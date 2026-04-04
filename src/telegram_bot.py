@@ -214,7 +214,16 @@ def send_message(token: str, chat_id: int, text: str) -> None:
         try:
             telegram_request(token, "sendMessage", params)
         except TelegramApiError as exc:
-            if "HTTP 400" not in str(exc):
+            error_text = str(exc).lower()
+            retry_without_parse_mode = (
+                "http 400" in error_text
+                and (
+                    "parse entities" in error_text
+                    or "unsupported start tag" in error_text
+                    or "entity" in error_text
+                )
+            )
+            if not retry_without_parse_mode:
                 raise
             fallback_params = {
                 "chat_id": chat_id,

@@ -111,9 +111,11 @@ class TelegramBotTests(unittest.TestCase):
         )
 
     @patch("src.telegram_bot.telegram_request")
-    def test_send_message_retries_without_parse_mode_on_http_400(self, mock_telegram_request) -> None:
+    def test_send_message_retries_without_parse_mode_on_parse_mode_http_400(self, mock_telegram_request) -> None:
         mock_telegram_request.side_effect = [
-            TelegramApiError("Errore Telegram su sendMessage: HTTP 400: Bad Request"),
+            TelegramApiError(
+                "Errore Telegram su sendMessage: HTTP 400: Bad Request: can't parse entities"
+            ),
             {"message_id": 1},
         ]
         send_message("token", 123, "ciao")
@@ -122,6 +124,15 @@ class TelegramBotTests(unittest.TestCase):
         second_call = mock_telegram_request.call_args_list[1].args[2]
         self.assertEqual(first_call.get("parse_mode"), "HTML")
         self.assertNotIn("parse_mode", second_call)
+
+    @patch("src.telegram_bot.telegram_request")
+    def test_send_message_does_not_retry_for_non_parse_http_400(self, mock_telegram_request) -> None:
+        mock_telegram_request.side_effect = TelegramApiError(
+            "Errore Telegram su sendMessage: HTTP 400: chat not found"
+        )
+        with self.assertRaises(TelegramApiError):
+            send_message("token", 123, "ciao")
+        self.assertEqual(mock_telegram_request.call_count, 1)
 
     def test_telegram_request_surfaces_http_error_description(self) -> None:
         body = b'{"ok":false,"description":"chat not found"}'
