@@ -1,8 +1,12 @@
 import unittest
+from io import BytesIO
+from urllib.error import HTTPError
 from unittest.mock import patch
 
 from src.telegram_bot import (
+    TelegramApiError,
     TelegramConfig,
+    RuntimeStatus,
     build_help_text,
     chunk_message,
     format_auto_notification,
@@ -11,6 +15,8 @@ from src.telegram_bot import (
     options_for_command,
     parse_command,
     process_message,
+    send_message,
+    telegram_request,
     update_state_with_records,
 )
 
@@ -38,6 +44,7 @@ class TelegramBotTests(unittest.TestCase):
         text = build_help_text()
         self.assertIn("/ultimi", text)
         self.assertIn("/ordine", text)
+        self.assertIn("/stato", text)
 
     @patch("src.telegram_bot.fetch_records")
     @patch("src.telegram_bot.load_config")
@@ -102,6 +109,52 @@ class TelegramBotTests(unittest.TestCase):
                 }
             )
         )
+
+    @patch("src.telegram_bot.telegram_request")
+    def test_send_message_retries_without_parse_mode_on_http_400(self, mock_telegram_request) -> None:
+        mock_telegram_request.side_effect = [
+            TelegramApiError("Errore Telegram su sendMessage: HTTP 400: Bad Request"),
+            {"message_id": 1},
+        ]
+        send_message("token", 123, "ciao")
+        self.assertEqual(mock_telegram_request.call_count, 2)
+        first_call = mock_telegram_request.call_args_list[0].args[2]
+        second_call = mock_telegram_request.call_args_list[1].args[2]
+        self.assertEqual(first_call.get("parse_mode"), "HTML")
+        self.assertNotIn("parse_mode", second_call)
+
+    def test_telegram_request_surfaces_http_error_description(self) -> None:
+        body = b'{"ok":false,"description":"chat not found"}'
+        http_error = HTTPError(
+            url="https://api.telegram.org/botx/sendMessage",
+            code=400,
+            msg="Bad Request",
+            hdrs=None,
+            fp=BytesIO(body),
+        )
+        with patch("urllib.request.urlopen", side_effect=http_error):
+            with self.assertRaises(TelegramApiError) as ctx:
+                telegram_request("token", "sendMessage", {"chat_id": 1, "text": "x"})
+        self.assertIn("HTTP 400", str(ctx.exception))
+        self.assertIn("chat not found", str(ctx.exception))
+
+    @patch("src.telegram_bot.load_state")
+    def test_process_message_stato(self, mock_load_state) -> None:
+        mock_load_state.return_value = {"notified_order_ids": ["1", "2"], "last_check": "2026-04-04T11:00:00Z"}
+        replies = process_message(
+            text="/stato",
+            chat_id=1,
+            telegram_config=TelegramConfig(token="x", allowed_chat_ids=None, notify_chat_ids={1}),
+            ebay_environment="production",
+            runtime_status=RuntimeStatus(
+                last_auto_notify_ok="2026-04-04T11:01:00Z",
+                last_auto_notify_error=None,
+                last_runtime_error=None,
+            ),
+        )
+        self.assertEqual(len(replies), 1)
+        self.assertIn("Stato bot", replies[0])
+        self.assertIn("Ordini notificati salvati", replies[0])
 
 
 if __name__ == "__main__":

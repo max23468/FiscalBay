@@ -9,6 +9,7 @@ import os
 import threading
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -35,6 +36,13 @@ class TelegramConfig:
     poll_timeout_seconds: int = 30
     ebay_poll_interval_seconds: int = 120
     state_path: str = DEFAULT_STATE_PATH
+
+
+@dataclass
+class RuntimeStatus:
+    last_auto_notify_ok: Optional[str] = None
+    last_auto_notify_error: Optional[str] = None
+    last_runtime_error: Optional[str] = None
 
 
 class TelegramApiError(RuntimeError):
@@ -92,6 +100,16 @@ def telegram_request(
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
             payload = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:  # pragma: no cover - rete esterna
+        body = exc.read().decode("utf-8", errors="replace")
+        try:
+            error_payload = json.loads(body)
+            description = error_payload.get("description") or body
+        except json.JSONDecodeError:
+            description = body or str(exc)
+        raise TelegramApiError(
+            f"Errore Telegram su {method}: HTTP {exc.code}: {description}"
+        ) from exc
     except Exception as exc:  # pragma: no cover - rete esterna
         raise TelegramApiError(f"Errore Telegram su {method}: {exc}") from exc
 
@@ -159,6 +177,7 @@ def build_help_text() -> str:
         "/ultimi [giorni] [max] - legge gli ordini recenti e restituisce i CF trovati\n"
         "/ordine <order_id> - legge un ordine specifico\n"
         "/tutti [giorni] [max] - mostra tutti gli ordini anche senza CF\n"
+        "/stato - mostra stato runtime bot/notifiche\n"
         "/help - mostra questo aiuto\n\n"
         "Esempi:\n"
         "<code>/ultimi 7 20</code>\n"
@@ -186,16 +205,23 @@ def is_authorized(chat_id: int, config: TelegramConfig) -> bool:
 
 def send_message(token: str, chat_id: int, text: str) -> None:
     for chunk in chunk_message(text):
-        telegram_request(
-            token,
-            "sendMessage",
-            {
+        params = {
+            "chat_id": chat_id,
+            "text": chunk,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        }
+        try:
+            telegram_request(token, "sendMessage", params)
+        except TelegramApiError as exc:
+            if "HTTP 400" not in str(exc):
+                raise
+            fallback_params = {
                 "chat_id": chat_id,
                 "text": chunk,
-                "parse_mode": "HTML",
                 "disable_web_page_preview": True,
-            },
-        )
+            }
+            telegram_request(token, "sendMessage", fallback_params)
 
 
 def send_to_all_targets(token: str, chat_ids: Iterable[int], text: str) -> None:
@@ -240,6 +266,31 @@ def has_codice_fiscale(record: Dict[str, str]) -> bool:
 def format_auto_notification(record: Dict[str, str]) -> str:
     prefix = "Nuovo ordine eBay ricevuto\n\n"
     return prefix + format_record(record)
+
+
+def format_status_message(
+    telegram_config: TelegramConfig,
+    ebay_environment: str,
+    runtime_status: RuntimeStatus,
+) -> str:
+    state = load_state(telegram_config.state_path)
+    notified_count = len(state.get("notified_order_ids", []))
+    last_check = state.get("last_check") or "n/d"
+    last_notify_ok = runtime_status.last_auto_notify_ok or "n/d"
+    last_notify_error = runtime_status.last_auto_notify_error or "n/d"
+    last_runtime_error = runtime_status.last_runtime_error or "n/d"
+    return (
+        "<b>Stato bot</b>\n"
+        f"Ambiente eBay: <code>{html.escape(ebay_environment)}</code>\n"
+        f"Poll Telegram (s): <code>{telegram_config.poll_timeout_seconds}</code>\n"
+        f"Poll eBay (s): <code>{telegram_config.ebay_poll_interval_seconds}</code>\n"
+        f"Notify target: <code>{len(telegram_config.notify_chat_ids)}</code>\n"
+        f"Ordini notificati salvati: <code>{notified_count}</code>\n"
+        f"Ultimo check stato locale: <code>{html.escape(str(last_check))}</code>\n"
+        f"Ultima auto-notify OK: <code>{html.escape(last_notify_ok)}</code>\n"
+        f"Ultimo errore auto-notify: <code>{html.escape(last_notify_error)}</code>\n"
+        f"Ultimo errore runtime bot: <code>{html.escape(last_runtime_error)}</code>"
+    )
 
 
 def fetch_new_order_records(
@@ -315,11 +366,18 @@ def maybe_send_new_order_notifications(
     save_state(telegram_config.state_path, updated_state)
 
 
-def auto_notify_loop(telegram_config: TelegramConfig, ebay_environment: str) -> None:
+def auto_notify_loop(
+    telegram_config: TelegramConfig,
+    ebay_environment: str,
+    runtime_status: RuntimeStatus,
+) -> None:
     while True:
         try:
             maybe_send_new_order_notifications(telegram_config, ebay_environment)
+            runtime_status.last_auto_notify_ok = now_utc().isoformat().replace("+00:00", "Z")
+            runtime_status.last_auto_notify_error = None
         except Exception as exc:  # pragma: no cover - loop resiliente
+            runtime_status.last_auto_notify_error = str(exc)
             print(f"Errore auto notify: {exc}", file=sys.stderr)
         time.sleep(telegram_config.ebay_poll_interval_seconds)
 
@@ -329,6 +387,7 @@ def process_message(
     chat_id: int,
     telegram_config: TelegramConfig,
     ebay_environment: str,
+    runtime_status: Optional[RuntimeStatus] = None,
 ) -> List[str]:
     if not is_authorized(chat_id, telegram_config):
         return ["Chat non autorizzata per questo bot."]
@@ -336,6 +395,14 @@ def process_message(
     command, args = parse_command(text)
     if command in ("", "/start", "/help"):
         return [build_help_text()]
+    if command == "/stato":
+        return [
+            format_status_message(
+                telegram_config=telegram_config,
+                ebay_environment=ebay_environment,
+                runtime_status=runtime_status or RuntimeStatus(),
+            )
+        ]
 
     if command not in ("/ultimi", "/ordine", "/tutti"):
         return ["Comando non riconosciuto. Usa /help."]
@@ -361,9 +428,10 @@ def run_bot() -> int:
         print(f"Errore configurazione: {exc}", file=sys.stderr)
         return 1
 
+    runtime_status = RuntimeStatus()
     notifier_thread = threading.Thread(
         target=auto_notify_loop,
-        args=(telegram_config, ebay_environment),
+        args=(telegram_config, ebay_environment, runtime_status),
         daemon=True,
     )
     notifier_thread.start()
@@ -391,6 +459,7 @@ def run_bot() -> int:
                         chat_id=chat_id,
                         telegram_config=telegram_config,
                         ebay_environment=ebay_environment,
+                        runtime_status=runtime_status,
                     )
                 except (TelegramApiError, EbayApiError, ValueError) as exc:
                     replies = [f"Errore: {html.escape(str(exc))}"]
@@ -399,6 +468,7 @@ def run_bot() -> int:
         except KeyboardInterrupt:
             return 0
         except Exception as exc:  # pragma: no cover - loop resiliente
+            runtime_status.last_runtime_error = str(exc)
             print(f"Errore runtime bot: {exc}", file=sys.stderr)
             time.sleep(3)
 

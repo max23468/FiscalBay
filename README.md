@@ -94,12 +94,14 @@ Comandi supportati:
 - `/ultimi 7 20`
 - `/tutti 7 20`
 - `/ordine 12-34567-89012`
+- `/stato`
 
 Comportamento:
 
 - `/ultimi` mostra solo gli ordini in cui eBay restituisce un identificativo fiscale
 - `/tutti` mostra anche gli ordini senza CF
 - `/ordine` legge un ordine specifico
+- `/stato` mostra stato runtime bot (ultimo errore, ultimo check, numero ordini notificati in stato locale)
 - Il bot usa long polling verso Telegram Bot API e richiama poi le API ufficiali eBay
 - In parallelo controlla periodicamente gli ordini eBay e invia automaticamente un messaggio per ogni nuovo `orderId` non ancora notificato
 - Le notifiche automatiche partono solo se eBay restituisce `taxIdentifierType=CODICE_FISCALE` e il relativo valore è presente
@@ -143,6 +145,21 @@ Le colonne principali sono:
 
 ```bash
 python3 -m unittest discover -s tests
+```
+
+## Esecuzione come servizio systemd (template)
+
+Nel repository è presente un unit file template in:
+
+`deploy/systemd/ebaycf-bot.service`
+
+Installazione rapida su VM:
+
+```bash
+sudo cp deploy/systemd/ebaycf-bot.service /etc/systemd/system/ebaycf-bot.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now ebaycf-bot
+sudo systemctl status ebaycf-bot --no-pager
 ```
 
 ## Riferimenti ufficiali eBay
