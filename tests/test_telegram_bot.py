@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from src.telegram_bot import (
+    TelegramApiError,
     TelegramConfig,
     build_help_text,
     chunk_message,
@@ -11,6 +12,7 @@ from src.telegram_bot import (
     options_for_command,
     parse_command,
     process_message,
+    send_message,
     update_state_with_records,
 )
 
@@ -102,6 +104,19 @@ class TelegramBotTests(unittest.TestCase):
                 }
             )
         )
+
+    @patch("src.telegram_bot.telegram_request")
+    def test_send_message_retries_without_parse_mode_on_http_400(self, mock_telegram_request) -> None:
+        mock_telegram_request.side_effect = [
+            TelegramApiError("Errore Telegram su sendMessage: HTTP 400: Bad Request"),
+            {"message_id": 1},
+        ]
+        send_message("token", 123, "ciao")
+        self.assertEqual(mock_telegram_request.call_count, 2)
+        first_call = mock_telegram_request.call_args_list[0].args[2]
+        second_call = mock_telegram_request.call_args_list[1].args[2]
+        self.assertEqual(first_call.get("parse_mode"), "HTML")
+        self.assertNotIn("parse_mode", second_call)
 
 
 if __name__ == "__main__":

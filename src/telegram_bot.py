@@ -9,6 +9,7 @@ import os
 import threading
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -92,6 +93,16 @@ def telegram_request(
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
             payload = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:  # pragma: no cover - rete esterna
+        body = exc.read().decode("utf-8", errors="replace")
+        try:
+            error_payload = json.loads(body)
+            description = error_payload.get("description") or body
+        except json.JSONDecodeError:
+            description = body or str(exc)
+        raise TelegramApiError(
+            f"Errore Telegram su {method}: HTTP {exc.code}: {description}"
+        ) from exc
     except Exception as exc:  # pragma: no cover - rete esterna
         raise TelegramApiError(f"Errore Telegram su {method}: {exc}") from exc
 
@@ -186,16 +197,23 @@ def is_authorized(chat_id: int, config: TelegramConfig) -> bool:
 
 def send_message(token: str, chat_id: int, text: str) -> None:
     for chunk in chunk_message(text):
-        telegram_request(
-            token,
-            "sendMessage",
-            {
+        params = {
+            "chat_id": chat_id,
+            "text": chunk,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        }
+        try:
+            telegram_request(token, "sendMessage", params)
+        except TelegramApiError as exc:
+            if "HTTP 400" not in str(exc):
+                raise
+            fallback_params = {
                 "chat_id": chat_id,
                 "text": chunk,
-                "parse_mode": "HTML",
                 "disable_web_page_preview": True,
-            },
-        )
+            }
+            telegram_request(token, "sendMessage", fallback_params)
 
 
 def send_to_all_targets(token: str, chat_ids: Iterable[int], text: str) -> None:
