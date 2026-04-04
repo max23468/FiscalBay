@@ -7,8 +7,12 @@ import argparse
 import base64
 import csv
 import json
+import logging
 import os
+import random
 import sys
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -16,13 +20,24 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Iterable, List, Optional
 
+logger = logging.getLogger(__name__)
 
 DEFAULT_SCOPE = "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly"
 DEFAULT_PAGE_SIZE = 50
+DEFAULT_REQUEST_RETRIES = 5
+DEFAULT_REQUEST_BASE_DELAY = 0.5
+DEFAULT_TOKEN_SKEW_SECONDS = 60
+
+_token_cache_lock = threading.Lock()
+_token_cache: Dict[str, tuple[str, float]] = {}
 
 
 class EbayApiError(RuntimeError):
     """Errore leggibile per richieste eBay fallite."""
+
+    def __init__(self, message: str, *, status_code: Optional[int] = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 @dataclass
@@ -49,6 +64,91 @@ class FetchOptions:
     max_results: int = 100
     order_ids: Optional[List[str]] = None
     only_found: bool = False
+
+
+def clear_access_token_cache() -> None:
+    """Svuota la cache token in memoria (utile per test)."""
+    with _token_cache_lock:
+        _token_cache.clear()
+
+
+def _token_cache_key(config: Config) -> str:
+    return f"{config.client_id}\0{config.environment}\0{config.scopes}"
+
+
+def _request_retry_settings() -> tuple[int, float]:
+    retries = int(os.getenv("EBAY_HTTP_MAX_RETRIES", str(DEFAULT_REQUEST_RETRIES)))
+    base = float(os.getenv("EBAY_HTTP_RETRY_BASE_DELAY", str(DEFAULT_REQUEST_BASE_DELAY)))
+    return max(1, retries), max(0.05, base)
+
+
+def _ebay_error_retryable(exc: EbayApiError) -> bool:
+    code = exc.status_code
+    if code is None:
+        return True
+    if code == 429:
+        return True
+    return 500 <= code <= 599
+
+
+def _make_request_once(
+    method: str,
+    url: str,
+    headers: Optional[Dict[str, str]] = None,
+    data: Optional[bytes] = None,
+) -> Dict:
+    request = urllib.request.Request(url=url, data=data, method=method)
+    for key, value in (headers or {}).items():
+        request.add_header(key, value)
+
+    try:
+        with urllib.request.urlopen(request) as response:
+            payload = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        try:
+            parsed = json.loads(body)
+            message = parsed.get("message") or parsed.get("error_description") or body
+        except json.JSONDecodeError:
+            message = body or str(exc)
+        raise EbayApiError(
+            f"HTTP {exc.code} su {url}: {message}",
+            status_code=exc.code,
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise EbayApiError(f"Errore di rete verso {url}: {exc.reason}") from exc
+
+    if not payload:
+        return {}
+    return json.loads(payload)
+
+
+def make_request(
+    method: str,
+    url: str,
+    headers: Optional[Dict[str, str]] = None,
+    data: Optional[bytes] = None,
+) -> Dict:
+    max_retries, base_delay = _request_retry_settings()
+    last: Optional[BaseException] = None
+    for attempt in range(max_retries):
+        try:
+            return _make_request_once(method, url, headers=headers, data=data)
+        except EbayApiError as exc:
+            last = exc
+            if not _ebay_error_retryable(exc) or attempt == max_retries - 1:
+                raise
+            delay = base_delay * (2**attempt) + random.uniform(0, 0.25)
+            logger.warning(
+                "Richiesta eBay fallita (tentativo %s/%s), riprovo tra %.2fs: %s",
+                attempt + 1,
+                max_retries,
+                delay,
+                exc,
+            )
+            time.sleep(delay)
+    assert last is not None
+    raise last
 
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
@@ -164,36 +264,7 @@ def to_ebay_timestamp(dt: datetime) -> str:
     )
 
 
-def make_request(
-    method: str,
-    url: str,
-    headers: Optional[Dict[str, str]] = None,
-    data: Optional[bytes] = None,
-) -> Dict:
-    request = urllib.request.Request(url=url, data=data, method=method)
-    for key, value in (headers or {}).items():
-        request.add_header(key, value)
-
-    try:
-        with urllib.request.urlopen(request) as response:
-            payload = response.read().decode("utf-8")
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        try:
-            parsed = json.loads(body)
-            message = parsed.get("message") or parsed.get("error_description") or body
-        except json.JSONDecodeError:
-            message = body or str(exc)
-        raise EbayApiError(f"HTTP {exc.code} su {url}: {message}") from exc
-    except urllib.error.URLError as exc:
-        raise EbayApiError(f"Errore di rete verso {url}: {exc.reason}") from exc
-
-    if not payload:
-        return {}
-    return json.loads(payload)
-
-
-def mint_user_access_token(config: Config) -> str:
+def mint_user_access_token_response(config: Config) -> Dict:
     credentials = f"{config.client_id}:{config.client_secret}".encode("utf-8")
     encoded = base64.b64encode(credentials).decode("ascii")
     url = f"{config.api_base}/identity/v1/oauth2/token"
@@ -204,7 +275,7 @@ def mint_user_access_token(config: Config) -> str:
             "scope": config.scopes,
         }
     ).encode("utf-8")
-    response = make_request(
+    return make_request(
         "POST",
         url,
         headers={
@@ -213,9 +284,38 @@ def mint_user_access_token(config: Config) -> str:
         },
         data=body,
     )
+
+
+def mint_user_access_token(config: Config) -> str:
+    """Ottiene un access token utente (con cache e scadenza)."""
+    return get_access_token(config)
+
+
+def get_access_token(config: Config) -> str:
+    key = _token_cache_key(config)
+    skew = int(os.getenv("EBAY_TOKEN_SKEW_SECONDS", str(DEFAULT_TOKEN_SKEW_SECONDS)))
+    now = time.time()
+    with _token_cache_lock:
+        cached = _token_cache.get(key)
+        if cached:
+            token, expires_at = cached
+            if expires_at - skew > now:
+                return token
+
+    response = mint_user_access_token_response(config)
     token = response.get("access_token")
     if not token:
         raise EbayApiError("La risposta OAuth non contiene access_token.")
+    expires_in = int(response.get("expires_in", 7200))
+    expires_at = time.time() + max(30, expires_in)
+
+    with _token_cache_lock:
+        cached = _token_cache.get(key)
+        if cached:
+            old_token, old_exp = cached
+            if old_exp - skew > time.time():
+                return old_token
+        _token_cache[key] = (token, expires_at)
     return token
 
 
@@ -274,6 +374,13 @@ def get_order_detail(config: Config, access_token: str, order_id: str) -> Dict:
             "Accept": "application/json",
         },
     )
+
+
+def _order_detail_delay_seconds() -> float:
+    raw = os.getenv("EBAY_ORDER_DETAIL_DELAY_SECONDS", "0").strip()
+    if not raw:
+        return 0.0
+    return max(0.0, float(raw))
 
 
 def choose_tax_identifier(order: Dict) -> Optional[Dict]:
@@ -356,22 +463,6 @@ def write_output(records: List[Dict[str, str]], fmt: str, output_path: Optional[
         print(content)
 
 
-def resolve_date_window(args: argparse.Namespace) -> tuple[datetime, datetime]:
-    if args.created_after:
-        created_after = parse_iso8601(args.created_after)
-    else:
-        created_after = datetime.now(timezone.utc) - timedelta(days=args.days)
-
-    if args.created_before:
-        created_before = parse_iso8601(args.created_before)
-    else:
-        created_before = datetime.now(timezone.utc)
-
-    if created_after >= created_before:
-        raise EbayApiError("--created-after deve essere precedente a --created-before.")
-    return created_after, created_before
-
-
 def resolve_date_window_from_options(options: FetchOptions) -> tuple[datetime, datetime]:
     if options.created_after:
         created_after = parse_iso8601(options.created_after)
@@ -389,12 +480,15 @@ def resolve_date_window_from_options(options: FetchOptions) -> tuple[datetime, d
 
 
 def fetch_records(config: Config, options: FetchOptions) -> List[Dict[str, str]]:
-    access_token = mint_user_access_token(config)
+    access_token = get_access_token(config)
     details: List[Dict] = []
     order_ids = options.order_ids or []
+    delay = _order_detail_delay_seconds()
 
     if order_ids:
-        for order_id in order_ids:
+        for index, order_id in enumerate(order_ids):
+            if index and delay:
+                time.sleep(delay)
             details.append(get_order_detail(config, access_token, order_id))
     else:
         created_after, created_before = resolve_date_window_from_options(options)
@@ -406,11 +500,15 @@ def fetch_records(config: Config, options: FetchOptions) -> List[Dict[str, str]]
             page_size=options.limit,
             max_results=options.max_results,
         )
+        detail_calls = 0
         for summary in summaries:
             order_id = summary.get("orderId")
             if not order_id:
                 continue
+            if detail_calls and delay:
+                time.sleep(delay)
             details.append(get_order_detail(config, access_token, order_id))
+            detail_calls += 1
 
     records = [extract_record(order) for order in details]
     if options.only_found:
@@ -418,49 +516,28 @@ def fetch_records(config: Config, options: FetchOptions) -> List[Dict[str, str]]
     return records
 
 
-def collect_records(args: argparse.Namespace, config: Config, access_token: str) -> List[Dict[str, str]]:
-    options = FetchOptions(
-        days=args.days,
-        created_after=args.created_after,
-        created_before=args.created_before,
-        limit=args.limit,
-        max_results=args.max_results,
-        order_ids=args.order_ids,
-        only_found=args.only_found,
-    )
-    if args.order_ids:
-        return fetch_records(config, options)
-
-    details: List[Dict] = []
-    created_after, created_before = resolve_date_window(args)
-    summaries = get_orders(
-        config=config,
-        access_token=access_token,
-        created_after=created_after,
-        created_before=created_before,
-        page_size=args.limit,
-        max_results=args.max_results,
-    )
-    for summary in summaries:
-        order_id = summary.get("orderId")
-        if not order_id:
-            continue
-        details.append(get_order_detail(config, access_token, order_id))
-
-    records = [extract_record(order) for order in details]
-    if args.only_found:
-        records = [record for record in records if record["found"] == "yes"]
-    return records
-
-
 def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
+    log_level = os.getenv("LOG_LEVEL", "WARNING").upper()
+    logging.basicConfig(
+        level=getattr(logging, log_level, logging.WARNING),
+        format="%(levelname)s %(name)s: %(message)s",
+    )
     try:
         config = load_config(args.environment)
-        access_token = mint_user_access_token(config)
-        records = collect_records(args, config, access_token)
+        options = FetchOptions(
+            days=args.days,
+            created_after=args.created_after,
+            created_before=args.created_before,
+            limit=args.limit,
+            max_results=args.max_results,
+            order_ids=args.order_ids,
+            only_found=args.only_found,
+        )
+        records = fetch_records(config, options)
         write_output(records, args.format, args.output)
     except EbayApiError as exc:
+        logger.error("%s", exc)
         print(f"Errore: {exc}", file=sys.stderr)
         return 1
     return 0

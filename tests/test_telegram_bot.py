@@ -2,15 +2,19 @@ import unittest
 from unittest.mock import patch
 
 from src.telegram_bot import (
+    TELEGRAM_CMD_MAX_DAYS,
+    TelegramApiError,
     TelegramConfig,
     build_help_text,
     chunk_message,
+    ensure_long_polling,
     format_auto_notification,
     format_records,
     has_codice_fiscale,
     options_for_command,
     parse_command,
     process_message,
+    send_message,
     update_state_with_records,
 )
 
@@ -25,6 +29,18 @@ class TelegramBotTests(unittest.TestCase):
         options = options_for_command("/ordine", ["12-34567-89012"])
         self.assertEqual(options.order_ids, ["12-34567-89012"])
         self.assertFalse(options.only_found)
+
+    def test_options_for_command_rejects_days_out_of_range(self) -> None:
+        with self.assertRaises(TelegramApiError):
+            options_for_command("/ultimi", [str(TELEGRAM_CMD_MAX_DAYS + 1), "10"])
+
+    def test_options_for_command_rejects_max_results_out_of_range(self) -> None:
+        with self.assertRaises(TelegramApiError):
+            options_for_command("/tutti", ["7", "9999"])
+
+    def test_options_for_command_rejects_non_integer_days(self) -> None:
+        with self.assertRaises(TelegramApiError):
+            options_for_command("/ultimi", ["foo"])
 
     def test_chunk_message_splits_long_payload(self) -> None:
         chunks = chunk_message(("a" * 2000) + "\n" + ("b" * 2000))
@@ -123,6 +139,28 @@ class TelegramBotTests(unittest.TestCase):
                     "taxpayerId": "",
                 }
             )
+        )
+
+    @patch("src.telegram_bot.telegram_request")
+    def test_send_message_retries_without_parse_mode_on_http_400(self, mock_telegram_request) -> None:
+        mock_telegram_request.side_effect = [
+            TelegramApiError("Errore Telegram su sendMessage: HTTP 400: Bad Request"),
+            {"message_id": 1},
+        ]
+        send_message("token", 123, "ciao")
+        self.assertEqual(mock_telegram_request.call_count, 2)
+        first_call = mock_telegram_request.call_args_list[0].args[2]
+        second_call = mock_telegram_request.call_args_list[1].args[2]
+        self.assertEqual(first_call.get("parse_mode"), "HTML")
+        self.assertNotIn("parse_mode", second_call)
+
+    @patch("src.telegram_bot.telegram_request")
+    def test_ensure_long_polling_deletes_existing_webhook(self, mock_telegram_request) -> None:
+        ensure_long_polling("token")
+        mock_telegram_request.assert_called_once_with(
+            "token",
+            "deleteWebhook",
+            {"drop_pending_updates": False},
         )
 
 

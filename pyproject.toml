@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ebay-cf-tool"
+version = "0.1.0"
+description = "CLI e bot Telegram per leggere codici fiscali dagli ordini eBay (API ufficiali)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "eBay CF Tool" }]
+
+[project.scripts]
+ebay-cf = "ebay_cf_tool:main"
+ebay-telegram-bot = "telegram_bot:run_bot"
+
+[project.optional-dependencies]
+dev = ["ruff>=0.6.0"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools]
+py-modules = ["ebay_cf_tool", "telegram_bot"]

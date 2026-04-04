@@ -8,9 +8,12 @@ import html
 import json
 import logging
 import os
-import threading
+import random
+import signal
 import sys
+import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -18,17 +21,33 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, Iterable, List, Optional
 
 try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows
+    fcntl = None
+
+try:
     from .ebay_cf_tool import EbayApiError, FetchOptions, fetch_records, load_config
 except ImportError:  # pragma: no cover - avvio come script diretto
     from ebay_cf_tool import EbayApiError, FetchOptions, fetch_records, load_config
 
+LOGGER = logging.getLogger("ebaycf.telegram_bot")
 
 TELEGRAM_API_BASE = "https://api.telegram.org"
 DEFAULT_ALLOWED_CHAT_IDS = "TELEGRAM_ALLOWED_CHAT_IDS"
 DEFAULT_NOTIFY_CHAT_IDS = "TELEGRAM_NOTIFY_CHAT_IDS"
 DEFAULT_STATE_PATH = "data/notified_orders.json"
 DEFAULT_RETRY_QUEUE_PATH = "data/failed_notifications.json"
-LOGGER = logging.getLogger("ebaycf.telegram_bot")
+DEFAULT_LOCK_PATH = "data/telegram_bot.lock"
+
+TELEGRAM_CMD_MAX_DAYS = 365
+TELEGRAM_CMD_MIN_DAYS = 1
+TELEGRAM_CMD_MAX_RESULTS = 500
+TELEGRAM_CMD_MIN_RESULTS = 1
+
+DEFAULT_TELEGRAM_RETRIES = 5
+DEFAULT_TELEGRAM_BASE_DELAY = 0.5
+
+_shutdown = threading.Event()
 
 
 @dataclass
@@ -40,17 +59,39 @@ class TelegramConfig:
     ebay_poll_interval_seconds: int = 120
     state_path: str = DEFAULT_STATE_PATH
     retry_queue_path: str = DEFAULT_RETRY_QUEUE_PATH
+    lock_path: str = DEFAULT_LOCK_PATH
 
 
 class TelegramApiError(RuntimeError):
     """Errore leggibile per Telegram Bot API."""
 
+    def __init__(self, message: str, *, status_code: Optional[int] = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def _telegram_retry_settings() -> tuple[int, float]:
+    retries = int(os.getenv("TELEGRAM_HTTP_MAX_RETRIES", str(DEFAULT_TELEGRAM_RETRIES)))
+    base = float(os.getenv("TELEGRAM_HTTP_RETRY_BASE_DELAY", str(DEFAULT_TELEGRAM_BASE_DELAY)))
+    return max(1, retries), max(0.05, base)
+
+
+def _telegram_error_retryable(exc: TelegramApiError) -> bool:
+    code = exc.status_code
+    if code is None:
+        return True
+    if code == 429:
+        return True
+    return 500 <= code <= 599
+
 
 def configure_logging() -> None:
     if logging.getLogger().handlers:
         return
+    level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
     logging.basicConfig(
-        level=logging.INFO,
+        level=level,
         format="%(asctime)sZ | %(levelname)s | %(name)s | %(message)s",
         datefmt="%Y-%m-%dT%H:%M:%S",
     )
@@ -84,10 +125,11 @@ def load_telegram_config() -> TelegramConfig:
         ebay_poll_interval_seconds=max(30, ebay_poll_interval),
         state_path=os.getenv("EBAY_ORDER_STATE_PATH", DEFAULT_STATE_PATH),
         retry_queue_path=os.getenv("EBAY_NOTIFY_RETRY_PATH", DEFAULT_RETRY_QUEUE_PATH),
+        lock_path=os.getenv("TELEGRAM_BOT_LOCK_PATH", DEFAULT_LOCK_PATH),
     )
 
 
-def telegram_request(
+def _telegram_request_once(
     token: str,
     method: str,
     params: Optional[Dict[str, object]] = None,
@@ -108,6 +150,17 @@ def telegram_request(
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
             payload = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:  # pragma: no cover - rete esterna
+        body = exc.read().decode("utf-8", errors="replace")
+        try:
+            error_payload = json.loads(body)
+            description = error_payload.get("description") or body
+        except json.JSONDecodeError:
+            description = body or str(exc)
+        raise TelegramApiError(
+            f"Errore Telegram su {method}: HTTP {exc.code}: {description}",
+            status_code=exc.code,
+        ) from exc
     except Exception as exc:  # pragma: no cover - rete esterna
         raise TelegramApiError(f"Errore Telegram su {method}: {exc}") from exc
 
@@ -115,6 +168,33 @@ def telegram_request(
     if not parsed.get("ok"):
         raise TelegramApiError(f"Telegram API {method}: {parsed}")
     return parsed["result"]
+
+
+def telegram_request(
+    token: str,
+    method: str,
+    params: Optional[Dict[str, object]] = None,
+) -> Dict:
+    max_retries, base_delay = _telegram_retry_settings()
+    last: Optional[BaseException] = None
+    for attempt in range(max_retries):
+        try:
+            return _telegram_request_once(token, method, params)
+        except TelegramApiError as exc:
+            last = exc
+            if not _telegram_error_retryable(exc) or attempt == max_retries - 1:
+                raise
+            delay = base_delay * (2**attempt) + random.uniform(0, 0.25)
+            LOGGER.warning(
+                "Richiesta Telegram fallita (tentativo %s/%s), riprovo tra %.2fs: %s",
+                attempt + 1,
+                max_retries,
+                delay,
+                exc,
+            )
+            time.sleep(delay)
+    assert last is not None
+    raise last
 
 
 def chunk_message(text: str, limit: int = 3500) -> List[str]:
@@ -198,7 +278,7 @@ def format_records(records: Iterable[Dict[str, str]], only_found: bool, page_siz
         return ["Nessun ordine trovato nella selezione richiesta."]
     pages: List[str] = []
     for start in range(0, len(rows), page_size):
-        page_rows = rows[start:start + page_size]
+        page_rows = rows[start : start + page_size]
         page_no = (start // page_size) + 1
         total_pages = (len(rows) + page_size - 1) // page_size
         header = f"📦 Ordini elaborati: <b>{len(rows)}</b> • Pagina <b>{page_no}/{total_pages}</b>"
@@ -226,7 +306,9 @@ def build_help_text() -> str:
         "/help - mostra questo aiuto\n\n"
         "Esempi:\n"
         "<code>/ultimi 7 20</code>\n"
-        "<code>/ordine 12-34567-89012</code>"
+        "<code>/ordine 12-34567-89012</code>\n\n"
+        f"Limiti: giorni {TELEGRAM_CMD_MIN_DAYS}-{TELEGRAM_CMD_MAX_DAYS}, "
+        f"max ordini {TELEGRAM_CMD_MIN_RESULTS}-{TELEGRAM_CMD_MAX_RESULTS}."
     )
 
 
@@ -236,8 +318,24 @@ def options_for_command(command: str, args: List[str]) -> FetchOptions:
             raise TelegramApiError("Uso corretto: /ordine <order_id>")
         return FetchOptions(order_ids=[args[0]], only_found=False, max_results=1)
 
-    days = int(args[0]) if len(args) >= 1 else 7
-    max_results = int(args[1]) if len(args) >= 2 else 20
+    try:
+        days = int(args[0]) if len(args) >= 1 else 7
+    except ValueError as exc:
+        raise TelegramApiError("Il numero di giorni deve essere un intero.") from exc
+    try:
+        max_results = int(args[1]) if len(args) >= 2 else 20
+    except ValueError as exc:
+        raise TelegramApiError("Il numero massimo ordini deve essere un intero.") from exc
+
+    if not TELEGRAM_CMD_MIN_DAYS <= days <= TELEGRAM_CMD_MAX_DAYS:
+        raise TelegramApiError(
+            f"Giorni fuori intervallo: usa un valore tra {TELEGRAM_CMD_MIN_DAYS} e {TELEGRAM_CMD_MAX_DAYS}."
+        )
+    if not TELEGRAM_CMD_MIN_RESULTS <= max_results <= TELEGRAM_CMD_MAX_RESULTS:
+        raise TelegramApiError(
+            f"Max ordini fuori intervallo: usa un valore tra {TELEGRAM_CMD_MIN_RESULTS} e {TELEGRAM_CMD_MAX_RESULTS}."
+        )
+
     only_found = command != "/tutti"
     return FetchOptions(days=days, max_results=max_results, only_found=only_found)
 
@@ -250,22 +348,67 @@ def is_authorized(chat_id: int, config: TelegramConfig) -> bool:
 
 def send_message(token: str, chat_id: int, text: str) -> None:
     for chunk in chunk_message(text):
-            if "HTTP 400" in str(exc):
-                fallback_params = {
-                    "chat_id": chat_id,
-                    "text": chunk,
-                    "disable_web_page_preview": True,
-                }
-                request_with_backoff(
-                    lambda: telegram_request(token, "sendMessage", fallback_params),
-                    label="sendMessage-fallback",
-                )
-                continue
-            request_with_backoff(
-                lambda: telegram_request(token, "sendMessage", params),
-                label="sendMessage-retry",
-            )
-            continue
+        params = {
+            "chat_id": chat_id,
+            "text": chunk,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        }
+        try:
+            telegram_request(token, "sendMessage", params)
+        except TelegramApiError as exc:
+            if "HTTP 400" not in str(exc):
+                raise
+            fallback_params = {
+                "chat_id": chat_id,
+                "text": chunk,
+                "disable_web_page_preview": True,
+            }
+            telegram_request(token, "sendMessage", fallback_params)
+
+
+def send_to_all_targets(token: str, chat_ids: Iterable[int], text: str) -> None:
+    for chat_id in chat_ids:
+        send_message(token, chat_id, text)
+
+
+def ensure_long_polling(token: str) -> None:
+    telegram_request(token, "deleteWebhook", {"drop_pending_updates": False})
+
+
+def ensure_parent_dir(path: str) -> None:
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+
+
+def acquire_process_lock(lock_path: str):
+    if fcntl is None:
+        LOGGER.warning(
+            "fcntl non disponibile: lock esclusivo non attivo su %s. "
+            "Non avviare due istanze con lo stesso token.",
+            lock_path,
+        )
+        return None
+    ensure_parent_dir(lock_path)
+    handle = open(lock_path, "a+", encoding="utf-8")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        handle.close()
+        raise TelegramApiError(
+            "Un'altra istanza del bot è già in esecuzione (lock su "
+            f"{lock_path}). Chiudi l'altra copia o imposta TELEGRAM_BOT_LOCK_PATH."
+        ) from None
+    try:
+        os.chmod(lock_path, 0o600)
+    except OSError:
+        pass
+    return handle
+
+
+def load_state(path: str) -> Dict[str, object]:
+    if not os.path.exists(path):
         return {
             "notified_order_ids": [],
             "notified_hashes": [],
@@ -277,6 +420,7 @@ def send_message(token: str, chat_id: int, text: str) -> None:
                 "errors_by_type": {},
             },
         }
+    with open(path, "r", encoding="utf-8") as handle:
         loaded = json.load(handle)
     loaded.setdefault("notified_order_ids", [])
     loaded.setdefault("notified_hashes", [])
@@ -292,6 +436,16 @@ def send_message(token: str, chat_id: int, text: str) -> None:
     return loaded
 
 
+def save_state(path: str, state: Dict[str, object]) -> None:
+    ensure_parent_dir(path)
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(state, handle, indent=2, ensure_ascii=False)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
 def load_retry_queue(path: str) -> List[Dict[str, object]]:
     if not os.path.exists(path):
         return []
@@ -303,6 +457,10 @@ def save_retry_queue(path: str, queue: List[Dict[str, object]]) -> None:
     ensure_parent_dir(path)
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(queue, handle, indent=2, ensure_ascii=False)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
 
 
 def increment_metric(state: Dict[str, object], metric: str, amount: int = 1) -> None:
@@ -330,33 +488,7 @@ def format_status(state: Dict[str, object], retry_queue_size: int) -> str:
     )
 
 
-    records = request_with_backoff(
-        lambda: fetch_records(
-            config,
-            FetchOptions(
-                created_after=start,
-                created_before=end,
-                max_results=100,
-                only_found=False,
-            ),
-        label="fetch_records",
-    notified_hashes = set(state.get("notified_hashes", []))
-        record
-        for record in records
-        if record.get("orderId")
-        and record["orderId"] not in notified_order_ids
-        and record_fingerprint(record) not in notified_hashes
-    existing_hashes = list(state.get("notified_hashes", []))
-    existing_hashes_set = set(existing_hashes)
-        fingerprint = record_fingerprint(record)
-        if fingerprint not in existing_hashes_set:
-            existing_hashes.append(fingerprint)
-            existing_hashes_set.add(fingerprint)
-    state["notified_hashes"] = existing_hashes[-max_tracked_orders:]
-def process_retry_queue(
-    telegram_config: TelegramConfig,
-    state: Dict[str, object],
-) -> None:
+def process_retry_queue(telegram_config: TelegramConfig, state: Dict[str, object]) -> None:
     queue = load_retry_queue(telegram_config.retry_queue_path)
     if not queue:
         return
@@ -378,47 +510,7 @@ def process_retry_queue(
     save_retry_queue(telegram_config.retry_queue_path, remaining)
 
 
-    process_retry_queue(telegram_config, state)
-    increment_metric(state, "orders_read", len(records))
-    failed_queue = load_retry_queue(telegram_config.retry_queue_path)
-        text = format_auto_notification(record)
-        for chat_id in telegram_config.notify_chat_ids:
-            try:
-                send_message(telegram_config.token, chat_id, text)
-                increment_metric(state, "notifications_sent")
-            except TelegramApiError as exc:
-                failed_queue.append({"chat_id": chat_id, "text": text, "attempts": 1})
-                state["last_error"] = str(exc)
-                increment_error_metric(state, "telegram_send")
-    save_retry_queue(telegram_config.retry_queue_path, failed_queue)
-    if command == "/ping":
-        return ["pong ✅"]
-    if command == "/stato":
-        state = load_state(telegram_config.state_path)
-        retry_queue_size = len(load_retry_queue(telegram_config.retry_queue_path))
-        return [format_status(state, retry_queue_size)]
-    records = request_with_backoff(
-        lambda: fetch_records(config, options),
-        label=f"fetch_records_{command}",
-    )
-    return format_records(records, only_found=options.only_found)
-        configure_logging()
-    updates_backoff_seconds = 1
-            updates = request_with_backoff(
-                lambda: telegram_request(
-                    telegram_config.token,
-                    "getUpdates",
-                    {
-                        "offset": offset,
-                        "timeout": telegram_config.poll_timeout_seconds,
-                        "allowed_updates": ["message", "edited_message"],
-                    },
-                ),
-                label="getUpdates",
-            updates_backoff_seconds = 1
-            LOGGER.error("Errore runtime bot: %s", exc)
-            time.sleep(updates_backoff_seconds)
-            updates_backoff_seconds = min(updates_backoff_seconds * 2, 30)
+def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
@@ -448,24 +540,34 @@ def fetch_new_order_records(
     if isinstance(last_check, str) and last_check:
         start = last_check
     else:
-        start = (now_utc() - timedelta(minutes=lookback_minutes)).isoformat().replace(
-            "+00:00", "Z"
-        )
+        start = (now_utc() - timedelta(minutes=lookback_minutes)).isoformat().replace("+00:00", "Z")
     end = now_utc().isoformat().replace("+00:00", "Z")
-    records = fetch_records(
-        config,
-        FetchOptions(
-            created_after=start,
-            created_before=end,
-            max_results=100,
-            only_found=False,
+
+    records = request_with_backoff(
+        lambda: fetch_records(
+            config,
+            FetchOptions(
+                created_after=start,
+                created_before=end,
+                max_results=100,
+                only_found=False,
+            ),
         ),
+        label="fetch_new_orders",
     )
+    assert isinstance(records, list)
+
     notified_order_ids = set(state.get("notified_order_ids", []))
-    new_records = [
-        record for record in records if record.get("orderId") and record["orderId"] not in notified_order_ids
-    ]
-    new_records = [record for record in new_records if has_codice_fiscale(record)]
+    notified_hashes = set(state.get("notified_hashes", []))
+    new_records: List[Dict[str, str]] = []
+    for record in records:
+        oid = record.get("orderId")
+        if not oid or oid in notified_order_ids:
+            continue
+        if record_fingerprint(record) in notified_hashes:
+            continue
+        if has_codice_fiscale(record):
+            new_records.append(record)
     new_records.sort(key=order_sort_key)
     return new_records
 
@@ -476,14 +578,21 @@ def update_state_with_records(
     checked_at: Optional[str] = None,
     max_tracked_orders: int = 1000,
 ) -> Dict[str, object]:
-    existing = list(state.get("notified_order_ids", []))
-    existing_set = set(existing)
+    existing_ids = list(state.get("notified_order_ids", []))
+    id_set = set(existing_ids)
+    existing_hashes = list(state.get("notified_hashes", []))
+    hash_set = set(existing_hashes)
     for record in records:
-        order_id = record.get("orderId")
-        if order_id and order_id not in existing_set:
-            existing.append(order_id)
-            existing_set.add(order_id)
-    state["notified_order_ids"] = existing[-max_tracked_orders:]
+        oid = record.get("orderId")
+        fp = record_fingerprint(record)
+        if oid and oid not in id_set:
+            existing_ids.append(oid)
+            id_set.add(oid)
+        if fp and fp not in hash_set:
+            existing_hashes.append(fp)
+            hash_set.add(fp)
+    state["notified_order_ids"] = existing_ids[-max_tracked_orders:]
+    state["notified_hashes"] = existing_hashes[-max_tracked_orders:]
     state["last_check"] = checked_at or now_utc().isoformat().replace("+00:00", "Z")
     return state
 
@@ -495,29 +604,41 @@ def maybe_send_new_order_notifications(
     if not telegram_config.notify_chat_ids:
         return
     state = load_state(telegram_config.state_path)
+    process_retry_queue(telegram_config, state)
+    save_state(telegram_config.state_path, state)
+
     records = fetch_new_order_records(ebay_environment, state)
     first_bootstrap = not state.get("last_check")
     if first_bootstrap:
         updated_state = update_state_with_records(state, records)
         save_state(telegram_config.state_path, updated_state)
         return
+
+    failed_queue = load_retry_queue(telegram_config.retry_queue_path)
     for record in records:
-        send_to_all_targets(
-            telegram_config.token,
-            telegram_config.notify_chat_ids,
-            format_auto_notification(record),
-        )
+        text = format_auto_notification(record)
+        for chat_id in telegram_config.notify_chat_ids:
+            try:
+                send_message(telegram_config.token, chat_id, text)
+                increment_metric(state, "notifications_sent")
+            except TelegramApiError as exc:
+                failed_queue.append({"chat_id": chat_id, "text": text, "attempts": 1})
+                state["last_error"] = str(exc)
+                increment_error_metric(state, "telegram_send")
+    save_retry_queue(telegram_config.retry_queue_path, failed_queue)
+    increment_metric(state, "orders_read", len(records))
     updated_state = update_state_with_records(state, records)
     save_state(telegram_config.state_path, updated_state)
 
 
 def auto_notify_loop(telegram_config: TelegramConfig, ebay_environment: str) -> None:
-    while True:
+    while not _shutdown.is_set():
         try:
             maybe_send_new_order_notifications(telegram_config, ebay_environment)
         except Exception as exc:  # pragma: no cover - loop resiliente
-            print(f"Errore auto notify: {exc}", file=sys.stderr)
-        time.sleep(telegram_config.ebay_poll_interval_seconds)
+            LOGGER.exception("Errore auto notify: %s", exc)
+        if _shutdown.wait(timeout=telegram_config.ebay_poll_interval_seconds):
+            break
 
 
 def process_message(
@@ -533,13 +654,25 @@ def process_message(
     if command in ("", "/start", "/help"):
         return [build_help_text()]
 
+    if command == "/ping":
+        return ["pong ✅"]
+
+    if command == "/stato":
+        state = load_state(telegram_config.state_path)
+        retry_queue_size = len(load_retry_queue(telegram_config.retry_queue_path))
+        return [format_status(state, retry_queue_size)]
+
     if command not in ("/ultimi", "/ordine", "/tutti"):
         return ["Comando non riconosciuto. Usa /help."]
 
     config = load_config(ebay_environment)
     options = options_for_command(command, args)
-    records = fetch_records(config, options)
-    return [format_records(records, only_found=options.only_found)]
+    records = request_with_backoff(
+        lambda: fetch_records(config, options),
+        label=f"fetch_records_{command}",
+    )
+    assert isinstance(records, list)
+    return format_records(records, only_found=options.only_found)
 
 
 def extract_text(update: Dict) -> tuple[Optional[int], str]:
@@ -549,13 +682,27 @@ def extract_text(update: Dict) -> tuple[Optional[int], str]:
     return chat.get("id"), text
 
 
+def _request_shutdown(signum: int, frame: Optional[object]) -> None:
+    LOGGER.info("Segnale %s ricevuto, arresto in corso...", signum)
+    _shutdown.set()
+
+
 def run_bot() -> int:
+    configure_logging()
+    lock_handle = None
     try:
         telegram_config = load_telegram_config()
         ebay_environment = os.getenv("EBAY_ENVIRONMENT", "production")
+        lock_handle = acquire_process_lock(telegram_config.lock_path)
+        ensure_long_polling(telegram_config.token)
     except (TelegramApiError, EbayApiError) as exc:
+        LOGGER.error("Errore configurazione: %s", exc)
         print(f"Errore configurazione: {exc}", file=sys.stderr)
+        if lock_handle is not None:
+            lock_handle.close()
         return 1
+
+    signal.signal(signal.SIGTERM, _request_shutdown)
 
     notifier_thread = threading.Thread(
         target=auto_notify_loop,
@@ -565,38 +712,62 @@ def run_bot() -> int:
     notifier_thread.start()
 
     offset = 0
-    while True:
+    updates_backoff_seconds = 1.0
+    while not _shutdown.is_set():
         try:
-            updates = telegram_request(
-                telegram_config.token,
-                "getUpdates",
-                {
-                    "offset": offset,
-                    "timeout": telegram_config.poll_timeout_seconds,
-                    "allowed_updates": ["message", "edited_message"],
-                },
+            poll_timeout = telegram_config.poll_timeout_seconds
+            if _shutdown.is_set():
+                poll_timeout = min(poll_timeout, 2)
+            updates = request_with_backoff(
+                lambda: telegram_request(
+                    telegram_config.token,
+                    "getUpdates",
+                    {
+                        "offset": offset,
+                        "timeout": poll_timeout,
+                        "allowed_updates": ["message", "edited_message"],
+                    },
+                ),
+                label="getUpdates",
             )
+            assert isinstance(updates, list)
+            updates_backoff_seconds = 1.0
             for update in updates:
                 offset = max(offset, int(update["update_id"]) + 1)
-                chat_id, text = extract_text(update)
-                if not chat_id or not text.strip():
+                cid, msg_text = extract_text(update)
+                if not cid or not msg_text.strip():
                     continue
                 try:
                     replies = process_message(
-                        text=text,
-                        chat_id=chat_id,
+                        text=msg_text,
+                        chat_id=cid,
                         telegram_config=telegram_config,
                         ebay_environment=ebay_environment,
                     )
                 except (TelegramApiError, EbayApiError, ValueError) as exc:
                     replies = [f"Errore: {html.escape(str(exc))}"]
                 for reply in replies:
-                    send_message(telegram_config.token, chat_id, reply)
+                    send_message(telegram_config.token, cid, reply)
+            if _shutdown.is_set():
+                break
         except KeyboardInterrupt:
-            return 0
+            _shutdown.set()
+            break
         except Exception as exc:  # pragma: no cover - loop resiliente
-            print(f"Errore runtime bot: {exc}", file=sys.stderr)
-            time.sleep(3)
+            LOGGER.exception("Errore runtime bot: %s", exc)
+            time.sleep(updates_backoff_seconds)
+            updates_backoff_seconds = min(updates_backoff_seconds * 2, 30.0)
+            if _shutdown.is_set():
+                break
+
+    if lock_handle is not None:
+        try:
+            if fcntl is not None:
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+        except OSError:
+            pass
+        lock_handle.close()
+    return 0
 
 
 if __name__ == "__main__":
