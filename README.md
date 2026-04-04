@@ -162,6 +162,27 @@ sudo systemctl enable --now ebaycf-bot
 sudo systemctl status ebaycf-bot --no-pager
 ```
 
+## Deploy cloud-only con script unico
+
+Per aggiornare il bot direttamente in VM con un solo comando:
+
+```bash
+cd "/home/opc/eBay CF"
+bash deploy/deploy.sh
+```
+
+Lo script esegue in sequenza:
+
+1. `git pull --ff-only`
+2. attivazione virtualenv `.venv`
+3. test unitari (`python3 -m unittest discover -s tests`)
+4. restart e status del servizio `ebaycf-bot`
+
+Variabili opzionali:
+
+- `SERVICE_NAME` (default `ebaycf-bot`)
+- `VENV_PATH` (default `<repo>/.venv`)
+
 ## Riferimenti ufficiali eBay
 
 - Fulfillment API `getOrders`: https://developer.ebay.com/api-docs/sell/fulfillment/resources/order/methods/getOrders
