@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import html
 import json
+import logging
 import os
 import threading
 import sys
@@ -25,6 +27,8 @@ TELEGRAM_API_BASE = "https://api.telegram.org"
 DEFAULT_ALLOWED_CHAT_IDS = "TELEGRAM_ALLOWED_CHAT_IDS"
 DEFAULT_NOTIFY_CHAT_IDS = "TELEGRAM_NOTIFY_CHAT_IDS"
 DEFAULT_STATE_PATH = "data/notified_orders.json"
+DEFAULT_RETRY_QUEUE_PATH = "data/failed_notifications.json"
+LOGGER = logging.getLogger("ebaycf.telegram_bot")
 
 
 @dataclass
@@ -35,10 +39,21 @@ class TelegramConfig:
     poll_timeout_seconds: int = 30
     ebay_poll_interval_seconds: int = 120
     state_path: str = DEFAULT_STATE_PATH
+    retry_queue_path: str = DEFAULT_RETRY_QUEUE_PATH
 
 
 class TelegramApiError(RuntimeError):
     """Errore leggibile per Telegram Bot API."""
+
+
+def configure_logging() -> None:
+    if logging.getLogger().handlers:
+        return
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)sZ | %(levelname)s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
+    )
 
 
 def load_telegram_config() -> TelegramConfig:
@@ -68,6 +83,7 @@ def load_telegram_config() -> TelegramConfig:
         poll_timeout_seconds=max(1, timeout),
         ebay_poll_interval_seconds=max(30, ebay_poll_interval),
         state_path=os.getenv("EBAY_ORDER_STATE_PATH", DEFAULT_STATE_PATH),
+        retry_queue_path=os.getenv("EBAY_NOTIFY_RETRY_PATH", DEFAULT_RETRY_QUEUE_PATH),
     )
 
 
@@ -121,28 +137,74 @@ def chunk_message(text: str, limit: int = 3500) -> List[str]:
     return chunks
 
 
+def request_with_backoff(
+    fn,
+    label: str,
+    attempts: int = 4,
+    initial_delay: float = 1.0,
+) -> object:
+    delay = initial_delay
+    last_error: Optional[Exception] = None
+    for idx in range(1, attempts + 1):
+        try:
+            return fn()
+        except (TelegramApiError, EbayApiError) as exc:
+            last_error = exc
+            if idx >= attempts:
+                break
+            LOGGER.warning("%s tentativo %s/%s fallito: %s", label, idx, attempts, exc)
+            time.sleep(delay)
+            delay = min(delay * 2, 30)
+    assert last_error is not None
+    raise last_error
+
+
+def record_fingerprint(record: Dict[str, str]) -> str:
+    raw = "|".join(
+        [
+            record.get("orderId", ""),
+            record.get("creationDate", ""),
+            record.get("buyerUsername", ""),
+            record.get("taxpayerId", ""),
+            record.get("taxIdentifierType", ""),
+            record.get("issuingCountry", ""),
+        ]
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 def format_record(record: Dict[str, str]) -> str:
     cf = record["taxpayerId"] or "non disponibile"
     tax_type = record["taxIdentifierType"] or "n/d"
     country = record["issuingCountry"] or "n/d"
+    missing_fiscal = ""
+    if not record.get("taxpayerId"):
+        missing_fiscal = "\n⚠️ Dati fiscali non presenti nella risposta eBay per questo ordine."
     return (
         f"Ordine: <code>{html.escape(record['orderId'])}</code>\n"
         f"Data: <code>{html.escape(record['creationDate'])}</code>\n"
         f"Buyer: <code>{html.escape(record['buyerUsername'] or 'n/d')}</code>\n"
         f"Codice fiscale: <code>{html.escape(cf)}</code>\n"
         f"Tipo: <code>{html.escape(tax_type)}</code>\n"
-        f"Paese: <code>{html.escape(country)}</code>"
+        f"Paese: <code>{html.escape(country)}</code>{missing_fiscal}"
     )
 
 
-def format_records(records: Iterable[Dict[str, str]], only_found: bool) -> str:
+def format_records(records: Iterable[Dict[str, str]], only_found: bool, page_size: int = 5) -> List[str]:
     rows = list(records)
     if not rows:
         if only_found:
-            return "Nessun ordine con codice fiscale restituito da eBay nella selezione richiesta."
-        return "Nessun ordine trovato nella selezione richiesta."
-    header = f"Ordini elaborati: <b>{len(rows)}</b>"
-    return header + "\n\n" + "\n\n".join(format_record(row) for row in rows)
+            return ["Nessun ordine con codice fiscale restituito da eBay nella selezione richiesta."]
+        return ["Nessun ordine trovato nella selezione richiesta."]
+    pages: List[str] = []
+    for start in range(0, len(rows), page_size):
+        page_rows = rows[start:start + page_size]
+        page_no = (start // page_size) + 1
+        total_pages = (len(rows) + page_size - 1) // page_size
+        header = f"📦 Ordini elaborati: <b>{len(rows)}</b> • Pagina <b>{page_no}/{total_pages}</b>"
+        body = "\n\n".join(f"🔹 {format_record(row)}" for row in page_rows)
+        pages.append(header + "\n\n" + body)
+    return pages
 
 
 def parse_command(text: str) -> tuple[str, List[str]]:
@@ -156,6 +218,8 @@ def parse_command(text: str) -> tuple[str, List[str]]:
 def build_help_text() -> str:
     return (
         "Comandi disponibili:\n"
+        "/ping - health check rapido\n"
+        "/stato - stato monitor ordini/notifiche\n"
         "/ultimi [giorni] [max] - legge gli ordini recenti e restituisce i CF trovati\n"
         "/ordine <order_id> - legge un ordine specifico\n"
         "/tutti [giorni] [max] - mostra tutti gli ordini anche senza CF\n"
@@ -186,43 +250,175 @@ def is_authorized(chat_id: int, config: TelegramConfig) -> bool:
 
 def send_message(token: str, chat_id: int, text: str) -> None:
     for chunk in chunk_message(text):
-        telegram_request(
-            token,
-            "sendMessage",
-            {
-                "chat_id": chat_id,
-                "text": chunk,
-                "parse_mode": "HTML",
-                "disable_web_page_preview": True,
+            if "HTTP 400" in str(exc):
+                fallback_params = {
+                    "chat_id": chat_id,
+                    "text": chunk,
+                    "disable_web_page_preview": True,
+                }
+                request_with_backoff(
+                    lambda: telegram_request(token, "sendMessage", fallback_params),
+                    label="sendMessage-fallback",
+                )
+                continue
+            request_with_backoff(
+                lambda: telegram_request(token, "sendMessage", params),
+                label="sendMessage-retry",
+            )
+            continue
+        return {
+            "notified_order_ids": [],
+            "notified_hashes": [],
+            "last_check": None,
+            "last_error": None,
+            "metrics": {
+                "orders_read": 0,
+                "notifications_sent": 0,
+                "errors_by_type": {},
             },
-        )
+        }
+        loaded = json.load(handle)
+    loaded.setdefault("notified_order_ids", [])
+    loaded.setdefault("notified_hashes", [])
+    loaded.setdefault("last_check", None)
+    loaded.setdefault("last_error", None)
+    loaded.setdefault(
+        "metrics",
+        {"orders_read": 0, "notifications_sent": 0, "errors_by_type": {}},
+    )
+    loaded["metrics"].setdefault("orders_read", 0)
+    loaded["metrics"].setdefault("notifications_sent", 0)
+    loaded["metrics"].setdefault("errors_by_type", {})
+    return loaded
 
 
-def send_to_all_targets(token: str, chat_ids: Iterable[int], text: str) -> None:
-    for chat_id in chat_ids:
-        send_message(token, chat_id, text)
-
-
-def ensure_parent_dir(path: str) -> None:
-    directory = os.path.dirname(path)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
-
-
-def load_state(path: str) -> Dict[str, object]:
+def load_retry_queue(path: str) -> List[Dict[str, object]]:
     if not os.path.exists(path):
-        return {"notified_order_ids": [], "last_check": None}
+        return []
     with open(path, "r", encoding="utf-8") as handle:
         return json.load(handle)
 
 
-def save_state(path: str, state: Dict[str, object]) -> None:
+def save_retry_queue(path: str, queue: List[Dict[str, object]]) -> None:
     ensure_parent_dir(path)
     with open(path, "w", encoding="utf-8") as handle:
-        json.dump(state, handle, indent=2, ensure_ascii=False)
+        json.dump(queue, handle, indent=2, ensure_ascii=False)
 
 
-def now_utc() -> datetime:
+def increment_metric(state: Dict[str, object], metric: str, amount: int = 1) -> None:
+    metrics = state.setdefault("metrics", {})
+    metrics[metric] = int(metrics.get(metric, 0)) + amount
+
+
+def increment_error_metric(state: Dict[str, object], error_type: str) -> None:
+    metrics = state.setdefault("metrics", {})
+    errors = metrics.setdefault("errors_by_type", {})
+    errors[error_type] = int(errors.get(error_type, 0)) + 1
+
+
+def format_status(state: Dict[str, object], retry_queue_size: int) -> str:
+    metrics = state.get("metrics", {})
+    errors = metrics.get("errors_by_type", {})
+    return (
+        "📊 Stato bot\n"
+        f"Ultimo check eBay: <code>{html.escape(str(state.get('last_check') or 'mai'))}</code>\n"
+        f"Ordini analizzati: <b>{int(metrics.get('orders_read', 0))}</b>\n"
+        f"Notifiche inviate: <b>{int(metrics.get('notifications_sent', 0))}</b>\n"
+        f"Coda retry notifiche: <b>{retry_queue_size}</b>\n"
+        f"Ultimo errore: <code>{html.escape(str(state.get('last_error') or 'nessuno'))}</code>\n"
+        f"Errori per tipo: <code>{html.escape(json.dumps(errors, ensure_ascii=False))}</code>"
+    )
+
+
+    records = request_with_backoff(
+        lambda: fetch_records(
+            config,
+            FetchOptions(
+                created_after=start,
+                created_before=end,
+                max_results=100,
+                only_found=False,
+            ),
+        label="fetch_records",
+    notified_hashes = set(state.get("notified_hashes", []))
+        record
+        for record in records
+        if record.get("orderId")
+        and record["orderId"] not in notified_order_ids
+        and record_fingerprint(record) not in notified_hashes
+    existing_hashes = list(state.get("notified_hashes", []))
+    existing_hashes_set = set(existing_hashes)
+        fingerprint = record_fingerprint(record)
+        if fingerprint not in existing_hashes_set:
+            existing_hashes.append(fingerprint)
+            existing_hashes_set.add(fingerprint)
+    state["notified_hashes"] = existing_hashes[-max_tracked_orders:]
+def process_retry_queue(
+    telegram_config: TelegramConfig,
+    state: Dict[str, object],
+) -> None:
+    queue = load_retry_queue(telegram_config.retry_queue_path)
+    if not queue:
+        return
+    remaining: List[Dict[str, object]] = []
+    for item in queue:
+        try:
+            send_message(
+                telegram_config.token,
+                int(item["chat_id"]),
+                str(item["text"]),
+            )
+            increment_metric(state, "notifications_sent")
+        except TelegramApiError as exc:
+            item["attempts"] = int(item.get("attempts", 0)) + 1
+            if item["attempts"] < 5:
+                remaining.append(item)
+            state["last_error"] = str(exc)
+            increment_error_metric(state, "telegram_send")
+    save_retry_queue(telegram_config.retry_queue_path, remaining)
+
+
+    process_retry_queue(telegram_config, state)
+    increment_metric(state, "orders_read", len(records))
+    failed_queue = load_retry_queue(telegram_config.retry_queue_path)
+        text = format_auto_notification(record)
+        for chat_id in telegram_config.notify_chat_ids:
+            try:
+                send_message(telegram_config.token, chat_id, text)
+                increment_metric(state, "notifications_sent")
+            except TelegramApiError as exc:
+                failed_queue.append({"chat_id": chat_id, "text": text, "attempts": 1})
+                state["last_error"] = str(exc)
+                increment_error_metric(state, "telegram_send")
+    save_retry_queue(telegram_config.retry_queue_path, failed_queue)
+    if command == "/ping":
+        return ["pong ✅"]
+    if command == "/stato":
+        state = load_state(telegram_config.state_path)
+        retry_queue_size = len(load_retry_queue(telegram_config.retry_queue_path))
+        return [format_status(state, retry_queue_size)]
+    records = request_with_backoff(
+        lambda: fetch_records(config, options),
+        label=f"fetch_records_{command}",
+    )
+    return format_records(records, only_found=options.only_found)
+        configure_logging()
+    updates_backoff_seconds = 1
+            updates = request_with_backoff(
+                lambda: telegram_request(
+                    telegram_config.token,
+                    "getUpdates",
+                    {
+                        "offset": offset,
+                        "timeout": telegram_config.poll_timeout_seconds,
+                        "allowed_updates": ["message", "edited_message"],
+                    },
+                ),
+                label="getUpdates",
+            updates_backoff_seconds = 1
+            LOGGER.error("Errore runtime bot: %s", exc)
+            time.sleep(updates_backoff_seconds)
+            updates_backoff_seconds = min(updates_backoff_seconds * 2, 30)
     return datetime.now(timezone.utc)
 
 
