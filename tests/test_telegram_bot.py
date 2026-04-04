@@ -31,7 +31,7 @@ class TelegramBotTests(unittest.TestCase):
         self.assertEqual(len(chunks), 2)
 
     def test_format_records_empty_only_found(self) -> None:
-        content = format_records([], only_found=True)
+        content = format_records([], only_found=True)[0]
         self.assertIn("Nessun ordine con codice fiscale", content)
 
     def test_build_help_text_mentions_commands(self) -> None:
@@ -52,6 +52,15 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("Comandi disponibili", replies[0])
         mock_load_config.assert_not_called()
         mock_fetch_records.assert_not_called()
+
+    def test_process_message_ping(self) -> None:
+        replies = process_message(
+            text="/ping",
+            chat_id=1,
+            telegram_config=TelegramConfig(token="x", allowed_chat_ids=None, notify_chat_ids=set()),
+            ebay_environment="production",
+        )
+        self.assertEqual(replies, ["pong ✅"])
 
     def test_update_state_with_records_tracks_ids(self) -> None:
         state = {"notified_order_ids": ["1"], "last_check": None}
@@ -76,6 +85,19 @@ class TelegramBotTests(unittest.TestCase):
         )
         self.assertIn("Nuovo ordine eBay ricevuto", text)
         self.assertIn("RSSMRA80A01H501U", text)
+
+    def test_format_order_fallback_when_missing_fiscal_fields(self) -> None:
+        text = format_auto_notification(
+            {
+                "orderId": "12-345",
+                "creationDate": "2026-04-03T10:00:00Z",
+                "buyerUsername": "buyer",
+                "taxpayerId": "",
+                "taxIdentifierType": "",
+                "issuingCountry": "",
+            }
+        )
+        self.assertIn("Dati fiscali non presenti", text)
 
     def test_has_codice_fiscale_requires_type_and_value(self) -> None:
         self.assertTrue(

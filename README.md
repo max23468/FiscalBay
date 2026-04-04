@@ -76,6 +76,7 @@ export TELEGRAM_NOTIFY_CHAT_IDS="123456789"
 export TELEGRAM_POLL_TIMEOUT="30"
 export EBAY_ORDER_POLL_INTERVAL="120"
 export EBAY_ORDER_STATE_PATH="data/notified_orders.json"
+export EBAY_NOTIFY_RETRY_PATH="data/failed_notifications.json"
 ```
 
 `TELEGRAM_ALLOWED_CHAT_IDS` è opzionale ma consigliato. Puoi inserire uno o più chat id separati da virgola.
@@ -91,6 +92,8 @@ python3 src/telegram_bot.py
 Comandi supportati:
 
 - `/help`
+- `/ping`
+- `/stato`
 - `/ultimi 7 20`
 - `/tutti 7 20`
 - `/ordine 12-34567-89012`
@@ -104,6 +107,9 @@ Comportamento:
 - In parallelo controlla periodicamente gli ordini eBay e invia automaticamente un messaggio per ogni nuovo `orderId` non ancora notificato
 - Le notifiche automatiche partono solo se eBay restituisce `taxIdentifierType=CODICE_FISCALE` e il relativo valore è presente
 - Gli `orderId` già inviati vengono salvati nel file stato locale `data/notified_orders.json` per evitare duplicati dopo riavvii
+- Deduplica più robusta: oltre a `orderId`, viene tracciato anche un hash del contenuto ordine già notificato
+- Se l'invio Telegram fallisce, il messaggio entra in una coda locale (`data/failed_notifications.json`) e viene ritentato con backoff
+- `/stato` mostra ultimo check, metriche minime (ordini analizzati, notifiche inviate, errori), coda retry e ultimo errore
 
 ## Invio automatico nuovi ordini
 
