@@ -161,7 +161,6 @@ Struttura introdotta:
 
 ## Fase 3 - Qualita' e Tooling
 
-- [ ] valutare `mypy` o type checking graduale
 - [ ] aggiungere test di integrazione per:
   - fetch ordini
 - [ ] aggiungere coverage minima utile

@@ -19,6 +19,7 @@ ebay-cf-fix-git-lock = "ebay_cf.git_utils:main"
 [project.optional-dependencies]
 dev = [
   "build>=1.2.2",
+  "mypy>=1.18.2",
   "ruff==0.15.9",
 ]
 
@@ -42,3 +43,13 @@ select = [
   "F",
   "I",
 ]
+
+[tool.mypy]
+python_version = "3.10"
+files = [
+  "src/ebay_cf/models.py",
+  "src/ebay_cf/config.py",
+  "src/ebay_cf/storage/sqlite.py",
+  "src/ebay_cf/git_utils.py",
+]
+strict = true

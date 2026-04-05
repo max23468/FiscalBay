@@ -5,9 +5,30 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from typing import Iterable
+from typing import Iterable, TypedDict
 
 SCHEMA_VERSION = 2
+
+
+class MetricsState(TypedDict):
+    orders_read: int
+    notifications_sent: int
+    errors_by_type: dict[str, int]
+
+
+class BotState(TypedDict):
+    notified_order_ids: list[str]
+    notified_hashes: list[str]
+    last_check: str | None
+    last_error: str | None
+    metrics: MetricsState
+
+
+class RetryQueueItem(TypedDict, total=False):
+    id: int
+    chat_id: int
+    text: str
+    attempts: int
 
 
 def ensure_parent_dir(path: str) -> None:
@@ -119,8 +140,8 @@ def _sync_string_table(
         )
 
 
-def _normalize_retry_item(item: dict[str, object]) -> dict[str, object]:
-    normalized: dict[str, object] = {
+def _normalize_retry_item(item: RetryQueueItem) -> RetryQueueItem:
+    normalized: RetryQueueItem = {
         "chat_id": int(item["chat_id"]),
         "text": str(item["text"]),
         "attempts": int(item.get("attempts", 0)),
@@ -130,7 +151,7 @@ def _normalize_retry_item(item: dict[str, object]) -> dict[str, object]:
     return normalized
 
 
-def _sync_retry_queue(conn: sqlite3.Connection, queue: list[dict[str, object]]) -> None:
+def _sync_retry_queue(conn: sqlite3.Connection, queue: list[RetryQueueItem]) -> None:
     normalized = [_normalize_retry_item(item) for item in queue]
     existing_rows = conn.execute("SELECT id FROM retry_queue ORDER BY id").fetchall()
     existing_ids = {int(row["id"]) for row in existing_rows}
@@ -166,14 +187,40 @@ def _sync_retry_queue(conn: sqlite3.Connection, queue: list[dict[str, object]]) 
             )
 
 
-def load_state(path: str) -> dict[str, object]:
+def _default_metrics_state() -> MetricsState:
+    return {
+        "orders_read": 0,
+        "notifications_sent": 0,
+        "errors_by_type": {},
+    }
+
+
+def _parse_metrics_state(raw_value: str) -> MetricsState:
+    decoded = json.loads(raw_value)
+    if not isinstance(decoded, dict):
+        return _default_metrics_state()
+    errors = decoded.get("errors_by_type", {})
+    normalized_errors: dict[str, int] = {}
+    if isinstance(errors, dict):
+        normalized_errors = {
+            str(key): int(value)
+            for key, value in errors.items()
+        }
+    return {
+        "orders_read": int(decoded.get("orders_read", 0)),
+        "notifications_sent": int(decoded.get("notifications_sent", 0)),
+        "errors_by_type": normalized_errors,
+    }
+
+
+def load_state(path: str) -> BotState:
     init_db(path)
-    state: dict[str, object] = {
+    state: BotState = {
         "notified_order_ids": [],
         "notified_hashes": [],
         "last_check": None,
         "last_error": None,
-        "metrics": {"orders_read": 0, "notifications_sent": 0, "errors_by_type": {}},
+        "metrics": _default_metrics_state(),
     }
     with _connect(path) as conn:
         for row in conn.execute("SELECT order_id FROM notified_order_ids ORDER BY rowid"):
@@ -182,15 +229,15 @@ def load_state(path: str) -> dict[str, object]:
             state["notified_hashes"].append(str(row["hash"]))
         for row in conn.execute("SELECT key, value FROM kv_store"):
             if row["key"] == "last_check":
-                state["last_check"] = row["value"]
+                state["last_check"] = str(row["value"])
             elif row["key"] == "last_error":
-                state["last_error"] = row["value"]
+                state["last_error"] = str(row["value"])
             elif row["key"] == "metrics":
-                state["metrics"] = json.loads(row["value"])
+                state["metrics"] = _parse_metrics_state(str(row["value"]))
     return state
 
 
-def save_state(path: str, state: dict[str, object]) -> None:
+def save_state(path: str, state: BotState) -> None:
     init_db(path)
     with _connect(path) as conn:
         _sync_string_table(
@@ -206,7 +253,7 @@ def save_state(path: str, state: dict[str, object]) -> None:
             state.get("notified_hashes", []),
         )
 
-        metrics_json = json.dumps(state.get("metrics", {}))
+        metrics_json = json.dumps(state["metrics"])
         conn.execute(
             "INSERT OR REPLACE INTO kv_store (key, value) VALUES ('metrics', ?)",
             (metrics_json,),
@@ -227,9 +274,9 @@ def save_state(path: str, state: dict[str, object]) -> None:
             conn.execute("DELETE FROM kv_store WHERE key = 'last_error'")
 
 
-def load_retry_queue(path: str) -> list[dict[str, object]]:
+def load_retry_queue(path: str) -> list[RetryQueueItem]:
     init_db(path)
-    queue: list[dict[str, object]] = []
+    queue: list[RetryQueueItem] = []
     with _connect(path) as conn:
         for row in conn.execute("SELECT id, chat_id, text, attempts FROM retry_queue ORDER BY id"):
             queue.append(
@@ -243,7 +290,7 @@ def load_retry_queue(path: str) -> list[dict[str, object]]:
     return queue
 
 
-def save_retry_queue(path: str, queue: list[dict[str, object]]) -> None:
+def save_retry_queue(path: str, queue: list[RetryQueueItem]) -> None:
     init_db(path)
     with _connect(path) as conn:
         _sync_retry_queue(conn, queue)
