@@ -188,6 +188,16 @@ python3 src/ebay_cf_tool.py --help
 python3 src/telegram_bot.py
 ```
 
+### Utility operativa Git
+
+Se Git resta bloccato da un `index.lock` rimasto sporco, puoi usare:
+
+```bash
+ebay-cf-fix-git-lock
+```
+
+Il comando rimuove il lock solo se non risulta piu' detenuto da un processo attivo.
+
 ## Campi Restituiti
 
 I record prodotti dalla CLI includono:
