@@ -161,8 +161,6 @@ Struttura introdotta:
 
 ## Fase 3 - Qualita' e Tooling
 
-- [ ] aggiungere coverage minima utile
-
 ## Fase 4 - Operativita' e Osservabilita'
 
 - [ ] definire log strutturati coerenti
