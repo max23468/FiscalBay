@@ -1,9 +1,12 @@
 .env
 .env.*
 .venv/
+.vscode/
 __pycache__/
 *.egg-info/
 .eggs/
 build/
 dist/
 *.pyc
+data/*.db
+data/*.lock
