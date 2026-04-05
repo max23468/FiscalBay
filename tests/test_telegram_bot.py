@@ -1,4 +1,6 @@
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from src.ebay_cf.bot import (
@@ -9,6 +11,7 @@ from src.ebay_cf.bot import (
     TELEGRAM_CMD_MAX_DAYS,
     TelegramApiError,
     TelegramConfig,
+    acquire_process_lock,
     build_help_text,
     build_main_menu_markup,
     callback_command_from_data,
@@ -21,6 +24,7 @@ from src.ebay_cf.bot import (
     options_for_command,
     parse_command,
     process_message,
+    release_process_lock,
     send_message,
     update_state_with_records,
 )
@@ -213,6 +217,32 @@ class TelegramBotTests(unittest.TestCase):
             "deleteWebhook",
             {"drop_pending_updates": False},
         )
+
+    def test_process_lock_writes_metadata_and_removes_file_on_release(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            lock_path = Path(tmpdir) / "telegram_bot.lock"
+
+            handle = acquire_process_lock(str(lock_path))
+            self.assertTrue(lock_path.exists())
+            content = lock_path.read_text(encoding="utf-8")
+            self.assertIn("pid=", content)
+            self.assertIn("started_at=", content)
+
+            release_process_lock(handle, str(lock_path))
+            self.assertFalse(lock_path.exists())
+
+    def test_acquire_process_lock_reports_holder_details_when_already_locked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            lock_path = Path(tmpdir) / "telegram_bot.lock"
+
+            handle = acquire_process_lock(str(lock_path))
+            try:
+                with self.assertRaises(TelegramApiError) as ctx:
+                    acquire_process_lock(str(lock_path))
+            finally:
+                release_process_lock(handle, str(lock_path))
+
+            self.assertIn("pid=", str(ctx.exception))
 
 
 if __name__ == "__main__":

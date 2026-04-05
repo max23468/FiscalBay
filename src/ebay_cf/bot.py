@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 import urllib.parse
+from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import Iterable, Optional
 
@@ -308,16 +309,36 @@ def acquire_process_lock(lock_path: str):
     try:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
+        handle.seek(0)
+        holder = handle.read().strip()
         handle.close()
+        holder_details = f" ({holder})" if holder else ""
         raise TelegramApiError(
             "Un'altra istanza del bot e' gia' in esecuzione (lock su "
-            f"{lock_path}). Chiudi l'altra copia o imposta TELEGRAM_BOT_LOCK_PATH."
+            f"{lock_path}{holder_details}). Chiudi l'altra copia o imposta "
+            "TELEGRAM_BOT_LOCK_PATH."
         ) from None
     try:
         os.chmod(lock_path, 0o600)
     except OSError:
         pass
+    handle.seek(0)
+    handle.truncate()
+    handle.write(f"pid={os.getpid()}\nstarted_at={datetime.now(timezone.utc).isoformat()}\n")
+    handle.flush()
     return handle
+
+
+def release_process_lock(lock_handle, lock_path: str) -> None:
+    try:
+        if fcntl is not None:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+    except OSError:
+        pass
+    with suppress(OSError):
+        lock_handle.close()
+    with suppress(FileNotFoundError, OSError):
+        os.remove(lock_path)
 
 
 def increment_metric(state: dict[str, object], metric: str, amount: int = 1) -> None:
@@ -566,7 +587,9 @@ def request_shutdown(signum: int, frame: Optional[object]) -> None:
 
 def run_bot() -> int:
     configure_logging()
+    _shutdown.clear()
     lock_handle = None
+    telegram_config = None
     try:
         telegram_config = load_telegram_config()
         ebay_environment = os.getenv("EBAY_ENVIRONMENT", "production")
@@ -575,11 +598,12 @@ def run_bot() -> int:
     except (TelegramApiError, EbayApiError) as exc:
         LOGGER.error("Errore configurazione: %s", exc)
         print(f"Errore configurazione: {exc}", file=sys.stderr)
-        if lock_handle is not None:
-            lock_handle.close()
+        if lock_handle is not None and telegram_config is not None:
+            release_process_lock(lock_handle, telegram_config.lock_path)
         return 1
 
     signal.signal(signal.SIGTERM, request_shutdown)
+    signal.signal(signal.SIGINT, request_shutdown)
 
     notifier_thread = threading.Thread(
         target=auto_notify_loop,
@@ -707,11 +731,6 @@ def run_bot() -> int:
             if _shutdown.is_set():
                 break
 
-    if lock_handle is not None:
-        try:
-            if fcntl is not None:
-                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
-        except OSError:
-            pass
-        lock_handle.close()
+    if lock_handle is not None and telegram_config is not None:
+        release_process_lock(lock_handle, telegram_config.lock_path)
     return 0
