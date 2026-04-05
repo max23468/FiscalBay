@@ -15,6 +15,7 @@
 
 ### Assetto iniziale e rischio
 
+- [ ] preservare la continuita' d'uso del tool mentre procede il refactor
 - [ ] confermare che il progetto resta usabile mentre procede il refactor
 - [ ] aprire issue board o milestone board minima con priorita' e dipendenze
 - [ ] creare un branch dedicato al refactor strutturale
@@ -55,6 +56,7 @@
 
 ### Esecuzione servizio
 
+- [ ] migliorare affidabilita' del deploy e dell'esecuzione sulla VPS
 - [ ] decidere standard operativo unico:
   - `systemd` nativo
   - oppure Docker Compose
@@ -91,6 +93,8 @@ Struttura introdotta:
 
 ### Refactor tecnico
 
+- [ ] separare meglio responsabilita' applicative e operative tra CLI, bot, servizi, client e storage
+- [ ] ridurre fragilita' e duplicazioni ancora presenti nel codice
 - [ ] ridurre l'accorpamento di responsabilita' rimasto nei flussi CLI e bot
 - [ ] eliminare i punti in cui la logica applicativa dipende ancora da import diretti fra entrypoint
 - [ ] creare modelli tipizzati per:
@@ -108,6 +112,7 @@ Struttura introdotta:
 
 ### Quality gate e release
 
+- [ ] documentare il percorso di refactor e le decisioni senza bloccare l'uso attuale del progetto
 - [ ] mantenere test, CI, mypy e coverage allineati con ogni refactor
 - [ ] introdurre `CHANGELOG.md` per le modifiche rilevanti
 - [ ] verificare se serve un controllo packaging o release process piu' esplicito
@@ -116,6 +121,7 @@ Struttura introdotta:
 
 ### Logging e contesto operativo
 
+- [ ] portare il progetto a un livello di osservabilita' e sicurezza adeguato a un servizio pubblico
 - [ ] completare il contesto nei log con correlation id o identificativi equivalenti per operazioni, ordini e chat
 - [ ] standardizzare definitivamente eventi log per start, stop, polling, retry, errori e health check
 
@@ -137,6 +143,7 @@ Struttura introdotta:
 
 ### Target di prodotto
 
+- [ ] raggiungere supporto multiutente reale
 - [ ] ogni utente Telegram deve poter collegare il proprio account eBay
 - [ ] ogni utente deve vedere solo i propri ordini e le proprie notifiche
 - [ ] piu' utenti devono poter convivere sullo stesso bot
@@ -175,6 +182,8 @@ Struttura introdotta:
 
 ### Esperienza target utente
 
+- [ ] rendere disponibile onboarding self-service da Telegram
+- [ ] permettere il collegamento del proprio account eBay con OAuth per singolo utente
 - [ ] utente apre il bot e fa `/start`
 - [ ] il bot presenta un pulsante "Collega account eBay"
 - [ ] il pulsante apre una pagina web sicura con OAuth eBay
@@ -205,6 +214,7 @@ Struttura introdotta:
 
 ## Fase 7 - Governance del Prodotto [Priorita' media]
 
+- [ ] definire governance e limiti del servizio in modo compatibile con isolamento dati tra utenti
 - [ ] definire quali dati personali vengono trattati
 - [ ] scrivere informativa minima d'uso e retention
 - [ ] definire retention dei log
