@@ -171,11 +171,6 @@ Struttura introdotta:
 - [ ] valutare `mypy` o type checking graduale
 - [ ] aggiungere test di integrazione per:
   - fetch ordini
-  - stato bot
-  - retry queue
-  - bootstrap primo avvio
-  - notifiche duplicate
-- [ ] aggiungere test storage su SQLite reale temporaneo
 - [ ] aggiungere coverage minima utile
 - [ ] estendere CI con lint + test + package build
 
