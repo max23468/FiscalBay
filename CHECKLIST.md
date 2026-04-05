@@ -134,31 +134,25 @@ Ordine consigliato:
 
 ### Nuova struttura proposta
 
-- [ ] introdurre package applicativo, ad esempio:
-  - `src/ebay_cf/cli.py`
-  - `src/ebay_cf/bot.py`
-  - `src/ebay_cf/config.py`
-  - `src/ebay_cf/domain/models.py`
-  - `src/ebay_cf/clients/ebay.py`
-  - `src/ebay_cf/clients/telegram.py`
-  - `src/ebay_cf/services/orders.py`
-  - `src/ebay_cf/services/notifications.py`
-  - `src/ebay_cf/storage/sqlite.py`
-  - `src/ebay_cf/runtime/poller.py`
+Struttura introdotta:
+
+- `src/ebay_cf/cli.py`
+- `src/ebay_cf/bot.py`
+- `src/ebay_cf/config.py`
+- `src/ebay_cf/models.py`
+- `src/ebay_cf/clients/ebay.py`
+- `src/ebay_cf/clients/telegram.py`
+- `src/ebay_cf/services/orders.py`
+- `src/ebay_cf/storage/sqlite.py`
 
 ### Refactor tecnico
 
-- [ ] separare config loading dalla logica business
-- [ ] estrarre client eBay dedicato
-- [ ] estrarre client Telegram dedicato
 - [ ] creare modelli tipizzati per:
   - ordine eBay normalizzato
   - stato notifica
   - utente Telegram
   - account eBay collegato
-- [ ] sostituire i `Dict[str, str]` con dataclass o modelli equivalenti
-- [ ] creare service layer condiviso tra CLI e bot
-- [ ] rimuovere import del bot dal modulo CLI
+- [ ] sostituire in modo sistematico i `Dict[str, str]` residui con dataclass o modelli equivalenti
 - [ ] centralizzare retry, backoff e classificazione errori
 - [ ] definire eccezioni applicative piu' chiare
 - [ ] separare rendering output da raccolta dati
@@ -291,8 +285,6 @@ Oltre al refactor e alla VPS, suggerisco di aggiungere anche questi elementi:
 - [ ] backup e audit VPS
 - [ ] hardening base VPS
 - [ ] standardizzare il modo di eseguire il servizio
-- [ ] creare nuova struttura package senza cambiare comportamento
-- [ ] centralizzare config e client API
 
 ### Sprint 2
 
