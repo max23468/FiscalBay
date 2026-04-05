@@ -202,10 +202,7 @@ def _parse_metrics_state(raw_value: str) -> MetricsState:
     errors = decoded.get("errors_by_type", {})
     normalized_errors: dict[str, int] = {}
     if isinstance(errors, dict):
-        normalized_errors = {
-            str(key): int(value)
-            for key, value in errors.items()
-        }
+        normalized_errors = {str(key): int(value) for key, value in errors.items()}
     return {
         "orders_read": int(decoded.get("orders_read", 0)),
         "notifications_sent": int(decoded.get("notifications_sent", 0)),
