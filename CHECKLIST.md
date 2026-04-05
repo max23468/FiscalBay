@@ -159,9 +159,6 @@ Struttura introdotta:
 
 ### Storage
 
-- [ ] evitare pattern `DELETE + INSERT` completi dove non necessari
-- [ ] rendere idempotenti operazioni di stato e retry
-
 ## Fase 3 - Qualita' e Tooling
 
 - [ ] valutare `mypy` o type checking graduale

@@ -119,6 +119,53 @@ def _sync_string_table(
         )
 
 
+def _normalize_retry_item(item: dict[str, object]) -> dict[str, object]:
+    normalized: dict[str, object] = {
+        "chat_id": int(item["chat_id"]),
+        "text": str(item["text"]),
+        "attempts": int(item.get("attempts", 0)),
+    }
+    if item.get("id") is not None:
+        normalized["id"] = int(item["id"])
+    return normalized
+
+
+def _sync_retry_queue(conn: sqlite3.Connection, queue: list[dict[str, object]]) -> None:
+    normalized = [_normalize_retry_item(item) for item in queue]
+    existing_rows = conn.execute("SELECT id FROM retry_queue ORDER BY id").fetchall()
+    existing_ids = {int(row["id"]) for row in existing_rows}
+    desired_ids = {int(item["id"]) for item in normalized if item.get("id") is not None}
+
+    to_delete = existing_ids - desired_ids
+    if to_delete:
+        placeholders = ", ".join("?" for _ in to_delete)
+        conn.execute(
+            f"DELETE FROM retry_queue WHERE id IN ({placeholders})",
+            tuple(sorted(to_delete)),
+        )
+
+    for item in normalized:
+        if item.get("id") is not None:
+            conn.execute(
+                "UPDATE retry_queue SET chat_id = ?, text = ?, attempts = ? WHERE id = ?",
+                (
+                    item["chat_id"],
+                    item["text"],
+                    item["attempts"],
+                    item["id"],
+                ),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO retry_queue (chat_id, text, attempts) VALUES (?, ?, ?)",
+                (
+                    item["chat_id"],
+                    item["text"],
+                    item["attempts"],
+                ),
+            )
+
+
 def load_state(path: str) -> dict[str, object]:
     init_db(path)
     state: dict[str, object] = {
@@ -184,9 +231,10 @@ def load_retry_queue(path: str) -> list[dict[str, object]]:
     init_db(path)
     queue: list[dict[str, object]] = []
     with _connect(path) as conn:
-        for row in conn.execute("SELECT chat_id, text, attempts FROM retry_queue ORDER BY id"):
+        for row in conn.execute("SELECT id, chat_id, text, attempts FROM retry_queue ORDER BY id"):
             queue.append(
                 {
+                    "id": int(row["id"]),
                     "chat_id": int(row["chat_id"]),
                     "text": str(row["text"]),
                     "attempts": int(row["attempts"]),
@@ -198,12 +246,4 @@ def load_retry_queue(path: str) -> list[dict[str, object]]:
 def save_retry_queue(path: str, queue: list[dict[str, object]]) -> None:
     init_db(path)
     with _connect(path) as conn:
-        conn.execute("DELETE FROM retry_queue")
-        rows = [
-            (int(item["chat_id"]), str(item["text"]), int(item.get("attempts", 0)))
-            for item in queue
-        ]
-        conn.executemany(
-            "INSERT INTO retry_queue (chat_id, text, attempts) VALUES (?, ?, ?)",
-            rows,
-        )
+        _sync_retry_queue(conn, queue)

@@ -62,7 +62,15 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             save_retry_queue(str(db_path), queue)
 
             restored = load_retry_queue(str(db_path))
-            self.assertEqual(restored, queue)
+            self.assertEqual(len(restored), 2)
+            self.assertEqual(restored[0]["chat_id"], 123)
+            self.assertEqual(restored[0]["text"], "msg-1")
+            self.assertEqual(restored[0]["attempts"], 1)
+            self.assertIn("id", restored[0])
+            self.assertEqual(restored[1]["chat_id"], 456)
+            self.assertEqual(restored[1]["text"], "msg-2")
+            self.assertEqual(restored[1]["attempts"], 2)
+            self.assertIn("id", restored[1])
 
     def test_legacy_notified_orders_table_is_migrated(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -132,6 +140,45 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             restored = load_state(str(db_path))
             self.assertEqual(restored["notified_order_ids"], ["order-2"])
             self.assertEqual(restored["notified_hashes"], ["hash-2"])
+
+    def test_retry_queue_updates_existing_rows_without_full_reset(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+
+            save_retry_queue(
+                str(db_path),
+                [
+                    {"chat_id": 123, "text": "msg-1", "attempts": 1},
+                    {"chat_id": 456, "text": "msg-2", "attempts": 2},
+                ],
+            )
+            initial = load_retry_queue(str(db_path))
+
+            save_retry_queue(
+                str(db_path),
+                [
+                    {
+                        "id": initial[1]["id"],
+                        "chat_id": 456,
+                        "text": "msg-2-updated",
+                        "attempts": 3,
+                    },
+                    {
+                        "chat_id": 789,
+                        "text": "msg-3",
+                        "attempts": 0,
+                    },
+                ],
+            )
+
+            restored = load_retry_queue(str(db_path))
+            self.assertEqual(len(restored), 2)
+            self.assertEqual(restored[0]["id"], initial[1]["id"])
+            self.assertEqual(restored[0]["chat_id"], 456)
+            self.assertEqual(restored[0]["text"], "msg-2-updated")
+            self.assertEqual(restored[0]["attempts"], 3)
+            self.assertEqual(restored[1]["chat_id"], 789)
+            self.assertEqual(restored[1]["text"], "msg-3")
 
 
 if __name__ == "__main__":
