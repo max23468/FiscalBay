@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  ebay-cf-bot:
+    build: .
+    container_name: ebay-bot
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+    # IMPORTANTE: Configura questo file oppure usa un .env nella stessa cartella:
+    # env_file:
+    #   - .env
+    environment:
+      # eBay API
+      - EBAY_ENVIRONMENT=production
+      - EBAY_CLIENT_ID=${EBAY_CLIENT_ID:-}
+      - EBAY_CLIENT_SECRET=${EBAY_CLIENT_SECRET:-}
+      - EBAY_REFRESH_TOKEN=${EBAY_REFRESH_TOKEN:-}
+      
+      # Telegram Bot API
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_NOTIFY_CHAT_IDS=${TELEGRAM_NOTIFY_CHAT_IDS:-}
+      - TELEGRAM_ALLOWED_CHAT_IDS=${TELEGRAM_ALLOWED_CHAT_IDS:-}
+      
+      # Setting
+      - EBAY_ORDER_POLL_INTERVAL=120
+      - LOG_LEVEL=INFO

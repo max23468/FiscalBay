@@ -16,6 +16,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Iterable, List, Optional
@@ -35,8 +36,8 @@ LOGGER = logging.getLogger("ebaycf.telegram_bot")
 TELEGRAM_API_BASE = "https://api.telegram.org"
 DEFAULT_ALLOWED_CHAT_IDS = "TELEGRAM_ALLOWED_CHAT_IDS"
 DEFAULT_NOTIFY_CHAT_IDS = "TELEGRAM_NOTIFY_CHAT_IDS"
-DEFAULT_STATE_PATH = "data/notified_orders.json"
-DEFAULT_RETRY_QUEUE_PATH = "data/failed_notifications.json"
+DEFAULT_STATE_PATH = "data/state.db"
+DEFAULT_RETRY_QUEUE_PATH = "data/state.db"
 DEFAULT_LOCK_PATH = "data/telegram_bot.lock"
 
 TELEGRAM_CMD_MAX_DAYS = 365
@@ -254,20 +255,27 @@ def record_fingerprint(record: Dict[str, str]) -> str:
 
 
 def format_record(record: Dict[str, str]) -> str:
-    cf = record["taxpayerId"] or "non disponibile"
-    tax_type = record["taxIdentifierType"] or "n/d"
-    country = record["issuingCountry"] or "n/d"
-    order_id = html.escape(record['orderId'])
+    cf = record.get("taxpayerId") or "non disponibile"
+    tax_type = record.get("taxIdentifierType") or "n/d"
+    country = record.get("issuingCountry") or "n/d"
+    order_id = html.escape(record.get('orderId', ''))
     missing_fiscal = ""
     if not record.get("taxpayerId"):
         missing_fiscal = "\n⚠️ <i>Dati fiscali non presenti nella risposta eBay per questo ordine.</i>"
         
-    ebay_url = f"https://www.ebay.it/sh/ord/details?orderid={urllib.parse.quote(record['orderId'])}"
+    ebay_url = f"https://www.ebay.it/sh/ord/details?orderid={urllib.parse.quote(record.get('orderId', ''))}"
+    
+    items = html.escape(record.get('items', 'N/D'))
+    total = html.escape(record.get('total', 'N/D'))
+    shipping = html.escape(record.get('shippingAddress', 'N/D'))
         
     return (
         f"🛒 <b>Ordine:</b> <a href=\"{ebay_url}\">{order_id}</a>\n"
-        f"📅 <b>Data:</b> <code>{html.escape(record['creationDate'])}</code>\n"
-        f"👤 <b>Acquirente:</b> <code>{html.escape(record['buyerUsername'] or 'n/d')}</code>\n"
+        f"📅 <b>Data:</b> <code>{html.escape(record.get('creationDate', ''))}</code>\n"
+        f"👤 <b>Acquirente:</b> <code>{html.escape(record.get('buyerUsername', '') or 'n/d')}</code>\n"
+        f"📦 <b>Articoli:</b> <i>{items}</i>\n"
+        f"💰 <b>Totale:</b> <code>{total}</code>\n"
+        f"📍 <b>Spedire a:</b> <code>{shipping}</code>\n"
         f"💳 <b>Dettagli Fiscali:</b>\n"
         f" • CF: <code>{html.escape(cf)}</code> <i>({html.escape(tax_type)})</i>\n"
         f" • Paese: <code>{html.escape(country)}</code>{missing_fiscal}"
@@ -426,60 +434,72 @@ def acquire_process_lock(lock_path: str):
     return handle
 
 
+def init_db(path: str) -> None:
+    ensure_parent_dir(path)
+    with sqlite3.connect(path, timeout=10.0) as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS notified_orders (order_id TEXT, hash TEXT)")
+        conn.execute("CREATE TABLE IF NOT EXISTS retry_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, text TEXT, attempts INTEGER)")
+        conn.execute("CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value TEXT)")
+
+
 def load_state(path: str) -> Dict[str, object]:
-    if not os.path.exists(path):
-        return {
-            "notified_order_ids": [],
-            "notified_hashes": [],
-            "last_check": None,
-            "last_error": None,
-            "metrics": {
-                "orders_read": 0,
-                "notifications_sent": 0,
-                "errors_by_type": {},
-            },
-        }
-    with open(path, "r", encoding="utf-8") as handle:
-        loaded = json.load(handle)
-    loaded.setdefault("notified_order_ids", [])
-    loaded.setdefault("notified_hashes", [])
-    loaded.setdefault("last_check", None)
-    loaded.setdefault("last_error", None)
-    loaded.setdefault(
-        "metrics",
-        {"orders_read": 0, "notifications_sent": 0, "errors_by_type": {}},
-    )
-    loaded["metrics"].setdefault("orders_read", 0)
-    loaded["metrics"].setdefault("notifications_sent", 0)
-    loaded["metrics"].setdefault("errors_by_type", {})
-    return loaded
+    init_db(path)
+    state = {
+        "notified_order_ids": [],
+        "notified_hashes": [],
+        "last_check": None,
+        "last_error": None,
+        "metrics": {"orders_read": 0, "notifications_sent": 0, "errors_by_type": {}},
+    }
+    with sqlite3.connect(path, timeout=10.0) as conn:
+        for row in conn.execute("SELECT order_id, hash FROM notified_orders"):
+            if row[0]: state["notified_order_ids"].append(row[0])
+            if row[1]: state["notified_hashes"].append(row[1])
+        for row in conn.execute("SELECT key, value FROM kv_store"):
+            if row[0] == "last_check": state["last_check"] = row[1]
+            elif row[0] == "last_error": state["last_error"] = row[1]
+            elif row[0] == "metrics": state["metrics"] = json.loads(row[1])
+    return state
 
 
 def save_state(path: str, state: Dict[str, object]) -> None:
-    ensure_parent_dir(path)
-    with open(path, "w", encoding="utf-8") as handle:
-        json.dump(state, handle, indent=2, ensure_ascii=False)
-    try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
+    init_db(path)
+    with sqlite3.connect(path, timeout=10.0) as conn:
+        conn.execute("DELETE FROM notified_orders")
+        ids = state.get("notified_order_ids", [])
+        hashes = state.get("notified_hashes", [])
+        rows = []
+        max_len = max(len(ids), len(hashes))
+        for i in range(max_len):
+            rows.append((
+                ids[i] if i < len(ids) else None,
+                hashes[i] if i < len(hashes) else None,
+            ))
+        conn.executemany("INSERT INTO notified_orders (order_id, hash) VALUES (?, ?)", rows)
+        
+        metrics_json = json.dumps(state.get("metrics", {}))
+        conn.execute("INSERT OR REPLACE INTO kv_store (key, value) VALUES ('metrics', ?)", (metrics_json,))
+        if state.get("last_check"):
+            conn.execute("INSERT OR REPLACE INTO kv_store (key, value) VALUES ('last_check', ?)", (state["last_check"],))
+        if state.get("last_error"):
+            conn.execute("INSERT OR REPLACE INTO kv_store (key, value) VALUES ('last_error', ?)", (state["last_error"],))
 
 
 def load_retry_queue(path: str) -> List[Dict[str, object]]:
-    if not os.path.exists(path):
-        return []
-    with open(path, "r", encoding="utf-8") as handle:
-        return json.load(handle)
+    init_db(path)
+    queue = []
+    with sqlite3.connect(path, timeout=10.0) as conn:
+        for row in conn.execute("SELECT chat_id, text, attempts FROM retry_queue ORDER BY id"):
+            queue.append({"chat_id": row[0], "text": row[1], "attempts": row[2]})
+    return queue
 
 
 def save_retry_queue(path: str, queue: List[Dict[str, object]]) -> None:
-    ensure_parent_dir(path)
-    with open(path, "w", encoding="utf-8") as handle:
-        json.dump(queue, handle, indent=2, ensure_ascii=False)
-    try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
+    init_db(path)
+    with sqlite3.connect(path, timeout=10.0) as conn:
+        conn.execute("DELETE FROM retry_queue")
+        rows = [(item["chat_id"], item["text"], item.get("attempts", 0)) for item in queue]
+        conn.executemany("INSERT INTO retry_queue (chat_id, text, attempts) VALUES (?, ?, ?)", rows)
 
 
 def increment_metric(state: Dict[str, object], metric: str, amount: int = 1) -> None:

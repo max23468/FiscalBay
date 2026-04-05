@@ -245,6 +245,9 @@ def get_csv_fieldnames(records: List[Dict[str, str]]) -> List[str]:
         "taxIdentifierType",
         "issuingCountry",
         "found",
+        "items",
+        "total",
+        "shippingAddress",
     ]
 
 
@@ -396,6 +399,32 @@ def extract_record(order: Dict) -> Dict[str, str]:
     tax_identifier = choose_tax_identifier(order) or {}
     taxpayer_id = tax_identifier.get("taxpayerId") or ""
     tax_type = tax_identifier.get("taxIdentifierType") or ""
+    
+    line_items = order.get("lineItems") or []
+    items_desc = []
+    for item in line_items:
+        qty = item.get("quantity", 1)
+        title = item.get("title", "")
+        items_desc.append(f"{qty}x {title}")
+    items_str = ", ".join(items_desc) if items_desc else "N/D"
+
+    pricing = order.get("pricingSummary") or {}
+    total = pricing.get("total") or {}
+    total_str = f"{total.get('value', '0.00')} {total.get('currency', 'EUR')}"
+
+    shipping_addr_str = "N/D"
+    fsi = order.get("fulfillmentStartInstructions") or []
+    if fsi and isinstance(fsi, list):
+        ship_to = fsi[0].get("shippingStep", {}).get("shipTo", {})
+        contact = ship_to.get("contactAddress") or {}
+        name = ship_to.get("fullName") or ""
+        lines = [contact.get("addressLine1"), contact.get("addressLine2"), contact.get("city"), contact.get("postalCode"), contact.get("stateOrProvince")]
+        addr = ", ".join([str(l) for l in lines if l])
+        if name and addr:
+            shipping_addr_str = f"{name}, {addr}"
+        elif addr:
+            shipping_addr_str = addr
+
     return {
         "orderId": order.get("orderId", ""),
         "creationDate": order.get("creationDate", ""),
@@ -406,6 +435,9 @@ def extract_record(order: Dict) -> Dict[str, str]:
         "taxIdentifierType": tax_type,
         "issuingCountry": tax_identifier.get("issuingCountry", ""),
         "found": "yes" if taxpayer_id else "no",
+        "items": items_str,
+        "total": total_str,
+        "shippingAddress": shipping_addr_str,
     }
 
 
