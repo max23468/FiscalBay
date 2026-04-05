@@ -12,64 +12,29 @@
 - [ ] isolamento dati tra utenti
 - [ ] osservabilita' e sicurezza adatte a un servizio pubblico
 
-## Audit Tecnico
+## Ordine di esecuzione consigliato
 
-### Findings principali
-
-- [ ] `Alta` Le responsabilita' sono molto accorpate in pochi file monolitici.
-  Evidenza: [src/ebay_cf_tool.py](/Users/Matteo/Documents/eBay%20CF/src/ebay_cf_tool.py#L154) contiene parsing CLI, config, HTTP client eBay, logica dominio, serializzazione output. [src/telegram_bot.py](/Users/Matteo/Documents/eBay%20CF/src/telegram_bot.py#L106) contiene config, client Telegram, command handling, persistence SQLite, scheduler polling e notifica.
-
-- [ ] `Alta` La logica applicativa e' condivisa tramite import diretti fra entrypoint, invece che tramite un layer di servizio dedicato.
-  Evidenza: [src/telegram_bot.py](/Users/Matteo/Documents/eBay%20CF/src/telegram_bot.py#L29) importa direttamente `FetchOptions`, `fetch_records`, `load_config` dal modulo CLI.
-
-- [ ] `Alta` Il modello dati e' implicito e basato quasi ovunque su `Dict[str, str]`, con rischio di errori silenziosi e forte accoppiamento su chiavi stringa.
-  Evidenza: [src/ebay_cf_tool.py](/Users/Matteo/Documents/eBay%20CF/src/ebay_cf_tool.py#L397), [src/telegram_bot.py](/Users/Matteo/Documents/eBay%20CF/src/telegram_bot.py#L262), [src/telegram_bot.py](/Users/Matteo/Documents/eBay%20CF/src/telegram_bot.py#L670).
-
-- [ ] `Alta` La persistenza SQLite e' molto primitiva: niente migration, nessun vincolo, salvataggi distruttivi completi e schema non versionato.
-  Evidenza: [src/telegram_bot.py](/Users/Matteo/Documents/eBay%20CF/src/telegram_bot.py#L484), [src/telegram_bot.py](/Users/Matteo/Documents/eBay%20CF/src/telegram_bot.py#L512), [src/telegram_bot.py](/Users/Matteo/Documents/eBay%20CF/src/telegram_bot.py#L544).
-
-- [ ] `Alta` Il design attuale e' single-tenant per definizione: una sola configurazione eBay, una sola configurazione Telegram, stato globale condiviso.
-  Evidenza: [src/ebay_cf_tool.py](/Users/Matteo/Documents/eBay%20CF/src/ebay_cf_tool.py#L217), [src/telegram_bot.py](/Users/Matteo/Documents/eBay%20CF/src/telegram_bot.py#L106), [src/telegram_bot.py](/Users/Matteo/Documents/eBay%20CF/src/telegram_bot.py#L695).
-
-- [ ] `Alta` La futura evoluzione multiutente non puo' basarsi sulle variabili ambiente attuali: servira' un vero datastore per utenti, credenziali e autorizzazioni.
-
-- [ ] `Media` Retry, backoff ed error handling sono duplicati tra eBay e Telegram con implementazioni simili ma separate.
-  Evidenza: [src/ebay_cf_tool.py](/Users/Matteo/Documents/eBay%20CF/src/ebay_cf_tool.py#L79), [src/ebay_cf_tool.py](/Users/Matteo/Documents/eBay%20CF/src/ebay_cf_tool.py#L126), [src/telegram_bot.py](/Users/Matteo/Documents/eBay%20CF/src/telegram_bot.py#L79), [src/telegram_bot.py](/Users/Matteo/Documents/eBay%20CF/src/telegram_bot.py#L179), [src/telegram_bot.py](/Users/Matteo/Documents/eBay%20CF/src/telegram_bot.py#L226).
-
-- [ ] `Media` La logica di polling e notifica usa thread e stato globale locale, sufficiente oggi ma poco robusta per crescita, deploy multipli o piu' worker.
-  Evidenza: [src/telegram_bot.py](/Users/Matteo/Documents/eBay%20CF/src/telegram_bot.py#L56), [src/telegram_bot.py](/Users/Matteo/Documents/eBay%20CF/src/telegram_bot.py#L729).
-
-- [ ] `Media` Manca un package Python piu' strutturato; oggi il progetto e' composto da due moduli top-level con responsabilita' trasversali.
-  Evidenza: [pyproject.toml](/Users/Matteo/Documents/eBay%20CF/pyproject.toml#L21) e [pyproject.toml](/Users/Matteo/Documents/eBay%20CF/pyproject.toml#L24).
-
-- [ ] `Media` I test coprono bene alcune utility ma non coprono flussi integrati, schema storage, bootstrap del bot, deploy e recovery.
-
-- [ ] `Media` Docker e compose sono minimali: manca healthcheck, non c'e' gestione esplicita dei secret, manca utente non-root, manca strategia di aggiornamento.
-  Evidenza: [Dockerfile](/Users/Matteo/Documents/eBay%20CF/Dockerfile#L1), [Dockerfile](/Users/Matteo/Documents/eBay%20CF/Dockerfile#L25), [docker-compose.yml](/Users/Matteo/Documents/eBay%20CF/docker-compose.yml#L3).
-
-- [ ] `Bassa` Ci sono dettagli di naming che aumentano confusione.
-  Esempio: `mint_user_access_token()` richiama `get_access_token()` invece di essere il primitivo effettivo, creando un naming fuorviante. Evidenza: [src/ebay_cf_tool.py](/Users/Matteo/Documents/eBay%20CF/src/ebay_cf_tool.py#L292).
-
-### Conclusione audit
-
-Il progetto oggi e' funzionante ma fragile per crescita. La criticita' maggiore non e' il singolo bug: e' il fatto che codice operativo, integrazione API, persistenza, command handling e comportamento di runtime sono troppo mescolati. Se continuiamo ad aggiungere feature senza refactor, il costo di ogni modifica salira' rapidamente.
-
-## Strategia Complessiva
-
-Ordine consigliato:
-
-1. stabilizzazione minima
-2. hardening VPS
-3. refactor architetturale senza cambiare comportamento
-4. osservabilita' e deploy piu' sicuri
+1. stabilizzazione minima e sicurezza operativa
+2. hardening VPS e standard deploy
+3. rifondazione strutturale del codice senza cambiare comportamento
+4. osservabilita', health check e runbook operativi
 5. progettazione multiutente
-6. implementazione onboarding utenti eBay
+6. onboarding self-service Telegram + eBay OAuth
 
-## Checklist Esecutiva
+## Checklist Operativa
 
-## Fase 0 - Baseline e Sicurezza Immediata
+## Fase 0 - Baseline e Sicurezza Immediata [Priorita' alta]
 
+### Assetto iniziale e rischio
+
+- [ ] confermare che il progetto resta usabile mentre procede il refactor
+- [ ] aprire issue board o milestone board minima con priorita' e dipendenze
 - [ ] creare un branch dedicato al refactor strutturale
+- [ ] censire segreti attuali e programmare rotazione di quelli piu' esposti
+- [ ] introdurre rotazione periodica dei segreti come attivita' ricorrente
+
+### Fotografia ambiente attuale
+
 - [ ] fotografare la configurazione attuale della VPS
 - [ ] esportare backup di:
   - file env
@@ -77,9 +42,10 @@ Ordine consigliato:
   - unita' `systemd` o configurazione Docker attuale
 - [ ] definire una checklist di rollback
 - [ ] verificare dove stanno girando oggi bot, env file, dati runtime e log
-- [ ] censire segreti attuali e programmare rotazione di quelli piu' esposti
+- [ ] verificare se esiste gia' un ambiente staging o almeno una preview testabile
+- [ ] se staging manca, decidere un'alternativa minima per prove pre-release
 
-## Fase 1 - Hardening e Aggiornamenti VPS
+## Fase 1 - Hardening e Aggiornamenti VPS [Priorita' alta]
 
 ### Sistema
 
@@ -97,6 +63,7 @@ Ordine consigliato:
 - [ ] valutare `fail2ban`
 - [ ] verificare permessi dei file con segreti
 - [ ] usare utente di servizio dedicato per il bot
+- [ ] pianificare runbook minimo per rotazione segreti e ripristino credenziali
 
 ### Esecuzione servizio
 
@@ -107,7 +74,9 @@ Ordine consigliato:
 - [ ] definire restart policy chiara
 - [ ] definire directory runtime dedicate
 - [ ] impostare log standardizzati
-- [ ] documentare avvio, stop, restart e status
+- [ ] scrivere `RUNBOOK.md` per avvio, stop, restart, status e rollback
+- [ ] definire smoke test post-deploy minimo
+- [ ] decidere se mantenere o no Docker Compose come opzione reale di esercizio
 
 ### Backup e recovery
 
@@ -117,7 +86,7 @@ Ordine consigliato:
 - [ ] prova di restore su file separato
 - [ ] mini runbook di recovery
 
-## Fase 2 - Rifondazione Strutturale del Codice
+## Fase 2 - Rifondazione Strutturale del Codice [Priorita' alta]
 
 ### Nuova struttura proposta
 
@@ -134,19 +103,36 @@ Struttura introdotta:
 
 ### Refactor tecnico
 
+- [ ] ridurre l'accorpamento di responsabilita' rimasto nei flussi CLI e bot
+- [ ] eliminare i punti in cui la logica applicativa dipende ancora da import diretti fra entrypoint
 - [ ] creare modelli tipizzati per:
   - ordine eBay normalizzato
   - stato notifica
   - utente Telegram
   - account eBay collegato
 - [ ] sostituire in modo sistematico i `Dict[str, str]` residui con dataclass o modelli equivalenti
-- [ ] centralizzare retry, backoff e classificazione errori
+- [ ] centralizzare retry, backoff e classificazione errori eBay/Telegram in componenti condivisi
 - [ ] definire eccezioni applicative piu' chiare
 - [ ] separare rendering output da raccolta dati
+- [ ] ridurre l'uso di stato globale locale nel polling e nella notifica
+- [ ] risolvere i dettagli di naming fuorvianti rimasti nelle API interne
+- [ ] aggiungere `ADR` leggere per le decisioni architetturali importanti
 
-## Fase 4 - Operativita' e Osservabilita'
+### Quality gate e release
 
-- [ ] aggiungere correlation id o almeno contesto operazione nei log
+- [ ] mantenere test, CI, mypy e coverage allineati con ogni refactor
+- [ ] introdurre `CHANGELOG.md` per le modifiche rilevanti
+- [ ] verificare se serve un controllo packaging o release process piu' esplicito
+
+## Fase 4 - Operativita' e Osservabilita' [Priorita' media]
+
+### Logging e contesto operativo
+
+- [ ] completare il contesto nei log con correlation id o identificativi equivalenti per operazioni, ordini e chat
+- [ ] standardizzare definitivamente eventi log per start, stop, polling, retry, errori e health check
+
+### Metriche e controlli runtime
+
 - [ ] misurare:
   - ordini letti
   - ordini con CF
@@ -154,12 +140,14 @@ Struttura introdotta:
   - retry Telegram
   - errori eBay
   - errori Telegram
+- [ ] decidere dove esporre o raccogliere queste metriche
 - [ ] introdurre alert basilari su processo fermo e su troppi errori consecutivi
-- [ ] documentare metriche e troubleshooting operativo
+- [ ] documentare troubleshooting operativo per `healthcheck`, `retry_queue`, `last_check` stale e fallimenti deploy
+- [ ] mantenere smoke test post-deploy come controllo obbligatorio dopo ogni rilascio significativo
 
-## Fase 5 - Progettazione Multiutente
+## Fase 5 - Progettazione Multiutente [Priorita' media]
 
-### Requisiti target
+### Target di prodotto
 
 - [ ] ogni utente Telegram deve poter collegare il proprio account eBay
 - [ ] ogni utente deve vedere solo i propri ordini e le proprie notifiche
@@ -167,7 +155,7 @@ Struttura introdotta:
 - [ ] le credenziali eBay non devono stare in env globali condivise
 - [ ] l'onboarding deve essere il piu' possibile self-service
 
-### Implicazioni architetturali
+### Lavori tecnici necessari
 
 - [ ] passare da single-tenant a multi-tenant
 - [ ] introdurre tabella utenti
@@ -177,9 +165,10 @@ Struttura introdotta:
 - [ ] introdurre isolamento dati e scoping per `telegram_chat_id`
 - [ ] introdurre scheduler che processa per tenant
 
-### Scelte tecniche consigliate
+### Decisioni architetturali e vincoli
 
 - [ ] trattare il passaggio a bot pubblico multiutente come cambio di natura del progetto: da utility personale a servizio con requisiti di sicurezza, privacy e affidabilita'
+- [ ] collegare la progettazione multiutente ai finding audit su single-tenant, variabili ambiente globali e stato condiviso
 - [ ] valutare migrazione da SQLite a Postgres prima della multiutenza pubblica
 - [ ] cifrare a riposo refresh token eBay
 - [ ] gestire revoca, refresh e scadenza token per utente
@@ -191,10 +180,12 @@ Struttura introdotta:
   - backup seri
   - alerting
   - processo di deploy piu' sicuro
+- [ ] preparare una security review dedicata ai token utente
+- [ ] fissare milestone di beta privata prima dell'apertura piu' ampia
 
-## Fase 6 - Onboarding Self-Service Telegram + eBay OAuth
+## Fase 6 - Onboarding Self-Service Telegram + eBay OAuth [Priorita' media]
 
-### Flusso ideale
+### Esperienza target utente
 
 - [ ] utente apre il bot e fa `/start`
 - [ ] il bot presenta un pulsante "Collega account eBay"
@@ -204,7 +195,7 @@ Struttura introdotta:
 - [ ] il bot conferma collegamento riuscito
 - [ ] l'utente puo' configurare notifiche e comandi personali
 
-### Componenti necessari
+### Componenti implementativi
 
 - [ ] mini web app o callback server per OAuth
 - [ ] gestione `state` anti-CSRF
@@ -213,8 +204,9 @@ Struttura introdotta:
 - [ ] pagina di successo/fallimento leggibile
 - [ ] comando `/disconnect` per scollegare l'account
 - [ ] comando `/whoami` o `/account` per vedere stato collegamento
+- [ ] disegnare in dettaglio il flusso Telegram -> web -> eBay prima dell'implementazione
 
-### Nuovi comandi consigliati
+### Comandi da introdurre
 
 - [ ] `/connect`
 - [ ] `/disconnect`
@@ -223,7 +215,7 @@ Struttura introdotta:
 - [ ] `/notifications off`
 - [ ] `/settings`
 
-## Fase 7 - Governance del Prodotto
+## Fase 7 - Governance del Prodotto [Priorita' media]
 
 - [ ] definire quali dati personali vengono trattati
 - [ ] scrivere informativa minima d'uso e retention
@@ -232,43 +224,9 @@ Struttura introdotta:
 - [ ] chiarire policy di cancellazione utente
 - [ ] definire limiti del servizio e carichi supportati
 
-## Suggerimenti Extra
+## Prossimi Step Immediati
 
-Oltre al refactor e alla VPS, suggerisco di aggiungere anche questi elementi:
-
-- [ ] `ADR` leggere per le decisioni importanti
-- [ ] `RUNBOOK.md` per avvio, deploy, debug e rollback
-- [ ] `CHANGELOG.md`
-- [ ] ambiente staging o almeno preview di test
-- [ ] smoke test post-deploy
-- [ ] rotazione periodica segreti
-- [ ] issue board con priorita' per milestone
-
-## Priorita' Consigliata
-
-### Sprint 1
-
-- [ ] backup e audit VPS
-- [ ] hardening base VPS
-- [ ] standardizzare il modo di eseguire il servizio
-
-### Sprint 2
-
-- [ ] rifare storage e schema
-- [ ] migliorare test e CI
-- [ ] aggiungere logging e health check
-- [ ] documentare deploy e recovery
-
-### Sprint 3
-
-- [ ] progettazione dettagliata multiutente
-- [ ] scelta database definitiva
-- [ ] disegno flusso OAuth Telegram -> web -> eBay
-- [ ] security review dei token utente
-
-### Sprint 4
-
-- [ ] implementazione onboarding self-service
-- [ ] isolamento tenant
-- [ ] notifiche per account collegato
-- [ ] beta privata con pochi utenti reali
+- [ ] completare backup, audit VPS e standard di esecuzione del servizio
+- [ ] finire la rifondazione tecnica residua su modelli, retry condivisi e riduzione stato globale
+- [ ] chiudere osservabilita' minima con metriche leggibili, alert basilari e runbook
+- [ ] preparare milestone di progettazione multiutente con database, token e flusso OAuth definiti
