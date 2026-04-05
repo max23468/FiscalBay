@@ -301,7 +301,7 @@ def build_help_text() -> str:
         "/ping - health check rapido\n"
         "/stato - stato monitor ordini/notifiche\n"
         "/ultimi [giorni] [max] - legge gli ordini recenti e restituisce i CF trovati\n"
-        "/ordine <order_id> - legge un ordine specifico\n"
+        "/ordine [order_id] - legge un ordine specifico\n"
         "/tutti [giorni] [max] - mostra tutti gli ordini anche senza CF\n"
         "/help - mostra questo aiuto\n\n"
         "Esempi:\n"
@@ -346,30 +346,44 @@ def is_authorized(chat_id: int, config: TelegramConfig) -> bool:
     return chat_id in config.allowed_chat_ids
 
 
-def send_message(token: str, chat_id: int, text: str) -> None:
+def send_message(
+    token: str,
+    chat_id: int,
+    text: str,
+    message_thread_id: Optional[int] = None,
+) -> None:
     for chunk in chunk_message(text):
-        params = {
+        params: Dict[str, object] = {
             "chat_id": chat_id,
             "text": chunk,
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
         }
+        if message_thread_id is not None:
+            params["message_thread_id"] = message_thread_id
         try:
             telegram_request(token, "sendMessage", params)
         except TelegramApiError as exc:
-            if "HTTP 400" not in str(exc):
+            if getattr(exc, "status_code", None) != 400 and "HTTP 400" not in str(exc):
                 raise
-            fallback_params = {
+            fallback_params: Dict[str, object] = {
                 "chat_id": chat_id,
                 "text": chunk,
                 "disable_web_page_preview": True,
             }
+            if message_thread_id is not None:
+                fallback_params["message_thread_id"] = message_thread_id
             telegram_request(token, "sendMessage", fallback_params)
 
 
-def send_to_all_targets(token: str, chat_ids: Iterable[int], text: str) -> None:
+def send_to_all_targets(
+    token: str,
+    chat_ids: Iterable[int],
+    text: str,
+    message_thread_id: Optional[int] = None,
+) -> None:
     for chat_id in chat_ids:
-        send_message(token, chat_id, text)
+        send_message(token, chat_id, text, message_thread_id=message_thread_id)
 
 
 def ensure_long_polling(token: str) -> None:
@@ -675,11 +689,15 @@ def process_message(
     return format_records(records, only_found=options.only_found)
 
 
-def extract_text(update: Dict) -> tuple[Optional[int], str]:
+def extract_message_context(update: Dict) -> tuple[Optional[int], str, Optional[int]]:
+    """Restituisce (chat_id, testo, message_thread_id per forum / topic)."""
     message = update.get("message") or update.get("edited_message") or {}
     chat = message.get("chat") or {}
     text = message.get("text") or ""
-    return chat.get("id"), text
+    thread_id = message.get("message_thread_id")
+    if isinstance(thread_id, int):
+        return chat.get("id"), text, thread_id
+    return chat.get("id"), text, None
 
 
 def _request_shutdown(signum: int, frame: Optional[object]) -> None:
@@ -734,7 +752,7 @@ def run_bot() -> int:
             updates_backoff_seconds = 1.0
             for update in updates:
                 offset = max(offset, int(update["update_id"]) + 1)
-                cid, msg_text = extract_text(update)
+                cid, msg_text, thread_id = extract_message_context(update)
                 if not cid or not msg_text.strip():
                     continue
                 try:
@@ -747,7 +765,15 @@ def run_bot() -> int:
                 except (TelegramApiError, EbayApiError, ValueError) as exc:
                     replies = [f"Errore: {html.escape(str(exc))}"]
                 for reply in replies:
-                    send_message(telegram_config.token, cid, reply)
+                    try:
+                        send_message(
+                            telegram_config.token,
+                            cid,
+                            reply,
+                            message_thread_id=thread_id,
+                        )
+                    except TelegramApiError as exc:
+                        LOGGER.error("Invio risposta fallito: %s", exc)
             if _shutdown.is_set():
                 break
         except KeyboardInterrupt:
