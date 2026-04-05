@@ -172,7 +172,6 @@ Struttura introdotta:
 - [ ] aggiungere test di integrazione per:
   - fetch ordini
 - [ ] aggiungere coverage minima utile
-- [ ] estendere CI con lint + test + package build
 
 ## Fase 4 - Operativita' e Osservabilita'
 
