@@ -9,8 +9,8 @@ from src.ebay_cf.bot import (
     TELEGRAM_CMD_MAX_DAYS,
     TelegramApiError,
     TelegramConfig,
-    build_main_menu_markup,
     build_help_text,
+    build_main_menu_markup,
     callback_command_from_data,
     chunk_message,
     ensure_long_polling,
@@ -24,8 +24,6 @@ from src.ebay_cf.bot import (
     send_message,
     update_state_with_records,
 )
-from src.ebay_cf.errors import TelegramApiError
-from src.ebay_cf.models import TelegramConfig
 
 
 class TelegramBotTests(unittest.TestCase):
@@ -33,11 +31,7 @@ class TelegramBotTests(unittest.TestCase):
         markup = build_main_menu_markup()
         keyboard = markup.get("inline_keyboard")
         self.assertIsInstance(keyboard, list)
-        all_callbacks = [
-            button.get("callback_data")
-            for row in keyboard
-            for button in row
-        ]
+        all_callbacks = [button.get("callback_data") for row in keyboard for button in row]
         self.assertIn(CALLBACK_ULTIMI, all_callbacks)
         self.assertIn(CALLBACK_TUTTI, all_callbacks)
         self.assertIn(CALLBACK_STATO, all_callbacks)
@@ -189,7 +183,9 @@ class TelegramBotTests(unittest.TestCase):
         )
 
     @patch("src.ebay_cf.bot.telegram_request")
-    def test_send_message_retries_without_parse_mode_on_http_400(self, mock_telegram_request) -> None:
+    def test_send_message_retries_without_parse_mode_on_http_400(
+        self, mock_telegram_request
+    ) -> None:
         mock_telegram_request.side_effect = [
             TelegramApiError("Errore Telegram su sendMessage: HTTP 400: Bad Request"),
             {"message_id": 1},

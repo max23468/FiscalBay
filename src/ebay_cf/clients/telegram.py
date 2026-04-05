@@ -105,4 +105,3 @@ def telegram_request(
 
 def ensure_long_polling(token: str) -> None:
     telegram_request(token, "deleteWebhook", {"drop_pending_updates": False})
-

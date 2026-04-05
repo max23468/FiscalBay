@@ -54,16 +54,12 @@ def load_telegram_config() -> TelegramConfig:
     allowed_chat_ids = None
     if raw_chat_ids:
         allowed_chat_ids = {
-            int(value.strip())
-            for value in raw_chat_ids.split(",")
-            if value.strip()
+            int(value.strip()) for value in raw_chat_ids.split(",") if value.strip()
         }
 
     raw_notify_chat_ids = os.getenv(DEFAULT_NOTIFY_CHAT_IDS, raw_chat_ids).strip()
     notify_chat_ids = {
-        int(value.strip())
-        for value in raw_notify_chat_ids.split(",")
-        if value.strip()
+        int(value.strip()) for value in raw_notify_chat_ids.split(",") if value.strip()
     }
 
     timeout = int(os.getenv("TELEGRAM_POLL_TIMEOUT", "30"))

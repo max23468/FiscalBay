@@ -168,8 +168,6 @@ Struttura introdotta:
 
 ## Fase 3 - Qualita' e Tooling
 
-- [ ] aggiungere `ruff` con configurazione condivisa
-- [ ] scegliere formatter unico
 - [ ] valutare `mypy` o type checking graduale
 - [ ] aggiungere test di integrazione per:
   - fetch ordini

@@ -184,9 +184,7 @@ def get_orders(
             f"creationdate:[{to_ebay_timestamp(created_after)}.."
             f"{to_ebay_timestamp(created_before)}]"
         )
-        query = urllib.parse.urlencode(
-            {"filter": filter_value, "limit": limit, "offset": offset}
-        )
+        query = urllib.parse.urlencode({"filter": filter_value, "limit": limit, "offset": offset})
         url = f"{config.api_base}/sell/fulfillment/v1/order?{query}"
         response = make_request("GET", url, headers=headers)
         page_orders = response.get("orders", [])
@@ -211,6 +209,4 @@ def get_order_detail(config: Config, access_token: str, order_id: str) -> dict:
 
 
 def to_ebay_timestamp(dt: datetime) -> str:
-    return dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace(
-        "+00:00", "Z"
-    )
+    return dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")

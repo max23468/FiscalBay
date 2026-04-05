@@ -111,7 +111,9 @@ def format_record(record: dict[str, str]) -> str:
     order_id = html.escape(record.get("orderId", ""))
     missing_fiscal = ""
     if not record.get("taxpayerId"):
-        missing_fiscal = "\n⚠️ <i>Dati fiscali non presenti nella risposta eBay per questo ordine.</i>"
+        missing_fiscal = (
+            "\n⚠️ <i>Dati fiscali non presenti nella risposta eBay per questo ordine.</i>"
+        )
 
     ebay_url = (
         "https://www.ebay.it/sh/ord/details?orderid="
@@ -125,13 +127,16 @@ def format_record(record: dict[str, str]) -> str:
     created_at = html.escape(record.get("creationDate", ""))
 
     return (
-        f"🛒 <b>Ordine</b> • <a href=\"{ebay_url}\"><code>{order_id}</code></a>\n"
+        f'🛒 <b>Ordine</b> • <a href="{ebay_url}"><code>{order_id}</code></a>\n'
         f"┌ 📅 <b>Data</b>: <code>{created_at}</code>\n"
         f"├ 👤 <b>Acquirente</b>: <code>{buyer}</code>\n"
         f"├ 📦 <b>Articoli</b>: <i>{items}</i>\n"
         f"├ 💰 <b>Totale</b>: <code>{total}</code>\n"
         f"├ 📍 <b>Spedizione</b>: <code>{shipping}</code>\n"
-        f"└ 💳 <b>CF</b>: <code>{html.escape(cf)}</code> <i>({html.escape(tax_type)})</i> • <code>{html.escape(country)}</code>"
+        "└ 💳 <b>CF</b>: "
+        f"<code>{html.escape(cf)}</code> "
+        f"<i>({html.escape(tax_type)})</i> • "
+        f"<code>{html.escape(country)}</code>"
         f"{missing_fiscal}"
     )
 
@@ -142,7 +147,9 @@ def format_records(
     rows = list(records)
     if not rows:
         if only_found:
-            return ["🔎 Nessun ordine con codice fiscale restituito da eBay nella selezione richiesta."]
+            return [
+                "🔎 Nessun ordine con codice fiscale restituito da eBay nella selezione richiesta."
+            ]
         return ["🔎 Nessun ordine trovato nella selezione richiesta."]
     pages: list[str] = []
     for start in range(0, len(rows), page_size):
@@ -233,11 +240,13 @@ def options_for_command(command: str, args: list[str]) -> FetchOptions:
 
     if not TELEGRAM_CMD_MIN_DAYS <= days <= TELEGRAM_CMD_MAX_DAYS:
         raise TelegramApiError(
-            f"Giorni fuori intervallo: usa un valore tra {TELEGRAM_CMD_MIN_DAYS} e {TELEGRAM_CMD_MAX_DAYS}."
+            "Giorni fuori intervallo: usa un valore tra "
+            f"{TELEGRAM_CMD_MIN_DAYS} e {TELEGRAM_CMD_MAX_DAYS}."
         )
     if not TELEGRAM_CMD_MIN_RESULTS <= max_results <= TELEGRAM_CMD_MAX_RESULTS:
         raise TelegramApiError(
-            f"Max ordini fuori intervallo: usa un valore tra {TELEGRAM_CMD_MIN_RESULTS} e {TELEGRAM_CMD_MAX_RESULTS}."
+            "Max ordini fuori intervallo: usa un valore tra "
+            f"{TELEGRAM_CMD_MIN_RESULTS} e {TELEGRAM_CMD_MAX_RESULTS}."
         )
 
     only_found = command != "/tutti"
@@ -368,9 +377,8 @@ def order_sort_key(record: dict[str, str]) -> str:
 
 
 def has_codice_fiscale(record: dict[str, str]) -> bool:
-    return (
-        (record.get("taxIdentifierType") or "").upper() == "CODICE_FISCALE"
-        and bool(record.get("taxpayerId"))
+    return (record.get("taxIdentifierType") or "").upper() == "CODICE_FISCALE" and bool(
+        record.get("taxpayerId")
     )
 
 
@@ -389,9 +397,7 @@ def fetch_new_order_records(
     if isinstance(last_check, str) and last_check:
         start = last_check
     else:
-        start = (
-            now_utc() - timedelta(minutes=lookback_minutes)
-        ).isoformat().replace("+00:00", "Z")
+        start = (now_utc() - timedelta(minutes=lookback_minutes)).isoformat().replace("+00:00", "Z")
     end = now_utc().isoformat().replace("+00:00", "Z")
 
     records = request_with_backoff(
@@ -709,4 +715,3 @@ def run_bot() -> int:
             pass
         lock_handle.close()
     return 0
-

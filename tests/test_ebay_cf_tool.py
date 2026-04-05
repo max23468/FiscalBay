@@ -1,14 +1,12 @@
-from datetime import timezone
 import unittest
+from datetime import timezone
 from unittest.mock import patch
 
-from src.ebay_cf.cli import main
 from src.ebay_cf.clients.ebay import (
     clear_access_token_cache,
     get_access_token,
     make_request,
 )
-from src.ebay_cf.config import load_config
 from src.ebay_cf.errors import EbayApiError
 from src.ebay_cf.models import (
     Config,

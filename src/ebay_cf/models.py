@@ -60,4 +60,3 @@ class OrderRecord:
 
     def as_dict(self) -> dict[str, str]:
         return {key: str(value) for key, value in asdict(self).items()}
-

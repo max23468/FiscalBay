@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Compatibility wrapper for the CLI module."""
+# ruff: noqa: F401
 
 from ebay_cf.cli import main
 from ebay_cf.clients.ebay import (

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Compatibility wrapper for the Telegram bot module."""
+# ruff: noqa: F401,I001
 
 from ebay_cf.bot import (
     CALLBACK_HELP,
