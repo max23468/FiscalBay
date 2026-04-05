@@ -1,17 +1,5 @@
 # Checklist
 
-## Obiettivi da raggiungere
-
-- [ ] ridurre fragilita' e duplicazioni
-- [ ] migliorare affidabilita' del deploy sulla VPS
-- [ ] separare meglio responsabilita' applicative e operative
-- [ ] documentare un percorso di refactor senza bloccare l'uso attuale
-- [ ] supporto multiutente reale
-- [ ] onboarding self-service da Telegram
-- [ ] collegamento del proprio account eBay con OAuth per singolo utente
-- [ ] isolamento dati tra utenti
-- [ ] osservabilita' e sicurezza adatte a un servizio pubblico
-
 ## Ordine di esecuzione consigliato
 
 1. stabilizzazione minima e sicurezza operativa
