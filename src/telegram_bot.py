@@ -257,16 +257,20 @@ def format_record(record: Dict[str, str]) -> str:
     cf = record["taxpayerId"] or "non disponibile"
     tax_type = record["taxIdentifierType"] or "n/d"
     country = record["issuingCountry"] or "n/d"
+    order_id = html.escape(record['orderId'])
     missing_fiscal = ""
     if not record.get("taxpayerId"):
-        missing_fiscal = "\n⚠️ Dati fiscali non presenti nella risposta eBay per questo ordine."
+        missing_fiscal = "\n⚠️ <i>Dati fiscali non presenti nella risposta eBay per questo ordine.</i>"
+        
+    ebay_url = f"https://www.ebay.it/sh/ord/details?orderid={urllib.parse.quote(record['orderId'])}"
+        
     return (
-        f"Ordine: <code>{html.escape(record['orderId'])}</code>\n"
-        f"Data: <code>{html.escape(record['creationDate'])}</code>\n"
-        f"Buyer: <code>{html.escape(record['buyerUsername'] or 'n/d')}</code>\n"
-        f"Codice fiscale: <code>{html.escape(cf)}</code>\n"
-        f"Tipo: <code>{html.escape(tax_type)}</code>\n"
-        f"Paese: <code>{html.escape(country)}</code>{missing_fiscal}"
+        f"🛒 <b>Ordine:</b> <a href=\"{ebay_url}\">{order_id}</a>\n"
+        f"📅 <b>Data:</b> <code>{html.escape(record['creationDate'])}</code>\n"
+        f"👤 <b>Acquirente:</b> <code>{html.escape(record['buyerUsername'] or 'n/d')}</code>\n"
+        f"💳 <b>Dettagli Fiscali:</b>\n"
+        f" • CF: <code>{html.escape(cf)}</code> <i>({html.escape(tax_type)})</i>\n"
+        f" • Paese: <code>{html.escape(country)}</code>{missing_fiscal}"
     )
 
 
@@ -281,8 +285,8 @@ def format_records(records: Iterable[Dict[str, str]], only_found: bool, page_siz
         page_rows = rows[start : start + page_size]
         page_no = (start // page_size) + 1
         total_pages = (len(rows) + page_size - 1) // page_size
-        header = f"📦 Ordini elaborati: <b>{len(rows)}</b> • Pagina <b>{page_no}/{total_pages}</b>"
-        body = "\n\n".join(f"🔹 {format_record(row)}" for row in page_rows)
+        header = f"📦 <b>Ordini elaborati:</b> <code>{len(rows)}</code> • 📄 <b>Pagina:</b> <code>{page_no}/{total_pages}</code>\n━━━━━━━━━━━━━━━━━━━━━━━━"
+        body = "\n\n".join(format_record(row) for row in page_rows)
         pages.append(header + "\n\n" + body)
     return pages
 
@@ -297,18 +301,19 @@ def parse_command(text: str) -> tuple[str, List[str]]:
 
 def build_help_text() -> str:
     return (
-        "Comandi disponibili:\n"
-        "/ping - health check rapido\n"
-        "/stato - stato monitor ordini/notifiche\n"
-        "/ultimi [giorni] [max] - legge gli ordini recenti e restituisce i CF trovati\n"
-        "/ordine [order_id] - legge un ordine specifico\n"
-        "/tutti [giorni] [max] - mostra tutti gli ordini anche senza CF\n"
-        "/help - mostra questo aiuto\n\n"
-        "Esempi:\n"
-        "<code>/ultimi 7 20</code>\n"
-        "<code>/ordine 12-34567-89012</code>\n\n"
-        f"Limiti: giorni {TELEGRAM_CMD_MIN_DAYS}-{TELEGRAM_CMD_MAX_DAYS}, "
-        f"max ordini {TELEGRAM_CMD_MIN_RESULTS}-{TELEGRAM_CMD_MAX_RESULTS}."
+        "🤖 <b>Benvenuto in eBay CF Bot!</b>\n"
+        "Ecco cosa posso fare per te:\n\n"
+        "🟢 <code>/ping</code> - Health check rapido\n"
+        "📊 <code>/stato</code> - Statistiche e monitoraggio bot\n"
+        "📦 <code>/ultimi [giorni] [max]</code> - Ordini recenti (solo CF trovati)\n"
+        "🔍 <code>/ordine [id]</code> - Leggi un ordine specifico\n"
+        "📋 <code>/tutti [giorni] [max]</code> - Mostra tutti gli ordini (anche senza CF)\n"
+        "ℹ️ <code>/help</code> - Mostra questo aiuto\n\n"
+        "<b>Esempi d'uso:</b>\n"
+        "↳ <code>/ultimi 7 20</code>\n"
+        "↳ <code>/ordine 12-34567-89012</code>\n\n"
+        f"<i>Limiti: giorni {TELEGRAM_CMD_MIN_DAYS}-{TELEGRAM_CMD_MAX_DAYS}, "
+        f"max ordini {TELEGRAM_CMD_MIN_RESULTS}-{TELEGRAM_CMD_MAX_RESULTS}.</i>"
     )
 
 
@@ -491,14 +496,20 @@ def increment_error_metric(state: Dict[str, object], error_type: str) -> None:
 def format_status(state: Dict[str, object], retry_queue_size: int) -> str:
     metrics = state.get("metrics", {})
     errors = metrics.get("errors_by_type", {})
+    
+    last_check_str = str(state.get('last_check') or 'mai')
+    last_error_str = str(state.get('last_error') or 'nessuno')
+    
     return (
-        "📊 Stato bot\n"
-        f"Ultimo check eBay: <code>{html.escape(str(state.get('last_check') or 'mai'))}</code>\n"
-        f"Ordini analizzati: <b>{int(metrics.get('orders_read', 0))}</b>\n"
-        f"Notifiche inviate: <b>{int(metrics.get('notifications_sent', 0))}</b>\n"
-        f"Coda retry notifiche: <b>{retry_queue_size}</b>\n"
-        f"Ultimo errore: <code>{html.escape(str(state.get('last_error') or 'nessuno'))}</code>\n"
-        f"Errori per tipo: <code>{html.escape(json.dumps(errors, ensure_ascii=False))}</code>"
+        "📊 <b>Stato del Bot</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"⏱️ <b>Ultimo check eBay:</b> <code>{html.escape(last_check_str)}</code>\n"
+        f"📦 <b>Ordini analizzati:</b> <code>{int(metrics.get('orders_read', 0))}</code>\n"
+        f"📩 <b>Notifiche inviate:</b> <code>{int(metrics.get('notifications_sent', 0))}</code>\n"
+        f"⏳ <b>Coda retry:</b> <code>{retry_queue_size}</code>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"⚠️ <b>Ultimo errore:</b> <code>{html.escape(last_error_str)}</code>\n"
+        f"📉 <b>Errori per tipo:</b>\n<code>{html.escape(json.dumps(errors, indent=2, ensure_ascii=False))}</code>"
     )
 
 
@@ -540,7 +551,7 @@ def has_codice_fiscale(record: Dict[str, str]) -> bool:
 
 
 def format_auto_notification(record: Dict[str, str]) -> str:
-    prefix = "Nuovo ordine eBay ricevuto\n\n"
+    prefix = "🚨 <b>NUOVO ORDINE EBAY RICEVUTO!</b> 🚨\n━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
     return prefix + format_record(record)
 
 
