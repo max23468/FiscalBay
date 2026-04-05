@@ -14,6 +14,7 @@ from src.ebay_cf.models import (
 )
 from src.ebay_cf.services.orders import (
     extract_record,
+    fetch_records,
     get_csv_fieldnames,
     parse_iso8601,
     render_table,
@@ -110,6 +111,166 @@ class EbayCfToolTests(unittest.TestCase):
         fieldnames = get_csv_fieldnames([])
         self.assertIn("taxpayerId", fieldnames)
         self.assertIn("buyerName", fieldnames)
+
+    @patch("src.ebay_cf.services.orders.get_order_detail")
+    @patch("src.ebay_cf.services.orders.get_orders")
+    @patch("src.ebay_cf.services.orders.get_access_token")
+    def test_fetch_records_reads_summaries_and_returns_normalized_rows(
+        self,
+        mock_get_access_token,
+        mock_get_orders,
+        mock_get_order_detail,
+    ) -> None:
+        mock_get_access_token.return_value = "access-token"
+        mock_get_orders.return_value = [
+            {"orderId": "order-1"},
+            {"orderId": "order-2"},
+        ]
+        mock_get_order_detail.side_effect = [
+            {
+                "orderId": "order-1",
+                "creationDate": "2026-04-03T10:00:00Z",
+                "buyer": {
+                    "username": "buyer-1",
+                    "taxIdentifier": {
+                        "taxpayerId": "RSSMRA80A01H501U",
+                        "taxIdentifierType": "CODICE_FISCALE",
+                        "issuingCountry": "IT",
+                    },
+                },
+            },
+            {
+                "orderId": "order-2",
+                "creationDate": "2026-04-03T11:00:00Z",
+                "buyer": {
+                    "username": "buyer-2",
+                },
+            },
+        ]
+
+        records = fetch_records(
+            self._sample_config(),
+            FetchOptions(days=7, limit=50, max_results=10, only_found=False),
+        )
+
+        self.assertEqual([record["orderId"] for record in records], ["order-1", "order-2"])
+        self.assertEqual(records[0]["taxpayerId"], "RSSMRA80A01H501U")
+        self.assertEqual(records[0]["found"], "yes")
+        self.assertEqual(records[1]["taxpayerId"], "")
+        self.assertEqual(records[1]["found"], "no")
+        mock_get_orders.assert_called_once()
+        self.assertEqual(mock_get_order_detail.call_count, 2)
+
+    @patch("src.ebay_cf.services.orders.get_order_detail")
+    @patch("src.ebay_cf.services.orders.get_access_token")
+    def test_fetch_records_uses_explicit_order_ids_without_listing_call(
+        self,
+        mock_get_access_token,
+        mock_get_order_detail,
+    ) -> None:
+        mock_get_access_token.return_value = "access-token"
+        mock_get_order_detail.side_effect = [
+            {
+                "orderId": "order-10",
+                "creationDate": "2026-04-03T10:00:00Z",
+                "buyer": {"username": "buyer-10"},
+            },
+            {
+                "orderId": "order-20",
+                "creationDate": "2026-04-03T11:00:00Z",
+                "buyer": {
+                    "username": "buyer-20",
+                    "taxIdentifier": {
+                        "taxpayerId": "ABCDEF12G34H567I",
+                        "taxIdentifierType": "CODICE_FISCALE",
+                        "issuingCountry": "IT",
+                    },
+                },
+            },
+        ]
+
+        with patch("src.ebay_cf.services.orders.get_orders") as mock_get_orders:
+            records = fetch_records(
+                self._sample_config(),
+                FetchOptions(order_ids=["order-10", "order-20"], only_found=False),
+            )
+
+        self.assertEqual([record["orderId"] for record in records], ["order-10", "order-20"])
+        mock_get_orders.assert_not_called()
+        self.assertEqual(mock_get_order_detail.call_count, 2)
+
+    @patch("src.ebay_cf.services.orders.get_order_detail")
+    @patch("src.ebay_cf.services.orders.get_orders")
+    @patch("src.ebay_cf.services.orders.get_access_token")
+    def test_fetch_records_only_found_filters_missing_tax_identifier(
+        self,
+        mock_get_access_token,
+        mock_get_orders,
+        mock_get_order_detail,
+    ) -> None:
+        mock_get_access_token.return_value = "access-token"
+        mock_get_orders.return_value = [
+            {"orderId": "order-1"},
+            {"orderId": "order-2"},
+        ]
+        mock_get_order_detail.side_effect = [
+            {
+                "orderId": "order-1",
+                "creationDate": "2026-04-03T10:00:00Z",
+                "buyer": {"username": "buyer-1"},
+            },
+            {
+                "orderId": "order-2",
+                "creationDate": "2026-04-03T11:00:00Z",
+                "buyer": {
+                    "username": "buyer-2",
+                    "taxIdentifier": {
+                        "taxpayerId": "ABCDEF12G34H567I",
+                        "taxIdentifierType": "CODICE_FISCALE",
+                        "issuingCountry": "IT",
+                    },
+                },
+            },
+        ]
+
+        records = fetch_records(
+            self._sample_config(),
+            FetchOptions(days=7, limit=50, max_results=10, only_found=True),
+        )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["orderId"], "order-2")
+
+    @patch("src.ebay_cf.services.orders.time.sleep")
+    @patch("src.ebay_cf.services.orders.get_order_detail")
+    @patch("src.ebay_cf.services.orders.get_access_token")
+    def test_fetch_records_waits_between_explicit_order_details_when_configured(
+        self,
+        mock_get_access_token,
+        mock_get_order_detail,
+        mock_sleep,
+    ) -> None:
+        mock_get_access_token.return_value = "access-token"
+        mock_get_order_detail.side_effect = [
+            {
+                "orderId": "order-10",
+                "creationDate": "2026-04-03T10:00:00Z",
+                "buyer": {"username": "buyer-10"},
+            },
+            {
+                "orderId": "order-20",
+                "creationDate": "2026-04-03T11:00:00Z",
+                "buyer": {"username": "buyer-20"},
+            },
+        ]
+
+        with patch("src.ebay_cf.services.orders.order_detail_delay_seconds", return_value=0.25):
+            fetch_records(
+                self._sample_config(),
+                FetchOptions(order_ids=["order-10", "order-20"], only_found=False),
+            )
+
+        mock_sleep.assert_called_once_with(0.25)
 
 
 if __name__ == "__main__":

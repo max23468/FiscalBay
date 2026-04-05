@@ -161,8 +161,6 @@ Struttura introdotta:
 
 ## Fase 3 - Qualita' e Tooling
 
-- [ ] aggiungere test di integrazione per:
-  - fetch ordini
 - [ ] aggiungere coverage minima utile
 
 ## Fase 4 - Operativita' e Osservabilita'
