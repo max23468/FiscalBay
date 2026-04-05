@@ -23,3 +23,6 @@ dev = ["ruff>=0.6.0"]
 
 [tool.setuptools]
 py-modules = ["ebay_cf_tool", "telegram_bot"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

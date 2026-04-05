@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from src.telegram_bot import (
+from src.ebay_cf.bot import (
     CALLBACK_HELP,
     CALLBACK_STATO,
     CALLBACK_TUTTI,
@@ -24,6 +24,8 @@ from src.telegram_bot import (
     send_message,
     update_state_with_records,
 )
+from src.ebay_cf.errors import TelegramApiError
+from src.ebay_cf.models import TelegramConfig
 
 
 class TelegramBotTests(unittest.TestCase):
@@ -100,8 +102,8 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("/ultimi", text)
         self.assertIn("/ordine", text)
 
-    @patch("src.telegram_bot.fetch_records")
-    @patch("src.telegram_bot.load_config")
+    @patch("src.ebay_cf.bot.fetch_records")
+    @patch("src.ebay_cf.bot.load_config")
     def test_process_message_for_help(self, mock_load_config, mock_fetch_records) -> None:
         replies = process_message(
             text="/help",
@@ -186,7 +188,7 @@ class TelegramBotTests(unittest.TestCase):
             )
         )
 
-    @patch("src.telegram_bot.telegram_request")
+    @patch("src.ebay_cf.bot.telegram_request")
     def test_send_message_retries_without_parse_mode_on_http_400(self, mock_telegram_request) -> None:
         mock_telegram_request.side_effect = [
             TelegramApiError("Errore Telegram su sendMessage: HTTP 400: Bad Request"),
@@ -199,7 +201,7 @@ class TelegramBotTests(unittest.TestCase):
         self.assertEqual(first_call.get("parse_mode"), "HTML")
         self.assertNotIn("parse_mode", second_call)
 
-    @patch("src.telegram_bot.telegram_request")
+    @patch("src.ebay_cf.bot.telegram_request")
     def test_send_message_includes_reply_markup(self, mock_telegram_request) -> None:
         mock_telegram_request.return_value = {"message_id": 1}
         reply_markup = build_main_menu_markup()
@@ -207,7 +209,7 @@ class TelegramBotTests(unittest.TestCase):
         params = mock_telegram_request.call_args.args[2]
         self.assertEqual(params.get("reply_markup"), reply_markup)
 
-    @patch("src.telegram_bot.telegram_request")
+    @patch("src.ebay_cf.clients.telegram.telegram_request")
     def test_ensure_long_polling_deletes_existing_webhook(self, mock_telegram_request) -> None:
         ensure_long_polling("token")
         mock_telegram_request.assert_called_once_with(

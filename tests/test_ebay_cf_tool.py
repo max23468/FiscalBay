@@ -2,15 +2,21 @@ from datetime import timezone
 import unittest
 from unittest.mock import patch
 
-from src.ebay_cf_tool import (
-    Config,
-    EbayApiError,
-    FetchOptions,
+from src.ebay_cf.cli import main
+from src.ebay_cf.clients.ebay import (
     clear_access_token_cache,
-    extract_record,
     get_access_token,
-    get_csv_fieldnames,
     make_request,
+)
+from src.ebay_cf.config import load_config
+from src.ebay_cf.errors import EbayApiError
+from src.ebay_cf.models import (
+    Config,
+    FetchOptions,
+)
+from src.ebay_cf.services.orders import (
+    extract_record,
+    get_csv_fieldnames,
     parse_iso8601,
     render_table,
     resolve_date_window_from_options,
@@ -33,7 +39,7 @@ class EbayCfToolTests(unittest.TestCase):
             scopes="https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
         )
 
-    @patch("src.ebay_cf_tool.mint_user_access_token_response")
+    @patch("src.ebay_cf.clients.ebay.mint_user_access_token_response")
     def test_get_access_token_uses_cache(self, mock_mint) -> None:
         mock_mint.return_value = {"access_token": "tok-one", "expires_in": 7200}
         cfg = self._sample_config()
@@ -41,9 +47,9 @@ class EbayCfToolTests(unittest.TestCase):
         self.assertEqual(get_access_token(cfg), "tok-one")
         self.assertEqual(mock_mint.call_count, 1)
 
-    @patch("src.ebay_cf_tool.logger")
-    @patch("src.ebay_cf_tool.time.sleep", autospec=True)
-    @patch("src.ebay_cf_tool._make_request_once")
+    @patch("src.ebay_cf.clients.ebay.logger")
+    @patch("src.ebay_cf.clients.ebay.time.sleep", autospec=True)
+    @patch("src.ebay_cf.clients.ebay.make_request_once")
     def test_make_request_retries_transient_http(self, mock_once, mock_sleep, mock_logger) -> None:
         mock_once.side_effect = [
             EbayApiError("HTTP 503", status_code=503),
