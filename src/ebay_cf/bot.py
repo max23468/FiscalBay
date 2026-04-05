@@ -24,6 +24,7 @@ except ImportError:  # pragma: no cover - Windows
 from .clients.telegram import ensure_long_polling, telegram_request
 from .config import configure_logging, load_config, load_telegram_config
 from .errors import EbayApiError, TelegramApiError
+from .logging_utils import log_event
 from .models import FetchOptions, TelegramConfig
 from .services.orders import fetch_records
 from .storage.sqlite import (
@@ -84,7 +85,15 @@ def request_with_backoff(
             last_error = exc
             if idx >= attempts:
                 break
-            LOGGER.warning("%s tentativo %s/%s fallito: %s", label, idx, attempts, exc)
+            log_event(
+                LOGGER,
+                logging.WARNING,
+                "request_retry",
+                label=label,
+                attempt=idx,
+                attempts=attempts,
+                error=exc,
+            )
             time.sleep(delay)
             delay = min(delay * 2, 30)
     assert last_error is not None
@@ -375,6 +384,7 @@ def process_retry_queue(telegram_config: TelegramConfig, state: dict[str, object
     queue = load_retry_queue(telegram_config.retry_queue_path)
     if not queue:
         return
+    log_event(LOGGER, logging.INFO, "retry_queue_start", size=len(queue))
     remaining: list[dict[str, object]] = []
     for item in queue:
         try:
@@ -386,7 +396,16 @@ def process_retry_queue(telegram_config: TelegramConfig, state: dict[str, object
                 remaining.append(item)
             state["last_error"] = str(exc)
             increment_error_metric(state, "telegram_send")
+            log_event(
+                LOGGER,
+                logging.WARNING,
+                "retry_queue_send_failed",
+                chat_id=item.get("chat_id"),
+                attempts=item.get("attempts"),
+                error=exc,
+            )
     save_retry_queue(telegram_config.retry_queue_path, remaining)
+    log_event(LOGGER, logging.INFO, "retry_queue_complete", remaining=len(remaining))
 
 
 def now_utc() -> datetime:
@@ -434,6 +453,14 @@ def fetch_new_order_records(
         label="fetch_new_orders",
     )
     assert isinstance(records, list)
+    log_event(
+        LOGGER,
+        logging.INFO,
+        "orders_window_fetched",
+        start=start,
+        end=end,
+        fetched=len(records),
+    )
 
     notified_order_ids = set(state.get("notified_order_ids", []))
     notified_hashes = set(state.get("notified_hashes", []))
@@ -480,6 +507,7 @@ def maybe_send_new_order_notifications(
     ebay_environment: str,
 ) -> None:
     if not telegram_config.notify_chat_ids:
+        log_event(LOGGER, logging.INFO, "notify_skipped", reason="no_notify_chat_ids")
         return
     state = load_state(telegram_config.state_path)
     process_retry_queue(telegram_config, state)
@@ -488,28 +516,53 @@ def maybe_send_new_order_notifications(
     records = fetch_new_order_records(ebay_environment, state)
     first_bootstrap = not state.get("last_check")
     if first_bootstrap:
+        log_event(LOGGER, logging.INFO, "notify_bootstrap", records=len(records))
         updated_state = update_state_with_records(state, records)
         save_state(telegram_config.state_path, updated_state)
         return
 
     failed_queue = load_retry_queue(telegram_config.retry_queue_path)
+    sent_count = 0
     for record in records:
         text = format_auto_notification(record)
         for chat_id in telegram_config.notify_chat_ids:
             try:
                 send_message(telegram_config.token, chat_id, text)
                 increment_metric(state, "notifications_sent")
+                sent_count += 1
             except TelegramApiError as exc:
                 failed_queue.append({"chat_id": chat_id, "text": text, "attempts": 1})
                 state["last_error"] = str(exc)
                 increment_error_metric(state, "telegram_send")
+                log_event(
+                    LOGGER,
+                    logging.WARNING,
+                    "notify_send_failed",
+                    chat_id=chat_id,
+                    order_id=record.get("orderId"),
+                    error=exc,
+                )
     save_retry_queue(telegram_config.retry_queue_path, failed_queue)
     increment_metric(state, "orders_read", len(records))
     updated_state = update_state_with_records(state, records)
     save_state(telegram_config.state_path, updated_state)
+    log_event(
+        LOGGER,
+        logging.INFO,
+        "notify_cycle_complete",
+        new_records=len(records),
+        notifications_sent=sent_count,
+        retry_queue_size=len(failed_queue),
+    )
 
 
 def auto_notify_loop(telegram_config: TelegramConfig, ebay_environment: str) -> None:
+    log_event(
+        LOGGER,
+        logging.INFO,
+        "auto_notify_loop_started",
+        poll_interval_seconds=telegram_config.ebay_poll_interval_seconds,
+    )
     while not _shutdown.is_set():
         try:
             maybe_send_new_order_notifications(telegram_config, ebay_environment)
@@ -581,7 +634,7 @@ def extract_callback_context(
 
 
 def request_shutdown(signum: int, frame: Optional[object]) -> None:
-    LOGGER.info("Segnale %s ricevuto, arresto in corso...", signum)
+    log_event(LOGGER, logging.INFO, "shutdown_requested", signal=signum)
     _shutdown.set()
 
 
@@ -595,6 +648,14 @@ def run_bot() -> int:
         ebay_environment = os.getenv("EBAY_ENVIRONMENT", "production")
         lock_handle = acquire_process_lock(telegram_config.lock_path)
         ensure_long_polling(telegram_config.token)
+        log_event(
+            LOGGER,
+            logging.INFO,
+            "bot_started",
+            environment=ebay_environment,
+            notify_chat_count=len(telegram_config.notify_chat_ids),
+            allowed_chat_mode="all" if telegram_config.allowed_chat_ids is None else "restricted",
+        )
     except (TelegramApiError, EbayApiError) as exc:
         LOGGER.error("Errore configurazione: %s", exc)
         print(f"Errore configurazione: {exc}", file=sys.stderr)
@@ -733,4 +794,5 @@ def run_bot() -> int:
 
     if lock_handle is not None and telegram_config is not None:
         release_process_lock(lock_handle, telegram_config.lock_path)
+    log_event(LOGGER, logging.INFO, "bot_stopped")
     return 0

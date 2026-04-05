@@ -15,6 +15,7 @@ authors = [{ name = "eBay CF Tool" }]
 ebay-cf = "ebay_cf_tool:main"
 ebay-telegram-bot = "telegram_bot:run_bot"
 ebay-cf-fix-git-lock = "ebay_cf.git_utils:main"
+ebay-cf-healthcheck = "ebay_cf.healthcheck:main"
 
 [project.optional-dependencies]
 dev = [
@@ -52,6 +53,8 @@ files = [
   "src/ebay_cf/config.py",
   "src/ebay_cf/storage/sqlite.py",
   "src/ebay_cf/git_utils.py",
+  "src/ebay_cf/logging_utils.py",
+  "src/ebay_cf/healthcheck.py",
 ]
 strict = true
 

@@ -146,7 +146,6 @@ Struttura introdotta:
 
 ## Fase 4 - Operativita' e Osservabilita'
 
-- [ ] definire log strutturati coerenti
 - [ ] aggiungere correlation id o almeno contesto operazione nei log
 - [ ] misurare:
   - ordini letti
@@ -155,7 +154,6 @@ Struttura introdotta:
   - retry Telegram
   - errori eBay
   - errori Telegram
-- [ ] creare comando o endpoint di health check
 - [ ] introdurre alert basilari su processo fermo e su troppi errori consecutivi
 - [ ] documentare metriche e troubleshooting operativo
 

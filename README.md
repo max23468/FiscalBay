@@ -198,6 +198,27 @@ ebay-cf-fix-git-lock
 
 Il comando rimuove il lock solo se non risulta piu' detenuto da un processo attivo.
 
+### Health Check
+
+Per verificare rapidamente se il bot sembra sano lato runtime puoi usare:
+
+```bash
+ebay-cf-healthcheck
+```
+
+Oppure in JSON:
+
+```bash
+ebay-cf-healthcheck --json
+```
+
+Il controllo verifica almeno:
+
+- presenza del lock del bot
+- freschezza di `last_check`
+- dimensione della retry queue
+- eventuale ultimo errore registrato
+
 ## Campi Restituiti
 
 I record prodotti dalla CLI includono:
