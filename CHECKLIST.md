@@ -159,11 +159,7 @@ Struttura introdotta:
 
 ### Storage
 
-- [ ] progettare schema SQLite esplicito
-- [ ] aggiungere versionamento schema
-- [ ] aggiungere migration iniziale
 - [ ] evitare pattern `DELETE + INSERT` completi dove non necessari
-- [ ] introdurre chiavi primarie, indici e vincoli minimi
 - [ ] rendere idempotenti operazioni di stato e retry
 
 ## Fase 3 - Qualita' e Tooling
