@@ -159,8 +159,6 @@ Struttura introdotta:
 
 ## Fase 5 - Progettazione Multiutente
 
-Questa e' la svolta piu' importante per il futuro del progetto.
-
 ### Requisiti target
 
 - [ ] ogni utente Telegram deve poter collegare il proprio account eBay
@@ -181,11 +179,18 @@ Questa e' la svolta piu' importante per il futuro del progetto.
 
 ### Scelte tecniche consigliate
 
+- [ ] trattare il passaggio a bot pubblico multiutente come cambio di natura del progetto: da utility personale a servizio con requisiti di sicurezza, privacy e affidabilita'
 - [ ] valutare migrazione da SQLite a Postgres prima della multiutenza pubblica
 - [ ] cifrare a riposo refresh token eBay
 - [ ] gestire revoca, refresh e scadenza token per utente
 - [ ] introdurre rate limiting per utente
 - [ ] introdurre audit log minimo per collegamento/disconnessione account
+- [ ] prima di aprire il bot a terzi, trattare credenziali, persistence e osservabilita' come componenti di prodotto e non come dettagli accessori
+- [ ] verificare se la VPS attuale resta sufficiente per la fase privata o se servono gia':
+  - database gestito o ben amministrato
+  - backup seri
+  - alerting
+  - processo di deploy piu' sicuro
 
 ## Fase 6 - Onboarding Self-Service Telegram + eBay OAuth
 
@@ -267,13 +272,3 @@ Oltre al refactor e alla VPS, suggerisco di aggiungere anche questi elementi:
 - [ ] isolamento tenant
 - [ ] notifiche per account collegato
 - [ ] beta privata con pochi utenti reali
-
-## Note Operative Importanti
-
-- Il bot pubblico multiutente cambia la natura del progetto: da utility personale a servizio con responsabilita' di sicurezza, privacy e affidabilita'.
-- Prima di aprirlo a terzi, conviene trattare credenziali, persistence e osservabilita' come componenti di prodotto, non come dettagli accessori.
-- Se la VPS attuale e' piccola ma stabile, puo' bastare per le prime fasi. Per multiutenza pubblica e' probabile che servano almeno:
-  - database gestito o ben amministrato
-  - backup seri
-  - alerting
-  - processo di deploy piu' sicuro
