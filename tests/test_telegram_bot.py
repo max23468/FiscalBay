@@ -2,12 +2,19 @@ import unittest
 from unittest.mock import patch
 
 from src.telegram_bot import (
+    CALLBACK_HELP,
+    CALLBACK_STATO,
+    CALLBACK_TUTTI,
+    CALLBACK_ULTIMI,
     TELEGRAM_CMD_MAX_DAYS,
     TelegramApiError,
     TelegramConfig,
+    build_main_menu_markup,
     build_help_text,
+    callback_command_from_data,
     chunk_message,
     ensure_long_polling,
+    extract_callback_context,
     format_auto_notification,
     format_records,
     has_codice_fiscale,
@@ -20,6 +27,44 @@ from src.telegram_bot import (
 
 
 class TelegramBotTests(unittest.TestCase):
+    def test_build_main_menu_markup_contains_inline_keyboard(self) -> None:
+        markup = build_main_menu_markup()
+        keyboard = markup.get("inline_keyboard")
+        self.assertIsInstance(keyboard, list)
+        all_callbacks = [
+            button.get("callback_data")
+            for row in keyboard
+            for button in row
+        ]
+        self.assertIn(CALLBACK_ULTIMI, all_callbacks)
+        self.assertIn(CALLBACK_TUTTI, all_callbacks)
+        self.assertIn(CALLBACK_STATO, all_callbacks)
+        self.assertIn(CALLBACK_HELP, all_callbacks)
+
+    def test_callback_command_from_data_maps_buttons(self) -> None:
+        self.assertEqual(callback_command_from_data(CALLBACK_ULTIMI), "/ultimi 7 20")
+        self.assertEqual(callback_command_from_data(CALLBACK_TUTTI), "/tutti 7 20")
+        self.assertEqual(callback_command_from_data(CALLBACK_STATO), "/stato")
+        self.assertEqual(callback_command_from_data(CALLBACK_HELP), "/help")
+        self.assertIsNone(callback_command_from_data("menu:unknown"))
+
+    def test_extract_callback_context_reads_callback_query(self) -> None:
+        update = {
+            "callback_query": {
+                "id": "cb-1",
+                "data": CALLBACK_STATO,
+                "message": {
+                    "chat": {"id": 123},
+                    "message_thread_id": 9,
+                },
+            }
+        }
+        callback_id, chat_id, data, thread_id = extract_callback_context(update)
+        self.assertEqual(callback_id, "cb-1")
+        self.assertEqual(chat_id, 123)
+        self.assertEqual(data, CALLBACK_STATO)
+        self.assertEqual(thread_id, 9)
+
     def test_parse_command_strips_bot_suffix(self) -> None:
         command, args = parse_command("/ultimi@mybot 7 5")
         self.assertEqual(command, "/ultimi")
@@ -153,6 +198,14 @@ class TelegramBotTests(unittest.TestCase):
         second_call = mock_telegram_request.call_args_list[1].args[2]
         self.assertEqual(first_call.get("parse_mode"), "HTML")
         self.assertNotIn("parse_mode", second_call)
+
+    @patch("src.telegram_bot.telegram_request")
+    def test_send_message_includes_reply_markup(self, mock_telegram_request) -> None:
+        mock_telegram_request.return_value = {"message_id": 1}
+        reply_markup = build_main_menu_markup()
+        send_message("token", 123, "ciao", reply_markup=reply_markup)
+        params = mock_telegram_request.call_args.args[2]
+        self.assertEqual(params.get("reply_markup"), reply_markup)
 
     @patch("src.telegram_bot.telegram_request")
     def test_ensure_long_polling_deletes_existing_webhook(self, mock_telegram_request) -> None:

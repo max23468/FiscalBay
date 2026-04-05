@@ -48,6 +48,11 @@ TELEGRAM_CMD_MIN_RESULTS = 1
 DEFAULT_TELEGRAM_RETRIES = 5
 DEFAULT_TELEGRAM_BASE_DELAY = 0.5
 
+CALLBACK_ULTIMI = "menu:ultimi"
+CALLBACK_TUTTI = "menu:tutti"
+CALLBACK_STATO = "menu:stato"
+CALLBACK_HELP = "menu:help"
+
 _shutdown = threading.Event()
 
 
@@ -258,27 +263,28 @@ def format_record(record: Dict[str, str]) -> str:
     cf = record.get("taxpayerId") or "non disponibile"
     tax_type = record.get("taxIdentifierType") or "n/d"
     country = record.get("issuingCountry") or "n/d"
-    order_id = html.escape(record.get('orderId', ''))
+    order_id = html.escape(record.get("orderId", ""))
     missing_fiscal = ""
     if not record.get("taxpayerId"):
         missing_fiscal = "\n⚠️ <i>Dati fiscali non presenti nella risposta eBay per questo ordine.</i>"
-        
+
     ebay_url = f"https://www.ebay.it/sh/ord/details?orderid={urllib.parse.quote(record.get('orderId', ''))}"
-    
-    items = html.escape(record.get('items', 'N/D'))
-    total = html.escape(record.get('total', 'N/D'))
-    shipping = html.escape(record.get('shippingAddress', 'N/D'))
-        
+
+    items = html.escape(record.get("items", "N/D"))
+    total = html.escape(record.get("total", "N/D"))
+    shipping = html.escape(record.get("shippingAddress", "N/D"))
+    buyer = html.escape(record.get("buyerUsername", "") or "n/d")
+    created_at = html.escape(record.get("creationDate", ""))
+
     return (
-        f"🛒 <b>Ordine:</b> <a href=\"{ebay_url}\">{order_id}</a>\n"
-        f"📅 <b>Data:</b> <code>{html.escape(record.get('creationDate', ''))}</code>\n"
-        f"👤 <b>Acquirente:</b> <code>{html.escape(record.get('buyerUsername', '') or 'n/d')}</code>\n"
-        f"📦 <b>Articoli:</b> <i>{items}</i>\n"
-        f"💰 <b>Totale:</b> <code>{total}</code>\n"
-        f"📍 <b>Spedire a:</b> <code>{shipping}</code>\n"
-        f"💳 <b>Dettagli Fiscali:</b>\n"
-        f" • CF: <code>{html.escape(cf)}</code> <i>({html.escape(tax_type)})</i>\n"
-        f" • Paese: <code>{html.escape(country)}</code>{missing_fiscal}"
+        f"🛒 <b>Ordine</b> • <a href=\"{ebay_url}\"><code>{order_id}</code></a>\n"
+        f"┌ 📅 <b>Data</b>: <code>{created_at}</code>\n"
+        f"├ 👤 <b>Acquirente</b>: <code>{buyer}</code>\n"
+        f"├ 📦 <b>Articoli</b>: <i>{items}</i>\n"
+        f"├ 💰 <b>Totale</b>: <code>{total}</code>\n"
+        f"├ 📍 <b>Spedizione</b>: <code>{shipping}</code>\n"
+        f"└ 💳 <b>CF</b>: <code>{html.escape(cf)}</code> <i>({html.escape(tax_type)})</i> • <code>{html.escape(country)}</code>"
+        f"{missing_fiscal}"
     )
 
 
@@ -286,14 +292,18 @@ def format_records(records: Iterable[Dict[str, str]], only_found: bool, page_siz
     rows = list(records)
     if not rows:
         if only_found:
-            return ["Nessun ordine con codice fiscale restituito da eBay nella selezione richiesta."]
-        return ["Nessun ordine trovato nella selezione richiesta."]
+            return ["🔎 Nessun ordine con codice fiscale restituito da eBay nella selezione richiesta."]
+        return ["🔎 Nessun ordine trovato nella selezione richiesta."]
     pages: List[str] = []
     for start in range(0, len(rows), page_size):
         page_rows = rows[start : start + page_size]
         page_no = (start // page_size) + 1
         total_pages = (len(rows) + page_size - 1) // page_size
-        header = f"📦 <b>Ordini elaborati:</b> <code>{len(rows)}</code> • 📄 <b>Pagina:</b> <code>{page_no}/{total_pages}</code>\n━━━━━━━━━━━━━━━━━━━━━━━━"
+        header = (
+            "📋 <b>Riepilogo ordini</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📦 Totale: <code>{len(rows)}</code> • 📄 Pagina: <code>{page_no}/{total_pages}</code>"
+        )
         body = "\n\n".join(format_record(row) for row in page_rows)
         pages.append(header + "\n\n" + body)
     return pages
@@ -309,20 +319,51 @@ def parse_command(text: str) -> tuple[str, List[str]]:
 
 def build_help_text() -> str:
     return (
-        "🤖 <b>Benvenuto in eBay CF Bot!</b>\n"
-        "Ecco cosa posso fare per te:\n\n"
-        "🟢 <code>/ping</code> - Health check rapido\n"
-        "📊 <code>/stato</code> - Statistiche e monitoraggio bot\n"
-        "📦 <code>/ultimi [giorni] [max]</code> - Ordini recenti (solo CF trovati)\n"
-        "🔍 <code>/ordine [id]</code> - Leggi un ordine specifico\n"
-        "📋 <code>/tutti [giorni] [max]</code> - Mostra tutti gli ordini (anche senza CF)\n"
-        "ℹ️ <code>/help</code> - Mostra questo aiuto\n\n"
-        "<b>Esempi d'uso:</b>\n"
-        "↳ <code>/ultimi 7 20</code>\n"
-        "↳ <code>/ordine 12-34567-89012</code>\n\n"
-        f"<i>Limiti: giorni {TELEGRAM_CMD_MIN_DAYS}-{TELEGRAM_CMD_MAX_DAYS}, "
+        "🤖 <b>Benvenuto in eBay CF Bot</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "Comandi disponibili:\n"
+        "• 🟢 <code>/ping</code> → verifica rapida\n"
+        "• 📊 <code>/stato</code> → stato e metriche bot\n"
+        "• 📦 <code>/ultimi [giorni] [max]</code> → ordini con CF trovato\n"
+        "• 📋 <code>/tutti [giorni] [max]</code> → tutti gli ordini\n"
+        "• 🔍 <code>/ordine [id]</code> → dettaglio ordine singolo\n"
+        "• ℹ️ <code>/help</code> → questa guida\n\n"
+        "<b>Esempi rapidi</b>\n"
+        "• <code>/ultimi 7 20</code>\n"
+        "• <code>/tutti 3 50</code>\n"
+        "• <code>/ordine 12-34567-89012</code>\n\n"
+        f"<i>Limiti input: giorni {TELEGRAM_CMD_MIN_DAYS}-{TELEGRAM_CMD_MAX_DAYS}, "
         f"max ordini {TELEGRAM_CMD_MIN_RESULTS}-{TELEGRAM_CMD_MAX_RESULTS}.</i>"
     )
+
+
+def build_main_menu_markup() -> Dict[str, object]:
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "Ultimi CF", "callback_data": CALLBACK_ULTIMI},
+                {"text": "Tutti", "callback_data": CALLBACK_TUTTI},
+            ],
+            [
+                {"text": "Stato", "callback_data": CALLBACK_STATO},
+                {"text": "Help", "callback_data": CALLBACK_HELP},
+            ],
+        ]
+    }
+
+
+def callback_command_from_data(data: str) -> Optional[str]:
+    mapping = {
+        CALLBACK_ULTIMI: "/ultimi 7 20",
+        CALLBACK_TUTTI: "/tutti 7 20",
+        CALLBACK_STATO: "/stato",
+        CALLBACK_HELP: "/help",
+    }
+    return mapping.get(data.strip())
+
+
+def should_attach_main_menu(command: str) -> bool:
+    return command in ("", "/start", "/help", "/ping", "/stato")
 
 
 def options_for_command(command: str, args: List[str]) -> FetchOptions:
@@ -364,8 +405,10 @@ def send_message(
     chat_id: int,
     text: str,
     message_thread_id: Optional[int] = None,
+    reply_markup: Optional[Dict[str, object]] = None,
 ) -> None:
-    for chunk in chunk_message(text):
+    chunks = chunk_message(text)
+    for idx, chunk in enumerate(chunks):
         params: Dict[str, object] = {
             "chat_id": chat_id,
             "text": chunk,
@@ -374,6 +417,8 @@ def send_message(
         }
         if message_thread_id is not None:
             params["message_thread_id"] = message_thread_id
+        if reply_markup is not None and idx == len(chunks) - 1:
+            params["reply_markup"] = reply_markup
         try:
             telegram_request(token, "sendMessage", params)
         except TelegramApiError as exc:
@@ -386,6 +431,8 @@ def send_message(
             }
             if message_thread_id is not None:
                 fallback_params["message_thread_id"] = message_thread_id
+            if reply_markup is not None and idx == len(chunks) - 1:
+                fallback_params["reply_markup"] = reply_markup
             telegram_request(token, "sendMessage", fallback_params)
 
 
@@ -516,20 +563,23 @@ def increment_error_metric(state: Dict[str, object], error_type: str) -> None:
 def format_status(state: Dict[str, object], retry_queue_size: int) -> str:
     metrics = state.get("metrics", {})
     errors = metrics.get("errors_by_type", {})
-    
-    last_check_str = str(state.get('last_check') or 'mai')
-    last_error_str = str(state.get('last_error') or 'nessuno')
-    
+    errors_text = (
+        html.escape(json.dumps(errors, ensure_ascii=False))
+        if errors
+        else "nessuno"
+    )
+    last_check_str = str(state.get("last_check") or "mai")
+    last_error_str = str(state.get("last_error") or "nessuno")
+
     return (
         "📊 <b>Stato del Bot</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"⏱️ <b>Ultimo check eBay:</b> <code>{html.escape(last_check_str)}</code>\n"
-        f"📦 <b>Ordini analizzati:</b> <code>{int(metrics.get('orders_read', 0))}</code>\n"
-        f"📩 <b>Notifiche inviate:</b> <code>{int(metrics.get('notifications_sent', 0))}</code>\n"
-        f"⏳ <b>Coda retry:</b> <code>{retry_queue_size}</code>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"⚠️ <b>Ultimo errore:</b> <code>{html.escape(last_error_str)}</code>\n"
-        f"📉 <b>Errori per tipo:</b>\n<code>{html.escape(json.dumps(errors, indent=2, ensure_ascii=False))}</code>"
+        f"⏱️ Ultimo check eBay: <code>{html.escape(last_check_str)}</code>\n"
+        f"📦 Ordini analizzati: <code>{int(metrics.get('orders_read', 0))}</code>\n"
+        f"📩 Notifiche inviate: <code>{int(metrics.get('notifications_sent', 0))}</code>\n"
+        f"⏳ Coda retry: <code>{retry_queue_size}</code>\n"
+        f"⚠️ Ultimo errore: <code>{html.escape(last_error_str)}</code>\n"
+        f"📉 Errori per tipo: <code>{errors_text}</code>"
     )
 
 
@@ -708,7 +758,7 @@ def process_message(
         return [format_status(state, retry_queue_size)]
 
     if command not in ("/ultimi", "/ordine", "/tutti"):
-        return ["Comando non riconosciuto. Usa /help."]
+        return ["Comando non riconosciuto. Usa /help per vedere i comandi disponibili."]
 
     config = load_config(ebay_environment)
     options = options_for_command(command, args)
@@ -729,6 +779,23 @@ def extract_message_context(update: Dict) -> tuple[Optional[int], str, Optional[
     if isinstance(thread_id, int):
         return chat.get("id"), text, thread_id
     return chat.get("id"), text, None
+
+
+def extract_callback_context(
+    update: Dict,
+) -> tuple[Optional[str], Optional[int], Optional[str], Optional[int]]:
+    callback = update.get("callback_query") or {}
+    callback_id = callback.get("id")
+    data = callback.get("data")
+    message = callback.get("message") or {}
+    chat = message.get("chat") or {}
+    thread_id = message.get("message_thread_id")
+    normalized_thread = thread_id if isinstance(thread_id, int) else None
+    if not isinstance(callback_id, str):
+        return None, None, None, normalized_thread
+    if not isinstance(data, str):
+        return callback_id, chat.get("id"), None, normalized_thread
+    return callback_id, chat.get("id"), data, normalized_thread
 
 
 def _request_shutdown(signum: int, frame: Optional[object]) -> None:
@@ -774,7 +841,7 @@ def run_bot() -> int:
                     {
                         "offset": offset,
                         "timeout": poll_timeout,
-                        "allowed_updates": ["message", "edited_message"],
+                        "allowed_updates": ["message", "edited_message", "callback_query"],
                     },
                 ),
                 label="getUpdates",
@@ -783,9 +850,66 @@ def run_bot() -> int:
             updates_backoff_seconds = 1.0
             for update in updates:
                 offset = max(offset, int(update["update_id"]) + 1)
+                callback_id, callback_chat_id, callback_data, callback_thread_id = (
+                    extract_callback_context(update)
+                )
+                if callback_id and callback_chat_id and callback_data:
+                    callback_text = callback_command_from_data(callback_data)
+                    if callback_text:
+                        try:
+                            replies = process_message(
+                                text=callback_text,
+                                chat_id=callback_chat_id,
+                                telegram_config=telegram_config,
+                                ebay_environment=ebay_environment,
+                            )
+                        except (TelegramApiError, EbayApiError, ValueError) as exc:
+                            replies = [f"Errore: {html.escape(str(exc))}"]
+                        for index, reply in enumerate(replies):
+                            try:
+                                send_message(
+                                    telegram_config.token,
+                                    callback_chat_id,
+                                    reply,
+                                    message_thread_id=callback_thread_id,
+                                    reply_markup=(
+                                        build_main_menu_markup()
+                                        if index == len(replies) - 1
+                                        else None
+                                    ),
+                                )
+                            except TelegramApiError as exc:
+                                LOGGER.error("Invio risposta callback fallito: %s", exc)
+                        try:
+                            telegram_request(
+                                telegram_config.token,
+                                "answerCallbackQuery",
+                                {
+                                    "callback_query_id": callback_id,
+                                    "text": "Comando eseguito",
+                                },
+                            )
+                        except TelegramApiError as exc:
+                            LOGGER.warning("answerCallbackQuery fallita: %s", exc)
+                    else:
+                        try:
+                            telegram_request(
+                                telegram_config.token,
+                                "answerCallbackQuery",
+                                {
+                                    "callback_query_id": callback_id,
+                                    "text": "Azione non riconosciuta",
+                                },
+                            )
+                        except TelegramApiError as exc:
+                            LOGGER.warning("answerCallbackQuery fallita: %s", exc)
+                    continue
+
                 cid, msg_text, thread_id = extract_message_context(update)
                 if not cid or not msg_text.strip():
                     continue
+                command, _ = parse_command(msg_text)
+                show_menu = is_authorized(cid, telegram_config) and should_attach_main_menu(command)
                 try:
                     replies = process_message(
                         text=msg_text,
@@ -795,13 +919,18 @@ def run_bot() -> int:
                     )
                 except (TelegramApiError, EbayApiError, ValueError) as exc:
                     replies = [f"Errore: {html.escape(str(exc))}"]
-                for reply in replies:
+                for index, reply in enumerate(replies):
                     try:
                         send_message(
                             telegram_config.token,
                             cid,
                             reply,
                             message_thread_id=thread_id,
+                            reply_markup=(
+                                build_main_menu_markup()
+                                if show_menu and index == len(replies) - 1
+                                else None
+                            ),
                         )
                     except TelegramApiError as exc:
                         LOGGER.error("Invio risposta fallito: %s", exc)
