@@ -18,7 +18,7 @@ ebay-telegram-bot = "telegram_bot:run_bot"
 [project.optional-dependencies]
 dev = [
   "build>=1.2.2",
-  "ruff>=0.6.0",
+  "ruff==0.15.9",
 ]
 
 [tool.setuptools.package-dir]

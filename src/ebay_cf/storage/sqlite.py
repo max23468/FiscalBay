@@ -32,9 +32,7 @@ def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
 
 
 def _create_v2_schema(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS notified_order_ids (order_id TEXT PRIMARY KEY)"
-    )
+    conn.execute("CREATE TABLE IF NOT EXISTS notified_order_ids (order_id TEXT PRIMARY KEY)")
     conn.execute("CREATE TABLE IF NOT EXISTS notified_hashes (hash TEXT PRIMARY KEY)")
     conn.execute(
         "CREATE TABLE IF NOT EXISTS retry_queue "
@@ -45,9 +43,7 @@ def _create_v2_schema(conn: sqlite3.Connection) -> None:
         "attempts INTEGER NOT NULL DEFAULT 0"
         ")"
     )
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
-    )
+    conn.execute("CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
 
 
 def _migrate_legacy_notified_orders(conn: sqlite3.Connection) -> None:

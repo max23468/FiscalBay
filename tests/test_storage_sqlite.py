@@ -69,9 +69,7 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             db_path = Path(tmpdir) / "state.db"
 
             with sqlite3.connect(db_path) as conn:
-                conn.execute(
-                    "CREATE TABLE notified_orders (order_id TEXT, hash TEXT)"
-                )
+                conn.execute("CREATE TABLE notified_orders (order_id TEXT, hash TEXT)")
                 conn.execute(
                     "CREATE TABLE retry_queue "
                     "("
@@ -79,9 +77,7 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
                     "chat_id INTEGER, text TEXT, attempts INTEGER"
                     ")"
                 )
-                conn.execute(
-                    "CREATE TABLE kv_store (key TEXT PRIMARY KEY, value TEXT)"
-                )
+                conn.execute("CREATE TABLE kv_store (key TEXT PRIMARY KEY, value TEXT)")
                 conn.execute(
                     "INSERT INTO notified_orders (order_id, hash) VALUES (?, ?)",
                     ("legacy-order", "legacy-hash"),
