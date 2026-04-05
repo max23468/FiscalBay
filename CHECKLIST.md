@@ -1,29 +1,16 @@
 # Checklist
 
-Questo documento unisce tre cose:
+## Obiettivi da raggiungere
 
-- audit tecnico dello stato attuale
-- piano strutturale di miglioramento
-- checklist operativa per progetto e VPS
-
-L'obiettivo non e' solo "ripulire il codice", ma trasformare il tool in un servizio piu' affidabile, manutenibile e pronto a evolvere verso un bot Telegram multiutente, dove ogni utente puo' collegare il proprio account venditore eBay.
-
-## Obiettivi
-
-### Obiettivi immediati
-
-- ridurre fragilita' e duplicazioni
-- migliorare affidabilita' del deploy sulla VPS
-- separare meglio responsabilita' applicative e operative
-- documentare un percorso di refactor senza bloccare l'uso attuale
-
-### Obiettivi futuri
-
-- supporto multiutente reale
-- onboarding self-service da Telegram
-- collegamento del proprio account eBay con OAuth per singolo utente
-- isolamento dati tra utenti
-- osservabilita' e sicurezza adatte a un servizio pubblico
+- [ ] ridurre fragilita' e duplicazioni
+- [ ] migliorare affidabilita' del deploy sulla VPS
+- [ ] separare meglio responsabilita' applicative e operative
+- [ ] documentare un percorso di refactor senza bloccare l'uso attuale
+- [ ] supporto multiutente reale
+- [ ] onboarding self-service da Telegram
+- [ ] collegamento del proprio account eBay con OAuth per singolo utente
+- [ ] isolamento dati tra utenti
+- [ ] osservabilita' e sicurezza adatte a un servizio pubblico
 
 ## Audit Tecnico
 
