@@ -157,10 +157,6 @@ Struttura introdotta:
 - [ ] definire eccezioni applicative piu' chiare
 - [ ] separare rendering output da raccolta dati
 
-### Storage
-
-## Fase 3 - Qualita' e Tooling
-
 ## Fase 4 - Operativita' e Osservabilita'
 
 - [ ] definire log strutturati coerenti
