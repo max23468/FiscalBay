@@ -65,7 +65,7 @@ class TelegramBotTests(unittest.TestCase):
             ebay_environment="production",
         )
         self.assertEqual(len(replies), 1)
-        self.assertIn("Comandi disponibili", replies[0])
+        self.assertIn("Benvenuto in eBay CF Bot", replies[0])
         mock_load_config.assert_not_called()
         mock_fetch_records.assert_not_called()
 
@@ -99,7 +99,7 @@ class TelegramBotTests(unittest.TestCase):
                 "issuingCountry": "IT",
             }
         )
-        self.assertIn("Nuovo ordine eBay ricevuto", text)
+        self.assertIn("NUOVO ORDINE EBAY RICEVUTO", text)
         self.assertIn("RSSMRA80A01H501U", text)
 
     def test_format_order_fallback_when_missing_fiscal_fields(self) -> None:
