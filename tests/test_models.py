@@ -1,12 +1,21 @@
 import unittest
 
 from src.ebay_cf.models import (
+    CAPABILITY_CONNECT_ACCOUNT,
+    CAPABILITY_REQUEST_ACCESS,
+    CAPABILITY_REVIEW_ACCESS,
+    OAUTH_SESSION_STATUS_CANCELLED,
+    OAUTH_SESSION_STATUS_PENDING,
     EbayTokenSet,
     LinkedEbayAccount,
     NotificationSubscription,
     TelegramChat,
     TelegramUser,
     TenantChatContext,
+    get_telegram_user_capabilities,
+    has_telegram_user_capability,
+    normalize_oauth_session_status,
+    normalize_telegram_user_status,
 )
 
 
@@ -28,7 +37,7 @@ class ModelsTests(unittest.TestCase):
         self.assertEqual(user.username, "seller_bot_user")
         self.assertEqual(user.display_name, "Mario Rossi")
         self.assertEqual(user.created_at, "2026-04-06T10:00:00Z")
-        self.assertEqual(user.as_dict()["status"], "active")
+        self.assertEqual(user.as_dict()["status"], "approved")
 
     def test_linked_ebay_account_from_mapping_normalizes_fields(self) -> None:
         account = LinkedEbayAccount.from_mapping(
@@ -118,6 +127,27 @@ class ModelsTests(unittest.TestCase):
         self.assertEqual(tenant_context.telegram_chat_id, 456)
         self.assertEqual(tenant_context.environment, "sandbox")
         self.assertTrue(tenant_context.notifications_enabled)
+
+    def test_normalize_telegram_user_status_maps_legacy_aliases(self) -> None:
+        self.assertEqual(normalize_telegram_user_status("active"), "approved")
+        self.assertEqual(normalize_telegram_user_status("rejected"), "blocked")
+        self.assertEqual(normalize_telegram_user_status("pending"), "pending")
+
+    def test_get_telegram_user_capabilities_varies_by_workflow_status(self) -> None:
+        self.assertEqual(
+            get_telegram_user_capabilities("new"),
+            frozenset({CAPABILITY_REQUEST_ACCESS}),
+        )
+        self.assertTrue(has_telegram_user_capability("approved", CAPABILITY_CONNECT_ACCOUNT))
+        self.assertFalse(has_telegram_user_capability("blocked", CAPABILITY_CONNECT_ACCOUNT))
+        self.assertTrue(has_telegram_user_capability("admin", CAPABILITY_REVIEW_ACCESS))
+
+    def test_normalize_oauth_session_status_preserves_known_terminal_states(self) -> None:
+        self.assertEqual(normalize_oauth_session_status("pending"), OAUTH_SESSION_STATUS_PENDING)
+        self.assertEqual(
+            normalize_oauth_session_status("cancelled"),
+            OAUTH_SESSION_STATUS_CANCELLED,
+        )
 
 
 if __name__ == "__main__":

@@ -13,6 +13,10 @@ Documenti collegati:
 
 ## In lavorazione
 
+- centralizzati gli stati workflow utente/account/sessione e il capability gating dei comandi Telegram, riducendo i check sparsi su stringhe legacy tra `bot.py` e `telegram_runtime.py`
+- resi piu' idempotenti i flussi sensibili di accesso e collegamento: approvazioni ripetute non duplicano notifiche e `/connect` riusa la sessione OAuth pendente valida
+- aggiunti `reconcile.py` e una `operation_queue` SQLite minima per il recovery dei workflow sensibili; il deploy VPS prevede ora anche `ebaycf-reconcile.timer`
+
 ### Added
 
 - `src/ebay_cf/telegram_commands.py` per parsing, menu e rendering Telegram.
@@ -50,6 +54,11 @@ Documenti collegati:
 - `src/ebay_cf/bot.py`, `src/ebay_cf/telegram_commands.py`, `src/ebay_cf/storage/sqlite.py` e `src/ebay_cf/services/telegram_runtime.py` aggiungono ora il workflow di approvazione: utenti `new/pending/approved/blocked`, `/request_access`, notifiche admin con pulsanti inline e comandi `/users`, `/approve_user`, `/reject_user`.
 - `src/ebay_cf/storage/sqlite.py`, `src/ebay_cf/bot.py` e `src/ebay_cf/oauth_server.py` introducono un audit log minimo append-only nel `state.db` per `request_access`, `approve`, `reject`, `connect`, `disconnect`, `oauth_success` e `oauth_failure`.
 - `src/ebay_cf/tenant_credentials.py` passa ora a cifratura Fernet per i refresh token tenant con chiave `EBAY_TENANT_TOKEN_KEY`; il fallback plaintext resta solo esplicito per beta privata/dev.
+- `src/ebay_cf/models.py`, `src/ebay_cf/bot.py`, `src/ebay_cf/telegram_commands.py` e `src/ebay_cf/storage/sqlite.py` centralizzano ora stati workflow e capability, rendendo espliciti `new/pending/approved/blocked/admin`, i permessi associati e gli alias legacy.
+- `src/ebay_cf/bot.py`, `src/ebay_cf/application.py` e `src/ebay_cf/reconcile.py` rendono idempotenti i processi sensibili di accesso e collegamento: approvazioni/rifiuti ripetuti non duplicano effetti e `/connect` riusa la sessione OAuth ancora valida.
+- `src/ebay_cf/storage/sqlite.py` e `src/ebay_cf/reconcile.py` introducono `operation_queue` e un worker periodico di reconciliation per riallineare accessi, chat, subscription, sessioni OAuth stale e token incoerenti.
+- `deploy/reconcile.sh`, `deploy/ebaycf-reconcile.service`, `deploy/ebaycf-reconcile.timer` e `deploy/linux-setup.sh` estendono il deploy VPS con una reconciliation periodica via `systemd`.
+- `src/ebay_cf/application.py` e `src/ebay_cf/bot.py` chiudono ora il residuo di fase 3 nel runtime multiutente: con `TELEGRAM_ADMIN_USER_ID` configurato il bot usa credenziali tenant per i tenant collegati e non ricade piu' su `EBAY_REFRESH_TOKEN` condiviso.
 - `deploy/ebaycf-oauth.service`, `deploy/linux-setup.sh`, `deploy/update.sh` e `deploy/smoke-check.sh` estendono il deploy VPS con il servizio `systemd` separato `ebaycf-oauth`.
 - `docs/CHECKLIST.md` considera ora la fase di onboarding self-service sostanzialmente chiusa e lascia aperti in roadmap solo i target multiutente residui e la governance prodotto.
 - `src/ebay_cf/services/telegram_runtime.py` e `src/ebay_cf/services/notifications.py` emettono ora log piu' correlabili con `cycle_id` per polling, callback, messaggi e cicli notifica.

@@ -15,6 +15,9 @@ from .models import (
     RetryQueueEntry,
     TelegramConfig,
     TelegramUser,
+    is_blocked_telegram_user_status,
+    is_pending_telegram_user_status,
+    normalize_telegram_user_status,
 )
 
 TELEGRAM_CMD_MAX_DAYS = 365
@@ -249,20 +252,21 @@ def build_admin_approval_markup(telegram_user_id: int) -> dict[str, object]:
 
 
 def format_access_required_status(user_status: str, *, is_admin: bool = False) -> str:
+    canonical_status = normalize_telegram_user_status(user_status)
     if is_admin:
         return (
             "👑 <b>Admin del bot</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "Il tuo account Telegram e' riconosciuto come admin globale."
         )
-    if user_status == "pending":
+    if is_pending_telegram_user_status(canonical_status):
         return (
             "⏳ <b>Accesso in attesa</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "La tua richiesta e' gia' in attesa di approvazione da parte dell'admin.\n"
             "Quando verrai approvato potrai usare <code>/connect</code> e gli altri comandi."
         )
-    if user_status == "blocked":
+    if is_blocked_telegram_user_status(canonical_status):
         return (
             "⛔ <b>Accesso non approvato</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"

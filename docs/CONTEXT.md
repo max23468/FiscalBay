@@ -218,6 +218,10 @@ Nota onboarding:
 - `/settings` mostra gia' un riepilogo leggero delle preferenze utente/chat
 - se `TELEGRAM_ADMIN_USER_ID` e' configurata, gli utenti non admin entrano in stati `new/pending/approved/blocked` e possono sbloccare il bot solo dopo approvazione admin
 - l'admin puo' gestire gli accessi con callback inline o con `/users`, `/approve_user` e `/reject_user`
+- il runtime normalizza ora centralmente gli stati workflow e applica capability esplicite per i comandi sensibili, invece di affidarsi a semplici check sparsi su stringhe di stato
+- il workflow accessi non si ferma piu' al solo cambio di stato: approvazione e blocco riallineano anche le permission applicate su chat e subscription gia' esistenti
+- il comando `/connect` e' ora idempotente rispetto alla sessione OAuth pendente: se la sessione valida esiste gia', viene riusata
+- una `operation_queue` minima in SQLite tiene le applicazioni differibili o recuperabili dei workflow sensibili, e la reconciliation periodica la processa sul server
 - esiste ora anche un callback server minimale separato, che chiude il flusso `/connect` quando la VPS espone URL pubblici corretti e usa il `RuName` eBay corretto verso il developer portal
 - i passaggi sensibili di accesso e collegamento account lasciano ora anche un audit log minimo append-only nel `state.db`
 - i refresh token tenant usano ora cifratura Fernet a riposo con chiave da env sulla VPS
@@ -296,21 +300,16 @@ bash scripts/ci_verify.sh
 
 ### Limiti attuali ancora veri
 
-- progetto ancora single-tenant
-- credenziali eBay ancora globali
 - niente onboarding self-service pubblico
-- niente OAuth eBay per singolo utente Telegram
-- parte multiutente ancora solo in progettazione
+- hardening governance/privacy ancora da completare
 
 Aggiornamento di stato:
 
-- e' iniziata la base tecnica della fase 3: SQLite e scheduler stanno ricevendo strutture tenant-aware, ma il comportamento operativo resta ancora single-tenant finche' non vengono popolati utenti/chat/account nel DB
-- il bot ora puo' iniziare a popolare utenti e chat dal traffico Telegram reale, preparando la migrazione senza fermare il servizio su VPS
-- i comandi del bot risolvono ora il tenant dai dati runtime Telegram e, quando trovano una mappatura nel DB, leggono stato e retry queue del tenant invece del solo stato globale
-- anche il layer applicativo che sceglie l'environment eBay passa ora dal tenant e dall'account collegato quando il DB lo consente, pur mantenendo fallback sulle credenziali globali attuali
-- la sorgente credenziali per il fetch non e' piu' una decisione sparsa nei caller: esiste ora una facciata unica che in futuro potra' preferire token per tenant senza cambiare ogni servizio
-- esiste gia' anche un adapter storage-side per futuri token tenant, ma sul bot in VPS resta volutamente spento finche' non sara' disponibile la decifratura reale dei refresh token utente
-- il comando `/stato` mostra ora esplicitamente se la chat sta lavorando in contesto tenant o ancora in fallback globale, rendendo osservabile il residuo single-tenant direttamente dal bot
+- il bot usa ora utenti/chat/account/token tenant-aware come percorso operativo normale su VPS
+- i comandi del bot risolvono il tenant dai dati runtime Telegram e leggono stato e retry queue del tenant invece del solo stato globale
+- il layer applicativo che sceglie l'environment eBay passa dal tenant e dall'account collegato quando il DB lo consente
+- la sorgente credenziali per il fetch non e' piu' sparsa nei caller: il bot multiutente con admin configurato usa solo token tenant; il fallback `.env` resta confinato ai percorsi legacy adminless o CLI
+- il comando `/stato` mostra esplicitamente se la chat sta lavorando in contesto tenant, se il token tenant e' pronto o se manca ancora il collegamento
 - e' disponibile anche `/account`, che mostra lo stato del collegamento eBay registrato per il tenant della chat e rappresenta il primo comando davvero orientato all'onboarding fase 4
 
 ## Multiutenza futura

@@ -17,6 +17,7 @@ from .storage.sqlite import (
     load_retry_queue_entries,
     load_runtime_state,
     summarize_multi_tenant_readiness,
+    summarize_operation_queue,
 )
 
 LOGGER = logging.getLogger("ebaycf.healthcheck")
@@ -131,6 +132,7 @@ def build_health_report(
 
     ebay_errors, telegram_errors = summarize_error_metrics(state.metrics)
     multi_tenant = summarize_multi_tenant_readiness(telegram_config.state_path)
+    operation_queue = summarize_operation_queue(telegram_config.state_path)
     status = "ok" if not reasons else "fail"
     report = {
         "ok": not reasons,
@@ -158,6 +160,7 @@ def build_health_report(
             "tenant_credentials_ready": multi_tenant["linked_accounts"] > 0
             and multi_tenant["active_token_sets"] > 0,
         },
+        "operation_queue": operation_queue,
     }
     alerts = build_alerts(
         report,
@@ -189,6 +192,8 @@ def build_health_report(
         tenant_users=multi_tenant["tenant_users"],
         linked_accounts=multi_tenant["linked_accounts"],
         active_token_sets=multi_tenant["active_token_sets"],
+        operation_queue_pending=operation_queue["pending"],
+        operation_queue_failed=operation_queue["failed"],
     )
     return report
 
@@ -228,6 +233,8 @@ def render_text_report(report: dict[str, object]) -> str:
     alerts = raw_alerts if isinstance(raw_alerts, list) else []
     raw_multi_tenant = report.get("multi_tenant")
     multi_tenant = raw_multi_tenant if isinstance(raw_multi_tenant, dict) else {}
+    raw_operation_queue = report.get("operation_queue")
+    operation_queue = raw_operation_queue if isinstance(raw_operation_queue, dict) else {}
     lines.append("reasons: " + (", ".join(str(item) for item in reasons) if reasons else "none"))
     lines.append("warnings: " + (", ".join(str(item) for item in warnings) if warnings else "none"))
     lines.append("alerts: " + (", ".join(str(item) for item in alerts) if alerts else "none"))
@@ -242,6 +249,9 @@ def render_text_report(report: dict[str, object]) -> str:
             f"multi_tenant.tenant_runtime_states: {multi_tenant.get('tenant_runtime_states', 0)}",
             "multi_tenant.tenant_credentials_ready: "
             f"{multi_tenant.get('tenant_credentials_ready', False)}",
+            f"operation_queue.pending: {operation_queue.get('pending', 0)}",
+            f"operation_queue.running: {operation_queue.get('running', 0)}",
+            f"operation_queue.failed: {operation_queue.get('failed', 0)}",
         ]
     )
     return "\n".join(lines)

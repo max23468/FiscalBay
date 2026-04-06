@@ -75,7 +75,7 @@ Permettere a un utente Telegram di collegare il proprio account eBay senza inter
 
 1. introdurre schema dati tenant-aware senza cambiare ancora il comportamento single-tenant
 2. spostare credenziali eBay da env globale a repository/account storage
-   Stato attuale: il progetto ha gia' una facciata di risoluzione credenziali e un adapter storage-side per token tenant, ma sul deploy VPS resta attivo il fallback globale finche' non esiste il decoder reale dei refresh token cifrati.
+   Stato attuale: il progetto usa gia' token tenant cifrati come percorso operativo normale del bot su VPS; il fallback `.env` resta solo per CLI o istanze legacy adminless.
 3. creare endpoint o mini web app per avvio OAuth e callback
    Stato attuale: il comando `/connect`, la tabella `oauth_link_sessions` e il servizio web minimale esistono gia'; restano da rifinire deploy pubblico, RuName/Accept URL nel portale eBay, revoca remota e hardening finale del flusso.
 4. aggiungere comandi `/connect`, `/disconnect` e `/account`

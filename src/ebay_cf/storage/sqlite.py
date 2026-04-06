@@ -8,6 +8,15 @@ import sqlite3
 from typing import Iterable, TypedDict
 
 from ..models import (
+    CAPABILITY_MANAGE_NOTIFICATIONS,
+    EBAY_ACCOUNT_STATUS_DISCONNECTED,
+    EBAY_ACCOUNT_STATUS_LINKED,
+    OAUTH_SESSION_STATUS_CANCELLED,
+    OAUTH_SESSION_STATUS_EXPIRED,
+    OAUTH_SESSION_STATUS_PENDING,
+    OPERATION_STATUS_FAILED,
+    OPERATION_STATUS_PENDING,
+    OPERATION_STATUS_RUNNING,
     AuditLogEntry,
     BotMetrics,
     BotRuntimeState,
@@ -16,14 +25,18 @@ from ..models import (
     NotificationSubscription,
     NotificationTenantTarget,
     OauthLinkSession,
+    OperationQueueEntry,
     RetryQueueEntry,
     TelegramChat,
     TelegramUser,
     TenantChatContext,
     as_int,
+    has_telegram_user_capability,
+    normalize_operation_status,
+    normalize_telegram_user_status,
 )
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 
 class MetricsState(TypedDict):
@@ -308,6 +321,26 @@ def _create_v6_schema(conn: sqlite3.Connection) -> None:
     )
 
 
+def _create_v7_schema(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS operation_queue "
+        "("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "operation_type TEXT NOT NULL, "
+        "status TEXT NOT NULL DEFAULT 'pending', "
+        "actor_telegram_user_id INTEGER, "
+        "target_telegram_user_id INTEGER, "
+        "available_at TEXT, "
+        "payload_json TEXT NOT NULL DEFAULT '', "
+        "result_json TEXT NOT NULL DEFAULT '', "
+        "last_error TEXT NOT NULL DEFAULT '', "
+        "attempts INTEGER NOT NULL DEFAULT 0, "
+        "created_at TEXT NOT NULL, "
+        "updated_at TEXT"
+        ")"
+    )
+
+
 def _migrate_legacy_notified_orders(conn: sqlite3.Connection) -> None:
     if not _table_exists(conn, "notified_orders"):
         return
@@ -347,6 +380,9 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         version = 5
     if version < 6:
         _create_v6_schema(conn)
+        version = 6
+    if version < 7:
+        _create_v7_schema(conn)
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 
@@ -838,6 +874,150 @@ def load_audit_log_entries(path: str, limit: int = 100) -> list[AuditLogEntry]:
     return entries
 
 
+def enqueue_operation(path: str, entry: OperationQueueEntry) -> OperationQueueEntry:
+    init_db(path)
+    with _connect(path) as conn:
+        cursor = conn.execute(
+            "INSERT INTO operation_queue "
+            "("
+            "operation_type, status, actor_telegram_user_id, target_telegram_user_id, "
+            "available_at, payload_json, result_json, last_error, attempts, created_at, updated_at"
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                entry.operation_type,
+                normalize_operation_status(entry.status),
+                entry.actor_telegram_user_id,
+                entry.target_telegram_user_id,
+                entry.available_at,
+                entry.payload_json,
+                entry.result_json,
+                entry.last_error,
+                entry.attempts,
+                entry.created_at,
+                entry.updated_at or entry.created_at,
+            ),
+        )
+        if cursor.lastrowid is None:
+            raise RuntimeError("Inserimento operation queue fallito: lastrowid mancante.")
+        entry.id = int(cursor.lastrowid)
+    return entry
+
+
+def load_operation_queue_entries(
+    path: str,
+    *,
+    limit: int = 100,
+    statuses: set[str] | None = None,
+) -> list[OperationQueueEntry]:
+    init_db(path)
+    entries: list[OperationQueueEntry] = []
+    safe_limit = max(1, int(limit))
+    with _connect(path) as conn:
+        if statuses:
+            normalized_statuses = [
+                normalize_operation_status(status) for status in sorted(statuses)
+            ]
+            placeholders = ", ".join("?" for _ in normalized_statuses)
+            rows = conn.execute(
+                "SELECT id, operation_type, status, actor_telegram_user_id, "
+                "target_telegram_user_id, available_at, payload_json, result_json, "
+                "last_error, attempts, created_at, updated_at "
+                f"FROM operation_queue WHERE status IN ({placeholders}) "
+                "ORDER BY id ASC LIMIT ?",
+                (*normalized_statuses, safe_limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT id, operation_type, status, actor_telegram_user_id, "
+                "target_telegram_user_id, available_at, payload_json, result_json, "
+                "last_error, attempts, created_at, updated_at "
+                "FROM operation_queue ORDER BY id ASC LIMIT ?",
+                (safe_limit,),
+            ).fetchall()
+        for row in rows:
+            entries.append(OperationQueueEntry.from_mapping(dict(row)))
+    return entries
+
+
+def update_operation_queue_entry(
+    path: str,
+    operation_id: int,
+    *,
+    status: str | None = None,
+    result_json: str | None = None,
+    last_error: str | None = None,
+    attempts: int | None = None,
+    updated_at: str,
+) -> OperationQueueEntry | None:
+    init_db(path)
+    assignments: list[str] = ["updated_at = ?"]
+    params: list[object] = [updated_at]
+    if status is not None:
+        assignments.append("status = ?")
+        params.append(normalize_operation_status(status))
+    if result_json is not None:
+        assignments.append("result_json = ?")
+        params.append(result_json)
+    if last_error is not None:
+        assignments.append("last_error = ?")
+        params.append(last_error)
+    if attempts is not None:
+        assignments.append("attempts = ?")
+        params.append(attempts)
+    params.append(operation_id)
+    with _connect(path) as conn:
+        conn.execute(
+            f"UPDATE operation_queue SET {', '.join(assignments)} WHERE id = ?",
+            tuple(params),
+        )
+        row = conn.execute(
+            "SELECT id, operation_type, status, actor_telegram_user_id, "
+            "target_telegram_user_id, available_at, payload_json, result_json, "
+            "last_error, attempts, created_at, updated_at "
+            "FROM operation_queue WHERE id = ? LIMIT 1",
+            (operation_id,),
+        ).fetchone()
+        if row is None:
+            return None
+    return OperationQueueEntry.from_mapping(dict(row))
+
+
+def claim_pending_operation(path: str, *, now_iso: str) -> OperationQueueEntry | None:
+    init_db(path)
+    with _connect(path) as conn:
+        row = conn.execute(
+            "SELECT id, operation_type, status, actor_telegram_user_id, "
+            "target_telegram_user_id, available_at, payload_json, result_json, "
+            "last_error, attempts, created_at, updated_at "
+            "FROM operation_queue "
+            "WHERE status = ? AND (available_at IS NULL OR available_at <= ?) "
+            "ORDER BY id ASC LIMIT 1",
+            (OPERATION_STATUS_PENDING, now_iso),
+        ).fetchone()
+        if row is None:
+            return None
+        operation = OperationQueueEntry.from_mapping(dict(row))
+        next_attempts = operation.attempts + 1
+        conn.execute(
+            "UPDATE operation_queue "
+            "SET status = ?, attempts = ?, updated_at = ? "
+            "WHERE id = ? AND status = ?",
+            (
+                OPERATION_STATUS_RUNNING,
+                next_attempts,
+                now_iso,
+                operation.id,
+                OPERATION_STATUS_PENDING,
+            ),
+        )
+        if conn.total_changes == 0:
+            return None
+        operation.status = OPERATION_STATUS_RUNNING
+        operation.attempts = next_attempts
+        operation.updated_at = now_iso
+    return operation
+
+
 def load_telegram_user(path: str, telegram_user_id: int) -> TelegramUser | None:
     init_db(path)
     with _connect(path) as conn:
@@ -875,6 +1055,44 @@ def update_telegram_user_status(
         conn.execute(
             "UPDATE telegram_users SET status = ?, updated_at = ? WHERE telegram_user_id = ?",
             (status, updated_at, telegram_user_id),
+        )
+    return load_telegram_user(path, telegram_user_id)
+
+
+def apply_telegram_user_access_status(
+    path: str,
+    telegram_user_id: int,
+    status: str,
+    *,
+    updated_at: str,
+    default_notify_chat_ids: set[int] | None = None,
+) -> TelegramUser | None:
+    normalized_status = normalize_telegram_user_status(status)
+    user = update_telegram_user_status(
+        path,
+        telegram_user_id,
+        normalized_status,
+        updated_at=updated_at,
+    )
+    if user is None:
+        return None
+
+    notifications_allowed = has_telegram_user_capability(
+        normalized_status,
+        CAPABILITY_MANAGE_NOTIFICATIONS,
+    )
+    notify_chat_ids = default_notify_chat_ids or set()
+    for chat in load_telegram_chats(path):
+        if chat.telegram_user_id != telegram_user_id:
+            continue
+        enabled = notifications_allowed and chat.telegram_chat_id in notify_chat_ids
+        set_notification_subscription_enabled(
+            path,
+            telegram_user_id,
+            chat.telegram_chat_id,
+            enabled,
+            created_at=chat.created_at or updated_at,
+            updated_at=updated_at,
         )
     return load_telegram_user(path, telegram_user_id)
 
@@ -1207,8 +1425,8 @@ def disconnect_linked_ebay_account(
     init_db(path)
     with _connect(path) as conn:
         conn.execute(
-            "UPDATE ebay_accounts SET status = 'disconnected' WHERE id = ?",
-            (account.id,),
+            "UPDATE ebay_accounts SET status = ? WHERE id = ?",
+            (EBAY_ACCOUNT_STATUS_DISCONNECTED, account.id),
         )
         conn.execute(
             "UPDATE ebay_tokens "
@@ -1218,13 +1436,12 @@ def disconnect_linked_ebay_account(
             (account.id,),
         )
         conn.execute(
-            "UPDATE oauth_link_sessions "
-            "SET status = 'cancelled' "
-            "WHERE telegram_user_id = ? AND provider = 'ebay' AND status = 'pending'",
-            (telegram_user_id,),
+            "UPDATE oauth_link_sessions SET status = ? "
+            "WHERE telegram_user_id = ? AND provider = 'ebay' AND status = ?",
+            (OAUTH_SESSION_STATUS_CANCELLED, telegram_user_id, OAUTH_SESSION_STATUS_PENDING),
         )
 
-    account.status = "disconnected"
+    account.status = EBAY_ACCOUNT_STATUS_DISCONNECTED
     return account
 
 
@@ -1348,6 +1565,61 @@ def list_notification_tenants(path: str) -> list[NotificationTenantTarget]:
         )
         for (telegram_user_id, environment), chat_ids in grouped.items()
     ]
+
+
+def expire_stale_oauth_link_sessions(path: str, *, now_iso: str) -> int:
+    init_db(path)
+    with _connect(path) as conn:
+        conn.execute(
+            "UPDATE oauth_link_sessions "
+            "SET status = ? "
+            "WHERE status = ? AND expires_at IS NOT NULL AND expires_at <= ?",
+            (OAUTH_SESSION_STATUS_EXPIRED, OAUTH_SESSION_STATUS_PENDING, now_iso),
+        )
+        return conn.total_changes
+
+
+def reconcile_account_token_consistency(path: str) -> int:
+    init_db(path)
+    with _connect(path) as conn:
+        conn.execute(
+            "UPDATE ebay_tokens "
+            "SET refresh_token_encrypted = '', access_token = '', status = 'revoked', "
+            "updated_at = CURRENT_TIMESTAMP "
+            "WHERE status = 'active' AND ebay_account_id IN ("
+            "SELECT id FROM ebay_accounts WHERE status != ?"
+            ")",
+            (EBAY_ACCOUNT_STATUS_LINKED,),
+        )
+        return conn.total_changes
+
+
+def summarize_operation_queue(path: str) -> dict[str, int]:
+    init_db(path)
+    with _connect(path) as conn:
+        pending = as_int(
+            conn.execute(
+                "SELECT COUNT(*) FROM operation_queue WHERE status = ?",
+                (OPERATION_STATUS_PENDING,),
+            ).fetchone()[0]
+        )
+        running = as_int(
+            conn.execute(
+                "SELECT COUNT(*) FROM operation_queue WHERE status = ?",
+                (OPERATION_STATUS_RUNNING,),
+            ).fetchone()[0]
+        )
+        failed = as_int(
+            conn.execute(
+                "SELECT COUNT(*) FROM operation_queue WHERE status = ?",
+                (OPERATION_STATUS_FAILED,),
+            ).fetchone()[0]
+        )
+    return {
+        "pending": pending,
+        "running": running,
+        "failed": failed,
+    }
 
 
 def summarize_multi_tenant_readiness(path: str) -> dict[str, int]:

@@ -12,7 +12,12 @@ from typing import Callable
 from ..clients.telegram import ensure_long_polling, telegram_request
 from ..errors import AppError, TelegramApiError
 from ..logging_utils import generate_operation_id, log_event
-from ..models import TelegramConfig
+from ..models import (
+    CAPABILITY_REQUEST_ACCESS,
+    CAPABILITY_USE_BOT,
+    TelegramConfig,
+    has_telegram_user_capability,
+)
 from ..storage.sqlite import load_telegram_user
 from ..telegram_commands import (
     build_access_request_markup,
@@ -26,7 +31,6 @@ from ..telegram_commands import (
 
 LOGGER = logging.getLogger("ebaycf.telegram_runtime")
 _ACTIVE_SHUTDOWN_EVENT: threading.Event | None = None
-APPROVED_USER_STATUSES = {"active", "approved"}
 
 
 def extract_message_context(update: dict) -> tuple[int | None, str, int | None]:
@@ -289,8 +293,9 @@ def run_bot(
                         callback_chat_id,
                         callback_user_id,
                         telegram_config,
-                    ) or (
-                        callback_user is not None and callback_user.status in APPROVED_USER_STATUSES
+                    ) or has_telegram_user_capability(
+                        callback_user.status if callback_user is not None else None,
+                        CAPABILITY_USE_BOT,
                     )
                     if callback_text:
                         try:
@@ -414,14 +419,20 @@ def run_bot(
                             message_user_id,
                             telegram_config,
                         )
-                        or (known_user is not None and known_user.status in APPROVED_USER_STATUSES)
+                        or has_telegram_user_capability(
+                            known_user.status if known_user is not None else None,
+                            CAPABILITY_USE_BOT,
+                        )
                     )
                 )
                 show_access_request = (
                     should_attach_main_menu(command)
                     and is_authorized(cid, telegram_config)
                     and not show_menu
-                    and (known_user is None or known_user.status not in {"blocked", "rejected"})
+                    and has_telegram_user_capability(
+                        known_user.status if known_user is not None else None,
+                        CAPABILITY_REQUEST_ACCESS,
+                    )
                 )
                 try:
                     replies = process_message_fn(

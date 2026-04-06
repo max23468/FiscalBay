@@ -176,11 +176,11 @@ Stato implementativo corrente:
 - il runtime Telegram inizia a registrare utenti, chat e subscription dal traffico reale del bot, mantenendo compatibilita' con il deploy VPS esistente
 - i comandi del bot risolvono ora il tenant partendo dalla coppia `telegram_chat_id` + `telegram_user_id` quando disponibile, e leggono stato runtime e retry queue per tenant invece del solo stato globale
 - il layer applicativo di fetch ordini risolve ora anche l'account eBay collegato per tenant e sceglie l'environment a partire dal DB quando esiste una mappatura valida
-- la scelta della sorgente credenziali di fetch passa ora da una facciata applicativa unica: oggi usa ancora `.env` globale come fallback, ma il punto di innesto per credenziali per tenant non e' piu' sparso tra bot e servizi
-- esiste ora anche un adapter dedicato per credenziali tenant in storage, ma per sicurezza sul deploy VPS rimane inattivo finche' non viene fornito un decoder reale dei refresh token utente
-- se una chat non e' ancora mappata a un tenant nel DB della VPS, il bot mantiene comunque il fallback globale per non interrompere il servizio esistente
+- la scelta della sorgente credenziali di fetch passa ora da una facciata applicativa unica: sul bot multiutente con admin configurato il runtime usa solo credenziali tenant, mentre il fallback `.env` resta confinato ai percorsi legacy di manutenzione o alle istanze adminless
+- esiste ora anche un adapter dedicato per credenziali tenant in storage, attivo sul deploy VPS quando il refresh token tenant e' decifrabile con `EBAY_TENANT_TOKEN_KEY`
+- se una chat non e' ancora mappata a un tenant nel DB della VPS, il bot non usa piu' credenziali eBay condivise e richiede invece il collegamento esplicito dell'account
 - l'healthcheck operativo espone ora anche contatori di readiness multi-tenant, cosi' la maturita' del DB tenant-aware e' osservabile direttamente sul server
-- anche `/stato` espone ora lo scope runtime e la sorgente credenziali, cosi' il fallback globale residuo e' visibile direttamente dal bot
+- anche `/stato` espone ora lo scope runtime e la sorgente credenziali, cosi' si vede subito se una chat sta usando `tenant_store`, `tenant_required` o un percorso legacy adminless
 - `/account` fornisce ora una vista tenant-aware del collegamento eBay gia' presente nel DB, senza richiedere ancora il flusso OAuth completo
 - `/connect` crea ora una sessione preliminare in `oauth_link_sessions` e, se la VPS espone `EBAY_OAUTH_CONNECT_BASE_URL`, restituisce anche il link pubblico di ingresso al futuro callback server
 - `/disconnect` scollega ora localmente l'account tenant dal `state.db`, marca il token come revocato e cancella il segreto dal runtime locale, lasciando la futura revoca remota eBay a uno step successivo
@@ -191,6 +191,12 @@ Stato implementativo corrente:
 - `TELEGRAM_ADMIN_USER_ID` puo' ora definire un admin globale: gli altri utenti restano discoverable, ma passano da uno stato `new` o `pending` e possono usare il bot solo dopo approvazione esplicita
 - il workflow di approvazione e' interno al bot: richiesta accesso, notifica admin, approvazione o rifiuto e sblocco successivo di `/connect` e dei comandi tenant-aware
 - gli eventi sensibili principali scrivono ora anche su un audit log append-only in SQLite, separato dai soli log runtime
+- gli stati utente e di sessione OAuth passano ora da normalizzazione centrale nel dominio, cosi' alias legacy come `active` e `rejected` non restano sparsi nel runtime
+- il gating dei comandi non dipende piu' solo da controlli ad hoc `admin / approved`, ma da capability esplicite come `request_access`, `review_access`, `connect_account`, `manage_notifications` e `view_orders`
+- l'approvazione accessi passa ora da un piccolo step applicativo esplicito: oltre al cambio di stato utente, il runtime riallinea chat e subscription gia' note per quel tenant
+- `/connect` riusa ora l'ultima sessione OAuth ancora pendente e valida per lo stesso tenant/environment, invece di accumulare nuove sessioni inutili a ogni invocazione ripetuta
+- esiste ora anche una `operation_queue` minima in SQLite per le operazioni sensibili differibili, oggi usata soprattutto per applicare in modo robusto i cambi di accesso utente
+- `reconcile.py` fornisce un worker periodico one-shot che processa la queue, riallinea accessi/chat/subscription, scade sessioni OAuth stale e corregge token attivi rimasti su account non piu' collegati
 
 ## Decisione database per la beta privata
 
@@ -217,7 +223,8 @@ Stato implementativo corrente:
 - resta un layer di compatibilita' nel bot per i test e i wrapper storici, anche se il dominio core e' ormai tipizzato
 - la multiutenza richiedera' un modello dati nuovo e un nuovo flusso OAuth
 - il callback web OAuth esiste in forma minimale, ma restano aperti hardening finale e revoca remota verso eBay
-- il gating accessi oggi e' pensato per beta privata controllata: non esistono ancora ruoli multipli oltre a `admin` e utente approvato
+- il gating accessi oggi e' pensato per beta privata controllata: le capability sono esplicite, ma non esistono ancora ruoli multipli oltre a `admin`, utente approvato, in attesa o bloccato
+- la queue operativa e' ancora minimale: oggi copre soprattutto access application e recovery, non un workflow completo di revoca remota eBay
 
 ## Compatibilita' mantenuta durante il refactor
 

@@ -6,6 +6,7 @@ import argparse
 from typing import Callable
 
 from .config import load_config
+from .errors import ConfigurationError
 from .models import Config, FetchOptions, LinkedEbayAccount, OrderRecord, ResolvedFetchContext
 from .services.orders import fetch_records
 from .storage.sqlite import resolve_linked_ebay_account
@@ -40,6 +41,7 @@ def resolve_fetch_context(
     *,
     telegram_user_id: int | None = None,
     state_path: str | None = None,
+    allow_global_fallback: bool = True,
     load_config_fn: Callable[[str], Config] = load_config,
     resolve_linked_account_fn: Callable[
         [str, int, str | None], LinkedEbayAccount | None
@@ -76,6 +78,17 @@ def resolve_fetch_context(
     elif telegram_user_id:
         fallback_reason = "tenant_account_unlinked"
 
+    if telegram_user_id is not None and not allow_global_fallback:
+        if fallback_reason == "tenant_credentials_unavailable":
+            raise ConfigurationError(
+                "Credenziali tenant eBay non disponibili per questo utente. "
+                "Completa di nuovo /connect per collegare un token valido."
+            )
+        raise ConfigurationError(
+            "Nessun account eBay collegato per questo utente. "
+            "Usa /connect per collegare il tuo account eBay."
+        )
+
     return ResolvedFetchContext(
         config=load_config_fn(resolved_environment),
         config_source="global_env",
@@ -107,6 +120,7 @@ def fetch_tenant_records(
     *,
     telegram_user_id: int | None,
     state_path: str,
+    allow_global_fallback: bool = True,
     load_config_fn: Callable[[str], Config] = load_config,
     fetch_records_fn: Callable[[Config, FetchOptions], list[OrderRecord]] = fetch_records,
     resolve_linked_account_fn: Callable[
@@ -117,6 +131,7 @@ def fetch_tenant_records(
         ebay_environment,
         telegram_user_id=telegram_user_id,
         state_path=state_path,
+        allow_global_fallback=allow_global_fallback,
         load_config_fn=load_config_fn,
         resolve_linked_account_fn=resolve_linked_account_fn,
     )

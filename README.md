@@ -11,6 +11,7 @@ Il repository contiene due entry point:
 - `ebay-cf`: utility CLI per leggere ordini e stampare i risultati in tabella, JSON o CSV
 - `ebay-telegram-bot`: bot Telegram con comandi interattivi e notifiche automatiche dei nuovi ordini
 - `ebay-cf-oauth-server`: callback server minimale per l'onboarding self-service Telegram + eBay OAuth
+- `ebay-cf-reconcile`: worker one-shot per reconciliation periodica e coda operativa
 
 Funzionalità principali:
 
@@ -235,6 +236,18 @@ Il controllo verifica almeno:
 - freschezza di `last_check`
 - dimensione della retry queue
 - eventuale ultimo errore registrato
+
+Per riallineare periodicamente accessi, sessioni OAuth stale e queue operativa puoi usare:
+
+```bash
+ebay-cf-reconcile
+```
+
+Oppure in JSON:
+
+```bash
+ebay-cf-reconcile --json
+```
 
 ## Campi Restituiti
 

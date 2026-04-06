@@ -6,6 +6,7 @@ from src.ebay_cf.application import (
     resolve_fetch_context,
     resolve_tenant_fetch_account,
 )
+from src.ebay_cf.errors import ConfigurationError
 from src.ebay_cf.models import Config, FetchOptions, LinkedEbayAccount, OrderRecord
 
 
@@ -129,6 +130,31 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(resolved.environment, "sandbox")
         self.assertEqual(resolved.fallback_reason, "tenant_credentials_unavailable")
         load_global_mock.assert_called_once_with("sandbox")
+
+    def test_resolve_fetch_context_requires_tenant_credentials_when_fallback_disabled(self) -> None:
+        resolve_account_mock = Mock(
+            return_value=LinkedEbayAccount(
+                telegram_user_id=123,
+                ebay_user_id="seller-ebay",
+                environment="sandbox",
+                status="linked",
+            )
+        )
+        load_global_mock = Mock()
+        load_tenant_mock = Mock(return_value=None)
+
+        with self.assertRaises(ConfigurationError):
+            resolve_fetch_context(
+                "production",
+                telegram_user_id=123,
+                state_path="data/state.db",
+                allow_global_fallback=False,
+                load_config_fn=load_global_mock,
+                resolve_linked_account_fn=resolve_account_mock,
+                load_tenant_config_fn=load_tenant_mock,
+            )
+
+        load_global_mock.assert_not_called()
 
 
 if __name__ == "__main__":

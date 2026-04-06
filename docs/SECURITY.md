@@ -114,6 +114,7 @@ Ogni passo della fase multiutente deve essere giustificato contro questi finding
 - il percorso standard usa ora cifratura Fernet a riposo con chiave `EBAY_TENANT_TOKEN_KEY`
 - il fallback plaintext resta solo come percorso esplicitamente opt-in per beta privata/dev tramite `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS=1`
 - sulla VPS il target corretto e' usare `EBAY_TENANT_TOKEN_KEY` e lasciare disattivato il fallback plaintext
+- con `TELEGRAM_ADMIN_USER_ID` attivo, il runtime del bot non deve piu' usare `EBAY_REFRESH_TOKEN` come credenziale condivisa per i tenant collegati
 
 ## Sufficienza della VPS attuale
 

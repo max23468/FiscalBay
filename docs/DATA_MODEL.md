@@ -66,6 +66,11 @@ Stati attesi:
 - `blocked`
 - `admin`
 
+Nota di compatibilita':
+
+- alias legacy come `active` e `rejected` vengono normalizzati nel dominio rispettivamente a `approved` e `blocked`
+- il runtime deduce ora le capability operative a partire da questo stato canonico
+
 ### `LinkedEbayAccount`
 
 Definisce:
@@ -81,6 +86,34 @@ Definisce:
 Uso:
 
 - modello tipizzato preparatorio per l'associazione tra utente Telegram e account eBay
+
+Stati attesi:
+
+- `linked`
+- `disconnected`
+- `revoked`
+
+### `OperationQueueEntry`
+
+Definisce:
+
+- `id`
+- `operation_type`
+- `status`
+- `actor_telegram_user_id`
+- `target_telegram_user_id`
+- `available_at`
+- `payload_json`
+- `result_json`
+- `last_error`
+- `attempts`
+- `created_at`
+- `updated_at`
+
+Uso:
+
+- coda operativa minima in SQLite per applicazioni sensibili e recovery periodico
+- oggi usata soprattutto per `apply_user_access_state`
 
 ### `OrderRecord`
 

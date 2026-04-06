@@ -139,6 +139,12 @@ Include anche readiness multiutente:
 - `multi_tenant.tenant_runtime_states`
 - `multi_tenant.tenant_credentials_ready`
 
+Include anche stato queue operativa:
+
+- `operation_queue.pending`
+- `operation_queue.running`
+- `operation_queue.failed`
+
 Alert check periodico:
 
 ```bash
@@ -157,6 +163,21 @@ Override possibili via env:
 
 - `MAX_CONSECUTIVE_ERROR_CYCLES`
 - `MAX_RETRY_QUEUE_SIZE`
+
+Reconciliation periodica:
+
+```bash
+./deploy/reconcile.sh
+sudo systemctl status ebaycf-reconcile.timer
+sudo systemctl list-timers ebaycf-reconcile.timer
+```
+
+La reconciliation:
+
+- processa la `operation_queue`
+- riallinea accessi utente, chat e subscription
+- marca come `expired` le sessioni OAuth pendenti ma scadute
+- revoca localmente eventuali token ancora `active` su account non piu' `linked`
 
 ## Aggiornamento del bot
 

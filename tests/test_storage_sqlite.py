@@ -4,6 +4,12 @@ import unittest
 from pathlib import Path
 
 from src.ebay_cf.models import (
+    OPERATION_STATUS_COMPLETED,
+    OPERATION_STATUS_PENDING,
+    OPERATION_STATUS_RUNNING,
+    OPERATION_TYPE_APPLY_USER_ACCESS_STATE,
+    TELEGRAM_USER_STATUS_APPROVED,
+    TELEGRAM_USER_STATUS_BLOCKED,
     AuditLogEntry,
     BotMetrics,
     BotRuntimeState,
@@ -11,6 +17,7 @@ from src.ebay_cf.models import (
     LinkedEbayAccount,
     NotificationSubscription,
     OauthLinkSession,
+    OperationQueueEntry,
     RetryQueueEntry,
     TelegramChat,
     TelegramUser,
@@ -18,14 +25,18 @@ from src.ebay_cf.models import (
 from src.ebay_cf.storage.sqlite import (
     SCHEMA_VERSION,
     append_audit_log_entry,
+    apply_telegram_user_access_status,
+    claim_pending_operation,
     create_oauth_link_session,
     disconnect_linked_ebay_account,
+    enqueue_operation,
     list_notification_tenants,
     load_audit_log_entries,
     load_ebay_token_sets,
     load_latest_oauth_link_session,
     load_linked_ebay_accounts,
     load_notification_subscriptions,
+    load_operation_queue_entries,
     load_retry_queue,
     load_state,
     load_telegram_chats,
@@ -39,6 +50,8 @@ from src.ebay_cf.storage.sqlite import (
     save_tenant_retry_queue_entries,
     save_tenant_runtime_state,
     set_notification_subscription_enabled,
+    summarize_operation_queue,
+    update_operation_queue_entry,
     upsert_ebay_token_set,
     upsert_linked_ebay_account,
     upsert_notification_subscription,
@@ -70,6 +83,43 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertEqual(entries[0].actor_telegram_user_id, 111)
             self.assertEqual(entries[0].telegram_chat_id, 222)
             self.assertEqual(entries[0].outcome, "pending")
+
+    def test_operation_queue_roundtrip_and_claim(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            entry = enqueue_operation(
+                str(db_path),
+                OperationQueueEntry(
+                    operation_type=OPERATION_TYPE_APPLY_USER_ACCESS_STATE,
+                    created_at="2026-04-06T18:00:00Z",
+                    actor_telegram_user_id=123,
+                    target_telegram_user_id=456,
+                    payload_json='{"requested_status":"approved"}',
+                ),
+            )
+
+            entries = load_operation_queue_entries(str(db_path))
+            self.assertEqual(len(entries), 1)
+            self.assertEqual(entries[0].status, OPERATION_STATUS_PENDING)
+
+            claimed = claim_pending_operation(str(db_path), now_iso="2026-04-06T18:01:00Z")
+            self.assertIsNotNone(claimed)
+            assert claimed is not None
+            self.assertEqual(claimed.id, entry.id)
+            self.assertEqual(claimed.status, OPERATION_STATUS_RUNNING)
+            self.assertEqual(claimed.attempts, 1)
+
+            updated = update_operation_queue_entry(
+                str(db_path),
+                claimed.id or 0,
+                status=OPERATION_STATUS_COMPLETED,
+                result_json='{"result":"applied"}',
+                updated_at="2026-04-06T18:02:00Z",
+            )
+            self.assertIsNotNone(updated)
+            assert updated is not None
+            self.assertEqual(updated.status, OPERATION_STATUS_COMPLETED)
+            self.assertEqual(summarize_operation_queue(str(db_path))["pending"], 0)
 
     def test_state_roundtrip_on_temp_sqlite_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -606,6 +656,67 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertEqual(len(subscriptions), 1)
             self.assertFalse(subscriptions[0].enabled)
             self.assertEqual(len(chats), 1)
+            self.assertFalse(chats[0].notifications_enabled)
+
+    def test_apply_telegram_user_access_status_syncs_permissions_for_existing_chats(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+
+            upsert_telegram_user(
+                str(db_path),
+                TelegramUser(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    username="seller_user",
+                    display_name="Mario Rossi",
+                    created_at="2026-04-06T10:00:00Z",
+                    status="pending",
+                ),
+            )
+            upsert_telegram_chat(
+                str(db_path),
+                TelegramChat(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    chat_type="private",
+                    is_primary=True,
+                    notifications_enabled=False,
+                    created_at="2026-04-06T10:00:00Z",
+                    updated_at="2026-04-06T10:00:00Z",
+                ),
+            )
+
+            approved_user = apply_telegram_user_access_status(
+                str(db_path),
+                123,
+                TELEGRAM_USER_STATUS_APPROVED,
+                updated_at="2026-04-06T10:05:00Z",
+                default_notify_chat_ids={456},
+            )
+
+            self.assertIsNotNone(approved_user)
+            assert approved_user is not None
+            self.assertEqual(approved_user.status, TELEGRAM_USER_STATUS_APPROVED)
+            subscriptions = load_notification_subscriptions(str(db_path))
+            chats = load_telegram_chats(str(db_path))
+            self.assertEqual(len(subscriptions), 1)
+            self.assertTrue(subscriptions[0].enabled)
+            self.assertTrue(chats[0].notifications_enabled)
+
+            blocked_user = apply_telegram_user_access_status(
+                str(db_path),
+                123,
+                TELEGRAM_USER_STATUS_BLOCKED,
+                updated_at="2026-04-06T10:06:00Z",
+                default_notify_chat_ids={456},
+            )
+
+            self.assertIsNotNone(blocked_user)
+            assert blocked_user is not None
+            self.assertEqual(blocked_user.status, TELEGRAM_USER_STATUS_BLOCKED)
+            subscriptions = load_notification_subscriptions(str(db_path))
+            chats = load_telegram_chats(str(db_path))
+            self.assertFalse(subscriptions[0].enabled)
             self.assertFalse(chats[0].notifications_enabled)
 
 

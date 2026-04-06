@@ -19,9 +19,23 @@ from .application import fetch_environment_records as _fetch_environment_records
 from .application import fetch_tenant_records as _fetch_tenant_records
 from .clients.telegram import ensure_long_polling, telegram_request
 from .config import configure_logging, load_config, load_telegram_config
-from .errors import EbayApiError, TelegramApiError
+from .errors import ConfigurationError, EbayApiError, TelegramApiError
 from .logging_utils import log_event
 from .models import (
+    CAPABILITY_CONNECT_ACCOUNT,
+    CAPABILITY_MANAGE_NOTIFICATIONS,
+    CAPABILITY_MANAGE_SETTINGS,
+    CAPABILITY_REQUEST_ACCESS,
+    CAPABILITY_REVIEW_ACCESS,
+    CAPABILITY_USE_BOT,
+    CAPABILITY_VIEW_ACCOUNT,
+    CAPABILITY_VIEW_ORDERS,
+    OAUTH_SESSION_STATUS_PENDING,
+    TELEGRAM_USER_STATUS_ADMIN,
+    TELEGRAM_USER_STATUS_APPROVED,
+    TELEGRAM_USER_STATUS_BLOCKED,
+    TELEGRAM_USER_STATUS_NEW,
+    TELEGRAM_USER_STATUS_PENDING,
     AuditLogEntry,
     BotRuntimeState,
     BotRuntimeStateLike,
@@ -35,7 +49,12 @@ from .models import (
     TelegramConfig,
     TelegramUser,
     TenantChatContext,
+    has_telegram_user_capability,
+    is_blocked_telegram_user_status,
+    is_pending_telegram_user_status,
+    normalize_telegram_user_status,
 )
+from .reconcile import enqueue_apply_user_access_operation, process_pending_operations
 from .retry import run_with_retry
 from .services.notifications import (
     fetch_new_order_records as _fetch_new_order_records,
@@ -78,7 +97,6 @@ from .storage.sqlite import (
     disconnect_linked_ebay_account,
     ensure_parent_dir,
     list_notification_tenants,
-    load_ebay_token_sets,
     load_latest_oauth_link_session,
     load_notification_subscriptions,
     load_retry_queue_entries,
@@ -87,6 +105,7 @@ from .storage.sqlite import (
     load_telegram_users,
     load_tenant_retry_queue_entries,
     load_tenant_runtime_state,
+    resolve_ebay_token_set,
     resolve_primary_chat_id,
     resolve_tenant_chat_context,
     save_retry_queue_entries,
@@ -153,8 +172,22 @@ from .telegram_commands import (
 from .tenant_credentials import decode_refresh_token
 
 LOGGER = logging.getLogger("ebaycf.telegram_bot")
-APPROVED_USER_STATUSES = {"active", "approved"}
-BLOCKED_USER_STATUSES = {"blocked", "rejected"}
+COMMAND_CAPABILITIES: dict[str, str] = {
+    "/ping": CAPABILITY_USE_BOT,
+    "/stato": CAPABILITY_USE_BOT,
+    "/account": CAPABILITY_VIEW_ACCOUNT,
+    "/connect": CAPABILITY_CONNECT_ACCOUNT,
+    "/disconnect": CAPABILITY_CONNECT_ACCOUNT,
+    "/notifications": CAPABILITY_MANAGE_NOTIFICATIONS,
+    "/settings": CAPABILITY_MANAGE_SETTINGS,
+    "/ultimi": CAPABILITY_VIEW_ORDERS,
+    "/tutti": CAPABILITY_VIEW_ORDERS,
+    "/ordine": CAPABILITY_VIEW_ORDERS,
+    "/users": CAPABILITY_REVIEW_ACCESS,
+    "/approve_user": CAPABILITY_REVIEW_ACCESS,
+    "/reject_user": CAPABILITY_REVIEW_ACCESS,
+    "/request_access": CAPABILITY_REQUEST_ACCESS,
+}
 
 
 def coerce_runtime_state(state: BotRuntimeStateLike) -> BotRuntimeState:
@@ -201,6 +234,7 @@ def fetch_tenant_records(
         options,
         telegram_user_id=telegram_user_id,
         state_path=state_path,
+        allow_global_fallback=False,
         load_config_fn=load_config,
         fetch_records_fn=fetch_records,
     )
@@ -366,11 +400,22 @@ def sync_runtime_contact(
     timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     existing_user = load_telegram_user(telegram_config.state_path, telegram_user_id)
     if telegram_config.admin_user_id is None:
-        status = existing_user.status if existing_user is not None else "active"
+        status = (
+            normalize_telegram_user_status(
+                existing_user.status,
+                default=TELEGRAM_USER_STATUS_APPROVED,
+            )
+            if existing_user is not None
+            else TELEGRAM_USER_STATUS_APPROVED
+        )
     else:
-        status = existing_user.status if existing_user is not None else "new"
+        status = (
+            normalize_telegram_user_status(existing_user.status)
+            if existing_user is not None
+            else TELEGRAM_USER_STATUS_NEW
+        )
     if _is_admin_user(telegram_user_id, telegram_config):
-        status = "admin"
+        status = TELEGRAM_USER_STATUS_ADMIN
     upsert_telegram_user(
         telegram_config.state_path,
         TelegramUser(
@@ -394,8 +439,9 @@ def sync_runtime_contact(
             updated_at=timestamp,
         ),
     )
-    if chat_id in telegram_config.notify_chat_ids and status in APPROVED_USER_STATUSES.union(
-        {"admin"}
+    if chat_id in telegram_config.notify_chat_ids and has_telegram_user_capability(
+        status,
+        CAPABILITY_MANAGE_NOTIFICATIONS,
     ):
         upsert_notification_subscription(
             telegram_config.state_path,
@@ -425,11 +471,11 @@ def _load_user_status(
     if telegram_user_id is None:
         return None
     if _is_admin_user(telegram_user_id, telegram_config):
-        return "admin"
+        return TELEGRAM_USER_STATUS_ADMIN
     user = load_telegram_user(telegram_config.state_path, telegram_user_id)
     if user is None:
         return None
-    return user.status
+    return normalize_telegram_user_status(user.status)
 
 
 def _is_user_approved(
@@ -438,10 +484,46 @@ def _is_user_approved(
 ) -> bool:
     if telegram_config.admin_user_id is None:
         return True
-    if _is_admin_user(telegram_user_id, telegram_config):
-        return True
     status = _load_user_status(telegram_config, telegram_user_id)
-    return status in APPROVED_USER_STATUSES
+    return has_telegram_user_capability(status, CAPABILITY_USE_BOT)
+
+
+def _has_command_capability(
+    telegram_config: TelegramConfig,
+    *,
+    telegram_user_id: int | None,
+    command: str,
+) -> bool:
+    if telegram_config.admin_user_id is None:
+        return True
+    required_capability = COMMAND_CAPABILITIES.get(command)
+    if required_capability is None:
+        return True
+    return has_telegram_user_capability(
+        _load_user_status(telegram_config, telegram_user_id),
+        required_capability,
+    )
+
+
+def _is_reusable_oauth_session(
+    session: OauthLinkSession | None,
+    *,
+    environment: str,
+    now: datetime,
+) -> bool:
+    if session is None:
+        return False
+    if session.environment != environment:
+        return False
+    if session.status != OAUTH_SESSION_STATUS_PENDING:
+        return False
+    if not session.expires_at:
+        return True
+    try:
+        expires_at = datetime.fromisoformat(session.expires_at.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return expires_at > now
 
 
 def _notify_user_access_status(
@@ -609,21 +691,49 @@ def maybe_send_new_order_notifications(
     ebay_environment: str,
 ) -> None:
     tenant_targets = list_notification_tenants(telegram_config.state_path)
+    strict_tenant_credentials = telegram_config.admin_user_id is not None
     if not tenant_targets:
-        _maybe_send_new_order_notifications(
-            telegram_config,
-            ebay_environment,
-            load_state_fn=load_runtime_state,
-            save_state_fn=save_runtime_state,
-            load_retry_queue_fn=load_retry_queue_entries,
-            save_retry_queue_fn=save_retry_queue_entries,
-            fetch_records_for_environment_fn=fetch_environment_records,
-            send_message_fn=send_message,
-            request_with_backoff_fn=request_with_backoff,
+        if not strict_tenant_credentials:
+            _maybe_send_new_order_notifications(
+                telegram_config,
+                ebay_environment,
+                load_state_fn=load_runtime_state,
+                save_state_fn=save_runtime_state,
+                load_retry_queue_fn=load_retry_queue_entries,
+                save_retry_queue_fn=save_retry_queue_entries,
+                fetch_records_for_environment_fn=fetch_environment_records,
+                send_message_fn=send_message,
+                request_with_backoff_fn=request_with_backoff,
+            )
+            return
+        log_event(
+            LOGGER,
+            logging.INFO,
+            "notify_skipped",
+            reason="no_tenant_targets",
         )
         return
 
     for target in tenant_targets:
+        token_set = resolve_ebay_token_set(
+            telegram_config.state_path,
+            target.telegram_user_id,
+            target.environment,
+        )
+        if (
+            token_set is None
+            or token_set.status != "active"
+            or not decode_refresh_token(token_set.refresh_token_encrypted)
+        ):
+            log_event(
+                LOGGER,
+                logging.WARNING,
+                "notify_tenant_skipped",
+                telegram_user_id=target.telegram_user_id,
+                environment=target.environment,
+                reason="tenant_credentials_unavailable",
+            )
+            continue
         tenant_config = TelegramConfig(
             token=telegram_config.token,
             allowed_chat_ids=telegram_config.allowed_chat_ids,
@@ -649,12 +759,17 @@ def maybe_send_new_order_notifications(
             save_retry_queue_fn=lambda _path, queue, user_id=target.telegram_user_id: (
                 save_tenant_retry_queue_entries(telegram_config.retry_queue_path, user_id, queue)
             ),
-            fetch_records_for_environment_fn=(
-                lambda env, options, user_id=target.telegram_user_id: fetch_tenant_records(
-                    env,
-                    options,
-                    telegram_user_id=user_id,
-                    state_path=telegram_config.state_path,
+            fetch_records_for_environment_fn=lambda env, options, user_id=target.telegram_user_id: (
+                coerce_order_records(
+                    _fetch_tenant_records(
+                        env,
+                        options,
+                        telegram_user_id=user_id,
+                        state_path=telegram_config.state_path,
+                        allow_global_fallback=not strict_tenant_credentials,
+                        load_config_fn=load_config,
+                        fetch_records_fn=fetch_records,
+                    )
                 )
             ),
             send_message_fn=send_message,
@@ -676,6 +791,11 @@ def process_message(
     is_admin_user = _is_admin_user(telegram_user_id, telegram_config)
     user_status = _load_user_status(telegram_config, telegram_user_id)
     can_use_bot = _is_user_approved(telegram_config, telegram_user_id)
+    has_command_capability = _has_command_capability(
+        telegram_config,
+        telegram_user_id=telegram_user_id,
+        command=command,
+    )
 
     if command == "/request_access":
         if telegram_config.admin_user_id is None:
@@ -687,14 +807,14 @@ def process_message(
         if telegram_user_id is None:
             return [format_access_request_status(admin_notified=False)]
         if is_admin_user:
-            return [format_access_required_status("admin", is_admin=True)]
-        if user_status in APPROVED_USER_STATUSES:
+            return [format_access_required_status(TELEGRAM_USER_STATUS_ADMIN, is_admin=True)]
+        if has_telegram_user_capability(user_status, CAPABILITY_USE_BOT):
             return [
                 "✅ <b>Accesso gia' approvato</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 "Il tuo account e' gia' abilitato all'uso del bot."
             ]
-        if user_status in BLOCKED_USER_STATUSES:
+        if is_blocked_telegram_user_status(user_status):
             return [format_access_request_status(blocked=True)]
 
         timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -708,11 +828,11 @@ def process_message(
                     username="",
                     display_name="",
                     created_at=timestamp,
-                    status="pending",
+                    status=TELEGRAM_USER_STATUS_PENDING,
                 ),
             )
             existing_user = load_telegram_user(telegram_config.state_path, telegram_user_id)
-        elif existing_user.status == "pending":
+        elif is_pending_telegram_user_status(existing_user.status):
             _append_audit_log(
                 telegram_config,
                 event_type="request_access",
@@ -728,7 +848,7 @@ def process_message(
             update_telegram_user_status(
                 telegram_config.state_path,
                 telegram_user_id,
-                "pending",
+                TELEGRAM_USER_STATUS_PENDING,
                 updated_at=timestamp,
             )
             existing_user = load_telegram_user(telegram_config.state_path, telegram_user_id)
@@ -764,7 +884,7 @@ def process_message(
         )
         return [format_access_request_status(admin_notified=admin_notified)]
 
-    if command in {"/approve_user", "/reject_user", "/users"} and not is_admin_user:
+    if command in {"/approve_user", "/reject_user", "/users"} and not has_command_capability:
         return ["Solo l'admin puo' usare questo comando."]
 
     if command == "/users":
@@ -780,25 +900,57 @@ def process_message(
             action = "approve_user" if command == "/approve_user" else "reject_user"
             return [f"Uso corretto: <code>/{action} &lt;telegram_user_id&gt;</code>"]
         timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        next_status = "approved" if command == "/approve_user" else "blocked"
+        next_status = (
+            TELEGRAM_USER_STATUS_APPROVED
+            if command == "/approve_user"
+            else TELEGRAM_USER_STATUS_BLOCKED
+        )
+        current_user = load_telegram_user(telegram_config.state_path, target_user_id)
+        status_changed = (
+            current_user is None
+            or normalize_telegram_user_status(current_user.status) != next_status
+        )
         updated_user = update_telegram_user_status(
             telegram_config.state_path,
             target_user_id,
             next_status,
             updated_at=timestamp,
         )
+        if updated_user is not None:
+            enqueue_apply_user_access_operation(
+                telegram_config.state_path,
+                actor_telegram_user_id=telegram_user_id,
+                target_telegram_user_id=target_user_id,
+                requested_status=next_status,
+            )
+            operation_summary = process_pending_operations(
+                state_path=telegram_config.state_path,
+                default_notify_chat_ids=telegram_config.notify_chat_ids,
+                max_operations=10,
+            )
+        else:
+            operation_summary = {"processed": 0, "completed": 0, "failed": 0, "applied": 0}
         _append_audit_log(
             telegram_config,
-            event_type="approve" if next_status == "approved" else "reject",
+            event_type="approve" if next_status == TELEGRAM_USER_STATUS_APPROVED else "reject",
             created_at=timestamp,
             actor_telegram_user_id=telegram_user_id,
             target_telegram_user_id=target_user_id,
             telegram_chat_id=chat_id,
-            outcome="applied" if updated_user is not None else "missing_user",
-            details={"status": next_status},
+            outcome=(
+                "applied"
+                if updated_user is not None and status_changed
+                else ("already_applied" if updated_user is not None else "missing_user")
+            ),
+            details={
+                "status": next_status,
+                "status_changed": status_changed,
+                "operations_processed": operation_summary["processed"],
+                "operations_failed": operation_summary["failed"],
+            },
         )
-        if updated_user is not None:
-            if next_status == "approved":
+        if updated_user is not None and status_changed and operation_summary["failed"] == 0:
+            if next_status == TELEGRAM_USER_STATUS_APPROVED:
                 _notify_user_access_status(
                     telegram_config,
                     telegram_user_id=target_user_id,
@@ -828,9 +980,19 @@ def process_message(
             )
         ]
 
-    if not can_use_bot:
+    if not has_command_capability:
         if command in ("", "/start", "/help"):
-            return [format_access_required_status(user_status or "unknown")]
+            return [format_access_required_status(user_status or TELEGRAM_USER_STATUS_NEW)]
+        if command == "/request_access":
+            return [
+                format_access_request_status(blocked=is_blocked_telegram_user_status(user_status))
+            ]
+        return [
+            "Utente non ancora approvato per questo bot. "
+            "Usa <code>/request_access</code> per inviare la richiesta all'admin."
+        ]
+
+    if not can_use_bot and command not in ("", "/start", "/help", "/request_access"):
         return [
             "Utente non ancora approvato per questo bot. "
             "Usa <code>/request_access</code> per inviare la richiesta all'admin."
@@ -841,6 +1003,7 @@ def process_message(
         chat_id=chat_id,
         telegram_user_id=telegram_user_id,
     )
+    strict_tenant_credentials = telegram_config.admin_user_id is not None
     resolved_environment = ebay_environment
     load_state_fn: Callable[[str], BotRuntimeState] = load_runtime_state
     load_retry_queue_fn: Callable[[str], list[RetryQueueEntry]] = load_retry_queue_entries
@@ -866,28 +1029,52 @@ def process_message(
             env: str,
             options: FetchOptions,
         ) -> list[OrderRecord]:
-            return fetch_tenant_records(
-                env,
-                options,
-                telegram_user_id=tenant_user_id,
-                state_path=telegram_config.state_path,
+            return coerce_order_records(
+                _fetch_tenant_records(
+                    env,
+                    options,
+                    telegram_user_id=tenant_user_id,
+                    state_path=telegram_config.state_path,
+                    allow_global_fallback=not strict_tenant_credentials,
+                    load_config_fn=load_config,
+                    fetch_records_fn=fetch_records,
+                )
             )
 
     command_context: dict[str, object] = {
         "tenant_scope": "tenant" if tenant_context is not None else "global",
         "environment": resolved_environment,
-        "config_source": "global_env",
+        "config_source": (
+            "tenant_required"
+            if tenant_context is not None and strict_tenant_credentials
+            else "global_env"
+        ),
     }
-    if command_context["tenant_scope"] == "tenant":
-        command_context["fallback_reason"] = "tenant_credentials_unavailable"
-        tenant_tokens = load_ebay_token_sets(telegram_config.state_path)
-        tenant_token_ready = any(
-            token.status == "active" and bool(decode_refresh_token(token.refresh_token_encrypted))
-            for token in tenant_tokens
+    if command_context["tenant_scope"] == "tenant" and resolved_telegram_user_id is not None:
+        account_status = summarize_tenant_account_status(
+            telegram_config.state_path,
+            resolved_telegram_user_id,
+            resolved_environment,
         )
-        if tenant_token_ready:
+        token_set = resolve_ebay_token_set(
+            telegram_config.state_path,
+            resolved_telegram_user_id,
+            resolved_environment,
+        )
+        token_ready = (
+            bool(account_status.get("linked"))
+            and token_set is not None
+            and token_set.status == "active"
+            and bool(decode_refresh_token(token_set.refresh_token_encrypted))
+        )
+        if token_ready:
             command_context["config_source"] = "tenant_store"
-            command_context.pop("fallback_reason", None)
+        else:
+            command_context["fallback_reason"] = (
+                "tenant_credentials_unavailable"
+                if account_status.get("linked")
+                else "tenant_account_unlinked"
+            )
 
     if command == "/stato":
         state = load_state_fn(telegram_config.state_path)
@@ -914,24 +1101,32 @@ def process_message(
                 "Questa chat non e' ancora associata a un tenant Telegram noto."
             ]
         now = datetime.now(timezone.utc)
-        session = create_oauth_link_session(
-            telegram_config.state_path,
-            OauthLinkSession(
-                telegram_user_id=resolved_telegram_user_id,
-                telegram_chat_id=chat_id,
-                provider="ebay",
-                environment=resolved_environment,
-                oauth_state=secrets.token_urlsafe(18),
-                status="pending",
-                expires_at=(now + timedelta(minutes=15)).isoformat().replace("+00:00", "Z"),
-                created_at=now.isoformat().replace("+00:00", "Z"),
-            ),
-        )
         latest_session = load_latest_oauth_link_session(
             telegram_config.state_path,
             resolved_telegram_user_id,
         )
-        active_session = latest_session or session
+        active_session = latest_session
+        created_session = False
+        if not _is_reusable_oauth_session(
+            active_session,
+            environment=resolved_environment,
+            now=now,
+        ):
+            active_session = create_oauth_link_session(
+                telegram_config.state_path,
+                OauthLinkSession(
+                    telegram_user_id=resolved_telegram_user_id,
+                    telegram_chat_id=chat_id,
+                    provider="ebay",
+                    environment=resolved_environment,
+                    oauth_state=secrets.token_urlsafe(18),
+                    status=OAUTH_SESSION_STATUS_PENDING,
+                    expires_at=(now + timedelta(minutes=15)).isoformat().replace("+00:00", "Z"),
+                    created_at=now.isoformat().replace("+00:00", "Z"),
+                ),
+            )
+            created_session = True
+        assert active_session is not None
         _append_audit_log(
             telegram_config,
             event_type="connect",
@@ -940,8 +1135,11 @@ def process_message(
             target_telegram_user_id=resolved_telegram_user_id,
             telegram_chat_id=chat_id,
             environment=resolved_environment,
-            outcome="session_created",
-            details={"oauth_state": active_session.oauth_state},
+            outcome="session_created" if created_session else "session_reused",
+            details={
+                "oauth_state": active_session.oauth_state,
+                "session_reused": not created_session,
+            },
         )
         return [
             format_connect_status(
@@ -1057,16 +1255,19 @@ def process_message(
             )
         ]
 
-    return _process_message(
-        text=text,
-        chat_id=chat_id,
-        telegram_config=telegram_config,
-        ebay_environment=resolved_environment,
-        load_state_fn=load_state_fn,
-        load_retry_queue_fn=load_retry_queue_fn,
-        fetch_records_for_environment_fn=fetch_records_for_environment_fn,
-        request_with_backoff_fn=request_with_backoff,
-    )
+    try:
+        return _process_message(
+            text=text,
+            chat_id=chat_id,
+            telegram_config=telegram_config,
+            ebay_environment=resolved_environment,
+            load_state_fn=load_state_fn,
+            load_retry_queue_fn=load_retry_queue_fn,
+            fetch_records_for_environment_fn=fetch_records_for_environment_fn,
+            request_with_backoff_fn=request_with_backoff,
+        )
+    except ConfigurationError as exc:
+        return [f"⚠️ {exc}"]
 
 
 def auto_notify_loop(telegram_config: TelegramConfig, ebay_environment: str) -> None:

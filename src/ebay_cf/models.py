@@ -5,6 +5,78 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Iterable, Mapping, Optional, Union
 
+TELEGRAM_USER_STATUS_NEW = "new"
+TELEGRAM_USER_STATUS_PENDING = "pending"
+TELEGRAM_USER_STATUS_APPROVED = "approved"
+TELEGRAM_USER_STATUS_BLOCKED = "blocked"
+TELEGRAM_USER_STATUS_ADMIN = "admin"
+
+TELEGRAM_USER_STATUSES = frozenset(
+    {
+        TELEGRAM_USER_STATUS_NEW,
+        TELEGRAM_USER_STATUS_PENDING,
+        TELEGRAM_USER_STATUS_APPROVED,
+        TELEGRAM_USER_STATUS_BLOCKED,
+        TELEGRAM_USER_STATUS_ADMIN,
+    }
+)
+LEGACY_APPROVED_TELEGRAM_USER_STATUSES = frozenset({"active"})
+LEGACY_BLOCKED_TELEGRAM_USER_STATUSES = frozenset({"rejected"})
+
+EBAY_ACCOUNT_STATUS_LINKED = "linked"
+EBAY_ACCOUNT_STATUS_DISCONNECTED = "disconnected"
+EBAY_ACCOUNT_STATUS_REVOKED = "revoked"
+
+OAUTH_SESSION_STATUS_PENDING = "pending"
+OAUTH_SESSION_STATUS_COMPLETED = "completed"
+OAUTH_SESSION_STATUS_FAILED = "failed"
+OAUTH_SESSION_STATUS_EXPIRED = "expired"
+OAUTH_SESSION_STATUS_CANCELLED = "cancelled"
+
+OPERATION_STATUS_PENDING = "pending"
+OPERATION_STATUS_RUNNING = "running"
+OPERATION_STATUS_COMPLETED = "completed"
+OPERATION_STATUS_FAILED = "failed"
+OPERATION_STATUS_CANCELLED = "cancelled"
+
+OPERATION_TYPE_APPLY_USER_ACCESS_STATE = "apply_user_access_state"
+OPERATION_TYPE_RECONCILE_RUNTIME = "reconcile_runtime"
+
+CAPABILITY_REQUEST_ACCESS = "request_access"
+CAPABILITY_USE_BOT = "use_bot"
+CAPABILITY_REVIEW_ACCESS = "review_access"
+CAPABILITY_CONNECT_ACCOUNT = "connect_account"
+CAPABILITY_MANAGE_NOTIFICATIONS = "manage_notifications"
+CAPABILITY_VIEW_ORDERS = "view_orders"
+CAPABILITY_VIEW_ACCOUNT = "view_account"
+CAPABILITY_MANAGE_SETTINGS = "manage_settings"
+
+ADMIN_CAPABILITIES: frozenset[str] = frozenset(
+    {
+        CAPABILITY_REQUEST_ACCESS,
+        CAPABILITY_USE_BOT,
+        CAPABILITY_REVIEW_ACCESS,
+        CAPABILITY_CONNECT_ACCOUNT,
+        CAPABILITY_MANAGE_NOTIFICATIONS,
+        CAPABILITY_VIEW_ORDERS,
+        CAPABILITY_VIEW_ACCOUNT,
+        CAPABILITY_MANAGE_SETTINGS,
+    }
+)
+APPROVED_USER_CAPABILITIES: frozenset[str] = frozenset(
+    {
+        CAPABILITY_USE_BOT,
+        CAPABILITY_CONNECT_ACCOUNT,
+        CAPABILITY_MANAGE_NOTIFICATIONS,
+        CAPABILITY_VIEW_ORDERS,
+        CAPABILITY_VIEW_ACCOUNT,
+        CAPABILITY_MANAGE_SETTINGS,
+    }
+)
+PENDING_USER_CAPABILITIES: frozenset[str] = frozenset({CAPABILITY_REQUEST_ACCESS})
+NEW_USER_CAPABILITIES: frozenset[str] = frozenset({CAPABILITY_REQUEST_ACCESS})
+BLOCKED_USER_CAPABILITIES: frozenset[str] = frozenset()
+
 
 def as_int(value: object, default: int = 0) -> int:
     if value is None:
@@ -45,6 +117,90 @@ def as_bool(value: object, default: bool = False) -> bool:
         if normalized in {"0", "false", "no", "off"}:
             return False
     return default
+
+
+def normalize_telegram_user_status(
+    status: str | None,
+    *,
+    default: str = TELEGRAM_USER_STATUS_NEW,
+) -> str:
+    normalized = str(status or "").strip().lower()
+    if not normalized:
+        return default
+    if normalized in LEGACY_APPROVED_TELEGRAM_USER_STATUSES:
+        return TELEGRAM_USER_STATUS_APPROVED
+    if normalized in LEGACY_BLOCKED_TELEGRAM_USER_STATUSES:
+        return TELEGRAM_USER_STATUS_BLOCKED
+    if normalized in TELEGRAM_USER_STATUSES:
+        return normalized
+    return default
+
+
+def normalize_ebay_account_status(status: str | None) -> str:
+    normalized = str(status or "").strip().lower()
+    if normalized in {
+        EBAY_ACCOUNT_STATUS_LINKED,
+        EBAY_ACCOUNT_STATUS_DISCONNECTED,
+        EBAY_ACCOUNT_STATUS_REVOKED,
+    }:
+        return normalized
+    return EBAY_ACCOUNT_STATUS_LINKED
+
+
+def normalize_oauth_session_status(status: str | None) -> str:
+    normalized = str(status or "").strip().lower()
+    if normalized in {
+        OAUTH_SESSION_STATUS_PENDING,
+        OAUTH_SESSION_STATUS_COMPLETED,
+        OAUTH_SESSION_STATUS_FAILED,
+        OAUTH_SESSION_STATUS_EXPIRED,
+        OAUTH_SESSION_STATUS_CANCELLED,
+    }:
+        return normalized
+    return OAUTH_SESSION_STATUS_PENDING
+
+
+def normalize_operation_status(status: str | None) -> str:
+    normalized = str(status or "").strip().lower()
+    if normalized in {
+        OPERATION_STATUS_PENDING,
+        OPERATION_STATUS_RUNNING,
+        OPERATION_STATUS_COMPLETED,
+        OPERATION_STATUS_FAILED,
+        OPERATION_STATUS_CANCELLED,
+    }:
+        return normalized
+    return OPERATION_STATUS_PENDING
+
+
+def is_pending_telegram_user_status(status: str | None) -> bool:
+    return normalize_telegram_user_status(status) == TELEGRAM_USER_STATUS_PENDING
+
+
+def is_blocked_telegram_user_status(status: str | None) -> bool:
+    return normalize_telegram_user_status(status) == TELEGRAM_USER_STATUS_BLOCKED
+
+
+def is_approved_telegram_user_status(status: str | None) -> bool:
+    canonical = normalize_telegram_user_status(status)
+    return canonical in {TELEGRAM_USER_STATUS_APPROVED, TELEGRAM_USER_STATUS_ADMIN}
+
+
+def get_telegram_user_capabilities(status: str | None) -> frozenset[str]:
+    canonical = normalize_telegram_user_status(status)
+    if canonical == TELEGRAM_USER_STATUS_ADMIN:
+        return ADMIN_CAPABILITIES
+    if canonical == TELEGRAM_USER_STATUS_APPROVED:
+        return APPROVED_USER_CAPABILITIES
+    if canonical == TELEGRAM_USER_STATUS_PENDING:
+        return PENDING_USER_CAPABILITIES
+    if canonical == TELEGRAM_USER_STATUS_NEW:
+        return NEW_USER_CAPABILITIES
+    return BLOCKED_USER_CAPABILITIES
+
+
+def has_telegram_user_capability(status: str | None, capability: str) -> bool:
+    return capability in get_telegram_user_capabilities(status)
 
 
 @dataclass
@@ -114,7 +270,10 @@ class TelegramUser:
             username=str(data.get("username", "")),
             display_name=str(data.get("display_name", "")),
             created_at=str(data["created_at"]) if data.get("created_at") else None,
-            status=str(data.get("status", "active")),
+            status=normalize_telegram_user_status(
+                str(data.get("status", TELEGRAM_USER_STATUS_APPROVED)),
+                default=TELEGRAM_USER_STATUS_APPROVED,
+            ),
         )
 
     def as_dict(self) -> dict[str, object]:
@@ -148,7 +307,9 @@ class LinkedEbayAccount:
             environment=str(data.get("environment", "production")),
             scopes=str(data.get("scopes", "")),
             linked_at=str(data["linked_at"]) if data.get("linked_at") else None,
-            status=str(data.get("status", "linked")),
+            status=normalize_ebay_account_status(
+                str(data.get("status", EBAY_ACCOUNT_STATUS_LINKED))
+            ),
         )
 
     def as_dict(self) -> dict[str, object]:
@@ -360,7 +521,9 @@ class OauthLinkSession:
             oauth_state=str(data.get("oauth_state", "")),
             code_verifier=str(data.get("code_verifier", "")),
             redirect_uri=str(data.get("redirect_uri", "")),
-            status=str(data.get("status", "pending")),
+            status=normalize_oauth_session_status(
+                str(data.get("status", OAUTH_SESSION_STATUS_PENDING))
+            ),
             expires_at=str(data["expires_at"]) if data.get("expires_at") else None,
             created_at=str(data["created_at"]) if data.get("created_at") else None,
         )
@@ -426,6 +589,60 @@ class AuditLogEntry:
             "environment": self.environment,
             "outcome": self.outcome,
             "details_json": self.details_json,
+        }
+        if self.id is not None:
+            payload["id"] = self.id
+        return payload
+
+
+@dataclass
+class OperationQueueEntry:
+    operation_type: str
+    created_at: str
+    status: str = OPERATION_STATUS_PENDING
+    actor_telegram_user_id: int | None = None
+    target_telegram_user_id: int | None = None
+    available_at: str | None = None
+    payload_json: str = ""
+    result_json: str = ""
+    last_error: str = ""
+    attempts: int = 0
+    updated_at: str | None = None
+    id: int | None = None
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, object]) -> "OperationQueueEntry":
+        raw_id = data.get("id")
+        raw_actor = data.get("actor_telegram_user_id")
+        raw_target = data.get("target_telegram_user_id")
+        return cls(
+            id=as_int(raw_id) if raw_id is not None else None,
+            operation_type=str(data.get("operation_type", "")),
+            created_at=str(data.get("created_at", "")),
+            status=normalize_operation_status(str(data.get("status", OPERATION_STATUS_PENDING))),
+            actor_telegram_user_id=as_int(raw_actor) if raw_actor is not None else None,
+            target_telegram_user_id=as_int(raw_target) if raw_target is not None else None,
+            available_at=str(data["available_at"]) if data.get("available_at") else None,
+            payload_json=str(data.get("payload_json", "")),
+            result_json=str(data.get("result_json", "")),
+            last_error=str(data.get("last_error", "")),
+            attempts=as_int(data.get("attempts", 0)),
+            updated_at=str(data["updated_at"]) if data.get("updated_at") else None,
+        )
+
+    def as_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "operation_type": self.operation_type,
+            "created_at": self.created_at,
+            "status": self.status,
+            "actor_telegram_user_id": self.actor_telegram_user_id,
+            "target_telegram_user_id": self.target_telegram_user_id,
+            "available_at": self.available_at,
+            "payload_json": self.payload_json,
+            "result_json": self.result_json,
+            "last_error": self.last_error,
+            "attempts": self.attempts,
+            "updated_at": self.updated_at,
         }
         if self.id is not None:
             payload["id"] = self.id

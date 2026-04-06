@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic reconciliation for eBay CF
+
+[Timer]
+OnCalendar=*:0/10
+Persistent=true
+Unit=ebaycf-reconcile.service
+
+[Install]
+WantedBy=timers.target

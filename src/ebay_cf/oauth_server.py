@@ -23,7 +23,19 @@ from .clients.ebay import (
 from .config import load_config, load_telegram_config
 from .errors import ConfigurationError, EbayApiError
 from .logging_utils import log_event
-from .models import AuditLogEntry, EbayTokenSet, LinkedEbayAccount, OauthLinkSession, TelegramConfig
+from .models import (
+    EBAY_ACCOUNT_STATUS_LINKED,
+    OAUTH_SESSION_STATUS_COMPLETED,
+    OAUTH_SESSION_STATUS_EXPIRED,
+    OAUTH_SESSION_STATUS_FAILED,
+    OAUTH_SESSION_STATUS_PENDING,
+    AuditLogEntry,
+    EbayTokenSet,
+    LinkedEbayAccount,
+    OauthLinkSession,
+    TelegramConfig,
+    normalize_oauth_session_status,
+)
 from .storage.sqlite import (
     append_audit_log_entry,
     load_oauth_link_session_by_state,
@@ -179,7 +191,7 @@ def build_oauth_start_redirect(
     session = load_session_fn(state_path, oauth_state, "ebay")
     if session is None:
         raise ConfigurationError("Sessione OAuth non trovata.")
-    if session.status != "pending":
+    if normalize_oauth_session_status(session.status) != OAUTH_SESSION_STATUS_PENDING:
         raise ConfigurationError("La sessione OAuth non e' piu' disponibile.")
     if session_is_expired(session):
         raise ConfigurationError("La sessione OAuth e' scaduta. Usa di nuovo /connect.")
@@ -214,10 +226,14 @@ def complete_oauth_link(
     session = load_session_fn(telegram_config.state_path, oauth_state, "ebay")
     if session is None:
         raise ConfigurationError("Sessione OAuth non trovata.")
-    if session.status != "pending":
+    if normalize_oauth_session_status(session.status) != OAUTH_SESSION_STATUS_PENDING:
         raise ConfigurationError("La sessione OAuth non e' piu' disponibile.")
     if session_is_expired(session):
-        update_oauth_link_session(telegram_config.state_path, oauth_state, status="expired")
+        update_oauth_link_session(
+            telegram_config.state_path,
+            oauth_state,
+            status=OAUTH_SESSION_STATUS_EXPIRED,
+        )
         raise ConfigurationError("La sessione OAuth e' scaduta. Usa di nuovo /connect.")
 
     callback_url = callback_url_fn()
@@ -279,7 +295,7 @@ def complete_oauth_link(
             environment=session.environment,
             scopes=str(token_payload.get("scope") or config.scopes),
             linked_at=timestamp,
-            status="linked",
+            status=EBAY_ACCOUNT_STATUS_LINKED,
         ),
     )
     account = resolve_linked_ebay_account(
@@ -302,7 +318,11 @@ def complete_oauth_link(
             status="active",
         ),
     )
-    update_oauth_link_session(telegram_config.state_path, oauth_state, status="completed")
+    update_oauth_link_session(
+        telegram_config.state_path,
+        oauth_state,
+        status=OAUTH_SESSION_STATUS_COMPLETED,
+    )
     append_oauth_audit_log(
         telegram_config,
         event_type="oauth_success",
@@ -331,7 +351,7 @@ def complete_oauth_link(
         telegram_user_id=session.telegram_user_id,
         environment=session.environment,
         ebay_user_id=ebay_user_id,
-        account_status="linked",
+        account_status=EBAY_ACCOUNT_STATUS_LINKED,
     )
 
 
@@ -391,7 +411,7 @@ class OAuthHandler(BaseHTTPRequestHandler):
             update_oauth_link_session(
                 self.server.telegram_config.state_path,  # type: ignore[attr-defined]
                 oauth_state,
-                status="failed",
+                status=OAUTH_SESSION_STATUS_FAILED,
             )
             self._write_response(
                 HTTPStatus.BAD_REQUEST,
@@ -429,7 +449,7 @@ class OAuthHandler(BaseHTTPRequestHandler):
             update_oauth_link_session(
                 self.server.telegram_config.state_path,  # type: ignore[attr-defined]
                 oauth_state,
-                status="failed",
+                status=OAUTH_SESSION_STATUS_FAILED,
             )
             log_event(LOGGER, logging.ERROR, "oauth_callback_failed", error=exc, state=oauth_state)
             self._write_response(

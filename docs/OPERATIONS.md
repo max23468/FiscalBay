@@ -132,10 +132,16 @@ Controllo accessi Telegram:
 - `TELEGRAM_ALLOWED_CHAT_IDS` continua a limitare le chat ammesse
 - `TELEGRAM_ADMIN_USER_ID`, quando valorizzata, identifica l'admin globale del bot
 - gli altri utenti vengono registrati nel DB con stati `new`, `pending`, `approved` o `blocked`
+- il runtime normalizza anche alias legacy come `active` e `rejected`, cosi' il controllo accessi resta coerente anche su record vecchi nel `state.db`
 - gli utenti non approvati possono solo usare `/start`, `/help` e `/request_access`
 - l'admin riceve una richiesta con pulsanti inline `Approva` e `Rifiuta`
 - in alternativa l'admin puo' usare `/users`, `/approve_user <telegram_user_id>` e `/reject_user <telegram_user_id>`
-- solo gli utenti `approved` o l'`admin` possono usare `/connect`, `/account`, `/settings`, `/notifications` e i comandi ordini
+- il gating passa ora da capability esplicite: `request_access`, `review_access`, `connect_account`, `manage_notifications`, `view_account`, `view_orders`
+- solo gli utenti `approved` o l'`admin` ricevono le capability operative che sbloccano `/connect`, `/account`, `/settings`, `/notifications` e i comandi ordini
+- approvare o bloccare un utente riallinea anche chat e subscription gia' registrate, quindi l'effetto non dipende solo dal prossimo restart o dal prossimo messaggio
+- ripetere `/approve_user` o `/reject_user` sullo stesso stato non genera una nuova transizione ne' una nuova notifica utente, ma riallinea comunque i permessi applicati
+- ripetere `/connect` mentre esiste gia' una sessione OAuth pendente e valida riusa la sessione esistente invece di crearne una nuova
+- il `state.db` contiene ora anche una `operation_queue` minima per applicazioni sensibili differibili o recuperabili
 
 Audit log minimo:
 
@@ -150,6 +156,7 @@ Servizio OAuth su VPS:
 - endpoint locali minimi: `/healthz`, `/oauth/start`, `/oauth/callback`
 - variabili utili: `EBAY_OAUTH_RUNAME`, `EBAY_OAUTH_RUNAME_SANDBOX`, `EBAY_OAUTH_CONNECT_BASE_URL`, `EBAY_OAUTH_CALLBACK_URL`, `EBAY_OAUTH_SERVER_HOST`, `EBAY_OAUTH_SERVER_PORT`, `EBAY_TENANT_TOKEN_KEY`
 - il percorso corretto su VPS e' usare `EBAY_TENANT_TOKEN_KEY` per cifrare i refresh token utente a riposo
+- con `TELEGRAM_ADMIN_USER_ID` configurato, il bot in produzione usa i token tenant come percorso operativo normale e non deve piu' dipendere da `EBAY_REFRESH_TOKEN` per i tenant collegati
 - verso eBay il parametro `redirect_uri` deve essere il `RuName` registrato nel portale eBay, non la callback URL pubblica
 - la callback URL pubblica del progetto deve invece coincidere con l'`Accept URL` associato a quel `RuName`
 - `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS=1` va considerato solo fallback di beta privata/dev e non configurazione operativa normale
@@ -157,8 +164,9 @@ Servizio OAuth su VPS:
 Readiness multiutente nel healthcheck:
 
 - il report healthcheck espone anche contatori `multi_tenant.*` per utenti, chat, account collegati, token attivi, subscription e stati runtime tenant
-- il flag `multi_tenant.tenant_credentials_ready` indica se il DB ha gia' almeno account collegati e token attivi sufficienti per uscire dal puro fallback globale
+- il flag `multi_tenant.tenant_credentials_ready` indica se il DB ha gia' account collegati e token attivi sufficienti per operare interamente con credenziali tenant
 - questo aiuta a capire sulla VPS quanto siamo vicini al multiutente reale senza interrogare SQLite manualmente
+- il report healthcheck espone ora anche `operation_queue.pending`, `operation_queue.running` e `operation_queue.failed`
 
 Alert basilari runtime:
 
@@ -167,6 +175,13 @@ Alert basilari runtime:
 - gli alert minimi oggi coprono servizio `systemd` non attivo, troppi errori consecutivi e retry queue oltre soglia
 - soglie di default: `MAX_CONSECUTIVE_ERROR_CYCLES=3` e `MAX_RETRY_QUEUE_SIZE=20`
 - il fallimento del check finisce nel journal del service `ebaycf-alertcheck`
+
+Reconciliation periodica:
+
+- entrypoint: `ebay-cf-reconcile`
+- wrapper VPS: `deploy/reconcile.sh`
+- timer `systemd`: `ebaycf-reconcile.timer`
+- la reconciliation processa la `operation_queue`, riallinea accessi/chat/subscription, scade sessioni OAuth pendenti troppo vecchie e revoca token attivi rimasti su account non piu' collegati
 
 Suggerimento pratico sui log:
 

@@ -1,0 +1,9 @@
+[Unit]
+Description=eBay CF periodic reconciliation
+
+[Service]
+Type=oneshot
+User=__APP_USER__
+Group=__APP_GROUP__
+WorkingDirectory=__APP_DIR__
+ExecStart=/usr/bin/bash -lc 'exec "__APP_DIR__/deploy/reconcile.sh"'
