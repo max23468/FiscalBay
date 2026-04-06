@@ -28,8 +28,6 @@ Documenti collegati:
 ## Fase 4 - Governance del Prodotto [Priorita' media]
 
 - [ ] definire governance e limiti del servizio in modo compatibile con isolamento dati tra utenti
-- [ ] introdurre audit log minimo append-only per request_access, approve, reject, connect, disconnect, oauth_success e oauth_failure
-- [ ] fare in modo che ogni processo sensibile produca sia outcome utente sia evento tecnico tracciabile
 - [ ] definire quali dati personali vengono trattati
 - [ ] scrivere informativa minima d'uso e retention
 - [ ] definire retention dei log

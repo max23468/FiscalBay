@@ -190,6 +190,7 @@ Stato implementativo corrente:
 - `tenant_credentials.py` usa ora Fernet con chiave `EBAY_TENANT_TOKEN_KEY` come percorso standard di cifratura a riposo dei refresh token tenant
 - `TELEGRAM_ADMIN_USER_ID` puo' ora definire un admin globale: gli altri utenti restano discoverable, ma passano da uno stato `new` o `pending` e possono usare il bot solo dopo approvazione esplicita
 - il workflow di approvazione e' interno al bot: richiesta accesso, notifica admin, approvazione o rifiuto e sblocco successivo di `/connect` e dei comandi tenant-aware
+- gli eventi sensibili principali scrivono ora anche su un audit log append-only in SQLite, separato dai soli log runtime
 
 ## Decisione database per la beta privata
 

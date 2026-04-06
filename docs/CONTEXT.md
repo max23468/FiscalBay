@@ -219,6 +219,7 @@ Nota onboarding:
 - se `TELEGRAM_ADMIN_USER_ID` e' configurata, gli utenti non admin entrano in stati `new/pending/approved/blocked` e possono sbloccare il bot solo dopo approvazione admin
 - l'admin puo' gestire gli accessi con callback inline o con `/users`, `/approve_user` e `/reject_user`
 - esiste ora anche un callback server minimale separato, che chiude il flusso `/connect` quando la VPS espone URL pubblici corretti e usa il `RuName` eBay corretto verso il developer portal
+- i passaggi sensibili di accesso e collegamento account lasciano ora anche un audit log minimo append-only nel `state.db`
 - i refresh token tenant usano ora cifratura Fernet a riposo con chiave da env sulla VPS
 - restano ancora aperti hardening finale e revoca remota verso eBay
 

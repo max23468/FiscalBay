@@ -17,6 +17,7 @@ from src.ebay_cf.models import (
     TelegramConfig,
 )
 from src.ebay_cf.storage.sqlite import (
+    load_audit_log_entries,
     load_notification_subscriptions,
     load_retry_queue,
     load_state,
@@ -119,6 +120,9 @@ class BotIntegrationTests(unittest.TestCase):
             users = load_telegram_users(str(db_path))
             requested_user = next(user for user in users if user.telegram_user_id == 999)
             self.assertEqual(requested_user.status, "pending")
+            audit_entries = load_audit_log_entries(str(db_path))
+            self.assertEqual(audit_entries[0].event_type, "request_access")
+            self.assertEqual(audit_entries[0].outcome, "pending")
             self.assertEqual(len(replies), 1)
             self.assertIn("Richiesta inviata", replies[0])
             mock_send_message.assert_called_once()
@@ -173,6 +177,9 @@ class BotIntegrationTests(unittest.TestCase):
             users = load_telegram_users(str(db_path))
             approved_user = next(user for user in users if user.telegram_user_id == 999)
             self.assertEqual(approved_user.status, "approved")
+            audit_entries = load_audit_log_entries(str(db_path), limit=5)
+            self.assertEqual(audit_entries[0].event_type, "approve")
+            self.assertEqual(audit_entries[0].outcome, "applied")
             self.assertEqual(len(replies), 1)
             self.assertIn("approved", replies[0])
             mock_send_message.assert_called_once()

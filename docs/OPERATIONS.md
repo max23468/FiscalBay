@@ -137,6 +137,12 @@ Controllo accessi Telegram:
 - in alternativa l'admin puo' usare `/users`, `/approve_user <telegram_user_id>` e `/reject_user <telegram_user_id>`
 - solo gli utenti `approved` o l'`admin` possono usare `/connect`, `/account`, `/settings`, `/notifications` e i comandi ordini
 
+Audit log minimo:
+
+- il `state.db` contiene ora anche una tabella append-only `audit_log`
+- eventi tracciati: `request_access`, `approve`, `reject`, `connect`, `disconnect`, `oauth_success`, `oauth_failure`
+- l'audit log integra i messaggi utente e i log runtime, non li sostituisce
+
 Servizio OAuth su VPS:
 
 - entrypoint: `ebay-cf-oauth-server`

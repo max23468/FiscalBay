@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from src.ebay_cf.models import (
+    AuditLogEntry,
     BotMetrics,
     BotRuntimeState,
     EbayTokenSet,
@@ -16,9 +17,11 @@ from src.ebay_cf.models import (
 )
 from src.ebay_cf.storage.sqlite import (
     SCHEMA_VERSION,
+    append_audit_log_entry,
     create_oauth_link_session,
     disconnect_linked_ebay_account,
     list_notification_tenants,
+    load_audit_log_entries,
     load_ebay_token_sets,
     load_latest_oauth_link_session,
     load_linked_ebay_accounts,
@@ -45,6 +48,29 @@ from src.ebay_cf.storage.sqlite import (
 
 
 class SQLiteStorageIntegrationTests(unittest.TestCase):
+    def test_audit_log_roundtrip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            append_audit_log_entry(
+                str(db_path),
+                AuditLogEntry(
+                    event_type="request_access",
+                    created_at="2026-04-06T18:00:00Z",
+                    actor_telegram_user_id=111,
+                    target_telegram_user_id=111,
+                    telegram_chat_id=222,
+                    outcome="pending",
+                    details_json='{"admin_notified": true}',
+                ),
+            )
+
+            entries = load_audit_log_entries(str(db_path))
+            self.assertEqual(len(entries), 1)
+            self.assertEqual(entries[0].event_type, "request_access")
+            self.assertEqual(entries[0].actor_telegram_user_id, 111)
+            self.assertEqual(entries[0].telegram_chat_id, 222)
+            self.assertEqual(entries[0].outcome, "pending")
+
     def test_state_roundtrip_on_temp_sqlite_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"

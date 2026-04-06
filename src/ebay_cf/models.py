@@ -384,6 +384,55 @@ class OauthLinkSession:
 
 
 @dataclass
+class AuditLogEntry:
+    event_type: str
+    created_at: str
+    actor_telegram_user_id: int | None = None
+    target_telegram_user_id: int | None = None
+    telegram_chat_id: int | None = None
+    ebay_user_id: str = ""
+    environment: str = ""
+    outcome: str = ""
+    details_json: str = ""
+    id: int | None = None
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, object]) -> "AuditLogEntry":
+        raw_id = data.get("id")
+        raw_actor = data.get("actor_telegram_user_id")
+        raw_target = data.get("target_telegram_user_id")
+        raw_chat = data.get("telegram_chat_id")
+        return cls(
+            id=as_int(raw_id) if raw_id is not None else None,
+            event_type=str(data.get("event_type", "")),
+            created_at=str(data.get("created_at", "")),
+            actor_telegram_user_id=as_int(raw_actor) if raw_actor is not None else None,
+            target_telegram_user_id=as_int(raw_target) if raw_target is not None else None,
+            telegram_chat_id=as_int(raw_chat) if raw_chat is not None else None,
+            ebay_user_id=str(data.get("ebay_user_id", "")),
+            environment=str(data.get("environment", "")),
+            outcome=str(data.get("outcome", "")),
+            details_json=str(data.get("details_json", "")),
+        )
+
+    def as_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "event_type": self.event_type,
+            "created_at": self.created_at,
+            "actor_telegram_user_id": self.actor_telegram_user_id,
+            "target_telegram_user_id": self.target_telegram_user_id,
+            "telegram_chat_id": self.telegram_chat_id,
+            "ebay_user_id": self.ebay_user_id,
+            "environment": self.environment,
+            "outcome": self.outcome,
+            "details_json": self.details_json,
+        }
+        if self.id is not None:
+            payload["id"] = self.id
+        return payload
+
+
+@dataclass
 class BotMetrics:
     orders_read: int = 0
     orders_with_cf: int = 0

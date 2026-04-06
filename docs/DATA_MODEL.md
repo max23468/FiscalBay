@@ -162,6 +162,7 @@ Lo stesso SQLite ora puo' ospitare anche tabelle tenant-aware per:
 - token eBay per account
 - subscription notifiche
 - stato runtime per tenant
+- audit log append-only per eventi sensibili
 
 Compatibilita' mantenuta:
 

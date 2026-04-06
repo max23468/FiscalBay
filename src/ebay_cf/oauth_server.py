@@ -23,8 +23,9 @@ from .clients.ebay import (
 from .config import load_config, load_telegram_config
 from .errors import ConfigurationError, EbayApiError
 from .logging_utils import log_event
-from .models import EbayTokenSet, LinkedEbayAccount, OauthLinkSession, TelegramConfig
+from .models import AuditLogEntry, EbayTokenSet, LinkedEbayAccount, OauthLinkSession, TelegramConfig
 from .storage.sqlite import (
+    append_audit_log_entry,
     load_oauth_link_session_by_state,
     resolve_linked_ebay_account,
     update_oauth_link_session,
@@ -37,6 +38,35 @@ LOGGER = logging.getLogger("ebaycf.oauth_server")
 DEFAULT_OAUTH_HOST = "127.0.0.1"
 DEFAULT_OAUTH_PORT = 8787
 DEFAULT_CALLBACK_PATH = "/oauth/callback"
+
+
+def append_oauth_audit_log(
+    telegram_config: TelegramConfig,
+    *,
+    event_type: str,
+    created_at: str,
+    actor_telegram_user_id: int | None = None,
+    target_telegram_user_id: int | None = None,
+    telegram_chat_id: int | None = None,
+    ebay_user_id: str = "",
+    environment: str = "",
+    outcome: str = "",
+    details_json: str = "",
+) -> None:
+    append_audit_log_entry(
+        telegram_config.state_path,
+        AuditLogEntry(
+            event_type=event_type,
+            created_at=created_at,
+            actor_telegram_user_id=actor_telegram_user_id,
+            target_telegram_user_id=target_telegram_user_id,
+            telegram_chat_id=telegram_chat_id,
+            ebay_user_id=ebay_user_id,
+            environment=environment,
+            outcome=outcome,
+            details_json=details_json,
+        ),
+    )
 
 
 @dataclass
@@ -273,6 +303,18 @@ def complete_oauth_link(
         ),
     )
     update_oauth_link_session(telegram_config.state_path, oauth_state, status="completed")
+    append_oauth_audit_log(
+        telegram_config,
+        event_type="oauth_success",
+        created_at=timestamp,
+        actor_telegram_user_id=session.telegram_user_id,
+        target_telegram_user_id=session.telegram_user_id,
+        telegram_chat_id=session.telegram_chat_id,
+        ebay_user_id=ebay_user_id,
+        environment=session.environment,
+        outcome="linked",
+        details_json=str(token_payload.get("scope") or config.scopes),
+    )
     send_message_fn(
         telegram_config.token,
         session.telegram_chat_id,
@@ -339,6 +381,13 @@ class OAuthHandler(BaseHTTPRequestHandler):
         oauth_state = (params.get("state") or [""])[0]
         error_value = (params.get("error") or [""])[0]
         if error_value:
+            append_oauth_audit_log(
+                self.server.telegram_config,  # type: ignore[attr-defined]
+                event_type="oauth_failure",
+                created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                outcome="provider_error",
+                details_json=error_value,
+            )
             update_oauth_link_session(
                 self.server.telegram_config.state_path,  # type: ignore[attr-defined]
                 oauth_state,
@@ -370,6 +419,13 @@ class OAuthHandler(BaseHTTPRequestHandler):
                 environment=result.environment,
             )
         except Exception as exc:
+            append_oauth_audit_log(
+                self.server.telegram_config,  # type: ignore[attr-defined]
+                event_type="oauth_failure",
+                created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                outcome="callback_error",
+                details_json=str(exc),
+            )
             update_oauth_link_session(
                 self.server.telegram_config.state_path,  # type: ignore[attr-defined]
                 oauth_state,

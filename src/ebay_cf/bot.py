@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import secrets
@@ -21,6 +22,7 @@ from .config import configure_logging, load_config, load_telegram_config
 from .errors import EbayApiError, TelegramApiError
 from .logging_utils import log_event
 from .models import (
+    AuditLogEntry,
     BotRuntimeState,
     BotRuntimeStateLike,
     FetchOptions,
@@ -71,6 +73,7 @@ from .services.telegram_runtime import (
     run_bot as _run_bot,
 )
 from .storage.sqlite import (
+    append_audit_log_entry,
     create_oauth_link_session,
     disconnect_linked_ebay_account,
     ensure_parent_dir,
@@ -457,6 +460,35 @@ def _notify_user_access_status(
     )
 
 
+def _append_audit_log(
+    telegram_config: TelegramConfig,
+    *,
+    event_type: str,
+    created_at: str,
+    actor_telegram_user_id: int | None = None,
+    target_telegram_user_id: int | None = None,
+    telegram_chat_id: int | None = None,
+    ebay_user_id: str = "",
+    environment: str = "",
+    outcome: str = "",
+    details: dict[str, object] | None = None,
+) -> None:
+    append_audit_log_entry(
+        telegram_config.state_path,
+        AuditLogEntry(
+            event_type=event_type,
+            created_at=created_at,
+            actor_telegram_user_id=actor_telegram_user_id,
+            target_telegram_user_id=target_telegram_user_id,
+            telegram_chat_id=telegram_chat_id,
+            ebay_user_id=ebay_user_id,
+            environment=environment,
+            outcome=outcome,
+            details_json=json.dumps(details or {}, ensure_ascii=False, sort_keys=True),
+        ),
+    )
+
+
 def build_connect_entrypoint_url(oauth_state: str) -> str:
     base_url = os.getenv("EBAY_OAUTH_CONNECT_BASE_URL", "").strip()
     if not base_url:
@@ -681,6 +713,16 @@ def process_message(
             )
             existing_user = load_telegram_user(telegram_config.state_path, telegram_user_id)
         elif existing_user.status == "pending":
+            _append_audit_log(
+                telegram_config,
+                event_type="request_access",
+                created_at=timestamp,
+                actor_telegram_user_id=telegram_user_id,
+                target_telegram_user_id=telegram_user_id,
+                telegram_chat_id=chat_id,
+                outcome="already_pending",
+                details={"user_status": existing_user.status},
+            )
             return [format_access_request_status(already_pending=True)]
         else:
             update_telegram_user_status(
@@ -710,6 +752,16 @@ def process_message(
                 reply_markup=build_admin_approval_markup(telegram_user_id),
             )
             admin_notified = True
+        _append_audit_log(
+            telegram_config,
+            event_type="request_access",
+            created_at=timestamp,
+            actor_telegram_user_id=telegram_user_id,
+            target_telegram_user_id=telegram_user_id,
+            telegram_chat_id=chat_id,
+            outcome="pending",
+            details={"admin_notified": admin_notified},
+        )
         return [format_access_request_status(admin_notified=admin_notified)]
 
     if command in {"/approve_user", "/reject_user", "/users"} and not is_admin_user:
@@ -734,6 +786,16 @@ def process_message(
             target_user_id,
             next_status,
             updated_at=timestamp,
+        )
+        _append_audit_log(
+            telegram_config,
+            event_type="approve" if next_status == "approved" else "reject",
+            created_at=timestamp,
+            actor_telegram_user_id=telegram_user_id,
+            target_telegram_user_id=target_user_id,
+            telegram_chat_id=chat_id,
+            outcome="applied" if updated_user is not None else "missing_user",
+            details={"status": next_status},
         )
         if updated_user is not None:
             if next_status == "approved":
@@ -870,6 +932,17 @@ def process_message(
             resolved_telegram_user_id,
         )
         active_session = latest_session or session
+        _append_audit_log(
+            telegram_config,
+            event_type="connect",
+            created_at=now.isoformat().replace("+00:00", "Z"),
+            actor_telegram_user_id=resolved_telegram_user_id,
+            target_telegram_user_id=resolved_telegram_user_id,
+            telegram_chat_id=chat_id,
+            environment=resolved_environment,
+            outcome="session_created",
+            details={"oauth_state": active_session.oauth_state},
+        )
         return [
             format_connect_status(
                 {
@@ -890,6 +963,19 @@ def process_message(
             telegram_config.state_path,
             resolved_telegram_user_id,
             resolved_environment,
+        )
+        _append_audit_log(
+            telegram_config,
+            event_type="disconnect",
+            created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            actor_telegram_user_id=resolved_telegram_user_id,
+            target_telegram_user_id=resolved_telegram_user_id,
+            telegram_chat_id=chat_id,
+            ebay_user_id=(
+                disconnected_account.ebay_user_id if disconnected_account is not None else ""
+            ),
+            environment=resolved_environment,
+            outcome="disconnected" if disconnected_account is not None else "noop",
         )
         return [
             format_disconnect_status(

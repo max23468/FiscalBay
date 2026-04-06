@@ -12,6 +12,7 @@ from src.ebay_cf.oauth_server import (
 )
 from src.ebay_cf.storage.sqlite import (
     create_oauth_link_session,
+    load_audit_log_entries,
     load_ebay_token_sets,
     load_latest_oauth_link_session,
     resolve_linked_ebay_account,
@@ -127,6 +128,10 @@ class OAuthServerTests(unittest.TestCase):
             session = load_latest_oauth_link_session(str(db_path), 123)
             assert session is not None
             self.assertEqual(session.status, "completed")
+            audit_entries = load_audit_log_entries(str(db_path))
+            self.assertEqual(audit_entries[0].event_type, "oauth_success")
+            self.assertEqual(audit_entries[0].outcome, "linked")
+            self.assertEqual(audit_entries[0].ebay_user_id, "real-ebay-user")
             send_message_mock.assert_called_once()
 
 

@@ -8,6 +8,7 @@ import sqlite3
 from typing import Iterable, TypedDict
 
 from ..models import (
+    AuditLogEntry,
     BotMetrics,
     BotRuntimeState,
     EbayTokenSet,
@@ -22,7 +23,7 @@ from ..models import (
     as_int,
 )
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 class MetricsState(TypedDict):
@@ -289,6 +290,24 @@ def _create_v5_schema(conn: sqlite3.Connection) -> None:
         )
 
 
+def _create_v6_schema(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS audit_log "
+        "("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "event_type TEXT NOT NULL, "
+        "actor_telegram_user_id INTEGER, "
+        "target_telegram_user_id INTEGER, "
+        "telegram_chat_id INTEGER, "
+        "ebay_user_id TEXT NOT NULL DEFAULT '', "
+        "environment TEXT NOT NULL DEFAULT '', "
+        "outcome TEXT NOT NULL DEFAULT '', "
+        "details_json TEXT NOT NULL DEFAULT '', "
+        "created_at TEXT NOT NULL"
+        ")"
+    )
+
+
 def _migrate_legacy_notified_orders(conn: sqlite3.Connection) -> None:
     if not _table_exists(conn, "notified_orders"):
         return
@@ -325,6 +344,9 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         version = 4
     if version < 5:
         _create_v5_schema(conn)
+        version = 5
+    if version < 6:
+        _create_v6_schema(conn)
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 
@@ -771,6 +793,49 @@ def load_telegram_users(path: str) -> list[TelegramUser]:
         ):
             users.append(TelegramUser.from_mapping(dict(row)))
     return users
+
+
+def append_audit_log_entry(path: str, entry: AuditLogEntry) -> AuditLogEntry:
+    init_db(path)
+    with _connect(path) as conn:
+        cursor = conn.execute(
+            "INSERT INTO audit_log "
+            "("
+            "event_type, actor_telegram_user_id, target_telegram_user_id, telegram_chat_id, "
+            "ebay_user_id, environment, outcome, details_json, created_at"
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                entry.event_type,
+                entry.actor_telegram_user_id,
+                entry.target_telegram_user_id,
+                entry.telegram_chat_id,
+                entry.ebay_user_id,
+                entry.environment,
+                entry.outcome,
+                entry.details_json,
+                entry.created_at,
+            ),
+        )
+        if cursor.lastrowid is None:
+            raise RuntimeError("Inserimento audit log fallito: lastrowid mancante.")
+        entry.id = int(cursor.lastrowid)
+    return entry
+
+
+def load_audit_log_entries(path: str, limit: int = 100) -> list[AuditLogEntry]:
+    init_db(path)
+    entries: list[AuditLogEntry] = []
+    safe_limit = max(1, int(limit))
+    with _connect(path) as conn:
+        rows = conn.execute(
+            "SELECT id, event_type, actor_telegram_user_id, target_telegram_user_id, "
+            "telegram_chat_id, ebay_user_id, environment, outcome, details_json, created_at "
+            "FROM audit_log ORDER BY id DESC LIMIT ?",
+            (safe_limit,),
+        ).fetchall()
+        for row in rows:
+            entries.append(AuditLogEntry.from_mapping(dict(row)))
+    return entries
 
 
 def load_telegram_user(path: str, telegram_user_id: int) -> TelegramUser | None:
