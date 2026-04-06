@@ -3,7 +3,32 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Mapping, Optional, Union
+from typing import Iterable, Mapping, Optional, Union
+
+
+def as_int(value: object, default: int = 0) -> int:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
+def as_str_list(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, Iterable):
+        return [str(item) for item in value]
+    return []
 
 
 @dataclass
@@ -55,10 +80,10 @@ class BotMetrics:
         raw_errors = data.get("errors_by_type", {})
         errors_by_type: dict[str, int] = {}
         if isinstance(raw_errors, Mapping):
-            errors_by_type = {str(key): int(value) for key, value in raw_errors.items()}
+            errors_by_type = {str(key): as_int(value) for key, value in raw_errors.items()}
         return cls(
-            orders_read=int(data.get("orders_read", 0)),
-            notifications_sent=int(data.get("notifications_sent", 0)),
+            orders_read=as_int(data.get("orders_read", 0)),
+            notifications_sent=as_int(data.get("notifications_sent", 0)),
             errors_by_type=errors_by_type,
         )
 
@@ -81,10 +106,10 @@ class RetryQueueEntry:
     def from_mapping(cls, data: Mapping[str, object]) -> "RetryQueueEntry":
         raw_id = data.get("id")
         return cls(
-            id=int(raw_id) if raw_id is not None else None,
-            chat_id=int(data.get("chat_id", 0)),
+            id=as_int(raw_id) if raw_id is not None else None,
+            chat_id=as_int(data.get("chat_id", 0)),
             text=str(data.get("text", "")),
-            attempts=int(data.get("attempts", 0)),
+            attempts=as_int(data.get("attempts", 0)),
         )
 
     def as_dict(self) -> dict[str, object]:
@@ -109,14 +134,15 @@ class BotRuntimeState:
     @classmethod
     def from_mapping(cls, data: Mapping[str, object]) -> "BotRuntimeState":
         raw_metrics = data.get("metrics", {})
-        metrics = (
-            raw_metrics
-            if isinstance(raw_metrics, BotMetrics)
-            else BotMetrics.from_mapping(raw_metrics)
-        )
+        if isinstance(raw_metrics, BotMetrics):
+            metrics = raw_metrics
+        elif isinstance(raw_metrics, Mapping):
+            metrics = BotMetrics.from_mapping(raw_metrics)
+        else:
+            metrics = BotMetrics()
         return cls(
-            notified_order_ids=[str(value) for value in data.get("notified_order_ids", [])],
-            notified_hashes=[str(value) for value in data.get("notified_hashes", [])],
+            notified_order_ids=as_str_list(data.get("notified_order_ids", [])),
+            notified_hashes=as_str_list(data.get("notified_hashes", [])),
             last_check=str(data["last_check"]) if data.get("last_check") else None,
             last_error=str(data["last_error"]) if data.get("last_error") else None,
             metrics=metrics,
