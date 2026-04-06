@@ -64,6 +64,10 @@ class OAuthServerTests(unittest.TestCase):
         self.assertIn("https://auth.sandbox.ebay.com/oauth2/authorize?", redirect)
         self.assertIn("state=state-123", redirect)
         self.assertIn("redirect_uri=sandbox-ru-name", redirect)
+        self.assertIn(
+            "scope=scope+https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope%2Fcommerce.identity.readonly",
+            redirect,
+        )
 
     def test_complete_oauth_link_persists_account_and_token(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -106,14 +110,17 @@ class OAuthServerTests(unittest.TestCase):
                     "scope": "scope-1 scope-2",
                     "expires_in": 7200,
                 },
+                fetch_user_profile_fn=lambda _config, _access_token: {"username": "real-ebay-user"},
                 encode_refresh_token_fn=lambda refresh_token: f"plain:{refresh_token}",
                 send_message_fn=send_message_mock,
             )
 
             self.assertEqual(result.environment, "sandbox")
+            self.assertEqual(result.ebay_user_id, "real-ebay-user")
             account = resolve_linked_ebay_account(str(db_path), 123, "sandbox")
             assert account is not None
             self.assertEqual(account.status, "linked")
+            self.assertEqual(account.ebay_user_id, "real-ebay-user")
             token_set = load_ebay_token_sets(str(db_path))[0]
             self.assertEqual(token_set.refresh_token_encrypted, "plain:tenant-refresh")
             self.assertEqual(token_set.status, "active")

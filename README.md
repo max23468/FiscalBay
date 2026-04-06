@@ -136,6 +136,7 @@ Nota OAuth eBay:
 - il parametro `redirect_uri` inviato a eBay non e' una URL libera, ma il `RuName` registrato nel portale developer eBay
 - `EBAY_OAUTH_CALLBACK_URL` serve invece al progetto per esporre il callback pubblico che deve essere associato a quel `RuName`
 - sulla VPS, per avere `/connect` davvero usabile, vanno quindi configurati sia il `RuName` corretto sia l'URL pubblico raggiungibile del callback server
+- il flusso `/connect` richiede anche lo scope pubblico `commerce.identity.readonly`, usato per leggere un identificativo account eBay reale invece del placeholder locale
 
 ### Variabili Telegram
 

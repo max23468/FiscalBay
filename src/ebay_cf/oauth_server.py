@@ -13,9 +13,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable
 
 from .bot import send_message
-from .clients.ebay import build_user_consent_url, mint_authorization_code_token_response
+from .clients.ebay import (
+    DEFAULT_IDENTITY_SCOPE,
+    build_user_consent_url,
+    get_authenticated_user_profile,
+    merge_scopes,
+    mint_authorization_code_token_response,
+)
 from .config import load_config, load_telegram_config
-from .errors import ConfigurationError
+from .errors import ConfigurationError, EbayApiError
 from .logging_utils import log_event
 from .models import EbayTokenSet, LinkedEbayAccount, OauthLinkSession, TelegramConfig
 from .storage.sqlite import (
@@ -114,6 +120,22 @@ def render_html_page(title: str, message: str, *, is_error: bool = False) -> byt
     return body.encode("utf-8")
 
 
+def oauth_consent_config(config: object) -> object:
+    assert hasattr(config, "client_id")
+    assert hasattr(config, "client_secret")
+    assert hasattr(config, "refresh_token")
+    assert hasattr(config, "environment")
+    assert hasattr(config, "scopes")
+    consent_scopes = merge_scopes(str(config.scopes), DEFAULT_IDENTITY_SCOPE)
+    return type(config)(
+        client_id=config.client_id,
+        client_secret=config.client_secret,
+        refresh_token=config.refresh_token,
+        environment=config.environment,
+        scopes=consent_scopes,
+    )
+
+
 def build_oauth_start_redirect(
     oauth_state: str,
     state_path: str,
@@ -132,7 +154,7 @@ def build_oauth_start_redirect(
     if session_is_expired(session):
         raise ConfigurationError("La sessione OAuth e' scaduta. Usa di nuovo /connect.")
 
-    config = load_config_fn(session.environment)
+    config = oauth_consent_config(load_config_fn(session.environment))
     assert hasattr(config, "environment")
     assert hasattr(config, "client_id")
     assert hasattr(config, "scopes")
@@ -155,6 +177,7 @@ def complete_oauth_link(
     callback_url_fn: Callable[[], str] = oauth_callback_url,
     runame_fn: Callable[[str], str] = oauth_runame,
     exchange_code_fn: Callable[[object, str, str], dict] = mint_authorization_code_token_response,
+    fetch_user_profile_fn: Callable[[object, str], dict] = get_authenticated_user_profile,
     encode_refresh_token_fn: Callable[[str], str | None] = encode_refresh_token,
     send_message_fn: Callable[..., None] = send_message,
 ) -> OAuthCallbackResult:
@@ -174,7 +197,7 @@ def complete_oauth_link(
         redirect_uri=callback_url,
     )
 
-    config = load_config_fn(session.environment)
+    config = oauth_consent_config(load_config_fn(session.environment))
     token_payload = exchange_code_fn(config, code, runame_fn(session.environment))
     refresh_token = str(token_payload.get("refresh_token", "") or "")
     encrypted_refresh_token = encode_refresh_token_fn(refresh_token)
@@ -194,7 +217,27 @@ def complete_oauth_link(
             .replace("+00:00", "Z")
         )
 
+    access_token = str(token_payload.get("access_token", "") or "")
     ebay_user_id = str(token_payload.get("username") or token_payload.get("ebay_user_id") or "")
+    if access_token:
+        try:
+            user_profile = fetch_user_profile_fn(config, access_token)
+        except EbayApiError as exc:
+            log_event(
+                LOGGER,
+                logging.WARNING,
+                "oauth_identity_lookup_failed",
+                environment=session.environment,
+                status_code=exc.status_code,
+                error=exc,
+            )
+        else:
+            ebay_user_id = str(
+                user_profile.get("username")
+                or user_profile.get("userId")
+                or user_profile.get("user_id")
+                or ebay_user_id
+            )
     if not ebay_user_id:
         ebay_user_id = f"ebay-user-{session.telegram_user_id}"
 
@@ -222,7 +265,7 @@ def complete_oauth_link(
         EbayTokenSet(
             ebay_account_id=account.id,
             refresh_token_encrypted=encrypted_refresh_token,
-            access_token=str(token_payload.get("access_token", "") or ""),
+            access_token=access_token,
             scope_set=str(token_payload.get("scope") or config.scopes),
             expires_at=expires_at,
             updated_at=timestamp,

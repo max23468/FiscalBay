@@ -25,6 +25,7 @@ DEFAULT_PAGE_SIZE = 50
 DEFAULT_REQUEST_RETRIES = 5
 DEFAULT_REQUEST_BASE_DELAY = 0.5
 DEFAULT_TOKEN_SKEW_SECONDS = 60
+DEFAULT_IDENTITY_SCOPE = "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly"
 
 _token_cache_lock = threading.Lock()
 _token_cache: dict[str, tuple[str, float]] = {}
@@ -34,6 +35,25 @@ def oauth_authorize_base(environment: str) -> str:
     if environment == "sandbox":
         return "https://auth.sandbox.ebay.com/oauth2/authorize"
     return "https://auth.ebay.com/oauth2/authorize"
+
+
+def identity_api_base(environment: str) -> str:
+    if environment == "sandbox":
+        return "https://apiz.sandbox.ebay.com"
+    return "https://apiz.ebay.com"
+
+
+def merge_scopes(*scope_sets: str) -> str:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for scope_set in scope_sets:
+        for scope in scope_set.split():
+            normalized = scope.strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            merged.append(normalized)
+    return " ".join(merged)
 
 
 def clear_access_token_cache() -> None:
@@ -182,6 +202,15 @@ def build_user_consent_url(config: Config, *, redirect_uri: str, state: str) -> 
         }
     )
     return f"{oauth_authorize_base(config.environment)}?{query}"
+
+
+def get_authenticated_user_profile(config: Config, access_token: str) -> dict:
+    url = f"{identity_api_base(config.environment)}/commerce/identity/v1/user/"
+    return request_json(
+        "GET",
+        url,
+        headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+    )
 
 
 def get_access_token(config: Config) -> str:

@@ -10,6 +10,7 @@ Stato attuale:
 - esiste anche un callback server minimale che valida `state`, scambia `code` con token e salva account/token nel `state.db`
 - il salvataggio finale dei token usa ora cifratura Fernet con chiave `EBAY_TENANT_TOKEN_KEY`
 - verso eBay il progetto usa ora il `RuName` registrato nel developer portal, non una callback URL libera, come `redirect_uri`
+- il consenso OAuth include anche lo scope pubblico `commerce.identity.readonly`, cosi' il callback puo' salvare un identificativo account eBay reale
 - il fallback plaintext resta solo come opt-in esplicito per beta privata/dev
 
 ## Obiettivo
