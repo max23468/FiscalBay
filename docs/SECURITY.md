@@ -63,6 +63,32 @@ Procedura minima:
 - metriche e alerting ancora minimi
 - assenza di cifratura a riposo per futuri token utente
 
+## Cambio di perimetro con la multiutenza
+
+Aprire il bot a piu' utenti cambia il perimetro del progetto:
+
+- da utility personale a servizio applicativo
+- da configurazione globale a credenziali per tenant
+- da stato condiviso a isolamento dati per utente, chat e account
+- da operativita' privata a responsabilita' esplicita su audit, abusi e limiti di servizio
+
+Per questo la multiutenza non va trattata come sola feature OAuth.
+
+## Finding di sicurezza che guidano la roadmap
+
+- `EBAY_REFRESH_TOKEN` globale in `.env`
+  - accettabile solo nel modello single-tenant
+- stato e retry queue condivisi
+  - rischio di contaminazione dati tra tenant
+- assenza di storage dedicato per token utente
+  - impedisce onboarding self-service sicuro
+- assenza di audit log di `connect` e `disconnect`
+  - insufficiente per un bot multiutente
+- assenza di rate limiting per utente
+  - espone a uso improprio e rumorosita' tra tenant
+
+Ogni passo della fase multiutente deve essere giustificato contro questi finding.
+
 ## Requisiti minimi prima della multiutenza pubblica
 
 - token per utente e non globali
@@ -71,6 +97,43 @@ Procedura minima:
 - rate limiting per utente
 - migliore osservabilita' operativa
 - review dedicata del flusso OAuth
+
+## Vincoli fissati per la beta privata
+
+- un solo account eBay attivo per utente e per environment
+- refresh token cifrato a riposo in storage dedicato
+- gestione esplicita degli stati: attivo, scaduto, revocato, da riconnettere
+- rate limiting minimo per utente prima dell'onboarding self-service
+- audit log minimo per `connect`, `disconnect`, revoca e refresh fallito
+- SQLite ancora accettabile per beta privata controllata
+- Postgres richiesto prima dell'apertura pubblica multiutente
+
+## Sufficienza della VPS attuale
+
+Per la fase privata la VPS attuale e' considerata sufficiente solo se restano veri questi vincoli:
+
+- numero di tenant basso
+- traffico non pubblico e non bursty
+- backup, alerting e deploy sicuro gia' mantenuti come baseline
+- nessuna dipendenza da query concorrenti pesanti o code multiworker
+
+Se questi vincoli saltano, i primi componenti da promuovere sono:
+
+- database meglio amministrato o gestito
+- storage token piu' robusto
+- alerting piu' ricco
+- processo di deploy e rollback piu' forte
+
+## Security review minima per token utente
+
+La review dedicata ai token utente dovra' coprire almeno:
+
+- cifratura a riposo del refresh token
+- gestione chiavi di cifratura
+- audit degli eventi `connect`, `disconnect`, refresh e revoca
+- percorso di revoca e riconnessione
+- esposizione dei token nei log e nei backup
+- policy di retention e cancellazione
 
 ## Incident response minima
 

@@ -4,9 +4,9 @@ Decisioni ancora aperte che influenzano le prossime fasi.
 
 ## Fase 3
 
-- confermare SQLite o passare a Postgres prima della beta privata
 - disegnare il modello tenant-aware definitivo
 - decidere il livello di audit log necessario per token e collegamenti account
+- definire il formato finale della tabella `tenant_runtime_state` rispetto alle metriche oggi globali
 
 ## Fase 4
 

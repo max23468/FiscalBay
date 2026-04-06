@@ -27,6 +27,10 @@ Documenti collegati:
 
 ### Changed
 
+- la roadmap entra nella nuova fase 3 con una progettazione multiutente piu' concreta: schema dati iniziale, milestone tecnica e direzione database sono ora fissati nei documenti stabili.
+- `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`, `docs/OAUTH_FLOW.md` e `docs/MILESTONE_BOARD.md` descrivono ora il target tenant-aware minimo, la separazione tra utente e chat, la strategia token per utente e la scelta SQLite ora / Postgres prima dell'apertura pubblica.
+- `docs/CONTEXT.md` e `docs/SECURITY.md` trattano ora esplicitamente la multiutenza come cambio di natura del progetto e collegano la roadmap ai finding audit su segreti globali, stato condiviso e assenza di audit/rate limiting per tenant.
+- la prima beta privata multiutente e' ora vincolata a `1 account eBay attivo per utente per environment`, refresh token cifrato a riposo, lifecycle token esplicito, audit log minimo e rate limiting per utente.
 - `src/ebay_cf/services/telegram_runtime.py` e `src/ebay_cf/services/notifications.py` emettono ora log piu' correlabili con `cycle_id` per polling, callback, messaggi e cicli notifica.
 - `src/ebay_cf/healthcheck.py` espone anche metriche runtime aggregate leggibili in output testuale e JSON.
 - `src/ebay_cf/models.py` e `src/ebay_cf/storage/sqlite.py` tracciano ora anche `orders_with_cf`, `telegram_retries` e `consecutive_error_cycles` dentro le metriche runtime.

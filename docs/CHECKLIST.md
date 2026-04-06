@@ -36,25 +36,6 @@ Documenti collegati:
 - [ ] introdurre isolamento dati e scoping per `telegram_chat_id`
 - [ ] introdurre scheduler che processa per tenant
 
-### Decisioni architetturali e vincoli
-
-- [ ] preparare milestone di progettazione multiutente con database, token e flusso OAuth definiti
-- [ ] trattare il passaggio a bot pubblico multiutente come cambio di natura del progetto: da utility personale a servizio con requisiti di sicurezza, privacy e affidabilita'
-- [ ] collegare la progettazione multiutente ai finding audit su single-tenant, variabili ambiente globali e stato condiviso
-- [ ] valutare migrazione da SQLite a Postgres prima della multiutenza pubblica
-- [ ] cifrare a riposo refresh token eBay
-- [ ] gestire revoca, refresh e scadenza token per utente
-- [ ] introdurre rate limiting per utente
-- [ ] introdurre audit log minimo per collegamento/disconnessione account
-- [ ] prima di aprire il bot a terzi, trattare credenziali, persistence e osservabilita' come componenti di prodotto e non come dettagli accessori
-- [ ] verificare se la VPS attuale resta sufficiente per la fase privata o se servono gia':
-  - database gestito o ben amministrato
-  - backup seri
-  - alerting
-  - processo di deploy piu' sicuro
-- [ ] preparare una security review dedicata ai token utente
-- [ ] fissare milestone di beta privata prima dell'apertura piu' ampia
-
 ## Fase 4 - Onboarding Self-Service Telegram + eBay OAuth [Priorita' media]
 
 ### Esperienza target utente

@@ -40,11 +40,31 @@ Permettere a un utente Telegram di collegare il proprio account eBay senza inter
 ## Dati da salvare
 
 - identificativo utente Telegram
+- identificativo chat Telegram che ha iniziato il flusso
 - identificativo account eBay
 - scope autorizzati
 - refresh token cifrato
 - scadenza access token
 - timestamp di collegamento
+
+## Decisioni di progettazione gia' fissate
+
+- il tenant logico resta l'utente Telegram, non la singola chat
+- la chat che avvia `/connect` viene comunque tracciata per tornare con la conferma nel posto giusto
+- il flusso usera' una tabella dedicata `oauth_link_sessions` con `state`, expiry e stato della richiesta
+- il callback OAuth salva o aggiorna `ebay_accounts` e `ebay_tokens`, poi marca chiusa la sessione OAuth
+- per la prima beta il flusso target e' un account eBay attivo per utente e per environment
+- il refresh token non resta in env e non viene mai considerato configurazione globale del bot
+- il refresh token viene salvato solo in forma cifrata
+- un token revocato o non piu' refreshabile porta l'account in stato da riconnettere
+
+## Milestone tecnica prima dell'implementazione
+
+1. introdurre schema dati tenant-aware senza cambiare ancora il comportamento single-tenant
+2. spostare credenziali eBay da env globale a repository/account storage
+3. creare endpoint o mini web app per avvio OAuth e callback
+4. aggiungere comandi `/connect`, `/disconnect` e `/account`
+5. spostare scheduler e notifiche da stato globale a stato per tenant
 
 ## Questioni aperte
 

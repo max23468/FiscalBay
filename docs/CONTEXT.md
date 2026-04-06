@@ -74,7 +74,8 @@ Questi restano come wrapper compatibili, ma la logica vera sta nel package inter
 
 Nota di stato:
 
-- la rifondazione strutturale del codice e' considerata chiusa; i prossimi lavori aperti partono dall'operativita' e osservabilita'
+- la rifondazione strutturale del codice e l'osservabilita' minima sono considerate chiuse
+- i prossimi lavori aperti partono dalla progettazione multiutente
 
 ### Struttura codice corrente
 
@@ -294,6 +295,16 @@ Questo passaggio va trattato come cambio di natura del progetto:
 
 - da utility personale/privata
 - a servizio con requisiti piu' seri di sicurezza, privacy, backup e osservabilita'
+
+Finding audit che guidano questa fase:
+
+- credenziali eBay ancora globali in `.env`
+- stato runtime, metriche e retry queue ancora condivisi
+- scoping operativo ancora troppo vicino alla chat invece che al tenant utente
+- assenza di audit log per collegamento e scollegamento account
+- assenza di rate limiting per utente
+
+Questi finding sono la base esplicita delle scelte gia' fissate in `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md` e `docs/OAUTH_FLOW.md`.
 
 ## VPS attuale
 

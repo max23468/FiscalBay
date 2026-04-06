@@ -152,28 +152,129 @@ Compatibilita' mantenuta:
 
 ## Modelli futuri da introdurre
 
-### `EbayTokenSet`
+## Schema multiutente target minimo
+
+La progettazione attuale fissa questo assetto minimo per la beta privata.
+
+### `telegram_users`
+
+Campi minimi:
+
+- `id`
+- `telegram_user_id`
+- `username`
+- `display_name`
+- `status`
+- `created_at`
+- `updated_at`
+
+Note:
+
+- `telegram_user_id` e' la chiave logica del tenant
+- lo user record resta indipendente dalle singole chat
+
+### `telegram_chats`
+
+Campi minimi:
+
+- `id`
+- `telegram_user_id`
+- `telegram_chat_id`
+- `chat_type`
+- `is_primary`
+- `notifications_enabled`
+- `created_at`
+- `updated_at`
+
+Note:
+
+- serve a non confondere utente e chat
+- permette in futuro piu' chat per lo stesso utente
+
+### `ebay_accounts`
+
+Campi minimi:
+
+- `id`
+- `telegram_user_id`
+- `ebay_user_id`
+- `environment`
+- `status`
+- `linked_at`
+- `updated_at`
+
+Note:
+
+- per la prima beta il vincolo e' un solo account attivo per utente e per environment
+- il supporto multi-account per utente viene esplicitamente rinviato
+
+### `ebay_tokens`
 
 Possibili campi:
 
-- `account_id`
+- `id`
+- `ebay_account_id`
 - `access_token`
 - `refresh_token_encrypted`
+- `scope_set`
 - `expires_at`
 - `updated_at`
 
-### `NotificationSubscription`
+Note:
+
+- il refresh token va cifrato a riposo
+- l'access token puo' restare cache runtime o storage breve, ma il refresh token non deve stare in env globali
+- il lifecycle deve supportare refresh riuscito, refresh fallito, token scaduto, token revocato e richiesta di riconnessione utente
+
+### `notification_subscriptions`
 
 Possibili campi:
 
+- `id`
 - `telegram_user_id`
-- `chat_id`
+- `telegram_chat_id`
 - `enabled`
 - `filters`
 - `created_at`
+- `updated_at`
+
+Note:
+
+- il modello serve anche come base per attivare o disattivare notifiche per singola chat senza rompere l'isolamento per utente
+
+### `oauth_link_sessions`
+
+Possibili campi:
+
+- `id`
+- `telegram_user_id`
+- `telegram_chat_id`
+- `provider`
+- `oauth_state`
+- `code_verifier` o equivalente
+- `redirect_uri`
+- `status`
+- `expires_at`
+- `created_at`
+
+### `tenant_runtime_state`
+
+Possibili campi:
+
+- `id`
+- `telegram_user_id`
+- `last_check`
+- `last_error`
+- `metrics_json`
+- `updated_at`
+
+Note:
+
+- per la beta privata puo' restare un payload aggregato, ma la chiave di ownership deve essere il tenant utente
 
 ## Vincoli futuri
 
 - nessuna credenziale eBay deve restare globale quando iniziera' la multiutenza
 - i token utente dovranno essere cifrati a riposo
 - il modello dati dovra' introdurre isolamento per tenant e audit minimo
+- per la beta privata il modello resta compatibile con SQLite, ma deve essere facilmente migrabile a Postgres

@@ -126,6 +126,62 @@ Entrambe condividono lo stesso package Python interno `src/ebay_cf/`.
 - l'osservabilita' minima passa da `/stato`, `ebay-cf-healthcheck` e dal timer `ebaycf-alertcheck`, che segnala servizio fermo, backlog retry e troppi errori consecutivi
 - lo storage espone adattatori tipizzati mantenendo compatibilita' con le API storiche piu' usate nei test
 
+## Direzione multiutente fissata
+
+- il passaggio multiutente verra' costruito come estensione del package corrente, non come secondo bot separato
+- il passaggio multiutente viene trattato come cambio di natura del progetto: da utility personale a servizio con requisiti di privacy, sicurezza e affidabilita'
+- il tenant applicativo iniziale coincide con l'utente Telegram, identificato da `telegram_user_id`
+- `telegram_chat_id` resta importante per routing notifiche e UX, ma non diventa da solo la chiave di isolamento del dominio
+- un utente Telegram potra' avere piu' chat abilitate
+- per la prima beta privata il vincolo e' `1 account eBay attivo per utente per environment`
+- il supporto a piu' account per utente viene rinviato a una fase successiva
+- i token eBay dovranno uscire dalle env globali ed entrare in storage dedicato per utente
+- per la beta privata la base dati puo' restare SQLite, ma il modello va progettato in modo portabile verso Postgres
+- prima di un'apertura pubblica vera il target architetturale diventa Postgres, non SQLite
+
+Finding di partenza:
+
+- credenziali eBay globali in env
+- stato runtime e retry queue condivisi
+- scoping ancora troppo centrato sulla chat
+- assenza di audit log per eventi sensibili di collegamento account
+
+## Schema target minimo
+
+Blocchi dati da introdurre nella prossima tranche:
+
+- `telegram_users`
+  - identita' utente, stato, metadati base e timestamp di registrazione
+- `telegram_chats`
+  - mappatura tra utente, chat Telegram, ruolo della chat e stato abilitazione
+- `ebay_accounts`
+  - account eBay collegato, environment, stato collegamento e timestamp
+- `ebay_tokens`
+  - token per account con refresh token cifrato, scadenze e metadati di rotazione
+- `notification_subscriptions`
+  - preferenze notifiche per utente o chat
+- `oauth_link_sessions`
+  - stato temporaneo del flusso OAuth, `state` anti-CSRF, expiry e correlazione con utente/chat
+- `tenant_runtime_state`
+  - ultimo check, metriche e retry queue per tenant invece che globali
+
+## Decisione database per la beta privata
+
+- breve termine: mantenere SQLite per progettazione e primi refactor tenant-aware
+- vincolo: repository e servizi devono evitare SQL o shape troppo specifici di SQLite
+- soglia di cambio: prima della multiutenza pubblica o di piu' tenant reali simultanei, migrazione prevista verso Postgres
+- motivazione: SQLite va bene per il bot privato e per prototipazione locale, ma non e' il target finale per concorrenza, operativita' e gestione token sensibili a scala maggiore
+
+## Vincoli operativi per la beta privata
+
+- refresh token eBay sempre cifrato a riposo
+- access token trattato come dato volatile o cache breve, non come configurazione globale
+- gestione esplicita di revoca, refresh e scadenza per ogni account utente
+- rate limiting minimo per utente prima dell'onboarding self-service
+- audit log minimo per `connect`, `disconnect`, refresh fallito e revoca account
+- credenziali, persistence e observability trattate come componenti di prodotto
+- VPS attuale considerata sufficiente per beta privata solo finche' resta piccolo il numero di tenant e non esiste traffico pubblico aperto
+
 ## Limiti da tenere presenti
 
 - le credenziali eBay sono ancora globali
