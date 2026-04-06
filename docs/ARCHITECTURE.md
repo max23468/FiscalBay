@@ -35,6 +35,8 @@ Entrambe condividono lo stesso package Python interno `src/ebay_cf/`.
   - esegue il flusso CLI
 - `src/ebay_cf/bot.py`
   - espone la facciata compatibile del bot e collega i servizi
+- `src/ebay_cf/application.py`
+  - facciata applicativa condivisa per il fetch ordini usato da CLI e bot
 
 ### Config e modelli
 
@@ -46,6 +48,8 @@ Entrambe condividono lo stesso package Python interno `src/ebay_cf/`.
   - gerarchia errori applicativi
 - `src/ebay_cf/retry.py`
   - retry/backoff condiviso
+- `src/ebay_cf/application.py`
+  - coordina il fetch di record eBay a partire dall'ambiente applicativo
 
 ### Client esterni
 
@@ -82,9 +86,9 @@ Entrambe condividono lo stesso package Python interno `src/ebay_cf/`.
 ### Flusso CLI
 
 1. `cli.py` legge argomenti e configurazione.
-2. `services/orders.py` risolve finestra temporale e opzioni.
-3. `clients/ebay.py` ottiene access token e richiama le API eBay.
-4. i dettagli ordine vengono normalizzati.
+2. `application.py` costruisce le opzioni e richiama il fetch ambientato.
+3. `services/orders.py` risolve finestra temporale e opzioni.
+4. `clients/ebay.py` ottiene access token e richiama le API eBay.
 5. il risultato viene renderizzato in table, JSON o CSV.
 
 ### Flusso bot Telegram
@@ -93,7 +97,7 @@ Entrambe condividono lo stesso package Python interno `src/ebay_cf/`.
 2. `clients/telegram.py` forza `deleteWebhook` e prepara il long polling.
 3. `services/telegram_runtime.py` legge gli update da Telegram.
 4. `telegram_commands.py` interpreta i comandi utente.
-5. se serve, `services/orders.py` interroga eBay.
+5. se serve, `application.py` coordina il fetch ordini per l'ambiente corretto.
 6. `telegram_commands.py` formatta la risposta.
 7. `clients/telegram.py` invia i messaggi.
 
@@ -101,7 +105,7 @@ Entrambe condividono lo stesso package Python interno `src/ebay_cf/`.
 
 1. `services/notifications.py` legge lo stato runtime da SQLite.
 2. calcola la finestra temporale da controllare.
-3. interroga eBay tramite `services/orders.py`.
+3. usa `application.py` per ottenere ordini gia' normalizzati per ambiente.
 4. deduplica per `orderId` e fingerprint.
 5. invia notifiche Telegram solo per ordini con `CODICE_FISCALE`.
 6. salva metriche, `last_check`, errori e retry queue.
@@ -115,12 +119,15 @@ Entrambe condividono lo stesso package Python interno `src/ebay_cf/`.
 - il refactor corrente ha separato parsing comandi, runtime Telegram e notifiche automatiche
 - i client esterni usano retry condiviso invece di logiche duplicate
 - stato runtime e retry queue hanno modelli tipizzati dedicati
+- i servizi core del bot lavorano ormai su `OrderRecord`, `BotRuntimeState` e `RetryQueueEntry`; le conversioni legacy restano ai bordi
+- anche il rendering CLI/Telegram usa principalmente `OrderRecord`; i wrapper compatibili di `bot.py` assorbono i payload legacy usati dai test storici
+- le conversioni compatibili sono state accentrate in adattatori espliciti dentro `bot.py`, invece di essere duplicate tra wrapper diversi
 - lo storage espone adattatori tipizzati mantenendo compatibilita' con le API storiche piu' usate nei test
 
 ## Limiti da tenere presenti
 
 - le credenziali eBay sono ancora globali
-- il dominio ordini non e' ancora completamente tipizzato end-to-end
+- resta un layer di compatibilita' nel bot per i test e i wrapper storici, anche se il dominio core e' ormai tipizzato
 - la multiutenza richiedera' un modello dati nuovo e un nuovo flusso OAuth
 
 ## Compatibilita' mantenuta durante il refactor

@@ -70,6 +70,74 @@ class TelegramConfig:
 
 
 @dataclass
+class TelegramUser:
+    telegram_user_id: int
+    telegram_chat_id: int
+    username: str = ""
+    display_name: str = ""
+    created_at: str | None = None
+    status: str = "active"
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, object]) -> "TelegramUser":
+        return cls(
+            telegram_user_id=as_int(data.get("telegram_user_id", 0)),
+            telegram_chat_id=as_int(data.get("telegram_chat_id", 0)),
+            username=str(data.get("username", "")),
+            display_name=str(data.get("display_name", "")),
+            created_at=str(data["created_at"]) if data.get("created_at") else None,
+            status=str(data.get("status", "active")),
+        )
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "telegram_user_id": self.telegram_user_id,
+            "telegram_chat_id": self.telegram_chat_id,
+            "username": self.username,
+            "display_name": self.display_name,
+            "created_at": self.created_at,
+            "status": self.status,
+        }
+
+
+@dataclass
+class LinkedEbayAccount:
+    telegram_user_id: int
+    ebay_user_id: str
+    environment: str = "production"
+    scopes: str = ""
+    linked_at: str | None = None
+    status: str = "linked"
+    id: int | None = None
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, object]) -> "LinkedEbayAccount":
+        raw_id = data.get("id")
+        return cls(
+            id=as_int(raw_id) if raw_id is not None else None,
+            telegram_user_id=as_int(data.get("telegram_user_id", 0)),
+            ebay_user_id=str(data.get("ebay_user_id", "")),
+            environment=str(data.get("environment", "production")),
+            scopes=str(data.get("scopes", "")),
+            linked_at=str(data["linked_at"]) if data.get("linked_at") else None,
+            status=str(data.get("status", "linked")),
+        )
+
+    def as_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "telegram_user_id": self.telegram_user_id,
+            "ebay_user_id": self.ebay_user_id,
+            "environment": self.environment,
+            "scopes": self.scopes,
+            "linked_at": self.linked_at,
+            "status": self.status,
+        }
+        if self.id is not None:
+            payload["id"] = self.id
+        return payload
+
+
+@dataclass
 class BotMetrics:
     orders_read: int = 0
     notifications_sent: int = 0
@@ -208,3 +276,5 @@ class OrderRecord:
 OrderRecordLike = Union[OrderRecord, Mapping[str, object]]
 BotRuntimeStateLike = Union[BotRuntimeState, Mapping[str, object]]
 RetryQueueEntryLike = Union[RetryQueueEntry, Mapping[str, object]]
+TelegramUserLike = Union[TelegramUser, Mapping[str, object]]
+LinkedEbayAccountLike = Union[LinkedEbayAccount, Mapping[str, object]]

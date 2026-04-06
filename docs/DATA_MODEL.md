@@ -43,6 +43,37 @@ Definisce:
 - path stato, retry queue e lock
 - timing di polling
 
+### `TelegramUser`
+
+Definisce:
+
+- `telegram_user_id`
+- `telegram_chat_id`
+- `username`
+- `display_name`
+- `created_at`
+- `status`
+
+Uso:
+
+- modello tipizzato preparatorio per la futura multiutenza
+
+### `LinkedEbayAccount`
+
+Definisce:
+
+- `id`
+- `telegram_user_id`
+- `ebay_user_id`
+- `environment`
+- `scopes`
+- `linked_at`
+- `status`
+
+Uso:
+
+- modello tipizzato preparatorio per l'associazione tra utente Telegram e account eBay
+
 ### `OrderRecord`
 
 Rappresenta l'ordine eBay normalizzato usato dal dominio applicativo.
@@ -64,6 +95,8 @@ Campi principali:
 Nota:
 
 - oggi e' il modello tipizzato piu' importante per ridurre i `dict` legacy
+- i servizi `orders`, `notifications` e il fetch condiviso CLI/bot lavorano ormai principalmente su questo modello
+- anche il rendering testuale e le notifiche Telegram passano principalmente da questo modello; le conversioni legacy rimaste sono concentrate nei wrapper compatibili
 
 ### `BotMetrics`
 
@@ -83,6 +116,11 @@ Contiene:
 - `last_error`
 - `metrics`
 
+Uso:
+
+- stato runtime tipizzato per notifiche automatiche, healthcheck e stato del bot
+- le conversioni da payload SQLite legacy restano ai bordi del sistema
+
 ### `RetryQueueEntry`
 
 Contiene:
@@ -91,6 +129,11 @@ Contiene:
 - `chat_id`
 - `text`
 - `attempts`
+
+Uso:
+
+- entry tipizzato della coda retry Telegram
+- usato direttamente dai servizi applicativi e dallo storage adattatore
 
 ## Persistenza attuale
 
@@ -105,29 +148,6 @@ Compatibilita' mantenuta:
 - i vecchi file JSON vengono migrati automaticamente a SQLite
 
 ## Modelli futuri da introdurre
-
-### `TelegramUser`
-
-Possibili campi:
-
-- `telegram_user_id`
-- `telegram_chat_id`
-- `username`
-- `display_name`
-- `created_at`
-- `status`
-
-### `LinkedEbayAccount`
-
-Possibili campi:
-
-- `id`
-- `telegram_user_id`
-- `ebay_user_id`
-- `environment`
-- `scopes`
-- `linked_at`
-- `status`
 
 ### `EbayTokenSet`
 

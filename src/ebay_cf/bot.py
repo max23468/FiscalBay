@@ -13,11 +13,18 @@ try:
 except ImportError:  # pragma: no cover - Windows
     fcntl = None
 
+from .application import fetch_environment_records as _fetch_environment_records
 from .clients.telegram import ensure_long_polling, telegram_request
 from .config import configure_logging, load_config, load_telegram_config
 from .errors import EbayApiError, TelegramApiError
 from .logging_utils import log_event
-from .models import TelegramConfig
+from .models import (
+    BotRuntimeState,
+    BotRuntimeStateLike,
+    OrderRecord,
+    OrderRecordLike,
+    TelegramConfig,
+)
 from .retry import run_with_retry
 from .services.notifications import (
     fetch_new_order_records as _fetch_new_order_records,
@@ -53,7 +60,6 @@ from .services.telegram_runtime import (
 )
 from .storage.sqlite import (
     ensure_parent_dir,
-    load_retry_queue,
     load_retry_queue_entries,
     load_runtime_state,
     save_retry_queue_entries,
@@ -72,22 +78,91 @@ from .telegram_commands import (
     build_main_menu_markup,
     callback_command_from_data,
     chunk_message,
-    format_auto_notification,
-    format_record,
-    format_records,
     format_status,
-    has_codice_fiscale,
     is_authorized,
     options_for_command,
     parse_command,
-    record_fingerprint,
     should_attach_main_menu,
+)
+from .telegram_commands import (
+    format_auto_notification as _format_auto_notification,
+)
+from .telegram_commands import (
+    format_record as _format_record,
+)
+from .telegram_commands import (
+    format_records as _format_records,
+)
+from .telegram_commands import (
+    has_codice_fiscale as _has_codice_fiscale,
 )
 from .telegram_commands import (
     process_message as _process_message,
 )
+from .telegram_commands import (
+    record_fingerprint as _record_fingerprint,
+)
 
 LOGGER = logging.getLogger("ebaycf.telegram_bot")
+
+
+def coerce_runtime_state(state: BotRuntimeStateLike) -> BotRuntimeState:
+    if isinstance(state, BotRuntimeState):
+        return state
+    return BotRuntimeState.from_mapping(state)
+
+
+def coerce_order_records(records: list[OrderRecordLike]) -> list[OrderRecord]:
+    normalized: list[OrderRecord] = []
+    for record in records:
+        if isinstance(record, OrderRecord):
+            normalized.append(record)
+        else:
+            normalized.append(OrderRecord.from_mapping(record))
+    return normalized
+
+
+def coerce_order_record(record: OrderRecordLike) -> OrderRecord:
+    if isinstance(record, OrderRecord):
+        return record
+    return OrderRecord.from_mapping(record)
+
+
+def fetch_environment_records(ebay_environment: str, options) -> list[OrderRecord]:
+    records = _fetch_environment_records(
+        ebay_environment,
+        options,
+        load_config_fn=load_config,
+        fetch_records_fn=fetch_records,
+    )
+    return coerce_order_records(records)
+
+
+def record_fingerprint(record: OrderRecordLike) -> str:
+    return _record_fingerprint(coerce_order_record(record))
+
+
+def format_record(record: OrderRecordLike) -> str:
+    return _format_record(coerce_order_record(record))
+
+
+def format_records(
+    records: list[OrderRecordLike], only_found: bool, page_size: int = 5
+) -> list[str]:
+    return _format_records(
+        coerce_order_records(records),
+        only_found=only_found,
+        page_size=page_size,
+    )
+
+
+def has_codice_fiscale(record: OrderRecordLike) -> bool:
+    return _has_codice_fiscale(coerce_order_record(record))
+
+
+def format_auto_notification(record: OrderRecordLike) -> str:
+    return _format_auto_notification(coerce_order_record(record))
+
 
 __all__ = [
     "CALLBACK_HELP",
@@ -243,18 +318,18 @@ def release_process_lock(lock_handle, lock_path: str) -> None:
         os.remove(lock_path)
 
 
-def increment_metric(state: dict[str, object], metric: str, amount: int = 1) -> None:
-    _increment_metric(state, metric, amount)
+def increment_metric(state: BotRuntimeStateLike, metric: str, amount: int = 1) -> None:
+    _increment_metric(coerce_runtime_state(state), metric, amount)
 
 
-def increment_error_metric(state: dict[str, object], error_type: str) -> None:
-    _increment_error_metric(state, error_type)
+def increment_error_metric(state: BotRuntimeStateLike, error_type: str) -> None:
+    _increment_error_metric(coerce_runtime_state(state), error_type)
 
 
-def process_retry_queue(telegram_config: TelegramConfig, state: dict[str, object]) -> None:
+def process_retry_queue(telegram_config: TelegramConfig, state: BotRuntimeStateLike) -> None:
     _process_retry_queue(
         telegram_config,
-        state,
+        coerce_runtime_state(state),
         load_retry_queue_fn=load_retry_queue_entries,
         save_retry_queue_fn=save_retry_queue_entries,
         send_message_fn=send_message,
@@ -263,31 +338,31 @@ def process_retry_queue(telegram_config: TelegramConfig, state: dict[str, object
 
 def fetch_new_order_records(
     ebay_environment: str,
-    state: dict[str, object],
+    state: BotRuntimeStateLike,
     lookback_minutes: int = 180,
-) -> list[dict[str, str]]:
+) -> list[OrderRecord]:
     return _fetch_new_order_records(
         ebay_environment,
-        state,
-        load_config_fn=load_config,
-        fetch_records_fn=fetch_records,
+        coerce_runtime_state(state),
+        fetch_records_for_environment_fn=fetch_environment_records,
         request_with_backoff_fn=request_with_backoff,
         lookback_minutes=lookback_minutes,
     )
 
 
 def update_state_with_records(
-    state: dict[str, object],
-    records: list[dict[str, str]],
+    state: BotRuntimeStateLike,
+    records: list[OrderRecordLike],
     checked_at: Optional[str] = None,
     max_tracked_orders: int = 1000,
 ) -> dict[str, object]:
-    return _update_state_with_records(
-        state,
-        records,
+    updated_state = _update_state_with_records(
+        coerce_runtime_state(state),
+        coerce_order_records(records),
         checked_at=checked_at,
         max_tracked_orders=max_tracked_orders,
     )
+    return updated_state.as_dict()
 
 
 def maybe_send_new_order_notifications(
@@ -301,8 +376,7 @@ def maybe_send_new_order_notifications(
         save_state_fn=save_runtime_state,
         load_retry_queue_fn=load_retry_queue_entries,
         save_retry_queue_fn=save_retry_queue_entries,
-        load_config_fn=load_config,
-        fetch_records_fn=fetch_records,
+        fetch_records_for_environment_fn=fetch_environment_records,
         send_message_fn=send_message,
         request_with_backoff_fn=request_with_backoff,
     )
@@ -320,9 +394,8 @@ def process_message(
         telegram_config=telegram_config,
         ebay_environment=ebay_environment,
         load_state_fn=load_runtime_state,
-        load_retry_queue_fn=load_retry_queue,
-        load_config_fn=load_config,
-        fetch_records_fn=fetch_records,
+        load_retry_queue_fn=load_retry_queue_entries,
+        fetch_records_for_environment_fn=fetch_environment_records,
         request_with_backoff_fn=request_with_backoff,
     )
 

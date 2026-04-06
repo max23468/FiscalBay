@@ -2,8 +2,6 @@
 
 ## Indice rapido
 
-- `Fase 2`
-  - rifondazione strutturale del codice
 - `Fase 3`
   - operativita' e osservabilita'
 - `Fase 4`
@@ -18,24 +16,6 @@ Documenti collegati:
 - `docs/INDEX.md`
 - `docs/MILESTONE_BOARD.md`
 - `docs/DECISIONS_PENDING.md`
-
-## Fase 2 - Rifondazione Strutturale del Codice [Priorita' alta]
-
-### Refactor tecnico
-
-- [ ] finire la rifondazione tecnica residua su modelli, retry condivisi e riduzione stato globale
-- [ ] ridurre fragilita' e duplicazioni ancora presenti nel codice
-- [ ] eliminare i punti in cui la logica applicativa dipende ancora da import diretti fra entrypoint
-- [ ] creare modelli tipizzati per:
-  - ordine eBay normalizzato
-  - stato notifica
-  - utente Telegram
-  - account eBay collegato
-- [ ] sostituire in modo sistematico i `Dict[str, str]` residui con dataclass o modelli equivalenti
-
-### Quality gate e release
-
-- [ ] verificare se serve un controllo packaging o release process piu' esplicito
 
 ## Fase 3 - Operativita' e Osservabilita' [Priorita' media]
 

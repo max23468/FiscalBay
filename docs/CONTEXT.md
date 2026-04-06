@@ -72,6 +72,10 @@ Compatibilita' con i vecchi entrypoint:
 
 Questi restano come wrapper compatibili, ma la logica vera sta nel package interno.
 
+Nota di stato:
+
+- la rifondazione strutturale del codice e' considerata chiusa; i prossimi lavori aperti partono dall'operativita' e osservabilita'
+
 ### Struttura codice corrente
 
 Package principale:

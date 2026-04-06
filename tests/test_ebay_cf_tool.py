@@ -11,6 +11,7 @@ from src.ebay_cf.errors import EbayApiError
 from src.ebay_cf.models import (
     Config,
     FetchOptions,
+    OrderRecord,
 )
 from src.ebay_cf.services.orders import (
     extract_record,
@@ -77,22 +78,22 @@ class EbayCfToolTests(unittest.TestCase):
             },
         }
         record = extract_record(order)
-        self.assertEqual(record["taxpayerId"], "RSSMRA80A01H501U")
-        self.assertEqual(record["taxIdentifierType"], "CODICE_FISCALE")
-        self.assertEqual(record["found"], "yes")
+        self.assertEqual(record.taxpayerId, "RSSMRA80A01H501U")
+        self.assertEqual(record.taxIdentifierType, "CODICE_FISCALE")
+        self.assertEqual(record.found, "yes")
 
     def test_render_table_contains_header(self) -> None:
         content = render_table(
             [
-                {
-                    "orderId": "1",
-                    "creationDate": "2026-04-03T10:00:00Z",
-                    "buyerUsername": "foo",
-                    "taxpayerId": "RSSMRA80A01H501U",
-                    "taxIdentifierType": "CODICE_FISCALE",
-                    "issuingCountry": "IT",
-                    "found": "yes",
-                }
+                OrderRecord(
+                    orderId="1",
+                    creationDate="2026-04-03T10:00:00Z",
+                    buyerUsername="foo",
+                    taxpayerId="RSSMRA80A01H501U",
+                    taxIdentifierType="CODICE_FISCALE",
+                    issuingCountry="IT",
+                    found="yes",
+                )
             ]
         )
         self.assertIn("orderId", content)
@@ -153,11 +154,11 @@ class EbayCfToolTests(unittest.TestCase):
             FetchOptions(days=7, limit=50, max_results=10, only_found=False),
         )
 
-        self.assertEqual([record["orderId"] for record in records], ["order-1", "order-2"])
-        self.assertEqual(records[0]["taxpayerId"], "RSSMRA80A01H501U")
-        self.assertEqual(records[0]["found"], "yes")
-        self.assertEqual(records[1]["taxpayerId"], "")
-        self.assertEqual(records[1]["found"], "no")
+        self.assertEqual([record.orderId for record in records], ["order-1", "order-2"])
+        self.assertEqual(records[0].taxpayerId, "RSSMRA80A01H501U")
+        self.assertEqual(records[0].found, "yes")
+        self.assertEqual(records[1].taxpayerId, "")
+        self.assertEqual(records[1].found, "no")
         mock_get_orders.assert_called_once()
         self.assertEqual(mock_get_order_detail.call_count, 2)
 
@@ -195,7 +196,7 @@ class EbayCfToolTests(unittest.TestCase):
                 FetchOptions(order_ids=["order-10", "order-20"], only_found=False),
             )
 
-        self.assertEqual([record["orderId"] for record in records], ["order-10", "order-20"])
+        self.assertEqual([record.orderId for record in records], ["order-10", "order-20"])
         mock_get_orders.assert_not_called()
         self.assertEqual(mock_get_order_detail.call_count, 2)
 
@@ -239,7 +240,7 @@ class EbayCfToolTests(unittest.TestCase):
         )
 
         self.assertEqual(len(records), 1)
-        self.assertEqual(records[0]["orderId"], "order-2")
+        self.assertEqual(records[0].orderId, "order-2")
 
     @patch("src.ebay_cf.services.orders.time.sleep")
     @patch("src.ebay_cf.services.orders.get_order_detail")

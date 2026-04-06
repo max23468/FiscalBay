@@ -9,11 +9,11 @@ import logging
 import os
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Iterable, Optional
+from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from ..clients.ebay import get_access_token, get_order_detail, get_orders
 from ..errors import EbayApiError
-from ..models import Config, FetchOptions, OrderRecord, OrderRecordLike
+from ..models import Config, FetchOptions, OrderRecord
 
 DEFAULT_PAGE_SIZE = 50
 
@@ -83,15 +83,9 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def to_order_record(record: OrderRecordLike) -> OrderRecord:
-    if isinstance(record, OrderRecord):
-        return record
-    return OrderRecord.from_mapping(record)
-
-
-def get_csv_fieldnames(records: list[OrderRecordLike]) -> list[str]:
+def get_csv_fieldnames(records: Sequence[OrderRecord]) -> list[str]:
     if records:
-        return list(to_order_record(records[0]).as_dict().keys())
+        return list(records[0].as_dict().keys())
     return list(OrderRecord().as_dict().keys())
 
 
@@ -112,16 +106,19 @@ def order_detail_delay_seconds() -> float:
     return max(0.0, float(raw))
 
 
-def choose_tax_identifier(order: dict) -> Optional[dict]:
-    buyer = order.get("buyer") or {}
+def choose_tax_identifier(order: Mapping[str, Any]) -> Optional[Mapping[str, Any]]:
+    buyer = order.get("buyer")
+    if not isinstance(buyer, Mapping):
+        return None
     tax_identifier = buyer.get("taxIdentifier")
-    if tax_identifier:
+    if isinstance(tax_identifier, Mapping):
         return tax_identifier
     return None
 
 
-def extract_record_model(order: dict) -> OrderRecord:
-    buyer = order.get("buyer") or {}
+def extract_record(order: Mapping[str, Any]) -> OrderRecord:
+    buyer = order.get("buyer")
+    buyer_mapping = buyer if isinstance(buyer, Mapping) else {}
     tax_identifier = choose_tax_identifier(order) or {}
     taxpayer_id = tax_identifier.get("taxpayerId") or ""
     tax_type = tax_identifier.get("taxIdentifierType") or ""
@@ -141,15 +138,18 @@ def extract_record_model(order: dict) -> OrderRecord:
     shipping_addr_str = "N/D"
     fsi = order.get("fulfillmentStartInstructions") or []
     if fsi and isinstance(fsi, list):
-        ship_to = fsi[0].get("shippingStep", {}).get("shipTo", {})
-        contact = ship_to.get("contactAddress") or {}
+        first_instruction = fsi[0] if isinstance(fsi[0], Mapping) else {}
+        shipping_step = first_instruction.get("shippingStep")
+        ship_to = shipping_step.get("shipTo", {}) if isinstance(shipping_step, Mapping) else {}
+        contact = ship_to.get("contactAddress") if isinstance(ship_to, Mapping) else {}
+        contact_mapping = contact if isinstance(contact, Mapping) else {}
         name = ship_to.get("fullName") or ""
         lines = [
-            contact.get("addressLine1"),
-            contact.get("addressLine2"),
-            contact.get("city"),
-            contact.get("postalCode"),
-            contact.get("stateOrProvince"),
+            contact_mapping.get("addressLine1"),
+            contact_mapping.get("addressLine2"),
+            contact_mapping.get("city"),
+            contact_mapping.get("postalCode"),
+            contact_mapping.get("stateOrProvince"),
         ]
         addr = ", ".join([str(line) for line in lines if line])
         if name and addr:
@@ -160,8 +160,15 @@ def extract_record_model(order: dict) -> OrderRecord:
     return OrderRecord(
         orderId=order.get("orderId", ""),
         creationDate=order.get("creationDate", ""),
-        buyerUsername=buyer.get("username", ""),
-        buyerName=buyer.get("taxAddress", {}).get("fullName", "") or buyer.get("fullName", ""),
+        buyerUsername=buyer_mapping.get("username", ""),
+        buyerName=(
+            (
+                buyer_mapping.get("taxAddress", {}).get("fullName", "")
+                if isinstance(buyer_mapping.get("taxAddress"), Mapping)
+                else ""
+            )
+            or buyer_mapping.get("fullName", "")
+        ),
         taxpayerId=taxpayer_id,
         taxIdentifierType=tax_type,
         issuingCountry=tax_identifier.get("issuingCountry", ""),
@@ -172,12 +179,8 @@ def extract_record_model(order: dict) -> OrderRecord:
     )
 
 
-def extract_record(order: dict) -> dict[str, str]:
-    return extract_record_model(order).as_dict()
-
-
-def render_table(records: Iterable[OrderRecordLike]) -> str:
-    rows = [to_order_record(record).as_dict() for record in records]
+def render_table(records: Iterable[OrderRecord]) -> str:
+    rows = [record.as_dict() for record in records]
     columns = [
         "orderId",
         "creationDate",
@@ -192,7 +195,7 @@ def render_table(records: Iterable[OrderRecordLike]) -> str:
         for column in columns:
             widths[column] = max(widths[column], len(str(row.get(column, ""))))
 
-    def format_row(row: dict[str, str]) -> str:
+    def format_row(row: Mapping[str, str]) -> str:
         return " | ".join(str(row.get(column, "")).ljust(widths[column]) for column in columns)
 
     header = format_row({column: column for column in columns})
@@ -201,8 +204,8 @@ def render_table(records: Iterable[OrderRecordLike]) -> str:
     return "\n".join([header, separator] + body) if body else header + "\n" + separator
 
 
-def write_output(records: list[OrderRecordLike], fmt: str, output_path: Optional[str]) -> None:
-    normalized_records = [to_order_record(record).as_dict() for record in records]
+def write_output(records: Sequence[OrderRecord], fmt: str, output_path: Optional[str]) -> None:
+    normalized_records = [record.as_dict() for record in records]
     if fmt == "json":
         content = json.dumps(normalized_records, indent=2, ensure_ascii=False)
     elif fmt == "csv":
@@ -245,9 +248,9 @@ def resolve_date_window_from_options(options: FetchOptions) -> tuple[datetime, d
     return created_after, created_before
 
 
-def fetch_records(config: Config, options: FetchOptions) -> list[dict[str, str]]:
+def fetch_records(config: Config, options: FetchOptions) -> list[OrderRecord]:
     access_token = get_access_token(config)
-    details: list[dict] = []
+    details: list[Mapping[str, Any]] = []
     order_ids = options.order_ids or []
     delay = order_detail_delay_seconds()
 
@@ -278,5 +281,5 @@ def fetch_records(config: Config, options: FetchOptions) -> list[dict[str, str]]
 
     records = [extract_record(order) for order in details]
     if options.only_found:
-        records = [record for record in records if record["found"] == "yes"]
+        records = [record for record in records if record.found == "yes"]
     return records

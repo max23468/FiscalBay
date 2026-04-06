@@ -10,10 +10,9 @@ from typing import Callable, Iterable
 from .errors import UserInputError
 from .models import (
     BotRuntimeState,
-    BotRuntimeStateLike,
     FetchOptions,
     OrderRecord,
-    OrderRecordLike,
+    RetryQueueEntry,
     TelegramConfig,
 )
 
@@ -28,23 +27,11 @@ CALLBACK_STATO = "menu:stato"
 CALLBACK_HELP = "menu:help"
 
 
-def to_order_record(record: OrderRecordLike) -> OrderRecord:
-    if isinstance(record, OrderRecord):
-        return record
-    return OrderRecord.from_mapping(record)
-
-
-def to_runtime_state(state: BotRuntimeStateLike) -> BotRuntimeState:
-    if isinstance(state, BotRuntimeState):
-        return state
-    return BotRuntimeState.from_mapping(state)
-
-
 def chunk_message(text: str, limit: int = 3500) -> list[str]:
     if len(text) <= limit:
         return [text]
     chunks: list[str] = []
-    current = []
+    current: list[str] = []
     current_length = 0
     for line in text.splitlines():
         extra = len(line) + (1 if current else 0)
@@ -60,33 +47,31 @@ def chunk_message(text: str, limit: int = 3500) -> list[str]:
     return chunks
 
 
-def record_fingerprint(record: OrderRecordLike) -> str:
-    order = to_order_record(record)
-    raw = "|".join(order.fingerprint_parts())
+def record_fingerprint(record: OrderRecord) -> str:
+    raw = "|".join(record.fingerprint_parts())
     import hashlib
 
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def format_record(record: OrderRecordLike) -> str:
-    order = to_order_record(record)
-    cf = order.taxpayerId or "non disponibile"
-    tax_type = order.taxIdentifierType or "n/d"
-    country = order.issuingCountry or "n/d"
-    order_id = html.escape(order.orderId)
+def format_record(record: OrderRecord) -> str:
+    cf = record.taxpayerId or "non disponibile"
+    tax_type = record.taxIdentifierType or "n/d"
+    country = record.issuingCountry or "n/d"
+    order_id = html.escape(record.orderId)
     missing_fiscal = ""
-    if not order.taxpayerId:
+    if not record.taxpayerId:
         missing_fiscal = (
             "\n⚠️ <i>Dati fiscali non presenti nella risposta eBay per questo ordine.</i>"
         )
 
-    ebay_url = f"https://www.ebay.it/sh/ord/details?orderid={urllib.parse.quote(order.orderId)}"
+    ebay_url = f"https://www.ebay.it/sh/ord/details?orderid={urllib.parse.quote(record.orderId)}"
 
-    items = html.escape(order.items or "N/D")
-    total = html.escape(order.total or "N/D")
-    shipping = html.escape(order.shippingAddress or "N/D")
-    buyer = html.escape(order.buyerUsername or "n/d")
-    created_at = html.escape(order.creationDate)
+    items = html.escape(record.items or "N/D")
+    total = html.escape(record.total or "N/D")
+    shipping = html.escape(record.shippingAddress or "N/D")
+    buyer = html.escape(record.buyerUsername or "n/d")
+    created_at = html.escape(record.creationDate)
 
     return (
         f'🛒 <b>Ordine</b> • <a href="{ebay_url}"><code>{order_id}</code></a>\n'
@@ -104,9 +89,9 @@ def format_record(record: OrderRecordLike) -> str:
 
 
 def format_records(
-    records: Iterable[OrderRecordLike], only_found: bool, page_size: int = 5
+    records: Iterable[OrderRecord], only_found: bool, page_size: int = 5
 ) -> list[str]:
-    rows = [to_order_record(record) for record in records]
+    rows = list(records)
     if not rows:
         if only_found:
             return [
@@ -221,13 +206,12 @@ def is_authorized(chat_id: int, config: TelegramConfig) -> bool:
     return chat_id in config.allowed_chat_ids
 
 
-def format_status(state: BotRuntimeStateLike, retry_queue_size: int) -> str:
-    runtime_state = to_runtime_state(state)
-    metrics = runtime_state.metrics
+def format_status(state: BotRuntimeState, retry_queue_size: int) -> str:
+    metrics = state.metrics
     errors = metrics.errors_by_type
     errors_text = html.escape(json.dumps(errors, ensure_ascii=False)) if errors else "nessuno"
-    last_check_str = runtime_state.last_check or "mai"
-    last_error_str = runtime_state.last_error or "nessuno"
+    last_check_str = state.last_check or "mai"
+    last_error_str = state.last_error or "nessuno"
 
     return (
         "📊 <b>Stato del Bot</b>\n"
@@ -241,11 +225,11 @@ def format_status(state: BotRuntimeStateLike, retry_queue_size: int) -> str:
     )
 
 
-def has_codice_fiscale(record: OrderRecordLike) -> bool:
-    return to_order_record(record).has_codice_fiscale()
+def has_codice_fiscale(record: OrderRecord) -> bool:
+    return record.has_codice_fiscale()
 
 
-def format_auto_notification(record: OrderRecordLike) -> str:
+def format_auto_notification(record: OrderRecord) -> str:
     prefix = "🚨 <b>NUOVO ORDINE EBAY RICEVUTO!</b> 🚨\n━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
     return prefix + format_record(record)
 
@@ -256,10 +240,9 @@ def process_message(
     telegram_config: TelegramConfig,
     ebay_environment: str,
     *,
-    load_state_fn: Callable[[str], dict[str, object]],
-    load_retry_queue_fn: Callable[[str], list[dict[str, object]]],
-    load_config_fn: Callable[[str], object],
-    fetch_records_fn: Callable[[object, FetchOptions], list[OrderRecordLike]],
+    load_state_fn: Callable[[str], BotRuntimeState],
+    load_retry_queue_fn: Callable[[str], list[RetryQueueEntry]],
+    fetch_records_for_environment_fn: Callable[[str, FetchOptions], list[OrderRecord]],
     request_with_backoff_fn: Callable[..., object],
 ) -> list[str]:
     if not is_authorized(chat_id, telegram_config):
@@ -280,10 +263,9 @@ def process_message(
     if command not in ("/ultimi", "/ordine", "/tutti"):
         return ["Comando non riconosciuto. Usa /help per vedere i comandi disponibili."]
 
-    config = load_config_fn(ebay_environment)
     options = options_for_command(command, args)
     records = request_with_backoff_fn(
-        lambda: fetch_records_fn(config, options),
+        lambda: fetch_records_for_environment_fn(ebay_environment, options),
         label=f"fetch_records_{command}",
     )
     assert isinstance(records, list)

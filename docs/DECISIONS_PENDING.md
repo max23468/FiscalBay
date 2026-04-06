@@ -2,12 +2,6 @@
 
 Decisioni ancora aperte che influenzano le prossime fasi.
 
-## Fase 2
-
-- quanto spingere la tipizzazione del dominio ordini prima di toccare la multiutenza
-- come eliminare gli ultimi import diretti fra entrypoint e servizi senza rompere la compatibilita'
-- se introdurre un controllo packaging o release process piu' esplicito
-
 ## Fase 3
 
 - dove raccogliere o esporre le metriche operative
