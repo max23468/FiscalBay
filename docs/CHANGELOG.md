@@ -27,6 +27,11 @@ Documenti collegati:
 
 ### Changed
 
+- `src/ebay_cf/services/telegram_runtime.py` e `src/ebay_cf/services/notifications.py` emettono ora log piu' correlabili con `cycle_id` per polling, callback, messaggi e cicli notifica.
+- `src/ebay_cf/healthcheck.py` espone anche metriche runtime aggregate leggibili in output testuale e JSON.
+- `src/ebay_cf/models.py` e `src/ebay_cf/storage/sqlite.py` tracciano ora anche `orders_with_cf`, `telegram_retries` e `consecutive_error_cycles` dentro le metriche runtime.
+- `src/ebay_cf/clients/ebay.py`, `src/ebay_cf/clients/telegram.py`, `src/ebay_cf/services/telegram_runtime.py`, `src/ebay_cf/services/notifications.py` e `src/ebay_cf/healthcheck.py` usano ora eventi di log piu' coerenti per retry, errori, polling, start/stop e health check.
+- `deploy/linux-setup.sh` installa ora anche `deploy/alert-check.sh`, `ebaycf-alertcheck.service` ed `ebaycf-alertcheck.timer` per gli alert runtime minimi su servizio fermo, retry queue fuori soglia ed errori consecutivi.
 - la rifondazione strutturale della fase 2 puo' considerarsi chiusa: dominio core tipizzato, retry condiviso, runtime/comandi/notifiche separati e percorso di release minimo esplicito in docs e CI.
 - `src/ebay_cf/bot.py` ora funge soprattutto da facciata compatibile e punto di wiring.
 - `src/ebay_cf/bot.py` concentra anche gli adattatori di compatibilita' per test e payload legacy, lasciando i servizi core piu' tipizzati.

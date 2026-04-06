@@ -12,6 +12,7 @@ import urllib.request
 from typing import Optional
 
 from ..errors import TelegramApiError
+from ..logging_utils import log_event
 from ..retry import run_with_retry
 
 LOGGER = logging.getLogger("ebaycf.telegram_bot")
@@ -85,12 +86,16 @@ def telegram_api_request(
 
     def on_retry(exc: BaseException, attempt_no: int, total_attempts: int, delay: float) -> None:
         assert isinstance(exc, TelegramApiError)
-        LOGGER.warning(
-            "Richiesta Telegram fallita (tentativo %s/%s), riprovo tra %.2fs: %s",
-            attempt_no,
-            total_attempts,
-            delay,
-            exc,
+        log_event(
+            LOGGER,
+            logging.WARNING,
+            "telegram_api_retry",
+            method=method,
+            attempt=attempt_no,
+            attempts=total_attempts,
+            delay_seconds=round(delay, 2),
+            status_code=exc.status_code,
+            error=exc,
         )
 
     return run_with_retry(

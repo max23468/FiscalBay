@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from ..errors import EbayApiError
+from ..logging_utils import log_event
 from ..models import Config
 from ..retry import run_with_retry
 
@@ -92,12 +93,18 @@ def request_json(
 
     def on_retry(exc: BaseException, attempt_no: int, total_attempts: int, delay: float) -> None:
         assert isinstance(exc, EbayApiError)
-        logger.warning(
-            "Richiesta eBay fallita (tentativo %s/%s), riprovo tra %.2fs: %s",
-            attempt_no,
-            total_attempts,
-            delay,
-            exc,
+        endpoint = urllib.parse.urlparse(url).path or url
+        log_event(
+            logger,
+            logging.WARNING,
+            "ebay_api_retry",
+            method=method,
+            endpoint=endpoint,
+            attempt=attempt_no,
+            attempts=total_attempts,
+            delay_seconds=round(delay, 2),
+            status_code=exc.status_code,
+            error=exc,
         )
 
     return run_with_retry(

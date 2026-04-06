@@ -14,7 +14,10 @@ SCHEMA_VERSION = 2
 
 class MetricsState(TypedDict):
     orders_read: int
+    orders_with_cf: int
     notifications_sent: int
+    telegram_retries: int
+    consecutive_error_cycles: int
     errors_by_type: dict[str, int]
 
 
@@ -260,7 +263,10 @@ def _sync_retry_queue(conn: sqlite3.Connection, queue: list[RetryQueueItem]) -> 
 def _default_metrics_state() -> MetricsState:
     return {
         "orders_read": 0,
+        "orders_with_cf": 0,
         "notifications_sent": 0,
+        "telegram_retries": 0,
+        "consecutive_error_cycles": 0,
         "errors_by_type": {},
     }
 
@@ -275,7 +281,10 @@ def _parse_metrics_state(raw_value: str) -> MetricsState:
         normalized_errors = {str(key): int(value) for key, value in errors.items()}
     return {
         "orders_read": int(decoded.get("orders_read", 0)),
+        "orders_with_cf": int(decoded.get("orders_with_cf", 0)),
         "notifications_sent": int(decoded.get("notifications_sent", 0)),
+        "telegram_retries": int(decoded.get("telegram_retries", 0)),
+        "consecutive_error_cycles": int(decoded.get("consecutive_error_cycles", 0)),
         "errors_by_type": normalized_errors,
     }
 
@@ -298,7 +307,10 @@ def _state_from_model(state: BotRuntimeState) -> BotState:
         "last_error": state.last_error,
         "metrics": {
             "orders_read": state.metrics.orders_read,
+            "orders_with_cf": state.metrics.orders_with_cf,
             "notifications_sent": state.metrics.notifications_sent,
+            "telegram_retries": state.metrics.telegram_retries,
+            "consecutive_error_cycles": state.metrics.consecutive_error_cycles,
             "errors_by_type": dict(state.metrics.errors_by_type),
         },
     }

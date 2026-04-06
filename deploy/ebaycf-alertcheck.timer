@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic alert check for eBay CF
+
+[Timer]
+OnCalendar=*:0/5
+Persistent=true
+Unit=ebaycf-alertcheck.service
+
+[Install]
+WantedBy=timers.target

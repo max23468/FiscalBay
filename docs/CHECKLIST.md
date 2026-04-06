@@ -3,12 +3,10 @@
 ## Indice rapido
 
 - `Fase 3`
-  - operativita' e osservabilita'
-- `Fase 4`
   - progettazione multiutente
-- `Fase 5`
+- `Fase 4`
   - onboarding self-service Telegram + eBay OAuth
-- `Fase 6`
+- `Fase 5`
   - governance del prodotto
 
 Documenti collegati:
@@ -17,30 +15,7 @@ Documenti collegati:
 - `docs/MILESTONE_BOARD.md`
 - `docs/DECISIONS_PENDING.md`
 
-## Fase 3 - Operativita' e Osservabilita' [Priorita' media]
-
-### Logging e contesto operativo
-
-- [ ] portare il progetto a un livello di osservabilita' e sicurezza adeguato a un servizio pubblico
-- [ ] completare il contesto nei log con correlation id o identificativi equivalenti per operazioni, ordini e chat
-- [ ] standardizzare definitivamente eventi log per start, stop, polling, retry, errori e health check
-
-### Metriche e controlli runtime
-
-- [ ] chiudere osservabilita' minima con metriche leggibili, alert basilari e runbook
-- [ ] misurare:
-  - ordini letti
-  - ordini con CF
-  - notifiche inviate
-  - retry Telegram
-  - errori eBay
-  - errori Telegram
-- [ ] decidere dove esporre o raccogliere queste metriche
-- [ ] introdurre alert basilari su processo fermo e su troppi errori consecutivi
-- [ ] documentare troubleshooting operativo per `healthcheck`, `retry_queue`, `last_check` stale e fallimenti deploy
-- [ ] mantenere smoke test post-deploy come controllo obbligatorio dopo ogni rilascio significativo
-
-## Fase 4 - Progettazione Multiutente [Priorita' media]
+## Fase 3 - Progettazione Multiutente [Priorita' media]
 
 ### Target di prodotto
 
@@ -80,7 +55,7 @@ Documenti collegati:
 - [ ] preparare una security review dedicata ai token utente
 - [ ] fissare milestone di beta privata prima dell'apertura piu' ampia
 
-## Fase 5 - Onboarding Self-Service Telegram + eBay OAuth [Priorita' media]
+## Fase 4 - Onboarding Self-Service Telegram + eBay OAuth [Priorita' media]
 
 ### Esperienza target utente
 
@@ -114,7 +89,7 @@ Documenti collegati:
 - [ ] `/notifications off`
 - [ ] `/settings`
 
-## Fase 6 - Governance del Prodotto [Priorita' media]
+## Fase 5 - Governance del Prodotto [Priorita' media]
 
 - [ ] definire governance e limiti del servizio in modo compatibile con isolamento dati tra utenti
 - [ ] definire quali dati personali vengono trattati

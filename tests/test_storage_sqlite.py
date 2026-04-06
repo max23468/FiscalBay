@@ -29,7 +29,10 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
                 "last_error": "boom",
                 "metrics": {
                     "orders_read": 7,
+                    "orders_with_cf": 2,
                     "notifications_sent": 3,
+                    "telegram_retries": 1,
+                    "consecutive_error_cycles": 2,
                     "errors_by_type": {"telegram_send": 1},
                 },
             }
@@ -44,7 +47,10 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
                 restored["metrics"],
                 {
                     "orders_read": 7,
+                    "orders_with_cf": 2,
                     "notifications_sent": 3,
+                    "telegram_retries": 1,
+                    "consecutive_error_cycles": 2,
                     "errors_by_type": {"telegram_send": 1},
                 },
             )
@@ -189,7 +195,7 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
                     '"notified_hashes":["hash-1"],'
                     '"last_check":"2026-04-05T20:00:00Z",'
                     '"last_error":null,'
-                    '"metrics":{"orders_read":2,"notifications_sent":1,"errors_by_type":{}}}'
+                    '"metrics":{"orders_read":2,"orders_with_cf":1,"notifications_sent":1,"telegram_retries":0,"consecutive_error_cycles":0,"errors_by_type":{}}}'
                 ),
                 encoding="utf-8",
             )

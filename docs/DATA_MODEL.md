@@ -103,7 +103,10 @@ Nota:
 Contiene:
 
 - `orders_read`
+- `orders_with_cf`
 - `notifications_sent`
+- `telegram_retries`
+- `consecutive_error_cycles`
 - `errors_by_type`
 
 ### `BotRuntimeState`

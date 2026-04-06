@@ -11,7 +11,7 @@ from typing import Callable
 
 from ..clients.telegram import ensure_long_polling, telegram_request
 from ..errors import AppError, TelegramApiError
-from ..logging_utils import log_event
+from ..logging_utils import generate_operation_id, log_event
 from ..models import TelegramConfig
 from ..telegram_commands import (
     build_main_menu_markup,
@@ -79,6 +79,13 @@ def auto_notify_loop(
         try:
             maybe_send_new_order_notifications_fn(telegram_config, ebay_environment)
         except Exception as exc:  # pragma: no cover - loop resiliente
+            log_event(
+                LOGGER,
+                logging.ERROR,
+                "auto_notify_failed",
+                environment=ebay_environment,
+                error=exc,
+            )
             LOGGER.exception("Errore auto notify: %s", exc)
         if shutdown_event.wait(timeout=telegram_config.ebay_poll_interval_seconds):
             break
@@ -119,6 +126,12 @@ def run_bot(
             allowed_chat_mode="all" if telegram_config.allowed_chat_ids is None else "restricted",
         )
     except AppError as exc:
+        log_event(
+            LOGGER,
+            logging.ERROR,
+            "bot_configuration_failed",
+            error=exc,
+        )
         LOGGER.error("Errore configurazione: %s", exc)
         import sys
 
@@ -151,10 +164,19 @@ def run_bot(
     offset = 0
     updates_backoff_seconds = 1.0
     while not shutdown_event.is_set():
+        poll_cycle_id = generate_operation_id("poll")
         try:
             poll_timeout = telegram_config.poll_timeout_seconds
             if shutdown_event.is_set():
                 poll_timeout = min(poll_timeout, 2)
+            log_event(
+                LOGGER,
+                logging.INFO,
+                "poll_cycle_started",
+                cycle_id=poll_cycle_id,
+                offset=offset,
+                timeout_seconds=poll_timeout,
+            )
             updates = request_with_backoff_fn(
                 lambda: telegram_request(
                     telegram_config.token,
@@ -168,13 +190,31 @@ def run_bot(
                 label="getUpdates",
             )
             assert isinstance(updates, list)
+            log_event(
+                LOGGER,
+                logging.INFO,
+                "poll_cycle_fetched",
+                cycle_id=poll_cycle_id,
+                updates=len(updates),
+            )
             updates_backoff_seconds = 1.0
             for update in updates:
-                offset = max(offset, int(update["update_id"]) + 1)
+                update_id = int(update["update_id"])
+                offset = max(offset, update_id + 1)
                 callback_id, callback_chat_id, callback_data, callback_thread_id = (
                     extract_callback_context(update)
                 )
                 if callback_id and callback_chat_id and callback_data:
+                    log_event(
+                        LOGGER,
+                        logging.INFO,
+                        "callback_received",
+                        cycle_id=poll_cycle_id,
+                        update_id=update_id,
+                        callback_id=callback_id,
+                        chat_id=callback_chat_id,
+                        action=callback_data,
+                    )
                     callback_text = callback_command_from_data(callback_data)
                     if callback_text:
                         try:
@@ -200,7 +240,16 @@ def run_bot(
                                     ),
                                 )
                             except TelegramApiError as exc:
-                                LOGGER.error("Invio risposta callback fallito: %s", exc)
+                                log_event(
+                                    LOGGER,
+                                    logging.ERROR,
+                                    "callback_reply_failed",
+                                    cycle_id=poll_cycle_id,
+                                    update_id=update_id,
+                                    callback_id=callback_id,
+                                    chat_id=callback_chat_id,
+                                    error=exc,
+                                )
                         try:
                             telegram_request(
                                 telegram_config.token,
@@ -211,7 +260,15 @@ def run_bot(
                                 },
                             )
                         except TelegramApiError as exc:
-                            LOGGER.warning("answerCallbackQuery fallita: %s", exc)
+                            log_event(
+                                LOGGER,
+                                logging.WARNING,
+                                "callback_ack_failed",
+                                cycle_id=poll_cycle_id,
+                                update_id=update_id,
+                                callback_id=callback_id,
+                                error=exc,
+                            )
                     else:
                         try:
                             telegram_request(
@@ -223,13 +280,30 @@ def run_bot(
                                 },
                             )
                         except TelegramApiError as exc:
-                            LOGGER.warning("answerCallbackQuery fallita: %s", exc)
+                            log_event(
+                                LOGGER,
+                                logging.WARNING,
+                                "callback_unknown_ack_failed",
+                                cycle_id=poll_cycle_id,
+                                update_id=update_id,
+                                callback_id=callback_id,
+                                error=exc,
+                            )
                     continue
 
                 cid, msg_text, thread_id = extract_message_context(update)
                 if not cid or not msg_text.strip():
                     continue
                 command, _ = parse_command(msg_text)
+                log_event(
+                    LOGGER,
+                    logging.INFO,
+                    "message_received",
+                    cycle_id=poll_cycle_id,
+                    update_id=update_id,
+                    chat_id=cid,
+                    command=command or "none",
+                )
                 show_menu = is_authorized(cid, telegram_config) and should_attach_main_menu(command)
                 try:
                     replies = process_message_fn(
@@ -254,13 +328,30 @@ def run_bot(
                             ),
                         )
                     except TelegramApiError as exc:
-                        LOGGER.error("Invio risposta fallito: %s", exc)
+                        log_event(
+                            LOGGER,
+                            logging.ERROR,
+                            "message_reply_failed",
+                            cycle_id=poll_cycle_id,
+                            update_id=update_id,
+                            chat_id=cid,
+                            command=command or "none",
+                            error=exc,
+                        )
             if shutdown_event.is_set():
                 break
         except KeyboardInterrupt:
             shutdown_event.set()
             break
         except Exception as exc:  # pragma: no cover - loop resiliente
+            log_event(
+                LOGGER,
+                logging.ERROR,
+                "poll_cycle_failed",
+                cycle_id=poll_cycle_id,
+                backoff_seconds=round(updates_backoff_seconds, 2),
+                error=exc,
+            )
             LOGGER.exception("Errore runtime bot: %s", exc)
             time.sleep(updates_backoff_seconds)
             updates_backoff_seconds = min(updates_backoff_seconds * 2, 30.0)
@@ -270,5 +361,10 @@ def run_bot(
     if lock_handle is not None and telegram_config is not None:
         release_process_lock_fn(lock_handle, telegram_config.lock_path)
     _ACTIVE_SHUTDOWN_EVENT = None
-    log_event(LOGGER, logging.INFO, "bot_stopped")
+    log_event(
+        LOGGER,
+        logging.INFO,
+        "bot_stopped",
+        final_offset=offset,
+    )
     return 0

@@ -66,6 +66,34 @@ Health check JSON:
 ./.venv/bin/ebay-cf-healthcheck --json
 ```
 
+Metriche runtime leggibili:
+
+- `orders_read`
+- `orders_with_cf`
+- `notifications_sent`
+- `telegram_retries`
+- `consecutive_error_cycles`
+- `ebay_errors`
+- `telegram_errors`
+
+Queste sono esposte oggi in due posti operativi:
+
+- comando Telegram `/stato`
+- `./.venv/bin/ebay-cf-healthcheck --json`
+
+Alert basilari runtime:
+
+- `deploy/alert-check.sh` esegue `ebay-cf-healthcheck` con soglie operative minime
+- `ebaycf-alertcheck.timer` lancia il controllo ogni 5 minuti
+- gli alert minimi oggi coprono servizio `systemd` non attivo, troppi errori consecutivi e retry queue oltre soglia
+- soglie di default: `MAX_CONSECUTIVE_ERROR_CYCLES=3` e `MAX_RETRY_QUEUE_SIZE=20`
+- il fallimento del check finisce nel journal del service `ebaycf-alertcheck`
+
+Suggerimento pratico sui log:
+
+- seguire i log cercando `cycle_id=` per correlare polling, callback, messaggi e cicli di notifica
+- gli eventi principali sono ormai standardizzati per start, stop, polling, retry HTTP, retry queue, notifiche ed healthcheck
+
 ## Sequenza standard dopo update
 
 1. eseguire `./deploy/update.sh`
@@ -127,6 +155,8 @@ Condizioni di stop:
 - verificare se il problema e' `last_check` troppo vecchio
 - verificare se la retry queue e' bloccata
 - verificare se il servizio e' partito con il path corretto a `state.db`
+- controllare anche le metriche aggregate nel report JSON per capire se il problema e' lato eBay, lato Telegram o backlog retry
+- se il controllo periodico fallisce, leggere `sudo journalctl -u ebaycf-alertcheck -n 50 --no-pager`
 
 ## Backup operativi
 
@@ -159,6 +189,7 @@ Asset minimi da proteggere:
 
 - `systemd` attivo
 - healthcheck `ok`
+- alert check periodico senza errori recenti
 - `last_check` aggiornato
 - retry queue non in crescita continua
 - nessuna raffica di errori eBay o Telegram nei log recenti

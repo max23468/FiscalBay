@@ -64,6 +64,17 @@ Log live:
 sudo journalctl -u ebaycf-bot -f
 ```
 
+Per seguire un singolo ciclo operativo, filtrare o cercare `cycle_id=` nei log recenti.
+
+Gli eventi principali sono standardizzati per:
+
+- start e stop del bot
+- polling Telegram
+- callback e messaggi
+- retry HTTP verso Telegram ed eBay
+- retry queue e cicli notifica
+- esecuzione healthcheck
+
 Health check:
 
 ```bash
@@ -75,6 +86,35 @@ Health check JSON:
 ```bash
 "$(pwd)/.venv/bin/ebay-cf-healthcheck" --json
 ```
+
+Il report JSON include anche metriche runtime aggregate:
+
+- `orders_read`
+- `orders_with_cf`
+- `notifications_sent`
+- `telegram_retries`
+- `consecutive_error_cycles`
+- `ebay_errors`
+- `telegram_errors`
+
+Alert check periodico:
+
+```bash
+./deploy/alert-check.sh
+sudo systemctl status ebaycf-alertcheck.timer
+sudo systemctl list-timers ebaycf-alertcheck.timer
+```
+
+Soglie minime attuali:
+
+- servizio `ebaycf-bot` attivo
+- `consecutive_error_cycles <= 3`
+- `retry_queue_size <= 20`
+
+Override possibili via env:
+
+- `MAX_CONSECUTIVE_ERROR_CYCLES`
+- `MAX_RETRY_QUEUE_SIZE`
 
 ## Aggiornamento del bot
 
@@ -190,6 +230,7 @@ Health check fallisce:
 - `fail2ban` protegge il jail `sshd`
 - lo script di setup supporta un utente di servizio dedicato tramite `APP_USER` e `APP_GROUP`
 - lo script di setup installa e abilita il timer `ebaycf-backup.timer`
+- lo script di setup installa e abilita anche `ebaycf-alertcheck.timer` per gli alert runtime minimi
 
 Deploy riuscito ma bot non sano:
 

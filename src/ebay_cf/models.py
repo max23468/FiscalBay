@@ -140,7 +140,10 @@ class LinkedEbayAccount:
 @dataclass
 class BotMetrics:
     orders_read: int = 0
+    orders_with_cf: int = 0
     notifications_sent: int = 0
+    telegram_retries: int = 0
+    consecutive_error_cycles: int = 0
     errors_by_type: dict[str, int] = field(default_factory=dict)
 
     @classmethod
@@ -151,14 +154,20 @@ class BotMetrics:
             errors_by_type = {str(key): as_int(value) for key, value in raw_errors.items()}
         return cls(
             orders_read=as_int(data.get("orders_read", 0)),
+            orders_with_cf=as_int(data.get("orders_with_cf", 0)),
             notifications_sent=as_int(data.get("notifications_sent", 0)),
+            telegram_retries=as_int(data.get("telegram_retries", 0)),
+            consecutive_error_cycles=as_int(data.get("consecutive_error_cycles", 0)),
             errors_by_type=errors_by_type,
         )
 
     def as_dict(self) -> dict[str, object]:
         return {
             "orders_read": self.orders_read,
+            "orders_with_cf": self.orders_with_cf,
             "notifications_sent": self.notifications_sent,
+            "telegram_retries": self.telegram_retries,
+            "consecutive_error_cycles": self.consecutive_error_cycles,
             "errors_by_type": dict(self.errors_by_type),
         }
 

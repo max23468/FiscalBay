@@ -275,10 +275,12 @@ def send_message(
 
 def acquire_process_lock(lock_path: str):
     if fcntl is None:
-        LOGGER.warning(
-            "fcntl non disponibile: lock esclusivo non attivo su %s. "
-            "Non avviare due istanze con lo stesso token.",
-            lock_path,
+        log_event(
+            LOGGER,
+            logging.WARNING,
+            "process_lock_unavailable",
+            lock_path=lock_path,
+            reason="fcntl_unavailable",
         )
         return None
     ensure_parent_dir(lock_path)

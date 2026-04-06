@@ -18,6 +18,11 @@ BACKUP_SERVICE_TEMPLATE="${APP_DIR}/deploy/ebaycf-backup.service"
 BACKUP_SERVICE_TARGET="/etc/systemd/system/${BACKUP_SERVICE_NAME}.service"
 BACKUP_TIMER_TEMPLATE="${APP_DIR}/deploy/ebaycf-backup.timer"
 BACKUP_TIMER_TARGET="/etc/systemd/system/${BACKUP_SERVICE_NAME}.timer"
+ALERT_SERVICE_NAME="ebaycf-alertcheck"
+ALERT_SERVICE_TEMPLATE="${APP_DIR}/deploy/ebaycf-alertcheck.service"
+ALERT_SERVICE_TARGET="/etc/systemd/system/${ALERT_SERVICE_NAME}.service"
+ALERT_TIMER_TEMPLATE="${APP_DIR}/deploy/ebaycf-alertcheck.timer"
+ALERT_TIMER_TARGET="/etc/systemd/system/${ALERT_SERVICE_NAME}.timer"
 
 install_packages() {
   if command -v apt-get >/dev/null 2>&1; then
@@ -102,9 +107,12 @@ sudo chmod 600 "${ENV_FILE}"
 
 install_service_file "${SERVICE_TEMPLATE}" "${SERVICE_TARGET}"
 install_service_file "${BACKUP_SERVICE_TEMPLATE}" "${BACKUP_SERVICE_TARGET}"
+install_service_file "${ALERT_SERVICE_TEMPLATE}" "${ALERT_SERVICE_TARGET}"
 sudo cp "${BACKUP_TIMER_TEMPLATE}" "${BACKUP_TIMER_TARGET}"
+sudo cp "${ALERT_TIMER_TEMPLATE}" "${ALERT_TIMER_TARGET}"
 sudo systemctl daemon-reload
 sudo systemctl enable --now "${BACKUP_SERVICE_NAME}.timer"
+sudo systemctl enable --now "${ALERT_SERVICE_NAME}.timer"
 
 echo "Installazione completata."
 echo "Prossimi passi:"
@@ -113,6 +121,7 @@ echo "2. Esegui: sudo systemctl enable --now ${SERVICE_NAME}"
 echo "3. Controlla: sudo systemctl status ${SERVICE_NAME}"
 echo "4. Log: sudo journalctl -u ${SERVICE_NAME} -f"
 echo "5. Verifica timer backup: sudo systemctl status ${BACKUP_SERVICE_NAME}.timer"
+echo "6. Verifica timer alert: sudo systemctl status ${ALERT_SERVICE_NAME}.timer"
 echo
 echo "Configurazione applicata:"
 echo "- APP_USER=${APP_USER}"

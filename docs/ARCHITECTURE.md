@@ -77,9 +77,9 @@ Entrambe condividono lo stesso package Python interno `src/ebay_cf/`.
 ### Operativita'
 
 - `src/ebay_cf/healthcheck.py`
-  - controlli runtime
+  - controlli runtime e soglie alert minime
 - `deploy/`
-  - setup VPS, update, smoke check, backup e restore
+  - setup VPS, update, smoke check, backup, restore e timer di alert check
 
 ## Flussi principali
 
@@ -122,6 +122,8 @@ Entrambe condividono lo stesso package Python interno `src/ebay_cf/`.
 - i servizi core del bot lavorano ormai su `OrderRecord`, `BotRuntimeState` e `RetryQueueEntry`; le conversioni legacy restano ai bordi
 - anche il rendering CLI/Telegram usa principalmente `OrderRecord`; i wrapper compatibili di `bot.py` assorbono i payload legacy usati dai test storici
 - le conversioni compatibili sono state accentrate in adattatori espliciti dentro `bot.py`, invece di essere duplicate tra wrapper diversi
+- i log runtime, client HTTP, notifiche e healthcheck usano eventi strutturati; `cycle_id` correla polling, callback, messaggi e cicli di notifica
+- l'osservabilita' minima passa da `/stato`, `ebay-cf-healthcheck` e dal timer `ebaycf-alertcheck`, che segnala servizio fermo, backlog retry e troppi errori consecutivi
 - lo storage espone adattatori tipizzati mantenendo compatibilita' con le API storiche piu' usate nei test
 
 ## Limiti da tenere presenti

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 
 
 def _normalize_log_value(value: object) -> str:
@@ -19,6 +20,10 @@ def format_log_context(event: str, **fields: object) -> str:
     for key in sorted(fields):
         parts.append(f"{key}={_normalize_log_value(fields[key])}")
     return " ".join(parts)
+
+
+def generate_operation_id(prefix: str) -> str:
+    return f"{prefix}-{uuid.uuid4().hex[:10]}"
 
 
 def log_event(logger: logging.Logger, level: int, event: str, **fields: object) -> None:

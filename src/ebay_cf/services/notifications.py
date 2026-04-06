@@ -6,8 +6,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
-from ..errors import TelegramApiError
-from ..logging_utils import log_event
+from ..errors import EbayApiError, TelegramApiError
+from ..logging_utils import generate_operation_id, log_event
 from ..models import (
     BotRuntimeState,
     FetchOptions,
@@ -34,6 +34,13 @@ def increment_error_metric(state: BotRuntimeState, error_type: str) -> None:
     errors[error_type] = int(errors.get(error_type, 0)) + 1
 
 
+def mark_cycle_result(state: BotRuntimeState, *, had_errors: bool) -> None:
+    if had_errors:
+        state.metrics.consecutive_error_cycles += 1
+        return
+    state.metrics.consecutive_error_cycles = 0
+
+
 def process_retry_queue(
     telegram_config: TelegramConfig,
     state: BotRuntimeState,
@@ -41,11 +48,12 @@ def process_retry_queue(
     load_retry_queue_fn: Callable[[str], list[RetryQueueEntry]],
     save_retry_queue_fn: Callable[[str, list[RetryQueueEntry]], None],
     send_message_fn: Callable[..., None],
+    cycle_id: str,
 ) -> None:
     queue = load_retry_queue_fn(telegram_config.retry_queue_path)
     if not queue:
         return
-    log_event(LOGGER, logging.INFO, "retry_queue_start", size=len(queue))
+    log_event(LOGGER, logging.INFO, "retry_queue_start", cycle_id=cycle_id, size=len(queue))
     remaining: list[RetryQueueEntry] = []
     for item in queue:
         try:
@@ -57,16 +65,24 @@ def process_retry_queue(
                 remaining.append(item)
             state.last_error = str(exc)
             increment_error_metric(state, "telegram_send")
+            increment_metric(state, "telegram_retries")
             log_event(
                 LOGGER,
                 logging.WARNING,
                 "retry_queue_send_failed",
+                cycle_id=cycle_id,
                 chat_id=item.chat_id,
                 attempts=item.attempts,
                 error=exc,
             )
     save_retry_queue_fn(telegram_config.retry_queue_path, remaining)
-    log_event(LOGGER, logging.INFO, "retry_queue_complete", remaining=len(remaining))
+    log_event(
+        LOGGER,
+        logging.INFO,
+        "retry_queue_complete",
+        cycle_id=cycle_id,
+        remaining=len(remaining),
+    )
 
 
 def now_utc() -> datetime:
@@ -84,6 +100,7 @@ def fetch_new_order_records(
     fetch_records_for_environment_fn: Callable[[str, FetchOptions], list[OrderRecord]],
     request_with_backoff_fn: Callable[..., object],
     lookback_minutes: int = 180,
+    cycle_id: str,
 ) -> list[OrderRecord]:
     last_check = state.last_check
     if isinstance(last_check, str) and last_check:
@@ -109,6 +126,8 @@ def fetch_new_order_records(
         LOGGER,
         logging.INFO,
         "orders_window_fetched",
+        cycle_id=cycle_id,
+        environment=ebay_environment,
         start=start,
         end=end,
         fetched=len(records),
@@ -167,8 +186,16 @@ def maybe_send_new_order_notifications(
     send_message_fn: Callable[..., None],
     request_with_backoff_fn: Callable[..., object],
 ) -> None:
+    cycle_id = generate_operation_id("notify")
+    cycle_had_errors = False
     if not telegram_config.notify_chat_ids:
-        log_event(LOGGER, logging.INFO, "notify_skipped", reason="no_notify_chat_ids")
+        log_event(
+            LOGGER,
+            logging.INFO,
+            "notify_skipped",
+            cycle_id=cycle_id,
+            reason="no_notify_chat_ids",
+        )
         return
     state = load_state_fn(telegram_config.state_path)
     process_retry_queue(
@@ -177,18 +204,49 @@ def maybe_send_new_order_notifications(
         load_retry_queue_fn=load_retry_queue_fn,
         save_retry_queue_fn=save_retry_queue_fn,
         send_message_fn=send_message_fn,
+        cycle_id=cycle_id,
     )
     save_state_fn(telegram_config.state_path, state)
 
-    records = fetch_new_order_records(
-        ebay_environment,
-        state,
-        fetch_records_for_environment_fn=fetch_records_for_environment_fn,
-        request_with_backoff_fn=request_with_backoff_fn,
-    )
+    try:
+        records = fetch_new_order_records(
+            ebay_environment,
+            state,
+            fetch_records_for_environment_fn=fetch_records_for_environment_fn,
+            request_with_backoff_fn=request_with_backoff_fn,
+            cycle_id=cycle_id,
+        )
+    except Exception as exc:
+        cycle_had_errors = True
+        state.last_error = str(exc)
+        if isinstance(exc, EbayApiError):
+            increment_error_metric(state, "ebay_fetch")
+        elif isinstance(exc, TelegramApiError):
+            increment_error_metric(state, "telegram_fetch")
+        else:
+            increment_error_metric(state, "notify_cycle")
+        mark_cycle_result(state, had_errors=True)
+        save_state_fn(telegram_config.state_path, state)
+        log_event(
+            LOGGER,
+            logging.ERROR,
+            "notify_fetch_failed",
+            cycle_id=cycle_id,
+            environment=ebay_environment,
+            error=exc,
+        )
+        raise
     first_bootstrap = not state.last_check
     if first_bootstrap:
-        log_event(LOGGER, logging.INFO, "notify_bootstrap", records=len(records))
+        increment_metric(state, "orders_with_cf", len(records))
+        mark_cycle_result(state, had_errors=False)
+        log_event(
+            LOGGER,
+            logging.INFO,
+            "notify_bootstrap",
+            cycle_id=cycle_id,
+            records=len(records),
+        )
         updated_state = update_state_with_records(state, records)
         save_state_fn(telegram_config.state_path, updated_state)
         return
@@ -203,6 +261,7 @@ def maybe_send_new_order_notifications(
                 increment_metric(state, "notifications_sent")
                 sent_count += 1
             except TelegramApiError as exc:
+                cycle_had_errors = True
                 failed_queue.append(RetryQueueEntry(chat_id=chat_id, text=text, attempts=1))
                 state.last_error = str(exc)
                 increment_error_metric(state, "telegram_send")
@@ -210,18 +269,23 @@ def maybe_send_new_order_notifications(
                     LOGGER,
                     logging.WARNING,
                     "notify_send_failed",
+                    cycle_id=cycle_id,
                     chat_id=chat_id,
                     order_id=record.orderId,
                     error=exc,
                 )
     save_retry_queue_fn(telegram_config.retry_queue_path, failed_queue)
     increment_metric(state, "orders_read", len(records))
+    increment_metric(state, "orders_with_cf", len(records))
+    mark_cycle_result(state, had_errors=cycle_had_errors)
     updated_state = update_state_with_records(state, records)
     save_state_fn(telegram_config.state_path, updated_state)
     log_event(
         LOGGER,
         logging.INFO,
         "notify_cycle_complete",
+        cycle_id=cycle_id,
+        environment=ebay_environment,
         new_records=len(records),
         notifications_sent=sent_count,
         retry_queue_size=len(failed_queue),

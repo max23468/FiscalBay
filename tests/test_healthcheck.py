@@ -33,7 +33,10 @@ class HealthcheckTests(unittest.TestCase):
                     "last_error": None,
                     "metrics": {
                         "orders_read": 4,
+                        "orders_with_cf": 1,
                         "notifications_sent": 2,
+                        "telegram_retries": 0,
+                        "consecutive_error_cycles": 0,
                         "errors_by_type": {},
                     },
                 },
@@ -60,6 +63,9 @@ class HealthcheckTests(unittest.TestCase):
             self.assertEqual(report["status"], "ok")
             self.assertEqual(report["reasons"], [])
             self.assertEqual(report["retry_queue_size"], 0)
+            self.assertEqual(report["metrics"]["orders_read"], 4)
+            self.assertEqual(report["metrics"]["orders_with_cf"], 1)
+            self.assertEqual(report["metrics"]["telegram_errors"], 0)
 
     def test_build_health_report_fails_for_missing_lock_and_stale_check(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -73,7 +79,10 @@ class HealthcheckTests(unittest.TestCase):
                     "last_error": "telegram timeout",
                     "metrics": {
                         "orders_read": 0,
+                        "orders_with_cf": 0,
                         "notifications_sent": 0,
+                        "telegram_retries": 2,
+                        "consecutive_error_cycles": 4,
                         "errors_by_type": {"telegram_send": 1},
                     },
                 },
@@ -98,13 +107,24 @@ class HealthcheckTests(unittest.TestCase):
                     lock_path=str(Path(tmpdir) / "missing.lock"),
                 )
                 with patch("src.ebay_cf.healthcheck.load_telegram_config", return_value=config):
-                    report = build_health_report(max_age_seconds=60)
+                    with patch("src.ebay_cf.healthcheck.service_is_active", return_value=False):
+                        report = build_health_report(
+                            max_age_seconds=60,
+                            check_service_active=True,
+                            max_consecutive_error_cycles=3,
+                            max_retry_queue_size=0,
+                        )
 
             self.assertFalse(report["ok"])
             self.assertIn("lock_missing", report["reasons"])
             self.assertIn("last_check_stale", report["reasons"])
             self.assertIn("last_error_present", report["warnings"])
             self.assertIn("retry_queue_not_empty", report["warnings"])
+            self.assertEqual(report["metrics"]["telegram_retries"], 2)
+            self.assertEqual(report["metrics"]["telegram_errors"], 1)
+            self.assertIn("service_inactive", report["alerts"])
+            self.assertIn("consecutive_error_cycles_exceeded", report["alerts"])
+            self.assertIn("retry_queue_size_exceeded", report["alerts"])
 
     def test_render_text_report_includes_reasons_and_warnings(self) -> None:
         text = render_text_report(
@@ -117,11 +137,23 @@ class HealthcheckTests(unittest.TestCase):
                 "retry_queue_size": 2,
                 "notified_orders_tracked": 4,
                 "last_error": "boom",
+                "metrics": {
+                    "orders_read": 8,
+                    "orders_with_cf": 3,
+                    "notifications_sent": 2,
+                    "telegram_retries": 1,
+                    "consecutive_error_cycles": 2,
+                    "ebay_errors": 0,
+                    "telegram_errors": 2,
+                },
                 "reasons": ["lock_missing"],
                 "warnings": ["retry_queue_not_empty"],
+                "alerts": ["service_inactive"],
             }
         )
         self.assertIn("status: fail", text)
+        self.assertIn("metrics.orders_with_cf: 3", text)
+        self.assertIn("alerts: service_inactive", text)
         self.assertIn("reasons: lock_missing", text)
         self.assertIn("warnings: retry_queue_not_empty", text)
 
@@ -139,6 +171,16 @@ class HealthcheckTests(unittest.TestCase):
             "retry_queue_size": 0,
             "notified_orders_tracked": 1,
             "last_error": None,
+            "metrics": {
+                "orders_read": 1,
+                "orders_with_cf": 1,
+                "notifications_sent": 1,
+                "telegram_retries": 0,
+                "consecutive_error_cycles": 0,
+                "ebay_errors": 0,
+                "telegram_errors": 0,
+            },
+            "alerts": [],
         }
 
         with patch("builtins.print") as mock_print:

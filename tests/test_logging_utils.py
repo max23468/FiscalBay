@@ -2,7 +2,7 @@ import logging
 import unittest
 from unittest.mock import Mock
 
-from src.ebay_cf.logging_utils import format_log_context, log_event
+from src.ebay_cf.logging_utils import format_log_context, generate_operation_id, log_event
 
 
 class LoggingUtilsTests(unittest.TestCase):
@@ -24,3 +24,9 @@ class LoggingUtilsTests(unittest.TestCase):
         log_event(logger, logging.INFO, "bot_started", environment="production")
 
         logger.log.assert_called_once_with(logging.INFO, "event=bot_started environment=production")
+
+    def test_generate_operation_id_uses_prefix(self) -> None:
+        operation_id = generate_operation_id("poll")
+
+        self.assertTrue(operation_id.startswith("poll-"))
+        self.assertGreater(len(operation_id), len("poll-"))
