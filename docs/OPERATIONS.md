@@ -66,6 +66,14 @@ Health check JSON:
 ./.venv/bin/ebay-cf-healthcheck --json
 ```
 
+Nota deploy storage:
+
+- il `state.db` del bot in VPS puo' ricevere migrazioni schema per tabelle tenant-aware
+- finche' non vengono caricati tenant, account e subscription reali, il comportamento resta compatibile con l'attuale single-tenant
+- prima di rilasci che toccano `src/ebay_cf/storage/sqlite.py`, mantenere come sempre un backup aggiornato di `data/state.db`
+- il runtime puo' ora registrare utenti/chat Telegram nel DB durante il traffico normale del bot, quindi il backup di `state.db` copre anche questa nuova base tenant-aware
+- quando il DB contiene gia' la mappatura chat/utente, il comando `/stato` legge stato e retry queue del tenant corretto; se la mappatura manca, il fallback resta globale
+
 Metriche runtime leggibili:
 
 - `orders_read`
@@ -80,6 +88,18 @@ Queste sono esposte oggi in due posti operativi:
 
 - comando Telegram `/stato`
 - `./.venv/bin/ebay-cf-healthcheck --json`
+
+Il comando Telegram `/stato` espone anche:
+
+- `Scope runtime`, per vedere se la chat sta usando contesto `tenant` o `global`
+- `Sorgente credenziali`, per capire se il bot e' ancora su `global_env` o se usa un futuro `tenant_store`
+- `Fallback credenziali`, quando il tenant esiste ma il bot e' ancora costretto a ripiegare sul percorso globale
+
+Readiness multiutente nel healthcheck:
+
+- il report healthcheck espone anche contatori `multi_tenant.*` per utenti, chat, account collegati, token attivi, subscription e stati runtime tenant
+- il flag `multi_tenant.tenant_credentials_ready` indica se il DB ha gia' almeno account collegati e token attivi sufficienti per uscire dal puro fallback globale
+- questo aiuta a capire sulla VPS quanto siamo vicini al multiutente reale senza interrogare SQLite manualmente
 
 Alert basilari runtime:
 

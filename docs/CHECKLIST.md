@@ -26,16 +26,6 @@ Documenti collegati:
 - [ ] le credenziali eBay non devono stare in env globali condivise
 - [ ] l'onboarding deve essere il piu' possibile self-service
 
-### Lavori tecnici necessari
-
-- [ ] passare da single-tenant a multi-tenant
-- [ ] introdurre tabella utenti
-- [ ] introdurre tabella account eBay collegati
-- [ ] introdurre tabella token eBay per utente
-- [ ] introdurre tabella subscription/notifiche
-- [ ] introdurre isolamento dati e scoping per `telegram_chat_id`
-- [ ] introdurre scheduler che processa per tenant
-
 ## Fase 4 - Onboarding Self-Service Telegram + eBay OAuth [Priorita' media]
 
 ### Esperienza target utente

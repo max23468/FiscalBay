@@ -3,12 +3,39 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from src.ebay_cf.models import (
+    BotMetrics,
+    BotRuntimeState,
+    EbayTokenSet,
+    LinkedEbayAccount,
+    NotificationSubscription,
+    RetryQueueEntry,
+    TelegramChat,
+    TelegramUser,
+)
 from src.ebay_cf.storage.sqlite import (
     SCHEMA_VERSION,
+    list_notification_tenants,
+    load_ebay_token_sets,
+    load_linked_ebay_accounts,
+    load_notification_subscriptions,
     load_retry_queue,
     load_state,
+    load_telegram_chats,
+    load_telegram_users,
+    load_tenant_retry_queue_entries,
+    load_tenant_runtime_state,
+    resolve_linked_ebay_account,
+    resolve_tenant_chat_context,
     save_retry_queue,
     save_state,
+    save_tenant_retry_queue_entries,
+    save_tenant_runtime_state,
+    upsert_ebay_token_set,
+    upsert_linked_ebay_account,
+    upsert_notification_subscription,
+    upsert_telegram_chat,
+    upsert_telegram_user,
 )
 
 
@@ -226,6 +253,222 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertEqual(restored[0]["text"], "retry me")
             self.assertEqual(restored[0]["attempts"], 2)
             self.assertTrue((Path(tmpdir) / "failed_notifications.json.legacy-json.bak").exists())
+
+    def test_tenant_runtime_state_roundtrip_on_shared_db(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+
+            save_tenant_runtime_state(
+                str(db_path),
+                123,
+                BotRuntimeState(
+                    notified_order_ids=["order-1"],
+                    notified_hashes=["hash-1"],
+                    last_check="2026-04-06T10:00:00Z",
+                    last_error=None,
+                    metrics=BotMetrics(orders_read=3, orders_with_cf=1),
+                ),
+            )
+
+            restored = load_tenant_runtime_state(str(db_path), 123)
+            self.assertEqual(restored.notified_order_ids, ["order-1"])
+            self.assertEqual(restored.notified_hashes, ["hash-1"])
+            self.assertEqual(restored.last_check, "2026-04-06T10:00:00Z")
+            self.assertEqual(restored.metrics.orders_with_cf, 1)
+
+    def test_tenant_retry_queue_roundtrip_on_shared_db(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+
+            save_tenant_retry_queue_entries(
+                str(db_path),
+                123,
+                [RetryQueueEntry(chat_id=456, text="hello", attempts=1)],
+            )
+
+            restored = load_tenant_retry_queue_entries(str(db_path), 123)
+            self.assertEqual(len(restored), 1)
+            self.assertEqual(restored[0].chat_id, 456)
+            self.assertEqual(restored[0].text, "hello")
+            self.assertEqual(restored[0].attempts, 1)
+
+    def test_multi_tenant_entities_and_notification_targets_roundtrip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+
+            upsert_telegram_user(
+                str(db_path),
+                TelegramUser(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    username="seller",
+                    display_name="Mario Rossi",
+                    created_at="2026-04-06T10:00:00Z",
+                ),
+            )
+            upsert_telegram_chat(
+                str(db_path),
+                TelegramChat(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    chat_type="private",
+                    is_primary=True,
+                    notifications_enabled=True,
+                    created_at="2026-04-06T10:00:00Z",
+                ),
+            )
+            upsert_linked_ebay_account(
+                str(db_path),
+                LinkedEbayAccount(
+                    telegram_user_id=123,
+                    ebay_user_id="seller-ebay",
+                    environment="production",
+                    scopes="sell.fulfillment.readonly",
+                    linked_at="2026-04-06T10:05:00Z",
+                    status="linked",
+                ),
+            )
+            account = load_linked_ebay_accounts(str(db_path))[0]
+            self.assertIsNotNone(account.id)
+            upsert_ebay_token_set(
+                str(db_path),
+                EbayTokenSet(
+                    ebay_account_id=int(account.id),
+                    refresh_token_encrypted="enc",
+                    access_token="short",
+                    scope_set="sell.fulfillment.readonly",
+                    status="active",
+                ),
+            )
+            upsert_notification_subscription(
+                str(db_path),
+                NotificationSubscription(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    enabled=True,
+                    filters="",
+                    created_at="2026-04-06T10:06:00Z",
+                ),
+            )
+
+            self.assertEqual(len(load_telegram_users(str(db_path))), 1)
+            self.assertEqual(len(load_telegram_chats(str(db_path))), 1)
+            self.assertEqual(len(load_linked_ebay_accounts(str(db_path))), 1)
+            self.assertEqual(len(load_ebay_token_sets(str(db_path))), 1)
+            self.assertEqual(len(load_notification_subscriptions(str(db_path))), 1)
+
+            tenants = list_notification_tenants(str(db_path))
+            self.assertEqual(len(tenants), 1)
+            self.assertEqual(tenants[0].telegram_user_id, 123)
+            self.assertEqual(tenants[0].environment, "production")
+            self.assertEqual(tenants[0].notify_chat_ids, {456})
+
+    def test_resolve_tenant_chat_context_prefers_exact_user_mapping(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+
+            upsert_telegram_user(
+                str(db_path),
+                TelegramUser(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    username="first",
+                    display_name="First User",
+                    created_at="2026-04-06T10:00:00Z",
+                ),
+            )
+            upsert_telegram_chat(
+                str(db_path),
+                TelegramChat(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    notifications_enabled=True,
+                    created_at="2026-04-06T10:00:00Z",
+                    updated_at="2026-04-06T10:00:00Z",
+                ),
+            )
+            upsert_linked_ebay_account(
+                str(db_path),
+                LinkedEbayAccount(
+                    telegram_user_id=123,
+                    ebay_user_id="seller-1",
+                    environment="production",
+                    linked_at="2026-04-06T10:00:00Z",
+                ),
+            )
+
+            upsert_telegram_user(
+                str(db_path),
+                TelegramUser(
+                    telegram_user_id=124,
+                    telegram_chat_id=456,
+                    username="second",
+                    display_name="Second User",
+                    created_at="2026-04-06T10:01:00Z",
+                ),
+            )
+            upsert_telegram_chat(
+                str(db_path),
+                TelegramChat(
+                    telegram_user_id=124,
+                    telegram_chat_id=456,
+                    notifications_enabled=False,
+                    created_at="2026-04-06T10:01:00Z",
+                    updated_at="2026-04-06T10:01:00Z",
+                ),
+            )
+            upsert_linked_ebay_account(
+                str(db_path),
+                LinkedEbayAccount(
+                    telegram_user_id=124,
+                    ebay_user_id="seller-2",
+                    environment="sandbox",
+                    linked_at="2026-04-06T10:01:00Z",
+                ),
+            )
+
+            exact = resolve_tenant_chat_context(str(db_path), 456, telegram_user_id=124)
+            fallback = resolve_tenant_chat_context(str(db_path), 456)
+
+            assert exact is not None
+            assert fallback is not None
+            self.assertEqual(exact.telegram_user_id, 124)
+            self.assertEqual(exact.environment, "sandbox")
+            self.assertFalse(exact.notifications_enabled)
+            self.assertEqual(fallback.telegram_chat_id, 456)
+
+    def test_resolve_linked_ebay_account_prefers_exact_environment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+
+            upsert_linked_ebay_account(
+                str(db_path),
+                LinkedEbayAccount(
+                    telegram_user_id=123,
+                    ebay_user_id="seller-prod",
+                    environment="production",
+                    linked_at="2026-04-06T10:00:00Z",
+                    status="linked",
+                ),
+            )
+            upsert_linked_ebay_account(
+                str(db_path),
+                LinkedEbayAccount(
+                    telegram_user_id=123,
+                    ebay_user_id="seller-sandbox",
+                    environment="sandbox",
+                    linked_at="2026-04-06T10:01:00Z",
+                    status="linked",
+                ),
+            )
+
+            exact = resolve_linked_ebay_account(str(db_path), 123, "sandbox")
+            fallback = resolve_linked_ebay_account(str(db_path), 123, "staging")
+
+            assert exact is not None
+            assert fallback is not None
+            self.assertEqual(exact.ebay_user_id, "seller-sandbox")
+            self.assertEqual(fallback.telegram_user_id, 123)
 
 
 if __name__ == "__main__":

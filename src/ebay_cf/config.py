@@ -45,6 +45,21 @@ def load_config(environment: str) -> Config:
     )
 
 
+def load_config_with_refresh_token(environment: str, refresh_token: str) -> Config:
+    if not refresh_token:
+        raise ConfigurationError("Refresh token tenant mancante.")
+    missing = [name for name in ("EBAY_CLIENT_ID", "EBAY_CLIENT_SECRET") if not os.getenv(name)]
+    if missing:
+        raise ConfigurationError("Variabili ambiente mancanti: " + ", ".join(missing))
+    return Config(
+        client_id=os.environ["EBAY_CLIENT_ID"],
+        client_secret=os.environ["EBAY_CLIENT_SECRET"],
+        refresh_token=refresh_token,
+        environment=environment,
+        scopes=os.getenv("EBAY_SCOPES", DEFAULT_SCOPE),
+    )
+
+
 def load_telegram_config() -> TelegramConfig:
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:

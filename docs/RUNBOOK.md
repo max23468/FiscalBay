@@ -87,6 +87,14 @@ Health check JSON:
 "$(pwd)/.venv/bin/ebay-cf-healthcheck" --json
 ```
 
+Nota storage:
+
+- le nuove migrazioni SQLite possono aggiungere tabelle tenant-aware nello stesso `state.db`
+- questo non attiva da solo la multiutenza: finche' il DB non contiene tenant/account/subscription, il bot continua a comportarsi come oggi
+- su VPS, prima di deploy che toccano lo storage, verificare di avere un backup fresco di `data/state.db`
+- dal momento in cui il bot registra utenti/chat dal traffico Telegram reale, `state.db` diventa anche la base iniziale della futura migrazione multiutente
+- se il DB contiene gia' la mappatura tra chat Telegram e tenant utente, i comandi del bot leggono gia' lo stato tenant-aware; in assenza di mappatura resta il fallback globale
+
 Il report JSON include anche metriche runtime aggregate:
 
 - `orders_read`
@@ -96,6 +104,16 @@ Il report JSON include anche metriche runtime aggregate:
 - `consecutive_error_cycles`
 - `ebay_errors`
 - `telegram_errors`
+
+Include anche readiness multiutente:
+
+- `multi_tenant.tenant_users`
+- `multi_tenant.tenant_chats`
+- `multi_tenant.linked_accounts`
+- `multi_tenant.active_token_sets`
+- `multi_tenant.notification_subscriptions`
+- `multi_tenant.tenant_runtime_states`
+- `multi_tenant.tenant_credentials_ready`
 
 Alert check periodico:
 

@@ -66,6 +66,8 @@ class HealthcheckTests(unittest.TestCase):
             self.assertEqual(report["metrics"]["orders_read"], 4)
             self.assertEqual(report["metrics"]["orders_with_cf"], 1)
             self.assertEqual(report["metrics"]["telegram_errors"], 0)
+            self.assertIn("multi_tenant", report)
+            self.assertFalse(report["multi_tenant"]["tenant_credentials_ready"])
 
     def test_build_health_report_fails_for_missing_lock_and_stale_check(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -149,6 +151,15 @@ class HealthcheckTests(unittest.TestCase):
                 "reasons": ["lock_missing"],
                 "warnings": ["retry_queue_not_empty"],
                 "alerts": ["service_inactive"],
+                "multi_tenant": {
+                    "tenant_users": 1,
+                    "tenant_chats": 1,
+                    "linked_accounts": 0,
+                    "active_token_sets": 0,
+                    "notification_subscriptions": 1,
+                    "tenant_runtime_states": 0,
+                    "tenant_credentials_ready": False,
+                },
             }
         )
         self.assertIn("status: fail", text)
@@ -156,6 +167,7 @@ class HealthcheckTests(unittest.TestCase):
         self.assertIn("alerts: service_inactive", text)
         self.assertIn("reasons: lock_missing", text)
         self.assertIn("warnings: retry_queue_not_empty", text)
+        self.assertIn("multi_tenant.tenant_users: 1", text)
 
     @patch("src.ebay_cf.healthcheck.build_health_report")
     def test_main_can_render_json(self, mock_build_health_report) -> None:
@@ -181,6 +193,15 @@ class HealthcheckTests(unittest.TestCase):
                 "telegram_errors": 0,
             },
             "alerts": [],
+            "multi_tenant": {
+                "tenant_users": 0,
+                "tenant_chats": 0,
+                "linked_accounts": 0,
+                "active_token_sets": 0,
+                "notification_subscriptions": 0,
+                "tenant_runtime_states": 0,
+                "tenant_credentials_ready": False,
+            },
         }
 
         with patch("builtins.print") as mock_print:

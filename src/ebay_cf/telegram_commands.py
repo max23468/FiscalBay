@@ -5,7 +5,7 @@ from __future__ import annotations
 import html
 import json
 import urllib.parse
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Mapping
 
 from .errors import UserInputError
 from .models import (
@@ -206,16 +206,34 @@ def is_authorized(chat_id: int, config: TelegramConfig) -> bool:
     return chat_id in config.allowed_chat_ids
 
 
-def format_status(state: BotRuntimeState, retry_queue_size: int) -> str:
+def format_status(
+    state: BotRuntimeState,
+    retry_queue_size: int,
+    runtime_context: Mapping[str, object] | None = None,
+) -> str:
     metrics = state.metrics
     errors = metrics.errors_by_type
     errors_text = html.escape(json.dumps(errors, ensure_ascii=False)) if errors else "nessuno"
     last_check_str = state.last_check or "mai"
     last_error_str = state.last_error or "nessuno"
+    context = runtime_context or {}
+    tenant_scope = html.escape(str(context.get("tenant_scope", "global")))
+    environment = html.escape(str(context.get("environment", "production")))
+    config_source = html.escape(str(context.get("config_source", "global_env")))
+    fallback_reason = context.get("fallback_reason")
+    fallback_text = (
+        f"\n🪂 Fallback credenziali: <code>{html.escape(str(fallback_reason))}</code>"
+        if fallback_reason
+        else ""
+    )
 
     return (
         "📊 <b>Stato del Bot</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🏷️ Scope runtime: <code>{tenant_scope}</code>\n"
+        f"🌍 Ambiente eBay: <code>{environment}</code>\n"
+        f"🔐 Sorgente credenziali: <code>{config_source}</code>"
+        f"{fallback_text}\n"
         f"⏱️ Ultimo check eBay: <code>{html.escape(last_check_str)}</code>\n"
         f"📦 Ordini analizzati: <code>{metrics.orders_read}</code>\n"
         f"🧾 Ordini con CF: <code>{metrics.orders_with_cf}</code>\n"

@@ -108,6 +108,12 @@ Ogni passo della fase multiutente deve essere giustificato contro questi finding
 - SQLite ancora accettabile per beta privata controllata
 - Postgres richiesto prima dell'apertura pubblica multiutente
 
+## Stato attuale dell'adapter token tenant
+
+- il codice applicativo ha ora un adapter dedicato per leggere token tenant dallo storage
+- per sicurezza, sul deploy VPS attuale questo adapter resta in fallback su credenziali globali finche' non esiste un decoder reale del refresh token cifrato
+- e' presente solo un percorso di test/dev esplicitamente opt-in per token plaintext, da non abilitare sulla VPS di produzione
+
 ## Sufficienza della VPS attuale
 
 Per la fase privata la VPS attuale e' considerata sufficiente solo se restano veri questi vincoli:

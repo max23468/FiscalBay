@@ -6,8 +6,10 @@ import argparse
 from typing import Callable
 
 from .config import load_config
-from .models import Config, FetchOptions, OrderRecord
+from .models import Config, FetchOptions, LinkedEbayAccount, OrderRecord, ResolvedFetchContext
 from .services.orders import fetch_records
+from .storage.sqlite import resolve_linked_ebay_account
+from .tenant_credentials import load_tenant_config_from_storage
 
 
 def build_fetch_options_from_namespace(args: argparse.Namespace) -> FetchOptions:
@@ -31,3 +33,91 @@ def fetch_environment_records(
 ) -> list[OrderRecord]:
     config = load_config_fn(ebay_environment)
     return fetch_records_fn(config, options)
+
+
+def resolve_fetch_context(
+    ebay_environment: str,
+    *,
+    telegram_user_id: int | None = None,
+    state_path: str | None = None,
+    load_config_fn: Callable[[str], Config] = load_config,
+    resolve_linked_account_fn: Callable[
+        [str, int, str | None], LinkedEbayAccount | None
+    ] = resolve_linked_ebay_account,
+    load_tenant_config_fn: Callable[[LinkedEbayAccount, str, str], Config | None]
+    | None = load_tenant_config_from_storage,
+) -> ResolvedFetchContext:
+    linked_account: LinkedEbayAccount | None = None
+    resolved_environment = ebay_environment
+    if telegram_user_id and state_path:
+        linked_account = resolve_linked_account_fn(state_path, telegram_user_id, ebay_environment)
+        if linked_account is not None and linked_account.environment:
+            resolved_environment = linked_account.environment
+
+    if linked_account is not None and load_tenant_config_fn is not None:
+        tenant_config = load_tenant_config_fn(
+            linked_account,
+            resolved_environment,
+            state_path or "",
+        )
+        if tenant_config is not None:
+            return ResolvedFetchContext(
+                config=tenant_config,
+                config_source="tenant_store",
+                environment=resolved_environment,
+                telegram_user_id=telegram_user_id,
+                ebay_user_id=linked_account.ebay_user_id,
+                used_tenant_credentials=True,
+            )
+
+    fallback_reason = None
+    if linked_account is not None:
+        fallback_reason = "tenant_credentials_unavailable"
+    elif telegram_user_id:
+        fallback_reason = "tenant_account_unlinked"
+
+    return ResolvedFetchContext(
+        config=load_config_fn(resolved_environment),
+        config_source="global_env",
+        environment=resolved_environment,
+        telegram_user_id=telegram_user_id,
+        ebay_user_id=linked_account.ebay_user_id if linked_account is not None else "",
+        used_tenant_credentials=False,
+        fallback_reason=fallback_reason,
+    )
+
+
+def resolve_tenant_fetch_account(
+    preferred_environment: str,
+    *,
+    telegram_user_id: int | None,
+    state_path: str,
+    resolve_linked_account_fn: Callable[
+        [str, int, str | None], LinkedEbayAccount | None
+    ] = resolve_linked_ebay_account,
+) -> LinkedEbayAccount | None:
+    if not telegram_user_id:
+        return None
+    return resolve_linked_account_fn(state_path, telegram_user_id, preferred_environment)
+
+
+def fetch_tenant_records(
+    ebay_environment: str,
+    options: FetchOptions,
+    *,
+    telegram_user_id: int | None,
+    state_path: str,
+    load_config_fn: Callable[[str], Config] = load_config,
+    fetch_records_fn: Callable[[Config, FetchOptions], list[OrderRecord]] = fetch_records,
+    resolve_linked_account_fn: Callable[
+        [str, int, str | None], LinkedEbayAccount | None
+    ] = resolve_linked_ebay_account,
+) -> list[OrderRecord]:
+    resolved = resolve_fetch_context(
+        ebay_environment,
+        telegram_user_id=telegram_user_id,
+        state_path=state_path,
+        load_config_fn=load_config_fn,
+        resolve_linked_account_fn=resolve_linked_account_fn,
+    )
+    return fetch_records_fn(resolved.config, options)

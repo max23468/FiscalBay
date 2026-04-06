@@ -31,6 +31,22 @@ def as_str_list(value: object) -> list[str]:
     return []
 
 
+def as_bool(value: object, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return default
+
+
 @dataclass
 class Config:
     client_id: str
@@ -44,6 +60,17 @@ class Config:
         if self.environment == "sandbox":
             return "https://api.sandbox.ebay.com"
         return "https://api.ebay.com"
+
+
+@dataclass
+class ResolvedFetchContext:
+    config: Config
+    config_source: str = "global_env"
+    environment: str = "production"
+    telegram_user_id: int | None = None
+    ebay_user_id: str = ""
+    used_tenant_credentials: bool = False
+    fallback_reason: str | None = None
 
 
 @dataclass
@@ -135,6 +162,175 @@ class LinkedEbayAccount:
         if self.id is not None:
             payload["id"] = self.id
         return payload
+
+
+@dataclass
+class TelegramChat:
+    telegram_user_id: int
+    telegram_chat_id: int
+    chat_type: str = "private"
+    is_primary: bool = True
+    notifications_enabled: bool = True
+    created_at: str | None = None
+    updated_at: str | None = None
+    id: int | None = None
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, object]) -> "TelegramChat":
+        raw_id = data.get("id")
+        return cls(
+            id=as_int(raw_id) if raw_id is not None else None,
+            telegram_user_id=as_int(data.get("telegram_user_id", 0)),
+            telegram_chat_id=as_int(data.get("telegram_chat_id", 0)),
+            chat_type=str(data.get("chat_type", "private")),
+            is_primary=as_bool(data.get("is_primary", True), True),
+            notifications_enabled=as_bool(data.get("notifications_enabled", True), True),
+            created_at=str(data["created_at"]) if data.get("created_at") else None,
+            updated_at=str(data["updated_at"]) if data.get("updated_at") else None,
+        )
+
+    def as_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "telegram_user_id": self.telegram_user_id,
+            "telegram_chat_id": self.telegram_chat_id,
+            "chat_type": self.chat_type,
+            "is_primary": self.is_primary,
+            "notifications_enabled": self.notifications_enabled,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+        if self.id is not None:
+            payload["id"] = self.id
+        return payload
+
+
+@dataclass
+class EbayTokenSet:
+    ebay_account_id: int
+    refresh_token_encrypted: str
+    access_token: str = ""
+    scope_set: str = ""
+    expires_at: str | None = None
+    updated_at: str | None = None
+    status: str = "active"
+    id: int | None = None
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, object]) -> "EbayTokenSet":
+        raw_id = data.get("id")
+        return cls(
+            id=as_int(raw_id) if raw_id is not None else None,
+            ebay_account_id=as_int(data.get("ebay_account_id", 0)),
+            refresh_token_encrypted=str(data.get("refresh_token_encrypted", "")),
+            access_token=str(data.get("access_token", "")),
+            scope_set=str(data.get("scope_set", "")),
+            expires_at=str(data["expires_at"]) if data.get("expires_at") else None,
+            updated_at=str(data["updated_at"]) if data.get("updated_at") else None,
+            status=str(data.get("status", "active")),
+        )
+
+    def as_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "ebay_account_id": self.ebay_account_id,
+            "refresh_token_encrypted": self.refresh_token_encrypted,
+            "access_token": self.access_token,
+            "scope_set": self.scope_set,
+            "expires_at": self.expires_at,
+            "updated_at": self.updated_at,
+            "status": self.status,
+        }
+        if self.id is not None:
+            payload["id"] = self.id
+        return payload
+
+
+@dataclass
+class NotificationSubscription:
+    telegram_user_id: int
+    telegram_chat_id: int
+    enabled: bool = True
+    filters: str = ""
+    created_at: str | None = None
+    updated_at: str | None = None
+    id: int | None = None
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, object]) -> "NotificationSubscription":
+        raw_id = data.get("id")
+        return cls(
+            id=as_int(raw_id) if raw_id is not None else None,
+            telegram_user_id=as_int(data.get("telegram_user_id", 0)),
+            telegram_chat_id=as_int(data.get("telegram_chat_id", 0)),
+            enabled=as_bool(data.get("enabled", True), True),
+            filters=str(data.get("filters", "")),
+            created_at=str(data["created_at"]) if data.get("created_at") else None,
+            updated_at=str(data["updated_at"]) if data.get("updated_at") else None,
+        )
+
+    def as_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "telegram_user_id": self.telegram_user_id,
+            "telegram_chat_id": self.telegram_chat_id,
+            "enabled": self.enabled,
+            "filters": self.filters,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+        if self.id is not None:
+            payload["id"] = self.id
+        return payload
+
+
+@dataclass
+class TenantChatContext:
+    telegram_user_id: int
+    telegram_chat_id: int
+    environment: str | None = None
+    notifications_enabled: bool = False
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, object]) -> "TenantChatContext":
+        raw_environment = data.get("environment")
+        return cls(
+            telegram_user_id=as_int(data.get("telegram_user_id", 0)),
+            telegram_chat_id=as_int(data.get("telegram_chat_id", 0)),
+            environment=str(raw_environment) if raw_environment else None,
+            notifications_enabled=as_bool(data.get("notifications_enabled", False), False),
+        )
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "telegram_user_id": self.telegram_user_id,
+            "telegram_chat_id": self.telegram_chat_id,
+            "environment": self.environment,
+            "notifications_enabled": self.notifications_enabled,
+        }
+
+
+@dataclass
+class NotificationTenantTarget:
+    telegram_user_id: int
+    environment: str = "production"
+    notify_chat_ids: set[int] = field(default_factory=set)
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, object]) -> "NotificationTenantTarget":
+        raw_chat_ids = data.get("notify_chat_ids", [])
+        notify_chat_ids: set[int] = set()
+        if isinstance(raw_chat_ids, Iterable) and not isinstance(raw_chat_ids, (str, bytes)):
+            notify_chat_ids = {as_int(value) for value in raw_chat_ids if as_int(value)}
+        return cls(
+            telegram_user_id=as_int(data.get("telegram_user_id", 0)),
+            environment=str(data.get("environment", "production")),
+            notify_chat_ids=notify_chat_ids,
+        )
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "telegram_user_id": self.telegram_user_id,
+            "environment": self.environment,
+            "notify_chat_ids": sorted(self.notify_chat_ids),
+        }
 
 
 @dataclass
@@ -287,3 +483,7 @@ BotRuntimeStateLike = Union[BotRuntimeState, Mapping[str, object]]
 RetryQueueEntryLike = Union[RetryQueueEntry, Mapping[str, object]]
 TelegramUserLike = Union[TelegramUser, Mapping[str, object]]
 LinkedEbayAccountLike = Union[LinkedEbayAccount, Mapping[str, object]]
+TelegramChatLike = Union[TelegramChat, Mapping[str, object]]
+EbayTokenSetLike = Union[EbayTokenSet, Mapping[str, object]]
+NotificationSubscriptionLike = Union[NotificationSubscription, Mapping[str, object]]
+TenantChatContextLike = Union[TenantChatContext, Mapping[str, object]]

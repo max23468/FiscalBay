@@ -13,7 +13,11 @@ from typing import Optional
 from .config import configure_logging, load_telegram_config
 from .logging_utils import log_event
 from .models import BotMetrics, as_int
-from .storage.sqlite import load_retry_queue_entries, load_runtime_state
+from .storage.sqlite import (
+    load_retry_queue_entries,
+    load_runtime_state,
+    summarize_multi_tenant_readiness,
+)
 
 LOGGER = logging.getLogger("ebaycf.healthcheck")
 
@@ -126,6 +130,7 @@ def build_health_report(
         warnings.append("retry_queue_not_empty")
 
     ebay_errors, telegram_errors = summarize_error_metrics(state.metrics)
+    multi_tenant = summarize_multi_tenant_readiness(telegram_config.state_path)
     status = "ok" if not reasons else "fail"
     report = {
         "ok": not reasons,
@@ -147,6 +152,11 @@ def build_health_report(
             "consecutive_error_cycles": state.metrics.consecutive_error_cycles,
             "ebay_errors": ebay_errors,
             "telegram_errors": telegram_errors,
+        },
+        "multi_tenant": {
+            **multi_tenant,
+            "tenant_credentials_ready": multi_tenant["linked_accounts"] > 0
+            and multi_tenant["active_token_sets"] > 0,
         },
     }
     alerts = build_alerts(
@@ -176,6 +186,9 @@ def build_health_report(
         consecutive_error_cycles=state.metrics.consecutive_error_cycles,
         ebay_errors=ebay_errors,
         telegram_errors=telegram_errors,
+        tenant_users=multi_tenant["tenant_users"],
+        linked_accounts=multi_tenant["linked_accounts"],
+        active_token_sets=multi_tenant["active_token_sets"],
     )
     return report
 
@@ -213,9 +226,24 @@ def render_text_report(report: dict[str, object]) -> str:
     )
     raw_alerts = report.get("alerts")
     alerts = raw_alerts if isinstance(raw_alerts, list) else []
+    raw_multi_tenant = report.get("multi_tenant")
+    multi_tenant = raw_multi_tenant if isinstance(raw_multi_tenant, dict) else {}
     lines.append("reasons: " + (", ".join(str(item) for item in reasons) if reasons else "none"))
     lines.append("warnings: " + (", ".join(str(item) for item in warnings) if warnings else "none"))
     lines.append("alerts: " + (", ".join(str(item) for item in alerts) if alerts else "none"))
+    lines.extend(
+        [
+            f"multi_tenant.tenant_users: {multi_tenant.get('tenant_users', 0)}",
+            f"multi_tenant.tenant_chats: {multi_tenant.get('tenant_chats', 0)}",
+            f"multi_tenant.linked_accounts: {multi_tenant.get('linked_accounts', 0)}",
+            f"multi_tenant.active_token_sets: {multi_tenant.get('active_token_sets', 0)}",
+            "multi_tenant.notification_subscriptions: "
+            f"{multi_tenant.get('notification_subscriptions', 0)}",
+            f"multi_tenant.tenant_runtime_states: {multi_tenant.get('tenant_runtime_states', 0)}",
+            "multi_tenant.tenant_credentials_ready: "
+            f"{multi_tenant.get('tenant_credentials_ready', False)}",
+        ]
+    )
     return "\n".join(lines)
 
 

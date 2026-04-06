@@ -72,7 +72,7 @@ Entrambe condividono lo stesso package Python interno `src/ebay_cf/`.
 ### Persistenza
 
 - `src/ebay_cf/storage/sqlite.py`
-  - stato runtime, retry queue, migrazioni SQLite e compatibilita' legacy JSON
+  - stato runtime, retry queue, migrazioni SQLite, repository tenant-aware e compatibilita' legacy JSON
 
 ### Operativita'
 
@@ -165,6 +165,20 @@ Blocchi dati da introdurre nella prossima tranche:
 - `tenant_runtime_state`
   - ultimo check, metriche e retry queue per tenant invece che globali
 
+Stato implementativo corrente:
+
+- le tabelle tenant-aware e i repository base possono convivere nello stesso `state.db` del bot attuale
+- se non esistono tenant reali configurati, il runtime continua a usare il percorso single-tenant compatibile
+- il loop notifiche puo' gia' iterare tenant attivi quando trova subscription e account collegati nel DB
+- il runtime Telegram inizia a registrare utenti, chat e subscription dal traffico reale del bot, mantenendo compatibilita' con il deploy VPS esistente
+- i comandi del bot risolvono ora il tenant partendo dalla coppia `telegram_chat_id` + `telegram_user_id` quando disponibile, e leggono stato runtime e retry queue per tenant invece del solo stato globale
+- il layer applicativo di fetch ordini risolve ora anche l'account eBay collegato per tenant e sceglie l'environment a partire dal DB quando esiste una mappatura valida
+- la scelta della sorgente credenziali di fetch passa ora da una facciata applicativa unica: oggi usa ancora `.env` globale come fallback, ma il punto di innesto per credenziali per tenant non e' piu' sparso tra bot e servizi
+- esiste ora anche un adapter dedicato per credenziali tenant in storage, ma per sicurezza sul deploy VPS rimane inattivo finche' non viene fornito un decoder reale dei refresh token utente
+- se una chat non e' ancora mappata a un tenant nel DB della VPS, il bot mantiene comunque il fallback globale per non interrompere il servizio esistente
+- l'healthcheck operativo espone ora anche contatori di readiness multi-tenant, cosi' la maturita' del DB tenant-aware e' osservabile direttamente sul server
+- anche `/stato` espone ora lo scope runtime e la sorgente credenziali, cosi' il fallback globale residuo e' visibile direttamente dal bot
+
 ## Decisione database per la beta privata
 
 - breve termine: mantenere SQLite per progettazione e primi refactor tenant-aware
@@ -185,6 +199,8 @@ Blocchi dati da introdurre nella prossima tranche:
 ## Limiti da tenere presenti
 
 - le credenziali eBay sono ancora globali
+- i comandi tenant-aware usano gia' stato e scoping per tenant, ma il fetch ordini usa ancora credenziali globali finche' non arriva l'OAuth per utente
+- la risoluzione dell'account collegato e dell'environment e' gia' tenant-aware, ma la sorgente delle credenziali resta ancora `.env` globale finche' non saranno attivi token utente reali
 - resta un layer di compatibilita' nel bot per i test e i wrapper storici, anche se il dominio core e' ormai tipizzato
 - la multiutenza richiedera' un modello dati nuovo e un nuovo flusso OAuth
 

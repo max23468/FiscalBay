@@ -281,6 +281,16 @@ bash scripts/ci_verify.sh
 - niente OAuth eBay per singolo utente Telegram
 - parte multiutente ancora solo in progettazione
 
+Aggiornamento di stato:
+
+- e' iniziata la base tecnica della fase 3: SQLite e scheduler stanno ricevendo strutture tenant-aware, ma il comportamento operativo resta ancora single-tenant finche' non vengono popolati utenti/chat/account nel DB
+- il bot ora puo' iniziare a popolare utenti e chat dal traffico Telegram reale, preparando la migrazione senza fermare il servizio su VPS
+- i comandi del bot risolvono ora il tenant dai dati runtime Telegram e, quando trovano una mappatura nel DB, leggono stato e retry queue del tenant invece del solo stato globale
+- anche il layer applicativo che sceglie l'environment eBay passa ora dal tenant e dall'account collegato quando il DB lo consente, pur mantenendo fallback sulle credenziali globali attuali
+- la sorgente credenziali per il fetch non e' piu' una decisione sparsa nei caller: esiste ora una facciata unica che in futuro potra' preferire token per tenant senza cambiare ogni servizio
+- esiste gia' anche un adapter storage-side per futuri token tenant, ma sul bot in VPS resta volutamente spento finche' non sara' disponibile la decifratura reale dei refresh token utente
+- il comando `/stato` mostra ora esplicitamente se la chat sta lavorando in contesto tenant o ancora in fallback globale, rendendo osservabile il residuo single-tenant direttamente dal bot
+
 ## Multiutenza futura
 
 Direzione prevista, non ancora implementata:

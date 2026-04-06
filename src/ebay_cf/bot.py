@@ -6,7 +6,7 @@ import logging
 import os
 from contextlib import suppress
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Callable, Optional
 
 try:
     import fcntl
@@ -14,6 +14,7 @@ except ImportError:  # pragma: no cover - Windows
     fcntl = None
 
 from .application import fetch_environment_records as _fetch_environment_records
+from .application import fetch_tenant_records as _fetch_tenant_records
 from .clients.telegram import ensure_long_polling, telegram_request
 from .config import configure_logging, load_config, load_telegram_config
 from .errors import EbayApiError, TelegramApiError
@@ -21,9 +22,15 @@ from .logging_utils import log_event
 from .models import (
     BotRuntimeState,
     BotRuntimeStateLike,
+    FetchOptions,
+    NotificationSubscription,
     OrderRecord,
     OrderRecordLike,
+    RetryQueueEntry,
+    TelegramChat,
     TelegramConfig,
+    TelegramUser,
+    TenantChatContext,
 )
 from .retry import run_with_retry
 from .services.notifications import (
@@ -60,10 +67,20 @@ from .services.telegram_runtime import (
 )
 from .storage.sqlite import (
     ensure_parent_dir,
+    list_notification_tenants,
+    load_ebay_token_sets,
     load_retry_queue_entries,
     load_runtime_state,
+    load_tenant_retry_queue_entries,
+    load_tenant_runtime_state,
+    resolve_tenant_chat_context,
     save_retry_queue_entries,
     save_runtime_state,
+    save_tenant_retry_queue_entries,
+    save_tenant_runtime_state,
+    upsert_notification_subscription,
+    upsert_telegram_chat,
+    upsert_telegram_user,
 )
 from .telegram_commands import (
     CALLBACK_HELP,
@@ -102,6 +119,7 @@ from .telegram_commands import (
 from .telegram_commands import (
     record_fingerprint as _record_fingerprint,
 )
+from .tenant_credentials import decode_refresh_token
 
 LOGGER = logging.getLogger("ebaycf.telegram_bot")
 
@@ -132,6 +150,24 @@ def fetch_environment_records(ebay_environment: str, options) -> list[OrderRecor
     records = _fetch_environment_records(
         ebay_environment,
         options,
+        load_config_fn=load_config,
+        fetch_records_fn=fetch_records,
+    )
+    return coerce_order_records(records)
+
+
+def fetch_tenant_records(
+    ebay_environment: str,
+    options,
+    *,
+    telegram_user_id: int | None,
+    state_path: str,
+) -> list[OrderRecord]:
+    records = _fetch_tenant_records(
+        ebay_environment,
+        options,
+        telegram_user_id=telegram_user_id,
+        state_path=state_path,
         load_config_fn=load_config,
         fetch_records_fn=fetch_records,
     )
@@ -205,6 +241,7 @@ __all__ = [
     "run_bot",
     "send_message",
     "should_attach_main_menu",
+    "sync_runtime_contact",
     "update_state_with_records",
 ]
 
@@ -271,6 +308,68 @@ def send_message(
             if reply_markup is not None and idx == len(chunks) - 1:
                 fallback_params["reply_markup"] = reply_markup
             telegram_request(token, "sendMessage", fallback_params)
+
+
+def sync_runtime_contact(
+    telegram_config: TelegramConfig,
+    *,
+    telegram_user_id: int | None,
+    chat_id: int | None,
+    username: str = "",
+    display_name: str = "",
+    chat_type: str = "private",
+) -> None:
+    if not telegram_user_id or not chat_id:
+        return
+    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    upsert_telegram_user(
+        telegram_config.state_path,
+        TelegramUser(
+            telegram_user_id=telegram_user_id,
+            telegram_chat_id=chat_id,
+            username=username,
+            display_name=display_name,
+            created_at=timestamp,
+            status="active",
+        ),
+    )
+    upsert_telegram_chat(
+        telegram_config.state_path,
+        TelegramChat(
+            telegram_user_id=telegram_user_id,
+            telegram_chat_id=chat_id,
+            chat_type=chat_type or "private",
+            is_primary=True,
+            notifications_enabled=chat_id in telegram_config.notify_chat_ids,
+            created_at=timestamp,
+            updated_at=timestamp,
+        ),
+    )
+    if chat_id in telegram_config.notify_chat_ids:
+        upsert_notification_subscription(
+            telegram_config.state_path,
+            NotificationSubscription(
+                telegram_user_id=telegram_user_id,
+                telegram_chat_id=chat_id,
+                enabled=True,
+                filters="",
+                created_at=timestamp,
+                updated_at=timestamp,
+            ),
+        )
+
+
+def resolve_tenant_command_context(
+    telegram_config: TelegramConfig,
+    *,
+    chat_id: int,
+    telegram_user_id: int | None = None,
+) -> TenantChatContext | None:
+    return resolve_tenant_chat_context(
+        telegram_config.state_path,
+        telegram_chat_id=chat_id,
+        telegram_user_id=telegram_user_id,
+    )
 
 
 def acquire_process_lock(lock_path: str):
@@ -371,17 +470,58 @@ def maybe_send_new_order_notifications(
     telegram_config: TelegramConfig,
     ebay_environment: str,
 ) -> None:
-    _maybe_send_new_order_notifications(
-        telegram_config,
-        ebay_environment,
-        load_state_fn=load_runtime_state,
-        save_state_fn=save_runtime_state,
-        load_retry_queue_fn=load_retry_queue_entries,
-        save_retry_queue_fn=save_retry_queue_entries,
-        fetch_records_for_environment_fn=fetch_environment_records,
-        send_message_fn=send_message,
-        request_with_backoff_fn=request_with_backoff,
-    )
+    tenant_targets = list_notification_tenants(telegram_config.state_path)
+    if not tenant_targets:
+        _maybe_send_new_order_notifications(
+            telegram_config,
+            ebay_environment,
+            load_state_fn=load_runtime_state,
+            save_state_fn=save_runtime_state,
+            load_retry_queue_fn=load_retry_queue_entries,
+            save_retry_queue_fn=save_retry_queue_entries,
+            fetch_records_for_environment_fn=fetch_environment_records,
+            send_message_fn=send_message,
+            request_with_backoff_fn=request_with_backoff,
+        )
+        return
+
+    for target in tenant_targets:
+        tenant_config = TelegramConfig(
+            token=telegram_config.token,
+            allowed_chat_ids=telegram_config.allowed_chat_ids,
+            notify_chat_ids=set(target.notify_chat_ids),
+            poll_timeout_seconds=telegram_config.poll_timeout_seconds,
+            ebay_poll_interval_seconds=telegram_config.ebay_poll_interval_seconds,
+            state_path=telegram_config.state_path,
+            retry_queue_path=telegram_config.retry_queue_path,
+            lock_path=telegram_config.lock_path,
+        )
+        _maybe_send_new_order_notifications(
+            tenant_config,
+            target.environment or ebay_environment,
+            load_state_fn=lambda _path, user_id=target.telegram_user_id: load_tenant_runtime_state(
+                telegram_config.state_path, user_id
+            ),
+            save_state_fn=lambda _path, state, user_id=target.telegram_user_id: (
+                save_tenant_runtime_state(telegram_config.state_path, user_id, state)
+            ),
+            load_retry_queue_fn=lambda _path, user_id=target.telegram_user_id: (
+                load_tenant_retry_queue_entries(telegram_config.retry_queue_path, user_id)
+            ),
+            save_retry_queue_fn=lambda _path, queue, user_id=target.telegram_user_id: (
+                save_tenant_retry_queue_entries(telegram_config.retry_queue_path, user_id, queue)
+            ),
+            fetch_records_for_environment_fn=(
+                lambda env, options, user_id=target.telegram_user_id: fetch_tenant_records(
+                    env,
+                    options,
+                    telegram_user_id=user_id,
+                    state_path=telegram_config.state_path,
+                )
+            ),
+            send_message_fn=send_message,
+            request_with_backoff_fn=request_with_backoff,
+        )
 
 
 def process_message(
@@ -389,15 +529,74 @@ def process_message(
     chat_id: int,
     telegram_config: TelegramConfig,
     ebay_environment: str,
+    telegram_user_id: int | None = None,
 ) -> list[str]:
+    tenant_context = resolve_tenant_command_context(
+        telegram_config,
+        chat_id=chat_id,
+        telegram_user_id=telegram_user_id,
+    )
+    resolved_environment = ebay_environment
+    load_state_fn: Callable[[str], BotRuntimeState] = load_runtime_state
+    load_retry_queue_fn: Callable[[str], list[RetryQueueEntry]] = load_retry_queue_entries
+    fetch_records_for_environment_fn: Callable[[str, FetchOptions], list[OrderRecord]] = (
+        fetch_environment_records
+    )
+    resolved_telegram_user_id = telegram_user_id
+    if tenant_context is not None:
+        resolved_telegram_user_id = tenant_context.telegram_user_id
+        resolved_environment = tenant_context.environment or ebay_environment
+        tenant_user_id = tenant_context.telegram_user_id
+
+        def load_state_fn(_path: str) -> BotRuntimeState:
+            return load_tenant_runtime_state(telegram_config.state_path, tenant_user_id)
+
+        def load_retry_queue_fn(_path: str) -> list[RetryQueueEntry]:
+            return load_tenant_retry_queue_entries(telegram_config.retry_queue_path, tenant_user_id)
+
+    if resolved_telegram_user_id:
+        tenant_user_id = resolved_telegram_user_id
+
+        def fetch_records_for_environment_fn(
+            env: str,
+            options: FetchOptions,
+        ) -> list[OrderRecord]:
+            return fetch_tenant_records(
+                env,
+                options,
+                telegram_user_id=tenant_user_id,
+                state_path=telegram_config.state_path,
+            )
+
+    command_context: dict[str, object] = {
+        "tenant_scope": "tenant" if tenant_context is not None else "global",
+        "environment": resolved_environment,
+        "config_source": "global_env",
+    }
+    if command_context["tenant_scope"] == "tenant":
+        command_context["fallback_reason"] = "tenant_credentials_unavailable"
+        tenant_tokens = load_ebay_token_sets(telegram_config.state_path)
+        tenant_token_ready = any(
+            token.status == "active" and bool(decode_refresh_token(token.refresh_token_encrypted))
+            for token in tenant_tokens
+        )
+        if tenant_token_ready:
+            command_context["config_source"] = "tenant_store"
+            command_context.pop("fallback_reason", None)
+
+    if parse_command(text)[0] == "/stato":
+        state = load_state_fn(telegram_config.state_path)
+        retry_queue_size = len(load_retry_queue_fn(telegram_config.retry_queue_path))
+        return [format_status(state, retry_queue_size, runtime_context=command_context)]
+
     return _process_message(
         text=text,
         chat_id=chat_id,
         telegram_config=telegram_config,
-        ebay_environment=ebay_environment,
-        load_state_fn=load_runtime_state,
-        load_retry_queue_fn=load_retry_queue_entries,
-        fetch_records_for_environment_fn=fetch_environment_records,
+        ebay_environment=resolved_environment,
+        load_state_fn=load_state_fn,
+        load_retry_queue_fn=load_retry_queue_fn,
+        fetch_records_for_environment_fn=fetch_records_for_environment_fn,
         request_with_backoff_fn=request_with_backoff,
     )
 
@@ -424,6 +623,7 @@ def run_bot() -> int:
         acquire_process_lock_fn=acquire_process_lock,
         release_process_lock_fn=release_process_lock,
         process_message_fn=process_message,
+        register_runtime_contact_fn=sync_runtime_contact,
         send_message_fn=send_message,
         maybe_send_new_order_notifications_fn=maybe_send_new_order_notifications,
         request_with_backoff_fn=request_with_backoff,

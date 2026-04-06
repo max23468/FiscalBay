@@ -35,6 +35,30 @@ def extract_message_context(update: dict) -> tuple[int | None, str, int | None]:
     return chat.get("id"), text, None
 
 
+def _display_name_from_user(user: dict) -> str:
+    first_name = str(user.get("first_name") or "").strip()
+    last_name = str(user.get("last_name") or "").strip()
+    full_name = " ".join(part for part in (first_name, last_name) if part).strip()
+    if full_name:
+        return full_name
+    return str(user.get("username") or "").strip()
+
+
+def extract_message_actor(
+    update: dict,
+) -> tuple[int | None, int | None, str, str, str]:
+    message = update.get("message") or update.get("edited_message") or {}
+    chat = message.get("chat") or {}
+    user = message.get("from") or {}
+    return (
+        user.get("id"),
+        chat.get("id"),
+        str(user.get("username") or ""),
+        _display_name_from_user(user),
+        str(chat.get("type") or "private"),
+    )
+
+
 def extract_callback_context(
     update: dict,
 ) -> tuple[str | None, int | None, str | None, int | None]:
@@ -50,6 +74,22 @@ def extract_callback_context(
     if not isinstance(data, str):
         return callback_id, chat.get("id"), None, normalized_thread
     return callback_id, chat.get("id"), data, normalized_thread
+
+
+def extract_callback_actor(
+    update: dict,
+) -> tuple[int | None, int | None, str, str, str]:
+    callback = update.get("callback_query") or {}
+    user = callback.get("from") or {}
+    message = callback.get("message") or {}
+    chat = message.get("chat") or {}
+    return (
+        user.get("id"),
+        chat.get("id"),
+        str(user.get("username") or ""),
+        _display_name_from_user(user),
+        str(chat.get("type") or "private"),
+    )
 
 
 def request_shutdown(
@@ -97,7 +137,8 @@ def run_bot(
     load_telegram_config_fn: Callable[[], TelegramConfig],
     acquire_process_lock_fn: Callable[[str], object],
     release_process_lock_fn: Callable[[object, str], None],
-    process_message_fn: Callable[[str, int, TelegramConfig, str], list[str]],
+    process_message_fn: Callable[[str, int, TelegramConfig, str, int | None], list[str]],
+    register_runtime_contact_fn: Callable[..., None],
     send_message_fn: Callable[..., None],
     maybe_send_new_order_notifications_fn: Callable[[TelegramConfig, str], None],
     request_with_backoff_fn: Callable[..., object],
@@ -205,6 +246,21 @@ def run_bot(
                     extract_callback_context(update)
                 )
                 if callback_id and callback_chat_id and callback_data:
+                    (
+                        callback_user_id,
+                        _,
+                        callback_username,
+                        callback_display_name,
+                        callback_chat_type,
+                    ) = extract_callback_actor(update)
+                    register_runtime_contact_fn(
+                        telegram_config,
+                        telegram_user_id=callback_user_id,
+                        chat_id=callback_chat_id,
+                        username=callback_username,
+                        display_name=callback_display_name,
+                        chat_type=callback_chat_type,
+                    )
                     log_event(
                         LOGGER,
                         logging.INFO,
@@ -223,6 +279,7 @@ def run_bot(
                                 chat_id=callback_chat_id,
                                 telegram_config=telegram_config,
                                 ebay_environment=ebay_environment,
+                                telegram_user_id=callback_user_id,
                             )
                         except AppError as exc:
                             replies = [f"Errore: {html.escape(str(exc))}"]
@@ -294,6 +351,17 @@ def run_bot(
                 cid, msg_text, thread_id = extract_message_context(update)
                 if not cid or not msg_text.strip():
                     continue
+                message_user_id, _, message_username, message_display_name, message_chat_type = (
+                    extract_message_actor(update)
+                )
+                register_runtime_contact_fn(
+                    telegram_config,
+                    telegram_user_id=message_user_id,
+                    chat_id=cid,
+                    username=message_username,
+                    display_name=message_display_name,
+                    chat_type=message_chat_type,
+                )
                 command, _ = parse_command(msg_text)
                 log_event(
                     LOGGER,
@@ -311,6 +379,7 @@ def run_bot(
                         chat_id=cid,
                         telegram_config=telegram_config,
                         ebay_environment=ebay_environment,
+                        telegram_user_id=message_user_id,
                     )
                 except AppError as exc:
                     replies = [f"Errore: {html.escape(str(exc))}"]

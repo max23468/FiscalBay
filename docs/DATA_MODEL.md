@@ -146,9 +146,22 @@ Lo stato runtime vive in `data/state.db` e comprende:
 - metriche
 - retry queue
 
+Lo stesso SQLite ora puo' ospitare anche tabelle tenant-aware per:
+
+- utenti Telegram
+- chat Telegram
+- account eBay collegati
+- token eBay per account
+- subscription notifiche
+- stato runtime per tenant
+
 Compatibilita' mantenuta:
 
 - i vecchi file JSON vengono migrati automaticamente a SQLite
+- se il database non contiene ancora tenant configurati, il bot continua a funzionare in modalita' single-tenant
+- quando una chat Telegram e' gia' stata registrata nel DB, i comandi del bot possono risolvere il tenant e leggere stato runtime e retry queue del tenant invece del solo stato globale
+- il fetch applicativo puo' ora risolvere dal DB anche l'account eBay collegato e il relativo `environment`, pur continuando a usare credenziali globali finche' non esistono token utente reali
+- la scelta finale tra credenziali tenant-specifiche e fallback globale passa ora da un contesto applicativo esplicito, invece di essere implicita nei singoli caller
 
 ## Modelli futuri da introdurre
 
@@ -190,6 +203,7 @@ Note:
 
 - serve a non confondere utente e chat
 - permette in futuro piu' chat per lo stesso utente
+- nel runtime attuale e' gia' usata per risolvere lo scoping dei comandi del bot insieme a `telegram_user_id`
 
 ### `ebay_accounts`
 
@@ -271,6 +285,7 @@ Possibili campi:
 Note:
 
 - per la beta privata puo' restare un payload aggregato, ma la chiave di ownership deve essere il tenant utente
+- il comando Telegram `/stato` usa gia' questo stato tenant-aware quando il bot riesce a risolvere utente e chat dal DB
 
 ## Vincoli futuri
 
