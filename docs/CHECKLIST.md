@@ -17,14 +17,19 @@ Documenti collegati:
 
 ### Target di prodotto
 
-- [ ] raggiungere supporto multiutente reale
-- [ ] ogni utente deve vedere solo i propri ordini e le proprie notifiche
-- [ ] piu' utenti devono poter convivere sullo stesso bot
 - [ ] le credenziali eBay non devono stare in env globali condivise
+- [ ] rendere espliciti gli stati del workflow utente e account invece di usare flag impliciti sparsi
+- [ ] introdurre gating per capability oltre che per ruolo admin o utente
+- [ ] rendere idempotenti i comandi e i processi sensibili di onboarding e collegamento account
+- [ ] separare meglio richiesta, approvazione e applicazione effettiva dei permessi nel workflow accessi
+- [ ] introdurre una piccola reconciliation periodica per riallineare utenti, chat, token e subscription incoerenti
+- [ ] valutare una coda operativa per azioni sensibili come OAuth, revoca e operazioni admin critiche
 
 ## Fase 4 - Governance del Prodotto [Priorita' media]
 
 - [ ] definire governance e limiti del servizio in modo compatibile con isolamento dati tra utenti
+- [ ] introdurre audit log minimo append-only per request_access, approve, reject, connect, disconnect, oauth_success e oauth_failure
+- [ ] fare in modo che ogni processo sensibile produca sia outcome utente sia evento tecnico tracciabile
 - [ ] definire quali dati personali vengono trattati
 - [ ] scrivere informativa minima d'uso e retention
 - [ ] definire retention dei log

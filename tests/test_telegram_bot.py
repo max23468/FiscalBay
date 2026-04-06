@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from src.ebay_cf.bot import (
     CALLBACK_HELP,
+    CALLBACK_REQUEST_ACCESS,
     CALLBACK_SETTINGS,
     CALLBACK_STATO,
     CALLBACK_TUTTI,
@@ -48,6 +49,9 @@ class TelegramBotTests(unittest.TestCase):
         self.assertEqual(callback_command_from_data(CALLBACK_TUTTI), "/tutti 7 20")
         self.assertEqual(callback_command_from_data(CALLBACK_STATO), "/stato")
         self.assertEqual(callback_command_from_data(CALLBACK_SETTINGS), "/settings")
+        self.assertEqual(callback_command_from_data(CALLBACK_REQUEST_ACCESS), "/request_access")
+        self.assertEqual(callback_command_from_data("access:approve:321"), "/approve_user 321")
+        self.assertEqual(callback_command_from_data("access:reject:321"), "/reject_user 321")
         self.assertEqual(callback_command_from_data(CALLBACK_HELP), "/help")
         self.assertIsNone(callback_command_from_data("menu:unknown"))
 
@@ -104,6 +108,8 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("/ordine", text)
         self.assertIn("/settings", text)
         self.assertIn("/notifications on", text)
+        self.assertIn("/request_access", text)
+        self.assertIn("/users", text)
 
     @patch("src.ebay_cf.bot.fetch_records")
     @patch("src.ebay_cf.bot.load_config")

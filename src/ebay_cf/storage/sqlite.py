@@ -773,6 +773,47 @@ def load_telegram_users(path: str) -> list[TelegramUser]:
     return users
 
 
+def load_telegram_user(path: str, telegram_user_id: int) -> TelegramUser | None:
+    init_db(path)
+    with _connect(path) as conn:
+        row = conn.execute(
+            "SELECT u.telegram_user_id, "
+            "COALESCE(c.telegram_chat_id, 0) AS telegram_chat_id, "
+            "u.username, u.display_name, u.status, u.created_at, u.updated_at "
+            "FROM telegram_users AS u "
+            "LEFT JOIN telegram_chats AS c "
+            "ON c.telegram_user_id = u.telegram_user_id AND c.is_primary = 1 "
+            "WHERE u.telegram_user_id = ? "
+            "LIMIT 1",
+            (telegram_user_id,),
+        ).fetchone()
+        if row is None:
+            return None
+    return TelegramUser.from_mapping(dict(row))
+
+
+def update_telegram_user_status(
+    path: str,
+    telegram_user_id: int,
+    status: str,
+    *,
+    updated_at: str,
+) -> TelegramUser | None:
+    init_db(path)
+    with _connect(path) as conn:
+        row = conn.execute(
+            "SELECT telegram_user_id FROM telegram_users WHERE telegram_user_id = ? LIMIT 1",
+            (telegram_user_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        conn.execute(
+            "UPDATE telegram_users SET status = ?, updated_at = ? WHERE telegram_user_id = ?",
+            (status, updated_at, telegram_user_id),
+        )
+    return load_telegram_user(path, telegram_user_id)
+
+
 def upsert_telegram_chat(path: str, chat: TelegramChat) -> None:
     init_db(path)
     with _connect(path) as conn:
@@ -812,6 +853,22 @@ def load_telegram_chats(path: str) -> list[TelegramChat]:
         ):
             chats.append(TelegramChat.from_mapping(dict(row)))
     return chats
+
+
+def resolve_primary_chat_id(path: str, telegram_user_id: int) -> int | None:
+    init_db(path)
+    with _connect(path) as conn:
+        row = conn.execute(
+            "SELECT telegram_chat_id "
+            "FROM telegram_chats "
+            "WHERE telegram_user_id = ? "
+            "ORDER BY CASE WHEN is_primary = 1 THEN 0 ELSE 1 END, telegram_chat_id "
+            "LIMIT 1",
+            (telegram_user_id,),
+        ).fetchone()
+        if row is None:
+            return None
+    return as_int(row["telegram_chat_id"])
 
 
 def upsert_linked_ebay_account(path: str, account: LinkedEbayAccount) -> None:

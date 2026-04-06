@@ -201,8 +201,10 @@ Storage:
 - `/account`
 - `/connect`
 - `/disconnect`
+- `/request_access`
 - `/notifications on|off`
 - `/settings`
+- `/users`
 - `/ultimi`
 - `/tutti`
 - `/ordine`
@@ -214,6 +216,8 @@ Nota onboarding:
 - `/disconnect` scollega gia' localmente account e token del tenant corrente dal DB sulla VPS
 - `/notifications on|off` consente gia' alla singola chat di attivare o spegnere le notifiche personali
 - `/settings` mostra gia' un riepilogo leggero delle preferenze utente/chat
+- se `TELEGRAM_ADMIN_USER_ID` e' configurata, gli utenti non admin entrano in stati `new/pending/approved/blocked` e possono sbloccare il bot solo dopo approvazione admin
+- l'admin puo' gestire gli accessi con callback inline o con `/users`, `/approve_user` e `/reject_user`
 - esiste ora anche un callback server minimale separato, che chiude il flusso `/connect` quando la VPS espone URL pubblici corretti e usa il `RuName` eBay corretto verso il developer portal
 - i refresh token tenant usano ora cifratura Fernet a riposo con chiave da env sulla VPS
 - restano ancora aperti hardening finale e revoca remota verso eBay

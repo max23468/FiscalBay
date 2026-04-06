@@ -14,6 +14,7 @@ from .models import (
     OrderRecord,
     RetryQueueEntry,
     TelegramConfig,
+    TelegramUser,
 )
 
 TELEGRAM_CMD_MAX_DAYS = 365
@@ -29,6 +30,9 @@ CALLBACK_ACCOUNT = "menu:account"
 CALLBACK_CONNECT = "menu:connect"
 CALLBACK_DISCONNECT = "menu:disconnect"
 CALLBACK_SETTINGS = "menu:settings"
+CALLBACK_REQUEST_ACCESS = "access:request"
+CALLBACK_APPROVE_PREFIX = "access:approve:"
+CALLBACK_REJECT_PREFIX = "access:reject:"
 
 
 def chunk_message(text: str, limit: int = 3500) -> list[str]:
@@ -138,6 +142,8 @@ def build_help_text() -> str:
         "• 🔔 <code>/notifications on</code> → attiva notifiche per questa chat\n"
         "• 🔕 <code>/notifications off</code> → disattiva notifiche per questa chat\n"
         "• ⚙️ <code>/settings</code> → riepilogo preferenze di chat e tenant\n"
+        "• 🙋 <code>/request_access</code> → richiede accesso all'admin del bot\n"
+        "• 👥 <code>/users</code> → elenco utenti registrati e stato accessi (admin)\n"
         "• 📦 <code>/ultimi [giorni] [max]</code> → ordini con CF trovato\n"
         "• 📋 <code>/tutti [giorni] [max]</code> → tutti gli ordini\n"
         "• 🔍 <code>/ordine [id]</code> → dettaglio ordine singolo\n"
@@ -175,6 +181,7 @@ def build_main_menu_markup() -> dict[str, object]:
 
 
 def callback_command_from_data(data: str) -> str | None:
+    normalized = data.strip()
     mapping = {
         CALLBACK_ULTIMI: "/ultimi 7 20",
         CALLBACK_TUTTI: "/tutti 7 20",
@@ -183,9 +190,18 @@ def callback_command_from_data(data: str) -> str | None:
         CALLBACK_CONNECT: "/connect",
         CALLBACK_DISCONNECT: "/disconnect",
         CALLBACK_SETTINGS: "/settings",
+        CALLBACK_REQUEST_ACCESS: "/request_access",
         CALLBACK_HELP: "/help",
     }
-    return mapping.get(data.strip())
+    if normalized.startswith(CALLBACK_APPROVE_PREFIX):
+        telegram_user_id = normalized.removeprefix(CALLBACK_APPROVE_PREFIX)
+        if telegram_user_id:
+            return f"/approve_user {telegram_user_id}"
+    if normalized.startswith(CALLBACK_REJECT_PREFIX):
+        telegram_user_id = normalized.removeprefix(CALLBACK_REJECT_PREFIX)
+        if telegram_user_id:
+            return f"/reject_user {telegram_user_id}"
+    return mapping.get(normalized)
 
 
 def should_attach_main_menu(command: str) -> bool:
@@ -199,6 +215,161 @@ def should_attach_main_menu(command: str) -> bool:
         "/connect",
         "/disconnect",
         "/settings",
+    )
+
+
+def build_access_request_markup() -> dict[str, object]:
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": "Richiedi accesso",
+                    "callback_data": CALLBACK_REQUEST_ACCESS,
+                }
+            ]
+        ]
+    }
+
+
+def build_admin_approval_markup(telegram_user_id: int) -> dict[str, object]:
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": "Approva",
+                    "callback_data": f"{CALLBACK_APPROVE_PREFIX}{telegram_user_id}",
+                },
+                {
+                    "text": "Rifiuta",
+                    "callback_data": f"{CALLBACK_REJECT_PREFIX}{telegram_user_id}",
+                },
+            ]
+        ]
+    }
+
+
+def format_access_required_status(user_status: str, *, is_admin: bool = False) -> str:
+    if is_admin:
+        return (
+            "👑 <b>Admin del bot</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Il tuo account Telegram e' riconosciuto come admin globale."
+        )
+    if user_status == "pending":
+        return (
+            "⏳ <b>Accesso in attesa</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "La tua richiesta e' gia' in attesa di approvazione da parte dell'admin.\n"
+            "Quando verrai approvato potrai usare <code>/connect</code> e gli altri comandi."
+        )
+    if user_status == "blocked":
+        return (
+            "⛔ <b>Accesso non approvato</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Il tuo accesso al bot e' stato rifiutato o bloccato.\n"
+            "Contatta l'admin se ritieni che sia un errore."
+        )
+    return (
+        "🙋 <b>Accesso richiesto</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "Questo bot usa un accesso approvato dall'admin.\n"
+        "Usa <code>/request_access</code> per inviare la tua richiesta."
+    )
+
+
+def format_access_request_status(
+    *,
+    already_pending: bool = False,
+    admin_notified: bool = False,
+    blocked: bool = False,
+) -> str:
+    if blocked:
+        return (
+            "⛔ <b>Richiesta accesso</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Il tuo account risulta bloccato o rifiutato.\n"
+            "Contatta l'admin per una nuova valutazione."
+        )
+    if already_pending:
+        return (
+            "⏳ <b>Richiesta accesso</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "La tua richiesta e' gia' in attesa di approvazione."
+        )
+    if admin_notified:
+        return (
+            "✅ <b>Richiesta inviata</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "L'admin e' stato notificato. Ti scrivera' il bot appena l'accesso verra' approvato."
+        )
+    return (
+        "✅ <b>Richiesta registrata</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "La tua richiesta e' stata salvata, ma l'admin non e' ancora "
+        "raggiungibile da questa istanza."
+    )
+
+
+def format_admin_access_request(
+    *,
+    telegram_user_id: int,
+    username: str,
+    display_name: str,
+    chat_id: int,
+) -> str:
+    safe_username = html.escape(username or "n/d")
+    safe_display_name = html.escape(display_name or "n/d")
+    return (
+        "🙋 <b>Nuova richiesta accesso</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🆔 Telegram user: <code>{telegram_user_id}</code>\n"
+        f"👤 Username: <code>{safe_username}</code>\n"
+        f"🏷️ Nome: <code>{safe_display_name}</code>\n"
+        f"💬 Chat iniziale: <code>{chat_id}</code>\n"
+        "Usa i pulsanti qui sotto per approvare o rifiutare l'accesso."
+    )
+
+
+def format_admin_user_list(users: Iterable[Mapping[str, object] | TelegramUser]) -> str:
+    rows = list(users)
+    if not rows:
+        return (
+            "👥 <b>Utenti bot</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\nNessun utente registrato nel database."
+        )
+    rendered: list[str] = []
+    for raw_user in rows:
+        user = (
+            raw_user if isinstance(raw_user, TelegramUser) else TelegramUser.from_mapping(raw_user)
+        )
+        username = html.escape(user.username or "n/d")
+        display_name = html.escape(user.display_name or "n/d")
+        rendered.append(
+            f"• <code>{user.telegram_user_id}</code> "
+            f"status=<code>{html.escape(user.status)}</code> "
+            f"chat=<code>{user.telegram_chat_id}</code> "
+            f"user=<code>{username}</code> "
+            f"name=<code>{display_name}</code>"
+        )
+    return "👥 <b>Utenti bot</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(rendered)
+
+
+def format_admin_status_update(
+    *,
+    telegram_user_id: int,
+    status: str,
+    updated: bool,
+) -> str:
+    if not updated:
+        return (
+            "👥 <b>Gestione accessi</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"Nessun utente trovato per <code>{telegram_user_id}</code>."
+        )
+    return (
+        "👥 <b>Gestione accessi</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"Utente <code>{telegram_user_id}</code> aggiornato a "
+        f"<code>{html.escape(status)}</code>."
     )
 
 

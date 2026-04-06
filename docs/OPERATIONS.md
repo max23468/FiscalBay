@@ -130,8 +130,12 @@ Il comando Telegram `/settings`:
 Controllo accessi Telegram:
 
 - `TELEGRAM_ALLOWED_CHAT_IDS` continua a limitare le chat ammesse
-- `TELEGRAM_ADMIN_USER_ID`, quando valorizzata, rende il bot mono-admin: solo quell'utente Telegram puo' usare comandi, callback e onboarding OAuth
-- gli altri utenti non vengono trattati come tenant attivi e non vengono persistiti nel DB operativo del bot
+- `TELEGRAM_ADMIN_USER_ID`, quando valorizzata, identifica l'admin globale del bot
+- gli altri utenti vengono registrati nel DB con stati `new`, `pending`, `approved` o `blocked`
+- gli utenti non approvati possono solo usare `/start`, `/help` e `/request_access`
+- l'admin riceve una richiesta con pulsanti inline `Approva` e `Rifiuta`
+- in alternativa l'admin puo' usare `/users`, `/approve_user <telegram_user_id>` e `/reject_user <telegram_user_id>`
+- solo gli utenti `approved` o l'`admin` possono usare `/connect`, `/account`, `/settings`, `/notifications` e i comandi ordini
 
 Servizio OAuth su VPS:
 

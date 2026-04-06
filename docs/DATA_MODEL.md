@@ -56,7 +56,15 @@ Definisce:
 
 Uso:
 
-- modello tipizzato preparatorio per la futura multiutenza
+- modello tipizzato per tenant Telegram, access approval e anagrafica minima runtime
+
+Stati attesi:
+
+- `new`
+- `pending`
+- `approved`
+- `blocked`
+- `admin`
 
 ### `LinkedEbayAccount`
 
@@ -185,6 +193,7 @@ Note:
 
 - `telegram_user_id` e' la chiave logica del tenant
 - lo user record resta indipendente dalle singole chat
+- `status` governa anche il workflow di accesso approvato della beta privata
 
 ### `telegram_chats`
 

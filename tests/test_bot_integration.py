@@ -31,7 +31,7 @@ from src.ebay_cf.storage.sqlite import (
 
 
 class BotIntegrationTests(unittest.TestCase):
-    def test_process_message_rejects_non_admin_user(self) -> None:
+    def test_process_message_prompts_request_for_non_approved_user(self) -> None:
         replies = process_message(
             text="/help",
             chat_id=573159993,
@@ -45,9 +45,10 @@ class BotIntegrationTests(unittest.TestCase):
             telegram_user_id=111111,
         )
 
-        self.assertEqual(replies, ["Utente non autorizzato per questo bot."])
+        self.assertEqual(len(replies), 1)
+        self.assertIn("/request_access", replies[0])
 
-    def test_sync_runtime_contact_ignores_non_admin_user(self) -> None:
+    def test_sync_runtime_contact_persists_new_non_admin_user(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
@@ -68,9 +69,123 @@ class BotIntegrationTests(unittest.TestCase):
                 chat_type="private",
             )
 
-            self.assertEqual(load_telegram_users(str(db_path)), [])
-            self.assertEqual(load_telegram_chats(str(db_path)), [])
-            self.assertEqual(load_notification_subscriptions(str(db_path)), [])
+            users = load_telegram_users(str(db_path))
+            chats = load_telegram_chats(str(db_path))
+            subscriptions = load_notification_subscriptions(str(db_path))
+
+            self.assertEqual(len(users), 1)
+            self.assertEqual(users[0].status, "new")
+            self.assertEqual(len(chats), 1)
+            self.assertEqual(subscriptions, [])
+
+    @patch("src.ebay_cf.bot.send_message")
+    def test_request_access_notifies_admin_and_marks_user_pending(self, mock_send_message) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids=None,
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=999,
+                chat_id=456,
+                username="other_user",
+                display_name="Other User",
+                chat_type="private",
+            )
+
+            replies = process_message(
+                text="/request_access",
+                chat_id=456,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=999,
+            )
+
+            users = load_telegram_users(str(db_path))
+            requested_user = next(user for user in users if user.telegram_user_id == 999)
+            self.assertEqual(requested_user.status, "pending")
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Richiesta inviata", replies[0])
+            mock_send_message.assert_called_once()
+            self.assertEqual(mock_send_message.call_args.args[1], 123)
+
+    @patch("src.ebay_cf.bot.send_message")
+    def test_admin_can_approve_user_and_user_becomes_operational(self, mock_send_message) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids=None,
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=999,
+                chat_id=456,
+                username="other_user",
+                display_name="Other User",
+                chat_type="private",
+            )
+            process_message(
+                text="/request_access",
+                chat_id=456,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=999,
+            )
+            mock_send_message.reset_mock()
+
+            replies = process_message(
+                text="/approve_user 999",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+
+            users = load_telegram_users(str(db_path))
+            approved_user = next(user for user in users if user.telegram_user_id == 999)
+            self.assertEqual(approved_user.status, "approved")
+            self.assertEqual(len(replies), 1)
+            self.assertIn("approved", replies[0])
+            mock_send_message.assert_called_once()
+            self.assertEqual(mock_send_message.call_args.args[1], 456)
+
+            approved_help = process_message(
+                text="/help",
+                chat_id=456,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=999,
+            )
+            self.assertIn("Benvenuto in eBay CF Bot", approved_help[0])
 
     def test_process_message_status_reads_real_sqlite_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

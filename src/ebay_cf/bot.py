@@ -80,8 +80,11 @@ from .storage.sqlite import (
     load_notification_subscriptions,
     load_retry_queue_entries,
     load_runtime_state,
+    load_telegram_user,
+    load_telegram_users,
     load_tenant_retry_queue_entries,
     load_tenant_runtime_state,
+    resolve_primary_chat_id,
     resolve_tenant_chat_context,
     save_retry_queue_entries,
     save_runtime_state,
@@ -89,12 +92,14 @@ from .storage.sqlite import (
     save_tenant_runtime_state,
     set_notification_subscription_enabled,
     summarize_tenant_account_status,
+    update_telegram_user_status,
     upsert_notification_subscription,
     upsert_telegram_chat,
     upsert_telegram_user,
 )
 from .telegram_commands import (
     CALLBACK_HELP,
+    CALLBACK_REQUEST_ACCESS,
     CALLBACK_SETTINGS,
     CALLBACK_STATO,
     CALLBACK_TUTTI,
@@ -103,17 +108,22 @@ from .telegram_commands import (
     TELEGRAM_CMD_MAX_RESULTS,
     TELEGRAM_CMD_MIN_DAYS,
     TELEGRAM_CMD_MIN_RESULTS,
+    build_admin_approval_markup,
     build_help_text,
     build_main_menu_markup,
     callback_command_from_data,
     chunk_message,
+    format_access_request_status,
+    format_access_required_status,
     format_account_status,
+    format_admin_access_request,
+    format_admin_status_update,
+    format_admin_user_list,
     format_connect_status,
     format_disconnect_status,
     format_notifications_status,
     format_settings_status,
     format_status,
-    is_admin_authorized,
     is_authorized,
     options_for_command,
     parse_command,
@@ -140,6 +150,8 @@ from .telegram_commands import (
 from .tenant_credentials import decode_refresh_token
 
 LOGGER = logging.getLogger("ebaycf.telegram_bot")
+APPROVED_USER_STATUSES = {"active", "approved"}
+BLOCKED_USER_STATUSES = {"blocked", "rejected"}
 
 
 def coerce_runtime_state(state: BotRuntimeStateLike) -> BotRuntimeState:
@@ -224,6 +236,7 @@ def now_utc():
 
 __all__ = [
     "CALLBACK_HELP",
+    "CALLBACK_REQUEST_ACCESS",
     "CALLBACK_SETTINGS",
     "CALLBACK_STATO",
     "CALLBACK_TUTTI",
@@ -343,11 +356,18 @@ def sync_runtime_contact(
     display_name: str = "",
     chat_type: str = "private",
 ) -> None:
-    if not is_admin_authorized(chat_id, telegram_user_id, telegram_config):
+    if not is_authorized(chat_id, telegram_config):
         return
     if not telegram_user_id or not chat_id:
         return
     timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    existing_user = load_telegram_user(telegram_config.state_path, telegram_user_id)
+    if telegram_config.admin_user_id is None:
+        status = existing_user.status if existing_user is not None else "active"
+    else:
+        status = existing_user.status if existing_user is not None else "new"
+    if _is_admin_user(telegram_user_id, telegram_config):
+        status = "admin"
     upsert_telegram_user(
         telegram_config.state_path,
         TelegramUser(
@@ -356,7 +376,7 @@ def sync_runtime_contact(
             username=username,
             display_name=display_name,
             created_at=timestamp,
-            status="active",
+            status=status,
         ),
     )
     upsert_telegram_chat(
@@ -371,7 +391,9 @@ def sync_runtime_contact(
             updated_at=timestamp,
         ),
     )
-    if chat_id in telegram_config.notify_chat_ids:
+    if chat_id in telegram_config.notify_chat_ids and status in APPROVED_USER_STATUSES.union(
+        {"admin"}
+    ):
         upsert_notification_subscription(
             telegram_config.state_path,
             NotificationSubscription(
@@ -383,6 +405,56 @@ def sync_runtime_contact(
                 updated_at=timestamp,
             ),
         )
+
+
+def _is_admin_user(telegram_user_id: int | None, telegram_config: TelegramConfig) -> bool:
+    return (
+        telegram_user_id is not None
+        and telegram_config.admin_user_id is not None
+        and telegram_user_id == telegram_config.admin_user_id
+    )
+
+
+def _load_user_status(
+    telegram_config: TelegramConfig,
+    telegram_user_id: int | None,
+) -> str | None:
+    if telegram_user_id is None:
+        return None
+    if _is_admin_user(telegram_user_id, telegram_config):
+        return "admin"
+    user = load_telegram_user(telegram_config.state_path, telegram_user_id)
+    if user is None:
+        return None
+    return user.status
+
+
+def _is_user_approved(
+    telegram_config: TelegramConfig,
+    telegram_user_id: int | None,
+) -> bool:
+    if telegram_config.admin_user_id is None:
+        return True
+    if _is_admin_user(telegram_user_id, telegram_config):
+        return True
+    status = _load_user_status(telegram_config, telegram_user_id)
+    return status in APPROVED_USER_STATUSES
+
+
+def _notify_user_access_status(
+    telegram_config: TelegramConfig,
+    *,
+    telegram_user_id: int,
+    text: str,
+) -> None:
+    target_chat_id = resolve_primary_chat_id(telegram_config.state_path, telegram_user_id)
+    if target_chat_id is None:
+        return
+    send_message(
+        telegram_config.token,
+        target_chat_id,
+        text,
+    )
 
 
 def build_connect_entrypoint_url(oauth_state: str) -> str:
@@ -565,10 +637,142 @@ def process_message(
     ebay_environment: str,
     telegram_user_id: int | None = None,
 ) -> list[str]:
-    if not is_admin_authorized(chat_id, telegram_user_id, telegram_config):
-        if not is_authorized(chat_id, telegram_config):
-            return ["Chat non autorizzata per questo bot."]
-        return ["Utente non autorizzato per questo bot."]
+    if not is_authorized(chat_id, telegram_config):
+        return ["Chat non autorizzata per questo bot."]
+
+    command, args = parse_command(text)
+    is_admin_user = _is_admin_user(telegram_user_id, telegram_config)
+    user_status = _load_user_status(telegram_config, telegram_user_id)
+    can_use_bot = _is_user_approved(telegram_config, telegram_user_id)
+
+    if command == "/request_access":
+        if telegram_config.admin_user_id is None:
+            return [
+                "✅ <b>Accesso libero</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "Questa istanza del bot non richiede approvazione admin."
+            ]
+        if telegram_user_id is None:
+            return [format_access_request_status(admin_notified=False)]
+        if is_admin_user:
+            return [format_access_required_status("admin", is_admin=True)]
+        if user_status in APPROVED_USER_STATUSES:
+            return [
+                "✅ <b>Accesso gia' approvato</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "Il tuo account e' gia' abilitato all'uso del bot."
+            ]
+        if user_status in BLOCKED_USER_STATUSES:
+            return [format_access_request_status(blocked=True)]
+
+        timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        existing_user = load_telegram_user(telegram_config.state_path, telegram_user_id)
+        if existing_user is None:
+            upsert_telegram_user(
+                telegram_config.state_path,
+                TelegramUser(
+                    telegram_user_id=telegram_user_id,
+                    telegram_chat_id=chat_id,
+                    username="",
+                    display_name="",
+                    created_at=timestamp,
+                    status="pending",
+                ),
+            )
+            existing_user = load_telegram_user(telegram_config.state_path, telegram_user_id)
+        elif existing_user.status == "pending":
+            return [format_access_request_status(already_pending=True)]
+        else:
+            update_telegram_user_status(
+                telegram_config.state_path,
+                telegram_user_id,
+                "pending",
+                updated_at=timestamp,
+            )
+            existing_user = load_telegram_user(telegram_config.state_path, telegram_user_id)
+
+        admin_notified = False
+        admin_chat_id = (
+            resolve_primary_chat_id(telegram_config.state_path, telegram_config.admin_user_id)
+            if telegram_config.admin_user_id is not None
+            else None
+        )
+        if admin_chat_id is not None and existing_user is not None:
+            send_message(
+                telegram_config.token,
+                admin_chat_id,
+                format_admin_access_request(
+                    telegram_user_id=telegram_user_id,
+                    username=existing_user.username,
+                    display_name=existing_user.display_name,
+                    chat_id=chat_id,
+                ),
+                reply_markup=build_admin_approval_markup(telegram_user_id),
+            )
+            admin_notified = True
+        return [format_access_request_status(admin_notified=admin_notified)]
+
+    if command in {"/approve_user", "/reject_user", "/users"} and not is_admin_user:
+        return ["Solo l'admin puo' usare questo comando."]
+
+    if command == "/users":
+        return [format_admin_user_list(load_telegram_users(telegram_config.state_path))]
+
+    if command in {"/approve_user", "/reject_user"}:
+        if not args:
+            action = "approve_user" if command == "/approve_user" else "reject_user"
+            return [f"Uso corretto: <code>/{action} &lt;telegram_user_id&gt;</code>"]
+        try:
+            target_user_id = int(args[0])
+        except ValueError:
+            action = "approve_user" if command == "/approve_user" else "reject_user"
+            return [f"Uso corretto: <code>/{action} &lt;telegram_user_id&gt;</code>"]
+        timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        next_status = "approved" if command == "/approve_user" else "blocked"
+        updated_user = update_telegram_user_status(
+            telegram_config.state_path,
+            target_user_id,
+            next_status,
+            updated_at=timestamp,
+        )
+        if updated_user is not None:
+            if next_status == "approved":
+                _notify_user_access_status(
+                    telegram_config,
+                    telegram_user_id=target_user_id,
+                    text=(
+                        "✅ <b>Accesso approvato</b>\n"
+                        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                        "L'admin ha approvato il tuo accesso. "
+                        "Ora puoi usare <code>/connect</code>, "
+                        "<code>/account</code> e gli altri comandi."
+                    ),
+                )
+            else:
+                _notify_user_access_status(
+                    telegram_config,
+                    telegram_user_id=target_user_id,
+                    text=(
+                        "⛔ <b>Accesso non approvato</b>\n"
+                        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                        "L'admin ha rifiutato o bloccato il tuo accesso al bot."
+                    ),
+                )
+        return [
+            format_admin_status_update(
+                telegram_user_id=target_user_id,
+                status=next_status,
+                updated=updated_user is not None,
+            )
+        ]
+
+    if not can_use_bot:
+        if command in ("", "/start", "/help"):
+            return [format_access_required_status(user_status or "unknown")]
+        return [
+            "Utente non ancora approvato per questo bot. "
+            "Usa <code>/request_access</code> per inviare la richiesta all'admin."
+        ]
 
     tenant_context = resolve_tenant_command_context(
         telegram_config,
@@ -622,8 +826,6 @@ def process_message(
         if tenant_token_ready:
             command_context["config_source"] = "tenant_store"
             command_context.pop("fallback_reason", None)
-
-    command = parse_command(text)[0]
 
     if command == "/stato":
         state = load_state_fn(telegram_config.state_path)

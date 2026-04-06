@@ -188,7 +188,8 @@ Stato implementativo corrente:
 - `/settings` espone ora un riepilogo user-facing delle preferenze tenant/chat senza dover ispezionare direttamente il DB
 - `oauth_server.py` espone ora `/oauth/start`, `/oauth/callback` e `/healthz`, valida `state`, usa il `RuName` eBay corretto per lo scambio OAuth e aggiorna account/token nel DB tenant-aware
 - `tenant_credentials.py` usa ora Fernet con chiave `EBAY_TENANT_TOKEN_KEY` come percorso standard di cifratura a riposo dei refresh token tenant
-- `TELEGRAM_ADMIN_USER_ID` puo' ora restringere il bot a un solo utente admin: runtime e registrazione contatti ignorano gli altri utenti anche se scrivono in chat formalmente autorizzate
+- `TELEGRAM_ADMIN_USER_ID` puo' ora definire un admin globale: gli altri utenti restano discoverable, ma passano da uno stato `new` o `pending` e possono usare il bot solo dopo approvazione esplicita
+- il workflow di approvazione e' interno al bot: richiesta accesso, notifica admin, approvazione o rifiuto e sblocco successivo di `/connect` e dei comandi tenant-aware
 
 ## Decisione database per la beta privata
 
@@ -215,6 +216,7 @@ Stato implementativo corrente:
 - resta un layer di compatibilita' nel bot per i test e i wrapper storici, anche se il dominio core e' ormai tipizzato
 - la multiutenza richiedera' un modello dati nuovo e un nuovo flusso OAuth
 - il callback web OAuth esiste in forma minimale, ma restano aperti hardening finale e revoca remota verso eBay
+- il gating accessi oggi e' pensato per beta privata controllata: non esistono ancora ruoli multipli oltre a `admin` e utente approvato
 
 ## Compatibilita' mantenuta durante il refactor
 

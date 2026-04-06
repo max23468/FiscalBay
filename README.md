@@ -143,7 +143,7 @@ Nota OAuth eBay:
 | Variabile | Obbligatoria | Default | Descrizione |
 | --- | --- | --- | --- |
 | `TELEGRAM_BOT_TOKEN` | Sì per il bot | - | Token del bot Telegram |
-| `TELEGRAM_ADMIN_USER_ID` | Consigliata | vuoto | Se valorizzata, solo questo utente Telegram puo' usare davvero il bot e completare l'onboarding |
+| `TELEGRAM_ADMIN_USER_ID` | Consigliata | vuoto | Se valorizzata, questo utente Telegram diventa admin globale e approva l'accesso degli altri utenti |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | Consigliata | vuoto | Chat autorizzate, separate da virgola |
 | `TELEGRAM_NOTIFY_CHAT_IDS` | Consigliata | stessi valori di `TELEGRAM_ALLOWED_CHAT_IDS` | Chat che ricevono notifiche automatiche |
 | `TELEGRAM_POLL_TIMEOUT` | No | `30` | Timeout long polling Telegram |
@@ -265,9 +265,11 @@ I record prodotti dalla CLI includono:
 - `/account`
 - `/connect`
 - `/disconnect`
+- `/request_access`
 - `/notifications on`
 - `/notifications off`
 - `/settings`
+- `/users`
 - `/ultimi 7 20`
 - `/tutti 7 20`
 - `/ordine 12-34567-89012`
@@ -285,6 +287,9 @@ Comportamento:
 - `/ordine` interroga un ordine specifico
 - `/stato` mostra ultimo check, contatori e dimensione della coda retry
 - `/start` e `/help` mostrano anche una tastiera inline con scorciatoie
+- se `TELEGRAM_ADMIN_USER_ID` e' configurata, gli utenti non ancora approvati possono solo richiedere accesso con `/request_access`
+- l'admin puo' approvare o rifiutare richieste dal messaggio inline o con `/approve_user <telegram_user_id>` e `/reject_user <telegram_user_id>`
+- `/users` mostra all'admin lo stato degli utenti registrati (`new`, `pending`, `approved`, `blocked`, `admin`)
 
 ### Notifiche automatiche
 
@@ -412,6 +417,7 @@ Il bot effettua retry automatici con backoff. Se l'invio continua a fallire, i m
 I messaggi possono contenere dati personali e fiscali. In particolare:
 
 - limita sempre l'accesso con `TELEGRAM_ALLOWED_CHAT_IDS`
+- se usi onboarding approvato, imposta anche `TELEGRAM_ADMIN_USER_ID`
 - ricorda che Telegram può conservare cronologia chat e backup
 - proteggi la directory `data/`, che contiene stato operativo e messaggi in retry
 - usa ambienti e dispositivi controllati per consultare questi dati
