@@ -11,84 +11,17 @@
 
 ## Checklist Operativa
 
-## Fase 0 - Baseline e Sicurezza Immediata [Priorita' alta]
-
-### Assetto iniziale e rischio
-
-- [x] aprire issue board o milestone board minima con priorita' e dipendenze
-- [ ] creare un branch dedicato al refactor strutturale
-- [x] censire segreti attuali e programmare rotazione di quelli piu' esposti
-- [x] introdurre rotazione periodica dei segreti come attivita' ricorrente
-
-### Fotografia ambiente attuale
-
-- [x] definire una checklist di rollback
-- [x] verificare se esiste gia' un ambiente staging o almeno una preview testabile
-- [x] se staging manca, decidere un'alternativa minima per prove pre-release
-
-Esito audit VPS del 2026-04-06:
-
-- Oracle Linux 9.7 con `systemd`, `firewall-cmd` attivo e SELinux `Enforcing`
-- servizio reale individuato: `ebaycf-bot`
-- codice e virtualenv attuali: `/home/opc/eBay CF` e `/home/opc/eBay CF/.venv`
-- env file attuale: `/home/opc/eBay CF/.env`
-- dati runtime attuali: `/home/opc/eBay CF/data`
-- log runtime: `journalctl -u ebaycf-bot`
-- problema operativo emerso: coesistenza di istanza manuale legacy e servizio `systemd`
-- problema storico emerso: presenza di stato legacy JSON rimasto nella VPS
-- backup manuali esportati in `~/maintenance-backups/2026-04-06-vps-cleanup`
-
-Decisioni di baseline fase 0 documentate:
-
-- milestone board minima in `docs/MILESTONE_BOARD.md`
-- policy operativa concordata: restare su `main`; branch dedicati solo su proposta e conferma esplicita
-- checklist rollback, inventario segreti e cadenza di rotazione in `docs/PHASE0_BASELINE.md`
-- staging dedicato assente; alternativa minima scelta: `scripts/ci_verify.sh` locale + smoke test post-deploy + osservazione `journalctl`
-
 ## Fase 1 - Hardening e Aggiornamenti VPS [Priorita' alta]
 
-### Sistema
+Stato:
 
-- [ ] verificare utilizzo CPU in condizioni reali di carico
-- [ ] verificare timezone, NTP e sincronizzazione oraria
-
-Stato audit gia' verificato:
-
-- spazio disco disponibile: circa 22 GB liberi su 30 GB
-- RAM rilevata: circa 503 MiB con swap attiva da 2.5 GiB
-- sistema aggiornato il 2026-04-06 con kernel UEK attivo `6.12.0-200.74.27.1.el9uek.x86_64`
-- runtime applicativo coerente: bot su `.venv` Python `3.11`, Python di sistema aggiornato a `3.9.25-3.0.1.el9_7.1`
-
-### Sicurezza
-
-- [ ] verificare permessi dei file con segreti
-- [ ] usare utente di servizio dedicato per il bot
-- [ ] pianificare runbook minimo per rotazione segreti e ripristino credenziali
-
-Stato hardening applicato:
-
-- `PasswordAuthentication no`
-- `PermitRootLogin no`
-- `PubkeyAuthentication yes`
-- firewall attivo con sola esposizione `ssh`
-- `fail2ban` installato e jail `sshd` attiva
-
-### Esecuzione servizio
-
-- [ ] decidere se mantenere o no Docker Compose come opzione reale di esercizio
-
-Stato operativo emerso:
-
-- il bot e' ora gestito da `systemd` come servizio principale
-- il vecchio avvio manuale via `~/run-ebaycf-bot.sh` e i residui legacy sono stati archiviati in backup
-
-### Backup e recovery
-
-- [ ] backup automatico giornaliero del database
-- [ ] backup dell'env file
-- [ ] retention minima dei backup
-- [ ] prova di restore su file separato
-- [ ] mini runbook di recovery
+- fase 1 completata il 2026-04-06
+- setup produttivo standardizzato su `systemd` con utente dedicato `ebaycf` e app in `/opt/ebay-cf`
+- backup, restore e verifica permessi segreti coperti da `deploy/backup.sh`, `deploy/restore.sh` e `deploy/check-secrets-perms.sh`
+- timer `systemd` `ebaycf-backup.timer` attivo con backup giornaliero
+- hardening VPS attivo: SSH solo a chiave, `PermitRootLogin no`, firewall su `ssh`, `fail2ban` attivo
+- verifica runtime eseguita il 2026-04-06: load average `0.00 0.03 0.05`, CPU idle circa `96.9%`, clock sincronizzato via `chronyd`
+- Docker rimosso dal progetto e non piu' considerato parte dello standard operativo
 
 ## Fase 2 - Rifondazione Strutturale del Codice [Priorita' alta]
 
@@ -238,7 +171,6 @@ Struttura introdotta:
 
 ## Prossimi Step Immediati
 
-- [ ] completare rollback checklist, staging minimo e backup automatici
 - [ ] finire la rifondazione tecnica residua su modelli, retry condivisi e riduzione stato globale
 - [ ] chiudere osservabilita' minima con metriche leggibili, alert basilari e runbook
 - [ ] preparare milestone di progettazione multiutente con database, token e flusso OAuth definiti

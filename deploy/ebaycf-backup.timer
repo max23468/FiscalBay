@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily backup for eBay CF
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+Unit=ebaycf-backup.service
+
+[Install]
+WantedBy=timers.target

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_USER="opc"
-APP_DIR="/home/opc/eBay CF"
-VENV_DIR="/home/opc/eBay CF/.venv"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+APP_USER="${APP_USER:-$(stat -c '%U' "${APP_DIR}")}"
+VENV_DIR="${APP_DIR}/.venv"
 SERVICE_NAME="ebaycf-bot"
 
 sudo -u "${APP_USER}" git -C "${APP_DIR}" pull --ff-only

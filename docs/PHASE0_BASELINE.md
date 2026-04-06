@@ -22,14 +22,14 @@ Eseguire nell'ordine seguente se un deploy peggiora il servizio:
 
 1. verificare il problema con `sudo systemctl status ebaycf-bot`
 2. raccogliere contesto rapido con `sudo journalctl -u ebaycf-bot -n 100 --no-pager`
-3. eseguire `"/home/opc/eBay CF/.venv/bin/ebay-cf-healthcheck" --json`
-4. annotare la revisione corrente con `git -C "/home/opc/eBay CF" rev-parse --short HEAD`
-5. individuare la revisione precedente sana con `git -C "/home/opc/eBay CF" log --oneline -n 5`
+3. eseguire `"/opt/ebay-cf/.venv/bin/ebay-cf-healthcheck" --json`
+4. annotare la revisione corrente con `git -C "/opt/ebay-cf" rev-parse --short HEAD`
+5. individuare la revisione precedente sana con `git -C "/opt/ebay-cf" log --oneline -n 5`
 6. fare checkout della revisione da ripristinare
-7. reinstallare il package nel virtualenv con `"/home/opc/eBay CF/.venv/bin/pip" install -e "/home/opc/eBay CF"`
+7. reinstallare il package nel virtualenv con `"/opt/ebay-cf/.venv/bin/pip" install -e "/opt/ebay-cf"`
 8. riavviare il servizio con `sudo systemctl restart ebaycf-bot`
-9. rieseguire smoke test con `"/home/opc/eBay CF/deploy/smoke-check.sh"`
-10. se il problema riguarda dati o configurazione, recuperare `.env` e `state.db` dai backup in `~/maintenance-backups/`
+9. rieseguire smoke test con `"/opt/ebay-cf/deploy/smoke-check.sh"`
+10. se il problema riguarda dati o configurazione, recuperare `.env` e `state.db` dai backup in `/home/ebaycf/maintenance-backups/`
 
 Condizioni di stop:
 
@@ -61,7 +61,7 @@ Segreti sensibili attuali:
 
 Contenitore autorizzato attuale:
 
-- `/home/opc/eBay CF/.env`
+- `/opt/ebay-cf/.env`
 
 Regole minime:
 
@@ -89,7 +89,7 @@ Procedura minima di rotazione:
 
 1. creare backup cifrato o comunque amministrativamente controllato dell'attuale `.env`
 2. generare il nuovo segreto lato provider
-3. aggiornare `/home/opc/eBay CF/.env`
+3. aggiornare `/opt/ebay-cf/.env`
 4. riavviare `ebaycf-bot`
 5. eseguire `deploy/smoke-check.sh`
 6. invalidare il segreto precedente appena confermato il corretto funzionamento
@@ -101,6 +101,7 @@ Baseline operativa gia' verificata al 2026-04-06:
 
 - VPS Oracle Linux 9.7 con `systemd`
 - servizio reale `ebaycf-bot`
-- runtime corretto in `/home/opc/eBay CF/.venv`
-- dati runtime in `/home/opc/eBay CF/data`
-- backup manuale di manutenzione in `~/maintenance-backups/2026-04-06-vps-cleanup`
+- runtime corretto in `/opt/ebay-cf/.venv`
+- dati runtime in `/opt/ebay-cf/data`
+- backup operativi in `/home/ebaycf/maintenance-backups/`
+- archivio della vecchia installazione in `/home/opc/maintenance-backups/2026-04-06-legacy-install-home-opc/ebay-cf-legacy`

@@ -328,11 +328,11 @@ Presenti e utili:
 
 Path progetto:
 
-- `/home/opc/eBay CF`
+- `/opt/ebay-cf`
 
 Virtualenv attivo del progetto:
 
-- `/home/opc/eBay CF/.venv`
+- `/opt/ebay-cf/.venv`
 
 Runtime applicativo stabile:
 
@@ -364,7 +364,7 @@ sudo journalctl -u ebaycf-bot -f
 Healthcheck:
 
 ```bash
-"/home/opc/eBay CF/.venv/bin/ebay-cf-healthcheck" --json
+"/opt/ebay-cf/.venv/bin/ebay-cf-healthcheck" --json
 ```
 
 ### Stato manutenzione VPS gia' eseguito
@@ -385,6 +385,7 @@ Gia' fatto:
 Backup di manutenzione creato:
 
 - `~/maintenance-backups/2026-04-06-vps-cleanup`
+- `/home/opc/maintenance-backups/2026-04-06-legacy-install-home-opc/ebay-cf-legacy`
 
 Lì sono stati archiviati:
 
@@ -429,7 +430,7 @@ Dipende da:
 
 Queste credenziali stanno in:
 
-- `/home/opc/eBay CF/.env`
+- `/opt/ebay-cf/.env`
 
 Non devono essere riportate in questo file.
 
