@@ -15,16 +15,16 @@
 
 ### Assetto iniziale e rischio
 
-- [ ] aprire issue board o milestone board minima con priorita' e dipendenze
+- [x] aprire issue board o milestone board minima con priorita' e dipendenze
 - [ ] creare un branch dedicato al refactor strutturale
-- [ ] censire segreti attuali e programmare rotazione di quelli piu' esposti
-- [ ] introdurre rotazione periodica dei segreti come attivita' ricorrente
+- [x] censire segreti attuali e programmare rotazione di quelli piu' esposti
+- [x] introdurre rotazione periodica dei segreti come attivita' ricorrente
 
 ### Fotografia ambiente attuale
 
-- [ ] definire una checklist di rollback
-- [ ] verificare se esiste gia' un ambiente staging o almeno una preview testabile
-- [ ] se staging manca, decidere un'alternativa minima per prove pre-release
+- [x] definire una checklist di rollback
+- [x] verificare se esiste gia' un ambiente staging o almeno una preview testabile
+- [x] se staging manca, decidere un'alternativa minima per prove pre-release
 
 Esito audit VPS del 2026-04-06:
 
@@ -37,6 +37,13 @@ Esito audit VPS del 2026-04-06:
 - problema operativo emerso: coesistenza di istanza manuale legacy e servizio `systemd`
 - problema storico emerso: presenza di stato legacy JSON rimasto nella VPS
 - backup manuali esportati in `~/maintenance-backups/2026-04-06-vps-cleanup`
+
+Decisioni di baseline fase 0 documentate:
+
+- milestone board minima in `docs/MILESTONE_BOARD.md`
+- policy operativa concordata: restare su `main`; branch dedicati solo su proposta e conferma esplicita
+- checklist rollback, inventario segreti e cadenza di rotazione in `docs/PHASE0_BASELINE.md`
+- staging dedicato assente; alternativa minima scelta: `scripts/ci_verify.sh` locale + smoke test post-deploy + osservazione `journalctl`
 
 ## Fase 1 - Hardening e Aggiornamenti VPS [Priorita' alta]
 
