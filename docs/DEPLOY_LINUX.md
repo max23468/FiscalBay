@@ -1,10 +1,10 @@
-# Deploy su Oracle VPS
+# Deploy su VPS Linux
 
-Questa guida prepara `eBay CF` per una VPS Oracle con Ubuntu usando `systemd`.
+Questa guida prepara `eBay CF` per una VPS Linux con `systemd`.
 
 ## Configurazione consigliata
 
-- Ubuntu 24.04 LTS
+- distribuzione Linux con `systemd`
 - accesso SSH con chiave
 - 1 vCPU
 - 1-2 GB RAM se disponibili
@@ -14,7 +14,7 @@ Questa guida prepara `eBay CF` per una VPS Oracle con Ubuntu usando `systemd`.
 
 1. entra in SSH
 2. clona la repository
-3. esegui `deploy/oracle-setup.sh`
+3. esegui `deploy/linux-setup.sh`
 4. compila `/etc/ebay-cf/ebay-cf.env`
 5. abilita il servizio `ebay-cf`
 6. esegui smoke test e health check
@@ -22,12 +22,10 @@ Questa guida prepara `eBay CF` per una VPS Oracle con Ubuntu usando `systemd`.
 ## Setup iniziale
 
 ```bash
-sudo apt update
-sudo apt install -y git
 git clone https://github.com/max23468/eBayCF.git
 cd eBayCF
-chmod +x deploy/oracle-setup.sh
-./deploy/oracle-setup.sh
+chmod +x deploy/linux-setup.sh
+./deploy/linux-setup.sh
 ```
 
 ## Variabili da configurare
@@ -82,3 +80,4 @@ cd /opt/ebay-cf/app
 - usiamo polling, quindi non serve webhook pubblico
 - SQLite e lock file restano fuori dal clone Git
 - `systemd` e' lo standard operativo raccomandato per questo progetto
+- lo script di setup supporta `apt-get`, `dnf`, `yum` e `apk`

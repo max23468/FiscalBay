@@ -1,6 +1,6 @@
 # Runbook
 
-Questa guida standardizza l'esercizio del bot su VPS con `systemd`.
+Questa guida standardizza l'esercizio del bot su VPS Linux con `systemd`.
 
 ## Standard operativo scelto
 
@@ -11,15 +11,20 @@ Questa guida standardizza l'esercizio del bot su VPS con `systemd`.
 - env file: `/etc/ebay-cf/ebay-cf.env`
 - servizio: `ebay-cf`
 
-## Primo setup su VPS Ubuntu
+## Primo setup su VPS Linux
+
+Lo script di setup supporta in automatico:
+
+- `apt-get`
+- `dnf`
+- `yum`
+- `apk`
 
 ```bash
-sudo apt update
-sudo apt install -y git
 git clone https://github.com/max23468/eBayCF.git
 cd eBayCF
-chmod +x deploy/oracle-setup.sh
-./deploy/oracle-setup.sh
+chmod +x deploy/linux-setup.sh
+./deploy/linux-setup.sh
 ```
 
 Poi:
