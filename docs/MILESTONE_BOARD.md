@@ -137,6 +137,16 @@ Deliverable principali:
 - storage sicuro token
 - comandi `/account` e `/disconnect`
 
+Stato corrente:
+
+- `/account` e `/connect` esistono gia' nel bot
+- `/disconnect` esiste gia' come scollegamento locale sul DB del bot
+- `/notifications on|off` e `/settings` esistono gia' come gestione self-service minima lato chat
+- `/connect` salva una sessione preliminare in `oauth_link_sessions`
+- il callback OAuth minimale esiste gia' come servizio separato `ebaycf-oauth`
+- il token storage tenant usa gia' cifratura a riposo con chiave Fernet da env
+- restano aperti revoca remota e affinamento UX end-to-end
+
 ## Priorita' correnti
 
 Ordine consigliato di lavoro:

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 from contextlib import suppress
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional
 
 try:
@@ -24,6 +25,7 @@ from .models import (
     BotRuntimeStateLike,
     FetchOptions,
     NotificationSubscription,
+    OauthLinkSession,
     OrderRecord,
     OrderRecordLike,
     RetryQueueEntry,
@@ -66,9 +68,13 @@ from .services.telegram_runtime import (
     run_bot as _run_bot,
 )
 from .storage.sqlite import (
+    create_oauth_link_session,
+    disconnect_linked_ebay_account,
     ensure_parent_dir,
     list_notification_tenants,
     load_ebay_token_sets,
+    load_latest_oauth_link_session,
+    load_notification_subscriptions,
     load_retry_queue_entries,
     load_runtime_state,
     load_tenant_retry_queue_entries,
@@ -78,12 +84,15 @@ from .storage.sqlite import (
     save_runtime_state,
     save_tenant_retry_queue_entries,
     save_tenant_runtime_state,
+    set_notification_subscription_enabled,
+    summarize_tenant_account_status,
     upsert_notification_subscription,
     upsert_telegram_chat,
     upsert_telegram_user,
 )
 from .telegram_commands import (
     CALLBACK_HELP,
+    CALLBACK_SETTINGS,
     CALLBACK_STATO,
     CALLBACK_TUTTI,
     CALLBACK_ULTIMI,
@@ -95,6 +104,11 @@ from .telegram_commands import (
     build_main_menu_markup,
     callback_command_from_data,
     chunk_message,
+    format_account_status,
+    format_connect_status,
+    format_disconnect_status,
+    format_notifications_status,
+    format_settings_status,
     format_status,
     is_authorized,
     options_for_command,
@@ -202,6 +216,7 @@ def format_auto_notification(record: OrderRecordLike) -> str:
 
 __all__ = [
     "CALLBACK_HELP",
+    "CALLBACK_SETTINGS",
     "CALLBACK_STATO",
     "CALLBACK_TUTTI",
     "CALLBACK_ULTIMI",
@@ -357,6 +372,14 @@ def sync_runtime_contact(
                 updated_at=timestamp,
             ),
         )
+
+
+def build_connect_entrypoint_url(oauth_state: str) -> str:
+    base_url = os.getenv("EBAY_OAUTH_CONNECT_BASE_URL", "").strip()
+    if not base_url:
+        return ""
+    separator = "&" if "?" in base_url else "?"
+    return f"{base_url}{separator}state={oauth_state}"
 
 
 def resolve_tenant_command_context(
@@ -584,10 +607,151 @@ def process_message(
             command_context["config_source"] = "tenant_store"
             command_context.pop("fallback_reason", None)
 
-    if parse_command(text)[0] == "/stato":
+    command = parse_command(text)[0]
+
+    if command == "/stato":
         state = load_state_fn(telegram_config.state_path)
         retry_queue_size = len(load_retry_queue_fn(telegram_config.retry_queue_path))
         return [format_status(state, retry_queue_size, runtime_context=command_context)]
+
+    if command == "/account":
+        if resolved_telegram_user_id is None:
+            return [
+                "👤 <b>Account eBay</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "Questa chat non e' ancora associata a un tenant Telegram noto."
+            ]
+        account_status = summarize_tenant_account_status(
+            telegram_config.state_path,
+            resolved_telegram_user_id,
+            resolved_environment,
+        )
+        return [format_account_status(account_status)]
+
+    if command == "/connect":
+        if resolved_telegram_user_id is None:
+            return [
+                "🔗 <b>Collegamento account eBay</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "Questa chat non e' ancora associata a un tenant Telegram noto."
+            ]
+        now = datetime.now(timezone.utc)
+        session = create_oauth_link_session(
+            telegram_config.state_path,
+            OauthLinkSession(
+                telegram_user_id=resolved_telegram_user_id,
+                telegram_chat_id=chat_id,
+                provider="ebay",
+                environment=resolved_environment,
+                oauth_state=secrets.token_urlsafe(18),
+                status="pending",
+                expires_at=(now + timedelta(minutes=15)).isoformat().replace("+00:00", "Z"),
+                created_at=now.isoformat().replace("+00:00", "Z"),
+            ),
+        )
+        latest_session = load_latest_oauth_link_session(
+            telegram_config.state_path,
+            resolved_telegram_user_id,
+        )
+        active_session = latest_session or session
+        return [
+            format_connect_status(
+                {
+                    "oauth_state": active_session.oauth_state,
+                    "expires_at": active_session.expires_at,
+                    "connect_url": build_connect_entrypoint_url(active_session.oauth_state),
+                }
+            )
+        ]
+
+    if command == "/disconnect":
+        if resolved_telegram_user_id is None:
+            return [
+                "❌ <b>Scollega account eBay</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "Questa chat non e' ancora associata a un tenant Telegram noto."
+            ]
+        disconnected_account = disconnect_linked_ebay_account(
+            telegram_config.state_path,
+            resolved_telegram_user_id,
+            resolved_environment,
+        )
+        return [
+            format_disconnect_status(
+                {
+                    "disconnected": disconnected_account is not None,
+                    "ebay_user_id": (
+                        disconnected_account.ebay_user_id if disconnected_account else ""
+                    ),
+                    "environment": (
+                        disconnected_account.environment
+                        if disconnected_account
+                        else resolved_environment
+                    ),
+                }
+            )
+        ]
+
+    if command == "/notifications":
+        if resolved_telegram_user_id is None:
+            return [
+                "🔔 <b>Notifiche chat</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "Questa chat non e' ancora associata a un tenant Telegram noto."
+            ]
+        command_args = parse_command(text)[1]
+        if not command_args or command_args[0] not in {"on", "off"}:
+            return [
+                "Uso corretto: <code>/notifications on</code> oppure "
+                "<code>/notifications off</code>."
+            ]
+        enabled = command_args[0] == "on"
+        timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        set_notification_subscription_enabled(
+            telegram_config.state_path,
+            resolved_telegram_user_id,
+            chat_id,
+            enabled,
+            created_at=timestamp,
+            updated_at=timestamp,
+        )
+        return [
+            format_notifications_status(
+                {
+                    "enabled": enabled,
+                    "tenant_scope": "tenant" if tenant_context is not None else "global",
+                    "chat_id": chat_id,
+                    "environment": resolved_environment,
+                }
+            )
+        ]
+
+    if command == "/settings":
+        notifications_enabled = False
+        if resolved_telegram_user_id is not None:
+            subscriptions = load_notification_subscriptions(telegram_config.state_path)
+            notifications_enabled = any(
+                subscription.telegram_user_id == resolved_telegram_user_id
+                and subscription.telegram_chat_id == chat_id
+                and subscription.enabled
+                for subscription in subscriptions
+            )
+        account_linked = False
+        if resolved_telegram_user_id is not None:
+            account_linked = (
+                summarize_tenant_account_status(
+                    telegram_config.state_path,
+                    resolved_telegram_user_id,
+                    resolved_environment,
+                ).get("linked")
+                is True
+            )
+        return [
+            format_settings_status(
+                {
+                    "tenant_scope": "tenant" if tenant_context is not None else "global",
+                    "environment": resolved_environment,
+                    "notifications_enabled": notifications_enabled,
+                    "account_linked": account_linked,
+                }
+            )
+        ]
 
     return _process_message(
         text=text,

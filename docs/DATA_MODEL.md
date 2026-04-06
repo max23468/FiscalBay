@@ -221,6 +221,7 @@ Note:
 
 - per la prima beta il vincolo e' un solo account attivo per utente e per environment
 - il supporto multi-account per utente viene esplicitamente rinviato
+- lo stato locale puo' passare da `linked` a `disconnected` quando l'utente usa `/disconnect`
 
 ### `ebay_tokens`
 
@@ -239,6 +240,7 @@ Note:
 - il refresh token va cifrato a riposo
 - l'access token puo' restare cache runtime o storage breve, ma il refresh token non deve stare in env globali
 - il lifecycle deve supportare refresh riuscito, refresh fallito, token scaduto, token revocato e richiesta di riconnessione utente
+- oggi `/disconnect` porta localmente il token in stato `revoked` e pulisce i segreti dal DB della VPS
 
 ### `notification_subscriptions`
 
@@ -264,12 +266,19 @@ Possibili campi:
 - `telegram_user_id`
 - `telegram_chat_id`
 - `provider`
+- `environment`
 - `oauth_state`
 - `code_verifier` o equivalente
 - `redirect_uri`
 - `status`
 - `expires_at`
 - `created_at`
+
+Stato attuale:
+
+- il modello e la tabella esistono gia' nel progetto corrente
+- `/connect` salva gia' una sessione preliminare con `oauth_state`, `status=pending`, expiry, environment e correlazione Telegram utente/chat
+- il callback OAuth usa gia' `redirect_uri` e stato sessione per chiudere il collegamento e aggiornare account/token nel DB
 
 ### `tenant_runtime_state`
 

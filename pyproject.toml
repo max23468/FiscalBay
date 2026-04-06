@@ -10,10 +10,14 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 authors = [{ name = "eBay CF Tool" }]
+dependencies = [
+  "cryptography>=45.0.0",
+]
 
 [project.scripts]
 ebay-cf = "ebay_cf_tool:main"
 ebay-telegram-bot = "telegram_bot:run_bot"
+ebay-cf-oauth-server = "ebay_cf.oauth_server:main"
 ebay-cf-fix-git-lock = "ebay_cf.git_utils:main"
 ebay-cf-healthcheck = "ebay_cf.healthcheck:main"
 

@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from src.ebay_cf.bot import (
     CALLBACK_HELP,
+    CALLBACK_SETTINGS,
     CALLBACK_STATO,
     CALLBACK_TUTTI,
     CALLBACK_ULTIMI,
@@ -40,11 +41,13 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn(CALLBACK_TUTTI, all_callbacks)
         self.assertIn(CALLBACK_STATO, all_callbacks)
         self.assertIn(CALLBACK_HELP, all_callbacks)
+        self.assertIn(CALLBACK_SETTINGS, all_callbacks)
 
     def test_callback_command_from_data_maps_buttons(self) -> None:
         self.assertEqual(callback_command_from_data(CALLBACK_ULTIMI), "/ultimi 7 20")
         self.assertEqual(callback_command_from_data(CALLBACK_TUTTI), "/tutti 7 20")
         self.assertEqual(callback_command_from_data(CALLBACK_STATO), "/stato")
+        self.assertEqual(callback_command_from_data(CALLBACK_SETTINGS), "/settings")
         self.assertEqual(callback_command_from_data(CALLBACK_HELP), "/help")
         self.assertIsNone(callback_command_from_data("menu:unknown"))
 
@@ -99,6 +102,8 @@ class TelegramBotTests(unittest.TestCase):
         text = build_help_text()
         self.assertIn("/ultimi", text)
         self.assertIn("/ordine", text)
+        self.assertIn("/settings", text)
+        self.assertIn("/notifications on", text)
 
     @patch("src.ebay_cf.bot.fetch_records")
     @patch("src.ebay_cf.bot.load_config")

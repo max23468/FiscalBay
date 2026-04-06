@@ -30,6 +30,12 @@ _token_cache_lock = threading.Lock()
 _token_cache: dict[str, tuple[str, float]] = {}
 
 
+def oauth_authorize_base(environment: str) -> str:
+    if environment == "sandbox":
+        return "https://auth.sandbox.ebay.com/oauth2/authorize"
+    return "https://auth.ebay.com/oauth2/authorize"
+
+
 def clear_access_token_cache() -> None:
     with _token_cache_lock:
         _token_cache.clear()
@@ -139,6 +145,45 @@ def request_user_access_token_response(config: Config) -> dict:
     )
 
 
+def request_authorization_code_token_response(
+    config: Config,
+    code: str,
+    redirect_uri: str,
+) -> dict:
+    credentials = f"{config.client_id}:{config.client_secret}".encode("utf-8")
+    encoded = base64.b64encode(credentials).decode("ascii")
+    url = f"{config.api_base}/identity/v1/oauth2/token"
+    body = urllib.parse.urlencode(
+        {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": redirect_uri,
+        }
+    ).encode("utf-8")
+    return request_json(
+        "POST",
+        url,
+        headers={
+            "Authorization": f"Basic {encoded}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        data=body,
+    )
+
+
+def build_user_consent_url(config: Config, *, redirect_uri: str, state: str) -> str:
+    query = urllib.parse.urlencode(
+        {
+            "client_id": config.client_id,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": config.scopes,
+            "state": state,
+        }
+    )
+    return f"{oauth_authorize_base(config.environment)}?{query}"
+
+
 def get_access_token(config: Config) -> str:
     key = token_cache_key(config)
     skew = int(os.getenv("EBAY_TOKEN_SKEW_SECONDS", str(DEFAULT_TOKEN_SKEW_SECONDS)))
@@ -235,6 +280,14 @@ def make_request(
 
 def mint_user_access_token_response(config: Config) -> dict:
     return request_user_access_token_response(config)
+
+
+def mint_authorization_code_token_response(
+    config: Config,
+    code: str,
+    redirect_uri: str,
+) -> dict:
+    return request_authorization_code_token_response(config, code, redirect_uri)
 
 
 def to_ebay_timestamp(dt: datetime) -> str:

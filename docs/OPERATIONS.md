@@ -95,6 +95,47 @@ Il comando Telegram `/stato` espone anche:
 - `Sorgente credenziali`, per capire se il bot e' ancora su `global_env` o se usa un futuro `tenant_store`
 - `Fallback credenziali`, quando il tenant esiste ma il bot e' ancora costretto a ripiegare sul percorso globale
 
+Il comando Telegram `/account` espone invece:
+
+- stato del collegamento eBay per il tenant della chat
+- utente eBay associato
+- environment collegato
+- stato del token
+- numero di chat e subscription attive viste dal bot per quel tenant
+
+Il comando Telegram `/connect`:
+
+- crea una sessione preliminare in `oauth_link_sessions`
+- restituisce un link pubblico solo se sulla VPS e' configurata `EBAY_OAUTH_CONNECT_BASE_URL`
+- senza questa variabile, il bot prepara comunque la sessione ma avvisa che il callback OAuth non e' ancora raggiungibile
+- il link pubblico punta al callback server `ebaycf-oauth`, che a sua volta redirige verso eBay e gestisce il ritorno OAuth
+
+Il comando Telegram `/disconnect`:
+
+- scollega localmente l'account eBay del tenant corrente
+- marca il token nel DB come `revoked` e pulisce refresh/access token dal `state.db`
+- non esegue ancora una revoca remota lato eBay; quella resta parte del flusso OAuth completo di fase 4
+
+Il comando Telegram `/notifications on|off`:
+
+- abilita o disabilita le notifiche per la chat corrente
+- aggiorna sia `notification_subscriptions` sia il flag `notifications_enabled` della chat tenant-aware
+- quindi l'effetto resta coerente anche dopo riavvio del bot sulla VPS
+
+Il comando Telegram `/settings`:
+
+- mostra un riepilogo rapido di scope runtime, ambiente, stato notifiche della chat e stato del collegamento account
+- e' il punto di controllo piu' rapido lato utente prima di usare `/connect`, `/disconnect` o `/account`
+
+Servizio OAuth su VPS:
+
+- entrypoint: `ebay-cf-oauth-server`
+- servizio `systemd`: `ebaycf-oauth`
+- endpoint locali minimi: `/healthz`, `/oauth/start`, `/oauth/callback`
+- variabili utili: `EBAY_OAUTH_CONNECT_BASE_URL`, `EBAY_OAUTH_CALLBACK_URL`, `EBAY_OAUTH_SERVER_HOST`, `EBAY_OAUTH_SERVER_PORT`, `EBAY_TENANT_TOKEN_KEY`
+- il percorso corretto su VPS e' usare `EBAY_TENANT_TOKEN_KEY` per cifrare i refresh token utente a riposo
+- `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS=1` va considerato solo fallback di beta privata/dev e non configurazione operativa normale
+
 Readiness multiutente nel healthcheck:
 
 - il report healthcheck espone anche contatori `multi_tenant.*` per utenti, chat, account collegati, token attivi, subscription e stati runtime tenant

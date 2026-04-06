@@ -13,6 +13,7 @@ Questa guida standardizza l'esercizio del bot sulla VPS Linux attuale con `syste
 - dati runtime: `${APP_DIR}/data`
 - env file: `${APP_DIR}/.env`
 - servizio: `ebaycf-bot`
+- callback OAuth: `ebaycf-oauth`
 
 ## Primo setup su VPS Linux
 
@@ -35,6 +36,7 @@ Poi:
 ```bash
 nano "./.env"
 sudo systemctl enable --now ebaycf-bot
+sudo systemctl enable --now ebaycf-oauth
 sudo systemctl status ebaycf-bot
 ```
 
@@ -44,12 +46,14 @@ Status:
 
 ```bash
 sudo systemctl status ebaycf-bot
+sudo systemctl status ebaycf-oauth
 ```
 
 Restart:
 
 ```bash
 sudo systemctl restart ebaycf-bot
+sudo systemctl restart ebaycf-oauth
 ```
 
 Stop:
@@ -62,6 +66,7 @@ Log live:
 
 ```bash
 sudo journalctl -u ebaycf-bot -f
+sudo journalctl -u ebaycf-oauth -f
 ```
 
 Per seguire un singolo ciclo operativo, filtrare o cercare `cycle_id=` nei log recenti.
@@ -74,6 +79,22 @@ Gli eventi principali sono standardizzati per:
 - retry HTTP verso Telegram ed eBay
 - retry queue e cicli notifica
 - esecuzione healthcheck
+- start, redirect e callback OAuth
+
+Variabili aggiuntive per onboarding OAuth:
+
+- `EBAY_OAUTH_CONNECT_BASE_URL`
+- `EBAY_OAUTH_CALLBACK_URL`
+- `EBAY_OAUTH_SERVER_HOST`
+- `EBAY_OAUTH_SERVER_PORT`
+- `EBAY_TENANT_TOKEN_KEY`
+- `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS`
+
+Nota importante:
+
+- il callback server puo' girare anche senza URL pubblico, ma in quel caso `/connect` non restituisce un link usabile dall'utente
+- il percorso operativo corretto e' configurare `EBAY_TENANT_TOKEN_KEY` sulla VPS prima di usare davvero il callback OAuth
+- per la beta privata e' possibile usare il fallback `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS=1`, ma non sostituisce la cifratura reale a riposo e non va lasciato attivo come default
 
 Health check:
 
@@ -154,6 +175,7 @@ Lo smoke test verifica:
 
 - servizio `systemd` attivo
 - health check del bot in stato `ok`
+- se `ebaycf-oauth` e' abilitato, verifica anche che il servizio OAuth risulti attivo
 
 ## Backup e restore
 

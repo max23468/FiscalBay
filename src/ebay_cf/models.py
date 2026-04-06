@@ -334,6 +334,55 @@ class NotificationTenantTarget:
 
 
 @dataclass
+class OauthLinkSession:
+    telegram_user_id: int
+    telegram_chat_id: int
+    provider: str = "ebay"
+    environment: str = "production"
+    oauth_state: str = ""
+    code_verifier: str = ""
+    redirect_uri: str = ""
+    status: str = "pending"
+    expires_at: str | None = None
+    created_at: str | None = None
+    id: int | None = None
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, object]) -> "OauthLinkSession":
+        raw_id = data.get("id")
+        return cls(
+            id=as_int(raw_id) if raw_id is not None else None,
+            telegram_user_id=as_int(data.get("telegram_user_id", 0)),
+            telegram_chat_id=as_int(data.get("telegram_chat_id", 0)),
+            provider=str(data.get("provider", "ebay")),
+            environment=str(data.get("environment", "production")),
+            oauth_state=str(data.get("oauth_state", "")),
+            code_verifier=str(data.get("code_verifier", "")),
+            redirect_uri=str(data.get("redirect_uri", "")),
+            status=str(data.get("status", "pending")),
+            expires_at=str(data["expires_at"]) if data.get("expires_at") else None,
+            created_at=str(data["created_at"]) if data.get("created_at") else None,
+        )
+
+    def as_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "telegram_user_id": self.telegram_user_id,
+            "telegram_chat_id": self.telegram_chat_id,
+            "provider": self.provider,
+            "environment": self.environment,
+            "oauth_state": self.oauth_state,
+            "code_verifier": self.code_verifier,
+            "redirect_uri": self.redirect_uri,
+            "status": self.status,
+            "expires_at": self.expires_at,
+            "created_at": self.created_at,
+        }
+        if self.id is not None:
+            payload["id"] = self.id
+        return payload
+
+
+@dataclass
 class BotMetrics:
     orders_read: int = 0
     orders_with_cf: int = 0
@@ -487,3 +536,4 @@ TelegramChatLike = Union[TelegramChat, Mapping[str, object]]
 EbayTokenSetLike = Union[EbayTokenSet, Mapping[str, object]]
 NotificationSubscriptionLike = Union[NotificationSubscription, Mapping[str, object]]
 TenantChatContextLike = Union[TenantChatContext, Mapping[str, object]]
+OauthLinkSessionLike = Union[OauthLinkSession, Mapping[str, object]]

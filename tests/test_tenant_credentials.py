@@ -2,10 +2,13 @@ import os
 import unittest
 from unittest.mock import Mock, patch
 
+from cryptography.fernet import Fernet
 from src.ebay_cf.models import Config, EbayTokenSet, LinkedEbayAccount
 from src.ebay_cf.tenant_credentials import (
     decode_refresh_token,
+    encode_refresh_token,
     load_tenant_config_from_storage,
+    load_token_cipher,
 )
 
 
@@ -17,6 +20,26 @@ class TenantCredentialsTests(unittest.TestCase):
     def test_decode_refresh_token_accepts_plaintext_only_when_enabled(self) -> None:
         with patch.dict(os.environ, {"EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS": "1"}, clear=False):
             self.assertEqual(decode_refresh_token("plain:tenant-refresh"), "tenant-refresh")
+
+    def test_load_token_cipher_returns_none_without_key(self) -> None:
+        with patch.dict(os.environ, {}, clear=False):
+            self.assertIsNone(load_token_cipher())
+
+    def test_encode_and_decode_refresh_token_with_fernet_key(self) -> None:
+        key = Fernet.generate_key().decode("utf-8")
+        with patch.dict(os.environ, {"EBAY_TENANT_TOKEN_KEY": key}, clear=False):
+            encoded = encode_refresh_token("tenant-refresh")
+            assert encoded is not None
+            self.assertTrue(encoded.startswith("fernet:"))
+            self.assertEqual(decode_refresh_token(encoded), "tenant-refresh")
+
+    def test_encode_refresh_token_requires_explicit_opt_in(self) -> None:
+        with patch.dict(os.environ, {}, clear=False):
+            self.assertIsNone(encode_refresh_token("tenant-refresh"))
+
+    def test_encode_refresh_token_accepts_plaintext_only_when_enabled(self) -> None:
+        with patch.dict(os.environ, {"EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS": "1"}, clear=False):
+            self.assertEqual(encode_refresh_token("tenant-refresh"), "plain:tenant-refresh")
 
     def test_load_tenant_config_from_storage_returns_none_for_inactive_token(self) -> None:
         resolve_token_mock = Mock(

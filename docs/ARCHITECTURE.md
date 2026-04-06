@@ -35,6 +35,8 @@ Entrambe condividono lo stesso package Python interno `src/ebay_cf/`.
   - esegue il flusso CLI
 - `src/ebay_cf/bot.py`
   - espone la facciata compatibile del bot e collega i servizi
+- `src/ebay_cf/oauth_server.py`
+  - espone il mini callback server OAuth per l'onboarding self-service
 - `src/ebay_cf/application.py`
   - facciata applicativa condivisa per il fetch ordini usato da CLI e bot
 
@@ -80,6 +82,7 @@ Entrambe condividono lo stesso package Python interno `src/ebay_cf/`.
   - controlli runtime e soglie alert minime
 - `deploy/`
   - setup VPS, update, smoke check, backup, restore e timer di alert check
+  - service `systemd` per bot e callback server OAuth
 
 ## Flussi principali
 
@@ -178,6 +181,13 @@ Stato implementativo corrente:
 - se una chat non e' ancora mappata a un tenant nel DB della VPS, il bot mantiene comunque il fallback globale per non interrompere il servizio esistente
 - l'healthcheck operativo espone ora anche contatori di readiness multi-tenant, cosi' la maturita' del DB tenant-aware e' osservabile direttamente sul server
 - anche `/stato` espone ora lo scope runtime e la sorgente credenziali, cosi' il fallback globale residuo e' visibile direttamente dal bot
+- `/account` fornisce ora una vista tenant-aware del collegamento eBay gia' presente nel DB, senza richiedere ancora il flusso OAuth completo
+- `/connect` crea ora una sessione preliminare in `oauth_link_sessions` e, se la VPS espone `EBAY_OAUTH_CONNECT_BASE_URL`, restituisce anche il link pubblico di ingresso al futuro callback server
+- `/disconnect` scollega ora localmente l'account tenant dal `state.db`, marca il token come revocato e cancella il segreto dal runtime locale, lasciando la futura revoca remota eBay a uno step successivo
+- `/notifications on|off` aggiorna ora in modo coerente sia `notification_subscriptions` sia `telegram_chats.notifications_enabled`
+- `/settings` espone ora un riepilogo user-facing delle preferenze tenant/chat senza dover ispezionare direttamente il DB
+- `oauth_server.py` espone ora `/oauth/start`, `/oauth/callback` e `/healthz`, valida `state`, scambia `code` con token e aggiorna account/token nel DB tenant-aware
+- `tenant_credentials.py` usa ora Fernet con chiave `EBAY_TENANT_TOKEN_KEY` come percorso standard di cifratura a riposo dei refresh token tenant
 
 ## Decisione database per la beta privata
 
@@ -203,6 +213,7 @@ Stato implementativo corrente:
 - la risoluzione dell'account collegato e dell'environment e' gia' tenant-aware, ma la sorgente delle credenziali resta ancora `.env` globale finche' non saranno attivi token utente reali
 - resta un layer di compatibilita' nel bot per i test e i wrapper storici, anche se il dominio core e' ormai tipizzato
 - la multiutenza richiedera' un modello dati nuovo e un nuovo flusso OAuth
+- il callback web OAuth esiste in forma minimale, ma restano aperti hardening finale e revoca remota verso eBay
 
 ## Compatibilita' mantenuta durante il refactor
 

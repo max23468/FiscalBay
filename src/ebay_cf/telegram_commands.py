@@ -25,6 +25,10 @@ CALLBACK_ULTIMI = "menu:ultimi"
 CALLBACK_TUTTI = "menu:tutti"
 CALLBACK_STATO = "menu:stato"
 CALLBACK_HELP = "menu:help"
+CALLBACK_ACCOUNT = "menu:account"
+CALLBACK_CONNECT = "menu:connect"
+CALLBACK_DISCONNECT = "menu:disconnect"
+CALLBACK_SETTINGS = "menu:settings"
 
 
 def chunk_message(text: str, limit: int = 3500) -> list[str]:
@@ -128,6 +132,12 @@ def build_help_text() -> str:
         "Comandi disponibili:\n"
         "• 🟢 <code>/ping</code> → verifica rapida\n"
         "• 📊 <code>/stato</code> → stato e metriche bot\n"
+        "• 👤 <code>/account</code> → stato collegamento account eBay\n"
+        "• 🔗 <code>/connect</code> → prepara il collegamento account eBay\n"
+        "• ❌ <code>/disconnect</code> → scollega account eBay dal bot\n"
+        "• 🔔 <code>/notifications on</code> → attiva notifiche per questa chat\n"
+        "• 🔕 <code>/notifications off</code> → disattiva notifiche per questa chat\n"
+        "• ⚙️ <code>/settings</code> → riepilogo preferenze di chat e tenant\n"
         "• 📦 <code>/ultimi [giorni] [max]</code> → ordini con CF trovato\n"
         "• 📋 <code>/tutti [giorni] [max]</code> → tutti gli ordini\n"
         "• 🔍 <code>/ordine [id]</code> → dettaglio ordine singolo\n"
@@ -150,6 +160,14 @@ def build_main_menu_markup() -> dict[str, object]:
             ],
             [
                 {"text": "Stato", "callback_data": CALLBACK_STATO},
+                {"text": "Account", "callback_data": CALLBACK_ACCOUNT},
+            ],
+            [
+                {"text": "Collega eBay", "callback_data": CALLBACK_CONNECT},
+                {"text": "Scollega", "callback_data": CALLBACK_DISCONNECT},
+            ],
+            [
+                {"text": "Settings", "callback_data": CALLBACK_SETTINGS},
                 {"text": "Help", "callback_data": CALLBACK_HELP},
             ],
         ]
@@ -161,13 +179,134 @@ def callback_command_from_data(data: str) -> str | None:
         CALLBACK_ULTIMI: "/ultimi 7 20",
         CALLBACK_TUTTI: "/tutti 7 20",
         CALLBACK_STATO: "/stato",
+        CALLBACK_ACCOUNT: "/account",
+        CALLBACK_CONNECT: "/connect",
+        CALLBACK_DISCONNECT: "/disconnect",
+        CALLBACK_SETTINGS: "/settings",
         CALLBACK_HELP: "/help",
     }
     return mapping.get(data.strip())
 
 
 def should_attach_main_menu(command: str) -> bool:
-    return command in ("", "/start", "/help", "/ping", "/stato")
+    return command in (
+        "",
+        "/start",
+        "/help",
+        "/ping",
+        "/stato",
+        "/account",
+        "/connect",
+        "/disconnect",
+        "/settings",
+    )
+
+
+def format_account_status(account_status: Mapping[str, object]) -> str:
+    linked = bool(account_status.get("linked"))
+    environment = html.escape(str(account_status.get("environment") or "n/d"))
+    ebay_user_id = html.escape(str(account_status.get("ebay_user_id") or "non collegato"))
+    account_state = html.escape(str(account_status.get("account_status") or "unlinked"))
+    token_status = html.escape(str(account_status.get("token_status") or "missing"))
+    subscription_count = int(account_status.get("subscription_count", 0))
+    chat_count = int(account_status.get("chat_count", 0))
+
+    if not linked:
+        return (
+            "👤 <b>Account eBay</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Stato: <code>non collegato</code>\n"
+            "Usa <code>/connect</code> quando il flusso OAuth sara' disponibile."
+        )
+
+    return (
+        "👤 <b>Account eBay</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🔗 Stato: <code>{account_state}</code>\n"
+        f"🪪 Utente eBay: <code>{ebay_user_id}</code>\n"
+        f"🌍 Ambiente: <code>{environment}</code>\n"
+        f"🔐 Token: <code>{token_status}</code>\n"
+        f"💬 Chat abilitate: <code>{chat_count}</code>\n"
+        f"🔔 Subscription attive: <code>{subscription_count}</code>"
+    )
+
+
+def format_connect_status(connect_status: Mapping[str, object]) -> str:
+    connect_url = str(connect_status.get("connect_url", "") or "")
+    oauth_state = html.escape(str(connect_status.get("oauth_state", "")))
+    expires_at = html.escape(str(connect_status.get("expires_at", "")))
+    base = (
+        "🔗 <b>Collegamento account eBay</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🪪 Sessione OAuth: <code>{oauth_state}</code>\n"
+        f"⏳ Scadenza: <code>{expires_at}</code>\n"
+    )
+    if connect_url:
+        escaped_url = html.escape(connect_url, quote=True)
+        return base + f'🌐 Apri questo link: <a href="{escaped_url}">{escaped_url}</a>'
+    return (
+        base
+        + "⚠️ Il callback OAuth non e' ancora configurato sul server.\n"
+        + "La sessione e' stata preparata, ma serve impostare l'URL pubblico di collegamento."
+    )
+
+
+def format_disconnect_status(disconnect_status: Mapping[str, object]) -> str:
+    if not disconnect_status.get("disconnected", False):
+        return (
+            "❌ <b>Scollega account eBay</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Nessun account eBay collegato da scollegare in questo contesto."
+        )
+
+    ebay_user_id = html.escape(str(disconnect_status.get("ebay_user_id", "n/d")))
+    environment = html.escape(str(disconnect_status.get("environment", "n/d")))
+    return (
+        "❌ <b>Scollega account eBay</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🪪 Utente eBay scollegato: <code>{ebay_user_id}</code>\n"
+        f"🌍 Ambiente: <code>{environment}</code>\n"
+        "🔐 Token locale rimosso dal runtime del bot.\n"
+        "Puoi usare <code>/connect</code> per collegare di nuovo l'account."
+    )
+
+
+def format_notifications_status(notification_status: Mapping[str, object]) -> str:
+    enabled = bool(notification_status.get("enabled", False))
+    tenant_scope = html.escape(str(notification_status.get("tenant_scope", "global")))
+    chat_id = html.escape(str(notification_status.get("chat_id", "n/d")))
+    environment = html.escape(str(notification_status.get("environment", "n/d")))
+    status_text = "attive" if enabled else "disattivate"
+    command_hint = "/notifications off" if enabled else "/notifications on"
+    return (
+        "🔔 <b>Notifiche chat</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"💬 Chat: <code>{chat_id}</code>\n"
+        f"🏷️ Scope: <code>{tenant_scope}</code>\n"
+        f"🌍 Ambiente: <code>{environment}</code>\n"
+        f"📣 Stato: <code>{status_text}</code>\n"
+        f"Usa <code>{command_hint}</code> per cambiare questa preferenza."
+    )
+
+
+def format_settings_status(settings_status: Mapping[str, object]) -> str:
+    tenant_scope = html.escape(str(settings_status.get("tenant_scope", "global")))
+    environment = html.escape(str(settings_status.get("environment", "n/d")))
+    notifications_enabled = bool(settings_status.get("notifications_enabled", False))
+    notifications_text = "attive" if notifications_enabled else "disattivate"
+    linked = bool(settings_status.get("account_linked", False))
+    linked_text = "collegato" if linked else "non collegato"
+    return (
+        "⚙️ <b>Impostazioni</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🏷️ Scope runtime: <code>{tenant_scope}</code>\n"
+        f"🌍 Ambiente: <code>{environment}</code>\n"
+        f"🔔 Notifiche chat: <code>{notifications_text}</code>\n"
+        f"👤 Account eBay: <code>{linked_text}</code>\n"
+        "Comandi utili: <code>/account</code>, <code>/connect</code>, "
+        "<code>/disconnect</code>, <code>/notifications on</code>, "
+        "<code>/notifications off</code>."
+    )
 
 
 def options_for_command(command: str, args: list[str]) -> FetchOptions:

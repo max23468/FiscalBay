@@ -10,6 +10,7 @@ Il repository contiene due entry point:
 
 - `ebay-cf`: utility CLI per leggere ordini e stampare i risultati in tabella, JSON o CSV
 - `ebay-telegram-bot`: bot Telegram con comandi interattivi e notifiche automatiche dei nuovi ordini
+- `ebay-cf-oauth-server`: callback server minimale per l'onboarding self-service Telegram + eBay OAuth
 
 Funzionalità principali:
 
@@ -120,6 +121,12 @@ ebay-telegram-bot
 | `EBAY_HTTP_RETRY_BASE_DELAY` | No | `0.5` | Delay base del backoff eBay |
 | `EBAY_TOKEN_SKEW_SECONDS` | No | `60` | Margine di sicurezza sulla scadenza token |
 | `EBAY_ORDER_DETAIL_DELAY_SECONDS` | No | `0` | Pausa tra chiamate `getOrder` |
+| `EBAY_OAUTH_CONNECT_BASE_URL` | No | vuoto | URL pubblico usato da `/connect` per aprire il flusso OAuth |
+| `EBAY_OAUTH_CALLBACK_URL` | No | derivato da `EBAY_OAUTH_CONNECT_BASE_URL` | URL pubblico di callback OAuth |
+| `EBAY_OAUTH_SERVER_HOST` | No | `127.0.0.1` | Host di bind del callback server |
+| `EBAY_OAUTH_SERVER_PORT` | No | `8787` | Porta locale del callback server |
+| `EBAY_TENANT_TOKEN_KEY` | Consigliata per OAuth multiutente | vuoto | Chiave Fernet usata per cifrare i refresh token tenant a riposo |
+| `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS` | No | vuoto | Opt-in solo beta privata per salvare il refresh token tenant in formato `plain:` |
 | `LOG_LEVEL` | No | `WARNING` per CLI, `INFO` per bot se impostato così | Livello log |
 
 ### Variabili Telegram
@@ -245,6 +252,12 @@ I record prodotti dalla CLI includono:
 - `/help`
 - `/ping`
 - `/stato`
+- `/account`
+- `/connect`
+- `/disconnect`
+- `/notifications on`
+- `/notifications off`
+- `/settings`
 - `/ultimi 7 20`
 - `/tutti 7 20`
 - `/ordine 12-34567-89012`

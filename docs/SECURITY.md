@@ -58,10 +58,10 @@ Procedura minima:
 
 ## Rischi ancora aperti
 
-- credenziali eBay ancora globali single-tenant
+- credenziali eBay ancora globali single-tenant come fallback residuo
 - SQLite locale come persistence principale
 - metriche e alerting ancora minimi
-- assenza di cifratura a riposo per futuri token utente
+- gestione chiave di cifratura token ancora affidata a `.env` su VPS, non a un secret manager dedicato
 
 ## Cambio di perimetro con la multiutenza
 
@@ -111,8 +111,9 @@ Ogni passo della fase multiutente deve essere giustificato contro questi finding
 ## Stato attuale dell'adapter token tenant
 
 - il codice applicativo ha ora un adapter dedicato per leggere token tenant dallo storage
-- per sicurezza, sul deploy VPS attuale questo adapter resta in fallback su credenziali globali finche' non esiste un decoder reale del refresh token cifrato
-- e' presente solo un percorso di test/dev esplicitamente opt-in per token plaintext, da non abilitare sulla VPS di produzione
+- il percorso standard usa ora cifratura Fernet a riposo con chiave `EBAY_TENANT_TOKEN_KEY`
+- il fallback plaintext resta solo come percorso esplicitamente opt-in per beta privata/dev tramite `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS=1`
+- sulla VPS il target corretto e' usare `EBAY_TENANT_TOKEN_KEY` e lasciare disattivato il fallback plaintext
 
 ## Sufficienza della VPS attuale
 
@@ -135,7 +136,7 @@ Se questi vincoli saltano, i primi componenti da promuovere sono:
 La review dedicata ai token utente dovra' coprire almeno:
 
 - cifratura a riposo del refresh token
-- gestione chiavi di cifratura
+- gestione chiavi di cifratura, rotazione e backup
 - audit degli eventi `connect`, `disconnect`, refresh e revoca
 - percorso di revoca e riconnessione
 - esposizione dei token nei log e nei backup

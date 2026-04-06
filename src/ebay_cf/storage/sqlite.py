@@ -14,6 +14,7 @@ from ..models import (
     LinkedEbayAccount,
     NotificationSubscription,
     NotificationTenantTarget,
+    OauthLinkSession,
     RetryQueueEntry,
     TelegramChat,
     TelegramUser,
@@ -21,7 +22,7 @@ from ..models import (
     as_int,
 )
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 5
 
 
 class MetricsState(TypedDict):
@@ -135,6 +136,11 @@ def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
         (table,),
     ).fetchone()
     return row is not None
+
+
+def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return any(str(row["name"]) == column for row in rows)
 
 
 def _create_v2_schema(conn: sqlite3.Connection) -> None:
@@ -256,6 +262,33 @@ def _create_v3_schema(conn: sqlite3.Connection) -> None:
     )
 
 
+def _create_v4_schema(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS oauth_link_sessions "
+        "("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "telegram_user_id INTEGER NOT NULL, "
+        "telegram_chat_id INTEGER NOT NULL, "
+        "provider TEXT NOT NULL DEFAULT 'ebay', "
+        "environment TEXT NOT NULL DEFAULT 'production', "
+        "oauth_state TEXT NOT NULL UNIQUE, "
+        "code_verifier TEXT NOT NULL DEFAULT '', "
+        "redirect_uri TEXT NOT NULL DEFAULT '', "
+        "status TEXT NOT NULL DEFAULT 'pending', "
+        "expires_at TEXT, "
+        "created_at TEXT"
+        ")"
+    )
+
+
+def _create_v5_schema(conn: sqlite3.Connection) -> None:
+    if not _column_exists(conn, "oauth_link_sessions", "environment"):
+        conn.execute(
+            "ALTER TABLE oauth_link_sessions "
+            "ADD COLUMN environment TEXT NOT NULL DEFAULT 'production'"
+        )
+
+
 def _migrate_legacy_notified_orders(conn: sqlite3.Connection) -> None:
     if not _table_exists(conn, "notified_orders"):
         return
@@ -286,6 +319,12 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         version = 2
     if version < 3:
         _create_v3_schema(conn)
+        version = 3
+    if version < 4:
+        _create_v4_schema(conn)
+        version = 4
+    if version < 5:
+        _create_v5_schema(conn)
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 
@@ -909,6 +948,164 @@ def resolve_ebay_token_set(
     return EbayTokenSet.from_mapping(dict(row))
 
 
+def summarize_tenant_account_status(
+    path: str,
+    telegram_user_id: int,
+    environment: str | None = None,
+) -> dict[str, object]:
+    linked_account = resolve_linked_ebay_account(path, telegram_user_id, environment)
+    token_set = (
+        resolve_ebay_token_set(path, telegram_user_id, environment) if linked_account else None
+    )
+    subscriptions = load_notification_subscriptions(path)
+    enabled_subscription_count = sum(
+        1
+        for subscription in subscriptions
+        if subscription.telegram_user_id == telegram_user_id and subscription.enabled
+    )
+    chats = load_telegram_chats(path)
+    chat_count = sum(1 for chat in chats if chat.telegram_user_id == telegram_user_id)
+    return {
+        "telegram_user_id": telegram_user_id,
+        "linked": linked_account is not None,
+        "environment": linked_account.environment if linked_account is not None else environment,
+        "ebay_user_id": linked_account.ebay_user_id if linked_account is not None else "",
+        "account_status": linked_account.status if linked_account is not None else "unlinked",
+        "token_status": token_set.status if token_set is not None else "missing",
+        "token_configured": token_set is not None,
+        "subscription_count": enabled_subscription_count,
+        "chat_count": chat_count,
+    }
+
+
+def create_oauth_link_session(path: str, session: OauthLinkSession) -> OauthLinkSession:
+    init_db(path)
+    with _connect(path) as conn:
+        cursor = conn.execute(
+            "INSERT INTO oauth_link_sessions "
+            "("
+            "telegram_user_id, telegram_chat_id, provider, environment, oauth_state, "
+            "code_verifier, "
+            "redirect_uri, status, expires_at, created_at"
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                session.telegram_user_id,
+                session.telegram_chat_id,
+                session.provider,
+                session.environment,
+                session.oauth_state,
+                session.code_verifier,
+                session.redirect_uri,
+                session.status,
+                session.expires_at,
+                session.created_at,
+            ),
+        )
+        if cursor.lastrowid is None:
+            raise RuntimeError("Inserimento sessione OAuth fallito: lastrowid mancante.")
+        session.id = int(cursor.lastrowid)
+    return session
+
+
+def load_latest_oauth_link_session(
+    path: str,
+    telegram_user_id: int,
+    provider: str = "ebay",
+) -> OauthLinkSession | None:
+    init_db(path)
+    with _connect(path) as conn:
+        row = conn.execute(
+            "SELECT id, telegram_user_id, telegram_chat_id, provider, environment, oauth_state, "
+            "code_verifier, redirect_uri, status, expires_at, created_at "
+            "FROM oauth_link_sessions "
+            "WHERE telegram_user_id = ? AND provider = ? "
+            "ORDER BY id DESC LIMIT 1",
+            (telegram_user_id, provider),
+        ).fetchone()
+        if row is None:
+            return None
+    return OauthLinkSession.from_mapping(dict(row))
+
+
+def load_oauth_link_session_by_state(
+    path: str,
+    oauth_state: str,
+    provider: str = "ebay",
+) -> OauthLinkSession | None:
+    init_db(path)
+    with _connect(path) as conn:
+        row = conn.execute(
+            "SELECT id, telegram_user_id, telegram_chat_id, provider, environment, oauth_state, "
+            "code_verifier, redirect_uri, status, expires_at, created_at "
+            "FROM oauth_link_sessions "
+            "WHERE oauth_state = ? AND provider = ? "
+            "LIMIT 1",
+            (oauth_state, provider),
+        ).fetchone()
+        if row is None:
+            return None
+    return OauthLinkSession.from_mapping(dict(row))
+
+
+def update_oauth_link_session(
+    path: str,
+    oauth_state: str,
+    *,
+    status: str | None = None,
+    redirect_uri: str | None = None,
+) -> None:
+    init_db(path)
+    assignments: list[str] = []
+    params: list[object] = []
+    if status is not None:
+        assignments.append("status = ?")
+        params.append(status)
+    if redirect_uri is not None:
+        assignments.append("redirect_uri = ?")
+        params.append(redirect_uri)
+    if not assignments:
+        return
+    params.append(oauth_state)
+    with _connect(path) as conn:
+        conn.execute(
+            f"UPDATE oauth_link_sessions SET {', '.join(assignments)} WHERE oauth_state = ?",
+            tuple(params),
+        )
+
+
+def disconnect_linked_ebay_account(
+    path: str,
+    telegram_user_id: int,
+    environment: str | None = None,
+) -> LinkedEbayAccount | None:
+    account = resolve_linked_ebay_account(path, telegram_user_id, environment)
+    if account is None or account.id is None:
+        return None
+
+    init_db(path)
+    with _connect(path) as conn:
+        conn.execute(
+            "UPDATE ebay_accounts SET status = 'disconnected' WHERE id = ?",
+            (account.id,),
+        )
+        conn.execute(
+            "UPDATE ebay_tokens "
+            "SET refresh_token_encrypted = '', access_token = '', status = 'revoked', "
+            "updated_at = CURRENT_TIMESTAMP "
+            "WHERE ebay_account_id = ?",
+            (account.id,),
+        )
+        conn.execute(
+            "UPDATE oauth_link_sessions "
+            "SET status = 'cancelled' "
+            "WHERE telegram_user_id = ? AND provider = 'ebay' AND status = 'pending'",
+            (telegram_user_id,),
+        )
+
+    account.status = "disconnected"
+    return account
+
+
 def upsert_notification_subscription(path: str, subscription: NotificationSubscription) -> None:
     init_db(path)
     with _connect(path) as conn:
@@ -943,6 +1140,35 @@ def load_notification_subscriptions(path: str) -> list[NotificationSubscription]
         ):
             subscriptions.append(NotificationSubscription.from_mapping(dict(row)))
     return subscriptions
+
+
+def set_notification_subscription_enabled(
+    path: str,
+    telegram_user_id: int,
+    telegram_chat_id: int,
+    enabled: bool,
+    *,
+    created_at: str,
+    updated_at: str,
+) -> NotificationSubscription:
+    subscription = NotificationSubscription(
+        telegram_user_id=telegram_user_id,
+        telegram_chat_id=telegram_chat_id,
+        enabled=enabled,
+        filters="",
+        created_at=created_at,
+        updated_at=updated_at,
+    )
+    upsert_notification_subscription(path, subscription)
+    init_db(path)
+    with _connect(path) as conn:
+        conn.execute(
+            "UPDATE telegram_chats "
+            "SET notifications_enabled = ?, updated_at = ? "
+            "WHERE telegram_user_id = ? AND telegram_chat_id = ?",
+            (int(enabled), updated_at, telegram_user_id, telegram_chat_id),
+        )
+    return subscription
 
 
 def resolve_tenant_chat_context(

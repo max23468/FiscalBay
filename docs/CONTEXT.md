@@ -198,9 +198,25 @@ Storage:
 - `/help`
 - `/ping`
 - `/stato`
+- `/account`
+- `/connect`
+- `/disconnect`
+- `/notifications on|off`
+- `/settings`
 - `/ultimi`
 - `/tutti`
 - `/ordine`
+
+Nota onboarding:
+
+- `/account` mostra gia' il collegamento eBay noto per il tenant della chat
+- `/connect` prepara gia' una sessione OAuth nel DB e puo' restituire un link pubblico se la VPS espone `EBAY_OAUTH_CONNECT_BASE_URL`
+- `/disconnect` scollega gia' localmente account e token del tenant corrente dal DB sulla VPS
+- `/notifications on|off` consente gia' alla singola chat di attivare o spegnere le notifiche personali
+- `/settings` mostra gia' un riepilogo leggero delle preferenze utente/chat
+- esiste ora anche un callback server minimale separato, che chiude il flusso `/connect` quando la VPS espone URL pubblici corretti
+- i refresh token tenant usano ora cifratura Fernet a riposo con chiave da env sulla VPS
+- restano ancora aperti hardening finale e revoca remota verso eBay
 
 ### Notifiche automatiche
 
@@ -290,6 +306,7 @@ Aggiornamento di stato:
 - la sorgente credenziali per il fetch non e' piu' una decisione sparsa nei caller: esiste ora una facciata unica che in futuro potra' preferire token per tenant senza cambiare ogni servizio
 - esiste gia' anche un adapter storage-side per futuri token tenant, ma sul bot in VPS resta volutamente spento finche' non sara' disponibile la decifratura reale dei refresh token utente
 - il comando `/stato` mostra ora esplicitamente se la chat sta lavorando in contesto tenant o ancora in fallback globale, rendendo osservabile il residuo single-tenant direttamente dal bot
+- e' disponibile anche `/account`, che mostra lo stato del collegamento eBay registrato per il tenant della chat e rappresenta il primo comando davvero orientato all'onboarding fase 4
 
 ## Multiutenza futura
 
