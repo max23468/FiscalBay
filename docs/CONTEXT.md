@@ -214,7 +214,7 @@ Nota onboarding:
 - `/disconnect` scollega gia' localmente account e token del tenant corrente dal DB sulla VPS
 - `/notifications on|off` consente gia' alla singola chat di attivare o spegnere le notifiche personali
 - `/settings` mostra gia' un riepilogo leggero delle preferenze utente/chat
-- esiste ora anche un callback server minimale separato, che chiude il flusso `/connect` quando la VPS espone URL pubblici corretti
+- esiste ora anche un callback server minimale separato, che chiude il flusso `/connect` quando la VPS espone URL pubblici corretti e usa il `RuName` eBay corretto verso il developer portal
 - i refresh token tenant usano ora cifratura Fernet a riposo con chiave da env sulla VPS
 - restano ancora aperti hardening finale e revoca remota verso eBay
 

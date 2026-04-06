@@ -8,6 +8,7 @@ from src.ebay_cf.oauth_server import (
     build_oauth_start_redirect,
     complete_oauth_link,
     oauth_callback_url,
+    oauth_runame,
 )
 from src.ebay_cf.storage.sqlite import (
     create_oauth_link_session,
@@ -25,6 +26,18 @@ class OAuthServerTests(unittest.TestCase):
             clear=False,
         ):
             self.assertEqual(oauth_callback_url(), "https://example.com/oauth/callback")
+
+    def test_oauth_runame_uses_sandbox_override(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "EBAY_OAUTH_RUNAME": "prod-ru-name",
+                "EBAY_OAUTH_RUNAME_SANDBOX": "sandbox-ru-name",
+            },
+            clear=False,
+        ):
+            self.assertEqual(oauth_runame("sandbox"), "sandbox-ru-name")
+            self.assertEqual(oauth_runame("production"), "prod-ru-name")
 
     def test_build_oauth_start_redirect_uses_session_environment(self) -> None:
         config = Config(
@@ -45,12 +58,12 @@ class OAuthServerTests(unittest.TestCase):
                 status="pending",
             ),
             load_config_fn=lambda _environment: config,
-            callback_url_fn=lambda: "https://example.com/oauth/callback",
+            runame_fn=lambda _environment: "sandbox-ru-name",
         )
 
         self.assertIn("https://auth.sandbox.ebay.com/oauth2/authorize?", redirect)
         self.assertIn("state=state-123", redirect)
-        self.assertIn("redirect_uri=https%3A%2F%2Fexample.com%2Foauth%2Fcallback", redirect)
+        self.assertIn("redirect_uri=sandbox-ru-name", redirect)
 
     def test_complete_oauth_link_persists_account_and_token(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -86,7 +99,8 @@ class OAuthServerTests(unittest.TestCase):
                     scopes="scope-1 scope-2",
                 ),
                 callback_url_fn=lambda: "https://example.com/oauth/callback",
-                exchange_code_fn=lambda _config, _code, _redirect_uri: {
+                runame_fn=lambda _environment: "sandbox-ru-name",
+                exchange_code_fn=lambda _config, _code, _runame: {
                     "refresh_token": "tenant-refresh",
                     "access_token": "access-token",
                     "scope": "scope-1 scope-2",

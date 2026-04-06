@@ -278,7 +278,8 @@ Stato attuale:
 
 - il modello e la tabella esistono gia' nel progetto corrente
 - `/connect` salva gia' una sessione preliminare con `oauth_state`, `status=pending`, expiry, environment e correlazione Telegram utente/chat
-- il callback OAuth usa gia' `redirect_uri` e stato sessione per chiudere il collegamento e aggiornare account/token nel DB
+- il callback OAuth usa gia' lo stato sessione per chiudere il collegamento e aggiornare account/token nel DB
+- il campo `redirect_uri` conserva oggi la callback URL pubblica attesa dal progetto; verso eBay il valore usato come `redirect_uri` e' invece il `RuName` configurato a parte
 
 ### `tenant_runtime_state`
 

@@ -132,8 +132,10 @@ Servizio OAuth su VPS:
 - entrypoint: `ebay-cf-oauth-server`
 - servizio `systemd`: `ebaycf-oauth`
 - endpoint locali minimi: `/healthz`, `/oauth/start`, `/oauth/callback`
-- variabili utili: `EBAY_OAUTH_CONNECT_BASE_URL`, `EBAY_OAUTH_CALLBACK_URL`, `EBAY_OAUTH_SERVER_HOST`, `EBAY_OAUTH_SERVER_PORT`, `EBAY_TENANT_TOKEN_KEY`
+- variabili utili: `EBAY_OAUTH_RUNAME`, `EBAY_OAUTH_RUNAME_SANDBOX`, `EBAY_OAUTH_CONNECT_BASE_URL`, `EBAY_OAUTH_CALLBACK_URL`, `EBAY_OAUTH_SERVER_HOST`, `EBAY_OAUTH_SERVER_PORT`, `EBAY_TENANT_TOKEN_KEY`
 - il percorso corretto su VPS e' usare `EBAY_TENANT_TOKEN_KEY` per cifrare i refresh token utente a riposo
+- verso eBay il parametro `redirect_uri` deve essere il `RuName` registrato nel portale eBay, non la callback URL pubblica
+- la callback URL pubblica del progetto deve invece coincidere con l'`Accept URL` associato a quel `RuName`
 - `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS=1` va considerato solo fallback di beta privata/dev e non configurazione operativa normale
 
 Readiness multiutente nel healthcheck:

@@ -61,6 +61,25 @@ def oauth_callback_url() -> str:
     return urllib.parse.urlunparse(rebuilt)
 
 
+def oauth_runame(environment: str) -> str:
+    env_name = environment.strip().lower()
+    if env_name == "sandbox":
+        sandbox = os.getenv("EBAY_OAUTH_RUNAME_SANDBOX", "").strip()
+        if sandbox:
+            return sandbox
+
+    runame = os.getenv("EBAY_OAUTH_RUNAME", "").strip()
+    if runame:
+        return runame
+
+    if env_name == "sandbox":
+        raise ConfigurationError(
+            "Variabile ambiente mancante: EBAY_OAUTH_RUNAME_SANDBOX "
+            "(oppure EBAY_OAUTH_RUNAME come fallback)."
+        )
+    raise ConfigurationError("Variabile ambiente mancante: EBAY_OAUTH_RUNAME")
+
+
 def session_is_expired(session: OauthLinkSession, *, now: datetime | None = None) -> bool:
     if not session.expires_at:
         return False
@@ -103,7 +122,7 @@ def build_oauth_start_redirect(
         [str, str, str], OauthLinkSession | None
     ] = load_oauth_link_session_by_state,
     load_config_fn: Callable[[str], object] = load_config,
-    callback_url_fn: Callable[[], str] = oauth_callback_url,
+    runame_fn: Callable[[str], str] = oauth_runame,
 ) -> str:
     session = load_session_fn(state_path, oauth_state, "ebay")
     if session is None:
@@ -113,12 +132,15 @@ def build_oauth_start_redirect(
     if session_is_expired(session):
         raise ConfigurationError("La sessione OAuth e' scaduta. Usa di nuovo /connect.")
 
-    callback_url = callback_url_fn()
     config = load_config_fn(session.environment)
     assert hasattr(config, "environment")
     assert hasattr(config, "client_id")
     assert hasattr(config, "scopes")
-    return build_user_consent_url(config, redirect_uri=callback_url, state=session.oauth_state)
+    return build_user_consent_url(
+        config,
+        redirect_uri=runame_fn(session.environment),
+        state=session.oauth_state,
+    )
 
 
 def complete_oauth_link(
@@ -131,6 +153,7 @@ def complete_oauth_link(
     ] = load_oauth_link_session_by_state,
     load_config_fn: Callable[[str], object] = load_config,
     callback_url_fn: Callable[[], str] = oauth_callback_url,
+    runame_fn: Callable[[str], str] = oauth_runame,
     exchange_code_fn: Callable[[object, str, str], dict] = mint_authorization_code_token_response,
     encode_refresh_token_fn: Callable[[str], str | None] = encode_refresh_token,
     send_message_fn: Callable[..., None] = send_message,
@@ -152,7 +175,7 @@ def complete_oauth_link(
     )
 
     config = load_config_fn(session.environment)
-    token_payload = exchange_code_fn(config, code, callback_url)
+    token_payload = exchange_code_fn(config, code, runame_fn(session.environment))
     refresh_token = str(token_payload.get("refresh_token", "") or "")
     encrypted_refresh_token = encode_refresh_token_fn(refresh_token)
     if not encrypted_refresh_token:

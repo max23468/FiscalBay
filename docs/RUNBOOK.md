@@ -83,6 +83,8 @@ Gli eventi principali sono standardizzati per:
 
 Variabili aggiuntive per onboarding OAuth:
 
+- `EBAY_OAUTH_RUNAME`
+- `EBAY_OAUTH_RUNAME_SANDBOX`
 - `EBAY_OAUTH_CONNECT_BASE_URL`
 - `EBAY_OAUTH_CALLBACK_URL`
 - `EBAY_OAUTH_SERVER_HOST`
@@ -94,6 +96,7 @@ Nota importante:
 
 - il callback server puo' girare anche senza URL pubblico, ma in quel caso `/connect` non restituisce un link usabile dall'utente
 - il percorso operativo corretto e' configurare `EBAY_TENANT_TOKEN_KEY` sulla VPS prima di usare davvero il callback OAuth
+- per eBay il `redirect_uri` non e' una URL arbitraria: va configurato il `RuName` corretto e l'`Accept URL` del portale eBay deve puntare al callback pubblico del progetto
 - per la beta privata e' possibile usare il fallback `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS=1`, ma non sostituisce la cifratura reale a riposo e non va lasciato attivo come default
 
 Health check:

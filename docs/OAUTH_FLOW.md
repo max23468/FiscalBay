@@ -9,6 +9,7 @@ Stato attuale:
 - se sulla VPS e' valorizzata `EBAY_OAUTH_CONNECT_BASE_URL`, il bot restituisce anche il link pubblico di avvio
 - esiste anche un callback server minimale che valida `state`, scambia `code` con token e salva account/token nel `state.db`
 - il salvataggio finale dei token usa ora cifratura Fernet con chiave `EBAY_TENANT_TOKEN_KEY`
+- verso eBay il progetto usa ora il `RuName` registrato nel developer portal, non una callback URL libera, come `redirect_uri`
 - il fallback plaintext resta solo come opt-in esplicito per beta privata/dev
 
 ## Obiettivo
@@ -60,7 +61,10 @@ Permettere a un utente Telegram di collegare il proprio account eBay senza inter
 - la chat che avvia `/connect` viene comunque tracciata per tornare con la conferma nel posto giusto
 - il flusso usera' una tabella dedicata `oauth_link_sessions` con `state`, expiry e stato della richiesta
 - il callback OAuth salva o aggiorna `ebay_accounts` e `ebay_tokens`, poi marca chiusa la sessione OAuth
-- il callback server attuale gira come servizio separato `ebaycf-oauth` sulla VPS e usa `EBAY_OAUTH_CALLBACK_URL` o, in fallback, deriva il callback da `EBAY_OAUTH_CONNECT_BASE_URL`
+- il callback server attuale gira come servizio separato `ebaycf-oauth` sulla VPS
+- verso eBay il server usa `EBAY_OAUTH_RUNAME` oppure `EBAY_OAUTH_RUNAME_SANDBOX` come identificatore `redirect_uri`
+- il callback pubblico del progetto usa `EBAY_OAUTH_CALLBACK_URL` o, in fallback, deriva la URL da `EBAY_OAUTH_CONNECT_BASE_URL`
+- l'Accept URL associato al `RuName` nel portale eBay deve puntare proprio al callback pubblico esposto dal progetto
 - per la prima beta il flusso target e' un account eBay attivo per utente e per environment
 - il refresh token non resta in env e non viene mai considerato configurazione globale del bot
 - il refresh token viene salvato solo in forma cifrata
@@ -72,7 +76,7 @@ Permettere a un utente Telegram di collegare il proprio account eBay senza inter
 2. spostare credenziali eBay da env globale a repository/account storage
    Stato attuale: il progetto ha gia' una facciata di risoluzione credenziali e un adapter storage-side per token tenant, ma sul deploy VPS resta attivo il fallback globale finche' non esiste il decoder reale dei refresh token cifrati.
 3. creare endpoint o mini web app per avvio OAuth e callback
-   Stato attuale: il comando `/connect`, la tabella `oauth_link_sessions` e il servizio web minimale esistono gia'; restano da rifinire deploy pubblico, revoca remota e hardening finale del flusso.
+   Stato attuale: il comando `/connect`, la tabella `oauth_link_sessions` e il servizio web minimale esistono gia'; restano da rifinire deploy pubblico, RuName/Accept URL nel portale eBay, revoca remota e hardening finale del flusso.
 4. aggiungere comandi `/connect`, `/disconnect` e `/account`
    Stato attuale: `/account`, `/connect` e `/disconnect` sono gia' presenti nel bot; resta da completare l'hardening finale del percorso end-to-end e la gestione completa del token storage sicuro.
    In piu', il bot espone gia' `/notifications on|off` e `/settings` per rendere piu' self-service anche la gestione della chat dopo il collegamento.
