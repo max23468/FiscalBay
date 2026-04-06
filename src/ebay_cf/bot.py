@@ -48,6 +48,9 @@ from .services.notifications import (
     maybe_send_new_order_notifications as _maybe_send_new_order_notifications,
 )
 from .services.notifications import (
+    now_utc as _now_utc,
+)
+from .services.notifications import (
     process_retry_queue as _process_retry_queue,
 )
 from .services.notifications import (
@@ -214,6 +217,10 @@ def format_auto_notification(record: OrderRecordLike) -> str:
     return _format_auto_notification(coerce_order_record(record))
 
 
+def now_utc():
+    return _now_utc()
+
+
 __all__ = [
     "CALLBACK_HELP",
     "CALLBACK_SETTINGS",
@@ -245,6 +252,7 @@ __all__ = [
     "increment_metric",
     "is_authorized",
     "maybe_send_new_order_notifications",
+    "now_utc",
     "options_for_command",
     "parse_command",
     "process_message",
