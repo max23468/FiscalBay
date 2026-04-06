@@ -449,15 +449,15 @@ Convenzione importante:
 
 - per modifiche solo documentali o checklist non serve riavviare il bot
 
-## Vercel
+## Piattaforma di deploy
 
-Vercel non e' piu' parte attiva del deploy operativo del bot.
+Il bot non usa piattaforme di deploy web collegate al repository.
 
 Situazione attuale:
 
-- il progetto non va trattato come app web Vercel
+- il progetto va trattato come servizio Python deployato su VPS Linux
 - il deploy reale vive sulla VPS Linux
-- l'integrazione Vercel e' stata disattivata per evitare deploy inutili/falliti
+- il repository non ha piu' integrazioni di deploy automatico da considerare
 
 ## File operativi importanti
 
@@ -496,7 +496,7 @@ Le cose principali ancora aperte non sono piu' il “mettere in piedi” il prog
 
 - il progetto oggi funziona ed e' live
 - il bot e' single-tenant, non multiutente
-- il deploy vero e' su VPS, non su Vercel
+- il deploy vero e' su VPS Linux
 - la VPS usa Oracle Linux 9.7
 - l'accesso standard e' `ssh opc@79.72.45.89`
 - SSH e' key-only, root login disabilitato

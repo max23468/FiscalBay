@@ -11,18 +11,6 @@
 
 ## Checklist Operativa
 
-## Fase 1 - Hardening e Aggiornamenti VPS [Priorita' alta]
-
-Stato:
-
-- fase 1 completata il 2026-04-06
-- setup produttivo standardizzato su `systemd` con utente dedicato `ebaycf` e app in `/opt/ebay-cf`
-- backup, restore e verifica permessi segreti coperti da `deploy/backup.sh`, `deploy/restore.sh` e `deploy/check-secrets-perms.sh`
-- timer `systemd` `ebaycf-backup.timer` attivo con backup giornaliero
-- hardening VPS attivo: SSH solo a chiave, `PermitRootLogin no`, firewall su `ssh`, `fail2ban` attivo
-- verifica runtime eseguita il 2026-04-06: load average `0.00 0.03 0.05`, CPU idle circa `96.9%`, clock sincronizzato via `chronyd`
-- Docker rimosso dal progetto e non piu' considerato parte dello standard operativo
-
 ## Fase 2 - Rifondazione Strutturale del Codice [Priorita' alta]
 
 ### Nuova struttura proposta
