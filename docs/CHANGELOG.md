@@ -9,10 +9,23 @@ Documenti collegati:
 
 - `docs/INDEX.md`
 - `docs/ARCHITECTURE.md`
-- `docs/CHECKLIST.md`
+- `docs/ROADMAP.md`
 
 ## In lavorazione
 
+- unificata la pianificazione residua in `docs/ROADMAP.md`, che ora contiene anche la checklist operativa aperta
+- il servizio viene ora descritto in modo coerente come bot pubblico con accesso approvato, non piu' come beta privata separata
+- la roadmap e' stata riorganizzata in fasi piu' pratiche: onboarding pubblico controllato, guardrail admin, lifecycle dati e consolidamento del servizio
+- la roadmap recepisce ora anche il posizionamento `Telegram first`, il target di servizio pubblico piccolo e curato, il lifecycle account/token esplicito e un cruscotto admin minimo via Telegram
+- la roadmap integra ora anche onboarding Telegram adattivo, reconnect guidato, distinzione errore utente/servizio, tenant health admin, metriche prodotto minime, modalita' incidente e gestione tenant dormienti
+- roadmap e documenti stabili fissano ora anche: solo chat privata, un solo admin globale, notifiche attive di default per utenti approvati, doppio percorso di uscita utente/account e approccio curato ai tenant inattivi
+- la roadmap include ora anche comandi esplicativi come `/why_not_notified` e `/reconnect_status`, alert di prodotto e una review admin dedicata per tenant dormienti
+- la roadmap recepisce ora anche un blocco di ottimizzazioni concrete: riduzione delle `getOrder` inutili, polling incrementale piu' stretto, deduplica piu' esplicita, scritture SQLite piu' contenute, percorsi hot/cold separati e indici mirati
+- la roadmap include ora anche due ultime ottimizzazioni ad alto valore: snapshot sintetico dell'ultimo stato utile per tenant e separazione piu' netta tra discovery veloce ordini e percorso di explain/detail
+- la roadmap integra ora anche un blocco completo di miglioramenti VPS: backup piu' ricostruibili, restore drill, monitor disco/memoria, check TLS esterni, hardening `systemd`, smoke deploy piu' ricco e playbook incidente piu' specifici
+- documenti stabili e roadmap fissano ora anche due vincoli aggiuntivi: un solo account/environment gia' collegato per utente lato UX e una memoria operativa minima leggibile, ma non uno storico completo del prodotto
+- la roadmap e' stata poi riorganizzata in piu' fasi semplici e leggibili, senza sottofasi: esperienza prodotto, guardrail/admin, lifecycle dati, ottimizzazione applicativa, robustezza VPS e consolidamento del servizio
+- `docs/SERVICE_GOVERNANCE.md`, `docs/CONTEXT.md` e `docs/ARCHITECTURE.md` fissano ora esplicitamente il perimetro del prodotto, cosi' nuove feature possano essere valutate contro criteri di inclusione ed esclusione e non far deragliare il tool verso bloat o funzioni fuori scopo
 - centralizzati gli stati workflow utente/account/sessione e il capability gating dei comandi Telegram, riducendo i check sparsi su stringhe legacy tra `bot.py` e `telegram_runtime.py`
 - resi piu' idempotenti i flussi sensibili di accesso e collegamento: approvazioni ripetute non duplicano notifiche e `/connect` riusa la sessione OAuth pendente valida
 - aggiunti `reconcile.py` e una `operation_queue` SQLite minima per il recovery dei workflow sensibili; il deploy VPS prevede ora anche `ebaycf-reconcile.timer`
@@ -61,9 +74,9 @@ Documenti collegati:
 - `deploy/ebaycf-reconcile.service` carica ora anche virtualenv e `.env`, evitando che il worker periodico parta senza configurazione Telegram/eBay sulla VPS.
 - `src/ebay_cf/application.py` e `src/ebay_cf/bot.py` chiudono ora il residuo di fase 3 nel runtime multiutente: con `TELEGRAM_ADMIN_USER_ID` configurato il bot usa credenziali tenant per i tenant collegati e non ricade piu' su `EBAY_REFRESH_TOKEN` condiviso.
 - `docs/SERVICE_GOVERNANCE.md` fissa ora in modo stabile governance del servizio, dati trattati, retention, cancellazione utente e limiti dichiarati della beta privata.
-- `docs/CHECKLIST.md` non ha piu' fasi aperte; le decisioni residue vengono tenute in `docs/DECISIONS_PENDING.md`.
+- l'assetto di pianificazione e' stato poi riassorbito in `docs/ROADMAP.md`, mentre le decisioni residue restano in `docs/DECISIONS_PENDING.md`.
 - `deploy/ebaycf-oauth.service`, `deploy/linux-setup.sh`, `deploy/update.sh` e `deploy/smoke-check.sh` estendono il deploy VPS con il servizio `systemd` separato `ebaycf-oauth`.
-- `docs/CHECKLIST.md` considera ora la fase di onboarding self-service sostanzialmente chiusa e lascia aperti in roadmap solo i target multiutente residui e la governance prodotto.
+- la fase di onboarding self-service e' stata considerata sostanzialmente chiusa, lasciando aperti in roadmap solo i target multiutente residui e la governance prodotto.
 - `src/ebay_cf/services/telegram_runtime.py` e `src/ebay_cf/services/notifications.py` emettono ora log piu' correlabili con `cycle_id` per polling, callback, messaggi e cicli notifica.
 - `src/ebay_cf/healthcheck.py` espone anche metriche runtime aggregate leggibili in output testuale e JSON.
 - `src/ebay_cf/models.py` e `src/ebay_cf/storage/sqlite.py` tracciano ora anche `orders_with_cf`, `telegram_retries` e `consecutive_error_cycles` dentro le metriche runtime.

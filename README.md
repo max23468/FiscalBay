@@ -129,7 +129,7 @@ ebay-telegram-bot
 | `EBAY_OAUTH_SERVER_HOST` | No | `127.0.0.1` | Host di bind del callback server |
 | `EBAY_OAUTH_SERVER_PORT` | No | `8787` | Porta locale del callback server |
 | `EBAY_TENANT_TOKEN_KEY` | Consigliata per OAuth multiutente | vuoto | Chiave Fernet usata per cifrare i refresh token tenant a riposo |
-| `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS` | No | vuoto | Opt-in solo beta privata per salvare il refresh token tenant in formato `plain:` |
+| `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS` | No | vuoto | Opt-in solo dev o recovery controllato per salvare il refresh token tenant in formato `plain:` |
 | `LOG_LEVEL` | No | `WARNING` per CLI, `INFO` per bot se impostato così | Livello log |
 
 Nota OAuth eBay:
@@ -370,7 +370,7 @@ Indice centrale:
 
 Documenti principali:
 
-- `docs/CHECKLIST.md`
+- `docs/ROADMAP.md`
 - `docs/CONTEXT.md`
 - `docs/ARCHITECTURE.md`
 - `docs/OPERATIONS.md`

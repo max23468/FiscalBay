@@ -6,8 +6,8 @@ Indice centrale della documentazione del progetto.
 
 - `../README.md`
   - panoramica generale, setup rapido, uso CLI e link principali
-- `docs/CHECKLIST.md`
-  - roadmap operativa e lavoro ancora aperto
+- `docs/ROADMAP.md`
+  - direzione del prodotto e ordine delle prossime fasi
 - `docs/CONTEXT.md`
   - stato reale del progetto, del codice e della VPS
 
@@ -37,8 +37,8 @@ Indice centrale della documentazione del progetto.
 
 ## Pianificazione
 
-- `docs/CHECKLIST.md`
-  - fasi e task aperti
+- `docs/ROADMAP.md`
+  - fasi, task aperti e direzione delle prossime fasi
 - `docs/MILESTONE_BOARD.md`
   - milestone e dipendenze di alto livello
 - `docs/DECISIONS_PENDING.md`

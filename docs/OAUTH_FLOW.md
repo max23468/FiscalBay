@@ -11,7 +11,7 @@ Stato attuale:
 - il salvataggio finale dei token usa ora cifratura Fernet con chiave `EBAY_TENANT_TOKEN_KEY`
 - verso eBay il progetto usa ora il `RuName` registrato nel developer portal, non una callback URL libera, come `redirect_uri`
 - il consenso OAuth include anche lo scope pubblico `commerce.identity.readonly`, cosi' il callback puo' salvare un identificativo account eBay reale
-- il fallback plaintext resta solo come opt-in esplicito per beta privata/dev
+- il fallback plaintext resta solo come opt-in esplicito per dev o recovery controllato
 
 ## Obiettivo
 
@@ -66,7 +66,7 @@ Permettere a un utente Telegram di collegare il proprio account eBay senza inter
 - verso eBay il server usa `EBAY_OAUTH_RUNAME` oppure `EBAY_OAUTH_RUNAME_SANDBOX` come identificatore `redirect_uri`
 - il callback pubblico del progetto usa `EBAY_OAUTH_CALLBACK_URL` o, in fallback, deriva la URL da `EBAY_OAUTH_CONNECT_BASE_URL`
 - l'Accept URL associato al `RuName` nel portale eBay deve puntare proprio al callback pubblico esposto dal progetto
-- per la prima beta il flusso target e' un account eBay attivo per utente e per environment
+- il flusso target resta un account eBay attivo per utente e per environment
 - il refresh token non resta in env e non viene mai considerato configurazione globale del bot
 - il refresh token viene salvato solo in forma cifrata
 - un token revocato o non piu' refreshabile porta l'account in stato da riconnettere

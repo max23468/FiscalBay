@@ -70,7 +70,7 @@ Health check JSON:
 Nota deploy storage:
 
 - il `state.db` del bot in VPS puo' ricevere migrazioni schema per tabelle tenant-aware
-- finche' non vengono caricati tenant, account e subscription reali, il comportamento resta compatibile con l'attuale single-tenant
+- finche' non vengono caricati tenant, account e subscription reali, restano compatibili i percorsi legacy previsti per CLI o istanze non ancora migrate
 - prima di rilasci che toccano `src/ebay_cf/storage/sqlite.py`, mantenere come sempre un backup aggiornato di `data/state.db`
 - il runtime puo' ora registrare utenti/chat Telegram nel DB durante il traffico normale del bot, quindi il backup di `state.db` copre anche questa nuova base tenant-aware
 - quando il DB contiene gia' la mappatura chat/utente, il comando `/stato` legge stato e retry queue del tenant corretto; se la mappatura manca, il fallback resta globale
@@ -160,7 +160,7 @@ Servizio OAuth su VPS:
 - con `TELEGRAM_ADMIN_USER_ID` configurato, il bot in produzione usa i token tenant come percorso operativo normale e non deve piu' dipendere da `EBAY_REFRESH_TOKEN` per i tenant collegati
 - verso eBay il parametro `redirect_uri` deve essere il `RuName` registrato nel portale eBay, non la callback URL pubblica
 - la callback URL pubblica del progetto deve invece coincidere con l'`Accept URL` associato a quel `RuName`
-- `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS=1` va considerato solo fallback di beta privata/dev e non configurazione operativa normale
+- `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS=1` va considerato solo fallback di dev o recovery controllato e non configurazione operativa normale
 
 Readiness multiutente nel healthcheck:
 

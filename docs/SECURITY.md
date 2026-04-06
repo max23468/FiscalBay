@@ -90,7 +90,7 @@ Per questo la multiutenza non va trattata come sola feature OAuth.
 
 Ogni passo della fase multiutente deve essere giustificato contro questi finding.
 
-## Requisiti minimi prima della multiutenza pubblica
+## Requisiti minimi del servizio pubblico con accesso approvato
 
 - token per utente e non globali
 - refresh token cifrati a riposo
@@ -99,27 +99,27 @@ Ogni passo della fase multiutente deve essere giustificato contro questi finding
 - migliore osservabilita' operativa
 - review dedicata del flusso OAuth
 
-## Vincoli fissati per la beta privata
+## Vincoli fissati per il servizio pubblico attuale
 
 - un solo account eBay attivo per utente e per environment
 - refresh token cifrato a riposo in storage dedicato
 - gestione esplicita degli stati: attivo, scaduto, revocato, da riconnettere
 - rate limiting minimo per utente prima dell'onboarding self-service
 - audit log minimo per `connect`, `disconnect`, revoca e refresh fallito
-- SQLite ancora accettabile per beta privata controllata
+- SQLite ancora accettabile solo finche' il servizio pubblico resta a bassa scala e con accesso approvato
 - Postgres richiesto prima dell'apertura pubblica multiutente
 
 ## Stato attuale dell'adapter token tenant
 
 - il codice applicativo ha ora un adapter dedicato per leggere token tenant dallo storage
 - il percorso standard usa ora cifratura Fernet a riposo con chiave `EBAY_TENANT_TOKEN_KEY`
-- il fallback plaintext resta solo come percorso esplicitamente opt-in per beta privata/dev tramite `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS=1`
+- il fallback plaintext resta solo come percorso esplicitamente opt-in per dev o recovery controllato tramite `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS=1`
 - sulla VPS il target corretto e' usare `EBAY_TENANT_TOKEN_KEY` e lasciare disattivato il fallback plaintext
 - con `TELEGRAM_ADMIN_USER_ID` attivo, il runtime del bot non deve piu' usare `EBAY_REFRESH_TOKEN` come credenziale condivisa per i tenant collegati
 
 ## Sufficienza della VPS attuale
 
-Per la fase privata la VPS attuale e' considerata sufficiente solo se restano veri questi vincoli:
+Per il servizio pubblico attuale la VPS e' considerata sufficiente solo se restano veri questi vincoli:
 
 - numero di tenant basso
 - traffico non pubblico e non bursty

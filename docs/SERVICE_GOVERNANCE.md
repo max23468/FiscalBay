@@ -1,6 +1,6 @@
 # Governance del Servizio
 
-Regole minime di esercizio del bot come servizio privato multiutente controllato.
+Regole minime di esercizio del bot come servizio pubblico con accesso approvato.
 
 ## Scopo
 
@@ -18,18 +18,59 @@ Il documento descrive il servizio reale oggi in esecuzione su VPS, non un assett
 
 Il bot e' oggi da considerare:
 
-- beta privata controllata
-- servizio ospitato su una singola VPS Linux
-- accesso governato da un admin globale Telegram
+- servizio pubblico raggiungibile su Telegram
+- servizio `Telegram first`
+- utilizzabile solo in chat private con il bot
+- accesso operativo governato da un admin globale Telegram
 - onboarding utente soggetto ad approvazione esplicita
+- servizio ospitato su una singola VPS Linux
 - un solo account eBay attivo per utente e per environment
 
 Regole operative di base:
 
 - solo l'admin puo' approvare o bloccare utenti
+- il modello amministrativo corrente prevede un solo admin globale e nessun co-admin
 - solo utenti `approved` o `admin` possono usare i comandi operativi e collegare un account eBay
+- per gli utenti approvati le notifiche sono attive di default, salvo disattivazione esplicita
+- lato UX l'utente opera sempre sul proprio account eBay gia' collegato, senza dover scegliere tra account o environment multipli
 - il runtime del bot, quando `TELEGRAM_ADMIN_USER_ID` e' configurato, usa token tenant e non refresh token eBay globali condivisi per i tenant collegati
 - il servizio e' `best effort` e non ha SLA formale
+
+## Perimetro del prodotto
+
+Il prodotto e':
+
+- un tool verticale su ordini e identificativi fiscali eBay
+- un servizio `Telegram first`
+- un bot pubblico con accesso approvato, piccolo e curato
+- un servizio operativo focalizzato su consultazione, collegamento account e notifiche utili
+- un tool con memoria operativa minima leggibile, ma non con storico completo del dominio
+
+Il prodotto non e':
+
+- una dashboard eBay generalista
+- un gestionale ordini completo
+- un CRM o una suite di analytics
+- una piattaforma multi-team con ruoli complessi
+- un prodotto web-first
+- un bot pensato per gruppi o supergruppi Telegram
+
+## Criteri di inclusione delle funzionalita'
+
+Una funzionalita' nuova entra nel perimetro se migliora almeno uno di questi assi:
+
+- flusso core `accesso -> collegamento -> lettura ordini -> notifica -> stato`
+- controllo amministrativo del servizio pubblico con accesso approvato
+- affidabilita', sicurezza o operativita' reale su VPS
+- lifecycle dati, audit, retention o cancellazione gia' necessari al servizio
+
+Una funzionalita' va invece evitata o messa in coda se:
+
+- apre un dominio di prodotto nuovo non necessario allo scopo fiscale del tool
+- sposta il baricentro del prodotto da Telegram verso una UI web piu' ampia
+- richiede di supportare gruppi, supergruppi o modelli di amministrazione piu' complessi senza un bisogno diretto del flusso core
+- aumenta molto complessita' operativa o di manutenzione senza migliorare il flusso core
+- avvicina il progetto a un gestionale eBay generalista invece che a un tool operativo verticale
 
 ## Dati trattati
 
@@ -77,7 +118,7 @@ Regole:
 
 - il refresh token tenant va considerato dato altamente sensibile
 - il percorso normale e' cifratura Fernet con `EBAY_TENANT_TOKEN_KEY`
-- il fallback plaintext e' solo opt-in per beta privata/dev e non configurazione normale di produzione
+- il fallback plaintext e' solo opt-in per dev o recovery controllato e non configurazione normale di produzione
 
 ### Dati ordine eBay
 
@@ -99,6 +140,7 @@ Regola importante:
 - il bot non mantiene un archivio storico completo degli ordini nel database locale
 - nel database locale conserva solo stato operativo minimo, ad esempio `notified_order_ids`, fingerprint/hash e metriche runtime
 - i dettagli ordine sono quindi trattati soprattutto in memoria e in output utente, non come storico locale completo
+- una minima memoria operativa leggibile per utente o tenant e' invece ammessa quando serve a spiegare stato collegamento, ultimo errore o ultimo esito utile
 
 ### Dati operativi e di audit
 
@@ -214,6 +256,7 @@ Stato attuale:
 
 - cancellazione amministrativa assistita
 - non ancora self-service da Telegram
+- l'uscita utente dal servizio va trattata in modo distinto tra scollegamento account eBay e disattivazione dell'accesso al bot
 
 Richiesta minima:
 
@@ -221,7 +264,7 @@ Richiesta minima:
 
 Obiettivo operativo:
 
-- evasione entro `7 giorni` nella beta privata, salvo incidenti o verifiche tecniche necessarie
+- evasione entro `7 giorni`, salvo incidenti o verifiche tecniche necessarie
 
 Rimozioni attese:
 
@@ -241,9 +284,9 @@ Eccezioni minime:
 
 Limiti dichiarati oggi:
 
-- servizio privato, non pubblico general availability
-- numero utenti basso e approvati manualmente
-- traffico non bursty
+- servizio pubblico con accesso comunque approvato manualmente
+- numero utenti da mantenere ancora basso, curato e controllato
+- traffico atteso non bursty
 - una sola VPS
 - nessuna promessa di alta disponibilita'
 - nessun supporto a carichi elevati o multiworker distribuiti
@@ -251,7 +294,7 @@ Limiti dichiarati oggi:
 Limiti funzionali:
 
 - un account eBay per utente e per environment
-- onboarding e supporto ancora orientati a beta privata
+- onboarding e supporto ancora orientati a servizio pubblico controllato, non a larga scala
 - revoca remota eBay e automatismi di data lifecycle ancora minimali
 
 Soglia oltre cui rivalutare l'assetto:

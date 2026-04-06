@@ -10,8 +10,8 @@ Questo documento serve come contesto persistente per nuove conversazioni con un'
   - struttura del codice e flussi principali
 - `docs/OPERATIONS.md`
   - esercizio operativo, rollback e criteri di salute
-- `docs/CHECKLIST.md`
-  - lavoro ancora aperto
+- `docs/ROADMAP.md`
+  - lavoro ancora aperto e ordine delle prossime fasi
 
 Obiettivo:
 
@@ -35,11 +35,14 @@ Il progetto oggi ha due modalita' principali:
 - CLI locale per interrogazioni manuali
 - bot Telegram con comandi e notifiche automatiche
 
-Il progetto oggi e' ancora single-tenant:
+Il progetto oggi e' da considerare:
 
-- usa un solo account eBay configurato a livello globale
-- invia notifiche Telegram alle chat autorizzate/configurate
-- non e' ancora un servizio pubblico multiutente
+- servizio pubblico raggiungibile su Telegram
+- utilizzabile solo in chat privata col bot
+- accesso operativo governato da approvazione admin
+- multiutente tenant-aware sul piano applicativo
+- ospitato su una singola VPS Linux
+- pensato per un solo account eBay gia' collegato per utente, senza scelte account/environment lato UX
 
 ## Scopo funzionale attuale
 
@@ -50,11 +53,29 @@ Il tool serve a:
 - estrarre `buyer.taxIdentifier.taxpayerId`
 - mostrare se il dato fiscale e' presente o assente
 - notificare automaticamente via Telegram i nuovi ordini che contengono davvero il codice fiscale
+- mantenere una minima memoria operativa leggibile sullo stato del collegamento e sugli errori recenti utili
 
 Limite strutturale fondamentale:
 
 - il progetto mostra solo cio' che eBay restituisce davvero
 - se eBay non espone `buyer.taxIdentifier`, il tool non puo' dedurre il codice fiscale
+
+## Perimetro da rispettare
+
+Per evitare bloat, il progetto va trattato come:
+
+- tool operativo verticale sugli ordini eBay e sui dati fiscali realmente restituiti
+- servizio `Telegram first`
+- bot pubblico con accesso approvato, ma volutamente piccolo e curato
+- bot con un solo admin globale, almeno nell'assetto attuale
+
+Non va trattato come:
+
+- dashboard eBay generalista
+- gestionale ordini completo
+- suite analytics o reportistica ampia
+- piattaforma web-first
+- bot per gruppi o supergruppi Telegram
 
 ## Componenti del repository
 
@@ -74,8 +95,8 @@ Questi restano come wrapper compatibili, ma la logica vera sta nel package inter
 
 Nota di stato:
 
-- la rifondazione strutturale del codice e l'osservabilita' minima sono considerate chiuse
-- i prossimi lavori aperti partono dalla progettazione multiutente
+- la rifondazione strutturale, l'osservabilita' minima e la base multiutente sono considerate chiuse
+- i prossimi lavori aperti sono descritti in `docs/ROADMAP.md`
 
 ### Struttura codice corrente
 
@@ -553,7 +574,7 @@ Documentazione:
 - `docs/INDEX.md`
 - `README.md`
 - `docs/RUNBOOK.md`
-- `docs/CHECKLIST.md`
+- `docs/ROADMAP.md`
 - `docs/DEPLOY_LINUX.md`
 
 Script deploy:
@@ -571,35 +592,26 @@ Verifica qualita':
 
 Le cose principali ancora aperte non sono piu' il “mettere in piedi” il progetto, ma:
 
-- backup automatici veri
-- test di restore
-- checklist di rollback
-- osservabilita' runtime piu' ricca
-- verifica CPU/NTP/time sync
-- decisione su Docker Compose come opzione da tenere o no
-- eventuale utente di servizio dedicato al posto di `opc`
-- progettazione multiutente
-
-## Refactor ancora aperto
-
-Il refactor strutturale ha gia' assorbito la separazione principale dei moduli, ma restano aperti soprattutto:
-
-- riduzione dei `dict` residui nel dominio ordini
-- riduzione degli accoppiamenti residui tra entrypoint e servizi
-- completamento dei modelli che serviranno anche per la futura multiutenza
+- rifinitura del servizio pubblico con accesso approvato
+- pruning e lifecycle dati coerenti con la governance dichiarata
+- revoca remota eBay e affinamento dell'onboarding pubblico
+- chiarimento dei limiti operativi della VPS attuale
+- decisione su hosting stabile del componente web di onboarding
 
 ## Cose che un'IA nuova deve sapere subito
 
 - il progetto oggi funziona ed e' live
-- il bot e' single-tenant, non multiutente
+- il bot e' pubblico su Telegram ma con accesso approvato dall'admin
 - il deploy vero e' su VPS Linux
 - la VPS usa Oracle Linux 9.7
 - l'accesso standard e' `ssh opc@79.72.45.89`
 - SSH e' key-only, root login disabilitato
 - il bot gira come `systemd` service `ebaycf-bot`
+- il callback OAuth gira come `systemd` service `ebaycf-oauth`
+- la reconciliation periodica gira via `ebaycf-reconcile.timer`
 - il runtime corretto del progetto e' Python `3.11` nel `.venv`
 - il bot usa SQLite locale in `data/state.db`
-- la checklist da seguire per il lavoro residuo e' `docs/CHECKLIST.md`
+- la roadmap da seguire per il lavoro residuo e' `docs/ROADMAP.md`
 
 ## Come mantenere aggiornato questo file
 

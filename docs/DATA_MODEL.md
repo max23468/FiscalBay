@@ -16,7 +16,7 @@ Definisce:
 
 Uso:
 
-- configurazione eBay globale single-tenant
+- configurazione eBay di base per CLI e percorsi legacy amministrativi
 
 ### `FetchOptions`
 
@@ -200,7 +200,7 @@ Lo stesso SQLite ora puo' ospitare anche tabelle tenant-aware per:
 Compatibilita' mantenuta:
 
 - i vecchi file JSON vengono migrati automaticamente a SQLite
-- se il database non contiene ancora tenant configurati, il bot continua a funzionare in modalita' single-tenant
+- se il database non contiene ancora tenant configurati, restano disponibili i percorsi legacy compatibili dove previsti
 - quando una chat Telegram e' gia' stata registrata nel DB, i comandi del bot possono risolvere il tenant e leggere stato runtime e retry queue del tenant invece del solo stato globale
 - il fetch applicativo puo' ora risolvere dal DB anche l'account eBay collegato e il relativo `environment`, pur continuando a usare credenziali globali finche' non esistono token utente reali
 - la scelta finale tra credenziali tenant-specifiche e fallback globale passa ora da un contesto applicativo esplicito, invece di essere implicita nei singoli caller
@@ -209,7 +209,7 @@ Compatibilita' mantenuta:
 
 ## Schema multiutente target minimo
 
-La progettazione attuale fissa questo assetto minimo per la beta privata.
+La progettazione attuale fissa questo assetto minimo per il servizio pubblico con accesso approvato.
 
 ### `telegram_users`
 
@@ -227,7 +227,7 @@ Note:
 
 - `telegram_user_id` e' la chiave logica del tenant
 - lo user record resta indipendente dalle singole chat
-- `status` governa anche il workflow di accesso approvato della beta privata
+- `status` governa il workflow di accesso approvato del servizio
 
 ### `telegram_chats`
 
@@ -337,7 +337,7 @@ Possibili campi:
 
 Note:
 
-- per la beta privata puo' restare un payload aggregato, ma la chiave di ownership deve essere il tenant utente
+- nel servizio attuale puo' restare un payload aggregato, ma la chiave di ownership deve essere il tenant utente
 - il comando Telegram `/stato` usa gia' questo stato tenant-aware quando il bot riesce a risolvere utente e chat dal DB
 
 ## Vincoli futuri
@@ -345,4 +345,4 @@ Note:
 - nessuna credenziale eBay deve restare globale quando iniziera' la multiutenza
 - i token utente dovranno essere cifrati a riposo
 - il modello dati dovra' introdurre isolamento per tenant e audit minimo
-- per la beta privata il modello resta compatibile con SQLite, ma deve essere facilmente migrabile a Postgres
+- nel servizio attuale il modello resta compatibile con SQLite, ma deve essere facilmente migrabile a Postgres

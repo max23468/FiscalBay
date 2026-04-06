@@ -27,6 +27,14 @@ Il progetto ha oggi due facce:
 
 Entrambe condividono lo stesso package Python interno `src/ebay_cf/`.
 
+Vincolo di prodotto:
+
+- il baricentro resta Telegram
+- l'uso supportato resta la chat privata col bot
+- la parte web serve solo a supportare il flusso OAuth e non deve diventare il centro del prodotto
+- il progetto resta un tool verticale su ordini e dati fiscali eBay, non un gestionale generalista
+- lato UX il bot non espone scelta di account o environment: ogni utente opera sul proprio collegamento gia' definito
+
 ## Moduli principali
 
 ### Entry point
@@ -115,9 +123,12 @@ Entrambe condividono lo stesso package Python interno `src/ebay_cf/`.
 
 ## Decisioni architetturali attuali
 
-- il progetto e' ancora single-tenant
+- il progetto e' tenant-aware sul piano applicativo, pur restando piccolo e controllato
 - lo storage attuale e' SQLite locale
 - il deploy reale e' su VPS Linux con `systemd`
+- il modello amministrativo attuale prevede un solo admin globale
+- l'uso supportato lato Telegram e' la chat privata, non gruppi o supergruppi
+- il prodotto conserva una minima memoria operativa leggibile, ma non uno storico completo degli ordini
 - i wrapper storici restano compatibili per non rompere entrypoint e test
 - il refactor corrente ha separato parsing comandi, runtime Telegram e notifiche automatiche
 - i client esterni usano retry condiviso invece di logiche duplicate
@@ -135,11 +146,11 @@ Entrambe condividono lo stesso package Python interno `src/ebay_cf/`.
 - il passaggio multiutente viene trattato come cambio di natura del progetto: da utility personale a servizio con requisiti di privacy, sicurezza e affidabilita'
 - il tenant applicativo iniziale coincide con l'utente Telegram, identificato da `telegram_user_id`
 - `telegram_chat_id` resta importante per routing notifiche e UX, ma non diventa da solo la chiave di isolamento del dominio
-- un utente Telegram potra' avere piu' chat abilitate
-- per la prima beta privata il vincolo e' `1 account eBay attivo per utente per environment`
+- il tenant applicativo resta l'utente Telegram, ma l'uso prodotto supportato oggi e' solo la chat privata
+- il vincolo operativo resta `1 account eBay attivo per utente per environment`
 - il supporto a piu' account per utente viene rinviato a una fase successiva
 - i token eBay dovranno uscire dalle env globali ed entrare in storage dedicato per utente
-- per la beta privata la base dati puo' restare SQLite, ma il modello va progettato in modo portabile verso Postgres
+- la base dati puo' restare SQLite finche' il servizio resta piccolo e controllato, ma il modello va progettato in modo portabile verso Postgres
 - prima di un'apertura pubblica vera il target architetturale diventa Postgres, non SQLite
 
 Finding di partenza:
@@ -198,14 +209,14 @@ Stato implementativo corrente:
 - esiste ora anche una `operation_queue` minima in SQLite per le operazioni sensibili differibili, oggi usata soprattutto per applicare in modo robusto i cambi di accesso utente
 - `reconcile.py` fornisce un worker periodico one-shot che processa la queue, riallinea accessi/chat/subscription, scade sessioni OAuth stale e corregge token attivi rimasti su account non piu' collegati
 
-## Decisione database per la beta privata
+## Decisione database per il servizio attuale
 
-- breve termine: mantenere SQLite per progettazione e primi refactor tenant-aware
+- breve termine: mantenere SQLite per progettazione e consolidamento tenant-aware
 - vincolo: repository e servizi devono evitare SQL o shape troppo specifici di SQLite
 - soglia di cambio: prima della multiutenza pubblica o di piu' tenant reali simultanei, migrazione prevista verso Postgres
 - motivazione: SQLite va bene per il bot privato e per prototipazione locale, ma non e' il target finale per concorrenza, operativita' e gestione token sensibili a scala maggiore
 
-## Vincoli operativi per la beta privata
+## Vincoli operativi per il servizio attuale
 
 - refresh token eBay sempre cifrato a riposo
 - access token trattato come dato volatile o cache breve, non come configurazione globale
@@ -213,7 +224,7 @@ Stato implementativo corrente:
 - rate limiting minimo per utente prima dell'onboarding self-service
 - audit log minimo per `connect`, `disconnect`, refresh fallito e revoca account
 - credenziali, persistence e observability trattate come componenti di prodotto
-- VPS attuale considerata sufficiente per beta privata solo finche' resta piccolo il numero di tenant e non esiste traffico pubblico aperto
+- VPS attuale considerata sufficiente solo finche' resta piccolo il numero di tenant approvati e non emerge traffico piu' intenso o bursty
 
 ## Limiti da tenere presenti
 
@@ -223,7 +234,7 @@ Stato implementativo corrente:
 - resta un layer di compatibilita' nel bot per i test e i wrapper storici, anche se il dominio core e' ormai tipizzato
 - la multiutenza richiedera' un modello dati nuovo e un nuovo flusso OAuth
 - il callback web OAuth esiste in forma minimale, ma restano aperti hardening finale e revoca remota verso eBay
-- il gating accessi oggi e' pensato per beta privata controllata: le capability sono esplicite, ma non esistono ancora ruoli multipli oltre a `admin`, utente approvato, in attesa o bloccato
+- il gating accessi oggi e' pensato per un servizio pubblico controllato: le capability sono esplicite, ma non esistono ancora ruoli multipli oltre a `admin`, utente approvato, in attesa o bloccato
 - la queue operativa e' ancora minimale: oggi copre soprattutto access application e recovery, non un workflow completo di revoca remota eBay
 
 ## Compatibilita' mantenuta durante il refactor

@@ -18,7 +18,7 @@ Deliverable minimi:
 
 - baseline operativa minima assorbita in `docs/OPERATIONS.md` e `docs/SECURITY.md`
 - `docs/RUNBOOK.md` aggiornato
-- `docs/CHECKLIST.md` allineata allo stato reale
+- `docs/ROADMAP.md` allineata allo stato reale
 
 ### M1 - Hardening VPS e recovery
 
@@ -151,7 +151,7 @@ Stato corrente:
 
 Obiettivo:
 
-- fissare regole minime di esercizio del servizio multiutente privato
+- fissare regole minime di esercizio del servizio pubblico con accesso approvato
 
 Dipendenze:
 
@@ -167,12 +167,18 @@ Deliverable principali:
 Stato corrente:
 
 - assorbita in `docs/SERVICE_GOVERNANCE.md`
-- checklist operativa senza fasi aperte residue
+- la pianificazione aperta ora vive in `docs/ROADMAP.md`
 
 ## Priorita' correnti
 
-Al momento non risultano milestone operative aperte in checklist.
+Le prossime milestone operative sono ora:
 
-Le decisioni residue stanno in:
+- consolidamento del servizio pubblico con accesso approvato
+- guardrail e strumenti admin per un bot pubblico controllato
+- lifecycle dati e automazioni amministrative
+- consolidamento dei limiti del servizio pubblico
 
+Per il dettaglio operativo vedere:
+
+- `docs/ROADMAP.md`
 - `docs/DECISIONS_PENDING.md`
