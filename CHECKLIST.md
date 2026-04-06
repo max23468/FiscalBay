@@ -15,8 +15,6 @@
 
 ### Assetto iniziale e rischio
 
-- [ ] preservare la continuita' d'uso del tool mentre procede il refactor
-- [ ] confermare che il progetto resta usabile mentre procede il refactor
 - [ ] aprire issue board o milestone board minima con priorita' e dipendenze
 - [ ] creare un branch dedicato al refactor strutturale
 - [ ] censire segreti attuali e programmare rotazione di quelli piu' esposti
@@ -70,11 +68,6 @@ Stato hardening applicato:
 
 ### Esecuzione servizio
 
-- [ ] migliorare affidabilita' del deploy e dell'esecuzione sulla VPS
-- [ ] evitare doppie modalita' di deploy non allineate
-- [ ] definire restart policy chiara
-- [ ] definire directory runtime dedicate
-- [ ] impostare log standardizzati
 - [ ] decidere se mantenere o no Docker Compose come opzione reale di esercizio
 
 Stato operativo emerso:
