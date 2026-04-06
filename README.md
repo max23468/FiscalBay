@@ -321,6 +321,21 @@ Prima dell'avvio conviene fornire le variabili ambiente tramite:
 - variabili esportate nella shell
 - oppure una sezione `env_file` in `docker-compose.yml`
 
+## Deploy VPS
+
+Per il deploy standard su VPS Ubuntu/Oracle con `systemd`, vedi:
+
+- [RUNBOOK.md](/Users/Matteo/Documents/eBay%20CF/RUNBOOK.md)
+- [docs/DEPLOY_ORACLE.md](/Users/Matteo/Documents/eBay%20CF/docs/DEPLOY_ORACLE.md)
+
+Asset disponibili nel repository:
+
+- [deploy/oracle-setup.sh](/Users/Matteo/Documents/eBay%20CF/deploy/oracle-setup.sh)
+- [deploy/update.sh](/Users/Matteo/Documents/eBay%20CF/deploy/update.sh)
+- [deploy/smoke-check.sh](/Users/Matteo/Documents/eBay%20CF/deploy/smoke-check.sh)
+- [deploy/ebay-cf.service](/Users/Matteo/Documents/eBay%20CF/deploy/ebay-cf.service)
+- [.env.example](/Users/Matteo/Documents/eBay%20CF/.env.example)
+
 ## Test
 
 Esegui i test con:

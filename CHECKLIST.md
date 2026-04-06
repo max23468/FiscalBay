@@ -57,15 +57,10 @@
 ### Esecuzione servizio
 
 - [ ] migliorare affidabilita' del deploy e dell'esecuzione sulla VPS
-- [ ] decidere standard operativo unico:
-  - `systemd` nativo
-  - oppure Docker Compose
 - [ ] evitare doppie modalita' di deploy non allineate
 - [ ] definire restart policy chiara
 - [ ] definire directory runtime dedicate
 - [ ] impostare log standardizzati
-- [ ] scrivere `RUNBOOK.md` per avvio, stop, restart, status e rollback
-- [ ] definire smoke test post-deploy minimo
 - [ ] decidere se mantenere o no Docker Compose come opzione reale di esercizio
 
 ### Backup e recovery

@@ -1,0 +1,18 @@
+[Unit]
+Description=eBay CF Telegram Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ebaycf
+Group=ebaycf
+WorkingDirectory=/opt/ebay-cf/app
+EnvironmentFile=/etc/ebay-cf/ebay-cf.env
+ExecStart=/opt/ebay-cf/venv/bin/ebay-telegram-bot
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
