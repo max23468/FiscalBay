@@ -345,6 +345,18 @@ def is_authorized(chat_id: int, config: TelegramConfig) -> bool:
     return chat_id in config.allowed_chat_ids
 
 
+def is_admin_authorized(
+    chat_id: int,
+    telegram_user_id: int | None,
+    config: TelegramConfig,
+) -> bool:
+    if not is_authorized(chat_id, config):
+        return False
+    if config.admin_user_id is None:
+        return True
+    return telegram_user_id == config.admin_user_id
+
+
 def format_status(
     state: BotRuntimeState,
     retry_queue_size: int,

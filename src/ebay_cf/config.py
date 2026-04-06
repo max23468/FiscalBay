@@ -79,11 +79,14 @@ def load_telegram_config() -> TelegramConfig:
 
     timeout = int(os.getenv("TELEGRAM_POLL_TIMEOUT", "30"))
     ebay_poll_interval = int(os.getenv("EBAY_ORDER_POLL_INTERVAL", "120"))
+    admin_user_id_raw = os.getenv("TELEGRAM_ADMIN_USER_ID", "").strip()
+    admin_user_id = int(admin_user_id_raw) if admin_user_id_raw else None
 
     return TelegramConfig(
         token=token,
         allowed_chat_ids=allowed_chat_ids,
         notify_chat_ids=notify_chat_ids,
+        admin_user_id=admin_user_id,
         poll_timeout_seconds=max(1, timeout),
         ebay_poll_interval_seconds=max(30, ebay_poll_interval),
         state_path=os.getenv("EBAY_ORDER_STATE_PATH", DEFAULT_STATE_PATH),

@@ -113,6 +113,7 @@ from .telegram_commands import (
     format_notifications_status,
     format_settings_status,
     format_status,
+    is_admin_authorized,
     is_authorized,
     options_for_command,
     parse_command,
@@ -342,6 +343,8 @@ def sync_runtime_contact(
     display_name: str = "",
     chat_type: str = "private",
 ) -> None:
+    if not is_admin_authorized(chat_id, telegram_user_id, telegram_config):
+        return
     if not telegram_user_id or not chat_id:
         return
     timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -562,6 +565,11 @@ def process_message(
     ebay_environment: str,
     telegram_user_id: int | None = None,
 ) -> list[str]:
+    if not is_admin_authorized(chat_id, telegram_user_id, telegram_config):
+        if not is_authorized(chat_id, telegram_config):
+            return ["Chat non autorizzata per questo bot."]
+        return ["Utente non autorizzato per questo bot."]
+
     tenant_context = resolve_tenant_command_context(
         telegram_config,
         chat_id=chat_id,

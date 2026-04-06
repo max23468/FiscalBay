@@ -16,7 +16,7 @@ from ..models import TelegramConfig
 from ..telegram_commands import (
     build_main_menu_markup,
     callback_command_from_data,
-    is_authorized,
+    is_admin_authorized,
     parse_command,
     should_attach_main_menu,
 )
@@ -164,7 +164,11 @@ def run_bot(
             "bot_started",
             environment=ebay_environment,
             notify_chat_count=len(telegram_config.notify_chat_ids),
-            allowed_chat_mode="all" if telegram_config.allowed_chat_ids is None else "restricted",
+            allowed_chat_mode=(
+                "admin_only"
+                if telegram_config.admin_user_id is not None
+                else ("all" if telegram_config.allowed_chat_ids is None else "restricted")
+            ),
         )
     except AppError as exc:
         log_event(
@@ -372,7 +376,11 @@ def run_bot(
                     chat_id=cid,
                     command=command or "none",
                 )
-                show_menu = is_authorized(cid, telegram_config) and should_attach_main_menu(command)
+                show_menu = is_admin_authorized(
+                    cid,
+                    message_user_id,
+                    telegram_config,
+                ) and should_attach_main_menu(command)
                 try:
                     replies = process_message_fn(
                         text=msg_text,

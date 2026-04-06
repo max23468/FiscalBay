@@ -89,6 +89,7 @@ class TelegramConfig:
     token: str
     allowed_chat_ids: Optional[set[int]]
     notify_chat_ids: set[int]
+    admin_user_id: int | None = None
     poll_timeout_seconds: int = 30
     ebay_poll_interval_seconds: int = 120
     state_path: str = "data/state.db"

@@ -188,6 +188,7 @@ Stato implementativo corrente:
 - `/settings` espone ora un riepilogo user-facing delle preferenze tenant/chat senza dover ispezionare direttamente il DB
 - `oauth_server.py` espone ora `/oauth/start`, `/oauth/callback` e `/healthz`, valida `state`, usa il `RuName` eBay corretto per lo scambio OAuth e aggiorna account/token nel DB tenant-aware
 - `tenant_credentials.py` usa ora Fernet con chiave `EBAY_TENANT_TOKEN_KEY` come percorso standard di cifratura a riposo dei refresh token tenant
+- `TELEGRAM_ADMIN_USER_ID` puo' ora restringere il bot a un solo utente admin: runtime e registrazione contatti ignorano gli altri utenti anche se scrivono in chat formalmente autorizzate
 
 ## Decisione database per la beta privata
 

@@ -31,6 +31,47 @@ from src.ebay_cf.storage.sqlite import (
 
 
 class BotIntegrationTests(unittest.TestCase):
+    def test_process_message_rejects_non_admin_user(self) -> None:
+        replies = process_message(
+            text="/help",
+            chat_id=573159993,
+            telegram_config=TelegramConfig(
+                token="x",
+                allowed_chat_ids={573159993},
+                notify_chat_ids=set(),
+                admin_user_id=573159993,
+            ),
+            ebay_environment="production",
+            telegram_user_id=111111,
+        )
+
+        self.assertEqual(replies, ["Utente non autorizzato per questo bot."])
+
+    def test_sync_runtime_contact_ignores_non_admin_user(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={456},
+                notify_chat_ids={456},
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=999,
+                chat_id=456,
+                username="other_user",
+                display_name="Other User",
+                chat_type="private",
+            )
+
+            self.assertEqual(load_telegram_users(str(db_path)), [])
+            self.assertEqual(load_telegram_chats(str(db_path)), [])
+            self.assertEqual(load_notification_subscriptions(str(db_path)), [])
+
     def test_process_message_status_reads_real_sqlite_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"

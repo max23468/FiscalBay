@@ -127,6 +127,12 @@ Il comando Telegram `/settings`:
 - mostra un riepilogo rapido di scope runtime, ambiente, stato notifiche della chat e stato del collegamento account
 - e' il punto di controllo piu' rapido lato utente prima di usare `/connect`, `/disconnect` o `/account`
 
+Controllo accessi Telegram:
+
+- `TELEGRAM_ALLOWED_CHAT_IDS` continua a limitare le chat ammesse
+- `TELEGRAM_ADMIN_USER_ID`, quando valorizzata, rende il bot mono-admin: solo quell'utente Telegram puo' usare comandi, callback e onboarding OAuth
+- gli altri utenti non vengono trattati come tenant attivi e non vengono persistiti nel DB operativo del bot
+
 Servizio OAuth su VPS:
 
 - entrypoint: `ebay-cf-oauth-server`
