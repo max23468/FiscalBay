@@ -2,6 +2,8 @@
 
 Questa nota riassume il perimetro di sicurezza attuale e i gap aperti.
 
+Per dati trattati, retention, cancellazione utente e limiti dichiarati del servizio vedere anche `docs/SERVICE_GOVERNANCE.md`.
+
 ## Stato attuale
 
 - deploy reale su VPS Linux
@@ -58,7 +60,6 @@ Procedura minima:
 
 ## Rischi ancora aperti
 
-- credenziali eBay ancora globali single-tenant come fallback residuo
 - SQLite locale come persistence principale
 - metriche e alerting ancora minimi
 - gestione chiave di cifratura token ancora affidata a `.env` su VPS, non a un secret manager dedicato

@@ -2,21 +2,17 @@
 
 ## Indice rapido
 
-- `Fase 3`
-  - governance del prodotto
+- nessuna fase aperta
 
 Documenti collegati:
 
 - `docs/INDEX.md`
+- `docs/SERVICE_GOVERNANCE.md`
 - `docs/MILESTONE_BOARD.md`
 - `docs/DECISIONS_PENDING.md`
 
-## Fase 3 - Governance del Prodotto [Priorita' media]
+## Stato attuale
 
-- [ ] definire governance e limiti del servizio in modo compatibile con isolamento dati tra utenti
-- [ ] definire quali dati personali vengono trattati
-- [ ] scrivere informativa minima d'uso e retention
-- [ ] definire retention dei log
-- [ ] definire retention dei token e dati ordini
-- [ ] chiarire policy di cancellazione utente
-- [ ] definire limiti del servizio e carichi supportati
+- nessuna fase aperta nella checklist operativa
+- governance, dati trattati, retention, cancellazione utente e limiti del servizio sono ora fissati in `docs/SERVICE_GOVERNANCE.md`
+- le decisioni residue non chiuse stanno in `docs/DECISIONS_PENDING.md`

@@ -32,6 +32,8 @@ Indice centrale della documentazione del progetto.
   - guida specifica al deploy Linux
 - `docs/SECURITY.md`
   - perimetro di sicurezza, segreti e requisiti futuri
+- `docs/SERVICE_GOVERNANCE.md`
+  - dati trattati, retention, cancellazione utente e limiti del servizio
 
 ## Pianificazione
 

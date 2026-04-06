@@ -147,12 +147,32 @@ Stato corrente:
 - il token storage tenant usa gia' cifratura a riposo con chiave Fernet da env
 - restano aperti revoca remota e affinamento UX end-to-end
 
+### M6 - Governance del prodotto
+
+Obiettivo:
+
+- fissare regole minime di esercizio del servizio multiutente privato
+
+Dipendenze:
+
+- M4 e M5 abbastanza stabili da sapere quali dati e flussi esistono davvero
+
+Deliverable principali:
+
+- dati trattati definiti
+- retention minima esplicita
+- policy di cancellazione utente chiarita
+- limiti del servizio dichiarati
+
+Stato corrente:
+
+- assorbita in `docs/SERVICE_GOVERNANCE.md`
+- checklist operativa senza fasi aperte residue
+
 ## Priorita' correnti
 
-Ordine consigliato di lavoro:
+Al momento non risultano milestone operative aperte in checklist.
 
-1. M1 - Hardening VPS e recovery
-2. M2 - Rifondazione strutturale del codice
-3. M3 - Operativita' e osservabilita'
-4. M4 - Progettazione multiutente
-5. M5 - Onboarding self-service
+Le decisioni residue stanno in:
+
+- `docs/DECISIONS_PENDING.md`

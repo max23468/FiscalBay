@@ -60,6 +60,8 @@ Documenti collegati:
 - `deploy/reconcile.sh`, `deploy/ebaycf-reconcile.service`, `deploy/ebaycf-reconcile.timer` e `deploy/linux-setup.sh` estendono il deploy VPS con una reconciliation periodica via `systemd`.
 - `deploy/ebaycf-reconcile.service` carica ora anche virtualenv e `.env`, evitando che il worker periodico parta senza configurazione Telegram/eBay sulla VPS.
 - `src/ebay_cf/application.py` e `src/ebay_cf/bot.py` chiudono ora il residuo di fase 3 nel runtime multiutente: con `TELEGRAM_ADMIN_USER_ID` configurato il bot usa credenziali tenant per i tenant collegati e non ricade piu' su `EBAY_REFRESH_TOKEN` condiviso.
+- `docs/SERVICE_GOVERNANCE.md` fissa ora in modo stabile governance del servizio, dati trattati, retention, cancellazione utente e limiti dichiarati della beta privata.
+- `docs/CHECKLIST.md` non ha piu' fasi aperte; le decisioni residue vengono tenute in `docs/DECISIONS_PENDING.md`.
 - `deploy/ebaycf-oauth.service`, `deploy/linux-setup.sh`, `deploy/update.sh` e `deploy/smoke-check.sh` estendono il deploy VPS con il servizio `systemd` separato `ebaycf-oauth`.
 - `docs/CHECKLIST.md` considera ora la fase di onboarding self-service sostanzialmente chiusa e lascia aperti in roadmap solo i target multiutente residui e la governance prodotto.
 - `src/ebay_cf/services/telegram_runtime.py` e `src/ebay_cf/services/notifications.py` emettono ora log piu' correlabili con `cycle_id` per polling, callback, messaggi e cicli notifica.

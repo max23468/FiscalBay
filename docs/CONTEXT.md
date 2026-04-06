@@ -301,7 +301,7 @@ bash scripts/ci_verify.sh
 ### Limiti attuali ancora veri
 
 - niente onboarding self-service pubblico
-- hardening governance/privacy ancora da completare
+- hardening governance/privacy ora documentato, ma ancora senza automatismi di retention o cancellazione self-service
 
 Aggiornamento di stato:
 

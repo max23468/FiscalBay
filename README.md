@@ -363,6 +363,7 @@ Documenti principali:
 - `docs/OPERATIONS.md`
 - `docs/DATA_MODEL.md`
 - `docs/SECURITY.md`
+- `docs/SERVICE_GOVERNANCE.md`
 - `docs/DECISIONS_PENDING.md`
 - `docs/OAUTH_FLOW.md`
 - `docs/CHANGELOG.md`

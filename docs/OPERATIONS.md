@@ -19,6 +19,7 @@ Documenti collegati:
 - `docs/INDEX.md`
 - `docs/RUNBOOK.md`
 - `docs/SECURITY.md`
+- `docs/SERVICE_GOVERNANCE.md`
 
 ## Check giornalieri minimi
 
@@ -182,6 +183,13 @@ Reconciliation periodica:
 - wrapper VPS: `deploy/reconcile.sh`
 - timer `systemd`: `ebaycf-reconcile.timer`
 - la reconciliation processa la `operation_queue`, riallinea accessi/chat/subscription, scade sessioni OAuth pendenti troppo vecchie e revoca token attivi rimasti su account non piu' collegati
+
+Retention e cancellazione:
+
+- la policy di riferimento e' definita in `docs/SERVICE_GOVERNANCE.md`
+- stato attuale: la cancellazione utente e' amministrativa, non self-service
+- i token tenant vanno rimossi subito quando un account viene scollegato o revocato
+- audit log e log runtime seguono retention distinte e non vanno confusi con lo stato operativo del bot
 
 Suggerimento pratico sui log:
 
