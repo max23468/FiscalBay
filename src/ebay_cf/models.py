@@ -110,7 +110,9 @@ class BotRuntimeState:
     def from_mapping(cls, data: Mapping[str, object]) -> "BotRuntimeState":
         raw_metrics = data.get("metrics", {})
         metrics = (
-            raw_metrics if isinstance(raw_metrics, BotMetrics) else BotMetrics.from_mapping(raw_metrics)
+            raw_metrics
+            if isinstance(raw_metrics, BotMetrics)
+            else BotMetrics.from_mapping(raw_metrics)
         )
         return cls(
             notified_order_ids=[str(value) for value in data.get("notified_order_ids", [])],

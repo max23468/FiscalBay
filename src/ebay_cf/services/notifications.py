@@ -6,10 +6,9 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
-from ..errors import EbayApiError, TelegramApiError
+from ..errors import TelegramApiError
 from ..logging_utils import log_event
 from ..models import (
-    BotMetrics,
     BotRuntimeState,
     BotRuntimeStateLike,
     FetchOptions,
@@ -19,7 +18,7 @@ from ..models import (
     RetryQueueEntryLike,
     TelegramConfig,
 )
-from ..storage.sqlite import BotState, RetryQueueItem
+from ..storage.sqlite import BotState
 from ..telegram_commands import (
     format_auto_notification,
     has_codice_fiscale,
@@ -63,7 +62,9 @@ def process_retry_queue(
     send_message_fn: Callable[..., None],
 ) -> None:
     runtime_state = to_runtime_state(state)
-    queue = [to_retry_queue_entry(item) for item in load_retry_queue_fn(telegram_config.retry_queue_path)]
+    queue = [
+        to_retry_queue_entry(item) for item in load_retry_queue_fn(telegram_config.retry_queue_path)
+    ]
     if not queue:
         return
     log_event(LOGGER, logging.INFO, "retry_queue_start", size=len(queue))
@@ -222,7 +223,9 @@ def maybe_send_new_order_notifications(
         save_state_fn(telegram_config.state_path, BotRuntimeState.from_mapping(updated_state))
         return
 
-    failed_queue = [to_retry_queue_entry(item) for item in load_retry_queue_fn(telegram_config.retry_queue_path)]
+    failed_queue = [
+        to_retry_queue_entry(item) for item in load_retry_queue_fn(telegram_config.retry_queue_path)
+    ]
     sent_count = 0
     for record in records:
         text = format_auto_notification(record)

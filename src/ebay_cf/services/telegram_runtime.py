@@ -10,7 +10,7 @@ import time
 from typing import Callable
 
 from ..clients.telegram import ensure_long_polling, telegram_request
-from ..errors import AppError, EbayApiError, TelegramApiError
+from ..errors import AppError, TelegramApiError
 from ..logging_utils import log_event
 from ..models import TelegramConfig
 from ..telegram_commands import (

@@ -29,3 +29,4 @@ Documenti collegati:
 - `src/ebay_cf/clients/ebay.py` e `src/ebay_cf/clients/telegram.py` usano retry centralizzato e mantengono alias compatibili per i nomi storici.
 - `src/ebay_cf/errors.py` espone una gerarchia di errori applicativi piu' esplicita.
 - `src/ebay_cf/healthcheck.py` e i servizi principali leggono lo stato tramite modelli tipizzati invece di dipendere da payload SQLite raw.
+- i moduli introdotti nel refactor fase 2 sono stati riallineati al quality gate CI, con export espliciti in `bot.py` e pulizia degli import inutilizzati.

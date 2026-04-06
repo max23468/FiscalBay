@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import html
 import logging
 import os
 from contextlib import suppress
@@ -20,20 +19,36 @@ from .errors import EbayApiError, TelegramApiError
 from .logging_utils import log_event
 from .models import TelegramConfig
 from .retry import run_with_retry
-from .services.orders import fetch_records
 from .services.notifications import (
     fetch_new_order_records as _fetch_new_order_records,
+)
+from .services.notifications import (
     increment_error_metric as _increment_error_metric,
+)
+from .services.notifications import (
     increment_metric as _increment_metric,
+)
+from .services.notifications import (
     maybe_send_new_order_notifications as _maybe_send_new_order_notifications,
+)
+from .services.notifications import (
     process_retry_queue as _process_retry_queue,
+)
+from .services.notifications import (
     update_state_with_records as _update_state_with_records,
 )
+from .services.orders import fetch_records
 from .services.telegram_runtime import (
     auto_notify_loop as _auto_notify_loop,
+)
+from .services.telegram_runtime import (
     extract_callback_context,
     extract_message_context,
+)
+from .services.telegram_runtime import (
     request_shutdown as _request_shutdown,
+)
+from .services.telegram_runtime import (
     run_bot as _run_bot,
 )
 from .storage.sqlite import (
@@ -41,11 +56,8 @@ from .storage.sqlite import (
     load_retry_queue,
     load_retry_queue_entries,
     load_runtime_state,
-    load_state,
-    save_retry_queue,
     save_retry_queue_entries,
     save_runtime_state,
-    save_state,
 )
 from .telegram_commands import (
     CALLBACK_HELP,
@@ -61,19 +73,65 @@ from .telegram_commands import (
     callback_command_from_data,
     chunk_message,
     format_auto_notification,
-    format_records,
     format_record,
+    format_records,
     format_status,
     has_codice_fiscale,
     is_authorized,
     options_for_command,
     parse_command,
-    process_message as _process_message,
     record_fingerprint,
     should_attach_main_menu,
 )
+from .telegram_commands import (
+    process_message as _process_message,
+)
 
 LOGGER = logging.getLogger("ebaycf.telegram_bot")
+
+__all__ = [
+    "CALLBACK_HELP",
+    "CALLBACK_STATO",
+    "CALLBACK_TUTTI",
+    "CALLBACK_ULTIMI",
+    "TELEGRAM_CMD_MAX_DAYS",
+    "TELEGRAM_CMD_MAX_RESULTS",
+    "TELEGRAM_CMD_MIN_DAYS",
+    "TELEGRAM_CMD_MIN_RESULTS",
+    "TelegramApiError",
+    "TelegramConfig",
+    "acquire_process_lock",
+    "auto_notify_loop",
+    "build_help_text",
+    "build_main_menu_markup",
+    "callback_command_from_data",
+    "chunk_message",
+    "ensure_long_polling",
+    "extract_callback_context",
+    "extract_message_context",
+    "fetch_new_order_records",
+    "format_auto_notification",
+    "format_record",
+    "format_records",
+    "format_status",
+    "has_codice_fiscale",
+    "increment_error_metric",
+    "increment_metric",
+    "is_authorized",
+    "maybe_send_new_order_notifications",
+    "options_for_command",
+    "parse_command",
+    "process_message",
+    "process_retry_queue",
+    "record_fingerprint",
+    "release_process_lock",
+    "request_shutdown",
+    "request_with_backoff",
+    "run_bot",
+    "send_message",
+    "should_attach_main_menu",
+    "update_state_with_records",
+]
 
 
 def request_with_backoff(

@@ -8,7 +8,14 @@ import urllib.parse
 from typing import Callable, Iterable
 
 from .errors import UserInputError
-from .models import BotRuntimeState, BotRuntimeStateLike, FetchOptions, OrderRecord, OrderRecordLike, TelegramConfig
+from .models import (
+    BotRuntimeState,
+    BotRuntimeStateLike,
+    FetchOptions,
+    OrderRecord,
+    OrderRecordLike,
+    TelegramConfig,
+)
 
 TELEGRAM_CMD_MAX_DAYS = 365
 TELEGRAM_CMD_MIN_DAYS = 1
@@ -73,10 +80,7 @@ def format_record(record: OrderRecordLike) -> str:
             "\n⚠️ <i>Dati fiscali non presenti nella risposta eBay per questo ordine.</i>"
         )
 
-    ebay_url = (
-        "https://www.ebay.it/sh/ord/details?orderid="
-        f"{urllib.parse.quote(order.orderId)}"
-    )
+    ebay_url = f"https://www.ebay.it/sh/ord/details?orderid={urllib.parse.quote(order.orderId)}"
 
     items = html.escape(order.items or "N/D")
     total = html.escape(order.total or "N/D")

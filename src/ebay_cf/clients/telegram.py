@@ -96,7 +96,9 @@ def telegram_api_request(
     return run_with_retry(
         lambda: telegram_request_once(token, method, params),
         max_attempts=max_retries,
-        should_retry=lambda exc: isinstance(exc, TelegramApiError) and telegram_error_retryable(exc),
+        should_retry=lambda exc: (
+            isinstance(exc, TelegramApiError) and telegram_error_retryable(exc)
+        ),
         on_retry=on_retry,
         base_delay=base_delay,
         sleep_fn=time.sleep,
