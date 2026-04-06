@@ -1,0 +1,18 @@
+[Unit]
+Description=eBay CF Telegram Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=opc
+Group=opc
+WorkingDirectory=/home/opc/eBay CF
+ExecStart=/usr/bin/bash -lc 'source "/home/opc/eBay CF/.venv/bin/activate" && set -a && source "/home/opc/eBay CF/.env" && set +a && exec python3 src/telegram_bot.py'
+Restart=always
+RestartSec=10
+TimeoutStopSec=20
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

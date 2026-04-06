@@ -180,6 +180,47 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertEqual(restored[1]["chat_id"], 789)
             self.assertEqual(restored[1]["text"], "msg-3")
 
+    def test_legacy_json_state_file_is_migrated_to_sqlite(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "notified_orders.json"
+            db_path.write_text(
+                (
+                    '{"notified_order_ids":["order-1"],'
+                    '"notified_hashes":["hash-1"],'
+                    '"last_check":"2026-04-05T20:00:00Z",'
+                    '"last_error":null,'
+                    '"metrics":{"orders_read":2,"notifications_sent":1,"errors_by_type":{}}}'
+                ),
+                encoding="utf-8",
+            )
+
+            restored = load_state(str(db_path))
+
+            self.assertEqual(restored["notified_order_ids"], ["order-1"])
+            self.assertEqual(restored["notified_hashes"], ["hash-1"])
+            self.assertEqual(restored["last_check"], "2026-04-05T20:00:00Z")
+            self.assertTrue((Path(tmpdir) / "notified_orders.json.legacy-json.bak").exists())
+
+            with sqlite3.connect(db_path) as conn:
+                version = conn.execute("PRAGMA user_version").fetchone()[0]
+                self.assertEqual(version, SCHEMA_VERSION)
+
+    def test_legacy_json_retry_queue_file_is_migrated_to_sqlite(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "failed_notifications.json"
+            db_path.write_text(
+                '[{"chat_id":123,"text":"retry me","attempts":2}]',
+                encoding="utf-8",
+            )
+
+            restored = load_retry_queue(str(db_path))
+
+            self.assertEqual(len(restored), 1)
+            self.assertEqual(restored[0]["chat_id"], 123)
+            self.assertEqual(restored[0]["text"], "retry me")
+            self.assertEqual(restored[0]["attempts"], 2)
+            self.assertTrue((Path(tmpdir) / "failed_notifications.json.legacy-json.bak").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -293,6 +293,8 @@ Nello stato locale salva:
 
 Se cambi `EBAY_ORDER_STATE_PATH` o `EBAY_NOTIFY_RETRY_PATH`, assicurati che la directory esista o sia scrivibile.
 
+Se su un ambiente esistente trovi ancora i vecchi file JSON `data/notified_orders.json` o `data/failed_notifications.json`, il bot li migra automaticamente a SQLite al primo avvio e conserva una copia `.legacy-json.bak`.
+
 ### Lock del Processo
 
 Su Unix e macOS il bot usa un lock esclusivo su `TELEGRAM_BOT_LOCK_PATH` tramite `fcntl`. Questo evita di eseguire due processi con lo stesso token Telegram e due loop concorrenti su `getUpdates`.
@@ -328,12 +330,12 @@ Per il deploy standard su VPS Linux con `systemd`, vedi:
 - [RUNBOOK.md](/Users/Matteo/Documents/eBay%20CF/RUNBOOK.md)
 - [docs/DEPLOY_LINUX.md](/Users/Matteo/Documents/eBay%20CF/docs/DEPLOY_LINUX.md)
 
-Asset disponibili nel repository:
+Asset disponibili nel repository, allineati al setup VPS attuale (`opc`, `/home/opc/eBay CF`, servizio `ebaycf-bot`):
 
 - [deploy/linux-setup.sh](/Users/Matteo/Documents/eBay%20CF/deploy/linux-setup.sh)
 - [deploy/update.sh](/Users/Matteo/Documents/eBay%20CF/deploy/update.sh)
 - [deploy/smoke-check.sh](/Users/Matteo/Documents/eBay%20CF/deploy/smoke-check.sh)
-- [deploy/ebay-cf.service](/Users/Matteo/Documents/eBay%20CF/deploy/ebay-cf.service)
+- [deploy/ebaycf-bot.service](/Users/Matteo/Documents/eBay%20CF/deploy/ebaycf-bot.service)
 - [.env.example](/Users/Matteo/Documents/eBay%20CF/.env.example)
 
 ## Test

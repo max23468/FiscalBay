@@ -44,6 +44,74 @@ def _connect(path: str) -> sqlite3.Connection:
     return conn
 
 
+def _looks_like_sqlite_database(path: str) -> bool:
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
+        return False
+    with open(path, "rb") as handle:
+        return handle.read(16) == b"SQLite format 3\x00"
+
+
+def _load_legacy_json_file(path: str) -> object | None:
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as handle:
+        loaded: object = json.load(handle)
+        return loaded
+
+
+def _migrate_legacy_json_state(path: str) -> bool:
+    if _looks_like_sqlite_database(path):
+        return False
+
+    legacy = _load_legacy_json_file(path)
+    if not isinstance(legacy, dict):
+        return False
+
+    state: BotState = {
+        "notified_order_ids": _unique_preserving_order(legacy.get("notified_order_ids", [])),
+        "notified_hashes": _unique_preserving_order(legacy.get("notified_hashes", [])),
+        "last_check": str(legacy["last_check"]) if legacy.get("last_check") else None,
+        "last_error": str(legacy["last_error"]) if legacy.get("last_error") else None,
+        "metrics": _default_metrics_state(),
+    }
+    raw_metrics = legacy.get("metrics")
+    if isinstance(raw_metrics, dict):
+        state["metrics"] = _parse_metrics_state(json.dumps(raw_metrics))
+
+    os.replace(path, f"{path}.legacy-json.bak")
+    save_state(path, state)
+    return True
+
+
+def _migrate_legacy_json_retry_queue(path: str) -> bool:
+    if _looks_like_sqlite_database(path):
+        return False
+
+    legacy = _load_legacy_json_file(path)
+    if not isinstance(legacy, list):
+        return False
+
+    queue: list[RetryQueueItem] = []
+    for item in legacy:
+        if not isinstance(item, dict):
+            continue
+        if "chat_id" not in item or "text" not in item:
+            continue
+        queue.append(
+            _normalize_retry_item(
+                {
+                    "chat_id": int(item["chat_id"]),
+                    "text": str(item["text"]),
+                    "attempts": int(item.get("attempts", 0)),
+                }
+            )
+        )
+
+    os.replace(path, f"{path}.legacy-json.bak")
+    save_retry_queue(path, queue)
+    return True
+
+
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
     row = conn.execute(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
@@ -211,6 +279,7 @@ def _parse_metrics_state(raw_value: str) -> MetricsState:
 
 
 def load_state(path: str) -> BotState:
+    _migrate_legacy_json_state(path)
     init_db(path)
     state: BotState = {
         "notified_order_ids": [],
@@ -272,6 +341,7 @@ def save_state(path: str, state: BotState) -> None:
 
 
 def load_retry_queue(path: str) -> list[RetryQueueItem]:
+    _migrate_legacy_json_retry_queue(path)
     init_db(path)
     queue: list[RetryQueueItem] = []
     with _connect(path) as conn:

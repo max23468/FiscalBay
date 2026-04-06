@@ -24,15 +24,24 @@
 
 ### Fotografia ambiente attuale
 
-- [ ] fotografare la configurazione attuale della VPS
 - [ ] esportare backup di:
   - file env
   - database SQLite
   - unita' `systemd` o configurazione Docker attuale
 - [ ] definire una checklist di rollback
-- [ ] verificare dove stanno girando oggi bot, env file, dati runtime e log
 - [ ] verificare se esiste gia' un ambiente staging o almeno una preview testabile
 - [ ] se staging manca, decidere un'alternativa minima per prove pre-release
+
+Esito audit VPS del 2026-04-06:
+
+- Oracle Linux 9.7 con `systemd`, `firewall-cmd` attivo e SELinux `Enforcing`
+- servizio reale individuato: `ebaycf-bot`
+- codice e virtualenv attuali: `/home/opc/eBay CF` e `/home/opc/eBay CF/.venv`
+- env file attuale: `/home/opc/eBay CF/.env`
+- dati runtime attuali: `/home/opc/eBay CF/data`
+- log runtime: `journalctl -u ebaycf-bot`
+- problema operativo emerso: coesistenza di istanza manuale legacy e servizio `systemd`
+- problema storico emerso: presenza di stato legacy JSON rimasto nella VPS
 
 ## Fase 1 - Hardening e Aggiornamenti VPS [Priorita' alta]
 
@@ -40,8 +49,13 @@
 
 - [ ] aggiornare sistema operativo e pacchetti di sicurezza
 - [ ] verificare versione Python installata e coerente con il progetto
-- [ ] verificare spazio disco, swap, memoria e utilizzo CPU
+- [ ] verificare utilizzo CPU in condizioni reali di carico
 - [ ] verificare timezone, NTP e sincronizzazione oraria
+
+Stato audit gia' verificato:
+
+- spazio disco disponibile: circa 22 GB liberi su 30 GB
+- RAM rilevata: circa 503 MiB con swap attiva da 2.5 GiB
 
 ### Sicurezza
 
@@ -62,6 +76,11 @@
 - [ ] definire directory runtime dedicate
 - [ ] impostare log standardizzati
 - [ ] decidere se mantenere o no Docker Compose come opzione reale di esercizio
+
+Stato operativo emerso:
+
+- il bot e' ora gestito da `systemd` come servizio principale
+- il vecchio avvio manuale via `~/run-ebaycf-bot.sh` resta una fonte di conflitto da eliminare o depotenziare
 
 ### Backup e recovery
 

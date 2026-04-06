@@ -1,15 +1,17 @@
 # Runbook
 
-Questa guida standardizza l'esercizio del bot su VPS Linux con `systemd`.
+Questa guida standardizza l'esercizio del bot sulla VPS Linux attuale con `systemd`.
 
 ## Standard operativo scelto
 
+- distribuzione verificata: Oracle Linux 9.7
 - esecuzione principale: `systemd` nativo
-- codice applicativo: `/opt/ebay-cf/app`
-- virtualenv: `/opt/ebay-cf/venv`
-- dati runtime: `/opt/ebay-cf/data/runtime`
-- env file: `/etc/ebay-cf/ebay-cf.env`
-- servizio: `ebay-cf`
+- utente servizio attuale: `opc`
+- codice applicativo: `/home/opc/eBay CF`
+- virtualenv: `/home/opc/eBay CF/.venv`
+- dati runtime: `/home/opc/eBay CF/data`
+- env file: `/home/opc/eBay CF/.env`
+- servizio: `ebaycf-bot`
 
 ## Primo setup su VPS Linux
 
@@ -21,8 +23,8 @@ Lo script di setup supporta in automatico:
 - `apk`
 
 ```bash
-git clone https://github.com/max23468/eBayCF.git
-cd eBayCF
+git clone https://github.com/max23468/eBayCF.git "eBay CF"
+cd "eBay CF"
 chmod +x deploy/linux-setup.sh
 ./deploy/linux-setup.sh
 ```
@@ -30,9 +32,9 @@ chmod +x deploy/linux-setup.sh
 Poi:
 
 ```bash
-sudo nano /etc/ebay-cf/ebay-cf.env
-sudo systemctl enable --now ebay-cf
-sudo systemctl status ebay-cf
+nano "/home/opc/eBay CF/.env"
+sudo systemctl enable --now ebaycf-bot
+sudo systemctl status ebaycf-bot
 ```
 
 ## Comandi operativi
@@ -40,43 +42,43 @@ sudo systemctl status ebay-cf
 Status:
 
 ```bash
-sudo systemctl status ebay-cf
+sudo systemctl status ebaycf-bot
 ```
 
 Restart:
 
 ```bash
-sudo systemctl restart ebay-cf
+sudo systemctl restart ebaycf-bot
 ```
 
 Stop:
 
 ```bash
-sudo systemctl stop ebay-cf
+sudo systemctl stop ebaycf-bot
 ```
 
 Log live:
 
 ```bash
-sudo journalctl -u ebay-cf -f
+sudo journalctl -u ebaycf-bot -f
 ```
 
 Health check:
 
 ```bash
-/opt/ebay-cf/venv/bin/ebay-cf-healthcheck
+"/home/opc/eBay CF/.venv/bin/ebay-cf-healthcheck"
 ```
 
 Health check JSON:
 
 ```bash
-/opt/ebay-cf/venv/bin/ebay-cf-healthcheck --json
+"/home/opc/eBay CF/.venv/bin/ebay-cf-healthcheck" --json
 ```
 
 ## Aggiornamento del bot
 
 ```bash
-cd /opt/ebay-cf/app
+cd "/home/opc/eBay CF"
 chmod +x deploy/update.sh
 ./deploy/update.sh
 ```
@@ -84,7 +86,7 @@ chmod +x deploy/update.sh
 ## Smoke test post-deploy
 
 ```bash
-cd /opt/ebay-cf/app
+cd "/home/opc/eBay CF"
 chmod +x deploy/smoke-check.sh
 ./deploy/smoke-check.sh
 ```
@@ -96,17 +98,19 @@ Lo smoke test verifica:
 
 ## Backup minimi da prevedere
 
-- `/etc/ebay-cf/ebay-cf.env`
-- `/opt/ebay-cf/data/runtime/state.db`
+- `/home/opc/eBay CF/.env`
+- `/home/opc/eBay CF/data/state.db`
+- eventuali file `.legacy-json.bak` creati durante la migrazione automatica
 - eventuali override di servizio o note locali operative
 
 ## Problemi operativi comuni
 
 Servizio non parte:
 
-- controlla `sudo systemctl status ebay-cf`
-- controlla `sudo journalctl -u ebay-cf -n 100 --no-pager`
-- verifica il file `/etc/ebay-cf/ebay-cf.env`
+- controlla `sudo systemctl status ebaycf-bot`
+- controlla `sudo journalctl -u ebaycf-bot -n 100 --no-pager`
+- verifica il file `/home/opc/eBay CF/.env`
+- controlla che non esista una seconda istanza manuale di `python src/telegram_bot.py`
 
 Health check fallisce:
 
@@ -114,6 +118,7 @@ Health check fallisce:
 - controlla se `last_check` e' troppo vecchio
 - controlla se la retry queue non si svuota
 - controlla `last_error` nello state DB
+- se trovi vecchi file `data/notified_orders.json` o `data/failed_notifications.json`, il bot ora li converte da solo a SQLite al primo avvio
 
 Deploy riuscito ma bot non sano:
 

@@ -1,10 +1,10 @@
 # Deploy su VPS Linux
 
-Questa guida prepara `eBay CF` per una VPS Linux con `systemd`.
+Questa guida prepara `eBay CF` per la VPS Linux attuale con `systemd`.
 
 ## Configurazione consigliata
 
-- distribuzione Linux con `systemd`
+- Oracle Linux 9.7 con `systemd`
 - accesso SSH con chiave
 - 1 vCPU
 - 1-2 GB RAM se disponibili
@@ -15,15 +15,15 @@ Questa guida prepara `eBay CF` per una VPS Linux con `systemd`.
 1. entra in SSH
 2. clona la repository
 3. esegui `deploy/linux-setup.sh`
-4. compila `/etc/ebay-cf/ebay-cf.env`
-5. abilita il servizio `ebay-cf`
+4. compila `/home/opc/eBay CF/.env`
+5. abilita il servizio `ebaycf-bot`
 6. esegui smoke test e health check
 
 ## Setup iniziale
 
 ```bash
-git clone https://github.com/max23468/eBayCF.git
-cd eBayCF
+git clone https://github.com/max23468/eBayCF.git "eBay CF"
+cd "eBay CF"
 chmod +x deploy/linux-setup.sh
 ./deploy/linux-setup.sh
 ```
@@ -33,7 +33,7 @@ chmod +x deploy/linux-setup.sh
 File:
 
 ```bash
-sudo nano /etc/ebay-cf/ebay-cf.env
+nano "/home/opc/eBay CF/.env"
 ```
 
 Minimo indispensabile:
@@ -48,29 +48,29 @@ Minimo indispensabile:
 Percorsi consigliati:
 
 ```env
-EBAY_ORDER_STATE_PATH=/opt/ebay-cf/data/runtime/state.db
-EBAY_NOTIFY_RETRY_PATH=/opt/ebay-cf/data/runtime/state.db
-TELEGRAM_BOT_LOCK_PATH=/opt/ebay-cf/data/runtime/telegram_bot.lock
+EBAY_ORDER_STATE_PATH=data/state.db
+EBAY_NOTIFY_RETRY_PATH=data/state.db
+TELEGRAM_BOT_LOCK_PATH=data/telegram_bot.lock
 ```
 
 ## Avvio servizio
 
 ```bash
-sudo systemctl enable --now ebay-cf
-sudo systemctl status ebay-cf
+sudo systemctl enable --now ebaycf-bot
+sudo systemctl status ebaycf-bot
 ```
 
 ## Log e salute runtime
 
 ```bash
-sudo journalctl -u ebay-cf -f
-/opt/ebay-cf/venv/bin/ebay-cf-healthcheck
+sudo journalctl -u ebaycf-bot -f
+"/home/opc/eBay CF/.venv/bin/ebay-cf-healthcheck"
 ```
 
 ## Aggiornamento dopo un push
 
 ```bash
-cd /opt/ebay-cf/app
+cd "/home/opc/eBay CF"
 ./deploy/update.sh
 ./deploy/smoke-check.sh
 ```
@@ -78,6 +78,7 @@ cd /opt/ebay-cf/app
 ## Note operative
 
 - usiamo polling, quindi non serve webhook pubblico
-- SQLite e lock file restano fuori dal clone Git
-- `systemd` e' lo standard operativo raccomandato per questo progetto
+- SQLite e lock file restano nella directory `data/` del progetto
+- il servizio reale della VPS si chiama `ebaycf-bot`
 - lo script di setup supporta `apt-get`, `dnf`, `yum` e `apk`
+- se sulla VPS esistono ancora `data/notified_orders.json` o `data/failed_notifications.json`, il bot li migra automaticamente a SQLite al primo avvio utile
