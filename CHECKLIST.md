@@ -24,10 +24,6 @@
 
 ### Fotografia ambiente attuale
 
-- [ ] esportare backup di:
-  - file env
-  - database SQLite
-  - unita' `systemd` o configurazione Docker attuale
 - [ ] definire una checklist di rollback
 - [ ] verificare se esiste gia' un ambiente staging o almeno una preview testabile
 - [ ] se staging manca, decidere un'alternativa minima per prove pre-release
@@ -42,13 +38,12 @@ Esito audit VPS del 2026-04-06:
 - log runtime: `journalctl -u ebaycf-bot`
 - problema operativo emerso: coesistenza di istanza manuale legacy e servizio `systemd`
 - problema storico emerso: presenza di stato legacy JSON rimasto nella VPS
+- backup manuali esportati in `~/maintenance-backups/2026-04-06-vps-cleanup`
 
 ## Fase 1 - Hardening e Aggiornamenti VPS [Priorita' alta]
 
 ### Sistema
 
-- [ ] aggiornare sistema operativo e pacchetti di sicurezza
-- [ ] verificare versione Python installata e coerente con il progetto
 - [ ] verificare utilizzo CPU in condizioni reali di carico
 - [ ] verificare timezone, NTP e sincronizzazione oraria
 
@@ -56,17 +51,22 @@ Stato audit gia' verificato:
 
 - spazio disco disponibile: circa 22 GB liberi su 30 GB
 - RAM rilevata: circa 503 MiB con swap attiva da 2.5 GiB
+- sistema aggiornato il 2026-04-06 con kernel UEK attivo `6.12.0-200.74.27.1.el9uek.x86_64`
+- runtime applicativo coerente: bot su `.venv` Python `3.11`, Python di sistema aggiornato a `3.9.25-3.0.1.el9_7.1`
 
 ### Sicurezza
 
-- [ ] confermare accesso SSH solo con chiave
-- [ ] disabilitare login password se non serve
-- [ ] disabilitare login root diretto
-- [ ] configurare firewall con sole porte necessarie
-- [ ] valutare `fail2ban`
 - [ ] verificare permessi dei file con segreti
 - [ ] usare utente di servizio dedicato per il bot
 - [ ] pianificare runbook minimo per rotazione segreti e ripristino credenziali
+
+Stato hardening applicato:
+
+- `PasswordAuthentication no`
+- `PermitRootLogin no`
+- `PubkeyAuthentication yes`
+- firewall attivo con sola esposizione `ssh`
+- `fail2ban` installato e jail `sshd` attiva
 
 ### Esecuzione servizio
 
@@ -80,7 +80,7 @@ Stato audit gia' verificato:
 Stato operativo emerso:
 
 - il bot e' ora gestito da `systemd` come servizio principale
-- il vecchio avvio manuale via `~/run-ebaycf-bot.sh` resta una fonte di conflitto da eliminare o depotenziare
+- il vecchio avvio manuale via `~/run-ebaycf-bot.sh` e i residui legacy sono stati archiviati in backup
 
 ### Backup e recovery
 
@@ -238,7 +238,7 @@ Struttura introdotta:
 
 ## Prossimi Step Immediati
 
-- [ ] completare backup, audit VPS e standard di esecuzione del servizio
+- [ ] completare rollback checklist, staging minimo e backup automatici
 - [ ] finire la rifondazione tecnica residua su modelli, retry condivisi e riduzione stato globale
 - [ ] chiudere osservabilita' minima con metriche leggibili, alert basilari e runbook
 - [ ] preparare milestone di progettazione multiutente con database, token e flusso OAuth definiti

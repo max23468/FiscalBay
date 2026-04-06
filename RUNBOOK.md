@@ -101,6 +101,10 @@ Lo smoke test verifica:
 - `/home/opc/eBay CF/.env`
 - `/home/opc/eBay CF/data/state.db`
 - eventuali file `.legacy-json.bak` creati durante la migrazione automatica
+
+Backup manuale di manutenzione gia' eseguito:
+
+- `~/maintenance-backups/2026-04-06-vps-cleanup`
 - eventuali override di servizio o note locali operative
 
 ## Problemi operativi comuni
@@ -119,6 +123,13 @@ Health check fallisce:
 - controlla se la retry queue non si svuota
 - controlla `last_error` nello state DB
 - se trovi vecchi file `data/notified_orders.json` o `data/failed_notifications.json`, il bot ora li converte da solo a SQLite al primo avvio
+
+## Hardening attivo
+
+- SSH accetta login solo con chiave
+- `PermitRootLogin` e' impostato a `no`
+- firewall espone solo il servizio `ssh`
+- `fail2ban` protegge il jail `sshd`
 
 Deploy riuscito ma bot non sano:
 
