@@ -1,4 +1,4 @@
-# Milestone Board Minima
+# Board Milestone Minima
 
 Board minima locale per tenere visibili priorita' e dipendenze finche' non viene aperta una board GitHub dedicata.
 
@@ -16,9 +16,9 @@ Dipendenze:
 
 Deliverable minimi:
 
-- `docs/PHASE0_BASELINE.md`
-- `RUNBOOK.md` aggiornato
-- `CHECKLIST.md` allineata allo stato reale
+- baseline operativa minima assorbita in `docs/OPERATIONS.md` e `docs/SECURITY.md`
+- `docs/RUNBOOK.md` aggiornato
+- `docs/CHECKLIST.md` allineata allo stato reale
 
 ### M1 - Hardening VPS e recovery
 

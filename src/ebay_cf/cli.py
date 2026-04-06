@@ -8,7 +8,7 @@ import sys
 from typing import Optional
 
 from .config import load_config
-from .errors import EbayApiError
+from .errors import AppError
 from .models import FetchOptions
 from .services.orders import fetch_records, parse_args, write_output
 
@@ -35,7 +35,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
         records = fetch_records(config, options)
         write_output(records, args.format, args.output)
-    except EbayApiError as exc:
+    except AppError as exc:
         logger.error("%s", exc)
         print(f"Errore: {exc}", file=sys.stderr)
         return 1

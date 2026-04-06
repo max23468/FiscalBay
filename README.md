@@ -305,8 +305,26 @@ Su Windows il lock non è disponibile: il bot continua a funzionare ma segnala u
 
 Per il deploy standard su VPS Linux con `systemd`, vedi:
 
-- `RUNBOOK.md`
+- `docs/RUNBOOK.md`
 - `docs/DEPLOY_LINUX.md`
+
+## Documentazione
+
+Indice centrale:
+
+- `docs/INDEX.md`
+
+Documenti principali:
+
+- `docs/CHECKLIST.md`
+- `docs/CONTEXT.md`
+- `docs/ARCHITECTURE.md`
+- `docs/OPERATIONS.md`
+- `docs/DATA_MODEL.md`
+- `docs/SECURITY.md`
+- `docs/DECISIONS_PENDING.md`
+- `docs/OAUTH_FLOW.md`
+- `docs/CHANGELOG.md`
 
 Asset disponibili nel repository, allineati al setup VPS attuale (`ebaycf`, `/opt/ebay-cf`, servizio `ebaycf-bot`):
 

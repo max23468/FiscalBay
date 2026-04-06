@@ -1,36 +1,30 @@
-# Checklist
+# Checklist Operativa
 
-## Ordine di esecuzione consigliato
+## Indice rapido
 
-1. stabilizzazione minima e sicurezza operativa
-2. hardening VPS e standard deploy
-3. rifondazione strutturale del codice senza cambiare comportamento
-4. osservabilita', health check e runbook operativi
-5. progettazione multiutente
-6. onboarding self-service Telegram + eBay OAuth
+- `Fase 2`
+  - rifondazione strutturale del codice
+- `Fase 3`
+  - operativita' e osservabilita'
+- `Fase 4`
+  - progettazione multiutente
+- `Fase 5`
+  - onboarding self-service Telegram + eBay OAuth
+- `Fase 6`
+  - governance del prodotto
 
-## Checklist Operativa
+Documenti collegati:
+
+- `docs/INDEX.md`
+- `docs/MILESTONE_BOARD.md`
+- `docs/DECISIONS_PENDING.md`
 
 ## Fase 2 - Rifondazione Strutturale del Codice [Priorita' alta]
 
-### Nuova struttura proposta
-
-Struttura introdotta:
-
-- `src/ebay_cf/cli.py`
-- `src/ebay_cf/bot.py`
-- `src/ebay_cf/config.py`
-- `src/ebay_cf/models.py`
-- `src/ebay_cf/clients/ebay.py`
-- `src/ebay_cf/clients/telegram.py`
-- `src/ebay_cf/services/orders.py`
-- `src/ebay_cf/storage/sqlite.py`
-
 ### Refactor tecnico
 
-- [ ] separare meglio responsabilita' applicative e operative tra CLI, bot, servizi, client e storage
+- [ ] finire la rifondazione tecnica residua su modelli, retry condivisi e riduzione stato globale
 - [ ] ridurre fragilita' e duplicazioni ancora presenti nel codice
-- [ ] ridurre l'accorpamento di responsabilita' rimasto nei flussi CLI e bot
 - [ ] eliminare i punti in cui la logica applicativa dipende ancora da import diretti fra entrypoint
 - [ ] creare modelli tipizzati per:
   - ordine eBay normalizzato
@@ -38,21 +32,12 @@ Struttura introdotta:
   - utente Telegram
   - account eBay collegato
 - [ ] sostituire in modo sistematico i `Dict[str, str]` residui con dataclass o modelli equivalenti
-- [ ] centralizzare retry, backoff e classificazione errori eBay/Telegram in componenti condivisi
-- [ ] definire eccezioni applicative piu' chiare
-- [ ] separare rendering output da raccolta dati
-- [ ] ridurre l'uso di stato globale locale nel polling e nella notifica
-- [ ] risolvere i dettagli di naming fuorvianti rimasti nelle API interne
-- [ ] aggiungere `ADR` leggere per le decisioni architetturali importanti
 
 ### Quality gate e release
 
-- [ ] documentare il percorso di refactor e le decisioni senza bloccare l'uso attuale del progetto
-- [ ] mantenere test, CI, mypy e coverage allineati con ogni refactor
-- [ ] introdurre `CHANGELOG.md` per le modifiche rilevanti
 - [ ] verificare se serve un controllo packaging o release process piu' esplicito
 
-## Fase 4 - Operativita' e Osservabilita' [Priorita' media]
+## Fase 3 - Operativita' e Osservabilita' [Priorita' media]
 
 ### Logging e contesto operativo
 
@@ -62,6 +47,7 @@ Struttura introdotta:
 
 ### Metriche e controlli runtime
 
+- [ ] chiudere osservabilita' minima con metriche leggibili, alert basilari e runbook
 - [ ] misurare:
   - ordini letti
   - ordini con CF
@@ -74,7 +60,7 @@ Struttura introdotta:
 - [ ] documentare troubleshooting operativo per `healthcheck`, `retry_queue`, `last_check` stale e fallimenti deploy
 - [ ] mantenere smoke test post-deploy come controllo obbligatorio dopo ogni rilascio significativo
 
-## Fase 5 - Progettazione Multiutente [Priorita' media]
+## Fase 4 - Progettazione Multiutente [Priorita' media]
 
 ### Target di prodotto
 
@@ -97,6 +83,7 @@ Struttura introdotta:
 
 ### Decisioni architetturali e vincoli
 
+- [ ] preparare milestone di progettazione multiutente con database, token e flusso OAuth definiti
 - [ ] trattare il passaggio a bot pubblico multiutente come cambio di natura del progetto: da utility personale a servizio con requisiti di sicurezza, privacy e affidabilita'
 - [ ] collegare la progettazione multiutente ai finding audit su single-tenant, variabili ambiente globali e stato condiviso
 - [ ] valutare migrazione da SQLite a Postgres prima della multiutenza pubblica
@@ -113,7 +100,7 @@ Struttura introdotta:
 - [ ] preparare una security review dedicata ai token utente
 - [ ] fissare milestone di beta privata prima dell'apertura piu' ampia
 
-## Fase 6 - Onboarding Self-Service Telegram + eBay OAuth [Priorita' media]
+## Fase 5 - Onboarding Self-Service Telegram + eBay OAuth [Priorita' media]
 
 ### Esperienza target utente
 
@@ -147,7 +134,7 @@ Struttura introdotta:
 - [ ] `/notifications off`
 - [ ] `/settings`
 
-## Fase 7 - Governance del Prodotto [Priorita' media]
+## Fase 6 - Governance del Prodotto [Priorita' media]
 
 - [ ] definire governance e limiti del servizio in modo compatibile con isolamento dati tra utenti
 - [ ] definire quali dati personali vengono trattati
@@ -156,9 +143,3 @@ Struttura introdotta:
 - [ ] definire retention dei token e dati ordini
 - [ ] chiarire policy di cancellazione utente
 - [ ] definire limiti del servizio e carichi supportati
-
-## Prossimi Step Immediati
-
-- [ ] finire la rifondazione tecnica residua su modelli, retry condivisi e riduzione stato globale
-- [ ] chiudere osservabilita' minima con metriche leggibili, alert basilari e runbook
-- [ ] preparare milestone di progettazione multiutente con database, token e flusso OAuth definiti

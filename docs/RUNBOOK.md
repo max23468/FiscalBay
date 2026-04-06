@@ -1,4 +1,4 @@
-# Runbook
+# Runbook Operativo
 
 Questa guida standardizza l'esercizio del bot sulla VPS Linux attuale con `systemd`.
 
@@ -196,14 +196,9 @@ Deploy riuscito ma bot non sano:
 - esegui `./deploy/smoke-check.sh`
 - se fallisce, fai rollback alla revisione precedente e riavvia il servizio
 
-## Baseline fase 0
+## Baseline operativa e sicurezza
 
-Per chiudere i requisiti minimi di baseline e sicurezza immediata, fare riferimento anche a:
+I requisiti minimi di baseline e sicurezza immediata sono ora assorbiti in:
 
-- `docs/PHASE0_BASELINE.md`
-
-In particolare li' sono definiti:
-
-- checklist di rollback
-- alternativa minima a staging finche' manca un ambiente dedicato
-- inventario e cadenza di rotazione dei segreti attuali
+- `docs/OPERATIONS.md`
+- `docs/SECURITY.md`

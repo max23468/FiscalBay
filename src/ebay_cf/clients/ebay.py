@@ -6,7 +6,6 @@ import base64
 import json
 import logging
 import os
-import random
 import threading
 import time
 import urllib.error
@@ -17,6 +16,7 @@ from typing import Optional
 
 from ..errors import EbayApiError
 from ..models import Config
+from ..retry import run_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ def ebay_error_retryable(exc: EbayApiError) -> bool:
     return 500 <= code <= 599
 
 
-def make_request_once(
+def request_json_once(
     method: str,
     url: str,
     headers: Optional[dict[str, str]] = None,
@@ -82,35 +82,35 @@ def make_request_once(
     return json.loads(payload)
 
 
-def make_request(
+def request_json(
     method: str,
     url: str,
     headers: Optional[dict[str, str]] = None,
     data: Optional[bytes] = None,
 ) -> dict:
     max_retries, base_delay = request_retry_settings()
-    last: Optional[BaseException] = None
-    for attempt in range(max_retries):
-        try:
-            return make_request_once(method, url, headers=headers, data=data)
-        except EbayApiError as exc:
-            last = exc
-            if not ebay_error_retryable(exc) or attempt == max_retries - 1:
-                raise
-            delay = base_delay * (2**attempt) + random.uniform(0, 0.25)
-            logger.warning(
-                "Richiesta eBay fallita (tentativo %s/%s), riprovo tra %.2fs: %s",
-                attempt + 1,
-                max_retries,
-                delay,
-                exc,
-            )
-            time.sleep(delay)
-    assert last is not None
-    raise last
+
+    def on_retry(exc: BaseException, attempt_no: int, total_attempts: int, delay: float) -> None:
+        assert isinstance(exc, EbayApiError)
+        logger.warning(
+            "Richiesta eBay fallita (tentativo %s/%s), riprovo tra %.2fs: %s",
+            attempt_no,
+            total_attempts,
+            delay,
+            exc,
+        )
+
+    return run_with_retry(
+        lambda: make_request_once(method, url, headers=headers, data=data),
+        max_attempts=max_retries,
+        should_retry=lambda exc: isinstance(exc, EbayApiError) and ebay_error_retryable(exc),
+        on_retry=on_retry,
+        base_delay=base_delay,
+        sleep_fn=time.sleep,
+    )
 
 
-def mint_user_access_token_response(config: Config) -> dict:
+def request_user_access_token_response(config: Config) -> dict:
     credentials = f"{config.client_id}:{config.client_secret}".encode("utf-8")
     encoded = base64.b64encode(credentials).decode("ascii")
     url = f"{config.api_base}/identity/v1/oauth2/token"
@@ -121,7 +121,7 @@ def mint_user_access_token_response(config: Config) -> dict:
             "scope": config.scopes,
         }
     ).encode("utf-8")
-    return make_request(
+    return request_json(
         "POST",
         url,
         headers={
@@ -186,7 +186,7 @@ def get_orders(
         )
         query = urllib.parse.urlencode({"filter": filter_value, "limit": limit, "offset": offset})
         url = f"{config.api_base}/sell/fulfillment/v1/order?{query}"
-        response = make_request("GET", url, headers=headers)
+        response = request_json("GET", url, headers=headers)
         page_orders = response.get("orders", [])
         if not page_orders:
             break
@@ -201,11 +201,33 @@ def get_orders(
 def get_order_detail(config: Config, access_token: str, order_id: str) -> dict:
     encoded_order_id = urllib.parse.quote(order_id, safe="")
     url = f"{config.api_base}/sell/fulfillment/v1/order/{encoded_order_id}"
-    return make_request(
+    return request_json(
         "GET",
         url,
         headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
     )
+
+
+def make_request_once(
+    method: str,
+    url: str,
+    headers: Optional[dict[str, str]] = None,
+    data: Optional[bytes] = None,
+) -> dict:
+    return request_json_once(method, url, headers=headers, data=data)
+
+
+def make_request(
+    method: str,
+    url: str,
+    headers: Optional[dict[str, str]] = None,
+    data: Optional[bytes] = None,
+) -> dict:
+    return request_json(method, url, headers=headers, data=data)
+
+
+def mint_user_access_token_response(config: Config) -> dict:
+    return request_user_access_token_response(config)
 
 
 def to_ebay_timestamp(dt: datetime) -> str:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 
-from .errors import EbayApiError, TelegramApiError
+from .errors import ConfigurationError
 from .models import Config, TelegramConfig
 
 DEFAULT_SCOPE = "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly"
@@ -35,7 +35,7 @@ def load_config(environment: str) -> Config:
         if not os.getenv(name)
     ]
     if missing:
-        raise EbayApiError("Variabili ambiente mancanti: " + ", ".join(missing))
+        raise ConfigurationError("Variabili ambiente mancanti: " + ", ".join(missing))
     return Config(
         client_id=os.environ["EBAY_CLIENT_ID"],
         client_secret=os.environ["EBAY_CLIENT_SECRET"],
@@ -48,7 +48,7 @@ def load_config(environment: str) -> Config:
 def load_telegram_config() -> TelegramConfig:
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
-        raise TelegramApiError("Variabile ambiente mancante: TELEGRAM_BOT_TOKEN")
+        raise ConfigurationError("Variabile ambiente mancante: TELEGRAM_BOT_TOKEN")
 
     raw_chat_ids = os.getenv(DEFAULT_ALLOWED_CHAT_IDS, "").strip()
     allowed_chat_ids = None
