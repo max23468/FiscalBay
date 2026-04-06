@@ -13,7 +13,7 @@ from typing import Iterable, Optional
 
 from ..clients.ebay import get_access_token, get_order_detail, get_orders
 from ..errors import EbayApiError
-from ..models import Config, FetchOptions, OrderRecord
+from ..models import Config, FetchOptions, OrderRecord, OrderRecordLike
 
 DEFAULT_PAGE_SIZE = 50
 
@@ -83,9 +83,15 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def get_csv_fieldnames(records: list[dict[str, str]]) -> list[str]:
+def to_order_record(record: OrderRecordLike) -> OrderRecord:
+    if isinstance(record, OrderRecord):
+        return record
+    return OrderRecord.from_mapping(record)
+
+
+def get_csv_fieldnames(records: list[OrderRecordLike]) -> list[str]:
     if records:
-        return list(records[0].keys())
+        return list(to_order_record(records[0]).as_dict().keys())
     return list(OrderRecord().as_dict().keys())
 
 
@@ -114,7 +120,7 @@ def choose_tax_identifier(order: dict) -> Optional[dict]:
     return None
 
 
-def extract_record(order: dict) -> dict[str, str]:
+def extract_record_model(order: dict) -> OrderRecord:
     buyer = order.get("buyer") or {}
     tax_identifier = choose_tax_identifier(order) or {}
     taxpayer_id = tax_identifier.get("taxpayerId") or ""
@@ -163,11 +169,15 @@ def extract_record(order: dict) -> dict[str, str]:
         items=items_str,
         total=total_str,
         shippingAddress=shipping_addr_str,
-    ).as_dict()
+    )
 
 
-def render_table(records: Iterable[dict[str, str]]) -> str:
-    rows = list(records)
+def extract_record(order: dict) -> dict[str, str]:
+    return extract_record_model(order).as_dict()
+
+
+def render_table(records: Iterable[OrderRecordLike]) -> str:
+    rows = [to_order_record(record).as_dict() for record in records]
     columns = [
         "orderId",
         "creationDate",
@@ -191,25 +201,26 @@ def render_table(records: Iterable[dict[str, str]]) -> str:
     return "\n".join([header, separator] + body) if body else header + "\n" + separator
 
 
-def write_output(records: list[dict[str, str]], fmt: str, output_path: Optional[str]) -> None:
+def write_output(records: list[OrderRecordLike], fmt: str, output_path: Optional[str]) -> None:
+    normalized_records = [to_order_record(record).as_dict() for record in records]
     if fmt == "json":
-        content = json.dumps(records, indent=2, ensure_ascii=False)
+        content = json.dumps(normalized_records, indent=2, ensure_ascii=False)
     elif fmt == "csv":
         if output_path:
             with open(output_path, "w", newline="", encoding="utf-8") as handle:
-                writer = csv.DictWriter(handle, fieldnames=get_csv_fieldnames(records))
+                writer = csv.DictWriter(handle, fieldnames=get_csv_fieldnames(normalized_records))
                 writer.writeheader()
-                writer.writerows(records)
+                writer.writerows(normalized_records)
             return
         from io import StringIO
 
         string_io = StringIO()
-        writer = csv.DictWriter(string_io, fieldnames=get_csv_fieldnames(records))
+        writer = csv.DictWriter(string_io, fieldnames=get_csv_fieldnames(normalized_records))
         writer.writeheader()
-        writer.writerows(records)
+        writer.writerows(normalized_records)
         content = string_io.getvalue().rstrip("\n")
     else:
-        content = render_table(records)
+        content = render_table(normalized_records)
 
     if output_path:
         with open(output_path, "w", encoding="utf-8") as handle:

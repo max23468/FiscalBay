@@ -1,6 +1,17 @@
-# Project Context
+# Contesto Progetto
 
 Questo documento serve come contesto persistente per nuove conversazioni con un'IA o con nuovi collaboratori tecnici.
+
+## Indice rapido
+
+- `docs/INDEX.md`
+  - indice centrale della documentazione
+- `docs/ARCHITECTURE.md`
+  - struttura del codice e flussi principali
+- `docs/OPERATIONS.md`
+  - esercizio operativo, rollback e criteri di salute
+- `docs/CHECKLIST.md`
+  - lavoro ancora aperto
 
 Obiettivo:
 
@@ -73,6 +84,8 @@ Package principale:
 - `src/ebay_cf/logging_utils.py`
 - `src/ebay_cf/healthcheck.py`
 - `src/ebay_cf/git_utils.py`
+- `src/ebay_cf/retry.py`
+- `src/ebay_cf/telegram_commands.py`
 
 Client esterni:
 
@@ -82,6 +95,8 @@ Client esterni:
 Service layer:
 
 - `src/ebay_cf/services/orders.py`
+- `src/ebay_cf/services/notifications.py`
+- `src/ebay_cf/services/telegram_runtime.py`
 
 Storage:
 
@@ -97,6 +112,7 @@ Storage:
 `models.py`
 
 - modelli e tipi di configurazione/opzioni
+- modelli tipizzati per stato bot, metriche, retry queue e ordine normalizzato
 
 `clients/ebay.py`
 
@@ -109,20 +125,40 @@ Storage:
 - richieste Telegram Bot API
 - long polling
 - deleteWebhook e gestione base trasporto
+- retry condiviso con policy centralizzata
 
 `services/orders.py`
 
 - orchestration del fetch ordini
 - normalizzazione dei record restituiti
 
+`services/notifications.py`
+
+- stato runtime del bot
+- retry queue Telegram
+- deduplica ordini e invio notifiche automatiche
+
+`services/telegram_runtime.py`
+
+- polling Telegram
+- callback query
+- lifecycle runtime e shutdown
+
 `bot.py`
 
-- logica principale del bot Telegram
-- parsing comandi
-- loop notifiche automatiche
+- facciata compatibile del bot Telegram
+- wiring tra runtime, notifiche, storage e comandi
 - gestione lock processo
-- gestione retry queue
-- metriche e stato runtime
+
+`telegram_commands.py`
+
+- parsing comandi
+- validazione input utente
+- rendering menu e testi Telegram
+
+`retry.py`
+
+- retry/backoff condiviso tra client esterni e runtime
 
 `storage/sqlite.py`
 
@@ -219,14 +255,18 @@ bash scripts/ci_verify.sh
 
 - package interno introdotto
 - separazione piu' chiara tra config, clients, services e storage
+- separazione tra parsing comandi, runtime Telegram e notifiche automatiche
 - storage SQLite strutturato
 - migrazioni storage introdotte
 - retry queue resa piu' robusta
+- retry/backoff centralizzato
 - lock file del bot migliorato
+- modelli tipizzati per stato runtime e ordine normalizzato
 - test integrazione su bot, storage e fetch ordini
 - logging piu' coerente
 - healthcheck operativo disponibile
 - CI e quality gate presenti
+- percorso di refactor documentato nei documenti stabili e nelle ADR
 
 ### Limiti attuali ancora veri
 
@@ -328,11 +368,11 @@ Presenti e utili:
 
 Path progetto:
 
-- `/home/opc/eBay CF`
+- `/opt/ebay-cf`
 
 Virtualenv attivo del progetto:
 
-- `/home/opc/eBay CF/.venv`
+- `/opt/ebay-cf/.venv`
 
 Runtime applicativo stabile:
 
@@ -364,7 +404,7 @@ sudo journalctl -u ebaycf-bot -f
 Healthcheck:
 
 ```bash
-"/home/opc/eBay CF/.venv/bin/ebay-cf-healthcheck" --json
+"/opt/ebay-cf/.venv/bin/ebay-cf-healthcheck" --json
 ```
 
 ### Stato manutenzione VPS gia' eseguito
@@ -385,6 +425,7 @@ Gia' fatto:
 Backup di manutenzione creato:
 
 - `~/maintenance-backups/2026-04-06-vps-cleanup`
+- `/home/opc/maintenance-backups/2026-04-06-legacy-install-home-opc/ebay-cf-legacy`
 
 Lì sono stati archiviati:
 
@@ -429,7 +470,7 @@ Dipende da:
 
 Queste credenziali stanno in:
 
-- `/home/opc/eBay CF/.env`
+- `/opt/ebay-cf/.env`
 
 Non devono essere riportate in questo file.
 
@@ -448,23 +489,24 @@ Convenzione importante:
 
 - per modifiche solo documentali o checklist non serve riavviare il bot
 
-## Vercel
+## Piattaforma di deploy
 
-Vercel non e' piu' parte attiva del deploy operativo del bot.
+Il bot non usa piattaforme di deploy web collegate al repository.
 
 Situazione attuale:
 
-- il progetto non va trattato come app web Vercel
+- il progetto va trattato come servizio Python deployato su VPS Linux
 - il deploy reale vive sulla VPS Linux
-- l'integrazione Vercel e' stata disattivata per evitare deploy inutili/falliti
+- il repository non ha piu' integrazioni di deploy automatico da considerare
 
 ## File operativi importanti
 
 Documentazione:
 
+- `docs/INDEX.md`
 - `README.md`
-- `RUNBOOK.md`
-- `CHECKLIST.md`
+- `docs/RUNBOOK.md`
+- `docs/CHECKLIST.md`
 - `docs/DEPLOY_LINUX.md`
 
 Script deploy:
@@ -491,18 +533,26 @@ Le cose principali ancora aperte non sono piu' il “mettere in piedi” il prog
 - eventuale utente di servizio dedicato al posto di `opc`
 - progettazione multiutente
 
+## Refactor ancora aperto
+
+Il refactor strutturale ha gia' assorbito la separazione principale dei moduli, ma restano aperti soprattutto:
+
+- riduzione dei `dict` residui nel dominio ordini
+- riduzione degli accoppiamenti residui tra entrypoint e servizi
+- completamento dei modelli che serviranno anche per la futura multiutenza
+
 ## Cose che un'IA nuova deve sapere subito
 
 - il progetto oggi funziona ed e' live
 - il bot e' single-tenant, non multiutente
-- il deploy vero e' su VPS, non su Vercel
+- il deploy vero e' su VPS Linux
 - la VPS usa Oracle Linux 9.7
 - l'accesso standard e' `ssh opc@79.72.45.89`
 - SSH e' key-only, root login disabilitato
 - il bot gira come `systemd` service `ebaycf-bot`
 - il runtime corretto del progetto e' Python `3.11` nel `.venv`
 - il bot usa SQLite locale in `data/state.db`
-- la checklist da seguire per il lavoro residuo e' `CHECKLIST.md`
+- la checklist da seguire per il lavoro residuo e' `docs/CHECKLIST.md`
 
 ## Come mantenere aggiornato questo file
 

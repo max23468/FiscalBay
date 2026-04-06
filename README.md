@@ -280,7 +280,7 @@ Nota operativa importante:
 
 ### Stato Locale e Persistenza
 
-Per default il bot usa un database SQLite in [data/state.db](/Users/Matteo/Documents/eBay CF/data/state.db).
+Per default il bot usa un database SQLite in `data/state.db`.
 
 Nello stato locale salva:
 
@@ -301,42 +301,38 @@ Su Unix e macOS il bot usa un lock esclusivo su `TELEGRAM_BOT_LOCK_PATH` tramite
 
 Su Windows il lock non è disponibile: il bot continua a funzionare ma segnala un warning nei log.
 
-## Docker
-
-### Build
-
-```bash
-docker compose build
-```
-
-### Avvio
-
-```bash
-docker compose up -d
-```
-
-Il file [docker-compose.yml](/Users/Matteo/Documents/eBay CF/docker-compose.yml) monta `./data` dentro `/app/data`, quindi il database SQLite e il lock file restano persistenti tra i riavvii del container.
-
-Prima dell'avvio conviene fornire le variabili ambiente tramite:
-
-- un file `.env` nella root del progetto
-- variabili esportate nella shell
-- oppure una sezione `env_file` in `docker-compose.yml`
-
 ## Deploy VPS
 
 Per il deploy standard su VPS Linux con `systemd`, vedi:
 
-- [RUNBOOK.md](/Users/Matteo/Documents/eBay%20CF/RUNBOOK.md)
-- [docs/DEPLOY_LINUX.md](/Users/Matteo/Documents/eBay%20CF/docs/DEPLOY_LINUX.md)
+- `docs/RUNBOOK.md`
+- `docs/DEPLOY_LINUX.md`
 
-Asset disponibili nel repository, allineati al setup VPS attuale (`opc`, `/home/opc/eBay CF`, servizio `ebaycf-bot`):
+## Documentazione
 
-- [deploy/linux-setup.sh](/Users/Matteo/Documents/eBay%20CF/deploy/linux-setup.sh)
-- [deploy/update.sh](/Users/Matteo/Documents/eBay%20CF/deploy/update.sh)
-- [deploy/smoke-check.sh](/Users/Matteo/Documents/eBay%20CF/deploy/smoke-check.sh)
-- [deploy/ebaycf-bot.service](/Users/Matteo/Documents/eBay%20CF/deploy/ebaycf-bot.service)
-- [.env.example](/Users/Matteo/Documents/eBay%20CF/.env.example)
+Indice centrale:
+
+- `docs/INDEX.md`
+
+Documenti principali:
+
+- `docs/CHECKLIST.md`
+- `docs/CONTEXT.md`
+- `docs/ARCHITECTURE.md`
+- `docs/OPERATIONS.md`
+- `docs/DATA_MODEL.md`
+- `docs/SECURITY.md`
+- `docs/DECISIONS_PENDING.md`
+- `docs/OAUTH_FLOW.md`
+- `docs/CHANGELOG.md`
+
+Asset disponibili nel repository, allineati al setup VPS attuale (`ebaycf`, `/opt/ebay-cf`, servizio `ebaycf-bot`):
+
+- `deploy/linux-setup.sh`
+- `deploy/update.sh`
+- `deploy/smoke-check.sh`
+- `deploy/ebaycf-bot.service`
+- `.env.example`
 
 ## Test
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import random
 import time
 import urllib.error
 import urllib.parse
@@ -13,6 +12,7 @@ import urllib.request
 from typing import Optional
 
 from ..errors import TelegramApiError
+from ..retry import run_with_retry
 
 LOGGER = logging.getLogger("ebaycf.telegram_bot")
 TELEGRAM_API_BASE = "https://api.telegram.org"
@@ -35,7 +35,7 @@ def telegram_error_retryable(exc: TelegramApiError) -> bool:
     return 500 <= code <= 599
 
 
-def telegram_request_once(
+def telegram_api_request_once(
     token: str,
     method: str,
     params: Optional[dict[str, object]] = None,
@@ -76,32 +76,50 @@ def telegram_request_once(
     return parsed["result"]
 
 
-def telegram_request(
+def telegram_api_request(
     token: str,
     method: str,
     params: Optional[dict[str, object]] = None,
 ) -> dict:
     max_retries, base_delay = telegram_retry_settings()
-    last: Optional[BaseException] = None
-    for attempt in range(max_retries):
-        try:
-            return telegram_request_once(token, method, params)
-        except TelegramApiError as exc:
-            last = exc
-            if not telegram_error_retryable(exc) or attempt == max_retries - 1:
-                raise
-            delay = base_delay * (2**attempt) + random.uniform(0, 0.25)
-            LOGGER.warning(
-                "Richiesta Telegram fallita (tentativo %s/%s), riprovo tra %.2fs: %s",
-                attempt + 1,
-                max_retries,
-                delay,
-                exc,
-            )
-            time.sleep(delay)
-    assert last is not None
-    raise last
+
+    def on_retry(exc: BaseException, attempt_no: int, total_attempts: int, delay: float) -> None:
+        assert isinstance(exc, TelegramApiError)
+        LOGGER.warning(
+            "Richiesta Telegram fallita (tentativo %s/%s), riprovo tra %.2fs: %s",
+            attempt_no,
+            total_attempts,
+            delay,
+            exc,
+        )
+
+    return run_with_retry(
+        lambda: telegram_request_once(token, method, params),
+        max_attempts=max_retries,
+        should_retry=lambda exc: (
+            isinstance(exc, TelegramApiError) and telegram_error_retryable(exc)
+        ),
+        on_retry=on_retry,
+        base_delay=base_delay,
+        sleep_fn=time.sleep,
+    )
 
 
 def ensure_long_polling(token: str) -> None:
     telegram_request(token, "deleteWebhook", {"drop_pending_updates": False})
+
+
+def telegram_request_once(
+    token: str,
+    method: str,
+    params: Optional[dict[str, object]] = None,
+) -> dict:
+    return telegram_api_request_once(token, method, params)
+
+
+def telegram_request(
+    token: str,
+    method: str,
+    params: Optional[dict[str, object]] = None,
+) -> dict:
+    return telegram_api_request(token, method, params)

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from .config import configure_logging, load_telegram_config
-from .storage.sqlite import load_retry_queue, load_state
+from .storage.sqlite import load_retry_queue_entries, load_runtime_state
 
 
 def parse_iso8601_utc(value: str) -> datetime:
@@ -28,8 +28,8 @@ def default_max_age_seconds(poll_interval_seconds: int) -> int:
 
 def build_health_report(max_age_seconds: Optional[int] = None) -> dict[str, object]:
     telegram_config = load_telegram_config()
-    state = load_state(telegram_config.state_path)
-    retry_queue = load_retry_queue(telegram_config.retry_queue_path)
+    state = load_runtime_state(telegram_config.state_path)
+    retry_queue = load_retry_queue_entries(telegram_config.retry_queue_path)
     effective_max_age = max_age_seconds or default_max_age_seconds(
         telegram_config.ebay_poll_interval_seconds
     )
@@ -40,7 +40,7 @@ def build_health_report(max_age_seconds: Optional[int] = None) -> dict[str, obje
     if not lock_exists:
         reasons.append("lock_missing")
 
-    last_check = state.get("last_check")
+    last_check = state.last_check
     age_seconds: Optional[int] = None
     if isinstance(last_check, str) and last_check:
         last_check_dt = parse_iso8601_utc(last_check)
@@ -50,7 +50,7 @@ def build_health_report(max_age_seconds: Optional[int] = None) -> dict[str, obje
     else:
         reasons.append("last_check_missing")
 
-    last_error = state.get("last_error")
+    last_error = state.last_error
     if last_error:
         warnings.append("last_error_present")
     if retry_queue:
@@ -67,7 +67,7 @@ def build_health_report(max_age_seconds: Optional[int] = None) -> dict[str, obje
         "last_check_age_seconds": age_seconds,
         "max_age_seconds": effective_max_age,
         "retry_queue_size": len(retry_queue),
-        "notified_orders_tracked": len(state.get("notified_order_ids", [])),
+        "notified_orders_tracked": len(state.notified_order_ids),
         "last_error": last_error,
     }
 

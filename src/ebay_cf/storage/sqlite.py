@@ -7,6 +7,8 @@ import os
 import sqlite3
 from typing import Iterable, TypedDict
 
+from ..models import BotMetrics, BotRuntimeState, RetryQueueEntry
+
 SCHEMA_VERSION = 2
 
 
@@ -278,6 +280,50 @@ def _parse_metrics_state(raw_value: str) -> MetricsState:
     }
 
 
+def _state_to_model(state: BotState) -> BotRuntimeState:
+    return BotRuntimeState(
+        notified_order_ids=list(state["notified_order_ids"]),
+        notified_hashes=list(state["notified_hashes"]),
+        last_check=state["last_check"],
+        last_error=state["last_error"],
+        metrics=BotMetrics.from_mapping(state["metrics"]),
+    )
+
+
+def _state_from_model(state: BotRuntimeState) -> BotState:
+    return {
+        "notified_order_ids": list(state.notified_order_ids),
+        "notified_hashes": list(state.notified_hashes),
+        "last_check": state.last_check,
+        "last_error": state.last_error,
+        "metrics": {
+            "orders_read": state.metrics.orders_read,
+            "notifications_sent": state.metrics.notifications_sent,
+            "errors_by_type": dict(state.metrics.errors_by_type),
+        },
+    }
+
+
+def _retry_entry_to_model(item: RetryQueueItem) -> RetryQueueEntry:
+    return RetryQueueEntry(
+        id=item.get("id"),
+        chat_id=item["chat_id"],
+        text=item["text"],
+        attempts=item["attempts"],
+    )
+
+
+def _retry_entry_from_model(item: RetryQueueEntry) -> RetryQueueItem:
+    payload: RetryQueueItem = {
+        "chat_id": item.chat_id,
+        "text": item.text,
+        "attempts": item.attempts,
+    }
+    if item.id is not None:
+        payload["id"] = item.id
+    return payload
+
+
 def load_state(path: str) -> BotState:
     _migrate_legacy_json_state(path)
     init_db(path)
@@ -340,6 +386,14 @@ def save_state(path: str, state: BotState) -> None:
             conn.execute("DELETE FROM kv_store WHERE key = 'last_error'")
 
 
+def load_runtime_state(path: str) -> BotRuntimeState:
+    return _state_to_model(load_state(path))
+
+
+def save_runtime_state(path: str, state: BotRuntimeState) -> None:
+    save_state(path, _state_from_model(state))
+
+
 def load_retry_queue(path: str) -> list[RetryQueueItem]:
     _migrate_legacy_json_retry_queue(path)
     init_db(path)
@@ -361,3 +415,11 @@ def save_retry_queue(path: str, queue: list[RetryQueueItem]) -> None:
     init_db(path)
     with _connect(path) as conn:
         _sync_retry_queue(conn, queue)
+
+
+def load_retry_queue_entries(path: str) -> list[RetryQueueEntry]:
+    return [_retry_entry_to_model(item) for item in load_retry_queue(path)]
+
+
+def save_retry_queue_entries(path: str, queue: list[RetryQueueEntry]) -> None:
+    save_retry_queue(path, [_retry_entry_from_model(item) for item in queue])
