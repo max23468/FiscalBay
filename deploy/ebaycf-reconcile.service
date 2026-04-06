@@ -6,4 +6,4 @@ Type=oneshot
 User=__APP_USER__
 Group=__APP_GROUP__
 WorkingDirectory=__APP_DIR__
-ExecStart=/usr/bin/bash -lc 'exec "__APP_DIR__/deploy/reconcile.sh"'
+ExecStart=/usr/bin/bash -lc 'source "__VENV_DIR__/bin/activate" && set -a && source "__ENV_FILE__" && set +a && exec "__APP_DIR__/deploy/reconcile.sh"'

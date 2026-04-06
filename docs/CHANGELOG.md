@@ -58,6 +58,7 @@ Documenti collegati:
 - `src/ebay_cf/bot.py`, `src/ebay_cf/application.py` e `src/ebay_cf/reconcile.py` rendono idempotenti i processi sensibili di accesso e collegamento: approvazioni/rifiuti ripetuti non duplicano effetti e `/connect` riusa la sessione OAuth ancora valida.
 - `src/ebay_cf/storage/sqlite.py` e `src/ebay_cf/reconcile.py` introducono `operation_queue` e un worker periodico di reconciliation per riallineare accessi, chat, subscription, sessioni OAuth stale e token incoerenti.
 - `deploy/reconcile.sh`, `deploy/ebaycf-reconcile.service`, `deploy/ebaycf-reconcile.timer` e `deploy/linux-setup.sh` estendono il deploy VPS con una reconciliation periodica via `systemd`.
+- `deploy/ebaycf-reconcile.service` carica ora anche virtualenv e `.env`, evitando che il worker periodico parta senza configurazione Telegram/eBay sulla VPS.
 - `src/ebay_cf/application.py` e `src/ebay_cf/bot.py` chiudono ora il residuo di fase 3 nel runtime multiutente: con `TELEGRAM_ADMIN_USER_ID` configurato il bot usa credenziali tenant per i tenant collegati e non ricade piu' su `EBAY_REFRESH_TOKEN` condiviso.
 - `deploy/ebaycf-oauth.service`, `deploy/linux-setup.sh`, `deploy/update.sh` e `deploy/smoke-check.sh` estendono il deploy VPS con il servizio `systemd` separato `ebaycf-oauth`.
 - `docs/CHECKLIST.md` considera ora la fase di onboarding self-service sostanzialmente chiusa e lascia aperti in roadmap solo i target multiutente residui e la governance prodotto.
