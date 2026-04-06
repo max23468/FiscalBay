@@ -180,6 +180,7 @@ Storage:
 `git_utils.py`
 
 - utility operative per sbloccare `index.lock` Git in modo sicuro
+- wrapper per eseguire comandi Git locali con preflight automatico sul lock
 
 ## Funzionamento del bot
 

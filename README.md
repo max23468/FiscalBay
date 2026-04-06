@@ -216,6 +216,19 @@ ebay-cf-fix-git-lock
 
 Il comando rimuove il lock solo se non risulta piu' detenuto da un processo attivo.
 
+Per rendere piu' robusti i comandi Git locali del progetto puoi anche usare:
+
+```bash
+ebay-cf-git-safe -- commit -m "messaggio"
+ebay-cf-git-safe -- push origin main
+```
+
+Questo wrapper:
+
+- aspetta per pochi secondi se il lock e' davvero detenuto da un processo attivo
+- rimuove automaticamente solo i lock stale
+- poi esegue il comando Git richiesto
+
 ### Health Check
 
 Per verificare rapidamente se il bot sembra sano lato runtime puoi usare:

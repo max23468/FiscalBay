@@ -243,6 +243,12 @@ Condizioni di stop:
 - verificare che il virtualenv esista
 - verificare che non ci sia un lock incoerente o una seconda istanza manuale
 
+### Git bloccato da `index.lock`
+
+- usare `ebay-cf-fix-git-lock` se vuoi solo rimuovere in sicurezza un lock stale
+- usare `ebay-cf-git-safe -- <comando git>` per operazioni locali che vuoi rendere piu' robuste
+- il wrapper aspetta un lock realmente attivo per pochi secondi e rimuove solo quelli stale
+
 ### Il processo e' attivo ma non notifica
 
 - controllare `last_check`

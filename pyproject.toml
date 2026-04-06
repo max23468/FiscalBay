@@ -19,6 +19,7 @@ ebay-cf = "ebay_cf_tool:main"
 ebay-telegram-bot = "telegram_bot:run_bot"
 ebay-cf-oauth-server = "ebay_cf.oauth_server:main"
 ebay-cf-fix-git-lock = "ebay_cf.git_utils:main"
+ebay-cf-git-safe = "ebay_cf.git_utils:safe_git_main"
 ebay-cf-healthcheck = "ebay_cf.healthcheck:main"
 ebay-cf-reconcile = "ebay_cf.reconcile:main"
 
