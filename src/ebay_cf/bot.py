@@ -17,9 +17,11 @@ except ImportError:  # pragma: no cover - Windows
 
 from .application import fetch_environment_records as _fetch_environment_records
 from .application import fetch_tenant_records as _fetch_tenant_records
+from .bot_messaging import request_with_backoff
+from .bot_messaging import send_message as _send_message
 from .clients.telegram import ensure_long_polling, telegram_request
 from .config import configure_logging, load_config, load_telegram_config
-from .errors import ConfigurationError, EbayApiError, TelegramApiError
+from .errors import ConfigurationError, TelegramApiError
 from .logging_utils import log_event
 from .models import (
     CAPABILITY_CONNECT_ACCOUNT,
@@ -55,7 +57,6 @@ from .models import (
     normalize_telegram_user_status,
 )
 from .reconcile import enqueue_apply_user_access_operation, process_pending_operations
-from .retry import run_with_retry
 from .services.notifications import (
     fetch_new_order_records as _fetch_new_order_records,
 )
@@ -316,36 +317,9 @@ __all__ = [
     "send_message",
     "should_attach_main_menu",
     "sync_runtime_contact",
+    "telegram_request",
     "update_state_with_records",
 ]
-
-
-def request_with_backoff(
-    fn,
-    label: str,
-    attempts: int = 4,
-    initial_delay: float = 1.0,
-) -> object:
-    def on_retry(exc: BaseException, attempt_no: int, total_attempts: int, delay: float) -> None:
-        log_event(
-            LOGGER,
-            logging.WARNING,
-            "request_retry",
-            label=label,
-            attempt=attempt_no,
-            attempts=total_attempts,
-            delay_seconds=round(delay, 2),
-            error=exc,
-        )
-
-    return run_with_retry(
-        fn,
-        max_attempts=attempts,
-        should_retry=lambda exc: isinstance(exc, (TelegramApiError, EbayApiError)),
-        on_retry=on_retry,
-        base_delay=initial_delay,
-        max_delay=30.0,
-    )
 
 
 def send_message(
@@ -355,33 +329,14 @@ def send_message(
     message_thread_id: Optional[int] = None,
     reply_markup: Optional[dict[str, object]] = None,
 ) -> None:
-    chunks = chunk_message(text)
-    for idx, chunk in enumerate(chunks):
-        params: dict[str, object] = {
-            "chat_id": chat_id,
-            "text": chunk,
-            "parse_mode": "HTML",
-            "disable_web_page_preview": True,
-        }
-        if message_thread_id is not None:
-            params["message_thread_id"] = message_thread_id
-        if reply_markup is not None and idx == len(chunks) - 1:
-            params["reply_markup"] = reply_markup
-        try:
-            telegram_request(token, "sendMessage", params)
-        except TelegramApiError as exc:
-            if getattr(exc, "status_code", None) != 400 and "HTTP 400" not in str(exc):
-                raise
-            fallback_params: dict[str, object] = {
-                "chat_id": chat_id,
-                "text": chunk,
-                "disable_web_page_preview": True,
-            }
-            if message_thread_id is not None:
-                fallback_params["message_thread_id"] = message_thread_id
-            if reply_markup is not None and idx == len(chunks) - 1:
-                fallback_params["reply_markup"] = reply_markup
-            telegram_request(token, "sendMessage", fallback_params)
+    _send_message(
+        token,
+        chat_id,
+        text,
+        message_thread_id=message_thread_id,
+        reply_markup=reply_markup,
+        request_fn=telegram_request,
+    )
 
 
 def sync_runtime_contact(
