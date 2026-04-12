@@ -145,7 +145,7 @@ Nota OAuth eBay:
 | --- | --- | --- | --- |
 | `TELEGRAM_BOT_TOKEN` | Sì per il bot | - | Token del bot Telegram |
 | `TELEGRAM_ADMIN_USER_ID` | Consigliata | vuoto | Se valorizzata, questo utente Telegram diventa admin globale e approva l'accesso degli altri utenti |
-| `TELEGRAM_ALLOWED_CHAT_IDS` | Consigliata | vuoto | Chat autorizzate, separate da virgola |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | **Sì** | vuoto (deny-all) | Chat autorizzate, separate da virgola. Se vuota, nessuna chat è autorizzata |
 | `TELEGRAM_NOTIFY_CHAT_IDS` | Consigliata | stessi valori di `TELEGRAM_ALLOWED_CHAT_IDS` | Chat che ricevono notifiche automatiche |
 | `TELEGRAM_POLL_TIMEOUT` | No | `30` | Timeout long polling Telegram |
 | `TELEGRAM_BOT_LOCK_PATH` | No | `data/telegram_bot.lock` | File lock del processo |
