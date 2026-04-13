@@ -313,7 +313,7 @@ Comportamento:
 - `/ordine` interroga un ordine specifico
 - `/stato` mostra ultimo check, contatori e dimensione della coda retry
 - `/start` e `/help` mostrano anche una tastiera inline con scorciatoie
-- se `TELEGRAM_ADMIN_USER_ID` e' configurata, gli utenti non ancora approvati possono solo richiedere accesso con `/request_access`
+- se `TELEGRAM_ADMIN_USER_ID` e' configurata, gli utenti non ancora approvati (gia' presenti in `TELEGRAM_ALLOWED_CHAT_IDS`) possono solo richiedere accesso con `/request_access`
 - l'admin puo' approvare o rifiutare richieste dal messaggio inline o con `/approve_user <telegram_user_id>` e `/reject_user <telegram_user_id>`
 - `/users` mostra all'admin lo stato degli utenti registrati (`new`, `pending`, `approved`, `blocked`, `admin`)
 
