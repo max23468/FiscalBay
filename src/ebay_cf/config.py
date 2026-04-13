@@ -66,11 +66,9 @@ def load_telegram_config() -> TelegramConfig:
         raise ConfigurationError("Variabile ambiente mancante: TELEGRAM_BOT_TOKEN")
 
     raw_chat_ids = os.getenv(DEFAULT_ALLOWED_CHAT_IDS, "").strip()
-    allowed_chat_ids = None
-    if raw_chat_ids:
-        allowed_chat_ids = {
-            int(value.strip()) for value in raw_chat_ids.split(",") if value.strip()
-        }
+    allowed_chat_ids = {
+        int(value.strip()) for value in raw_chat_ids.split(",") if value.strip()
+    }
 
     raw_notify_chat_ids = os.getenv(DEFAULT_NOTIFY_CHAT_IDS, raw_chat_ids).strip()
     notify_chat_ids = {

@@ -87,7 +87,7 @@ class BotIntegrationTests(unittest.TestCase):
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
                 token="x",
-                allowed_chat_ids=None,
+                allowed_chat_ids={1, 123, 456, 573159993},
                 notify_chat_ids=set(),
                 admin_user_id=123,
                 state_path=str(db_path),
@@ -136,7 +136,7 @@ class BotIntegrationTests(unittest.TestCase):
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
                 token="x",
-                allowed_chat_ids=None,
+                allowed_chat_ids={1, 123, 456, 573159993},
                 notify_chat_ids=set(),
                 admin_user_id=123,
                 state_path=str(db_path),
@@ -219,7 +219,7 @@ class BotIntegrationTests(unittest.TestCase):
                 chat_id=1,
                 telegram_config=TelegramConfig(
                     token="x",
-                    allowed_chat_ids=None,
+                    allowed_chat_ids={1, 123, 456, 573159993},
                     notify_chat_ids=set(),
                     state_path=str(db_path),
                     retry_queue_path=str(db_path),
@@ -237,7 +237,7 @@ class BotIntegrationTests(unittest.TestCase):
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
                 token="x",
-                allowed_chat_ids=None,
+                allowed_chat_ids={1, 123, 456, 573159993},
                 notify_chat_ids=set(),
                 admin_user_id=123,
                 state_path=str(db_path),
@@ -269,7 +269,7 @@ class BotIntegrationTests(unittest.TestCase):
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
                 token="x",
-                allowed_chat_ids=None,
+                allowed_chat_ids={1, 123, 456, 573159993},
                 notify_chat_ids=set(),
                 admin_user_id=123,
                 state_path=str(db_path),
@@ -308,7 +308,7 @@ class BotIntegrationTests(unittest.TestCase):
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
                 token="x",
-                allowed_chat_ids=None,
+                allowed_chat_ids={1, 123, 456, 573159993},
                 notify_chat_ids={456},
                 admin_user_id=123,
                 state_path=str(db_path),
@@ -373,7 +373,7 @@ class BotIntegrationTests(unittest.TestCase):
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
                 token="x",
-                allowed_chat_ids=None,
+                allowed_chat_ids={1, 123, 456, 573159993},
                 notify_chat_ids=set(),
                 state_path=str(db_path),
                 retry_queue_path=str(db_path),
@@ -442,7 +442,7 @@ class BotIntegrationTests(unittest.TestCase):
 
             config = TelegramConfig(
                 token="x",
-                allowed_chat_ids=None,
+                allowed_chat_ids={1, 123, 456, 573159993},
                 notify_chat_ids={123},
                 state_path=str(db_path),
                 retry_queue_path=str(db_path),
@@ -502,7 +502,7 @@ class BotIntegrationTests(unittest.TestCase):
 
             config = TelegramConfig(
                 token="x",
-                allowed_chat_ids=None,
+                allowed_chat_ids={1, 123, 456, 573159993},
                 notify_chat_ids={123},
                 state_path=str(db_path),
                 retry_queue_path=str(db_path),
@@ -523,7 +523,7 @@ class BotIntegrationTests(unittest.TestCase):
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
                 token="x",
-                allowed_chat_ids=None,
+                allowed_chat_ids={1, 123, 456, 573159993},
                 notify_chat_ids={456},
                 state_path=str(db_path),
                 retry_queue_path=str(db_path),
@@ -562,7 +562,7 @@ class BotIntegrationTests(unittest.TestCase):
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
                 token="x",
-                allowed_chat_ids=None,
+                allowed_chat_ids={1, 123, 456, 573159993},
                 notify_chat_ids={456},
                 state_path=str(db_path),
                 retry_queue_path=str(db_path),
@@ -657,7 +657,7 @@ class BotIntegrationTests(unittest.TestCase):
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
                 token="x",
-                allowed_chat_ids=None,
+                allowed_chat_ids={1, 123, 456, 573159993},
                 notify_chat_ids={456},
                 state_path=str(db_path),
                 retry_queue_path=str(db_path),
@@ -718,7 +718,7 @@ class BotIntegrationTests(unittest.TestCase):
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
                 token="x",
-                allowed_chat_ids=None,
+                allowed_chat_ids={1, 123, 456, 573159993},
                 notify_chat_ids={456},
                 admin_user_id=999,
                 state_path=str(db_path),
@@ -756,7 +756,7 @@ class BotIntegrationTests(unittest.TestCase):
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
                 token="x",
-                allowed_chat_ids=None,
+                allowed_chat_ids={1, 123, 456, 573159993},
                 notify_chat_ids={456},
                 state_path=str(db_path),
                 retry_queue_path=str(db_path),
@@ -809,7 +809,7 @@ class BotIntegrationTests(unittest.TestCase):
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
                 token="x",
-                allowed_chat_ids=None,
+                allowed_chat_ids={1, 123, 456, 573159993},
                 notify_chat_ids={456},
                 state_path=str(db_path),
                 retry_queue_path=str(db_path),
@@ -846,7 +846,7 @@ class BotIntegrationTests(unittest.TestCase):
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
                 token="x",
-                allowed_chat_ids=None,
+                allowed_chat_ids={1, 123, 456, 573159993},
                 notify_chat_ids={456},
                 state_path=str(db_path),
                 retry_queue_path=str(db_path),
@@ -877,7 +877,7 @@ class BotIntegrationTests(unittest.TestCase):
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
                 token="x",
-                allowed_chat_ids=None,
+                allowed_chat_ids={1, 123, 456, 573159993},
                 notify_chat_ids={456},
                 state_path=str(db_path),
                 retry_queue_path=str(db_path),
@@ -940,7 +940,7 @@ class BotIntegrationTests(unittest.TestCase):
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
                 token="x",
-                allowed_chat_ids=None,
+                allowed_chat_ids={1, 123, 456, 573159993},
                 notify_chat_ids={456},
                 state_path=str(db_path),
                 retry_queue_path=str(db_path),
@@ -984,7 +984,7 @@ class BotIntegrationTests(unittest.TestCase):
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
                 token="x",
-                allowed_chat_ids=None,
+                allowed_chat_ids={1, 123, 456, 573159993},
                 notify_chat_ids={456},
                 state_path=str(db_path),
                 retry_queue_path=str(db_path),
