@@ -1,0 +1,31 @@
+name: Maintenance task
+description: Track a small internal improvement for solo maintenance.
+title: "[Task] "
+labels:
+  - chore
+body:
+  - type: input
+    id: objective
+    attributes:
+      label: Objective
+      description: Single-sentence objective.
+      placeholder: Keep this task scoped and concrete.
+    validations:
+      required: true
+  - type: textarea
+    id: checklist
+    attributes:
+      label: Checklist
+      description: Bullet list of concrete actions.
+      placeholder: |
+        - [ ] Action 1
+        - [ ] Action 2
+    validations:
+      required: true
+  - type: textarea
+    id: done_definition
+    attributes:
+      label: Definition of done
+      description: How do you know this task is complete?
+    validations:
+      required: true
