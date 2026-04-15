@@ -35,13 +35,11 @@ Questo documento raccoglie una proposta pragmatica per ripulire il progetto `eBa
 
 ## 2) Priorità media (stabilizzazione)
 
-### 2.1 Snellire il wrapper legacy `src/telegram_bot.py`
+### 2.1 (Completata) Rimozione wrapper legacy entrypoint
 
-- Il wrapper importa moltissimi simboli con `# ruff: noqa` per retrocompatibilità.
-- Piano:
-  - deprecare gradualmente i re-export non necessari;
-  - mantenere solo il minimo entrypoint (`run_bot`) + alias strettamente necessari;
-  - documentare deadline di rimozione nel changelog.
+- I wrapper legacy `src/telegram_bot.py` e `src/ebay_cf_tool.py` sono stati rimossi.
+- Gli script console puntano direttamente ai moduli del package (`ebay_cf.bot`, `ebay_cf.cli`).
+- Eventuali import legacy esterni vanno migrati verso i moduli interni del package.
 
 ### 2.2 Rafforzare la rete safety net (typing + coverage)
 

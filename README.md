@@ -202,8 +202,8 @@ ebay-cf --format json --output risultati.json
 ### Esecuzione senza installazione
 
 ```bash
-python3 src/ebay_cf_tool.py --help
-python3 src/telegram_bot.py
+PYTHONPATH=src python3 -m ebay_cf.cli --help
+PYTHONPATH=src python3 -m ebay_cf.bot
 ```
 
 ### Utility operativa Git

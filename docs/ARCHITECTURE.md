@@ -239,6 +239,6 @@ Stato implementativo corrente:
 
 ## Compatibilita' mantenuta durante il refactor
 
-- `src/ebay_cf_tool.py` e `src/telegram_bot.py` restano wrapper compatibili
+- gli entrypoint di packaging puntano direttamente a `src/ebay_cf/cli.py` e `src/ebay_cf/bot.py`
 - i nomi storici delle API interne piu' patchati nei test restano disponibili come alias
 - il formato persistito in SQLite resta compatibile con il runbook operativo attuale

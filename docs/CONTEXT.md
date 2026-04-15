@@ -86,12 +86,8 @@ Non va trattato come:
 - `ebay-telegram-bot`
   - bot Telegram
 
-Compatibilita' con i vecchi entrypoint:
-
-- `src/ebay_cf_tool.py`
-- `src/telegram_bot.py`
-
-Questi restano come wrapper compatibili, ma la logica vera sta nel package interno.
+Gli entrypoint `ebay-cf` e `ebay-telegram-bot` puntano direttamente al package interno
+(`src/ebay_cf/cli.py` e `src/ebay_cf/bot.py`).
 
 Nota di stato:
 
