@@ -15,8 +15,6 @@ try:
 except ImportError:  # pragma: no cover - Windows
     fcntl = None
 
-from .application import fetch_environment_records as _fetch_environment_records
-from .application import fetch_tenant_records as _fetch_tenant_records
 from .bot_messaging import request_with_backoff
 from .bot_messaging import send_message as _send_message
 from .clients.telegram import ensure_long_polling, telegram_request
@@ -107,6 +105,7 @@ from .storage.sqlite import (
     load_tenant_retry_queue_entries,
     load_tenant_runtime_state,
     resolve_ebay_token_set,
+    resolve_linked_ebay_account,
     resolve_primary_chat_id,
     resolve_tenant_chat_context,
     save_retry_queue_entries,
@@ -170,7 +169,7 @@ from .telegram_commands import (
 from .telegram_commands import (
     record_fingerprint as _record_fingerprint,
 )
-from .tenant_credentials import decode_refresh_token
+from .tenant_credentials import decode_refresh_token, load_tenant_config_from_storage
 
 LOGGER = logging.getLogger("ebaycf.telegram_bot")
 COMMAND_CAPABILITIES: dict[str, str] = {
@@ -214,12 +213,8 @@ def coerce_order_record(record: OrderRecordLike) -> OrderRecord:
 
 
 def fetch_environment_records(ebay_environment: str, options) -> list[OrderRecord]:
-    records = _fetch_environment_records(
-        ebay_environment,
-        options,
-        load_config_fn=load_config,
-        fetch_records_fn=fetch_records,
-    )
+    config = load_config(ebay_environment)
+    records = fetch_records(config, options)
     return coerce_order_records(records)
 
 
@@ -230,16 +225,52 @@ def fetch_tenant_records(
     telegram_user_id: int | None,
     state_path: str,
 ) -> list[OrderRecord]:
-    records = _fetch_tenant_records(
+    records = _fetch_tenant_records_for_user(
         ebay_environment,
         options,
         telegram_user_id=telegram_user_id,
         state_path=state_path,
         allow_global_fallback=False,
-        load_config_fn=load_config,
-        fetch_records_fn=fetch_records,
     )
     return coerce_order_records(records)
+
+
+def _fetch_tenant_records_for_user(
+    ebay_environment: str,
+    options: FetchOptions,
+    *,
+    telegram_user_id: int | None,
+    state_path: str,
+    allow_global_fallback: bool,
+) -> list[OrderRecord]:
+    linked_account = None
+    resolved_environment = ebay_environment
+    if telegram_user_id and state_path:
+        linked_account = resolve_linked_ebay_account(state_path, telegram_user_id, ebay_environment)
+        if linked_account is not None and linked_account.environment:
+            resolved_environment = linked_account.environment
+
+    if linked_account is not None:
+        tenant_config = load_tenant_config_from_storage(
+            linked_account,
+            resolved_environment,
+            state_path,
+        )
+        if tenant_config is not None:
+            return fetch_records(tenant_config, options)
+
+    if telegram_user_id is not None and not allow_global_fallback:
+        if linked_account is not None:
+            raise ConfigurationError(
+                "Credenziali tenant eBay non disponibili per questo utente. "
+                "Completa di nuovo /connect per collegare un token valido."
+            )
+        raise ConfigurationError(
+            "Nessun account eBay collegato per questo utente. "
+            "Usa /connect per collegare il tuo account eBay."
+        )
+
+    return fetch_records(load_config(resolved_environment), options)
 
 
 def record_fingerprint(record: OrderRecordLike) -> str:
@@ -716,14 +747,12 @@ def maybe_send_new_order_notifications(
             ),
             fetch_records_for_environment_fn=lambda env, options, user_id=target.telegram_user_id: (
                 coerce_order_records(
-                    _fetch_tenant_records(
+                    _fetch_tenant_records_for_user(
                         env,
                         options,
                         telegram_user_id=user_id,
                         state_path=telegram_config.state_path,
                         allow_global_fallback=not strict_tenant_credentials,
-                        load_config_fn=load_config,
-                        fetch_records_fn=fetch_records,
                     )
                 )
             ),
@@ -985,14 +1014,12 @@ def process_message(
             options: FetchOptions,
         ) -> list[OrderRecord]:
             return coerce_order_records(
-                _fetch_tenant_records(
+                _fetch_tenant_records_for_user(
                     env,
                     options,
                     telegram_user_id=tenant_user_id,
                     state_path=telegram_config.state_path,
                     allow_global_fallback=not strict_tenant_credentials,
-                    load_config_fn=load_config,
-                    fetch_records_fn=fetch_records,
                 )
             )
 
