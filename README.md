@@ -56,10 +56,9 @@ Per mantenere il repository allineato alle best practice GitHub anche in contest
 
 Passi consigliati dopo il clone/fork:
 
-1. sostituisci `@CHANGE_ME` in `.github/CODEOWNERS` con il tuo username GitHub
-2. verifica branch protection su `main` (almeno: CI obbligatoria, linear history)
-3. abilita secret scanning e Dependabot alerts dal tab Security
-4. usa PR anche da branch personali per lasciare audit trail e checklist standard
+1. verifica branch protection su `main` (almeno: CI obbligatoria, linear history)
+2. abilita secret scanning e Dependabot alerts dal tab Security
+3. usa PR anche da branch personali per lasciare audit trail e checklist standard
 
 ## Setup Rapido
 
