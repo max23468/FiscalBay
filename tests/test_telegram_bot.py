@@ -117,7 +117,11 @@ class TelegramBotTests(unittest.TestCase):
         replies = process_message(
             text="/help",
             chat_id=1,
-            telegram_config=TelegramConfig(token="x", allowed_chat_ids={1, 123, 456, 573159993}, notify_chat_ids=set()),
+            telegram_config=TelegramConfig(
+                token="x",
+                allowed_chat_ids={1, 123, 456, 573159993},
+                notify_chat_ids=set(),
+            ),
             ebay_environment="production",
         )
         self.assertEqual(len(replies), 1)
@@ -129,7 +133,11 @@ class TelegramBotTests(unittest.TestCase):
         replies = process_message(
             text="/ping",
             chat_id=1,
-            telegram_config=TelegramConfig(token="x", allowed_chat_ids={1, 123, 456, 573159993}, notify_chat_ids=set()),
+            telegram_config=TelegramConfig(
+                token="x",
+                allowed_chat_ids={1, 123, 456, 573159993},
+                notify_chat_ids=set(),
+            ),
             ebay_environment="production",
         )
         self.assertEqual(replies, ["pong ✅"])
