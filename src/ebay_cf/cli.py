@@ -30,3 +30,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(f"Errore: {exc}", file=sys.stderr)
         return 1
     return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -276,7 +276,7 @@ Servizio non parte:
 - controlla `sudo systemctl status ebaycf-bot`
 - controlla `sudo journalctl -u ebaycf-bot -n 100 --no-pager`
 - verifica il file `${APP_DIR}/.env`
-- controlla che non esista una seconda istanza manuale di `python src/telegram_bot.py`
+- controlla che non esista una seconda istanza manuale di `ebay-telegram-bot`
 
 Health check fallisce:
 

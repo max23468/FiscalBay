@@ -1252,3 +1252,7 @@ def run_bot() -> int:
         maybe_send_new_order_notifications_fn=maybe_send_new_order_notifications,
         request_with_backoff_fn=request_with_backoff,
     )
+
+
+if __name__ == "__main__":
+    raise SystemExit(run_bot())
