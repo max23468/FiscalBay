@@ -13,7 +13,6 @@ Documenti collegati:
 
 ## In lavorazione
 
-- roadmap riallineata rimuovendo dalla checklist gli item gia' completati (chat private, account singolo per utente, workflow accesso approvato, mono-admin, viste `pending` e messaggistica accesso)
 - unificata la pianificazione residua in `docs/ROADMAP.md`, che ora contiene anche la checklist operativa aperta
 - il servizio viene ora descritto in modo coerente come bot pubblico con accesso approvato, non piu' come beta privata separata
 - la roadmap e' stata riorganizzata in fasi piu' pratiche: onboarding pubblico controllato, guardrail admin, lifecycle dati e consolidamento del servizio
