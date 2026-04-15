@@ -43,6 +43,23 @@ In pratica:
   - `EBAY_REFRESH_TOKEN`
 - per il bot: un token Telegram Bot API
 
+## Integrazione GitHub (solo maintainer)
+
+Per mantenere il repository allineato alle best practice GitHub anche in contesto single-maintainer, il progetto include:
+
+- workflow CI su push/PR (`.github/workflows/ci.yml`)
+- aggiornamenti automatici dipendenze con Dependabot (`.github/dependabot.yml`)
+- template per Pull Request (`.github/PULL_REQUEST_TEMPLATE.md`)
+- issue forms per bug e task operativi (`.github/ISSUE_TEMPLATE/*`)
+- `CODEOWNERS` per ownership esplicita (`.github/CODEOWNERS`)
+- security policy riconosciuta dalla Security tab (`SECURITY.md`)
+
+Passi consigliati dopo il clone/fork:
+
+1. verifica branch protection su `main` (almeno: CI obbligatoria, linear history)
+2. abilita secret scanning e Dependabot alerts dal tab Security
+3. usa PR anche da branch personali per lasciare audit trail e checklist standard
+
 ## Setup Rapido
 
 ### 1. Installa il progetto
