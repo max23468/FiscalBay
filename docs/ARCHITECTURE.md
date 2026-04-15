@@ -16,7 +16,6 @@ Documenti collegati:
 - `docs/INDEX.md`
 - `docs/CONTEXT.md`
 - `docs/DATA_MODEL.md`
-- `docs/adr/`
 
 ## Scopo
 
@@ -208,6 +207,31 @@ Stato implementativo corrente:
 - `/connect` riusa ora l'ultima sessione OAuth ancora pendente e valida per lo stesso tenant/environment, invece di accumulare nuove sessioni inutili a ogni invocazione ripetuta
 - esiste ora anche una `operation_queue` minima in SQLite per le operazioni sensibili differibili, oggi usata soprattutto per applicare in modo robusto i cambi di accesso utente
 - `reconcile.py` fornisce un worker periodico one-shot che processa la queue, riallinea accessi/chat/subscription, scade sessioni OAuth stale e corregge token attivi rimasti su account non piu' collegati
+
+## Decisioni consolidate del refactor (ex ADR)
+
+Le decisioni architetturali principali del refactor, prima tracciate in `docs/adr/`, sono ora consolidate in questa sezione.
+
+### DR-001 - Modularizzare runtime Telegram e parsing comandi
+
+- **Stato:** accettata
+- **Contesto:** il vecchio `bot.py` accentrava polling, parsing, rendering, notifiche e stato runtime, rendendo difficile test e manutenzione.
+- **Decisione:** separare responsabilita' in `telegram_commands.py` (parsing/rendering), `services/telegram_runtime.py` (lifecycle/polling) e `services/notifications.py` (auto-notify/retry), mantenendo `bot.py` come facciata compatibile e wiring.
+- **Conseguenze:** responsabilita' piu' chiare, test piu' mirati e minore accoppiamento tra UI Telegram e logica runtime.
+
+### DR-002 - Introdurre modelli tipizzati per stato runtime
+
+- **Stato:** accettata
+- **Contesto:** stato bot e retry queue erano modellati soprattutto come `dict`, con campi impliciti e controlli sparsi.
+- **Decisione:** introdurre in `models.py` i modelli `OrderRecord`, `BotMetrics`, `BotRuntimeState` e `RetryQueueEntry`, con adattatori tipizzati in storage mantenendo compatibilita' legacy dove necessario.
+- **Conseguenze:** contratti interni piu' espliciti, conversioni concentrate e minore dipendenza da payload raw di persistenza.
+
+### DR-003 - Centralizzare retry e classificazione errori
+
+- **Stato:** accettata
+- **Contesto:** retry HTTP e classificazione errori erano distribuiti tra runtime, client e operativita', con logica duplicata.
+- **Decisione:** centralizzare la policy in `retry.py` e la gerarchia errori applicativa in `errors.py`, mantenendo alias compatibili nei client dove utile ai test/integrazioni.
+- **Conseguenze:** backoff coerente tra eBay/Telegram/runtime, log piu' uniformi e errori meglio distinguibili.
 
 ## Decisione database per il servizio attuale
 
