@@ -50,7 +50,7 @@ class EbayCfToolTests(unittest.TestCase):
     @patch("src.ebay_cf.clients.ebay.logger")
     @patch("src.ebay_cf.clients.ebay.time.sleep", autospec=True)
     @patch("src.ebay_cf.clients.ebay.make_request_once")
-    def test_make_request_retries_transient_http(self, mock_once, mock_sleep, mock_logger) -> None:
+    def test_make_request_retries_transient_http(self, mock_once, mock_sleep, _mock_logger) -> None:
         mock_once.side_effect = [
             EbayApiError("HTTP 503", status_code=503),
             {"ok": True},

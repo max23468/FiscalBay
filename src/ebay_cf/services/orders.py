@@ -9,7 +9,7 @@ import logging
 import os
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Iterable, Mapping, Optional, Sequence
+from typing import Iterable, Mapping, Optional, Sequence, TypeAlias
 
 from ..clients.ebay import get_access_token, get_order_detail, get_orders
 from ..errors import EbayApiError
@@ -18,6 +18,17 @@ from ..models import Config, FetchOptions, OrderRecord
 DEFAULT_PAGE_SIZE = 50
 
 logger = logging.getLogger(__name__)
+
+JsonValue: TypeAlias = object
+OrderPayload: TypeAlias = Mapping[str, JsonValue]
+
+
+def _as_mapping(value: object) -> Mapping[str, JsonValue]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _as_sequence(value: object) -> Sequence[object]:
+    return value if isinstance(value, Sequence) and not isinstance(value, (str, bytes)) else ()
 
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
@@ -83,9 +94,12 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def get_csv_fieldnames(records: Sequence[OrderRecord]) -> list[str]:
+def get_csv_fieldnames(records: Sequence[OrderRecord | Mapping[str, object]]) -> list[str]:
     if records:
-        return list(records[0].as_dict().keys())
+        first = records[0]
+        if isinstance(first, OrderRecord):
+            return list(first.as_dict().keys())
+        return list(first.keys())
     return list(OrderRecord().as_dict().keys())
 
 
@@ -106,43 +120,38 @@ def order_detail_delay_seconds() -> float:
     return max(0.0, float(raw))
 
 
-def choose_tax_identifier(order: Mapping[str, Any]) -> Optional[Mapping[str, Any]]:
-    buyer = order.get("buyer")
-    if not isinstance(buyer, Mapping):
-        return None
-    tax_identifier = buyer.get("taxIdentifier")
-    if isinstance(tax_identifier, Mapping):
-        return tax_identifier
-    return None
+def choose_tax_identifier(order: OrderPayload) -> Optional[OrderPayload]:
+    tax_identifier = _as_mapping(order.get("buyer")).get("taxIdentifier")
+    return _as_mapping(tax_identifier) or None
 
 
-def extract_record(order: Mapping[str, Any]) -> OrderRecord:
-    buyer = order.get("buyer")
-    buyer_mapping = buyer if isinstance(buyer, Mapping) else {}
+def extract_record(order: OrderPayload) -> OrderRecord:
+    buyer_mapping = _as_mapping(order.get("buyer"))
     tax_identifier = choose_tax_identifier(order) or {}
-    taxpayer_id = tax_identifier.get("taxpayerId") or ""
-    tax_type = tax_identifier.get("taxIdentifierType") or ""
+    taxpayer_id = str(tax_identifier.get("taxpayerId") or "")
+    tax_type = str(tax_identifier.get("taxIdentifierType") or "")
 
-    line_items = order.get("lineItems") or []
+    line_items = _as_sequence(order.get("lineItems"))
     items_desc = []
     for item in line_items:
+        if not isinstance(item, Mapping):
+            continue
         qty = item.get("quantity", 1)
         title = item.get("title", "")
         items_desc.append(f"{qty}x {title}")
     items_str = ", ".join(items_desc) if items_desc else "N/D"
 
-    pricing = order.get("pricingSummary") or {}
-    total = pricing.get("total") or {}
+    pricing = _as_mapping(order.get("pricingSummary"))
+    total = _as_mapping(pricing.get("total"))
     total_str = f"{total.get('value', '0.00')} {total.get('currency', 'EUR')}"
 
     shipping_addr_str = "N/D"
-    fsi = order.get("fulfillmentStartInstructions") or []
-    if fsi and isinstance(fsi, list):
-        first_instruction = fsi[0] if isinstance(fsi[0], Mapping) else {}
+    fsi = _as_sequence(order.get("fulfillmentStartInstructions"))
+    if fsi:
+        first_instruction = _as_mapping(fsi[0])
         shipping_step = first_instruction.get("shippingStep")
-        ship_to = shipping_step.get("shipTo", {}) if isinstance(shipping_step, Mapping) else {}
-        contact = ship_to.get("contactAddress") if isinstance(ship_to, Mapping) else {}
-        contact_mapping = contact if isinstance(contact, Mapping) else {}
+        ship_to = _as_mapping(_as_mapping(shipping_step).get("shipTo"))
+        contact_mapping = _as_mapping(ship_to.get("contactAddress"))
         name = ship_to.get("fullName") or ""
         lines = [
             contact_mapping.get("addressLine1"),
@@ -163,15 +172,13 @@ def extract_record(order: Mapping[str, Any]) -> OrderRecord:
         buyerUsername=buyer_mapping.get("username", ""),
         buyerName=(
             (
-                buyer_mapping.get("taxAddress", {}).get("fullName", "")
-                if isinstance(buyer_mapping.get("taxAddress"), Mapping)
-                else ""
+                _as_mapping(buyer_mapping.get("taxAddress")).get("fullName", "")
             )
             or buyer_mapping.get("fullName", "")
         ),
         taxpayerId=taxpayer_id,
         taxIdentifierType=tax_type,
-        issuingCountry=tax_identifier.get("issuingCountry", ""),
+        issuingCountry=str(tax_identifier.get("issuingCountry", "")),
         found="yes" if taxpayer_id else "no",
         items=items_str,
         total=total_str,
@@ -250,7 +257,7 @@ def resolve_date_window_from_options(options: FetchOptions) -> tuple[datetime, d
 
 def fetch_records(config: Config, options: FetchOptions) -> list[OrderRecord]:
     access_token = get_access_token(config)
-    details: list[Mapping[str, Any]] = []
+    details: list[OrderPayload] = []
     order_ids = options.order_ids or []
     delay = order_detail_delay_seconds()
 
