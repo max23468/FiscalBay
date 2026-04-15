@@ -19,8 +19,8 @@ Indice centrale della documentazione del progetto.
   - modelli attuali e modelli futuri previsti
 - `docs/OAUTH_FLOW.md`
   - flusso target del futuro onboarding OAuth
-- `docs/adr/`
-  - decisioni architetturali persistenti
+- `docs/ARCHITECTURE.md` (sezione decisioni consolidate)
+  - decisioni architetturali persistenti del refactor
 
 ## Operativita'
 

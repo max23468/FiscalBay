@@ -52,7 +52,7 @@ Deliverable principali:
 
 - refactor residuo su modelli, retry, errori e stato locale
 - riduzione accoppiamento tra CLI, bot e moduli applicativi
-- ADR leggere sulle decisioni architetturali
+- decisioni architetturali consolidate in `docs/ARCHITECTURE.md`
 
 ### M3 - Operativita' e osservabilita'
 

@@ -40,7 +40,7 @@ Documenti collegati:
 - modelli tipizzati in `src/ebay_cf/models.py` per stato bot, metriche, retry queue e ordini normalizzati.
 - modelli tipizzati `TelegramUser` e `LinkedEbayAccount` in `src/ebay_cf/models.py` per preparare la fase multiutente.
 - API storage tipizzate in `src/ebay_cf/storage/sqlite.py` per stato runtime e retry queue.
-- ADR leggere in `docs/adr/` per documentare le decisioni principali del refactor fase 2.
+- decisioni architetturali del refactor fase 2 consolidate in `docs/ARCHITECTURE.md` (sezione dedicata).
 
 ### Changed
 
