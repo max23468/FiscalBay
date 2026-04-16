@@ -15,7 +15,6 @@ In caso di conflitto, seguire sempre il livello più alto.
 ## Principi generali
 - Effettua cambi minimi e mirati al task richiesto.
 - Non introdurre refactor non richiesti nello stesso intervento.
-- Mantieni backward compatibility salvo richiesta esplicita.
 - Preferisci chiarezza e leggibilità a soluzioni "furbe".
 - Non inserire segreti o credenziali nel codice o nei log.
 
