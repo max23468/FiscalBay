@@ -28,7 +28,6 @@ In caso di conflitto, seguire sempre il livello più alto.
 Prima di finalizzare:
 1. Esegui almeno i test/controlli strettamente rilevanti alla modifica.
 2. Se non puoi eseguirli (limiti ambiente/tempo), dichiaralo esplicitamente.
-3. Riporta sempre i comandi eseguiti e l'esito.
 
 ## Commit e PR
 - Crea commit atomici con messaggio chiaro.
