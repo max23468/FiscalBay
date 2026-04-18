@@ -1,2 +1,11 @@
 # Keep ownership explicit even for solo maintenance.
 * @max23468
+
+# Keep areas explicit so future growth has an easy migration path.
+/.github/ @max23468
+/deploy/ @max23468
+/docs/ @max23468
+/src/ @max23468
+/tests/ @max23468
+/README.md @max23468
+/SECURITY.md @max23468
