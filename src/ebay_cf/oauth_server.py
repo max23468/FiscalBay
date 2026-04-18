@@ -170,6 +170,79 @@ def render_html_page(title: str, message: str, *, is_error: bool = False) -> byt
     return body.encode("utf-8")
 
 
+def render_action_html_page(
+    title: str,
+    message: str,
+    *,
+    is_error: bool = False,
+    action_label: str = "",
+    action_url: str = "",
+    hint: str = "",
+    auto_redirect_seconds: int | None = None,
+) -> bytes:
+    accent = "#9a3412" if is_error else "#166534"
+    badge = "Errore" if is_error else "OK"
+    safe_title = html.escape(title)
+    safe_message = html.escape(message)
+    safe_hint = html.escape(hint)
+    safe_action_label = html.escape(action_label)
+    safe_action_url = html.escape(action_url, quote=True)
+    meta_refresh = ""
+    refresh_hint = ""
+    if auto_redirect_seconds is not None and action_url:
+        meta_refresh = (
+            f"<meta http-equiv='refresh' content='{max(0, int(auto_redirect_seconds))};"
+            f"url={safe_action_url}'>"
+        )
+        refresh_hint = (
+            "<p class='muted'>Se non succede nulla automaticamente, usa il pulsante qui sotto.</p>"
+        )
+    action_block = ""
+    if action_label and action_url:
+        action_block = (
+            f"<p><a class='button' href='{safe_action_url}'>{safe_action_label}</a></p>"
+            f"{refresh_hint}"
+        )
+    hint_block = f"<p class='muted'>{safe_hint}</p>" if safe_hint else ""
+    body = (
+        "<!doctype html><html lang='it'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        f"{meta_refresh}"
+        f"<title>{safe_title}</title>"
+        "<style>"
+        "body{font-family:ui-sans-serif,system-ui,sans-serif;background:#f6f7f9;"
+        "color:#111827;padding:40px;}"
+        ".card{max-width:720px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;"
+        "border-radius:16px;padding:28px;box-shadow:0 18px 40px rgba(17,24,39,.08);}"
+        f".badge{{display:inline-block;background:{accent};color:#fff;border-radius:999px;"
+        "padding:6px 10px;font-size:12px;font-weight:700;"
+        "letter-spacing:.04em;text-transform:uppercase;}}"
+        "h1{margin:16px 0 10px;font-size:28px;}"
+        "p{line-height:1.6;font-size:16px;color:#374151;}"
+        ".muted{font-size:14px;color:#6b7280;}"
+        ".button{display:inline-block;background:#111827;color:#fff;text-decoration:none;"
+        "padding:12px 18px;border-radius:12px;font-weight:700;}"
+        "</style></head><body><div class='card'>"
+        f"<span class='badge'>{badge}</span><h1>{safe_title}</h1><p>{safe_message}</p>"
+        f"{action_block}{hint_block}</div></body></html>"
+    )
+    return body.encode("utf-8")
+
+
+def render_oauth_start_page(redirect_url: str) -> bytes:
+    return render_action_html_page(
+        "Continua con eBay",
+        (
+            "Stai per essere reindirizzato alla pagina di autorizzazione eBay. "
+            "Completa il consenso nello stesso browser e poi torna pure su Telegram."
+        ),
+        action_label="Continua su eBay",
+        action_url=redirect_url,
+        hint=("Se chiudi questa pagina prima del consenso, il collegamento non verra' completato."),
+        auto_redirect_seconds=0,
+    )
+
+
 def describe_provider_error(error_value: str) -> OAuthFailurePresentation:
     normalized = error_value.strip().lower()
     if normalized in {"access_denied", "user_canceled", "user_cancelled"}:
@@ -478,7 +551,9 @@ def complete_oauth_link(
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"🪪 Account: <code>{html.escape(ebay_user_id)}</code>\n"
             f"🌍 Ambiente: <code>{html.escape(session.environment)}</code>\n"
-            "Ora puoi usare <code>/account</code> per controllare lo stato."
+            "Ora puoi usare <code>/account</code> per controllare lo stato,\n"
+            "<code>/settings</code> per verificare la chat e "
+            "<code>/ultimi</code> per controllare gli ordini recenti."
         ),
     )
     return OAuthCallbackResult(
@@ -527,10 +602,7 @@ class OAuthHandler(BaseHTTPRequestHandler):
                 render_html_page("Collegamento non disponibile", str(exc), is_error=True),
             )
             return
-
-        self.send_response(HTTPStatus.FOUND)
-        self.send_header("Location", redirect_url)
-        self.end_headers()
+        self._write_response(HTTPStatus.OK, render_oauth_start_page(redirect_url))
 
     def _handle_callback(self, params: dict[str, list[str]]) -> None:
         oauth_state = (params.get("state") or [""])[0]
@@ -622,9 +694,15 @@ class OAuthHandler(BaseHTTPRequestHandler):
 
         self._write_response(
             HTTPStatus.OK,
-            render_html_page(
+            render_action_html_page(
                 "Collegamento riuscito",
-                "Puoi tornare su Telegram: il bot ha gia' confermato il collegamento.",
+                (
+                    "Puoi tornare su Telegram: il bot ha gia' confermato il collegamento "
+                    "e ti aspetta li'."
+                ),
+                action_label="Apri Telegram",
+                action_url="https://t.me/",
+                hint="Se l'app Telegram e' gia' aperta, puoi semplicemente chiudere questa pagina.",
             ),
         )
 

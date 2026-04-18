@@ -12,6 +12,8 @@ from src.ebay_cf.oauth_server import (
     describe_provider_error,
     oauth_callback_url,
     oauth_runame,
+    render_action_html_page,
+    render_oauth_start_page,
 )
 from src.ebay_cf.storage.sqlite import (
     create_oauth_link_session,
@@ -23,6 +25,27 @@ from src.ebay_cf.storage.sqlite import (
 
 
 class OAuthServerTests(unittest.TestCase):
+    def test_render_oauth_start_page_contains_cta_and_refresh(self) -> None:
+        body = render_oauth_start_page("https://example.com/continue").decode("utf-8")
+
+        self.assertIn("Continua con eBay", body)
+        self.assertIn("Continua su eBay", body)
+        self.assertIn("https://example.com/continue", body)
+        self.assertIn("http-equiv='refresh'", body)
+
+    def test_render_action_html_page_can_include_hint_and_action(self) -> None:
+        body = render_action_html_page(
+            "Collegamento riuscito",
+            "Messaggio di conferma",
+            action_label="Apri Telegram",
+            action_url="https://t.me/",
+            hint="Puoi chiudere questa pagina.",
+        ).decode("utf-8")
+
+        self.assertIn("Apri Telegram", body)
+        self.assertIn("https://t.me/", body)
+        self.assertIn("Puoi chiudere questa pagina.", body)
+
     def test_describe_provider_error_for_user_cancelled(self) -> None:
         presentation = describe_provider_error("access_denied")
 
@@ -167,6 +190,10 @@ class OAuthServerTests(unittest.TestCase):
             self.assertEqual(audit_entries[0].outcome, "linked")
             self.assertEqual(audit_entries[0].ebay_user_id, "real-ebay-user")
             send_message_mock.assert_called_once()
+            success_message = send_message_mock.call_args.args[2]
+            self.assertIn("/account", success_message)
+            self.assertIn("/settings", success_message)
+            self.assertIn("/ultimi", success_message)
 
 
 if __name__ == "__main__":
