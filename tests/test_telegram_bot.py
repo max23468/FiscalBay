@@ -81,6 +81,12 @@ class TelegramBotTests(unittest.TestCase):
         options = options_for_command("/ordine", ["12-34567-89012"])
         self.assertEqual(options.order_ids, ["12-34567-89012"])
         self.assertFalse(options.only_found)
+        self.assertTrue(options.include_details)
+
+    def test_options_for_command_tutti_uses_summary_mode(self) -> None:
+        options = options_for_command("/tutti", ["7", "20"])
+        self.assertFalse(options.only_found)
+        self.assertFalse(options.include_details)
 
     def test_options_for_command_rejects_days_out_of_range(self) -> None:
         with self.assertRaises(TelegramApiError):
@@ -107,6 +113,7 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("/ultimi", text)
         self.assertIn("/ordine", text)
         self.assertIn("/settings", text)
+        self.assertIn("/leave_bot", text)
         self.assertIn("/reconnect_status", text)
         self.assertIn("/why_not_notified", text)
         self.assertIn("/notifications on", text)

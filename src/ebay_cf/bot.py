@@ -21,6 +21,7 @@ from .application import (
 from .application import resolve_fetch_context as _resolve_fetch_context
 from .bot_messaging import request_with_backoff
 from .bot_messaging import send_message as _send_message
+from .clients.ebay import revoke_user_refresh_token
 from .clients.telegram import InlineKeyboardMarkup, ensure_long_polling, telegram_request
 from .config import configure_logging, load_config, load_telegram_config
 from .errors import ConfigurationError, TelegramApiError
@@ -45,6 +46,7 @@ from .models import (
     BotRuntimeStateLike,
     FetchOptions,
     JsonObject,
+    LinkedEbayAccount,
     NotificationSubscription,
     OauthLinkSession,
     OrderRecord,
@@ -97,6 +99,7 @@ from .services.telegram_runtime import (
 )
 from .storage.sqlite import (
     append_audit_log_entry,
+    apply_telegram_user_access_status,
     create_oauth_link_session,
     disconnect_linked_ebay_account,
     ensure_parent_dir,
@@ -108,6 +111,7 @@ from .storage.sqlite import (
     load_telegram_chats,
     load_telegram_user,
     load_telegram_users,
+    load_tenant_account_status_cache,
     load_tenant_retry_queue_entries,
     load_tenant_runtime_state,
     resolve_ebay_token_set,
@@ -150,6 +154,7 @@ from .telegram_commands import (
     format_admin_user_list,
     format_connect_status,
     format_disconnect_status,
+    format_leave_status,
     format_notifications_status,
     format_order_notification_summary,
     format_reconnect_status,
@@ -189,6 +194,7 @@ COMMAND_CAPABILITIES: dict[str, str] = {
     "/reconnect_status": CAPABILITY_VIEW_ACCOUNT,
     "/connect": CAPABILITY_CONNECT_ACCOUNT,
     "/disconnect": CAPABILITY_CONNECT_ACCOUNT,
+    "/leave_bot": CAPABILITY_MANAGE_SETTINGS,
     "/notifications": CAPABILITY_MANAGE_NOTIFICATIONS,
     "/settings": CAPABILITY_MANAGE_SETTINGS,
     "/why_not_notified": CAPABILITY_VIEW_ORDERS,
@@ -206,6 +212,44 @@ def coerce_runtime_state(state: BotRuntimeStateLike) -> BotRuntimeState:
     if isinstance(state, BotRuntimeState):
         return state
     return BotRuntimeState.from_mapping(state)
+
+
+def _disconnect_account_with_remote_revocation(
+    *,
+    telegram_config: TelegramConfig,
+    telegram_user_id: int,
+    environment: str,
+) -> tuple[LinkedEbayAccount | None, str, str]:
+    linked_account = resolve_linked_ebay_account(
+        telegram_config.state_path,
+        telegram_user_id,
+        environment,
+    )
+    remote_revocation_status = "not_attempted"
+    remote_revocation_detail = ""
+    if linked_account is not None:
+        tenant_config = load_tenant_config_from_storage(
+            linked_account,
+            environment,
+            telegram_config.state_path,
+        )
+        if tenant_config is None:
+            remote_revocation_status = "skipped"
+            remote_revocation_detail = "refresh token tenant non disponibile"
+        else:
+            try:
+                revoke_user_refresh_token(tenant_config)
+            except Exception as exc:
+                remote_revocation_status = "failed"
+                remote_revocation_detail = str(exc)
+            else:
+                remote_revocation_status = "revoked"
+    disconnected_account = disconnect_linked_ebay_account(
+        telegram_config.state_path,
+        telegram_user_id,
+        environment,
+    )
+    return disconnected_account, remote_revocation_status, remote_revocation_detail
 
 
 def coerce_order_records(records: list[OrderRecordLike]) -> list[OrderRecord]:
@@ -824,6 +868,26 @@ def maybe_send_new_order_notifications(
         return
 
     for target in tenant_targets:
+        cached_account_status = load_tenant_account_status_cache(
+            telegram_config.state_path,
+            target.telegram_user_id,
+        )
+        cached_status = str(cached_account_status.get("account_status") or "unlinked")
+        cached_token_status = str(cached_account_status.get("token_status") or "missing")
+        if cached_status in {"disconnected", "revoked"} or cached_token_status in {
+            "revoked",
+            "expired",
+            "token_expired",
+        }:
+            log_event(
+                LOGGER,
+                logging.INFO,
+                "notify_tenant_skipped",
+                telegram_user_id=target.telegram_user_id,
+                environment=target.environment,
+                reason="tenant_reconnect_cached",
+            )
+            continue
         token_set = resolve_ebay_token_set(
             telegram_config.state_path,
             target.telegram_user_id,
@@ -995,7 +1059,48 @@ def process_message(
         return ["Solo l'admin puo' usare questo comando."]
 
     if command == "/users":
-        return [format_admin_user_list(load_telegram_users(telegram_config.state_path))]
+        user_rows: list[dict[str, object]] = []
+        for user in load_telegram_users(telegram_config.state_path):
+            account_status = summarize_tenant_account_status(
+                telegram_config.state_path,
+                user.telegram_user_id,
+                "",
+            )
+            operational_state = "waiting_connect"
+            if user.status == TELEGRAM_USER_STATUS_PENDING:
+                operational_state = "pending"
+            elif user.status == TELEGRAM_USER_STATUS_BLOCKED:
+                operational_state = "blocked"
+            elif user.status == TELEGRAM_USER_STATUS_ADMIN:
+                operational_state = "admin"
+            else:
+                raw_account_status = str(account_status.get("account_status") or "unlinked")
+                raw_token_status = str(account_status.get("token_status") or "missing")
+                if raw_account_status == "linked" and raw_token_status == "active":
+                    operational_state = "ready"
+                elif raw_account_status in {"revoked"} or raw_token_status in {
+                    "revoked",
+                    "expired",
+                    "token_expired",
+                }:
+                    operational_state = "reconnect_required"
+                else:
+                    operational_state = "waiting_connect"
+            user_rows.append(
+                {
+                    "telegram_user_id": user.telegram_user_id,
+                    "telegram_chat_id": user.telegram_chat_id,
+                    "username": user.username,
+                    "display_name": user.display_name,
+                    "status": user.status,
+                    "operational_state": operational_state,
+                    "account_status": account_status.get("account_status"),
+                    "token_status": account_status.get("token_status"),
+                    "environment": account_status.get("environment"),
+                    "ebay_user_id": account_status.get("ebay_user_id"),
+                }
+            )
+        return [format_admin_user_list(user_rows)]
 
     if command in {"/approve_user", "/reject_user"}:
         if not args:
@@ -1372,10 +1477,14 @@ def process_message(
                 "❌ <b>Scollega account eBay</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 "Questa chat non e' ancora associata a un tenant Telegram noto."
             ]
-        disconnected_account = disconnect_linked_ebay_account(
-            telegram_config.state_path,
-            resolved_telegram_user_id,
-            resolved_environment,
+        (
+            disconnected_account,
+            remote_revocation_status,
+            remote_revocation_detail,
+        ) = _disconnect_account_with_remote_revocation(
+            telegram_config=telegram_config,
+            telegram_user_id=resolved_telegram_user_id,
+            environment=resolved_environment,
         )
         _append_audit_log(
             telegram_config,
@@ -1388,7 +1497,24 @@ def process_message(
                 disconnected_account.ebay_user_id if disconnected_account is not None else ""
             ),
             environment=resolved_environment,
-            outcome="disconnected" if disconnected_account is not None else "noop",
+            outcome=(
+                "disconnected_remote_revoked"
+                if disconnected_account is not None and remote_revocation_status == "revoked"
+                else (
+                    "disconnected_remote_failed"
+                    if disconnected_account is not None and remote_revocation_status == "failed"
+                    else ("disconnected" if disconnected_account is not None else "noop")
+                )
+            ),
+            details={
+                "remote_revocation_status": remote_revocation_status,
+                "remote_revocation_detail": remote_revocation_detail,
+            },
+        )
+        summarize_tenant_account_status(
+            telegram_config.state_path,
+            resolved_telegram_user_id,
+            resolved_environment,
         )
         return [
             format_disconnect_status(
@@ -1402,6 +1528,91 @@ def process_message(
                         if disconnected_account
                         else resolved_environment
                     ),
+                    "remote_revocation_status": remote_revocation_status,
+                    "remote_revocation_detail": remote_revocation_detail,
+                }
+            )
+        ]
+
+    if command == "/leave_bot":
+        if resolved_telegram_user_id is None:
+            return [
+                "🚪 <b>Disattiva uso bot</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "Questa chat non e' ancora associata a un tenant Telegram noto."
+            ]
+        current_user = load_telegram_user(
+            telegram_config.state_path,
+            resolved_telegram_user_id,
+        )
+        current_status = normalize_telegram_user_status(
+            current_user.status if current_user is not None else TELEGRAM_USER_STATUS_NEW
+        )
+        if current_status == TELEGRAM_USER_STATUS_ADMIN:
+            return [
+                "🚪 <b>Disattiva uso bot</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "Per un account admin questo comando non e' disponibile.\n"
+                "Usa <code>/disconnect</code> se vuoi scollegare solo eBay."
+            ]
+        timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        (
+            disconnected_account,
+            remote_revocation_status,
+            remote_revocation_detail,
+        ) = _disconnect_account_with_remote_revocation(
+            telegram_config=telegram_config,
+            telegram_user_id=resolved_telegram_user_id,
+            environment=resolved_environment,
+        )
+        applied_user = apply_telegram_user_access_status(
+            telegram_config.state_path,
+            resolved_telegram_user_id,
+            TELEGRAM_USER_STATUS_NEW,
+            updated_at=timestamp,
+        )
+        _append_audit_log(
+            telegram_config,
+            event_type="leave_bot",
+            created_at=timestamp,
+            actor_telegram_user_id=resolved_telegram_user_id,
+            target_telegram_user_id=resolved_telegram_user_id,
+            telegram_chat_id=chat_id,
+            ebay_user_id=(
+                disconnected_account.ebay_user_id if disconnected_account is not None else ""
+            ),
+            environment=resolved_environment,
+            outcome=(
+                "left_bot_remote_revoked"
+                if remote_revocation_status == "revoked"
+                else (
+                    "left_bot_remote_failed" if remote_revocation_status == "failed" else "left_bot"
+                )
+            ),
+            details={
+                "previous_status": current_status,
+                "new_status": applied_user.status if applied_user is not None else "new",
+                "remote_revocation_status": remote_revocation_status,
+                "remote_revocation_detail": remote_revocation_detail,
+            },
+        )
+        summarize_tenant_account_status(
+            telegram_config.state_path,
+            resolved_telegram_user_id,
+            resolved_environment,
+        )
+        return [
+            format_leave_status(
+                {
+                    "account_was_linked": disconnected_account is not None,
+                    "ebay_user_id": (
+                        disconnected_account.ebay_user_id if disconnected_account else ""
+                    ),
+                    "environment": (
+                        disconnected_account.environment
+                        if disconnected_account
+                        else resolved_environment
+                    ),
+                    "remote_revocation_status": remote_revocation_status,
+                    "remote_revocation_detail": remote_revocation_detail,
                 }
             )
         ]
@@ -1441,6 +1652,7 @@ def process_message(
 
     if command == "/settings":
         notifications_enabled = False
+        settings_state = load_runtime_state(telegram_config.state_path)
         if resolved_telegram_user_id is not None:
             subscriptions = load_notification_subscriptions(telegram_config.state_path)
             notifications_enabled = any(
@@ -1448,6 +1660,10 @@ def process_message(
                 and subscription.telegram_chat_id == chat_id
                 and subscription.enabled
                 for subscription in subscriptions
+            )
+            settings_state = load_tenant_runtime_state(
+                telegram_config.state_path,
+                resolved_telegram_user_id,
             )
         account_linked = False
         if resolved_telegram_user_id is not None:
@@ -1466,6 +1682,15 @@ def process_message(
                     "environment": resolved_environment,
                     "notifications_enabled": notifications_enabled,
                     "account_linked": account_linked,
+                    "user_status": user_status or TELEGRAM_USER_STATUS_NEW,
+                    "last_fetch_start": settings_state.memory.last_fetch_start,
+                    "last_fetch_end": settings_state.memory.last_fetch_end,
+                    "last_seen_order_id": settings_state.memory.last_seen_order_id,
+                    "last_seen_order_created_at": settings_state.memory.last_seen_order_created_at,
+                    "last_notified_order_id": settings_state.memory.last_notified_order_id,
+                    "last_notified_order_created_at": (
+                        settings_state.memory.last_notified_order_created_at
+                    ),
                 }
             )
         ]

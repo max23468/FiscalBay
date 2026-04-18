@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
@@ -204,6 +204,18 @@ def _create_v7_schema(conn: sqlite3.Connection) -> None:
     )
 
 
+def _create_v8_schema(conn: sqlite3.Connection) -> None:
+    if not _column_exists(conn, "tenant_runtime_state", "memory_json"):
+        conn.execute(
+            "ALTER TABLE tenant_runtime_state ADD COLUMN memory_json TEXT NOT NULL DEFAULT '{}'"
+        )
+    if not _column_exists(conn, "tenant_runtime_state", "account_snapshot_json"):
+        conn.execute(
+            "ALTER TABLE tenant_runtime_state "
+            "ADD COLUMN account_snapshot_json TEXT NOT NULL DEFAULT '{}'"
+        )
+
+
 def _migrate_legacy_notified_orders(conn: sqlite3.Connection) -> None:
     if not _table_exists(conn, "notified_orders"):
         return
@@ -246,4 +258,6 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         version = 6
     if version < 7:
         _create_v7_schema(conn)
+    if version < 8:
+        _create_v8_schema(conn)
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")

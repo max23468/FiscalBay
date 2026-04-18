@@ -9,7 +9,7 @@ from .config import load_config
 from .errors import ConfigurationError
 from .models import Config, FetchOptions, LinkedEbayAccount, OrderRecord, ResolvedFetchContext
 from .services.orders import fetch_records
-from .storage.sqlite import resolve_linked_ebay_account
+from .storage.sqlite import load_tenant_account_status_cache, resolve_linked_ebay_account
 from .tenant_credentials import load_tenant_config_from_storage
 
 
@@ -55,6 +55,33 @@ def resolve_fetch_context(
         linked_account = resolve_linked_account_fn(state_path, telegram_user_id, ebay_environment)
         if linked_account is not None and linked_account.environment:
             resolved_environment = linked_account.environment
+
+    cached_status: dict[str, object] = {}
+    if telegram_user_id and state_path:
+        cached_status = load_tenant_account_status_cache(state_path, telegram_user_id)
+
+    cached_account_status = str(cached_status.get("account_status") or "unlinked")
+    cached_token_status = str(cached_status.get("token_status") or "missing")
+    cached_requires_reconnect = cached_account_status in {"disconnected", "revoked"} or (
+        cached_token_status in {"revoked", "expired", "token_expired"}
+    )
+
+    if linked_account is not None and cached_requires_reconnect:
+        fallback_reason = "tenant_reconnect_required"
+        if telegram_user_id is not None and not allow_global_fallback:
+            raise ConfigurationError(
+                "Le credenziali tenant eBay richiedono un reconnect. "
+                "Completa di nuovo /connect per collegare un token valido."
+            )
+        return ResolvedFetchContext(
+            config=load_config_fn(resolved_environment),
+            config_source="global_env",
+            environment=resolved_environment,
+            telegram_user_id=telegram_user_id,
+            ebay_user_id=linked_account.ebay_user_id,
+            used_tenant_credentials=False,
+            fallback_reason=fallback_reason,
+        )
 
     if linked_account is not None and load_tenant_config_fn is not None:
         tenant_config = load_tenant_config_fn(

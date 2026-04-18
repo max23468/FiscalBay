@@ -143,7 +143,8 @@ def build_help_text() -> str:
         "• 👤 <code>/account</code> → stato collegamento account eBay\n"
         "• 🔁 <code>/reconnect_status</code> → stato reconnect e prossima azione\n"
         "• 🔗 <code>/connect</code> → prepara il collegamento account eBay\n"
-        "• ❌ <code>/disconnect</code> → scollega account eBay dal bot\n"
+        "• ❌ <code>/disconnect</code> → scollega solo l'account eBay dal bot\n"
+        "• 🚪 <code>/leave_bot</code> → disattiva uso bot e richiede nuova approvazione\n"
         "• 🔔 <code>/notifications on</code> → attiva notifiche per questa chat\n"
         "• 🔕 <code>/notifications off</code> → disattiva notifiche per questa chat\n"
         "• ⚙️ <code>/settings</code> → riepilogo preferenze di chat e tenant\n"
@@ -419,21 +420,101 @@ def format_admin_user_list(users: Iterable[Mapping[str, object] | TelegramUser])
         return (
             "👥 <b>Utenti bot</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\nNessun utente registrato nel database."
         )
-    rendered: list[str] = []
-    for raw_user in rows:
-        user = (
-            raw_user if isinstance(raw_user, TelegramUser) else TelegramUser.from_mapping(raw_user)
-        )
-        username = html.escape(user.username or "n/d")
-        display_name = html.escape(user.display_name or "n/d")
-        rendered.append(
-            f"• <code>{user.telegram_user_id}</code> "
-            f"status=<code>{html.escape(user.status)}</code> "
-            f"chat=<code>{user.telegram_chat_id}</code> "
+    if all(isinstance(row, TelegramUser) for row in rows):
+        rendered: list[str] = []
+        for raw_user in rows:
+            user = (
+                raw_user
+                if isinstance(raw_user, TelegramUser)
+                else TelegramUser.from_mapping(raw_user)
+            )
+            username = html.escape(user.username or "n/d")
+            display_name = html.escape(user.display_name or "n/d")
+            rendered.append(
+                f"• <code>{user.telegram_user_id}</code> "
+                f"status=<code>{html.escape(user.status)}</code> "
+                f"chat=<code>{user.telegram_chat_id}</code> "
+                f"user=<code>{username}</code> "
+                f"name=<code>{display_name}</code>"
+            )
+        return "👥 <b>Utenti bot</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(rendered)
+
+    def render_user_line(user_row: Mapping[str, object]) -> str:
+        telegram_user_id = html.escape(str(user_row.get("telegram_user_id") or "n/d"))
+        username = html.escape(str(user_row.get("username") or "n/d"))
+        display_name = html.escape(str(user_row.get("display_name") or "n/d"))
+        account_status = html.escape(str(user_row.get("account_status") or "unlinked"))
+        token_status = html.escape(str(user_row.get("token_status") or "missing"))
+        environment = html.escape(str(user_row.get("environment") or "n/d"))
+        ebay_user_id = html.escape(str(user_row.get("ebay_user_id") or "n/d"))
+        return (
+            f"• <code>{telegram_user_id}</code> "
             f"user=<code>{username}</code> "
-            f"name=<code>{display_name}</code>"
+            f"name=<code>{display_name}</code> "
+            f"account=<code>{account_status}</code> "
+            f"token=<code>{token_status}</code> "
+            f"env=<code>{environment}</code> "
+            f"ebay=<code>{ebay_user_id}</code>"
         )
-    return "👥 <b>Utenti bot</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(rendered)
+
+    pending_rows: list[str] = []
+    waiting_connect_rows: list[str] = []
+    reconnect_rows: list[str] = []
+    ready_rows: list[str] = []
+    blocked_rows: list[str] = []
+    admin_rows: list[str] = []
+
+    for user_row in rows:
+        status = str(user_row.get("status") or "")
+        operational_state = str(user_row.get("operational_state") or "")
+        rendered_row = render_user_line(user_row)
+        if status == "pending":
+            pending_rows.append(rendered_row)
+            continue
+        if status == "blocked":
+            blocked_rows.append(rendered_row)
+            continue
+        if status == "admin":
+            admin_rows.append(rendered_row)
+            continue
+        if operational_state == "reconnect_required":
+            reconnect_rows.append(rendered_row)
+            continue
+        if operational_state == "ready":
+            ready_rows.append(rendered_row)
+            continue
+        waiting_connect_rows.append(rendered_row)
+
+    summary = (
+        f"📊 Pending: <code>{len(pending_rows)}</code> • "
+        f"Da collegare: <code>{len(waiting_connect_rows)}</code> • "
+        f"Reconnect: <code>{len(reconnect_rows)}</code> • "
+        f"Operativi: <code>{len(ready_rows)}</code>"
+    )
+    sections = [
+        "👥 <b>Utenti bot</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        summary,
+    ]
+    if pending_rows:
+        sections.append("\n🕓 <b>Richieste pending</b>")
+        sections.extend(pending_rows)
+    if waiting_connect_rows:
+        sections.append("\n🔗 <b>Approvati ma non ancora operativi</b>")
+        sections.extend(waiting_connect_rows)
+    if reconnect_rows:
+        sections.append("\n🔁 <b>Reconnect richiesto</b>")
+        sections.extend(reconnect_rows)
+    if ready_rows:
+        sections.append("\n✅ <b>Utenti operativi</b>")
+        sections.extend(ready_rows)
+    if blocked_rows:
+        sections.append("\n⛔ <b>Utenti bloccati</b>")
+        sections.extend(blocked_rows)
+    if admin_rows:
+        sections.append("\n👑 <b>Admin</b>")
+        sections.extend(admin_rows)
+    return "\n".join(sections)
 
 
 def format_admin_status_update(
@@ -766,14 +847,56 @@ def format_disconnect_status(disconnect_status: Mapping[str, object]) -> str:
 
     ebay_user_id = html.escape(str(disconnect_status.get("ebay_user_id", "n/d")))
     environment = html.escape(str(disconnect_status.get("environment", "n/d")))
+    remote_revocation_status = html.escape(
+        str(disconnect_status.get("remote_revocation_status", "not_attempted"))
+    )
+    remote_revocation_detail = html.escape(
+        str(disconnect_status.get("remote_revocation_detail", ""))
+    )
+    remote_line = _format_remote_revocation_line(
+        remote_revocation_status,
+        remote_revocation_detail,
+    )
     return (
         "❌ <b>Scollega account eBay</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"🪪 Utente eBay scollegato: <code>{ebay_user_id}</code>\n"
         f"🌍 Ambiente: <code>{environment}</code>\n"
         "🔐 Token locale rimosso dal runtime del bot.\n"
-        "ℹ️ La revoca remota eBay non e' ancora inclusa in questo comando.\n"
+        f"{remote_line}"
+        "ℹ️ Questo comando scollega solo l'account eBay: l'accesso al bot resta approvato.\n"
         "Puoi usare <code>/connect</code> per collegare di nuovo l'account."
+    )
+
+
+def format_leave_status(leave_status: Mapping[str, object]) -> str:
+    ebay_user_id = html.escape(str(leave_status.get("ebay_user_id", "n/d")))
+    environment = html.escape(str(leave_status.get("environment", "n/d")))
+    account_was_linked = bool(leave_status.get("account_was_linked", False))
+    remote_revocation_status = html.escape(
+        str(leave_status.get("remote_revocation_status", "not_attempted"))
+    )
+    remote_revocation_detail = html.escape(str(leave_status.get("remote_revocation_detail", "")))
+    remote_line = _format_remote_revocation_line(
+        remote_revocation_status,
+        remote_revocation_detail,
+    )
+    account_line = (
+        f"🪪 Ultimo account eBay: <code>{ebay_user_id}</code>\n"
+        f"🌍 Ambiente: <code>{environment}</code>\n"
+        "🔐 Collegamento e token locali rimossi dal runtime del bot.\n"
+        f"{remote_line}"
+        if account_was_linked
+        else "🪪 Nessun account eBay collegato da scollegare in questo momento.\n"
+    )
+    return (
+        "🚪 <b>Disattiva uso bot</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"{account_line}"
+        "🔕 Notifiche chat: <code>disattivate</code>\n"
+        "🙅 Accesso operativo al bot: <code>disattivato</code>\n"
+        "Per tornare operativo dovrai usare <code>/request_access</code> "
+        "e attendere una nuova approvazione."
     )
 
 
@@ -802,24 +925,84 @@ def format_settings_status(settings_status: Mapping[str, object]) -> str:
     notifications_text = "attive" if notifications_enabled else "disattivate"
     linked = bool(settings_status.get("account_linked", False))
     linked_text = "collegato" if linked else "non collegato"
+    user_status = normalize_telegram_user_status(str(settings_status.get("user_status") or "new"))
+    if user_status == "admin":
+        user_status_text = "admin"
+    elif user_status == "approved":
+        user_status_text = "approvato"
+    elif user_status == "pending":
+        user_status_text = "pending"
+    elif user_status == "blocked":
+        user_status_text = "bloccato"
+    else:
+        user_status_text = "non approvato"
+    last_fetch_start = html.escape(str(settings_status.get("last_fetch_start") or ""))
+    last_fetch_end = html.escape(str(settings_status.get("last_fetch_end") or ""))
+    last_seen_order_id = html.escape(str(settings_status.get("last_seen_order_id") or ""))
+    last_seen_order_created_at = html.escape(
+        str(settings_status.get("last_seen_order_created_at") or "")
+    )
+    last_notified_order_id = html.escape(str(settings_status.get("last_notified_order_id") or ""))
+    last_notified_order_created_at = html.escape(
+        str(settings_status.get("last_notified_order_created_at") or "")
+    )
+    memory_lines = ""
+    if last_fetch_start and last_fetch_end:
+        memory_lines += (
+            f"🧭 Ultima finestra polling: <code>{last_fetch_start}</code> → "
+            f"<code>{last_fetch_end}</code>\n"
+        )
+    if last_seen_order_id:
+        memory_lines += (
+            f"👀 Ultimo ordine visto: <code>{last_seen_order_id}</code> • "
+            f"<code>{last_seen_order_created_at or 'n/d'}</code>\n"
+        )
+    if last_notified_order_id:
+        memory_lines += (
+            f"📨 Ultimo ordine notificato: <code>{last_notified_order_id}</code> • "
+            f"<code>{last_notified_order_created_at or 'n/d'}</code>\n"
+        )
     return (
         "⚙️ <b>Impostazioni</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"🏷️ Scope runtime: <code>{tenant_scope}</code>\n"
         f"🌍 Ambiente: <code>{environment}</code>\n"
         f"🔔 Notifiche chat: <code>{notifications_text}</code>\n"
+        f"🛂 Accesso bot: <code>{user_status_text}</code>\n"
         f"👤 Account eBay: <code>{linked_text}</code>\n"
+        f"{memory_lines}"
         "Comandi utili: <code>/account</code>, <code>/connect</code>, "
-        "<code>/disconnect</code>, <code>/notifications on</code>, "
-        "<code>/notifications off</code>."
+        "<code>/disconnect</code>, <code>/leave_bot</code>, "
+        "<code>/notifications on</code>, <code>/notifications off</code>."
     )
+
+
+def _format_remote_revocation_line(status: str, detail: str) -> str:
+    if status == "revoked":
+        return "☁️ Revoca remota eBay: <code>completata</code>\n"
+    if status == "failed":
+        return (
+            "☁️ Revoca remota eBay: <code>non confermata</code>\n"
+            f"📝 Dettaglio remoto: <code>{detail or 'n/d'}</code>\n"
+        )
+    if status == "skipped":
+        return (
+            "☁️ Revoca remota eBay: <code>saltata</code>\n"
+            f"📝 Dettaglio remoto: <code>{detail or 'token non disponibile'}</code>\n"
+        )
+    return "☁️ Revoca remota eBay: <code>non tentata</code>\n"
 
 
 def options_for_command(command: str, args: list[str]) -> FetchOptions:
     if command == "/ordine":
         if not args:
             raise UserInputError("Uso corretto: /ordine <order_id>")
-        return FetchOptions(order_ids=[args[0]], only_found=False, max_results=1)
+        return FetchOptions(
+            order_ids=[args[0]],
+            only_found=False,
+            max_results=1,
+            include_details=True,
+        )
 
     try:
         days = int(args[0]) if len(args) >= 1 else 7
@@ -842,7 +1025,12 @@ def options_for_command(command: str, args: list[str]) -> FetchOptions:
         )
 
     only_found = command != "/tutti"
-    return FetchOptions(days=days, max_results=max_results, only_found=only_found)
+    return FetchOptions(
+        days=days,
+        max_results=max_results,
+        only_found=only_found,
+        include_details=only_found,
+    )
 
 
 def is_authorized(chat_id: int, config: TelegramConfig) -> bool:

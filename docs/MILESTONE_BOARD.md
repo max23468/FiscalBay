@@ -140,12 +140,14 @@ Deliverable principali:
 Stato corrente:
 
 - `/account` e `/connect` esistono gia' nel bot
-- `/disconnect` esiste gia' come scollegamento locale sul DB del bot
+- `/disconnect` ora tenta anche la revoca remota eBay e mantiene distinta l'uscita completa dal bot
 - `/notifications on|off` e `/settings` esistono gia' come gestione self-service minima lato chat
 - `/connect` salva una sessione preliminare in `oauth_link_sessions`
 - il callback OAuth minimale esiste gia' come servizio separato `ebaycf-oauth`
 - il token storage tenant usa gia' cifratura a riposo con chiave Fernet da env
-- restano aperti revoca remota e affinamento UX end-to-end
+- `/reconnect_status`, `/why_not_notified` e il riepilogo explain su `/ordine` sono gia' disponibili
+- `/leave_bot` copre ora l'uscita completa dell'utente con disattivazione notifiche e nuova approvazione richiesta
+- resta aperto soprattutto l'affinamento del polling e della riduzione `getOrder`
 
 ### M6 - Governance del prodotto
 
@@ -174,6 +176,7 @@ Stato corrente:
 Le prossime milestone operative sono ora:
 
 - consolidamento del servizio pubblico con accesso approvato
+- ottimizzazione del polling ordini e riduzione dei dettagli `getOrder` non necessari
 - guardrail e strumenti admin per un bot pubblico controllato
 - lifecycle dati e automazioni amministrative
 - consolidamento dei limiti del servizio pubblico

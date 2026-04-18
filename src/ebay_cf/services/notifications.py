@@ -102,8 +102,11 @@ def fetch_new_order_records(
     lookback_minutes: int = 180,
     cycle_id: str,
 ) -> list[OrderRecord]:
+    last_fetch_end = state.memory.last_fetch_end
     last_check = state.last_check
-    if isinstance(last_check, str) and last_check:
+    if isinstance(last_fetch_end, str) and last_fetch_end:
+        start = last_fetch_end
+    elif isinstance(last_check, str) and last_check:
         start = last_check
     else:
         start = (now_utc() - timedelta(minutes=lookback_minutes)).isoformat().replace("+00:00", "Z")
@@ -122,6 +125,13 @@ def fetch_new_order_records(
         label="fetch_new_orders",
     )
     assert isinstance(records, list)
+    state.memory.last_fetch_start = start
+    state.memory.last_fetch_end = end
+    state.memory.last_fetch_count = len(records)
+    if records:
+        latest_record = max(records, key=order_sort_key)
+        state.memory.last_seen_order_id = latest_record.orderId
+        state.memory.last_seen_order_created_at = latest_record.creationDate
     log_event(
         LOGGER,
         logging.INFO,
@@ -168,6 +178,10 @@ def update_state_with_records(
         if fp and fp not in hash_set:
             existing_hashes.append(fp)
             hash_set.add(fp)
+    if records:
+        latest_notified = max(records, key=order_sort_key)
+        state.memory.last_notified_order_id = latest_notified.orderId
+        state.memory.last_notified_order_created_at = latest_notified.creationDate
     state.notified_order_ids = existing_ids[-max_tracked_orders:]
     state.notified_hashes = existing_hashes[-max_tracked_orders:]
     state.last_check = checked_at or now_utc().isoformat().replace("+00:00", "Z")

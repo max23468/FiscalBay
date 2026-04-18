@@ -1,4 +1,6 @@
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import Mock
 
 from src.ebay_cf.application import (
@@ -8,6 +10,7 @@ from src.ebay_cf.application import (
 )
 from src.ebay_cf.errors import ConfigurationError
 from src.ebay_cf.models import Config, FetchOptions, LinkedEbayAccount, OrderRecord
+from src.ebay_cf.storage.sqlite import save_tenant_account_status_cache
 
 
 class ApplicationTests(unittest.TestCase):
@@ -155,6 +158,53 @@ class ApplicationTests(unittest.TestCase):
             )
 
         load_global_mock.assert_not_called()
+
+    def test_resolve_fetch_context_uses_cached_reconnect_state_before_loading_tenant_token(
+        self,
+    ) -> None:
+        global_config = Config(
+            client_id="global-cid",
+            client_secret="global-secret",
+            refresh_token="global-refresh",
+            environment="sandbox",
+            scopes="scope",
+        )
+        resolve_account_mock = Mock(
+            return_value=LinkedEbayAccount(
+                telegram_user_id=123,
+                ebay_user_id="seller-ebay",
+                environment="sandbox",
+                status="linked",
+            )
+        )
+        load_global_mock = Mock(return_value=global_config)
+        load_tenant_mock = Mock()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            save_tenant_account_status_cache(
+                str(db_path),
+                123,
+                {
+                    "account_status": "linked",
+                    "token_status": "revoked",
+                    "environment": "sandbox",
+                    "ebay_user_id": "seller-ebay",
+                },
+            )
+
+            resolved = resolve_fetch_context(
+                "production",
+                telegram_user_id=123,
+                state_path=str(db_path),
+                load_config_fn=load_global_mock,
+                resolve_linked_account_fn=resolve_account_mock,
+                load_tenant_config_fn=load_tenant_mock,
+            )
+
+        self.assertEqual(resolved.config_source, "global_env")
+        self.assertEqual(resolved.fallback_reason, "tenant_reconnect_required")
+        load_tenant_mock.assert_not_called()
 
 
 if __name__ == "__main__":

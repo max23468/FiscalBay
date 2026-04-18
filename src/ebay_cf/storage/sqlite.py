@@ -103,6 +103,7 @@ def _migrate_legacy_json_state(path: str) -> bool:
         "last_check": str(legacy["last_check"]) if legacy.get("last_check") else None,
         "last_error": str(legacy["last_error"]) if legacy.get("last_error") else None,
         "metrics": _default_metrics_state(),
+        "memory": {},
     }
     raw_metrics = legacy.get("metrics")
     if isinstance(raw_metrics, dict):
@@ -291,6 +292,14 @@ def _parse_metrics_state(raw_value: str) -> BotMetricsPayload:
     }
 
 
+def _parse_operational_memory_state(raw_value: str) -> dict[str, object]:
+    try:
+        decoded = json.loads(raw_value)
+    except json.JSONDecodeError:
+        return {}
+    return decoded if isinstance(decoded, dict) else {}
+
+
 def _state_to_model(state: BotRuntimeStatePayload) -> BotRuntimeState:
     return BotRuntimeState(
         notified_order_ids=list(state["notified_order_ids"]),
@@ -298,6 +307,7 @@ def _state_to_model(state: BotRuntimeStatePayload) -> BotRuntimeState:
         last_check=state["last_check"],
         last_error=state["last_error"],
         metrics=BotMetrics.from_mapping(state["metrics"]),
+        memory=BotRuntimeState.from_mapping({"memory": state.get("memory", {})}).memory,
     )
 
 
@@ -315,6 +325,7 @@ def _state_from_model(state: BotRuntimeState) -> BotRuntimeStatePayload:
             "consecutive_error_cycles": state.metrics.consecutive_error_cycles,
             "errors_by_type": dict(state.metrics.errors_by_type),
         },
+        "memory": state.memory.as_dict(),
     }
 
 
@@ -347,6 +358,7 @@ def load_state(path: str) -> BotRuntimeStatePayload:
         "last_check": None,
         "last_error": None,
         "metrics": _default_metrics_state(),
+        "memory": {},
     }
     with _connect(path) as conn:
         for row in conn.execute("SELECT order_id FROM notified_order_ids ORDER BY rowid"):
@@ -360,6 +372,8 @@ def load_state(path: str) -> BotRuntimeStatePayload:
                 state["last_error"] = str(row["value"])
             elif row["key"] == "metrics":
                 state["metrics"] = _parse_metrics_state(str(row["value"]))
+            elif row["key"] == "operational_memory":
+                state["memory"] = _parse_operational_memory_state(str(row["value"]))
     return state
 
 
@@ -380,9 +394,14 @@ def save_state(path: str, state: BotRuntimeStatePayload) -> None:
         )
 
         metrics_json = json.dumps(state["metrics"])
+        memory_json = json.dumps(state.get("memory", {}))
         conn.execute(
             "INSERT OR REPLACE INTO kv_store (key, value) VALUES ('metrics', ?)",
             (metrics_json,),
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO kv_store (key, value) VALUES ('operational_memory', ?)",
+            (memory_json,),
         )
         if state.get("last_check"):
             conn.execute(
@@ -494,7 +513,7 @@ def load_tenant_runtime_state(path: str, telegram_user_id: int) -> BotRuntimeSta
         ):
             state.notified_hashes.append(str(row["hash"]))
         runtime_row = conn.execute(
-            "SELECT last_check, last_error, metrics_json "
+            "SELECT last_check, last_error, metrics_json, memory_json "
             "FROM tenant_runtime_state WHERE telegram_user_id = ?",
             (telegram_user_id,),
         ).fetchone()
@@ -508,6 +527,9 @@ def load_tenant_runtime_state(path: str, telegram_user_id: int) -> BotRuntimeSta
             state.metrics = BotMetrics.from_mapping(
                 _parse_metrics_state(str(runtime_row["metrics_json"]))
             )
+            state.memory = BotRuntimeState.from_mapping(
+                {"memory": _parse_operational_memory_state(str(runtime_row["memory_json"]))}
+            ).memory
     return state
 
 
@@ -529,14 +551,21 @@ def save_tenant_runtime_state(path: str, telegram_user_id: int, state: BotRuntim
             state.notified_hashes,
         )
         conn.execute(
-            "INSERT OR REPLACE INTO tenant_runtime_state "
-            "(telegram_user_id, last_check, last_error, metrics_json, updated_at) "
-            "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)",
+            "INSERT INTO tenant_runtime_state "
+            "(telegram_user_id, last_check, last_error, metrics_json, memory_json, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(telegram_user_id) DO UPDATE SET "
+            "last_check = excluded.last_check, "
+            "last_error = excluded.last_error, "
+            "metrics_json = excluded.metrics_json, "
+            "memory_json = excluded.memory_json, "
+            "updated_at = CURRENT_TIMESTAMP",
             (
                 telegram_user_id,
                 state.last_check,
                 state.last_error,
                 json.dumps(state.metrics.as_dict()),
+                json.dumps(state.memory.as_dict()),
             ),
         )
 
@@ -1082,12 +1111,93 @@ def resolve_ebay_token_set(
     return EbayTokenSet.from_mapping(dict(row))
 
 
+def load_tenant_account_status_cache(path: str, telegram_user_id: int) -> dict[str, object]:
+    init_db(path)
+    with _connect(path) as conn:
+        row = conn.execute(
+            "SELECT account_snapshot_json FROM tenant_runtime_state WHERE telegram_user_id = ?",
+            (telegram_user_id,),
+        ).fetchone()
+        if row is None or row["account_snapshot_json"] is None:
+            return {}
+    return _parse_operational_memory_state(str(row["account_snapshot_json"]))
+
+
+def save_tenant_account_status_cache(
+    path: str,
+    telegram_user_id: int,
+    snapshot: dict[str, object],
+) -> None:
+    init_db(path)
+    with _connect(path) as conn:
+        conn.execute(
+            "INSERT INTO tenant_runtime_state "
+            "(telegram_user_id, metrics_json, memory_json, account_snapshot_json, updated_at) "
+            "VALUES (?, '{}', '{}', ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(telegram_user_id) DO UPDATE SET "
+            "account_snapshot_json = excluded.account_snapshot_json, "
+            "updated_at = CURRENT_TIMESTAMP",
+            (
+                telegram_user_id,
+                json.dumps(snapshot),
+            ),
+        )
+
+
+def _account_status_requires_reconnect(
+    account_status: str,
+    token_status: str,
+) -> bool:
+    return account_status in {"revoked"} or token_status in {"revoked", "expired", "token_expired"}
+
+
+def _cached_account_snapshot_is_usable(
+    snapshot: dict[str, object],
+    environment: str | None,
+) -> bool:
+    if not snapshot:
+        return False
+    snapshot_environment = str(snapshot.get("environment") or "")
+    if environment and snapshot_environment and snapshot_environment != environment:
+        return False
+    account_status = str(snapshot.get("account_status") or "unlinked")
+    token_status = str(snapshot.get("token_status") or "missing")
+    return account_status in {"disconnected", "revoked"} or _account_status_requires_reconnect(
+        account_status,
+        token_status,
+    )
+
+
 def summarize_tenant_account_status(
     path: str,
     telegram_user_id: int,
     environment: str | None = None,
 ) -> dict[str, object]:
     init_db(path)
+    cached_snapshot = load_tenant_account_status_cache(path, telegram_user_id)
+    subscriptions = load_notification_subscriptions(path)
+    enabled_subscription_count = sum(
+        1
+        for subscription in subscriptions
+        if subscription.telegram_user_id == telegram_user_id and subscription.enabled
+    )
+    chats = load_telegram_chats(path)
+    chat_count = sum(1 for chat in chats if chat.telegram_user_id == telegram_user_id)
+    if _cached_account_snapshot_is_usable(cached_snapshot, environment):
+        return {
+            "telegram_user_id": telegram_user_id,
+            "linked": bool(cached_snapshot.get("linked", False)),
+            "environment": cached_snapshot.get("environment") or environment,
+            "ebay_user_id": str(cached_snapshot.get("ebay_user_id") or ""),
+            "account_status": str(cached_snapshot.get("account_status") or "unlinked"),
+            "token_status": str(cached_snapshot.get("token_status") or "missing"),
+            "token_configured": bool(cached_snapshot.get("token_configured", False)),
+            "latest_reconnect_outcome": str(cached_snapshot.get("latest_reconnect_outcome") or ""),
+            "latest_reconnect_reason": str(cached_snapshot.get("latest_reconnect_reason") or ""),
+            "subscription_count": enabled_subscription_count,
+            "chat_count": chat_count,
+            "cached": True,
+        }
     linked_account = resolve_linked_ebay_account(path, telegram_user_id, environment)
     account_snapshot = linked_account
     token_set = (
@@ -1122,7 +1232,6 @@ def summarize_tenant_account_status(
             ).fetchone()
             if token_row is not None:
                 token_set = EbayTokenSet.from_mapping(dict(token_row))
-    subscriptions = load_notification_subscriptions(path)
     latest_reconnect_outcome = ""
     latest_reconnect_reason = ""
     for entry in load_audit_log_entries(path, limit=200):
@@ -1135,14 +1244,7 @@ def summarize_tenant_account_status(
         latest_reconnect_outcome = entry.outcome
         latest_reconnect_reason = entry.details_json
         break
-    enabled_subscription_count = sum(
-        1
-        for subscription in subscriptions
-        if subscription.telegram_user_id == telegram_user_id and subscription.enabled
-    )
-    chats = load_telegram_chats(path)
-    chat_count = sum(1 for chat in chats if chat.telegram_user_id == telegram_user_id)
-    return {
+    summary: dict[str, object] = {
         "telegram_user_id": telegram_user_id,
         "linked": linked_account is not None,
         "environment": account_snapshot.environment
@@ -1156,7 +1258,23 @@ def summarize_tenant_account_status(
         "latest_reconnect_reason": latest_reconnect_reason,
         "subscription_count": enabled_subscription_count,
         "chat_count": chat_count,
+        "cached": False,
     }
+    save_tenant_account_status_cache(
+        path,
+        telegram_user_id,
+        {
+            "linked": bool(summary["linked"]),
+            "environment": summary["environment"],
+            "ebay_user_id": summary["ebay_user_id"],
+            "account_status": summary["account_status"],
+            "token_status": summary["token_status"],
+            "token_configured": bool(summary["token_configured"]),
+            "latest_reconnect_outcome": summary["latest_reconnect_outcome"],
+            "latest_reconnect_reason": summary["latest_reconnect_reason"],
+        },
+    )
+    return summary
 
 
 def create_oauth_link_session(path: str, session: OauthLinkSession) -> OauthLinkSession:

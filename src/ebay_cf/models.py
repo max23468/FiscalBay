@@ -242,6 +242,7 @@ class FetchOptions:
     max_results: int = 100
     order_ids: Optional[list[str]] = None
     only_found: bool = False
+    include_details: bool = True
 
 
 @dataclass
@@ -689,6 +690,46 @@ class BotMetrics:
 
 
 @dataclass
+class BotOperationalMemory:
+    last_fetch_start: str | None = None
+    last_fetch_end: str | None = None
+    last_fetch_count: int = 0
+    last_seen_order_id: str = ""
+    last_seen_order_created_at: str | None = None
+    last_notified_order_id: str = ""
+    last_notified_order_created_at: str | None = None
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, object]) -> "BotOperationalMemory":
+        return cls(
+            last_fetch_start=str(data["last_fetch_start"])
+            if data.get("last_fetch_start")
+            else None,
+            last_fetch_end=str(data["last_fetch_end"]) if data.get("last_fetch_end") else None,
+            last_fetch_count=as_int(data.get("last_fetch_count", 0)),
+            last_seen_order_id=str(data.get("last_seen_order_id", "")),
+            last_seen_order_created_at=str(data["last_seen_order_created_at"])
+            if data.get("last_seen_order_created_at")
+            else None,
+            last_notified_order_id=str(data.get("last_notified_order_id", "")),
+            last_notified_order_created_at=str(data["last_notified_order_created_at"])
+            if data.get("last_notified_order_created_at")
+            else None,
+        )
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "last_fetch_start": self.last_fetch_start,
+            "last_fetch_end": self.last_fetch_end,
+            "last_fetch_count": self.last_fetch_count,
+            "last_seen_order_id": self.last_seen_order_id,
+            "last_seen_order_created_at": self.last_seen_order_created_at,
+            "last_notified_order_id": self.last_notified_order_id,
+            "last_notified_order_created_at": self.last_notified_order_created_at,
+        }
+
+
+@dataclass
 class RetryQueueEntry:
     chat_id: int
     text: str
@@ -723,6 +764,7 @@ class BotRuntimeState:
     last_check: str | None = None
     last_error: str | None = None
     metrics: BotMetrics = field(default_factory=BotMetrics)
+    memory: BotOperationalMemory = field(default_factory=BotOperationalMemory)
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, object]) -> "BotRuntimeState":
@@ -733,12 +775,20 @@ class BotRuntimeState:
             metrics = BotMetrics.from_mapping(raw_metrics)
         else:
             metrics = BotMetrics()
+        raw_memory = data.get("memory", {})
+        if isinstance(raw_memory, BotOperationalMemory):
+            memory = raw_memory
+        elif isinstance(raw_memory, Mapping):
+            memory = BotOperationalMemory.from_mapping(raw_memory)
+        else:
+            memory = BotOperationalMemory()
         return cls(
             notified_order_ids=as_str_list(data.get("notified_order_ids", [])),
             notified_hashes=as_str_list(data.get("notified_hashes", [])),
             last_check=str(data["last_check"]) if data.get("last_check") else None,
             last_error=str(data["last_error"]) if data.get("last_error") else None,
             metrics=metrics,
+            memory=memory,
         )
 
     def as_dict(self) -> dict[str, object]:
@@ -748,6 +798,7 @@ class BotRuntimeState:
             "last_check": self.last_check,
             "last_error": self.last_error,
             "metrics": self.metrics.as_dict(),
+            "memory": self.memory.as_dict(),
         }
 
 
@@ -813,6 +864,7 @@ class BotRuntimeStatePayload(TypedDict):
     last_check: str | None
     last_error: str | None
     metrics: BotMetricsPayload
+    memory: dict[str, object]
 
 
 class RetryQueueItemPayload(TypedDict, total=False):

@@ -273,15 +273,18 @@ def fetch_records(config: Config, options: FetchOptions) -> list[OrderRecord]:
             page_size=options.limit,
             max_results=options.max_results,
         )
-        detail_calls = 0
-        for summary in summaries:
-            order_id = summary.get("orderId")
-            if not order_id:
-                continue
-            if detail_calls and delay:
-                time.sleep(delay)
-            details.append(get_order_detail(config, access_token, order_id))
-            detail_calls += 1
+        if not options.include_details:
+            details = [summary for summary in summaries if summary.get("orderId")]
+        else:
+            detail_calls = 0
+            for summary in summaries:
+                order_id = summary.get("orderId")
+                if not order_id:
+                    continue
+                if detail_calls and delay:
+                    time.sleep(delay)
+                details.append(get_order_detail(config, access_token, order_id))
+                detail_calls += 1
 
     records = [extract_record(order) for order in details]
     if options.only_found:

@@ -242,6 +242,44 @@ class EbayCfToolTests(unittest.TestCase):
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0].orderId, "order-2")
 
+    @patch("src.ebay_cf.services.orders.get_order_detail")
+    @patch("src.ebay_cf.services.orders.get_orders")
+    @patch("src.ebay_cf.services.orders.get_access_token")
+    def test_fetch_records_can_use_summaries_without_detail_calls(
+        self,
+        mock_get_access_token,
+        mock_get_orders,
+        mock_get_order_detail,
+    ) -> None:
+        mock_get_access_token.return_value = "access-token"
+        mock_get_orders.return_value = [
+            {
+                "orderId": "order-1",
+                "creationDate": "2026-04-03T10:00:00Z",
+                "buyer": {"username": "buyer-1"},
+            },
+            {
+                "orderId": "order-2",
+                "creationDate": "2026-04-03T11:00:00Z",
+                "buyer": {"username": "buyer-2"},
+            },
+        ]
+
+        records = fetch_records(
+            self._sample_config(),
+            FetchOptions(
+                days=7,
+                limit=50,
+                max_results=10,
+                only_found=False,
+                include_details=False,
+            ),
+        )
+
+        self.assertEqual([record.orderId for record in records], ["order-1", "order-2"])
+        mock_get_orders.assert_called_once()
+        mock_get_order_detail.assert_not_called()
+
     @patch("src.ebay_cf.services.orders.time.sleep")
     @patch("src.ebay_cf.services.orders.get_order_detail")
     @patch("src.ebay_cf.services.orders.get_access_token")

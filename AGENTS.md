@@ -48,6 +48,7 @@ Prima di finalizzare:
 - Non inventare risultati di test/comandi non eseguiti.
 - Se un'informazione è incerta, dichiarare assunzioni e limiti.
 - Se una richiesta è ambigua, fare la scelta più conservativa e spiegarla.
+- Quando aggiorni `docs/ROADMAP.md`, gli item completati vanno rimossi dalla roadmap: non vanno lasciati come checkbox spuntate.
 
 ## Suggerimento operativo
 Per regole specifiche di sotto-moduli, aggiungere `AGENTS.md` nelle relative sottocartelle.

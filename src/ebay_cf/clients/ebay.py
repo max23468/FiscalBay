@@ -303,6 +303,30 @@ def request_authorization_code_token_response(
     return _coerce_oauth_token_response(response)
 
 
+def revoke_user_refresh_token(config: Config, refresh_token: str | None = None) -> None:
+    token = (refresh_token or config.refresh_token).strip()
+    if not token:
+        raise EbayApiError("Refresh token mancante: impossibile revocare il collegamento eBay.")
+    credentials = f"{config.client_id}:{config.client_secret}".encode("utf-8")
+    encoded = base64.b64encode(credentials).decode("ascii")
+    url = f"{config.api_base}/identity/v1/oauth2/revoke_token"
+    body = urllib.parse.urlencode(
+        {
+            "token": token,
+            "token_type_hint": "refresh_token",
+        }
+    ).encode("utf-8")
+    request_json(
+        "POST",
+        url,
+        headers={
+            "Authorization": f"Basic {encoded}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        data=body,
+    )
+
+
 def build_user_consent_url(config: Config, *, redirect_uri: str, state: str) -> str:
     query = urllib.parse.urlencode(
         {

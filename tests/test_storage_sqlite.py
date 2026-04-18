@@ -47,10 +47,12 @@ from src.ebay_cf.storage.sqlite import (
     resolve_tenant_chat_context,
     save_retry_queue,
     save_state,
+    save_tenant_account_status_cache,
     save_tenant_retry_queue_entries,
     save_tenant_runtime_state,
     set_notification_subscription_enabled,
     summarize_operation_queue,
+    summarize_tenant_account_status,
     update_operation_queue_entry,
     upsert_ebay_token_set,
     upsert_linked_ebay_account,
@@ -129,6 +131,7 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertEqual(initial["notified_order_ids"], [])
             self.assertEqual(initial["notified_hashes"], [])
             self.assertIsNone(initial["last_check"])
+            self.assertEqual(initial["memory"], {})
 
             state = {
                 "notified_order_ids": ["order-1", "order-2"],
@@ -143,6 +146,10 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
                     "consecutive_error_cycles": 2,
                     "errors_by_type": {"telegram_send": 1},
                 },
+                "memory": {
+                    "last_fetch_end": "2026-04-05T20:00:00Z",
+                    "last_seen_order_id": "order-2",
+                },
             }
             save_state(str(db_path), state)
 
@@ -151,6 +158,8 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertEqual(restored["notified_hashes"], ["hash-1", "hash-2"])
             self.assertEqual(restored["last_check"], "2026-04-05T20:00:00Z")
             self.assertEqual(restored["last_error"], "boom")
+            self.assertEqual(restored["memory"]["last_fetch_end"], "2026-04-05T20:00:00Z")
+            self.assertEqual(restored["memory"]["last_seen_order_id"], "order-2")
             self.assertEqual(
                 restored["metrics"],
                 {
@@ -348,6 +357,14 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
                     last_check="2026-04-06T10:00:00Z",
                     last_error=None,
                     metrics=BotMetrics(orders_read=3, orders_with_cf=1),
+                    memory=BotRuntimeState.from_mapping(
+                        {
+                            "memory": {
+                                "last_fetch_end": "2026-04-06T10:00:00Z",
+                                "last_notified_order_id": "order-1",
+                            }
+                        }
+                    ).memory,
                 ),
             )
 
@@ -356,6 +373,42 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertEqual(restored.notified_hashes, ["hash-1"])
             self.assertEqual(restored.last_check, "2026-04-06T10:00:00Z")
             self.assertEqual(restored.metrics.orders_with_cf, 1)
+            self.assertEqual(restored.memory.last_fetch_end, "2026-04-06T10:00:00Z")
+            self.assertEqual(restored.memory.last_notified_order_id, "order-1")
+
+    def test_summarize_tenant_account_status_can_use_cached_terminal_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+
+            save_tenant_account_status_cache(
+                str(db_path),
+                123,
+                {
+                    "linked": False,
+                    "environment": "production",
+                    "ebay_user_id": "seller-ebay",
+                    "account_status": "disconnected",
+                    "token_status": "revoked",
+                    "token_configured": True,
+                    "latest_reconnect_outcome": "provider_cancelled",
+                    "latest_reconnect_reason": "access_denied",
+                },
+            )
+            set_notification_subscription_enabled(
+                str(db_path),
+                123,
+                456,
+                True,
+                created_at="2026-04-06T10:00:00Z",
+                updated_at="2026-04-06T10:00:00Z",
+            )
+
+            summary = summarize_tenant_account_status(str(db_path), 123, "production")
+
+            self.assertTrue(summary["cached"])
+            self.assertEqual(summary["account_status"], "disconnected")
+            self.assertEqual(summary["token_status"], "revoked")
+            self.assertEqual(summary["subscription_count"], 1)
 
     def test_tenant_retry_queue_roundtrip_on_shared_db(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

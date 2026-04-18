@@ -40,6 +40,7 @@ from .storage.sqlite import (
     append_audit_log_entry,
     load_oauth_link_session_by_state,
     resolve_linked_ebay_account,
+    summarize_tenant_account_status,
     update_oauth_link_session,
     upsert_ebay_token_set,
     upsert_linked_ebay_account,
@@ -633,6 +634,11 @@ class OAuthHandler(BaseHTTPRequestHandler):
                     oauth_state,
                     status=OAUTH_SESSION_STATUS_FAILED,
                 )
+                summarize_tenant_account_status(
+                    self.server.telegram_config.state_path,  # type: ignore[attr-defined]
+                    session.telegram_user_id,
+                    session.environment,
+                )
                 send_message(
                     self.server.telegram_config.token,  # type: ignore[attr-defined]
                     session.telegram_chat_id,
@@ -682,6 +688,11 @@ class OAuthHandler(BaseHTTPRequestHandler):
                     oauth_state,
                     status=OAUTH_SESSION_STATUS_FAILED,
                 )
+                summarize_tenant_account_status(
+                    self.server.telegram_config.state_path,  # type: ignore[attr-defined]
+                    session.telegram_user_id,
+                    session.environment,
+                )
                 send_message(
                     self.server.telegram_config.token,  # type: ignore[attr-defined]
                     session.telegram_chat_id,
@@ -694,6 +705,11 @@ class OAuthHandler(BaseHTTPRequestHandler):
             )
             return
 
+        summarize_tenant_account_status(
+            self.server.telegram_config.state_path,  # type: ignore[attr-defined]
+            result.telegram_user_id,
+            result.environment,
+        )
         self._write_response(
             HTTPStatus.OK,
             render_action_html_page(

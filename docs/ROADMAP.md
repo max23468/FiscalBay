@@ -2,30 +2,7 @@
 
 ## Fase 1 - Servizio Pubblico con Accesso Approvato
 
-- [ ] rifinire il flusso UX finale tra Telegram, pagina web e callback conclusivo
-- [ ] rendere `/start` adattivo allo stato reale dell'utente e dell'account: `new`, `pending`, `approved`, `blocked`, collegato o da collegare
-- [ ] chiarire con messaggi piu' espliciti cosa puo' fare un utente `new`, `pending`, `approved` o `blocked`
-- [ ] rendere esplicito che il bot supporta solo chat private e non gruppi o supergruppi
-- [ ] rendere piu' leggibile il percorso di errore per `/connect`, `/disconnect` e callback OAuth falliti
-- [ ] introdurre revoca remota eBay nel flusso `/disconnect`
-- [ ] introdurre uno stato account eBay esplicito e coerente tra bot, storage e callback: `linked`, `token_expired`, `revoked`, `reconnect_required`, `error`
-- [ ] chiarire a livello utente quando un account eBay e' collegato, scaduto, revocato o da riconnettere
-- [ ] introdurre un percorso di reconnect guidato quando il token e' scaduto, revocato o richiede nuovo consenso
-- [ ] aggiungere una vista o comando rapido tipo `/reconnect_status` focalizzato sullo stato di collegamento e sulla prossima azione richiesta
-- [ ] mantenere lato UX il modello di un solo account eBay gia' collegato per utente, senza introdurre selettori di account o environment
-- [ ] distinguere meglio nei messaggi tra errore utente e errore di servizio
-- [ ] spiegare meglio, sui comandi ordine, se un ordine rientra o no nei criteri di notifica e se risulta gia' notificato
-- [ ] chiarire e implementare le due opzioni distinte di disconnessione: scollegare solo l'account eBay oppure disattivare anche l'uso del bot per l'utente
-- [ ] rendere piu' esplicito nell'interfaccia admin quando un utente approvato non ha ancora completato il collegamento eBay
-- [ ] aggiungere una vista admin piu' leggibile delle richieste aperte e degli utenti gia' approvati
-- [ ] rendere piu' chiara la distinzione tra richiesta accesso, approvazione admin e attivazione operativa dell'utente
-- [ ] introdurre un comando o vista tipo `/why_not_notified` per spiegare perche' un ordine non ha generato una notifica
-- [ ] rendere piu' esplicita la deduplica tra ordine visto, ordine notificabile, ordine gia' notificato e ordine escluso dai criteri
-- [ ] separare meglio il percorso veloce di discovery ordini dal percorso piu' ricco di explain/detail richiesto solo quando serve
-- [ ] ridurre le chiamate `getOrder` non necessarie, usando il dettaglio solo quando serve davvero al flusso core
-- [ ] rendere piu' stretto il fetch incrementale del polling per ridurre overlap inutili tra cicli consecutivi
-- [ ] migliorare il caching dello stato account/token quando un tenant e' gia' in stato `reconnect_required`, `revoked` o equivalente
-- [ ] mantenere una minima memoria operativa leggibile per utente o tenant, senza trasformarla in storico completo del prodotto
+Fase 1 completata.
 
 ## Fase 2 - Guardrail e Strumenti Admin
 
