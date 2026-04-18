@@ -6,7 +6,8 @@ import json
 import os
 import sqlite3
 from datetime import datetime, timezone
-from typing import Iterable, TypedDict
+from types import TracebackType
+from typing import Iterable, Literal, TypedDict
 
 from ..models import (
     CAPABILITY_MANAGE_NOTIFICATIONS,
@@ -42,6 +43,21 @@ from .schema import migrate_db
 SCHEMA_VERSION = _SCHEMA_VERSION
 
 
+class _ClosingConnection(sqlite3.Connection):
+    """sqlite3 context manager variant that also closes the connection on exit."""
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> Literal[False]:
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
+
+
 class MetricsState(TypedDict):
     orders_read: int
     orders_with_cf: int
@@ -74,7 +90,7 @@ def ensure_parent_dir(path: str) -> None:
 
 def _connect(path: str) -> sqlite3.Connection:
     ensure_parent_dir(path)
-    conn = sqlite3.connect(path, timeout=10.0)
+    conn = sqlite3.connect(path, timeout=10.0, factory=_ClosingConnection)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -1092,11 +1108,54 @@ def summarize_tenant_account_status(
     telegram_user_id: int,
     environment: str | None = None,
 ) -> dict[str, object]:
+    init_db(path)
     linked_account = resolve_linked_ebay_account(path, telegram_user_id, environment)
+    account_snapshot = linked_account
     token_set = (
         resolve_ebay_token_set(path, telegram_user_id, environment) if linked_account else None
     )
+    with _connect(path) as conn:
+        if account_snapshot is None:
+            base_query = (
+                "SELECT id, telegram_user_id, ebay_user_id, environment, scopes, linked_at, status "
+                "FROM ebay_accounts "
+                "WHERE telegram_user_id = ?"
+            )
+            row = None
+            if environment:
+                row = conn.execute(
+                    base_query + " AND environment = ? ORDER BY id DESC LIMIT 1",
+                    (telegram_user_id, environment),
+                ).fetchone()
+            if row is None:
+                row = conn.execute(
+                    base_query + " ORDER BY id DESC LIMIT 1",
+                    (telegram_user_id,),
+                ).fetchone()
+            if row is not None:
+                account_snapshot = LinkedEbayAccount.from_mapping(dict(row))
+        if account_snapshot is not None and token_set is None and account_snapshot.id is not None:
+            token_row = conn.execute(
+                "SELECT id, ebay_account_id, refresh_token_encrypted, access_token, "
+                "scope_set, expires_at, updated_at, status "
+                "FROM ebay_tokens WHERE ebay_account_id = ? LIMIT 1",
+                (account_snapshot.id,),
+            ).fetchone()
+            if token_row is not None:
+                token_set = EbayTokenSet.from_mapping(dict(token_row))
     subscriptions = load_notification_subscriptions(path)
+    latest_reconnect_outcome = ""
+    latest_reconnect_reason = ""
+    for entry in load_audit_log_entries(path, limit=200):
+        if entry.event_type != "oauth_failure":
+            continue
+        if entry.target_telegram_user_id not in {None, telegram_user_id}:
+            continue
+        if environment and entry.environment and entry.environment != environment:
+            continue
+        latest_reconnect_outcome = entry.outcome
+        latest_reconnect_reason = entry.details_json
+        break
     enabled_subscription_count = sum(
         1
         for subscription in subscriptions
@@ -1107,11 +1166,15 @@ def summarize_tenant_account_status(
     return {
         "telegram_user_id": telegram_user_id,
         "linked": linked_account is not None,
-        "environment": linked_account.environment if linked_account is not None else environment,
-        "ebay_user_id": linked_account.ebay_user_id if linked_account is not None else "",
-        "account_status": linked_account.status if linked_account is not None else "unlinked",
+        "environment": account_snapshot.environment
+        if account_snapshot is not None
+        else environment,
+        "ebay_user_id": account_snapshot.ebay_user_id if account_snapshot is not None else "",
+        "account_status": account_snapshot.status if account_snapshot is not None else "unlinked",
         "token_status": token_set.status if token_set is not None else "missing",
         "token_configured": token_set is not None,
+        "latest_reconnect_outcome": latest_reconnect_outcome,
+        "latest_reconnect_reason": latest_reconnect_reason,
         "subscription_count": enabled_subscription_count,
         "chat_count": chat_count,
     }

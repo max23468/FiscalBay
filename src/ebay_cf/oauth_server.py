@@ -90,6 +90,14 @@ class OAuthCallbackResult:
     account_status: str
 
 
+@dataclass
+class OAuthFailurePresentation:
+    title: str
+    message: str
+    outcome: str
+    notify_text: str
+
+
 def oauth_callback_url() -> str:
     explicit = os.getenv("EBAY_OAUTH_CALLBACK_URL", "").strip()
     if explicit:
@@ -160,6 +168,133 @@ def render_html_page(title: str, message: str, *, is_error: bool = False) -> byt
         "</div></body></html>"
     )
     return body.encode("utf-8")
+
+
+def describe_provider_error(error_value: str) -> OAuthFailurePresentation:
+    normalized = error_value.strip().lower()
+    if normalized in {"access_denied", "user_canceled", "user_cancelled"}:
+        return OAuthFailurePresentation(
+            title="Autorizzazione annullata",
+            message=(
+                "L'autorizzazione eBay e' stata annullata prima del completamento. "
+                "Torna su Telegram e usa di nuovo /connect se vuoi riprovare."
+            ),
+            outcome="user_cancelled",
+            notify_text=(
+                "⚠️ <b>Collegamento eBay non completato</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "L'autorizzazione e' stata annullata prima del completamento.\n"
+                "Usa <code>/connect</code> se vuoi riprovare."
+            ),
+        )
+    if normalized in {"invalid_scope", "unauthorized_client"}:
+        return OAuthFailurePresentation(
+            title="Collegamento non disponibile",
+            message=(
+                "eBay ha rifiutato la richiesta di autorizzazione per un problema di "
+                "configurazione del servizio. Riprova piu' tardi o contatta l'admin."
+            ),
+            outcome="provider_configuration_error",
+            notify_text=(
+                "⚠️ <b>Collegamento eBay non disponibile</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "eBay ha rifiutato la richiesta per un problema di configurazione del servizio.\n"
+                "Non dipende dal tuo account: riprova piu' tardi."
+            ),
+        )
+    return OAuthFailurePresentation(
+        title="Autorizzazione non completata",
+        message=(
+            "eBay non ha completato l'autorizzazione richiesta. "
+            f"Codice restituito: {error_value or 'n/d'}. "
+            "Torna su Telegram e usa /connect per riprovare."
+        ),
+        outcome="provider_error",
+        notify_text=(
+            "⚠️ <b>Collegamento eBay non completato</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "eBay non ha completato l'autorizzazione richiesta.\n"
+            "Usa <code>/connect</code> per riprovare."
+        ),
+    )
+
+
+def describe_callback_exception(exc: Exception) -> OAuthFailurePresentation:
+    message = str(exc)
+    if isinstance(exc, ConfigurationError):
+        if "scaduta" in message.lower():
+            return OAuthFailurePresentation(
+                title="Sessione scaduta",
+                message=(
+                    "La sessione di collegamento e' scaduta prima del completamento. "
+                    "Torna su Telegram e usa di nuovo /connect."
+                ),
+                outcome="session_expired",
+                notify_text=(
+                    "⚠️ <b>Sessione OAuth scaduta</b>\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "Il collegamento non e' stato completato in tempo.\n"
+                    "Usa <code>/connect</code> per aprire una nuova sessione."
+                ),
+            )
+        if "non trovata" in message.lower() or "non e' piu' disponibile" in message.lower():
+            return OAuthFailurePresentation(
+                title="Link non piu' valido",
+                message=(
+                    "Il link di collegamento non e' piu' valido o non e' piu' disponibile. "
+                    "Torna su Telegram e usa /connect per generarne uno nuovo."
+                ),
+                outcome="session_unavailable",
+                notify_text=(
+                    "⚠️ <b>Link di collegamento non piu' valido</b>\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "La sessione OAuth non e' piu' disponibile.\n"
+                    "Usa <code>/connect</code> per generarne una nuova."
+                ),
+            )
+        return OAuthFailurePresentation(
+            title="Collegamento non disponibile",
+            message=(
+                "Il servizio non ha potuto completare il collegamento per un problema di "
+                "configurazione o salvataggio. Riprova piu' tardi o contatta l'admin."
+            ),
+            outcome="service_configuration_error",
+            notify_text=(
+                "⚠️ <b>Collegamento eBay non disponibile</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "Il servizio non ha potuto completare il collegamento per un problema tecnico.\n"
+                "Non dipende dal tuo account: riprova piu' tardi."
+            ),
+        )
+    if isinstance(exc, EbayApiError):
+        return OAuthFailurePresentation(
+            title="Errore temporaneo eBay",
+            message=(
+                "eBay non ha completato correttamente il callback o lo scambio token. "
+                "Riprova piu' tardi da Telegram con /connect."
+            ),
+            outcome="provider_runtime_error",
+            notify_text=(
+                "⚠️ <b>Errore temporaneo durante il collegamento</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "eBay non ha completato correttamente il callback o lo scambio token.\n"
+                "Usa <code>/connect</code> per riprovare piu' tardi."
+            ),
+        )
+    return OAuthFailurePresentation(
+        title="Collegamento fallito",
+        message=(
+            "Il collegamento non e' stato completato per un errore inatteso del servizio. "
+            "Riprova piu' tardi da Telegram con /connect."
+        ),
+        outcome="callback_error",
+        notify_text=(
+            "⚠️ <b>Collegamento eBay fallito</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Il servizio ha incontrato un errore inatteso durante il callback.\n"
+            "Usa <code>/connect</code> per riprovare piu' tardi."
+        ),
+    )
 
 
 def oauth_consent_config(config: object) -> object:
@@ -400,24 +535,40 @@ class OAuthHandler(BaseHTTPRequestHandler):
     def _handle_callback(self, params: dict[str, list[str]]) -> None:
         oauth_state = (params.get("state") or [""])[0]
         error_value = (params.get("error") or [""])[0]
+        session = load_oauth_link_session_by_state(
+            self.server.telegram_config.state_path,  # type: ignore[attr-defined]
+            oauth_state,
+            "ebay",
+        )
         if error_value:
+            presentation = describe_provider_error(error_value)
             append_oauth_audit_log(
                 self.server.telegram_config,  # type: ignore[attr-defined]
                 event_type="oauth_failure",
                 created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                outcome="provider_error",
+                actor_telegram_user_id=session.telegram_user_id if session is not None else None,
+                target_telegram_user_id=session.telegram_user_id if session is not None else None,
+                telegram_chat_id=session.telegram_chat_id if session is not None else None,
+                environment=session.environment if session is not None else "",
+                outcome=presentation.outcome,
                 details_json=error_value,
             )
-            update_oauth_link_session(
-                self.server.telegram_config.state_path,  # type: ignore[attr-defined]
-                oauth_state,
-                status=OAUTH_SESSION_STATUS_FAILED,
-            )
+            if session is not None:
+                update_oauth_link_session(
+                    self.server.telegram_config.state_path,  # type: ignore[attr-defined]
+                    oauth_state,
+                    status=OAUTH_SESSION_STATUS_FAILED,
+                )
+                send_message(
+                    self.server.telegram_config.token,  # type: ignore[attr-defined]
+                    session.telegram_chat_id,
+                    presentation.notify_text,
+                )
             self._write_response(
                 HTTPStatus.BAD_REQUEST,
                 render_html_page(
-                    "Autorizzazione annullata",
-                    f"eBay ha restituito l'errore: {error_value}",
+                    presentation.title,
+                    presentation.message,
                     is_error=True,
                 ),
             )
@@ -439,22 +590,33 @@ class OAuthHandler(BaseHTTPRequestHandler):
                 environment=result.environment,
             )
         except Exception as exc:
+            presentation = describe_callback_exception(exc)
             append_oauth_audit_log(
                 self.server.telegram_config,  # type: ignore[attr-defined]
                 event_type="oauth_failure",
                 created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                outcome="callback_error",
+                actor_telegram_user_id=session.telegram_user_id if session is not None else None,
+                target_telegram_user_id=session.telegram_user_id if session is not None else None,
+                telegram_chat_id=session.telegram_chat_id if session is not None else None,
+                environment=session.environment if session is not None else "",
+                outcome=presentation.outcome,
                 details_json=str(exc),
             )
-            update_oauth_link_session(
-                self.server.telegram_config.state_path,  # type: ignore[attr-defined]
-                oauth_state,
-                status=OAUTH_SESSION_STATUS_FAILED,
-            )
+            if session is not None:
+                update_oauth_link_session(
+                    self.server.telegram_config.state_path,  # type: ignore[attr-defined]
+                    oauth_state,
+                    status=OAUTH_SESSION_STATUS_FAILED,
+                )
+                send_message(
+                    self.server.telegram_config.token,  # type: ignore[attr-defined]
+                    session.telegram_chat_id,
+                    presentation.notify_text,
+                )
             log_event(LOGGER, logging.ERROR, "oauth_callback_failed", error=exc, state=oauth_state)
             self._write_response(
                 HTTPStatus.BAD_REQUEST,
-                render_html_page("Collegamento fallito", str(exc), is_error=True),
+                render_html_page(presentation.title, presentation.message, is_error=True),
             )
             return
 

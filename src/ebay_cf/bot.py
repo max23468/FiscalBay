@@ -100,6 +100,7 @@ from .storage.sqlite import (
     load_notification_subscriptions,
     load_retry_queue_entries,
     load_runtime_state,
+    load_telegram_chats,
     load_telegram_user,
     load_telegram_users,
     load_tenant_retry_queue_entries,
@@ -133,6 +134,7 @@ from .telegram_commands import (
     build_admin_approval_markup,
     build_help_text,
     build_main_menu_markup,
+    build_start_text,
     callback_command_from_data,
     chunk_message,
     format_access_request_status,
@@ -144,8 +146,11 @@ from .telegram_commands import (
     format_connect_status,
     format_disconnect_status,
     format_notifications_status,
+    format_order_notification_summary,
+    format_reconnect_status,
     format_settings_status,
     format_status,
+    format_why_not_notified_status,
     is_authorized,
     options_for_command,
     parse_command,
@@ -176,10 +181,12 @@ COMMAND_CAPABILITIES: dict[str, str] = {
     "/ping": CAPABILITY_USE_BOT,
     "/stato": CAPABILITY_USE_BOT,
     "/account": CAPABILITY_VIEW_ACCOUNT,
+    "/reconnect_status": CAPABILITY_VIEW_ACCOUNT,
     "/connect": CAPABILITY_CONNECT_ACCOUNT,
     "/disconnect": CAPABILITY_CONNECT_ACCOUNT,
     "/notifications": CAPABILITY_MANAGE_NOTIFICATIONS,
     "/settings": CAPABILITY_MANAGE_SETTINGS,
+    "/why_not_notified": CAPABILITY_VIEW_ORDERS,
     "/ultimi": CAPABILITY_VIEW_ORDERS,
     "/tutti": CAPABILITY_VIEW_ORDERS,
     "/ordine": CAPABILITY_VIEW_ORDERS,
@@ -672,6 +679,130 @@ def update_state_with_records(
     return updated_state.as_dict()
 
 
+def explain_why_order_not_notified(
+    order: OrderRecord,
+    state: BotRuntimeState,
+    *,
+    environment: str,
+    state_path: str,
+    telegram_user_id: int | None,
+    chat_id: int | None,
+) -> dict[str, str]:
+    order_id = order.orderId
+    fingerprint = record_fingerprint(order)
+    delivery_status = "delivery_unknown"
+    delivery_headline = "Il contesto di recapito di questa chat non e' disponibile."
+    delivery_detail = (
+        "Il comando non riesce a verificare preferenze notifiche senza chat o utente Telegram."
+    )
+    if telegram_user_id is not None and chat_id is not None:
+        chats = load_telegram_chats(state_path)
+        subscriptions = load_notification_subscriptions(state_path)
+        chat = next(
+            (
+                item
+                for item in chats
+                if item.telegram_user_id == telegram_user_id and item.telegram_chat_id == chat_id
+            ),
+            None,
+        )
+        subscription = next(
+            (
+                item
+                for item in subscriptions
+                if item.telegram_user_id == telegram_user_id and item.telegram_chat_id == chat_id
+            ),
+            None,
+        )
+        if chat is None:
+            delivery_status = "chat_not_registered"
+            delivery_headline = "Questa chat non e' ancora registrata come target notifiche."
+            delivery_detail = (
+                "Invia un comando al bot da questa chat e verifica poi /settings o /notifications."
+            )
+        elif not chat.notifications_enabled:
+            delivery_status = "chat_notifications_disabled"
+            delivery_headline = "Le notifiche risultano disabilitate per questa chat."
+            delivery_detail = (
+                "Riattiva la chat con /notifications on prima di aspettarti nuovi avvisi."
+            )
+        elif subscription is None:
+            delivery_status = "chat_not_subscribed"
+            delivery_headline = "Questa chat non ha una subscription notifiche attiva."
+            delivery_detail = (
+                "Serve una subscription tenant per ricevere auto-notifiche in questa chat."
+            )
+        elif not subscription.enabled:
+            delivery_status = "chat_subscription_disabled"
+            delivery_headline = "La subscription notifiche di questa chat e' disattivata."
+            delivery_detail = (
+                "Riattiva la subscription con /notifications on per ricevere nuovi ordini."
+            )
+        else:
+            delivery_status = "delivery_ready"
+            delivery_headline = "Questa chat risulta abilitata a ricevere notifiche."
+            delivery_detail = (
+                "Se l'ordine e' eleggibile e non gia' deduplicato, il recapito qui e' pronto."
+            )
+    if not order_id:
+        return {
+            "order_id": "n/d",
+            "environment": environment,
+            "status": "missing_order_id",
+            "headline": "L'ordine non ha un identificativo stabile utilizzabile.",
+            "detail": "Il runtime non notificherebbe un record senza orderId.",
+            "delivery_status": delivery_status,
+            "delivery_headline": delivery_headline,
+            "delivery_detail": delivery_detail,
+        }
+    if not has_codice_fiscale(order):
+        return {
+            "order_id": order_id,
+            "environment": environment,
+            "status": "not_eligible",
+            "headline": "L'ordine non rientra nei criteri di notifica correnti.",
+            "detail": "Il bot notifica solo ordini con CODICE_FISCALE presente e valorizzato.",
+            "delivery_status": delivery_status,
+            "delivery_headline": delivery_headline,
+            "delivery_detail": delivery_detail,
+        }
+    if order_id in set(state.notified_order_ids):
+        return {
+            "order_id": order_id,
+            "environment": environment,
+            "status": "already_notified_order_id",
+            "headline": "L'ordine risulta gia' notificato o tracciato come visto.",
+            "detail": "La deduplica per orderId evita una seconda notifica.",
+            "delivery_status": delivery_status,
+            "delivery_headline": delivery_headline,
+            "delivery_detail": delivery_detail,
+        }
+    if fingerprint in set(state.notified_hashes):
+        return {
+            "order_id": order_id,
+            "environment": environment,
+            "status": "already_notified_fingerprint",
+            "headline": "L'ordine collide con una fingerprint gia' notificata.",
+            "detail": "La deduplica per fingerprint evita duplicati anche oltre il solo orderId.",
+            "delivery_status": delivery_status,
+            "delivery_headline": delivery_headline,
+            "delivery_detail": delivery_detail,
+        }
+    return {
+        "order_id": order_id,
+        "environment": environment,
+        "status": "would_notify",
+        "headline": "Con i criteri attuali questo ordine risulta notificabile.",
+        "detail": (
+            "Se entra in una finestra nuova del polling e la chat ha notifiche attive, "
+            "il bot lo notifichera'."
+        ),
+        "delivery_status": delivery_status,
+        "delivery_headline": delivery_headline,
+        "delivery_detail": delivery_detail,
+    }
+
+
 def maybe_send_new_order_notifications(
     telegram_config: TelegramConfig,
     ebay_environment: str,
@@ -964,8 +1095,28 @@ def process_message(
             )
         ]
 
+    if command in ("", "/start"):
+        if is_admin_user:
+            return [build_start_text(user_status=TELEGRAM_USER_STATUS_ADMIN, is_admin=True)]
+        if telegram_config.admin_user_id is not None and not can_use_bot:
+            return [build_start_text(user_status=user_status or TELEGRAM_USER_STATUS_NEW)]
+
+        start_account_status: dict[str, object] | None = None
+        if telegram_user_id is not None:
+            start_account_status = summarize_tenant_account_status(
+                telegram_config.state_path,
+                telegram_user_id,
+                ebay_environment,
+            )
+        return [
+            build_start_text(
+                user_status=user_status or TELEGRAM_USER_STATUS_APPROVED,
+                account_status=start_account_status,
+            )
+        ]
+
     if not has_command_capability:
-        if command in ("", "/start", "/help"):
+        if command == "/help":
             return [format_access_required_status(user_status or TELEGRAM_USER_STATUS_NEW)]
         if command == "/request_access":
             return [
@@ -1076,12 +1227,97 @@ def process_message(
         )
         return [format_account_status(account_status)]
 
+    if command == "/reconnect_status":
+        if resolved_telegram_user_id is None:
+            return [
+                "🔁 <b>Reconnect status</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "Questa chat non e' ancora associata a un tenant Telegram noto."
+            ]
+        account_status = summarize_tenant_account_status(
+            telegram_config.state_path,
+            resolved_telegram_user_id,
+            resolved_environment,
+        )
+        return [format_reconnect_status(account_status)]
+
+    if command == "/why_not_notified":
+        if not args:
+            return ["Uso corretto: <code>/why_not_notified &lt;order_id&gt;</code>"]
+        order_id = args[0]
+        options = FetchOptions(order_ids=[order_id], only_found=False, max_results=1)
+        try:
+            records = request_with_backoff(
+                lambda: fetch_records_for_environment_fn(resolved_environment, options),
+                label="fetch_records_why_not_notified",
+            )
+        except ConfigurationError as exc:
+            return [f"⚠️ {exc}"]
+        assert isinstance(records, list)
+        if not records:
+            return [
+                format_why_not_notified_status(
+                    {
+                        "order_id": order_id,
+                        "environment": resolved_environment,
+                        "status": "order_not_found",
+                        "headline": "L'ordine non e' stato trovato con le credenziali correnti.",
+                        "detail": (
+                            "Verifica orderId, ambiente e collegamento account prima di riprovare."
+                        ),
+                    }
+                )
+            ]
+        state = load_state_fn(telegram_config.state_path)
+        explanation = explain_why_order_not_notified(
+            coerce_order_record(records[0]),
+            state,
+            environment=resolved_environment,
+            state_path=telegram_config.state_path,
+            telegram_user_id=resolved_telegram_user_id,
+            chat_id=chat_id,
+        )
+        return [format_why_not_notified_status(explanation)]
+
+    if command == "/ordine":
+        if not args:
+            return ["Uso corretto: <code>/ordine &lt;order_id&gt;</code>"]
+        order_id = args[0]
+        options = FetchOptions(order_ids=[order_id], only_found=False, max_results=1)
+        try:
+            records = request_with_backoff(
+                lambda: fetch_records_for_environment_fn(resolved_environment, options),
+                label="fetch_records_order_detail",
+            )
+        except ConfigurationError as exc:
+            return [f"⚠️ {exc}"]
+        assert isinstance(records, list)
+        if not records:
+            return ["🔎 Nessun ordine trovato nella selezione richiesta."]
+        order_record = coerce_order_record(records[0])
+        state = load_state_fn(telegram_config.state_path)
+        explanation = explain_why_order_not_notified(
+            order_record,
+            state,
+            environment=resolved_environment,
+            state_path=telegram_config.state_path,
+            telegram_user_id=resolved_telegram_user_id,
+            chat_id=chat_id,
+        )
+        return [
+            _format_record(order_record) + "\n\n" + format_order_notification_summary(explanation)
+        ]
+
     if command == "/connect":
         if resolved_telegram_user_id is None:
             return [
                 "🔗 <b>Collegamento account eBay</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 "Questa chat non e' ancora associata a un tenant Telegram noto."
             ]
+        connect_account_status = summarize_tenant_account_status(
+            telegram_config.state_path,
+            resolved_telegram_user_id,
+            resolved_environment,
+        )
         now = datetime.now(timezone.utc)
         latest_session = load_latest_oauth_link_session(
             telegram_config.state_path,
@@ -1129,6 +1365,11 @@ def process_message(
                     "oauth_state": active_session.oauth_state,
                     "expires_at": active_session.expires_at,
                     "connect_url": build_connect_entrypoint_url(active_session.oauth_state),
+                    "session_reused": not created_session,
+                    "account_status": connect_account_status.get("account_status"),
+                    "ebay_user_id": connect_account_status.get("ebay_user_id"),
+                    "reconnect": connect_account_status.get("account_status")
+                    in {"linked", "disconnected", "revoked"},
                 }
             )
         ]
