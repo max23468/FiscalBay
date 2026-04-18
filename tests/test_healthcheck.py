@@ -10,8 +10,8 @@ from src.ebay_cf.healthcheck import (
     main,
     render_text_report,
 )
-from src.ebay_cf.models import TelegramConfig
-from src.ebay_cf.storage.sqlite import save_retry_queue, save_state
+from src.ebay_cf.models import BotMetrics, BotRuntimeState, TelegramConfig
+from src.ebay_cf.storage.sqlite import save_retry_queue, save_state, save_tenant_runtime_state
 
 
 class HealthcheckTests(unittest.TestCase):
@@ -127,6 +127,67 @@ class HealthcheckTests(unittest.TestCase):
             self.assertIn("service_inactive", report["alerts"])
             self.assertIn("consecutive_error_cycles_exceeded", report["alerts"])
             self.assertIn("retry_queue_size_exceeded", report["alerts"])
+
+    def test_build_health_report_prefers_fresh_tenant_runtime_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            lock_path = Path(tmpdir) / "telegram_bot.lock"
+            lock_path.write_text("pid=123\n", encoding="utf-8")
+            save_state(
+                str(db_path),
+                {
+                    "notified_order_ids": [],
+                    "notified_hashes": [],
+                    "last_check": "2026-04-05T20:00:00Z",
+                    "last_error": None,
+                    "metrics": {
+                        "orders_read": 0,
+                        "orders_with_cf": 0,
+                        "notifications_sent": 0,
+                        "telegram_retries": 0,
+                        "consecutive_error_cycles": 0,
+                        "errors_by_type": {},
+                    },
+                },
+            )
+            save_tenant_runtime_state(
+                str(db_path),
+                42,
+                BotRuntimeState(
+                    last_check="2026-04-05T20:02:00Z",
+                    metrics=BotMetrics(
+                        orders_read=5,
+                        orders_with_cf=2,
+                        notifications_sent=1,
+                        telegram_retries=0,
+                        consecutive_error_cycles=0,
+                        errors_by_type={},
+                    ),
+                ),
+            )
+
+            with patch("src.ebay_cf.healthcheck.datetime") as mock_datetime:
+                from datetime import datetime, timezone
+
+                mock_datetime.now.return_value = datetime(2026, 4, 5, 20, 3, 0, tzinfo=timezone.utc)
+                mock_datetime.fromisoformat = datetime.fromisoformat
+                config = TelegramConfig(
+                    token="x",
+                    allowed_chat_ids=None,
+                    notify_chat_ids={123},
+                    ebay_poll_interval_seconds=120,
+                    state_path=str(db_path),
+                    retry_queue_path=str(db_path),
+                    lock_path=str(lock_path),
+                )
+                with patch("src.ebay_cf.healthcheck.load_telegram_config", return_value=config):
+                    report = build_health_report()
+
+            self.assertTrue(report["ok"])
+            self.assertEqual(report["status"], "ok")
+            self.assertEqual(report["last_check"], "2026-04-05T20:02:00Z")
+            self.assertEqual(report["metrics"]["orders_read"], 5)
+            self.assertEqual(report["metrics"]["orders_with_cf"], 2)
 
     def test_render_text_report_includes_reasons_and_warnings(self) -> None:
         text = render_text_report(

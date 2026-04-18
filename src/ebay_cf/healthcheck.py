@@ -14,8 +14,8 @@ from .config import configure_logging, load_telegram_config
 from .logging_utils import log_event
 from .models import BotMetrics, as_int
 from .storage.sqlite import (
+    load_effective_runtime_state,
     load_retry_queue_entries,
-    load_runtime_state,
     summarize_multi_tenant_readiness,
     summarize_operation_queue,
 )
@@ -102,7 +102,7 @@ def build_health_report(
     max_retry_queue_size: int | None = None,
 ) -> dict[str, object]:
     telegram_config = load_telegram_config()
-    state = load_runtime_state(telegram_config.state_path)
+    state = load_effective_runtime_state(telegram_config.state_path)
     retry_queue = load_retry_queue_entries(telegram_config.retry_queue_path)
     effective_max_age = max_age_seconds or default_max_age_seconds(
         telegram_config.ebay_poll_interval_seconds

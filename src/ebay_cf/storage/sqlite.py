@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from datetime import datetime, timezone
 from typing import Iterable, TypedDict
 
 from ..models import (
@@ -410,6 +411,44 @@ def load_runtime_state(path: str) -> BotRuntimeState:
 
 def save_runtime_state(path: str, state: BotRuntimeState) -> None:
     save_state(path, _state_from_model(state))
+
+
+def _parse_runtime_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def load_effective_runtime_state(path: str) -> BotRuntimeState:
+    init_db(path)
+    global_state = load_runtime_state(path)
+    global_timestamp = _parse_runtime_timestamp(global_state.last_check)
+    freshest_state = global_state
+    freshest_timestamp = global_timestamp
+    with _connect(path) as conn:
+        tenant_rows = conn.execute(
+            "SELECT telegram_user_id "
+            "FROM tenant_runtime_state "
+            "ORDER BY updated_at DESC, telegram_user_id ASC"
+        ).fetchall()
+    for row in tenant_rows:
+        tenant_state = load_tenant_runtime_state(path, int(row["telegram_user_id"]))
+        tenant_timestamp = _parse_runtime_timestamp(tenant_state.last_check)
+        if tenant_timestamp is None:
+            continue
+        if freshest_timestamp is None or tenant_timestamp > freshest_timestamp:
+            freshest_state = tenant_state
+            freshest_timestamp = tenant_timestamp
+    return freshest_state
 
 
 def load_retry_queue(path: str) -> list[RetryQueueItem]:

@@ -171,9 +171,7 @@ def extract_record(order: OrderPayload) -> OrderRecord:
         creationDate=order.get("creationDate", ""),
         buyerUsername=buyer_mapping.get("username", ""),
         buyerName=(
-            (
-                _as_mapping(buyer_mapping.get("taxAddress")).get("fullName", "")
-            )
+            (_as_mapping(buyer_mapping.get("taxAddress")).get("fullName", ""))
             or buyer_mapping.get("fullName", "")
         ),
         taxpayerId=taxpayer_id,
