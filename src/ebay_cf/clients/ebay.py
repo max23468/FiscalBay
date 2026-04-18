@@ -12,7 +12,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Mapping, Optional, TypeAlias, TypedDict, cast
 
 from ..errors import EbayApiError
 from ..logging_utils import log_event
@@ -29,6 +29,114 @@ DEFAULT_IDENTITY_SCOPE = "https://api.ebay.com/oauth/api_scope/commerce.identity
 
 _token_cache_lock = threading.Lock()
 _token_cache: dict[str, tuple[str, float]] = {}
+
+JsonPrimitive: TypeAlias = None | bool | int | float | str
+JsonValue: TypeAlias = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"]
+JsonObject: TypeAlias = dict[str, JsonValue]
+
+
+class EbayErrorPayload(TypedDict, total=False):
+    message: str
+    error_description: str
+
+
+class OAuthTokenResponse(TypedDict, total=False):
+    access_token: str
+    refresh_token: str
+    token_type: str
+    expires_in: int
+    refresh_token_expires_in: int
+    scope: str
+
+
+class OrderTaxIdentifier(TypedDict, total=False):
+    taxpayerId: str
+    taxIdentifierType: str
+    issuingCountry: str
+
+
+class OrderTaxAddress(TypedDict, total=False):
+    fullName: str
+
+
+class OrderBuyer(TypedDict, total=False):
+    username: str
+    fullName: str
+    taxAddress: OrderTaxAddress
+    taxIdentifier: OrderTaxIdentifier
+
+
+class OrderLineItem(TypedDict, total=False):
+    quantity: int | str
+    title: str
+
+
+class MoneyAmount(TypedDict, total=False):
+    value: str
+    currency: str
+
+
+class PricingSummary(TypedDict, total=False):
+    total: MoneyAmount
+
+
+class ContactAddress(TypedDict, total=False):
+    addressLine1: str
+    addressLine2: str
+    city: str
+    postalCode: str
+    stateOrProvince: str
+
+
+class ShipTo(TypedDict, total=False):
+    fullName: str
+    contactAddress: ContactAddress
+
+
+class ShippingStep(TypedDict, total=False):
+    shipTo: ShipTo
+
+
+class FulfillmentInstruction(TypedDict, total=False):
+    shippingStep: ShippingStep
+
+
+class EbayOrderPayload(TypedDict, total=False):
+    orderId: str
+    creationDate: str
+    buyer: OrderBuyer
+    lineItems: list[OrderLineItem]
+    pricingSummary: PricingSummary
+    fulfillmentStartInstructions: list[FulfillmentInstruction]
+
+
+class OrdersResponse(TypedDict, total=False):
+    orders: list[EbayOrderPayload]
+
+
+def _parse_json_object(payload: str, *, url: str) -> JsonObject:
+    parsed = json.loads(payload)
+    if not isinstance(parsed, dict):
+        raise EbayApiError(f"Risposta JSON non valida da {url}: atteso oggetto JSON.")
+    return cast(JsonObject, parsed)
+
+
+def _coerce_oauth_token_response(payload: Mapping[str, JsonValue]) -> OAuthTokenResponse:
+    return cast(OAuthTokenResponse, dict(payload))
+
+
+def _coerce_order_payload(payload: Mapping[str, JsonValue]) -> EbayOrderPayload:
+    return cast(EbayOrderPayload, dict(payload))
+
+
+def _coerce_order_list(value: JsonValue) -> list[EbayOrderPayload]:
+    if not isinstance(value, list):
+        return []
+    orders: list[EbayOrderPayload] = []
+    for item in value:
+        if isinstance(item, dict):
+            orders.append(_coerce_order_payload(item))
+    return orders
 
 
 def oauth_authorize_base(environment: str) -> str:
@@ -85,7 +193,7 @@ def request_json_once(
     url: str,
     headers: Optional[dict[str, str]] = None,
     data: Optional[bytes] = None,
-) -> dict:
+) -> JsonObject:
     request = urllib.request.Request(url=url, data=data, method=method)
     for key, value in (headers or {}).items():
         request.add_header(key, value)
@@ -96,9 +204,11 @@ def request_json_once(
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         try:
-            parsed = json.loads(body)
+            parsed = cast(EbayErrorPayload, _parse_json_object(body, url=url))
             message = parsed.get("message") or parsed.get("error_description") or body
         except json.JSONDecodeError:
+            message = body or str(exc)
+        except EbayApiError:
             message = body or str(exc)
         raise EbayApiError(f"HTTP {exc.code} su {url}: {message}", status_code=exc.code) from exc
     except urllib.error.URLError as exc:
@@ -106,7 +216,7 @@ def request_json_once(
 
     if not payload:
         return {}
-    return json.loads(payload)
+    return _parse_json_object(payload, url=url)
 
 
 def request_json(
@@ -114,10 +224,10 @@ def request_json(
     url: str,
     headers: Optional[dict[str, str]] = None,
     data: Optional[bytes] = None,
-) -> dict:
+) -> JsonObject:
     max_retries, base_delay = request_retry_settings()
 
-    def on_retry(exc: BaseException, attempt_no: int, total_attempts: int, delay: float) -> None:
+    def on_retry(exc: Exception, attempt_no: int, total_attempts: int, delay: float) -> None:
         assert isinstance(exc, EbayApiError)
         endpoint = urllib.parse.urlparse(url).path or url
         log_event(
@@ -134,7 +244,7 @@ def request_json(
         )
 
     return run_with_retry(
-        lambda: make_request_once(method, url, headers=headers, data=data),
+        lambda: request_json_once(method, url, headers=headers, data=data),
         max_attempts=max_retries,
         should_retry=lambda exc: isinstance(exc, EbayApiError) and ebay_error_retryable(exc),
         on_retry=on_retry,
@@ -143,7 +253,7 @@ def request_json(
     )
 
 
-def request_user_access_token_response(config: Config) -> dict:
+def request_user_access_token_response(config: Config) -> OAuthTokenResponse:
     credentials = f"{config.client_id}:{config.client_secret}".encode("utf-8")
     encoded = base64.b64encode(credentials).decode("ascii")
     url = f"{config.api_base}/identity/v1/oauth2/token"
@@ -154,7 +264,7 @@ def request_user_access_token_response(config: Config) -> dict:
             "scope": config.scopes,
         }
     ).encode("utf-8")
-    return request_json(
+    response = request_json(
         "POST",
         url,
         headers={
@@ -163,13 +273,14 @@ def request_user_access_token_response(config: Config) -> dict:
         },
         data=body,
     )
+    return _coerce_oauth_token_response(response)
 
 
 def request_authorization_code_token_response(
     config: Config,
     code: str,
     redirect_uri: str,
-) -> dict:
+) -> OAuthTokenResponse:
     credentials = f"{config.client_id}:{config.client_secret}".encode("utf-8")
     encoded = base64.b64encode(credentials).decode("ascii")
     url = f"{config.api_base}/identity/v1/oauth2/token"
@@ -180,7 +291,7 @@ def request_authorization_code_token_response(
             "redirect_uri": redirect_uri,
         }
     ).encode("utf-8")
-    return request_json(
+    response = request_json(
         "POST",
         url,
         headers={
@@ -189,6 +300,7 @@ def request_authorization_code_token_response(
         },
         data=body,
     )
+    return _coerce_oauth_token_response(response)
 
 
 def build_user_consent_url(config: Config, *, redirect_uri: str, state: str) -> str:
@@ -204,7 +316,7 @@ def build_user_consent_url(config: Config, *, redirect_uri: str, state: str) -> 
     return f"{oauth_authorize_base(config.environment)}?{query}"
 
 
-def get_authenticated_user_profile(config: Config, access_token: str) -> dict:
+def get_authenticated_user_profile(config: Config, access_token: str) -> JsonObject:
     url = f"{identity_api_base(config.environment)}/commerce/identity/v1/user/"
     return request_json(
         "GET",
@@ -224,7 +336,7 @@ def get_access_token(config: Config) -> str:
             if expires_at - skew > now:
                 return token
 
-    response = mint_user_access_token_response(config)
+    response = request_user_access_token_response(config)
     token = response.get("access_token")
     if not token:
         raise EbayApiError("La risposta OAuth non contiene access_token.")
@@ -248,8 +360,8 @@ def get_orders(
     created_before: datetime,
     page_size: int,
     max_results: int,
-) -> list[dict]:
-    orders: list[dict] = []
+) -> list[EbayOrderPayload]:
+    orders: list[EbayOrderPayload] = []
     offset = 0
     safe_page_size = max(1, min(page_size, DEFAULT_PAGE_SIZE))
     headers = {
@@ -268,7 +380,7 @@ def get_orders(
         query = urllib.parse.urlencode({"filter": filter_value, "limit": limit, "offset": offset})
         url = f"{config.api_base}/sell/fulfillment/v1/order?{query}"
         response = request_json("GET", url, headers=headers)
-        page_orders = response.get("orders", [])
+        page_orders = _coerce_order_list(cast(OrdersResponse, response).get("orders", []))
         if not page_orders:
             break
         orders.extend(page_orders)
@@ -279,44 +391,16 @@ def get_orders(
     return orders
 
 
-def get_order_detail(config: Config, access_token: str, order_id: str) -> dict:
+def get_order_detail(config: Config, access_token: str, order_id: str) -> EbayOrderPayload:
     encoded_order_id = urllib.parse.quote(order_id, safe="")
     url = f"{config.api_base}/sell/fulfillment/v1/order/{encoded_order_id}"
-    return request_json(
-        "GET",
-        url,
-        headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+    return _coerce_order_payload(
+        request_json(
+            "GET",
+            url,
+            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+        )
     )
-
-
-def make_request_once(
-    method: str,
-    url: str,
-    headers: Optional[dict[str, str]] = None,
-    data: Optional[bytes] = None,
-) -> dict:
-    return request_json_once(method, url, headers=headers, data=data)
-
-
-def make_request(
-    method: str,
-    url: str,
-    headers: Optional[dict[str, str]] = None,
-    data: Optional[bytes] = None,
-) -> dict:
-    return request_json(method, url, headers=headers, data=data)
-
-
-def mint_user_access_token_response(config: Config) -> dict:
-    return request_user_access_token_response(config)
-
-
-def mint_authorization_code_token_response(
-    config: Config,
-    code: str,
-    redirect_uri: str,
-) -> dict:
-    return request_authorization_code_token_response(config, code, redirect_uri)
 
 
 def to_ebay_timestamp(dt: datetime) -> str:

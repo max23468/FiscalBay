@@ -1,7 +1,5 @@
-# Keep ownership explicit even for solo maintenance.
 * @max23468
 
-# Keep areas explicit so future growth has an easy migration path.
 /.github/ @max23468
 /deploy/ @max23468
 /docs/ @max23468

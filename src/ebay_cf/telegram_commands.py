@@ -7,6 +7,7 @@ import json
 import urllib.parse
 from typing import Callable, Iterable, Mapping
 
+from .clients.telegram import InlineKeyboardMarkup
 from .errors import UserInputError
 from .models import (
     BotRuntimeState,
@@ -237,7 +238,7 @@ def build_start_text(
     )
 
 
-def build_main_menu_markup() -> dict[str, object]:
+def build_main_menu_markup() -> InlineKeyboardMarkup:
     return {
         "inline_keyboard": [
             [
@@ -299,7 +300,7 @@ def should_attach_main_menu(command: str) -> bool:
     )
 
 
-def build_access_request_markup() -> dict[str, object]:
+def build_access_request_markup() -> InlineKeyboardMarkup:
     return {
         "inline_keyboard": [
             [
@@ -312,7 +313,7 @@ def build_access_request_markup() -> dict[str, object]:
     }
 
 
-def build_admin_approval_markup(telegram_user_id: int) -> dict[str, object]:
+def build_admin_approval_markup(telegram_user_id: int) -> InlineKeyboardMarkup:
     return {
         "inline_keyboard": [
             [

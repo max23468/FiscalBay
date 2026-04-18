@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Callable, Mapping, Optional
 
-from .clients.telegram import telegram_request as _telegram_request
+from .clients.telegram import (
+    InlineKeyboardMarkup,
+    JsonValue,
+)
+from .clients.telegram import (
+    telegram_request as _telegram_request,
+)
 from .errors import EbayApiError, TelegramApiError
 from .logging_utils import log_event
 from .retry import run_with_retry
@@ -20,7 +26,7 @@ def request_with_backoff(
     attempts: int = 4,
     initial_delay: float = 1.0,
 ) -> object:
-    def on_retry(exc: BaseException, attempt_no: int, total_attempts: int, delay: float) -> None:
+    def on_retry(exc: Exception, attempt_no: int, total_attempts: int, delay: float) -> None:
         log_event(
             LOGGER,
             logging.WARNING,
@@ -47,12 +53,12 @@ def send_message(
     chat_id: int,
     text: str,
     message_thread_id: Optional[int] = None,
-    reply_markup: Optional[dict[str, object]] = None,
-    request_fn=_telegram_request,
+    reply_markup: InlineKeyboardMarkup | None = None,
+    request_fn: Callable[[str, str, Mapping[str, JsonValue] | None], JsonValue] = _telegram_request,
 ) -> None:
     chunks = chunk_message(text)
     for idx, chunk in enumerate(chunks):
-        params: dict[str, object] = {
+        params: dict[str, JsonValue] = {
             "chat_id": chat_id,
             "text": chunk,
             "parse_mode": "HTML",
@@ -67,7 +73,7 @@ def send_message(
         except TelegramApiError as exc:
             if getattr(exc, "status_code", None) != 400 and "HTTP 400" not in str(exc):
                 raise
-            fallback_params: dict[str, object] = {
+            fallback_params: dict[str, JsonValue] = {
                 "chat_id": chat_id,
                 "text": chunk,
                 "disable_web_page_preview": True,

@@ -7,7 +7,6 @@ import time
 from typing import Callable, TypeVar
 
 T = TypeVar("T")
-E = TypeVar("E", bound=BaseException)
 
 
 def compute_backoff_delay(
@@ -23,19 +22,19 @@ def run_with_retry(
     action: Callable[[], T],
     *,
     max_attempts: int,
-    should_retry: Callable[[BaseException], bool],
-    on_retry: Callable[[BaseException, int, int, float], None] | None = None,
+    should_retry: Callable[[Exception], bool],
+    on_retry: Callable[[Exception, int, int, float], None] | None = None,
     base_delay: float = 0.5,
     max_delay: float | None = None,
     jitter_max: float = 0.25,
     sleep_fn: Callable[[float], None] = time.sleep,
 ) -> T:
     attempts = max(1, max_attempts)
-    last_error: BaseException | None = None
+    last_error: Exception | None = None
     for attempt_index in range(attempts):
         try:
             return action()
-        except BaseException as exc:
+        except Exception as exc:
             last_error = exc
             is_last_attempt = attempt_index == attempts - 1
             if is_last_attempt or not should_retry(exc):

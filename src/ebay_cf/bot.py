@@ -15,9 +15,13 @@ try:
 except ImportError:  # pragma: no cover - Windows
     fcntl = None
 
+from .application import (
+    fetch_environment_records as _fetch_environment_records,
+)
+from .application import resolve_fetch_context as _resolve_fetch_context
 from .bot_messaging import request_with_backoff
 from .bot_messaging import send_message as _send_message
-from .clients.telegram import ensure_long_polling, telegram_request
+from .clients.telegram import InlineKeyboardMarkup, ensure_long_polling, telegram_request
 from .config import configure_logging, load_config, load_telegram_config
 from .errors import ConfigurationError, TelegramApiError
 from .logging_utils import log_event
@@ -40,6 +44,7 @@ from .models import (
     BotRuntimeState,
     BotRuntimeStateLike,
     FetchOptions,
+    JsonObject,
     NotificationSubscription,
     OauthLinkSession,
     OrderRecord,
@@ -220,9 +225,14 @@ def coerce_order_record(record: OrderRecordLike) -> OrderRecord:
 
 
 def fetch_environment_records(ebay_environment: str, options) -> list[OrderRecord]:
-    config = load_config(ebay_environment)
-    records = fetch_records(config, options)
-    return coerce_order_records(records)
+    return coerce_order_records(
+        _fetch_environment_records(
+            ebay_environment,
+            options,
+            load_config_fn=load_config,
+            fetch_records_fn=fetch_records,
+        )
+    )
 
 
 def fetch_tenant_records(
@@ -250,34 +260,16 @@ def _fetch_tenant_records_for_user(
     state_path: str,
     allow_global_fallback: bool,
 ) -> list[OrderRecord]:
-    linked_account = None
-    resolved_environment = ebay_environment
-    if telegram_user_id and state_path:
-        linked_account = resolve_linked_ebay_account(state_path, telegram_user_id, ebay_environment)
-        if linked_account is not None and linked_account.environment:
-            resolved_environment = linked_account.environment
-
-    if linked_account is not None:
-        tenant_config = load_tenant_config_from_storage(
-            linked_account,
-            resolved_environment,
-            state_path,
-        )
-        if tenant_config is not None:
-            return fetch_records(tenant_config, options)
-
-    if telegram_user_id is not None and not allow_global_fallback:
-        if linked_account is not None:
-            raise ConfigurationError(
-                "Credenziali tenant eBay non disponibili per questo utente. "
-                "Completa di nuovo /connect per collegare un token valido."
-            )
-        raise ConfigurationError(
-            "Nessun account eBay collegato per questo utente. "
-            "Usa /connect per collegare il tuo account eBay."
-        )
-
-    return fetch_records(load_config(resolved_environment), options)
+    resolved = _resolve_fetch_context(
+        ebay_environment,
+        telegram_user_id=telegram_user_id,
+        state_path=state_path,
+        allow_global_fallback=allow_global_fallback,
+        load_config_fn=load_config,
+        resolve_linked_account_fn=resolve_linked_ebay_account,
+        load_tenant_config_fn=load_tenant_config_from_storage,
+    )
+    return fetch_records(resolved.config, options)
 
 
 def record_fingerprint(record: OrderRecordLike) -> str:
@@ -365,7 +357,7 @@ def send_message(
     chat_id: int,
     text: str,
     message_thread_id: Optional[int] = None,
-    reply_markup: Optional[dict[str, object]] = None,
+    reply_markup: InlineKeyboardMarkup | None = None,
 ) -> None:
     _send_message(
         token,
@@ -546,7 +538,7 @@ def _append_audit_log(
     ebay_user_id: str = "",
     environment: str = "",
     outcome: str = "",
-    details: dict[str, object] | None = None,
+    details: JsonObject | None = None,
 ) -> None:
     append_audit_log_entry(
         telegram_config.state_path,
@@ -669,7 +661,7 @@ def update_state_with_records(
     records: list[OrderRecordLike],
     checked_at: Optional[str] = None,
     max_tracked_orders: int = 1000,
-) -> dict[str, object]:
+) -> JsonObject:
     updated_state = _update_state_with_records(
         coerce_runtime_state(state),
         coerce_order_records(records),

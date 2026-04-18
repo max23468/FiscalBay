@@ -13,14 +13,13 @@ from typing import Iterable, Mapping, Optional, Sequence, TypeAlias
 
 from ..clients.ebay import get_access_token, get_order_detail, get_orders
 from ..errors import EbayApiError
-from ..models import Config, FetchOptions, OrderRecord
+from ..models import Config, FetchOptions, JsonObject, JsonValue, OrderRecord
 
 DEFAULT_PAGE_SIZE = 50
 
 logger = logging.getLogger(__name__)
 
-JsonValue: TypeAlias = object
-OrderPayload: TypeAlias = Mapping[str, JsonValue]
+OrderPayload: TypeAlias = JsonObject
 
 
 def _as_mapping(value: object) -> Mapping[str, JsonValue]:

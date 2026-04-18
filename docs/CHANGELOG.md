@@ -89,7 +89,7 @@ Documenti collegati:
 - la rifondazione strutturale della fase 2 puo' considerarsi chiusa: dominio core tipizzato, retry condiviso, runtime/comandi/notifiche separati e percorso di release minimo esplicito in docs e CI.
 - `src/ebay_cf/bot.py` ora funge soprattutto da facciata compatibile e punto di wiring.
 - `src/ebay_cf/bot.py` concentra anche gli adattatori di compatibilita' per test e payload legacy, lasciando i servizi core piu' tipizzati.
-- `src/ebay_cf/clients/ebay.py` e `src/ebay_cf/clients/telegram.py` usano retry centralizzato e mantengono alias compatibili per i nomi storici.
+- `src/ebay_cf/clients/ebay.py` e `src/ebay_cf/clients/telegram.py` usano retry centralizzato; nel client eBay i wrapper storici interni sono stati rimossi a favore dei nomi canonici.
 - `src/ebay_cf/errors.py` espone una gerarchia di errori applicativi piu' esplicita.
 - `src/ebay_cf/healthcheck.py` e i servizi principali leggono lo stato tramite modelli tipizzati invece di dipendere da payload SQLite raw.
 - i moduli introdotti nel refactor fase 2 sono stati riallineati al quality gate CI, con export espliciti in `bot.py` e pulizia degli import inutilizzati.

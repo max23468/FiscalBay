@@ -7,7 +7,7 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 from types import TracebackType
-from typing import Iterable, Literal, TypedDict
+from typing import Iterable, Literal
 
 from ..models import (
     CAPABILITY_MANAGE_NOTIFICATIONS,
@@ -21,7 +21,9 @@ from ..models import (
     OPERATION_STATUS_RUNNING,
     AuditLogEntry,
     BotMetrics,
+    BotMetricsPayload,
     BotRuntimeState,
+    BotRuntimeStatePayload,
     EbayTokenSet,
     LinkedEbayAccount,
     NotificationSubscription,
@@ -29,6 +31,7 @@ from ..models import (
     OauthLinkSession,
     OperationQueueEntry,
     RetryQueueEntry,
+    RetryQueueItemPayload,
     TelegramChat,
     TelegramUser,
     TenantChatContext,
@@ -56,30 +59,6 @@ class _ClosingConnection(sqlite3.Connection):
             return super().__exit__(exc_type, exc_value, traceback)
         finally:
             self.close()
-
-
-class MetricsState(TypedDict):
-    orders_read: int
-    orders_with_cf: int
-    notifications_sent: int
-    telegram_retries: int
-    consecutive_error_cycles: int
-    errors_by_type: dict[str, int]
-
-
-class BotState(TypedDict):
-    notified_order_ids: list[str]
-    notified_hashes: list[str]
-    last_check: str | None
-    last_error: str | None
-    metrics: MetricsState
-
-
-class RetryQueueItem(TypedDict, total=False):
-    id: int
-    chat_id: int
-    text: str
-    attempts: int
 
 
 def ensure_parent_dir(path: str) -> None:
@@ -118,7 +97,7 @@ def _migrate_legacy_json_state(path: str) -> bool:
     if not isinstance(legacy, dict):
         return False
 
-    state: BotState = {
+    state: BotRuntimeStatePayload = {
         "notified_order_ids": _unique_preserving_order(legacy.get("notified_order_ids", [])),
         "notified_hashes": _unique_preserving_order(legacy.get("notified_hashes", [])),
         "last_check": str(legacy["last_check"]) if legacy.get("last_check") else None,
@@ -142,7 +121,7 @@ def _migrate_legacy_json_retry_queue(path: str) -> bool:
     if not isinstance(legacy, list):
         return False
 
-    queue: list[RetryQueueItem] = []
+    queue: list[RetryQueueItemPayload] = []
     for item in legacy:
         if not isinstance(item, dict):
             continue
@@ -207,8 +186,8 @@ def _sync_string_table(
         )
 
 
-def _normalize_retry_item(item: RetryQueueItem) -> RetryQueueItem:
-    normalized: RetryQueueItem = {
+def _normalize_retry_item(item: RetryQueueItemPayload) -> RetryQueueItemPayload:
+    normalized: RetryQueueItemPayload = {
         "chat_id": int(item["chat_id"]),
         "text": str(item["text"]),
         "attempts": int(item.get("attempts", 0)),
@@ -218,7 +197,7 @@ def _normalize_retry_item(item: RetryQueueItem) -> RetryQueueItem:
     return normalized
 
 
-def _sync_retry_queue(conn: sqlite3.Connection, queue: list[RetryQueueItem]) -> None:
+def _sync_retry_queue(conn: sqlite3.Connection, queue: list[RetryQueueItemPayload]) -> None:
     normalized = [_normalize_retry_item(item) for item in queue]
     existing_rows = conn.execute("SELECT id FROM retry_queue ORDER BY id").fetchall()
     existing_ids = {int(row["id"]) for row in existing_rows}
@@ -283,7 +262,7 @@ def _sync_tenant_string_table(
         )
 
 
-def _default_metrics_state() -> MetricsState:
+def _default_metrics_state() -> BotMetricsPayload:
     return {
         "orders_read": 0,
         "orders_with_cf": 0,
@@ -294,7 +273,7 @@ def _default_metrics_state() -> MetricsState:
     }
 
 
-def _parse_metrics_state(raw_value: str) -> MetricsState:
+def _parse_metrics_state(raw_value: str) -> BotMetricsPayload:
     decoded = json.loads(raw_value)
     if not isinstance(decoded, dict):
         return _default_metrics_state()
@@ -312,7 +291,7 @@ def _parse_metrics_state(raw_value: str) -> MetricsState:
     }
 
 
-def _state_to_model(state: BotState) -> BotRuntimeState:
+def _state_to_model(state: BotRuntimeStatePayload) -> BotRuntimeState:
     return BotRuntimeState(
         notified_order_ids=list(state["notified_order_ids"]),
         notified_hashes=list(state["notified_hashes"]),
@@ -322,7 +301,7 @@ def _state_to_model(state: BotState) -> BotRuntimeState:
     )
 
 
-def _state_from_model(state: BotRuntimeState) -> BotState:
+def _state_from_model(state: BotRuntimeState) -> BotRuntimeStatePayload:
     return {
         "notified_order_ids": list(state.notified_order_ids),
         "notified_hashes": list(state.notified_hashes),
@@ -339,7 +318,7 @@ def _state_from_model(state: BotRuntimeState) -> BotState:
     }
 
 
-def _retry_entry_to_model(item: RetryQueueItem) -> RetryQueueEntry:
+def _retry_entry_to_model(item: RetryQueueItemPayload) -> RetryQueueEntry:
     return RetryQueueEntry(
         id=item.get("id"),
         chat_id=item["chat_id"],
@@ -348,8 +327,8 @@ def _retry_entry_to_model(item: RetryQueueItem) -> RetryQueueEntry:
     )
 
 
-def _retry_entry_from_model(item: RetryQueueEntry) -> RetryQueueItem:
-    payload: RetryQueueItem = {
+def _retry_entry_from_model(item: RetryQueueEntry) -> RetryQueueItemPayload:
+    payload: RetryQueueItemPayload = {
         "chat_id": item.chat_id,
         "text": item.text,
         "attempts": item.attempts,
@@ -359,10 +338,10 @@ def _retry_entry_from_model(item: RetryQueueEntry) -> RetryQueueItem:
     return payload
 
 
-def load_state(path: str) -> BotState:
+def load_state(path: str) -> BotRuntimeStatePayload:
     _migrate_legacy_json_state(path)
     init_db(path)
-    state: BotState = {
+    state: BotRuntimeStatePayload = {
         "notified_order_ids": [],
         "notified_hashes": [],
         "last_check": None,
@@ -384,7 +363,7 @@ def load_state(path: str) -> BotState:
     return state
 
 
-def save_state(path: str, state: BotState) -> None:
+def save_state(path: str, state: BotRuntimeStatePayload) -> None:
     init_db(path)
     with _connect(path) as conn:
         _sync_string_table(
@@ -467,10 +446,10 @@ def load_effective_runtime_state(path: str) -> BotRuntimeState:
     return freshest_state
 
 
-def load_retry_queue(path: str) -> list[RetryQueueItem]:
+def load_retry_queue(path: str) -> list[RetryQueueItemPayload]:
     _migrate_legacy_json_retry_queue(path)
     init_db(path)
-    queue: list[RetryQueueItem] = []
+    queue: list[RetryQueueItemPayload] = []
     with _connect(path) as conn:
         for row in conn.execute("SELECT id, chat_id, text, attempts FROM retry_queue ORDER BY id"):
             queue.append(
@@ -484,7 +463,7 @@ def load_retry_queue(path: str) -> list[RetryQueueItem]:
     return queue
 
 
-def save_retry_queue(path: str, queue: list[RetryQueueItem]) -> None:
+def save_retry_queue(path: str, queue: list[RetryQueueItemPayload]) -> None:
     init_db(path)
     with _connect(path) as conn:
         _sync_retry_queue(conn, queue)
