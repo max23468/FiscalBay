@@ -5,7 +5,8 @@ Questa guida raccoglie le impostazioni GitHub che completano gli asset versionat
 ## Cosa e' versionato nel repo
 
 - CI: `.github/workflows/ci.yml`
-- Release automation: `.github/workflows/release.yml`
+- Release PR automation: `.github/workflows/release-please.yml`
+- Manual release assets rebuild: `.github/workflows/release.yml`
 - Dependabot: `.github/dependabot.yml`
 - PR template: `.github/PULL_REQUEST_TEMPLATE.md`
 - Issue forms: `.github/ISSUE_TEMPLATE/*`
@@ -29,6 +30,19 @@ Check da marcare come obbligatori:
 
 - job `lint-and-test`
 - job `package-build`
+- job `conventional-pr-title`
+- valuta anche il workflow `Release Please` come richiesto, se vuoi bloccare modifiche che rompano il processo di release
+
+### Merge options
+
+Configurazione consigliata in `Settings > General`:
+
+- abilita `Allow squash merging`
+- usa titolo PR come base del messaggio di squash
+- valuta di disabilitare `Allow merge commits`
+- valuta di disabilitare `Allow rebase merging`
+
+Questo repository usa `release-please`, quindi una cronologia `main` composta da commit squashed e semanticamente chiari rende versioni e changelog piu' affidabili.
 
 ### Security tab
 
@@ -41,14 +55,25 @@ Abilitare almeno:
 
 ### Releases
 
-Il workflow `Release` pubblica una GitHub Release quando fai push di un tag `v*`, ad esempio:
+Il flusso consigliato non parte piu' dal tag manuale come primo passo.
 
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
+Il percorso standard e':
 
-Supporta anche `workflow_dispatch` per pubblicare un tag gia' esistente.
+1. mergi una PR su `main` con titolo Conventional Commit
+2. `Release Please` apre o aggiorna una Release PR
+3. la Release PR aggiorna versione e `CHANGELOG.md`
+4. mergi la Release PR quando vuoi pubblicare
+5. `Release Please` crea il tag `vX.Y.Z`, la relativa release GitHub e allega gli artefatti buildati
+
+Il workflow `Release Assets` supporta ancora `workflow_dispatch` se serve rigenerare gli artefatti per un tag gia' esistente.
+
+### Actions settings
+
+Verifica in `Settings > Actions > General`:
+
+- `Allow GitHub Actions to create and approve pull requests`
+
+Se in futuro vuoi che altri workflow si attivino anche sulle Release PR create automaticamente, valuta l'uso di un PAT dedicato invece del solo `GITHUB_TOKEN`.
 
 ## Revisione periodica consigliata
 

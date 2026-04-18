@@ -1,13 +1,10 @@
-name: Release
+name: Release Assets
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       tag_name:
-        description: Existing tag to publish as a GitHub Release.
+        description: Existing tag to rebuild and upload on GitHub Release.
         required: true
         type: string
 
@@ -15,19 +12,20 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.workflow }}-${{ github.ref }}
+  group: release-assets-${{ github.workflow }}-${{ github.event.inputs.tag_name || github.ref }}
   cancel-in-progress: false
 
 jobs:
-  build-and-release:
+  build-and-upload-assets:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      TAG_NAME: ${{ github.event.inputs.tag_name }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          ref: ${{ github.event.inputs.tag_name || github.ref }}
+          ref: ${{ env.TAG_NAME }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -44,16 +42,13 @@ jobs:
       - name: Build distribution artifacts
         run: python -m build
 
-      - name: Publish GitHub release
+      - name: Upload artifacts to GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: ${{ github.event.inputs.tag_name || github.ref_name }}
         run: |
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             gh release upload "$TAG_NAME" dist/* --clobber
           else
             gh release create "$TAG_NAME" dist/* \
-              --verify-tag \
-              --generate-notes \
               --title "$TAG_NAME"
           fi
