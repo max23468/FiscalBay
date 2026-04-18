@@ -7,6 +7,7 @@ Stato attuale:
 - il bot espone gia' `/connect` come entrypoint Telegram
 - `/connect` crea una sessione preliminare in `oauth_link_sessions`
 - se sulla VPS e' valorizzata `EBAY_OAUTH_CONNECT_BASE_URL`, il bot restituisce anche il link pubblico di avvio
+- l'entrypoint web `/oauth/start` mostra ora una pagina intermedia semplice e leggibile prima del consenso eBay
 - esiste anche un callback server minimale che valida `state`, scambia `code` con token e salva account/token nel `state.db`
 - il salvataggio finale dei token usa ora cifratura Fernet con chiave `EBAY_TENANT_TOKEN_KEY`
 - verso eBay il progetto usa ora il `RuName` registrato nel developer portal, non una callback URL libera, come `redirect_uri`
@@ -22,13 +23,14 @@ Permettere a un utente Telegram di collegare il proprio account eBay senza inter
 1. l'utente apre il bot e usa `/connect`
 2. il bot risponde con un link di collegamento
 3. il link apre una pagina web controllata dal progetto
-4. la pagina avvia OAuth verso eBay
+4. la pagina spiega il passaggio e avvia OAuth verso eBay
 5. eBay autentica l'utente e chiede consenso
 6. eBay richiama il callback del progetto con `code` e `state`
 7. il backend valida `state`
 8. il backend scambia `code` con token eBay
 9. il backend salva l'account collegato e i token associati all'utente Telegram
 10. il bot conferma in chat il collegamento riuscito
+11. la pagina callback conferma l'esito e rimanda l'utente verso Telegram
 
 ## Requisiti minimi
 
