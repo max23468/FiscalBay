@@ -180,6 +180,23 @@ def build_health_report(
     ebay_errors, telegram_errors = summarize_error_metrics(state.metrics)
     multi_tenant = summarize_multi_tenant_readiness(telegram_config.state_path)
     operation_queue = summarize_operation_queue(telegram_config.state_path)
+    multi_tenant_health: MultiTenantHealth = {
+        "tenant_users": multi_tenant.get("tenant_users", 0),
+        "tenant_chats": multi_tenant.get("tenant_chats", 0),
+        "linked_accounts": multi_tenant.get("linked_accounts", 0),
+        "active_token_sets": multi_tenant.get("active_token_sets", 0),
+        "notification_subscriptions": multi_tenant.get("notification_subscriptions", 0),
+        "tenant_runtime_states": multi_tenant.get("tenant_runtime_states", 0),
+        "tenant_credentials_ready": multi_tenant.get("linked_accounts", 0) > 0
+        and multi_tenant.get("active_token_sets", 0) > 0,
+    }
+    operation_queue_health: OperationQueueHealth = {
+        "pending": operation_queue.get("pending", 0),
+        "running": operation_queue.get("running", 0),
+        "failed": operation_queue.get("failed", 0),
+        "completed": operation_queue.get("completed", 0),
+        "cancelled": operation_queue.get("cancelled", 0),
+    }
     status = "ok" if not reasons else "fail"
     report: HealthReport = {
         "ok": not reasons,
@@ -202,12 +219,8 @@ def build_health_report(
             "ebay_errors": ebay_errors,
             "telegram_errors": telegram_errors,
         },
-        "multi_tenant": {
-            **multi_tenant,
-            "tenant_credentials_ready": multi_tenant["linked_accounts"] > 0
-            and multi_tenant["active_token_sets"] > 0,
-        },
-        "operation_queue": operation_queue,
+        "multi_tenant": multi_tenant_health,
+        "operation_queue": operation_queue_health,
         "alerts": [],
         "service_active": None,
         "service_name": None,

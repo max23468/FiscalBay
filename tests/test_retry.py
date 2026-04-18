@@ -35,9 +35,7 @@ class RetryTests(unittest.TestCase):
         self.assertIn("offline", str(ctx.exception))
 
     @patch("src.ebay_cf.clients.telegram.urllib.request.urlopen")
-    def test_telegram_api_request_once_does_not_hide_keyboard_interrupt(
-        self, mock_urlopen
-    ) -> None:
+    def test_telegram_api_request_once_does_not_hide_keyboard_interrupt(self, mock_urlopen) -> None:
         mock_urlopen.side_effect = KeyboardInterrupt()
 
         with self.assertRaises(KeyboardInterrupt):
