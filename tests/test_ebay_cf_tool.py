@@ -5,7 +5,7 @@ from unittest.mock import patch
 from src.ebay_cf.clients.ebay import (
     clear_access_token_cache,
     get_access_token,
-    make_request,
+    request_json,
 )
 from src.ebay_cf.errors import EbayApiError
 from src.ebay_cf.models import (
@@ -39,7 +39,7 @@ class EbayCfToolTests(unittest.TestCase):
             scopes="https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
         )
 
-    @patch("src.ebay_cf.clients.ebay.mint_user_access_token_response")
+    @patch("src.ebay_cf.clients.ebay.request_user_access_token_response")
     def test_get_access_token_uses_cache(self, mock_mint) -> None:
         mock_mint.return_value = {"access_token": "tok-one", "expires_in": 7200}
         cfg = self._sample_config()
@@ -49,13 +49,13 @@ class EbayCfToolTests(unittest.TestCase):
 
     @patch("src.ebay_cf.clients.ebay.logger")
     @patch("src.ebay_cf.clients.ebay.time.sleep", autospec=True)
-    @patch("src.ebay_cf.clients.ebay.make_request_once")
+    @patch("src.ebay_cf.clients.ebay.request_json_once")
     def test_make_request_retries_transient_http(self, mock_once, mock_sleep, _mock_logger) -> None:
         mock_once.side_effect = [
             EbayApiError("HTTP 503", status_code=503),
             {"ok": True},
         ]
-        self.assertEqual(make_request("GET", "https://api.ebay.com/x"), {"ok": True})
+        self.assertEqual(request_json("GET", "https://api.ebay.com/x"), {"ok": True})
         self.assertEqual(mock_once.call_count, 2)
 
     def test_parse_iso8601_accepts_zulu(self) -> None:

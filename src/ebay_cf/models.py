@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Iterable, Mapping, Optional, Union
+from typing import Iterable, Mapping, Optional, TypeAlias, TypedDict, Union
+
+JsonPrimitive: TypeAlias = None | bool | int | float | str
+JsonValue: TypeAlias = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"]
+JsonObject: TypeAlias = Mapping[str, JsonValue]
 
 TELEGRAM_USER_STATUS_NEW = "new"
 TELEGRAM_USER_STATUS_PENDING = "pending"
@@ -792,6 +796,30 @@ class OrderRecord:
             self.taxIdentifierType,
             self.issuingCountry,
         )
+
+
+class BotMetricsPayload(TypedDict):
+    orders_read: int
+    orders_with_cf: int
+    notifications_sent: int
+    telegram_retries: int
+    consecutive_error_cycles: int
+    errors_by_type: dict[str, int]
+
+
+class BotRuntimeStatePayload(TypedDict):
+    notified_order_ids: list[str]
+    notified_hashes: list[str]
+    last_check: str | None
+    last_error: str | None
+    metrics: BotMetricsPayload
+
+
+class RetryQueueItemPayload(TypedDict, total=False):
+    id: int
+    chat_id: int
+    text: str
+    attempts: int
 
 
 OrderRecordLike = Union[OrderRecord, Mapping[str, object]]

@@ -260,9 +260,9 @@ Le decisioni architetturali principali del refactor, prima tracciate in `docs/ad
 - il callback web OAuth esiste in forma minimale, ma restano aperti hardening finale e revoca remota verso eBay
 - il gating accessi oggi e' pensato per un servizio pubblico controllato: le capability sono esplicite, ma non esistono ancora ruoli multipli oltre a `admin`, utente approvato, in attesa o bloccato
 - la queue operativa e' ancora minimale: oggi copre soprattutto access application e recovery, non un workflow completo di revoca remota eBay
+- alcuni alias storici interni sono stati rimossi dai client eBay; i caller devono usare i nomi canonici del modulo
 
 ## Compatibilita' mantenuta durante il refactor
 
 - gli entrypoint di packaging puntano direttamente a `src/ebay_cf/cli.py` e `src/ebay_cf/bot.py`
-- i nomi storici delle API interne piu' patchati nei test restano disponibili come alias
 - il formato persistito in SQLite resta compatibile con il runbook operativo attuale

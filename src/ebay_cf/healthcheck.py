@@ -8,7 +8,7 @@ import logging
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TypedDict
 
 from .config import configure_logging, load_telegram_config
 from .logging_utils import log_event
@@ -21,6 +21,54 @@ from .storage.sqlite import (
 )
 
 LOGGER = logging.getLogger("ebaycf.healthcheck")
+
+
+class HealthMetrics(TypedDict):
+    orders_read: int
+    orders_with_cf: int
+    notifications_sent: int
+    telegram_retries: int
+    consecutive_error_cycles: int
+    ebay_errors: int
+    telegram_errors: int
+
+
+class MultiTenantHealth(TypedDict):
+    tenant_users: int
+    tenant_chats: int
+    linked_accounts: int
+    active_token_sets: int
+    notification_subscriptions: int
+    tenant_runtime_states: int
+    tenant_credentials_ready: bool
+
+
+class OperationQueueHealth(TypedDict):
+    pending: int
+    running: int
+    failed: int
+    completed: int
+    cancelled: int
+
+
+class HealthReport(TypedDict):
+    ok: bool
+    status: str
+    reasons: list[str]
+    warnings: list[str]
+    lock_exists: bool
+    last_check: str | None
+    last_check_age_seconds: int | None
+    max_age_seconds: int
+    retry_queue_size: int
+    notified_orders_tracked: int
+    last_error: str | None
+    metrics: HealthMetrics
+    multi_tenant: MultiTenantHealth
+    operation_queue: OperationQueueHealth
+    alerts: list[str]
+    service_active: bool | None
+    service_name: str | None
 
 
 def parse_iso8601_utc(value: str) -> datetime:
@@ -63,7 +111,7 @@ def service_is_active(service_name: str) -> bool | None:
 
 
 def build_alerts(
-    report: dict[str, object],
+    report: HealthReport,
     *,
     check_service_active: bool,
     service_name: str,
@@ -78,10 +126,9 @@ def build_alerts(
     if check_service_active and service_active is False:
         alerts.append("service_inactive")
 
-    raw_metrics = report.get("metrics")
-    metrics = raw_metrics if isinstance(raw_metrics, dict) else {}
+    metrics = report["metrics"]
     consecutive_error_cycles = as_int(metrics.get("consecutive_error_cycles", 0))
-    retry_queue_size = as_int(report.get("retry_queue_size", 0))
+    retry_queue_size = report["retry_queue_size"]
 
     if (
         max_consecutive_error_cycles is not None
@@ -100,7 +147,7 @@ def build_health_report(
     service_name: str = "ebaycf-bot",
     max_consecutive_error_cycles: int | None = None,
     max_retry_queue_size: int | None = None,
-) -> dict[str, object]:
+) -> HealthReport:
     telegram_config = load_telegram_config()
     state = load_effective_runtime_state(telegram_config.state_path)
     retry_queue = load_retry_queue_entries(telegram_config.retry_queue_path)
@@ -133,8 +180,25 @@ def build_health_report(
     ebay_errors, telegram_errors = summarize_error_metrics(state.metrics)
     multi_tenant = summarize_multi_tenant_readiness(telegram_config.state_path)
     operation_queue = summarize_operation_queue(telegram_config.state_path)
+    multi_tenant_health: MultiTenantHealth = {
+        "tenant_users": multi_tenant.get("tenant_users", 0),
+        "tenant_chats": multi_tenant.get("tenant_chats", 0),
+        "linked_accounts": multi_tenant.get("linked_accounts", 0),
+        "active_token_sets": multi_tenant.get("active_token_sets", 0),
+        "notification_subscriptions": multi_tenant.get("notification_subscriptions", 0),
+        "tenant_runtime_states": multi_tenant.get("tenant_runtime_states", 0),
+        "tenant_credentials_ready": multi_tenant.get("linked_accounts", 0) > 0
+        and multi_tenant.get("active_token_sets", 0) > 0,
+    }
+    operation_queue_health: OperationQueueHealth = {
+        "pending": operation_queue.get("pending", 0),
+        "running": operation_queue.get("running", 0),
+        "failed": operation_queue.get("failed", 0),
+        "completed": operation_queue.get("completed", 0),
+        "cancelled": operation_queue.get("cancelled", 0),
+    }
     status = "ok" if not reasons else "fail"
-    report = {
+    report: HealthReport = {
         "ok": not reasons,
         "status": status,
         "reasons": reasons,
@@ -155,12 +219,11 @@ def build_health_report(
             "ebay_errors": ebay_errors,
             "telegram_errors": telegram_errors,
         },
-        "multi_tenant": {
-            **multi_tenant,
-            "tenant_credentials_ready": multi_tenant["linked_accounts"] > 0
-            and multi_tenant["active_token_sets"] > 0,
-        },
-        "operation_queue": operation_queue,
+        "multi_tenant": multi_tenant_health,
+        "operation_queue": operation_queue_health,
+        "alerts": [],
+        "service_active": None,
+        "service_name": None,
     }
     alerts = build_alerts(
         report,
@@ -198,13 +261,27 @@ def build_health_report(
     return report
 
 
-def render_text_report(report: dict[str, object]) -> str:
+def render_text_report(report: HealthReport) -> str:
     last_check_age = report["last_check_age_seconds"]
     last_check_age_text = str(last_check_age) if last_check_age is not None else "none"
-    raw_reasons = report.get("reasons")
-    reasons = raw_reasons if isinstance(raw_reasons, list) else []
-    raw_warnings = report.get("warnings")
-    warnings = raw_warnings if isinstance(raw_warnings, list) else []
+    reasons = report["reasons"]
+    warnings = report["warnings"]
+    default_multi_tenant: MultiTenantHealth = {
+        "tenant_users": 0,
+        "tenant_chats": 0,
+        "linked_accounts": 0,
+        "active_token_sets": 0,
+        "notification_subscriptions": 0,
+        "tenant_runtime_states": 0,
+        "tenant_credentials_ready": False,
+    }
+    default_operation_queue: OperationQueueHealth = {
+        "pending": 0,
+        "running": 0,
+        "failed": 0,
+        "completed": 0,
+        "cancelled": 0,
+    }
     lines = [
         f"status: {report['status']}",
         f"service_active: {report.get('service_active', 'not_checked')}",
@@ -216,8 +293,7 @@ def render_text_report(report: dict[str, object]) -> str:
         f"notified_orders_tracked: {report['notified_orders_tracked']}",
         f"last_error: {report['last_error'] or 'none'}",
     ]
-    raw_metrics = report.get("metrics")
-    metrics = raw_metrics if isinstance(raw_metrics, dict) else {}
+    metrics = report["metrics"]
     lines.extend(
         [
             f"metrics.orders_read: {metrics.get('orders_read', 0)}",
@@ -229,12 +305,9 @@ def render_text_report(report: dict[str, object]) -> str:
             f"metrics.telegram_errors: {metrics.get('telegram_errors', 0)}",
         ]
     )
-    raw_alerts = report.get("alerts")
-    alerts = raw_alerts if isinstance(raw_alerts, list) else []
-    raw_multi_tenant = report.get("multi_tenant")
-    multi_tenant = raw_multi_tenant if isinstance(raw_multi_tenant, dict) else {}
-    raw_operation_queue = report.get("operation_queue")
-    operation_queue = raw_operation_queue if isinstance(raw_operation_queue, dict) else {}
+    alerts = report["alerts"]
+    multi_tenant = report.get("multi_tenant", default_multi_tenant)
+    operation_queue = report.get("operation_queue", default_operation_queue)
     lines.append("reasons: " + (", ".join(str(item) for item in reasons) if reasons else "none"))
     lines.append("warnings: " + (", ".join(str(item) for item in warnings) if warnings else "none"))
     lines.append("alerts: " + (", ".join(str(item) for item in alerts) if alerts else "none"))

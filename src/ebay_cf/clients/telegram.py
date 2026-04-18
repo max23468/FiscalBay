@@ -9,7 +9,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Optional
+from typing import Mapping, TypeAlias, TypedDict, cast
 
 from ..errors import TelegramApiError
 from ..logging_utils import log_event
@@ -19,6 +19,30 @@ LOGGER = logging.getLogger("ebaycf.telegram_bot")
 TELEGRAM_API_BASE = "https://api.telegram.org"
 DEFAULT_TELEGRAM_RETRIES = 5
 DEFAULT_TELEGRAM_BASE_DELAY = 0.5
+
+JsonPrimitive: TypeAlias = None | bool | int | float | str
+JsonValue: TypeAlias = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"]
+JsonObject: TypeAlias = dict[str, JsonValue]
+
+
+class InlineKeyboardButton(TypedDict):
+    text: str
+    callback_data: str
+
+
+class InlineKeyboardMarkup(TypedDict):
+    inline_keyboard: list[list[InlineKeyboardButton]]
+
+
+class TelegramErrorPayload(TypedDict, total=False):
+    description: str
+
+
+def _parse_json_object(payload: str, *, method: str) -> JsonObject:
+    parsed = json.loads(payload)
+    if not isinstance(parsed, dict):
+        raise TelegramApiError(f"Risposta Telegram non valida su {method}: atteso oggetto JSON.")
+    return cast(JsonObject, parsed)
 
 
 def telegram_retry_settings() -> tuple[int, float]:
@@ -39,8 +63,8 @@ def telegram_error_retryable(exc: TelegramApiError) -> bool:
 def telegram_api_request_once(
     token: str,
     method: str,
-    params: Optional[dict[str, object]] = None,
-) -> dict:
+    params: Mapping[str, JsonValue] | None = None,
+) -> JsonValue:
     encoded_method = urllib.parse.quote(method, safe="")
     url = f"{TELEGRAM_API_BASE}/bot{token}/{encoded_method}"
     data = None
@@ -60,9 +84,11 @@ def telegram_api_request_once(
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         try:
-            error_payload = json.loads(body)
+            error_payload = cast(TelegramErrorPayload, _parse_json_object(body, method=method))
             description = error_payload.get("description") or body
         except json.JSONDecodeError:
+            description = body or str(exc)
+        except TelegramApiError:
             description = body or str(exc)
         raise TelegramApiError(
             f"Errore Telegram su {method}: HTTP {exc.code}: {description}",
@@ -71,20 +97,20 @@ def telegram_api_request_once(
     except Exception as exc:
         raise TelegramApiError(f"Errore Telegram su {method}: {exc}") from exc
 
-    parsed = json.loads(payload)
+    parsed = _parse_json_object(payload, method=method)
     if not parsed.get("ok"):
         raise TelegramApiError(f"Telegram API {method}: {parsed}")
-    return parsed["result"]
+    return parsed.get("result")
 
 
 def telegram_api_request(
     token: str,
     method: str,
-    params: Optional[dict[str, object]] = None,
-) -> dict:
+    params: Mapping[str, JsonValue] | None = None,
+) -> JsonValue:
     max_retries, base_delay = telegram_retry_settings()
 
-    def on_retry(exc: BaseException, attempt_no: int, total_attempts: int, delay: float) -> None:
+    def on_retry(exc: Exception, attempt_no: int, total_attempts: int, delay: float) -> None:
         assert isinstance(exc, TelegramApiError)
         log_event(
             LOGGER,
@@ -117,14 +143,14 @@ def ensure_long_polling(token: str) -> None:
 def telegram_request_once(
     token: str,
     method: str,
-    params: Optional[dict[str, object]] = None,
-) -> dict:
+    params: Mapping[str, JsonValue] | None = None,
+) -> JsonValue:
     return telegram_api_request_once(token, method, params)
 
 
 def telegram_request(
     token: str,
     method: str,
-    params: Optional[dict[str, object]] = None,
-) -> dict:
+    params: Mapping[str, JsonValue] | None = None,
+) -> JsonValue:
     return telegram_api_request(token, method, params)

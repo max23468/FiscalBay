@@ -12,13 +12,13 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable
 
-from .bot import send_message
+from .bot_messaging import send_message
 from .clients.ebay import (
     DEFAULT_IDENTITY_SCOPE,
     build_user_consent_url,
     get_authenticated_user_profile,
     merge_scopes,
-    mint_authorization_code_token_response,
+    request_authorization_code_token_response,
 )
 from .config import load_config, load_telegram_config
 from .errors import ConfigurationError, EbayApiError
@@ -426,7 +426,9 @@ def complete_oauth_link(
     load_config_fn: Callable[[str], object] = load_config,
     callback_url_fn: Callable[[], str] = oauth_callback_url,
     runame_fn: Callable[[str], str] = oauth_runame,
-    exchange_code_fn: Callable[[object, str, str], dict] = mint_authorization_code_token_response,
+    exchange_code_fn: Callable[
+        [object, str, str], dict
+    ] = request_authorization_code_token_response,
     fetch_user_profile_fn: Callable[[object, str], dict] = get_authenticated_user_profile,
     encode_refresh_token_fn: Callable[[str], str | None] = encode_refresh_token,
     send_message_fn: Callable[..., None] = send_message,
