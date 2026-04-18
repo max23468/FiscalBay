@@ -5,7 +5,6 @@ Questa guida raccoglie le impostazioni GitHub che completano gli asset versionat
 ## Cosa e' versionato nel repo
 
 - CI: `.github/workflows/ci.yml`
-- CodeQL: `.github/workflows/codeql.yml`
 - Release automation: `.github/workflows/release.yml`
 - Dependabot: `.github/dependabot.yml`
 - PR template: `.github/PULL_REQUEST_TEMPLATE.md`
@@ -30,7 +29,6 @@ Check da marcare come obbligatori:
 
 - job `lint-and-test`
 - job `package-build`
-- workflow `CodeQL / Analyze Python`
 
 ### Security tab
 
@@ -58,5 +56,5 @@ Frequenza minima mensile:
 
 1. verificare workflow failed o flakey
 2. verificare PR Dependabot aperte da troppo tempo
-3. verificare alert Security/Code scanning
+3. verificare alert Security e Dependabot
 4. verificare che i ruleset di `main` siano ancora coerenti con il flusso di lavoro reale
