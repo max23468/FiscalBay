@@ -4,6 +4,9 @@
 ## Why
 - [ ] Explain the problem solved or improvement delivered
 
+## Release title
+- [ ] Suggested squash-merge title in Conventional Commit format (`feat: ...`, `fix: ...`, `chore: ...`)
+
 ## Scope and impact
 - [ ] Runtime impact (CLI/Bot/OAuth/Reconcile):
 - [ ] Backward compatibility notes:

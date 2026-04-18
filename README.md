@@ -48,7 +48,9 @@ In pratica:
 Per mantenere il repository allineato alle best practice GitHub anche in contesto single-maintainer, il progetto include:
 
 - workflow CI su push/PR (`.github/workflows/ci.yml`)
-- release automation su tag `v*` (`.github/workflows/release.yml`)
+- release PR automatiche con `release-please` (`.github/workflows/release-please.yml`)
+- build e upload automatico degli artefatti nella GitHub Release creata da `release-please`
+- rebuild manuale degli artefatti per un tag esistente (`.github/workflows/release.yml`)
 - aggiornamenti automatici dipendenze con Dependabot (`.github/dependabot.yml`)
 - template per Pull Request (`.github/PULL_REQUEST_TEMPLATE.md`)
 - issue forms per bug e task operativi (`.github/ISSUE_TEMPLATE/*`)
@@ -61,6 +63,25 @@ Passi consigliati dopo il clone/fork:
 1. verifica branch protection su `main` (almeno: CI obbligatoria, linear history)
 2. abilita secret scanning e Dependabot alerts dal tab Security
 3. usa PR anche da branch personali per lasciare audit trail e checklist standard
+4. usa titoli PR di squash in formato Conventional Commit per tenere coerenti versioni e changelog
+5. in GitHub abilita `Squash merge` e valuta di disabilitare `Merge commit` e `Rebase merge` per rendere il flusso piu' coerente
+
+## Versioni e changelog
+
+Il repository usa Semantic Versioning con tag GitHub nel formato `vX.Y.Z`.
+
+- `PATCH` per bugfix compatibili, ad esempio `v0.1.1`
+- `MINOR` per nuove funzionalita' compatibili, ad esempio `v0.2.0`
+- `MAJOR` per breaking change, ad esempio `v1.0.0`
+
+Il flusso e' allineato a GitHub:
+
+- i merge su `main` aggiornano automaticamente una Release PR
+- la Release PR aggiorna `CHANGELOG.md` e la versione in `pyproject.toml`
+- il merge della Release PR crea tag, GitHub Release e allega automaticamente gli artefatti buildati
+- se serve, il workflow `Release Assets` permette di rigenerare manualmente gli artefatti per un tag esistente
+
+Per i dettagli operativi e le policy di naming/bump vedere `docs/RELEASE_POLICY.md`.
 
 ## Setup Rapido
 

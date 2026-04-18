@@ -28,6 +28,8 @@ Indice centrale della documentazione del progetto.
   - setup e gestione completa del deploy VPS
 - `docs/OPERATIONS.md`
   - controlli rapidi, rollback, backup e criteri di salute
+- `docs/RELEASE_POLICY.md`
+  - regole ufficiali per versioni, changelog, release PR e tag GitHub
 - `docs/DEPLOY_LINUX.md`
   - guida specifica al deploy Linux
 - `docs/SECURITY.md`
@@ -46,5 +48,7 @@ Indice centrale della documentazione del progetto.
 
 ## Storico
 
+- `../CHANGELOG.md`
+  - changelog ufficiale delle release correnti
 - `docs/CHANGELOG.md`
-  - modifiche rilevanti gia' introdotte nel progetto
+  - archivio storico narrativo precedente al flusso automatico

@@ -1,0 +1,48 @@
+name: PR Title
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+
+permissions:
+  pull-requests: read
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  conventional-pr-title:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          import sys
+
+          title = os.environ["PR_TITLE"].strip()
+          pattern = re.compile(
+              r"^(feat|fix|perf|refactor|docs|test|build|ci|chore)(\([a-z0-9._/-]+\))?!?: .+"
+          )
+
+          if pattern.match(title):
+              print(f"PR title ok: {title}")
+              sys.exit(0)
+
+          print("PR title must follow Conventional Commits.")
+          print("Examples:")
+          print("  fix: corregge il retry Telegram")
+          print("  feat(bot): aggiunge /settings")
+          print("  feat!: cambia il formato output CLI")
+          print(f"Current title: {title!r}")
+          sys.exit(1)
+          PY
