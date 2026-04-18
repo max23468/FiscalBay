@@ -107,6 +107,8 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("/ultimi", text)
         self.assertIn("/ordine", text)
         self.assertIn("/settings", text)
+        self.assertIn("/reconnect_status", text)
+        self.assertIn("/why_not_notified", text)
         self.assertIn("/notifications on", text)
         self.assertIn("/request_access", text)
         self.assertIn("/users", text)

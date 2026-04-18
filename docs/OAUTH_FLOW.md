@@ -46,6 +46,61 @@ Permettere a un utente Telegram di collegare il proprio account eBay senza inter
 - account collegato
 - account revocato o scollegato
 
+## Matrice stati minima per Fase 1
+
+Questa matrice fissa il comportamento minimo che useremo per completare la Fase 1 senza
+reintrodurre ambiguita' nei messaggi Telegram.
+
+### Stato utente Telegram
+
+- `new`
+  - utente visto dal bot ma non ancora approvato
+  - puo' usare solo `/start`, `/help` e `/request_access`
+  - messaggio atteso: il bot spiega che l'accesso e' approvato manualmente e indica la prossima azione
+- `pending`
+  - richiesta accesso registrata e in attesa di admin
+  - non puo' ancora collegare eBay o leggere ordini
+  - messaggio atteso: richiesta in attesa, nessuna azione extra oltre ad aspettare
+- `approved`
+  - utente approvato e operativo
+  - puo' usare comandi account, ordini e notifiche
+  - messaggio atteso: prossimo passo principale `/connect` se l'account non e' ancora collegato
+- `blocked`
+  - accesso rifiutato o sospeso dall'admin
+  - non puo' usare i comandi operativi
+  - messaggio atteso: accesso non disponibile, contattare l'admin se necessario
+- `admin`
+  - admin globale del bot
+  - puo' usare tutto, inclusi comandi di review utenti
+
+### Stato account eBay mostrato all'utente
+
+- `unlinked`
+  - nessun collegamento attivo o storico utile
+  - prossima azione: `/connect`
+- `linked`
+  - account collegato e token usabile
+  - prossima azione: nessuna, il bot puo' lavorare normalmente
+- `reconnect_required`
+  - account presente ma token non piu' usabile, revocato o scaduto
+  - prossima azione: `/connect`
+- `disconnected`
+  - utente ha scollegato il bot localmente
+  - prossima azione: `/connect`
+- `revoked`
+  - collegamento non piu' valido o revocato
+  - prossima azione: `/connect`
+- `error`
+  - stato incoerente o fallimento non classificato
+  - prossima azione: messaggio chiaro di errore servizio e retry guidato
+
+Regola UX:
+
+- `/start` deve spiegare sempre lo stato reale dell'utente
+- `/account` deve spiegare sempre lo stato reale del collegamento e la prossima azione richiesta
+- `/reconnect_status` deve riassumere rapidamente se serve reconnect e qual e' la prossima azione
+- `/disconnect` oggi scollega localmente e rimuove il token locale; la revoca remota eBay resta uno step separato da completare
+
 ## Dati da salvare
 
 - identificativo utente Telegram

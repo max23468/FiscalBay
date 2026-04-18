@@ -3,10 +3,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from src.ebay_cf.errors import ConfigurationError
 from src.ebay_cf.models import Config, OauthLinkSession, TelegramConfig
 from src.ebay_cf.oauth_server import (
     build_oauth_start_redirect,
     complete_oauth_link,
+    describe_callback_exception,
+    describe_provider_error,
     oauth_callback_url,
     oauth_runame,
 )
@@ -20,6 +23,37 @@ from src.ebay_cf.storage.sqlite import (
 
 
 class OAuthServerTests(unittest.TestCase):
+    def test_describe_provider_error_for_user_cancelled(self) -> None:
+        presentation = describe_provider_error("access_denied")
+
+        self.assertEqual(presentation.title, "Autorizzazione annullata")
+        self.assertEqual(presentation.outcome, "user_cancelled")
+        self.assertIn("/connect", presentation.message)
+        self.assertIn("/connect", presentation.notify_text)
+
+    def test_describe_callback_exception_for_expired_session(self) -> None:
+        presentation = describe_callback_exception(
+            Exception("La sessione OAuth e' scaduta. Usa di nuovo /connect.")
+        )
+
+        self.assertEqual(presentation.title, "Collegamento fallito")
+        self.assertEqual(presentation.outcome, "callback_error")
+
+        config_presentation = describe_callback_exception(
+            ConfigurationError("La sessione OAuth e' scaduta. Usa di nuovo /connect.")
+        )
+        self.assertEqual(config_presentation.title, "Sessione scaduta")
+        self.assertEqual(config_presentation.outcome, "session_expired")
+        self.assertIn("/connect", config_presentation.notify_text)
+
+    def test_describe_callback_exception_for_unavailable_session(self) -> None:
+        config_presentation = describe_callback_exception(
+            ConfigurationError("La sessione OAuth non e' piu' disponibile.")
+        )
+
+        self.assertEqual(config_presentation.title, "Link non piu' valido")
+        self.assertEqual(config_presentation.outcome, "session_unavailable")
+
     def test_oauth_callback_url_can_be_derived_from_connect_base(self) -> None:
         with patch.dict(
             "os.environ",

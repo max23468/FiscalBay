@@ -140,11 +140,13 @@ def build_help_text() -> str:
         "• 🟢 <code>/ping</code> → verifica rapida\n"
         "• 📊 <code>/stato</code> → stato e metriche bot\n"
         "• 👤 <code>/account</code> → stato collegamento account eBay\n"
+        "• 🔁 <code>/reconnect_status</code> → stato reconnect e prossima azione\n"
         "• 🔗 <code>/connect</code> → prepara il collegamento account eBay\n"
         "• ❌ <code>/disconnect</code> → scollega account eBay dal bot\n"
         "• 🔔 <code>/notifications on</code> → attiva notifiche per questa chat\n"
         "• 🔕 <code>/notifications off</code> → disattiva notifiche per questa chat\n"
         "• ⚙️ <code>/settings</code> → riepilogo preferenze di chat e tenant\n"
+        "• 🧭 <code>/why_not_notified [order_id]</code> → spiega se un ordine e' notificabile\n"
         "• 🙋 <code>/request_access</code> → richiede accesso all'admin del bot\n"
         "• 👥 <code>/users</code> → elenco utenti registrati e stato accessi (admin)\n"
         "• 📦 <code>/ultimi [giorni] [max]</code> → ordini con CF trovato\n"
@@ -157,6 +159,81 @@ def build_help_text() -> str:
         "• <code>/ordine 12-34567-89012</code>\n\n"
         f"<i>Limiti input: giorni {TELEGRAM_CMD_MIN_DAYS}-{TELEGRAM_CMD_MAX_DAYS}, "
         f"max ordini {TELEGRAM_CMD_MIN_RESULTS}-{TELEGRAM_CMD_MAX_RESULTS}.</i>"
+    )
+
+
+def build_start_text(
+    *,
+    user_status: str,
+    is_admin: bool = False,
+    account_status: Mapping[str, object] | None = None,
+) -> str:
+    private_only_note = (
+        "\n\n<i>Uso supportato: solo chat privata con il bot, non gruppi o supergruppi.</i>"
+    )
+    if is_admin:
+        return (
+            "👑 <b>Benvenuto in eBay CF Bot</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Il tuo account Telegram e' riconosciuto come admin globale.\n"
+            "Puoi approvare utenti con <code>/users</code>, <code>/approve_user</code> "
+            "e <code>/reject_user</code>.\n"
+            "Per il tuo uso operativo puoi controllare <code>/account</code>, "
+            "<code>/connect</code> e gli ordini recenti."
+            f"{private_only_note}"
+        )
+
+    canonical_status = normalize_telegram_user_status(user_status)
+    if canonical_status in {"new", "pending", "blocked"}:
+        return format_access_required_status(canonical_status) + private_only_note
+
+    summary = account_status or {}
+    raw_account_status = str(summary.get("account_status") or "unlinked")
+    raw_token_status = str(summary.get("token_status") or "missing")
+    ebay_user_id = html.escape(str(summary.get("ebay_user_id") or "n/d"))
+    environment = html.escape(str(summary.get("environment") or "n/d"))
+
+    if raw_account_status in {"disconnected", "revoked"}:
+        return (
+            "👋 <b>Benvenuto in eBay CF Bot</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Il tuo ultimo account eBay risulta in stato "
+            f"<code>{html.escape(raw_account_status)}</code>.\n"
+            "Ultimo utente noto: "
+            f"<code>{ebay_user_id}</code> • ambiente: <code>{environment}</code>\n"
+            "Prossimo passo: usa <code>/connect</code> per collegare di nuovo l'account."
+            f"{private_only_note}"
+        )
+
+    if raw_token_status in {"revoked", "expired", "token_expired"}:
+        return (
+            "👋 <b>Benvenuto in eBay CF Bot</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Il tuo account eBay risulta collegato, ma il token non e' piu' utilizzabile.\n"
+            f"Utente eBay: <code>{ebay_user_id}</code> • ambiente: <code>{environment}</code>\n"
+            "Prossimo passo: usa <code>/connect</code> per completare il reconnect."
+            f"{private_only_note}"
+        )
+
+    if raw_account_status != "linked":
+        return (
+            "👋 <b>Benvenuto in eBay CF Bot</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Il tuo accesso e' approvato, ma non hai ancora collegato un account eBay.\n"
+            "Prossimo passo: usa <code>/connect</code>.\n"
+            "Poi potrai verificare lo stato con <code>/account</code> "
+            "e attivare il flusso operativo."
+            f"{private_only_note}"
+        )
+
+    return (
+        "✅ <b>Benvenuto in eBay CF Bot</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "Il tuo accesso e' attivo e l'account eBay risulta collegato.\n"
+        f"Utente eBay: <code>{ebay_user_id}</code> • ambiente: <code>{environment}</code>\n"
+        "Comandi utili: <code>/ultimi</code>, <code>/tutti</code>, <code>/ordine</code>, "
+        "<code>/account</code>, <code>/notifications on</code>, <code>/settings</code>."
+        f"{private_only_note}"
     )
 
 
@@ -215,6 +292,7 @@ def should_attach_main_menu(command: str) -> bool:
         "/ping",
         "/stato",
         "/account",
+        "/reconnect_status",
         "/connect",
         "/disconnect",
         "/settings",
@@ -383,15 +461,57 @@ def format_account_status(account_status: Mapping[str, object]) -> str:
     ebay_user_id = html.escape(str(account_status.get("ebay_user_id") or "non collegato"))
     account_state = html.escape(str(account_status.get("account_status") or "unlinked"))
     token_status = html.escape(str(account_status.get("token_status") or "missing"))
+    raw_account_state = str(account_status.get("account_status") or "unlinked")
+    raw_token_status = str(account_status.get("token_status") or "missing")
+    reconnect_hint = format_reconnect_reason_hint(account_status)
     subscription_count = int(account_status.get("subscription_count", 0))
     chat_count = int(account_status.get("chat_count", 0))
+
+    if raw_account_state == "revoked":
+        return (
+            "👤 <b>Account eBay</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🔗 Stato: <code>{account_state}</code>\n"
+            f"🪪 Ultimo utente eBay: <code>{ebay_user_id}</code>\n"
+            f"🌍 Ambiente: <code>{environment}</code>\n"
+            f"🔐 Token: <code>{token_status}</code>\n"
+            "Il collegamento risulta revocato e va autorizzato di nuovo con "
+            "<code>/connect</code>."
+            f"{reconnect_hint}"
+        )
+
+    if raw_account_state == "disconnected":
+        return (
+            "👤 <b>Account eBay</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🔗 Stato: <code>{account_state}</code>\n"
+            f"🪪 Ultimo utente eBay: <code>{ebay_user_id}</code>\n"
+            f"🌍 Ambiente: <code>{environment}</code>\n"
+            f"🔐 Token: <code>{token_status}</code>\n"
+            "L'account e' stato scollegato dal bot. Usa <code>/connect</code> "
+            "per ricollegarlo."
+            f"{reconnect_hint}"
+        )
 
     if not linked:
         return (
             "👤 <b>Account eBay</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "Stato: <code>non collegato</code>\n"
-            "Usa <code>/connect</code> quando il flusso OAuth sara' disponibile."
+            "Usa <code>/connect</code> per collegare il tuo account eBay."
+        )
+
+    if raw_token_status in {"revoked", "expired", "token_expired"}:
+        return (
+            "👤 <b>Account eBay</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🔗 Stato: <code>reconnect_required</code>\n"
+            f"🪪 Utente eBay: <code>{ebay_user_id}</code>\n"
+            f"🌍 Ambiente: <code>{environment}</code>\n"
+            f"🔐 Token: <code>{token_status}</code>\n"
+            "Il collegamento esiste ancora, ma il token non e' piu' utilizzabile. "
+            "Usa <code>/connect</code> per riconnettere l'account."
+            f"{reconnect_hint}"
         )
 
     return (
@@ -406,23 +526,231 @@ def format_account_status(account_status: Mapping[str, object]) -> str:
     )
 
 
+def format_reconnect_status(account_status: Mapping[str, object]) -> str:
+    linked = bool(account_status.get("linked"))
+    raw_account_status = str(account_status.get("account_status") or "unlinked")
+    raw_token_status = str(account_status.get("token_status") or "missing")
+    reconnect_hint = format_reconnect_reason_hint(account_status)
+    environment = html.escape(str(account_status.get("environment") or "n/d"))
+    ebay_user_id = html.escape(str(account_status.get("ebay_user_id") or "n/d"))
+
+    if raw_account_status in {"revoked", "disconnected"}:
+        return (
+            "🔁 <b>Reconnect status</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📌 Stato attuale: <code>{html.escape(raw_account_status)}</code>\n"
+            f"🪪 Ultimo utente eBay: <code>{ebay_user_id}</code>\n"
+            f"🌍 Ambiente: <code>{environment}</code>\n"
+            "Prossima azione: usa <code>/connect</code> per collegare di nuovo l'account."
+            f"{reconnect_hint}"
+        )
+
+    if linked and raw_token_status in {"revoked", "expired", "token_expired"}:
+        return (
+            "🔁 <b>Reconnect status</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "📌 Stato attuale: <code>reconnect_required</code>\n"
+            f"🪪 Utente eBay: <code>{ebay_user_id}</code>\n"
+            f"🌍 Ambiente: <code>{environment}</code>\n"
+            f"🔐 Stato token: <code>{html.escape(raw_token_status)}</code>\n"
+            "Prossima azione: usa <code>/connect</code> per completare il reconnect."
+            f"{reconnect_hint}"
+        )
+
+    if linked:
+        return (
+            "🔁 <b>Reconnect status</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "📌 Stato attuale: <code>linked</code>\n"
+            f"🪪 Utente eBay: <code>{ebay_user_id}</code>\n"
+            f"🌍 Ambiente: <code>{environment}</code>\n"
+            "Nessuna azione richiesta: il collegamento risulta utilizzabile."
+        )
+
+    return (
+        "🔁 <b>Reconnect status</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "📌 Stato attuale: <code>unlinked</code>\n"
+        "Nessun account eBay collegato in questo momento.\n"
+        "Prossima azione: usa <code>/connect</code> per avviare il collegamento."
+    )
+
+
+def format_reconnect_reason_hint(account_status: Mapping[str, object]) -> str:
+    outcome = str(account_status.get("latest_reconnect_outcome") or "").strip()
+    reason = str(account_status.get("latest_reconnect_reason") or "").strip()
+    if not outcome and not reason:
+        return ""
+
+    if outcome == "session_expired":
+        label = "Sessione OAuth scaduta"
+    elif outcome == "session_unavailable":
+        label = "Link di collegamento non piu' valido"
+    elif outcome == "user_cancelled":
+        label = "Autorizzazione annullata dall'utente"
+    elif outcome == "provider_configuration_error":
+        label = "Configurazione OAuth del servizio non accettata da eBay"
+    elif outcome == "service_configuration_error":
+        label = "Problema di configurazione o salvataggio lato servizio"
+    elif outcome == "provider_runtime_error":
+        label = "Errore temporaneo restituito da eBay"
+    elif outcome:
+        label = outcome.replace("_", " ")
+    else:
+        label = "Ultimo problema noto"
+
+    safe_label = html.escape(label)
+    safe_reason = html.escape(reason) if reason else ""
+    if safe_reason:
+        return (
+            "\n"
+            f"⚠️ Ultimo problema noto: <code>{safe_label}</code>\n"
+            f"📝 Dettaglio: <code>{safe_reason}</code>"
+        )
+    return f"\n⚠️ Ultimo problema noto: <code>{safe_label}</code>"
+
+
+def format_why_not_notified_status(explain: Mapping[str, object]) -> str:
+    order_id = html.escape(str(explain.get("order_id") or "n/d"))
+    status = html.escape(str(explain.get("status") or "unknown"))
+    headline = html.escape(str(explain.get("headline") or "Stato non determinato"))
+    detail = html.escape(str(explain.get("detail") or ""))
+    environment = html.escape(str(explain.get("environment") or "n/d"))
+    delivery_status = html.escape(str(explain.get("delivery_status") or "unknown"))
+    delivery_headline = html.escape(str(explain.get("delivery_headline") or ""))
+    delivery_detail = html.escape(str(explain.get("delivery_detail") or ""))
+    raw_status = str(explain.get("status") or "unknown")
+    raw_delivery_status = str(explain.get("delivery_status") or "unknown")
+
+    blocking_reason = "Nessun blocco rilevato al momento."
+    next_action = "Nessuna azione richiesta: l'ordine e la chat risultano pronti."
+    if raw_status == "order_not_found":
+        blocking_reason = "L'ordine non e' recuperabile con il contesto attuale."
+        next_action = "Controlla orderId, ambiente e account collegato, poi riprova."
+    elif raw_status == "missing_order_id":
+        blocking_reason = "Manca un identificativo ordine stabile."
+        next_action = "Verifica il payload sorgente: senza orderId il bot non puo' tracciarlo."
+    elif raw_status == "not_eligible":
+        blocking_reason = "L'ordine non passa i criteri di eleggibilita' correnti."
+        next_action = "Controlla che il CODICE_FISCALE sia presente e valorizzato."
+    elif raw_status == "already_notified_order_id":
+        blocking_reason = "L'ordine e' gia' stato tracciato per orderId."
+        next_action = "Non serve intervenire, a meno che tu non voglia forzare un nuovo ciclo."
+    elif raw_status == "already_notified_fingerprint":
+        blocking_reason = "L'ordine collide con una fingerprint gia' vista."
+        next_action = "Controlla i dati ordine se ti aspettavi una nuova notifica distinta."
+    elif raw_delivery_status == "chat_not_registered":
+        blocking_reason = "La chat corrente non e' registrata come destinazione notifiche."
+        next_action = "Invia un comando da questa chat e poi verifica /settings o /notifications."
+    elif raw_delivery_status in {
+        "chat_notifications_disabled",
+        "chat_subscription_disabled",
+        "chat_not_subscribed",
+    }:
+        blocking_reason = "La chat corrente non e' pronta a ricevere notifiche automatiche."
+        next_action = "Riattiva il recapito con <code>/notifications on</code>."
+
+    rendered = [
+        "🧭 <b>Why Not Notified</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"🪪 Ordine: <code>{order_id}</code>",
+        f"🌍 Ambiente: <code>{environment}</code>",
+        f"📌 Esito ordine: <code>{status}</code>",
+        f"ℹ️ {headline}",
+    ]
+    if detail:
+        rendered.append(f"📝 Dettaglio: <code>{detail}</code>")
+    rendered.append(f"📨 Esito recapito chat: <code>{delivery_status}</code>")
+    if delivery_headline:
+        rendered.append(f"ℹ️ {delivery_headline}")
+    if delivery_detail:
+        rendered.append(f"📝 Recapito: <code>{delivery_detail}</code>")
+    rendered.append(f"🚫 Blocco attuale: {blocking_reason}")
+    rendered.append(f"➡️ Prossima azione: {next_action}")
+    return "\n".join(rendered)
+
+
+def format_order_notification_summary(explain: Mapping[str, object]) -> str:
+    raw_status = str(explain.get("status") or "unknown")
+    raw_delivery_status = str(explain.get("delivery_status") or "unknown")
+    blocking_reason = "Nessun blocco rilevato al momento."
+    next_action = "Nessuna azione richiesta: l'ordine e la chat risultano pronti."
+
+    if raw_status == "order_not_found":
+        blocking_reason = "L'ordine non e' recuperabile con il contesto attuale."
+        next_action = "Controlla orderId, ambiente e account collegato, poi riprova."
+    elif raw_status == "missing_order_id":
+        blocking_reason = "Manca un identificativo ordine stabile."
+        next_action = "Verifica il payload sorgente: senza orderId il bot non puo' tracciarlo."
+    elif raw_status == "not_eligible":
+        blocking_reason = "L'ordine non passa i criteri di eleggibilita' correnti."
+        next_action = "Controlla che il CODICE_FISCALE sia presente e valorizzato."
+    elif raw_status == "already_notified_order_id":
+        blocking_reason = "L'ordine e' gia' stato tracciato per orderId."
+        next_action = "Non serve intervenire, a meno che tu non voglia forzare un nuovo ciclo."
+    elif raw_status == "already_notified_fingerprint":
+        blocking_reason = "L'ordine collide con una fingerprint gia' vista."
+        next_action = "Controlla i dati ordine se ti aspettavi una nuova notifica distinta."
+    elif raw_delivery_status == "chat_not_registered":
+        blocking_reason = "La chat corrente non e' registrata come destinazione notifiche."
+        next_action = "Invia un comando da questa chat e poi verifica /settings o /notifications."
+    elif raw_delivery_status in {
+        "chat_notifications_disabled",
+        "chat_subscription_disabled",
+        "chat_not_subscribed",
+    }:
+        blocking_reason = "La chat corrente non e' pronta a ricevere notifiche automatiche."
+        next_action = "Riattiva il recapito con <code>/notifications on</code>."
+
+    status = html.escape(raw_status)
+    delivery_status = html.escape(raw_delivery_status)
+    return (
+        "🧭 <b>Notificabilita'</b>\n"
+        f"📌 Esito ordine: <code>{status}</code>\n"
+        f"📨 Esito recapito: <code>{delivery_status}</code>\n"
+        f"🚫 Blocco attuale: {blocking_reason}\n"
+        f"➡️ Prossima azione: {next_action}"
+    )
+
+
 def format_connect_status(connect_status: Mapping[str, object]) -> str:
     connect_url = str(connect_status.get("connect_url", "") or "")
     oauth_state = html.escape(str(connect_status.get("oauth_state", "")))
     expires_at = html.escape(str(connect_status.get("expires_at", "")))
+    session_reused = bool(connect_status.get("session_reused", False))
+    reconnect = bool(connect_status.get("reconnect", False))
+    account_status = html.escape(str(connect_status.get("account_status") or "unlinked"))
+    ebay_user_id = html.escape(str(connect_status.get("ebay_user_id") or "n/d"))
+    intro = (
+        "🔁 <b>Ricollega account eBay</b>" if reconnect else "🔗 <b>Collegamento account eBay</b>"
+    )
+    session_line = (
+        "♻️ Sessione gia' pronta: puoi riaprire il link qui sotto.\n"
+        if session_reused
+        else "🆕 Sessione OAuth preparata correttamente.\n"
+    )
     base = (
-        "🔗 <b>Collegamento account eBay</b>\n"
+        f"{intro}\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📌 Stato account attuale: <code>{account_status}</code>\n"
+        f"🪪 Utente eBay noto: <code>{ebay_user_id}</code>\n"
+        f"{session_line}"
         f"🪪 Sessione OAuth: <code>{oauth_state}</code>\n"
         f"⏳ Scadenza: <code>{expires_at}</code>\n"
     )
     if connect_url:
         escaped_url = html.escape(connect_url, quote=True)
-        return base + f'🌐 Apri questo link: <a href="{escaped_url}">{escaped_url}</a>'
+        return (
+            base
+            + f'🌐 Apri questo link: <a href="{escaped_url}">{escaped_url}</a>\n'
+            + "Dopo il consenso eBay il bot confermera' il risultato in questa chat."
+        )
     return (
         base
         + "⚠️ Il callback OAuth non e' ancora configurato sul server.\n"
-        + "La sessione e' stata preparata, ma serve impostare l'URL pubblico di collegamento."
+        + "La sessione e' stata preparata, ma il servizio non puo' ancora "
+        "aprire il flusso pubblico.\n"
+        + "Questa e' una limitazione di configurazione del server, non un errore del tuo account."
     )
 
 
@@ -431,7 +759,8 @@ def format_disconnect_status(disconnect_status: Mapping[str, object]) -> str:
         return (
             "❌ <b>Scollega account eBay</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "Nessun account eBay collegato da scollegare in questo contesto."
+            "Nessun account eBay collegato da scollegare in questo contesto.\n"
+            "Se devi collegarne uno usa <code>/connect</code>."
         )
 
     ebay_user_id = html.escape(str(disconnect_status.get("ebay_user_id", "n/d")))
@@ -442,6 +771,7 @@ def format_disconnect_status(disconnect_status: Mapping[str, object]) -> str:
         f"🪪 Utente eBay scollegato: <code>{ebay_user_id}</code>\n"
         f"🌍 Ambiente: <code>{environment}</code>\n"
         "🔐 Token locale rimosso dal runtime del bot.\n"
+        "ℹ️ La revoca remota eBay non e' ancora inclusa in questo comando.\n"
         "Puoi usare <code>/connect</code> per collegare di nuovo l'account."
     )
 
