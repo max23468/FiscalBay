@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.0](https://github.com/max23468/eBayCF/compare/v0.2.0...v0.3.0) (2026-04-19)
+
+
+### Features
+
+* complete phase 1 runtime and onboarding flow ([210c8f6](https://github.com/max23468/eBayCF/commit/210c8f6650648312a02e816816022dfbcc15334a))
+* complete phase 2 admin guardrails ([1d3193b](https://github.com/max23468/eBayCF/commit/1d3193b473e4c9af3003e0a5407d271c22fce1f0))
+* improve final oauth onboarding ux ([68cfc5c](https://github.com/max23468/eBayCF/commit/68cfc5ce6d8decd7eec1a0320d7a6457975bd004))
+* refine phase 1 account and notification UX ([153c0cb](https://github.com/max23468/eBayCF/commit/153c0cbe7242a2236a224e2d792adaf5c07a963f))
+
+
+### Bug Fixes
+
+* preserve VPS runtime files during sync ([834069a](https://github.com/max23468/eBayCF/commit/834069a136e0c039f55e934928b4c2caa9645c86))
+* prevent release asset upload cancellation ([#23](https://github.com/max23468/eBayCF/issues/23)) ([eb8abb2](https://github.com/max23468/eBayCF/commit/eb8abb2afd68d025dbe3335479762d9bd132535f))
+* refine empty admin views ([ffb247c](https://github.com/max23468/eBayCF/commit/ffb247c5e2b506466038f31fef205c6907210f73))
+* run VPS install script with sudo ([eda23c8](https://github.com/max23468/eBayCF/commit/eda23c873eedf780de5f765a6c30f7cf3ab0af34))
+* satisfy phase 2 lint checks ([a66ef59](https://github.com/max23468/eBayCF/commit/a66ef5910b96dd1927d8992c43fd3ec8855d9758))
+* update systemd bot entrypoint ([496265c](https://github.com/max23468/eBayCF/commit/496265c467d921ddf3c9d05047b12e6aecd201e5))
+
 ## [0.2.0](https://github.com/max23468/eBayCF/compare/v0.1.0...v0.2.0) (2026-04-18)
 
 
