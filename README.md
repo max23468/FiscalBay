@@ -75,6 +75,12 @@ Il flusso consigliato da remoto e:
 - GitHub Actions esegue il deploy verso la VPS
 - la VPS applica il deploy standard con `deploy/install-vps.sh`
 
+In pratica, da Codex web/mobile ti basta:
+
+- aprire il repository GitHub `max23468/eBayCF`
+- lavorare su branch o su `main`
+- usare GitHub Actions per il deploy, senza dipendere dai secret runtime di `chatgpt.com`
+
 ## Versioni e changelog
 
 Il repository usa Semantic Versioning con tag GitHub nel formato `vX.Y.Z`.
