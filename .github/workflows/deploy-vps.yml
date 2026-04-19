@@ -122,4 +122,4 @@ jobs:
             -o ServerAliveInterval=30 \
             -o StrictHostKeyChecking="${SSH_STRICT}" \
             "${EBAYCF_VPS_USER}@${EBAYCF_VPS_HOST}" \
-            "APP_DIR=/opt/ebay-cf APP_USER=ebaycf APP_GROUP=ebaycf bash /opt/ebay-cf/deploy/install-vps.sh"
+            "sudo APP_DIR=/opt/ebay-cf APP_USER=ebaycf APP_GROUP=ebaycf bash /opt/ebay-cf/deploy/install-vps.sh"
