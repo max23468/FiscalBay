@@ -151,6 +151,15 @@ def build_help_text() -> str:
         "• 🧭 <code>/why_not_notified [order_id]</code> → spiega se un ordine e' notificabile\n"
         "• 🙋 <code>/request_access</code> → richiede accesso all'admin del bot\n"
         "• 👥 <code>/users</code> → elenco utenti registrati e stato accessi (admin)\n"
+        "• 🕓 <code>/pending_users</code> → solo richieste accesso pending (admin)\n"
+        "• 🔗 <code>/unlinked_users</code> → approvati senza account operativo (admin)\n"
+        "• 🩺 <code>/tenant_health [user_id]</code> → salute tenant compatta (admin)\n"
+        "• 🧭 <code>/admin_dashboard</code> → cruscotto admin e alert prodotto (admin)\n"
+        "• ⛔ <code>/suspend_user [id]</code> → sospende un utente approvato (admin)\n"
+        "• ✅ <code>/reactivate_user [id]</code> → riattiva un utente sospeso (admin)\n"
+        "• 🛠️ <code>/service_mode [normal|maintenance|degraded]</code> → modalita' servizio (admin)\n"
+        "• 📣 <code>/service_status</code> → stato servizio e accesso approvato\n"
+        "• 📜 <code>/policy</code> → policy sintetica del servizio\n"
         "• 📦 <code>/ultimi [giorni] [max]</code> → ordini con CF trovato\n"
         "• 📋 <code>/tutti [giorni] [max]</code> → tutti gli ordini\n"
         "• 🔍 <code>/ordine [id]</code> → dettaglio ordine singolo\n"
@@ -298,6 +307,8 @@ def should_attach_main_menu(command: str) -> bool:
         "/connect",
         "/disconnect",
         "/settings",
+        "/service_status",
+        "/policy",
     )
 
 
@@ -534,6 +545,99 @@ def format_admin_status_update(
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"Utente <code>{telegram_user_id}</code> aggiornato a "
         f"<code>{html.escape(status)}</code>."
+    )
+
+
+def format_admin_dashboard(dashboard: Mapping[str, object]) -> str:
+    metrics = dashboard.get("metrics") or {}
+    queue = dashboard.get("queue") or {}
+    alerts = dashboard.get("alerts") or []
+    mode = html.escape(str(dashboard.get("service_mode") or "normal"))
+    oauth_failures_recent = html.escape(str(metrics.get("oauth_failures_recent", 0)))
+    pending = html.escape(str(metrics.get("pending_users", 0)))
+    approved = html.escape(str(metrics.get("approved_users", 0)))
+    linked = html.escape(str(metrics.get("linked_users", 0)))
+    approved_unlinked = html.escape(str(metrics.get("approved_without_link", 0)))
+    pending_stale = html.escape(str(metrics.get("pending_stale", 0)))
+    revoked_stale = html.escape(str(metrics.get("revoked_stale", 0)))
+    queue_pending = html.escape(str(queue.get("pending", 0)))
+    queue_failed = html.escape(str(queue.get("failed", 0)))
+    sections = [
+        "🧭 <b>Admin Dashboard</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"🛠️ Modalita' servizio: <code>{mode}</code>",
+        f"🕓 Pending: <code>{pending}</code> • ✅ Approved: <code>{approved}</code>",
+        f"🔗 Tenant linked: <code>{linked}</code> • ⌛ Approved non operativi: <code>{approved_unlinked}</code>",
+        f"🚨 OAuth failure recenti: <code>{oauth_failures_recent}</code>",
+        f"📦 Queue pending: <code>{queue_pending}</code> • failed: <code>{queue_failed}</code>",
+        f"⚠️ Pending fermi: <code>{pending_stale}</code> • token revocati/rotti persistenti: <code>{revoked_stale}</code>",
+    ]
+    if alerts:
+        sections.append("\n🚨 <b>Alert prodotto</b>")
+        sections.extend(
+            f"• <code>{html.escape(str(alert.get('code') or 'unknown'))}</code> "
+            f"{html.escape(str(alert.get('message') or ''))}"
+            for alert in alerts
+        )
+    return "\n".join(sections)
+
+
+def format_tenant_health(rows: Iterable[Mapping[str, object]]) -> str:
+    rendered_rows = list(rows)
+    if not rendered_rows:
+        return (
+            "🩺 <b>Tenant Health</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Nessun tenant registrato da mostrare."
+        )
+    lines = [
+        "🩺 <b>Tenant Health</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+    ]
+    for row in rendered_rows:
+        lines.append(
+            "• "
+            f"<code>{html.escape(str(row.get('telegram_user_id') or 'n/d'))}</code> "
+            f"access=<code>{html.escape(str(row.get('status') or 'n/d'))}</code> "
+            f"account=<code>{html.escape(str(row.get('account_status') or 'unlinked'))}</code> "
+            f"token=<code>{html.escape(str(row.get('token_status') or 'missing'))}</code> "
+            f"notif=<code>{html.escape(str(row.get('subscription_count') or 0))}</code> "
+            f"last=<code>{html.escape(str(row.get('last_issue') or 'none'))}</code>"
+        )
+    return "\n".join(lines)
+
+
+def format_service_status(service_status: Mapping[str, object]) -> str:
+    mode = html.escape(str(service_status.get("mode") or "normal"))
+    read_available = "si" if bool(service_status.get("read_available", True)) else "no"
+    write_available = "si" if bool(service_status.get("write_available", True)) else "no"
+    connect_available = "si" if bool(service_status.get("connect_available", True)) else "no"
+    admin_model = html.escape(str(service_status.get("admin_model") or "single_admin"))
+    return (
+        "📣 <b>Service Status</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "Questo bot usa accesso approvato dall'admin.\n"
+        f"👑 Modello admin: <code>{admin_model}</code>\n"
+        f"🛠️ Modalita' servizio: <code>{mode}</code>\n"
+        f"📖 Consultazione disponibile: <code>{read_available}</code>\n"
+        f"✍️ Azioni operative disponibili: <code>{write_available}</code>\n"
+        f"🔗 Nuovi collegamenti eBay disponibili: <code>{connect_available}</code>\n"
+        "Se non sei ancora approvato usa <code>/request_access</code>. "
+        "Per la governance sintetica usa <code>/policy</code>."
+    )
+
+
+def format_policy_status(policy_status: Mapping[str, object]) -> str:
+    mode = html.escape(str(policy_status.get("mode") or "normal"))
+    return (
+        "📜 <b>Policy Servizio</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "Servizio pubblico piccolo e curato, solo chat private Telegram.\n"
+        "Accesso operativo soggetto ad approvazione di un solo admin globale.\n"
+        "Notifiche attive di default per utenti approvati, salvo scelta utente o intervento admin.\n"
+        "Il bot mostra solo dati fiscali realmente restituiti da eBay.\n"
+        f"Modalita' servizio corrente: <code>{mode}</code>\n"
+        "Riferimento operativo: <code>docs/SERVICE_GOVERNANCE.md</code> nel repository."
     )
 
 

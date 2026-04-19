@@ -377,6 +377,33 @@ def load_state(path: str) -> BotRuntimeStatePayload:
     return state
 
 
+def load_kv_value(path: str, key: str) -> str | None:
+    init_db(path)
+    with _connect(path) as conn:
+        row = conn.execute(
+            "SELECT value FROM kv_store WHERE key = ? LIMIT 1",
+            (key,),
+        ).fetchone()
+        if row is None:
+            return None
+    return str(row["value"])
+
+
+def save_kv_value(path: str, key: str, value: str) -> None:
+    init_db(path)
+    with _connect(path) as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO kv_store (key, value) VALUES (?, ?)",
+            (key, value),
+        )
+
+
+def delete_kv_value(path: str, key: str) -> None:
+    init_db(path)
+    with _connect(path) as conn:
+        conn.execute("DELETE FROM kv_store WHERE key = ?", (key,))
+
+
 def save_state(path: str, state: BotRuntimeStatePayload) -> None:
     init_db(path)
     with _connect(path) as conn:

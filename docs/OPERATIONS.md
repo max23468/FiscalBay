@@ -136,12 +136,16 @@ Controllo accessi Telegram:
 - il runtime normalizza anche alias legacy come `active` e `rejected`, cosi' il controllo accessi resta coerente anche su record vecchi nel `state.db`
 - gli utenti non approvati possono solo usare `/start`, `/help` e `/request_access`
 - l'admin riceve una richiesta con pulsanti inline `Approva` e `Rifiuta`
-- in alternativa l'admin puo' usare `/users`, `/approve_user <telegram_user_id>` e `/reject_user <telegram_user_id>`
+- in alternativa l'admin puo' usare `/users`, `/pending_users`, `/unlinked_users`, `/tenant_health`, `/admin_dashboard`, `/approve_user <telegram_user_id>`, `/reject_user <telegram_user_id>`, `/suspend_user <telegram_user_id>` e `/reactivate_user <telegram_user_id>`
 - il gating passa ora da capability esplicite: `request_access`, `review_access`, `connect_account`, `manage_notifications`, `view_account`, `view_orders`
 - solo gli utenti `approved` o l'`admin` ricevono le capability operative che sbloccano `/connect`, `/account`, `/settings`, `/notifications` e i comandi ordini
 - approvare o bloccare un utente riallinea anche chat e subscription gia' registrate, quindi l'effetto non dipende solo dal prossimo restart o dal prossimo messaggio
 - ripetere `/approve_user` o `/reject_user` sullo stesso stato non genera una nuova transizione ne' una nuova notifica utente, ma riallinea comunque i permessi applicati
 - ripetere `/connect` mentre esiste gia' una sessione OAuth pendente e valida riusa la sessione esistente invece di crearne una nuova
+- i comandi sensibili lato utente hanno ora un rate limit minimo; `/request_access` e `/connect` applicano anche cooldown dedicati su richieste ravvicinate e failure OAuth ripetuti
+- il bot espone `/service_status` come messaggio pubblico minimo di funzionamento e `/policy` come riferimento sintetico alla governance del servizio
+- l'admin puo' passare il bot in `/service_mode normal|maintenance|degraded`: la manutenzione sospende nuovi collegamenti, il degrado lascia consultazione disponibile ma blocca azioni operative
+- il loop di notifica invia anche un riepilogo admin periodico quando trova pending o alert prodotto rilevanti
 - il `state.db` contiene ora anche una `operation_queue` minima per applicazioni sensibili differibili o recuperabili
 
 Audit log minimo:

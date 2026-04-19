@@ -5,7 +5,6 @@ Decisioni ancora aperte che influenzano le prossime fasi.
 ## Onboarding residuo
 
 - decidere dove ospitare la parte web di onboarding
-- decidere se esporre un comando pubblico minimo di policy/privacy per il bot
 - verificare se lo stato `error` vada davvero esposto stabilmente in UX oppure tenuto come failure mode interno
 - decidere quanto rendere persistente e visibile all'utente la memoria dell'ultimo failure reason OAuth/reconnect
 

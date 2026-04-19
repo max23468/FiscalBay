@@ -35,6 +35,8 @@ Regole operative di base:
 - lato UX l'utente opera sempre sul proprio account eBay gia' collegato, senza dover scegliere tra account o environment multipli
 - il runtime del bot, quando `TELEGRAM_ADMIN_USER_ID` e' configurato, usa token tenant e non refresh token eBay globali condivisi per i tenant collegati
 - il servizio e' `best effort` e non ha SLA formale
+- il bot espone `/service_status` e `/policy` come comandi pubblici minimi di orientamento sul servizio
+- l'admin puo' usare `/service_mode normal|maintenance|degraded` per sospendere nuovi collegamenti o limitare temporaneamente le sole azioni operative
 
 ## Perimetro del prodotto
 

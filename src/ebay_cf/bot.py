@@ -104,6 +104,8 @@ from .storage.sqlite import (
     disconnect_linked_ebay_account,
     ensure_parent_dir,
     list_notification_tenants,
+    load_audit_log_entries,
+    load_kv_value,
     load_latest_oauth_link_session,
     load_notification_subscriptions,
     load_retry_queue_entries,
@@ -118,11 +120,13 @@ from .storage.sqlite import (
     resolve_linked_ebay_account,
     resolve_primary_chat_id,
     resolve_tenant_chat_context,
+    save_kv_value,
     save_retry_queue_entries,
     save_runtime_state,
     save_tenant_retry_queue_entries,
     save_tenant_runtime_state,
     set_notification_subscription_enabled,
+    summarize_operation_queue,
     summarize_tenant_account_status,
     update_telegram_user_status,
     upsert_notification_subscription,
@@ -150,6 +154,7 @@ from .telegram_commands import (
     format_access_required_status,
     format_account_status,
     format_admin_access_request,
+    format_admin_dashboard,
     format_admin_status_update,
     format_admin_user_list,
     format_connect_status,
@@ -157,9 +162,12 @@ from .telegram_commands import (
     format_leave_status,
     format_notifications_status,
     format_order_notification_summary,
+    format_policy_status,
     format_reconnect_status,
     format_settings_status,
+    format_service_status,
     format_status,
+    format_tenant_health,
     format_why_not_notified_status,
     is_authorized,
     options_for_command,
@@ -202,9 +210,36 @@ COMMAND_CAPABILITIES: dict[str, str] = {
     "/tutti": CAPABILITY_VIEW_ORDERS,
     "/ordine": CAPABILITY_VIEW_ORDERS,
     "/users": CAPABILITY_REVIEW_ACCESS,
+    "/pending_users": CAPABILITY_REVIEW_ACCESS,
+    "/unlinked_users": CAPABILITY_REVIEW_ACCESS,
+    "/tenant_health": CAPABILITY_REVIEW_ACCESS,
+    "/admin_dashboard": CAPABILITY_REVIEW_ACCESS,
     "/approve_user": CAPABILITY_REVIEW_ACCESS,
     "/reject_user": CAPABILITY_REVIEW_ACCESS,
+    "/suspend_user": CAPABILITY_REVIEW_ACCESS,
+    "/reactivate_user": CAPABILITY_REVIEW_ACCESS,
+    "/service_mode": CAPABILITY_REVIEW_ACCESS,
     "/request_access": CAPABILITY_REQUEST_ACCESS,
+}
+
+SERVICE_MODE_NORMAL = "normal"
+SERVICE_MODE_MAINTENANCE = "maintenance"
+SERVICE_MODE_DEGRADED = "degraded"
+SERVICE_MODES = {
+    SERVICE_MODE_NORMAL,
+    SERVICE_MODE_MAINTENANCE,
+    SERVICE_MODE_DEGRADED,
+}
+DEFAULT_ADMIN_SUMMARY_INTERVAL_SECONDS = 6 * 60 * 60
+PENDING_STALE_HOURS = 48
+UNLINKED_STALE_HOURS = 72
+REVOKED_STALE_HOURS = 72
+COMMAND_RATE_LIMIT_SECONDS: dict[str, int] = {
+    "/request_access": 60,
+    "/connect": 10,
+    "/disconnect": 5,
+    "/leave_bot": 5,
+    "/service_mode": 2,
 }
 
 
@@ -212,6 +247,408 @@ def coerce_runtime_state(state: BotRuntimeStateLike) -> BotRuntimeState:
     if isinstance(state, BotRuntimeState):
         return state
     return BotRuntimeState.from_mapping(state)
+
+
+def _now_utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _parse_iso_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _seconds_between(now: datetime, previous: str | None) -> int | None:
+    parsed = _parse_iso_timestamp(previous)
+    if parsed is None:
+        return None
+    return max(0, int((now - parsed).total_seconds()))
+
+
+def _service_state_key() -> str:
+    return "service_state"
+
+
+def _command_rate_limit_key(telegram_user_id: int, command: str) -> str:
+    safe_command = command.replace("/", "")
+    return f"command_guard:{telegram_user_id}:{safe_command}"
+
+
+def _admin_summary_key() -> str:
+    return "admin_summary:last_sent_at"
+
+
+def _admin_summary_hash_key() -> str:
+    return "admin_summary:last_payload_hash"
+
+
+def _load_service_state(state_path: str) -> dict[str, object]:
+    raw = load_kv_value(state_path, _service_state_key())
+    if not raw:
+        return {"mode": SERVICE_MODE_NORMAL}
+    try:
+        loaded = json.loads(raw)
+    except json.JSONDecodeError:
+        return {"mode": SERVICE_MODE_NORMAL}
+    if not isinstance(loaded, dict):
+        return {"mode": SERVICE_MODE_NORMAL}
+    mode = str(loaded.get("mode") or SERVICE_MODE_NORMAL)
+    if mode not in SERVICE_MODES:
+        mode = SERVICE_MODE_NORMAL
+    return {
+        "mode": mode,
+        "updated_at": str(loaded.get("updated_at") or ""),
+        "updated_by": loaded.get("updated_by"),
+    }
+
+
+def _save_service_state(
+    state_path: str,
+    *,
+    mode: str,
+    updated_by: int | None,
+    updated_at: str,
+) -> None:
+    save_kv_value(
+        state_path,
+        _service_state_key(),
+        json.dumps(
+            {
+                "mode": mode if mode in SERVICE_MODES else SERVICE_MODE_NORMAL,
+                "updated_at": updated_at,
+                "updated_by": updated_by,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+    )
+
+
+def _mark_command_usage(
+    state_path: str,
+    *,
+    telegram_user_id: int | None,
+    command: str,
+    timestamp: str,
+) -> None:
+    if telegram_user_id is None or command not in COMMAND_RATE_LIMIT_SECONDS:
+        return
+    save_kv_value(
+        state_path,
+        _command_rate_limit_key(telegram_user_id, command),
+        timestamp,
+    )
+
+
+def _command_rate_limit_remaining_seconds(
+    state_path: str,
+    *,
+    telegram_user_id: int | None,
+    command: str,
+    now: datetime,
+) -> int:
+    if telegram_user_id is None:
+        return 0
+    limit_seconds = COMMAND_RATE_LIMIT_SECONDS.get(command, 0)
+    if limit_seconds <= 0:
+        return 0
+    previous = load_kv_value(state_path, _command_rate_limit_key(telegram_user_id, command))
+    elapsed = _seconds_between(now, previous)
+    if elapsed is None or elapsed >= limit_seconds:
+        return 0
+    return limit_seconds - elapsed
+
+
+def _format_cooldown_message(command: str, remaining_seconds: int) -> str:
+    return (
+        "⏱️ <b>Richiesta troppo ravvicinata</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"Il comando <code>{command}</code> e' in cooldown per altri "
+        f"<code>{remaining_seconds}</code> secondi.\n"
+        "Attendi un attimo e riprova."
+    )
+
+
+def _load_recent_audit_entries(
+    telegram_config: TelegramConfig,
+    *,
+    limit: int = 300,
+) -> list[AuditLogEntry]:
+    return load_audit_log_entries(telegram_config.state_path, limit=limit)
+
+
+def _connect_cooldown_remaining_seconds(
+    telegram_config: TelegramConfig,
+    *,
+    telegram_user_id: int,
+    environment: str,
+    now: datetime,
+) -> int:
+    entries = _load_recent_audit_entries(telegram_config, limit=300)
+    connect_attempts = 0
+    recent_failure_times: list[datetime] = []
+    latest_failure: datetime | None = None
+    for entry in entries:
+        if entry.target_telegram_user_id not in {telegram_user_id, None}:
+            continue
+        if entry.environment and entry.environment != environment:
+            continue
+        created_at = _parse_iso_timestamp(entry.created_at)
+        if created_at is None:
+            continue
+        age_seconds = int((now - created_at).total_seconds())
+        if age_seconds < 0:
+            continue
+        if entry.event_type == "connect" and age_seconds <= 600:
+            connect_attempts += 1
+        if entry.event_type == "oauth_failure" and age_seconds <= 900:
+            recent_failure_times.append(created_at)
+            if latest_failure is None or created_at > latest_failure:
+                latest_failure = created_at
+    if len(recent_failure_times) >= 3 and latest_failure is not None:
+        remaining = 900 - int((now - latest_failure).total_seconds())
+        if remaining > 0:
+            return remaining
+    if connect_attempts >= 5:
+        most_recent_connect = next(
+            (
+                _parse_iso_timestamp(entry.created_at)
+                for entry in entries
+                if entry.event_type == "connect"
+                and entry.target_telegram_user_id in {telegram_user_id, None}
+                and (not entry.environment or entry.environment == environment)
+                and _parse_iso_timestamp(entry.created_at) is not None
+            ),
+            None,
+        )
+        if most_recent_connect is not None:
+            remaining = 300 - int((now - most_recent_connect).total_seconds())
+            if remaining > 0:
+                return remaining
+    return 0
+
+
+def _service_mode_blocks_command(mode: str, command: str) -> str | None:
+    if mode == SERVICE_MODE_MAINTENANCE and command == "/connect":
+        return (
+            "🛠️ <b>Modalita' manutenzione</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "I nuovi collegamenti eBay sono temporaneamente sospesi.\n"
+            "I comandi informativi restano disponibili."
+        )
+    if mode == SERVICE_MODE_DEGRADED and command in {
+        "/connect",
+        "/disconnect",
+        "/leave_bot",
+        "/notifications",
+        "/approve_user",
+        "/reject_user",
+        "/suspend_user",
+        "/reactivate_user",
+    }:
+        return (
+            "🚧 <b>Servizio in modalita' degradata</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "La consultazione resta disponibile, ma le azioni operative sono temporaneamente sospese.\n"
+            "Riprova piu' tardi oppure usa <code>/service_status</code>."
+        )
+    return None
+
+
+def _build_service_status_payload(state_path: str) -> dict[str, object]:
+    service_state = _load_service_state(state_path)
+    mode = str(service_state.get("mode") or SERVICE_MODE_NORMAL)
+    return {
+        "mode": mode,
+        "read_available": True,
+        "write_available": mode == SERVICE_MODE_NORMAL,
+        "connect_available": mode == SERVICE_MODE_NORMAL,
+        "admin_model": "single_admin",
+    }
+
+
+def _build_user_row(
+    telegram_config: TelegramConfig,
+    *,
+    user: TelegramUser,
+) -> dict[str, object]:
+    account_status = summarize_tenant_account_status(
+        telegram_config.state_path,
+        user.telegram_user_id,
+        "",
+    )
+    operational_state = "waiting_connect"
+    if user.status == TELEGRAM_USER_STATUS_PENDING:
+        operational_state = "pending"
+    elif user.status == TELEGRAM_USER_STATUS_BLOCKED:
+        operational_state = "blocked"
+    elif user.status == TELEGRAM_USER_STATUS_ADMIN:
+        operational_state = "admin"
+    else:
+        raw_account_status = str(account_status.get("account_status") or "unlinked")
+        raw_token_status = str(account_status.get("token_status") or "missing")
+        if raw_account_status == "linked" and raw_token_status == "active":
+            operational_state = "ready"
+        elif raw_account_status in {"revoked"} or raw_token_status in {
+            "revoked",
+            "expired",
+            "token_expired",
+        }:
+            operational_state = "reconnect_required"
+    last_issue = str(account_status.get("latest_reconnect_outcome") or "")
+    if not last_issue and operational_state != "ready":
+        last_issue = operational_state
+    return {
+        "telegram_user_id": user.telegram_user_id,
+        "telegram_chat_id": user.telegram_chat_id,
+        "username": user.username,
+        "display_name": user.display_name,
+        "status": user.status,
+        "operational_state": operational_state,
+        "account_status": account_status.get("account_status"),
+        "token_status": account_status.get("token_status"),
+        "environment": account_status.get("environment"),
+        "ebay_user_id": account_status.get("ebay_user_id"),
+        "subscription_count": account_status.get("subscription_count", 0),
+        "chat_count": account_status.get("chat_count", 0),
+        "last_issue": last_issue or "none",
+        "created_at": user.created_at or "",
+    }
+
+
+def _build_user_rows(telegram_config: TelegramConfig) -> list[dict[str, object]]:
+    return [
+        _build_user_row(telegram_config, user=user)
+        for user in load_telegram_users(telegram_config.state_path)
+    ]
+
+
+def _build_admin_dashboard_payload(telegram_config: TelegramConfig) -> dict[str, object]:
+    rows = _build_user_rows(telegram_config)
+    now = datetime.now(timezone.utc)
+    audit_entries = _load_recent_audit_entries(telegram_config, limit=400)
+    oauth_failures_recent = 0
+    for entry in audit_entries:
+        if entry.event_type != "oauth_failure":
+            continue
+        created_at = _parse_iso_timestamp(entry.created_at)
+        if created_at is None:
+            continue
+        if int((now - created_at).total_seconds()) <= 24 * 60 * 60:
+            oauth_failures_recent += 1
+    pending_stale = 0
+    unlinked_stale = 0
+    revoked_stale = 0
+    alerts: list[dict[str, str]] = []
+    for row in rows:
+        created_at = _parse_iso_timestamp(str(row.get("created_at") or ""))
+        age_hours = int((now - created_at).total_seconds() // 3600) if created_at else 0
+        status = str(row.get("status") or "")
+        account_status = str(row.get("account_status") or "unlinked")
+        token_status = str(row.get("token_status") or "missing")
+        if status == TELEGRAM_USER_STATUS_PENDING and age_hours >= PENDING_STALE_HOURS:
+            pending_stale += 1
+        if status == TELEGRAM_USER_STATUS_APPROVED and account_status != "linked" and age_hours >= UNLINKED_STALE_HOURS:
+            unlinked_stale += 1
+        if status == TELEGRAM_USER_STATUS_APPROVED and token_status in {"revoked", "expired", "token_expired"} and age_hours >= REVOKED_STALE_HOURS:
+            revoked_stale += 1
+    if pending_stale:
+        alerts.append(
+            {
+                "code": "pending_stale",
+                "message": f"{pending_stale} richieste pending ferme oltre soglia",
+            }
+        )
+    if unlinked_stale:
+        alerts.append(
+            {
+                "code": "approved_unlinked_stale",
+                "message": f"{unlinked_stale} utenti approvati non hanno ancora collegato eBay",
+            }
+        )
+    if revoked_stale:
+        alerts.append(
+            {
+                "code": "token_revoked_stale",
+                "message": f"{revoked_stale} tenant restano con token revocato o scaduto",
+            }
+        )
+    queue_summary = summarize_operation_queue(telegram_config.state_path)
+    if queue_summary.get("pending", 0) > 0:
+        alerts.append(
+            {
+                "code": "operation_queue_pending",
+                "message": f"{queue_summary.get('pending', 0)} operazioni ancora pending",
+            }
+        )
+    if queue_summary.get("failed", 0) > 0:
+        alerts.append(
+            {
+                "code": "operation_queue_failed",
+                "message": f"{queue_summary.get('failed', 0)} operazioni fallite da rivedere",
+            }
+        )
+    approved_users = sum(
+        1 for row in rows if str(row.get("status")) in {TELEGRAM_USER_STATUS_APPROVED, TELEGRAM_USER_STATUS_ADMIN}
+    )
+    return {
+        "service_mode": _load_service_state(telegram_config.state_path).get("mode", SERVICE_MODE_NORMAL),
+        "metrics": {
+            "pending_users": sum(1 for row in rows if str(row.get("status")) == TELEGRAM_USER_STATUS_PENDING),
+            "approved_users": approved_users,
+            "linked_users": sum(1 for row in rows if str(row.get("account_status")) == "linked" and str(row.get("token_status")) == "active"),
+            "approved_without_link": sum(
+                1
+                for row in rows
+                if str(row.get("status")) == TELEGRAM_USER_STATUS_APPROVED
+                and str(row.get("account_status")) != "linked"
+            ),
+            "oauth_failures_recent": oauth_failures_recent,
+            "pending_stale": pending_stale,
+            "revoked_stale": revoked_stale,
+        },
+        "queue": queue_summary,
+        "alerts": alerts,
+    }
+
+
+def _maybe_send_admin_summary(telegram_config: TelegramConfig) -> None:
+    if telegram_config.admin_user_id is None:
+        return
+    admin_chat_id = resolve_primary_chat_id(telegram_config.state_path, telegram_config.admin_user_id)
+    if admin_chat_id is None:
+        return
+    now_iso = _now_utc_iso()
+    last_sent_at = load_kv_value(telegram_config.state_path, _admin_summary_key())
+    elapsed = _seconds_between(datetime.now(timezone.utc), last_sent_at)
+    dashboard = _build_admin_dashboard_payload(telegram_config)
+    if not dashboard.get("alerts") and int((dashboard.get("metrics") or {}).get("pending_users", 0)) == 0:
+        return
+    payload_hash = json.dumps(dashboard, ensure_ascii=False, sort_keys=True)
+    last_payload_hash = load_kv_value(telegram_config.state_path, _admin_summary_hash_key())
+    if last_payload_hash == payload_hash and elapsed is not None and elapsed < 24 * 60 * 60:
+        return
+    if last_payload_hash != payload_hash or elapsed is None:
+        pass
+    elif elapsed < DEFAULT_ADMIN_SUMMARY_INTERVAL_SECONDS:
+        return
+    send_message(
+        telegram_config.token,
+        admin_chat_id,
+        format_admin_dashboard(dashboard),
+    )
+    save_kv_value(telegram_config.state_path, _admin_summary_key(), now_iso)
+    save_kv_value(telegram_config.state_path, _admin_summary_hash_key(), payload_hash)
 
 
 def _disconnect_account_with_remote_revocation(
@@ -858,6 +1295,7 @@ def maybe_send_new_order_notifications(
                 send_message_fn=send_message,
                 request_with_backoff_fn=request_with_backoff,
             )
+            _maybe_send_admin_summary(telegram_config)
             return
         log_event(
             LOGGER,
@@ -865,6 +1303,7 @@ def maybe_send_new_order_notifications(
             "notify_skipped",
             reason="no_tenant_targets",
         )
+        _maybe_send_admin_summary(telegram_config)
         return
 
     for target in tenant_targets:
@@ -946,6 +1385,7 @@ def maybe_send_new_order_notifications(
             send_message_fn=send_message,
             request_with_backoff_fn=request_with_backoff,
         )
+    _maybe_send_admin_summary(telegram_config)
 
 
 def process_message(
@@ -959,14 +1399,73 @@ def process_message(
         return ["Chat non autorizzata per questo bot."]
 
     command, args = parse_command(text)
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat().replace("+00:00", "Z")
     is_admin_user = _is_admin_user(telegram_user_id, telegram_config)
     user_status = _load_user_status(telegram_config, telegram_user_id)
     can_use_bot = _is_user_approved(telegram_config, telegram_user_id)
+    service_state = _load_service_state(telegram_config.state_path)
+    service_mode = str(service_state.get("mode") or SERVICE_MODE_NORMAL)
     has_command_capability = _has_command_capability(
         telegram_config,
         telegram_user_id=telegram_user_id,
         command=command,
     )
+
+    if command == "/service_status":
+        return [format_service_status(_build_service_status_payload(telegram_config.state_path))]
+
+    if command == "/policy":
+        return [format_policy_status({"mode": service_mode})]
+
+    if command == "/service_mode":
+        if not has_command_capability:
+            return ["Solo l'admin puo' usare questo comando."]
+        if not args:
+            return [
+                "Uso corretto: <code>/service_mode normal|maintenance|degraded</code>\n"
+                f"Modalita' corrente: <code>{service_mode}</code>."
+            ]
+        requested_mode = str(args[0]).strip().lower()
+        if requested_mode not in SERVICE_MODES:
+            return [
+                "Uso corretto: <code>/service_mode normal|maintenance|degraded</code>"
+            ]
+        remaining = _command_rate_limit_remaining_seconds(
+            telegram_config.state_path,
+            telegram_user_id=telegram_user_id,
+            command=command,
+            now=now,
+        )
+        if remaining > 0:
+            return [_format_cooldown_message(command, remaining)]
+        _save_service_state(
+            telegram_config.state_path,
+            mode=requested_mode,
+            updated_by=telegram_user_id,
+            updated_at=now_iso,
+        )
+        _mark_command_usage(
+            telegram_config.state_path,
+            telegram_user_id=telegram_user_id,
+            command=command,
+            timestamp=now_iso,
+        )
+        _append_audit_log(
+            telegram_config,
+            event_type="service_mode",
+            created_at=now_iso,
+            actor_telegram_user_id=telegram_user_id,
+            target_telegram_user_id=telegram_user_id,
+            telegram_chat_id=chat_id,
+            outcome=requested_mode,
+            details={"previous_mode": service_mode},
+        )
+        return [
+            "🛠️ <b>Modalita' servizio aggiornata</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"Nuova modalita': <code>{requested_mode}</code>."
+        ]
 
     if command == "/request_access":
         if telegram_config.admin_user_id is None:
@@ -987,8 +1486,16 @@ def process_message(
             ]
         if is_blocked_telegram_user_status(user_status):
             return [format_access_request_status(blocked=True)]
+        remaining = _command_rate_limit_remaining_seconds(
+            telegram_config.state_path,
+            telegram_user_id=telegram_user_id,
+            command=command,
+            now=now,
+        )
+        if remaining > 0:
+            return [_format_cooldown_message(command, remaining)]
 
-        timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        timestamp = now_iso
         existing_user = load_telegram_user(telegram_config.state_path, telegram_user_id)
         if existing_user is None:
             upsert_telegram_user(
@@ -1053,70 +1560,103 @@ def process_message(
             outcome="pending",
             details={"admin_notified": admin_notified},
         )
+        _mark_command_usage(
+            telegram_config.state_path,
+            telegram_user_id=telegram_user_id,
+            command=command,
+            timestamp=timestamp,
+        )
         return [format_access_request_status(admin_notified=admin_notified)]
 
-    if command in {"/approve_user", "/reject_user", "/users"} and not has_command_capability:
+    if command in {
+        "/approve_user",
+        "/reject_user",
+        "/suspend_user",
+        "/reactivate_user",
+        "/users",
+        "/pending_users",
+        "/unlinked_users",
+        "/tenant_health",
+        "/admin_dashboard",
+    } and not has_command_capability:
         return ["Solo l'admin puo' usare questo comando."]
 
     if command == "/users":
-        user_rows: list[dict[str, object]] = []
-        for user in load_telegram_users(telegram_config.state_path):
-            account_status = summarize_tenant_account_status(
-                telegram_config.state_path,
-                user.telegram_user_id,
-                "",
-            )
-            operational_state = "waiting_connect"
-            if user.status == TELEGRAM_USER_STATUS_PENDING:
-                operational_state = "pending"
-            elif user.status == TELEGRAM_USER_STATUS_BLOCKED:
-                operational_state = "blocked"
-            elif user.status == TELEGRAM_USER_STATUS_ADMIN:
-                operational_state = "admin"
-            else:
-                raw_account_status = str(account_status.get("account_status") or "unlinked")
-                raw_token_status = str(account_status.get("token_status") or "missing")
-                if raw_account_status == "linked" and raw_token_status == "active":
-                    operational_state = "ready"
-                elif raw_account_status in {"revoked"} or raw_token_status in {
-                    "revoked",
-                    "expired",
-                    "token_expired",
-                }:
-                    operational_state = "reconnect_required"
-                else:
-                    operational_state = "waiting_connect"
-            user_rows.append(
-                {
-                    "telegram_user_id": user.telegram_user_id,
-                    "telegram_chat_id": user.telegram_chat_id,
-                    "username": user.username,
-                    "display_name": user.display_name,
-                    "status": user.status,
-                    "operational_state": operational_state,
-                    "account_status": account_status.get("account_status"),
-                    "token_status": account_status.get("token_status"),
-                    "environment": account_status.get("environment"),
-                    "ebay_user_id": account_status.get("ebay_user_id"),
-                }
-            )
-        return [format_admin_user_list(user_rows)]
+        return [format_admin_user_list(_build_user_rows(telegram_config))]
 
-    if command in {"/approve_user", "/reject_user"}:
+    if command == "/pending_users":
+        pending_rows = [
+            row for row in _build_user_rows(telegram_config) if str(row.get("status")) == "pending"
+        ]
+        return [format_admin_user_list(pending_rows)]
+
+    if command == "/unlinked_users":
+        unlinked_rows = [
+            row
+            for row in _build_user_rows(telegram_config)
+            if str(row.get("status")) == TELEGRAM_USER_STATUS_APPROVED
+            and str(row.get("account_status") or "unlinked") != "linked"
+        ]
+        return [format_admin_user_list(unlinked_rows)]
+
+    if command == "/admin_dashboard":
+        return [format_admin_dashboard(_build_admin_dashboard_payload(telegram_config))]
+
+    if command == "/tenant_health":
+        rows = _build_user_rows(telegram_config)
+        if args:
+            try:
+                target_user_id = int(args[0])
+            except ValueError:
+                return ["Uso corretto: <code>/tenant_health [telegram_user_id]</code>"]
+            rows = [
+                row for row in rows if int(row.get("telegram_user_id") or 0) == target_user_id
+            ]
+        else:
+            rows = [
+                row
+                for row in rows
+                if str(row.get("status") or "") != TELEGRAM_USER_STATUS_NEW
+            ]
+        return [format_tenant_health(rows)]
+
+    if command in {"/approve_user", "/reject_user", "/suspend_user", "/reactivate_user"}:
         if not args:
-            action = "approve_user" if command == "/approve_user" else "reject_user"
+            action_map = {
+                "/approve_user": "approve_user",
+                "/reject_user": "reject_user",
+                "/suspend_user": "suspend_user",
+                "/reactivate_user": "reactivate_user",
+            }
+            action = action_map[command]
             return [f"Uso corretto: <code>/{action} &lt;telegram_user_id&gt;</code>"]
         try:
             target_user_id = int(args[0])
         except ValueError:
-            action = "approve_user" if command == "/approve_user" else "reject_user"
+            action_map = {
+                "/approve_user": "approve_user",
+                "/reject_user": "reject_user",
+                "/suspend_user": "suspend_user",
+                "/reactivate_user": "reactivate_user",
+            }
+            action = action_map[command]
             return [f"Uso corretto: <code>/{action} &lt;telegram_user_id&gt;</code>"]
-        timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        next_status = (
-            TELEGRAM_USER_STATUS_APPROVED
-            if command == "/approve_user"
-            else TELEGRAM_USER_STATUS_BLOCKED
+        remaining = _command_rate_limit_remaining_seconds(
+            telegram_config.state_path,
+            telegram_user_id=telegram_user_id,
+            command=command,
+            now=now,
         )
+        if remaining > 0:
+            return [_format_cooldown_message(command, remaining)]
+        timestamp = now_iso
+        next_status_map = {
+            "/approve_user": TELEGRAM_USER_STATUS_APPROVED,
+            "/reject_user": TELEGRAM_USER_STATUS_BLOCKED,
+            "/suspend_user": TELEGRAM_USER_STATUS_BLOCKED,
+            "/reactivate_user": TELEGRAM_USER_STATUS_APPROVED,
+        }
+        next_status = next_status_map[command]
         current_user = load_telegram_user(telegram_config.state_path, target_user_id)
         status_changed = (
             current_user is None
@@ -1144,7 +1684,15 @@ def process_message(
             operation_summary = {"processed": 0, "completed": 0, "failed": 0, "applied": 0}
         _append_audit_log(
             telegram_config,
-            event_type="approve" if next_status == TELEGRAM_USER_STATUS_APPROVED else "reject",
+            event_type=(
+                "approve"
+                if command == "/approve_user"
+                else (
+                    "reject"
+                    if command == "/reject_user"
+                    else ("suspend" if command == "/suspend_user" else "reactivate")
+                )
+            ),
             created_at=timestamp,
             actor_telegram_user_id=telegram_user_id,
             target_telegram_user_id=target_user_id,
@@ -1160,6 +1708,12 @@ def process_message(
                 "operations_processed": operation_summary["processed"],
                 "operations_failed": operation_summary["failed"],
             },
+        )
+        _mark_command_usage(
+            telegram_config.state_path,
+            telegram_user_id=telegram_user_id,
+            command=command,
+            timestamp=timestamp,
         )
         if updated_user is not None and status_changed and operation_summary["failed"] == 0:
             if next_status == TELEGRAM_USER_STATUS_APPROVED:
@@ -1181,7 +1735,7 @@ def process_message(
                     text=(
                         "⛔ <b>Accesso non approvato</b>\n"
                         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                        "L'admin ha rifiutato o bloccato il tuo accesso al bot."
+                        "L'admin ha sospeso, rifiutato o bloccato il tuo accesso al bot."
                     ),
                 )
         return [
@@ -1211,6 +1765,10 @@ def process_message(
                 account_status=start_account_status,
             )
         ]
+
+    service_block_message = _service_mode_blocks_command(service_mode, command)
+    if service_block_message is not None:
+        return [service_block_message]
 
     if not has_command_capability:
         if command == "/help":
@@ -1422,6 +1980,35 @@ def process_message(
         )
         active_session = latest_session
         created_session = False
+        remaining = _command_rate_limit_remaining_seconds(
+            telegram_config.state_path,
+            telegram_user_id=resolved_telegram_user_id,
+            command=command,
+            now=now,
+        )
+        if remaining > 0 and not _is_reusable_oauth_session(
+            active_session,
+            environment=resolved_environment,
+            now=now,
+        ):
+            return [_format_cooldown_message(command, remaining)]
+        oauth_cooldown_remaining = _connect_cooldown_remaining_seconds(
+            telegram_config,
+            telegram_user_id=resolved_telegram_user_id,
+            environment=resolved_environment,
+            now=now,
+        )
+        if oauth_cooldown_remaining > 0 and not _is_reusable_oauth_session(
+            active_session,
+            environment=resolved_environment,
+            now=now,
+        ):
+            return [
+                "⏱️ <b>Collegamento temporaneamente raffreddato</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "Sono stati rilevati troppi tentativi ravvicinati o failure OAuth recenti.\n"
+                f"Riprova tra <code>{oauth_cooldown_remaining}</code> secondi."
+            ]
         if not _is_reusable_oauth_session(
             active_session,
             environment=resolved_environment,
@@ -1442,10 +2029,16 @@ def process_message(
             )
             created_session = True
         assert active_session is not None
+        _mark_command_usage(
+            telegram_config.state_path,
+            telegram_user_id=resolved_telegram_user_id,
+            command=command,
+            timestamp=now_iso,
+        )
         _append_audit_log(
             telegram_config,
             event_type="connect",
-            created_at=now.isoformat().replace("+00:00", "Z"),
+            created_at=now_iso,
             actor_telegram_user_id=resolved_telegram_user_id,
             target_telegram_user_id=resolved_telegram_user_id,
             telegram_chat_id=chat_id,
@@ -1477,6 +2070,14 @@ def process_message(
                 "❌ <b>Scollega account eBay</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 "Questa chat non e' ancora associata a un tenant Telegram noto."
             ]
+        remaining = _command_rate_limit_remaining_seconds(
+            telegram_config.state_path,
+            telegram_user_id=resolved_telegram_user_id,
+            command=command,
+            now=now,
+        )
+        if remaining > 0:
+            return [_format_cooldown_message(command, remaining)]
         (
             disconnected_account,
             remote_revocation_status,
@@ -1516,6 +2117,12 @@ def process_message(
             resolved_telegram_user_id,
             resolved_environment,
         )
+        _mark_command_usage(
+            telegram_config.state_path,
+            telegram_user_id=resolved_telegram_user_id,
+            command=command,
+            timestamp=now_iso,
+        )
         return [
             format_disconnect_status(
                 {
@@ -1540,6 +2147,14 @@ def process_message(
                 "🚪 <b>Disattiva uso bot</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 "Questa chat non e' ancora associata a un tenant Telegram noto."
             ]
+        remaining = _command_rate_limit_remaining_seconds(
+            telegram_config.state_path,
+            telegram_user_id=resolved_telegram_user_id,
+            command=command,
+            now=now,
+        )
+        if remaining > 0:
+            return [_format_cooldown_message(command, remaining)]
         current_user = load_telegram_user(
             telegram_config.state_path,
             resolved_telegram_user_id,
@@ -1598,6 +2213,12 @@ def process_message(
             telegram_config.state_path,
             resolved_telegram_user_id,
             resolved_environment,
+        )
+        _mark_command_usage(
+            telegram_config.state_path,
+            telegram_user_id=resolved_telegram_user_id,
+            command=command,
+            timestamp=timestamp,
         )
         return [
             format_leave_status(

@@ -643,6 +643,211 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertEqual(audit_entries[0].event_type, "connect")
             self.assertEqual(audit_entries[0].outcome, "session_reused")
 
+    def test_service_status_and_policy_are_public_commands(self) -> None:
+        replies = process_message(
+            text="/service_status",
+            chat_id=573159993,
+            telegram_config=TelegramConfig(
+                token="x",
+                allowed_chat_ids={573159993},
+                notify_chat_ids=set(),
+                admin_user_id=573159993,
+            ),
+            ebay_environment="production",
+            telegram_user_id=111111,
+        )
+
+        self.assertEqual(len(replies), 1)
+        self.assertIn("accesso approvato", replies[0])
+
+        policy_replies = process_message(
+            text="/policy",
+            chat_id=573159993,
+            telegram_config=TelegramConfig(
+                token="x",
+                allowed_chat_ids={573159993},
+                notify_chat_ids=set(),
+                admin_user_id=573159993,
+            ),
+            ebay_environment="production",
+            telegram_user_id=111111,
+        )
+        self.assertEqual(len(policy_replies), 1)
+        self.assertIn("Policy Servizio", policy_replies[0])
+
+    def test_service_mode_is_rate_limited(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+
+            replies = process_message(
+                text="/service_mode maintenance",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+            self.assertIn("maintenance", replies[0])
+
+            second_replies = process_message(
+                text="/service_mode degraded",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+            self.assertIn("cooldown", second_replies[0])
+
+    @patch("src.ebay_cf.bot.send_message")
+    def test_admin_can_filter_pending_and_unlinked_users(self, mock_send_message) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123, 456, 457},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=999,
+                chat_id=456,
+                username="pending_user",
+                display_name="Pending User",
+                chat_type="private",
+            )
+            process_message(
+                text="/request_access",
+                chat_id=456,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=999,
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=1000,
+                chat_id=457,
+                username="approved_user",
+                display_name="Approved User",
+                chat_type="private",
+            )
+            update_telegram_user_status(
+                str(db_path),
+                1000,
+                TELEGRAM_USER_STATUS_APPROVED,
+                updated_at="2026-04-06T10:00:00Z",
+            )
+
+            pending_replies = process_message(
+                text="/pending_users",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+            self.assertIn("pending_user", pending_replies[0])
+            self.assertNotIn("approved_user", pending_replies[0])
+
+            unlinked_replies = process_message(
+                text="/unlinked_users",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+            self.assertIn("approved_user", unlinked_replies[0])
+            self.assertNotIn("pending_user", unlinked_replies[0])
+            mock_send_message.assert_called_once()
+
+    def test_maintenance_mode_blocks_connect_but_not_account_reads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123, 456},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=999,
+                chat_id=456,
+                username="approved_user",
+                display_name="Approved User",
+                chat_type="private",
+            )
+            update_telegram_user_status(
+                str(db_path),
+                999,
+                TELEGRAM_USER_STATUS_APPROVED,
+                updated_at="2026-04-06T10:00:00Z",
+            )
+
+            mode_replies = process_message(
+                text="/service_mode maintenance",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+            self.assertIn("maintenance", mode_replies[0])
+
+            connect_replies = process_message(
+                text="/connect",
+                chat_id=456,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=999,
+            )
+            self.assertIn("manutenzione", connect_replies[0])
+
+            account_replies = process_message(
+                text="/account",
+                chat_id=456,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=999,
+            )
+            self.assertIn("Account eBay", account_replies[0])
+
     @patch("src.ebay_cf.bot.fetch_records")
     @patch("src.ebay_cf.bot.load_config")
     @patch("src.ebay_cf.bot.send_message")

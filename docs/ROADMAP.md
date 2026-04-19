@@ -6,22 +6,7 @@ Fase 1 completata.
 
 ## Fase 2 - Guardrail e Strumenti Admin
 
-- [ ] introdurre rate limiting minimo per utente sui comandi sensibili e sul flusso `/connect`
-- [ ] introdurre cooldown o throttling sulle richieste `/request_access`
-- [ ] introdurre cooldown sui fallimenti OAuth ripetuti e sui tentativi di collegamento ravvicinati
-- [ ] mantenere esplicitamente il modello con un solo admin globale, senza co-admin in questa fase
-- [ ] aggiungere un comando admin per sospendere o riattivare rapidamente un utente gia' approvato
-- [ ] aggiungere un comando admin per vedere solo richieste `pending`
-- [ ] aggiungere un comando admin per vedere utenti approvati ma senza account eBay collegato
-- [ ] aggiungere un piccolo cruscotto admin via Telegram con richieste `pending`, utenti approvati senza account collegato, tenant con token scaduti o revocati e code anomale
-- [ ] aggiungere una vista admin compatta di salute tenant con accesso, account collegato, stato token, notifiche e ultimo errore significativo
-- [ ] aggiungere un riepilogo admin periodico con utenti `pending`, tenant scollegati e code anomale
-- [ ] aggiungere un messaggio o comando pubblico minimo che spieghi come funziona l'accesso approvato
-- [ ] decidere se introdurre un comando `/privacy` o `/policy` che punti alla governance del servizio
-- [ ] introdurre una modalita' manutenzione che blocchi nuovi collegamenti ma lasci leggibili i comandi informativi
-- [ ] introdurre una modalita' incidente o degradata che distingua chiaramente tra consultazione ancora disponibile e funzioni temporaneamente sospese
-- [ ] aggiungere metriche prodotto minime per admin: utenti `pending`, `approved`, utenti con account linked, utenti approvati ma inattivi, fallimenti OAuth recenti
-- [ ] aggiungere alert di prodotto oltre ai soli alert runtime, ad esempio utenti `pending` fermi da giorni, tenant approvati mai collegati o token revocati da troppo tempo
+Fase 2 completata.
 
 ## Fase 3 - Lifecycle Dati e Retention
 
