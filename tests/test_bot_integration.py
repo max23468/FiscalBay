@@ -786,6 +786,48 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertNotIn("pending_user", unlinked_replies[0])
             mock_send_message.assert_called_once()
 
+    def test_admin_empty_filtered_views_use_specific_empty_messages(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+
+            pending_replies = process_message(
+                text="/pending_users",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+            self.assertIn("Nessuna richiesta accesso pending", pending_replies[0])
+
+            unlinked_replies = process_message(
+                text="/unlinked_users",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+            self.assertIn(
+                "Nessun utente approvato in attesa di collegamento",
+                unlinked_replies[0],
+            )
+
     def test_maintenance_mode_blocks_connect_but_not_account_reads(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"

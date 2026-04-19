@@ -426,12 +426,15 @@ def format_admin_access_request(
     )
 
 
-def format_admin_user_list(users: Iterable[Mapping[str, object] | TelegramUser]) -> str:
+def format_admin_user_list(
+    users: Iterable[Mapping[str, object] | TelegramUser],
+    *,
+    title: str = "👥 <b>Utenti bot</b>",
+    empty_message: str = "Nessun utente registrato nel database.",
+) -> str:
     rows = list(users)
     if not rows:
-        return (
-            "👥 <b>Utenti bot</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\nNessun utente registrato nel database."
-        )
+        return f"{title}\n━━━━━━━━━━━━━━━━━━━━━━━━\n{empty_message}"
     if all(isinstance(row, TelegramUser) for row in rows):
         rendered: list[str] = []
         for raw_user in rows:
@@ -449,7 +452,7 @@ def format_admin_user_list(users: Iterable[Mapping[str, object] | TelegramUser])
                 f"user=<code>{username}</code> "
                 f"name=<code>{display_name}</code>"
             )
-        return "👥 <b>Utenti bot</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(rendered)
+        return title + "\n━━━━━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(rendered)
 
     def render_user_line(user_row: Mapping[str, object]) -> str:
         telegram_user_id = html.escape(str(user_row.get("telegram_user_id") or "n/d"))
@@ -504,7 +507,7 @@ def format_admin_user_list(users: Iterable[Mapping[str, object] | TelegramUser])
         f"Operativi: <code>{len(ready_rows)}</code>"
     )
     sections = [
-        "👥 <b>Utenti bot</b>",
+        title,
         "━━━━━━━━━━━━━━━━━━━━━━━━",
         summary,
     ]

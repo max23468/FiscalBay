@@ -1620,7 +1620,13 @@ def process_message(
         pending_rows = [
             row for row in _build_user_rows(telegram_config) if str(row.get("status")) == "pending"
         ]
-        return [format_admin_user_list(pending_rows)]
+        return [
+            format_admin_user_list(
+                pending_rows,
+                title="🕓 <b>Richieste pending</b>",
+                empty_message="Nessuna richiesta accesso pending al momento.",
+            )
+        ]
 
     if command == "/unlinked_users":
         unlinked_rows = [
@@ -1629,7 +1635,13 @@ def process_message(
             if str(row.get("status")) == TELEGRAM_USER_STATUS_APPROVED
             and str(row.get("account_status") or "unlinked") != "linked"
         ]
-        return [format_admin_user_list(unlinked_rows)]
+        return [
+            format_admin_user_list(
+                unlinked_rows,
+                title="🔗 <b>Utenti non operativi</b>",
+                empty_message="Nessun utente approvato in attesa di collegamento.",
+            )
+        ]
 
     if command == "/admin_dashboard":
         return [format_admin_dashboard(_build_admin_dashboard_payload(telegram_config))]
