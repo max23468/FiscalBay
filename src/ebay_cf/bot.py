@@ -15,9 +15,7 @@ try:
 except ImportError:  # pragma: no cover - Windows
     fcntl = None
 
-from .application import (
-    fetch_environment_records as _fetch_environment_records,
-)
+from .application import fetch_environment_records as _fetch_environment_records
 from .application import resolve_fetch_context as _resolve_fetch_context
 from .bot_messaging import request_with_backoff
 from .bot_messaging import send_message as _send_message
@@ -164,8 +162,8 @@ from .telegram_commands import (
     format_order_notification_summary,
     format_policy_status,
     format_reconnect_status,
-    format_settings_status,
     format_service_status,
+    format_settings_status,
     format_status,
     format_tenant_health,
     format_why_not_notified_status,
@@ -362,7 +360,10 @@ def _command_rate_limit_remaining_seconds(
     limit_seconds = COMMAND_RATE_LIMIT_SECONDS.get(command, 0)
     if limit_seconds <= 0:
         return 0
-    previous = load_kv_value(state_path, _command_rate_limit_key(telegram_user_id, command))
+    previous = load_kv_value(
+        state_path,
+        _command_rate_limit_key(telegram_user_id, command),
+    )
     elapsed = _seconds_between(now, previous)
     if elapsed is None or elapsed >= limit_seconds:
         return 0
@@ -459,7 +460,8 @@ def _service_mode_blocks_command(mode: str, command: str) -> str | None:
         return (
             "🚧 <b>Servizio in modalita' degradata</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "La consultazione resta disponibile, ma le azioni operative sono temporaneamente sospese.\n"
+            "La consultazione resta disponibile, ma le azioni operative "
+            "sono temporaneamente sospese.\n"
             "Riprova piu' tardi oppure usa <code>/service_status</code>."
         )
     return None
@@ -558,9 +560,17 @@ def _build_admin_dashboard_payload(telegram_config: TelegramConfig) -> dict[str,
         token_status = str(row.get("token_status") or "missing")
         if status == TELEGRAM_USER_STATUS_PENDING and age_hours >= PENDING_STALE_HOURS:
             pending_stale += 1
-        if status == TELEGRAM_USER_STATUS_APPROVED and account_status != "linked" and age_hours >= UNLINKED_STALE_HOURS:
+        if (
+            status == TELEGRAM_USER_STATUS_APPROVED
+            and account_status != "linked"
+            and age_hours >= UNLINKED_STALE_HOURS
+        ):
             unlinked_stale += 1
-        if status == TELEGRAM_USER_STATUS_APPROVED and token_status in {"revoked", "expired", "token_expired"} and age_hours >= REVOKED_STALE_HOURS:
+        if (
+            status == TELEGRAM_USER_STATUS_APPROVED
+            and token_status in {"revoked", "expired", "token_expired"}
+            and age_hours >= REVOKED_STALE_HOURS
+        ):
             revoked_stale += 1
     if pending_stale:
         alerts.append(
@@ -599,14 +609,32 @@ def _build_admin_dashboard_payload(telegram_config: TelegramConfig) -> dict[str,
             }
         )
     approved_users = sum(
-        1 for row in rows if str(row.get("status")) in {TELEGRAM_USER_STATUS_APPROVED, TELEGRAM_USER_STATUS_ADMIN}
+        1
+        for row in rows
+        if str(row.get("status"))
+        in {TELEGRAM_USER_STATUS_APPROVED, TELEGRAM_USER_STATUS_ADMIN}
+    )
+    service_mode = _load_service_state(telegram_config.state_path).get(
+        "mode",
+        SERVICE_MODE_NORMAL,
+    )
+    pending_users = sum(
+        1
+        for row in rows
+        if str(row.get("status")) == TELEGRAM_USER_STATUS_PENDING
+    )
+    linked_users = sum(
+        1
+        for row in rows
+        if str(row.get("account_status")) == "linked"
+        and str(row.get("token_status")) == "active"
     )
     return {
-        "service_mode": _load_service_state(telegram_config.state_path).get("mode", SERVICE_MODE_NORMAL),
+        "service_mode": service_mode,
         "metrics": {
-            "pending_users": sum(1 for row in rows if str(row.get("status")) == TELEGRAM_USER_STATUS_PENDING),
+            "pending_users": pending_users,
             "approved_users": approved_users,
-            "linked_users": sum(1 for row in rows if str(row.get("account_status")) == "linked" and str(row.get("token_status")) == "active"),
+            "linked_users": linked_users,
             "approved_without_link": sum(
                 1
                 for row in rows
@@ -625,14 +653,18 @@ def _build_admin_dashboard_payload(telegram_config: TelegramConfig) -> dict[str,
 def _maybe_send_admin_summary(telegram_config: TelegramConfig) -> None:
     if telegram_config.admin_user_id is None:
         return
-    admin_chat_id = resolve_primary_chat_id(telegram_config.state_path, telegram_config.admin_user_id)
+    admin_chat_id = resolve_primary_chat_id(
+        telegram_config.state_path,
+        telegram_config.admin_user_id,
+    )
     if admin_chat_id is None:
         return
     now_iso = _now_utc_iso()
     last_sent_at = load_kv_value(telegram_config.state_path, _admin_summary_key())
     elapsed = _seconds_between(datetime.now(timezone.utc), last_sent_at)
     dashboard = _build_admin_dashboard_payload(telegram_config)
-    if not dashboard.get("alerts") and int((dashboard.get("metrics") or {}).get("pending_users", 0)) == 0:
+    pending_users = int((dashboard.get("metrics") or {}).get("pending_users", 0))
+    if not dashboard.get("alerts") and pending_users == 0:
         return
     payload_hash = json.dumps(dashboard, ensure_ascii=False, sort_keys=True)
     last_payload_hash = load_kv_value(telegram_config.state_path, _admin_summary_hash_key())

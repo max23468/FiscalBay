@@ -157,7 +157,8 @@ def build_help_text() -> str:
         "• 🧭 <code>/admin_dashboard</code> → cruscotto admin e alert prodotto (admin)\n"
         "• ⛔ <code>/suspend_user [id]</code> → sospende un utente approvato (admin)\n"
         "• ✅ <code>/reactivate_user [id]</code> → riattiva un utente sospeso (admin)\n"
-        "• 🛠️ <code>/service_mode [normal|maintenance|degraded]</code> → modalita' servizio (admin)\n"
+        "• 🛠️ <code>/service_mode "
+        "[normal|maintenance|degraded]</code> → modalita' servizio (admin)\n"
         "• 📣 <code>/service_status</code> → stato servizio e accesso approvato\n"
         "• 📜 <code>/policy</code> → policy sintetica del servizio\n"
         "• 📦 <code>/ultimi [giorni] [max]</code> → ordini con CF trovato\n"
@@ -567,10 +568,12 @@ def format_admin_dashboard(dashboard: Mapping[str, object]) -> str:
         "━━━━━━━━━━━━━━━━━━━━━━━━",
         f"🛠️ Modalita' servizio: <code>{mode}</code>",
         f"🕓 Pending: <code>{pending}</code> • ✅ Approved: <code>{approved}</code>",
-        f"🔗 Tenant linked: <code>{linked}</code> • ⌛ Approved non operativi: <code>{approved_unlinked}</code>",
+        f"🔗 Tenant linked: <code>{linked}</code> • "
+        f"⌛ Approved non operativi: <code>{approved_unlinked}</code>",
         f"🚨 OAuth failure recenti: <code>{oauth_failures_recent}</code>",
         f"📦 Queue pending: <code>{queue_pending}</code> • failed: <code>{queue_failed}</code>",
-        f"⚠️ Pending fermi: <code>{pending_stale}</code> • token revocati/rotti persistenti: <code>{revoked_stale}</code>",
+        f"⚠️ Pending fermi: <code>{pending_stale}</code> • "
+        f"token revocati/rotti persistenti: <code>{revoked_stale}</code>",
     ]
     if alerts:
         sections.append("\n🚨 <b>Alert prodotto</b>")
@@ -634,7 +637,8 @@ def format_policy_status(policy_status: Mapping[str, object]) -> str:
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "Servizio pubblico piccolo e curato, solo chat private Telegram.\n"
         "Accesso operativo soggetto ad approvazione di un solo admin globale.\n"
-        "Notifiche attive di default per utenti approvati, salvo scelta utente o intervento admin.\n"
+        "Notifiche attive di default per utenti approvati, "
+        "salvo scelta utente o intervento admin.\n"
         "Il bot mostra solo dati fiscali realmente restituiti da eBay.\n"
         f"Modalita' servizio corrente: <code>{mode}</code>\n"
         "Riferimento operativo: <code>docs/SERVICE_GOVERNANCE.md</code> nel repository."
