@@ -48,6 +48,7 @@ In pratica:
 Per mantenere il repository allineato alle best practice GitHub anche in contesto single-maintainer, il progetto include:
 
 - workflow CI su push/PR (`.github/workflows/ci.yml`)
+- deploy verso VPS via GitHub Actions (`.github/workflows/deploy-vps.yml`)
 - release PR automatiche con `release-please` (`.github/workflows/release-please.yml`)
 - build e upload automatico degli artefatti nella GitHub Release creata da `release-please`
 - rebuild manuale degli artefatti per un tag esistente (`.github/workflows/release.yml`)
@@ -65,6 +66,14 @@ Passi consigliati dopo il clone/fork:
 3. usa PR anche da branch personali per lasciare audit trail e checklist standard
 4. usa titoli PR di squash in formato Conventional Commit per tenere coerenti versioni e changelog
 5. in GitHub abilita `Squash merge` e valuta di disabilitare `Merge commit` e `Rebase merge` per rendere il flusso piu' coerente
+
+Per usare Codex su `chatgpt.com` come postazione di lavoro e deploy senza dipendere dal Mac locale, vedi [`docs/CODEX_CLOUD_DEPLOY.md`](docs/CODEX_CLOUD_DEPLOY.md).
+
+Il flusso consigliato da remoto e:
+
+- Codex o GitHub preparano il codice fino a `main`
+- GitHub Actions esegue il deploy verso la VPS
+- la VPS applica il deploy standard con `deploy/install-vps.sh`
 
 ## Versioni e changelog
 

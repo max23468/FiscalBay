@@ -30,6 +30,8 @@ Indice centrale della documentazione del progetto.
   - controlli rapidi, rollback, backup e criteri di salute
 - `docs/RELEASE_POLICY.md`
   - regole ufficiali per versioni, changelog, release PR e tag GitHub
+- `docs/CODEX_CLOUD_DEPLOY.md`
+  - flusso consigliato per lavorare da Codex web/cloud con deploy via GitHub Actions
 - `docs/DEPLOY_LINUX.md`
   - guida specifica al deploy Linux
 - `docs/SECURITY.md`
