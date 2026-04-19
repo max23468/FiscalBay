@@ -9,6 +9,7 @@ Per i dettagli completi di deploy e recovery vedere anche `docs/RUNBOOK.md`.
 - check giornalieri minimi
 - comandi rapidi
 - sequenza standard dopo update
+- sync locale dopo release GitHub
 - percorso minimo pre-release
 - rollback rapido
 - backup operativi
@@ -206,6 +207,31 @@ Suggerimento pratico sui log:
 2. verificare `sudo systemctl status ebaycf-bot`
 3. eseguire `./deploy/smoke-check.sh`
 4. se lo smoke check fallisce, leggere i log e valutare rollback
+
+## Sync locale dopo release GitHub
+
+Quando una Release PR di `release-please` viene mergiata da GitHub, il commit finale che aggiorna
+`CHANGELOG.md`, `pyproject.toml` e `.release-please-manifest.json` nasce su `main` lato remoto.
+Il repository locale quindi non vede automaticamente la nuova versione finche' non viene
+riallineato.
+
+Regola operativa:
+
+1. mergiare la Release PR su GitHub
+2. attendere l'avvio dei workflow post-merge
+3. eseguire in locale `git pull --ff-only origin main`
+4. solo dopo verificare `CHANGELOG.md`, tag GitHub e versione pacchetto
+
+Check rapido consigliato:
+
+```bash
+git pull --ff-only origin main
+git describe --tags --abbrev=0
+sed -n '1,40p' CHANGELOG.md
+```
+
+Se questo passaggio viene saltato, e' normale leggere in locale un changelog o una versione ancora
+precedenti anche se la release GitHub e' gia' stata pubblicata.
 
 ## Percorso minimo pre-release
 
