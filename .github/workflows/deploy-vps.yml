@@ -108,7 +108,7 @@ jobs:
               -o ServerAliveInterval=30 \
               -o StrictHostKeyChecking="${SSH_STRICT}" \
               "${EBAYCF_VPS_USER}@${EBAYCF_VPS_HOST}" \
-              "sudo mkdir -p /opt/ebay-cf && sudo rm -rf /opt/ebay-cf/* /opt/ebay-cf/.[!.]* /opt/ebay-cf/..?* && sudo tar -xzf - -C /opt/ebay-cf"
+              "sudo mkdir -p /opt/ebay-cf && sudo find /opt/ebay-cf -mindepth 1 -maxdepth 1 ! -name '.env' ! -name '.env.bak-*' ! -name '.venv' ! -name 'data' -exec rm -rf {} + && sudo tar --no-same-owner --no-same-permissions -xzf - -C /opt/ebay-cf"
 
       - name: Install and restart on VPS
         run: |
