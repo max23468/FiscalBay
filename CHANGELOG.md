@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/max23468/FiscalBay/compare/v0.5.0...v0.6.0) (2026-04-20)
+
+
+### Features
+
+* improve Telegram bot product and admin workflows ([#38](https://github.com/max23468/FiscalBay/issues/38)) ([efc85e4](https://github.com/max23468/FiscalBay/commit/efc85e420ce40272974ba34de1818c87bd8f2d1e))
+
 ## [0.5.0](https://github.com/max23468/FiscalBay/compare/v0.4.0...v0.5.0) (2026-04-20)
 
 ### Features
