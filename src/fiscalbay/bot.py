@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import os
+import re
 import secrets
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
@@ -235,6 +237,7 @@ SERVICE_MODES = {
     SERVICE_MODE_DEGRADED,
 }
 DEFAULT_ADMIN_SUMMARY_INTERVAL_SECONDS = 6 * 60 * 60
+DEFAULT_BRANDING_SYNC_BACKOFF_SECONDS = 6 * 60 * 60
 PENDING_STALE_HOURS = 48
 UNLINKED_STALE_HOURS = 72
 REVOKED_STALE_HOURS = 72
@@ -262,19 +265,61 @@ def _branding_sync_enabled() -> bool:
     return value not in {"0", "false", "no", "off"}
 
 
-def sync_runtime_branding(token: str) -> None:
+def _branding_profile_hash(profile: dict[str, object]) -> str:
+    serialized = json.dumps(profile, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _branding_profile_hash_key() -> str:
+    return "branding_sync:profile_hash"
+
+
+def _branding_sync_retry_at_key() -> str:
+    return "branding_sync:retry_at"
+
+
+def _extract_retry_after_seconds(error: TelegramApiError) -> int | None:
+    if error.status_code != 429:
+        return None
+    match = re.search(r"retry_after[_ =:]+(\d+)", str(error), flags=re.IGNORECASE)
+    if match is None:
+        return None
+    return max(1, int(match.group(1)))
+
+
+def sync_runtime_branding(telegram_config: TelegramConfig) -> None:
     if not _branding_sync_enabled():
         return
     branding_profile = build_telegram_branding_profile()
     commands = list(branding_profile["commands"])
+    profile_hash = _branding_profile_hash(branding_profile)
+    stored_hash = load_kv_value(telegram_config.state_path, _branding_profile_hash_key())
+    if stored_hash == profile_hash:
+        log_event(LOGGER, logging.INFO, "telegram_branding_sync_skipped", reason="unchanged")
+        return
+
+    now = datetime.now(timezone.utc)
+    retry_at_raw = load_kv_value(telegram_config.state_path, _branding_sync_retry_at_key())
+    retry_at = _parse_iso_timestamp(retry_at_raw)
+    if retry_at is not None and now < retry_at:
+        log_event(
+            LOGGER,
+            logging.INFO,
+            "telegram_branding_sync_skipped",
+            reason="backoff_active",
+            retry_at=retry_at.isoformat().replace("+00:00", "Z"),
+        )
+        return
+
     try:
         sync_bot_branding(
-            token,
+            telegram_config.token,
             name=str(branding_profile["name"]),
             short_description=str(branding_profile["short_description"]),
             description=str(branding_profile["description"]),
             commands=commands,
         )
+        save_kv_value(telegram_config.state_path, _branding_profile_hash_key(), profile_hash)
         log_event(
             LOGGER,
             logging.INFO,
@@ -282,6 +327,16 @@ def sync_runtime_branding(token: str) -> None:
             command_count=len(commands),
         )
     except TelegramApiError as exc:
+        if exc.status_code == 429:
+            retry_after_seconds = (
+                _extract_retry_after_seconds(exc) or DEFAULT_BRANDING_SYNC_BACKOFF_SECONDS
+            )
+            retry_at = now + timedelta(seconds=retry_after_seconds)
+            save_kv_value(
+                telegram_config.state_path,
+                _branding_sync_retry_at_key(),
+                retry_at.isoformat().replace("+00:00", "Z"),
+            )
         log_event(
             LOGGER,
             logging.WARNING,

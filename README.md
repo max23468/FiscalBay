@@ -209,7 +209,7 @@ Nota OAuth eBay:
 | `TELEGRAM_ALLOWED_CHAT_IDS` | **Sì** | vuoto (deny-all) | Chat autorizzate, separate da virgola. Se vuota, nessuna chat è autorizzata |
 | `TELEGRAM_NOTIFY_CHAT_IDS` | Consigliata | stessi valori di `TELEGRAM_ALLOWED_CHAT_IDS` | Chat che ricevono notifiche automatiche |
 | `TELEGRAM_POLL_TIMEOUT` | No | `30` | Timeout long polling Telegram |
-| `TELEGRAM_SYNC_BRANDING` | No | `1` | Se attiva, sincronizza nome, descrizione e menu comandi Telegram a ogni avvio del bot |
+| `TELEGRAM_SYNC_BRANDING` | No | `1` | Se attiva, sincronizza nome, descrizione e menu comandi Telegram quando il profilo cambia; in caso di rate limit applica un backoff automatico |
 | `TELEGRAM_BOT_LOCK_PATH` | No | `data/telegram_bot.lock` | File lock del processo |
 | `EBAY_ORDER_POLL_INTERVAL` | No | `120` | Intervallo polling nuovi ordini |
 | `EBAY_ORDER_STATE_PATH` | No | `data/state.db` | File SQLite per stato e metriche |
