@@ -32,12 +32,12 @@ from src.fiscalbay.bot import (
     update_state_with_records,
 )
 from src.fiscalbay.clients.telegram import sync_bot_branding
+from src.fiscalbay.storage.sqlite import load_kv_value
 from src.fiscalbay.telegram_commands import (
     BOT_DISPLAY_NAME,
     BOT_TAGLINE,
     build_telegram_branding_profile,
 )
-from src.fiscalbay.storage.sqlite import load_kv_value
 
 
 class TelegramBotTests(unittest.TestCase):

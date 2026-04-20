@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import logging
 import os
 import re
@@ -705,23 +705,17 @@ def _build_admin_dashboard_payload(telegram_config: TelegramConfig) -> dict[str,
     approved_users = sum(
         1
         for row in rows
-        if str(row.get("status"))
-        in {TELEGRAM_USER_STATUS_APPROVED, TELEGRAM_USER_STATUS_ADMIN}
+        if str(row.get("status")) in {TELEGRAM_USER_STATUS_APPROVED, TELEGRAM_USER_STATUS_ADMIN}
     )
     service_mode = _load_service_state(telegram_config.state_path).get(
         "mode",
         SERVICE_MODE_NORMAL,
     )
-    pending_users = sum(
-        1
-        for row in rows
-        if str(row.get("status")) == TELEGRAM_USER_STATUS_PENDING
-    )
+    pending_users = sum(1 for row in rows if str(row.get("status")) == TELEGRAM_USER_STATUS_PENDING)
     linked_users = sum(
         1
         for row in rows
-        if str(row.get("account_status")) == "linked"
-        and str(row.get("token_status")) == "active"
+        if str(row.get("account_status")) == "linked" and str(row.get("token_status")) == "active"
     )
     return {
         "service_mode": service_mode,
@@ -1554,9 +1548,7 @@ def process_message(
             ]
         requested_mode = str(args[0]).strip().lower()
         if requested_mode not in SERVICE_MODES:
-            return [
-                "Uso corretto: <code>/service_mode normal|maintenance|degraded</code>"
-            ]
+            return ["Uso corretto: <code>/service_mode normal|maintenance|degraded</code>"]
         remaining = _command_rate_limit_remaining_seconds(
             telegram_config.state_path,
             telegram_user_id=telegram_user_id,
@@ -1694,17 +1686,21 @@ def process_message(
         )
         return [format_access_request_status(admin_notified=admin_notified)]
 
-    if command in {
-        "/approve_user",
-        "/reject_user",
-        "/suspend_user",
-        "/reactivate_user",
-        "/users",
-        "/pending_users",
-        "/unlinked_users",
-        "/tenant_health",
-        "/admin_dashboard",
-    } and not has_command_capability:
+    if (
+        command
+        in {
+            "/approve_user",
+            "/reject_user",
+            "/suspend_user",
+            "/reactivate_user",
+            "/users",
+            "/pending_users",
+            "/unlinked_users",
+            "/tenant_health",
+            "/admin_dashboard",
+        }
+        and not has_command_capability
+    ):
         return ["Solo l'admin puo' usare questo comando."]
 
     if command == "/users":
@@ -1747,15 +1743,9 @@ def process_message(
                 target_user_id = int(args[0])
             except ValueError:
                 return ["Uso corretto: <code>/tenant_health [telegram_user_id]</code>"]
-            rows = [
-                row for row in rows if int(row.get("telegram_user_id") or 0) == target_user_id
-            ]
+            rows = [row for row in rows if int(row.get("telegram_user_id") or 0) == target_user_id]
         else:
-            rows = [
-                row
-                for row in rows
-                if str(row.get("status") or "") != TELEGRAM_USER_STATUS_NEW
-            ]
+            rows = [row for row in rows if str(row.get("status") or "") != TELEGRAM_USER_STATUS_NEW]
         return [format_tenant_health(rows)]
 
     if command in {"/approve_user", "/reject_user", "/suspend_user", "/reactivate_user"}:
