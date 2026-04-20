@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0](https://github.com/max23468/FiscalBay/compare/v0.3.0...v0.4.0) (2026-04-20)
+
+
+### Features
+
+* finalize FiscalBay branding system ([#30](https://github.com/max23468/FiscalBay/issues/30)) ([fb36938](https://github.com/max23468/FiscalBay/commit/fb3693863bb6751e67a69c9b3b05bbb59f2e2e51))
+
+
+### Bug Fixes
+
+* align deploy automation with fiscalbay ([fbd7744](https://github.com/max23468/FiscalBay/commit/fbd7744dde7031a94aea2d8933056cdd83f77908))
+* keep legacy VPS secrets for deploy ([1996140](https://github.com/max23468/FiscalBay/commit/1996140dc771196d328acbf7803a8f29061f2693))
+
 ## [0.3.0](https://github.com/max23468/eBayCF/compare/v0.2.0...v0.3.0) (2026-04-19)
 
 
