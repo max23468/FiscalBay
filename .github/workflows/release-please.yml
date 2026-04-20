@@ -27,11 +27,15 @@ jobs:
         id: release
         uses: googleapis/release-please-action@v4
         with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
       - name: Log release-please outputs
+        env:
+          HAS_RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN != '' }}
         run: |
+          echo "has_release_please_token=${HAS_RELEASE_PLEASE_TOKEN}"
           echo "release_created=${{ steps.release.outputs.release_created }}"
           echo "prs_created=${{ steps.release.outputs.prs_created }}"
           echo "pr=${{ steps.release.outputs.pr }}"
@@ -64,5 +68,5 @@ jobs:
       - name: Upload release artifacts
         if: ${{ steps.release.outputs.release_created }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ steps.release.outputs.tag_name }}" dist/* --clobber
