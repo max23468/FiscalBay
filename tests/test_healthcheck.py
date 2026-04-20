@@ -33,7 +33,7 @@ class HealthcheckTests(unittest.TestCase):
                     "last_error": None,
                     "metrics": {
                         "orders_read": 4,
-                        "orders_with_cf": 1,
+                        "orders_with_fiscal_identifier": 1,
                         "notifications_sent": 2,
                         "telegram_retries": 0,
                         "consecutive_error_cycles": 0,
@@ -64,7 +64,7 @@ class HealthcheckTests(unittest.TestCase):
             self.assertEqual(report["reasons"], [])
             self.assertEqual(report["retry_queue_size"], 0)
             self.assertEqual(report["metrics"]["orders_read"], 4)
-            self.assertEqual(report["metrics"]["orders_with_cf"], 1)
+            self.assertEqual(report["metrics"]["orders_with_fiscal_identifier"], 1)
             self.assertEqual(report["metrics"]["telegram_errors"], 0)
             self.assertIn("multi_tenant", report)
             self.assertFalse(report["multi_tenant"]["tenant_credentials_ready"])
@@ -81,7 +81,7 @@ class HealthcheckTests(unittest.TestCase):
                     "last_error": "telegram timeout",
                     "metrics": {
                         "orders_read": 0,
-                        "orders_with_cf": 0,
+                        "orders_with_fiscal_identifier": 0,
                         "notifications_sent": 0,
                         "telegram_retries": 2,
                         "consecutive_error_cycles": 4,
@@ -142,7 +142,7 @@ class HealthcheckTests(unittest.TestCase):
                     "last_error": None,
                     "metrics": {
                         "orders_read": 0,
-                        "orders_with_cf": 0,
+                        "orders_with_fiscal_identifier": 0,
                         "notifications_sent": 0,
                         "telegram_retries": 0,
                         "consecutive_error_cycles": 0,
@@ -157,7 +157,7 @@ class HealthcheckTests(unittest.TestCase):
                     last_check="2026-04-05T20:02:00Z",
                     metrics=BotMetrics(
                         orders_read=5,
-                        orders_with_cf=2,
+                        orders_with_fiscal_identifier=2,
                         notifications_sent=1,
                         telegram_retries=0,
                         consecutive_error_cycles=0,
@@ -187,7 +187,7 @@ class HealthcheckTests(unittest.TestCase):
             self.assertEqual(report["status"], "ok")
             self.assertEqual(report["last_check"], "2026-04-05T20:02:00Z")
             self.assertEqual(report["metrics"]["orders_read"], 5)
-            self.assertEqual(report["metrics"]["orders_with_cf"], 2)
+            self.assertEqual(report["metrics"]["orders_with_fiscal_identifier"], 2)
 
     def test_render_text_report_includes_reasons_and_warnings(self) -> None:
         text = render_text_report(
@@ -202,7 +202,7 @@ class HealthcheckTests(unittest.TestCase):
                 "last_error": "boom",
                 "metrics": {
                     "orders_read": 8,
-                    "orders_with_cf": 3,
+                    "orders_with_fiscal_identifier": 3,
                     "notifications_sent": 2,
                     "telegram_retries": 1,
                     "consecutive_error_cycles": 2,
@@ -224,7 +224,7 @@ class HealthcheckTests(unittest.TestCase):
             }
         )
         self.assertIn("status: fail", text)
-        self.assertIn("metrics.orders_with_cf: 3", text)
+        self.assertIn("metrics.orders_with_fiscal_identifier: 3", text)
         self.assertIn("alerts: service_inactive", text)
         self.assertIn("reasons: lock_missing", text)
         self.assertIn("warnings: retry_queue_not_empty", text)
@@ -246,7 +246,7 @@ class HealthcheckTests(unittest.TestCase):
             "last_error": None,
             "metrics": {
                 "orders_read": 1,
-                "orders_with_cf": 1,
+                "orders_with_fiscal_identifier": 1,
                 "notifications_sent": 1,
                 "telegram_retries": 0,
                 "consecutive_error_cycles": 0,

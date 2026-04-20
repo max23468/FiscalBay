@@ -266,7 +266,7 @@ def _sync_tenant_string_table(
 def _default_metrics_state() -> BotMetricsPayload:
     return {
         "orders_read": 0,
-        "orders_with_cf": 0,
+        "orders_with_fiscal_identifier": 0,
         "notifications_sent": 0,
         "telegram_retries": 0,
         "consecutive_error_cycles": 0,
@@ -284,7 +284,7 @@ def _parse_metrics_state(raw_value: str) -> BotMetricsPayload:
         normalized_errors = {str(key): int(value) for key, value in errors.items()}
     return {
         "orders_read": int(decoded.get("orders_read", 0)),
-        "orders_with_cf": int(decoded.get("orders_with_cf", 0)),
+        "orders_with_fiscal_identifier": int(decoded.get("orders_with_fiscal_identifier", 0)),
         "notifications_sent": int(decoded.get("notifications_sent", 0)),
         "telegram_retries": int(decoded.get("telegram_retries", 0)),
         "consecutive_error_cycles": int(decoded.get("consecutive_error_cycles", 0)),
@@ -319,7 +319,7 @@ def _state_from_model(state: BotRuntimeState) -> BotRuntimeStatePayload:
         "last_error": state.last_error,
         "metrics": {
             "orders_read": state.metrics.orders_read,
-            "orders_with_cf": state.metrics.orders_with_cf,
+            "orders_with_fiscal_identifier": state.metrics.orders_with_fiscal_identifier,
             "notifications_sent": state.metrics.notifications_sent,
             "telegram_retries": state.metrics.telegram_retries,
             "consecutive_error_cycles": state.metrics.consecutive_error_cycles,

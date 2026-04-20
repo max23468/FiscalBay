@@ -657,7 +657,7 @@ class OperationQueueEntry:
 @dataclass
 class BotMetrics:
     orders_read: int = 0
-    orders_with_cf: int = 0
+    orders_with_fiscal_identifier: int = 0
     notifications_sent: int = 0
     telegram_retries: int = 0
     consecutive_error_cycles: int = 0
@@ -671,7 +671,7 @@ class BotMetrics:
             errors_by_type = {str(key): as_int(value) for key, value in raw_errors.items()}
         return cls(
             orders_read=as_int(data.get("orders_read", 0)),
-            orders_with_cf=as_int(data.get("orders_with_cf", 0)),
+            orders_with_fiscal_identifier=as_int(data.get("orders_with_fiscal_identifier", 0)),
             notifications_sent=as_int(data.get("notifications_sent", 0)),
             telegram_retries=as_int(data.get("telegram_retries", 0)),
             consecutive_error_cycles=as_int(data.get("consecutive_error_cycles", 0)),
@@ -681,7 +681,7 @@ class BotMetrics:
     def as_dict(self) -> dict[str, object]:
         return {
             "orders_read": self.orders_read,
-            "orders_with_cf": self.orders_with_cf,
+            "orders_with_fiscal_identifier": self.orders_with_fiscal_identifier,
             "notifications_sent": self.notifications_sent,
             "telegram_retries": self.telegram_retries,
             "consecutive_error_cycles": self.consecutive_error_cycles,
@@ -835,8 +835,8 @@ class OrderRecord:
     def as_dict(self) -> dict[str, str]:
         return {key: str(value) for key, value in asdict(self).items()}
 
-    def has_codice_fiscale(self) -> bool:
-        return self.taxIdentifierType.upper() == "CODICE_FISCALE" and bool(self.taxpayerId)
+    def has_fiscal_identifier(self) -> bool:
+        return bool(self.taxpayerId) and bool(self.taxIdentifierType)
 
     def fingerprint_parts(self) -> tuple[str, ...]:
         return (
@@ -851,7 +851,7 @@ class OrderRecord:
 
 class BotMetricsPayload(TypedDict):
     orders_read: int
-    orders_with_cf: int
+    orders_with_fiscal_identifier: int
     notifications_sent: int
     telegram_retries: int
     consecutive_error_cycles: int

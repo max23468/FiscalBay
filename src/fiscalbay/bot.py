@@ -190,7 +190,7 @@ from .telegram_commands import (
     format_records as _format_records,
 )
 from .telegram_commands import (
-    has_codice_fiscale as _has_codice_fiscale,
+    has_fiscal_identifier as _has_fiscal_identifier,
 )
 from .telegram_commands import (
     process_message as _process_message,
@@ -891,8 +891,8 @@ def format_records(
     )
 
 
-def has_codice_fiscale(record: OrderRecordLike) -> bool:
-    return _has_codice_fiscale(coerce_order_record(record))
+def has_fiscal_identifier(record: OrderRecordLike) -> bool:
+    return _has_fiscal_identifier(coerce_order_record(record))
 
 
 def format_auto_notification(record: OrderRecordLike) -> str:
@@ -930,7 +930,7 @@ __all__ = [
     "format_record",
     "format_records",
     "format_status",
-    "has_codice_fiscale",
+    "has_fiscal_identifier",
     "increment_error_metric",
     "increment_metric",
     "is_authorized",
@@ -1348,13 +1348,13 @@ def explain_why_order_not_notified(
             "delivery_headline": delivery_headline,
             "delivery_detail": delivery_detail,
         }
-    if not has_codice_fiscale(order):
+    if not has_fiscal_identifier(order):
         return {
             "order_id": order_id,
             "environment": environment,
             "status": "not_eligible",
             "headline": "L'ordine non rientra nei criteri di notifica correnti.",
-            "detail": "Il bot notifica solo ordini con CODICE_FISCALE presente e valorizzato.",
+            "detail": "Il bot notifica solo ordini con identificativo fiscale presente e valorizzato.",
             "delivery_status": delivery_status,
             "delivery_headline": delivery_headline,
             "delivery_detail": delivery_detail,

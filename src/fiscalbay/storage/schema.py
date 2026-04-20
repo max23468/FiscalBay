@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
@@ -216,6 +217,42 @@ def _create_v8_schema(conn: sqlite3.Connection) -> None:
         )
 
 
+def _rename_metrics_payload_key(raw_value: str | None) -> str | None:
+    if not raw_value:
+        return raw_value
+    try:
+        decoded = json.loads(raw_value)
+    except json.JSONDecodeError:
+        return raw_value
+    if not isinstance(decoded, dict):
+        return raw_value
+    if "orders_with_cf" not in decoded:
+        return raw_value
+    decoded["orders_with_fiscal_identifier"] = decoded.pop("orders_with_cf")
+    return json.dumps(decoded, separators=(",", ":"))
+
+
+def _create_v9_schema(conn: sqlite3.Connection) -> None:
+    kv_row = conn.execute("SELECT value FROM kv_store WHERE key = 'metrics'").fetchone()
+    if kv_row is not None:
+        updated_value = _rename_metrics_payload_key(str(kv_row["value"]))
+        if updated_value is not None and updated_value != kv_row["value"]:
+            conn.execute("UPDATE kv_store SET value = ? WHERE key = 'metrics'", (updated_value,))
+
+    if _table_exists(conn, "tenant_runtime_state"):
+        rows = conn.execute(
+            "SELECT telegram_user_id, metrics_json FROM tenant_runtime_state"
+        ).fetchall()
+        for row in rows:
+            updated_metrics = _rename_metrics_payload_key(str(row["metrics_json"]))
+            if updated_metrics is None or updated_metrics == row["metrics_json"]:
+                continue
+            conn.execute(
+                "UPDATE tenant_runtime_state SET metrics_json = ? WHERE telegram_user_id = ?",
+                (updated_metrics, row["telegram_user_id"]),
+            )
+
+
 def _migrate_legacy_notified_orders(conn: sqlite3.Connection) -> None:
     if not _table_exists(conn, "notified_orders"):
         return
@@ -260,4 +297,7 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         _create_v7_schema(conn)
     if version < 8:
         _create_v8_schema(conn)
+        version = 8
+    if version < 9:
+        _create_v9_schema(conn)
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")

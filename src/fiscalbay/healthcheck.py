@@ -25,7 +25,7 @@ LOGGER = logging.getLogger("fiscalbay.healthcheck")
 
 class HealthMetrics(TypedDict):
     orders_read: int
-    orders_with_cf: int
+    orders_with_fiscal_identifier: int
     notifications_sent: int
     telegram_retries: int
     consecutive_error_cycles: int
@@ -212,7 +212,7 @@ def build_health_report(
         "last_error": last_error,
         "metrics": {
             "orders_read": state.metrics.orders_read,
-            "orders_with_cf": state.metrics.orders_with_cf,
+            "orders_with_fiscal_identifier": state.metrics.orders_with_fiscal_identifier,
             "notifications_sent": state.metrics.notifications_sent,
             "telegram_retries": state.metrics.telegram_retries,
             "consecutive_error_cycles": state.metrics.consecutive_error_cycles,
@@ -246,7 +246,7 @@ def build_health_report(
         warnings_count=len(warnings),
         alerts_count=len(alerts),
         orders_read=state.metrics.orders_read,
-        orders_with_cf=state.metrics.orders_with_cf,
+        orders_with_fiscal_identifier=state.metrics.orders_with_fiscal_identifier,
         notifications_sent=state.metrics.notifications_sent,
         telegram_retries=state.metrics.telegram_retries,
         consecutive_error_cycles=state.metrics.consecutive_error_cycles,
@@ -297,7 +297,8 @@ def render_text_report(report: HealthReport) -> str:
     lines.extend(
         [
             f"metrics.orders_read: {metrics.get('orders_read', 0)}",
-            f"metrics.orders_with_cf: {metrics.get('orders_with_cf', 0)}",
+            "metrics.orders_with_fiscal_identifier: "
+            f"{metrics.get('orders_with_fiscal_identifier', 0)}",
             f"metrics.notifications_sent: {metrics.get('notifications_sent', 0)}",
             f"metrics.telegram_retries: {metrics.get('telegram_retries', 0)}",
             f"metrics.consecutive_error_cycles: {metrics.get('consecutive_error_cycles', 0)}",

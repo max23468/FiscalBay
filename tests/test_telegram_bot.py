@@ -22,7 +22,7 @@ from src.fiscalbay.bot import (
     extract_callback_context,
     format_auto_notification,
     format_records,
-    has_codice_fiscale,
+    has_fiscal_identifier,
     options_for_command,
     parse_command,
     process_message,
@@ -114,7 +114,7 @@ class TelegramBotTests(unittest.TestCase):
 
     def test_format_records_empty_only_found(self) -> None:
         content = format_records([], only_found=True)[0]
-        self.assertIn("Nessun ordine con codice fiscale", content)
+        self.assertIn("Nessun ordine con identificativo fiscale", content)
 
     def test_build_help_text_mentions_commands(self) -> None:
         text = build_help_text()
@@ -207,17 +207,17 @@ class TelegramBotTests(unittest.TestCase):
         )
         self.assertIn("Dati fiscali non presenti", text)
 
-    def test_has_codice_fiscale_requires_type_and_value(self) -> None:
+    def test_has_fiscal_identifier_requires_type_and_value(self) -> None:
         self.assertTrue(
-            has_codice_fiscale(
+            has_fiscal_identifier(
                 {
                     "taxIdentifierType": "CODICE_FISCALE",
                     "taxpayerId": "RSSMRA80A01H501U",
                 }
             )
         )
-        self.assertFalse(
-            has_codice_fiscale(
+        self.assertTrue(
+            has_fiscal_identifier(
                 {
                     "taxIdentifierType": "VAT_NUMBER",
                     "taxpayerId": "IT123",
@@ -225,13 +225,27 @@ class TelegramBotTests(unittest.TestCase):
             )
         )
         self.assertFalse(
-            has_codice_fiscale(
+            has_fiscal_identifier(
                 {
                     "taxIdentifierType": "CODICE_FISCALE",
                     "taxpayerId": "",
                 }
             )
         )
+
+    def test_format_auto_notification_uses_vat_label_when_available(self) -> None:
+        text = format_auto_notification(
+            {
+                "orderId": "12-346",
+                "creationDate": "2026-04-03T10:00:00Z",
+                "buyerUsername": "buyer-vat",
+                "taxpayerId": "IT12345678901",
+                "taxIdentifierType": "VAT_NUMBER",
+                "issuingCountry": "IT",
+            }
+        )
+        self.assertIn("P.IVA", text)
+        self.assertIn("VAT_NUMBER", text)
 
     @patch("src.fiscalbay.bot.telegram_request")
     def test_send_message_retries_without_parse_mode_on_http_400(

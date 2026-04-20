@@ -1,8 +1,8 @@
 # FiscalBay
 
-FiscalBay e' un tool operativo con CLI e bot Telegram per leggere gli ordini eBay e mostrare l'identificativo fiscale restituito dalle API ufficiali eBay, inclusi i casi in cui il tipo e' `CODICE_FISCALE`.
+FiscalBay e' un tool operativo con CLI e bot Telegram per leggere gli ordini eBay e mostrare l'identificativo fiscale restituito dalle API ufficiali eBay, inclusi casi come `CODICE_FISCALE` e `VAT_NUMBER`.
 
-Payoff: `Assistente Codice Fiscale ordini per venditori eBay`.
+Payoff: `Assistente fiscale ordini per venditori eBay`.
 
 Linee guida brand e asset pronti all'uso: [`docs/BRAND_GUIDELINES.md`](docs/BRAND_GUIDELINES.md), `assets/branding/*`.
 Set definitivo approvato: logo orizzontale, mark e avatar Telegram nel concept `Seller Card`.
@@ -25,7 +25,7 @@ Funzionalità principali:
 - cache in memoria del token per ridurre chiamate a `/identity/v1/oauth2/token`
 - recupero ordini con `getOrders` e dettaglio con `getOrder`
 - estrazione del campo `buyer.taxIdentifier.taxpayerId`
-- indicazione del tipo di identificativo fiscale, ad esempio `CODICE_FISCALE`
+- indicazione del tipo di identificativo fiscale, ad esempio `CODICE_FISCALE` o `VAT_NUMBER`
 - output CLI in `table`, `json` o `csv`
 - retry con backoff esponenziale per errori transitori eBay e Telegram
 - polling continuo dei nuovi ordini con notifiche Telegram automatiche
@@ -33,7 +33,7 @@ Funzionalità principali:
 
 ## Limite Importante
 
-Il progetto mostra solo ciò che eBay restituisce davvero. Se `buyer.taxIdentifier` non è presente nella risposta dell'ordine, il tool non può ricostruire o dedurre il codice fiscale in altro modo.
+Il progetto mostra solo ciò che eBay restituisce davvero. Se `buyer.taxIdentifier` non è presente nella risposta dell'ordine, il tool non può ricostruire o dedurre l'identificativo fiscale in altro modo.
 
 In pratica:
 
@@ -385,7 +385,7 @@ Se il bot resta in esecuzione:
 
 - ogni `EBAY_ORDER_POLL_INTERVAL` secondi legge gli ordini più recenti
 - confronta gli ordini con quelli già notificati
-- invia un messaggio solo quando trova davvero `taxIdentifierType=CODICE_FISCALE` e un `taxpayerId` valorizzato
+- invia un messaggio solo quando trova davvero un `taxIdentifierType` valorizzato e un `taxpayerId` presente
 - salva sia `orderId` sia un hash del contenuto dell'ordine per deduplicare meglio
 - se l'invio Telegram fallisce, accoda il messaggio e ritenta nei cicli successivi
 
@@ -473,9 +473,9 @@ Per il bot serve anche:
 
 - `TELEGRAM_BOT_TOKEN`
 
-### Nessun codice fiscale trovato
+### Nessun identificativo fiscale trovato
 
-Non è necessariamente un bug. Significa che eBay non ha restituito `buyer.taxIdentifier` per quegli ordini oppure che il tipo restituito non è `CODICE_FISCALE`.
+Non è necessariamente un bug. Significa che eBay non ha restituito `buyer.taxIdentifier` per quegli ordini oppure che il blocco fiscale non contiene sia tipo sia valore.
 
 ### Troppe richieste o rallentamenti eBay
 
@@ -494,7 +494,7 @@ Verifica questi punti:
 - `TELEGRAM_NOTIFY_CHAT_IDS` è valorizzato
 - il bot è ancora in esecuzione
 - il primo avvio ha solo bootstrapato lo stato
-- eBay sta davvero restituendo `CODICE_FISCALE` e `taxpayerId`
+- eBay sta davvero restituendo `taxIdentifierType` e `taxpayerId`
 - il file SQLite in `data/` è scrivibile
 
 ### Telegram risponde ma alcuni messaggi falliscono

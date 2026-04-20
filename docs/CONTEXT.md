@@ -28,7 +28,7 @@ Nota importante:
 
 ## Cos'e' il progetto
 
-`FiscalBay` e' un progetto Python che legge gli ordini eBay tramite API ufficiali e mostra l'identificativo fiscale disponibile nei dati ordine, in particolare i casi in cui eBay restituisce `buyer.taxIdentifier` con tipo `CODICE_FISCALE`.
+`FiscalBay` e' un progetto Python che legge gli ordini eBay tramite API ufficiali e mostra l'identificativo fiscale disponibile nei dati ordine, in particolare i casi in cui eBay restituisce `buyer.taxIdentifier` con tipo e valore valorizzati.
 
 Il progetto oggi ha due modalita' principali:
 
@@ -52,13 +52,13 @@ Il tool serve a:
 - recuperare il dettaglio ordine
 - estrarre `buyer.taxIdentifier.taxpayerId`
 - mostrare se il dato fiscale e' presente o assente
-- notificare automaticamente via Telegram i nuovi ordini che contengono davvero il codice fiscale
+- notificare automaticamente via Telegram i nuovi ordini che contengono davvero un identificativo fiscale
 - mantenere una minima memoria operativa leggibile sullo stato del collegamento e sugli errori recenti utili
 
 Limite strutturale fondamentale:
 
 - il progetto mostra solo cio' che eBay restituisce davvero
-- se eBay non espone `buyer.taxIdentifier`, il tool non puo' dedurre il codice fiscale
+- se eBay non espone `buyer.taxIdentifier`, il tool non puo' dedurre l'identificativo fiscale
 
 ## Perimetro da rispettare
 
@@ -251,7 +251,7 @@ Il bot:
 
 - esegue polling ordini ogni `EBAY_ORDER_POLL_INTERVAL`
 - confronta con lo stato gia' notificato
-- invia notifiche solo se il record contiene davvero `CODICE_FISCALE` e `taxpayerId`
+- invia notifiche solo se il record contiene davvero `taxIdentifierType` e `taxpayerId`
 - usa sia `orderId` sia fingerprint hash per deduplicare meglio
 - usa una retry queue per i messaggi Telegram falliti
 

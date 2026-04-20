@@ -140,7 +140,7 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
                 "last_error": "boom",
                 "metrics": {
                     "orders_read": 7,
-                    "orders_with_cf": 2,
+                    "orders_with_fiscal_identifier": 2,
                     "notifications_sent": 3,
                     "telegram_retries": 1,
                     "consecutive_error_cycles": 2,
@@ -164,7 +164,7 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
                 restored["metrics"],
                 {
                     "orders_read": 7,
-                    "orders_with_cf": 2,
+                    "orders_with_fiscal_identifier": 2,
                     "notifications_sent": 3,
                     "telegram_retries": 1,
                     "consecutive_error_cycles": 2,
@@ -234,6 +234,75 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
                 hashes = conn.execute("SELECT hash FROM notified_hashes").fetchall()
                 self.assertEqual(ids[0][0], "legacy-order")
                 self.assertEqual(hashes[0][0], "legacy-hash")
+
+    def test_legacy_metrics_key_is_migrated_to_new_name(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+
+            with sqlite3.connect(db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                conn.execute("PRAGMA user_version = 8")
+                conn.execute(
+                    "CREATE TABLE notified_order_ids (order_id TEXT PRIMARY KEY)"
+                )
+                conn.execute("CREATE TABLE notified_hashes (hash TEXT PRIMARY KEY)")
+                conn.execute(
+                    "CREATE TABLE retry_queue "
+                    "("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "chat_id INTEGER NOT NULL, "
+                    "text TEXT NOT NULL, "
+                    "attempts INTEGER NOT NULL DEFAULT 0"
+                    ")"
+                )
+                conn.execute("CREATE TABLE kv_store (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+                conn.execute(
+                    "CREATE TABLE tenant_runtime_state "
+                    "("
+                    "telegram_user_id INTEGER PRIMARY KEY, "
+                    "last_check TEXT, "
+                    "last_error TEXT, "
+                    "metrics_json TEXT NOT NULL DEFAULT '{}', "
+                    "memory_json TEXT NOT NULL DEFAULT '{}', "
+                    "account_snapshot_json TEXT NOT NULL DEFAULT '{}', "
+                    "updated_at TEXT"
+                    ")"
+                )
+                conn.execute(
+                    "CREATE TABLE tenant_notified_order_ids "
+                    "("
+                    "telegram_user_id INTEGER NOT NULL, "
+                    "order_id TEXT NOT NULL, "
+                    "PRIMARY KEY (telegram_user_id, order_id)"
+                    ")"
+                )
+                conn.execute(
+                    "CREATE TABLE tenant_notified_hashes "
+                    "("
+                    "telegram_user_id INTEGER NOT NULL, "
+                    "hash TEXT NOT NULL, "
+                    "PRIMARY KEY (telegram_user_id, hash)"
+                    ")"
+                )
+                conn.execute(
+                    "INSERT INTO kv_store (key, value) VALUES (?, ?)",
+                    (
+                        "metrics",
+                        '{"orders_read":2,"orders_with_cf":1,"notifications_sent":1}',
+                    ),
+                )
+                conn.execute(
+                    "INSERT INTO tenant_runtime_state "
+                    "(telegram_user_id, metrics_json, memory_json, account_snapshot_json) "
+                    "VALUES (?, ?, '{}', '{}')",
+                    (123, '{"orders_read":3,"orders_with_cf":2,"notifications_sent":1}'),
+                )
+
+            restored = load_state(str(db_path))
+            self.assertEqual(restored["metrics"]["orders_with_fiscal_identifier"], 1)
+
+            tenant_state = load_tenant_runtime_state(str(db_path), 123)
+            self.assertEqual(tenant_state.metrics.orders_with_fiscal_identifier, 2)
 
     def test_save_state_removes_stale_values_without_duplicates(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -312,7 +381,7 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
                     '"notified_hashes":["hash-1"],'
                     '"last_check":"2026-04-05T20:00:00Z",'
                     '"last_error":null,'
-                    '"metrics":{"orders_read":2,"orders_with_cf":1,"notifications_sent":1,"telegram_retries":0,"consecutive_error_cycles":0,"errors_by_type":{}}}'
+                    '"metrics":{"orders_read":2,"orders_with_fiscal_identifier":1,"notifications_sent":1,"telegram_retries":0,"consecutive_error_cycles":0,"errors_by_type":{}}}'
                 ),
                 encoding="utf-8",
             )
@@ -356,7 +425,7 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
                     notified_hashes=["hash-1"],
                     last_check="2026-04-06T10:00:00Z",
                     last_error=None,
-                    metrics=BotMetrics(orders_read=3, orders_with_cf=1),
+                    metrics=BotMetrics(orders_read=3, orders_with_fiscal_identifier=1),
                     memory=BotRuntimeState.from_mapping(
                         {
                             "memory": {
@@ -372,7 +441,7 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertEqual(restored.notified_order_ids, ["order-1"])
             self.assertEqual(restored.notified_hashes, ["hash-1"])
             self.assertEqual(restored.last_check, "2026-04-06T10:00:00Z")
-            self.assertEqual(restored.metrics.orders_with_cf, 1)
+            self.assertEqual(restored.metrics.orders_with_fiscal_identifier, 1)
             self.assertEqual(restored.memory.last_fetch_end, "2026-04-06T10:00:00Z")
             self.assertEqual(restored.memory.last_notified_order_id, "order-1")
 

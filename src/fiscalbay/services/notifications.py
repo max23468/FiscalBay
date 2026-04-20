@@ -17,7 +17,7 @@ from ..models import (
 )
 from ..telegram_commands import (
     format_auto_notification,
-    has_codice_fiscale,
+    has_fiscal_identifier,
     record_fingerprint,
 )
 
@@ -152,7 +152,7 @@ def fetch_new_order_records(
             continue
         if record_fingerprint(record) in notified_hashes:
             continue
-        if has_codice_fiscale(record):
+        if has_fiscal_identifier(record):
             new_records.append(record)
     new_records.sort(key=order_sort_key)
     return new_records
@@ -252,7 +252,7 @@ def maybe_send_new_order_notifications(
         raise
     first_bootstrap = not state.last_check
     if first_bootstrap:
-        increment_metric(state, "orders_with_cf", len(records))
+        increment_metric(state, "orders_with_fiscal_identifier", len(records))
         mark_cycle_result(state, had_errors=False)
         log_event(
             LOGGER,
@@ -290,7 +290,7 @@ def maybe_send_new_order_notifications(
                 )
     save_retry_queue_fn(telegram_config.retry_queue_path, failed_queue)
     increment_metric(state, "orders_read", len(records))
-    increment_metric(state, "orders_with_cf", len(records))
+    increment_metric(state, "orders_with_fiscal_identifier", len(records))
     mark_cycle_result(state, had_errors=cycle_had_errors)
     updated_state = update_state_with_records(state, records)
     save_state_fn(telegram_config.state_path, updated_state)

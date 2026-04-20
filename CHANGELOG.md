@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.0](https://github.com/max23468/FiscalBay/compare/v0.4.0...v0.5.0) (2026-04-20)
+
+### Features
+
+* supporta identificativi fiscali generici nel bot e nella CLI
+
+### Bug Fixes
+
+* migra le metriche SQLite dal naming legacy `orders_with_cf`
+
 ## [0.4.0](https://github.com/max23468/FiscalBay/compare/v0.3.0...v0.4.0) (2026-04-20)
 
 

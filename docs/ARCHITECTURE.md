@@ -117,7 +117,7 @@ Vincolo di prodotto:
 2. calcola la finestra temporale da controllare.
 3. usa `application.py` per ottenere ordini gia' normalizzati per ambiente.
 4. deduplica per `orderId` e fingerprint.
-5. invia notifiche Telegram solo per ordini con `CODICE_FISCALE`.
+5. invia notifiche Telegram solo per ordini con identificativo fiscale presente.
 6. salva metriche, `last_check`, errori e retry queue.
 
 ## Decisioni architetturali attuali

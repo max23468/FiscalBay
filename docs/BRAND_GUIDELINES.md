@@ -5,8 +5,8 @@ Linee guida operative per il brand pubblico del prodotto e per la sua applicazio
 ## Brand Core
 
 - nome prodotto: `FiscalBay`
-- descrizione breve: `Assistente Codice Fiscale ordini per venditori eBay`
-- promessa: aiutare i seller eBay a leggere rapidamente Codice Fiscale, stato account e segnali operativi
+- descrizione breve: `Assistente fiscale ordini per venditori eBay`
+- promessa: aiutare i seller eBay a leggere rapidamente identificativi fiscali, stato account e segnali operativi
 - personalita': affidabile, operativa, chiara, professionale
 - tono di voce: diretto, rassicurante, orientato al prossimo passo
 
@@ -15,7 +15,7 @@ Linee guida operative per il brand pubblico del prodotto e per la sua applicazio
 - categoria: assistente operativo B2B per seller eBay
 - percezione desiderata: strumento serio, utile ogni giorno, non "botino tecnico"
 - vantaggio chiave: rende consultabili e notificabili i dati fiscali presenti negli ordini eBay in un flusso Telegram semplice
-- messaggio chiave: `FiscalBay rende piu' rapido il controllo operativo di Codice Fiscale, account e ordini eBay in Telegram.`
+- messaggio chiave: `FiscalBay rende piu' rapido il controllo operativo di identificativi fiscali, account e ordini eBay in Telegram.`
 
 ## Naming Architecture
 
@@ -82,7 +82,7 @@ Asset sorgente pronti all'uso:
 
 Il set finale unisce tre segnali:
 
-- una tessera bianca inclinata come richiamo al Codice Fiscale
+- una tessera bianca inclinata come richiamo ai dati fiscali ordine
 - piccoli accenti colore che evocano il mondo eBay senza imitarne il logo
 - una base navy molto solida, per dare affidabilita' e leggibilita' in piccolo
 
@@ -118,15 +118,15 @@ Per queste due superfici usare BotFather e gli asset in `assets/branding/`.
 
 ### Microcopy approvato
 
-- tagline: `Assistente Codice Fiscale ordini per venditori eBay`
-- sottotitolo operativo: `Controlla Codice Fiscale, stato account e ordini eBay da un'unica chat.`
+- tagline: `Assistente fiscale ordini per venditori eBay`
+- sottotitolo operativo: `Controlla identificativi fiscali, stato account e ordini eBay da un'unica chat.`
 - promessa corta: `FiscalBay ti aiuta a controllare account e ordini eBay piu' rapidamente.`
 - CTA primaria: `Collega account eBay`
 - CTA secondaria: `Controlla account`
 
 ### Pulsanti e label
 
-- `Ordini CF`
+- `Ordini fiscali`
 - `Tutti ordini`
 - `Stato bot`
 - `Account eBay`

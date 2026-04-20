@@ -33,7 +33,7 @@ def _as_sequence(value: object) -> Sequence[object]:
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Estrae il codice fiscale dell'acquirente dagli ordini eBay "
+            "Estrae l'identificativo fiscale dell'acquirente dagli ordini eBay "
             "usando le API ufficiali Sell Fulfillment."
         )
     )

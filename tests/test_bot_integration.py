@@ -1117,7 +1117,7 @@ class BotIntegrationTests(unittest.TestCase):
                         "last_error": None,
                         "metrics": {
                             "orders_read": 9,
-                            "orders_with_cf": 4,
+                            "orders_with_fiscal_identifier": 4,
                             "notifications_sent": 3,
                             "telegram_retries": 0,
                             "errors_by_type": {},
@@ -1134,7 +1134,7 @@ class BotIntegrationTests(unittest.TestCase):
                     "last_error": None,
                     "metrics": {
                         "orders_read": 1,
-                        "orders_with_cf": 0,
+                        "orders_with_fiscal_identifier": 0,
                         "notifications_sent": 0,
                         "errors_by_type": {},
                     },
@@ -1322,7 +1322,7 @@ class BotIntegrationTests(unittest.TestCase):
 
     @patch("src.fiscalbay.bot.fetch_records")
     @patch("src.fiscalbay.bot.load_config")
-    def test_process_message_why_not_notified_reports_missing_cf(
+    def test_process_message_why_not_notified_reports_missing_fiscal_identifier(
         self,
         mock_load_config,
         mock_fetch_records,
@@ -1366,9 +1366,57 @@ class BotIntegrationTests(unittest.TestCase):
 
             self.assertEqual(len(replies), 1)
             self.assertIn("not_eligible", replies[0])
-            self.assertIn("CODICE_FISCALE", replies[0])
+            self.assertIn("identificativo fiscale", replies[0])
             self.assertIn("Blocco attuale", replies[0])
             self.assertIn("Prossima azione", replies[0])
+
+    @patch("src.fiscalbay.bot.fetch_records")
+    @patch("src.fiscalbay.bot.load_config")
+    def test_process_message_why_not_notified_reports_vat_order_as_eligible(
+        self,
+        mock_load_config,
+        mock_fetch_records,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={1, 123, 456, 573159993},
+                notify_chat_ids={456},
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=456,
+                username="seller_user",
+                display_name="Mario Rossi",
+                chat_type="private",
+            )
+            mock_load_config.return_value = object()
+            mock_fetch_records.return_value = [
+                {
+                    "orderId": "order-vat-1",
+                    "creationDate": "2026-04-05T20:00:00Z",
+                    "buyerUsername": "buyer",
+                    "taxpayerId": "IT12345678901",
+                    "taxIdentifierType": "VAT_NUMBER",
+                    "issuingCountry": "IT",
+                }
+            ]
+
+            replies = process_message(
+                text="/why_not_notified order-vat-1",
+                chat_id=456,
+                telegram_user_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("would_notify", replies[0])
+            self.assertIn("delivery_ready", replies[0])
 
     @patch("src.fiscalbay.bot.fetch_records")
     @patch("src.fiscalbay.bot.load_config")

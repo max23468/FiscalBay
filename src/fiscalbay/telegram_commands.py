@@ -39,8 +39,19 @@ CALLBACK_APPROVE_PREFIX = "access:approve:"
 CALLBACK_REJECT_PREFIX = "access:reject:"
 
 BOT_DISPLAY_NAME = "FiscalBay"
-BOT_TAGLINE = "Assistente Codice Fiscale ordini per venditori eBay"
-BOT_LONG_DESCRIPTION = "Controlla Codice Fiscale, stato account e ordini eBay da un'unica chat."
+BOT_TAGLINE = "Assistente fiscale ordini per venditori eBay"
+BOT_LONG_DESCRIPTION = (
+    "Controlla identificativi fiscali, stato account e ordini eBay da un'unica chat."
+)
+
+
+def fiscal_identifier_label(tax_identifier_type: str) -> str:
+    normalized = str(tax_identifier_type or "").strip().upper()
+    if normalized == "CODICE_FISCALE":
+        return "CF"
+    if normalized == "VAT_NUMBER":
+        return "P.IVA"
+    return "ID Fiscale"
 
 
 def chunk_message(text: str, limit: int = 3500) -> list[str]:
@@ -71,9 +82,10 @@ def record_fingerprint(record: OrderRecord) -> str:
 
 
 def format_record(record: OrderRecord) -> str:
-    cf = record.taxpayerId or "non disponibile"
+    fiscal_value = record.taxpayerId or "non disponibile"
     tax_type = record.taxIdentifierType or "n/d"
     country = record.issuingCountry or "n/d"
+    fiscal_label = fiscal_identifier_label(record.taxIdentifierType)
     order_id = html.escape(record.orderId)
     missing_fiscal = ""
     if not record.taxpayerId:
@@ -96,8 +108,8 @@ def format_record(record: OrderRecord) -> str:
         f"├ 📦 <b>Articoli</b>: <i>{items}</i>\n"
         f"├ 💰 <b>Totale</b>: <code>{total}</code>\n"
         f"├ 📍 <b>Spedizione</b>: <code>{shipping}</code>\n"
-        "└ 💳 <b>CF</b>: "
-        f"<code>{html.escape(cf)}</code> "
+        f"└ 💳 <b>{html.escape(fiscal_label)}</b>: "
+        f"<code>{html.escape(fiscal_value)}</code> "
         f"<i>({html.escape(tax_type)})</i> • "
         f"<code>{html.escape(country)}</code>"
         f"{missing_fiscal}"
@@ -111,7 +123,7 @@ def format_records(
     if not rows:
         if only_found:
             return [
-                "🔎 Nessun ordine con codice fiscale restituito da eBay nella selezione richiesta."
+                "🔎 Nessun ordine con identificativo fiscale restituito da eBay nella selezione richiesta."
             ]
         return ["🔎 Nessun ordine trovato nella selezione richiesta."]
     pages: list[str] = []
@@ -166,7 +178,7 @@ def build_help_text() -> str:
         "[normal|maintenance|degraded]</code> → modalita' servizio (admin)\n"
         "• 📣 <code>/service_status</code> → stato servizio e accesso approvato\n"
         "• 📜 <code>/policy</code> → policy sintetica del servizio\n"
-        "• 📦 <code>/ultimi [giorni] [max]</code> → ordini con CF trovato\n"
+        "• 📦 <code>/ultimi [giorni] [max]</code> → ordini con identificativo fiscale trovato\n"
         "• 📋 <code>/tutti [giorni] [max]</code> → tutti gli ordini\n"
         "• 🔍 <code>/ordine [id]</code> → dettaglio ordine singolo\n"
         "• ℹ️ <code>/help</code> → questa guida\n\n"
@@ -188,7 +200,7 @@ def build_telegram_branding_profile() -> dict[str, object]:
             {"command": "help", "description": "Guida rapida del bot"},
             {"command": "connect", "description": "Collega o ricollega l'account eBay"},
             {"command": "account", "description": "Controlla stato account eBay"},
-            {"command": "ultimi", "description": "Ordini recenti con Codice Fiscale trovato"},
+            {"command": "ultimi", "description": "Ordini recenti con identificativo fiscale"},
             {"command": "tutti", "description": "Tutti gli ordini recenti eBay"},
             {"command": "ordine", "description": "Apri il dettaglio di un ordine"},
             {"command": "stato", "description": "Stato bot e metriche principali"},
@@ -233,7 +245,7 @@ def build_start_text(
         return (
             f"👋 <b>Benvenuto in {BOT_DISPLAY_NAME}</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Controlla Codice Fiscale, account e ordini eBay</i>\n"
+            "<i>Controlla identificativi fiscali, account e ordini eBay</i>\n"
             "Il tuo ultimo account eBay risulta in stato "
             f"<code>{html.escape(raw_account_status)}</code>.\n"
             "Ultimo utente noto: "
@@ -246,7 +258,7 @@ def build_start_text(
         return (
             f"👋 <b>Benvenuto in {BOT_DISPLAY_NAME}</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Controlla Codice Fiscale, account e ordini eBay</i>\n"
+            "<i>Controlla identificativi fiscali, account e ordini eBay</i>\n"
             "Il tuo account eBay risulta collegato, ma il token non e' piu' utilizzabile.\n"
             f"Utente eBay: <code>{ebay_user_id}</code> • ambiente: <code>{environment}</code>\n"
             "Prossimo passo: usa <code>/connect</code> per completare il reconnect."
@@ -257,7 +269,7 @@ def build_start_text(
         return (
             f"👋 <b>Benvenuto in {BOT_DISPLAY_NAME}</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Controlla Codice Fiscale, account e ordini eBay</i>\n"
+            "<i>Controlla identificativi fiscali, account e ordini eBay</i>\n"
             "Il tuo accesso e' approvato, ma non hai ancora collegato un account eBay.\n"
             "Prossimo passo: usa <code>/connect</code>.\n"
             "Poi potrai verificare lo stato con <code>/account</code> "
@@ -281,7 +293,7 @@ def build_main_menu_markup() -> InlineKeyboardMarkup:
     return {
         "inline_keyboard": [
             [
-                {"text": "Ordini CF", "callback_data": CALLBACK_ULTIMI},
+                {"text": "Ordini fiscali", "callback_data": CALLBACK_ULTIMI},
                 {"text": "Tutti ordini", "callback_data": CALLBACK_TUTTI},
             ],
             [
@@ -853,7 +865,7 @@ def format_why_not_notified_status(explain: Mapping[str, object]) -> str:
         next_action = "Verifica il payload sorgente: senza orderId il bot non puo' tracciarlo."
     elif raw_status == "not_eligible":
         blocking_reason = "L'ordine non passa i criteri di eleggibilita' correnti."
-        next_action = "Controlla che il CODICE_FISCALE sia presente e valorizzato."
+        next_action = "Controlla che l'identificativo fiscale sia presente e valorizzato."
     elif raw_status == "already_notified_order_id":
         blocking_reason = "L'ordine e' gia' stato tracciato per orderId."
         next_action = "Non serve intervenire, a meno che tu non voglia forzare un nuovo ciclo."
@@ -905,7 +917,7 @@ def format_order_notification_summary(explain: Mapping[str, object]) -> str:
         next_action = "Verifica il payload sorgente: senza orderId il bot non puo' tracciarlo."
     elif raw_status == "not_eligible":
         blocking_reason = "L'ordine non passa i criteri di eleggibilita' correnti."
-        next_action = "Controlla che il CODICE_FISCALE sia presente e valorizzato."
+        next_action = "Controlla che l'identificativo fiscale sia presente e valorizzato."
     elif raw_status == "already_notified_order_id":
         blocking_reason = "L'ordine e' gia' stato tracciato per orderId."
         next_action = "Non serve intervenire, a meno che tu non voglia forzare un nuovo ciclo."
@@ -1220,7 +1232,7 @@ def format_status(
         f"{fallback_text}\n"
         f"⏱️ Ultimo check eBay: <code>{html.escape(last_check_str)}</code>\n"
         f"📦 Ordini analizzati: <code>{metrics.orders_read}</code>\n"
-        f"🧾 Ordini con CF: <code>{metrics.orders_with_cf}</code>\n"
+        f"🧾 Ordini con dato fiscale: <code>{metrics.orders_with_fiscal_identifier}</code>\n"
         f"📩 Notifiche inviate: <code>{metrics.notifications_sent}</code>\n"
         f"🔁 Retry Telegram: <code>{metrics.telegram_retries}</code>\n"
         f"🚨 Errori consecutivi: <code>{metrics.consecutive_error_cycles}</code>\n"
@@ -1230,8 +1242,8 @@ def format_status(
     )
 
 
-def has_codice_fiscale(record: OrderRecord) -> bool:
-    return record.has_codice_fiscale()
+def has_fiscal_identifier(record: OrderRecord) -> bool:
+    return record.has_fiscal_identifier()
 
 
 def format_auto_notification(record: OrderRecord) -> str:

@@ -122,7 +122,7 @@ Nota storage:
 Il report JSON include anche metriche runtime aggregate:
 
 - `orders_read`
-- `orders_with_cf`
+- `orders_with_fiscal_identifier`
 - `notifications_sent`
 - `telegram_retries`
 - `consecutive_error_cycles`
