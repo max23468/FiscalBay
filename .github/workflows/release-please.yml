@@ -34,12 +34,14 @@ jobs:
       - name: Log release-please outputs
         env:
           HAS_RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN != '' }}
+          PR_OUTPUT: ${{ steps.release.outputs.pr }}
+          PRS_OUTPUT: ${{ steps.release.outputs.prs }}
         run: |
           echo "has_release_please_token=${HAS_RELEASE_PLEASE_TOKEN}"
           echo "release_created=${{ steps.release.outputs.release_created }}"
           echo "prs_created=${{ steps.release.outputs.prs_created }}"
-          echo "pr=${{ steps.release.outputs.pr }}"
-          echo "prs=${{ steps.release.outputs.prs }}"
+          printf 'pr=%s\n' "$PR_OUTPUT"
+          printf 'prs=%s\n' "$PRS_OUTPUT"
 
       - name: Checkout repository
         if: ${{ steps.release.outputs.release_created }}
