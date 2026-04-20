@@ -27,10 +27,10 @@ jobs:
       APP_DIR: /opt/fiscalbay
       SERVICE_NAME: fiscalbay-bot
       OAUTH_SERVICE_NAME: fiscalbay-oauth
-      FISCALBAY_VPS_HOST: ${{ secrets.FISCALBAY_VPS_HOST || secrets.EBAYCF_VPS_HOST }}
-      FISCALBAY_VPS_USER: ${{ secrets.FISCALBAY_VPS_USER || secrets.EBAYCF_VPS_USER }}
-      FISCALBAY_VPS_PORT: ${{ secrets.FISCALBAY_VPS_PORT || secrets.EBAYCF_VPS_PORT }}
-      FISCALBAY_VPS_SSH_KNOWN_HOSTS: ${{ secrets.FISCALBAY_VPS_SSH_KNOWN_HOSTS || secrets.EBAYCF_VPS_SSH_KNOWN_HOSTS }}
+      FISCALBAY_VPS_HOST: ${{ secrets.EBAYCF_VPS_HOST }}
+      FISCALBAY_VPS_USER: ${{ secrets.EBAYCF_VPS_USER }}
+      FISCALBAY_VPS_PORT: ${{ secrets.EBAYCF_VPS_PORT }}
+      FISCALBAY_VPS_SSH_KNOWN_HOSTS: ${{ secrets.EBAYCF_VPS_SSH_KNOWN_HOSTS }}
       TARGET_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.target_ref || github.sha }}
 
     steps:
@@ -41,7 +41,7 @@ jobs:
 
       - name: Validate deploy secrets
         env:
-          FISCALBAY_VPS_SSH_PRIVATE_KEY_B64: ${{ secrets.FISCALBAY_VPS_SSH_PRIVATE_KEY_B64 || secrets.EBAYCF_VPS_SSH_PRIVATE_KEY_B64 }}
+          FISCALBAY_VPS_SSH_PRIVATE_KEY_B64: ${{ secrets.EBAYCF_VPS_SSH_PRIVATE_KEY_B64 }}
         run: |
           set -euo pipefail
 
