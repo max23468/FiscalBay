@@ -2690,6 +2690,55 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertEqual(len(subscriptions), 1)
             self.assertIn("VAT_NUMBER", subscriptions[0].filters)
 
+    def test_process_message_notifications_toggle_preserves_existing_filter(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={1, 123, 456, 573159993},
+                notify_chat_ids={456},
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=456,
+                username="seller_user",
+                display_name="Mario Rossi",
+                chat_type="private",
+            )
+
+            process_message(
+                text="/notifications filter vat",
+                chat_id=456,
+                telegram_user_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+            process_message(
+                text="/notifications off",
+                chat_id=456,
+                telegram_user_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+            replies = process_message(
+                text="/notifications on",
+                chat_id=456,
+                telegram_user_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Filtro attivo: <code>solo_piva</code>", replies[0])
+            subscriptions = load_notification_subscriptions(str(db_path))
+            self.assertEqual(len(subscriptions), 1)
+            self.assertTrue(subscriptions[0].enabled)
+            self.assertIn("VAT_NUMBER", subscriptions[0].filters)
+
     def test_process_message_settings_reports_chat_preferences(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"

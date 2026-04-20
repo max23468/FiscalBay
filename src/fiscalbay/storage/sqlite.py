@@ -1475,14 +1475,29 @@ def set_notification_subscription_enabled(
     telegram_chat_id: int,
     enabled: bool,
     *,
+    filters: str | None = None,
     created_at: str,
     updated_at: str,
 ) -> NotificationSubscription:
+    preserved_filters = filters
+    if preserved_filters is None:
+        init_db(path)
+        with _connect(path) as conn:
+            existing_row = conn.execute(
+                "SELECT filters FROM notification_subscriptions "
+                "WHERE telegram_user_id = ? AND telegram_chat_id = ? "
+                "LIMIT 1",
+                (telegram_user_id, telegram_chat_id),
+            ).fetchone()
+            if existing_row is not None:
+                preserved_filters = str(existing_row["filters"] or "")
+    if preserved_filters is None:
+        preserved_filters = ""
     subscription = NotificationSubscription(
         telegram_user_id=telegram_user_id,
         telegram_chat_id=telegram_chat_id,
         enabled=enabled,
-        filters="",
+        filters=preserved_filters,
         created_at=created_at,
         updated_at=updated_at,
     )
