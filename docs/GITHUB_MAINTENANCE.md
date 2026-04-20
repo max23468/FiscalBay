@@ -76,21 +76,24 @@ Il percorso standard e':
 
 1. mergi una PR su `main` con titolo Conventional Commit
 2. `Release Please` apre o aggiorna una Release PR
-3. il workflow `Auto Merge Release PR` la mergia automaticamente
-4. il merge della Release PR aggiorna versione e `CHANGELOG.md`
-5. `Release Please` crea il tag `vX.Y.Z`, la relativa release GitHub e allega gli artefatti buildati
+3. i workflow `CI` e `PR Title` girano anche sulla Release PR
+4. il workflow `Auto Merge Release PR` la mergia automaticamente solo se entrambi risultano `success`
+5. il merge della Release PR aggiorna versione e `CHANGELOG.md`
+6. `Release Please` crea il tag `vX.Y.Z`, la relativa release GitHub e allega gli artefatti buildati
 
 Nota operativa:
 
 - l'auto-merge riguarda solo PR con branch `release-please--*` e titolo `chore(main): release ...`
+- il gate richiede oggi `CI` e `PR Title` verdi sulla Release PR
 - se in futuro vuoi reintrodurre un checkpoint manuale prima della pubblicazione, disabilita il workflow `Auto Merge Release PR`
 
 Fallback ufficiale senza branch protection / senza PR obbligatorie:
 
 1. pushi un commit Conventional Commit corretto su `main`
 2. controlli che `Release Please` apra o aggiorni la Release PR
-3. controlli che il workflow `Auto Merge Release PR` l'abbia chiusa correttamente
-4. non tocchi manualmente `pyproject.toml`, `CHANGELOG.md` root, tag o release
+3. controlli che `CI` e `PR Title` sulla Release PR siano verdi
+4. controlli che il workflow `Auto Merge Release PR` l'abbia chiusa correttamente
+5. non tocchi manualmente `pyproject.toml`, `CHANGELOG.md` root, tag o release
 
 Il workflow `Release Assets` supporta ancora `workflow_dispatch` se serve rigenerare gli artefatti per un tag gia' esistente.
 

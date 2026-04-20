@@ -271,7 +271,9 @@ def maybe_send_new_order_notifications(
     for record in records:
         text = format_auto_notification(record)
         for chat_id in telegram_config.notify_chat_ids:
-            if should_deliver_record_fn is not None and not should_deliver_record_fn(record, chat_id):
+            if should_deliver_record_fn is not None and not should_deliver_record_fn(
+                record, chat_id
+            ):
                 continue
             try:
                 send_message_fn(telegram_config.token, chat_id, text)
