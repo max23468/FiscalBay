@@ -3,7 +3,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.fiscalbay.clients.telegram import sync_bot_branding
 from src.fiscalbay.bot import (
     CALLBACK_HELP,
     CALLBACK_REQUEST_ACCESS,
@@ -31,6 +30,7 @@ from src.fiscalbay.bot import (
     send_message,
     update_state_with_records,
 )
+from src.fiscalbay.clients.telegram import sync_bot_branding
 from src.fiscalbay.telegram_commands import (
     BOT_DISPLAY_NAME,
     BOT_TAGLINE,
