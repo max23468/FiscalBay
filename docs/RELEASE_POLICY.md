@@ -137,6 +137,9 @@ Per restare allineati a GitHub e a `release-please`:
 - impostare il titolo di squash merge in formato Conventional Commit
 - se una PR contiene piu' modifiche, il titolo deve riflettere l'impatto piu' alto
 - il controllo CI `PR Title` verifica automaticamente che il titolo PR sia compatibile con il formato richiesto
+- questo repository e' privato e oggi ha un solo maintainer operativo
+- quindi review/commenti esterni non sono un prerequisito normale per il merge
+- il flusso standard e': self-review, test rilevanti verdi, PR pronta, merge
 
 Esempi:
 
