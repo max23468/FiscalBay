@@ -40,10 +40,7 @@ CALLBACK_REJECT_PREFIX = "access:reject:"
 
 BOT_DISPLAY_NAME = "FiscalBay"
 BOT_TAGLINE = "Assistente Codice Fiscale ordini per venditori eBay"
-BOT_LONG_DESCRIPTION = (
-    "Controlla Codice Fiscale, stato account e ordini eBay da un'unica chat. "
-    "FiscalBay mostra solo i dati che eBay restituisce davvero."
-)
+BOT_LONG_DESCRIPTION = "Controlla Codice Fiscale, stato account e ordini eBay da un'unica chat."
 
 
 def chunk_message(text: str, limit: int = 3500) -> list[str]:

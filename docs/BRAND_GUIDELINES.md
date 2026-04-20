@@ -6,7 +6,7 @@ Linee guida operative per il brand pubblico del prodotto e per la sua applicazio
 
 - nome prodotto: `FiscalBay`
 - descrizione breve: `Assistente Codice Fiscale ordini per venditori eBay`
-- promessa: aiutare i seller eBay a leggere rapidamente Codice Fiscale, stato account e segnali operativi senza inventare dati che eBay non espone
+- promessa: aiutare i seller eBay a leggere rapidamente Codice Fiscale, stato account e segnali operativi
 - personalita': affidabile, operativa, chiara, professionale
 - tono di voce: diretto, rassicurante, orientato al prossimo passo
 
@@ -15,7 +15,7 @@ Linee guida operative per il brand pubblico del prodotto e per la sua applicazio
 - categoria: assistente operativo B2B per seller eBay
 - percezione desiderata: strumento serio, utile ogni giorno, non "botino tecnico"
 - vantaggio chiave: rende consultabili e notificabili i dati fiscali presenti negli ordini eBay in un flusso Telegram semplice
-- messaggio chiave: `FiscalBay rende consultabili e notificabili gli identificativi fiscali restituiti dagli ordini eBay, senza inventare dati che eBay non espone.`
+- messaggio chiave: `FiscalBay rende piu' rapido il controllo operativo di Codice Fiscale, account e ordini eBay in Telegram.`
 
 ## Naming Architecture
 
@@ -120,7 +120,7 @@ Per queste due superfici usare BotFather e gli asset in `assets/branding/`.
 
 - tagline: `Assistente Codice Fiscale ordini per venditori eBay`
 - sottotitolo operativo: `Controlla Codice Fiscale, stato account e ordini eBay da un'unica chat.`
-- promessa corta: `FiscalBay ti mostra solo i dati che eBay restituisce davvero.`
+- promessa corta: `FiscalBay ti aiuta a controllare account e ordini eBay piu' rapidamente.`
 - CTA primaria: `Collega account eBay`
 - CTA secondaria: `Controlla account`
 
