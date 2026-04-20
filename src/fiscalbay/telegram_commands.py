@@ -126,7 +126,10 @@ def format_records(
     if not rows:
         if only_found:
             return [
-                "🔎 Nessun ordine con identificativo fiscale restituito da eBay nella selezione richiesta."
+                (
+                    "🔎 Nessun ordine con identificativo fiscale restituito "
+                    "da eBay nella selezione richiesta."
+                )
             ]
         return ["🔎 Nessun ordine trovato nella selezione richiesta."]
     pages: list[str] = []
@@ -174,7 +177,8 @@ def build_help_text() -> str:
         "• 🧭 <code>/why_not_notified [order_id]</code> → spiega se un ordine e' notificabile\n"
         "• 🗂️ <code>/review_orders [giorni] [max]</code> → ordini recenti da controllare a mano\n"
         "• 📈 <code>/report_summary [giorni] [max]</code> → mini report fiscale compatto in chat\n"
-        "• 🚦 <code>/priority_orders [giorni] [max]</code> → ordini recenti ordinati per priorita'\n"
+        "• 🚦 <code>/priority_orders [giorni] [max]</code> → "
+        "ordini recenti ordinati per priorita'\n"
         "• 🙋 <code>/request_access</code> → richiede accesso all'admin del bot\n"
         "• 👥 <code>/users</code> → elenco utenti registrati e stato accessi (admin)\n"
         "• 🕓 <code>/pending_users</code> → solo richieste accesso pending (admin)\n"
@@ -183,7 +187,8 @@ def build_help_text() -> str:
         "• 🌙 <code>/inactive_users</code> → tenant approvati ma fermi da troppo tempo (admin)\n"
         "• 🩺 <code>/tenant_health [user_id]</code> → salute tenant compatta (admin)\n"
         "• 🧭 <code>/admin_dashboard</code> → cruscotto admin e alert prodotto (admin)\n"
-        "• 🧹 <code>/maintenance_overview</code> → backlog operativo e cleanup da tenere d'occhio (admin)\n"
+        "• 🧹 <code>/maintenance_overview</code> → backlog operativo "
+        "e cleanup da tenere d'occhio (admin)\n"
         "• ⛔ <code>/suspend_user [id]</code> → sospende un utente approvato (admin)\n"
         "• ✅ <code>/reactivate_user [id]</code> → riattiva un utente sospeso (admin)\n"
         "• 🛠️ <code>/service_mode "
@@ -720,37 +725,51 @@ def format_admin_maintenance_overview(payload: Mapping[str, object]) -> str:
         "🧹 <b>Maintenance Overview</b>",
         "━━━━━━━━━━━━━━━━━━━━━━━━",
         f"🛠️ Modalita' servizio: <code>{mode}</code>",
-        f"🪪 OAuth pending attive: <code>{html.escape(str(oauth.get('pending_active', 0)))}</code>",
-        f"⏰ OAuth pending scadute: <code>{html.escape(str(oauth.get('pending_expired', 0)))}</code> • "
-        f"expired: <code>{html.escape(str(oauth.get('expired', 0)))}</code> • "
-        f"failed: <code>{html.escape(str(oauth.get('failed', 0)))}</code>",
+        (
+            f"🪪 OAuth pending attive: "
+            f"<code>{html.escape(str(oauth.get('pending_active', 0)))}</code>"
+        ),
+        (
+            f"⏰ OAuth pending scadute: "
+            f"<code>{html.escape(str(oauth.get('pending_expired', 0)))}</code> • "
+            f"expired: <code>{html.escape(str(oauth.get('expired', 0)))}</code> • "
+            f"failed: <code>{html.escape(str(oauth.get('failed', 0)))}</code>"
+        ),
         f"📦 Queue pending: <code>{html.escape(str(queue.get('pending', 0)))}</code> • "
         f"running: <code>{html.escape(str(queue.get('running', 0)))}</code> • "
         f"failed: <code>{html.escape(str(queue.get('failed', 0)))}</code> • "
         f"retry backlog: <code>{retry_backlog}</code>",
-        f"🕓 Pending fermi: <code>{html.escape(str(metrics.get('pending_stale', 0)))}</code> • "
-        f"🔁 Reconnect persistenti: <code>{html.escape(str(metrics.get('revoked_stale', 0)))}</code>",
+        (
+            f"🕓 Pending fermi: "
+            f"<code>{html.escape(str(metrics.get('pending_stale', 0)))}</code> • "
+            f"🔁 Reconnect persistenti: "
+            f"<code>{html.escape(str(metrics.get('revoked_stale', 0)))}</code>"
+        ),
     ]
     oldest_pending_user_id = oauth.get("oldest_pending_user_id")
     if oldest_pending_user_id not in {None, 0, "0"}:
         lines.append(
             "• "
             f"pending_session user=<code>{html.escape(str(oldest_pending_user_id))}</code> "
-            f"created=<code>{html.escape(str(oauth.get('oldest_pending_created_at') or 'n/d'))}</code> "
-            f"expires=<code>{html.escape(str(oauth.get('oldest_pending_expires_at') or 'n/d'))}</code>"
+            "created="
+            f"<code>{html.escape(str(oauth.get('oldest_pending_created_at') or 'n/d'))}</code> "
+            "expires="
+            f"<code>{html.escape(str(oauth.get('oldest_pending_expires_at') or 'n/d'))}</code>"
         )
     for sample in queue_samples:
         lines.append(
             "• "
             f"queue op=<code>{html.escape(str(sample.get('operation_type') or 'n/d'))}</code> "
             f"status=<code>{html.escape(str(sample.get('status') or 'n/d'))}</code> "
-            f"target=<code>{html.escape(str(sample.get('target_telegram_user_id') or 'n/d'))}</code> "
+            "target="
+            f"<code>{html.escape(str(sample.get('target_telegram_user_id') or 'n/d'))}</code> "
             f"attempts=<code>{html.escape(str(sample.get('attempts') or 0))}</code>"
         )
     quick_actions: list[str] = []
     if int(oauth.get("pending_expired", 0)) > 0:
         quick_actions.append(
-            "sessioni OAuth scadute: rivedi <code>/reconnect_users</code> e poi riallinea il backend"
+            "sessioni OAuth scadute: rivedi <code>/reconnect_users</code> "
+            "e poi riallinea il backend"
         )
     if int(queue.get("failed", 0)) > 0:
         quick_actions.append(
@@ -761,9 +780,7 @@ def format_admin_maintenance_overview(payload: Mapping[str, object]) -> str:
             "retry backlog presente: monitora <code>/service_status</code> e verifica il polling"
         )
     if int(metrics.get("pending_stale", 0)) > 0:
-        quick_actions.append(
-            "richieste accesso ferme: passa da <code>/pending_users</code>"
-        )
+        quick_actions.append("richieste accesso ferme: passa da <code>/pending_users</code>")
     if quick_actions:
         lines.append("\n🎯 <b>Priorita' consigliate</b>")
         lines.extend(f"• {action}" for action in quick_actions)
@@ -841,7 +858,9 @@ def _format_personal_snapshot(account_status: Mapping[str, object]) -> str:
     session_status = str(account_status.get("latest_session_status") or "").strip()
     session_expires_at = html.escape(str(account_status.get("latest_session_expires_at") or ""))
     last_seen_order_id = html.escape(str(account_status.get("last_seen_order_id") or ""))
-    last_seen_order_created_at = html.escape(str(account_status.get("last_seen_order_created_at") or ""))
+    last_seen_order_created_at = html.escape(
+        str(account_status.get("last_seen_order_created_at") or "")
+    )
     last_notified_order_id = html.escape(str(account_status.get("last_notified_order_id") or ""))
     last_notified_order_created_at = html.escape(
         str(account_status.get("last_notified_order_created_at") or "")
@@ -1275,13 +1294,16 @@ def format_notifications_status(notification_status: Mapping[str, object]) -> st
     status_text = "attive" if enabled else "disattivate"
     command_hint = "/notifications off" if enabled else "/notifications on"
     next_action = (
-        "Le notifiche sono pronte: puoi controllare anche <code>/why_not_notified &lt;order_id&gt;</code>."
+        "Le notifiche sono pronte: puoi controllare anche "
+        "<code>/why_not_notified &lt;order_id&gt;</code>."
         if enabled
-        else "Riattiva il recapito con <code>/notifications on</code> quando vuoi tornare a ricevere avvisi."
+        else "Riattiva il recapito con <code>/notifications on</code> "
+        "quando vuoi tornare a ricevere avvisi."
     )
     if not account_linked:
         next_action = (
-            "Prima di aspettarti notifiche operative collega un account eBay con <code>/connect</code>."
+            "Prima di aspettarti notifiche operative collega "
+            "un account eBay con <code>/connect</code>."
         )
     return (
         "🔔 <b>Notifiche chat</b>\n"
@@ -1302,7 +1324,8 @@ def format_review_records(records: Iterable[OrderRecord], page_size: int = 8) ->
         return [
             "🗂️ <b>Ordini Da Controllare</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "Nessun ordine recente da controllare manualmente: quelli trovati hanno gia' un dato fiscale."
+            "Nessun ordine recente da controllare manualmente: "
+            "quelli trovati hanno gia' un dato fiscale."
         ]
     pages: list[str] = []
     for start in range(0, len(rows), page_size):
@@ -1312,7 +1335,10 @@ def format_review_records(records: Iterable[OrderRecord], page_size: int = 8) ->
         lines = [
             "🗂️ <b>Ordini Da Controllare</b>",
             "━━━━━━━━━━━━━━━━━━━━━━━━",
-            f"📦 Totale da rivedere: <code>{len(rows)}</code> • 📄 Pagina: <code>{page_no}/{total_pages}</code>",
+            (
+                f"📦 Totale da rivedere: <code>{len(rows)}</code> • "
+                f"📄 Pagina: <code>{page_no}/{total_pages}</code>"
+            ),
             "Usa <code>/ordine &lt;order_id&gt;</code> per aprire il dettaglio di un caso.",
             "",
         ]
@@ -1392,8 +1418,14 @@ def format_priority_records(records: Iterable[OrderRecord], page_size: int = 8) 
         lines = [
             "🚦 <b>Ordini Prioritari</b>",
             "━━━━━━━━━━━━━━━━━━━━━━━━",
-            f"📦 Totale: <code>{len(ordered)}</code> • 📄 Pagina: <code>{page_no}/{total_pages}</code>",
-            "Legenda: <code>review</code> dato mancante • <code>high</code> P.IVA • <code>medium</code> CF",
+            (
+                f"📦 Totale: <code>{len(ordered)}</code> • "
+                f"📄 Pagina: <code>{page_no}/{total_pages}</code>"
+            ),
+            (
+                "Legenda: <code>review</code> dato mancante • "
+                "<code>high</code> P.IVA • <code>medium</code> CF"
+            ),
             "",
         ]
         for record in page_rows:
@@ -1469,9 +1501,7 @@ def format_settings_status(settings_status: Mapping[str, object]) -> str:
             f"<code>{last_notified_order_created_at or 'n/d'}</code>\n"
         )
     if session_ready and latest_session_expires_at:
-        memory_lines += (
-            f"🪄 Sessione connect pronta: <code>{latest_session_expires_at}</code>\n"
-        )
+        memory_lines += f"🪄 Sessione connect pronta: <code>{latest_session_expires_at}</code>\n"
     elif latest_session_status:
         memory_lines += f"🧷 Ultima sessione connect: <code>{latest_session_status}</code>\n"
     next_actions: list[str] = []
@@ -1480,9 +1510,14 @@ def format_settings_status(settings_status: Mapping[str, object]) -> str:
     if not notifications_enabled:
         next_actions.append("riattiva la chat con <code>/notifications on</code>")
     if linked and notifications_enabled:
-        next_actions.append("controlla ordini e notificabilita' con <code>/ultimi</code> o <code>/why_not_notified &lt;order_id&gt;</code>")
+        next_actions.append(
+            "controlla ordini e notificabilita' con <code>/ultimi</code> "
+            "o <code>/why_not_notified &lt;order_id&gt;</code>"
+        )
     if not next_actions:
-        next_actions.append("verifica account e recapito con <code>/account</code> e <code>/notifications</code>")
+        next_actions.append(
+            "verifica account e recapito con <code>/account</code> e <code>/notifications</code>"
+        )
     return (
         "⚙️ <b>Impostazioni</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -1492,9 +1527,7 @@ def format_settings_status(settings_status: Mapping[str, object]) -> str:
         f"🛂 Accesso bot: <code>{user_status_text}</code>\n"
         f"👤 Account eBay: <code>{linked_text}</code>\n"
         f"{memory_lines}"
-        "➡️ Prossimi passi: "
-        + " • ".join(next_actions)
-        + "\n"
+        "➡️ Prossimi passi: " + " • ".join(next_actions) + "\n"
         "Comandi utili: <code>/account</code>, <code>/connect</code>, "
         "<code>/reconnect_status</code>, <code>/disconnect</code>, <code>/leave_bot</code>, "
         "<code>/notifications on</code>, <code>/notifications off</code>."

@@ -132,8 +132,8 @@ from .storage.sqlite import (
     save_tenant_retry_queue_entries,
     save_tenant_runtime_state,
     set_notification_subscription_enabled,
-    summarize_operation_queue,
     summarize_oauth_link_sessions,
+    summarize_operation_queue,
     summarize_tenant_account_status,
     update_telegram_user_status,
     upsert_notification_subscription,
@@ -904,8 +904,10 @@ def _handle_admin_read_command(
     if command == "/unlinked_users":
         unlinked_rows = _filter_user_rows(
             telegram_config,
-            lambda row: str(row.get("status")) == TELEGRAM_USER_STATUS_APPROVED
-            and str(row.get("account_status") or "unlinked") != "linked",
+            lambda row: (
+                str(row.get("status")) == TELEGRAM_USER_STATUS_APPROVED
+                and str(row.get("account_status") or "unlinked") != "linked"
+            ),
         )
         return [
             format_admin_user_list(
@@ -937,7 +939,9 @@ def _handle_admin_read_command(
     if command == "/admin_dashboard":
         return [format_admin_dashboard(_build_admin_dashboard_payload(telegram_config))]
     if command == "/maintenance_overview":
-        return [format_admin_maintenance_overview(_build_admin_maintenance_payload(telegram_config))]
+        return [
+            format_admin_maintenance_overview(_build_admin_maintenance_payload(telegram_config))
+        ]
     if command == "/tenant_health":
         rows = _build_user_rows(telegram_config)
         if args:
@@ -1659,7 +1663,9 @@ def explain_why_order_not_notified(
             "environment": environment,
             "status": "not_eligible",
             "headline": "L'ordine non rientra nei criteri di notifica correnti.",
-            "detail": "Il bot notifica solo ordini con identificativo fiscale presente e valorizzato.",
+            "detail": (
+                "Il bot notifica solo ordini con identificativo fiscale presente e valorizzato."
+            ),
             "delivery_status": delivery_status,
             "delivery_headline": delivery_headline,
             "delivery_detail": delivery_detail,
@@ -2342,7 +2348,9 @@ def process_message(
             return [f"⚠️ {exc}"]
         assert isinstance(records, list)
         review_records = [
-            record for record in (coerce_order_record(item) for item in records) if not record.has_fiscal_identifier()
+            record
+            for record in (coerce_order_record(item) for item in records)
+            if not record.has_fiscal_identifier()
         ]
         return format_review_records(review_records)
 
@@ -2510,9 +2518,7 @@ def process_message(
                     "last_seen_order_created_at": connect_account_status.get(
                         "last_seen_order_created_at"
                     ),
-                    "last_notified_order_id": connect_account_status.get(
-                        "last_notified_order_id"
-                    ),
+                    "last_notified_order_id": connect_account_status.get("last_notified_order_id"),
                     "last_notified_order_created_at": connect_account_status.get(
                         "last_notified_order_created_at"
                     ),
@@ -2705,7 +2711,9 @@ def process_message(
             ),
             None,
         )
-        current_enabled = bool(current_subscription.enabled) if current_subscription is not None else False
+        current_enabled = (
+            bool(current_subscription.enabled) if current_subscription is not None else False
+        )
         filter_mode = (
             _notification_filter_mode_from_filters(current_subscription.filters)
             if current_subscription is not None
@@ -2739,8 +2747,12 @@ def process_message(
                 )
             elif command_args[0] not in {"on", "off"}:
                 return [
-                    "Uso corretto: <code>/notifications</code>, <code>/notifications on</code> "
-                    "<code>/notifications off</code> o <code>/notifications filter all|cf|vat</code>."
+                    (
+                        "Uso corretto: <code>/notifications</code>, "
+                        "<code>/notifications on</code> "
+                        "<code>/notifications off</code> o "
+                        "<code>/notifications filter all|cf|vat</code>."
+                    )
                 ]
             else:
                 enabled = command_args[0] == "on"

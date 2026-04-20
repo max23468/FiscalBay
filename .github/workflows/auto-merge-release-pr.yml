@@ -1,31 +1,107 @@
 name: Auto Merge Release PR
 
 on:
-  pull_request_target:
-    types: [opened, reopened, synchronize, ready_for_review]
+  workflow_run:
+    workflows: ["CI", "PR Title"]
+    types: [completed]
 
 permissions:
   contents: write
   pull-requests: write
 
 concurrency:
-  group: auto-merge-release-pr-${{ github.event.pull_request.number }}
+  group: auto-merge-release-pr-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: true
 
 jobs:
   auto-merge-release-pr:
-    if: >
-      github.event.pull_request.base.ref == 'main' &&
-      !github.event.pull_request.draft &&
-      startsWith(github.event.pull_request.head.ref, 'release-please--') &&
-      startsWith(github.event.pull_request.title, 'chore(main): release ')
+    if: ${{ startsWith(github.event.workflow_run.head_branch, 'release-please--') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Enable auto-merge semantics for release PR
+      - name: Resolve release PR and required workflow state
+        id: gate
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+
+          def run_json(*args: str) -> object:
+              completed = subprocess.run(
+                  list(args),
+                  check=True,
+                  capture_output=True,
+                  text=True,
+              )
+              return json.loads(completed.stdout)
+
+          repository = os.environ["REPOSITORY"]
+          head_branch = os.environ["HEAD_BRANCH"]
+          head_sha = os.environ["HEAD_SHA"]
+
+          prs = run_json(
+              "gh",
+              "pr",
+              "list",
+              "--repo",
+              repository,
+              "--head",
+              head_branch,
+              "--base",
+              "main",
+              "--state",
+              "open",
+              "--json",
+              "number,title,isDraft",
+          )
+          if not prs:
+              print("should_merge=false")
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+                  handle.write("should_merge=false\n")
+              sys.exit(0)
+
+          pr = prs[0]
+          title = str(pr["title"])
+          if bool(pr["isDraft"]) or not title.startswith("chore(main): release "):
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+                  handle.write("should_merge=false\n")
+              sys.exit(0)
+
+          runs_payload = run_json(
+              "gh",
+              "api",
+              f"repos/{repository}/actions/runs?head_sha={head_sha}&per_page=100",
+          )
+          workflow_runs = runs_payload.get("workflow_runs", [])
+          required = {"CI", "PR Title"}
+          conclusions: dict[str, str] = {}
+          for run in workflow_runs:
+              name = str(run.get("name") or "")
+              if name not in required:
+                  continue
+              if str(run.get("status") or "") != "completed":
+                  continue
+              conclusions.setdefault(name, str(run.get("conclusion") or ""))
+
+          should_merge = conclusions.get("CI") == "success" and conclusions.get("PR Title") == "success"
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write(f"should_merge={'true' if should_merge else 'false'}\n")
+              handle.write(f"pr_number={pr['number']}\n")
+          print(json.dumps({"pr_number": pr["number"], "conclusions": conclusions}, ensure_ascii=False))
+          PY
+
+      - name: Merge release PR after checks pass
+        if: ${{ steps.gate.outputs.should_merge == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.gate.outputs.pr_number }}
           REPOSITORY: ${{ github.repository }}
         run: |
           gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --squash --delete-branch

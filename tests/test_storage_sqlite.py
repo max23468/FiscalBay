@@ -242,9 +242,7 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             with sqlite3.connect(db_path) as conn:
                 conn.row_factory = sqlite3.Row
                 conn.execute("PRAGMA user_version = 8")
-                conn.execute(
-                    "CREATE TABLE notified_order_ids (order_id TEXT PRIMARY KEY)"
-                )
+                conn.execute("CREATE TABLE notified_order_ids (order_id TEXT PRIMARY KEY)")
                 conn.execute("CREATE TABLE notified_hashes (hash TEXT PRIMARY KEY)")
                 conn.execute(
                     "CREATE TABLE retry_queue "

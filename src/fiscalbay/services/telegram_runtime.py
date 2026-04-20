@@ -65,7 +65,9 @@ def _build_contextual_main_menu(
             telegram_user_id=telegram_user_id,
         )
         resolved_environment = (
-            tenant_context.environment if tenant_context and tenant_context.environment else ebay_environment
+            tenant_context.environment
+            if tenant_context and tenant_context.environment
+            else ebay_environment
         )
         account_status = summarize_tenant_account_status(
             telegram_config.state_path,
