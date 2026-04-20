@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
+import re
 import secrets
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
@@ -235,6 +237,7 @@ SERVICE_MODES = {
     SERVICE_MODE_DEGRADED,
 }
 DEFAULT_ADMIN_SUMMARY_INTERVAL_SECONDS = 6 * 60 * 60
+DEFAULT_BRANDING_SYNC_BACKOFF_SECONDS = 6 * 60 * 60
 PENDING_STALE_HOURS = 48
 UNLINKED_STALE_HOURS = 72
 REVOKED_STALE_HOURS = 72
@@ -262,19 +265,61 @@ def _branding_sync_enabled() -> bool:
     return value not in {"0", "false", "no", "off"}
 
 
-def sync_runtime_branding(token: str) -> None:
+def _branding_profile_hash(profile: dict[str, object]) -> str:
+    serialized = json.dumps(profile, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _branding_profile_hash_key() -> str:
+    return "branding_sync:profile_hash"
+
+
+def _branding_sync_retry_at_key() -> str:
+    return "branding_sync:retry_at"
+
+
+def _extract_retry_after_seconds(error: TelegramApiError) -> int | None:
+    if error.status_code != 429:
+        return None
+    match = re.search(r"retry_after[_ =:]+(\d+)", str(error), flags=re.IGNORECASE)
+    if match is None:
+        return None
+    return max(1, int(match.group(1)))
+
+
+def sync_runtime_branding(telegram_config: TelegramConfig) -> None:
     if not _branding_sync_enabled():
         return
     branding_profile = build_telegram_branding_profile()
     commands = list(branding_profile["commands"])
+    profile_hash = _branding_profile_hash(branding_profile)
+    stored_hash = load_kv_value(telegram_config.state_path, _branding_profile_hash_key())
+    if stored_hash == profile_hash:
+        log_event(LOGGER, logging.INFO, "telegram_branding_sync_skipped", reason="unchanged")
+        return
+
+    now = datetime.now(timezone.utc)
+    retry_at_raw = load_kv_value(telegram_config.state_path, _branding_sync_retry_at_key())
+    retry_at = _parse_iso_timestamp(retry_at_raw)
+    if retry_at is not None and now < retry_at:
+        log_event(
+            LOGGER,
+            logging.INFO,
+            "telegram_branding_sync_skipped",
+            reason="backoff_active",
+            retry_at=retry_at.isoformat().replace("+00:00", "Z"),
+        )
+        return
+
     try:
         sync_bot_branding(
-            token,
+            telegram_config.token,
             name=str(branding_profile["name"]),
             short_description=str(branding_profile["short_description"]),
             description=str(branding_profile["description"]),
             commands=commands,
         )
+        save_kv_value(telegram_config.state_path, _branding_profile_hash_key(), profile_hash)
         log_event(
             LOGGER,
             logging.INFO,
@@ -282,6 +327,16 @@ def sync_runtime_branding(token: str) -> None:
             command_count=len(commands),
         )
     except TelegramApiError as exc:
+        if exc.status_code == 429:
+            retry_after_seconds = (
+                _extract_retry_after_seconds(exc) or DEFAULT_BRANDING_SYNC_BACKOFF_SECONDS
+            )
+            retry_at = now + timedelta(seconds=retry_after_seconds)
+            save_kv_value(
+                telegram_config.state_path,
+                _branding_sync_retry_at_key(),
+                retry_at.isoformat().replace("+00:00", "Z"),
+            )
         log_event(
             LOGGER,
             logging.WARNING,
@@ -650,23 +705,17 @@ def _build_admin_dashboard_payload(telegram_config: TelegramConfig) -> dict[str,
     approved_users = sum(
         1
         for row in rows
-        if str(row.get("status"))
-        in {TELEGRAM_USER_STATUS_APPROVED, TELEGRAM_USER_STATUS_ADMIN}
+        if str(row.get("status")) in {TELEGRAM_USER_STATUS_APPROVED, TELEGRAM_USER_STATUS_ADMIN}
     )
     service_mode = _load_service_state(telegram_config.state_path).get(
         "mode",
         SERVICE_MODE_NORMAL,
     )
-    pending_users = sum(
-        1
-        for row in rows
-        if str(row.get("status")) == TELEGRAM_USER_STATUS_PENDING
-    )
+    pending_users = sum(1 for row in rows if str(row.get("status")) == TELEGRAM_USER_STATUS_PENDING)
     linked_users = sum(
         1
         for row in rows
-        if str(row.get("account_status")) == "linked"
-        and str(row.get("token_status")) == "active"
+        if str(row.get("account_status")) == "linked" and str(row.get("token_status")) == "active"
     )
     return {
         "service_mode": service_mode,
@@ -1499,9 +1548,7 @@ def process_message(
             ]
         requested_mode = str(args[0]).strip().lower()
         if requested_mode not in SERVICE_MODES:
-            return [
-                "Uso corretto: <code>/service_mode normal|maintenance|degraded</code>"
-            ]
+            return ["Uso corretto: <code>/service_mode normal|maintenance|degraded</code>"]
         remaining = _command_rate_limit_remaining_seconds(
             telegram_config.state_path,
             telegram_user_id=telegram_user_id,
@@ -1639,17 +1686,21 @@ def process_message(
         )
         return [format_access_request_status(admin_notified=admin_notified)]
 
-    if command in {
-        "/approve_user",
-        "/reject_user",
-        "/suspend_user",
-        "/reactivate_user",
-        "/users",
-        "/pending_users",
-        "/unlinked_users",
-        "/tenant_health",
-        "/admin_dashboard",
-    } and not has_command_capability:
+    if (
+        command
+        in {
+            "/approve_user",
+            "/reject_user",
+            "/suspend_user",
+            "/reactivate_user",
+            "/users",
+            "/pending_users",
+            "/unlinked_users",
+            "/tenant_health",
+            "/admin_dashboard",
+        }
+        and not has_command_capability
+    ):
         return ["Solo l'admin puo' usare questo comando."]
 
     if command == "/users":
@@ -1692,15 +1743,9 @@ def process_message(
                 target_user_id = int(args[0])
             except ValueError:
                 return ["Uso corretto: <code>/tenant_health [telegram_user_id]</code>"]
-            rows = [
-                row for row in rows if int(row.get("telegram_user_id") or 0) == target_user_id
-            ]
+            rows = [row for row in rows if int(row.get("telegram_user_id") or 0) == target_user_id]
         else:
-            rows = [
-                row
-                for row in rows
-                if str(row.get("status") or "") != TELEGRAM_USER_STATUS_NEW
-            ]
+            rows = [row for row in rows if str(row.get("status") or "") != TELEGRAM_USER_STATUS_NEW]
         return [format_tenant_health(rows)]
 
     if command in {"/approve_user", "/reject_user", "/suspend_user", "/reactivate_user"}:

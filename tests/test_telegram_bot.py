@@ -28,9 +28,11 @@ from src.fiscalbay.bot import (
     process_message,
     release_process_lock,
     send_message,
+    sync_runtime_branding,
     update_state_with_records,
 )
 from src.fiscalbay.clients.telegram import sync_bot_branding
+from src.fiscalbay.storage.sqlite import load_kv_value
 from src.fiscalbay.telegram_commands import (
     BOT_DISPLAY_NAME,
     BOT_TAGLINE,
@@ -284,6 +286,55 @@ class TelegramBotTests(unittest.TestCase):
                 "setChatMenuButton",
             ],
         )
+
+    @patch("src.fiscalbay.bot.sync_bot_branding")
+    def test_sync_runtime_branding_skips_when_profile_is_unchanged(
+        self,
+        mock_sync_bot_branding,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="token",
+                allowed_chat_ids=set(),
+                notify_chat_ids=set(),
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_branding(config)
+            sync_runtime_branding(config)
+
+            self.assertEqual(mock_sync_bot_branding.call_count, 1)
+            self.assertIsNotNone(
+                load_kv_value(str(db_path), "branding_sync:profile_hash"),
+            )
+
+    @patch("src.fiscalbay.bot.sync_bot_branding")
+    def test_sync_runtime_branding_backs_off_after_rate_limit(
+        self,
+        mock_sync_bot_branding,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="token",
+                allowed_chat_ids=set(),
+                notify_chat_ids=set(),
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+            mock_sync_bot_branding.side_effect = TelegramApiError(
+                "Errore Telegram su setMyName: HTTP 429: Too Many Requests: retry_after_120",
+                status_code=429,
+            )
+
+            sync_runtime_branding(config)
+            sync_runtime_branding(config)
+
+            self.assertEqual(mock_sync_bot_branding.call_count, 1)
+            self.assertEqual(load_kv_value(str(db_path), "branding_sync:profile_hash"), None)
+            self.assertIsNotNone(load_kv_value(str(db_path), "branding_sync:retry_at"))
 
     def test_process_lock_writes_metadata_and_removes_file_on_release(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -98,7 +98,8 @@ Superfici gestite automaticamente dal runtime:
 Configurazione:
 
 - env opzionale: `TELEGRAM_SYNC_BRANDING=1`
-- default: branding sync attivo a ogni startup del bot
+- default: branding sync attivo con controllo idempotente; riallinea Telegram solo quando il profilo cambia
+- in caso di `429 Too Many Requests`, il bot salva un backoff temporaneo per evitare retry inutili ai riavvii successivi
 - se vuoi disattivarlo temporaneamente: `TELEGRAM_SYNC_BRANDING=0`
 
 Superfici non aggiornabili via Telegram Bot API e quindi manuali:
