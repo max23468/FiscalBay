@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/max23468/FiscalBay/compare/v0.6.0...v0.6.1) (2026-04-20)
+
+
+### Bug Fixes
+
+* use dedicated token for release please publishing ([#41](https://github.com/max23468/FiscalBay/issues/41)) ([bf09419](https://github.com/max23468/FiscalBay/commit/bf09419c036b68718bd7199604cd7f835a47f384))
+
 ## [0.6.0](https://github.com/max23468/FiscalBay/compare/v0.5.0...v0.6.0) (2026-04-20)
 
 
