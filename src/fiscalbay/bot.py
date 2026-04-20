@@ -20,7 +20,12 @@ from .application import resolve_fetch_context as _resolve_fetch_context
 from .bot_messaging import request_with_backoff
 from .bot_messaging import send_message as _send_message
 from .clients.ebay import revoke_user_refresh_token
-from .clients.telegram import InlineKeyboardMarkup, ensure_long_polling, telegram_request
+from .clients.telegram import (
+    InlineKeyboardMarkup,
+    ensure_long_polling,
+    sync_bot_branding,
+    telegram_request,
+)
 from .config import configure_logging, load_config, load_telegram_config
 from .errors import ConfigurationError, TelegramApiError
 from .logging_utils import log_event
@@ -146,6 +151,7 @@ from .telegram_commands import (
     build_help_text,
     build_main_menu_markup,
     build_start_text,
+    build_telegram_branding_profile,
     callback_command_from_data,
     chunk_message,
     format_access_request_status,
@@ -249,6 +255,39 @@ def coerce_runtime_state(state: BotRuntimeStateLike) -> BotRuntimeState:
 
 def _now_utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _branding_sync_enabled() -> bool:
+    value = os.getenv("TELEGRAM_SYNC_BRANDING", "1").strip().lower()
+    return value not in {"0", "false", "no", "off"}
+
+
+def sync_runtime_branding(token: str) -> None:
+    if not _branding_sync_enabled():
+        return
+    branding_profile = build_telegram_branding_profile()
+    commands = list(branding_profile["commands"])
+    try:
+        sync_bot_branding(
+            token,
+            name=str(branding_profile["name"]),
+            short_description=str(branding_profile["short_description"]),
+            description=str(branding_profile["description"]),
+            commands=commands,
+        )
+        log_event(
+            LOGGER,
+            logging.INFO,
+            "telegram_branding_synced",
+            command_count=len(commands),
+        )
+    except TelegramApiError as exc:
+        log_event(
+            LOGGER,
+            logging.WARNING,
+            "telegram_branding_sync_failed",
+            error=exc,
+        )
 
 
 def _parse_iso_timestamp(value: str | None) -> datetime | None:
@@ -2401,6 +2440,7 @@ def run_bot() -> int:
         send_message_fn=send_message,
         maybe_send_new_order_notifications_fn=maybe_send_new_order_notifications,
         request_with_backoff_fn=request_with_backoff,
+        sync_bot_branding_fn=sync_runtime_branding,
     )
 
 

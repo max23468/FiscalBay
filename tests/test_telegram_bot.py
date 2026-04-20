@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from src.fiscalbay.clients.telegram import sync_bot_branding
 from src.fiscalbay.bot import (
     CALLBACK_HELP,
     CALLBACK_REQUEST_ACCESS,
@@ -29,6 +30,11 @@ from src.fiscalbay.bot import (
     release_process_lock,
     send_message,
     update_state_with_records,
+)
+from src.fiscalbay.telegram_commands import (
+    BOT_DISPLAY_NAME,
+    BOT_TAGLINE,
+    build_telegram_branding_profile,
 )
 
 
@@ -119,6 +125,17 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("/notifications on", text)
         self.assertIn("/request_access", text)
         self.assertIn("/users", text)
+        self.assertIn(BOT_DISPLAY_NAME, text)
+
+    def test_build_telegram_branding_profile_contains_expected_fields(self) -> None:
+        profile = build_telegram_branding_profile()
+        self.assertEqual(profile["name"], BOT_DISPLAY_NAME)
+        self.assertEqual(profile["short_description"], BOT_TAGLINE)
+        commands = profile["commands"]
+        self.assertIsInstance(commands, list)
+        self.assertGreaterEqual(len(commands), 6)
+        self.assertEqual(commands[0]["command"], "help")
+        self.assertEqual(commands[1]["command"], "connect")
 
     @patch("src.fiscalbay.bot.fetch_records")
     @patch("src.fiscalbay.bot.load_config")
@@ -244,6 +261,28 @@ class TelegramBotTests(unittest.TestCase):
             "token",
             "deleteWebhook",
             {"drop_pending_updates": False},
+        )
+
+    @patch("src.fiscalbay.clients.telegram.telegram_request")
+    def test_sync_bot_branding_updates_profile_and_commands(self, mock_telegram_request) -> None:
+        profile = build_telegram_branding_profile()
+        sync_bot_branding(
+            "token",
+            name=profile["name"],
+            short_description=profile["short_description"],
+            description=profile["description"],
+            commands=profile["commands"],
+        )
+        methods = [call.args[1] for call in mock_telegram_request.call_args_list]
+        self.assertEqual(
+            methods,
+            [
+                "setMyName",
+                "setMyShortDescription",
+                "setMyDescription",
+                "setMyCommands",
+                "setChatMenuButton",
+            ],
         )
 
     def test_process_lock_writes_metadata_and_removes_file_on_release(self) -> None:

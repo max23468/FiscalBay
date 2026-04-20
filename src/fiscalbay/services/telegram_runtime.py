@@ -33,6 +33,15 @@ LOGGER = logging.getLogger("fiscalbay.telegram_runtime")
 _ACTIVE_SHUTDOWN_EVENT: threading.Event | None = None
 
 
+def _sync_branding_if_configured(
+    telegram_config: TelegramConfig,
+    sync_bot_branding_fn: Callable[[str], None] | None,
+) -> None:
+    if sync_bot_branding_fn is None:
+        return
+    sync_bot_branding_fn(telegram_config.token)
+
+
 def extract_message_context(update: dict) -> tuple[int | None, str, int | None]:
     message = update.get("message") or update.get("edited_message") or {}
     chat = message.get("chat") or {}
@@ -150,6 +159,7 @@ def run_bot(
     send_message_fn: Callable[..., None],
     maybe_send_new_order_notifications_fn: Callable[[TelegramConfig, str], None],
     request_with_backoff_fn: Callable[..., object],
+    sync_bot_branding_fn: Callable[[str], None] | None = None,
 ) -> int:
     shutdown_event = threading.Event()
     global _ACTIVE_SHUTDOWN_EVENT
@@ -166,6 +176,7 @@ def run_bot(
         ebay_environment = os.getenv("EBAY_ENVIRONMENT", "production")
         lock_handle = acquire_process_lock_fn(telegram_config.lock_path)
         ensure_long_polling(telegram_config.token)
+        _sync_branding_if_configured(telegram_config, sync_bot_branding_fn)
         log_event(
             LOGGER,
             logging.INFO,

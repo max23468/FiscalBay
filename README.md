@@ -2,7 +2,11 @@
 
 FiscalBay e' un tool operativo con CLI e bot Telegram per leggere gli ordini eBay e mostrare l'identificativo fiscale restituito dalle API ufficiali eBay, inclusi i casi in cui il tipo e' `CODICE_FISCALE`.
 
-Payoff: `Order tax ID assistant for eBay sellers`.
+Payoff: `Assistente Codice Fiscale ordini per venditori eBay`.
+
+Linee guida brand e asset pronti all'uso: [`docs/BRAND_GUIDELINES.md`](docs/BRAND_GUIDELINES.md), `assets/branding/*`.
+Set definitivo approvato: logo orizzontale, mark e avatar Telegram nel concept `Seller Card`.
+Export operativi pronti: `assets/branding/exports/fiscalbay-avatar-telegram-512.png`, `fiscalbay-mark-512.png`, `fiscalbay-logo-light-2048.png`, `fiscalbay-logo-dark-2048.png`.
 
 Il progetto nasce per un caso pratico molto preciso: interrogare gli ordini recenti, leggere il dettaglio completo di ogni ordine e rendere consultabile da terminale o da Telegram il contenuto di `buyer.taxIdentifier`.
 
@@ -205,6 +209,7 @@ Nota OAuth eBay:
 | `TELEGRAM_ALLOWED_CHAT_IDS` | **Sì** | vuoto (deny-all) | Chat autorizzate, separate da virgola. Se vuota, nessuna chat è autorizzata |
 | `TELEGRAM_NOTIFY_CHAT_IDS` | Consigliata | stessi valori di `TELEGRAM_ALLOWED_CHAT_IDS` | Chat che ricevono notifiche automatiche |
 | `TELEGRAM_POLL_TIMEOUT` | No | `30` | Timeout long polling Telegram |
+| `TELEGRAM_SYNC_BRANDING` | No | `1` | Se attiva, sincronizza nome, descrizione e menu comandi Telegram a ogni avvio del bot |
 | `TELEGRAM_BOT_LOCK_PATH` | No | `data/telegram_bot.lock` | File lock del processo |
 | `EBAY_ORDER_POLL_INTERVAL` | No | `120` | Intervallo polling nuovi ordini |
 | `EBAY_ORDER_STATE_PATH` | No | `data/state.db` | File SQLite per stato e metriche |
