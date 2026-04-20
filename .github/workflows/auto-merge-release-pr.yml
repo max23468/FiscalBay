@@ -22,7 +22,7 @@ jobs:
       - name: Resolve release PR and required workflow state
         id: gate
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -100,7 +100,7 @@ jobs:
       - name: Merge release PR after checks pass
         if: ${{ steps.gate.outputs.should_merge == 'true' }}
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ steps.gate.outputs.pr_number }}
           REPOSITORY: ${{ github.repository }}
         run: |

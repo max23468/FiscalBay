@@ -104,6 +104,7 @@ Il flusso e' allineato a GitHub:
 - i merge su `main` aggiornano automaticamente una Release PR
 - `CI` e `PR Title` girano anche sulla Release PR
 - il workflow `Auto Merge Release PR` la chiude automaticamente quando e' una PR `release-please` e i check sono verdi
+- per evitare il limite `Resource not accessible by integration` sulla pubblicazione finale, configura il secret repository `RELEASE_PLEASE_TOKEN`; senza secret i workflow ripiegano su `GITHUB_TOKEN`, ma la creazione della GitHub Release puo' fallire
 - la Release PR aggiorna `CHANGELOG.md` e la versione in `pyproject.toml`
 - il merge della Release PR crea tag, GitHub Release e allega automaticamente gli artefatti buildati
 - se serve, il workflow `Release Assets` permette di rigenerare manualmente gli artefatti per un tag esistente

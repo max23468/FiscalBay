@@ -193,6 +193,11 @@ Il flusso standard e' questo:
 7. lo stesso workflow builda il progetto e allega i file alla GitHub Release
 8. se serve ricostruire gli artefatti senza creare una nuova release, si usa `Release Assets` in modalita' manuale
 
+Nota operativa:
+
+- per creare la GitHub Release in modo affidabile, configura il secret repository `RELEASE_PLEASE_TOKEN`
+- il workflow fa fallback su `GITHUB_TOKEN`, ma GitHub puo' rifiutare la pubblicazione con `Resource not accessible by integration`
+
 In modalita' main-only:
 
 - il commit su `main` sostituisce il merge della feature PR

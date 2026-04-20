@@ -85,6 +85,7 @@ Nota operativa:
 
 - l'auto-merge riguarda solo PR con branch `release-please--*` e titolo `chore(main): release ...`
 - il gate richiede oggi `CI` e `PR Title` verdi sulla Release PR
+- per pubblicare tag e GitHub Release in modo affidabile, configura il secret repository `RELEASE_PLEASE_TOKEN`; con il solo `GITHUB_TOKEN` GitHub puo' rispondere con `Resource not accessible by integration`
 - se in futuro vuoi reintrodurre un checkpoint manuale prima della pubblicazione, disabilita il workflow `Auto Merge Release PR`
 
 Fallback ufficiale senza branch protection / senza PR obbligatorie:
