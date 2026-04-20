@@ -91,6 +91,10 @@ In pratica, da Codex web/mobile ti basta:
 
 Il repository usa Semantic Versioning con tag GitHub nel formato `vX.Y.Z`.
 
+Regola operativa minima:
+
+- su `main` non fare bump manuali di versione, tag manuali o release manuali nel flusso normale; il bump lo decide sempre `release-please` a partire dal tipo di commit (`feat`, `fix`, `perf`, `!`)
+
 - `PATCH` per bugfix compatibili, ad esempio `v0.1.1`
 - `MINOR` per nuove funzionalita' compatibili, ad esempio `v0.2.0`
 - `MAJOR` per breaking change, ad esempio `v1.0.0`

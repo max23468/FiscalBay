@@ -44,6 +44,15 @@ Prima di finalizzare:
   - test eseguiti
   - eventuali limitazioni note
 
+## Release e versioning
+- Questo repository usa `release-please` come meccanismo ufficiale di versionamento e release anche quando si lavora direttamente su `main`.
+- Regola fissa per gli agenti: per cambi funzionali o osservabili nel runtime, scegli sempre un commit message `feat:`, `fix:` o `perf:` coerente con l'impatto reale. Non usare `refactor:`, `chore:` o `docs:` se il comportamento utente/operatore cambia davvero.
+- Regola fissa per gli agenti: valuta sempre l'impatto release prima di creare il commit. Se il cambiamento merita release, il commit deve rifletterlo nel tipo (`feat`/`fix`/`perf` o `!` per breaking change).
+- Regola fissa per gli agenti: non eseguire bump manuali di versione in `pyproject.toml`, non aggiornare manualmente `CHANGELOG.md` root, non modificare `.release-please-manifest.json`, non creare tag Git manuali e non pubblicare release GitHub manuali, salvo richiesta esplicita dell'utente per una riparazione straordinaria del flusso.
+- Regola fissa per gli agenti: se l'utente chiede una release, il percorso standard e' verificare lo stato di `release-please`, pushare i commit corretti su `main` e usare la Release PR / workflow ufficiale invece di un rilascio manuale.
+- Regola fissa per gli agenti: se in un turno sono stati fatti cambi funzionali ma manca un commit Conventional Commit adeguato, non considerare il lavoro chiuso finche' il commit non e' coerente con il flusso `release-please`.
+- Se il flusso automatico sembra rotto, fermati e spiega il motivo prima di introdurre workaround manuali che bypassano `release-please`.
+
 ## Policy per agenti
 - Non inventare risultati di test/comandi non eseguiti.
 - Se un'informazione è incerta, dichiarare assunzioni e limiti.
