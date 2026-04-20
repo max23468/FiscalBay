@@ -1,0 +1,31 @@
+name: Auto Merge Release PR
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: auto-merge-release-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  auto-merge-release-pr:
+    if: >
+      github.event.pull_request.base.ref == 'main' &&
+      !github.event.pull_request.draft &&
+      startsWith(github.event.pull_request.head.ref, 'release-please--') &&
+      startsWith(github.event.pull_request.title, 'chore(main): release ')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Enable auto-merge semantics for release PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --squash --delete-branch

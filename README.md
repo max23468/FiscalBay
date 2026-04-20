@@ -102,6 +102,7 @@ Regola operativa minima:
 Il flusso e' allineato a GitHub:
 
 - i merge su `main` aggiornano automaticamente una Release PR
+- il workflow `Auto Merge Release PR` la chiude automaticamente quando e' una PR `release-please`
 - la Release PR aggiorna `CHANGELOG.md` e la versione in `pyproject.toml`
 - il merge della Release PR crea tag, GitHub Release e allega automaticamente gli artefatti buildati
 - se serve, il workflow `Release Assets` permette di rigenerare manualmente gli artefatti per un tag esistente

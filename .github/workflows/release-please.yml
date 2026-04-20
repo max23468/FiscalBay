@@ -30,6 +30,13 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
+      - name: Log release-please outputs
+        run: |
+          echo "release_created=${{ steps.release.outputs.release_created }}"
+          echo "prs_created=${{ steps.release.outputs.prs_created }}"
+          echo "pr=${{ steps.release.outputs.pr }}"
+          echo "prs=${{ steps.release.outputs.prs }}"
+
       - name: Checkout repository
         if: ${{ steps.release.outputs.release_created }}
         uses: actions/checkout@v6
