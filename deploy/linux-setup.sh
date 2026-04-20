@@ -10,6 +10,7 @@ APP_DIR="${APP_DIR:-${REPO_DIR}}"
 VENV_DIR="${APP_DIR}/.venv"
 DATA_DIR="${APP_DIR}/data"
 ENV_FILE="${APP_DIR}/.env"
+PYTHON_BIN="${PYTHON_BIN:-}"
 SERVICE_NAME="fiscalbay-bot"
 SERVICE_TEMPLATE="${APP_DIR}/deploy/fiscalbay-bot.service"
 SERVICE_TARGET="/etc/systemd/system/${SERVICE_NAME}.service"
@@ -31,6 +32,24 @@ RECONCILE_TIMER_TARGET="/etc/systemd/system/${RECONCILE_SERVICE_NAME}.timer"
 OAUTH_SERVICE_NAME="fiscalbay-oauth"
 OAUTH_SERVICE_TEMPLATE="${APP_DIR}/deploy/fiscalbay-oauth.service"
 OAUTH_SERVICE_TARGET="/etc/systemd/system/${OAUTH_SERVICE_NAME}.service"
+
+select_python_bin() {
+  if [ -n "${PYTHON_BIN}" ] && command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
+    echo "${PYTHON_BIN}"
+    return
+  fi
+
+  for candidate in python3.11 python3.10 python3; do
+    if command -v "${candidate}" >/dev/null 2>&1; then
+      echo "${candidate}"
+      return
+    fi
+  done
+
+  echo "python3"
+}
+
+PYTHON_BIN="$(select_python_bin)"
 
 install_packages() {
   if command -v apt-get >/dev/null 2>&1; then
@@ -100,7 +119,7 @@ sudo chmod 750 "${APP_DIR}"
 sudo chmod 750 "${DATA_DIR}"
 
 if [ ! -d "${VENV_DIR}" ]; then
-  sudo -u "${APP_USER}" python3 -m venv "${VENV_DIR}"
+  sudo -u "${APP_USER}" "${PYTHON_BIN}" -m venv "${VENV_DIR}"
 fi
 
 sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install --upgrade pip
