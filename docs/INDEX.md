@@ -6,6 +6,8 @@ Indice centrale della documentazione del progetto.
 
 - `../README.md`
   - panoramica generale, setup rapido, uso CLI e link principali
+- `docs/BRAND_GUIDELINES.md`
+  - identita' del prodotto, naming, tone of voice e direzione visuale di FiscalBay
 - `docs/ROADMAP.md`
   - direzione del prodotto e ordine delle prossime fasi
 - `docs/CONTEXT.md`

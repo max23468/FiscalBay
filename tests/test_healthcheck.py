@@ -4,14 +4,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.ebay_cf.healthcheck import (
+from src.fiscalbay.healthcheck import (
     build_health_report,
     default_max_age_seconds,
     main,
     render_text_report,
 )
-from src.ebay_cf.models import BotMetrics, BotRuntimeState, TelegramConfig
-from src.ebay_cf.storage.sqlite import save_retry_queue, save_state, save_tenant_runtime_state
+from src.fiscalbay.models import BotMetrics, BotRuntimeState, TelegramConfig
+from src.fiscalbay.storage.sqlite import save_retry_queue, save_state, save_tenant_runtime_state
 
 
 class HealthcheckTests(unittest.TestCase):
@@ -42,7 +42,7 @@ class HealthcheckTests(unittest.TestCase):
                 },
             )
 
-            with patch("src.ebay_cf.healthcheck.datetime") as mock_datetime:
+            with patch("src.fiscalbay.healthcheck.datetime") as mock_datetime:
                 from datetime import datetime, timezone
 
                 mock_datetime.now.return_value = datetime(2026, 4, 5, 20, 2, 0, tzinfo=timezone.utc)
@@ -56,7 +56,7 @@ class HealthcheckTests(unittest.TestCase):
                     retry_queue_path=str(db_path),
                     lock_path=str(lock_path),
                 )
-                with patch("src.ebay_cf.healthcheck.load_telegram_config", return_value=config):
+                with patch("src.fiscalbay.healthcheck.load_telegram_config", return_value=config):
                     report = build_health_report()
 
             self.assertTrue(report["ok"])
@@ -94,7 +94,7 @@ class HealthcheckTests(unittest.TestCase):
                 [{"chat_id": 123, "text": "retry me", "attempts": 1}],
             )
 
-            with patch("src.ebay_cf.healthcheck.datetime") as mock_datetime:
+            with patch("src.fiscalbay.healthcheck.datetime") as mock_datetime:
                 from datetime import datetime, timezone
 
                 mock_datetime.now.return_value = datetime(2026, 4, 5, 21, 0, 0, tzinfo=timezone.utc)
@@ -108,8 +108,8 @@ class HealthcheckTests(unittest.TestCase):
                     retry_queue_path=str(db_path),
                     lock_path=str(Path(tmpdir) / "missing.lock"),
                 )
-                with patch("src.ebay_cf.healthcheck.load_telegram_config", return_value=config):
-                    with patch("src.ebay_cf.healthcheck.service_is_active", return_value=False):
+                with patch("src.fiscalbay.healthcheck.load_telegram_config", return_value=config):
+                    with patch("src.fiscalbay.healthcheck.service_is_active", return_value=False):
                         report = build_health_report(
                             max_age_seconds=60,
                             check_service_active=True,
@@ -166,7 +166,7 @@ class HealthcheckTests(unittest.TestCase):
                 ),
             )
 
-            with patch("src.ebay_cf.healthcheck.datetime") as mock_datetime:
+            with patch("src.fiscalbay.healthcheck.datetime") as mock_datetime:
                 from datetime import datetime, timezone
 
                 mock_datetime.now.return_value = datetime(2026, 4, 5, 20, 3, 0, tzinfo=timezone.utc)
@@ -180,7 +180,7 @@ class HealthcheckTests(unittest.TestCase):
                     retry_queue_path=str(db_path),
                     lock_path=str(lock_path),
                 )
-                with patch("src.ebay_cf.healthcheck.load_telegram_config", return_value=config):
+                with patch("src.fiscalbay.healthcheck.load_telegram_config", return_value=config):
                     report = build_health_report()
 
             self.assertTrue(report["ok"])
@@ -230,7 +230,7 @@ class HealthcheckTests(unittest.TestCase):
         self.assertIn("warnings: retry_queue_not_empty", text)
         self.assertIn("multi_tenant.tenant_users: 1", text)
 
-    @patch("src.ebay_cf.healthcheck.build_health_report")
+    @patch("src.fiscalbay.healthcheck.build_health_report")
     def test_main_can_render_json(self, mock_build_health_report) -> None:
         mock_build_health_report.return_value = {
             "ok": True,

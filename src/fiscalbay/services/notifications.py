@@ -21,7 +21,7 @@ from ..telegram_commands import (
     record_fingerprint,
 )
 
-LOGGER = logging.getLogger("ebaycf.notifications")
+LOGGER = logging.getLogger("fiscalbay.notifications")
 
 
 def increment_metric(state: BotRuntimeState, metric: str, amount: int = 1) -> None:

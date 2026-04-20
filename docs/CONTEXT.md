@@ -28,7 +28,7 @@ Nota importante:
 
 ## Cos'e' il progetto
 
-`eBay CF Tool` e' un progetto Python che legge gli ordini eBay tramite API ufficiali e mostra l'identificativo fiscale disponibile nei dati ordine, in particolare i casi in cui eBay restituisce `buyer.taxIdentifier` con tipo `CODICE_FISCALE`.
+`FiscalBay` e' un progetto Python che legge gli ordini eBay tramite API ufficiali e mostra l'identificativo fiscale disponibile nei dati ordine, in particolare i casi in cui eBay restituisce `buyer.taxIdentifier` con tipo `CODICE_FISCALE`.
 
 Il progetto oggi ha due modalita' principali:
 
@@ -81,13 +81,13 @@ Non va trattato come:
 
 ### Entry point
 
-- `ebay-cf`
+- `fiscalbay`
   - utility CLI
-- `ebay-telegram-bot`
+- `fiscalbay-bot`
   - bot Telegram
 
-Gli entrypoint `ebay-cf` e `ebay-telegram-bot` puntano direttamente al package interno
-(`src/ebay_cf/cli.py` e `src/ebay_cf/bot.py`).
+Gli entrypoint `fiscalbay` e `fiscalbay-bot` puntano direttamente al package interno
+(`src/fiscalbay/cli.py` e `src/fiscalbay/bot.py`).
 
 Nota di stato:
 
@@ -98,31 +98,31 @@ Nota di stato:
 
 Package principale:
 
-- `src/ebay_cf/cli.py`
-- `src/ebay_cf/bot.py`
-- `src/ebay_cf/config.py`
-- `src/ebay_cf/models.py`
-- `src/ebay_cf/errors.py`
-- `src/ebay_cf/logging_utils.py`
-- `src/ebay_cf/healthcheck.py`
-- `src/ebay_cf/git_utils.py`
-- `src/ebay_cf/retry.py`
-- `src/ebay_cf/telegram_commands.py`
+- `src/fiscalbay/cli.py`
+- `src/fiscalbay/bot.py`
+- `src/fiscalbay/config.py`
+- `src/fiscalbay/models.py`
+- `src/fiscalbay/errors.py`
+- `src/fiscalbay/logging_utils.py`
+- `src/fiscalbay/healthcheck.py`
+- `src/fiscalbay/git_utils.py`
+- `src/fiscalbay/retry.py`
+- `src/fiscalbay/telegram_commands.py`
 
 Client esterni:
 
-- `src/ebay_cf/clients/ebay.py`
-- `src/ebay_cf/clients/telegram.py`
+- `src/fiscalbay/clients/ebay.py`
+- `src/fiscalbay/clients/telegram.py`
 
 Service layer:
 
-- `src/ebay_cf/services/orders.py`
-- `src/ebay_cf/services/notifications.py`
-- `src/ebay_cf/services/telegram_runtime.py`
+- `src/fiscalbay/services/orders.py`
+- `src/fiscalbay/services/notifications.py`
+- `src/fiscalbay/services/telegram_runtime.py`
 
 Storage:
 
-- `src/ebay_cf/storage/sqlite.py`
+- `src/fiscalbay/storage/sqlite.py`
 
 ### Ruolo delle componenti
 
@@ -432,11 +432,11 @@ Presenti e utili:
 
 Path progetto:
 
-- `/opt/ebay-cf`
+- `/opt/fiscalbay`
 
 Virtualenv attivo del progetto:
 
-- `/opt/ebay-cf/.venv`
+- `/opt/fiscalbay/.venv`
 
 Runtime applicativo stabile:
 
@@ -455,20 +455,20 @@ Scelta operativa corretta:
 
 Servizio `systemd` attuale:
 
-- `ebaycf-bot`
+- `fiscalbay-bot`
 
 Comandi principali:
 
 ```bash
-sudo systemctl status ebaycf-bot
-sudo systemctl restart ebaycf-bot
-sudo journalctl -u ebaycf-bot -f
+sudo systemctl status fiscalbay-bot
+sudo systemctl restart fiscalbay-bot
+sudo journalctl -u fiscalbay-bot -f
 ```
 
 Healthcheck:
 
 ```bash
-"/opt/ebay-cf/.venv/bin/ebay-cf-healthcheck" --json
+"/opt/fiscalbay/.venv/bin/fiscalbay-healthcheck" --json
 ```
 
 ### Stato manutenzione VPS gia' eseguito
@@ -489,7 +489,7 @@ Gia' fatto:
 Backup di manutenzione creato:
 
 - `~/maintenance-backups/2026-04-06-vps-cleanup`
-- `/home/opc/maintenance-backups/2026-04-06-legacy-install-home-opc/ebay-cf-legacy`
+- `/home/opc/maintenance-backups/2026-04-06-legacy-install-home-opc/fiscalbay-legacy`
 
 Lì sono stati archiviati:
 
@@ -498,7 +498,7 @@ Lì sono stati archiviati:
 - backup unit file servizio
 - vecchio `.venv` Python 3.9
 - vecchi file `.env.save`
-- vecchio `run-ebaycf-bot.sh`
+- vecchio `run-fiscalbay-bot.sh`
 - vecchi file JSON runtime legacy
 
 Questo significa:
@@ -534,7 +534,7 @@ Dipende da:
 
 Queste credenziali stanno in:
 
-- `/opt/ebay-cf/.env`
+- `/opt/fiscalbay/.env`
 
 Non devono essere riportate in questo file.
 
@@ -578,7 +578,7 @@ Script deploy:
 - `deploy/linux-setup.sh`
 - `deploy/update.sh`
 - `deploy/smoke-check.sh`
-- `deploy/ebaycf-bot.service`
+- `deploy/fiscalbay-bot.service`
 
 Verifica qualita':
 
@@ -602,9 +602,9 @@ Le cose principali ancora aperte non sono piu' il “mettere in piedi” il prog
 - la VPS usa Oracle Linux 9.7
 - l'accesso standard e' `ssh opc@79.72.45.89`
 - SSH e' key-only, root login disabilitato
-- il bot gira come `systemd` service `ebaycf-bot`
-- il callback OAuth gira come `systemd` service `ebaycf-oauth`
-- la reconciliation periodica gira via `ebaycf-reconcile.timer`
+- il bot gira come `systemd` service `fiscalbay-bot`
+- il callback OAuth gira come `systemd` service `fiscalbay-oauth`
+- la reconciliation periodica gira via `fiscalbay-reconcile.timer`
 - il runtime corretto del progetto e' Python `3.11` nel `.venv`
 - il bot usa SQLite locale in `data/state.db`
 - la roadmap da seguire per il lavoro residuo e' `docs/ROADMAP.md`

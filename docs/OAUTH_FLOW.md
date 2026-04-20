@@ -119,7 +119,7 @@ Regola UX:
 - la chat che avvia `/connect` viene comunque tracciata per tornare con la conferma nel posto giusto
 - il flusso usera' una tabella dedicata `oauth_link_sessions` con `state`, expiry e stato della richiesta
 - il callback OAuth salva o aggiorna `ebay_accounts` e `ebay_tokens`, poi marca chiusa la sessione OAuth
-- il callback server attuale gira come servizio separato `ebaycf-oauth` sulla VPS
+- il callback server attuale gira come servizio separato `fiscalbay-oauth` sulla VPS
 - verso eBay il server usa `EBAY_OAUTH_RUNAME` oppure `EBAY_OAUTH_RUNAME_SANDBOX` come identificatore `redirect_uri`
 - il callback pubblico del progetto usa `EBAY_OAUTH_CALLBACK_URL` o, in fallback, deriva la URL da `EBAY_OAUTH_CONNECT_BASE_URL`
 - l'Accept URL associato al `RuName` nel portale eBay deve puntare proprio al callback pubblico esposto dal progetto

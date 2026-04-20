@@ -1,5 +1,5 @@
 [Unit]
-Description=eBay CF backup job
+Description=FiscalBay backup job
 
 [Service]
 Type=oneshot

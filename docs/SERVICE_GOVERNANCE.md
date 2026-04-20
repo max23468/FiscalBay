@@ -230,8 +230,8 @@ Retention:
 
 Comprende:
 
-- `journalctl` per `ebaycf-bot`
-- `ebaycf-oauth`
+- `journalctl` per `fiscalbay-bot`
+- `fiscalbay-oauth`
 - timer e worker operativi
 
 Retention:

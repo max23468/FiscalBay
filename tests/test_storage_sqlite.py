@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.ebay_cf.models import (
+from src.fiscalbay.models import (
     OPERATION_STATUS_COMPLETED,
     OPERATION_STATUS_PENDING,
     OPERATION_STATUS_RUNNING,
@@ -22,7 +22,7 @@ from src.ebay_cf.models import (
     TelegramChat,
     TelegramUser,
 )
-from src.ebay_cf.storage.sqlite import (
+from src.fiscalbay.storage.sqlite import (
     SCHEMA_VERSION,
     append_audit_log_entry,
     apply_telegram_user_access_status,

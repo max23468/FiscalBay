@@ -192,7 +192,7 @@ from .telegram_commands import (
 )
 from .tenant_credentials import decode_refresh_token, load_tenant_config_from_storage
 
-LOGGER = logging.getLogger("ebaycf.telegram_bot")
+LOGGER = logging.getLogger("fiscalbay.telegram_bot")
 COMMAND_CAPABILITIES: dict[str, str] = {
     "/ping": CAPABILITY_USE_BOT,
     "/stato": CAPABILITY_USE_BOT,

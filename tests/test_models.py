@@ -1,6 +1,6 @@
 import unittest
 
-from src.ebay_cf.models import (
+from src.fiscalbay.models import (
     CAPABILITY_CONNECT_ACCOUNT,
     CAPABILITY_REQUEST_ACCESS,
     CAPABILITY_REVIEW_ACCESS,

@@ -2,18 +2,18 @@ import unittest
 from datetime import timezone
 from unittest.mock import patch
 
-from src.ebay_cf.clients.ebay import (
+from src.fiscalbay.clients.ebay import (
     clear_access_token_cache,
     get_access_token,
     request_json,
 )
-from src.ebay_cf.errors import EbayApiError
-from src.ebay_cf.models import (
+from src.fiscalbay.errors import EbayApiError
+from src.fiscalbay.models import (
     Config,
     FetchOptions,
     OrderRecord,
 )
-from src.ebay_cf.services.orders import (
+from src.fiscalbay.services.orders import (
     extract_record,
     fetch_records,
     get_csv_fieldnames,
@@ -39,7 +39,7 @@ class EbayCfToolTests(unittest.TestCase):
             scopes="https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
         )
 
-    @patch("src.ebay_cf.clients.ebay.request_user_access_token_response")
+    @patch("src.fiscalbay.clients.ebay.request_user_access_token_response")
     def test_get_access_token_uses_cache(self, mock_mint) -> None:
         mock_mint.return_value = {"access_token": "tok-one", "expires_in": 7200}
         cfg = self._sample_config()
@@ -47,9 +47,9 @@ class EbayCfToolTests(unittest.TestCase):
         self.assertEqual(get_access_token(cfg), "tok-one")
         self.assertEqual(mock_mint.call_count, 1)
 
-    @patch("src.ebay_cf.clients.ebay.logger")
-    @patch("src.ebay_cf.clients.ebay.time.sleep", autospec=True)
-    @patch("src.ebay_cf.clients.ebay.request_json_once")
+    @patch("src.fiscalbay.clients.ebay.logger")
+    @patch("src.fiscalbay.clients.ebay.time.sleep", autospec=True)
+    @patch("src.fiscalbay.clients.ebay.request_json_once")
     def test_make_request_retries_transient_http(self, mock_once, mock_sleep, _mock_logger) -> None:
         mock_once.side_effect = [
             EbayApiError("HTTP 503", status_code=503),
@@ -113,9 +113,9 @@ class EbayCfToolTests(unittest.TestCase):
         self.assertIn("taxpayerId", fieldnames)
         self.assertIn("buyerName", fieldnames)
 
-    @patch("src.ebay_cf.services.orders.get_order_detail")
-    @patch("src.ebay_cf.services.orders.get_orders")
-    @patch("src.ebay_cf.services.orders.get_access_token")
+    @patch("src.fiscalbay.services.orders.get_order_detail")
+    @patch("src.fiscalbay.services.orders.get_orders")
+    @patch("src.fiscalbay.services.orders.get_access_token")
     def test_fetch_records_reads_summaries_and_returns_normalized_rows(
         self,
         mock_get_access_token,
@@ -162,8 +162,8 @@ class EbayCfToolTests(unittest.TestCase):
         mock_get_orders.assert_called_once()
         self.assertEqual(mock_get_order_detail.call_count, 2)
 
-    @patch("src.ebay_cf.services.orders.get_order_detail")
-    @patch("src.ebay_cf.services.orders.get_access_token")
+    @patch("src.fiscalbay.services.orders.get_order_detail")
+    @patch("src.fiscalbay.services.orders.get_access_token")
     def test_fetch_records_uses_explicit_order_ids_without_listing_call(
         self,
         mock_get_access_token,
@@ -190,7 +190,7 @@ class EbayCfToolTests(unittest.TestCase):
             },
         ]
 
-        with patch("src.ebay_cf.services.orders.get_orders") as mock_get_orders:
+        with patch("src.fiscalbay.services.orders.get_orders") as mock_get_orders:
             records = fetch_records(
                 self._sample_config(),
                 FetchOptions(order_ids=["order-10", "order-20"], only_found=False),
@@ -200,9 +200,9 @@ class EbayCfToolTests(unittest.TestCase):
         mock_get_orders.assert_not_called()
         self.assertEqual(mock_get_order_detail.call_count, 2)
 
-    @patch("src.ebay_cf.services.orders.get_order_detail")
-    @patch("src.ebay_cf.services.orders.get_orders")
-    @patch("src.ebay_cf.services.orders.get_access_token")
+    @patch("src.fiscalbay.services.orders.get_order_detail")
+    @patch("src.fiscalbay.services.orders.get_orders")
+    @patch("src.fiscalbay.services.orders.get_access_token")
     def test_fetch_records_only_found_filters_missing_tax_identifier(
         self,
         mock_get_access_token,
@@ -242,9 +242,9 @@ class EbayCfToolTests(unittest.TestCase):
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0].orderId, "order-2")
 
-    @patch("src.ebay_cf.services.orders.get_order_detail")
-    @patch("src.ebay_cf.services.orders.get_orders")
-    @patch("src.ebay_cf.services.orders.get_access_token")
+    @patch("src.fiscalbay.services.orders.get_order_detail")
+    @patch("src.fiscalbay.services.orders.get_orders")
+    @patch("src.fiscalbay.services.orders.get_access_token")
     def test_fetch_records_can_use_summaries_without_detail_calls(
         self,
         mock_get_access_token,
@@ -280,9 +280,9 @@ class EbayCfToolTests(unittest.TestCase):
         mock_get_orders.assert_called_once()
         mock_get_order_detail.assert_not_called()
 
-    @patch("src.ebay_cf.services.orders.time.sleep")
-    @patch("src.ebay_cf.services.orders.get_order_detail")
-    @patch("src.ebay_cf.services.orders.get_access_token")
+    @patch("src.fiscalbay.services.orders.time.sleep")
+    @patch("src.fiscalbay.services.orders.get_order_detail")
+    @patch("src.fiscalbay.services.orders.get_access_token")
     def test_fetch_records_waits_between_explicit_order_details_when_configured(
         self,
         mock_get_access_token,
@@ -303,7 +303,7 @@ class EbayCfToolTests(unittest.TestCase):
             },
         ]
 
-        with patch("src.ebay_cf.services.orders.order_detail_delay_seconds", return_value=0.25):
+        with patch("src.fiscalbay.services.orders.order_detail_delay_seconds", return_value=0.25):
             fetch_records(
                 self._sample_config(),
                 FetchOptions(order_ids=["order-10", "order-20"], only_found=False),

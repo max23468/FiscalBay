@@ -6,7 +6,7 @@ APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BACKUP_ROOT="${BACKUP_ROOT:-${HOME}/maintenance-backups}"
 RETENTION_COUNT="${RETENTION_COUNT:-7}"
 TIMESTAMP="$(date '+%Y-%m-%dT%H-%M-%S')"
-BACKUP_DIR="${BACKUP_ROOT}/${TIMESTAMP}-ebaycf"
+BACKUP_DIR="${BACKUP_ROOT}/${TIMESTAMP}-fiscalbay"
 ENV_FILE="${APP_DIR}/.env"
 DATA_DIR="${APP_DIR}/data"
 STATE_DB="${DATA_DIR}/state.db"
@@ -43,7 +43,7 @@ state_db=$( [ -f "${STATE_DB}" ] && echo present || echo missing )
 EOF
 chmod 600 "${BACKUP_DIR}/MANIFEST.txt"
 
-mapfile -t backups < <(find "${BACKUP_ROOT}" -maxdepth 1 -mindepth 1 -type d -name '*-ebaycf' | sort)
+mapfile -t backups < <(find "${BACKUP_ROOT}" -maxdepth 1 -mindepth 1 -type d -name '*-fiscalbay' | sort)
 if [ "${#backups[@]}" -gt "${RETENTION_COUNT}" ]; then
   delete_count=$(( ${#backups[@]} - RETENTION_COUNT ))
   for ((i=0; i<delete_count; i+=1)); do

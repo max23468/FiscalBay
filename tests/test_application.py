@@ -3,14 +3,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from src.ebay_cf.application import (
+from src.fiscalbay.application import (
     fetch_tenant_records,
     resolve_fetch_context,
     resolve_tenant_fetch_account,
 )
-from src.ebay_cf.errors import ConfigurationError
-from src.ebay_cf.models import Config, FetchOptions, LinkedEbayAccount, OrderRecord
-from src.ebay_cf.storage.sqlite import save_tenant_account_status_cache
+from src.fiscalbay.errors import ConfigurationError
+from src.fiscalbay.models import Config, FetchOptions, LinkedEbayAccount, OrderRecord
+from src.fiscalbay.storage.sqlite import save_tenant_account_status_cache
 
 
 class ApplicationTests(unittest.TestCase):

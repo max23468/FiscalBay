@@ -3,13 +3,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.ebay_cf.bot import (
+from src.fiscalbay.bot import (
     maybe_send_new_order_notifications,
     process_message,
     record_fingerprint,
     sync_runtime_contact,
 )
-from src.ebay_cf.models import (
+from src.fiscalbay.models import (
     TELEGRAM_USER_STATUS_ADMIN,
     TELEGRAM_USER_STATUS_APPROVED,
     AuditLogEntry,
@@ -18,7 +18,7 @@ from src.ebay_cf.models import (
     LinkedEbayAccount,
     TelegramConfig,
 )
-from src.ebay_cf.storage.sqlite import (
+from src.fiscalbay.storage.sqlite import (
     append_audit_log_entry,
     load_audit_log_entries,
     load_latest_oauth_link_session,
@@ -201,7 +201,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertEqual(len(chats), 1)
             self.assertEqual(subscriptions, [])
 
-    @patch("src.ebay_cf.bot.send_message")
+    @patch("src.fiscalbay.bot.send_message")
     def test_request_access_notifies_admin_and_marks_user_pending(self, mock_send_message) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
@@ -250,7 +250,7 @@ class BotIntegrationTests(unittest.TestCase):
             mock_send_message.assert_called_once()
             self.assertEqual(mock_send_message.call_args.args[1], 123)
 
-    @patch("src.ebay_cf.bot.send_message")
+    @patch("src.fiscalbay.bot.send_message")
     def test_admin_can_approve_user_and_user_becomes_operational(self, mock_send_message) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
@@ -314,7 +314,7 @@ class BotIntegrationTests(unittest.TestCase):
                 ebay_environment="production",
                 telegram_user_id=999,
             )
-            self.assertIn("Benvenuto in eBay CF Bot", approved_help[0])
+            self.assertIn("Benvenuto in FiscalBay", approved_help[0])
 
     def test_process_message_status_reads_real_sqlite_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -422,7 +422,7 @@ class BotIntegrationTests(unittest.TestCase):
 
             self.assertEqual(replies, ["Solo l'admin puo' usare questo comando."])
 
-    @patch("src.ebay_cf.bot.send_message")
+    @patch("src.fiscalbay.bot.send_message")
     def test_admin_users_view_highlights_pending_waiting_connect_and_ready(
         self,
         mock_send_message,
@@ -525,7 +525,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("ready-ebay", replies[0])
             mock_send_message.assert_called_once()
 
-    @patch("src.ebay_cf.bot.send_message")
+    @patch("src.fiscalbay.bot.send_message")
     def test_repeated_approve_user_is_idempotent(self, mock_send_message) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
@@ -714,7 +714,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
             self.assertIn("cooldown", second_replies[0])
 
-    @patch("src.ebay_cf.bot.send_message")
+    @patch("src.fiscalbay.bot.send_message")
     def test_admin_can_filter_pending_and_unlinked_users(self, mock_send_message) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
@@ -890,9 +890,9 @@ class BotIntegrationTests(unittest.TestCase):
             )
             self.assertIn("Account eBay", account_replies[0])
 
-    @patch("src.ebay_cf.bot.fetch_records")
-    @patch("src.ebay_cf.bot.load_config")
-    @patch("src.ebay_cf.bot.send_message")
+    @patch("src.fiscalbay.bot.fetch_records")
+    @patch("src.fiscalbay.bot.load_config")
+    @patch("src.fiscalbay.bot.send_message")
     def test_first_bootstrap_persists_state_without_sending_messages(
         self,
         mock_send_message,
@@ -928,9 +928,9 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertTrue(state["last_check"])
             mock_send_message.assert_not_called()
 
-    @patch("src.ebay_cf.bot.fetch_records")
-    @patch("src.ebay_cf.bot.load_config")
-    @patch("src.ebay_cf.bot.send_message")
+    @patch("src.fiscalbay.bot.fetch_records")
+    @patch("src.fiscalbay.bot.load_config")
+    @patch("src.fiscalbay.bot.send_message")
     def test_subsequent_poll_sends_only_new_records(
         self,
         mock_send_message,
@@ -991,9 +991,9 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertEqual(state["metrics"]["notifications_sent"], 1)
             self.assertEqual(queue, [])
 
-    @patch("src.ebay_cf.bot.fetch_records")
-    @patch("src.ebay_cf.bot.load_config")
-    @patch("src.ebay_cf.bot.send_message")
+    @patch("src.fiscalbay.bot.fetch_records")
+    @patch("src.fiscalbay.bot.load_config")
+    @patch("src.fiscalbay.bot.send_message")
     def test_poll_uses_last_fetch_end_for_incremental_window(
         self,
         mock_send_message,
@@ -1168,7 +1168,7 @@ class BotIntegrationTests(unittest.TestCase):
         },
         clear=False,
     )
-    @patch("src.ebay_cf.bot.fetch_records")
+    @patch("src.fiscalbay.bot.fetch_records")
     def test_process_message_fetch_uses_linked_account_environment_for_tenant(
         self,
         mock_fetch_records,
@@ -1271,8 +1271,8 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertEqual(len(replies), 1)
             self.assertIn("Usa /connect", replies[0])
 
-    @patch("src.ebay_cf.bot.fetch_records")
-    @patch("src.ebay_cf.bot.load_config")
+    @patch("src.fiscalbay.bot.fetch_records")
+    @patch("src.fiscalbay.bot.load_config")
     def test_process_message_order_includes_notification_summary(
         self,
         mock_load_config,
@@ -1320,8 +1320,8 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("would_notify", replies[0])
             self.assertIn("delivery_ready", replies[0])
 
-    @patch("src.ebay_cf.bot.fetch_records")
-    @patch("src.ebay_cf.bot.load_config")
+    @patch("src.fiscalbay.bot.fetch_records")
+    @patch("src.fiscalbay.bot.load_config")
     def test_process_message_why_not_notified_reports_missing_cf(
         self,
         mock_load_config,
@@ -1370,8 +1370,8 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("Blocco attuale", replies[0])
             self.assertIn("Prossima azione", replies[0])
 
-    @patch("src.ebay_cf.bot.fetch_records")
-    @patch("src.ebay_cf.bot.load_config")
+    @patch("src.fiscalbay.bot.fetch_records")
+    @patch("src.fiscalbay.bot.load_config")
     def test_process_message_why_not_notified_reports_already_notified_order(
         self,
         mock_load_config,
@@ -1427,8 +1427,8 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("already_notified_order_id", replies[0])
             self.assertIn("deduplica per orderId", replies[0])
 
-    @patch("src.ebay_cf.bot.fetch_records")
-    @patch("src.ebay_cf.bot.load_config")
+    @patch("src.fiscalbay.bot.fetch_records")
+    @patch("src.fiscalbay.bot.load_config")
     def test_process_message_why_not_notified_reports_would_notify(
         self,
         mock_load_config,
@@ -1477,8 +1477,8 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("delivery_ready", replies[0])
             self.assertIn("Nessuna azione richiesta", replies[0])
 
-    @patch("src.ebay_cf.bot.fetch_records")
-    @patch("src.ebay_cf.bot.load_config")
+    @patch("src.fiscalbay.bot.fetch_records")
+    @patch("src.fiscalbay.bot.load_config")
     def test_process_message_why_not_notified_reports_disabled_chat_delivery(
         self,
         mock_load_config,
@@ -1970,8 +1970,8 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("Stato: <code>disconnected</code>", account_replies[0])
             self.assertIn("Usa <code>/connect</code>", account_replies[0])
 
-    @patch("src.ebay_cf.bot.load_tenant_config_from_storage")
-    @patch("src.ebay_cf.bot.revoke_user_refresh_token")
+    @patch("src.fiscalbay.bot.load_tenant_config_from_storage")
+    @patch("src.fiscalbay.bot.revoke_user_refresh_token")
     def test_process_message_disconnect_attempts_remote_revocation(
         self,
         mock_revoke_user_refresh_token,
@@ -2030,8 +2030,8 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("Revoca remota eBay: <code>completata</code>", replies[0])
             self.assertIn("accesso al bot resta approvato", replies[0])
 
-    @patch("src.ebay_cf.bot.load_tenant_config_from_storage")
-    @patch("src.ebay_cf.bot.revoke_user_refresh_token")
+    @patch("src.fiscalbay.bot.load_tenant_config_from_storage")
+    @patch("src.fiscalbay.bot.revoke_user_refresh_token")
     def test_process_message_disconnect_reports_remote_revocation_failure(
         self,
         mock_revoke_user_refresh_token,
@@ -2089,8 +2089,8 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertEqual(len(replies), 1)
             self.assertIn("non confermata", replies[0])
 
-    @patch("src.ebay_cf.bot.load_tenant_config_from_storage")
-    @patch("src.ebay_cf.bot.revoke_user_refresh_token")
+    @patch("src.fiscalbay.bot.load_tenant_config_from_storage")
+    @patch("src.fiscalbay.bot.revoke_user_refresh_token")
     def test_process_message_leave_bot_resets_access_and_notifications(
         self,
         mock_revoke_user_refresh_token,

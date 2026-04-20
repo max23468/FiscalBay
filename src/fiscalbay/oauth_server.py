@@ -47,7 +47,7 @@ from .storage.sqlite import (
 )
 from .tenant_credentials import encode_refresh_token
 
-LOGGER = logging.getLogger("ebaycf.oauth_server")
+LOGGER = logging.getLogger("fiscalbay.oauth_server")
 DEFAULT_OAUTH_HOST = "127.0.0.1"
 DEFAULT_OAUTH_PORT = 8787
 DEFAULT_CALLBACK_PATH = "/oauth/callback"
@@ -569,7 +569,7 @@ def complete_oauth_link(
 
 
 class OAuthHandler(BaseHTTPRequestHandler):
-    server_version = "eBayCFOAuth/0.1"
+    server_version = "FiscalBayOAuth/0.1"
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urllib.parse.urlparse(self.path)

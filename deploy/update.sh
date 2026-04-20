@@ -5,8 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 APP_USER="${APP_USER:-$(stat -c '%U' "${APP_DIR}")}"
 VENV_DIR="${APP_DIR}/.venv"
-SERVICE_NAME="ebaycf-bot"
-OAUTH_SERVICE_NAME="ebaycf-oauth"
+SERVICE_NAME="fiscalbay-bot"
+OAUTH_SERVICE_NAME="fiscalbay-oauth"
 
 sudo -u "${APP_USER}" git -C "${APP_DIR}" pull --ff-only
 sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install -e "${APP_DIR}"

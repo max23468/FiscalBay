@@ -24,7 +24,7 @@ Documenti collegati:
 
 ## Check giornalieri minimi
 
-- verificare che `ebaycf-bot` sia attivo
+- verificare che `fiscalbay-bot` sia attivo
 - verificare che l'healthcheck sia `ok`
 - controllare se ci sono errori recenti in journal
 - controllare che `last_check` non sia stale
@@ -35,44 +35,44 @@ Documenti collegati:
 Status servizio:
 
 ```bash
-sudo systemctl status ebaycf-bot
+sudo systemctl status fiscalbay-bot
 ```
 
 Log recenti:
 
 ```bash
-sudo journalctl -u ebaycf-bot -n 100 --no-pager
+sudo journalctl -u fiscalbay-bot -n 100 --no-pager
 ```
 
 Log live:
 
 ```bash
-sudo journalctl -u ebaycf-bot -f
+sudo journalctl -u fiscalbay-bot -f
 ```
 
 Restart:
 
 ```bash
-sudo systemctl restart ebaycf-bot
+sudo systemctl restart fiscalbay-bot
 ```
 
 Health check:
 
 ```bash
-./.venv/bin/ebay-cf-healthcheck
+./.venv/bin/fiscalbay-healthcheck
 ```
 
 Health check JSON:
 
 ```bash
-./.venv/bin/ebay-cf-healthcheck --json
+./.venv/bin/fiscalbay-healthcheck --json
 ```
 
 Nota deploy storage:
 
 - il `state.db` del bot in VPS puo' ricevere migrazioni schema per tabelle tenant-aware
 - finche' non vengono caricati tenant, account e subscription reali, restano compatibili i percorsi legacy previsti per CLI o istanze non ancora migrate
-- prima di rilasci che toccano `src/ebay_cf/storage/sqlite.py`, mantenere come sempre un backup aggiornato di `data/state.db`
+- prima di rilasci che toccano `src/fiscalbay/storage/sqlite.py`, mantenere come sempre un backup aggiornato di `data/state.db`
 - il runtime puo' ora registrare utenti/chat Telegram nel DB durante il traffico normale del bot, quindi il backup di `state.db` copre anche questa nuova base tenant-aware
 - quando il DB contiene gia' la mappatura chat/utente, il comando `/stato` legge stato e retry queue del tenant corretto; se la mappatura manca, il fallback resta globale
 
@@ -89,7 +89,7 @@ Metriche runtime leggibili:
 Queste sono esposte oggi in due posti operativi:
 
 - comando Telegram `/stato`
-- `./.venv/bin/ebay-cf-healthcheck --json`
+- `./.venv/bin/fiscalbay-healthcheck --json`
 
 Il comando Telegram `/stato` espone anche:
 
@@ -110,7 +110,7 @@ Il comando Telegram `/connect`:
 - crea una sessione preliminare in `oauth_link_sessions`
 - restituisce un link pubblico solo se sulla VPS e' configurata `EBAY_OAUTH_CONNECT_BASE_URL`
 - senza questa variabile, il bot prepara comunque la sessione ma avvisa che il callback OAuth non e' ancora raggiungibile
-- il link pubblico punta al callback server `ebaycf-oauth`, che a sua volta redirige verso eBay e gestisce il ritorno OAuth
+- il link pubblico punta al callback server `fiscalbay-oauth`, che a sua volta redirige verso eBay e gestisce il ritorno OAuth
 
 Il comando Telegram `/disconnect`:
 
@@ -157,8 +157,8 @@ Audit log minimo:
 
 Servizio OAuth su VPS:
 
-- entrypoint: `ebay-cf-oauth-server`
-- servizio `systemd`: `ebaycf-oauth`
+- entrypoint: `fiscalbay-oauth-server`
+- servizio `systemd`: `fiscalbay-oauth`
 - endpoint locali minimi: `/healthz`, `/oauth/start`, `/oauth/callback`
 - variabili utili: `EBAY_OAUTH_RUNAME`, `EBAY_OAUTH_RUNAME_SANDBOX`, `EBAY_OAUTH_CONNECT_BASE_URL`, `EBAY_OAUTH_CALLBACK_URL`, `EBAY_OAUTH_SERVER_HOST`, `EBAY_OAUTH_SERVER_PORT`, `EBAY_TENANT_TOKEN_KEY`
 - il percorso corretto su VPS e' usare `EBAY_TENANT_TOKEN_KEY` per cifrare i refresh token utente a riposo
@@ -176,17 +176,17 @@ Readiness multiutente nel healthcheck:
 
 Alert basilari runtime:
 
-- `deploy/alert-check.sh` esegue `ebay-cf-healthcheck` con soglie operative minime
-- `ebaycf-alertcheck.timer` lancia il controllo ogni 5 minuti
+- `deploy/alert-check.sh` esegue `fiscalbay-healthcheck` con soglie operative minime
+- `fiscalbay-alertcheck.timer` lancia il controllo ogni 5 minuti
 - gli alert minimi oggi coprono servizio `systemd` non attivo, troppi errori consecutivi e retry queue oltre soglia
 - soglie di default: `MAX_CONSECUTIVE_ERROR_CYCLES=3` e `MAX_RETRY_QUEUE_SIZE=20`
-- il fallimento del check finisce nel journal del service `ebaycf-alertcheck`
+- il fallimento del check finisce nel journal del service `fiscalbay-alertcheck`
 
 Reconciliation periodica:
 
-- entrypoint: `ebay-cf-reconcile`
+- entrypoint: `fiscalbay-reconcile`
 - wrapper VPS: `deploy/reconcile.sh`
-- timer `systemd`: `ebaycf-reconcile.timer`
+- timer `systemd`: `fiscalbay-reconcile.timer`
 - la reconciliation processa la `operation_queue`, riallinea accessi/chat/subscription, scade sessioni OAuth pendenti troppo vecchie e revoca token attivi rimasti su account non piu' collegati
 
 Retention e cancellazione:
@@ -204,7 +204,7 @@ Suggerimento pratico sui log:
 ## Sequenza standard dopo update
 
 1. eseguire `./deploy/update.sh`
-2. verificare `sudo systemctl status ebaycf-bot`
+2. verificare `sudo systemctl status fiscalbay-bot`
 3. eseguire `./deploy/smoke-check.sh`
 4. se lo smoke check fallisce, leggere i log e valutare rollback
 
@@ -240,7 +240,7 @@ Finche' non esiste uno staging dedicato persistente, il percorso minimo prima di
 1. eseguire in locale `bash scripts/ci_verify.sh`
 2. verificare gli entrypoint principali nel virtualenv
 3. se il cambiamento tocca bot, deploy o storage, eseguire `./deploy/smoke-check.sh` dopo il deploy
-4. osservare per alcuni minuti `journalctl -u ebaycf-bot -f`
+4. osservare per alcuni minuti `journalctl -u fiscalbay-bot -f`
 
 Questo non sostituisce uno staging vero, ma e' la baseline operativa minima attuale.
 
@@ -248,9 +248,9 @@ Questo non sostituisce uno staging vero, ma e' la baseline operativa minima attu
 
 Se un deploy peggiora il servizio, seguire nell'ordine:
 
-1. verificare `sudo systemctl status ebaycf-bot`
-2. raccogliere contesto con `sudo journalctl -u ebaycf-bot -n 100 --no-pager`
-3. eseguire `./.venv/bin/ebay-cf-healthcheck --json`
+1. verificare `sudo systemctl status fiscalbay-bot`
+2. raccogliere contesto con `sudo journalctl -u fiscalbay-bot -n 100 --no-pager`
+3. eseguire `./.venv/bin/fiscalbay-healthcheck --json`
 4. annotare la revisione corrente con `git rev-parse --short HEAD`
 5. individuare una revisione precedente sana con `git log --oneline -n 5`
 6. tornare alla revisione scelta
@@ -275,8 +275,8 @@ Condizioni di stop:
 
 ### Git bloccato da `index.lock`
 
-- usare `ebay-cf-fix-git-lock` se vuoi solo rimuovere in sicurezza un lock stale
-- usare `ebay-cf-git-safe -- <comando git>` per operazioni locali che vuoi rendere piu' robuste
+- usare `fiscalbay-fix-git-lock` se vuoi solo rimuovere in sicurezza un lock stale
+- usare `fiscalbay-git-safe -- <comando git>` per operazioni locali che vuoi rendere piu' robuste
 - il wrapper aspetta un lock realmente attivo per pochi secondi e rimuove solo quelli stale
 
 ### Il processo e' attivo ma non notifica
@@ -294,7 +294,7 @@ Condizioni di stop:
 - verificare se la retry queue e' bloccata
 - verificare se il servizio e' partito con il path corretto a `state.db`
 - controllare anche le metriche aggregate nel report JSON per capire se il problema e' lato eBay, lato Telegram o backlog retry
-- se il controllo periodico fallisce, leggere `sudo journalctl -u ebaycf-alertcheck -n 50 --no-pager`
+- se il controllo periodico fallisce, leggere `sudo journalctl -u fiscalbay-alertcheck -n 50 --no-pager`
 
 ## Backup operativi
 
@@ -307,8 +307,8 @@ Backup manuale:
 Verifica timer:
 
 ```bash
-sudo systemctl status ebaycf-backup.timer
-sudo systemctl list-timers ebaycf-backup.timer
+sudo systemctl status fiscalbay-backup.timer
+sudo systemctl list-timers fiscalbay-backup.timer
 ```
 
 Restore di prova:
@@ -337,7 +337,7 @@ Asset minimi da proteggere:
 Baseline operativa verificata al 2026-04-06:
 
 - VPS Oracle Linux 9.7 con `systemd`
-- servizio reale `ebaycf-bot`
-- runtime corretto in `/opt/ebay-cf/.venv`
-- dati runtime in `/opt/ebay-cf/data`
-- backup operativi in `/home/ebaycf/maintenance-backups/`
+- servizio reale `fiscalbay-bot`
+- runtime corretto in `/opt/fiscalbay/.venv`
+- dati runtime in `/opt/fiscalbay/data`
+- backup operativi in `/home/fiscalbay/maintenance-backups/`

@@ -1,12 +1,12 @@
 # Proposte di code cleanup
 
-Questo documento raccoglie una proposta pragmatica per ripulire il progetto `eBayCF` in modo incrementale, senza interrompere le funzionalità operative (CLI, bot Telegram, OAuth server, reconcile worker).
+Questo documento raccoglie una proposta pragmatica per ripulire il progetto `FiscalBay` in modo incrementale, senza interrompere le funzionalità operative (CLI, bot Telegram, OAuth server, reconcile worker).
 
 ## 1) Priorità alta (quick wins)
 
 ### 1.1 Ridurre la superficie del modulo `bot.py`
 
-- Oggi `src/ebay_cf/bot.py` è un modulo molto esteso e con responsabilità eterogenee (wiring, autorizzazioni, messaging, lock, OAuth linking, notifiche).
+- Oggi `src/fiscalbay/bot.py` è un modulo molto esteso e con responsabilità eterogenee (wiring, autorizzazioni, messaging, lock, OAuth linking, notifiche).
 - Primo step consigliato: estrarre in moduli dedicati i blocchi più isolabili:
   - `bot_authz.py` per capability/status gating;
   - `bot_messaging.py` per `send_message`, chunking e fallback API 400;
@@ -16,7 +16,7 @@ Questo documento raccoglie una proposta pragmatica per ripulire il progetto `eBa
 
 ### 1.2 Ridurre la complessità di `storage/sqlite.py`
 
-- `src/ebay_cf/storage/sqlite.py` è un “god module” (schema, migrazioni, repository runtime, account, retry queue, audit log).
+- `src/fiscalbay/storage/sqlite.py` è un “god module” (schema, migrazioni, repository runtime, account, retry queue, audit log).
 - Split suggerito:
   - `storage/schema.py` (create/migrate/version);
   - `storage/runtime_repo.py` (state + metrics + retry);
@@ -37,8 +37,8 @@ Questo documento raccoglie una proposta pragmatica per ripulire il progetto `eBa
 
 ### 2.1 (Completata) Rimozione wrapper legacy entrypoint
 
-- I wrapper legacy `src/telegram_bot.py` e `src/ebay_cf_tool.py` sono stati rimossi.
-- Gli script console puntano direttamente ai moduli del package (`ebay_cf.bot`, `ebay_cf.cli`).
+- I wrapper legacy `src/telegram_bot.py` e `src/fiscalbay_tool.py` sono stati rimossi.
+- Gli script console puntano direttamente ai moduli del package (`fiscalbay.bot`, `fiscalbay.cli`).
 - Eventuali import legacy esterni vanno migrati verso i moduli interni del package.
 
 ### 2.2 Rafforzare la rete safety net (typing + coverage)

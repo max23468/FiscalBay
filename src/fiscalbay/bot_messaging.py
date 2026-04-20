@@ -17,7 +17,7 @@ from .logging_utils import log_event
 from .retry import run_with_retry
 from .telegram_commands import chunk_message
 
-LOGGER = logging.getLogger("ebaycf.telegram_bot")
+LOGGER = logging.getLogger("fiscalbay.telegram_bot")
 
 
 def request_with_backoff(

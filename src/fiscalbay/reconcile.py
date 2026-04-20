@@ -29,7 +29,7 @@ from .storage.sqlite import (
     update_operation_queue_entry,
 )
 
-LOGGER = logging.getLogger("ebaycf.reconcile")
+LOGGER = logging.getLogger("fiscalbay.reconcile")
 
 
 def now_utc_iso() -> str:

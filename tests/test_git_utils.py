@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.ebay_cf.git_utils import (
+from src.fiscalbay.git_utils import (
     ensure_index_lock_available,
     list_index_lock_holders,
     remove_stale_index_lock,
@@ -14,7 +14,7 @@ from src.ebay_cf.git_utils import (
 
 
 class GitUtilsTests(unittest.TestCase):
-    @patch("src.ebay_cf.git_utils.subprocess.run")
+    @patch("src.fiscalbay.git_utils.subprocess.run")
     def test_resolve_git_dir_returns_absolute_path(self, mock_run) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_path = Path(tmpdir)
@@ -29,7 +29,7 @@ class GitUtilsTests(unittest.TestCase):
 
             self.assertEqual(git_dir, (repo_path / ".git").resolve())
 
-    @patch("src.ebay_cf.git_utils.subprocess.run")
+    @patch("src.fiscalbay.git_utils.subprocess.run")
     def test_list_index_lock_holders_returns_empty_when_unlocked(self, mock_run) -> None:
         mock_run.return_value = subprocess.CompletedProcess(
             args=["lsof", "/tmp/index.lock"],
@@ -42,8 +42,8 @@ class GitUtilsTests(unittest.TestCase):
 
         self.assertEqual(holders, [])
 
-    @patch("src.ebay_cf.git_utils.list_index_lock_holders")
-    @patch("src.ebay_cf.git_utils.resolve_git_dir")
+    @patch("src.fiscalbay.git_utils.list_index_lock_holders")
+    @patch("src.fiscalbay.git_utils.resolve_git_dir")
     def test_remove_stale_index_lock_deletes_unheld_file(
         self, mock_resolve_git_dir, mock_list_holders
     ) -> None:
@@ -60,8 +60,8 @@ class GitUtilsTests(unittest.TestCase):
             self.assertIn("Rimosso lock Git stale", message)
             self.assertFalse(lock_path.exists())
 
-    @patch("src.ebay_cf.git_utils.list_index_lock_holders")
-    @patch("src.ebay_cf.git_utils.resolve_git_dir")
+    @patch("src.fiscalbay.git_utils.list_index_lock_holders")
+    @patch("src.fiscalbay.git_utils.resolve_git_dir")
     def test_remove_stale_index_lock_refuses_when_process_is_active(
         self, mock_resolve_git_dir, mock_list_holders
     ) -> None:
@@ -79,9 +79,9 @@ class GitUtilsTests(unittest.TestCase):
             self.assertIn("sembra ancora in uso", str(ctx.exception))
             self.assertTrue(lock_path.exists())
 
-    @patch("src.ebay_cf.git_utils.time.sleep")
-    @patch("src.ebay_cf.git_utils.list_index_lock_holders")
-    @patch("src.ebay_cf.git_utils.resolve_git_dir")
+    @patch("src.fiscalbay.git_utils.time.sleep")
+    @patch("src.fiscalbay.git_utils.list_index_lock_holders")
+    @patch("src.fiscalbay.git_utils.resolve_git_dir")
     def test_ensure_index_lock_available_removes_stale_lock(
         self,
         mock_resolve_git_dir,
@@ -102,9 +102,9 @@ class GitUtilsTests(unittest.TestCase):
             self.assertFalse(lock_path.exists())
             mock_sleep.assert_not_called()
 
-    @patch("src.ebay_cf.git_utils.time.sleep")
-    @patch("src.ebay_cf.git_utils.list_index_lock_holders")
-    @patch("src.ebay_cf.git_utils.resolve_git_dir")
+    @patch("src.fiscalbay.git_utils.time.sleep")
+    @patch("src.fiscalbay.git_utils.list_index_lock_holders")
+    @patch("src.fiscalbay.git_utils.resolve_git_dir")
     def test_ensure_index_lock_available_waits_for_active_process(
         self,
         mock_resolve_git_dir,
@@ -132,8 +132,8 @@ class GitUtilsTests(unittest.TestCase):
             self.assertEqual(events, [])
             self.assertFalse(lock_path.exists())
 
-    @patch("src.ebay_cf.git_utils.subprocess.run")
-    @patch("src.ebay_cf.git_utils.ensure_index_lock_available")
+    @patch("src.fiscalbay.git_utils.subprocess.run")
+    @patch("src.fiscalbay.git_utils.ensure_index_lock_available")
     def test_run_git_command_calls_git_after_preflight(
         self,
         mock_ensure_lock,

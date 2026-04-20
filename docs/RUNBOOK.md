@@ -6,14 +6,14 @@ Questa guida standardizza l'esercizio del bot sulla VPS Linux attuale con `syste
 
 - distribuzione verificata: Oracle Linux 9.7
 - esecuzione principale: `systemd` nativo
-- utente servizio in produzione: `ebaycf`
-- codice applicativo in produzione: `/opt/ebay-cf`
+- utente servizio in produzione: `fiscalbay`
+- codice applicativo in produzione: `/opt/fiscalbay`
 - Docker Compose: supporto locale o legacy, non standard di esercizio in produzione
 - virtualenv: `${APP_DIR}/.venv`
 - dati runtime: `${APP_DIR}/data`
 - env file: `${APP_DIR}/.env`
-- servizio: `ebaycf-bot`
-- callback OAuth: `ebaycf-oauth`
+- servizio: `fiscalbay-bot`
+- callback OAuth: `fiscalbay-oauth`
 
 ## Primo setup su VPS Linux
 
@@ -25,19 +25,19 @@ Lo script di setup supporta in automatico:
 - `apk`
 
 ```bash
-git clone https://github.com/max23468/eBayCF.git ebay-cf
-cd ebay-cf
+git clone https://github.com/max23468/FiscalBay.git fiscalbay
+cd fiscalbay
 chmod +x deploy/linux-setup.sh
-APP_USER=ebaycf APP_GROUP=ebaycf ./deploy/linux-setup.sh
+APP_USER=fiscalbay APP_GROUP=fiscalbay ./deploy/linux-setup.sh
 ```
 
 Poi:
 
 ```bash
 nano "./.env"
-sudo systemctl enable --now ebaycf-bot
-sudo systemctl enable --now ebaycf-oauth
-sudo systemctl status ebaycf-bot
+sudo systemctl enable --now fiscalbay-bot
+sudo systemctl enable --now fiscalbay-oauth
+sudo systemctl status fiscalbay-bot
 ```
 
 ## Comandi operativi
@@ -45,28 +45,28 @@ sudo systemctl status ebaycf-bot
 Status:
 
 ```bash
-sudo systemctl status ebaycf-bot
-sudo systemctl status ebaycf-oauth
+sudo systemctl status fiscalbay-bot
+sudo systemctl status fiscalbay-oauth
 ```
 
 Restart:
 
 ```bash
-sudo systemctl restart ebaycf-bot
-sudo systemctl restart ebaycf-oauth
+sudo systemctl restart fiscalbay-bot
+sudo systemctl restart fiscalbay-oauth
 ```
 
 Stop:
 
 ```bash
-sudo systemctl stop ebaycf-bot
+sudo systemctl stop fiscalbay-bot
 ```
 
 Log live:
 
 ```bash
-sudo journalctl -u ebaycf-bot -f
-sudo journalctl -u ebaycf-oauth -f
+sudo journalctl -u fiscalbay-bot -f
+sudo journalctl -u fiscalbay-oauth -f
 ```
 
 Per seguire un singolo ciclo operativo, filtrare o cercare `cycle_id=` nei log recenti.
@@ -102,13 +102,13 @@ Nota importante:
 Health check:
 
 ```bash
-"$(pwd)/.venv/bin/ebay-cf-healthcheck"
+"$(pwd)/.venv/bin/fiscalbay-healthcheck"
 ```
 
 Health check JSON:
 
 ```bash
-"$(pwd)/.venv/bin/ebay-cf-healthcheck" --json
+"$(pwd)/.venv/bin/fiscalbay-healthcheck" --json
 ```
 
 Nota storage:
@@ -149,13 +149,13 @@ Alert check periodico:
 
 ```bash
 ./deploy/alert-check.sh
-sudo systemctl status ebaycf-alertcheck.timer
-sudo systemctl list-timers ebaycf-alertcheck.timer
+sudo systemctl status fiscalbay-alertcheck.timer
+sudo systemctl list-timers fiscalbay-alertcheck.timer
 ```
 
 Soglie minime attuali:
 
-- servizio `ebaycf-bot` attivo
+- servizio `fiscalbay-bot` attivo
 - `consecutive_error_cycles <= 3`
 - `retry_queue_size <= 20`
 
@@ -168,8 +168,8 @@ Reconciliation periodica:
 
 ```bash
 ./deploy/reconcile.sh
-sudo systemctl status ebaycf-reconcile.timer
-sudo systemctl list-timers ebaycf-reconcile.timer
+sudo systemctl status fiscalbay-reconcile.timer
+sudo systemctl list-timers fiscalbay-reconcile.timer
 ```
 
 La reconciliation:
@@ -199,7 +199,7 @@ Lo smoke test verifica:
 
 - servizio `systemd` attivo
 - health check del bot in stato `ok`
-- se `ebaycf-oauth` e' abilitato, verifica anche che il servizio OAuth risulti attivo
+- se `fiscalbay-oauth` e' abilitato, verifica anche che il servizio OAuth risulti attivo
 
 ## Backup e restore
 
@@ -222,15 +222,15 @@ Comportamento:
 - crea backup in `~/maintenance-backups/`
 - include `.env`, `data/state.db` e gli eventuali `.legacy-json.bak`
 - applica retention minima di 7 backup, modificabile con `RETENTION_COUNT`
-- i nuovi setup abilitano anche il timer `systemd` `ebaycf-backup.timer` con esecuzione giornaliera persistente
+- i nuovi setup abilitano anche il timer `systemd` `fiscalbay-backup.timer` con esecuzione giornaliera persistente
 
-Nel setup produttivo attuale dell'utente `ebaycf`, i backup finiscono in `/home/ebaycf/maintenance-backups/`.
+Nel setup produttivo attuale dell'utente `fiscalbay`, i backup finiscono in `/home/fiscalbay/maintenance-backups/`.
 
 Verifica schedulazione:
 
 ```bash
-sudo systemctl status ebaycf-backup.timer
-sudo systemctl list-timers ebaycf-backup.timer
+sudo systemctl status fiscalbay-backup.timer
+sudo systemctl list-timers fiscalbay-backup.timer
 ```
 
 Restore di prova su file separato:
@@ -238,20 +238,20 @@ Restore di prova su file separato:
 ```bash
 cd /percorso/del/progetto
 chmod +x deploy/restore.sh
-./deploy/restore.sh /home/ebaycf/maintenance-backups/<backup-dir>
+./deploy/restore.sh /home/fiscalbay/maintenance-backups/<backup-dir>
 ```
 
 Restore in-place solo quando serve davvero:
 
 ```bash
 cd /percorso/del/progetto
-./deploy/restore.sh /home/ebaycf/maintenance-backups/<backup-dir> --in-place
+./deploy/restore.sh /home/fiscalbay/maintenance-backups/<backup-dir> --in-place
 ```
 
 Backup manuale di manutenzione gia' eseguito:
 
-- `/home/ebaycf/maintenance-backups/`
-- `/home/opc/maintenance-backups/2026-04-06-legacy-install-home-opc/ebay-cf-legacy`
+- `/home/fiscalbay/maintenance-backups/`
+- `/home/opc/maintenance-backups/2026-04-06-legacy-install-home-opc/fiscalbay-legacy`
 - eventuali override di servizio o note locali operative
 
 ## Verifica permessi segreti
@@ -273,10 +273,10 @@ Atteso:
 
 Servizio non parte:
 
-- controlla `sudo systemctl status ebaycf-bot`
-- controlla `sudo journalctl -u ebaycf-bot -n 100 --no-pager`
+- controlla `sudo systemctl status fiscalbay-bot`
+- controlla `sudo journalctl -u fiscalbay-bot -n 100 --no-pager`
 - verifica il file `${APP_DIR}/.env`
-- controlla che non esista una seconda istanza manuale di `ebay-telegram-bot`
+- controlla che non esista una seconda istanza manuale di `fiscalbay-bot`
 
 Health check fallisce:
 
@@ -293,8 +293,8 @@ Health check fallisce:
 - firewall espone solo il servizio `ssh`
 - `fail2ban` protegge il jail `sshd`
 - lo script di setup supporta un utente di servizio dedicato tramite `APP_USER` e `APP_GROUP`
-- lo script di setup installa e abilita il timer `ebaycf-backup.timer`
-- lo script di setup installa e abilita anche `ebaycf-alertcheck.timer` per gli alert runtime minimi
+- lo script di setup installa e abilita il timer `fiscalbay-backup.timer`
+- lo script di setup installa e abilita anche `fiscalbay-alertcheck.timer` per gli alert runtime minimi
 
 Deploy riuscito ma bot non sano:
 

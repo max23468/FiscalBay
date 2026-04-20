@@ -3,9 +3,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from src.ebay_cf.errors import ConfigurationError
-from src.ebay_cf.models import Config, OauthLinkSession, TelegramConfig
-from src.ebay_cf.oauth_server import (
+from src.fiscalbay.errors import ConfigurationError
+from src.fiscalbay.models import Config, OauthLinkSession, TelegramConfig
+from src.fiscalbay.oauth_server import (
     build_oauth_start_redirect,
     complete_oauth_link,
     describe_callback_exception,
@@ -15,7 +15,7 @@ from src.ebay_cf.oauth_server import (
     render_action_html_page,
     render_oauth_start_page,
 )
-from src.ebay_cf.storage.sqlite import (
+from src.fiscalbay.storage.sqlite import (
     create_oauth_link_session,
     load_audit_log_entries,
     load_ebay_token_sets,

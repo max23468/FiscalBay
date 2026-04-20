@@ -30,7 +30,7 @@ Regole:
 - non inserire segreti in documentazione o commit
 - limitare la lettura di `.env`
 - ruotare i segreti in caso di sospetto leak o cambio manutentore
-- contenitore autorizzato attuale: `/opt/ebay-cf/.env`
+- contenitore autorizzato attuale: `/opt/fiscalbay/.env`
 - permessi attesi del file `.env`: `600`
 - evitare copie superflue di `.env` fuori da backup amministrativi controllati
 
@@ -53,8 +53,8 @@ Procedura minima:
 
 1. creare un backup amministrativamente controllato dell'attuale `.env`
 2. generare o ottenere il nuovo segreto lato provider
-3. aggiornare `/opt/ebay-cf/.env`
-4. riavviare `ebaycf-bot`
+3. aggiornare `/opt/fiscalbay/.env`
+4. riavviare `fiscalbay-bot`
 5. eseguire `deploy/smoke-check.sh`
 6. invalidare il segreto precedente appena confermato il corretto funzionamento
 

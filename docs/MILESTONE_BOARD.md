@@ -143,7 +143,7 @@ Stato corrente:
 - `/disconnect` ora tenta anche la revoca remota eBay e mantiene distinta l'uscita completa dal bot
 - `/notifications on|off` e `/settings` esistono gia' come gestione self-service minima lato chat
 - `/connect` salva una sessione preliminare in `oauth_link_sessions`
-- il callback OAuth minimale esiste gia' come servizio separato `ebaycf-oauth`
+- il callback OAuth minimale esiste gia' come servizio separato `fiscalbay-oauth`
 - il token storage tenant usa gia' cifratura a riposo con chiave Fernet da env
 - `/reconnect_status`, `/why_not_notified` e il riepilogo explain su `/ordine` sono gia' disponibili
 - `/leave_bot` copre ora l'uscita completa dell'utente con disattivazione notifiche e nuova approvazione richiesta

@@ -24,7 +24,7 @@ Il progetto ha oggi due facce:
 - CLI locale per interrogazioni manuali sugli ordini
 - bot Telegram con comandi e notifiche automatiche
 
-Entrambe condividono lo stesso package Python interno `src/ebay_cf/`.
+Entrambe condividono lo stesso package Python interno `src/fiscalbay/`.
 
 Vincolo di prodotto:
 
@@ -38,54 +38,54 @@ Vincolo di prodotto:
 
 ### Entry point
 
-- `src/ebay_cf/cli.py`
+- `src/fiscalbay/cli.py`
   - esegue il flusso CLI
-- `src/ebay_cf/bot.py`
+- `src/fiscalbay/bot.py`
   - espone la facciata compatibile del bot e collega i servizi
-- `src/ebay_cf/oauth_server.py`
+- `src/fiscalbay/oauth_server.py`
   - espone il mini callback server OAuth per l'onboarding self-service
-- `src/ebay_cf/application.py`
+- `src/fiscalbay/application.py`
   - facciata applicativa condivisa per il fetch ordini usato da CLI e bot
 
 ### Config e modelli
 
-- `src/ebay_cf/config.py`
+- `src/fiscalbay/config.py`
   - carica configurazione ambiente
-- `src/ebay_cf/models.py`
+- `src/fiscalbay/models.py`
   - definisce configurazione, opzioni fetch, stato runtime e record ordine
-- `src/ebay_cf/errors.py`
+- `src/fiscalbay/errors.py`
   - gerarchia errori applicativi
-- `src/ebay_cf/retry.py`
+- `src/fiscalbay/retry.py`
   - retry/backoff condiviso
-- `src/ebay_cf/application.py`
+- `src/fiscalbay/application.py`
   - coordina il fetch di record eBay a partire dall'ambiente applicativo
 
 ### Client esterni
 
-- `src/ebay_cf/clients/ebay.py`
+- `src/fiscalbay/clients/ebay.py`
   - OAuth eBay, `getOrders`, `getOrder`
-- `src/ebay_cf/clients/telegram.py`
+- `src/fiscalbay/clients/telegram.py`
   - Telegram Bot API, long polling, deleteWebhook
 
 ### Servizi applicativi
 
-- `src/ebay_cf/services/orders.py`
+- `src/fiscalbay/services/orders.py`
   - fetch e normalizzazione ordini
-- `src/ebay_cf/services/notifications.py`
+- `src/fiscalbay/services/notifications.py`
   - stato bot, retry queue, deduplica, auto-notify
-- `src/ebay_cf/services/telegram_runtime.py`
+- `src/fiscalbay/services/telegram_runtime.py`
   - polling updates, callback, shutdown lifecycle
-- `src/ebay_cf/telegram_commands.py`
+- `src/fiscalbay/telegram_commands.py`
   - parsing comandi e rendering risposte Telegram
 
 ### Persistenza
 
-- `src/ebay_cf/storage/sqlite.py`
+- `src/fiscalbay/storage/sqlite.py`
   - stato runtime, retry queue, migrazioni SQLite, repository tenant-aware e compatibilita' legacy JSON
 
 ### Operativita'
 
-- `src/ebay_cf/healthcheck.py`
+- `src/fiscalbay/healthcheck.py`
   - controlli runtime e soglie alert minime
 - `deploy/`
   - setup VPS, update, smoke check, backup, restore e timer di alert check
@@ -136,7 +136,7 @@ Vincolo di prodotto:
 - anche il rendering CLI/Telegram usa principalmente `OrderRecord`; i wrapper compatibili di `bot.py` assorbono i payload legacy usati dai test storici
 - le conversioni compatibili sono state accentrate in adattatori espliciti dentro `bot.py`, invece di essere duplicate tra wrapper diversi
 - i log runtime, client HTTP, notifiche e healthcheck usano eventi strutturati; `cycle_id` correla polling, callback, messaggi e cicli di notifica
-- l'osservabilita' minima passa da `/stato`, `ebay-cf-healthcheck` e dal timer `ebaycf-alertcheck`, che segnala servizio fermo, backlog retry e troppi errori consecutivi
+- l'osservabilita' minima passa da `/stato`, `fiscalbay-healthcheck` e dal timer `fiscalbay-alertcheck`, che segnala servizio fermo, backlog retry e troppi errori consecutivi
 - lo storage espone adattatori tipizzati mantenendo compatibilita' con le API storiche piu' usate nei test
 
 ## Direzione multiutente fissata
@@ -264,5 +264,5 @@ Le decisioni architetturali principali del refactor, prima tracciate in `docs/ad
 
 ## Compatibilita' mantenuta durante il refactor
 
-- gli entrypoint di packaging puntano direttamente a `src/ebay_cf/cli.py` e `src/ebay_cf/bot.py`
+- gli entrypoint di packaging puntano direttamente a `src/fiscalbay/cli.py` e `src/fiscalbay/bot.py`
 - il formato persistito in SQLite resta compatibile con il runbook operativo attuale

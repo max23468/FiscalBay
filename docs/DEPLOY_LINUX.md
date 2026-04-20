@@ -1,12 +1,12 @@
 # Deploy su VPS Linux
 
-Questa guida prepara `eBay CF` per la VPS Linux attuale con `systemd`.
+Questa guida prepara `FiscalBay` per la VPS Linux attuale con `systemd`.
 
 ## Configurazione consigliata
 
 - Oracle Linux 9.7 con `systemd`
 - accesso SSH con chiave
-- utente di servizio dedicato, per esempio `ebaycf`
+- utente di servizio dedicato, per esempio `fiscalbay`
 - `systemd` come unico standard di esercizio in produzione
 - 1 vCPU
 - 1-2 GB RAM se disponibili
@@ -17,17 +17,17 @@ Questa guida prepara `eBay CF` per la VPS Linux attuale con `systemd`.
 1. entra in SSH
 2. clona la repository
 3. esegui `deploy/linux-setup.sh`
-4. compila `/opt/ebay-cf/.env`
-5. abilita il servizio `ebaycf-bot`
+4. compila `/opt/fiscalbay/.env`
+5. abilita il servizio `fiscalbay-bot`
 6. esegui smoke test e health check
 
 ## Setup iniziale
 
 ```bash
-git clone https://github.com/max23468/eBayCF.git ebay-cf
-cd ebay-cf
+git clone https://github.com/max23468/FiscalBay.git fiscalbay
+cd fiscalbay
 chmod +x deploy/linux-setup.sh
-APP_USER=ebaycf APP_GROUP=ebaycf ./deploy/linux-setup.sh
+APP_USER=fiscalbay APP_GROUP=fiscalbay ./deploy/linux-setup.sh
 ```
 
 Note:
@@ -35,15 +35,15 @@ Note:
 - se `APP_USER` o `APP_GROUP` non esistono, lo script li crea come account di servizio
 - il servizio `systemd` viene generato con i path reali del clone corrente
 - il file `.env` viene protetto con permessi `600`
-- viene installato e abilitato anche il timer `ebaycf-backup.timer` per il backup giornaliero
-- per il setup produttivo corrente il percorso operativo finale atteso e' `/opt/ebay-cf`
+- viene installato e abilitato anche il timer `fiscalbay-backup.timer` per il backup giornaliero
+- per il setup produttivo corrente il percorso operativo finale atteso e' `/opt/fiscalbay`
 
 ## Variabili da configurare
 
 File:
 
 ```bash
-nano "/opt/ebay-cf/.env"
+nano "/opt/fiscalbay/.env"
 ```
 
 Minimo indispensabile:
@@ -66,21 +66,21 @@ TELEGRAM_BOT_LOCK_PATH=data/telegram_bot.lock
 ## Avvio servizio
 
 ```bash
-sudo systemctl enable --now ebaycf-bot
-sudo systemctl status ebaycf-bot
+sudo systemctl enable --now fiscalbay-bot
+sudo systemctl status fiscalbay-bot
 ```
 
 ## Log e salute runtime
 
 ```bash
-sudo journalctl -u ebaycf-bot -f
-./.venv/bin/ebay-cf-healthcheck
+sudo journalctl -u fiscalbay-bot -f
+./.venv/bin/fiscalbay-healthcheck
 ```
 
 ## Aggiornamento dopo un push
 
 ```bash
-cd "/opt/ebay-cf"
+cd "/opt/fiscalbay"
 ./deploy/update.sh
 ./deploy/smoke-check.sh
 ```
@@ -96,13 +96,13 @@ Backup:
 Restore di prova:
 
 ```bash
-./deploy/restore.sh /home/ebaycf/maintenance-backups/<backup-dir>
+./deploy/restore.sh /home/fiscalbay/maintenance-backups/<backup-dir>
 ```
 
 Restore in-place:
 
 ```bash
-./deploy/restore.sh /home/ebaycf/maintenance-backups/<backup-dir> --in-place
+./deploy/restore.sh /home/fiscalbay/maintenance-backups/<backup-dir> --in-place
 ```
 
 Verifica permessi:
@@ -114,15 +114,15 @@ Verifica permessi:
 Verifica timer giornaliero:
 
 ```bash
-sudo systemctl status ebaycf-backup.timer
-sudo systemctl list-timers ebaycf-backup.timer
+sudo systemctl status fiscalbay-backup.timer
+sudo systemctl list-timers fiscalbay-backup.timer
 ```
 
 ## Note operative
 
 - usiamo polling, quindi non serve webhook pubblico
 - SQLite e lock file restano nella directory `data/` del progetto
-- il servizio reale della VPS si chiama `ebaycf-bot`
+- il servizio reale della VPS si chiama `fiscalbay-bot`
 - Docker Compose non e' mantenuto come opzione reale di esercizio sulla VPS attuale
 - lo script di setup supporta `apt-get`, `dnf`, `yum` e `apk`
 - il setup puo' creare e usare un utente di servizio dedicato

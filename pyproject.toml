@@ -3,25 +3,25 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ebay-cf-tool"
+name = "fiscalbay"
 version = "0.3.0"
 description = "CLI e bot Telegram per leggere codici fiscali dagli ordini eBay (API ufficiali)."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
-authors = [{ name = "eBay CF Tool" }]
+authors = [{ name = "FiscalBay" }]
 dependencies = [
   "cryptography>=45.0.0",
 ]
 
 [project.scripts]
-ebay-cf = "ebay_cf.cli:main"
-ebay-telegram-bot = "ebay_cf.bot:run_bot"
-ebay-cf-oauth-server = "ebay_cf.oauth_server:main"
-ebay-cf-fix-git-lock = "ebay_cf.git_utils:main"
-ebay-cf-git-safe = "ebay_cf.git_utils:safe_git_main"
-ebay-cf-healthcheck = "ebay_cf.healthcheck:main"
-ebay-cf-reconcile = "ebay_cf.reconcile:main"
+fiscalbay = "fiscalbay.cli:main"
+fiscalbay-bot = "fiscalbay.bot:run_bot"
+fiscalbay-oauth-server = "fiscalbay.oauth_server:main"
+fiscalbay-fix-git-lock = "fiscalbay.git_utils:main"
+fiscalbay-git-safe = "fiscalbay.git_utils:safe_git_main"
+fiscalbay-healthcheck = "fiscalbay.healthcheck:main"
+fiscalbay-reconcile = "fiscalbay.reconcile:main"
 
 [project.optional-dependencies]
 dev = [
@@ -53,17 +53,17 @@ select = [
 [tool.mypy]
 python_version = "3.10"
 files = [
-  "src/ebay_cf/models.py",
-  "src/ebay_cf/config.py",
-  "src/ebay_cf/storage/sqlite.py",
-  "src/ebay_cf/git_utils.py",
-  "src/ebay_cf/logging_utils.py",
-  "src/ebay_cf/healthcheck.py",
+  "src/fiscalbay/models.py",
+  "src/fiscalbay/config.py",
+  "src/fiscalbay/storage/sqlite.py",
+  "src/fiscalbay/git_utils.py",
+  "src/fiscalbay/logging_utils.py",
+  "src/fiscalbay/healthcheck.py",
 ]
 strict = true
 
 [tool.coverage.run]
-source = ["src/ebay_cf"]
+source = ["src/fiscalbay"]
 
 [tool.coverage.report]
 fail_under = 64

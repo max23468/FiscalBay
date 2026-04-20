@@ -1,5 +1,5 @@
 [Unit]
-Description=eBay CF periodic reconciliation
+Description=FiscalBay periodic reconciliation
 
 [Service]
 Type=oneshot

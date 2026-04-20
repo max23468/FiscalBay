@@ -20,7 +20,7 @@ from .storage.sqlite import (
     summarize_operation_queue,
 )
 
-LOGGER = logging.getLogger("ebaycf.healthcheck")
+LOGGER = logging.getLogger("fiscalbay.healthcheck")
 
 
 class HealthMetrics(TypedDict):
@@ -144,7 +144,7 @@ def build_health_report(
     max_age_seconds: Optional[int] = None,
     *,
     check_service_active: bool = False,
-    service_name: str = "ebaycf-bot",
+    service_name: str = "fiscalbay-bot",
     max_consecutive_error_cycles: int | None = None,
     max_retry_queue_size: int | None = None,
 ) -> HealthReport:
@@ -349,7 +349,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--service-name",
-        default="ebaycf-bot",
+        default="fiscalbay-bot",
         help="Nome servizio systemd da controllare con --check-service-active.",
     )
     parser.add_argument(

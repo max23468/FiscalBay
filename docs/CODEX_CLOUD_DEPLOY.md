@@ -32,21 +32,21 @@ Questo flusso non richiede accesso dal runtime Codex cloud alla rete privata del
 
 Configura questi secret nel repository GitHub:
 
-- `EBAYCF_VPS_HOST`
-- `EBAYCF_VPS_USER`
-- `EBAYCF_VPS_PORT`
-- `EBAYCF_VPS_SSH_PRIVATE_KEY_B64`
-- `EBAYCF_VPS_SSH_KNOWN_HOSTS`
+- `FISCALBAY_VPS_HOST`
+- `FISCALBAY_VPS_USER`
+- `FISCALBAY_VPS_PORT`
+- `FISCALBAY_VPS_SSH_PRIVATE_KEY_B64`
+- `FISCALBAY_VPS_SSH_KNOWN_HOSTS`
 
 Note operative:
 
-- `EBAYCF_VPS_HOST` e obbligatorio
-- `EBAYCF_VPS_SSH_PRIVATE_KEY_B64` deve contenere la chiave privata SSH in Base64
-- `EBAYCF_VPS_USER` puo restare `opc`
-- `EBAYCF_VPS_PORT` puo restare `22`
-- `EBAYCF_VPS_SSH_KNOWN_HOSTS` e fortemente consigliato per mantenere il controllo stretto della host key
+- `FISCALBAY_VPS_HOST` e obbligatorio
+- `FISCALBAY_VPS_SSH_PRIVATE_KEY_B64` deve contenere la chiave privata SSH in Base64
+- `FISCALBAY_VPS_USER` puo restare `opc`
+- `FISCALBAY_VPS_PORT` puo restare `22`
+- `FISCALBAY_VPS_SSH_KNOWN_HOSTS` e fortemente consigliato per mantenere il controllo stretto della host key
 
-I secret applicativi eBay e Telegram continuano invece a vivere sulla VPS nel file `/opt/ebay-cf/.env`.
+I secret applicativi eBay e Telegram continuano invece a vivere sulla VPS nel file `/opt/fiscalbay/.env`.
 
 ## Come produrre i secret GitHub
 
@@ -67,11 +67,11 @@ ssh-keyscan -H <host-vps>
 Il workflow GitHub esegue:
 
 - checkout della revisione target
-- sincronizzazione del repository verso `/opt/ebay-cf`
+- sincronizzazione del repository verso `/opt/fiscalbay`
 - installazione o aggiornamento locale con `deploy/install-vps.sh`
-- restart di `ebaycf-bot`
-- restart di `ebaycf-oauth` se il servizio e gia abilitato
-- verifica dei timer `ebaycf-backup.timer`, `ebaycf-alertcheck.timer` e `ebaycf-reconcile.timer`
+- restart di `fiscalbay-bot`
+- restart di `fiscalbay-oauth` se il servizio e gia abilitato
+- verifica dei timer `fiscalbay-backup.timer`, `fiscalbay-alertcheck.timer` e `fiscalbay-reconcile.timer`
 - smoke test applicativo con `deploy/smoke-check.sh`
 
 ## Fallback locale

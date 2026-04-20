@@ -15,7 +15,7 @@ from ..errors import TelegramApiError
 from ..logging_utils import log_event
 from ..retry import run_with_retry
 
-LOGGER = logging.getLogger("ebaycf.telegram_bot")
+LOGGER = logging.getLogger("fiscalbay.telegram_bot")
 TELEGRAM_API_BASE = "https://api.telegram.org"
 DEFAULT_TELEGRAM_RETRIES = 5
 DEFAULT_TELEGRAM_BASE_DELAY = 0.5

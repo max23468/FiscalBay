@@ -2,9 +2,9 @@ import unittest
 import urllib.error
 from unittest.mock import patch
 
-from src.ebay_cf.clients.telegram import telegram_api_request_once
-from src.ebay_cf.errors import TelegramApiError
-from src.ebay_cf.retry import run_with_retry
+from src.fiscalbay.clients.telegram import telegram_api_request_once
+from src.fiscalbay.errors import TelegramApiError
+from src.fiscalbay.retry import run_with_retry
 
 
 class RetryTests(unittest.TestCase):
@@ -25,7 +25,7 @@ class RetryTests(unittest.TestCase):
 
         self.assertEqual(attempts, 1)
 
-    @patch("src.ebay_cf.clients.telegram.urllib.request.urlopen")
+    @patch("src.fiscalbay.clients.telegram.urllib.request.urlopen")
     def test_telegram_api_request_once_wraps_url_error(self, mock_urlopen) -> None:
         mock_urlopen.side_effect = urllib.error.URLError("offline")
 
@@ -34,7 +34,7 @@ class RetryTests(unittest.TestCase):
 
         self.assertIn("offline", str(ctx.exception))
 
-    @patch("src.ebay_cf.clients.telegram.urllib.request.urlopen")
+    @patch("src.fiscalbay.clients.telegram.urllib.request.urlopen")
     def test_telegram_api_request_once_does_not_hide_keyboard_interrupt(self, mock_urlopen) -> None:
         mock_urlopen.side_effect = KeyboardInterrupt()
 

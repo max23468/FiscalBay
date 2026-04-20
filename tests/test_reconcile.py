@@ -3,13 +3,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.ebay_cf.models import OauthLinkSession, TelegramChat, TelegramConfig, TelegramUser
-from src.ebay_cf.reconcile import (
+from src.fiscalbay.models import OauthLinkSession, TelegramChat, TelegramConfig, TelegramUser
+from src.fiscalbay.reconcile import (
     enqueue_apply_user_access_operation,
     process_pending_operations,
     run_reconciliation,
 )
-from src.ebay_cf.storage.sqlite import (
+from src.fiscalbay.storage.sqlite import (
     create_oauth_link_session,
     load_notification_subscriptions,
     load_oauth_link_session_by_state,
@@ -91,7 +91,7 @@ class ReconcileTests(unittest.TestCase):
                 lock_path=str(lock_path),
             )
 
-            with patch("src.ebay_cf.reconcile.load_telegram_config", return_value=config):
+            with patch("src.fiscalbay.reconcile.load_telegram_config", return_value=config):
                 report = run_reconciliation()
 
             self.assertEqual(report["expired_oauth_sessions"], 1)

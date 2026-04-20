@@ -1,5 +1,5 @@
 [Unit]
-Description=eBay CF runtime alert check
+Description=FiscalBay runtime alert check
 
 [Service]
 Type=oneshot

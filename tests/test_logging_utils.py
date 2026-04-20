@@ -2,7 +2,7 @@ import logging
 import unittest
 from unittest.mock import Mock
 
-from src.ebay_cf.logging_utils import format_log_context, generate_operation_id, log_event
+from src.fiscalbay.logging_utils import format_log_context, generate_operation_id, log_event
 
 
 class LoggingUtilsTests(unittest.TestCase):

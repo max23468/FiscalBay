@@ -3,8 +3,8 @@ import unittest
 from unittest.mock import Mock, patch
 
 from cryptography.fernet import Fernet
-from src.ebay_cf.models import Config, EbayTokenSet, LinkedEbayAccount
-from src.ebay_cf.tenant_credentials import (
+from src.fiscalbay.models import Config, EbayTokenSet, LinkedEbayAccount
+from src.fiscalbay.tenant_credentials import (
     decode_refresh_token,
     encode_refresh_token,
     load_tenant_config_from_storage,

@@ -4,7 +4,7 @@
   "packages": {
     ".": {
       "release-type": "python",
-      "package-name": "ebay-cf-tool",
+      "package-name": "fiscalbay",
       "changelog-path": "CHANGELOG.md",
       "include-v-in-tag": true,
       "include-component-in-tag": false,

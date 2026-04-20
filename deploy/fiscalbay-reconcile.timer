@@ -1,10 +1,10 @@
 [Unit]
-Description=Periodic reconciliation for eBay CF
+Description=Periodic reconciliation for FiscalBay
 
 [Timer]
 OnCalendar=*:0/10
 Persistent=true
-Unit=ebaycf-reconcile.service
+Unit=fiscalbay-reconcile.service
 
 [Install]
 WantedBy=timers.target

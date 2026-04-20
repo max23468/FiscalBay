@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.ebay_cf.bot import (
+from src.fiscalbay.bot import (
     CALLBACK_HELP,
     CALLBACK_REQUEST_ACCESS,
     CALLBACK_SETTINGS,
@@ -120,8 +120,8 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("/request_access", text)
         self.assertIn("/users", text)
 
-    @patch("src.ebay_cf.bot.fetch_records")
-    @patch("src.ebay_cf.bot.load_config")
+    @patch("src.fiscalbay.bot.fetch_records")
+    @patch("src.fiscalbay.bot.load_config")
     def test_process_message_for_help(self, mock_load_config, mock_fetch_records) -> None:
         replies = process_message(
             text="/help",
@@ -134,7 +134,7 @@ class TelegramBotTests(unittest.TestCase):
             ebay_environment="production",
         )
         self.assertEqual(len(replies), 1)
-        self.assertIn("Benvenuto in eBay CF Bot", replies[0])
+        self.assertIn("Benvenuto in FiscalBay", replies[0])
         mock_load_config.assert_not_called()
         mock_fetch_records.assert_not_called()
 
@@ -214,7 +214,7 @@ class TelegramBotTests(unittest.TestCase):
             )
         )
 
-    @patch("src.ebay_cf.bot.telegram_request")
+    @patch("src.fiscalbay.bot.telegram_request")
     def test_send_message_retries_without_parse_mode_on_http_400(
         self, mock_telegram_request
     ) -> None:
@@ -229,7 +229,7 @@ class TelegramBotTests(unittest.TestCase):
         self.assertEqual(first_call.get("parse_mode"), "HTML")
         self.assertNotIn("parse_mode", second_call)
 
-    @patch("src.ebay_cf.bot.telegram_request")
+    @patch("src.fiscalbay.bot.telegram_request")
     def test_send_message_includes_reply_markup(self, mock_telegram_request) -> None:
         mock_telegram_request.return_value = {"message_id": 1}
         reply_markup = build_main_menu_markup()
@@ -237,7 +237,7 @@ class TelegramBotTests(unittest.TestCase):
         params = mock_telegram_request.call_args.args[2]
         self.assertEqual(params.get("reply_markup"), reply_markup)
 
-    @patch("src.ebay_cf.clients.telegram.telegram_request")
+    @patch("src.fiscalbay.clients.telegram.telegram_request")
     def test_ensure_long_polling_deletes_existing_webhook(self, mock_telegram_request) -> None:
         ensure_long_polling("token")
         mock_telegram_request.assert_called_once_with(

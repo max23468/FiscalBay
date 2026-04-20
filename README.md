@@ -1,6 +1,8 @@
-# eBay CF Tool
+# FiscalBay
 
-CLI e bot Telegram per leggere gli ordini eBay e mostrare l'identificativo fiscale restituito dalle API ufficiali eBay, inclusi i casi in cui il tipo è `CODICE_FISCALE`.
+FiscalBay e' un tool operativo con CLI e bot Telegram per leggere gli ordini eBay e mostrare l'identificativo fiscale restituito dalle API ufficiali eBay, inclusi i casi in cui il tipo e' `CODICE_FISCALE`.
+
+Payoff: `Order tax ID assistant for eBay sellers`.
 
 Il progetto nasce per un caso pratico molto preciso: interrogare gli ordini recenti, leggere il dettaglio completo di ogni ordine e rendere consultabile da terminale o da Telegram il contenuto di `buyer.taxIdentifier`.
 
@@ -8,10 +10,10 @@ Il progetto nasce per un caso pratico molto preciso: interrogare gli ordini rece
 
 Il repository contiene due entry point:
 
-- `ebay-cf`: utility CLI per leggere ordini e stampare i risultati in tabella, JSON o CSV
-- `ebay-telegram-bot`: bot Telegram con comandi interattivi e notifiche automatiche dei nuovi ordini
-- `ebay-cf-oauth-server`: callback server minimale per l'onboarding self-service Telegram + eBay OAuth
-- `ebay-cf-reconcile`: worker one-shot per reconciliation periodica e coda operativa
+- `fiscalbay`: utility CLI per leggere ordini e stampare i risultati in tabella, JSON o CSV
+- `fiscalbay-bot`: bot Telegram con comandi interattivi e notifiche automatiche dei nuovi ordini
+- `fiscalbay-oauth-server`: callback server minimale per l'onboarding self-service Telegram + eBay OAuth
+- `fiscalbay-reconcile`: worker one-shot per reconciliation periodica e coda operativa
 
 Funzionalità principali:
 
@@ -77,7 +79,7 @@ Il flusso consigliato da remoto e:
 
 In pratica, da Codex web/mobile ti basta:
 
-- aprire il repository GitHub `max23468/eBayCF`
+- aprire il repository GitHub `max23468/FiscalBay`
 - lavorare su branch o su `main`
 - usare GitHub Actions per il deploy, senza dipendere dai secret runtime di `chatgpt.com`
 
@@ -133,13 +135,13 @@ export TELEGRAM_NOTIFY_CHAT_IDS="123456789"
 ### 3. Prova la CLI
 
 ```bash
-ebay-cf --only-found
+fiscalbay --only-found
 ```
 
 ### 4. Avvia il bot
 
 ```bash
-ebay-telegram-bot
+fiscalbay-bot
 ```
 
 ## Architettura
@@ -215,7 +217,7 @@ Nota OAuth eBay:
 ### Ordini recenti
 
 ```bash
-ebay-cf
+fiscalbay
 ```
 
 Equivale a leggere gli ordini degli ultimi 7 giorni.
@@ -223,13 +225,13 @@ Equivale a leggere gli ordini degli ultimi 7 giorni.
 ### Solo ordini con identificativo fiscale presente
 
 ```bash
-ebay-cf --only-found
+fiscalbay --only-found
 ```
 
 ### Ordine specifico
 
 ```bash
-ebay-cf --order-id "12-34567-89012"
+fiscalbay --order-id "12-34567-89012"
 ```
 
 Puoi ripetere `--order-id` più volte.
@@ -237,7 +239,7 @@ Puoi ripetere `--order-id` più volte.
 ### Finestra temporale esplicita
 
 ```bash
-ebay-cf \
+fiscalbay \
   --created-after "2026-04-01T00:00:00Z" \
   --created-before "2026-04-03T23:59:59Z"
 ```
@@ -245,20 +247,20 @@ ebay-cf \
 ### Esportazione CSV
 
 ```bash
-ebay-cf --format csv --output risultati.csv
+fiscalbay --format csv --output risultati.csv
 ```
 
 ### Esportazione JSON
 
 ```bash
-ebay-cf --format json --output risultati.json
+fiscalbay --format json --output risultati.json
 ```
 
 ### Esecuzione senza installazione
 
 ```bash
-PYTHONPATH=src python3 -m ebay_cf.cli --help
-PYTHONPATH=src python3 -m ebay_cf.bot
+PYTHONPATH=src python3 -m fiscalbay.cli --help
+PYTHONPATH=src python3 -m fiscalbay.bot
 ```
 
 ### Utility operativa Git
@@ -266,7 +268,7 @@ PYTHONPATH=src python3 -m ebay_cf.bot
 Se Git resta bloccato da un `index.lock` rimasto sporco, puoi usare:
 
 ```bash
-ebay-cf-fix-git-lock
+fiscalbay-fix-git-lock
 ```
 
 Il comando rimuove il lock solo se non risulta piu' detenuto da un processo attivo.
@@ -274,8 +276,8 @@ Il comando rimuove il lock solo se non risulta piu' detenuto da un processo atti
 Per rendere piu' robusti i comandi Git locali del progetto puoi anche usare:
 
 ```bash
-ebay-cf-git-safe -- commit -m "messaggio"
-ebay-cf-git-safe -- push origin main
+fiscalbay-git-safe -- commit -m "messaggio"
+fiscalbay-git-safe -- push origin main
 ```
 
 Questo wrapper:
@@ -289,13 +291,13 @@ Questo wrapper:
 Per verificare rapidamente se il bot sembra sano lato runtime puoi usare:
 
 ```bash
-ebay-cf-healthcheck
+fiscalbay-healthcheck
 ```
 
 Oppure in JSON:
 
 ```bash
-ebay-cf-healthcheck --json
+fiscalbay-healthcheck --json
 ```
 
 Il controllo verifica almeno:
@@ -308,13 +310,13 @@ Il controllo verifica almeno:
 Per riallineare periodicamente accessi, sessioni OAuth stale e queue operativa puoi usare:
 
 ```bash
-ebay-cf-reconcile
+fiscalbay-reconcile
 ```
 
 Oppure in JSON:
 
 ```bash
-ebay-cf-reconcile --json
+fiscalbay-reconcile --json
 ```
 
 ## Campi Restituiti
@@ -436,12 +438,12 @@ Documenti principali:
 - `docs/OAUTH_FLOW.md`
 - `docs/CHANGELOG.md`
 
-Asset disponibili nel repository, allineati al setup VPS attuale (`ebaycf`, `/opt/ebay-cf`, servizio `ebaycf-bot`):
+Asset disponibili nel repository, allineati al setup VPS attuale (`fiscalbay`, `/opt/fiscalbay`, servizio `fiscalbay-bot`):
 
 - `deploy/linux-setup.sh`
 - `deploy/update.sh`
 - `deploy/smoke-check.sh`
-- `deploy/ebaycf-bot.service`
+- `deploy/fiscalbay-bot.service`
 - `.env.example`
 
 ## Test

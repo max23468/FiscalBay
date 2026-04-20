@@ -29,7 +29,7 @@ from ..telegram_commands import (
     should_attach_main_menu,
 )
 
-LOGGER = logging.getLogger("ebaycf.telegram_runtime")
+LOGGER = logging.getLogger("fiscalbay.telegram_runtime")
 _ACTIVE_SHUTDOWN_EVENT: threading.Event | None = None
 
 

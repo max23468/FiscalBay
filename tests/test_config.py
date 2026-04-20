@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from src.ebay_cf.config import load_telegram_config
+from src.fiscalbay.config import load_telegram_config
 
 
 class ConfigTests(unittest.TestCase):
@@ -19,15 +19,15 @@ class ConfigTests(unittest.TestCase):
 
 class AuthorizationTests(unittest.TestCase):
     def test_is_authorized_denies_when_allowlist_is_empty(self) -> None:
-        from src.ebay_cf.models import TelegramConfig
-        from src.ebay_cf.telegram_commands import is_authorized
+        from src.fiscalbay.models import TelegramConfig
+        from src.fiscalbay.telegram_commands import is_authorized
 
         config = TelegramConfig(token="token", allowed_chat_ids=set(), notify_chat_ids=set())
         self.assertFalse(is_authorized(123456, config))
 
     def test_is_authorized_denies_when_allowlist_is_none(self) -> None:
-        from src.ebay_cf.models import TelegramConfig
-        from src.ebay_cf.telegram_commands import is_authorized
+        from src.fiscalbay.models import TelegramConfig
+        from src.fiscalbay.telegram_commands import is_authorized
 
         config = TelegramConfig(token="token", allowed_chat_ids=None, notify_chat_ids=set())
         self.assertFalse(is_authorized(123456, config))

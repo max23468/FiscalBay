@@ -1,10 +1,10 @@
 [Unit]
-Description=Daily backup for eBay CF
+Description=Daily backup for FiscalBay
 
 [Timer]
 OnCalendar=*-*-* 03:15:00
 Persistent=true
-Unit=ebaycf-backup.service
+Unit=fiscalbay-backup.service
 
 [Install]
 WantedBy=timers.target
