@@ -31,9 +31,12 @@ CALLBACK_TUTTI = "menu:tutti"
 CALLBACK_STATO = "menu:stato"
 CALLBACK_HELP = "menu:help"
 CALLBACK_ACCOUNT = "menu:account"
+CALLBACK_RECONNECT_STATUS = "menu:reconnect_status"
 CALLBACK_CONNECT = "menu:connect"
 CALLBACK_DISCONNECT = "menu:disconnect"
 CALLBACK_SETTINGS = "menu:settings"
+CALLBACK_NOTIFICATIONS_ON = "menu:notifications_on"
+CALLBACK_NOTIFICATIONS_OFF = "menu:notifications_off"
 CALLBACK_REQUEST_ACCESS = "access:request"
 CALLBACK_APPROVE_PREFIX = "access:approve:"
 CALLBACK_REJECT_PREFIX = "access:reject:"
@@ -154,6 +157,8 @@ def build_help_text() -> str:
         f"🤖 <b>Benvenuto in {BOT_DISPLAY_NAME}</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"<i>{BOT_TAGLINE}</i>\n\n"
+        "Esperienza consigliata: usa i pulsanti rapidi del bot per muoverti tra "
+        "collegamento account, stato e notifiche senza ricordare ogni comando.\n\n"
         "Comandi disponibili:\n"
         "• 🟢 <code>/ping</code> → verifica rapida\n"
         "• 📊 <code>/stato</code> → stato bot e metriche principali\n"
@@ -164,14 +169,21 @@ def build_help_text() -> str:
         "• 🚪 <code>/leave_bot</code> → disattiva uso bot e richiede nuova approvazione\n"
         "• 🔔 <code>/notifications on</code> → attiva notifiche per questa chat\n"
         "• 🔕 <code>/notifications off</code> → disattiva notifiche per questa chat\n"
+        "• 🧪 <code>/notifications filter all|cf|vat</code> → filtra il tipo di avviso fiscale\n"
         "• ⚙️ <code>/settings</code> → preferenze chat, notifiche e tenant\n"
         "• 🧭 <code>/why_not_notified [order_id]</code> → spiega se un ordine e' notificabile\n"
+        "• 🗂️ <code>/review_orders [giorni] [max]</code> → ordini recenti da controllare a mano\n"
+        "• 📈 <code>/report_summary [giorni] [max]</code> → mini report fiscale compatto in chat\n"
+        "• 🚦 <code>/priority_orders [giorni] [max]</code> → ordini recenti ordinati per priorita'\n"
         "• 🙋 <code>/request_access</code> → richiede accesso all'admin del bot\n"
         "• 👥 <code>/users</code> → elenco utenti registrati e stato accessi (admin)\n"
         "• 🕓 <code>/pending_users</code> → solo richieste accesso pending (admin)\n"
         "• 🔗 <code>/unlinked_users</code> → approvati senza account operativo (admin)\n"
+        "• 🔁 <code>/reconnect_users</code> → tenant che richiedono reconnect eBay (admin)\n"
+        "• 🌙 <code>/inactive_users</code> → tenant approvati ma fermi da troppo tempo (admin)\n"
         "• 🩺 <code>/tenant_health [user_id]</code> → salute tenant compatta (admin)\n"
         "• 🧭 <code>/admin_dashboard</code> → cruscotto admin e alert prodotto (admin)\n"
+        "• 🧹 <code>/maintenance_overview</code> → backlog operativo e cleanup da tenere d'occhio (admin)\n"
         "• ⛔ <code>/suspend_user [id]</code> → sospende un utente approvato (admin)\n"
         "• ✅ <code>/reactivate_user [id]</code> → riattiva un utente sospeso (admin)\n"
         "• 🛠️ <code>/service_mode "
@@ -226,8 +238,12 @@ def build_start_text(
             "Il tuo account Telegram e' riconosciuto come admin globale.\n"
             "Puoi approvare utenti con <code>/users</code>, <code>/approve_user</code> "
             "e <code>/reject_user</code>.\n"
+            "Per la vista prodotto usa <code>/admin_dashboard</code>; "
+            "per backlog e cleanup usa <code>/maintenance_overview</code>; "
+            "per i tenant da seguire usa <code>/reconnect_users</code>.\n"
             "Per il tuo uso operativo puoi controllare <code>/account</code>, "
-            "<code>/connect</code> e gli ordini recenti."
+            "<code>/connect</code> e gli ordini recenti.\n"
+            "Usa i pulsanti qui sotto per passare rapidamente tra stato, account e impostazioni."
             f"{private_only_note}"
         )
 
@@ -250,7 +266,9 @@ def build_start_text(
             f"<code>{html.escape(raw_account_status)}</code>.\n"
             "Ultimo utente noto: "
             f"<code>{ebay_user_id}</code> • ambiente: <code>{environment}</code>\n"
-            "Prossimo passo: usa <code>/connect</code> per collegare di nuovo l'account."
+            "Prossimo passo: usa <code>/connect</code> per collegare di nuovo l'account.\n"
+            "Dopo il reconnect potrai tornare subito a <code>/account</code> o "
+            "<code>/ultimi</code>."
             f"{private_only_note}"
         )
 
@@ -261,7 +279,9 @@ def build_start_text(
             "<i>Controlla identificativi fiscali, account e ordini eBay</i>\n"
             "Il tuo account eBay risulta collegato, ma il token non e' piu' utilizzabile.\n"
             f"Utente eBay: <code>{ebay_user_id}</code> • ambiente: <code>{environment}</code>\n"
-            "Prossimo passo: usa <code>/connect</code> per completare il reconnect."
+            "Prossimo passo: usa <code>/connect</code> per completare il reconnect.\n"
+            "Se vuoi capire meglio il problema puoi controllare anche "
+            "<code>/reconnect_status</code>."
             f"{private_only_note}"
         )
 
@@ -271,9 +291,10 @@ def build_start_text(
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "<i>Controlla identificativi fiscali, account e ordini eBay</i>\n"
             "Il tuo accesso e' approvato, ma non hai ancora collegato un account eBay.\n"
-            "Prossimo passo: usa <code>/connect</code>.\n"
-            "Poi potrai verificare lo stato con <code>/account</code> "
-            "e attivare il flusso operativo."
+            "Percorso consigliato:\n"
+            "1. usa <code>/connect</code>\n"
+            "2. controlla <code>/account</code>\n"
+            "3. prova <code>/ultimi</code> per i primi risultati"
             f"{private_only_note}"
         )
 
@@ -283,13 +304,43 @@ def build_start_text(
         f"<i>{BOT_TAGLINE}</i>\n"
         "Il tuo accesso e' attivo e l'account eBay risulta collegato.\n"
         f"Utente eBay: <code>{ebay_user_id}</code> • ambiente: <code>{environment}</code>\n"
-        "Comandi utili: <code>/ultimi</code>, <code>/tutti</code>, <code>/ordine</code>, "
-        "<code>/account</code>, <code>/notifications on</code>, <code>/settings</code>."
+        "Prossimi passi consigliati: controlla <code>/ultimi</code>, verifica "
+        "<code>/account</code> e gestisci recapito con <code>/notifications on</code> "
+        "o <code>/settings</code>."
         f"{private_only_note}"
     )
 
 
-def build_main_menu_markup() -> InlineKeyboardMarkup:
+def build_main_menu_markup(
+    *,
+    account_linked: bool = True,
+    reconnect_required: bool = False,
+    notifications_enabled: bool = True,
+) -> InlineKeyboardMarkup:
+    connect_label = "Ricollega eBay" if reconnect_required else "Collega eBay"
+    notification_label = "Disattiva notifiche" if notifications_enabled else "Attiva notifiche"
+    notification_callback = (
+        CALLBACK_NOTIFICATIONS_OFF if notifications_enabled else CALLBACK_NOTIFICATIONS_ON
+    )
+    third_row = [
+        {"text": connect_label, "callback_data": CALLBACK_CONNECT},
+        {"text": "Reconnect", "callback_data": CALLBACK_RECONNECT_STATUS},
+    ]
+    fourth_row = [
+        {"text": notification_label, "callback_data": notification_callback},
+        {"text": "Preferenze", "callback_data": CALLBACK_SETTINGS},
+    ]
+    if account_linked:
+        fifth_row = [
+            {"text": "Scollega", "callback_data": CALLBACK_DISCONNECT},
+            {"text": "Guida", "callback_data": CALLBACK_HELP},
+        ]
+    else:
+        fifth_row = [
+            {"text": "Account eBay", "callback_data": CALLBACK_ACCOUNT},
+            {"text": "Guida", "callback_data": CALLBACK_HELP},
+        ]
+
     return {
         "inline_keyboard": [
             [
@@ -300,14 +351,9 @@ def build_main_menu_markup() -> InlineKeyboardMarkup:
                 {"text": "Stato bot", "callback_data": CALLBACK_STATO},
                 {"text": "Account eBay", "callback_data": CALLBACK_ACCOUNT},
             ],
-            [
-                {"text": "Collega eBay", "callback_data": CALLBACK_CONNECT},
-                {"text": "Scollega", "callback_data": CALLBACK_DISCONNECT},
-            ],
-            [
-                {"text": "Preferenze", "callback_data": CALLBACK_SETTINGS},
-                {"text": "Guida", "callback_data": CALLBACK_HELP},
-            ],
+            third_row,
+            fourth_row,
+            fifth_row,
         ]
     }
 
@@ -319,9 +365,12 @@ def callback_command_from_data(data: str) -> str | None:
         CALLBACK_TUTTI: "/tutti 7 20",
         CALLBACK_STATO: "/stato",
         CALLBACK_ACCOUNT: "/account",
+        CALLBACK_RECONNECT_STATUS: "/reconnect_status",
         CALLBACK_CONNECT: "/connect",
         CALLBACK_DISCONNECT: "/disconnect",
         CALLBACK_SETTINGS: "/settings",
+        CALLBACK_NOTIFICATIONS_ON: "/notifications on",
+        CALLBACK_NOTIFICATIONS_OFF: "/notifications off",
         CALLBACK_REQUEST_ACCESS: "/request_access",
         CALLBACK_HELP: "/help",
     }
@@ -347,6 +396,7 @@ def should_attach_main_menu(command: str) -> bool:
         "/reconnect_status",
         "/connect",
         "/disconnect",
+        "/notifications",
         "/settings",
         "/service_status",
         "/policy",
@@ -360,8 +410,9 @@ def build_access_request_markup() -> InlineKeyboardMarkup:
                 {
                     "text": "Richiedi accesso",
                     "callback_data": CALLBACK_REQUEST_ACCESS,
-                }
-            ]
+                },
+                {"text": "Guida", "callback_data": CALLBACK_HELP},
+            ],
         ]
     }
 
@@ -409,7 +460,8 @@ def format_access_required_status(user_status: str, *, is_admin: bool = False) -
         "🙋 <b>Accesso richiesto</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "Questo bot usa un accesso approvato dall'admin.\n"
-        "Usa <code>/request_access</code> per inviare la tua richiesta."
+        "Usa <code>/request_access</code> per inviare la tua richiesta.\n"
+        "Dopo l'approvazione potrai collegare eBay direttamente da Telegram."
     )
 
 
@@ -572,6 +624,32 @@ def format_admin_user_list(
     return "\n".join(sections)
 
 
+def format_admin_watchlist(
+    rows: Iterable[Mapping[str, object]],
+    *,
+    title: str,
+    empty_message: str,
+) -> str:
+    rendered_rows = list(rows)
+    if not rendered_rows:
+        return f"{title}\n━━━━━━━━━━━━━━━━━━━━━━━━\n{empty_message}"
+    lines = [
+        title,
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"📦 Totale: <code>{len(rendered_rows)}</code>",
+    ]
+    for row in rendered_rows:
+        lines.append(
+            "• "
+            f"<code>{html.escape(str(row.get('telegram_user_id') or 'n/d'))}</code> "
+            f"user=<code>{html.escape(str(row.get('username') or 'n/d'))}</code> "
+            f"state=<code>{html.escape(str(row.get('operational_state') or 'n/d'))}</code> "
+            f"last=<code>{html.escape(str(row.get('last_issue') or 'none'))}</code> "
+            f"activity=<code>{html.escape(str(row.get('last_activity_at') or 'n/d'))}</code>"
+        )
+    return "\n".join(lines)
+
+
 def format_admin_status_update(
     *,
     telegram_user_id: int,
@@ -604,6 +682,7 @@ def format_admin_dashboard(dashboard: Mapping[str, object]) -> str:
     approved_unlinked = html.escape(str(metrics.get("approved_without_link", 0)))
     pending_stale = html.escape(str(metrics.get("pending_stale", 0)))
     revoked_stale = html.escape(str(metrics.get("revoked_stale", 0)))
+    oauth_pending_expired = html.escape(str(metrics.get("oauth_pending_expired", 0)))
     queue_pending = html.escape(str(queue.get("pending", 0)))
     queue_failed = html.escape(str(queue.get("failed", 0)))
     sections = [
@@ -614,6 +693,7 @@ def format_admin_dashboard(dashboard: Mapping[str, object]) -> str:
         f"🔗 Tenant linked: <code>{linked}</code> • "
         f"⌛ Approved non operativi: <code>{approved_unlinked}</code>",
         f"🚨 OAuth failure recenti: <code>{oauth_failures_recent}</code>",
+        f"🪪 Sessioni OAuth pending ma scadute: <code>{oauth_pending_expired}</code>",
         f"📦 Queue pending: <code>{queue_pending}</code> • failed: <code>{queue_failed}</code>",
         f"⚠️ Pending fermi: <code>{pending_stale}</code> • "
         f"token revocati/rotti persistenti: <code>{revoked_stale}</code>",
@@ -626,6 +706,72 @@ def format_admin_dashboard(dashboard: Mapping[str, object]) -> str:
             for alert in alerts
         )
     return "\n".join(sections)
+
+
+def format_admin_maintenance_overview(payload: Mapping[str, object]) -> str:
+    dashboard = payload.get("dashboard") or {}
+    metrics = dashboard.get("metrics") or {}
+    queue = payload.get("queue") or {}
+    oauth = payload.get("oauth_sessions") or {}
+    queue_samples = list(payload.get("queue_samples") or [])
+    mode = html.escape(str(payload.get("service_mode") or "normal"))
+    retry_backlog = html.escape(str(payload.get("retry_backlog", 0)))
+    lines = [
+        "🧹 <b>Maintenance Overview</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"🛠️ Modalita' servizio: <code>{mode}</code>",
+        f"🪪 OAuth pending attive: <code>{html.escape(str(oauth.get('pending_active', 0)))}</code>",
+        f"⏰ OAuth pending scadute: <code>{html.escape(str(oauth.get('pending_expired', 0)))}</code> • "
+        f"expired: <code>{html.escape(str(oauth.get('expired', 0)))}</code> • "
+        f"failed: <code>{html.escape(str(oauth.get('failed', 0)))}</code>",
+        f"📦 Queue pending: <code>{html.escape(str(queue.get('pending', 0)))}</code> • "
+        f"running: <code>{html.escape(str(queue.get('running', 0)))}</code> • "
+        f"failed: <code>{html.escape(str(queue.get('failed', 0)))}</code> • "
+        f"retry backlog: <code>{retry_backlog}</code>",
+        f"🕓 Pending fermi: <code>{html.escape(str(metrics.get('pending_stale', 0)))}</code> • "
+        f"🔁 Reconnect persistenti: <code>{html.escape(str(metrics.get('revoked_stale', 0)))}</code>",
+    ]
+    oldest_pending_user_id = oauth.get("oldest_pending_user_id")
+    if oldest_pending_user_id not in {None, 0, "0"}:
+        lines.append(
+            "• "
+            f"pending_session user=<code>{html.escape(str(oldest_pending_user_id))}</code> "
+            f"created=<code>{html.escape(str(oauth.get('oldest_pending_created_at') or 'n/d'))}</code> "
+            f"expires=<code>{html.escape(str(oauth.get('oldest_pending_expires_at') or 'n/d'))}</code>"
+        )
+    for sample in queue_samples:
+        lines.append(
+            "• "
+            f"queue op=<code>{html.escape(str(sample.get('operation_type') or 'n/d'))}</code> "
+            f"status=<code>{html.escape(str(sample.get('status') or 'n/d'))}</code> "
+            f"target=<code>{html.escape(str(sample.get('target_telegram_user_id') or 'n/d'))}</code> "
+            f"attempts=<code>{html.escape(str(sample.get('attempts') or 0))}</code>"
+        )
+    quick_actions: list[str] = []
+    if int(oauth.get("pending_expired", 0)) > 0:
+        quick_actions.append(
+            "sessioni OAuth scadute: rivedi <code>/reconnect_users</code> e poi riallinea il backend"
+        )
+    if int(queue.get("failed", 0)) > 0:
+        quick_actions.append(
+            "coda con errori: controlla <code>/tenant_health</code> sui tenant coinvolti"
+        )
+    if int(retry_backlog) > 0:
+        quick_actions.append(
+            "retry backlog presente: monitora <code>/service_status</code> e verifica il polling"
+        )
+    if int(metrics.get("pending_stale", 0)) > 0:
+        quick_actions.append(
+            "richieste accesso ferme: passa da <code>/pending_users</code>"
+        )
+    if quick_actions:
+        lines.append("\n🎯 <b>Priorita' consigliate</b>")
+        lines.extend(f"• {action}" for action in quick_actions)
+    lines.append(
+        "Usa <code>/admin_dashboard</code>, <code>/tenant_health</code> e "
+        "<code>/reconnect_users</code> per approfondire."
+    )
+    return "\n".join(lines)
 
 
 def format_tenant_health(rows: Iterable[Mapping[str, object]]) -> str:
@@ -688,6 +834,45 @@ def format_policy_status(policy_status: Mapping[str, object]) -> str:
     )
 
 
+def _format_personal_snapshot(account_status: Mapping[str, object]) -> str:
+    notifications_known = "notifications_enabled" in account_status
+    notifications_enabled = bool(account_status.get("notifications_enabled", False))
+    session_ready = bool(account_status.get("session_ready", False))
+    session_status = str(account_status.get("latest_session_status") or "").strip()
+    session_expires_at = html.escape(str(account_status.get("latest_session_expires_at") or ""))
+    last_seen_order_id = html.escape(str(account_status.get("last_seen_order_id") or ""))
+    last_seen_order_created_at = html.escape(str(account_status.get("last_seen_order_created_at") or ""))
+    last_notified_order_id = html.escape(str(account_status.get("last_notified_order_id") or ""))
+    last_notified_order_created_at = html.escape(
+        str(account_status.get("last_notified_order_created_at") or "")
+    )
+
+    lines: list[str] = []
+    if notifications_known:
+        lines.append(
+            "🔔 Chat corrente: <code>"
+            + ("attive" if notifications_enabled else "disattivate")
+            + "</code>"
+        )
+    if session_ready and session_expires_at:
+        lines.append(f"🪄 Sessione connect pronta fino a: <code>{session_expires_at}</code>")
+    elif session_status:
+        lines.append(f"🧷 Ultima sessione connect: <code>{html.escape(session_status)}</code>")
+    if last_seen_order_id:
+        lines.append(
+            f"👀 Ultimo ordine visto: <code>{last_seen_order_id}</code> • "
+            f"<code>{last_seen_order_created_at or 'n/d'}</code>"
+        )
+    if last_notified_order_id:
+        lines.append(
+            f"📨 Ultimo ordine notificato: <code>{last_notified_order_id}</code> • "
+            f"<code>{last_notified_order_created_at or 'n/d'}</code>"
+        )
+    if not lines:
+        return ""
+    return "\n" + "\n".join(lines)
+
+
 def format_account_status(account_status: Mapping[str, object]) -> str:
     linked = bool(account_status.get("linked"))
     environment = html.escape(str(account_status.get("environment") or "n/d"))
@@ -699,6 +884,7 @@ def format_account_status(account_status: Mapping[str, object]) -> str:
     reconnect_hint = format_reconnect_reason_hint(account_status)
     subscription_count = int(account_status.get("subscription_count", 0))
     chat_count = int(account_status.get("chat_count", 0))
+    personal_snapshot = _format_personal_snapshot(account_status)
 
     if raw_account_state == "revoked":
         return (
@@ -710,6 +896,7 @@ def format_account_status(account_status: Mapping[str, object]) -> str:
             f"🔐 Token: <code>{token_status}</code>\n"
             "Il collegamento risulta revocato e va autorizzato di nuovo con "
             "<code>/connect</code>."
+            f"{personal_snapshot}"
             f"{reconnect_hint}"
         )
 
@@ -723,6 +910,7 @@ def format_account_status(account_status: Mapping[str, object]) -> str:
             f"🔐 Token: <code>{token_status}</code>\n"
             "L'account e' stato scollegato dal bot. Usa <code>/connect</code> "
             "per ricollegarlo."
+            f"{personal_snapshot}"
             f"{reconnect_hint}"
         )
 
@@ -732,6 +920,7 @@ def format_account_status(account_status: Mapping[str, object]) -> str:
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "Stato: <code>non collegato</code>\n"
             "Usa <code>/connect</code> per collegare il tuo account eBay."
+            f"{personal_snapshot}"
         )
 
     if raw_token_status in {"revoked", "expired", "token_expired"}:
@@ -744,6 +933,7 @@ def format_account_status(account_status: Mapping[str, object]) -> str:
             f"🔐 Token: <code>{token_status}</code>\n"
             "Il collegamento esiste ancora, ma il token non e' piu' utilizzabile. "
             "Usa <code>/connect</code> per riconnettere l'account."
+            f"{personal_snapshot}"
             f"{reconnect_hint}"
         )
 
@@ -756,6 +946,10 @@ def format_account_status(account_status: Mapping[str, object]) -> str:
         f"🔐 Token: <code>{token_status}</code>\n"
         f"💬 Chat abilitate: <code>{chat_count}</code>\n"
         f"🔔 Subscription attive: <code>{subscription_count}</code>"
+        f"{personal_snapshot}\n"
+        "➡️ Prossimi passi: usa <code>/ultimi</code> per il controllo veloce, "
+        "<code>/ordine &lt;order_id&gt;</code> per il dettaglio e <code>/notifications</code> "
+        "per il recapito chat."
     )
 
 
@@ -766,6 +960,7 @@ def format_reconnect_status(account_status: Mapping[str, object]) -> str:
     reconnect_hint = format_reconnect_reason_hint(account_status)
     environment = html.escape(str(account_status.get("environment") or "n/d"))
     ebay_user_id = html.escape(str(account_status.get("ebay_user_id") or "n/d"))
+    personal_snapshot = _format_personal_snapshot(account_status)
 
     if raw_account_status in {"revoked", "disconnected"}:
         return (
@@ -775,6 +970,7 @@ def format_reconnect_status(account_status: Mapping[str, object]) -> str:
             f"🪪 Ultimo utente eBay: <code>{ebay_user_id}</code>\n"
             f"🌍 Ambiente: <code>{environment}</code>\n"
             "Prossima azione: usa <code>/connect</code> per collegare di nuovo l'account."
+            f"{personal_snapshot}"
             f"{reconnect_hint}"
         )
 
@@ -787,6 +983,7 @@ def format_reconnect_status(account_status: Mapping[str, object]) -> str:
             f"🌍 Ambiente: <code>{environment}</code>\n"
             f"🔐 Stato token: <code>{html.escape(raw_token_status)}</code>\n"
             "Prossima azione: usa <code>/connect</code> per completare il reconnect."
+            f"{personal_snapshot}"
             f"{reconnect_hint}"
         )
 
@@ -798,6 +995,7 @@ def format_reconnect_status(account_status: Mapping[str, object]) -> str:
             f"🪪 Utente eBay: <code>{ebay_user_id}</code>\n"
             f"🌍 Ambiente: <code>{environment}</code>\n"
             "Nessuna azione richiesta: il collegamento risulta utilizzabile."
+            f"{personal_snapshot}"
         )
 
     return (
@@ -806,6 +1004,7 @@ def format_reconnect_status(account_status: Mapping[str, object]) -> str:
         "📌 Stato attuale: <code>unlinked</code>\n"
         "Nessun account eBay collegato in questo momento.\n"
         "Prossima azione: usa <code>/connect</code> per avviare il collegamento."
+        f"{personal_snapshot}"
     )
 
 
@@ -857,24 +1056,30 @@ def format_why_not_notified_status(explain: Mapping[str, object]) -> str:
 
     blocking_reason = "Nessun blocco rilevato al momento."
     next_action = "Nessuna azione richiesta: l'ordine e la chat risultano pronti."
+    quick_command = "<code>/settings</code>"
     if raw_status == "order_not_found":
         blocking_reason = "L'ordine non e' recuperabile con il contesto attuale."
         next_action = "Controlla orderId, ambiente e account collegato, poi riprova."
+        quick_command = "<code>/account</code>"
     elif raw_status == "missing_order_id":
         blocking_reason = "Manca un identificativo ordine stabile."
         next_action = "Verifica il payload sorgente: senza orderId il bot non puo' tracciarlo."
     elif raw_status == "not_eligible":
         blocking_reason = "L'ordine non passa i criteri di eleggibilita' correnti."
         next_action = "Controlla che l'identificativo fiscale sia presente e valorizzato."
+        quick_command = "<code>/ordine " + order_id + "</code>"
     elif raw_status == "already_notified_order_id":
         blocking_reason = "L'ordine e' gia' stato tracciato per orderId."
         next_action = "Non serve intervenire, a meno che tu non voglia forzare un nuovo ciclo."
+        quick_command = "<code>/ordine " + order_id + "</code>"
     elif raw_status == "already_notified_fingerprint":
         blocking_reason = "L'ordine collide con una fingerprint gia' vista."
         next_action = "Controlla i dati ordine se ti aspettavi una nuova notifica distinta."
+        quick_command = "<code>/ordine " + order_id + "</code>"
     elif raw_delivery_status == "chat_not_registered":
         blocking_reason = "La chat corrente non e' registrata come destinazione notifiche."
         next_action = "Invia un comando da questa chat e poi verifica /settings o /notifications."
+        quick_command = "<code>/settings</code>"
     elif raw_delivery_status in {
         "chat_notifications_disabled",
         "chat_subscription_disabled",
@@ -882,6 +1087,9 @@ def format_why_not_notified_status(explain: Mapping[str, object]) -> str:
     }:
         blocking_reason = "La chat corrente non e' pronta a ricevere notifiche automatiche."
         next_action = "Riattiva il recapito con <code>/notifications on</code>."
+        quick_command = "<code>/notifications on</code>"
+    elif raw_delivery_status == "delivery_ready":
+        quick_command = "<code>/ordine " + order_id + "</code>"
 
     rendered = [
         "🧭 <b>Why Not Notified</b>",
@@ -900,6 +1108,7 @@ def format_why_not_notified_status(explain: Mapping[str, object]) -> str:
         rendered.append(f"📝 Recapito: <code>{delivery_detail}</code>")
     rendered.append(f"🚫 Blocco attuale: {blocking_reason}")
     rendered.append(f"➡️ Prossima azione: {next_action}")
+    rendered.append(f"⚡ Comando rapido: {quick_command}")
     return "\n".join(rendered)
 
 
@@ -954,6 +1163,7 @@ def format_connect_status(connect_status: Mapping[str, object]) -> str:
     reconnect = bool(connect_status.get("reconnect", False))
     account_status = html.escape(str(connect_status.get("account_status") or "unlinked"))
     ebay_user_id = html.escape(str(connect_status.get("ebay_user_id") or "n/d"))
+    personal_snapshot = _format_personal_snapshot(connect_status)
     intro = (
         "🔁 <b>Ricollega account eBay</b>" if reconnect else "🔗 <b>Collegamento account eBay</b>"
     )
@@ -970,13 +1180,17 @@ def format_connect_status(connect_status: Mapping[str, object]) -> str:
         f"{session_line}"
         f"🪪 Sessione OAuth: <code>{oauth_state}</code>\n"
         f"⏳ Scadenza: <code>{expires_at}</code>\n"
+        f"{personal_snapshot}\n"
     )
     if connect_url:
         escaped_url = html.escape(connect_url, quote=True)
         return (
             base
             + f'🌐 Apri questo link: <a href="{escaped_url}">{escaped_url}</a>\n'
-            + "Dopo il consenso eBay il bot confermera' il risultato in questa chat."
+            + "1. apri il link\n"
+            + "2. completa il consenso eBay\n"
+            + "3. torna in chat: il bot confermera' il risultato qui.\n"
+            + "Se vuoi ricontrollare prima lo stato usa <code>/reconnect_status</code>."
         )
     return (
         base
@@ -1056,8 +1270,19 @@ def format_notifications_status(notification_status: Mapping[str, object]) -> st
     tenant_scope = html.escape(str(notification_status.get("tenant_scope", "global")))
     chat_id = html.escape(str(notification_status.get("chat_id", "n/d")))
     environment = html.escape(str(notification_status.get("environment", "n/d")))
+    account_linked = bool(notification_status.get("account_linked", False))
+    filter_label = html.escape(str(notification_status.get("filter_label") or "tutti"))
     status_text = "attive" if enabled else "disattivate"
     command_hint = "/notifications off" if enabled else "/notifications on"
+    next_action = (
+        "Le notifiche sono pronte: puoi controllare anche <code>/why_not_notified &lt;order_id&gt;</code>."
+        if enabled
+        else "Riattiva il recapito con <code>/notifications on</code> quando vuoi tornare a ricevere avvisi."
+    )
+    if not account_linked:
+        next_action = (
+            "Prima di aspettarti notifiche operative collega un account eBay con <code>/connect</code>."
+        )
     return (
         "🔔 <b>Notifiche chat</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -1065,8 +1290,133 @@ def format_notifications_status(notification_status: Mapping[str, object]) -> st
         f"🏷️ Scope: <code>{tenant_scope}</code>\n"
         f"🌍 Ambiente: <code>{environment}</code>\n"
         f"📣 Stato: <code>{status_text}</code>\n"
-        f"Usa <code>{command_hint}</code> per cambiare questa preferenza."
+        f"🧪 Filtro attivo: <code>{filter_label}</code>\n"
+        f"Usa <code>{command_hint}</code> per cambiare questa preferenza.\n"
+        f"➡️ Prossima azione: {next_action}"
     )
+
+
+def format_review_records(records: Iterable[OrderRecord], page_size: int = 8) -> list[str]:
+    rows = list(records)
+    if not rows:
+        return [
+            "🗂️ <b>Ordini Da Controllare</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Nessun ordine recente da controllare manualmente: quelli trovati hanno gia' un dato fiscale."
+        ]
+    pages: list[str] = []
+    for start in range(0, len(rows), page_size):
+        page_rows = rows[start : start + page_size]
+        page_no = (start // page_size) + 1
+        total_pages = (len(rows) + page_size - 1) // page_size
+        lines = [
+            "🗂️ <b>Ordini Da Controllare</b>",
+            "━━━━━━━━━━━━━━━━━━━━━━━━",
+            f"📦 Totale da rivedere: <code>{len(rows)}</code> • 📄 Pagina: <code>{page_no}/{total_pages}</code>",
+            "Usa <code>/ordine &lt;order_id&gt;</code> per aprire il dettaglio di un caso.",
+            "",
+        ]
+        for record in page_rows:
+            order_id = html.escape(record.orderId or "n/d")
+            buyer = html.escape(record.buyerUsername or "n/d")
+            created_at = html.escape(record.creationDate or "n/d")
+            lines.append(
+                f"• <code>{order_id}</code> • <code>{created_at}</code> • "
+                f"buyer=<code>{buyer}</code> • motivo=<code>dato_fiscale_mancante</code>"
+            )
+        pages.append("\n".join(lines))
+    return pages
+
+
+def format_report_summary(records: Iterable[OrderRecord], *, days: int, max_results: int) -> str:
+    rows = list(records)
+    vat_count = 0
+    cf_count = 0
+    missing_count = 0
+    foreign_count = 0
+    for record in rows:
+        identifier_type = str(record.taxIdentifierType or "").strip().upper()
+        if not record.has_fiscal_identifier():
+            missing_count += 1
+        elif identifier_type == "VAT_NUMBER":
+            vat_count += 1
+        elif identifier_type == "CODICE_FISCALE":
+            cf_count += 1
+        else:
+            cf_count += 1
+        if str(record.issuingCountry or "").strip().upper() not in {"", "IT"}:
+            foreign_count += 1
+    action_hint = (
+        "Apri <code>/priority_orders</code> per vedere i casi piu' rilevanti."
+        if rows
+        else "Nessun dato disponibile: riprova piu' tardi o amplia la finestra."
+    )
+    return (
+        "📈 <b>Mini Report Fiscale</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🗓️ Finestra: <code>{days}</code> giorni • limite: <code>{max_results}</code>\n"
+        f"📦 Ordini analizzati: <code>{len(rows)}</code>\n"
+        f"🧾 Con P.IVA: <code>{vat_count}</code>\n"
+        f"🪪 Con CF: <code>{cf_count}</code>\n"
+        f"🕳️ Senza dato fiscale: <code>{missing_count}</code>\n"
+        f"🌍 Paese emissione non IT: <code>{foreign_count}</code>\n"
+        f"➡️ Prossima azione: {action_hint}"
+    )
+
+
+def format_priority_records(records: Iterable[OrderRecord], page_size: int = 8) -> list[str]:
+    rows = list(records)
+    if not rows:
+        return [
+            "🚦 <b>Ordini Prioritari</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Nessun ordine disponibile nella selezione richiesta."
+        ]
+
+    def priority_key(record: OrderRecord) -> tuple[int, str]:
+        identifier_type = str(record.taxIdentifierType or "").strip().upper()
+        if not record.has_fiscal_identifier():
+            return (0, record.creationDate or "")
+        if identifier_type == "VAT_NUMBER":
+            return (1, record.creationDate or "")
+        if identifier_type == "CODICE_FISCALE":
+            return (2, record.creationDate or "")
+        return (3, record.creationDate or "")
+
+    ordered = sorted(rows, key=priority_key)
+    pages: list[str] = []
+    for start in range(0, len(ordered), page_size):
+        page_rows = ordered[start : start + page_size]
+        page_no = (start // page_size) + 1
+        total_pages = (len(ordered) + page_size - 1) // page_size
+        lines = [
+            "🚦 <b>Ordini Prioritari</b>",
+            "━━━━━━━━━━━━━━━━━━━━━━━━",
+            f"📦 Totale: <code>{len(ordered)}</code> • 📄 Pagina: <code>{page_no}/{total_pages}</code>",
+            "Legenda: <code>review</code> dato mancante • <code>high</code> P.IVA • <code>medium</code> CF",
+            "",
+        ]
+        for record in page_rows:
+            identifier_type = str(record.taxIdentifierType or "").strip().upper()
+            if not record.has_fiscal_identifier():
+                level = "review"
+                reason = "dato_fiscale_mancante"
+            elif identifier_type == "VAT_NUMBER":
+                level = "high"
+                reason = "piva_presente"
+            elif identifier_type == "CODICE_FISCALE":
+                level = "medium"
+                reason = "cf_presente"
+            else:
+                level = "medium"
+                reason = "id_fiscale_presente"
+            lines.append(
+                f"• <code>{html.escape(record.orderId or 'n/d')}</code> • "
+                f"prio=<code>{level}</code> • motivo=<code>{reason}</code> • "
+                f"buyer=<code>{html.escape(record.buyerUsername or 'n/d')}</code>"
+            )
+        pages.append("\n".join(lines))
+    return pages
 
 
 def format_settings_status(settings_status: Mapping[str, object]) -> str:
@@ -1097,6 +1447,11 @@ def format_settings_status(settings_status: Mapping[str, object]) -> str:
     last_notified_order_created_at = html.escape(
         str(settings_status.get("last_notified_order_created_at") or "")
     )
+    latest_session_status = html.escape(str(settings_status.get("latest_session_status") or ""))
+    latest_session_expires_at = html.escape(
+        str(settings_status.get("latest_session_expires_at") or "")
+    )
+    session_ready = bool(settings_status.get("session_ready", False))
     memory_lines = ""
     if last_fetch_start and last_fetch_end:
         memory_lines += (
@@ -1113,6 +1468,21 @@ def format_settings_status(settings_status: Mapping[str, object]) -> str:
             f"📨 Ultimo ordine notificato: <code>{last_notified_order_id}</code> • "
             f"<code>{last_notified_order_created_at or 'n/d'}</code>\n"
         )
+    if session_ready and latest_session_expires_at:
+        memory_lines += (
+            f"🪄 Sessione connect pronta: <code>{latest_session_expires_at}</code>\n"
+        )
+    elif latest_session_status:
+        memory_lines += f"🧷 Ultima sessione connect: <code>{latest_session_status}</code>\n"
+    next_actions: list[str] = []
+    if not linked:
+        next_actions.append("collega eBay con <code>/connect</code>")
+    if not notifications_enabled:
+        next_actions.append("riattiva la chat con <code>/notifications on</code>")
+    if linked and notifications_enabled:
+        next_actions.append("controlla ordini e notificabilita' con <code>/ultimi</code> o <code>/why_not_notified &lt;order_id&gt;</code>")
+    if not next_actions:
+        next_actions.append("verifica account e recapito con <code>/account</code> e <code>/notifications</code>")
     return (
         "⚙️ <b>Impostazioni</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -1122,8 +1492,11 @@ def format_settings_status(settings_status: Mapping[str, object]) -> str:
         f"🛂 Accesso bot: <code>{user_status_text}</code>\n"
         f"👤 Account eBay: <code>{linked_text}</code>\n"
         f"{memory_lines}"
+        "➡️ Prossimi passi: "
+        + " • ".join(next_actions)
+        + "\n"
         "Comandi utili: <code>/account</code>, <code>/connect</code>, "
-        "<code>/disconnect</code>, <code>/leave_bot</code>, "
+        "<code>/reconnect_status</code>, <code>/disconnect</code>, <code>/leave_bot</code>, "
         "<code>/notifications on</code>, <code>/notifications off</code>."
     )
 

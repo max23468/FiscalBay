@@ -199,6 +199,7 @@ def maybe_send_new_order_notifications(
     fetch_records_for_environment_fn: Callable[[str, FetchOptions], list[OrderRecord]],
     send_message_fn: Callable[..., None],
     request_with_backoff_fn: Callable[..., object],
+    should_deliver_record_fn: Callable[[OrderRecord, int], bool] | None = None,
 ) -> None:
     cycle_id = generate_operation_id("notify")
     cycle_had_errors = False
@@ -270,6 +271,8 @@ def maybe_send_new_order_notifications(
     for record in records:
         text = format_auto_notification(record)
         for chat_id in telegram_config.notify_chat_ids:
+            if should_deliver_record_fn is not None and not should_deliver_record_fn(record, chat_id):
+                continue
             try:
                 send_message_fn(telegram_config.token, chat_id, text)
                 increment_metric(state, "notifications_sent")

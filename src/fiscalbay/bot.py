@@ -113,6 +113,7 @@ from .storage.sqlite import (
     load_kv_value,
     load_latest_oauth_link_session,
     load_notification_subscriptions,
+    load_operation_queue_entries,
     load_retry_queue_entries,
     load_runtime_state,
     load_telegram_chats,
@@ -132,6 +133,7 @@ from .storage.sqlite import (
     save_tenant_runtime_state,
     set_notification_subscription_enabled,
     summarize_operation_queue,
+    summarize_oauth_link_sessions,
     summarize_tenant_account_status,
     update_telegram_user_status,
     upsert_notification_subscription,
@@ -161,15 +163,20 @@ from .telegram_commands import (
     format_account_status,
     format_admin_access_request,
     format_admin_dashboard,
+    format_admin_maintenance_overview,
     format_admin_status_update,
     format_admin_user_list,
+    format_admin_watchlist,
     format_connect_status,
     format_disconnect_status,
     format_leave_status,
     format_notifications_status,
     format_order_notification_summary,
     format_policy_status,
+    format_priority_records,
     format_reconnect_status,
+    format_report_summary,
+    format_review_records,
     format_service_status,
     format_settings_status,
     format_status,
@@ -212,14 +219,20 @@ COMMAND_CAPABILITIES: dict[str, str] = {
     "/notifications": CAPABILITY_MANAGE_NOTIFICATIONS,
     "/settings": CAPABILITY_MANAGE_SETTINGS,
     "/why_not_notified": CAPABILITY_VIEW_ORDERS,
+    "/report_summary": CAPABILITY_VIEW_ORDERS,
+    "/priority_orders": CAPABILITY_VIEW_ORDERS,
+    "/review_orders": CAPABILITY_VIEW_ORDERS,
     "/ultimi": CAPABILITY_VIEW_ORDERS,
     "/tutti": CAPABILITY_VIEW_ORDERS,
     "/ordine": CAPABILITY_VIEW_ORDERS,
     "/users": CAPABILITY_REVIEW_ACCESS,
     "/pending_users": CAPABILITY_REVIEW_ACCESS,
     "/unlinked_users": CAPABILITY_REVIEW_ACCESS,
+    "/reconnect_users": CAPABILITY_REVIEW_ACCESS,
+    "/inactive_users": CAPABILITY_REVIEW_ACCESS,
     "/tenant_health": CAPABILITY_REVIEW_ACCESS,
     "/admin_dashboard": CAPABILITY_REVIEW_ACCESS,
+    "/maintenance_overview": CAPABILITY_REVIEW_ACCESS,
     "/approve_user": CAPABILITY_REVIEW_ACCESS,
     "/reject_user": CAPABILITY_REVIEW_ACCESS,
     "/suspend_user": CAPABILITY_REVIEW_ACCESS,
@@ -227,6 +240,22 @@ COMMAND_CAPABILITIES: dict[str, str] = {
     "/service_mode": CAPABILITY_REVIEW_ACCESS,
     "/request_access": CAPABILITY_REQUEST_ACCESS,
 }
+ADMIN_ONLY_COMMANDS = frozenset(
+    {
+        "/approve_user",
+        "/reject_user",
+        "/suspend_user",
+        "/reactivate_user",
+        "/users",
+        "/pending_users",
+        "/unlinked_users",
+        "/reconnect_users",
+        "/inactive_users",
+        "/tenant_health",
+        "/admin_dashboard",
+        "/maintenance_overview",
+    }
+)
 
 SERVICE_MODE_NORMAL = "normal"
 SERVICE_MODE_MAINTENANCE = "maintenance"
@@ -241,6 +270,7 @@ DEFAULT_BRANDING_SYNC_BACKOFF_SECONDS = 6 * 60 * 60
 PENDING_STALE_HOURS = 48
 UNLINKED_STALE_HOURS = 72
 REVOKED_STALE_HOURS = 72
+INACTIVE_TENANT_HOURS = 96
 COMMAND_RATE_LIMIT_SECONDS: dict[str, int] = {
     "/request_access": 60,
     "/connect": 10,
@@ -601,6 +631,17 @@ def _build_user_row(
             "token_expired",
         }:
             operational_state = "reconnect_required"
+    runtime_state = load_tenant_runtime_state(
+        telegram_config.state_path,
+        user.telegram_user_id,
+    )
+    last_activity_at = (
+        runtime_state.memory.last_notified_order_created_at
+        or runtime_state.memory.last_seen_order_created_at
+        or runtime_state.memory.last_fetch_end
+        or user.created_at
+        or ""
+    )
     last_issue = str(account_status.get("latest_reconnect_outcome") or "")
     if not last_issue and operational_state != "ready":
         last_issue = operational_state
@@ -618,6 +659,7 @@ def _build_user_row(
         "subscription_count": account_status.get("subscription_count", 0),
         "chat_count": account_status.get("chat_count", 0),
         "last_issue": last_issue or "none",
+        "last_activity_at": last_activity_at,
         "created_at": user.created_at or "",
     }
 
@@ -629,10 +671,85 @@ def _build_user_rows(telegram_config: TelegramConfig) -> list[dict[str, object]]
     ]
 
 
+def _filter_user_rows(
+    telegram_config: TelegramConfig,
+    predicate: Callable[[dict[str, object]], bool],
+) -> list[dict[str, object]]:
+    return [row for row in _build_user_rows(telegram_config) if predicate(row)]
+
+
+def _build_inactive_user_rows(telegram_config: TelegramConfig) -> list[dict[str, object]]:
+    now = datetime.now(timezone.utc)
+    inactive_rows: list[dict[str, object]] = []
+    for row in _build_user_rows(telegram_config):
+        if str(row.get("status") or "") != TELEGRAM_USER_STATUS_APPROVED:
+            continue
+        if str(row.get("operational_state") or "") != "ready":
+            continue
+        last_activity = _parse_iso_timestamp(str(row.get("last_activity_at") or ""))
+        if last_activity is None:
+            continue
+        age_hours = int((now - last_activity).total_seconds() // 3600)
+        if age_hours >= INACTIVE_TENANT_HOURS:
+            enriched_row = dict(row)
+            enriched_row["last_issue"] = f"inactive_{age_hours}h"
+            inactive_rows.append(enriched_row)
+    return inactive_rows
+
+
+def _build_operation_queue_samples(telegram_config: TelegramConfig) -> list[dict[str, object]]:
+    queue_entries = load_operation_queue_entries(
+        telegram_config.state_path,
+        limit=5,
+        statuses={"pending", "running", "failed"},
+    )
+    return [
+        {
+            "operation_type": entry.operation_type,
+            "status": entry.status,
+            "target_telegram_user_id": entry.target_telegram_user_id,
+            "attempts": entry.attempts,
+        }
+        for entry in queue_entries
+    ]
+
+
+def _tenant_not_linked_message(title: str) -> list[str]:
+    return [
+        f"{title}\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "Questa chat non e' ancora associata a un tenant Telegram noto."
+    ]
+
+
+def _load_tenant_ux_context_for_command(
+    telegram_config: TelegramConfig,
+    *,
+    telegram_user_id: int | None,
+    chat_id: int,
+    environment: str,
+    title: str,
+) -> tuple[dict[str, object] | None, list[str] | None]:
+    if telegram_user_id is None:
+        return None, _tenant_not_linked_message(title)
+    return (
+        _build_tenant_ux_context(
+            telegram_config,
+            telegram_user_id=telegram_user_id,
+            chat_id=chat_id,
+            environment=environment,
+        ),
+        None,
+    )
+
+
 def _build_admin_dashboard_payload(telegram_config: TelegramConfig) -> dict[str, object]:
     rows = _build_user_rows(telegram_config)
     now = datetime.now(timezone.utc)
     audit_entries = _load_recent_audit_entries(telegram_config, limit=400)
+    oauth_summary = summarize_oauth_link_sessions(
+        telegram_config.state_path,
+        now_iso=_now_utc_iso(),
+    )
     oauth_failures_recent = 0
     for entry in audit_entries:
         if entry.event_type != "oauth_failure":
@@ -687,6 +804,16 @@ def _build_admin_dashboard_payload(telegram_config: TelegramConfig) -> dict[str,
                 "message": f"{revoked_stale} tenant restano con token revocato o scaduto",
             }
         )
+    if int(oauth_summary.get("pending_expired", 0)) > 0:
+        alerts.append(
+            {
+                "code": "oauth_sessions_expired_pending_cleanup",
+                "message": (
+                    f"{oauth_summary.get('pending_expired', 0)} sessioni OAuth risultano "
+                    "pending ma gia' scadute"
+                ),
+            }
+        )
     queue_summary = summarize_operation_queue(telegram_config.state_path)
     if queue_summary.get("pending", 0) > 0:
         alerts.append(
@@ -730,12 +857,99 @@ def _build_admin_dashboard_payload(telegram_config: TelegramConfig) -> dict[str,
                 and str(row.get("account_status")) != "linked"
             ),
             "oauth_failures_recent": oauth_failures_recent,
+            "oauth_pending_expired": int(oauth_summary.get("pending_expired", 0)),
             "pending_stale": pending_stale,
             "revoked_stale": revoked_stale,
         },
         "queue": queue_summary,
         "alerts": alerts,
     }
+
+
+def _build_admin_maintenance_payload(telegram_config: TelegramConfig) -> dict[str, object]:
+    dashboard = _build_admin_dashboard_payload(telegram_config)
+    return {
+        "service_mode": dashboard.get("service_mode", SERVICE_MODE_NORMAL),
+        "dashboard": dashboard,
+        "queue": summarize_operation_queue(telegram_config.state_path),
+        "retry_backlog": len(load_retry_queue_entries(telegram_config.retry_queue_path)),
+        "oauth_sessions": summarize_oauth_link_sessions(
+            telegram_config.state_path,
+            now_iso=_now_utc_iso(),
+        ),
+        "queue_samples": _build_operation_queue_samples(telegram_config),
+    }
+
+
+def _handle_admin_read_command(
+    command: str,
+    *,
+    telegram_config: TelegramConfig,
+    args: list[str],
+) -> list[str] | None:
+    if command == "/users":
+        return [format_admin_user_list(_build_user_rows(telegram_config))]
+    if command == "/pending_users":
+        pending_rows = _filter_user_rows(
+            telegram_config,
+            lambda row: str(row.get("status")) == TELEGRAM_USER_STATUS_PENDING,
+        )
+        return [
+            format_admin_user_list(
+                pending_rows,
+                title="🕓 <b>Richieste pending</b>",
+                empty_message="Nessuna richiesta accesso pending al momento.",
+            )
+        ]
+    if command == "/unlinked_users":
+        unlinked_rows = _filter_user_rows(
+            telegram_config,
+            lambda row: str(row.get("status")) == TELEGRAM_USER_STATUS_APPROVED
+            and str(row.get("account_status") or "unlinked") != "linked",
+        )
+        return [
+            format_admin_user_list(
+                unlinked_rows,
+                title="🔗 <b>Utenti non operativi</b>",
+                empty_message="Nessun utente approvato in attesa di collegamento.",
+            )
+        ]
+    if command == "/reconnect_users":
+        reconnect_rows = _filter_user_rows(
+            telegram_config,
+            lambda row: str(row.get("operational_state") or "") == "reconnect_required",
+        )
+        return [
+            format_admin_watchlist(
+                reconnect_rows,
+                title="🔁 <b>Tenant Da Ricollegare</b>",
+                empty_message="Nessun tenant richiede reconnect in questo momento.",
+            )
+        ]
+    if command == "/inactive_users":
+        return [
+            format_admin_watchlist(
+                _build_inactive_user_rows(telegram_config),
+                title="🌙 <b>Tenant Inattivi</b>",
+                empty_message="Nessun tenant operativo risulta inattivo oltre soglia.",
+            )
+        ]
+    if command == "/admin_dashboard":
+        return [format_admin_dashboard(_build_admin_dashboard_payload(telegram_config))]
+    if command == "/maintenance_overview":
+        return [format_admin_maintenance_overview(_build_admin_maintenance_payload(telegram_config))]
+    if command == "/tenant_health":
+        rows = _build_user_rows(telegram_config)
+        if args:
+            try:
+                target_user_id = int(args[0])
+            except ValueError:
+                return ["Uso corretto: <code>/tenant_health [telegram_user_id]</code>"]
+            rows = [row for row in rows if int(row.get("telegram_user_id") or 0) == target_user_id]
+        else:
+            rows = [row for row in rows if str(row.get("status") or "") != TELEGRAM_USER_STATUS_NEW]
+        return [format_tenant_health(rows)]
+    return None
 
 
 def _maybe_send_admin_summary(telegram_config: TelegramConfig) -> None:
@@ -1110,6 +1324,97 @@ def _is_reusable_oauth_session(
     except ValueError:
         return False
     return expires_at > now
+
+
+def _build_tenant_ux_context(
+    telegram_config: TelegramConfig,
+    *,
+    telegram_user_id: int,
+    chat_id: int,
+    environment: str,
+) -> dict[str, object]:
+    account_status = summarize_tenant_account_status(
+        telegram_config.state_path,
+        telegram_user_id,
+        environment,
+    )
+    subscriptions = load_notification_subscriptions(telegram_config.state_path)
+    notifications_enabled = any(
+        subscription.telegram_user_id == telegram_user_id
+        and subscription.telegram_chat_id == chat_id
+        and subscription.enabled
+        for subscription in subscriptions
+    )
+    runtime_state = load_tenant_runtime_state(
+        telegram_config.state_path,
+        telegram_user_id,
+    )
+    latest_session = load_latest_oauth_link_session(
+        telegram_config.state_path,
+        telegram_user_id,
+    )
+    now = datetime.now(timezone.utc)
+    session_ready = _is_reusable_oauth_session(
+        latest_session,
+        environment=environment,
+        now=now,
+    )
+    return {
+        **account_status,
+        "notifications_enabled": notifications_enabled,
+        "last_fetch_start": runtime_state.memory.last_fetch_start,
+        "last_fetch_end": runtime_state.memory.last_fetch_end,
+        "last_seen_order_id": runtime_state.memory.last_seen_order_id,
+        "last_seen_order_created_at": runtime_state.memory.last_seen_order_created_at,
+        "last_notified_order_id": runtime_state.memory.last_notified_order_id,
+        "last_notified_order_created_at": runtime_state.memory.last_notified_order_created_at,
+        "latest_session_status": latest_session.status if latest_session is not None else "",
+        "latest_session_expires_at": (
+            latest_session.expires_at if latest_session is not None else ""
+        ),
+        "session_ready": session_ready,
+    }
+
+
+def _notification_filter_mode_from_filters(filters: str) -> str:
+    raw = str(filters or "").strip()
+    if not raw:
+        return "all"
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return "all"
+    tax_identifier_type = str(parsed.get("tax_identifier_type") or "").strip().upper()
+    if tax_identifier_type == "CODICE_FISCALE":
+        return "cf"
+    if tax_identifier_type == "VAT_NUMBER":
+        return "vat"
+    return "all"
+
+
+def _notification_filter_payload(mode: str) -> str:
+    if mode == "cf":
+        return json.dumps({"tax_identifier_type": "CODICE_FISCALE"}, ensure_ascii=True)
+    if mode == "vat":
+        return json.dumps({"tax_identifier_type": "VAT_NUMBER"}, ensure_ascii=True)
+    return ""
+
+
+def _notification_filter_label(mode: str) -> str:
+    return {
+        "all": "tutti",
+        "cf": "solo_cf",
+        "vat": "solo_piva",
+    }.get(mode, "tutti")
+
+
+def _record_matches_notification_filter(mode: str, record: OrderRecord) -> bool:
+    normalized = (mode or "all").strip().lower()
+    if normalized == "cf":
+        return str(record.taxIdentifierType or "").strip().upper() == "CODICE_FISCALE"
+    if normalized == "vat":
+        return str(record.taxIdentifierType or "").strip().upper() == "VAT_NUMBER"
+    return True
 
 
 def _notify_user_access_status(
@@ -1504,6 +1809,22 @@ def maybe_send_new_order_notifications(
             ),
             send_message_fn=send_message,
             request_with_backoff_fn=request_with_backoff,
+            should_deliver_record_fn=lambda record, chat_id, user_id=target.telegram_user_id: (
+                _record_matches_notification_filter(
+                    next(
+                        (
+                            _notification_filter_mode_from_filters(subscription.filters)
+                            for subscription in load_notification_subscriptions(
+                                telegram_config.state_path
+                            )
+                            if subscription.telegram_user_id == user_id
+                            and subscription.telegram_chat_id == chat_id
+                        ),
+                        "all",
+                    ),
+                    record,
+                )
+            ),
         )
     _maybe_send_admin_summary(telegram_config)
 
@@ -1686,67 +2007,16 @@ def process_message(
         )
         return [format_access_request_status(admin_notified=admin_notified)]
 
-    if (
-        command
-        in {
-            "/approve_user",
-            "/reject_user",
-            "/suspend_user",
-            "/reactivate_user",
-            "/users",
-            "/pending_users",
-            "/unlinked_users",
-            "/tenant_health",
-            "/admin_dashboard",
-        }
-        and not has_command_capability
-    ):
+    if command in ADMIN_ONLY_COMMANDS and not has_command_capability:
         return ["Solo l'admin puo' usare questo comando."]
 
-    if command == "/users":
-        return [format_admin_user_list(_build_user_rows(telegram_config))]
-
-    if command == "/pending_users":
-        pending_rows = [
-            row for row in _build_user_rows(telegram_config) if str(row.get("status")) == "pending"
-        ]
-        return [
-            format_admin_user_list(
-                pending_rows,
-                title="🕓 <b>Richieste pending</b>",
-                empty_message="Nessuna richiesta accesso pending al momento.",
-            )
-        ]
-
-    if command == "/unlinked_users":
-        unlinked_rows = [
-            row
-            for row in _build_user_rows(telegram_config)
-            if str(row.get("status")) == TELEGRAM_USER_STATUS_APPROVED
-            and str(row.get("account_status") or "unlinked") != "linked"
-        ]
-        return [
-            format_admin_user_list(
-                unlinked_rows,
-                title="🔗 <b>Utenti non operativi</b>",
-                empty_message="Nessun utente approvato in attesa di collegamento.",
-            )
-        ]
-
-    if command == "/admin_dashboard":
-        return [format_admin_dashboard(_build_admin_dashboard_payload(telegram_config))]
-
-    if command == "/tenant_health":
-        rows = _build_user_rows(telegram_config)
-        if args:
-            try:
-                target_user_id = int(args[0])
-            except ValueError:
-                return ["Uso corretto: <code>/tenant_health [telegram_user_id]</code>"]
-            rows = [row for row in rows if int(row.get("telegram_user_id") or 0) == target_user_id]
-        else:
-            rows = [row for row in rows if str(row.get("status") or "") != TELEGRAM_USER_STATUS_NEW]
-        return [format_tenant_health(rows)]
+    admin_read_response = _handle_admin_read_command(
+        command,
+        telegram_config=telegram_config,
+        args=args,
+    )
+    if admin_read_response is not None:
+        return admin_read_response
 
     if command in {"/approve_user", "/reject_user", "/suspend_user", "/reactivate_user"}:
         if not args:
@@ -1998,29 +2268,29 @@ def process_message(
         return [format_status(state, retry_queue_size, runtime_context=command_context)]
 
     if command == "/account":
-        if resolved_telegram_user_id is None:
-            return [
-                "👤 <b>Account eBay</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "Questa chat non e' ancora associata a un tenant Telegram noto."
-            ]
-        account_status = summarize_tenant_account_status(
-            telegram_config.state_path,
-            resolved_telegram_user_id,
-            resolved_environment,
+        account_status, missing_response = _load_tenant_ux_context_for_command(
+            telegram_config,
+            telegram_user_id=resolved_telegram_user_id,
+            chat_id=chat_id,
+            environment=resolved_environment,
+            title="👤 <b>Account eBay</b>",
         )
+        if missing_response is not None:
+            return missing_response
+        assert account_status is not None
         return [format_account_status(account_status)]
 
     if command == "/reconnect_status":
-        if resolved_telegram_user_id is None:
-            return [
-                "🔁 <b>Reconnect status</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "Questa chat non e' ancora associata a un tenant Telegram noto."
-            ]
-        account_status = summarize_tenant_account_status(
-            telegram_config.state_path,
-            resolved_telegram_user_id,
-            resolved_environment,
+        account_status, missing_response = _load_tenant_ux_context_for_command(
+            telegram_config,
+            telegram_user_id=resolved_telegram_user_id,
+            chat_id=chat_id,
+            environment=resolved_environment,
+            title="🔁 <b>Reconnect status</b>",
         )
+        if missing_response is not None:
+            return missing_response
+        assert account_status is not None
         return [format_reconnect_status(account_status)]
 
     if command == "/why_not_notified":
@@ -2061,6 +2331,53 @@ def process_message(
         )
         return [format_why_not_notified_status(explanation)]
 
+    if command == "/review_orders":
+        options = options_for_command("/tutti", args)
+        try:
+            records = request_with_backoff(
+                lambda: fetch_records_for_environment_fn(resolved_environment, options),
+                label="fetch_records_review_orders",
+            )
+        except ConfigurationError as exc:
+            return [f"⚠️ {exc}"]
+        assert isinstance(records, list)
+        review_records = [
+            record for record in (coerce_order_record(item) for item in records) if not record.has_fiscal_identifier()
+        ]
+        return format_review_records(review_records)
+
+    if command == "/report_summary":
+        options = options_for_command("/tutti", args)
+        try:
+            records = request_with_backoff(
+                lambda: fetch_records_for_environment_fn(resolved_environment, options),
+                label="fetch_records_report_summary",
+            )
+        except ConfigurationError as exc:
+            return [f"⚠️ {exc}"]
+        assert isinstance(records, list)
+        normalized = [coerce_order_record(item) for item in records]
+        return [
+            format_report_summary(
+                normalized,
+                days=options.days or 7,
+                max_results=options.max_results,
+            )
+        ]
+
+    if command == "/priority_orders":
+        options = options_for_command("/tutti", args)
+        try:
+            records = request_with_backoff(
+                lambda: fetch_records_for_environment_fn(resolved_environment, options),
+                label="fetch_records_priority_orders",
+            )
+        except ConfigurationError as exc:
+            return [f"⚠️ {exc}"]
+        assert isinstance(records, list)
+        normalized = [coerce_order_record(item) for item in records]
+        return format_priority_records(normalized)
+
     if command == "/ordine":
         if not args:
             return ["Uso corretto: <code>/ordine &lt;order_id&gt;</code>"]
@@ -2091,16 +2408,16 @@ def process_message(
         ]
 
     if command == "/connect":
-        if resolved_telegram_user_id is None:
-            return [
-                "🔗 <b>Collegamento account eBay</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "Questa chat non e' ancora associata a un tenant Telegram noto."
-            ]
-        connect_account_status = summarize_tenant_account_status(
-            telegram_config.state_path,
-            resolved_telegram_user_id,
-            resolved_environment,
+        connect_account_status, missing_response = _load_tenant_ux_context_for_command(
+            telegram_config,
+            telegram_user_id=resolved_telegram_user_id,
+            chat_id=chat_id,
+            environment=resolved_environment,
+            title="🔗 <b>Collegamento account eBay</b>",
         )
+        if missing_response is not None:
+            return missing_response
+        assert connect_account_status is not None
         now = datetime.now(timezone.utc)
         latest_session = load_latest_oauth_link_session(
             telegram_config.state_path,
@@ -2188,16 +2505,27 @@ def process_message(
                     "ebay_user_id": connect_account_status.get("ebay_user_id"),
                     "reconnect": connect_account_status.get("account_status")
                     in {"linked", "disconnected", "revoked"},
+                    "notifications_enabled": connect_account_status.get("notifications_enabled"),
+                    "last_seen_order_id": connect_account_status.get("last_seen_order_id"),
+                    "last_seen_order_created_at": connect_account_status.get(
+                        "last_seen_order_created_at"
+                    ),
+                    "last_notified_order_id": connect_account_status.get(
+                        "last_notified_order_id"
+                    ),
+                    "last_notified_order_created_at": connect_account_status.get(
+                        "last_notified_order_created_at"
+                    ),
+                    "latest_session_status": active_session.status,
+                    "latest_session_expires_at": active_session.expires_at,
+                    "session_ready": True,
                 }
             )
         ]
 
     if command == "/disconnect":
         if resolved_telegram_user_id is None:
-            return [
-                "❌ <b>Scollega account eBay</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "Questa chat non e' ancora associata a un tenant Telegram noto."
-            ]
+            return _tenant_not_linked_message("❌ <b>Scollega account eBay</b>")
         remaining = _command_rate_limit_remaining_seconds(
             telegram_config.state_path,
             telegram_user_id=resolved_telegram_user_id,
@@ -2271,10 +2599,7 @@ def process_message(
 
     if command == "/leave_bot":
         if resolved_telegram_user_id is None:
-            return [
-                "🚪 <b>Disattiva uso bot</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "Questa chat non e' ancora associata a un tenant Telegram noto."
-            ]
+            return _tenant_not_linked_message("🚪 <b>Disattiva uso bot</b>")
         remaining = _command_rate_limit_remaining_seconds(
             telegram_config.state_path,
             telegram_user_id=resolved_telegram_user_id,
@@ -2368,25 +2693,70 @@ def process_message(
 
     if command == "/notifications":
         if resolved_telegram_user_id is None:
-            return [
-                "🔔 <b>Notifiche chat</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "Questa chat non e' ancora associata a un tenant Telegram noto."
-            ]
+            return _tenant_not_linked_message("🔔 <b>Notifiche chat</b>")
         command_args = parse_command(text)[1]
-        if not command_args or command_args[0] not in {"on", "off"}:
-            return [
-                "Uso corretto: <code>/notifications on</code> oppure "
-                "<code>/notifications off</code>."
-            ]
-        enabled = command_args[0] == "on"
-        timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        set_notification_subscription_enabled(
+        subscriptions = load_notification_subscriptions(telegram_config.state_path)
+        current_subscription = next(
+            (
+                subscription
+                for subscription in subscriptions
+                if subscription.telegram_user_id == resolved_telegram_user_id
+                and subscription.telegram_chat_id == chat_id
+            ),
+            None,
+        )
+        current_enabled = bool(current_subscription.enabled) if current_subscription is not None else False
+        filter_mode = (
+            _notification_filter_mode_from_filters(current_subscription.filters)
+            if current_subscription is not None
+            else "all"
+        )
+        enabled = current_enabled
+        if command_args:
+            if command_args[0] == "filter":
+                if len(command_args) < 2 or command_args[1] not in {"all", "cf", "vat"}:
+                    return [
+                        "Uso corretto: <code>/notifications filter all</code>, "
+                        "<code>/notifications filter cf</code> oppure "
+                        "<code>/notifications filter vat</code>."
+                    ]
+                filter_mode = command_args[1]
+                timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                upsert_notification_subscription(
+                    telegram_config.state_path,
+                    NotificationSubscription(
+                        telegram_user_id=resolved_telegram_user_id,
+                        telegram_chat_id=chat_id,
+                        enabled=enabled,
+                        filters=_notification_filter_payload(filter_mode),
+                        created_at=(
+                            current_subscription.created_at
+                            if current_subscription is not None
+                            else timestamp
+                        ),
+                        updated_at=timestamp,
+                    ),
+                )
+            elif command_args[0] not in {"on", "off"}:
+                return [
+                    "Uso corretto: <code>/notifications</code>, <code>/notifications on</code> "
+                    "<code>/notifications off</code> o <code>/notifications filter all|cf|vat</code>."
+                ]
+            else:
+                enabled = command_args[0] == "on"
+                timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                set_notification_subscription_enabled(
+                    telegram_config.state_path,
+                    resolved_telegram_user_id,
+                    chat_id,
+                    enabled,
+                    created_at=timestamp,
+                    updated_at=timestamp,
+                )
+        account_status_summary = summarize_tenant_account_status(
             telegram_config.state_path,
             resolved_telegram_user_id,
-            chat_id,
-            enabled,
-            created_at=timestamp,
-            updated_at=timestamp,
+            resolved_environment,
         )
         return [
             format_notifications_status(
@@ -2395,6 +2765,8 @@ def process_message(
                     "tenant_scope": "tenant" if tenant_context is not None else "global",
                     "chat_id": chat_id,
                     "environment": resolved_environment,
+                    "account_linked": account_status_summary.get("linked") is True,
+                    "filter_label": _notification_filter_label(filter_mode),
                 }
             )
         ]
@@ -2402,28 +2774,21 @@ def process_message(
     if command == "/settings":
         notifications_enabled = False
         settings_state = load_runtime_state(telegram_config.state_path)
+        account_linked = False
+        ux_context: dict[str, object] = {}
         if resolved_telegram_user_id is not None:
-            subscriptions = load_notification_subscriptions(telegram_config.state_path)
-            notifications_enabled = any(
-                subscription.telegram_user_id == resolved_telegram_user_id
-                and subscription.telegram_chat_id == chat_id
-                and subscription.enabled
-                for subscription in subscriptions
+            ux_context = _build_tenant_ux_context(
+                telegram_config,
+                telegram_user_id=resolved_telegram_user_id,
+                chat_id=chat_id,
+                environment=resolved_environment,
             )
+            notifications_enabled = bool(ux_context.get("notifications_enabled", False))
             settings_state = load_tenant_runtime_state(
                 telegram_config.state_path,
                 resolved_telegram_user_id,
             )
-        account_linked = False
-        if resolved_telegram_user_id is not None:
-            account_linked = (
-                summarize_tenant_account_status(
-                    telegram_config.state_path,
-                    resolved_telegram_user_id,
-                    resolved_environment,
-                ).get("linked")
-                is True
-            )
+            account_linked = ux_context.get("linked") is True
         return [
             format_settings_status(
                 {
@@ -2440,6 +2805,9 @@ def process_message(
                     "last_notified_order_created_at": (
                         settings_state.memory.last_notified_order_created_at
                     ),
+                    "latest_session_status": ux_context.get("latest_session_status", ""),
+                    "latest_session_expires_at": ux_context.get("latest_session_expires_at", ""),
+                    "session_ready": bool(ux_context.get("session_ready", False)),
                 }
             )
         ]

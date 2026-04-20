@@ -18,7 +18,12 @@ from ..models import (
     TelegramConfig,
     has_telegram_user_capability,
 )
-from ..storage.sqlite import load_telegram_user
+from ..storage.sqlite import (
+    load_notification_subscriptions,
+    load_telegram_user,
+    resolve_tenant_chat_context,
+    summarize_tenant_account_status,
+)
 from ..telegram_commands import (
     build_access_request_markup,
     build_main_menu_markup,
@@ -40,6 +45,51 @@ def _sync_branding_if_configured(
     if sync_bot_branding_fn is None:
         return
     sync_bot_branding_fn(telegram_config)
+
+
+def _build_contextual_main_menu(
+    telegram_config: TelegramConfig,
+    *,
+    chat_id: int,
+    telegram_user_id: int | None,
+    ebay_environment: str,
+):
+    account_linked = False
+    reconnect_required = False
+    notifications_enabled = False
+
+    if telegram_user_id is not None:
+        tenant_context = resolve_tenant_chat_context(
+            telegram_config.state_path,
+            telegram_chat_id=chat_id,
+            telegram_user_id=telegram_user_id,
+        )
+        resolved_environment = (
+            tenant_context.environment if tenant_context and tenant_context.environment else ebay_environment
+        )
+        account_status = summarize_tenant_account_status(
+            telegram_config.state_path,
+            telegram_user_id,
+            resolved_environment,
+        )
+        account_linked = bool(account_status.get("linked"))
+        raw_account_status = str(account_status.get("account_status") or "unlinked")
+        raw_token_status = str(account_status.get("token_status") or "missing")
+        reconnect_required = raw_account_status in {"disconnected", "revoked"} or (
+            account_linked and raw_token_status in {"revoked", "expired", "token_expired"}
+        )
+        notifications_enabled = any(
+            subscription.telegram_user_id == telegram_user_id
+            and subscription.telegram_chat_id == chat_id
+            and subscription.enabled
+            for subscription in load_notification_subscriptions(telegram_config.state_path)
+        )
+
+    return build_main_menu_markup(
+        account_linked=account_linked,
+        reconnect_required=reconnect_required,
+        notifications_enabled=notifications_enabled,
+    )
 
 
 def extract_message_context(update: dict) -> tuple[int | None, str, int | None]:
@@ -327,7 +377,12 @@ def run_bot(
                                     reply,
                                     message_thread_id=callback_thread_id,
                                     reply_markup=(
-                                        build_main_menu_markup()
+                                        _build_contextual_main_menu(
+                                            telegram_config,
+                                            chat_id=callback_chat_id,
+                                            telegram_user_id=callback_user_id,
+                                            ebay_environment=ebay_environment,
+                                        )
                                         if callback_can_use and index == len(replies) - 1
                                         else (
                                             build_access_request_markup()
@@ -463,7 +518,12 @@ def run_bot(
                             reply,
                             message_thread_id=thread_id,
                             reply_markup=(
-                                build_main_menu_markup()
+                                _build_contextual_main_menu(
+                                    telegram_config,
+                                    chat_id=cid,
+                                    telegram_user_id=message_user_id,
+                                    ebay_environment=ebay_environment,
+                                )
                                 if show_menu and index == len(replies) - 1
                                 else (
                                     build_access_request_markup()
