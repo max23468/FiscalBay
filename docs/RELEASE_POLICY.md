@@ -183,18 +183,20 @@ Il flusso standard e' questo:
 
 1. un commit Conventional Commit arriva su `main`
 2. `release-please` aggiorna o apre una Release PR
-3. la Release PR aggiorna:
+3. il workflow `Auto Merge Release PR` la mergia automaticamente quando riconosce una PR `release-please--*`
+4. la Release PR aggiorna:
    - `CHANGELOG.md`
    - `pyproject.toml`
    - `.release-please-manifest.json`
-4. quando la Release PR viene mergiata, GitHub crea tag e release
-5. lo stesso workflow builda il progetto e allega i file alla GitHub Release
-6. se serve ricostruire gli artefatti senza creare una nuova release, si usa `Release Assets` in modalita' manuale
+5. quando la Release PR viene mergiata, GitHub crea tag e release
+6. lo stesso workflow builda il progetto e allega i file alla GitHub Release
+7. se serve ricostruire gli artefatti senza creare una nuova release, si usa `Release Assets` in modalita' manuale
 
 In modalita' main-only:
 
 - il commit su `main` sostituisce il merge della feature PR
-- ma la Release PR di `release-please` resta comunque il punto ufficiale in cui si materializzano versione e changelog
+- la Release PR di `release-please` resta comunque il punto ufficiale in cui si materializzano versione e changelog
+- nel setup attuale il merge della Release PR e' automatizzato, quindi il rilascio resta a due fasi logiche ma a una sola azione umana
 
 ## Baseline iniziale
 

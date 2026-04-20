@@ -6,6 +6,7 @@ Questa guida raccoglie le impostazioni GitHub che completano gli asset versionat
 
 - CI: `.github/workflows/ci.yml`
 - Release PR automation: `.github/workflows/release-please.yml`
+- Release PR auto-merge: `.github/workflows/auto-merge-release-pr.yml`
 - Manual release assets rebuild: `.github/workflows/release.yml`
 - Dependabot: `.github/dependabot.yml`
 - PR template: `.github/PULL_REQUEST_TEMPLATE.md`
@@ -75,16 +76,21 @@ Il percorso standard e':
 
 1. mergi una PR su `main` con titolo Conventional Commit
 2. `Release Please` apre o aggiorna una Release PR
-3. la Release PR aggiorna versione e `CHANGELOG.md`
-4. mergi la Release PR quando vuoi pubblicare
+3. il workflow `Auto Merge Release PR` la mergia automaticamente
+4. il merge della Release PR aggiorna versione e `CHANGELOG.md`
 5. `Release Please` crea il tag `vX.Y.Z`, la relativa release GitHub e allega gli artefatti buildati
+
+Nota operativa:
+
+- l'auto-merge riguarda solo PR con branch `release-please--*` e titolo `chore(main): release ...`
+- se in futuro vuoi reintrodurre un checkpoint manuale prima della pubblicazione, disabilita il workflow `Auto Merge Release PR`
 
 Fallback ufficiale senza branch protection / senza PR obbligatorie:
 
 1. pushi un commit Conventional Commit corretto su `main`
 2. controlli che `Release Please` apra o aggiorni la Release PR
-3. non tocchi manualmente `pyproject.toml`, `CHANGELOG.md` root, tag o release
-4. usi la Release PR come punto ufficiale di pubblicazione
+3. controlli che il workflow `Auto Merge Release PR` l'abbia chiusa correttamente
+4. non tocchi manualmente `pyproject.toml`, `CHANGELOG.md` root, tag o release
 
 Il workflow `Release Assets` supporta ancora `workflow_dispatch` se serve rigenerare gli artefatti per un tag gia' esistente.
 
@@ -93,6 +99,7 @@ Il workflow `Release Assets` supporta ancora `workflow_dispatch` se serve rigene
 Verifica in `Settings > Actions > General`:
 
 - `Allow GitHub Actions to create and approve pull requests`
+- `Allow auto-merge`, se vuoi in futuro sostituire il merge diretto con `gh pr merge --auto`
 
 Se in futuro vuoi che altri workflow si attivino anche sulle Release PR create automaticamente, valuta l'uso di un PAT dedicato invece del solo `GITHUB_TOKEN`.
 

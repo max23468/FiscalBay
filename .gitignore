@@ -10,5 +10,6 @@ build/
 dist/
 .coverage
 *.pyc
+.DS_Store
 data/*.db
 data/*.lock
