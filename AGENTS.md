@@ -43,6 +43,9 @@ Prima di finalizzare:
   - impatto
   - test eseguiti
   - eventuali limitazioni note
+- Questo repository e' privato e gestito da un solo maintainer.
+- Regola operativa per gli agenti: non trattare review/commenti esterni come un passaggio atteso per chiudere il lavoro.
+- Quando la PR e' pronta, i test rilevanti sono verdi e la self-review e' stata completata, il passo naturale successivo e' il merge.
 
 ## Release e versioning
 - Questo repository usa `release-please` come meccanismo ufficiale di versionamento e release anche quando si lavora direttamente su `main`.

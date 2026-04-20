@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.fiscalbay.bot import (
+    enqueue_apply_user_access_operation,
     maybe_send_new_order_notifications,
     process_message,
     record_fingerprint,
@@ -16,18 +17,22 @@ from src.fiscalbay.models import (
     BotRuntimeState,
     EbayTokenSet,
     LinkedEbayAccount,
+    OauthLinkSession,
     TelegramConfig,
 )
 from src.fiscalbay.storage.sqlite import (
     append_audit_log_entry,
+    create_oauth_link_session,
     load_audit_log_entries,
     load_latest_oauth_link_session,
     load_notification_subscriptions,
+    load_operation_queue_entries,
     load_retry_queue,
     load_state,
     load_telegram_chats,
     load_telegram_users,
     resolve_linked_ebay_account,
+    save_retry_queue,
     save_state,
     save_tenant_runtime_state,
     set_notification_subscription_enabled,
@@ -55,6 +60,25 @@ class BotIntegrationTests(unittest.TestCase):
         self.assertEqual(len(replies), 1)
         self.assertIn("/request_access", replies[0])
         self.assertIn("solo chat privata", replies[0])
+
+    def test_start_for_admin_surfaces_operational_admin_commands(self) -> None:
+        replies = process_message(
+            text="/start",
+            chat_id=573159993,
+            telegram_config=TelegramConfig(
+                token="x",
+                allowed_chat_ids={573159993},
+                notify_chat_ids=set(),
+                admin_user_id=573159993,
+            ),
+            ebay_environment="production",
+            telegram_user_id=573159993,
+        )
+
+        self.assertEqual(len(replies), 1)
+        self.assertIn("/admin_dashboard", replies[0])
+        self.assertIn("/maintenance_overview", replies[0])
+        self.assertIn("/reconnect_users", replies[0])
 
     def test_process_message_prompts_request_for_non_approved_user(self) -> None:
         replies = process_message(
@@ -828,6 +852,241 @@ class BotIntegrationTests(unittest.TestCase):
                 unlinked_replies[0],
             )
 
+            reconnect_replies = process_message(
+                text="/reconnect_users",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+            self.assertIn("Nessun tenant richiede reconnect", reconnect_replies[0])
+
+            inactive_replies = process_message(
+                text="/inactive_users",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+            self.assertIn("Nessun tenant operativo risulta inattivo", inactive_replies[0])
+
+            maintenance_replies = process_message(
+                text="/maintenance_overview",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+            self.assertIn("Maintenance Overview", maintenance_replies[0])
+            self.assertIn("OAuth pending attive", maintenance_replies[0])
+
+    def test_admin_can_filter_reconnect_and_inactive_users(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123, 456, 457, 458},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=1000,
+                chat_id=456,
+                username="reconnect_user",
+                display_name="Reconnect User",
+                chat_type="private",
+            )
+            update_telegram_user_status(
+                str(db_path),
+                1000,
+                TELEGRAM_USER_STATUS_APPROVED,
+                updated_at="2026-04-06T10:00:00Z",
+            )
+            upsert_linked_ebay_account(
+                str(db_path),
+                LinkedEbayAccount(
+                    telegram_user_id=1000,
+                    ebay_user_id="seller-reconnect",
+                    environment="production",
+                    linked_at="2026-04-06T10:10:00Z",
+                    status="linked",
+                ),
+            )
+            upsert_ebay_token_set(
+                str(db_path),
+                EbayTokenSet(
+                    ebay_account_id=1,
+                    refresh_token_encrypted="plain:tenant-refresh",
+                    access_token="",
+                    scope_set="scope",
+                    status="revoked",
+                ),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=1001,
+                chat_id=457,
+                username="inactive_user",
+                display_name="Inactive User",
+                chat_type="private",
+            )
+            update_telegram_user_status(
+                str(db_path),
+                1001,
+                TELEGRAM_USER_STATUS_APPROVED,
+                updated_at="2026-04-01T10:00:00Z",
+            )
+            upsert_linked_ebay_account(
+                str(db_path),
+                LinkedEbayAccount(
+                    telegram_user_id=1001,
+                    ebay_user_id="seller-inactive",
+                    environment="production",
+                    linked_at="2026-04-01T10:10:00Z",
+                    status="linked",
+                ),
+            )
+            upsert_ebay_token_set(
+                str(db_path),
+                EbayTokenSet(
+                    ebay_account_id=2,
+                    refresh_token_encrypted="plain:tenant-refresh",
+                    access_token="",
+                    scope_set="scope",
+                    status="active",
+                ),
+            )
+            save_tenant_runtime_state(
+                str(db_path),
+                1001,
+                BotRuntimeState.from_mapping(
+                    {
+                        "memory": {
+                            "last_fetch_end": "2026-03-01T10:00:00Z",
+                        }
+                    }
+                ),
+            )
+
+            reconnect_replies = process_message(
+                text="/reconnect_users",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+            self.assertIn("reconnect_user", reconnect_replies[0])
+            self.assertNotIn("inactive_user", reconnect_replies[0])
+
+            inactive_replies = process_message(
+                text="/inactive_users",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+            self.assertIn("inactive_user", inactive_replies[0])
+            self.assertNotIn("reconnect_user", inactive_replies[0])
+
+    def test_admin_maintenance_overview_highlights_queue_and_oauth_cleanup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123, 456},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=1000,
+                chat_id=456,
+                username="ops_user",
+                display_name="Ops User",
+                chat_type="private",
+            )
+            update_telegram_user_status(
+                str(db_path),
+                1000,
+                TELEGRAM_USER_STATUS_APPROVED,
+                updated_at="2026-04-06T10:00:00Z",
+            )
+            create_oauth_link_session(
+                str(db_path),
+                OauthLinkSession(
+                    telegram_user_id=1000,
+                    telegram_chat_id=456,
+                    oauth_state="expired-pending-state",
+                    status="pending",
+                    expires_at="2026-04-06T10:05:00Z",
+                    created_at="2026-04-06T10:00:00Z",
+                ),
+            )
+            create_oauth_link_session(
+                str(db_path),
+                OauthLinkSession(
+                    telegram_user_id=1000,
+                    telegram_chat_id=456,
+                    oauth_state="failed-state",
+                    status="failed",
+                    expires_at="2026-04-06T10:10:00Z",
+                    created_at="2026-04-06T10:00:00Z",
+                ),
+            )
+            save_retry_queue(
+                str(db_path),
+                [
+                    {"chat_id": 456, "text": "retry me", "attempts": 2},
+                ],
+            )
+            enqueue_apply_user_access_operation(
+                state_path=str(db_path),
+                actor_telegram_user_id=123,
+                target_telegram_user_id=1000,
+                requested_status=TELEGRAM_USER_STATUS_APPROVED,
+            )
+            queue_entries = load_operation_queue_entries(str(db_path), limit=5)
+            self.assertEqual(len(queue_entries), 1)
+
+            replies = process_message(
+                text="/maintenance_overview",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("OAuth pending scadute", replies[0])
+            self.assertIn("retry backlog", replies[0])
+            self.assertIn("queue op=", replies[0])
+            self.assertIn("pending_session user=", replies[0])
+            self.assertIn("Priorita' consigliate", replies[0])
+
     def test_maintenance_mode_blocks_connect_but_not_account_reads(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
@@ -1582,6 +1841,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("chat_notifications_disabled", replies[0])
             self.assertIn("/notifications on", replies[0])
             self.assertIn("chat corrente non e' pronta", replies[0])
+            self.assertIn("Comando rapido", replies[0])
 
     def test_process_message_account_reports_linked_account_status(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1635,6 +1895,8 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("Utente eBay: <code>seller-ebay</code>", replies[0])
             self.assertIn("Ambiente: <code>sandbox</code>", replies[0])
             self.assertIn("Token: <code>active</code>", replies[0])
+            self.assertIn("Chat corrente: <code>attive</code>", replies[0])
+            self.assertIn("Prossimi passi", replies[0])
 
     def test_process_message_reconnect_status_reports_linked_account_as_ok(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1775,6 +2037,50 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("Stato token: <code>revoked</code>", replies[0])
             self.assertIn("/connect", replies[0])
 
+    def test_process_message_reconnect_status_reports_ready_connect_session(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={1, 123, 456, 573159993},
+                notify_chat_ids={456},
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=456,
+                username="seller_user",
+                display_name="Mario Rossi",
+                chat_type="private",
+            )
+            create_oauth_link_session(
+                str(db_path),
+                OauthLinkSession(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    environment="production",
+                    oauth_state="ready-state",
+                    status="pending",
+                    expires_at="2099-04-06T10:10:00Z",
+                    created_at="2026-04-06T10:00:00Z",
+                ),
+            )
+
+            replies = process_message(
+                text="/reconnect_status",
+                chat_id=456,
+                telegram_user_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Sessione connect pronta", replies[0])
+            self.assertIn("2099-04-06T10:10:00Z", replies[0])
+
     def test_process_message_reconnect_status_includes_last_known_failure_reason(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
@@ -1909,7 +2215,8 @@ class BotIntegrationTests(unittest.TestCase):
 
             self.assertEqual(len(replies), 1)
             self.assertIn("https://example.com/oauth/start?state=", replies[0])
-            self.assertIn("Dopo il consenso eBay", replies[0])
+            self.assertIn("1. apri il link", replies[0])
+            self.assertIn("/reconnect_status", replies[0])
 
     def test_process_message_connect_reconnects_from_disconnected_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2317,6 +2624,121 @@ class BotIntegrationTests(unittest.TestCase):
             subscriptions = load_notification_subscriptions(str(db_path))
             self.assertTrue(subscriptions[0].enabled)
 
+    def test_process_message_notifications_without_args_reports_current_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={1, 123, 456, 573159993},
+                notify_chat_ids={456},
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=456,
+                username="seller_user",
+                display_name="Mario Rossi",
+                chat_type="private",
+            )
+
+            replies = process_message(
+                text="/notifications",
+                chat_id=456,
+                telegram_user_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Notifiche chat", replies[0])
+            self.assertIn("attive", replies[0])
+            self.assertIn("/connect", replies[0])
+
+    def test_process_message_notifications_filter_updates_subscription(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={1, 123, 456, 573159993},
+                notify_chat_ids={456},
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=456,
+                username="seller_user",
+                display_name="Mario Rossi",
+                chat_type="private",
+            )
+
+            replies = process_message(
+                text="/notifications filter vat",
+                chat_id=456,
+                telegram_user_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Filtro attivo: <code>solo_piva</code>", replies[0])
+            subscriptions = load_notification_subscriptions(str(db_path))
+            self.assertEqual(len(subscriptions), 1)
+            self.assertIn("VAT_NUMBER", subscriptions[0].filters)
+
+    def test_process_message_notifications_toggle_preserves_existing_filter(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={1, 123, 456, 573159993},
+                notify_chat_ids={456},
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=456,
+                username="seller_user",
+                display_name="Mario Rossi",
+                chat_type="private",
+            )
+
+            process_message(
+                text="/notifications filter vat",
+                chat_id=456,
+                telegram_user_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+            process_message(
+                text="/notifications off",
+                chat_id=456,
+                telegram_user_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+            replies = process_message(
+                text="/notifications on",
+                chat_id=456,
+                telegram_user_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Filtro attivo: <code>solo_piva</code>", replies[0])
+            subscriptions = load_notification_subscriptions(str(db_path))
+            self.assertEqual(len(subscriptions), 1)
+            self.assertTrue(subscriptions[0].enabled)
+            self.assertIn("VAT_NUMBER", subscriptions[0].filters)
+
     def test_process_message_settings_reports_chat_preferences(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
@@ -2375,6 +2797,347 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("seen-order", replies[0])
             self.assertIn("sent-order", replies[0])
             self.assertIn("/leave_bot", replies[0])
+            self.assertIn("Prossimi passi", replies[0])
+
+    def test_process_message_settings_reports_ready_connect_session(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={1, 123, 456, 573159993},
+                notify_chat_ids={456},
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=456,
+                username="seller_user",
+                display_name="Mario Rossi",
+                chat_type="private",
+            )
+            create_oauth_link_session(
+                str(db_path),
+                OauthLinkSession(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    environment="production",
+                    oauth_state="ready-state",
+                    status="pending",
+                    expires_at="2099-04-06T10:10:00Z",
+                    created_at="2026-04-06T10:00:00Z",
+                ),
+            )
+
+            replies = process_message(
+                text="/settings",
+                chat_id=456,
+                telegram_user_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Sessione connect pronta", replies[0])
+            self.assertIn("2099-04-06T10:10:00Z", replies[0])
+
+    @patch("src.fiscalbay.bot.fetch_records")
+    @patch("src.fiscalbay.bot.load_config")
+    def test_process_message_review_orders_lists_records_without_fiscal_data(
+        self,
+        mock_load_config,
+        mock_fetch_records,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={1, 123, 456, 573159993},
+                notify_chat_ids={456},
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=456,
+                username="seller_user",
+                display_name="Mario Rossi",
+                chat_type="private",
+            )
+            mock_load_config.return_value = object()
+            mock_fetch_records.return_value = [
+                {
+                    "orderId": "order-missing",
+                    "creationDate": "2026-04-05T20:00:00Z",
+                    "buyerUsername": "buyer-missing",
+                    "taxpayerId": "",
+                    "taxIdentifierType": "",
+                    "issuingCountry": "IT",
+                },
+                {
+                    "orderId": "order-ok",
+                    "creationDate": "2026-04-05T21:00:00Z",
+                    "buyerUsername": "buyer-ok",
+                    "taxpayerId": "IT12345678901",
+                    "taxIdentifierType": "VAT_NUMBER",
+                    "issuingCountry": "IT",
+                },
+            ]
+
+            replies = process_message(
+                text="/review_orders 7 20",
+                chat_id=456,
+                telegram_user_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Ordini Da Controllare", replies[0])
+            self.assertIn("order-missing", replies[0])
+            self.assertNotIn("order-ok", replies[0])
+
+    @patch("src.fiscalbay.bot.fetch_records")
+    @patch("src.fiscalbay.bot.load_config")
+    def test_process_message_report_summary_renders_compact_counts(
+        self,
+        mock_load_config,
+        mock_fetch_records,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={1, 123, 456, 573159993},
+                notify_chat_ids={456},
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=456,
+                username="seller_user",
+                display_name="Mario Rossi",
+                chat_type="private",
+            )
+            mock_load_config.return_value = object()
+            mock_fetch_records.return_value = [
+                {
+                    "orderId": "order-missing",
+                    "creationDate": "2026-04-05T20:00:00Z",
+                    "buyerUsername": "buyer-missing",
+                    "taxpayerId": "",
+                    "taxIdentifierType": "",
+                    "issuingCountry": "IT",
+                },
+                {
+                    "orderId": "order-cf",
+                    "creationDate": "2026-04-05T21:00:00Z",
+                    "buyerUsername": "buyer-cf",
+                    "taxpayerId": "RSSMRA80A01H501U",
+                    "taxIdentifierType": "CODICE_FISCALE",
+                    "issuingCountry": "IT",
+                },
+                {
+                    "orderId": "order-vat",
+                    "creationDate": "2026-04-05T22:00:00Z",
+                    "buyerUsername": "buyer-vat",
+                    "taxpayerId": "IT12345678901",
+                    "taxIdentifierType": "VAT_NUMBER",
+                    "issuingCountry": "DE",
+                },
+            ]
+
+            replies = process_message(
+                text="/report_summary 7 20",
+                chat_id=456,
+                telegram_user_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Mini Report Fiscale", replies[0])
+            self.assertIn("Con P.IVA: <code>1</code>", replies[0])
+            self.assertIn("Con CF: <code>1</code>", replies[0])
+            self.assertIn("Senza dato fiscale: <code>1</code>", replies[0])
+            self.assertIn("Paese emissione non IT: <code>1</code>", replies[0])
+
+    @patch("src.fiscalbay.bot.fetch_records")
+    @patch("src.fiscalbay.bot.load_config")
+    def test_process_message_priority_orders_sorts_review_then_vat_then_cf(
+        self,
+        mock_load_config,
+        mock_fetch_records,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={1, 123, 456, 573159993},
+                notify_chat_ids={456},
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=456,
+                username="seller_user",
+                display_name="Mario Rossi",
+                chat_type="private",
+            )
+            mock_load_config.return_value = object()
+            mock_fetch_records.return_value = [
+                {
+                    "orderId": "order-cf",
+                    "creationDate": "2026-04-05T21:00:00Z",
+                    "buyerUsername": "buyer-cf",
+                    "taxpayerId": "RSSMRA80A01H501U",
+                    "taxIdentifierType": "CODICE_FISCALE",
+                    "issuingCountry": "IT",
+                },
+                {
+                    "orderId": "order-review",
+                    "creationDate": "2026-04-05T20:00:00Z",
+                    "buyerUsername": "buyer-review",
+                    "taxpayerId": "",
+                    "taxIdentifierType": "",
+                    "issuingCountry": "IT",
+                },
+                {
+                    "orderId": "order-vat",
+                    "creationDate": "2026-04-05T22:00:00Z",
+                    "buyerUsername": "buyer-vat",
+                    "taxpayerId": "IT12345678901",
+                    "taxIdentifierType": "VAT_NUMBER",
+                    "issuingCountry": "IT",
+                },
+            ]
+
+            replies = process_message(
+                text="/priority_orders 7 20",
+                chat_id=456,
+                telegram_user_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Ordini Prioritari", replies[0])
+            self.assertLess(replies[0].index("order-review"), replies[0].index("order-vat"))
+            self.assertLess(replies[0].index("order-vat"), replies[0].index("order-cf"))
+
+    @patch("src.fiscalbay.bot.fetch_records")
+    @patch("src.fiscalbay.bot.load_config")
+    @patch("src.fiscalbay.bot.send_message")
+    @patch.dict(
+        "os.environ",
+        {
+            "EBAY_CLIENT_ID": "cid",
+            "EBAY_CLIENT_SECRET": "secret",
+            "EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS": "1",
+        },
+        clear=False,
+    )
+    def test_maybe_send_new_order_notifications_respects_vat_filter(
+        self,
+        mock_send_message,
+        mock_load_config,
+        mock_fetch_records,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={1, 123, 456, 573159993},
+                notify_chat_ids={456},
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=456,
+                username="seller_user",
+                display_name="Mario Rossi",
+                chat_type="private",
+            )
+            save_tenant_runtime_state(
+                str(db_path),
+                123,
+                BotRuntimeState.from_mapping(
+                    {
+                        "last_check": "2026-04-05T19:30:00Z",
+                        "metrics": {
+                            "orders_read": 0,
+                            "notifications_sent": 0,
+                            "errors_by_type": {},
+                        },
+                    }
+                ),
+            )
+            upsert_linked_ebay_account(
+                str(db_path),
+                LinkedEbayAccount(
+                    telegram_user_id=123,
+                    ebay_user_id="seller-ebay",
+                    environment="production",
+                    linked_at="2026-04-06T10:10:00Z",
+                    status="linked",
+                ),
+            )
+            upsert_ebay_token_set(
+                str(db_path),
+                EbayTokenSet(
+                    ebay_account_id=1,
+                    refresh_token_encrypted="plain:tenant-refresh",
+                    access_token="",
+                    scope_set="scope",
+                    status="active",
+                ),
+            )
+            process_message(
+                text="/notifications filter vat",
+                chat_id=456,
+                telegram_user_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+            mock_load_config.return_value = object()
+            mock_fetch_records.return_value = [
+                {
+                    "orderId": "order-cf",
+                    "creationDate": "2026-04-05T20:00:00Z",
+                    "buyerUsername": "buyer-cf",
+                    "taxpayerId": "RSSMRA80A01H501U",
+                    "taxIdentifierType": "CODICE_FISCALE",
+                    "issuingCountry": "IT",
+                },
+                {
+                    "orderId": "order-vat",
+                    "creationDate": "2026-04-05T21:00:00Z",
+                    "buyerUsername": "buyer-vat",
+                    "taxpayerId": "IT12345678901",
+                    "taxIdentifierType": "VAT_NUMBER",
+                    "issuingCountry": "IT",
+                },
+            ]
+
+            maybe_send_new_order_notifications(config, "production")
+
+            self.assertEqual(mock_send_message.call_count, 1)
+            sent_text = mock_send_message.call_args.args[2]
+            self.assertIn("order-vat", sent_text)
+            self.assertNotIn("order-cf", sent_text)
 
 
 if __name__ == "__main__":

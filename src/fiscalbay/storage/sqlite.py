@@ -14,7 +14,9 @@ from ..models import (
     EBAY_ACCOUNT_STATUS_DISCONNECTED,
     EBAY_ACCOUNT_STATUS_LINKED,
     OAUTH_SESSION_STATUS_CANCELLED,
+    OAUTH_SESSION_STATUS_COMPLETED,
     OAUTH_SESSION_STATUS_EXPIRED,
+    OAUTH_SESSION_STATUS_FAILED,
     OAUTH_SESSION_STATUS_PENDING,
     OPERATION_STATUS_FAILED,
     OPERATION_STATUS_PENDING,
@@ -1473,14 +1475,29 @@ def set_notification_subscription_enabled(
     telegram_chat_id: int,
     enabled: bool,
     *,
+    filters: str | None = None,
     created_at: str,
     updated_at: str,
 ) -> NotificationSubscription:
+    preserved_filters = filters
+    if preserved_filters is None:
+        init_db(path)
+        with _connect(path) as conn:
+            existing_row = conn.execute(
+                "SELECT filters FROM notification_subscriptions "
+                "WHERE telegram_user_id = ? AND telegram_chat_id = ? "
+                "LIMIT 1",
+                (telegram_user_id, telegram_chat_id),
+            ).fetchone()
+            if existing_row is not None:
+                preserved_filters = str(existing_row["filters"] or "")
+    if preserved_filters is None:
+        preserved_filters = ""
     subscription = NotificationSubscription(
         telegram_user_id=telegram_user_id,
         telegram_chat_id=telegram_chat_id,
         enabled=enabled,
-        filters="",
+        filters=preserved_filters,
         created_at=created_at,
         updated_at=updated_at,
     )
@@ -1563,6 +1580,67 @@ def expire_stale_oauth_link_sessions(path: str, *, now_iso: str) -> int:
             (OAUTH_SESSION_STATUS_EXPIRED, OAUTH_SESSION_STATUS_PENDING, now_iso),
         )
         return conn.total_changes
+
+
+def summarize_oauth_link_sessions(path: str, *, now_iso: str) -> dict[str, object]:
+    init_db(path)
+    summary: dict[str, object] = {
+        "pending_active": 0,
+        "pending_expired": 0,
+        "expired": 0,
+        "failed": 0,
+        "completed": 0,
+        "oldest_pending_user_id": None,
+        "oldest_pending_created_at": "",
+        "oldest_pending_expires_at": "",
+        "oldest_pending_state": "",
+    }
+    with _connect(path) as conn:
+        summary["pending_active"] = as_int(
+            conn.execute(
+                "SELECT COUNT(*) FROM oauth_link_sessions "
+                "WHERE status = ? AND (expires_at IS NULL OR expires_at > ?)",
+                (OAUTH_SESSION_STATUS_PENDING, now_iso),
+            ).fetchone()[0]
+        )
+        summary["pending_expired"] = as_int(
+            conn.execute(
+                "SELECT COUNT(*) FROM oauth_link_sessions "
+                "WHERE status = ? AND expires_at IS NOT NULL AND expires_at <= ?",
+                (OAUTH_SESSION_STATUS_PENDING, now_iso),
+            ).fetchone()[0]
+        )
+        summary["expired"] = as_int(
+            conn.execute(
+                "SELECT COUNT(*) FROM oauth_link_sessions WHERE status = ?",
+                (OAUTH_SESSION_STATUS_EXPIRED,),
+            ).fetchone()[0]
+        )
+        summary["failed"] = as_int(
+            conn.execute(
+                "SELECT COUNT(*) FROM oauth_link_sessions WHERE status = ?",
+                (OAUTH_SESSION_STATUS_FAILED,),
+            ).fetchone()[0]
+        )
+        summary["completed"] = as_int(
+            conn.execute(
+                "SELECT COUNT(*) FROM oauth_link_sessions WHERE status = ?",
+                (OAUTH_SESSION_STATUS_COMPLETED,),
+            ).fetchone()[0]
+        )
+        oldest_pending = conn.execute(
+            "SELECT telegram_user_id, created_at, expires_at, oauth_state "
+            "FROM oauth_link_sessions "
+            "WHERE status = ? "
+            "ORDER BY created_at ASC, id ASC LIMIT 1",
+            (OAUTH_SESSION_STATUS_PENDING,),
+        ).fetchone()
+        if oldest_pending is not None:
+            summary["oldest_pending_user_id"] = as_int(oldest_pending["telegram_user_id"])
+            summary["oldest_pending_created_at"] = str(oldest_pending["created_at"] or "")
+            summary["oldest_pending_expires_at"] = str(oldest_pending["expires_at"] or "")
+            summary["oldest_pending_state"] = str(oldest_pending["oauth_state"] or "")
+    return summary
 
 
 def reconcile_account_token_consistency(path: str) -> int:
