@@ -1,0 +1,15 @@
+<svg width="860" height="220" viewBox="0 0 860 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="860" height="220" rx="32" fill="#16324F"/>
+  <g transform="translate(34 28)">
+    <g transform="rotate(-8 106 86)">
+      <rect x="8" y="8" width="196" height="156" rx="30" fill="#0F2236"/>
+      <rect x="32" y="32" width="148" height="108" rx="22" fill="#FFFDF9"/>
+      <rect x="54" y="50" width="92" height="15" rx="7.5" fill="#1F6FA8"/>
+      <rect x="54" y="76" width="72" height="9" rx="4.5" fill="#38B6B3"/>
+      <rect x="54" y="97" width="56" height="9" rx="4.5" fill="#E53238"/>
+      <rect x="120" y="87" width="18" height="18" rx="6" fill="#F5AF02"/>
+    </g>
+  </g>
+  <text x="254" y="102" fill="#FFFDF9" font-size="58" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700">FiscalBay</text>
+  <text x="254" y="142" fill="#9ED9F3" font-size="22" font-family="DejaVu Sans, Arial, sans-serif" font-weight="600">Assistente Codice Fiscale ordini per venditori eBay</text>
+</svg>

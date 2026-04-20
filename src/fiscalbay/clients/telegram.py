@@ -25,6 +25,11 @@ JsonValue: TypeAlias = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"
 JsonObject: TypeAlias = dict[str, JsonValue]
 
 
+class BotCommand(TypedDict):
+    command: str
+    description: str
+
+
 class InlineKeyboardButton(TypedDict):
     text: str
     callback_data: str
@@ -138,6 +143,29 @@ def telegram_api_request(
 
 def ensure_long_polling(token: str) -> None:
     telegram_request(token, "deleteWebhook", {"drop_pending_updates": False})
+
+
+def sync_bot_branding(
+    token: str,
+    *,
+    name: str,
+    short_description: str,
+    description: str,
+    commands: list[BotCommand],
+) -> None:
+    telegram_request(token, "setMyName", {"name": name})
+    telegram_request(
+        token,
+        "setMyShortDescription",
+        {"short_description": short_description},
+    )
+    telegram_request(token, "setMyDescription", {"description": description})
+    telegram_request(token, "setMyCommands", {"commands": commands})
+    telegram_request(
+        token,
+        "setChatMenuButton",
+        {"menu_button": {"type": "commands"}},
+    )
 
 
 def telegram_request_once(

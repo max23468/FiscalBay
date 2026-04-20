@@ -38,6 +38,13 @@ CALLBACK_REQUEST_ACCESS = "access:request"
 CALLBACK_APPROVE_PREFIX = "access:approve:"
 CALLBACK_REJECT_PREFIX = "access:reject:"
 
+BOT_DISPLAY_NAME = "FiscalBay"
+BOT_TAGLINE = "Assistente Codice Fiscale ordini per venditori eBay"
+BOT_LONG_DESCRIPTION = (
+    "Controlla Codice Fiscale, stato account e ordini eBay da un'unica chat. "
+    "FiscalBay mostra solo i dati che eBay restituisce davvero."
+)
+
 
 def chunk_message(text: str, limit: int = 3500) -> list[str]:
     if len(text) <= limit:
@@ -135,20 +142,20 @@ def parse_command(text: str) -> tuple[str, list[str]]:
 
 def build_help_text() -> str:
     return (
-        "🤖 <b>Benvenuto in FiscalBay</b>\n"
+        f"🤖 <b>Benvenuto in {BOT_DISPLAY_NAME}</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "<i>Order tax ID assistant for eBay sellers</i>\n\n"
+        f"<i>{BOT_TAGLINE}</i>\n\n"
         "Comandi disponibili:\n"
         "• 🟢 <code>/ping</code> → verifica rapida\n"
-        "• 📊 <code>/stato</code> → stato e metriche bot\n"
+        "• 📊 <code>/stato</code> → stato bot e metriche principali\n"
         "• 👤 <code>/account</code> → stato collegamento account eBay\n"
         "• 🔁 <code>/reconnect_status</code> → stato reconnect e prossima azione\n"
-        "• 🔗 <code>/connect</code> → prepara il collegamento account eBay\n"
+        "• 🔗 <code>/connect</code> → avvia o riprende il collegamento account eBay\n"
         "• ❌ <code>/disconnect</code> → scollega solo l'account eBay dal bot\n"
         "• 🚪 <code>/leave_bot</code> → disattiva uso bot e richiede nuova approvazione\n"
         "• 🔔 <code>/notifications on</code> → attiva notifiche per questa chat\n"
         "• 🔕 <code>/notifications off</code> → disattiva notifiche per questa chat\n"
-        "• ⚙️ <code>/settings</code> → riepilogo preferenze di chat e tenant\n"
+        "• ⚙️ <code>/settings</code> → preferenze chat, notifiche e tenant\n"
         "• 🧭 <code>/why_not_notified [order_id]</code> → spiega se un ordine e' notificabile\n"
         "• 🙋 <code>/request_access</code> → richiede accesso all'admin del bot\n"
         "• 👥 <code>/users</code> → elenco utenti registrati e stato accessi (admin)\n"
@@ -175,6 +182,24 @@ def build_help_text() -> str:
     )
 
 
+def build_telegram_branding_profile() -> dict[str, object]:
+    return {
+        "name": BOT_DISPLAY_NAME,
+        "short_description": BOT_TAGLINE,
+        "description": BOT_LONG_DESCRIPTION,
+        "commands": [
+            {"command": "help", "description": "Guida rapida del bot"},
+            {"command": "connect", "description": "Collega o ricollega l'account eBay"},
+            {"command": "account", "description": "Controlla stato account eBay"},
+            {"command": "ultimi", "description": "Ordini recenti con Codice Fiscale trovato"},
+            {"command": "tutti", "description": "Tutti gli ordini recenti eBay"},
+            {"command": "ordine", "description": "Apri il dettaglio di un ordine"},
+            {"command": "stato", "description": "Stato bot e metriche principali"},
+            {"command": "settings", "description": "Preferenze chat, notifiche e tenant"},
+        ],
+    }
+
+
 def build_start_text(
     *,
     user_status: str,
@@ -186,9 +211,9 @@ def build_start_text(
     )
     if is_admin:
         return (
-            "👑 <b>Benvenuto in FiscalBay</b>\n"
+            f"👑 <b>Benvenuto in {BOT_DISPLAY_NAME}</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Console admin per monitoraggio ordini e accessi</i>\n"
+            "<i>Console admin per accessi, account e flusso ordini eBay</i>\n"
             "Il tuo account Telegram e' riconosciuto come admin globale.\n"
             "Puoi approvare utenti con <code>/users</code>, <code>/approve_user</code> "
             "e <code>/reject_user</code>.\n"
@@ -209,9 +234,9 @@ def build_start_text(
 
     if raw_account_status in {"disconnected", "revoked"}:
         return (
-            "👋 <b>Benvenuto in FiscalBay</b>\n"
+            f"👋 <b>Benvenuto in {BOT_DISPLAY_NAME}</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Monitora Tax ID ordini e stato account eBay</i>\n"
+            "<i>Controlla Codice Fiscale, account e ordini eBay</i>\n"
             "Il tuo ultimo account eBay risulta in stato "
             f"<code>{html.escape(raw_account_status)}</code>.\n"
             "Ultimo utente noto: "
@@ -222,9 +247,9 @@ def build_start_text(
 
     if raw_token_status in {"revoked", "expired", "token_expired"}:
         return (
-            "👋 <b>Benvenuto in FiscalBay</b>\n"
+            f"👋 <b>Benvenuto in {BOT_DISPLAY_NAME}</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Monitora Tax ID ordini e stato account eBay</i>\n"
+            "<i>Controlla Codice Fiscale, account e ordini eBay</i>\n"
             "Il tuo account eBay risulta collegato, ma il token non e' piu' utilizzabile.\n"
             f"Utente eBay: <code>{ebay_user_id}</code> • ambiente: <code>{environment}</code>\n"
             "Prossimo passo: usa <code>/connect</code> per completare il reconnect."
@@ -233,9 +258,9 @@ def build_start_text(
 
     if raw_account_status != "linked":
         return (
-            "👋 <b>Benvenuto in FiscalBay</b>\n"
+            f"👋 <b>Benvenuto in {BOT_DISPLAY_NAME}</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "<i>Monitora Tax ID ordini e stato account eBay</i>\n"
+            "<i>Controlla Codice Fiscale, account e ordini eBay</i>\n"
             "Il tuo accesso e' approvato, ma non hai ancora collegato un account eBay.\n"
             "Prossimo passo: usa <code>/connect</code>.\n"
             "Poi potrai verificare lo stato con <code>/account</code> "
@@ -244,9 +269,9 @@ def build_start_text(
         )
 
     return (
-        "✅ <b>Benvenuto in FiscalBay</b>\n"
+        f"✅ <b>Benvenuto in {BOT_DISPLAY_NAME}</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "<i>Order tax ID assistant for eBay sellers</i>\n"
+        f"<i>{BOT_TAGLINE}</i>\n"
         "Il tuo accesso e' attivo e l'account eBay risulta collegato.\n"
         f"Utente eBay: <code>{ebay_user_id}</code> • ambiente: <code>{environment}</code>\n"
         "Comandi utili: <code>/ultimi</code>, <code>/tutti</code>, <code>/ordine</code>, "
@@ -259,20 +284,20 @@ def build_main_menu_markup() -> InlineKeyboardMarkup:
     return {
         "inline_keyboard": [
             [
-                {"text": "Ultimi CF", "callback_data": CALLBACK_ULTIMI},
-                {"text": "Tutti", "callback_data": CALLBACK_TUTTI},
+                {"text": "Ordini CF", "callback_data": CALLBACK_ULTIMI},
+                {"text": "Tutti ordini", "callback_data": CALLBACK_TUTTI},
             ],
             [
-                {"text": "Stato", "callback_data": CALLBACK_STATO},
-                {"text": "Account", "callback_data": CALLBACK_ACCOUNT},
+                {"text": "Stato bot", "callback_data": CALLBACK_STATO},
+                {"text": "Account eBay", "callback_data": CALLBACK_ACCOUNT},
             ],
             [
                 {"text": "Collega eBay", "callback_data": CALLBACK_CONNECT},
                 {"text": "Scollega", "callback_data": CALLBACK_DISCONNECT},
             ],
             [
-                {"text": "Settings", "callback_data": CALLBACK_SETTINGS},
-                {"text": "Help", "callback_data": CALLBACK_HELP},
+                {"text": "Preferenze", "callback_data": CALLBACK_SETTINGS},
+                {"text": "Guida", "callback_data": CALLBACK_HELP},
             ],
         ]
     }
