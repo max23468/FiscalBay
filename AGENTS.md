@@ -55,7 +55,10 @@ In caso di conflitto, seguire sempre il livello piu alto.
 3. Aggiorna README o `docs/*` quando cambiano comportamento, comandi, env var,
    deploy, policy operative o flussi utente.
 4. Esegui i test/controlli rilevanti prima di finalizzare.
-5. Riporta in modo esplicito cosa e' stato verificato e cosa no.
+5. Riporta in modo esplicito cosa e' stato verificato e cosa no solo quando
+   aggiunge valore al riepilogo: test eseguiti o falliti, controlli non eseguiti,
+   rischi residui o modifiche a codice/configurazione. Evita footer rituali sulle
+   verifiche per risposte semplici o cambi puramente minori.
 
 I file `.DS_Store` non fanno parte del repository: ignorali sempre e rimuovi quelli
 creati localmente quando li incontri.
@@ -142,8 +145,8 @@ Per dettagli e casi limite, seguire `docs/RELEASE_POLICY.md`.
   per dettagli marginali che non cambiano il risultato sostanziale.
 - Non trattare l'assenza di review esterne come blocco, ma non saltare self-review,
   test rilevanti e controllo dell'impatto release.
-- Mantieni output e riepiloghi finali concreti: cosa e' cambiato, dove, come e'
-  stato verificato, eventuali rischi residui.
+- Mantieni output e riepiloghi finali concreti: cosa e' cambiato, dove, eventuali
+  rischi residui e, quando utile, come e' stato verificato.
 
 ## Sotto-moduli
 
