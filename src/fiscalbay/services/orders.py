@@ -120,8 +120,20 @@ def order_detail_delay_seconds() -> float:
 
 
 def choose_tax_identifier(order: OrderPayload) -> Optional[OrderPayload]:
-    tax_identifier = _as_mapping(order.get("buyer")).get("taxIdentifier")
-    return _as_mapping(tax_identifier) or None
+    buyer = _as_mapping(order.get("buyer"))
+
+    primary = _as_mapping(buyer.get("taxIdentifier"))
+    if primary.get("taxpayerId"):
+        return primary
+
+    for field in ("taxIdentifiers", "taxIdentifierList"):
+        candidates = _as_sequence(buyer.get(field))
+        for candidate in candidates:
+            normalized = _as_mapping(candidate)
+            if normalized.get("taxpayerId"):
+                return normalized
+
+    return primary or None
 
 
 def extract_record(order: OrderPayload) -> OrderRecord:

@@ -82,6 +82,43 @@ class EbayCfToolTests(unittest.TestCase):
         self.assertEqual(record.taxIdentifierType, "CODICE_FISCALE")
         self.assertEqual(record.found, "yes")
 
+    def test_extract_record_reads_tax_identifier_from_plural_container(self) -> None:
+        order = {
+            "orderId": "12-34567-89013",
+            "creationDate": "2026-04-03T10:00:00.000Z",
+            "buyer": {
+                "username": "buyer-test",
+                "taxIdentifiers": [
+                    {
+                        "taxpayerId": "RSSMRA80A01H501U",
+                        "taxIdentifierType": "CODICE_FISCALE",
+                        "issuingCountry": "IT",
+                    }
+                ],
+            },
+        }
+        record = extract_record(order)
+        self.assertEqual(record.taxpayerId, "RSSMRA80A01H501U")
+        self.assertEqual(record.taxIdentifierType, "CODICE_FISCALE")
+        self.assertEqual(record.found, "yes")
+
+    def test_extract_record_falls_back_to_primary_tax_identifier_when_empty(self) -> None:
+        order = {
+            "orderId": "12-34567-89014",
+            "creationDate": "2026-04-03T10:00:00.000Z",
+            "buyer": {
+                "username": "buyer-test",
+                "taxIdentifier": {
+                    "taxIdentifierType": "CODICE_FISCALE",
+                    "issuingCountry": "IT",
+                },
+            },
+        }
+        record = extract_record(order)
+        self.assertEqual(record.taxpayerId, "")
+        self.assertEqual(record.taxIdentifierType, "CODICE_FISCALE")
+        self.assertEqual(record.found, "no")
+
     def test_render_table_contains_header(self) -> None:
         content = render_table(
             [
