@@ -1,0 +1,10 @@
+[Unit]
+Description=FiscalBay Duck DNS update
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/fiscalbay/duckdns.env
+ExecStart=/opt/fiscalbay/deploy/duckdns-update.sh
+

@@ -458,8 +458,13 @@ Asset disponibili nel repository, allineati al setup VPS attuale (`fiscalbay`, `
 - `deploy/linux-setup.sh`
 - `deploy/update.sh`
 - `deploy/smoke-check.sh`
+- `deploy/nginx-fiscalbay-oauth-site.conf`
+- `deploy/duckdns-update.sh`
 - `deploy/fiscalbay-bot.service`
 - `.env.example`
+
+Per esporre il callback OAuth senza usare l'indirizzo IP della VPS, usa un
+dominio HTTPS davanti a nginx. La guida operativa e' in `docs/PUBLIC_ACCESS.md`.
 
 ## Test
 

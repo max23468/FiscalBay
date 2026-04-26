@@ -21,6 +21,10 @@ Questa guida prepara `FiscalBay` per la VPS Linux attuale con `systemd`.
 5. abilita il servizio `fiscalbay-bot`
 6. esegui smoke test e health check
 
+Se il flusso OAuth deve essere usabile da Telegram, configura anche un dominio
+pubblico HTTPS davanti al servizio `fiscalbay-oauth`; vedi
+`docs/PUBLIC_ACCESS.md`.
+
 ## Setup iniziale
 
 ```bash
@@ -68,6 +72,25 @@ TELEGRAM_BOT_LOCK_PATH=data/telegram_bot.lock
 ```bash
 sudo systemctl enable --now fiscalbay-bot
 sudo systemctl status fiscalbay-bot
+```
+
+## Accesso pubblico OAuth
+
+Il bot usa polling Telegram, quindi non richiede webhook pubblico. Il dominio
+HTTPS serve invece al flusso `/connect` per completare l'OAuth eBay.
+
+Setup consigliato:
+
+- Duck DNS aggiorna l'IP pubblico della VPS
+- un sottodominio personalizzato, per esempio `connect.tuodominio.it`, punta al
+  record Duck DNS con `CNAME`
+- nginx espone solo `/oauth/*`, `/privacy`, `/about` e `/healthz`
+- Certbot gestisce il certificato HTTPS
+
+Guida completa:
+
+```bash
+less docs/PUBLIC_ACCESS.md
 ```
 
 ## Log e salute runtime

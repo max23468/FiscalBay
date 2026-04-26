@@ -36,6 +36,8 @@ Indice centrale della documentazione del progetto.
   - flusso consigliato per lavorare da Codex web/cloud con deploy via GitHub Actions
 - `docs/DEPLOY_LINUX.md`
   - guida specifica al deploy Linux
+- `docs/PUBLIC_ACCESS.md`
+  - setup dominio pubblico con Duck DNS, nginx, HTTPS e callback OAuth
 - `docs/SECURITY.md`
   - perimetro di sicurezza, segreti e requisiti futuri
 - `docs/SERVICE_GOVERNANCE.md`
