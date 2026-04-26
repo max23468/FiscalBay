@@ -117,6 +117,35 @@ jobs:
             echo "\`${VALUE}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
 
+      - name: Read EBAY_SCOPES on VPS
+        if: ${{ inputs.run_order_diagnostic }}
+        run: |
+          set -euo pipefail
+          SCOPES_VALUE="$(ssh \
+            -i "${HOME}/.ssh/fiscalbay_vps" \
+            -p "${FISCALBAY_VPS_PORT}" \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            -o ServerAliveInterval=30 \
+            -o StrictHostKeyChecking="${SSH_STRICT}" \
+            "${FISCALBAY_VPS_USER}@${FISCALBAY_VPS_HOST}" \
+            "sudo sed -n 's/^EBAY_SCOPES=//p' /opt/fiscalbay/.env")"
+
+          if [ -z "${SCOPES_VALUE}" ]; then
+            SCOPES_VALUE="(empty)"
+          fi
+
+          printf '%s\n' "${SCOPES_VALUE}" > ebay_scopes.txt
+          echo "EBAY_SCOPES=${SCOPES_VALUE}"
+
+          {
+            echo "## VPS EBAY_SCOPES"
+            echo
+            echo "\`\`\`"
+            cat ebay_scopes.txt
+            echo "\`\`\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
       - name: Run production order diagnostic on VPS
         if: ${{ inputs.run_order_diagnostic }}
         run: |
@@ -222,3 +251,4 @@ jobs:
             diagnostic_orders.json
             identity_profile.json
             identity_summary.txt
+            ebay_scopes.txt
