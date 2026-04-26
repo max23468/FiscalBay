@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.9.2](https://github.com/max23468/FiscalBay/compare/v0.9.1...v0.9.2) (2026-04-26)
+
+
+### Bug Fixes
+
+* gracefully fallback when ebay order detail rejects order id ([49abe31](https://github.com/max23468/FiscalBay/commit/49abe3190fa1119d52a411b6e47bc81f7639de36))
+* normalize buyer tax identifier alias fields ([ef9705a](https://github.com/max23468/FiscalBay/commit/ef9705a4a37f90e040568531b8b5057f4b9c2d26))
+* read buyer tax identifiers from alternate ebay payload shapes ([904c076](https://github.com/max23468/FiscalBay/commit/904c0769a717d3271a3d7f9d508e041dbc7348da))
+* retry detail lookup with legacyOrderId before summary fallback ([a8a0118](https://github.com/max23468/FiscalBay/commit/a8a0118a597b90ea233d1d3617ee60adf8bf1fe2))
+
 ## [0.9.1](https://github.com/max23468/FiscalBay/compare/v0.9.0...v0.9.1) (2026-04-26)
 
 
