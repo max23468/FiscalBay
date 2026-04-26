@@ -132,7 +132,7 @@ export EBAY_CLIENT_ID="..."
 export EBAY_CLIENT_SECRET="..."
 export EBAY_REFRESH_TOKEN="..."
 export EBAY_ENVIRONMENT="production"
-export EBAY_SCOPES="https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly"
+export EBAY_SCOPES="https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly https://api.ebay.com/oauth/api_scope/commerce.identity.readonly"
 ```
 
 Per il bot Telegram aggiungi:
@@ -206,6 +206,7 @@ Nota OAuth eBay:
 - `EBAY_OAUTH_CALLBACK_URL` serve invece al progetto per esporre il callback pubblico che deve essere associato a quel `RuName`
 - sulla VPS, per avere `/connect` davvero usabile, vanno quindi configurati sia il `RuName` corretto sia l'URL pubblico raggiungibile del callback server
 - il flusso `/connect` richiede anche lo scope pubblico `commerce.identity.readonly`, usato per leggere un identificativo account eBay reale invece del placeholder locale
+- se aggiungi o cambi scope in `EBAY_SCOPES`, i refresh token gia' emessi non si aggiornano da soli: serve rifare autorizzazione OAuth (`/connect`) per ottenere un token coerente con i nuovi scope
 
 ### Variabili Telegram
 
