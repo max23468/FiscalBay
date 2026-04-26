@@ -132,34 +132,30 @@ jobs:
             "CREATED_AFTER='${CREATED_AFTER}' CREATED_BEFORE='${CREATED_BEFORE}' MAX_RESULTS='${MAX_RESULTS}' bash -s" \
             > diagnostic_orders.json <<'REMOTE_SCRIPT'
           set -euo pipefail
-          cd /opt/fiscalbay
-
-          PYTHON_BIN=""
-          for candidate in .venv/bin/python venv/bin/python; do
-            if [ -x "${candidate}" ]; then
-              PYTHON_BIN="${candidate}"
-              break
-            fi
-          done
-          if [ -z "${PYTHON_BIN}" ]; then
-            PYTHON_BIN="$(command -v python3)"
-          fi
-
-          "${PYTHON_BIN}" - <<'PYTHON_CHECK'
-          import sys
-          if sys.version_info < (3, 10):
-              raise SystemExit(
-                  f"Python runtime non supportato per FiscalBay: {sys.version.split()[0]} (richiesto >= 3.10)"
-              )
-          PYTHON_CHECK
-
           sudo -u fiscalbay -H bash -lc '
             set -euo pipefail
             cd /opt/fiscalbay
+            PYTHON_BIN=""
+            for candidate in .venv/bin/python venv/bin/python; do
+              if [ -x "${candidate}" ]; then
+                PYTHON_BIN="${candidate}"
+                break
+              fi
+            done
+            if [ -z "${PYTHON_BIN}" ]; then
+              PYTHON_BIN="$(command -v python3)"
+            fi
+            "${PYTHON_BIN}" - <<'"'"'PYTHON_CHECK'"'"'
+import sys
+if sys.version_info < (3, 10):
+    raise SystemExit(
+        f"Python runtime non supportato per FiscalBay: {sys.version.split()[0]} (richiesto >= 3.10)"
+    )
+PYTHON_CHECK
             set -a
             [ -f .env ] && source .env
             set +a
-            PYTHONPATH=src "'"${PYTHON_BIN}"'" -m fiscalbay.cli \
+            PYTHONPATH=src "${PYTHON_BIN}" -m fiscalbay.cli \
               --environment production \
               --created-after "'"${CREATED_AFTER}"'" \
               --created-before "'"${CREATED_BEFORE}"'" \
