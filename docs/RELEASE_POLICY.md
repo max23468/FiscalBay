@@ -182,16 +182,17 @@ Lo storico preesistente resta consultabile in `docs/CHANGELOG.md`, ma non e' piu
 Il flusso standard e' questo:
 
 1. un commit Conventional Commit arriva su `main`
-2. `release-please` aggiorna o apre una Release PR
-3. i workflow `CI` e `PR Title` validano la Release PR
-4. il workflow `Auto Merge Release PR` la mergia automaticamente solo quando quei check risultano verdi
-5. la Release PR aggiorna:
+2. `release-please` aggiorna o apre una Release PR solo per cambi rilevanti per runtime/package, oppure quando viene lanciato manualmente
+3. `PR Title` valida automaticamente la Release PR
+4. `CI` viene lanciata manualmente sulla branch `release-please--*` quando vuoi autorizzare il merge automatico
+5. il workflow `Auto Merge Release PR` la mergia automaticamente solo quando `CI` manuale e `PR Title` risultano verdi
+6. la Release PR aggiorna:
    - `CHANGELOG.md`
    - `pyproject.toml`
    - `.release-please-manifest.json`
-6. quando la Release PR viene mergiata, GitHub crea tag e release
-7. lo stesso workflow builda il progetto e allega i file alla GitHub Release
-8. se serve ricostruire gli artefatti senza creare una nuova release, si usa `Release Assets` in modalita' manuale
+7. quando la Release PR viene mergiata, GitHub crea tag e release
+8. lo stesso workflow builda il progetto e allega i file alla GitHub Release
+9. se serve ricostruire gli artefatti senza creare una nuova release, si usa `Release Assets` in modalita' manuale
 
 Nota operativa:
 
@@ -202,7 +203,7 @@ In modalita' main-only:
 
 - il commit su `main` sostituisce il merge della feature PR
 - la Release PR di `release-please` resta comunque il punto ufficiale in cui si materializzano versione e changelog
-- nel setup attuale il merge della Release PR e' automatizzato, ma solo dopo check verdi, quindi il rilascio resta a due fasi logiche con un gate minimo di sicurezza
+- nel setup attuale il merge della Release PR e' automatizzato, ma solo dopo `CI` manuale e `PR Title` verdi, quindi il rilascio resta a due fasi logiche con un gate minimo di sicurezza e consumo Actions piu' controllato
 
 ## Baseline iniziale
 

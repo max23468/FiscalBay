@@ -2,7 +2,7 @@ name: Auto Merge Release PR
 
 on:
   workflow_run:
-    workflows: ["CI", "PR Title"]
+    workflows: ["CI"]
     types: [completed]
 
 permissions:
@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   auto-merge-release-pr:
-    if: ${{ startsWith(github.event.workflow_run.head_branch, 'release-please--') }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'release-please--') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

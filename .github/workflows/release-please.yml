@@ -3,6 +3,13 @@ name: Release Please
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - ".github/**"
+      - "AGENTS.md"
+      - "README.md"
+      - "docs/**"
+      - "scripts/**"
+      - "tests/**"
   workflow_dispatch:
 
 permissions:

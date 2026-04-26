@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "assets/**"
+      - "deploy/**"
+      - "pyproject.toml"
+      - "src/**"
+      - "uv.lock"
+      - "requirements*.txt"
   workflow_dispatch:
     inputs:
       target_ref:
@@ -16,7 +23,7 @@ permissions:
 
 concurrency:
   group: deploy-vps-${{ github.event_name == 'workflow_dispatch' && inputs.target_ref || github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:

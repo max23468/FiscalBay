@@ -19,12 +19,13 @@ Per deploy ordinari:
 
 1. fai lavorare Codex sul branch desiderato
 2. porta la modifica su `main`
-3. il workflow GitHub `Deploy VPS` parte automaticamente al push su `main`
+3. il workflow GitHub `Deploy VPS` parte automaticamente solo se il push tocca file runtime/deploy
 
 Per deploy manuali o di una revisione specifica:
 
 - usa il workflow `Deploy VPS` in GitHub Actions con `workflow_dispatch`
 - passa `target_ref` se vuoi deployare un commit o ref specifico
+- usalo anche per forzare un deploy dopo cambi documentali, CI-only o altri cambi esclusi dai path automatici
 
 Questo flusso non richiede accesso dal runtime Codex cloud alla rete privata della VPS: il ponte lo fa GitHub Actions.
 

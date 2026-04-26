@@ -53,9 +53,9 @@ In pratica:
 
 Per mantenere il repository allineato alle best practice GitHub anche in contesto single-maintainer, il progetto include:
 
-- workflow CI su push/PR (`.github/workflows/ci.yml`)
-- deploy verso VPS via GitHub Actions (`.github/workflows/deploy-vps.yml`)
-- release PR automatiche con `release-please` (`.github/workflows/release-please.yml`)
+- workflow CI manuale (`.github/workflows/ci.yml`) per contenere il consumo GitHub Actions
+- deploy verso VPS via GitHub Actions, automatico solo per cambi runtime/deploy e sempre avviabile manualmente (`.github/workflows/deploy-vps.yml`)
+- release PR con `release-please`, automatiche solo per cambi rilevanti al runtime/package e sempre avviabili manualmente (`.github/workflows/release-please.yml`)
 - build e upload automatico degli artefatti nella GitHub Release creata da `release-please`
 - rebuild manuale degli artefatti per un tag esistente (`.github/workflows/release.yml`)
 - aggiornamenti automatici dipendenze con Dependabot (`.github/dependabot.yml`)
@@ -67,7 +67,7 @@ Per mantenere il repository allineato alle best practice GitHub anche in contest
 
 Passi consigliati dopo il clone/fork:
 
-1. verifica branch protection su `main` (almeno: CI obbligatoria, linear history)
+1. verifica branch protection su `main` (almeno: linear history; CI come gate manuale quando serve contenere i minuti Actions)
 2. abilita secret scanning e Dependabot alerts dal tab Security
 3. usa PR anche da branch personali per lasciare audit trail e checklist standard
 4. usa titoli PR di squash in formato Conventional Commit per tenere coerenti versioni e changelog
@@ -78,14 +78,14 @@ Per usare Codex su `chatgpt.com` come postazione di lavoro e deploy senza dipend
 Il flusso consigliato da remoto e:
 
 - Codex o GitHub preparano il codice fino a `main`
-- GitHub Actions esegue il deploy verso la VPS
+- GitHub Actions esegue il deploy verso la VPS quando il push tocca file runtime/deploy, oppure quando il workflow viene lanciato manualmente
 - la VPS applica il deploy standard con `deploy/install-vps.sh`
 
 In pratica, da Codex web/mobile ti basta:
 
 - aprire il repository GitHub `max23468/FiscalBay`
 - lavorare su branch o su `main`
-- usare GitHub Actions per il deploy, senza dipendere dai secret runtime di `chatgpt.com`
+- usare GitHub Actions per il deploy manuale, senza dipendere dai secret runtime di `chatgpt.com`
 
 ## Versioni e changelog
 
@@ -101,9 +101,9 @@ Regola operativa minima:
 
 Il flusso e' allineato a GitHub:
 
-- i merge su `main` aggiornano automaticamente una Release PR
-- `CI` e `PR Title` girano anche sulla Release PR
-- il workflow `Auto Merge Release PR` la chiude automaticamente quando e' una PR `release-please` e i check sono verdi
+- i merge su `main` aggiornano automaticamente una Release PR solo quando toccano file rilevanti per runtime/package; negli altri casi `Release Please` resta avviabile manualmente
+- `PR Title` gira automaticamente sulla Release PR; `CI` e' manuale per ridurre il consumo Actions
+- il workflow `Auto Merge Release PR` la chiude automaticamente solo dopo una `CI` manuale riuscita sulla branch `release-please--*` e con `PR Title` verde
 - per evitare il limite `Resource not accessible by integration` sulla pubblicazione finale, configura il secret repository `RELEASE_PLEASE_TOKEN`; senza secret i workflow ripiegano su `GITHUB_TOKEN`, ma la creazione della GitHub Release puo' fallire
 - la Release PR aggiorna `CHANGELOG.md` e la versione in `pyproject.toml`
 - il merge della Release PR crea tag, GitHub Release e allega automaticamente gli artefatti buildati

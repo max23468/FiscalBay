@@ -19,7 +19,7 @@ Alcune feature GitHub non sono affidabili se lasciate solo come convenzione, ma 
 
 ### Ruleset o branch protection per `main`
 
-Configurazione consigliata:
+Configurazione consigliata quando vuoi privilegiare sicurezza di merge rispetto al consumo Actions:
 
 - richiedi le status check della CI prima del merge
 - richiedi branch aggiornato prima del merge, se il rumore operativo resta accettabile
@@ -27,7 +27,14 @@ Configurazione consigliata:
 - disabilita force push e branch deletion su `main`
 - valuta `Require pull request` anche in contesto solo-maintainer, se vuoi audit trail piu' pulito
 
-Check da marcare come obbligatori:
+Configurazione consigliata quando l'obiettivo primario e' ridurre i minuti Actions:
+
+- non rendere `CI` una check obbligatoria automatica
+- esegui manualmente il workflow `CI` prima dei merge/release che toccano runtime, storage, deploy o packaging
+- mantieni `Require linear history`
+- usa commit Conventional Commit corretti anche quando lavori direttamente su `main`
+
+Check da marcare come obbligatori solo se riattivi un gate automatico:
 
 - job `lint-and-test`
 - job `package-build`
@@ -75,26 +82,28 @@ Il flusso consigliato non parte piu' dal tag manuale come primo passo.
 Il percorso standard e':
 
 1. mergi una PR su `main` con titolo Conventional Commit
-2. `Release Please` apre o aggiorna una Release PR
-3. i workflow `CI` e `PR Title` girano anche sulla Release PR
-4. il workflow `Auto Merge Release PR` la mergia automaticamente solo se entrambi risultano `success`
-5. il merge della Release PR aggiorna versione e `CHANGELOG.md`
-6. `Release Please` crea il tag `vX.Y.Z`, la relativa release GitHub e allega gli artefatti buildati
+2. `Release Please` apre o aggiorna una Release PR se il push tocca file rilevanti per runtime/package, oppure quando viene lanciato manualmente
+3. `PR Title` gira automaticamente sulla Release PR
+4. esegui manualmente `CI` sulla branch `release-please--*` quando vuoi autorizzare il merge automatico della Release PR
+5. il workflow `Auto Merge Release PR` la mergia automaticamente solo dopo una `CI` riuscita e con `PR Title` verde
+6. il merge della Release PR aggiorna versione e `CHANGELOG.md`
+7. `Release Please` crea il tag `vX.Y.Z`, la relativa release GitHub e allega gli artefatti buildati
 
 Nota operativa:
 
 - l'auto-merge riguarda solo PR con branch `release-please--*` e titolo `chore(main): release ...`
-- il gate richiede oggi `CI` e `PR Title` verdi sulla Release PR
+- il gate richiede oggi `CI` manuale e `PR Title` verdi sulla Release PR
 - per pubblicare tag e GitHub Release in modo affidabile, configura il secret repository `RELEASE_PLEASE_TOKEN`; con il solo `GITHUB_TOKEN` GitHub puo' rispondere con `Resource not accessible by integration`
 - se in futuro vuoi reintrodurre un checkpoint manuale prima della pubblicazione, disabilita il workflow `Auto Merge Release PR`
 
 Fallback ufficiale senza branch protection / senza PR obbligatorie:
 
 1. pushi un commit Conventional Commit corretto su `main`
-2. controlli che `Release Please` apra o aggiorni la Release PR
-3. controlli che `CI` e `PR Title` sulla Release PR siano verdi
-4. controlli che il workflow `Auto Merge Release PR` l'abbia chiusa correttamente
-5. non tocchi manualmente `pyproject.toml`, `CHANGELOG.md` root, tag o release
+2. controlli che `Release Please` apra o aggiorni la Release PR quando il cambio e' rilevante; altrimenti lancialo manualmente
+3. lanci manualmente `CI` sulla Release PR quando vuoi chiuderla
+4. controlli che `CI` e `PR Title` sulla Release PR siano verdi
+5. controlli che il workflow `Auto Merge Release PR` l'abbia chiusa correttamente
+6. non tocchi manualmente `pyproject.toml`, `CHANGELOG.md` root, tag o release
 
 Il workflow `Release Assets` supporta ancora `workflow_dispatch` se serve rigenerare gli artefatti per un tag gia' esistente.
 
