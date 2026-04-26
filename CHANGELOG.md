@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/max23468/FiscalBay/compare/v0.6.1...v0.7.0) (2026-04-26)
+
+
+### Features
+
+* support TELEGRAM_ALLOWED_CHAT_IDS=* for admin approval flow ([008c83b](https://github.com/max23468/FiscalBay/commit/008c83b0829a8cfea9c41abdd9587f9e8849ec03))
+
 ## [0.6.1](https://github.com/max23468/FiscalBay/compare/v0.6.0...v0.6.1) (2026-04-20)
 
 
