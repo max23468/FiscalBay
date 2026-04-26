@@ -233,6 +233,7 @@ jobs:
             set -a
             [ -f .env ] && source .env
             set +a
+            EBAY_SCOPES="https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly" \
             PYTHONPATH=src "${PYTHON_BIN}" -m fiscalbay.cli \
               --environment production \
               --created-after "'"${CREATED_AFTER}"'" \
@@ -255,6 +256,7 @@ jobs:
 
       - name: Run eBay identity diagnostic on VPS
         if: ${{ inputs.run_order_diagnostic }}
+        continue-on-error: true
         run: |
           set -euo pipefail
           ssh \
