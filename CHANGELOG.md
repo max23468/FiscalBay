@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/max23468/FiscalBay/compare/v0.9.0...v0.9.1) (2026-04-26)
+
+
+### Bug Fixes
+
+* correct single-order diagnostic shell error handling ([846ec53](https://github.com/max23468/FiscalBay/commit/846ec538a68a5edce3031cb496258b6b77a93bf2))
+
 ## [0.9.0](https://github.com/max23468/FiscalBay/compare/v0.8.1...v0.9.0) (2026-04-26)
 
 
