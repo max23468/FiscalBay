@@ -434,6 +434,49 @@ class EbayCfToolTests(unittest.TestCase):
         self.assertEqual(records[0].taxIdentifierType, "CODICE_FISCALE")
         self.assertEqual(records[0].found, "yes")
 
+    @patch("src.fiscalbay.services.orders.get_order_detail")
+    @patch("src.fiscalbay.services.orders.get_orders")
+    @patch("src.fiscalbay.services.orders.get_access_token")
+    def test_fetch_records_include_details_retries_with_legacy_order_id(
+        self,
+        mock_get_access_token,
+        mock_get_orders,
+        mock_get_order_detail,
+    ) -> None:
+        mock_get_access_token.return_value = "access-token"
+        mock_get_orders.return_value = [
+            {
+                "orderId": "25-14513-45828",
+                "legacyOrderId": "v1|1234567890|0",
+            }
+        ]
+        mock_get_order_detail.side_effect = [
+            EbayApiError("HTTP 400 Invalid Order Id", status_code=400),
+            {
+                "orderId": "25-14513-45828",
+                "creationDate": "2026-04-03T10:00:00Z",
+                "buyer": {
+                    "username": "buyer-1",
+                    "taxIdentifier": {
+                        "taxpayerId": "RSSMRA80A01H501U",
+                        "taxIdentifierType": "CODICE_FISCALE",
+                        "issuingCountry": "IT",
+                    },
+                },
+            },
+        ]
+
+        records = fetch_records(
+            self._sample_config(),
+            FetchOptions(days=7, max_results=10, only_found=False, include_details=True),
+        )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].orderId, "25-14513-45828")
+        self.assertEqual(records[0].taxpayerId, "RSSMRA80A01H501U")
+        self.assertEqual(mock_get_order_detail.call_count, 2)
+        self.assertEqual(mock_get_order_detail.call_args_list[1].args[2], "v1|1234567890|0")
+
 
 if __name__ == "__main__":
     unittest.main()

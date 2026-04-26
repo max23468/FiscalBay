@@ -209,7 +209,7 @@ def extract_record(order: OrderPayload) -> OrderRecord:
             shipping_addr_str = addr
 
     return OrderRecord(
-        orderId=order.get("orderId", ""),
+        orderId=str(order.get("orderId") or order.get("legacyOrderId") or ""),
         creationDate=order.get("creationDate", ""),
         buyerUsername=buyer_mapping.get("username", ""),
         buyerName=(
@@ -341,6 +341,16 @@ def fetch_records(config: Config, options: FetchOptions) -> list[OrderRecord]:
                 except EbayApiError as exc:
                     if not _is_invalid_order_id_error(exc):
                         raise
+                    legacy_order_id = str(summary.get("legacyOrderId") or "").strip()
+                    if legacy_order_id and legacy_order_id != order_id:
+                        logger.info(
+                            "Retrying order detail with legacyOrderId=%s after invalid orderId=%s.",
+                            legacy_order_id,
+                            order_id,
+                        )
+                        details.append(get_order_detail(config, access_token, legacy_order_id))
+                        detail_calls += 1
+                        continue
                     logger.warning(
                         "Order detail unavailable for orderId=%s (HTTP 400 Invalid Order Id); "
                         "using list endpoint summary for normalization.",
