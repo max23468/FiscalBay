@@ -222,7 +222,7 @@ jobs:
             "CREATED_AFTER='${CREATED_AFTER}' CREATED_BEFORE='${CREATED_BEFORE}' MAX_RESULTS='${MAX_RESULTS}' bash -s" \
             > diagnostic_orders.json <<'REMOTE_SCRIPT'
           set -euo pipefail
-          sudo -u fiscalbay -H bash -lc '
+          sudo -u fiscalbay -H DEBUG_ORDER_ID="${DEBUG_ORDER_ID}" bash -lc '
             set -euo pipefail
             cd /opt/fiscalbay
             PYTHON_BIN=""
