@@ -157,9 +157,9 @@ jobs:
           merged="$(printf '%s' "${merged}" | xargs)"
 
           if grep -q '^EBAY_SCOPES=' "${ENV_FILE}"; then
-            sed -i "s|^EBAY_SCOPES=.*|EBAY_SCOPES=${merged}|" "${ENV_FILE}"
+            sed -i "s|^EBAY_SCOPES=.*|EBAY_SCOPES=\"${merged}\"|" "${ENV_FILE}"
           else
-            printf '\nEBAY_SCOPES=%s\n' "${merged}" >> "${ENV_FILE}"
+            printf '\nEBAY_SCOPES=\"%s\"\n' "${merged}" >> "${ENV_FILE}"
           fi
 
           systemctl try-restart fiscalbay-oauth.service || true
