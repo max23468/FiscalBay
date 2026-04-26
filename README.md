@@ -213,7 +213,7 @@ Nota OAuth eBay:
 | --- | --- | --- | --- |
 | `TELEGRAM_BOT_TOKEN` | Sì per il bot | - | Token del bot Telegram |
 | `TELEGRAM_ADMIN_USER_ID` | Consigliata | vuoto | Se valorizzata, questo utente Telegram diventa admin globale e approva l'accesso degli altri utenti |
-| `TELEGRAM_ALLOWED_CHAT_IDS` | **Sì** | vuoto (deny-all) | Chat autorizzate, separate da virgola. Se vuota, nessuna chat è autorizzata |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | **Sì** | vuoto (deny-all) | Chat autorizzate, separate da virgola. Usa `*` (o `all`) per accettare tutte le chat e demandare il filtro al workflow di approvazione admin |
 | `TELEGRAM_NOTIFY_CHAT_IDS` | Consigliata | stessi valori di `TELEGRAM_ALLOWED_CHAT_IDS` | Chat che ricevono notifiche automatiche |
 | `TELEGRAM_POLL_TIMEOUT` | No | `30` | Timeout long polling Telegram |
 | `TELEGRAM_SYNC_BRANDING` | No | `1` | Se attiva, sincronizza nome, descrizione e menu comandi Telegram quando il profilo cambia; in caso di rate limit applica un backoff automatico |
@@ -382,7 +382,7 @@ Comportamento:
 - `/ordine` interroga un ordine specifico
 - `/stato` mostra ultimo check, contatori e dimensione della coda retry
 - `/start` e `/help` mostrano anche una tastiera inline con scorciatoie
-- se `TELEGRAM_ADMIN_USER_ID` e' configurata, gli utenti non ancora approvati (gia' presenti in `TELEGRAM_ALLOWED_CHAT_IDS`) possono solo richiedere accesso con `/request_access`
+- se `TELEGRAM_ADMIN_USER_ID` e' configurata, gli utenti non ancora approvati possono solo richiedere accesso con `/request_access` (anche quando `TELEGRAM_ALLOWED_CHAT_IDS=*`)
 - l'admin puo' approvare o rifiutare richieste dal messaggio inline o con `/approve_user <telegram_user_id>` e `/reject_user <telegram_user_id>`
 - `/users` mostra all'admin lo stato degli utenti registrati (`new`, `pending`, `approved`, `blocked`, `admin`)
 

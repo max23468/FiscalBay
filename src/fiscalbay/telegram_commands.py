@@ -1591,6 +1591,8 @@ def options_for_command(command: str, args: list[str]) -> FetchOptions:
 
 
 def is_authorized(chat_id: int, config: TelegramConfig) -> bool:
+    if config.allowed_chat_ids is None:
+        return True
     if not config.allowed_chat_ids:
         return False
     return chat_id in config.allowed_chat_ids

@@ -131,7 +131,7 @@ Il comando Telegram `/settings`:
 
 Controllo accessi Telegram:
 
-- `TELEGRAM_ALLOWED_CHAT_IDS` continua a limitare le chat ammesse
+- `TELEGRAM_ALLOWED_CHAT_IDS` limita le chat ammesse; con `*` (o `all`) consente tutte le chat e lascia il filtro operativo al workflow di approvazione admin
 - `TELEGRAM_ADMIN_USER_ID`, quando valorizzata, identifica l'admin globale del bot
 - gli altri utenti vengono registrati nel DB con stati `new`, `pending`, `approved` o `blocked`
 - il runtime normalizza anche alias legacy come `active` e `rejected`, cosi' il controllo accessi resta coerente anche su record vecchi nel `state.db`

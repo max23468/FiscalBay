@@ -2,6 +2,12 @@ name: VPS Read Telegram Allowed IDs
 
 on:
   workflow_dispatch:
+    inputs:
+      set_all:
+        description: "Set TELEGRAM_ALLOWED_CHAT_IDS=* before reading"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   read_allowed_ids:
@@ -55,6 +61,18 @@ jobs:
       - name: Read TELEGRAM_ALLOWED_CHAT_IDS on VPS
         run: |
           set -euo pipefail
+          if [ "${{ inputs.set_all }}" = "true" ]; then
+            ssh \
+              -i "${HOME}/.ssh/fiscalbay_vps" \
+              -p "${FISCALBAY_VPS_PORT}" \
+              -o BatchMode=yes \
+              -o ConnectTimeout=15 \
+              -o ServerAliveInterval=30 \
+              -o StrictHostKeyChecking="${SSH_STRICT}" \
+              "${FISCALBAY_VPS_USER}@${FISCALBAY_VPS_HOST}" \
+              "sudo bash -lc 'if grep -q \"^TELEGRAM_ALLOWED_CHAT_IDS=\" /opt/fiscalbay/.env; then sed -i \"s/^TELEGRAM_ALLOWED_CHAT_IDS=.*/TELEGRAM_ALLOWED_CHAT_IDS=*/\" /opt/fiscalbay/.env; else echo \"TELEGRAM_ALLOWED_CHAT_IDS=*\" >> /opt/fiscalbay/.env; fi; systemctl restart fiscalbay-bot'"
+          fi
+
           VALUE="$(ssh \
             -i "${HOME}/.ssh/fiscalbay_vps" \
             -p "${FISCALBAY_VPS_PORT}" \
