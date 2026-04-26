@@ -342,6 +342,7 @@ jobs:
             PYTHONPATH=src "${PYTHON_BIN}" -c "import json, os; from fiscalbay.config import load_config; from fiscalbay.clients.ebay import get_access_token, get_order_detail; cfg=load_config(\"production\"); tok=get_access_token(cfg); order=get_order_detail(cfg, tok, os.environ[\"DEBUG_ORDER_ID\"]); print(json.dumps(order, ensure_ascii=False))"
           '
           REMOTE_SCRIPT
+          then
             python3 -c "import json, os; err=open('debug_order_error.txt',encoding='utf-8').read().strip(); payload={'orderId': os.environ['DEBUG_ORDER_ID'], 'error': err}; open('debug_order.json','w',encoding='utf-8').write(json.dumps(payload, ensure_ascii=False))"
           fi
 
