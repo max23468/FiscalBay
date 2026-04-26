@@ -119,6 +119,12 @@ def order_detail_delay_seconds() -> float:
     return max(0.0, float(raw))
 
 
+def _is_invalid_order_id_error(exc: EbayApiError) -> bool:
+    if exc.status_code != 400:
+        return False
+    return "invalid order id" in str(exc).lower()
+
+
 def choose_tax_identifier(order: OrderPayload) -> Optional[OrderPayload]:
     buyer = _as_mapping(order.get("buyer"))
 
@@ -274,7 +280,17 @@ def fetch_records(config: Config, options: FetchOptions) -> list[OrderRecord]:
         for index, order_id in enumerate(order_ids):
             if index and delay:
                 time.sleep(delay)
-            details.append(get_order_detail(config, access_token, order_id))
+            try:
+                details.append(get_order_detail(config, access_token, order_id))
+            except EbayApiError as exc:
+                if not _is_invalid_order_id_error(exc):
+                    raise
+                logger.warning(
+                    "Order detail unavailable for orderId=%s (HTTP 400 Invalid Order Id); "
+                    "falling back to list endpoint payload.",
+                    order_id,
+                )
+                details.append({"orderId": order_id})
     else:
         created_after, created_before = resolve_date_window_from_options(options)
         summaries = get_orders(
@@ -295,7 +311,17 @@ def fetch_records(config: Config, options: FetchOptions) -> list[OrderRecord]:
                     continue
                 if detail_calls and delay:
                     time.sleep(delay)
-                details.append(get_order_detail(config, access_token, order_id))
+                try:
+                    details.append(get_order_detail(config, access_token, order_id))
+                except EbayApiError as exc:
+                    if not _is_invalid_order_id_error(exc):
+                        raise
+                    logger.warning(
+                        "Order detail unavailable for orderId=%s (HTTP 400 Invalid Order Id); "
+                        "using list endpoint summary for normalization.",
+                        order_id,
+                    )
+                    details.append(summary)
                 detail_calls += 1
 
     records = [extract_record(order) for order in details]

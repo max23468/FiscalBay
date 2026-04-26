@@ -348,6 +348,71 @@ class EbayCfToolTests(unittest.TestCase):
 
         mock_sleep.assert_called_once_with(0.25)
 
+    @patch("src.fiscalbay.services.orders.get_order_detail")
+    @patch("src.fiscalbay.services.orders.get_access_token")
+    def test_fetch_records_order_ids_fallback_when_detail_returns_invalid_order_id(
+        self,
+        mock_get_access_token,
+        mock_get_order_detail,
+    ) -> None:
+        mock_get_access_token.return_value = "access-token"
+        mock_get_order_detail.side_effect = EbayApiError(
+            "HTTP 400 Invalid Order Id",
+            status_code=400,
+        )
+
+        with patch("src.fiscalbay.services.orders.get_orders") as mock_get_orders:
+            records = fetch_records(
+                self._sample_config(),
+                FetchOptions(order_ids=["order-10"], only_found=False),
+            )
+
+        mock_get_orders.assert_not_called()
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].orderId, "order-10")
+        self.assertEqual(records[0].taxpayerId, "")
+        self.assertEqual(records[0].found, "no")
+
+    @patch("src.fiscalbay.services.orders.get_order_detail")
+    @patch("src.fiscalbay.services.orders.get_orders")
+    @patch("src.fiscalbay.services.orders.get_access_token")
+    def test_fetch_records_include_details_falls_back_to_summary_on_invalid_order_id(
+        self,
+        mock_get_access_token,
+        mock_get_orders,
+        mock_get_order_detail,
+    ) -> None:
+        mock_get_access_token.return_value = "access-token"
+        mock_get_orders.return_value = [
+            {
+                "orderId": "order-1",
+                "creationDate": "2026-04-03T10:00:00Z",
+                "buyer": {
+                    "username": "buyer-1",
+                    "taxIdentifier": {
+                        "taxpayerId": "RSSMRA80A01H501U",
+                        "taxIdentifierType": "CODICE_FISCALE",
+                        "issuingCountry": "IT",
+                    },
+                },
+            }
+        ]
+        mock_get_order_detail.side_effect = EbayApiError(
+            "HTTP 400 Invalid Order Id",
+            status_code=400,
+        )
+
+        records = fetch_records(
+            self._sample_config(),
+            FetchOptions(days=7, max_results=10, only_found=False, include_details=True),
+        )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].orderId, "order-1")
+        self.assertEqual(records[0].taxpayerId, "RSSMRA80A01H501U")
+        self.assertEqual(records[0].taxIdentifierType, "CODICE_FISCALE")
+        self.assertEqual(records[0].found, "yes")
+
 
 if __name__ == "__main__":
     unittest.main()
