@@ -40,6 +40,7 @@ from .storage.sqlite import (
     append_audit_log_entry,
     load_oauth_link_session_by_state,
     resolve_linked_ebay_account,
+    save_tenant_account_status_cache,
     summarize_tenant_account_status,
     update_oauth_link_session,
     upsert_ebay_token_set,
@@ -545,6 +546,20 @@ def complete_oauth_link(
         environment=session.environment,
         outcome="linked",
         details_json=str(token_payload.get("scope") or config.scopes),
+    )
+    save_tenant_account_status_cache(
+        telegram_config.state_path,
+        session.telegram_user_id,
+        {
+            "linked": True,
+            "environment": session.environment,
+            "ebay_user_id": ebay_user_id,
+            "account_status": "linked",
+            "token_status": "active",
+            "token_configured": True,
+            "latest_reconnect_outcome": "linked",
+            "latest_reconnect_reason": "",
+        },
     )
     send_message_fn(
         telegram_config.token,
