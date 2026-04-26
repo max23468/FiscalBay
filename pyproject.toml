@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fiscalbay"
-version = "0.8.1"
+version = "0.9.0"
 description = "CLI e bot Telegram per leggere identificativi fiscali dagli ordini eBay (API ufficiali)."
 readme = "README.md"
 requires-python = ">=3.10"
