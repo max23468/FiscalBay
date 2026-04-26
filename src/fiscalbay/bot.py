@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import logging
 import os
@@ -29,7 +30,7 @@ from .clients.telegram import (
     telegram_request,
 )
 from .config import configure_logging, load_config, load_telegram_config
-from .errors import ConfigurationError, TelegramApiError
+from .errors import ConfigurationError, EbayApiError, TelegramApiError
 from .logging_utils import log_event
 from .models import (
     CAPABILITY_CONNECT_ACCOUNT,
@@ -1403,6 +1404,25 @@ def _build_tenant_ux_context(
     }
 
 
+def _format_order_lookup_error(
+    *,
+    exc: EbayApiError,
+    order_id: str,
+    environment: str,
+) -> str:
+    message = str(exc)
+    if exc.status_code == 400 and "Invalid Order Id" in message:
+        return (
+            "⚠️ eBay ha rifiutato questo orderId come non valido per le credenziali correnti.\n"
+            f"OrderId: <code>{html.escape(order_id)}</code> • ambiente: "
+            f"<code>{html.escape(environment)}</code>\n"
+            "Controlla che l'ID sia nel formato atteso (es. <code>12-34567-89012</code>) "
+            "e che appartenga allo stesso account eBay collegato al bot.\n"
+            "Suggerimento: usa prima <code>/tutti 30 200</code> e copia l'orderId mostrato dal bot."
+        )
+    return f"⚠️ {html.escape(message)}"
+
+
 def _notification_filter_mode_from_filters(filters: str) -> str:
     raw = str(filters or "").strip()
     if not raw:
@@ -2332,6 +2352,14 @@ def process_message(
                 lambda: fetch_records_for_environment_fn(resolved_environment, options),
                 label="fetch_records_why_not_notified",
             )
+        except EbayApiError as exc:
+            return [
+                _format_order_lookup_error(
+                    exc=exc,
+                    order_id=order_id,
+                    environment=resolved_environment,
+                )
+            ]
         except ConfigurationError as exc:
             return [f"⚠️ {exc}"]
         assert isinstance(records, list)
@@ -2419,6 +2447,14 @@ def process_message(
                 lambda: fetch_records_for_environment_fn(resolved_environment, options),
                 label="fetch_records_order_detail",
             )
+        except EbayApiError as exc:
+            return [
+                _format_order_lookup_error(
+                    exc=exc,
+                    order_id=order_id,
+                    environment=resolved_environment,
+                )
+            ]
         except ConfigurationError as exc:
             return [f"⚠️ {exc}"]
         assert isinstance(records, list)
