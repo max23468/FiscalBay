@@ -33,6 +33,11 @@ on:
         required: false
         type: string
         default: "200"
+      debug_order_id:
+        description: "Optional eBay orderId for raw payload diagnostic"
+        required: false
+        type: string
+        default: ""
 
 jobs:
   read_allowed_ids:
@@ -46,6 +51,7 @@ jobs:
       CREATED_AFTER: ${{ inputs.created_after }}
       CREATED_BEFORE: ${{ inputs.created_before }}
       MAX_RESULTS: ${{ inputs.max_results }}
+      DEBUG_ORDER_ID: ${{ inputs.debug_order_id }}
 
     steps:
       - name: Validate read secrets
@@ -299,6 +305,50 @@ jobs:
             echo "\`\`\`"
           } >> "${GITHUB_STEP_SUMMARY}"
 
+      - name: Run single-order raw payload diagnostic on VPS
+        if: ${{ inputs.run_order_diagnostic && inputs.debug_order_id != '' }}
+        run: |
+          set -euo pipefail
+          ssh \
+            -i "${HOME}/.ssh/fiscalbay_vps" \
+            -p "${FISCALBAY_VPS_PORT}" \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            -o ServerAliveInterval=30 \
+            -o StrictHostKeyChecking="${SSH_STRICT}" \
+            "${FISCALBAY_VPS_USER}@${FISCALBAY_VPS_HOST}" \
+            "DEBUG_ORDER_ID='${DEBUG_ORDER_ID}' bash -s" > debug_order.json <<'REMOTE_SCRIPT'
+          set -euo pipefail
+          sudo -u fiscalbay -H bash -lc '
+            set -euo pipefail
+            cd /opt/fiscalbay
+            PYTHON_BIN=""
+            for candidate in .venv/bin/python venv/bin/python; do
+              if [ -x "${candidate}" ]; then
+                PYTHON_BIN="${candidate}"
+                break
+              fi
+            done
+            if [ -z "${PYTHON_BIN}" ]; then
+              PYTHON_BIN="$(command -v python3)"
+            fi
+            set -a
+            [ -f .env ] && source .env
+            set +a
+            EBAY_SCOPES="https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly" \
+            PYTHONPATH=src "${PYTHON_BIN}" -c "import json, os; from fiscalbay.config import load_config; from fiscalbay.clients.ebay import get_access_token, get_order_detail; cfg=load_config(\"production\"); tok=get_access_token(cfg); order=get_order_detail(cfg, tok, os.environ[\"DEBUG_ORDER_ID\"]); print(json.dumps(order, ensure_ascii=False))"
+          '
+          REMOTE_SCRIPT
+
+          python3 -c "import json; o=json.load(open('debug_order.json')); t=((o.get('buyer') or {}).get('taxIdentifier') or {}); print('debug_order_id=', o.get('orderId','n/d')); print('taxpayerId=', t.get('taxpayerId') or ''); print('taxIdentifierType=', t.get('taxIdentifierType') or '')"
+
+          {
+            echo "## VPS Raw Order Diagnostic"
+            echo
+            echo "- OrderId: \`${DEBUG_ORDER_ID}\`"
+            echo "File allegato: \`debug_order.json\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
       - name: Upload diagnostic artifact
         if: ${{ inputs.run_order_diagnostic }}
         uses: actions/upload-artifact@v4
@@ -309,3 +359,4 @@ jobs:
             identity_profile.json
             identity_summary.txt
             ebay_scopes.txt
+            debug_order.json
