@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/max23468/FiscalBay/compare/v0.8.0...v0.8.1) (2026-04-26)
+
+
+### Bug Fixes
+
+* pass debug_order_id into VPS single-order diagnostic ([3fd0039](https://github.com/max23468/FiscalBay/commit/3fd0039729056b4a66dc1cfa574c90f4f65b24c1))
+
 ## [0.8.0](https://github.com/max23468/FiscalBay/compare/v0.7.0...v0.8.0) (2026-04-26)
 
 
