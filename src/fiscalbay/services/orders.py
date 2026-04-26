@@ -125,17 +125,42 @@ def _is_invalid_order_id_error(exc: EbayApiError) -> bool:
     return "invalid order id" in str(exc).lower()
 
 
+def _normalize_tax_identifier(raw: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
+    container = _as_mapping(raw.get("taxIdentifier")) or raw
+    taxpayer_id = (
+        container.get("taxpayerId")
+        or container.get("taxId")
+        or container.get("id")
+        or container.get("identifier")
+    )
+    tax_identifier_type = (
+        container.get("taxIdentifierType")
+        or container.get("identifierType")
+        or container.get("type")
+    )
+    issuing_country = (
+        container.get("issuingCountry")
+        or container.get("countryCode")
+        or container.get("country")
+    )
+    return {
+        "taxpayerId": str(taxpayer_id or ""),
+        "taxIdentifierType": str(tax_identifier_type or ""),
+        "issuingCountry": str(issuing_country or ""),
+    }
+
+
 def choose_tax_identifier(order: OrderPayload) -> Optional[OrderPayload]:
     buyer = _as_mapping(order.get("buyer"))
 
-    primary = _as_mapping(buyer.get("taxIdentifier"))
+    primary = _normalize_tax_identifier(_as_mapping(buyer.get("taxIdentifier")))
     if primary.get("taxpayerId"):
         return primary
 
     for field in ("taxIdentifiers", "taxIdentifierList"):
         candidates = _as_sequence(buyer.get(field))
         for candidate in candidates:
-            normalized = _as_mapping(candidate)
+            normalized = _normalize_tax_identifier(_as_mapping(candidate))
             if normalized.get("taxpayerId"):
                 return normalized
 
