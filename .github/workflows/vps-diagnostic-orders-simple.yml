@@ -1,0 +1,87 @@
+name: VPS Diagnostic Orders Simple
+
+on:
+  workflow_dispatch:
+    inputs:
+      created_after:
+        description: UTC start ISO-8601
+        required: true
+        default: '2026-04-25T00:00:00Z'
+      created_before:
+        description: UTC end ISO-8601
+        required: true
+        default: '2026-04-26T23:59:59Z'
+      max_results:
+        description: Max orders to fetch
+        required: true
+        default: '200'
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    env:
+      FISCALBAY_VPS_HOST: ${{ secrets.FISCALBAY_VPS_HOST }}
+      FISCALBAY_VPS_USER: ${{ secrets.FISCALBAY_VPS_USER }}
+      FISCALBAY_VPS_PORT: ${{ secrets.FISCALBAY_VPS_PORT }}
+      FISCALBAY_VPS_SSH_KNOWN_HOSTS: ${{ secrets.FISCALBAY_VPS_SSH_KNOWN_HOSTS }}
+      CREATED_AFTER: ${{ inputs.created_after }}
+      CREATED_BEFORE: ${{ inputs.created_before }}
+      MAX_RESULTS: ${{ inputs.max_results }}
+
+    steps:
+      - name: Validate secrets
+        env:
+          FISCALBAY_VPS_SSH_PRIVATE_KEY_B64: ${{ secrets.FISCALBAY_VPS_SSH_PRIVATE_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "${FISCALBAY_VPS_HOST:-}"
+          test -n "${FISCALBAY_VPS_SSH_PRIVATE_KEY_B64:-}"
+
+      - name: Defaults
+        run: |
+          set -euo pipefail
+          echo "FISCALBAY_VPS_USER=${FISCALBAY_VPS_USER:-opc}" >> "$GITHUB_ENV"
+          echo "FISCALBAY_VPS_PORT=${FISCALBAY_VPS_PORT:-22}" >> "$GITHUB_ENV"
+
+      - name: Prepare SSH
+        env:
+          FISCALBAY_VPS_SSH_PRIVATE_KEY_B64: ${{ secrets.FISCALBAY_VPS_SSH_PRIVATE_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s' "$FISCALBAY_VPS_SSH_PRIVATE_KEY_B64" | base64 --decode > "$HOME/.ssh/fiscalbay_vps"
+          chmod 600 "$HOME/.ssh/fiscalbay_vps"
+          if [ -n "${FISCALBAY_VPS_SSH_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$FISCALBAY_VPS_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+            chmod 600 "$HOME/.ssh/known_hosts"
+            echo "SSH_STRICT=yes" >> "$GITHUB_ENV"
+          else
+            echo "SSH_STRICT=accept-new" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run diagnostic on VPS
+        run: |
+          set -euo pipefail
+          ssh \
+            -i "$HOME/.ssh/fiscalbay_vps" \
+            -p "$FISCALBAY_VPS_PORT" \
+            -o "StrictHostKeyChecking=${SSH_STRICT}" \
+            -o ConnectTimeout=15 \
+            "$FISCALBAY_VPS_USER@$FISCALBAY_VPS_HOST" \
+            "cd /opt/fiscalbay && sudo -u fiscalbay -H bash -lc 'set -euo pipefail; set -a; [ -f .env ] && source .env; set +a; PYTHONPATH=src python3 -m fiscalbay.cli --environment production --created-after \"$CREATED_AFTER\" --created-before \"$CREATED_BEFORE\" --max-results \"$MAX_RESULTS\" --format json'" \
+            > diagnostic_orders.json
+
+          python3 - <<'PY'
+import json
+with open('diagnostic_orders.json') as f:
+    data=json.load(f)
+print(f'Fetched orders: {len(data)}')
+if data:
+    print('First orderId:', data[0].get('orderId','n/d'))
+PY
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vps-diagnostic-orders-simple
+          path: diagnostic_orders.json
