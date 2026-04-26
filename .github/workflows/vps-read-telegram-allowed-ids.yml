@@ -8,6 +8,26 @@ on:
         required: false
         type: boolean
         default: false
+      run_order_diagnostic:
+        description: "Run production order diagnostic on VPS"
+        required: false
+        type: boolean
+        default: true
+      created_after:
+        description: "Diagnostic UTC start ISO-8601"
+        required: false
+        type: string
+        default: "2026-04-25T00:00:00Z"
+      created_before:
+        description: "Diagnostic UTC end ISO-8601"
+        required: false
+        type: string
+        default: "2026-04-26T23:59:59Z"
+      max_results:
+        description: "Diagnostic max results"
+        required: false
+        type: string
+        default: "200"
 
 jobs:
   read_allowed_ids:
@@ -18,6 +38,9 @@ jobs:
       FISCALBAY_VPS_USER: ${{ secrets.FISCALBAY_VPS_USER }}
       FISCALBAY_VPS_PORT: ${{ secrets.FISCALBAY_VPS_PORT }}
       FISCALBAY_VPS_SSH_KNOWN_HOSTS: ${{ secrets.FISCALBAY_VPS_SSH_KNOWN_HOSTS }}
+      CREATED_AFTER: ${{ inputs.created_after }}
+      CREATED_BEFORE: ${{ inputs.created_before }}
+      MAX_RESULTS: ${{ inputs.max_results }}
 
     steps:
       - name: Validate read secrets
@@ -93,3 +116,36 @@ jobs:
             echo
             echo "\`${VALUE}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Run production order diagnostic on VPS
+        if: ${{ inputs.run_order_diagnostic }}
+        run: |
+          set -euo pipefail
+          ssh \
+            -i "${HOME}/.ssh/fiscalbay_vps" \
+            -p "${FISCALBAY_VPS_PORT}" \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            -o ServerAliveInterval=30 \
+            -o StrictHostKeyChecking="${SSH_STRICT}" \
+            "${FISCALBAY_VPS_USER}@${FISCALBAY_VPS_HOST}" \
+            "cd /opt/fiscalbay && sudo -u fiscalbay -H bash -lc 'set -euo pipefail; set -a; [ -f .env ] && source .env; set +a; PYTHONPATH=src python3 -m fiscalbay.cli --environment production --created-after \"${CREATED_AFTER}\" --created-before \"${CREATED_BEFORE}\" --max-results \"${MAX_RESULTS}\" --format json'" \
+            > diagnostic_orders.json
+
+          python3 -c "import json; data=json.load(open('diagnostic_orders.json')); print(f'Fetched orders: {len(data)}'); print('First orderId:', (data[0].get('orderId','n/d') if data else 'n/d'))"
+
+          COUNT="$(python3 -c "import json;print(len(json.load(open('diagnostic_orders.json'))))")"
+          {
+            echo "## VPS Order Diagnostic"
+            echo
+            echo "- Window: \`${CREATED_AFTER}\` → \`${CREATED_BEFORE}\`"
+            echo "- Max results: \`${MAX_RESULTS}\`"
+            echo "- Orders fetched: \`${COUNT}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload diagnostic artifact
+        if: ${{ inputs.run_order_diagnostic }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: vps-diagnostic-orders
+          path: diagnostic_orders.json
