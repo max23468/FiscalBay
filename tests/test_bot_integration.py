@@ -226,6 +226,84 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertEqual(subscriptions, [])
 
     @patch("src.fiscalbay.bot.send_message")
+    def test_sync_runtime_contact_notifies_admin_on_first_seen_user(self, mock_send_message) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123, 456},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+            mock_send_message.reset_mock()
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=999,
+                chat_id=456,
+                username="other_user",
+                display_name="Other User",
+                chat_type="private",
+            )
+
+            mock_send_message.assert_called_once()
+            self.assertEqual(mock_send_message.call_args.args[1], 123)
+            self.assertIn("Nuovo utente rilevato", mock_send_message.call_args.args[2])
+
+    @patch("src.fiscalbay.bot.send_message")
+    def test_sync_runtime_contact_notifies_admin_only_once_per_user(self, mock_send_message) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123, 456},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+            mock_send_message.reset_mock()
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=999,
+                chat_id=456,
+                username="other_user",
+                display_name="Other User",
+                chat_type="private",
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=999,
+                chat_id=456,
+                username="other_user",
+                display_name="Other User",
+                chat_type="private",
+            )
+
+            self.assertEqual(mock_send_message.call_count, 1)
+
+    @patch("src.fiscalbay.bot.send_message")
     def test_request_access_notifies_admin_and_marks_user_pending(self, mock_send_message) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"

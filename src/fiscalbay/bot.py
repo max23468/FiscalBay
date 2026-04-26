@@ -1203,6 +1203,7 @@ def sync_runtime_contact(
         return
     timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     existing_user = load_telegram_user(telegram_config.state_path, telegram_user_id)
+    is_new_user = existing_user is None
     if telegram_config.admin_user_id is None:
         status = (
             normalize_telegram_user_status(
@@ -1258,6 +1259,28 @@ def sync_runtime_contact(
                 updated_at=timestamp,
             ),
         )
+    if (
+        is_new_user
+        and telegram_config.admin_user_id is not None
+        and not _is_admin_user(telegram_user_id, telegram_config)
+    ):
+        admin_chat_id = resolve_primary_chat_id(telegram_config.state_path, telegram_config.admin_user_id)
+        if admin_chat_id is not None:
+            username_value = f"@{username}" if username else "-"
+            display_value = display_name or "-"
+            send_message(
+                telegram_config.token,
+                admin_chat_id,
+                "👤 <b>Nuovo utente rilevato</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"- Telegram user ID: <code>{telegram_user_id}</code>\n"
+                f"- Username: <code>{username_value}</code>\n"
+                f"- Nome: <code>{display_value}</code>\n"
+                f"- Chat ID: <code>{chat_id}</code>\n\n"
+                "Puoi gestire l'accesso con <code>/users</code>, "
+                f"<code>/approve_user {telegram_user_id}</code> o "
+                f"<code>/reject_user {telegram_user_id}</code>.",
+            )
 
 
 def _is_admin_user(telegram_user_id: int | None, telegram_config: TelegramConfig) -> bool:
