@@ -311,7 +311,8 @@ jobs:
         continue-on-error: true
         run: |
           set -euo pipefail
-          ssh \
+          rm -f debug_order.json debug_order_error.txt
+          if ! ssh \
             -i "${HOME}/.ssh/fiscalbay_vps" \
             -p "${FISCALBAY_VPS_PORT}" \
             -o BatchMode=yes \
@@ -319,7 +320,7 @@ jobs:
             -o ServerAliveInterval=30 \
             -o StrictHostKeyChecking="${SSH_STRICT}" \
             "${FISCALBAY_VPS_USER}@${FISCALBAY_VPS_HOST}" \
-            "DEBUG_ORDER_ID='${DEBUG_ORDER_ID}' bash -s" > debug_order.json <<'REMOTE_SCRIPT'
+            "DEBUG_ORDER_ID='${DEBUG_ORDER_ID}' bash -s" > debug_order.json 2> debug_order_error.txt <<'REMOTE_SCRIPT'
           set -euo pipefail
           sudo -u fiscalbay -H DEBUG_ORDER_ID="${DEBUG_ORDER_ID}" bash -lc '
             set -euo pipefail
@@ -341,6 +342,8 @@ jobs:
             PYTHONPATH=src "${PYTHON_BIN}" -c "import json, os; from fiscalbay.config import load_config; from fiscalbay.clients.ebay import get_access_token, get_order_detail; cfg=load_config(\"production\"); tok=get_access_token(cfg); order=get_order_detail(cfg, tok, os.environ[\"DEBUG_ORDER_ID\"]); print(json.dumps(order, ensure_ascii=False))"
           '
           REMOTE_SCRIPT
+            python3 -c "import json, os; err=open('debug_order_error.txt',encoding='utf-8').read().strip(); payload={'orderId': os.environ['DEBUG_ORDER_ID'], 'error': err}; open('debug_order.json','w',encoding='utf-8').write(json.dumps(payload, ensure_ascii=False))"
+          fi
 
           python3 -c "import json; o=json.load(open('debug_order.json')); t=((o.get('buyer') or {}).get('taxIdentifier') or {}); print('debug_order_id=', o.get('orderId','n/d')); print('taxpayerId=', t.get('taxpayerId') or ''); print('taxIdentifierType=', t.get('taxIdentifierType') or '')"
 
@@ -362,3 +365,4 @@ jobs:
             identity_summary.txt
             ebay_scopes.txt
             debug_order.json
+            debug_order_error.txt
