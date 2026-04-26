@@ -145,13 +145,7 @@ jobs:
             if [ -z "${PYTHON_BIN}" ]; then
               PYTHON_BIN="$(command -v python3)"
             fi
-            "${PYTHON_BIN}" - <<'"'"'PYTHON_CHECK'"'"'
-import sys
-if sys.version_info < (3, 10):
-    raise SystemExit(
-        f"Python runtime non supportato per FiscalBay: {sys.version.split()[0]} (richiesto >= 3.10)"
-    )
-PYTHON_CHECK
+            "${PYTHON_BIN}" -c "import sys; assert sys.version_info >= (3, 10), f'Python runtime non supportato per FiscalBay: {sys.version.split()[0]} (richiesto >= 3.10)'"
             set -a
             [ -f .env ] && source .env
             set +a
