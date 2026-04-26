@@ -209,6 +209,7 @@ jobs:
 
       - name: Run production order diagnostic on VPS
         if: ${{ inputs.run_order_diagnostic }}
+        continue-on-error: true
         run: |
           set -euo pipefail
           ssh \
@@ -307,6 +308,7 @@ jobs:
 
       - name: Run single-order raw payload diagnostic on VPS
         if: ${{ inputs.run_order_diagnostic && inputs.debug_order_id != '' }}
+        continue-on-error: true
         run: |
           set -euo pipefail
           ssh \
