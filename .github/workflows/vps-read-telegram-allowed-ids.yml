@@ -8,6 +8,11 @@ on:
         required: false
         type: boolean
         default: false
+      set_identity_scope:
+        description: "Ensure EBAY_SCOPES includes commerce.identity.readonly on VPS"
+        required: false
+        type: boolean
+        default: false
       run_order_diagnostic:
         description: "Run production order diagnostic on VPS"
         required: false
@@ -115,6 +120,56 @@ jobs:
             echo "## VPS TELEGRAM_ALLOWED_CHAT_IDS"
             echo
             echo "\`${VALUE}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Ensure EBAY_SCOPES includes identity scope
+        if: ${{ inputs.set_identity_scope }}
+        run: |
+          set -euo pipefail
+          ssh \
+            -i "${HOME}/.ssh/fiscalbay_vps" \
+            -p "${FISCALBAY_VPS_PORT}" \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            -o ServerAliveInterval=30 \
+            -o StrictHostKeyChecking="${SSH_STRICT}" \
+            "${FISCALBAY_VPS_USER}@${FISCALBAY_VPS_HOST}" \
+            "sudo bash -s" <<'REMOTE_SCRIPT'
+          set -euo pipefail
+          ENV_FILE="/opt/fiscalbay/.env"
+          SCOPE_FULFILLMENT="https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly"
+          SCOPE_IDENTITY="https://api.ebay.com/oauth/api_scope/commerce.identity.readonly"
+
+          current="$(sed -n 's/^EBAY_SCOPES=//p' "${ENV_FILE}" | head -n 1)"
+          if [ -z "${current}" ]; then
+            merged="${SCOPE_FULFILLMENT} ${SCOPE_IDENTITY}"
+          else
+            merged="${current}"
+            case " ${merged} " in
+              *" ${SCOPE_FULFILLMENT} "*) ;;
+              *) merged="${merged} ${SCOPE_FULFILLMENT}" ;;
+            esac
+            case " ${merged} " in
+              *" ${SCOPE_IDENTITY} "*) ;;
+              *) merged="${merged} ${SCOPE_IDENTITY}" ;;
+            esac
+          fi
+          merged="$(printf '%s' "${merged}" | xargs)"
+
+          if grep -q '^EBAY_SCOPES=' "${ENV_FILE}"; then
+            sed -i "s|^EBAY_SCOPES=.*|EBAY_SCOPES=${merged}|" "${ENV_FILE}"
+          else
+            printf '\nEBAY_SCOPES=%s\n' "${merged}" >> "${ENV_FILE}"
+          fi
+
+          systemctl try-restart fiscalbay-oauth.service || true
+          systemctl try-restart fiscalbay-bot.service || true
+          REMOTE_SCRIPT
+
+          {
+            echo "## VPS EBAY_SCOPES update"
+            echo
+            echo "Aggiornamento scope applicato e servizi riavviati (try-restart)."
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Read EBAY_SCOPES on VPS
