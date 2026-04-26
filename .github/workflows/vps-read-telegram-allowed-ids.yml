@@ -171,10 +171,9 @@ jobs:
 
       - name: Run eBay identity diagnostic on VPS
         if: ${{ inputs.run_order_diagnostic }}
-        continue-on-error: true
         run: |
           set -euo pipefail
-          if ssh \
+          ssh \
             -i "${HOME}/.ssh/fiscalbay_vps" \
             -p "${FISCALBAY_VPS_PORT}" \
             -o BatchMode=yes \
@@ -200,19 +199,11 @@ jobs:
             set -a
             [ -f .env ] && source .env
             set +a
-            PYTHONPATH=src "${PYTHON_BIN}" -c "import json; from fiscalbay.clients.ebay import get_access_token, get_authenticated_user_profile; from fiscalbay.config import load_config; config=load_config(\"production\"); access_token=get_access_token(config); profile=get_authenticated_user_profile(config, access_token); print(json.dumps(profile, ensure_ascii=False))"
+            PYTHONPATH=src "${PYTHON_BIN}" -c "import json; from fiscalbay.clients.ebay import request_user_access_token_response; from fiscalbay.config import load_config; config=load_config(\"production\"); token_response=request_user_access_token_response(config); scope=str(token_response.get(\"scope\") or \"\"); out={\"token_scope\": scope, \"has_identity_scope\": (\"commerce.identity.readonly\" in scope)}; print(json.dumps(out, ensure_ascii=False))"
           '
           REMOTE_SCRIPT
-          then
-            python3 -c "import json; p=json.load(open('identity_profile.json')); u=p.get('username') or p.get('userId') or 'n/d'; a=p.get('accountType') or 'n/d'; print(f'Identity username/userId: {u}'); print(f'Identity accountType: {a}'); open('identity_summary.txt','w',encoding='utf-8').write(f'status=ok\\nusername_or_user_id={u}\\naccount_type={a}\\n')"
-          else
-            echo '{}' > identity_profile.json
-            {
-              echo "status=failed"
-              echo "detail=identity endpoint non accessibile con gli scope correnti"
-            } > identity_summary.txt
-            echo "Identity diagnostic non disponibile: scope insufficienti o endpoint non accessibile."
-          fi
+
+          python3 -c "import json; p=json.load(open('identity_profile.json')); has_scope=bool(p.get('has_identity_scope',False)); scope=p.get('token_scope',''); print(f'Has identity scope: {has_scope}'); open('identity_summary.txt','w',encoding='utf-8').write(f'has_identity_scope={has_scope}\\ntoken_scope={scope}\\n')"
 
           {
             echo "## VPS eBay Identity"
