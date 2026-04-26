@@ -462,7 +462,16 @@ Asset disponibili nel repository, allineati al setup VPS attuale (`fiscalbay`, `
 
 ## Test
 
-Esegui i test con:
+Prima di aprire una PR o fare release, esegui il gate locale completo:
+
+```bash
+bash scripts/ci_verify.sh
+```
+
+Il gate non modifica i file: se fallisce sulla formattazione, applicala con
+`ruff format src tests` e rilancialo.
+
+Per eseguire solo i test:
 
 ```bash
 python3 -m unittest discover -s tests -v

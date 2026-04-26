@@ -18,7 +18,7 @@ if [ -x ".venv/bin/coverage" ]; then
   COVERAGE_BIN=".venv/bin/coverage"
 fi
 
-"$RUFF_BIN" format src tests
+"$RUFF_BIN" format --check src tests
 "$RUFF_BIN" check src tests
 "$MYPY_BIN"
 "$COVERAGE_BIN" erase

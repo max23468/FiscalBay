@@ -16,7 +16,6 @@ class ConfigTests(unittest.TestCase):
 
         self.assertEqual(config.allowed_chat_ids, set())
 
-
     def test_load_telegram_config_allows_all_with_wildcard(self) -> None:
         with patch.dict(
             os.environ,

@@ -72,7 +72,9 @@ def load_telegram_config() -> TelegramConfig:
     if raw_chat_ids.lower() in {"*", "all"}:
         allowed_chat_ids = None
     else:
-        allowed_chat_ids = {int(value.strip()) for value in raw_chat_ids.split(",") if value.strip()}
+        allowed_chat_ids = {
+            int(value.strip()) for value in raw_chat_ids.split(",") if value.strip()
+        }
 
     raw_notify_chat_ids = os.getenv(DEFAULT_NOTIFY_CHAT_IDS, raw_chat_ids).strip()
     if raw_notify_chat_ids.lower() in {"*", "all"}:

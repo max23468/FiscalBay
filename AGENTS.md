@@ -66,8 +66,9 @@ creati localmente quando li incontri.
 ## Testing e verifica
 
 - Per modifiche runtime o condivise, usa come gate locale preferito
-  `bash scripts/ci_verify.sh`; nota che il comando include anche `ruff format`,
-  quindi puo modificare file oltre a eseguire check e test.
+  `bash scripts/ci_verify.sh`; il comando verifica anche la formattazione con
+  `ruff format --check`, quindi se fallisce per stile esegui prima
+  `ruff format src tests`.
 - Per modifiche a packaging, release o configurazione di build, aggiungi anche
   `python -m build` quando rilevante.
 - Per cambi molto piccoli, esegui almeno i test mirati piu vicini alla modifica.

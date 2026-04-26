@@ -139,9 +139,7 @@ def _normalize_tax_identifier(raw: Mapping[str, JsonValue]) -> Mapping[str, Json
         or container.get("type")
     )
     issuing_country = (
-        container.get("issuingCountry")
-        or container.get("countryCode")
-        or container.get("country")
+        container.get("issuingCountry") or container.get("countryCode") or container.get("country")
     )
     return {
         "taxpayerId": str(taxpayer_id or ""),
