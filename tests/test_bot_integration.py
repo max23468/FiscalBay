@@ -226,7 +226,9 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertEqual(subscriptions, [])
 
     @patch("src.fiscalbay.bot.send_message")
-    def test_sync_runtime_contact_notifies_admin_on_first_seen_user(self, mock_send_message) -> None:
+    def test_sync_runtime_contact_does_not_notify_admin_on_first_seen_user(
+        self, mock_send_message
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
@@ -257,12 +259,10 @@ class BotIntegrationTests(unittest.TestCase):
                 chat_type="private",
             )
 
-            mock_send_message.assert_called_once()
-            self.assertEqual(mock_send_message.call_args.args[1], 123)
-            self.assertIn("Nuovo utente rilevato", mock_send_message.call_args.args[2])
+            mock_send_message.assert_not_called()
 
     @patch("src.fiscalbay.bot.send_message")
-    def test_sync_runtime_contact_notifies_admin_only_once_per_user(self, mock_send_message) -> None:
+    def test_sync_runtime_contact_never_notifies_admin(self, mock_send_message) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
@@ -301,7 +301,7 @@ class BotIntegrationTests(unittest.TestCase):
                 chat_type="private",
             )
 
-            self.assertEqual(mock_send_message.call_count, 1)
+            mock_send_message.assert_not_called()
 
     @patch("src.fiscalbay.bot.send_message")
     def test_request_access_notifies_admin_and_marks_user_pending(self, mock_send_message) -> None:
