@@ -198,9 +198,18 @@ jobs:
           systemctl restart fiscalbay-oauth
           systemctl is-active --quiet fiscalbay-oauth
 
-          curl -fsS "https://${PUBLIC_DOMAIN}/healthz" >/tmp/fiscalbay-healthz.txt
-          curl -fsS "https://${PUBLIC_DOMAIN}/privacy" >/tmp/fiscalbay-privacy.html
-          curl -fsS "https://${PUBLIC_DOMAIN}/about" >/tmp/fiscalbay-about.html
+          for attempt in $(seq 1 12); do
+            if curl -fsS "https://${PUBLIC_DOMAIN}/healthz" >/tmp/fiscalbay-healthz.txt \
+              && curl -fsS "https://${PUBLIC_DOMAIN}/privacy" >/tmp/fiscalbay-privacy.html \
+              && curl -fsS "https://${PUBLIC_DOMAIN}/about" >/tmp/fiscalbay-about.html; then
+              break
+            fi
+            if [ "${attempt}" -eq 12 ]; then
+              exit 1
+            fi
+            echo "Endpoint pubblici non ancora stabili (${attempt}/12), nuovo tentativo tra 5s..."
+            sleep 5
+          done
 
           echo "Configurazione pubblica completata per https://${PUBLIC_DOMAIN}"
           REMOTE_SCRIPT
