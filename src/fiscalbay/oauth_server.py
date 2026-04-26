@@ -245,6 +245,171 @@ def render_oauth_start_page(redirect_url: str) -> bytes:
     )
 
 
+def render_public_info_page(title: str, intro: str, sections: list[tuple[str, list[str]]]) -> bytes:
+    safe_title = html.escape(title)
+    safe_intro = html.escape(intro)
+    section_blocks: list[str] = []
+    for section_title, items in sections:
+        safe_section_title = html.escape(section_title)
+        item_block = "".join(f"<li>{html.escape(item)}</li>" for item in items)
+        section_blocks.append(
+            f"<section><h2>{safe_section_title}</h2><ul>{item_block}</ul></section>"
+        )
+
+    body = (
+        "<!doctype html><html lang='it'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        f"<title>{safe_title}</title>"
+        "<style>"
+        "body{font-family:ui-sans-serif,system-ui,sans-serif;background:#f6f7f9;"
+        "color:#111827;margin:0;padding:40px;}"
+        "main{max-width:820px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;"
+        "border-radius:16px;padding:32px;box-shadow:0 18px 40px rgba(17,24,39,.08);}"
+        ".eyebrow{color:#1f6fa8;font-size:13px;font-weight:800;text-transform:uppercase;"
+        "letter-spacing:.08em;margin:0 0 10px;}"
+        "h1{margin:0 0 12px;font-size:32px;line-height:1.15;color:#16324f;}"
+        "h2{margin:28px 0 10px;font-size:18px;color:#1e2430;}"
+        "p,li{line-height:1.65;font-size:16px;color:#374151;}"
+        "ul{padding-left:22px;margin:0;}"
+        ".footer{margin-top:30px;font-size:14px;color:#6b7280;border-top:1px solid #e5e7eb;"
+        "padding-top:18px;}"
+        "a{color:#1f6fa8;}"
+        "</style></head><body><main>"
+        "<p class='eyebrow'>FiscalBay</p>"
+        f"<h1>{safe_title}</h1><p>{safe_intro}</p>"
+        f"{''.join(section_blocks)}"
+        "<p class='footer'>Per richieste operative usa Telegram e contatta l'amministratore "
+        "del servizio FiscalBay.</p>"
+        "</main></body></html>"
+    )
+    return body.encode("utf-8")
+
+
+def render_privacy_page() -> bytes:
+    return render_public_info_page(
+        "Informativa privacy",
+        (
+            "FiscalBay e' un assistente operativo Telegram first per venditori eBay. "
+            "Questa pagina riassume quali dati vengono trattati per collegare un account "
+            "eBay e mostrare informazioni fiscali e operative restituite dalle API ufficiali."
+        ),
+        [
+            (
+                "Dati trattati",
+                [
+                    "identificativi Telegram necessari a gestire accesso, chat e notifiche",
+                    (
+                        "identificativo account eBay, environment, scope OAuth concessi "
+                        "e stato del collegamento"
+                    ),
+                    (
+                        "refresh token eBay cifrato a riposo quando il collegamento OAuth "
+                        "viene completato"
+                    ),
+                    (
+                        "dati ordine eBay restituiti dalle API ufficiali, inclusi "
+                        "identificativi fiscali quando presenti nella risposta eBay"
+                    ),
+                    (
+                        "log tecnici, sessioni OAuth e audit minimo degli eventi di accesso "
+                        "e collegamento"
+                    ),
+                ],
+            ),
+            (
+                "Uso dei dati",
+                [
+                    "associare l'utente Telegram al proprio account eBay collegato",
+                    "leggere ordini e dati fiscali disponibili tramite API eBay ufficiali",
+                    "inviare notifiche operative nella chat Telegram autorizzata",
+                    "diagnosticare errori, sicurezza del collegamento e stato del servizio",
+                ],
+            ),
+            (
+                "Limiti e conservazione",
+                [
+                    "FiscalBay non deduce o ricostruisce dati fiscali assenti dalla risposta eBay",
+                    (
+                        "il servizio non conserva uno storico completo degli ordini "
+                        "nel database locale"
+                    ),
+                    (
+                        "i token OAuth sono dati sensibili e devono essere protetti "
+                        "con cifratura a riposo"
+                    ),
+                    (
+                        "l'accesso operativo e' soggetto ad approvazione "
+                        "dell'amministratore del servizio"
+                    ),
+                ],
+            ),
+        ],
+    )
+
+
+def render_about_page() -> bytes:
+    return render_public_info_page(
+        "About FiscalBay",
+        (
+            "FiscalBay aiuta i venditori eBay a controllare da Telegram identificativi fiscali, "
+            "stato account e segnali operativi sugli ordini, usando le API ufficiali eBay."
+        ),
+        [
+            (
+                "Cosa fa",
+                [
+                    "collega un account eBay tramite consenso OAuth",
+                    (
+                        "legge ordini e informazioni fiscali effettivamente disponibili "
+                        "nelle risposte eBay"
+                    ),
+                    (
+                        "invia notifiche e riepiloghi operativi nella chat Telegram "
+                        "dell'utente approvato"
+                    ),
+                    (
+                        "mantiene il prodotto centrato su Telegram, con una parte web minima "
+                        "per onboarding e callback OAuth"
+                    ),
+                ],
+            ),
+            (
+                "Cosa non fa",
+                [
+                    "non e' una dashboard eBay generalista",
+                    "non sostituisce un gestionale ordini completo",
+                    (
+                        "non inventa partita IVA, codice fiscale o altri dati fiscali "
+                        "se eBay non li restituisce"
+                    ),
+                    (
+                        "non richiede la password eBay dell'utente: il consenso passa "
+                        "dalle pagine OAuth di eBay"
+                    ),
+                ],
+            ),
+            (
+                "Brand e accesso",
+                [
+                    "nome prodotto: FiscalBay",
+                    "descrizione breve: assistente fiscale ordini per venditori eBay",
+                    "accesso operativo tramite bot Telegram e approvazione dell'amministratore",
+                    "servizio best effort senza SLA formale",
+                ],
+            ),
+        ],
+    )
+
+
+def render_public_page_for_path(path: str) -> bytes | None:
+    normalized_path = path.rstrip("/") or "/"
+    if normalized_path == "/privacy":
+        return render_privacy_page()
+    if normalized_path == "/about":
+        return render_about_page()
+    return None
+
+
 def describe_provider_error(error_value: str) -> OAuthFailurePresentation:
     normalized = error_value.strip().lower()
     if normalized in {"access_denied", "user_canceled", "user_cancelled"}:
@@ -588,15 +753,20 @@ class OAuthHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path == "/healthz":
+        path = parsed.path.rstrip("/") or "/"
+        if path == "/healthz":
             self._write_response(HTTPStatus.OK, b"ok", "text/plain; charset=utf-8")
+            return
+        public_page = render_public_page_for_path(path)
+        if public_page is not None:
+            self._write_response(HTTPStatus.OK, public_page)
             return
 
         params = urllib.parse.parse_qs(parsed.query)
-        if parsed.path.endswith("/start"):
+        if path.endswith("/start"):
             self._handle_start(params)
             return
-        if parsed.path.endswith("/callback"):
+        if path.endswith("/callback"):
             self._handle_callback(params)
             return
 

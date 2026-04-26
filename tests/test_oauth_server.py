@@ -12,8 +12,11 @@ from src.fiscalbay.oauth_server import (
     describe_provider_error,
     oauth_callback_url,
     oauth_runame,
+    render_about_page,
     render_action_html_page,
     render_oauth_start_page,
+    render_privacy_page,
+    render_public_page_for_path,
 )
 from src.fiscalbay.storage.sqlite import (
     create_oauth_link_session,
@@ -45,6 +48,30 @@ class OAuthServerTests(unittest.TestCase):
         self.assertIn("Apri Telegram", body)
         self.assertIn("https://t.me/", body)
         self.assertIn("Puoi chiudere questa pagina.", body)
+
+    def test_render_privacy_page_describes_data_handling(self) -> None:
+        body = render_privacy_page().decode("utf-8")
+
+        self.assertIn("Informativa privacy", body)
+        self.assertIn("refresh token eBay cifrato a riposo", body)
+        self.assertIn("non deduce o ricostruisce dati fiscali", body)
+
+    def test_render_about_page_describes_service_scope(self) -> None:
+        body = render_about_page().decode("utf-8")
+
+        self.assertIn("About FiscalBay", body)
+        self.assertIn("assistente fiscale ordini per venditori eBay", body)
+        self.assertIn("dashboard eBay generalista", body)
+
+    def test_render_public_page_for_path_matches_branding_urls(self) -> None:
+        privacy_body = render_public_page_for_path("/privacy/")
+        about_body = render_public_page_for_path("/about")
+
+        assert privacy_body is not None
+        assert about_body is not None
+        self.assertIn("Informativa privacy", privacy_body.decode("utf-8"))
+        self.assertIn("About FiscalBay", about_body.decode("utf-8"))
+        self.assertIsNone(render_public_page_for_path("/oauth/start"))
 
     def test_describe_provider_error_for_user_cancelled(self) -> None:
         presentation = describe_provider_error("access_denied")
