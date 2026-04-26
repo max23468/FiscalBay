@@ -197,9 +197,9 @@ jobs:
           systemctl restart fiscalbay-oauth
           systemctl is-active --quiet fiscalbay-oauth
 
-          curl -fsSI "https://${PUBLIC_DOMAIN}/healthz" >/tmp/fiscalbay-healthz.txt
-          curl -fsSI "https://${PUBLIC_DOMAIN}/privacy" >/tmp/fiscalbay-privacy.txt
-          curl -fsSI "https://${PUBLIC_DOMAIN}/about" >/tmp/fiscalbay-about.txt
+          curl -fsS "https://${PUBLIC_DOMAIN}/healthz" >/tmp/fiscalbay-healthz.txt
+          curl -fsS "https://${PUBLIC_DOMAIN}/privacy" >/tmp/fiscalbay-privacy.html
+          curl -fsS "https://${PUBLIC_DOMAIN}/about" >/tmp/fiscalbay-about.html
 
           echo "Configurazione pubblica completata per https://${PUBLIC_DOMAIN}"
           REMOTE_SCRIPT
