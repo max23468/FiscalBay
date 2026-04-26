@@ -171,9 +171,10 @@ jobs:
 
       - name: Run eBay identity diagnostic on VPS
         if: ${{ inputs.run_order_diagnostic }}
+        continue-on-error: true
         run: |
           set -euo pipefail
-          ssh \
+          if ssh \
             -i "${HOME}/.ssh/fiscalbay_vps" \
             -p "${FISCALBAY_VPS_PORT}" \
             -o BatchMode=yes \
@@ -202,8 +203,16 @@ jobs:
             PYTHONPATH=src "${PYTHON_BIN}" -c "import json; from fiscalbay.clients.ebay import get_access_token, get_authenticated_user_profile; from fiscalbay.config import load_config; config=load_config(\"production\"); access_token=get_access_token(config); profile=get_authenticated_user_profile(config, access_token); print(json.dumps(profile, ensure_ascii=False))"
           '
           REMOTE_SCRIPT
-
-          python3 -c "import json; p=json.load(open('identity_profile.json')); u=p.get('username') or p.get('userId') or 'n/d'; a=p.get('accountType') or 'n/d'; print(f'Identity username/userId: {u}'); print(f'Identity accountType: {a}'); open('identity_summary.txt','w',encoding='utf-8').write(f'username_or_user_id={u}\\naccount_type={a}\\n')"
+          then
+            python3 -c "import json; p=json.load(open('identity_profile.json')); u=p.get('username') or p.get('userId') or 'n/d'; a=p.get('accountType') or 'n/d'; print(f'Identity username/userId: {u}'); print(f'Identity accountType: {a}'); open('identity_summary.txt','w',encoding='utf-8').write(f'status=ok\\nusername_or_user_id={u}\\naccount_type={a}\\n')"
+          else
+            echo '{}' > identity_profile.json
+            {
+              echo "status=failed"
+              echo "detail=identity endpoint non accessibile con gli scope correnti"
+            } > identity_summary.txt
+            echo "Identity diagnostic non disponibile: scope insufficienti o endpoint non accessibile."
+          fi
 
           {
             echo "## VPS eBay Identity"
