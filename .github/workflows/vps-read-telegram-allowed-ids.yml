@@ -199,7 +199,7 @@ jobs:
             set -a
             [ -f .env ] && source .env
             set +a
-            PYTHONPATH=src "${PYTHON_BIN}" -c "import json; from fiscalbay.clients.ebay import get_access_token, get_authenticated_user_profile; from fiscalbay.config import load_config; config=load_config('production'); access_token=get_access_token(config); profile=get_authenticated_user_profile(config, access_token); print(json.dumps(profile, ensure_ascii=False))"
+            PYTHONPATH=src "${PYTHON_BIN}" -c "import json; from fiscalbay.clients.ebay import get_access_token, get_authenticated_user_profile; from fiscalbay.config import load_config; config=load_config(\"production\"); access_token=get_access_token(config); profile=get_authenticated_user_profile(config, access_token); print(json.dumps(profile, ensure_ascii=False))"
           '
           REMOTE_SCRIPT
 
