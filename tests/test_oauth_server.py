@@ -101,7 +101,9 @@ class OAuthServerTests(unittest.TestCase):
             ConfigurationError("La sessione OAuth non e' piu' disponibile.")
         )
 
-        self.assertEqual(config_presentation.title, "Link non piu' valido")
+        self.assertEqual(config_presentation.title, "Link non più valido")
+        self.assertIn("non è più valido", config_presentation.message)
+        self.assertIn("non più valido", config_presentation.notify_text)
         self.assertEqual(config_presentation.outcome, "session_unavailable")
 
     def test_oauth_callback_url_can_be_derived_from_connect_base(self) -> None:

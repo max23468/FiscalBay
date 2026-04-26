@@ -479,16 +479,16 @@ def describe_callback_exception(exc: Exception) -> OAuthFailurePresentation:
             )
         if "non trovata" in message.lower() or "non e' piu' disponibile" in message.lower():
             return OAuthFailurePresentation(
-                title="Link non piu' valido",
+                title="Link non più valido",
                 message=(
-                    "Il link di collegamento non e' piu' valido o non e' piu' disponibile. "
+                    "Il link di collegamento non è più valido o non è più disponibile. "
                     "Torna su Telegram e usa /connect per generarne uno nuovo."
                 ),
                 outcome="session_unavailable",
                 notify_text=(
-                    "⚠️ <b>Link di collegamento non piu' valido</b>\n"
+                    "⚠️ <b>Link di collegamento non più valido</b>\n"
                     "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    "La sessione OAuth non e' piu' disponibile.\n"
+                    "La sessione OAuth non è più disponibile.\n"
                     "Usa <code>/connect</code> per generarne una nuova."
                 ),
             )
