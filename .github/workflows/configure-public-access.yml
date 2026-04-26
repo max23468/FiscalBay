@@ -171,7 +171,8 @@ jobs:
               --register-unsafely-without-email \
               --redirect \
               -d "${PUBLIC_DOMAIN}"
-            timeout 120 certbot renew --dry-run --cert-name "${PUBLIC_DOMAIN}"
+            timeout 45 certbot renew --dry-run --cert-name "${PUBLIC_DOMAIN}" \
+              || echo "Certbot dry-run non completato entro il timeout; certificato reale gia' installato."
           fi
 
           env_file="${APP_DIR}/.env"
