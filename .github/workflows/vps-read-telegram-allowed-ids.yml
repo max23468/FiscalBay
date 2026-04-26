@@ -1,0 +1,77 @@
+name: VPS Read Telegram Allowed IDs
+
+on:
+  workflow_dispatch:
+
+jobs:
+  read_allowed_ids:
+    name: Read TELEGRAM_ALLOWED_CHAT_IDS from VPS
+    runs-on: ubuntu-latest
+    env:
+      FISCALBAY_VPS_HOST: ${{ secrets.FISCALBAY_VPS_HOST }}
+      FISCALBAY_VPS_USER: ${{ secrets.FISCALBAY_VPS_USER }}
+      FISCALBAY_VPS_PORT: ${{ secrets.FISCALBAY_VPS_PORT }}
+      FISCALBAY_VPS_SSH_KNOWN_HOSTS: ${{ secrets.FISCALBAY_VPS_SSH_KNOWN_HOSTS }}
+
+    steps:
+      - name: Validate read secrets
+        env:
+          FISCALBAY_VPS_SSH_PRIVATE_KEY_B64: ${{ secrets.FISCALBAY_VPS_SSH_PRIVATE_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          for var in FISCALBAY_VPS_HOST FISCALBAY_VPS_SSH_PRIVATE_KEY_B64; do
+            if [ -z "${!var:-}" ]; then
+              echo "Missing required secret: ${var}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Set defaults
+        run: |
+          set -euo pipefail
+          echo "FISCALBAY_VPS_USER=${FISCALBAY_VPS_USER:-opc}" >> "${GITHUB_ENV}"
+          echo "FISCALBAY_VPS_PORT=${FISCALBAY_VPS_PORT:-22}" >> "${GITHUB_ENV}"
+
+      - name: Prepare SSH key
+        env:
+          FISCALBAY_VPS_SSH_PRIVATE_KEY_B64: ${{ secrets.FISCALBAY_VPS_SSH_PRIVATE_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "${HOME}/.ssh"
+          printf '%s' "${FISCALBAY_VPS_SSH_PRIVATE_KEY_B64}" | base64 --decode > "${HOME}/.ssh/fiscalbay_vps"
+          chmod 600 "${HOME}/.ssh/fiscalbay_vps"
+
+      - name: Prepare known_hosts
+        run: |
+          set -euo pipefail
+          if [ -n "${FISCALBAY_VPS_SSH_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "${FISCALBAY_VPS_SSH_KNOWN_HOSTS}" > "${HOME}/.ssh/known_hosts"
+            chmod 600 "${HOME}/.ssh/known_hosts"
+            echo "SSH_STRICT=yes" >> "${GITHUB_ENV}"
+          else
+            echo "SSH_STRICT=accept-new" >> "${GITHUB_ENV}"
+          fi
+
+      - name: Read TELEGRAM_ALLOWED_CHAT_IDS on VPS
+        run: |
+          set -euo pipefail
+          VALUE="$(ssh \
+            -i "${HOME}/.ssh/fiscalbay_vps" \
+            -p "${FISCALBAY_VPS_PORT}" \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            -o ServerAliveInterval=30 \
+            -o StrictHostKeyChecking="${SSH_STRICT}" \
+            "${FISCALBAY_VPS_USER}@${FISCALBAY_VPS_HOST}" \
+            "sudo sed -n 's/^TELEGRAM_ALLOWED_CHAT_IDS=//p' /opt/fiscalbay/.env")"
+
+          if [ -z "${VALUE}" ]; then
+            VALUE="(empty)"
+          fi
+
+          echo "TELEGRAM_ALLOWED_CHAT_IDS=${VALUE}"
+          {
+            echo "## VPS TELEGRAM_ALLOWED_CHAT_IDS"
+            echo
+            echo "\`${VALUE}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
