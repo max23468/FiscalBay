@@ -173,8 +173,8 @@ Servizio OAuth su VPS:
 
 - entrypoint: `fiscalbay-oauth-server`
 - servizio `systemd`: `fiscalbay-oauth`
-- endpoint locali minimi: `/`, `/healthz`, `/oauth/start`, `/oauth/callback`, `/privacy`, `/about`
-- nginx deve inoltrare al servizio OAuth anche `/`, `/privacy` e `/about`; la configurazione di riferimento e' `deploy/nginx-fiscalbay-oauth.conf`
+- endpoint locali minimi: `/`, `/healthz`, `/oauth/start`, `/oauth/callback`, `/privacy`, `/about`, `/favicon.svg`, `/favicon.png`, `/favicon.ico`, `/apple-touch-icon.png`
+- nginx deve inoltrare al servizio OAuth anche `/`, `/privacy`, `/about` e gli asset favicon; la configurazione di riferimento e' `deploy/nginx-fiscalbay-oauth.conf`
 - variabili utili: `EBAY_OAUTH_RUNAME`, `EBAY_OAUTH_RUNAME_SANDBOX`, `EBAY_OAUTH_CONNECT_BASE_URL`, `EBAY_OAUTH_CALLBACK_URL`, `EBAY_OAUTH_SERVER_HOST`, `EBAY_OAUTH_SERVER_PORT`, `EBAY_TENANT_TOKEN_KEY`
 - il percorso corretto su VPS e' usare `EBAY_TENANT_TOKEN_KEY` per cifrare i refresh token utente a riposo
 - con `TELEGRAM_ADMIN_USER_ID` configurato, il bot in produzione usa i token tenant come percorso operativo normale e non deve piu' dipendere da `EBAY_REFRESH_TOKEN` per i tenant collegati

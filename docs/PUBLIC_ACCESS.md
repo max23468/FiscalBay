@@ -11,8 +11,8 @@ Obiettivo operativo:
 - IP della VPS usato solo per SSH, deploy e diagnostica infrastrutturale
 
 FiscalBay resta `Telegram first`: il dominio pubblico serve `/` come mini sito
-vetrina, `/oauth/*`, `/privacy`, `/about` e `/healthz`, senza trasformare il
-web nel punto di ingresso operativo principale.
+vetrina, `/oauth/*`, `/privacy`, `/about`, `/healthz` e gli asset favicon,
+senza trasformare il web nel punto di ingresso operativo principale.
 
 ## Scelta DNS
 
