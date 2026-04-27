@@ -80,18 +80,22 @@ install_packages() {
 }
 
 install_release_packages() {
-  if command -v npx >/dev/null 2>&1; then
+  if release_node_ready; then
+    return
+  fi
+  if command -v dnf >/dev/null 2>&1; then
+    sudo dnf module reset -y nodejs || true
+    sudo dnf module enable -y nodejs:20 || return 1
+    sudo dnf install -y nodejs npm || return 1
     return
   fi
   if command -v apt-get >/dev/null 2>&1; then
     sudo apt-get install -y nodejs npm || return 1
     return
   fi
-  if command -v dnf >/dev/null 2>&1; then
-    sudo dnf install -y nodejs npm || return 1
-    return
-  fi
   if command -v yum >/dev/null 2>&1; then
+    sudo yum module reset -y nodejs || true
+    sudo yum module enable -y nodejs:20 || true
     sudo yum install -y nodejs npm || return 1
     return
   fi
@@ -100,6 +104,15 @@ install_release_packages() {
     return
   fi
   return 1
+}
+
+release_node_ready() {
+  if ! command -v node >/dev/null 2>&1 || ! command -v npx >/dev/null 2>&1; then
+    return 1
+  fi
+  local node_major
+  node_major="$(node -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null || echo 0)"
+  [ "${node_major}" -ge 20 ]
 }
 
 ensure_group() {
@@ -180,10 +193,10 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now "${BACKUP_SERVICE_NAME}.timer"
 sudo systemctl enable --now "${ALERT_SERVICE_NAME}.timer"
 sudo systemctl enable --now "${RECONCILE_SERVICE_NAME}.timer"
-if [ -f "${RELEASE_ENV_FILE}" ] && command -v npx >/dev/null 2>&1; then
+if [ -f "${RELEASE_ENV_FILE}" ] && release_node_ready; then
   sudo systemctl enable --now "${RELEASE_SERVICE_NAME}.timer"
 else
-  echo "Timer ${RELEASE_SERVICE_NAME}.timer installato ma non abilitato: crea ${RELEASE_ENV_FILE} e verifica npx."
+  echo "Timer ${RELEASE_SERVICE_NAME}.timer installato ma non abilitato: crea ${RELEASE_ENV_FILE} e verifica Node.js >=20/npx."
 fi
 
 echo "Installazione completata."
@@ -197,7 +210,7 @@ echo "6. Log OAuth: sudo journalctl -u ${OAUTH_SERVICE_NAME} -f"
 echo "7. Verifica timer backup: sudo systemctl status ${BACKUP_SERVICE_NAME}.timer"
 echo "8. Verifica timer alert: sudo systemctl status ${ALERT_SERVICE_NAME}.timer"
 echo "9. Verifica timer reconcile: sudo systemctl status ${RECONCILE_SERVICE_NAME}.timer"
-echo "10. Configura release automation: ${RELEASE_ENV_FILE}, poi sudo systemctl enable --now ${RELEASE_SERVICE_NAME}.timer"
+echo "10. Configura release automation: ${RELEASE_ENV_FILE}, verifica Node.js >=20/npx, poi sudo systemctl enable --now ${RELEASE_SERVICE_NAME}.timer"
 echo
 echo "Configurazione applicata:"
 echo "- APP_USER=${APP_USER}"

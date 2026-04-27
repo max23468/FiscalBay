@@ -89,7 +89,7 @@ Non modificare manualmente `pyproject.toml`, `.release-please-manifest.json`,
 `CHANGELOG.md` root, tag o release senza una richiesta esplicita di release o di
 riparazione del flusso.
 
-Il timer richiede un token GitHub salvato fuori dal repository in
+Il timer richiede Node.js >=20 e un token GitHub salvato fuori dal repository in
 `/etc/fiscalbay/release-please.env`. Non committare token o file env reali.
 
 ## Revisione Periodica Consigliata

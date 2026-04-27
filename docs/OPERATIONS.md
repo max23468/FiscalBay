@@ -253,10 +253,11 @@ La VPS puo' aprire o aggiornare automaticamente la Release PR di `release-please
 senza usare GitHub Actions. Il timer installato e' `fiscalbay-release-please.timer`;
 il servizio eseguito e' `fiscalbay-release-please.service`.
 
-Prima di abilitarlo, verificare che `nodejs`/`npm` siano disponibili e creare
+Prima di abilitarlo, verificare che Node.js >=20 e `npm`/`npx` siano disponibili e creare
 sulla VPS un EnvironmentFile fuori dal repository:
 
 ```bash
+node --version
 command -v npx
 sudo install -d -m 750 /etc/fiscalbay
 sudo tee /etc/fiscalbay/release-please.env >/dev/null <<'EOF'

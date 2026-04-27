@@ -109,7 +109,7 @@ Il flusso resta automatizzato senza GitHub Actions:
 - tag e GitHub Release si creano solo su richiesta esplicita, con `gh` o UI GitHub
 - non fare bump manuali di versione, tag o release fuori da una richiesta di release esplicita
 
-Per abilitare il timer sulla VPS servono `nodejs`/`npm` e un token GitHub con
+Per abilitare il timer sulla VPS servono Node.js >=20, `npm`/`npx` e un token GitHub con
 permessi minimi sul repository, salvato fuori dal repo:
 
 ```bash

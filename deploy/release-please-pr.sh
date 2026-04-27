@@ -29,6 +29,12 @@ if ! command -v npx >/dev/null 2>&1; then
   exit 1
 fi
 
+NODE_MAJOR="$(node -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null || echo 0)"
+if [ "${NODE_MAJOR}" -lt 20 ]; then
+  echo "Errore: release-please richiede Node.js >=20; versione corrente: $(node --version 2>/dev/null || echo n/d)." >&2
+  exit 1
+fi
+
 cd "${APP_DIR}"
 
 if [ ! -f "${CONFIG_FILE}" ]; then

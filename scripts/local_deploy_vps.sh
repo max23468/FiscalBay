@@ -109,6 +109,7 @@ fi
 
 echo "Estraggo in ${APP_DIR}..."
 remote_cmd "sudo mkdir -p '${APP_DIR}' && sudo tar --warning=no-unknown-keyword -xzf '${remote_archive}' -C '${APP_DIR}' && sudo chown -R '${APP_USER}:${APP_GROUP}' '${APP_DIR}'"
+remote_cmd "sudo rm -rf '${APP_DIR}/.github/workflows' '${APP_DIR}/.github/dependabot.yml'"
 
 if [ "${SKIP_INSTALL}" = true ]; then
   echo "Install/restart saltato (--skip-install)."

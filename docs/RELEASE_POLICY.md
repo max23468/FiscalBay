@@ -209,7 +209,8 @@ autenticato o UI GitHub, solo su richiesta esplicita.
 La configurazione del timer vive nei file `deploy/fiscalbay-release-please.service`,
 `deploy/fiscalbay-release-please.timer` e `deploy/release-please-pr.sh`. Il token
 GitHub necessario al servizio deve stare fuori dal repository, per default in
-`/etc/fiscalbay/release-please.env`.
+`/etc/fiscalbay/release-please.env`. Il runtime Node.js della VPS deve essere >=20,
+coerente con la versione pin di `release-please` usata dallo script.
 
 In modalita' main-only:
 
