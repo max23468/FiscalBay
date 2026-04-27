@@ -70,6 +70,11 @@ creati localmente quando li incontri.
   DocMolder, per deploy, diagnostica, sync file, restart o lettura log di
   FiscalBay. Se host, hostname o contesto SSH non coincidono, fermati e chiedi
   conferma prima di qualunque comando remoto.
+- Accesso locale corretto alla VPS: login interattivo con
+  `ssh opc@79.72.45.89`; per comandi one-shot da Codex locale usare una TTY
+  esplicita, ad esempio
+  `ssh -tt -o BatchMode=yes -o ConnectTimeout=10 opc@79.72.45.89 'hostname'`,
+  e verificare che risponda `fiscalbay-bot`.
 - Il deploy operativo di default e' manuale sulla VPS con accesso SSH e script
   versionati (`deploy/update.sh`, `deploy/smoke-check.sh` e runbook collegati).
 - Non avviare deploy tramite GitHub Actions come conseguenza implicita di commit,

@@ -373,6 +373,9 @@ Utente SSH operativo:
 Metodo di accesso:
 
 - `ssh opc@79.72.45.89`
+- da Codex locale, per comandi one-shot, usare TTY esplicita:
+  `ssh -tt -o BatchMode=yes -o ConnectTimeout=10 opc@79.72.45.89 'hostname'`
+- output atteso per la verifica preliminare: `fiscalbay-bot`
 
 Politica SSH attuale:
 

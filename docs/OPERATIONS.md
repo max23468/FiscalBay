@@ -11,6 +11,12 @@ VPS operativa FiscalBay:
 - non usare mai la VPS di DocMolder o di altri progetti per operazioni FiscalBay
 - prima di deploy, diagnostica o restart remoti, verificare che host e contesto
   SSH siano quelli FiscalBay
+- accesso locale interattivo: `ssh opc@79.72.45.89`
+- per comandi one-shot da Codex locale:
+
+```bash
+ssh -tt -o BatchMode=yes -o ConnectTimeout=10 opc@79.72.45.89 'hostname'
+```
 
 ## Indice rapido
 

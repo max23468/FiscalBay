@@ -23,6 +23,22 @@ Regola di sicurezza operativa:
 - se `hostname`, IP o contesto SSH non corrispondono a FiscalBay, fermarsi prima
   di eseguire comandi remoti
 
+Accesso SSH locale:
+
+```bash
+ssh opc@79.72.45.89
+```
+
+Comando one-shot consigliato da Codex locale:
+
+```bash
+ssh -tt -o BatchMode=yes -o ConnectTimeout=10 opc@79.72.45.89 'hostname'
+```
+
+Il comando deve restituire `fiscalbay-bot`. Solo dopo questa verifica eseguire
+deploy, diagnostica, restart o lettura log. Evitare di usare host o alias SSH non
+riconducibili esplicitamente a FiscalBay.
+
 ## Primo setup su VPS Linux
 
 Lo script di setup supporta in automatico:
