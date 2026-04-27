@@ -120,6 +120,7 @@ class HealthcheckTests(unittest.TestCase):
             self.assertFalse(report["ok"])
             self.assertIn("lock_missing", report["reasons"])
             self.assertIn("last_check_stale", report["reasons"])
+            self.assertEqual(report["ignored_reasons"], [])
             self.assertIn("last_error_present", report["warnings"])
             self.assertIn("retry_queue_not_empty", report["warnings"])
             self.assertEqual(report["metrics"]["telegram_retries"], 2)
@@ -189,6 +190,55 @@ class HealthcheckTests(unittest.TestCase):
             self.assertEqual(report["metrics"]["orders_read"], 5)
             self.assertEqual(report["metrics"]["orders_with_fiscal_identifier"], 2)
 
+    def test_build_health_report_can_ignore_stale_check_for_smoke_checks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            lock_path = Path(tmpdir) / "telegram_bot.lock"
+            lock_path.write_text("pid=123\n", encoding="utf-8")
+            save_state(
+                str(db_path),
+                {
+                    "notified_order_ids": [],
+                    "notified_hashes": [],
+                    "last_check": "2026-04-05T20:00:00Z",
+                    "last_error": "HTTP 504",
+                    "metrics": {
+                        "orders_read": 0,
+                        "orders_with_fiscal_identifier": 0,
+                        "notifications_sent": 0,
+                        "telegram_retries": 0,
+                        "consecutive_error_cycles": 3,
+                        "errors_by_type": {"ebay_api": 1},
+                    },
+                },
+            )
+
+            with patch("src.fiscalbay.healthcheck.datetime") as mock_datetime:
+                from datetime import datetime, timezone
+
+                mock_datetime.now.return_value = datetime(2026, 4, 5, 21, 0, 0, tzinfo=timezone.utc)
+                mock_datetime.fromisoformat = datetime.fromisoformat
+                config = TelegramConfig(
+                    token="x",
+                    allowed_chat_ids=None,
+                    notify_chat_ids={123},
+                    ebay_poll_interval_seconds=120,
+                    state_path=str(db_path),
+                    retry_queue_path=str(db_path),
+                    lock_path=str(lock_path),
+                )
+                with patch("src.fiscalbay.healthcheck.load_telegram_config", return_value=config):
+                    report = build_health_report(
+                        max_age_seconds=60,
+                        ignored_reasons=["last_check_stale"],
+                    )
+
+            self.assertTrue(report["ok"])
+            self.assertEqual(report["status"], "ok")
+            self.assertEqual(report["reasons"], ["last_check_stale"])
+            self.assertEqual(report["ignored_reasons"], ["last_check_stale"])
+            self.assertIn("last_error_present", report["warnings"])
+
     def test_render_text_report_includes_reasons_and_warnings(self) -> None:
         text = render_text_report(
             {
@@ -210,6 +260,7 @@ class HealthcheckTests(unittest.TestCase):
                     "telegram_errors": 2,
                 },
                 "reasons": ["lock_missing"],
+                "ignored_reasons": ["last_check_stale"],
                 "warnings": ["retry_queue_not_empty"],
                 "alerts": ["service_inactive"],
                 "multi_tenant": {
@@ -227,6 +278,7 @@ class HealthcheckTests(unittest.TestCase):
         self.assertIn("metrics.orders_with_fiscal_identifier: 3", text)
         self.assertIn("alerts: service_inactive", text)
         self.assertIn("reasons: lock_missing", text)
+        self.assertIn("ignored_reasons: last_check_stale", text)
         self.assertIn("warnings: retry_queue_not_empty", text)
         self.assertIn("multi_tenant.tenant_users: 1", text)
 
@@ -236,6 +288,7 @@ class HealthcheckTests(unittest.TestCase):
             "ok": True,
             "status": "ok",
             "reasons": [],
+            "ignored_reasons": [],
             "warnings": [],
             "lock_exists": True,
             "last_check": "2026-04-05T20:00:00Z",

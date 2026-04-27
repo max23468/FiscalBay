@@ -16,6 +16,8 @@ cd "${APP_DIR}"
 healthcheck_args=(
   --check-service-active
   --service-name "${SERVICE_NAME}"
+  --ignore-reason last_check_missing
+  --ignore-reason last_check_stale
 )
 max_attempts="${SMOKE_CHECK_ATTEMPTS:-12}"
 sleep_seconds="${SMOKE_CHECK_SLEEP_SECONDS:-5}"

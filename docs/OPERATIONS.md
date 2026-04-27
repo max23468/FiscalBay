@@ -222,6 +222,11 @@ Suggerimento pratico sui log:
 2. verificare che lo smoke check remoto completi senza errori
 3. se lo smoke check fallisce, leggere i log e valutare rollback
 
+Lo smoke check di deploy verifica che servizi e lock siano sani, ma non blocca il
+deploy per `last_check_missing` o `last_check_stale`: questi restano visibili nel
+report healthcheck e nel timer alert, ma possono dipendere da problemi temporanei
+di eBay esterni al deploy.
+
 Questo e' il percorso di deploy predefinito. GitHub Actions non e' un canale
 operativo attivo per FiscalBay: deploy, diagnostica e configurazione VPS si
 automatizzano con script locali/VPS via SSH sulla VPS FiscalBay.

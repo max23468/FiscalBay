@@ -238,7 +238,8 @@ chmod +x deploy/smoke-check.sh
 Lo smoke test verifica:
 
 - servizio `systemd` attivo
-- health check del bot in stato `ok`
+- health check del bot senza errori bloccanti di avvio
+- `last_check_missing` e `last_check_stale` non bloccano lo smoke deploy, per non confondere problemi upstream eBay temporanei con deploy falliti
 - se `fiscalbay-oauth` e' abilitato, verifica anche che il servizio OAuth risulti attivo
 
 ## Backup e restore

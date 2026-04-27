@@ -55,6 +55,7 @@ class HealthReport(TypedDict):
     ok: bool
     status: str
     reasons: list[str]
+    ignored_reasons: list[str]
     warnings: list[str]
     lock_exists: bool
     last_check: str | None
@@ -147,6 +148,7 @@ def build_health_report(
     service_name: str = "fiscalbay-bot",
     max_consecutive_error_cycles: int | None = None,
     max_retry_queue_size: int | None = None,
+    ignored_reasons: list[str] | None = None,
 ) -> HealthReport:
     telegram_config = load_telegram_config()
     state = load_effective_runtime_state(telegram_config.state_path)
@@ -197,11 +199,15 @@ def build_health_report(
         "completed": operation_queue.get("completed", 0),
         "cancelled": operation_queue.get("cancelled", 0),
     }
-    status = "ok" if not reasons else "fail"
+    ignored_reason_set = set(ignored_reasons or [])
+    fatal_reasons = [reason for reason in reasons if reason not in ignored_reason_set]
+    effective_ignored_reasons = [reason for reason in reasons if reason in ignored_reason_set]
+    status = "ok" if not fatal_reasons else "fail"
     report: HealthReport = {
-        "ok": not reasons,
+        "ok": not fatal_reasons,
         "status": status,
         "reasons": reasons,
+        "ignored_reasons": effective_ignored_reasons,
         "warnings": warnings,
         "lock_exists": lock_exists,
         "last_check": last_check,
@@ -266,6 +272,7 @@ def render_text_report(report: HealthReport) -> str:
     last_check_age_text = str(last_check_age) if last_check_age is not None else "none"
     reasons = report["reasons"]
     warnings = report["warnings"]
+    ignored_reasons = report.get("ignored_reasons", [])
     default_multi_tenant: MultiTenantHealth = {
         "tenant_users": 0,
         "tenant_chats": 0,
@@ -310,6 +317,10 @@ def render_text_report(report: HealthReport) -> str:
     multi_tenant = report.get("multi_tenant", default_multi_tenant)
     operation_queue = report.get("operation_queue", default_operation_queue)
     lines.append("reasons: " + (", ".join(str(item) for item in reasons) if reasons else "none"))
+    lines.append(
+        "ignored_reasons: "
+        + (", ".join(str(item) for item in ignored_reasons) if ignored_reasons else "none")
+    )
     lines.append("warnings: " + (", ".join(str(item) for item in warnings) if warnings else "none"))
     lines.append("alerts: " + (", ".join(str(item) for item in alerts) if alerts else "none"))
     lines.extend(
@@ -363,6 +374,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help="Dimensione massima accettata della retry queue prima di fallire.",
     )
+    parser.add_argument(
+        "--ignore-reason",
+        action="append",
+        default=[],
+        help=(
+            "Motivo non bloccante da ignorare nel codice di uscita. "
+            "Ripetibile; utile per smoke check di deploy."
+        ),
+    )
     return parser
 
 
@@ -376,6 +396,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         service_name=args.service_name,
         max_consecutive_error_cycles=args.max_consecutive_error_cycles,
         max_retry_queue_size=args.max_retry_queue_size,
+        ignored_reasons=args.ignore_reason,
     )
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
