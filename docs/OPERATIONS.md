@@ -247,6 +247,38 @@ scripts/local_deploy_vps.sh
 Da shell aperta direttamente sulla VPS, `./deploy/update.sh` resta disponibile
 come manutenzione operativa locale.
 
+## Release PR automatica su VPS
+
+La VPS puo' aprire o aggiornare automaticamente la Release PR di `release-please`
+senza usare GitHub Actions. Il timer installato e' `fiscalbay-release-please.timer`;
+il servizio eseguito e' `fiscalbay-release-please.service`.
+
+Prima di abilitarlo, verificare che `nodejs`/`npm` siano disponibili e creare
+sulla VPS un EnvironmentFile fuori dal repository:
+
+```bash
+command -v npx
+sudo install -d -m 750 /etc/fiscalbay
+sudo tee /etc/fiscalbay/release-please.env >/dev/null <<'EOF'
+GITHUB_TOKEN=ghp_...
+FISCALBAY_RELEASE_REPO_URL=max23468/FiscalBay
+FISCALBAY_RELEASE_TARGET_BRANCH=main
+EOF
+sudo chmod 600 /etc/fiscalbay/release-please.env
+```
+
+Comandi operativi:
+
+```bash
+sudo systemctl enable --now fiscalbay-release-please.timer
+sudo systemctl start fiscalbay-release-please.service
+sudo systemctl status fiscalbay-release-please.timer
+sudo journalctl -u fiscalbay-release-please.service -n 100 --no-pager
+```
+
+Il timer automatizza solo la Release PR. Merge della Release PR, tag GitHub e
+GitHub Release restano passaggi manuali o esplicitamente richiesti.
+
 ## Sync locale dopo release GitHub
 
 Quando una Release PR di `release-please` viene mergiata manualmente da GitHub, il

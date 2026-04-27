@@ -58,7 +58,7 @@ Per mantenere il repository allineato alle best practice GitHub anche in contest
 - pipeline locale con `scripts/local_automate.sh`
 - CI locale con `bash scripts/ci_verify.sh`, richiamata anche dalla pipeline locale
 - deploy automatizzato sulla VPS FiscalBay via `scripts/local_deploy_vps.sh`
-- release manuali: `release-please` puo' essere usato solo localmente o sostituito da passaggi manuali espliciti
+- Release PR automatica sulla VPS FiscalBay con `release-please`, senza GitHub Actions
 - aggiornamenti dipendenze da fare manualmente; Dependabot alerts/security alerts possono restare nella UI GitHub
 - template per Pull Request (`.github/PULL_REQUEST_TEMPLATE.md`)
 - issue forms per bug e task operativi (`.github/ISSUE_TEMPLATE/*`)
@@ -103,11 +103,25 @@ Regola operativa minima:
 
 Il flusso resta automatizzato senza GitHub Actions:
 
-- `release-please` puo' essere eseguito localmente solo quando vuoi preparare changelog/versione
+- `release-please` gira sulla VPS FiscalBay tramite `fiscalbay-release-please.timer` per aprire/aggiornare la Release PR
 - CI locale: `bash scripts/ci_verify.sh`
 - build locale quando serve: `python -m build`
 - tag e GitHub Release si creano solo su richiesta esplicita, con `gh` o UI GitHub
 - non fare bump manuali di versione, tag o release fuori da una richiesta di release esplicita
+
+Per abilitare il timer sulla VPS servono `nodejs`/`npm` e un token GitHub con
+permessi minimi sul repository, salvato fuori dal repo:
+
+```bash
+sudo install -d -m 750 /etc/fiscalbay
+sudo tee /etc/fiscalbay/release-please.env >/dev/null <<'EOF'
+GITHUB_TOKEN=ghp_...
+FISCALBAY_RELEASE_REPO_URL=max23468/FiscalBay
+FISCALBAY_RELEASE_TARGET_BRANCH=main
+EOF
+sudo chmod 600 /etc/fiscalbay/release-please.env
+sudo systemctl enable --now fiscalbay-release-please.timer
+```
 
 Per i dettagli operativi e le policy di naming/bump vedere `docs/RELEASE_POLICY.md`.
 

@@ -187,11 +187,11 @@ Lo storico preesistente resta consultabile in `docs/CHANGELOG.md`, ma non e' piu
 Il flusso standard e' questo:
 
 1. un commit Conventional Commit arriva su `main`
-2. `release-please` si usa solo localmente o come passaggio manuale esplicitamente
-   richiesto
+2. la VPS FiscalBay esegue `release-please release-pr` tramite
+   `fiscalbay-release-please.timer`, senza GitHub Actions
 3. CI e controllo titolo PR si fanno localmente/documentalmente, senza Actions;
    il gate locale standard e' `scripts/local_automate.sh`
-4. la Release PR, se usata, viene mergiata manualmente dopo le verifiche locali
+4. la Release PR viene mergiata manualmente dopo le verifiche locali
 5. non ci sono workflow GitHub Actions versionati finche' il maintainer non decide
    di riattivarli
 6. la Release PR aggiorna:
@@ -206,10 +206,15 @@ Il flusso standard e' questo:
 Nota operativa: eventuali release GitHub vanno create o aggiornate da `gh`
 autenticato o UI GitHub, solo su richiesta esplicita.
 
+La configurazione del timer vive nei file `deploy/fiscalbay-release-please.service`,
+`deploy/fiscalbay-release-please.timer` e `deploy/release-please-pr.sh`. Il token
+GitHub necessario al servizio deve stare fuori dal repository, per default in
+`/etc/fiscalbay/release-please.env`.
+
 In modalita' main-only:
 
 - il commit su `main` sostituisce il merge della feature PR
-- la Release PR di `release-please`, se usata nel percorso manuale, resta il punto in cui si materializzano versione e changelog
+- la Release PR di `release-please` resta il punto in cui si materializzano versione e changelog
 - nel setup attuale il merge della Release PR resta manuale: e' la scelta piu' coerente quando il budget GitHub Actions e' limitato
 
 ## Baseline iniziale

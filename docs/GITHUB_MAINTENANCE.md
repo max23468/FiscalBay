@@ -72,22 +72,25 @@ Abilitare almeno:
 Non abilitare Dependabot version updates schedulati finche' il budget Actions resta
 limitato.
 
-## Release Manuali
+## Release Senza Actions
 
 Il percorso standard automatizzato senza GitHub Actions e':
 
 1. commit Conventional Commit corretto su `main`
-2. `scripts/local_automate.sh` per verifiche locali
-3. `scripts/local_automate.sh --build` per packaging
-4. se serve una release, concordare esplicitamente procedura, changelog/versione,
-   tag e GitHub Release
-5. usare `release-please` solo da ambiente locale o sostituirlo con passaggi
-   manuali esplicitamente richiesti
-6. per pubblicare e deployare codice gia' committato: `scripts/local_automate.sh --all`
+2. `fiscalbay-release-please.timer` sulla VPS apre o aggiorna la Release PR con
+   `release-please`
+3. `scripts/local_automate.sh` per verifiche locali
+4. `scripts/local_automate.sh --build` per packaging
+5. merge manuale della Release PR dopo review e verifiche
+6. tag e GitHub Release solo su richiesta esplicita
+7. per pubblicare e deployare codice gia' committato: `scripts/local_automate.sh --all`
 
 Non modificare manualmente `pyproject.toml`, `.release-please-manifest.json`,
 `CHANGELOG.md` root, tag o release senza una richiesta esplicita di release o di
 riparazione del flusso.
+
+Il timer richiede un token GitHub salvato fuori dal repository in
+`/etc/fiscalbay/release-please.env`. Non committare token o file env reali.
 
 ## Revisione Periodica Consigliata
 
