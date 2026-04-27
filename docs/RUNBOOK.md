@@ -19,7 +19,7 @@ Questa guida standardizza l'esercizio del bot sulla VPS Linux attuale con `syste
 Regola di sicurezza operativa:
 
 - usare solo la VPS FiscalBay per deploy, diagnostica, sync file, restart e log
-- non usare mai la VPS di DocMolder o di altri progetti per operazioni FiscalBay
+- non usare mai la VPS di altri progetti per operazioni FiscalBay
 - se `hostname`, IP o contesto SSH non corrispondono a FiscalBay, fermarsi prima
   di eseguire comandi remoti
 

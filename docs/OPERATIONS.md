@@ -8,7 +8,7 @@ VPS operativa FiscalBay:
 
 - host SSH: `opc@79.72.45.89`
 - hostname atteso: `fiscalbay-bot`
-- non usare mai la VPS di DocMolder o di altri progetti per operazioni FiscalBay
+- non usare mai la VPS di altri progetti per operazioni FiscalBay
 - prima di deploy, diagnostica o restart remoti, verificare che host e contesto
   SSH siano quelli FiscalBay
 - accesso locale interattivo: `ssh opc@79.72.45.89`

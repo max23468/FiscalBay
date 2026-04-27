@@ -66,10 +66,10 @@ creati localmente quando li incontri.
 ## Deploy
 
 - La VPS operativa corretta per FiscalBay e' solo `opc@79.72.45.89`
-  (`fiscalbay-bot`). Non usare host o VPS di altri progetti, in particolare
-  DocMolder, per deploy, diagnostica, sync file, restart o lettura log di
-  FiscalBay. Se host, hostname o contesto SSH non coincidono, fermati e chiedi
-  conferma prima di qualunque comando remoto.
+  (`fiscalbay-bot`). Non usare host o VPS di altri progetti per deploy,
+  diagnostica, sync file, restart o lettura log di FiscalBay. Se host,
+  hostname o contesto SSH non coincidono, fermati e chiedi conferma prima di
+  qualunque comando remoto.
 - Accesso locale corretto alla VPS: login interattivo con
   `ssh opc@79.72.45.89`; per comandi one-shot da Codex locale usare una TTY
   esplicita, ad esempio
