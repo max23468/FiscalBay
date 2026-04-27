@@ -18,6 +18,7 @@ from src.fiscalbay.oauth_server import (
     render_oauth_start_help_page,
     render_oauth_start_page,
     render_privacy_page,
+    render_public_icon_asset_for_path,
     render_public_page_for_path,
 )
 from src.fiscalbay.storage.sqlite import (
@@ -81,6 +82,8 @@ class OAuthServerTests(unittest.TestCase):
 
         self.assertIn("FiscalBay", body)
         self.assertIn("Assistente fiscale ordini per venditori eBay", body)
+        self.assertIn("href='/favicon.svg'", body)
+        self.assertIn("href='/apple-touch-icon.png'", body)
         self.assertIn("href='/privacy'", body)
         self.assertIn("href='/about'", body)
         self.assertIn("Apri Telegram", body)
@@ -88,6 +91,20 @@ class OAuthServerTests(unittest.TestCase):
         self.assertIn("buyer.taxIdentifier", body)
         self.assertNotIn("Collega eBay", body)
         self.assertNotIn("Pagine eBay Dev", body)
+
+    def test_render_public_icon_asset_for_path_serves_favicon_variants(self) -> None:
+        svg_asset = render_public_icon_asset_for_path("/favicon.svg")
+        png_asset = render_public_icon_asset_for_path("/apple-touch-icon.png")
+        ico_asset = render_public_icon_asset_for_path("/favicon.ico")
+
+        assert svg_asset is not None
+        assert png_asset is not None
+        assert ico_asset is not None
+        self.assertEqual(svg_asset[1], "image/svg+xml; charset=utf-8")
+        self.assertEqual(png_asset[1], "image/png")
+        self.assertEqual(ico_asset[1], "image/png")
+        self.assertTrue(svg_asset[0].startswith(b"<svg"))
+        self.assertGreater(len(png_asset[0]), 0)
 
     def test_render_public_page_for_path_matches_branding_urls(self) -> None:
         home_body = render_public_page_for_path("/")

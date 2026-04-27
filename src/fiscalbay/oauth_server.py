@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import html
 import logging
 import os
@@ -53,6 +54,125 @@ LOGGER = logging.getLogger("fiscalbay.oauth_server")
 DEFAULT_OAUTH_HOST = "127.0.0.1"
 DEFAULT_OAUTH_PORT = 8787
 DEFAULT_CALLBACK_PATH = "/oauth/callback"
+PUBLIC_ICON_SVG = textwrap.dedent(
+    """
+    <svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="16" y="16" width="224" height="224" rx="56" fill="#16324F"/>
+      <g transform="translate(22 46)">
+        <g transform="rotate(-8 106 90)">
+          <rect x="10" y="10" width="192" height="152" rx="28" fill="#16324F"/>
+          <rect x="34" y="34" width="144" height="104" rx="20" fill="#FFFDF9"/>
+          <rect x="56" y="52" width="90" height="14" rx="7" fill="#1F6FA8"/>
+          <rect x="56" y="78" width="70" height="9" rx="4.5" fill="#38B6B3"/>
+          <rect x="56" y="99" width="54" height="9" rx="4.5" fill="#E53238"/>
+          <rect x="120" y="89" width="18" height="18" rx="6" fill="#F5AF02"/>
+        </g>
+      </g>
+    </svg>
+    """
+).strip()
+PUBLIC_ICON_PNG = base64.b64decode(
+    """
+    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
+    AAAASUVORK5CYII=
+    """
+)
+
+
+def public_icon_links() -> str:
+    return (
+        "<link rel='icon' href='/favicon.svg' type='image/svg+xml'>"
+        "<link rel='icon' href='/favicon.png' type='image/png' sizes='180x180'>"
+        "<link rel='apple-touch-icon' href='/apple-touch-icon.png' sizes='180x180'>"
+        "<meta name='theme-color' content='#16324F'>"
+    )
+
+
+def render_public_icon_asset_for_path(path: str) -> tuple[bytes, str] | None:
+    normalized_path = path.rstrip("/") or "/"
+    if normalized_path == "/favicon.svg":
+        return PUBLIC_ICON_SVG.encode("utf-8"), "image/svg+xml; charset=utf-8"
+    if normalized_path in {"/favicon.png", "/apple-touch-icon.png", "/favicon.ico"}:
+        return PUBLIC_ICON_PNG, "image/png"
+    return None
 
 
 def append_oauth_audit_log(
@@ -155,6 +275,7 @@ def render_html_page(title: str, message: str, *, is_error: bool = False) -> byt
     body = (
         "<!doctype html><html lang='it'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        f"{public_icon_links()}"
         f"<title>{safe_title}</title>"
         "<style>"
         "body{font-family:ui-sans-serif,system-ui,sans-serif;background:#f6f7f9;"
@@ -211,6 +332,7 @@ def render_action_html_page(
         "<!doctype html><html lang='it'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
         f"{meta_refresh}"
+        f"{public_icon_links()}"
         f"<title>{safe_title}</title>"
         "<style>"
         "body{font-family:ui-sans-serif,system-ui,sans-serif;background:#f6f7f9;"
@@ -410,6 +532,7 @@ def render_home_page() -> bytes:
           <head>
             <meta charset='utf-8'>
             <meta name='viewport' content='width=device-width, initial-scale=1'>
+            {public_icon_links()}
             <title>FiscalBay | Assistente fiscale ordini eBay</title>
             <meta name='description' content='FiscalBay e&apos; un assistente
             Telegram first per venditori eBay che mostra gli identificativi fiscali
@@ -544,6 +667,7 @@ def render_public_info_page(title: str, intro: str, sections: list[tuple[str, li
     body = (
         "<!doctype html><html lang='it'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        f"{public_icon_links()}"
         f"<title>{safe_title}</title>"
         "<style>"
         "body{font-family:ui-sans-serif,system-ui,sans-serif;background:#f6f7f9;"
@@ -1037,6 +1161,11 @@ class OAuthHandler(BaseHTTPRequestHandler):
         path = parsed.path.rstrip("/") or "/"
         if path == "/healthz":
             self._write_response(HTTPStatus.OK, b"ok", "text/plain; charset=utf-8")
+            return
+        public_asset = render_public_icon_asset_for_path(path)
+        if public_asset is not None:
+            body, content_type = public_asset
+            self._write_response(HTTPStatus.OK, body, content_type)
             return
         public_page = render_public_page_for_path(path)
         if public_page is not None:

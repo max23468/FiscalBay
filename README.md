@@ -7,6 +7,7 @@ Payoff: `Assistente fiscale ordini per venditori eBay`.
 Linee guida brand e asset pronti all'uso: [`docs/BRAND_GUIDELINES.md`](docs/BRAND_GUIDELINES.md), `assets/branding/*`.
 Set definitivo approvato: logo orizzontale, mark e avatar Telegram nel concept `Seller Card`.
 Export operativi pronti: `assets/branding/exports/fiscalbay-avatar-telegram-512.png`, `fiscalbay-mark-512.png`, `fiscalbay-logo-light-2048.png`, `fiscalbay-logo-dark-2048.png`.
+Il server OAuth pubblico espone lo stesso mark anche come `favicon.svg`, `favicon.png` e `apple-touch-icon.png`, cosi' il sito resta riconoscibile anche su Safari e Mac.
 
 Il progetto nasce per un caso pratico molto preciso: interrogare gli ordini recenti, leggere il dettaglio completo di ogni ordine e rendere consultabile da terminale o da Telegram il contenuto di `buyer.taxIdentifier`.
 
