@@ -1,16 +1,6 @@
 name: Deploy VPS
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "assets/**"
-      - "deploy/**"
-      - "pyproject.toml"
-      - "src/**"
-      - "uv.lock"
-      - "requirements*.txt"
   workflow_dispatch:
     inputs:
       target_ref:
@@ -22,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-vps-${{ github.event_name == 'workflow_dispatch' && inputs.target_ref || github.ref }}
+  group: deploy-vps-${{ inputs.target_ref }}
   cancel-in-progress: true
 
 jobs:
@@ -38,7 +28,7 @@ jobs:
       FISCALBAY_VPS_USER: ${{ secrets.FISCALBAY_VPS_USER }}
       FISCALBAY_VPS_PORT: ${{ secrets.FISCALBAY_VPS_PORT }}
       FISCALBAY_VPS_SSH_KNOWN_HOSTS: ${{ secrets.FISCALBAY_VPS_SSH_KNOWN_HOSTS }}
-      TARGET_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.target_ref || github.sha }}
+      TARGET_REF: ${{ inputs.target_ref }}
 
     steps:
       - name: Checkout target revision

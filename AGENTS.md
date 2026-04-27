@@ -63,6 +63,18 @@ In caso di conflitto, seguire sempre il livello piu alto.
 I file `.DS_Store` non fanno parte del repository: ignorali sempre e rimuovi quelli
 creati localmente quando li incontri.
 
+## Deploy
+
+- Il deploy operativo di default e' manuale sulla VPS con accesso SSH e script
+  versionati (`deploy/update.sh`, `deploy/smoke-check.sh` e runbook collegati).
+- Non avviare deploy tramite GitHub Actions come conseguenza implicita di commit,
+  push, merge o release.
+- Usa il workflow GitHub Actions `Deploy VPS` solo quando l'utente chiede
+  esplicitamente di fare il deploy con GitHub Actions.
+- Se la richiesta parla genericamente di "deploy" senza nominare GitHub Actions,
+  applica il percorso manuale o chiedi conferma quando l'azione remota sarebbe
+  rischiosa o ambigua.
+
 ## Testing e verifica
 
 - Per modifiche runtime o condivise, usa come gate locale preferito

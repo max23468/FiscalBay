@@ -1,12 +1,14 @@
-# Deploy Da Codex Cloud
+# Deploy Da Codex Cloud Con GitHub Actions
 
-Questa guida serve per usare `chatgpt.com` come postazione di lavoro e deploy senza dipendere dal Mac locale.
+Questa guida serve per usare `chatgpt.com` come postazione di lavoro e, solo su richiesta esplicita del maintainer, come ponte di deploy GitHub Actions senza dipendere dal Mac locale.
 
 ## Stato attuale
 
 Il deploy SSH diretto dal runtime Codex cloud verso la VPS non e affidabile, e in piu i secret applicativi non risultano disponibili nei task shell cloud in modo consistente.
 
-Il percorso consigliato quindi e:
+Il default operativo resta quindi il deploy manuale sulla VPS tramite SSH e script versionati. Codex non deve avviare GitHub Actions per deploy come conseguenza implicita di commit, push, merge o release.
+
+Quando il maintainer chiede esplicitamente un deploy con GitHub Actions, il percorso e:
 
 1. Codex cloud prepara e pubblica il codice su GitHub.
 2. GitHub Actions sincronizza il repository sulla VPS via SSH.
@@ -19,13 +21,13 @@ Per deploy ordinari:
 
 1. fai lavorare Codex sul branch desiderato
 2. porta la modifica su `main`
-3. il workflow GitHub `Deploy VPS` parte automaticamente solo se il push tocca file runtime/deploy
+3. esegui il deploy manuale sulla VPS con il runbook operativo quando decidi di pubblicare
 
-Per deploy manuali o di una revisione specifica:
+Per deploy via GitHub Actions o di una revisione specifica:
 
 - usa il workflow `Deploy VPS` in GitHub Actions con `workflow_dispatch`
 - passa `target_ref` se vuoi deployare un commit o ref specifico
-- usalo anche per forzare un deploy dopo cambi documentali, CI-only o altri cambi esclusi dai path automatici
+- usalo solo quando chiedi esplicitamente a Codex o al maintainer di fare il deploy con GitHub Actions
 
 Questo flusso non richiede accesso dal runtime Codex cloud alla rete privata della VPS: il ponte lo fa GitHub Actions.
 
@@ -77,6 +79,6 @@ Il workflow GitHub esegue:
 
 ## Fallback locale
 
-Restano validi i comandi SSH diretti e gli script locali per amministrazione manuale della VPS.
+I comandi SSH diretti e gli script locali sono il percorso standard per amministrazione e deploy manuale della VPS.
 
-Su `chatgpt.com`, pero, il percorso da considerare ufficiale e quello via GitHub Actions.
+Su `chatgpt.com`, il workflow GitHub Actions e' un canale disponibile solo quando viene richiesto esplicitamente.

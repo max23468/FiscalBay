@@ -54,7 +54,7 @@ In pratica:
 Per mantenere il repository allineato alle best practice GitHub anche in contesto single-maintainer, il progetto include:
 
 - workflow CI manuale (`.github/workflows/ci.yml`) per contenere il consumo GitHub Actions
-- deploy verso VPS via GitHub Actions, automatico solo per cambi runtime/deploy e sempre avviabile manualmente (`.github/workflows/deploy-vps.yml`)
+- deploy verso VPS via GitHub Actions solo manuale e solo su richiesta esplicita del maintainer (`.github/workflows/deploy-vps.yml`)
 - release PR con `release-please`, automatiche solo per cambi rilevanti al runtime/package e sempre avviabili manualmente (`.github/workflows/release-please.yml`)
 - build e upload automatico degli artefatti nella GitHub Release creata da `release-please`
 - rebuild manuale degli artefatti per un tag esistente (`.github/workflows/release.yml`)
@@ -73,19 +73,20 @@ Passi consigliati dopo il clone/fork:
 4. usa titoli PR di squash in formato Conventional Commit per tenere coerenti versioni e changelog
 5. in GitHub abilita `Squash merge` e valuta di disabilitare `Merge commit` e `Rebase merge` per rendere il flusso piu' coerente
 
-Per usare Codex su `chatgpt.com` come postazione di lavoro e deploy senza dipendere dal Mac locale, vedi [`docs/CODEX_CLOUD_DEPLOY.md`](docs/CODEX_CLOUD_DEPLOY.md).
+Per usare Codex su `chatgpt.com` come postazione di lavoro e, solo quando richiesto esplicitamente, come ponte di deploy GitHub Actions, vedi [`docs/CODEX_CLOUD_DEPLOY.md`](docs/CODEX_CLOUD_DEPLOY.md).
 
 Il flusso consigliato da remoto e:
 
 - Codex o GitHub preparano il codice fino a `main`
-- GitHub Actions esegue il deploy verso la VPS quando il push tocca file runtime/deploy, oppure quando il workflow viene lanciato manualmente
-- la VPS applica il deploy standard con `deploy/install-vps.sh`
+- il deploy resta manuale sulla VPS tramite SSH e script versionati
+- GitHub Actions non esegue deploy automatici su push
+- il workflow `Deploy VPS` va lanciato solo quando il maintainer chiede esplicitamente di fare il deploy con GitHub Actions
 
 In pratica, da Codex web/mobile ti basta:
 
 - aprire il repository GitHub `max23468/FiscalBay`
 - lavorare su branch o su `main`
-- usare GitHub Actions per il deploy manuale, senza dipendere dai secret runtime di `chatgpt.com`
+- fermarti al codice e alla verifica, salvo richiesta esplicita di deploy via GitHub Actions
 
 ## Versioni e changelog
 

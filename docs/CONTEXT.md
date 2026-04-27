@@ -562,6 +562,8 @@ Situazione attuale:
 - il progetto va trattato come servizio Python deployato su VPS Linux
 - il deploy reale vive sulla VPS Linux
 - il repository non ha piu' integrazioni di deploy automatico da considerare
+- il workflow GitHub Actions `Deploy VPS` e' solo manuale (`workflow_dispatch`) e va
+  usato solo su richiesta esplicita del maintainer
 
 ## File operativi importanti
 

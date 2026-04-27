@@ -209,6 +209,9 @@ Suggerimento pratico sui log:
 3. eseguire `./deploy/smoke-check.sh`
 4. se lo smoke check fallisce, leggere i log e valutare rollback
 
+Questo e' il percorso di deploy predefinito. Il workflow GitHub Actions `Deploy VPS`
+va usato solo quando viene richiesto esplicitamente un deploy con GitHub Actions.
+
 ## Sync locale dopo release GitHub
 
 Quando una Release PR di `release-please` viene mergiata da GitHub, il commit finale che aggiorna
