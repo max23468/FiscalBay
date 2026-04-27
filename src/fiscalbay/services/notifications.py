@@ -39,6 +39,7 @@ def mark_cycle_result(state: BotRuntimeState, *, had_errors: bool) -> None:
         state.metrics.consecutive_error_cycles += 1
         return
     state.metrics.consecutive_error_cycles = 0
+    state.last_error = None
 
 
 def process_retry_queue(
