@@ -189,7 +189,8 @@ Il flusso standard e' questo:
 1. un commit Conventional Commit arriva su `main`
 2. `release-please` si usa solo localmente o come passaggio manuale esplicitamente
    richiesto
-3. CI e controllo titolo PR si fanno localmente/documentalmente, senza Actions
+3. CI e controllo titolo PR si fanno localmente/documentalmente, senza Actions;
+   il gate locale standard e' `scripts/local_automate.sh`
 4. la Release PR, se usata, viene mergiata manualmente dopo le verifiche locali
 5. non ci sono workflow GitHub Actions versionati finche' il maintainer non decide
    di riattivarli
@@ -198,7 +199,7 @@ Il flusso standard e' questo:
    - `pyproject.toml`
    - `.release-please-manifest.json`
 7. tag e GitHub Release si creano manualmente solo su richiesta esplicita
-8. gli artefatti si buildano localmente con `python -m build`
+8. gli artefatti si buildano localmente con `scripts/local_automate.sh --build`
 9. se serve allegare artefatti a una GitHub Release, usare `gh release upload` o la
    UI GitHub solo su richiesta esplicita
 

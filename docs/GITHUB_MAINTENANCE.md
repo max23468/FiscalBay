@@ -12,7 +12,7 @@ GitHub Actions e' disattivato come canale operativo.
   dipendenze
 - non aggiungere workflow senza richiesta esplicita del maintainer
 - se GitHub mostra run falliti per billing, spending limit o budget esaurito,
-  non rilanciare job: usare i percorsi locali/manuali
+  non rilanciare job: usare automazioni locali/VPS
 
 ## Cosa E' Versionato Nel Repo
 
@@ -42,8 +42,9 @@ Fallback operativo:
 
 - lavorare comunque con commit Conventional Commit corretti
 - trattare ogni commit su `main` come se fosse il titolo di una PR squash
+- usare `scripts/local_automate.sh` come pipeline locale standard
 - eseguire localmente `bash scripts/ci_verify.sh` prima dei cambi runtime,
-  storage, deploy o packaging
+  storage, deploy o packaging quando serve un gate mirato
 - non fare bump manuali, tag manuali o release manuali fuori da una richiesta
   esplicita di release
 
@@ -73,15 +74,16 @@ limitato.
 
 ## Release Manuali
 
-Il percorso standard senza GitHub Actions e':
+Il percorso standard automatizzato senza GitHub Actions e':
 
 1. commit Conventional Commit corretto su `main`
-2. verifiche locali, almeno `bash scripts/ci_verify.sh`
-3. per packaging, anche `python -m build`
+2. `scripts/local_automate.sh` per verifiche locali
+3. `scripts/local_automate.sh --build` per packaging
 4. se serve una release, concordare esplicitamente procedura, changelog/versione,
    tag e GitHub Release
 5. usare `release-please` solo da ambiente locale o sostituirlo con passaggi
    manuali esplicitamente richiesti
+6. per pubblicare e deployare codice gia' committato: `scripts/local_automate.sh --all`
 
 Non modificare manualmente `pyproject.toml`, `.release-please-manifest.json`,
 `CHANGELOG.md` root, tag o release senza una richiesta esplicita di release o di

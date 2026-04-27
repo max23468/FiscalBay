@@ -5,7 +5,8 @@ locale senza consumare GitHub Actions.
 
 ## Stato attuale
 
-GitHub Actions non e' un canale operativo attivo per FiscalBay.
+GitHub Actions non e' un canale operativo attivo per FiscalBay. L'automazione
+vive negli script locali e negli script/timer della VPS.
 
 Non sono versionati workflow in `.github/workflows/` e non vanno aggiunti o
 riattivati senza richiesta esplicita del maintainer.
@@ -23,7 +24,7 @@ Motivo operativo:
 2. esegui o chiedi di eseguire verifiche locali quando il lavoro torna sul Mac
 3. porta le modifiche su `main` solo dopo self-review
 4. non avviare GitHub Actions
-5. per deploy, usa solo il percorso manuale sulla VPS FiscalBay
+5. quando il lavoro torna sul Mac locale, usa `scripts/local_automate.sh`
 
 ## Verifiche Manuali
 
@@ -31,6 +32,12 @@ Gate locale preferito:
 
 ```bash
 bash scripts/ci_verify.sh
+```
+
+Pipeline automatica locale:
+
+```bash
+scripts/local_automate.sh
 ```
 
 Quando il cambio tocca packaging o release:
@@ -67,7 +74,20 @@ Output atteso:
 fiscalbay-bot
 ```
 
-Dopo questa verifica, seguire `docs/RUNBOOK.md` e `docs/OPERATIONS.md`.
+Deploy automatizzato da Mac locale:
+
+```bash
+scripts/local_deploy_vps.sh
+```
+
+Pipeline completa:
+
+```bash
+scripts/local_automate.sh --all
+```
+
+Dopo questa verifica, seguire `docs/RUNBOOK.md` e `docs/OPERATIONS.md` per
+diagnostica o rollback.
 
 ## Release Manuale
 

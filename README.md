@@ -53,9 +53,10 @@ In pratica:
 
 Per mantenere il repository allineato alle best practice GitHub anche in contesto single-maintainer, il progetto include:
 
-- nessun workflow GitHub Actions versionato: CI, deploy, release e manutenzione si eseguono manualmente fuori da Actions
-- CI locale con `bash scripts/ci_verify.sh`
-- deploy manuale sulla VPS FiscalBay via SSH e script versionati
+- nessun workflow GitHub Actions versionato: CI, deploy, release e manutenzione si automatizzano fuori da Actions
+- pipeline locale con `scripts/local_automate.sh`
+- CI locale con `bash scripts/ci_verify.sh`, richiamata anche dalla pipeline locale
+- deploy automatizzato sulla VPS FiscalBay via `scripts/local_deploy_vps.sh`
 - release manuali: `release-please` puo' essere usato solo localmente o sostituito da passaggi manuali espliciti
 - aggiornamenti dipendenze da fare manualmente; Dependabot alerts/security alerts possono restare nella UI GitHub
 - template per Pull Request (`.github/PULL_REQUEST_TEMPLATE.md`)
@@ -77,9 +78,9 @@ Per usare Codex su `chatgpt.com` come postazione di lavoro senza Actions, vedi [
 Il flusso consigliato da remoto e:
 
 - Codex o GitHub preparano il codice fino a `main`
-- il deploy resta manuale sulla VPS tramite SSH e script versionati
+- la pipeline automatica resta locale/VPS, non GitHub Actions
 - GitHub Actions non esegue CI, deploy, release, PR check o merge
-- ogni attivita' operativa resta manuale e locale/VPS
+- ogni attivita' operativa viene eseguita da script locali o dalla VPS FiscalBay
 
 In pratica, da Codex web/mobile ti basta:
 
@@ -99,7 +100,7 @@ Regola operativa minima:
 - `MINOR` per nuove funzionalita' compatibili, ad esempio `v0.2.0`
 - `MAJOR` per breaking change, ad esempio `v1.0.0`
 
-Il flusso resta manuale senza GitHub Actions:
+Il flusso resta automatizzato senza GitHub Actions:
 
 - `release-please` puo' essere eseguito localmente solo quando vuoi preparare changelog/versione
 - CI locale: `bash scripts/ci_verify.sh`
@@ -108,6 +109,17 @@ Il flusso resta manuale senza GitHub Actions:
 - non fare bump manuali di versione, tag o release fuori da una richiesta di release esplicita
 
 Per i dettagli operativi e le policy di naming/bump vedere `docs/RELEASE_POLICY.md`.
+
+Comandi principali senza Actions:
+
+```bash
+scripts/local_automate.sh
+scripts/local_automate.sh --build
+scripts/local_automate.sh --build --push
+scripts/local_automate.sh --all
+```
+
+`--all` esegue verifica locale, build, push e deploy sulla VPS FiscalBay.
 
 ## Setup Rapido
 
@@ -432,6 +444,12 @@ Per il deploy standard su VPS Linux con `systemd`, vedi:
 - `docs/RUNBOOK.md`
 - `docs/DEPLOY_LINUX.md`
 
+Da Mac locale puoi automatizzare il deploy senza GitHub Actions con:
+
+```bash
+scripts/local_deploy_vps.sh
+```
+
 ## Documentazione
 
 Indice centrale:
@@ -453,6 +471,8 @@ Documenti principali:
 
 Asset disponibili nel repository, allineati al setup VPS attuale (`fiscalbay`, `/opt/fiscalbay`, servizio `fiscalbay-bot`):
 
+- `scripts/local_automate.sh`
+- `scripts/local_deploy_vps.sh`
 - `deploy/linux-setup.sh`
 - `deploy/update.sh`
 - `deploy/smoke-check.sh`

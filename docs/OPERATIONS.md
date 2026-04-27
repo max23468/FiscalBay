@@ -218,14 +218,34 @@ Suggerimento pratico sui log:
 
 ## Sequenza standard dopo update
 
-1. eseguire `./deploy/update.sh`
-2. verificare `sudo systemctl status fiscalbay-bot`
-3. eseguire `./deploy/smoke-check.sh`
-4. se lo smoke check fallisce, leggere i log e valutare rollback
+1. da Mac locale, eseguire `scripts/local_automate.sh --all`
+2. verificare che lo smoke check remoto completi senza errori
+3. se lo smoke check fallisce, leggere i log e valutare rollback
 
 Questo e' il percorso di deploy predefinito. GitHub Actions non e' un canale
-operativo attivo per FiscalBay: deploy, diagnostica e configurazione VPS restano
-manuali via SSH sulla VPS FiscalBay.
+operativo attivo per FiscalBay: deploy, diagnostica e configurazione VPS si
+automatizzano con script locali/VPS via SSH sulla VPS FiscalBay.
+
+Pipeline locale standard:
+
+```bash
+scripts/local_automate.sh
+```
+
+Pipeline completa con build, push e deploy:
+
+```bash
+scripts/local_automate.sh --all
+```
+
+Solo deploy verso la VPS FiscalBay:
+
+```bash
+scripts/local_deploy_vps.sh
+```
+
+Da shell aperta direttamente sulla VPS, `./deploy/update.sh` resta disponibile
+come manutenzione operativa locale.
 
 ## Sync locale dopo release GitHub
 

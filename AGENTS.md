@@ -75,12 +75,11 @@ creati localmente quando li incontri.
   esplicita, ad esempio
   `ssh -tt -o BatchMode=yes -o ConnectTimeout=10 opc@79.72.45.89 'hostname'`,
   e verificare che risponda `fiscalbay-bot`.
-- Il deploy operativo di default e' manuale sulla VPS con accesso SSH e script
-  versionati (`deploy/update.sh`, `deploy/smoke-check.sh` e runbook collegati).
+- Il deploy operativo di default e' automatizzato fuori da GitHub Actions tramite
+  script locali/VPS e accesso SSH alla VPS FiscalBay.
 - GitHub Actions non e' un canale operativo attivo per deploy FiscalBay. Se una
-  richiesta parla genericamente di "deploy", applica sempre il percorso manuale
-  via SSH/VPS FiscalBay o chiedi conferma quando l'azione remota sarebbe rischiosa
-  o ambigua.
+  richiesta parla genericamente di "deploy", usa `scripts/local_deploy_vps.sh`
+  o chiedi conferma quando l'azione remota sarebbe rischiosa o ambigua.
 
 ## GitHub Actions e budget
 
@@ -91,7 +90,9 @@ creati localmente quando li incontri.
   esaurito, non rilanciare run e non tentare fix tramite Actions: esegui verifiche,
   release, merge, manutenzione e deploy in locale o via VPS FiscalBay.
 - CI, controllo titoli PR, release assets, configurazione public access, diagnostica
-  VPS e deploy sono attivita' manuali fuori da GitHub Actions.
+  VPS e deploy sono automatizzati da script locali/VPS fuori da GitHub Actions.
+- Pipeline locale standard: `scripts/local_automate.sh`; deploy automatizzato
+  senza Actions: `scripts/local_deploy_vps.sh`.
 - `release-please` resta il riferimento preferito per versioning e changelog, ma
   va eseguito solo localmente o sostituito da un passaggio manuale esplicitamente
   richiesto quando serve una release.

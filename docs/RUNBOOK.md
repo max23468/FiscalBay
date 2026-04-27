@@ -207,6 +207,20 @@ La reconciliation:
 
 ## Aggiornamento del bot
 
+Da Mac locale, percorso standard automatizzato senza GitHub Actions:
+
+```bash
+scripts/local_automate.sh --all
+```
+
+Solo deploy verso la VPS FiscalBay:
+
+```bash
+scripts/local_deploy_vps.sh
+```
+
+Da shell aperta direttamente sulla VPS, percorso operativo locale:
+
 ```bash
 cd /percorso/del/progetto
 chmod +x deploy/update.sh
