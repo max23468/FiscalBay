@@ -98,7 +98,7 @@ Nota importante:
 - l'URL pubblico consigliato e' un dominio HTTPS davanti a nginx, anche se la VPS resta raggiungibile via IP per SSH e deploy; vedi `docs/PUBLIC_ACCESS.md`
 - il percorso operativo corretto e' configurare `EBAY_TENANT_TOKEN_KEY` sulla VPS prima di usare davvero il callback OAuth
 - per eBay il `redirect_uri` non e' una URL arbitraria: va configurato il `RuName` corretto e l'`Accept URL` del portale eBay deve puntare al callback pubblico del progetto
-- per il branding OAuth eBay, nginx deve inoltrare anche `/privacy` e `/about` verso `fiscalbay-oauth`; la configurazione di riferimento e' `deploy/nginx-fiscalbay-oauth.conf`
+- per il branding OAuth eBay, nginx deve inoltrare anche `/`, `/privacy` e `/about` verso `fiscalbay-oauth`; la configurazione di riferimento e' `deploy/nginx-fiscalbay-oauth.conf`
 - e' possibile usare il fallback `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS=1` solo per dev o recovery controllato, ma non sostituisce la cifratura reale a riposo e non va lasciato attivo come default
 
 Health check:

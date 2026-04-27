@@ -123,7 +123,7 @@ Regola UX:
 - verso eBay il server usa `EBAY_OAUTH_RUNAME` oppure `EBAY_OAUTH_RUNAME_SANDBOX` come identificatore `redirect_uri`
 - il callback pubblico del progetto usa `EBAY_OAUTH_CALLBACK_URL` o, in fallback, deriva la URL da `EBAY_OAUTH_CONNECT_BASE_URL`
 - l'Accept URL associato al `RuName` nel portale eBay deve puntare proprio al callback pubblico esposto dal progetto
-- il server espone anche `/privacy` e `/about` sullo stesso host pubblico, cosi' il portale eBay puo' usare URL coerenti per Privacy Policy e About del branding OAuth
+- il server espone anche `/` come mini sito vetrina e `/privacy` e `/about` sullo stesso host pubblico, cosi' il portale eBay puo' usare URL coerenti per Privacy Policy e About del branding OAuth
 - il flusso target resta un account eBay attivo per utente e per environment
 - il refresh token non resta in env e non viene mai considerato configurazione globale del bot
 - il refresh token viene salvato solo in forma cifrata

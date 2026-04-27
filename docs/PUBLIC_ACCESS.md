@@ -10,8 +10,9 @@ Obiettivo operativo:
 - callback OAuth FiscalBay esposto solo sui percorsi necessari
 - IP della VPS usato solo per SSH, deploy e diagnostica infrastrutturale
 
-FiscalBay resta `Telegram first`: il dominio pubblico serve `/oauth/*`,
-`/privacy`, `/about` e `/healthz`, non diventa la home principale del prodotto.
+FiscalBay resta `Telegram first`: il dominio pubblico serve `/` come mini sito
+vetrina, `/oauth/*`, `/privacy`, `/about` e `/healthz`, senza trasformare il
+web nel punto di ingresso operativo principale.
 
 ## Scelta DNS
 
@@ -152,6 +153,7 @@ sudo systemctl status fiscalbay-oauth
 
 Nel RuName eBay usato da `EBAY_OAUTH_RUNAME` configura:
 
+- Homepage / landing pubblica: `https://connect.tuodominio.it/`
 - Accept URL: `https://connect.tuodominio.it/oauth/callback`
 - Privacy Policy URL: `https://connect.tuodominio.it/privacy`
 - Auth Accepted URL / About URL, se richiesto dal portale: `https://connect.tuodominio.it/about`

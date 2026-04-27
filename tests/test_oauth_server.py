@@ -14,6 +14,8 @@ from src.fiscalbay.oauth_server import (
     oauth_runame,
     render_about_page,
     render_action_html_page,
+    render_home_page,
+    render_oauth_start_help_page,
     render_oauth_start_page,
     render_privacy_page,
     render_public_page_for_path,
@@ -35,6 +37,13 @@ class OAuthServerTests(unittest.TestCase):
         self.assertIn("Continua su eBay", body)
         self.assertIn("https://example.com/continue", body)
         self.assertIn("http-equiv='refresh'", body)
+
+    def test_render_oauth_start_help_page_explains_telegram_entrypoint(self) -> None:
+        body = render_oauth_start_help_page().decode("utf-8")
+
+        self.assertIn("Collegamento da Telegram", body)
+        self.assertIn("/connect", body)
+        self.assertIn("Apri Telegram", body)
 
     def test_render_action_html_page_can_include_hint_and_action(self) -> None:
         body = render_action_html_page(
@@ -63,12 +72,25 @@ class OAuthServerTests(unittest.TestCase):
         self.assertIn("assistente fiscale ordini per venditori eBay", body)
         self.assertIn("dashboard eBay generalista", body)
 
+    def test_render_home_page_links_public_ebay_developer_pages(self) -> None:
+        body = render_home_page().decode("utf-8")
+
+        self.assertIn("FiscalBay", body)
+        self.assertIn("Assistente fiscale ordini per venditori eBay", body)
+        self.assertIn("href='/privacy'", body)
+        self.assertIn("href='/about'", body)
+        self.assertIn("href='/oauth/start'", body)
+        self.assertIn("buyer.taxIdentifier", body)
+
     def test_render_public_page_for_path_matches_branding_urls(self) -> None:
+        home_body = render_public_page_for_path("/")
         privacy_body = render_public_page_for_path("/privacy/")
         about_body = render_public_page_for_path("/about")
 
+        assert home_body is not None
         assert privacy_body is not None
         assert about_body is not None
+        self.assertIn("FiscalBay", home_body.decode("utf-8"))
         self.assertIn("Informativa privacy", privacy_body.decode("utf-8"))
         self.assertIn("About FiscalBay", about_body.decode("utf-8"))
         self.assertIsNone(render_public_page_for_path("/oauth/start"))

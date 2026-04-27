@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import logging
 import os
+import textwrap
 import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -245,6 +246,291 @@ def render_oauth_start_page(redirect_url: str) -> bytes:
     )
 
 
+def render_oauth_start_help_page() -> bytes:
+    return render_action_html_page(
+        "Collegamento da Telegram",
+        (
+            "Il collegamento eBay parte dal bot FiscalBay: apri Telegram, usa /connect "
+            "e torna qui con il link generato per la tua sessione."
+        ),
+        action_label="Apri Telegram",
+        action_url="https://t.me/",
+        hint="Questo passaggio protegge lo stato OAuth e associa il consenso all'utente corretto.",
+    )
+
+
+def render_home_page() -> bytes:
+    css = textwrap.dedent(
+        """
+        :root{
+          --ink:#16324f;--text:#273444;--muted:#687385;--line:#dde6ef;
+          --paper:#fffcf8;--blue:#1f6fa8;--teal:#38b6b3;
+          --red:#e53238;--yellow:#f5af02;
+        }
+        *{box-sizing:border-box;}
+        body{
+          margin:0;background:var(--paper);color:var(--text);
+          font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
+            'Segoe UI',sans-serif;
+        }
+        a{color:inherit;}
+        .page{min-height:100vh;display:flex;flex-direction:column;}
+        header{
+          border-bottom:1px solid rgba(22,50,79,.10);
+          background:rgba(255,252,248,.92);
+          backdrop-filter:blur(14px);position:sticky;top:0;z-index:10;
+        }
+        .nav{
+          max-width:1120px;margin:0 auto;padding:16px 24px;display:flex;
+          align-items:center;justify-content:space-between;gap:20px;
+        }
+        .brand{
+          display:flex;align-items:center;gap:12px;text-decoration:none;
+          font-weight:800;color:var(--ink);
+        }
+        .mark{
+          width:40px;height:40px;border-radius:12px;background:var(--ink);
+          display:grid;place-items:center;
+          box-shadow:0 10px 24px rgba(22,50,79,.18);
+        }
+        .mark svg{width:30px;height:30px;display:block;}
+        .links{
+          display:flex;align-items:center;gap:18px;font-size:14px;
+          font-weight:700;color:#425166;
+        }
+        .links a{text-decoration:none;}
+        .links a:hover{color:var(--blue);}
+        .shell{max-width:1120px;margin:0 auto;padding:72px 24px 36px;width:100%;}
+        .hero{
+          display:grid;grid-template-columns:minmax(0,1fr) minmax(330px,440px);
+          gap:54px;align-items:center;
+        }
+        .eyebrow{
+          margin:0 0 16px;color:var(--blue);font-size:13px;font-weight:800;
+          letter-spacing:.08em;text-transform:uppercase;
+        }
+        h1{
+          margin:0;color:var(--ink);font-size:clamp(44px,7vw,78px);
+          line-height:.95;letter-spacing:0;
+        }
+        .lead{
+          max-width:620px;margin:24px 0 0;color:#3f4d5f;
+          font-size:20px;line-height:1.55;
+        }
+        .actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px;}
+        .button{
+          display:inline-flex;align-items:center;justify-content:center;
+          min-height:46px;padding:12px 18px;border-radius:8px;
+          text-decoration:none;font-weight:800;border:1px solid var(--ink);
+        }
+        .button.primary{
+          background:var(--ink);color:white;
+          box-shadow:0 14px 28px rgba(22,50,79,.18);
+        }
+        .button.secondary{background:white;color:var(--ink);}
+        .note{margin-top:18px;color:var(--muted);font-size:14px;line-height:1.6;}
+        .product{
+          background:white;border:1px solid var(--line);border-radius:8px;
+          box-shadow:0 24px 70px rgba(22,50,79,.12);overflow:hidden;
+        }
+        .product-head{
+          display:flex;align-items:center;justify-content:space-between;
+          padding:16px 18px;border-bottom:1px solid var(--line);background:#fbfdff;
+        }
+        .dots{display:flex;gap:6px;}
+        .dots span{width:10px;height:10px;border-radius:50%;display:block;}
+        .dots span:nth-child(1){background:var(--red);}
+        .dots span:nth-child(2){background:var(--yellow);}
+        .dots span:nth-child(3){background:var(--teal);}
+        .product-title{font-size:13px;font-weight:800;color:var(--ink);}
+        .phone{
+          padding:20px;display:grid;gap:14px;
+          background:linear-gradient(180deg,#fff 0%,#f7fbfc 100%);
+        }
+        .message{
+          background:#eff8f8;border:1px solid #d5eeee;border-radius:8px;
+          padding:15px 16px;line-height:1.5;color:#274151;
+        }
+        .message strong{color:var(--ink);}
+        .receipt{
+          border:1px solid var(--line);border-radius:8px;background:white;
+          padding:16px;display:grid;gap:12px;
+        }
+        .row{
+          display:flex;align-items:center;justify-content:space-between;
+          gap:14px;font-size:14px;color:#566275;
+        }
+        .row b{
+          font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+          color:var(--ink);font-size:13px;
+        }
+        .pill{
+          display:inline-flex;align-items:center;border-radius:999px;
+          background:#fff4cc;color:#6f5200;font-size:12px;
+          font-weight:800;padding:5px 9px;
+        }
+        .features{
+          display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+          gap:16px;margin-top:56px;
+        }
+        .feature{background:white;border:1px solid var(--line);border-radius:8px;padding:22px;}
+        .feature h2{margin:0 0 10px;color:var(--ink);font-size:18px;}
+        .feature p{margin:0;color:#526071;line-height:1.6;font-size:15px;}
+        footer{margin-top:auto;border-top:1px solid rgba(22,50,79,.10);}
+        .foot{
+          max-width:1120px;margin:0 auto;padding:22px 24px;display:flex;
+          flex-wrap:wrap;align-items:center;justify-content:space-between;
+          gap:12px;color:var(--muted);font-size:14px;
+        }
+        .foot nav{display:flex;gap:16px;font-weight:700;}
+        .foot a{text-decoration:none;color:#425166;}
+        @media(max-width:820px){
+          .nav{align-items:flex-start;}
+          .links{gap:12px;flex-wrap:wrap;justify-content:flex-end;}
+          .shell{padding-top:44px;}
+          .hero{grid-template-columns:1fr;gap:34px;}
+          .features{grid-template-columns:1fr;}
+          h1{font-size:48px;}
+          .lead{font-size:18px;}
+        }
+        @media(max-width:520px){
+          .nav{display:grid;}
+          .links{justify-content:flex-start;}
+          .shell{padding-left:18px;padding-right:18px;}
+          .actions{display:grid;}
+          .button{width:100%;}
+          .row{display:grid;gap:4px;}
+        }
+        """
+    ).strip()
+    body = textwrap.dedent(
+        f"""
+        <!doctype html>
+        <html lang='it'>
+          <head>
+            <meta charset='utf-8'>
+            <meta name='viewport' content='width=device-width, initial-scale=1'>
+            <title>FiscalBay | Assistente fiscale ordini eBay</title>
+            <meta name='description' content='FiscalBay e&apos; un assistente
+            Telegram first per venditori eBay che mostra gli identificativi fiscali
+            disponibili nelle API ufficiali eBay.'>
+            <style>{css}</style>
+          </head>
+          <body>
+            <div class='page'>
+              <header>
+                <nav class='nav' aria-label='Navigazione principale'>
+                  <a class='brand' href='/' aria-label='FiscalBay home'>
+                    <span class='mark' aria-hidden='true'>
+                      <svg viewBox='0 0 64 64' fill='none'
+                        xmlns='http://www.w3.org/2000/svg'>
+                        <rect x='9' y='10' width='46' height='40' rx='12'
+                          fill='#fffdf9'/>
+                        <rect x='18' y='19' width='28' height='5' rx='2.5'
+                          fill='#1f6fa8'/>
+                        <rect x='18' y='30' width='22' height='4' rx='2'
+                          fill='#38b6b3'/>
+                        <rect x='18' y='40' width='17' height='4' rx='2'
+                          fill='#e53238'/>
+                        <rect x='39' y='36' width='8' height='8' rx='3'
+                          fill='#f5af02'/>
+                      </svg>
+                    </span>
+                    <span>FiscalBay</span>
+                  </a>
+                  <div class='links'>
+                    <a href='#prodotto'>Prodotto</a>
+                    <a href='/privacy'>Privacy</a>
+                    <a href='/about'>About</a>
+                    <a href='/oauth/start'>Collega eBay</a>
+                  </div>
+                </nav>
+              </header>
+              <main class='shell'>
+                <section class='hero' id='prodotto'>
+                  <div>
+                    <p class='eyebrow'>Telegram first per venditori eBay</p>
+                    <h1>FiscalBay</h1>
+                    <p class='lead'>
+                      Assistente fiscale ordini per venditori eBay: legge dalle API
+                      ufficiali gli identificativi disponibili sugli ordini e li
+                      porta nella chat Telegram operativa.
+                    </p>
+                    <div class='actions'>
+                      <a class='button primary' href='https://t.me/'>Apri Telegram</a>
+                      <a class='button secondary' href='/oauth/start'>Collega eBay</a>
+                    </div>
+                    <p class='note'>
+                      Il dato fiscale viene mostrato solo quando eBay lo restituisce
+                      davvero. FiscalBay non deduce e non ricostruisce informazioni
+                      assenti.
+                    </p>
+                  </div>
+                  <aside class='product' aria-label='Anteprima operativa FiscalBay'>
+                    <div class='product-head'>
+                      <div class='dots' aria-hidden='true'>
+                        <span></span><span></span><span></span>
+                      </div>
+                      <div class='product-title'>notifica ordine Telegram</div>
+                    </div>
+                    <div class='phone'>
+                      <div class='message'>
+                        <strong>Nuovo ordine eBay</strong><br>
+                        Identificativo fiscale trovato e pronto per la verifica operativa.
+                      </div>
+                      <div class='receipt'>
+                        <div class='row'><span>Order ID</span><b>12-34567-89012</b></div>
+                        <div class='row'><span>Tax identifier</span><b>CODICE_FISCALE</b></div>
+                        <div class='row'><span>Valore</span><b>RSSMRA80A01H501U</b></div>
+                        <div class='row'>
+                          <span>Origine</span><span class='pill'>buyer.taxIdentifier</span>
+                        </div>
+                      </div>
+                    </div>
+                  </aside>
+                </section>
+                <section class='features' aria-label='Caratteristiche principali'>
+                  <article class='feature'>
+                    <h2>OAuth eBay</h2>
+                    <p>
+                      Il collegamento passa dal consenso ufficiale eBay e dal callback
+                      pubblico configurato nel RuName developer.
+                    </p>
+                  </article>
+                  <article class='feature'>
+                    <h2>Operativo in chat</h2>
+                    <p>
+                      Comandi e notifiche restano su Telegram, con accesso approvato
+                      e stato locale su VPS.
+                    </p>
+                  </article>
+                  <article class='feature'>
+                    <h2>Pagine eBay Dev</h2>
+                    <p>
+                      Privacy Policy e About sono esposte come pagine pubbliche stabili
+                      per il branding OAuth.
+                    </p>
+                  </article>
+                </section>
+              </main>
+              <footer>
+                <div class='foot'>
+                  <span>FiscalBay - Assistente fiscale ordini per venditori eBay</span>
+                  <nav aria-label='Link legali'>
+                    <a href='/privacy'>Privacy</a>
+                    <a href='/about'>About</a>
+                    <a href='/healthz'>Health</a>
+                  </nav>
+                </div>
+              </footer>
+            </div>
+          </body>
+        </html>
+        """
+    ).strip()
+    return body.encode("utf-8")
+
+
 def render_public_info_page(title: str, intro: str, sections: list[tuple[str, list[str]]]) -> bytes:
     safe_title = html.escape(title)
     safe_intro = html.escape(intro)
@@ -275,7 +561,7 @@ def render_public_info_page(title: str, intro: str, sections: list[tuple[str, li
         "padding-top:18px;}"
         "a{color:#1f6fa8;}"
         "</style></head><body><main>"
-        "<p class='eyebrow'>FiscalBay</p>"
+        "<p class='eyebrow'><a href='/'>FiscalBay</a></p>"
         f"<h1>{safe_title}</h1><p>{safe_intro}</p>"
         f"{''.join(section_blocks)}"
         "<p class='footer'>Per richieste operative usa Telegram e contatta l'amministratore "
@@ -403,6 +689,8 @@ def render_about_page() -> bytes:
 
 def render_public_page_for_path(path: str) -> bytes | None:
     normalized_path = path.rstrip("/") or "/"
+    if normalized_path == "/":
+        return render_home_page()
     if normalized_path == "/privacy":
         return render_privacy_page()
     if normalized_path == "/about":
@@ -779,6 +1067,9 @@ class OAuthHandler(BaseHTTPRequestHandler):
 
     def _handle_start(self, params: dict[str, list[str]]) -> None:
         oauth_state = (params.get("state") or [""])[0]
+        if not oauth_state:
+            self._write_response(HTTPStatus.OK, render_oauth_start_help_page())
+            return
         try:
             redirect_url = build_oauth_start_redirect(
                 oauth_state, self.server.telegram_config.state_path

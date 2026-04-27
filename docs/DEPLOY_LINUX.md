@@ -84,7 +84,7 @@ Setup consigliato:
 - Duck DNS aggiorna l'IP pubblico della VPS
 - un sottodominio personalizzato, per esempio `connect.tuodominio.it`, punta al
   record Duck DNS con `CNAME`
-- nginx espone solo `/oauth/*`, `/privacy`, `/about` e `/healthz`
+- nginx espone solo `/`, `/oauth/*`, `/privacy`, `/about` e `/healthz`
 - Certbot gestisce il certificato HTTPS
 
 Guida completa:
