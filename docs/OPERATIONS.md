@@ -235,7 +235,7 @@ riallineato.
 
 Regola operativa:
 
-1. mergiare la Release PR su GitHub, manualmente o tramite `Auto Merge Release PR` dopo `CI` manuale verde
+1. mergiare la Release PR su GitHub manualmente dopo le verifiche locali o dopo i workflow manuali richiesti
 2. attendere eventuali workflow post-merge se il cambio li attiva
 3. eseguire in locale `git pull --ff-only origin main`
 4. solo dopo verificare `CHANGELOG.md`, tag GitHub e versione pacchetto

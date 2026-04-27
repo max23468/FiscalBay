@@ -85,6 +85,18 @@ creati localmente quando li incontri.
   applica il percorso manuale o chiedi conferma quando l'azione remota sarebbe
   rischiosa o ambigua.
 
+## GitHub Actions e budget
+
+- Le attivita' GitHub Actions devono restare manuali: niente workflow automatici
+  su `push`, `pull_request`, `pull_request_target`, `workflow_run` o schedule finche'
+  il maintainer non decide esplicitamente di riattivarli.
+- Se i workflow GitHub risultano falliti per billing, spending limit o budget
+  esaurito, non tentare di "riparare" rilanciando Actions: esegui verifiche,
+  release, merge e manutenzione in locale o via VPS FiscalBay.
+- `release-please` resta il riferimento per versioning e changelog, ma va lanciato
+  manualmente o sostituito da un passaggio manuale esplicitamente richiesto quando
+  GitHub Actions non e' disponibile.
+
 ## Testing e verifica
 
 - Per modifiche runtime o condivise, usa come gate locale preferito
@@ -142,11 +154,13 @@ creati localmente quando li incontri.
   flusso automatico.
 - Se l'utente chiede una release, il percorso standard e' verificare lo stato di
   `release-please`, pushare commit corretti su `main` e usare la Release PR /
-  workflow ufficiale.
+  workflow ufficiale solo quando GitHub Actions e' disponibile e viene richiesto.
+  Con budget Actions esaurito, fermati e concorda il percorso manuale prima di
+  aggiornare changelog, tag o release.
 - Se in un turno sono stati fatti cambi funzionali ma manca un Conventional Commit
   adeguato, non considerare il lavoro chiuso finche il commit non e' coerente con
   il flusso `release-please`.
-- Se il flusso automatico sembra rotto, fermati e spiega il motivo prima di
+- Se il flusso release sembra rotto, fermati e spiega il motivo prima di
   introdurre workaround manuali che bypassano `release-please`.
 
 Per dettagli e casi limite, seguire `docs/RELEASE_POLICY.md`.

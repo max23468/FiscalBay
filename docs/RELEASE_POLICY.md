@@ -136,7 +136,8 @@ Per restare allineati a GitHub e a `release-please`:
 - preferire squash merge
 - impostare il titolo di squash merge in formato Conventional Commit
 - se una PR contiene piu' modifiche, il titolo deve riflettere l'impatto piu' alto
-- il controllo CI `PR Title` verifica automaticamente che il titolo PR sia compatibile con il formato richiesto
+- il workflow `PR Title` puo' essere lanciato manualmente per verificare che un
+  titolo PR sia compatibile con il formato richiesto
 - questo repository e' privato e oggi ha un solo maintainer operativo
 - quindi review/commenti esterni non sono un prerequisito normale per il merge
 - il flusso standard e': self-review, test rilevanti verdi, PR pronta, merge
@@ -182,10 +183,10 @@ Lo storico preesistente resta consultabile in `docs/CHANGELOG.md`, ma non e' piu
 Il flusso standard e' questo:
 
 1. un commit Conventional Commit arriva su `main`
-2. `release-please` aggiorna o apre una Release PR solo per cambi rilevanti per runtime/package, oppure quando viene lanciato manualmente
-3. `PR Title` valida automaticamente la Release PR
-4. `CI` viene lanciata manualmente sulla branch `release-please--*` quando vuoi autorizzare il merge automatico
-5. il workflow `Auto Merge Release PR` la mergia automaticamente solo quando `CI` manuale e `PR Title` risultano verdi
+2. `release-please` aggiorna o apre una Release PR solo quando viene lanciato manualmente
+3. `PR Title` e `CI` sono workflow manuali da usare solo quando il budget Actions lo consente e il maintainer lo chiede
+4. la Release PR viene mergiata manualmente dopo le verifiche locali o dopo i workflow manuali richiesti
+5. non ci sono trigger automatici di release, PR check o auto-merge finche' il maintainer non decide di riattivarli
 6. la Release PR aggiorna:
    - `CHANGELOG.md`
    - `pyproject.toml`
@@ -203,7 +204,7 @@ In modalita' main-only:
 
 - il commit su `main` sostituisce il merge della feature PR
 - la Release PR di `release-please` resta comunque il punto ufficiale in cui si materializzano versione e changelog
-- nel setup attuale il merge della Release PR e' automatizzato, ma solo dopo `CI` manuale e `PR Title` verdi, quindi il rilascio resta a due fasi logiche con un gate minimo di sicurezza e consumo Actions piu' controllato
+- nel setup attuale il merge della Release PR resta manuale: e' la scelta piu' coerente quando il budget GitHub Actions e' limitato
 
 ## Baseline iniziale
 
@@ -215,7 +216,7 @@ In pratica:
 
 - `docs/CHANGELOG.md` conserva lo storico precedente
 - `CHANGELOG.md` in root parte come changelog ufficiale del nuovo flusso
-- le prossime release automatiche includeranno solo i cambi successivi all'adozione
+- le prossime release gestite da `release-please` includeranno solo i cambi successivi all'adozione
 
 ## Quando passare a 1.0.0
 

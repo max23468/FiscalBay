@@ -55,10 +55,10 @@ Per mantenere il repository allineato alle best practice GitHub anche in contest
 
 - workflow CI manuale (`.github/workflows/ci.yml`) per contenere il consumo GitHub Actions
 - deploy verso VPS via GitHub Actions solo manuale e solo su richiesta esplicita del maintainer (`.github/workflows/deploy-vps.yml`)
-- release PR con `release-please`, automatiche solo per cambi rilevanti al runtime/package e sempre avviabili manualmente (`.github/workflows/release-please.yml`)
-- build e upload automatico degli artefatti nella GitHub Release creata da `release-please`
+- release PR con `release-please` solo manuale (`.github/workflows/release-please.yml`)
+- build e upload artefatti solo manuali quando GitHub Actions e' disponibile
 - rebuild manuale degli artefatti per un tag esistente (`.github/workflows/release.yml`)
-- aggiornamenti automatici dipendenze con Dependabot (`.github/dependabot.yml`)
+- aggiornamenti dipendenze da fare manualmente; Dependabot version updates non e' configurato finche' il budget Actions resta limitato
 - template per Pull Request (`.github/PULL_REQUEST_TEMPLATE.md`)
 - issue forms per bug e task operativi (`.github/ISSUE_TEMPLATE/*`)
 - `CODEOWNERS` per ownership esplicita (`.github/CODEOWNERS`)
@@ -68,7 +68,7 @@ Per mantenere il repository allineato alle best practice GitHub anche in contest
 Passi consigliati dopo il clone/fork:
 
 1. verifica branch protection su `main` (almeno: linear history; CI come gate manuale quando serve contenere i minuti Actions)
-2. abilita secret scanning e Dependabot alerts dal tab Security
+2. abilita secret scanning e Dependabot alerts dal tab Security, ma lascia disattivati gli update automatici se il budget Actions e' limitato
 3. usa PR anche da branch personali per lasciare audit trail e checklist standard
 4. usa titoli PR di squash in formato Conventional Commit per tenere coerenti versioni e changelog
 5. in GitHub abilita `Squash merge` e valuta di disabilitare `Merge commit` e `Rebase merge` per rendere il flusso piu' coerente
@@ -80,6 +80,7 @@ Il flusso consigliato da remoto e:
 - Codex o GitHub preparano il codice fino a `main`
 - il deploy resta manuale sulla VPS tramite SSH e script versionati
 - GitHub Actions non esegue deploy automatici su push
+- GitHub Actions non esegue release, PR check o merge automatici
 - il workflow `Deploy VPS` va lanciato solo quando il maintainer chiede esplicitamente di fare il deploy con GitHub Actions
 
 In pratica, da Codex web/mobile ti basta:
@@ -100,14 +101,14 @@ Regola operativa minima:
 - `MINOR` per nuove funzionalita' compatibili, ad esempio `v0.2.0`
 - `MAJOR` per breaking change, ad esempio `v1.0.0`
 
-Il flusso e' allineato a GitHub:
+Il flusso e' allineato a GitHub, ma resta manuale finche' il budget Actions e' limitato:
 
-- i merge su `main` aggiornano automaticamente una Release PR solo quando toccano file rilevanti per runtime/package; negli altri casi `Release Please` resta avviabile manualmente
-- `PR Title` gira automaticamente sulla Release PR; `CI` e' manuale per ridurre il consumo Actions
-- il workflow `Auto Merge Release PR` la chiude automaticamente solo dopo una `CI` manuale riuscita sulla branch `release-please--*` e con `PR Title` verde
+- `Release Please` va lanciato manualmente solo quando vuoi aprire o aggiornare una Release PR
+- `PR Title` e `CI` sono manuali per ridurre il consumo Actions
+- il merge della Release PR e' manuale
 - per evitare il limite `Resource not accessible by integration` sulla pubblicazione finale, configura il secret repository `RELEASE_PLEASE_TOKEN`; senza secret i workflow ripiegano su `GITHUB_TOKEN`, ma la creazione della GitHub Release puo' fallire
 - la Release PR aggiorna `CHANGELOG.md` e la versione in `pyproject.toml`
-- il merge della Release PR crea tag, GitHub Release e allega automaticamente gli artefatti buildati
+- quando GitHub Actions e' disponibile, il merge della Release PR crea tag e GitHub Release; gli artefatti si allegano solo tramite workflow manuale
 - se serve, il workflow `Release Assets` permette di rigenerare manualmente gli artefatti per un tag esistente
 
 Per i dettagli operativi e le policy di naming/bump vedere `docs/RELEASE_POLICY.md`.

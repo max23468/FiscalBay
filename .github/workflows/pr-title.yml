@@ -1,18 +1,18 @@
 name: PR Title
 
 on:
-  pull_request_target:
-    types:
-      - opened
-      - edited
-      - reopened
-      - synchronize
+  workflow_dispatch:
+    inputs:
+      pr_title:
+        description: "PR title to validate manually"
+        required: true
+        type: string
 
 permissions:
   pull-requests: read
 
 concurrency:
-  group: pr-title-${{ github.event.pull_request.number }}
+  group: pr-title-${{ github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -22,7 +22,7 @@ jobs:
     steps:
       - name: Validate PR title
         env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_TITLE: ${{ inputs.pr_title }}
         run: |
           python - <<'PY'
           import os

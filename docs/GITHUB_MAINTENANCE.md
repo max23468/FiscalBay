@@ -5,10 +5,9 @@ Questa guida raccoglie le impostazioni GitHub che completano gli asset versionat
 ## Cosa e' versionato nel repo
 
 - CI: `.github/workflows/ci.yml`
-- Release PR automation: `.github/workflows/release-please.yml`
-- Release PR auto-merge: `.github/workflows/auto-merge-release-pr.yml`
+- Release PR manuale: `.github/workflows/release-please.yml`
 - Manual release assets rebuild: `.github/workflows/release.yml`
-- Dependabot: `.github/dependabot.yml`
+- Dependabot version updates: non configurato finche' il budget Actions resta limitato
 - PR template: `.github/PULL_REQUEST_TEMPLATE.md`
 - Issue forms: `.github/ISSUE_TEMPLATE/*`
 - Ownership: `.github/CODEOWNERS`
@@ -46,7 +45,7 @@ Se il piano GitHub o il tipo di repository non permette di usare ruleset o branc
 - lavorare comunque su `main`, ma solo con commit Conventional Commit corretti
 - trattare ogni commit su `main` come se fosse il titolo di una PR squash
 - non fare bump manuali, tag manuali o release manuali nel flusso normale
-- controllare dopo ogni push su `main` che `release-please` abbia aperto o aggiornato la Release PR attesa
+- lanciare manualmente `release-please` quando vuoi aprire o aggiornare la Release PR attesa
 - considerare un commit non conforme su `main` come incidente di processo da correggere subito nel commit successivo
 
 In pratica, quando manca la branch protection, la disciplina del commit message diventa il controllo principale che tiene affidabile il versioning automatico.
@@ -79,30 +78,26 @@ Abilitare almeno:
 
 Il flusso consigliato non parte piu' dal tag manuale come primo passo.
 
-Il percorso standard e':
+Il percorso standard, con budget GitHub Actions limitato, e':
 
 1. mergi una PR su `main` con titolo Conventional Commit
-2. `Release Please` apre o aggiorna una Release PR se il push tocca file rilevanti per runtime/package, oppure quando viene lanciato manualmente
-3. `PR Title` gira automaticamente sulla Release PR
-4. esegui manualmente `CI` sulla branch `release-please--*` quando vuoi autorizzare il merge automatico della Release PR
-5. il workflow `Auto Merge Release PR` la mergia automaticamente solo dopo una `CI` riuscita e con `PR Title` verde
+2. lancia manualmente `Release Please` quando vuoi aprire o aggiornare una Release PR
+3. valida manualmente titolo PR e test locali; usa `CI` GitHub solo se il budget lo consente e lo richiedi esplicitamente
+4. mergia manualmente la Release PR quando hai completato le verifiche
 6. il merge della Release PR aggiorna versione e `CHANGELOG.md`
-7. `Release Please` crea il tag `vX.Y.Z`, la relativa release GitHub e allega gli artefatti buildati
+7. `Release Please` crea il tag `vX.Y.Z` e la relativa release GitHub quando il workflow manuale viene usato
 
 Nota operativa:
 
-- l'auto-merge riguarda solo PR con branch `release-please--*` e titolo `chore(main): release ...`
-- il gate richiede oggi `CI` manuale e `PR Title` verdi sulla Release PR
 - per pubblicare tag e GitHub Release in modo affidabile, configura il secret repository `RELEASE_PLEASE_TOKEN`; con il solo `GITHUB_TOKEN` GitHub puo' rispondere con `Resource not accessible by integration`
-- se in futuro vuoi reintrodurre un checkpoint manuale prima della pubblicazione, disabilita il workflow `Auto Merge Release PR`
+- non riattivare trigger automatici senza una decisione esplicita sul budget Actions
 
 Fallback ufficiale senza branch protection / senza PR obbligatorie:
 
 1. pushi un commit Conventional Commit corretto su `main`
-2. controlli che `Release Please` apra o aggiorni la Release PR quando il cambio e' rilevante; altrimenti lancialo manualmente
-3. lanci manualmente `CI` sulla Release PR quando vuoi chiuderla
-4. controlli che `CI` e `PR Title` sulla Release PR siano verdi
-5. controlli che il workflow `Auto Merge Release PR` l'abbia chiusa correttamente
+2. lanci manualmente `Release Please` quando vuoi materializzare changelog/versione
+3. esegui in locale `bash scripts/ci_verify.sh`
+4. mergi manualmente la Release PR se la usi
 6. non tocchi manualmente `pyproject.toml`, `CHANGELOG.md` root, tag o release
 
 Il workflow `Release Assets` supporta ancora `workflow_dispatch` se serve rigenerare gli artefatti per un tag gia' esistente.
@@ -121,6 +116,6 @@ Se in futuro vuoi che altri workflow si attivino anche sulle Release PR create a
 Frequenza minima mensile:
 
 1. verificare workflow failed o flakey
-2. verificare PR Dependabot aperte da troppo tempo
+2. verificare dipendenze manualmente quando serve
 3. verificare alert Security e Dependabot
 4. verificare che i ruleset di `main` siano ancora coerenti con il flusso di lavoro reale
