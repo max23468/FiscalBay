@@ -2,10 +2,29 @@ import os
 import unittest
 from unittest.mock import patch
 
-from src.fiscalbay.config import load_telegram_config
+from src.fiscalbay.config import DEFAULT_SCOPE, load_config, load_telegram_config
 
 
 class ConfigTests(unittest.TestCase):
+    def test_load_config_defaults_to_fulfillment_scope_only(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "EBAY_CLIENT_ID": "client-id",
+                "EBAY_CLIENT_SECRET": "client-secret",
+                "EBAY_REFRESH_TOKEN": "refresh-token",
+            },
+            clear=True,
+        ):
+            config = load_config("production")
+
+        self.assertEqual(
+            DEFAULT_SCOPE,
+            "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+        )
+        self.assertEqual(config.scopes, DEFAULT_SCOPE)
+        self.assertNotIn("commerce.identity.readonly", config.scopes)
+
     def test_load_telegram_config_defaults_to_deny_all_without_allowed_chat_ids(self) -> None:
         with patch.dict(
             os.environ,

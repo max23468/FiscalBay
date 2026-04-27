@@ -121,8 +121,8 @@ Per queste due superfici usare BotFather e gli asset in `assets/branding/`.
 - tagline: `Assistente fiscale ordini per venditori eBay`
 - sottotitolo operativo: `Controlla identificativi fiscali, stato account e ordini eBay da un'unica chat.`
 - promessa corta: `FiscalBay ti aiuta a controllare account e ordini eBay piu' rapidamente.`
-- CTA primaria: `Collega account eBay`
-- CTA secondaria: `Controlla account`
+- CTA primaria sito: `Apri Telegram`
+- CTA secondaria sito: `Come funziona`
 
 ### Pulsanti e label
 
@@ -130,7 +130,7 @@ Per queste due superfici usare BotFather e gli asset in `assets/branding/`.
 - `Tutti ordini`
 - `Stato bot`
 - `Account eBay`
-- `Collega eBay`
+- `Apri Telegram`
 - `Scollega`
 - `Preferenze`
 - `Guida`

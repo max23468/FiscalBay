@@ -8,10 +8,7 @@ import os
 from .errors import ConfigurationError
 from .models import Config, TelegramConfig
 
-DEFAULT_SCOPE = (
-    "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly "
-    "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly"
-)
+DEFAULT_SCOPE = "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly"
 DEFAULT_ALLOWED_CHAT_IDS = "TELEGRAM_ALLOWED_CHAT_IDS"
 DEFAULT_NOTIFY_CHAT_IDS = "TELEGRAM_NOTIFY_CHAT_IDS"
 DEFAULT_STATE_PATH = "data/state.db"

@@ -64,6 +64,8 @@ class OAuthServerTests(unittest.TestCase):
         self.assertIn("Informativa privacy", body)
         self.assertIn("refresh token eBay cifrato a riposo", body)
         self.assertIn("non deduce o ricostruisce dati fiscali", body)
+        self.assertNotIn("collegare un account", body)
+        self.assertNotIn("collegamento OAuth", body)
 
     def test_render_about_page_describes_service_scope(self) -> None:
         body = render_about_page().decode("utf-8")
@@ -71,16 +73,21 @@ class OAuthServerTests(unittest.TestCase):
         self.assertIn("About FiscalBay", body)
         self.assertIn("assistente fiscale ordini per venditori eBay", body)
         self.assertIn("dashboard eBay generalista", body)
+        self.assertNotIn("collega un account eBay", body)
+        self.assertNotIn("pagine OAuth di eBay", body)
 
-    def test_render_home_page_links_public_ebay_developer_pages(self) -> None:
+    def test_render_home_page_is_telegram_first(self) -> None:
         body = render_home_page().decode("utf-8")
 
         self.assertIn("FiscalBay", body)
         self.assertIn("Assistente fiscale ordini per venditori eBay", body)
         self.assertIn("href='/privacy'", body)
         self.assertIn("href='/about'", body)
-        self.assertIn("href='/oauth/start'", body)
+        self.assertIn("Apri Telegram", body)
+        self.assertIn("Avvio da Telegram", body)
         self.assertIn("buyer.taxIdentifier", body)
+        self.assertNotIn("Collega eBay", body)
+        self.assertNotIn("Pagine eBay Dev", body)
 
     def test_render_public_page_for_path_matches_branding_urls(self) -> None:
         home_body = render_public_page_for_path("/")

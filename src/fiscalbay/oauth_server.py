@@ -442,7 +442,6 @@ def render_home_page() -> bytes:
                     <a href='#prodotto'>Prodotto</a>
                     <a href='/privacy'>Privacy</a>
                     <a href='/about'>About</a>
-                    <a href='/oauth/start'>Collega eBay</a>
                   </div>
                 </nav>
               </header>
@@ -458,7 +457,7 @@ def render_home_page() -> bytes:
                     </p>
                     <div class='actions'>
                       <a class='button primary' href='https://t.me/'>Apri Telegram</a>
-                      <a class='button secondary' href='/oauth/start'>Collega eBay</a>
+                      <a class='button secondary' href='#prodotto'>Come funziona</a>
                     </div>
                     <p class='note'>
                       Il dato fiscale viene mostrato solo quando eBay lo restituisce
@@ -491,10 +490,10 @@ def render_home_page() -> bytes:
                 </section>
                 <section class='features' aria-label='Caratteristiche principali'>
                   <article class='feature'>
-                    <h2>OAuth eBay</h2>
+                    <h2>Avvio da Telegram</h2>
                     <p>
-                      Il collegamento passa dal consenso ufficiale eBay e dal callback
-                      pubblico configurato nel RuName developer.
+                      Accesso, richieste e passaggi operativi partono sempre dal bot
+                      e dalla chat approvata.
                     </p>
                   </article>
                   <article class='feature'>
@@ -505,10 +504,10 @@ def render_home_page() -> bytes:
                     </p>
                   </article>
                   <article class='feature'>
-                    <h2>Pagine eBay Dev</h2>
+                    <h2>Pagine pubbliche</h2>
                     <p>
-                      Privacy Policy e About sono esposte come pagine pubbliche stabili
-                      per il branding OAuth.
+                      Privacy e About restano disponibili per trasparenza, revisione
+                      e configurazioni esterne.
                     </p>
                   </article>
                 </section>
@@ -576,8 +575,8 @@ def render_privacy_page() -> bytes:
         "Informativa privacy",
         (
             "FiscalBay e' un assistente operativo Telegram first per venditori eBay. "
-            "Questa pagina riassume quali dati vengono trattati per collegare un account "
-            "eBay e mostrare informazioni fiscali e operative restituite dalle API ufficiali."
+            "Questa pagina riassume quali dati vengono trattati per mostrare in Telegram "
+            "informazioni fiscali e operative restituite dalle API ufficiali."
         ),
         [
             (
@@ -585,30 +584,27 @@ def render_privacy_page() -> bytes:
                 [
                     "identificativi Telegram necessari a gestire accesso, chat e notifiche",
                     (
-                        "identificativo account eBay, environment, scope OAuth concessi "
-                        "e stato del collegamento"
+                        "identificativo account eBay, ambiente API, scope autorizzati "
+                        "e stato operativo"
                     ),
                     (
-                        "refresh token eBay cifrato a riposo quando il collegamento OAuth "
-                        "viene completato"
+                        "refresh token eBay cifrato a riposo quando l'autorizzazione "
+                        "tecnica viene completata"
                     ),
                     (
                         "dati ordine eBay restituiti dalle API ufficiali, inclusi "
                         "identificativi fiscali quando presenti nella risposta eBay"
                     ),
-                    (
-                        "log tecnici, sessioni OAuth e audit minimo degli eventi di accesso "
-                        "e collegamento"
-                    ),
+                    ("log tecnici, sessioni temporanee e audit minimo degli eventi di accesso"),
                 ],
             ),
             (
                 "Uso dei dati",
                 [
-                    "associare l'utente Telegram al proprio account eBay collegato",
+                    "associare le richieste operative all'utente Telegram autorizzato",
                     "leggere ordini e dati fiscali disponibili tramite API eBay ufficiali",
                     "inviare notifiche operative nella chat Telegram autorizzata",
-                    "diagnosticare errori, sicurezza del collegamento e stato del servizio",
+                    "diagnosticare errori, sicurezza dell'accesso e stato del servizio",
                 ],
             ),
             (
@@ -644,7 +640,7 @@ def render_about_page() -> bytes:
             (
                 "Cosa fa",
                 [
-                    "collega un account eBay tramite consenso OAuth",
+                    "porta nella chat Telegram segnali operativi sugli ordini eBay",
                     (
                         "legge ordini e informazioni fiscali effettivamente disponibili "
                         "nelle risposte eBay"
@@ -655,7 +651,7 @@ def render_about_page() -> bytes:
                     ),
                     (
                         "mantiene il prodotto centrato su Telegram, con una parte web minima "
-                        "per onboarding e callback OAuth"
+                        "per informative pubbliche e callback tecnico avviato dal bot"
                     ),
                 ],
             ),
@@ -668,10 +664,7 @@ def render_about_page() -> bytes:
                         "non inventa partita IVA, codice fiscale o altri dati fiscali "
                         "se eBay non li restituisce"
                     ),
-                    (
-                        "non richiede la password eBay dell'utente: il consenso passa "
-                        "dalle pagine OAuth di eBay"
-                    ),
+                    "non sposta l'operativita' fuori da Telegram",
                 ],
             ),
             (
