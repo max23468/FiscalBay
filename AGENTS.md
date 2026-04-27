@@ -65,6 +65,11 @@ creati localmente quando li incontri.
 
 ## Deploy
 
+- La VPS operativa corretta per FiscalBay e' solo `opc@79.72.45.89`
+  (`fiscalbay-bot`). Non usare host o VPS di altri progetti, in particolare
+  DocMolder, per deploy, diagnostica, sync file, restart o lettura log di
+  FiscalBay. Se host, hostname o contesto SSH non coincidono, fermati e chiedi
+  conferma prima di qualunque comando remoto.
 - Il deploy operativo di default e' manuale sulla VPS con accesso SSH e script
   versionati (`deploy/update.sh`, `deploy/smoke-check.sh` e runbook collegati).
 - Non avviare deploy tramite GitHub Actions come conseguenza implicita di commit,

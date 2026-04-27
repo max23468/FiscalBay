@@ -362,6 +362,9 @@ Questi finding sono la base esplicita delle scelte gia' fissate in `docs/ARCHITE
 Host attuale:
 
 - `79.72.45.89`
+- hostname atteso: `fiscalbay-bot`
+- contesto operativo esclusivo: FiscalBay; non usare la VPS di DocMolder o di
+  altri progetti per comandi, deploy o diagnostica FiscalBay
 
 Utente SSH operativo:
 

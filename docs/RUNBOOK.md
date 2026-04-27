@@ -14,6 +14,14 @@ Questa guida standardizza l'esercizio del bot sulla VPS Linux attuale con `syste
 - env file: `${APP_DIR}/.env`
 - servizio: `fiscalbay-bot`
 - callback OAuth: `fiscalbay-oauth`
+- host operativo FiscalBay: `opc@79.72.45.89` (`fiscalbay-bot`)
+
+Regola di sicurezza operativa:
+
+- usare solo la VPS FiscalBay per deploy, diagnostica, sync file, restart e log
+- non usare mai la VPS di DocMolder o di altri progetti per operazioni FiscalBay
+- se `hostname`, IP o contesto SSH non corrispondono a FiscalBay, fermarsi prima
+  di eseguire comandi remoti
 
 ## Primo setup su VPS Linux
 

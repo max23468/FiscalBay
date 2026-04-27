@@ -4,6 +4,14 @@ Guida operativa rapida per l'esercizio quotidiano del servizio.
 
 Per i dettagli completi di deploy e recovery vedere anche `docs/RUNBOOK.md`.
 
+VPS operativa FiscalBay:
+
+- host SSH: `opc@79.72.45.89`
+- hostname atteso: `fiscalbay-bot`
+- non usare mai la VPS di DocMolder o di altri progetti per operazioni FiscalBay
+- prima di deploy, diagnostica o restart remoti, verificare che host e contesto
+  SSH siano quelli FiscalBay
+
 ## Indice rapido
 
 - check giornalieri minimi
