@@ -289,7 +289,7 @@ Il progetto oggi include:
 - `ruff`
 - `mypy` graduale
 - `coverage`
-- GitHub Actions CI
+- CI locale con `bash scripts/ci_verify.sh`
 
 Comando di verifica locale principale:
 
@@ -313,7 +313,7 @@ bash scripts/ci_verify.sh
 - test integrazione su bot, storage e fetch ordini
 - logging piu' coerente
 - healthcheck operativo disponibile
-- CI e quality gate presenti
+- CI e quality gate locali presenti
 - percorso di refactor documentato nei documenti stabili e nelle ADR
 
 ### Limiti attuali ancora veri
@@ -567,9 +567,9 @@ Situazione attuale:
 
 - il progetto va trattato come servizio Python deployato su VPS Linux
 - il deploy reale vive sulla VPS Linux
-- il repository non ha piu' integrazioni di deploy automatico da considerare
-- il workflow GitHub Actions `Deploy VPS` e' solo manuale (`workflow_dispatch`) e va
-  usato solo su richiesta esplicita del maintainer
+- il repository non ha piu' integrazioni GitHub Actions da considerare
+- deploy, release, CI e diagnostica VPS sono attivita' manuali locali o via SSH
+  sulla VPS FiscalBay
 
 ## File operativi importanti
 

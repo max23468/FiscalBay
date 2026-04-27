@@ -77,25 +77,24 @@ creati localmente quando li incontri.
   e verificare che risponda `fiscalbay-bot`.
 - Il deploy operativo di default e' manuale sulla VPS con accesso SSH e script
   versionati (`deploy/update.sh`, `deploy/smoke-check.sh` e runbook collegati).
-- Non avviare deploy tramite GitHub Actions come conseguenza implicita di commit,
-  push, merge o release.
-- Usa il workflow GitHub Actions `Deploy VPS` solo quando l'utente chiede
-  esplicitamente di fare il deploy con GitHub Actions.
-- Se la richiesta parla genericamente di "deploy" senza nominare GitHub Actions,
-  applica il percorso manuale o chiedi conferma quando l'azione remota sarebbe
-  rischiosa o ambigua.
+- GitHub Actions non e' un canale operativo attivo per deploy FiscalBay. Se una
+  richiesta parla genericamente di "deploy", applica sempre il percorso manuale
+  via SSH/VPS FiscalBay o chiedi conferma quando l'azione remota sarebbe rischiosa
+  o ambigua.
 
 ## GitHub Actions e budget
 
-- Le attivita' GitHub Actions devono restare manuali: niente workflow automatici
-  su `push`, `pull_request`, `pull_request_target`, `workflow_run` o schedule finche'
-  il maintainer non decide esplicitamente di riattivarli.
-- Se i workflow GitHub risultano falliti per billing, spending limit o budget
-  esaurito, non tentare di "riparare" rilanciando Actions: esegui verifiche,
-  release, merge e manutenzione in locale o via VPS FiscalBay.
-- `release-please` resta il riferimento per versioning e changelog, ma va lanciato
-  manualmente o sostituito da un passaggio manuale esplicitamente richiesto quando
-  GitHub Actions non e' disponibile.
+- Il repository non deve contenere workflow GitHub Actions attivi. Non aggiungere
+  file in `.github/workflows/` e non riattivare trigger Actions senza richiesta
+  esplicita del maintainer.
+- Se GitHub segnala fallimenti Actions per billing, spending limit o budget
+  esaurito, non rilanciare run e non tentare fix tramite Actions: esegui verifiche,
+  release, merge, manutenzione e deploy in locale o via VPS FiscalBay.
+- CI, controllo titoli PR, release assets, configurazione public access, diagnostica
+  VPS e deploy sono attivita' manuali fuori da GitHub Actions.
+- `release-please` resta il riferimento preferito per versioning e changelog, ma
+  va eseguito solo localmente o sostituito da un passaggio manuale esplicitamente
+  richiesto quando serve una release.
 
 ## Testing e verifica
 
@@ -139,8 +138,8 @@ creati localmente quando li incontri.
 
 ## Release e versioning
 
-- Questo repository usa `release-please` come meccanismo ufficiale di versionamento,
-  changelog, tag e release.
+- Questo repository usa `release-please` come riferimento preferito di
+  versionamento, changelog, tag e release, ma senza GitHub Actions attive.
 - Prima di creare un commit, valuta sempre l'impatto release.
 - Per cambi funzionali o osservabili nel runtime, scegli sempre `feat:`, `fix:` o
   `perf:` coerente con l'impatto reale. Non usare `refactor:`, `chore:` o `docs:`
@@ -152,16 +151,14 @@ creati localmente quando li incontri.
   controllati da `release-please` e modificarli a mano puo disallineare versione,
   changelog, tag e release. Fallo solo su richiesta esplicita per riparare il
   flusso automatico.
-- Se l'utente chiede una release, il percorso standard e' verificare lo stato di
-  `release-please`, pushare commit corretti su `main` e usare la Release PR /
-  workflow ufficiale solo quando GitHub Actions e' disponibile e viene richiesto.
-  Con budget Actions esaurito, fermati e concorda il percorso manuale prima di
-  aggiornare changelog, tag o release.
+- Se l'utente chiede una release, il percorso standard e' concordare il passaggio
+  manuale: verifiche locali, eventuale `release-please` eseguito localmente,
+  review di changelog/versione, tag/release solo su richiesta esplicita.
 - Se in un turno sono stati fatti cambi funzionali ma manca un Conventional Commit
   adeguato, non considerare il lavoro chiuso finche il commit non e' coerente con
   il flusso `release-please`.
 - Se il flusso release sembra rotto, fermati e spiega il motivo prima di
-  introdurre workaround manuali che bypassano `release-please`.
+  introdurre workaround che bypassano `release-please`.
 
 Per dettagli e casi limite, seguire `docs/RELEASE_POLICY.md`.
 
@@ -172,7 +169,7 @@ Per dettagli e casi limite, seguire `docs/RELEASE_POLICY.md`.
 - Quando aggiorni `docs/ROADMAP.md`, gli item completati vanno rimossi dalla
   roadmap: non vanno lasciati come checkbox spuntate.
 - `docs/CHANGELOG.md` e' storico; il changelog di release corrente e' `CHANGELOG.md`
-  root ed e' gestito da `release-please`.
+  root ed e' gestito dal percorso release manuale basato su `release-please`.
 
 ## Policy per agenti
 

@@ -223,22 +223,22 @@ Suggerimento pratico sui log:
 3. eseguire `./deploy/smoke-check.sh`
 4. se lo smoke check fallisce, leggere i log e valutare rollback
 
-Questo e' il percorso di deploy predefinito. Il workflow GitHub Actions `Deploy VPS`
-va usato solo quando viene richiesto esplicitamente un deploy con GitHub Actions.
+Questo e' il percorso di deploy predefinito. GitHub Actions non e' un canale
+operativo attivo per FiscalBay: deploy, diagnostica e configurazione VPS restano
+manuali via SSH sulla VPS FiscalBay.
 
 ## Sync locale dopo release GitHub
 
-Quando una Release PR di `release-please` viene mergiata da GitHub, il commit finale che aggiorna
-`CHANGELOG.md`, `pyproject.toml` e `.release-please-manifest.json` nasce su `main` lato remoto.
-Il repository locale quindi non vede automaticamente la nuova versione finche' non viene
-riallineato.
+Quando una Release PR di `release-please` viene mergiata manualmente da GitHub, il
+commit finale che aggiorna `CHANGELOG.md`, `pyproject.toml` e
+`.release-please-manifest.json` nasce su `main` lato remoto. Il repository locale
+quindi non vede la nuova versione finche' non viene riallineato.
 
 Regola operativa:
 
-1. mergiare la Release PR su GitHub manualmente dopo le verifiche locali o dopo i workflow manuali richiesti
-2. attendere eventuali workflow post-merge se il cambio li attiva
-3. eseguire in locale `git pull --ff-only origin main`
-4. solo dopo verificare `CHANGELOG.md`, tag GitHub e versione pacchetto
+1. mergiare la Release PR su GitHub manualmente dopo le verifiche locali
+2. eseguire in locale `git pull --ff-only origin main`
+3. solo dopo verificare `CHANGELOG.md`, tag GitHub e versione pacchetto
 
 Check rapido consigliato:
 

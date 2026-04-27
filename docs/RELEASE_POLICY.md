@@ -15,7 +15,8 @@ Questa guida definisce il flusso ufficiale di versionamento, changelog e release
 - tag GitHub: `vX.Y.Z`
 - changelog ufficiale: `CHANGELOG.md` in root
 - archivio storico precedente: `docs/CHANGELOG.md`
-- meccanismo ufficiale di release: `release-please`
+- meccanismo preferito di release: `release-please`, da usare localmente o in
+  procedura manuale esplicita finche' GitHub Actions resta disattivato
 
 La versione del pacchetto resta senza prefisso `v` in `pyproject.toml`.
 
@@ -25,7 +26,8 @@ Per questo repository il flusso da considerare ufficiale e' uno solo:
 
 - si puo' lavorare anche direttamente su `main`
 - i commit su `main` devono essere Conventional Commit corretti
-- `release-please` decide bump versione, changelog, tag e release
+- `release-please` decide bump versione, changelog, tag e release quando viene
+  usato nel percorso manuale concordato
 - bump manuali, tag manuali e release manuali sono eccezioni e non il percorso standard
 
 Regola pratica per agenti e maintainer:
@@ -34,7 +36,9 @@ Regola pratica per agenti e maintainer:
 - se il cambiamento e' breaking, usare `!` oppure footer `BREAKING CHANGE:`
 - non usare `refactor:` o `chore:` per cambi che in realta' meritano una release
 - non modificare manualmente `pyproject.toml`, `.release-please-manifest.json` o `CHANGELOG.md` root solo per forzare una release, salvo riparazioni straordinarie richieste esplicitamente
-- quando serve una release, il comportamento standard e' lasciare che `release-please` apra o aggiorni la Release PR e poi usare quel flusso
+- quando serve una release, concordare il percorso manuale: verifiche locali,
+  eventuale uso locale di `release-please`, review di changelog/versione, tag e
+  GitHub Release solo su richiesta esplicita
 
 ## Checklist agente prima del commit
 
@@ -136,8 +140,8 @@ Per restare allineati a GitHub e a `release-please`:
 - preferire squash merge
 - impostare il titolo di squash merge in formato Conventional Commit
 - se una PR contiene piu' modifiche, il titolo deve riflettere l'impatto piu' alto
-- il workflow `PR Title` puo' essere lanciato manualmente per verificare che un
-  titolo PR sia compatibile con il formato richiesto
+- il titolo PR o il commit su `main` va verificato manualmente rispetto al formato
+  Conventional Commit richiesto
 - questo repository e' privato e oggi ha un solo maintainer operativo
 - quindi review/commenti esterni non sono un prerequisito normale per il merge
 - il flusso standard e': self-review, test rilevanti verdi, PR pronta, merge
@@ -183,27 +187,28 @@ Lo storico preesistente resta consultabile in `docs/CHANGELOG.md`, ma non e' piu
 Il flusso standard e' questo:
 
 1. un commit Conventional Commit arriva su `main`
-2. `release-please` aggiorna o apre una Release PR solo quando viene lanciato manualmente
-3. `PR Title` e `CI` sono workflow manuali da usare solo quando il budget Actions lo consente e il maintainer lo chiede
-4. la Release PR viene mergiata manualmente dopo le verifiche locali o dopo i workflow manuali richiesti
-5. non ci sono trigger automatici di release, PR check o auto-merge finche' il maintainer non decide di riattivarli
+2. `release-please` si usa solo localmente o come passaggio manuale esplicitamente
+   richiesto
+3. CI e controllo titolo PR si fanno localmente/documentalmente, senza Actions
+4. la Release PR, se usata, viene mergiata manualmente dopo le verifiche locali
+5. non ci sono workflow GitHub Actions versionati finche' il maintainer non decide
+   di riattivarli
 6. la Release PR aggiorna:
    - `CHANGELOG.md`
    - `pyproject.toml`
    - `.release-please-manifest.json`
-7. quando la Release PR viene mergiata, GitHub crea tag e release
-8. lo stesso workflow builda il progetto e allega i file alla GitHub Release
-9. se serve ricostruire gli artefatti senza creare una nuova release, si usa `Release Assets` in modalita' manuale
+7. tag e GitHub Release si creano manualmente solo su richiesta esplicita
+8. gli artefatti si buildano localmente con `python -m build`
+9. se serve allegare artefatti a una GitHub Release, usare `gh release upload` o la
+   UI GitHub solo su richiesta esplicita
 
-Nota operativa:
-
-- per creare la GitHub Release in modo affidabile, configura il secret repository `RELEASE_PLEASE_TOKEN`
-- il workflow fa fallback su `GITHUB_TOKEN`, ma GitHub puo' rifiutare la pubblicazione con `Resource not accessible by integration`
+Nota operativa: eventuali release GitHub vanno create o aggiornate da `gh`
+autenticato o UI GitHub, solo su richiesta esplicita.
 
 In modalita' main-only:
 
 - il commit su `main` sostituisce il merge della feature PR
-- la Release PR di `release-please` resta comunque il punto ufficiale in cui si materializzano versione e changelog
+- la Release PR di `release-please`, se usata nel percorso manuale, resta il punto in cui si materializzano versione e changelog
 - nel setup attuale il merge della Release PR resta manuale: e' la scelta piu' coerente quando il budget GitHub Actions e' limitato
 
 ## Baseline iniziale

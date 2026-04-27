@@ -33,7 +33,7 @@ Indice centrale della documentazione del progetto.
 - `docs/RELEASE_POLICY.md`
   - regole ufficiali per versioni, changelog, release PR e tag GitHub
 - `docs/CODEX_CLOUD_DEPLOY.md`
-  - flusso per lavorare da Codex web/cloud e usare deploy via GitHub Actions solo su richiesta esplicita
+  - flusso per lavorare da Codex web/cloud senza usare GitHub Actions
 - `docs/DEPLOY_LINUX.md`
   - guida specifica al deploy Linux
 - `docs/PUBLIC_ACCESS.md`

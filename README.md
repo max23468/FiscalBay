@@ -53,12 +53,11 @@ In pratica:
 
 Per mantenere il repository allineato alle best practice GitHub anche in contesto single-maintainer, il progetto include:
 
-- workflow CI manuale (`.github/workflows/ci.yml`) per contenere il consumo GitHub Actions
-- deploy verso VPS via GitHub Actions solo manuale e solo su richiesta esplicita del maintainer (`.github/workflows/deploy-vps.yml`)
-- release PR con `release-please` solo manuale (`.github/workflows/release-please.yml`)
-- build e upload artefatti solo manuali quando GitHub Actions e' disponibile
-- rebuild manuale degli artefatti per un tag esistente (`.github/workflows/release.yml`)
-- aggiornamenti dipendenze da fare manualmente; Dependabot version updates non e' configurato finche' il budget Actions resta limitato
+- nessun workflow GitHub Actions versionato: CI, deploy, release e manutenzione si eseguono manualmente fuori da Actions
+- CI locale con `bash scripts/ci_verify.sh`
+- deploy manuale sulla VPS FiscalBay via SSH e script versionati
+- release manuali: `release-please` puo' essere usato solo localmente o sostituito da passaggi manuali espliciti
+- aggiornamenti dipendenze da fare manualmente; Dependabot alerts/security alerts possono restare nella UI GitHub
 - template per Pull Request (`.github/PULL_REQUEST_TEMPLATE.md`)
 - issue forms per bug e task operativi (`.github/ISSUE_TEMPLATE/*`)
 - `CODEOWNERS` per ownership esplicita (`.github/CODEOWNERS`)
@@ -67,27 +66,26 @@ Per mantenere il repository allineato alle best practice GitHub anche in contest
 
 Passi consigliati dopo il clone/fork:
 
-1. verifica branch protection su `main` (almeno: linear history; CI come gate manuale quando serve contenere i minuti Actions)
-2. abilita secret scanning e Dependabot alerts dal tab Security, ma lascia disattivati gli update automatici se il budget Actions e' limitato
+1. verifica branch protection su `main` (almeno: linear history; niente status check Actions obbligatorie)
+2. abilita secret scanning e Dependabot alerts dal tab Security, ma lascia disattivati workflow/update automatici
 3. usa PR anche da branch personali per lasciare audit trail e checklist standard
 4. usa titoli PR di squash in formato Conventional Commit per tenere coerenti versioni e changelog
 5. in GitHub abilita `Squash merge` e valuta di disabilitare `Merge commit` e `Rebase merge` per rendere il flusso piu' coerente
 
-Per usare Codex su `chatgpt.com` come postazione di lavoro e, solo quando richiesto esplicitamente, come ponte di deploy GitHub Actions, vedi [`docs/CODEX_CLOUD_DEPLOY.md`](docs/CODEX_CLOUD_DEPLOY.md).
+Per usare Codex su `chatgpt.com` come postazione di lavoro senza Actions, vedi [`docs/CODEX_CLOUD_DEPLOY.md`](docs/CODEX_CLOUD_DEPLOY.md).
 
 Il flusso consigliato da remoto e:
 
 - Codex o GitHub preparano il codice fino a `main`
 - il deploy resta manuale sulla VPS tramite SSH e script versionati
-- GitHub Actions non esegue deploy automatici su push
-- GitHub Actions non esegue release, PR check o merge automatici
-- il workflow `Deploy VPS` va lanciato solo quando il maintainer chiede esplicitamente di fare il deploy con GitHub Actions
+- GitHub Actions non esegue CI, deploy, release, PR check o merge
+- ogni attivita' operativa resta manuale e locale/VPS
 
 In pratica, da Codex web/mobile ti basta:
 
 - aprire il repository GitHub `max23468/FiscalBay`
 - lavorare su branch o su `main`
-- fermarti al codice e alla verifica, salvo richiesta esplicita di deploy via GitHub Actions
+- fermarti al codice e alla verifica locale; il deploy resta manuale sulla VPS FiscalBay
 
 ## Versioni e changelog
 
@@ -101,15 +99,13 @@ Regola operativa minima:
 - `MINOR` per nuove funzionalita' compatibili, ad esempio `v0.2.0`
 - `MAJOR` per breaking change, ad esempio `v1.0.0`
 
-Il flusso e' allineato a GitHub, ma resta manuale finche' il budget Actions e' limitato:
+Il flusso resta manuale senza GitHub Actions:
 
-- `Release Please` va lanciato manualmente solo quando vuoi aprire o aggiornare una Release PR
-- `PR Title` e `CI` sono manuali per ridurre il consumo Actions
-- il merge della Release PR e' manuale
-- per evitare il limite `Resource not accessible by integration` sulla pubblicazione finale, configura il secret repository `RELEASE_PLEASE_TOKEN`; senza secret i workflow ripiegano su `GITHUB_TOKEN`, ma la creazione della GitHub Release puo' fallire
-- la Release PR aggiorna `CHANGELOG.md` e la versione in `pyproject.toml`
-- quando GitHub Actions e' disponibile, il merge della Release PR crea tag e GitHub Release; gli artefatti si allegano solo tramite workflow manuale
-- se serve, il workflow `Release Assets` permette di rigenerare manualmente gli artefatti per un tag esistente
+- `release-please` puo' essere eseguito localmente solo quando vuoi preparare changelog/versione
+- CI locale: `bash scripts/ci_verify.sh`
+- build locale quando serve: `python -m build`
+- tag e GitHub Release si creano solo su richiesta esplicita, con `gh` o UI GitHub
+- non fare bump manuali di versione, tag o release fuori da una richiesta di release esplicita
 
 Per i dettagli operativi e le policy di naming/bump vedere `docs/RELEASE_POLICY.md`.
 

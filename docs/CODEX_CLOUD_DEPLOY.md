@@ -1,84 +1,79 @@
-# Deploy Da Codex Cloud Con GitHub Actions
+# Codex Senza GitHub Actions
 
-Questa guida serve per usare `chatgpt.com` come postazione di lavoro e, solo su richiesta esplicita del maintainer, come ponte di deploy GitHub Actions senza dipendere dal Mac locale.
+Questa guida descrive il flusso operativo quando si usa Codex da web/mobile o da
+locale senza consumare GitHub Actions.
 
 ## Stato attuale
 
-Il deploy SSH diretto dal runtime Codex cloud verso la VPS non e affidabile, e in piu i secret applicativi non risultano disponibili nei task shell cloud in modo consistente.
+GitHub Actions non e' un canale operativo attivo per FiscalBay.
 
-Il default operativo resta quindi il deploy manuale sulla VPS tramite SSH e script versionati. Codex non deve avviare GitHub Actions per deploy come conseguenza implicita di commit, push, merge o release.
+Non sono versionati workflow in `.github/workflows/` e non vanno aggiunti o
+riattivati senza richiesta esplicita del maintainer.
 
-Quando il maintainer chiede esplicitamente un deploy con GitHub Actions, il percorso e:
+Motivo operativo:
 
-1. Codex cloud prepara e pubblica il codice su GitHub.
-2. GitHub Actions sincronizza il repository sulla VPS via SSH.
-3. La VPS applica installazione o aggiornamento locale senza fare `git pull`.
-4. GitHub Actions riavvia i servizi e lancia lo smoke check dalla VPS.
+- il budget Actions puo' essere esaurito o non disponibile
+- i run falliti per billing/spending limit non sono risolvibili rilanciando job
+- deploy, verifica, release e manutenzione devono restare riproducibili anche solo
+  da Mac locale e VPS FiscalBay
 
-## Flusso consigliato da mobile
+## Flusso Da Codex Web O Mobile
 
-Per deploy ordinari:
+1. prepara codice e documentazione nel repository
+2. esegui o chiedi di eseguire verifiche locali quando il lavoro torna sul Mac
+3. porta le modifiche su `main` solo dopo self-review
+4. non avviare GitHub Actions
+5. per deploy, usa solo il percorso manuale sulla VPS FiscalBay
 
-1. fai lavorare Codex sul branch desiderato
-2. porta la modifica su `main`
-3. esegui il deploy manuale sulla VPS con il runbook operativo quando decidi di pubblicare
+## Verifiche Manuali
 
-Per deploy via GitHub Actions o di una revisione specifica:
-
-- usa il workflow `Deploy VPS` in GitHub Actions con `workflow_dispatch`
-- passa `target_ref` se vuoi deployare un commit o ref specifico
-- usalo solo quando chiedi esplicitamente a Codex o al maintainer di fare il deploy con GitHub Actions
-
-Questo flusso non richiede accesso dal runtime Codex cloud alla rete privata della VPS: il ponte lo fa GitHub Actions.
-
-## Secret richiesti in GitHub Actions
-
-Configura questi secret nel repository GitHub:
-
-- `FISCALBAY_VPS_HOST`
-- `FISCALBAY_VPS_USER`
-- `FISCALBAY_VPS_PORT`
-- `FISCALBAY_VPS_SSH_PRIVATE_KEY_B64`
-- `FISCALBAY_VPS_SSH_KNOWN_HOSTS`
-
-Note operative:
-
-- `FISCALBAY_VPS_HOST` e obbligatorio
-- `FISCALBAY_VPS_SSH_PRIVATE_KEY_B64` deve contenere la chiave privata SSH in Base64
-- `FISCALBAY_VPS_USER` puo restare `opc`
-- `FISCALBAY_VPS_PORT` puo restare `22`
-- `FISCALBAY_VPS_SSH_KNOWN_HOSTS` e fortemente consigliato per mantenere il controllo stretto della host key
-
-I secret applicativi eBay e Telegram continuano invece a vivere sulla VPS nel file `/opt/fiscalbay/.env`.
-
-## Come produrre i secret GitHub
-
-Chiave privata in Base64:
+Gate locale preferito:
 
 ```bash
-base64 < ~/.ssh/id_ed25519 | tr -d '\n'
+bash scripts/ci_verify.sh
 ```
 
-Host key:
+Quando il cambio tocca packaging o release:
 
 ```bash
-ssh-keyscan -H <host-vps>
+python -m build
 ```
 
-## Cosa fa il workflow
+Per controllare workflow residui non devono esserci file versionati qui:
 
-Il workflow GitHub esegue:
+```bash
+test ! -d .github/workflows || ! find .github/workflows -type f | grep .
+```
 
-- checkout della revisione target
-- sincronizzazione del repository verso `/opt/fiscalbay`
-- installazione o aggiornamento locale con `deploy/install-vps.sh`
-- restart di `fiscalbay-bot`
-- restart di `fiscalbay-oauth` se il servizio e gia abilitato
-- verifica dei timer `fiscalbay-backup.timer`, `fiscalbay-alertcheck.timer` e `fiscalbay-reconcile.timer`
-- smoke test applicativo con `deploy/smoke-check.sh`
+Il risultato atteso e' vuoto o la directory assente.
 
-## Fallback locale
+## Deploy Manuale
 
-I comandi SSH diretti e gli script locali sono il percorso standard per amministrazione e deploy manuale della VPS.
+La VPS FiscalBay corretta e':
 
-Su `chatgpt.com`, il workflow GitHub Actions e' un canale disponibile solo quando viene richiesto esplicitamente.
+```bash
+ssh opc@79.72.45.89
+```
+
+Da Codex locale, per comandi one-shot usare:
+
+```bash
+ssh -tt -o BatchMode=yes -o ConnectTimeout=10 opc@79.72.45.89 'hostname'
+```
+
+Output atteso:
+
+```text
+fiscalbay-bot
+```
+
+Dopo questa verifica, seguire `docs/RUNBOOK.md` e `docs/OPERATIONS.md`.
+
+## Release Manuale
+
+`release-please` resta il riferimento per changelog/versione, ma senza GitHub
+Actions deve essere usato solo da ambiente locale o sostituito da una procedura
+manuale esplicitamente richiesta.
+
+Non creare tag, GitHub Release, bump di versione o modifiche manuali a
+`CHANGELOG.md` root senza una richiesta esplicita di release.
