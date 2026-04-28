@@ -25,8 +25,11 @@ class ReleaseInfoTests(unittest.TestCase):
         self.assertEqual(info["package_version"], "1.2.3")
         self.assertEqual(info["package_version_source"], "pyproject")
         self.assertEqual(info["git_commit"], "")
+        self.assertEqual(info["git_tag"], "v1.2.3")
+        self.assertEqual(info["git_latest_tag"], "v1.2.3")
+        self.assertEqual(info["git_commits_since_latest_tag"], 0)
         self.assertIsNone(info["git_dirty"])
-        self.assertEqual(info["release_status"], "unknown")
+        self.assertEqual(info["release_status"], "package_release")
 
     def test_collect_release_info_marks_dirty_checkout(self) -> None:
         git_outputs = {

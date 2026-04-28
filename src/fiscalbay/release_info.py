@@ -107,6 +107,12 @@ def _release_status(*, git_dirty: bool | None, git_tag: str, commits_since_tag: 
     return "tagged_unknown_cleanliness"
 
 
+def _version_tag(package_version: str) -> str:
+    if package_version == "unknown":
+        return ""
+    return f"v{package_version}"
+
+
 def collect_release_info(repo_root: Path | None = None) -> ReleaseInfo:
     """Collect local package and Git metadata without requiring a Git checkout."""
 
@@ -119,6 +125,17 @@ def collect_release_info(repo_root: Path | None = None) -> ReleaseInfo:
     git_latest_tag = _run_git(["describe", "--tags", "--abbrev=0"], cwd=root) or ""
     git_dirty = _git_dirty(root)
     commits_since_latest_tag = _commits_since_latest_tag(root, git_latest_tag)
+    release_status = _release_status(
+        git_dirty=git_dirty,
+        git_tag=git_tag,
+        commits_since_tag=commits_since_latest_tag,
+    )
+    if not git_commit and package_version != "unknown":
+        package_tag = _version_tag(package_version)
+        git_tag = package_tag
+        git_latest_tag = git_latest_tag or package_tag
+        commits_since_latest_tag = 0
+        release_status = "package_release"
     return {
         "package_version": package_version,
         "package_version_source": package_version_source,
@@ -129,9 +146,5 @@ def collect_release_info(repo_root: Path | None = None) -> ReleaseInfo:
         "git_latest_tag": git_latest_tag,
         "git_commits_since_latest_tag": commits_since_latest_tag,
         "git_dirty": git_dirty,
-        "release_status": _release_status(
-            git_dirty=git_dirty,
-            git_tag=git_tag,
-            commits_since_tag=commits_since_latest_tag,
-        ),
+        "release_status": release_status,
     }
