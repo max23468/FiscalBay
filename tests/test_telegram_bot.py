@@ -269,6 +269,7 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("/settings", text)
         self.assertIn("/settings notifiche on", text)
         self.assertIn("/request_access", text)
+        self.assertNotIn("/ping", text)
         self.assertNotIn("/ordini report", text)
         self.assertNotIn("/admin_users", text)
         self.assertIn(BOT_DISPLAY_NAME, text)
@@ -278,6 +279,7 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("Area admin", text)
         self.assertIn("/admin_users", text)
         self.assertIn("/admin help", text)
+        self.assertIn("/ping", text)
         self.assertNotIn("/approve_user", text)
 
     def test_build_telegram_branding_profile_contains_expected_fields(self) -> None:
@@ -289,6 +291,7 @@ class TelegramBotTests(unittest.TestCase):
         self.assertGreaterEqual(len(commands), 6)
         self.assertEqual(commands[0]["command"], "help")
         self.assertEqual(commands[1]["command"], "stato")
+        self.assertNotIn("ping", {command["command"] for command in commands})
 
     @patch("src.fiscalbay.bot.fetch_records")
     @patch("src.fiscalbay.bot.load_config")

@@ -609,6 +609,7 @@ class BotIntegrationTests(unittest.TestCase):
                 "/suspend_user 999",
                 "/reactivate_user 999",
                 "/service_mode maintenance",
+                "/ping",
             ):
                 with self.subTest(command=command):
                     replies = process_message(

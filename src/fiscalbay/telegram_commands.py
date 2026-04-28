@@ -230,6 +230,7 @@ def build_help_text(*, is_admin: bool = False) -> str:
             "• 🧭 <code>/admin</code> → cruscotto operativo\n"
             "• 👥 <code>/admin_users</code> → utenti e richieste accesso\n"
             "• 🩺 <code>/tenant_health [user_id]</code> → salute tenant\n"
+            "• 🟢 <code>/ping</code> → diagnostica rapida bot\n"
             "Dettagli admin: <code>/admin help</code>\n"
         )
     return (
@@ -239,7 +240,6 @@ def build_help_text(*, is_admin: bool = False) -> str:
         "Esperienza consigliata: usa i pulsanti rapidi del bot per muoverti tra "
         "collegamento account, stato e notifiche senza ricordare ogni comando.\n\n"
         "Comandi principali:\n"
-        "• 🟢 <code>/ping</code> → verifica rapida\n"
         "• 📊 <code>/stato</code> → stato bot e servizio\n"
         "• 👤 <code>/account</code> → stato account eBay e azioni collegamento\n"
         "• 📦 <code>/ordini</code> → centro ordini e riepilogo azioni disponibili\n"

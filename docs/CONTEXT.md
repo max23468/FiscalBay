@@ -218,7 +218,6 @@ l'admin; i dettagli operativi sono concentrati in `/ordini`, `/settings` e
 
 - `/start`
 - `/help`
-- `/ping`
 - `/stato`
 - `/account`
 - `/account collega`
@@ -229,6 +228,7 @@ l'admin; i dettagli operativi sono concentrati in `/ordini`, `/settings` e
 - `/settings notifiche on|off`
 - `/admin`
 - `/admin help`
+- `/ping` (diagnostica rapida admin)
 - `/admin_users all|pending|unlinked|reconnect|inactive`
 - `/ordini fiscali`
 - `/ordini tutti`
