@@ -1297,6 +1297,45 @@ def format_admin_security_report(report: Mapping[str, object]) -> str:
     return "\n".join(lines)
 
 
+def _format_admin_scale_triggers(rows: Iterable[Mapping[str, object]]) -> list[str]:
+    rendered: list[str] = []
+    for row in rows:
+        name = html.escape(str(row.get("name") or "unknown"))
+        current = html.escape(str(row.get("current") or 0))
+        limit = html.escape(str(row.get("limit") or 0))
+        usage = html.escape(str(row.get("usage_percent") or 0))
+        level = html.escape(str(row.get("level") or "ok"))
+        rendered.append(
+            f"• <code>{name}</code>: <code>{current}</code>/<code>{limit}</code> "
+            f"(<code>{usage}%</code>) livello <code>{level}</code>"
+        )
+    return rendered
+
+
+def format_admin_scale_readiness(report: Mapping[str, object]) -> str:
+    status = html.escape(str(report.get("status") or "unknown"))
+    summary = html.escape(str(report.get("summary") or ""))
+    signals = [html.escape(str(item)) for item in report.get("signals") or []]
+    next_actions = [html.escape(str(item)) for item in report.get("next_actions") or []]
+    migration_plan = [html.escape(str(item)) for item in report.get("migration_plan") or []]
+    lines = [
+        "📏 <b>Scale readiness</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"Stato: <code>{status}</code>",
+        f"Sintesi: {summary}",
+        f"Segnali: <code>{', '.join(signals) if signals else 'none'}</code>",
+        "\n📊 <b>Trigger</b>",
+    ]
+    trigger_lines = _format_admin_scale_triggers(report.get("triggers") or [])
+    lines.extend(trigger_lines or ["• Nessun trigger disponibile."])
+    lines.append("\n➡️ <b>Prossime azioni</b>")
+    lines.extend(f"• {action}" for action in next_actions)
+    lines.append("\n🧭 <b>Piano migrazione pronto</b>")
+    lines.extend(f"• {step}" for step in migration_plan[:4])
+    lines.append("CLI: <code>fiscalbay-scale-check</code>.")
+    return "\n".join(lines)
+
+
 def format_admin_maintenance_overview(payload: Mapping[str, object]) -> str:
     dashboard = payload.get("dashboard") or {}
     metrics = dashboard.get("metrics") or {}
@@ -1853,6 +1892,7 @@ def format_admin_command_help() -> str:
         "• <code>/admin export &lt;id&gt;</code> → export tenant senza segreti\n"
         "• <code>/admin delete_tenant &lt;id&gt; confirm</code> → cancellazione operativa\n"
         "• <code>/admin service normal|maintenance|degraded</code> → modalita' servizio\n"
+        "• <code>/admin scala</code> → readiness SQLite/Postgres\n"
         "• <code>/admin sicurezza</code> → check security operations\n"
         "• <code>/admin storico [id] [limit]</code> → audit operativo recente\n"
         "• <code>/admin_users all|pending|unlinked|reconnect|inactive</code> → liste utenti\n"

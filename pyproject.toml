@@ -22,6 +22,7 @@ fiscalbay-fix-git-lock = "fiscalbay.git_utils:main"
 fiscalbay-git-safe = "fiscalbay.git_utils:safe_git_main"
 fiscalbay-healthcheck = "fiscalbay.healthcheck:main"
 fiscalbay-reconcile = "fiscalbay.reconcile:main"
+fiscalbay-scale-check = "fiscalbay.scale_readiness:main"
 fiscalbay-security-check = "fiscalbay.security_ops:main"
 
 [project.optional-dependencies]
@@ -68,6 +69,7 @@ files = [
   "src/fiscalbay/release_info.py",
   "src/fiscalbay/logging_utils.py",
   "src/fiscalbay/healthcheck.py",
+  "src/fiscalbay/scale_readiness.py",
   "src/fiscalbay/security_ops.py",
 ]
 strict = true

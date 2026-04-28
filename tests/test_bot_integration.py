@@ -1240,6 +1240,59 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("TELEGRAM_BOT_TOKEN", replies[0])
             self.assertIn("fiscalbay-security-check", replies[0])
 
+    def test_admin_scale_surfaces_scale_readiness_report(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+
+            with patch(
+                "src.fiscalbay.bot.build_scale_readiness_report",
+                return_value={
+                    "status": "watch",
+                    "summary": "Profilo ancora valido.",
+                    "signals": ["tenant_snapshot_stale"],
+                    "triggers": [
+                        {
+                            "name": "approved_users",
+                            "current": 15,
+                            "limit": 25,
+                            "usage_percent": 60,
+                            "level": "watch",
+                        }
+                    ],
+                    "next_actions": ["monitorare trend tenant/account/token"],
+                    "migration_plan": ["freeze temporaneo", "backup completo"],
+                },
+            ):
+                replies = process_message(
+                    text="/admin scala",
+                    chat_id=123,
+                    telegram_config=config,
+                    ebay_environment="production",
+                    telegram_user_id=123,
+                )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Scale readiness", replies[0])
+            self.assertIn("Stato: <code>watch</code>", replies[0])
+            self.assertIn("approved_users", replies[0])
+            self.assertIn("fiscalbay-scale-check", replies[0])
+
     def test_service_mode_is_rate_limited(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"

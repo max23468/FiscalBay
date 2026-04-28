@@ -99,6 +99,7 @@ questi eventi:
 
 - superamento delle soglie `FISCALBAY_PUBLIC_*`
 - `sqlite_migration_recommended` nell'healthcheck
+- `migration_required` in `fiscalbay-scale-check` o `/admin scala`
 - traffico bursty o uso giornaliero intenso
 - richiesta di apertura pubblica libera
 - necessita' di SLA o affidabilita' superiore al best effort

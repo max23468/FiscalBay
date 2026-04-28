@@ -381,6 +381,9 @@ Queste soglie non sono un obiettivo commerciale da raggiungere: sono il punto in
 cui fermare l'allargamento, rivedere la VPS e preparare uno storage piu' robusto.
 Il report `fiscalbay-healthcheck` espone `public_service.*` e segnala
 `sqlite_migration_recommended` quando il servizio esce dal profilo previsto.
+Il report `fiscalbay-scale-check` e il comando Telegram `/admin scala`
+trasformano quelle soglie in una decisione operativa read-only:
+`within_policy`, `watch`, `migration_recommended` o `migration_required`.
 
 Limiti funzionali:
 
@@ -400,6 +403,8 @@ SQLite resta accettabile solo dentro il profilo `approved_public_small`: pochi
 tenant approvati, traffico non bursty, un solo processo principale e backup/restore
 verificati. Prima di aprire davvero il numero di utenti approvati, il target
 diventa Postgres o un database equivalente gestito in modo piu' robusto.
+La migrazione effettiva richiede comunque una fase dedicata: freeze operativo,
+backup verificato, import su copia offline, smoke check e rollback documentato.
 
 ## Governance applicativa minima
 

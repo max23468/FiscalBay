@@ -162,7 +162,10 @@ Controllo accessi Telegram:
 - il runtime normalizza anche alias legacy come `active` e `rejected`, cosi' il controllo accessi resta coerente anche su record vecchi nel `state.db`
 - gli utenti non approvati possono solo usare `/start`, `/help`, `/altre_azioni` e `/request_access`
 - l'admin riceve una richiesta con pulsanti inline `Approva` e `Rifiuta`
-- in alternativa l'admin puo' usare `/admin_users all|pending|unlinked|reconnect|inactive`, `/tenant_health`, `/admin`, `/admin sicurezza`, `/admin dormant [ore]`, `/admin export <telegram_user_id>`, `/admin delete_tenant <telegram_user_id> confirm`, `/approve_user <telegram_user_id>`, `/reject_user <telegram_user_id>`, `/suspend_user <telegram_user_id>` e `/reactivate_user <telegram_user_id>`
+- in alternativa l'admin puo' usare `/admin_users all|pending|unlinked|reconnect|inactive`, `/tenant_health`, `/admin`, `/admin scala`, `/admin sicurezza`, `/admin dormant [ore]`, `/admin export <telegram_user_id>`, `/admin delete_tenant <telegram_user_id> confirm`, `/approve_user <telegram_user_id>`, `/reject_user <telegram_user_id>`, `/suspend_user <telegram_user_id>` e `/reactivate_user <telegram_user_id>`
+- per scale readiness l'admin puo' usare `/admin scala`, che classifica il
+  profilo in `within_policy`, `watch`, `migration_recommended` o
+  `migration_required` senza eseguire migrazioni automatiche
 - per controlli security operations l'admin puo' usare `/admin sicurezza`, che
   riassume permessi `.env`, stato `state.db`, inventario env, fallback plaintext,
   backup e restore drill senza mostrare valori segreti
@@ -235,6 +238,20 @@ Security operations check:
   configurazione rischiosa
 - controlla ultimo backup manutentivo e ultimo restore drill come warning se
   mancanti o stali
+
+Scale readiness check:
+
+- entrypoint CLI: `fiscalbay-scale-check`
+- comando Telegram admin: `/admin scala`
+- usa l'healthcheck esistente come sorgente dati e resta read-only
+- trigger principali: utenti approvati, account collegati, token attivi,
+  dimensione `state.db`
+- livelli: `within_policy`, `watch`, `migration_recommended`,
+  `migration_required`
+- segnali di contesto: operation queue, snapshot tenant stale, cicli errore e
+  warning pubblici healthcheck
+- il report include un piano Postgres pronto da seguire quando serve, ma non
+  cambia configurazione runtime e non sposta dati
 
 Alert basilari runtime:
 

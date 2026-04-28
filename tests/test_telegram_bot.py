@@ -50,6 +50,7 @@ from src.fiscalbay.telegram_commands import (
     format_admin_dashboard,
     format_admin_history,
     format_admin_maintenance_overview,
+    format_admin_scale_readiness,
     format_admin_security_report,
     format_order_date,
     is_admin_authorized,
@@ -386,6 +387,32 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("TELEGRAM_BOT_TOKEN", text)
         self.assertIn("EBAY_TENANT_TOKEN_KEY", text)
         self.assertIn("fiscalbay-security-check", text)
+
+    def test_format_admin_scale_readiness_renders_triggers_and_plan(self) -> None:
+        text = format_admin_scale_readiness(
+            {
+                "status": "migration_recommended",
+                "summary": "Soglie vicine: prepara piano Postgres.",
+                "signals": ["tenant_snapshot_stale"],
+                "triggers": [
+                    {
+                        "name": "active_token_sets",
+                        "current": 20,
+                        "limit": 25,
+                        "usage_percent": 80,
+                        "level": "recommend",
+                    }
+                ],
+                "next_actions": ["preparare prova di migrazione su copia offline"],
+                "migration_plan": ["freeze temporaneo", "backup completo", "provisioning Postgres"],
+            }
+        )
+
+        self.assertIn("Scale readiness", text)
+        self.assertIn("migration_recommended", text)
+        self.assertIn("active_token_sets", text)
+        self.assertIn("tenant_snapshot_stale", text)
+        self.assertIn("fiscalbay-scale-check", text)
 
     def test_admin_maintenance_overview_includes_release_metadata(self) -> None:
         text = format_admin_maintenance_overview(

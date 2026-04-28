@@ -400,6 +400,19 @@ richieste, fallback plaintext dei token tenant, profilo `approved_public_small`,
 ultimo backup e ultimo restore drill. In Telegram l'admin puo' leggere la stessa
 sintesi con `/admin sicurezza`.
 
+### Scale Readiness Check
+
+Per capire se SQLite resta adeguato senza avviare migrazioni automatiche:
+
+```bash
+fiscalbay-scale-check
+```
+
+Il report classifica lo stato in `within_policy`, `watch`,
+`migration_recommended` o `migration_required` usando soglie pubbliche, dimensione
+SQLite, queue e snapshot tenant. In Telegram l'admin puo' leggere la sintesi con
+`/admin scala`.
+
 L'healthcheck verifica almeno:
 
 - presenza del lock del bot
@@ -492,6 +505,7 @@ Comandi admin:
 - `/admin` (admin)
 - `/ping` (admin, diagnostica rapida)
 - `/admin manutenzione` (admin)
+- `/admin scala` (admin)
 - `/admin sicurezza` (admin)
 - `/admin storico [telegram_user_id] [limit]` (admin)
 - `/admin_users all|pending|unlinked|reconnect|inactive` (admin)
@@ -524,6 +538,9 @@ Comportamento:
 - quando un nuovo utente viene visto per la prima volta dal runtime, l'admin riceve una notifica proattiva con user id/chat id per gestire subito approvazione o rifiuto
 - l'admin puo' approvare o rifiutare richieste dal messaggio inline o con `/approve_user <telegram_user_id>` e `/reject_user <telegram_user_id>`
 - `/admin_users` mostra all'admin lo stato degli utenti registrati (`new`, `pending`, `approved`, `blocked`, `admin`) e accorpa i filtri prima esposti come comandi separati
+- `/admin scala` mostra se il profilo SQLite resta dentro policy, se serve solo
+  monitorare o se e' opportuno preparare o richiedere una migrazione verso
+  Postgres/equivalente; non esegue migrazioni automatiche
 - `/admin sicurezza` mostra il report security operations senza stampare valori
   segreti: permessi `.env`, stato `state.db`, inventario env, backup e restore
   drill
@@ -556,6 +573,9 @@ SQLite resta la scelta operativa per il servizio pubblico piccolo e approvato.
 Quando `fiscalbay-healthcheck` segnala `sqlite_migration_recommended` o una delle
 soglie `FISCALBAY_PUBLIC_*` viene superata, prima di ampliare gli utenti approvati
 va pianificato il passaggio a un database piu' robusto.
+Il comando `fiscalbay-scale-check` e `/admin scala` rendono esplicito il livello
+decisionale senza cambiare storage: `watch`, `migration_recommended` e
+`migration_required` sono segnali operativi, non automazioni di migrazione.
 
 Nello stato locale salva:
 

@@ -195,6 +195,12 @@ Verifica security operations senza stampare segreti:
 ./.venv/bin/fiscalbay-security-check
 ```
 
+Verifica scale readiness senza migrazione automatica:
+
+```bash
+./.venv/bin/fiscalbay-scale-check
+```
+
 Verifica timer giornaliero:
 
 ```bash

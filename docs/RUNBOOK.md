@@ -190,6 +190,14 @@ Include anche policy e soglie del servizio pubblico:
 - `public_service.sqlite_migration_recommended`
 - `public_service.scale_within_policy`
 
+Il comando `fiscalbay-scale-check` sintetizza questi valori in una decisione
+operativa read-only:
+
+- `within_policy`: SQLite resta il default
+- `watch`: profilo valido, ma con segnali da monitorare
+- `migration_recommended`: preparare piano Postgres senza migrare subito
+- `migration_required`: fermare crescita e migrare prima di allargare
+
 Metriche prodotto lato admin:
 
 - `/admin` mostra il set stabile minimo per governare il servizio piccolo:
@@ -234,6 +242,8 @@ Override possibili via env:
 
 Se compare `sqlite_migration_recommended`, non allargare il numero di utenti
 approvati prima di avere un piano di migrazione verso Postgres o equivalente.
+Per una sintesi immediata usare `./.venv/bin/fiscalbay-scale-check` o
+`/admin scala`.
 
 Healthcheck esterno HTTPS:
 

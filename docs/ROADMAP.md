@@ -27,6 +27,7 @@ Non ci sono fasi aperte bloccanti per `1.0.0`.
 - Fase 1.3 - Self-service assistito utente
 - Fase 1.4 - Admin comfort e osservabilita' leggera
 - Fase 1.5 - Security operations
+- Fase 1.6 - Scale readiness senza migrazione automatica
 
 ## Principi 1.x
 
@@ -46,16 +47,4 @@ Principi guida:
 
 ## Roadmap 1.x
 
-### 1.6.0 - Scale readiness senza migrazione automatica
-
-Obiettivo:
-
-- preparare una decisione tecnica chiara per il giorno in cui SQLite non basta
-  piu'
-
-Direzione:
-
-- produrre un piano pronto per Postgres o database equivalente gestito
-- definire trigger concreti per uscire da SQLite
-- evitare migrazioni premature finche' healthcheck, soglie pubbliche e carico
-  reale restano dentro il profilo approvato
+Prossima fase da definire in base ai segnali reali di esercizio.
