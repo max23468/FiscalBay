@@ -207,6 +207,12 @@ Export fiscale venditore da CLI:
 ./.venv/bin/fiscalbay-fiscal-export --days 30 --max-results 200 --output export-fiscale.csv
 ```
 
+Snapshot supporto tenant da CLI:
+
+```bash
+./.venv/bin/fiscalbay-support-snapshot 123456789 --state-path data/state.db
+```
+
 Verifica timer giornaliero:
 
 ```bash

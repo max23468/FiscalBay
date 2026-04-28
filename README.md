@@ -18,13 +18,14 @@ Il dettaglio dei criteri e dei limiti è in [`docs/RELEASE_READINESS.md`](docs/R
 
 ## Panoramica
 
-Il repository contiene due entry point:
+Il repository contiene più entry point operativi:
 
 - `fiscalbay`: utility CLI per leggere ordini e stampare i risultati in tabella, JSON o CSV
 - `fiscalbay-bot`: bot Telegram con comandi interattivi e notifiche automatiche dei nuovi ordini
 - `fiscalbay-oauth-server`: callback server minimale per l'onboarding self-service Telegram + eBay OAuth
 - `fiscalbay-reconcile`: worker one-shot per reconciliation periodica e coda operativa
 - `fiscalbay-fiscal-export`: export fiscale venditore con stato dati disponibili/mancanti
+- `fiscalbay-support-snapshot`: riepilogo supporto leggibile per singolo tenant Telegram
 
 Funzionalità principali:
 
@@ -350,6 +351,20 @@ L'export aggiunge periodo, stato del dato fiscale (`available`/`missing`) e camp
 fiscalbay-fiscal-export --telegram-user-id 123456789 --state-path data/state.db --output export-fiscale.csv
 ```
 
+### Support snapshot tenant
+
+```bash
+fiscalbay-support-snapshot 123456789 --state-path data/state.db
+```
+
+Lo snapshot raccoglie stato utente, account eBay collegato, stato token, ultimo
+sync, ordini recenti tracciati, coda retry, audit recente e azioni consigliate.
+Per integrazioni o diagnosi automatizzate:
+
+```bash
+fiscalbay-support-snapshot 123456789 --state-path data/state.db --json
+```
+
 ### Esportazione JSON
 
 ```bash
@@ -485,6 +500,7 @@ Comandi principali per tutti:
 - `/start`
 - `/help`
 - `/stato`
+- `/support`
 - `/account`
 - `/ordini`
 - `/altre_azioni`
@@ -521,6 +537,7 @@ Comandi admin:
 - `/admin manutenzione` (admin)
 - `/admin scala` (admin)
 - `/admin sicurezza` (admin)
+- `/admin support <telegram_user_id>` (admin)
 - `/admin storico [telegram_user_id] [limit]` (admin)
 - `/admin_users all|pending|unlinked|reconnect|inactive` (admin)
 - `/tenant_health [telegram_user_id]` (admin)
@@ -542,6 +559,7 @@ Comportamento:
 - `/ordini export` genera un export CSV inline con periodo, stato fiscale e campi mancanti per ogni ordine incluso
 - i messaggi ordine con identificativo fiscale valorizzato includono un pulsante inline per copiare direttamente il valore fiscale, ad esempio CF o P.IVA
 - `/stato` mostra ultimo check, contatori e dimensione della coda retry; `/stato servizio` mostra lo stato servizio sintetico
+- `/support` mostra uno snapshot supporto del proprio tenant con account, token, ultimi sync, ordini recenti, retry, audit e azioni consigliate
 - `/account` riassume lo stato eBay; `collega`, `reconnect` e `scollega` gestiscono le azioni account e indicano chiaramente se il consenso eBay va rimosso manualmente dalle impostazioni eBay
 - `/settings` riassume preferenze chat e tenant; `notifiche`, `filtro`,
   `policy`, `dati` e `lascia` gestiscono le azioni correlate
@@ -561,6 +579,8 @@ Comportamento:
   drill
 - `/admin storico` mostra gli ultimi eventi audit operativi e può filtrare per
   tenant, così supporto e diagnosi restano dentro Telegram
+- `/admin support <telegram_user_id>` mostra lo stesso snapshot supporto per un
+  tenant specifico, utile prima di chiedere screenshot o log all'utente
 - gli alias granulari precedenti (`/connect`, `/disconnect`, `/reconnect_status`, `/notifications`, `/leave_bot`, `/ultimi`, `/tutti`, `/ordine`, `/review_orders`, `/report_summary`, `/priority_orders`, `/why_not_notified`, `/service_status`, `/policy`, `/users`, `/pending_users`, `/unlinked_users`, `/reconnect_users`, `/inactive_users`, `/admin_dashboard`, `/maintenance_overview`) sono stati accorpati e ora rimandano ai comandi canonici
 
 ### Notifiche automatiche

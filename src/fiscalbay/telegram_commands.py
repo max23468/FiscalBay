@@ -24,6 +24,7 @@ from .models import (
     is_pending_telegram_user_status,
     normalize_telegram_user_status,
 )
+from .support_snapshot import SupportSnapshotReport
 
 TELEGRAM_CMD_MAX_DAYS = 365
 TELEGRAM_CMD_MIN_DAYS = 1
@@ -293,6 +294,7 @@ def build_help_text(*, is_admin: bool = False) -> str:
         "Comandi principali:\n"
         "• 📊 <code>/stato</code> → stato bot e servizio\n"
         "• 👤 <code>/account</code> → stato account eBay e azioni collegamento\n"
+        "• 🧾 <code>/support</code> → snapshot supporto del tuo tenant\n"
         "• 📦 <code>/ordini</code> → centro ordini e riepilogo azioni disponibili\n"
         "• 🧩 <code>/altre_azioni</code> → guida, preferenze e accesso\n"
         f"{admin_lines}\n"
@@ -327,6 +329,7 @@ def build_other_actions_text(*, is_admin: bool = False) -> str:
         "• <code>/help</code> → guida rapida\n"
         "• <code>/request_access</code> → richiede accesso all'admin del bot\n\n"
         "<b>Preferenze</b>\n"
+        "• <code>/support</code> → snapshot supporto del tuo tenant\n"
         "• <code>/settings</code> → preferenze chat e tenant\n"
         "• <code>/settings notifiche on</code> → attiva notifiche\n"
         "• <code>/settings notifiche off</code> → disattiva notifiche\n"
@@ -656,6 +659,7 @@ def should_attach_main_menu(command: str) -> bool:
         "/altre_azioni",
         "/ping",
         "/stato",
+        "/support",
         "/account",
         "/connect",
         "/disconnect",
@@ -879,6 +883,72 @@ def format_data_request_help(policy_status: Mapping[str, object]) -> str:
         "• <code>/settings dati cancellazione</code> → chiedi cancellazione dati locali\n"
         "La cancellazione resta confermata dall'admin e mantiene l'audit minimo "
         "fino alla retention."
+    )
+
+
+def format_support_snapshot(report: SupportSnapshotReport, *, admin_view: bool = False) -> str:
+    user = report.user
+    account = report.account_status
+    runtime = report.runtime_state
+    memory = runtime.memory
+    title = "🧾 <b>Support Snapshot Utente</b>" if admin_view else "🧾 <b>Support Snapshot</b>"
+    user_name = "n/d"
+    user_status = "unknown"
+    if user is not None:
+        user_name = user.display_name or user.username or "n/d"
+        user_status = user.status
+    latest_audit = report.recent_audit[0] if report.recent_audit else None
+    latest_audit_text = (
+        f"{latest_audit.created_at} {latest_audit.event_type}/{latest_audit.outcome}"
+        if latest_audit is not None
+        else "none"
+    )
+    recent_orders = [
+        (
+            "ultimo visto",
+            memory.last_seen_order_id,
+            memory.last_seen_order_created_at,
+        ),
+        (
+            "ultimo notificato",
+            memory.last_notified_order_id,
+            memory.last_notified_order_created_at,
+        ),
+    ]
+    order_lines = []
+    for label, order_id, created_at in recent_orders:
+        order_lines.append(
+            f"• {label}: <code>{html.escape(order_id or 'none')}</code> "
+            f"(<code>{html.escape(created_at or 'none')}</code>)"
+        )
+    action_lines = "\n".join(f"• {html.escape(action)}" for action in report.actions)
+    tenant_snapshot_state = str(report.tenant_snapshot.get("operational_state") or "none")
+    return (
+        f"{title}\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🆔 Telegram user: <code>{report.telegram_user_id}</code>\n"
+        f"👤 Utente: <code>{html.escape(user_name)}</code> "
+        f"status=<code>{html.escape(user_status)}</code>\n"
+        f"📌 Snapshot: <code>{html.escape(report.status)}</code>\n"
+        f"Generato: <code>{html.escape(report.generated_at)}</code>\n\n"
+        "👤 <b>Account</b>\n"
+        f"• linked: <code>{str(bool(account.get('linked'))).lower()}</code>\n"
+        f"• eBay: <code>{html.escape(str(account.get('ebay_user_id') or 'n/d'))}</code>\n"
+        f"• env: <code>{html.escape(str(account.get('environment') or 'n/d'))}</code>\n"
+        f"• account: <code>{html.escape(str(account.get('account_status') or 'unlinked'))}</code> "
+        f"token=<code>{html.escape(str(account.get('token_status') or 'missing'))}</code>\n\n"
+        "🔄 <b>Sync</b>\n"
+        f"• last_check: <code>{html.escape(runtime.last_check or 'none')}</code>\n"
+        f"• last_fetch_end: <code>{html.escape(memory.last_fetch_end or 'none')}</code>\n"
+        f"• last_fetch_count: <code>{memory.last_fetch_count}</code>\n"
+        f"• last_error: <code>{html.escape(runtime.last_error or 'none')}</code>\n\n"
+        "📦 <b>Ordini recenti</b>\n" + "\n".join(order_lines) + "\n\n"
+        "🧯 <b>Segnali supporto</b>\n"
+        f"• retry_queue: <code>{len(report.retry_queue)}</code>\n"
+        f"• latest_audit: <code>{html.escape(latest_audit_text)}</code>\n"
+        f"• tenant_snapshot: <code>{html.escape(tenant_snapshot_state)}</code>\n\n"
+        "➡️ <b>Azioni consigliate</b>\n"
+        f"{action_lines}"
     )
 
 
@@ -1934,6 +2004,7 @@ def format_admin_command_help() -> str:
         "• <code>/admin manutenzione</code> → backlog operativo e cleanup\n"
         "• <code>/admin dormant [ore]</code> → review tenant dormienti\n"
         "• <code>/admin export &lt;id&gt;</code> → export tenant senza segreti\n"
+        "• <code>/admin support &lt;id&gt;</code> → snapshot supporto utente\n"
         "• <code>/admin delete_tenant &lt;id&gt; confirm</code> → cancellazione operativa\n"
         "• <code>/admin service normal|maintenance|degraded</code> → modalità servizio\n"
         "• <code>/admin scala</code> → readiness SQLite/Postgres\n"

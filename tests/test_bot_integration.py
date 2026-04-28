@@ -3971,6 +3971,145 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("order-vat", sent_text)
             self.assertNotIn("order-cf", sent_text)
 
+    def test_process_message_support_snapshot_for_approved_user(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={456},
+                notify_chat_ids=set(),
+                admin_user_id=999,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=456,
+                username="seller_user",
+                display_name="Mario Rossi",
+                chat_type="private",
+            )
+            update_telegram_user_status(
+                str(db_path),
+                123,
+                TELEGRAM_USER_STATUS_APPROVED,
+                updated_at="2026-04-06T10:00:00Z",
+            )
+            upsert_linked_ebay_account(
+                str(db_path),
+                LinkedEbayAccount(
+                    telegram_user_id=123,
+                    ebay_user_id="seller-ebay",
+                    environment="production",
+                    linked_at="2026-04-06T10:10:00Z",
+                    status="linked",
+                ),
+            )
+            account = resolve_linked_ebay_account(str(db_path), 123, "production")
+            assert account is not None and account.id is not None
+            upsert_ebay_token_set(
+                str(db_path),
+                EbayTokenSet(
+                    ebay_account_id=account.id,
+                    refresh_token_encrypted="plain:tenant-refresh",
+                    status="active",
+                ),
+            )
+            save_tenant_runtime_state(
+                str(db_path),
+                123,
+                BotRuntimeState(
+                    last_check="2026-04-07T08:00:00Z",
+                    memory=BotOperationalMemory(
+                        last_fetch_end="2026-04-07T08:00:01Z",
+                        last_fetch_count=1,
+                        last_seen_order_id="order-1",
+                    ),
+                ),
+            )
+
+            replies = process_message(
+                text="/support",
+                chat_id=456,
+                telegram_user_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Support Snapshot", replies[0])
+            self.assertIn("seller-ebay", replies[0])
+            self.assertIn("order-1", replies[0])
+            self.assertIn("nessuna azione urgente", replies[0])
+
+    def test_process_message_admin_support_snapshot_for_target_user(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={999, 456},
+                notify_chat_ids=set(),
+                admin_user_id=999,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=999,
+                chat_id=999,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=456,
+                username="seller_user",
+                display_name="Mario Rossi",
+                chat_type="private",
+            )
+            update_telegram_user_status(
+                str(db_path),
+                123,
+                TELEGRAM_USER_STATUS_APPROVED,
+                updated_at="2026-04-06T10:00:00Z",
+            )
+            upsert_linked_ebay_account(
+                str(db_path),
+                LinkedEbayAccount(
+                    telegram_user_id=123,
+                    ebay_user_id="seller-ebay",
+                    environment="production",
+                    linked_at="2026-04-06T10:10:00Z",
+                    status="linked",
+                ),
+            )
+            account = resolve_linked_ebay_account(str(db_path), 123, "production")
+            assert account is not None and account.id is not None
+            upsert_ebay_token_set(
+                str(db_path),
+                EbayTokenSet(
+                    ebay_account_id=account.id,
+                    refresh_token_encrypted="plain:tenant-refresh",
+                    status="active",
+                ),
+            )
+
+            replies = process_message(
+                text="/admin support 123",
+                chat_id=999,
+                telegram_user_id=999,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Support Snapshot Utente", replies[0])
+            self.assertIn("Telegram user: <code>123</code>", replies[0])
+            self.assertIn("seller-ebay", replies[0])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,7 +4,7 @@ Aggiornata al 2026-04-29.
 
 ## Stato corrente
 
-FiscalBay è oggi alla versione `1.6.0`.
+FiscalBay è oggi alla versione `1.8.0`.
 
 La roadmap necessaria per la prima release stabile è completata. Il perimetro attuale resta `approved_public_small`: servizio pubblico con accesso approvato, pochi utenti selezionati, onboarding OAuth eBay su VPS, token tenant cifrati, bot Telegram operativo, strumenti admin, audit/retention/recovery minimi, metriche operative, security check e scale readiness.
 
@@ -32,11 +32,9 @@ La serie `1.x` resta centrata su stabilità operativa, servizio curato e miglior
 
 Prossimi rilasci pianificati:
 
-- `v1.7.0` - Export fiscale venditore: export ordinato degli ordini con dati fiscali disponibili, dati mancanti, stato e periodo.
-- `v1.8.0` - Support snapshot utente: riepilogo leggibile per singolo venditore con account collegato, ultimo sync, stato token, ultimi errori, ordini recenti e azioni consigliate.
 - `v1.9.0` - Onboarding selettivo più curato: flusso più chiaro per utente invitato, approvato e collegamento eBay, senza aprire registrazione libera.
 
-Possibili patch `v1.6.x`, `v1.7.x`, `v1.8.x` o `v1.9.x` vanno usate solo per fix mirati, documentazione operativa o piccoli affinamenti legati ai rilasci già pubblicati.
+Possibili patch `v1.8.x` o `v1.9.x` vanno usate solo per fix mirati, documentazione operativa o piccoli affinamenti legati ai rilasci già pubblicati.
 
 Altre aree possibili, senza ordine vincolante:
 
@@ -85,6 +83,8 @@ Questi lavori non sono rilasci attivi. Vanno ripresi solo se crescita, soglie, r
 
 ### Serie 1.x
 
+- `v1.8.0` - Support snapshot utente
+- `v1.7.0` - Export fiscale venditore
 - `v1.6.0` - Scale readiness senza migrazione automatica
 - `v1.5.0` - Security operations
 - `v1.4.0` - Admin comfort e osservabilità leggera

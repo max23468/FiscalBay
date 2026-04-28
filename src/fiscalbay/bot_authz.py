@@ -23,6 +23,7 @@ from .storage.sqlite import load_telegram_user
 COMMAND_CAPABILITIES: dict[str, str] = {
     "/ping": CAPABILITY_REVIEW_ACCESS,
     "/stato": CAPABILITY_USE_BOT,
+    "/support": CAPABILITY_VIEW_ACCOUNT,
     "/altre_azioni": CAPABILITY_REQUEST_ACCESS,
     "/account": CAPABILITY_VIEW_ACCOUNT,
     "/reconnect_status": CAPABILITY_VIEW_ACCOUNT,

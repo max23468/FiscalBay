@@ -154,6 +154,15 @@ Il comando Telegram `/settings`:
 - mostra un riepilogo rapido di scope runtime, ambiente, stato notifiche della chat e stato del collegamento account
 - è il punto di controllo più rapido lato utente prima di usare `/account collega`, `/account scollega` o `/account`
 
+Il comando Telegram `/support`:
+
+- mostra all'utente uno snapshot leggibile del proprio tenant con stato accesso,
+  account eBay, token, ultimo sync, ordini recenti tracciati, retry, audit
+  recente e azioni consigliate
+- non espone refresh token, access token o segreti locali
+- ha lo stesso obiettivo operativo del comando CLI
+  `fiscalbay-support-snapshot <telegram_user_id> --state-path data/state.db`
+
 Controllo accessi Telegram:
 
 - `TELEGRAM_ALLOWED_CHAT_IDS` limita le chat ammesse; con `*` (o `all`) consente tutte le chat e lascia il filtro operativo al workflow di approvazione admin
@@ -162,7 +171,7 @@ Controllo accessi Telegram:
 - il runtime normalizza anche alias legacy come `active` e `rejected`, così il controllo accessi resta coerente anche su record vecchi nel `state.db`
 - gli utenti non approvati possono solo usare `/start`, `/help`, `/altre_azioni` e `/request_access`
 - l'admin riceve una richiesta con pulsanti inline `Approva` e `Rifiuta`
-- in alternativa l'admin può usare `/admin_users all|pending|unlinked|reconnect|inactive`, `/tenant_health`, `/admin`, `/admin scala`, `/admin sicurezza`, `/admin dormant [ore]`, `/admin export <telegram_user_id>`, `/admin delete_tenant <telegram_user_id> confirm`, `/approve_user <telegram_user_id>`, `/reject_user <telegram_user_id>`, `/suspend_user <telegram_user_id>` e `/reactivate_user <telegram_user_id>`
+- in alternativa l'admin può usare `/admin_users all|pending|unlinked|reconnect|inactive`, `/tenant_health`, `/admin`, `/admin scala`, `/admin sicurezza`, `/admin dormant [ore]`, `/admin support <telegram_user_id>`, `/admin export <telegram_user_id>`, `/admin delete_tenant <telegram_user_id> confirm`, `/approve_user <telegram_user_id>`, `/reject_user <telegram_user_id>`, `/suspend_user <telegram_user_id>` e `/reactivate_user <telegram_user_id>`
 - per scale readiness l'admin può usare `/admin scala`, che classifica il
   profilo in `within_policy`, `watch`, `migration_recommended` o
   `migration_required` senza eseguire migrazioni automatiche
@@ -172,6 +181,10 @@ Controllo accessi Telegram:
 - per supporto e diagnosi rapida l'admin può usare
   `/admin storico [telegram_user_id] [limit]`, che legge l'audit recente senza
   introdurre una dashboard web o un nuovo archivio persistente
+- per supporto su un venditore specifico l'admin può usare
+  `/admin support <telegram_user_id>`, che aggrega in un solo messaggio stato
+  utente, account, token, ultimo sync, coda retry, audit recente e azioni
+  consigliate
 - quando un utente usa `/settings dati export` o `/settings dati cancellazione`,
   l'admin riceve una notifica con i comandi operativi suggeriti; la richiesta non
   modifica o cancella dati finché l'admin non esegue export/delete
@@ -311,7 +324,11 @@ Retention e cancellazione:
   disponibili per export/cancellazione assistita
 - default retention: `FISCALBAY_AUDIT_RETENTION_DAYS=180`, `FISCALBAY_OAUTH_SESSION_RETENTION_DAYS=30`, `FISCALBAY_OAUTH_PENDING_RETENTION_DAYS=7`, `FISCALBAY_OPERATION_QUEUE_RETENTION_DAYS=30`
 - `fiscalbay-fiscal-export` genera un export fiscale venditore da CLI usando credenziali globali o tenant (`--telegram-user-id`)
+- `fiscalbay-support-snapshot <telegram_user_id>` genera da CLI lo stesso
+  riepilogo supporto disponibile via `/support` e `/admin support`
 - `/admin export <telegram_user_id>` produce un export tenant senza refresh/access token in chiaro
+- `/admin support <telegram_user_id>` produce un riepilogo diagnostico tenant
+  senza refresh/access token in chiaro
 - `/admin delete_tenant <telegram_user_id> confirm` elimina token locali, account, chat, subscription, runtime state, retry tenant, sessioni OAuth e operazioni pending del tenant
 - l'audit log relativo alla cancellazione resta nel DB fino alla retention audit
 - `/admin dormant [ore]` e `/admin_users inactive` sono review non distruttive dei tenant dormienti

@@ -155,6 +155,7 @@ from .storage.sqlite import (
     upsert_telegram_chat,
     upsert_telegram_user,
 )
+from .support_snapshot import build_support_snapshot
 from .telegram_commands import (
     CALLBACK_ADMIN_DASHBOARD,
     CALLBACK_ADMIN_MAINTENANCE,
@@ -218,6 +219,7 @@ from .telegram_commands import (
     format_service_status,
     format_settings_status,
     format_status,
+    format_support_snapshot,
     format_tenant_health,
     format_why_not_notified_status,
     is_authorized,
@@ -2110,6 +2112,8 @@ def process_message(
             args = ["export", *args[1:]]
         elif admin_action in {"delete_tenant", "delete-user", "delete_user", "cancella"}:
             args = ["delete_tenant", *args[1:]]
+        elif admin_action in {"support", "snapshot", "supporto"}:
+            args = ["support", *args[1:]]
         elif admin_action in {"service", "servizio", "mode", "modalita"}:
             command = "/service_mode"
             args = args[1:]
@@ -2404,6 +2408,19 @@ def process_message(
                 },
             )
             return [format_admin_tenant_export(export_payload)]
+        if admin_action == "support":
+            if len(args) < 2:
+                return ["Uso corretto: <code>/admin support &lt;telegram_user_id&gt;</code>"]
+            try:
+                target_user_id = int(args[1])
+            except ValueError:
+                return ["Uso corretto: <code>/admin support &lt;telegram_user_id&gt;</code>"]
+            report = build_support_snapshot(
+                telegram_config.state_path,
+                target_user_id,
+                environment=ebay_environment,
+            )
+            return [format_support_snapshot(report, admin_view=True)]
         if admin_action == "delete_tenant":
             if len(args) < 3:
                 return [
@@ -2898,6 +2915,16 @@ def process_message(
         state = load_state_fn(telegram_config.state_path)
         retry_queue_size = len(load_retry_queue_fn(telegram_config.retry_queue_path))
         return [format_status(state, retry_queue_size, runtime_context=command_context)]
+
+    if command == "/support":
+        if resolved_telegram_user_id is None:
+            return ["Non riesco a identificare l'utente Telegram per lo snapshot supporto."]
+        report = build_support_snapshot(
+            telegram_config.state_path,
+            resolved_telegram_user_id,
+            environment=resolved_environment,
+        )
+        return [format_support_snapshot(report)]
 
     if command == "/account":
         account_status, missing_response = _load_tenant_ux_context_for_command(

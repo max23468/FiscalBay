@@ -25,6 +25,7 @@ fiscalbay-reconcile = "fiscalbay.reconcile:main"
 fiscalbay-fiscal-export = "fiscalbay.fiscal_export:main"
 fiscalbay-scale-check = "fiscalbay.scale_readiness:main"
 fiscalbay-security-check = "fiscalbay.security_ops:main"
+fiscalbay-support-snapshot = "fiscalbay.support_snapshot:main"
 
 [project.optional-dependencies]
 dev = [
