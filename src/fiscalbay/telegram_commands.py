@@ -69,6 +69,17 @@ def fiscal_identifier_label(tax_identifier_type: str) -> str:
     return "ID Fiscale"
 
 
+def fiscal_identifier_type_label(tax_identifier_type: str) -> str:
+    normalized = str(tax_identifier_type or "").strip().upper()
+    if normalized == "CODICE_FISCALE":
+        return "Codice fiscale"
+    if normalized == "VAT_NUMBER":
+        return "Partita IVA"
+    if normalized:
+        return normalized.replace("_", " ").lower().capitalize()
+    return ""
+
+
 def chunk_message(text: str, limit: int = 3500) -> list[str]:
     if len(text) <= limit:
         return [text]
@@ -142,9 +153,9 @@ def format_transaction_status(value: str) -> str:
 
 def format_record(record: OrderRecord) -> str:
     fiscal_value = record.taxpayerId or "non disponibile"
-    tax_type = record.taxIdentifierType or "n/d"
-    country = record.issuingCountry or "n/d"
     fiscal_label = fiscal_identifier_label(record.taxIdentifierType)
+    tax_type = fiscal_identifier_type_label(record.taxIdentifierType)
+    country = str(record.issuingCountry or "").strip().upper()
     order_id = html.escape(record.orderId)
     missing_fiscal = ""
     if not record.taxpayerId:
@@ -167,6 +178,13 @@ def format_record(record: OrderRecord) -> str:
         raw_shipping = raw_shipping[len(raw_buyer_name) + 2 :]
     shipping = html.escape(raw_shipping)
     created_at = html.escape(format_order_date(record.creationDate))
+    fiscal_meta_parts = []
+    if tax_type:
+        fiscal_meta_parts.append(f"🏷️ <b>Tipo</b>: {html.escape(tax_type)}")
+    if country:
+        fiscal_meta_parts.append(f"<b>Paese</b>: <code>{html.escape(country)}</code>")
+    fiscal_meta = " · ".join(fiscal_meta_parts)
+    fiscal_meta_suffix = f"\n{fiscal_meta}" if fiscal_meta else ""
 
     return (
         f'🛒 <b>Ordine</b> <a href="{ebay_url}"><code>{order_id}</code></a>\n'
@@ -179,9 +197,8 @@ def format_record(record: OrderRecord) -> str:
         f"📦 <b>Descrizione prodotto</b>: <i>{product_description}</i>\n"
         f"🔢 <b>Quantità ordine</b>: <code>{order_quantity}</code>\n"
         f"📍 <b>Spedizione</b>: <code>{shipping}</code>\n\n"
-        f"💳 <b>{html.escape(fiscal_label)}</b>: <code>{html.escape(fiscal_value)}</code>\n"
-        f"🏷️ <b>Tipo</b>: <code>{html.escape(tax_type)}</code> · "
-        f"<b>Paese</b>: <code>{html.escape(country)}</code>"
+        f"💳 <b>{html.escape(fiscal_label)}</b>: <code>{html.escape(fiscal_value)}</code>"
+        f"{fiscal_meta_suffix}"
         f"{missing_fiscal}"
     )
 

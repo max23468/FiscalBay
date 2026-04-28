@@ -394,6 +394,9 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("Quantità ordine", text)
         self.assertIn("Stato transazione", text)
         self.assertIn("Pagato", text)
+        self.assertIn("Tipo</b>: Codice fiscale", text)
+        self.assertIn("Paese</b>: <code>IT</code>", text)
+        self.assertNotIn("CODICE_FISCALE", text)
         self.assertNotIn("PAID", text)
 
     def test_format_order_date_falls_back_when_rome_timezone_is_unavailable(self) -> None:
@@ -415,6 +418,7 @@ class TelegramBotTests(unittest.TestCase):
             }
         )
         self.assertIn("Dati fiscali non presenti", text)
+        self.assertNotIn("Paese</b>: <code>n/d</code>", text)
 
     def test_has_fiscal_identifier_requires_type_and_value(self) -> None:
         self.assertTrue(
@@ -454,7 +458,8 @@ class TelegramBotTests(unittest.TestCase):
             }
         )
         self.assertIn("P.IVA", text)
-        self.assertIn("VAT_NUMBER", text)
+        self.assertIn("Tipo</b>: Partita IVA", text)
+        self.assertNotIn("VAT_NUMBER", text)
 
     @patch("src.fiscalbay.bot.telegram_request")
     def test_send_message_retries_without_parse_mode_on_http_400(
