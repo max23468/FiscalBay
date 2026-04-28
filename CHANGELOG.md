@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.13.1](https://github.com/max23468/FiscalBay/compare/v0.13.0...v0.13.1) (2026-04-28)
+
+### Bug Fixes
+
+* include maintenance commits in releases ([082be98](https://github.com/max23468/FiscalBay/commit/082be9841985d1bb018ccd3266a2c7b4cb8b808b))
+
+### Maintenance
+
+* remove release-please legacy assets ([651cce3](https://github.com/max23468/FiscalBay/commit/651cce3c6fc1981acf1580f94cb37bdf1d9fcecd))
+
 ## [0.13.0](https://github.com/max23468/FiscalBay/compare/v0.12.1...v0.13.0) (2026-04-28)
 
 ### Features
