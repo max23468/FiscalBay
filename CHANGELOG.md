@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.12.0](https://github.com/max23468/FiscalBay/compare/v0.11.0...v0.12.0) (2026-04-28)
+
+
+### Features
+
+* add contextual Telegram keyboards ([b34eba4](https://github.com/max23468/FiscalBay/commit/b34eba4993e78fe9edcfdc996d523bfd96ef1079))
+* simplify Telegram bot commands ([065ce97](https://github.com/max23468/FiscalBay/commit/065ce9751f46249ce395e2bf19e9a35cd6b2fac9))
+* streamline Telegram help and menu ([48835df](https://github.com/max23468/FiscalBay/commit/48835df43a4897cdfee5c5d9ea728b5c7f2bd078))
+
+
+### Bug Fixes
+
+* restrict Telegram admin commands to configured admin ([7671182](https://github.com/max23468/FiscalBay/commit/76711827dcfe8351364e1c07b774f8b575b1d37c))
+
 ## [0.11.0](https://github.com/max23468/FiscalBay/compare/v0.10.0...v0.11.0) (2026-04-28)
 
 
