@@ -12,6 +12,9 @@ RELEASE_PLEASE_PACKAGE="${FISCALBAY_RELEASE_PLEASE_PACKAGE:-release-please@17.6.
 DRY_RUN="${FISCALBAY_RELEASE_DRY_RUN:-false}"
 SKIP_LABELING="${FISCALBAY_RELEASE_SKIP_LABELING:-false}"
 DEBUG="${FISCALBAY_RELEASE_DEBUG:-false}"
+AUTO_MERGE="${FISCALBAY_RELEASE_AUTO_MERGE:-true}"
+AUTO_GITHUB_RELEASE="${FISCALBAY_RELEASE_AUTO_GITHUB_RELEASE:-true}"
+AUTO_DEPLOY="${FISCALBAY_RELEASE_AUTO_DEPLOY:-true}"
 
 GITHUB_AUTH_TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-${FISCALBAY_GITHUB_TOKEN:-}}}"
 
@@ -76,3 +79,44 @@ fi
 
 echo "Eseguo release-please release-pr su ${REPO_URL}:${TARGET_BRANCH}..."
 npx "${args[@]}" --token="${GITHUB_AUTH_TOKEN}"
+
+if [ "${AUTO_MERGE}" != "true" ]; then
+  echo "Merge automatico disabilitato."
+  exit 0
+fi
+
+echo "Valido e mergeo eventuale Release PR..."
+merge_result="$("${APP_DIR}/deploy/github-release-pr.py")"
+echo "${merge_result}"
+
+if ! printf '%s\n' "${merge_result}" | grep -q '"status": "merged"'; then
+  echo "Nessuna Release PR mergiata: salto pubblicazione e deploy."
+  exit 0
+fi
+
+if [ "${DRY_RUN}" = "true" ]; then
+  echo "Dry run: salto github-release e deploy."
+  exit 0
+fi
+
+if [ "${AUTO_GITHUB_RELEASE}" = "true" ]; then
+  echo "Creo tag e GitHub Release con release-please..."
+  npx \
+    --yes \
+    "${RELEASE_PLEASE_PACKAGE}" \
+    github-release \
+    --repo-url="${REPO_URL}" \
+    --target-branch="${TARGET_BRANCH}" \
+    --config-file="${CONFIG_FILE}" \
+    --manifest-file="${MANIFEST_FILE}" \
+    --token="${GITHUB_AUTH_TOKEN}"
+else
+  echo "Creazione tag/GitHub Release disabilitata."
+fi
+
+if [ "${AUTO_DEPLOY}" = "true" ]; then
+  echo "Deploy automatico del main aggiornato sulla VPS..."
+  "${APP_DIR}/deploy/vps-deploy-ref.sh" "${TARGET_BRANCH}"
+else
+  echo "Deploy automatico disabilitato."
+fi

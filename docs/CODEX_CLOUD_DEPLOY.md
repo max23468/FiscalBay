@@ -89,11 +89,12 @@ scripts/local_automate.sh --all
 Dopo questa verifica, seguire `docs/RUNBOOK.md` e `docs/OPERATIONS.md` per
 diagnostica o rollback.
 
-## Release Manuale
+## Release Senza Actions
 
-`release-please` resta il riferimento per changelog/versione, ma senza GitHub
-Actions deve essere usato solo da ambiente locale o sostituito da una procedura
-manuale esplicitamente richiesta.
+`release-please` resta il riferimento per changelog/versione. Senza GitHub Actions,
+la pipeline gira dalla VPS FiscalBay: crea/aggiorna la Release PR, la valida, la
+mergea, crea tag/GitHub Release e ridistribuisce `main`.
 
 Non creare tag, GitHub Release, bump di versione o modifiche manuali a
-`CHANGELOG.md` root senza una richiesta esplicita di release.
+`CHANGELOG.md` root fuori dalla pipeline `release-please` o da una riparazione
+esplicita del flusso.

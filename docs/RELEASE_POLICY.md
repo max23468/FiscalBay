@@ -15,8 +15,8 @@ Questa guida definisce il flusso ufficiale di versionamento, changelog e release
 - tag GitHub: `vX.Y.Z`
 - changelog ufficiale: `CHANGELOG.md` in root
 - archivio storico precedente: `docs/CHANGELOG.md`
-- meccanismo preferito di release: `release-please`, da usare localmente o in
-  procedura manuale esplicita finche' GitHub Actions resta disattivato
+- meccanismo preferito di release: `release-please`, eseguito dalla VPS FiscalBay
+  senza GitHub Actions
 
 La versione del pacchetto resta senza prefisso `v` in `pyproject.toml`.
 
@@ -26,8 +26,8 @@ Per questo repository il flusso da considerare ufficiale e' uno solo:
 
 - si puo' lavorare anche direttamente su `main`
 - i commit su `main` devono essere Conventional Commit corretti
-- `release-please` decide bump versione, changelog, tag e release quando viene
-  usato nel percorso manuale concordato
+- `release-please` decide bump versione, changelog, tag e release nel percorso
+  automatico VPS
 - bump manuali, tag manuali e release manuali sono eccezioni e non il percorso standard
 
 Regola pratica per agenti e maintainer:
@@ -36,9 +36,9 @@ Regola pratica per agenti e maintainer:
 - se il cambiamento e' breaking, usare `!` oppure footer `BREAKING CHANGE:`
 - non usare `refactor:` o `chore:` per cambi che in realta' meritano una release
 - non modificare manualmente `pyproject.toml`, `.release-please-manifest.json` o `CHANGELOG.md` root solo per forzare una release, salvo riparazioni straordinarie richieste esplicitamente
-- quando serve una release, concordare il percorso manuale: verifiche locali,
-  eventuale uso locale di `release-please`, review di changelog/versione, tag e
-  GitHub Release solo su richiesta esplicita
+- quando serve una release straordinaria fuori pipeline, concordare prima il
+  percorso manuale: verifiche locali, eventuale uso locale di `release-please`,
+  review di changelog/versione, tag e GitHub Release
 
 ## Checklist agente prima del commit
 
@@ -189,26 +189,22 @@ Il flusso standard e' questo:
 1. un commit Conventional Commit arriva su `main`
 2. la VPS FiscalBay esegue `release-please release-pr` tramite
    `fiscalbay-release-please.timer`, senza GitHub Actions
-3. CI e controllo titolo PR si fanno localmente/documentalmente, senza Actions;
-   il gate locale standard e' `scripts/local_automate.sh`
-4. la Release PR viene mergiata manualmente dopo le verifiche locali
+3. la pipeline VPS valida la Release PR generata e la mergea automaticamente se
+   e' mergeable e contiene solo file di release attesi
+4. dopo il merge la VPS esegue `release-please github-release` per creare tag e
+   GitHub Release, sempre senza GitHub Actions
 5. non ci sono workflow GitHub Actions versionati finche' il maintainer non decide
    di riattivarli
 6. la Release PR aggiorna:
    - `CHANGELOG.md`
    - `pyproject.toml`
    - `.release-please-manifest.json`
-7. tag e GitHub Release si creano manualmente solo su richiesta esplicita
-8. gli artefatti si buildano localmente con `scripts/local_automate.sh --build`
-9. se serve allegare artefatti a una GitHub Release, usare `gh release upload` o la
-   UI GitHub solo su richiesta esplicita
-
-Nota operativa: eventuali release GitHub vanno create o aggiornate da `gh`
-autenticato o UI GitHub, solo su richiesta esplicita.
+7. la VPS ridistribuisce il `main` aggiornato e riesegue lo smoke deploy locale
 
 La configurazione del timer vive nei file `deploy/fiscalbay-release-please.service`,
-`deploy/fiscalbay-release-please.timer` e `deploy/release-please-pr.sh`. Il token
-GitHub necessario al servizio deve stare fuori dal repository, per default in
+`deploy/fiscalbay-release-please.timer`, `deploy/release-please-pr.sh`,
+`deploy/github-release-pr.py` e `deploy/vps-deploy-ref.sh`. Il token GitHub
+necessario al servizio deve stare fuori dal repository, per default in
 `/etc/fiscalbay/release-please.env`. Il runtime Node.js della VPS deve essere >=20,
 coerente con la versione pin di `release-please` usata dallo script.
 
@@ -216,7 +212,8 @@ In modalita' main-only:
 
 - il commit su `main` sostituisce il merge della feature PR
 - la Release PR di `release-please` resta il punto in cui si materializzano versione e changelog
-- nel setup attuale il merge della Release PR resta manuale: e' la scelta piu' coerente quando il budget GitHub Actions e' limitato
+- la VPS chiude automaticamente il ciclo release quando i guardrail della pipeline
+  passano
 
 ## Baseline iniziale
 

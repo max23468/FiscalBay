@@ -58,7 +58,7 @@ Per mantenere il repository allineato alle best practice GitHub anche in contest
 - pipeline locale con `scripts/local_automate.sh`
 - CI locale con `bash scripts/ci_verify.sh`, richiamata anche dalla pipeline locale
 - deploy automatizzato sulla VPS FiscalBay via `scripts/local_deploy_vps.sh`
-- Release PR automatica sulla VPS FiscalBay con `release-please`, senza GitHub Actions
+- pipeline release automatica sulla VPS FiscalBay con `release-please`, senza GitHub Actions
 - aggiornamenti dipendenze da fare manualmente; Dependabot alerts/security alerts possono restare nella UI GitHub
 - template per Pull Request (`.github/PULL_REQUEST_TEMPLATE.md`)
 - issue forms per bug e task operativi (`.github/ISSUE_TEMPLATE/*`)
@@ -104,10 +104,11 @@ Regola operativa minima:
 Il flusso resta automatizzato senza GitHub Actions:
 
 - `release-please` gira sulla VPS FiscalBay tramite `fiscalbay-release-please.timer` per aprire/aggiornare la Release PR
+- la VPS valida e mergea automaticamente la Release PR quando e' mergeable e contiene solo file di release attesi
+- la VPS crea tag/GitHub Release con `release-please github-release` e ridistribuisce `main`
 - CI locale: `bash scripts/ci_verify.sh`
 - build locale quando serve: `python -m build`
-- tag e GitHub Release si creano solo su richiesta esplicita, con `gh` o UI GitHub
-- non fare bump manuali di versione, tag o release fuori da una richiesta di release esplicita
+- non fare bump manuali di versione, tag o release fuori dalla pipeline `release-please`
 
 Per abilitare il timer sulla VPS servono Node.js >=20, `npm`/`npx` e un token GitHub con
 permessi minimi sul repository, salvato fuori dal repo:
@@ -118,6 +119,9 @@ sudo tee /etc/fiscalbay/release-please.env >/dev/null <<'EOF'
 GITHUB_TOKEN=ghp_...
 FISCALBAY_RELEASE_REPO_URL=max23468/FiscalBay
 FISCALBAY_RELEASE_TARGET_BRANCH=main
+FISCALBAY_RELEASE_AUTO_MERGE=true
+FISCALBAY_RELEASE_AUTO_GITHUB_RELEASE=true
+FISCALBAY_RELEASE_AUTO_DEPLOY=true
 EOF
 sudo chmod 600 /etc/fiscalbay/release-please.env
 sudo systemctl enable --now fiscalbay-release-please.timer

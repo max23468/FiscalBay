@@ -252,11 +252,12 @@ scripts/local_deploy_vps.sh
 Da shell aperta direttamente sulla VPS, `./deploy/update.sh` resta disponibile
 come manutenzione operativa locale.
 
-## Release PR automatica su VPS
+## Pipeline release automatica su VPS
 
-La VPS puo' aprire o aggiornare automaticamente la Release PR di `release-please`
-senza usare GitHub Actions. Il timer installato e' `fiscalbay-release-please.timer`;
-il servizio eseguito e' `fiscalbay-release-please.service`.
+La VPS apre o aggiorna automaticamente la Release PR di `release-please`, la valida,
+la mergea, crea tag/GitHub Release e ridistribuisce `main`, senza usare GitHub
+Actions. Il timer installato e' `fiscalbay-release-please.timer`; il servizio
+eseguito e' `fiscalbay-release-please.service`.
 
 Prima di abilitarlo, verificare che Node.js >=20 e `npm`/`npx` siano disponibili e creare
 sulla VPS un EnvironmentFile fuori dal repository:
@@ -269,6 +270,10 @@ sudo tee /etc/fiscalbay/release-please.env >/dev/null <<'EOF'
 GITHUB_TOKEN=ghp_...
 FISCALBAY_RELEASE_REPO_URL=max23468/FiscalBay
 FISCALBAY_RELEASE_TARGET_BRANCH=main
+# default: true. Impostare false solo per fermare temporaneamente un passo.
+FISCALBAY_RELEASE_AUTO_MERGE=true
+FISCALBAY_RELEASE_AUTO_GITHUB_RELEASE=true
+FISCALBAY_RELEASE_AUTO_DEPLOY=true
 EOF
 sudo chmod 600 /etc/fiscalbay/release-please.env
 ```
@@ -282,19 +287,23 @@ sudo systemctl status fiscalbay-release-please.timer
 sudo journalctl -u fiscalbay-release-please.service -n 100 --no-pager
 ```
 
-Il timer automatizza solo la Release PR. Merge della Release PR, tag GitHub e
-GitHub Release restano passaggi manuali o esplicitamente richiesti.
+Guardrail automatici:
+
+- la Release PR deve essere mergeable
+- il titolo deve essere quello atteso da `release-please`
+- i file modificati devono essere solo quelli di release attesi
+- il deploy finale passa da `deploy/vps-deploy-ref.sh` e dallo smoke check locale
 
 ## Sync locale dopo release GitHub
 
-Quando una Release PR di `release-please` viene mergiata manualmente da GitHub, il
-commit finale che aggiorna `CHANGELOG.md`, `pyproject.toml` e
-`.release-please-manifest.json` nasce su `main` lato remoto. Il repository locale
-quindi non vede la nuova versione finche' non viene riallineato.
+Quando la pipeline VPS mergea una Release PR di `release-please`, il commit finale
+che aggiorna `CHANGELOG.md`, `pyproject.toml` e `.release-please-manifest.json`
+nasce su `main` lato remoto. Il repository locale quindi non vede la nuova versione
+finche' non viene riallineato.
 
 Regola operativa:
 
-1. mergiare la Release PR su GitHub manualmente dopo le verifiche locali
+1. verificare che `fiscalbay-release-please.service` sia passato
 2. eseguire in locale `git pull --ff-only origin main`
 3. solo dopo verificare `CHANGELOG.md`, tag GitHub e versione pacchetto
 

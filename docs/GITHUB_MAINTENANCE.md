@@ -45,8 +45,8 @@ Fallback operativo:
 - usare `scripts/local_automate.sh` come pipeline locale standard
 - eseguire localmente `bash scripts/ci_verify.sh` prima dei cambi runtime,
   storage, deploy o packaging quando serve un gate mirato
-- non fare bump manuali, tag manuali o release manuali fuori da una richiesta
-  esplicita di release
+- non fare bump manuali, tag manuali o release manuali fuori dalla pipeline
+  `release-please` o da una riparazione esplicita
 
 ### Merge Options
 
@@ -79,18 +79,22 @@ Il percorso standard automatizzato senza GitHub Actions e':
 1. commit Conventional Commit corretto su `main`
 2. `fiscalbay-release-please.timer` sulla VPS apre o aggiorna la Release PR con
    `release-please`
-3. `scripts/local_automate.sh` per verifiche locali
-4. `scripts/local_automate.sh --build` per packaging
-5. merge manuale della Release PR dopo review e verifiche
-6. tag e GitHub Release solo su richiesta esplicita
-7. per pubblicare e deployare codice gia' committato: `scripts/local_automate.sh --all`
+3. la VPS valida che la Release PR sia mergeable e tocchi solo file di release attesi
+4. la VPS mergea la Release PR
+5. `release-please github-release` crea tag e GitHub Release
+6. la VPS ridistribuisce `main` e riesegue lo smoke check locale
+7. `scripts/local_automate.sh --all` resta disponibile per pubblicare/deployare
+   manualmente codice gia' committato
 
 Non modificare manualmente `pyproject.toml`, `.release-please-manifest.json`,
-`CHANGELOG.md` root, tag o release senza una richiesta esplicita di release o di
-riparazione del flusso.
+`CHANGELOG.md` root, tag o release fuori dalla pipeline `release-please` o da una
+riparazione esplicita del flusso.
 
 Il timer richiede Node.js >=20 e un token GitHub salvato fuori dal repository in
-`/etc/fiscalbay/release-please.env`. Non committare token o file env reali.
+`/etc/fiscalbay/release-please.env`. Non committare token o file env reali. La
+pipeline release completa gira dalla VPS e sostituisce Release PR, merge, tag,
+GitHub Release e deploy che prima sarebbero stati tipicamente orchestrati da
+GitHub Actions.
 
 ## Revisione Periodica Consigliata
 
