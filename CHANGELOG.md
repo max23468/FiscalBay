@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.13.4](https://github.com/max23468/FiscalBay/compare/v0.13.3...v0.13.4) (2026-04-28)
+
+### Bug Fixes
+
+* use portable curl flags for DuckDNS updates ([4db1138](https://github.com/max23468/FiscalBay/commit/4db11384fc33e261614b822975e6ec4c67d1b8ff))
+
 ## [0.13.3](https://github.com/max23468/FiscalBay/compare/v0.13.2...v0.13.3) (2026-04-28)
 
 ### Bug Fixes
