@@ -372,7 +372,7 @@ class TelegramBotTests(unittest.TestCase):
                 "buyerUsername": "buyer",
                 "buyerName": "Mario Rossi",
                 "buyerEmail": "mario@example.com",
-                "taxpayerId": "RSSMRA80A01H501U",
+                "taxpayerId": "rssmra80a01h501u",
                 "taxIdentifierType": "CODICE_FISCALE",
                 "issuingCountry": "IT",
                 "orderQuantity": "2",
@@ -387,8 +387,10 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("ID ordine</b>", text)
         self.assertIn("<code>12-345</code>", text)
         self.assertIn("RSSMRA80A01H501U", text)
-        self.assertIn("Data</b>: <code>03/04/2026 12:00</code>", text)
-        self.assertIn("Nome completo", text)
+        self.assertNotIn("rssmra80a01h501u", text)
+        self.assertIn("Data</b>: <code>03/04/2026 12:00</code>\n💰", text)
+        self.assertIn("Nome</b>", text)
+        self.assertNotIn("Nome completo", text)
         self.assertIn("Mario Rossi", text)
         self.assertEqual(text.count("Mario Rossi"), 1)
         self.assertIn("mario@example.com", text)
@@ -397,7 +399,7 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("Quantità ordine", text)
         self.assertIn("Stato transazione", text)
         self.assertIn("Pagato", text)
-        self.assertIn("Tipo</b>: <code>Codice fiscale</code>", text)
+        self.assertNotIn("Tipo</b>", text)
         self.assertIn("Paese</b>: <code>IT</code>", text)
         self.assertNotIn("CODICE_FISCALE", text)
         self.assertNotIn("PAID", text)
@@ -461,7 +463,7 @@ class TelegramBotTests(unittest.TestCase):
             }
         )
         self.assertIn("P.IVA", text)
-        self.assertIn("Tipo</b>: <code>Partita IVA</code>", text)
+        self.assertNotIn("Tipo</b>", text)
         self.assertNotIn("VAT_NUMBER", text)
 
     @patch("src.fiscalbay.bot.telegram_request")
