@@ -55,7 +55,7 @@ if [ -f /etc/fiscalbay/duckdns.env ]; then
   sudo systemctl is-enabled --quiet fiscalbay-duckdns.timer
   sudo systemctl is-active --quiet fiscalbay-duckdns.timer
 fi
-if sudo systemctl --failed --no-legend 'fiscalbay-*' | grep -q .; then
-  sudo systemctl --failed 'fiscalbay-*' --no-pager
+if sudo systemctl list-units --failed --no-legend 'fiscalbay-*' | grep -q .; then
+  sudo systemctl list-units --failed 'fiscalbay-*' --no-pager
   exit 1
 fi
