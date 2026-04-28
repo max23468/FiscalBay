@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.0](https://github.com/max23468/FiscalBay/compare/v1.1.1...v1.2.0) (2026-04-28)
+
+### Features
+
+* improve disconnect and reconnect guidance ([87b1245](https://github.com/max23468/FiscalBay/commit/87b124563d7f9b7db657c8bca0856448e9f9dd2d))
+
 ## [1.1.1](https://github.com/max23468/FiscalBay/compare/v1.1.0...v1.1.1) (2026-04-28)
 
 ### Bug Fixes
