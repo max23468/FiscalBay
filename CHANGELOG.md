@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.0](https://github.com/max23468/FiscalBay/compare/v1.4.0...v1.5.0) (2026-04-28)
+
+### Features
+
+* add security operations check ([31bda1d](https://github.com/max23468/FiscalBay/commit/31bda1d91b5ebe4dc75ce2e0fc74d4907b5d88fd))
+
 ## [1.4.0](https://github.com/max23468/FiscalBay/compare/v1.3.0...v1.4.0) (2026-04-28)
 
 ### Features
