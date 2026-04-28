@@ -10,20 +10,7 @@ Fase 2 completata.
 
 ## Fase 3 - Lifecycle Dati e Retention
 
-- [ ] introdurre pruning automatico di `audit_log` secondo la retention dichiarata
-- [ ] introdurre pruning automatico delle `oauth_link_sessions` vecchie o gia' concluse
-- [ ] rendere osservabile dal healthcheck quando il pruning non gira o lascia arretrati anomali
-- [ ] introdurre un flusso amministrativo esplicito di cancellazione utente e tenant
-- [ ] definire e applicare la rimozione coordinata di token, mapping chat, subscription, stato runtime e sessioni OAuth residue
-- [ ] chiarire nei doc operativi cosa resta conservato in audit log dopo la cancellazione
-- [ ] estendere l'audit log agli eventi amministrativi di cancellazione, pruning e revoca remota
-- [ ] aggiungere un riepilogo amministrativo minimo per verificare richieste accesso, utenti approvati e tenant scollegati
-- [ ] trasformare la cancellazione amministrativa in un workflow esplicito con esito utente, audit dedicato e cleanup verificabile
-- [ ] introdurre un piccolo export amministrativo dei dati di un tenant per supporto o richiesta utente
-- [ ] definire un trattamento esplicito dei tenant inattivi o dormienti, separato dalla cancellazione completa
-- [ ] introdurre una review curata dei tenant inattivi, con segnalazione admin prima di qualsiasi cleanup o disattivazione
-- [ ] aggiungere un comando admin dedicato alla review dei tenant dormienti o inattivi da troppo tempo
-- [ ] chiarire se alcuni messaggi amministrativi o conferme utente vadano resi meno ripetitivi o meno persistenti nel tempo
+Fase 3 completata.
 
 ## Fase 4 - Ottimizzazione Applicativa e Storage
 

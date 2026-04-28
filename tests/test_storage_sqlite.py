@@ -28,8 +28,10 @@ from src.fiscalbay.storage.sqlite import (
     apply_telegram_user_access_status,
     claim_pending_operation,
     create_oauth_link_session,
+    delete_tenant_data,
     disconnect_linked_ebay_account,
     enqueue_operation,
+    export_tenant_data,
     list_notification_tenants,
     load_audit_log_entries,
     load_ebay_token_sets,
@@ -43,6 +45,8 @@ from src.fiscalbay.storage.sqlite import (
     load_telegram_users,
     load_tenant_retry_queue_entries,
     load_tenant_runtime_state,
+    prune_audit_log_entries,
+    prune_oauth_link_sessions,
     resolve_linked_ebay_account,
     resolve_tenant_chat_context,
     save_retry_queue,
@@ -52,6 +56,7 @@ from src.fiscalbay.storage.sqlite import (
     save_tenant_runtime_state,
     set_notification_subscription_enabled,
     summarize_operation_queue,
+    summarize_retention_backlog,
     summarize_tenant_account_status,
     update_operation_queue_entry,
     upsert_ebay_token_set,
@@ -85,6 +90,154 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertEqual(entries[0].actor_telegram_user_id, 111)
             self.assertEqual(entries[0].telegram_chat_id, 222)
             self.assertEqual(entries[0].outcome, "pending")
+
+    def test_retention_pruning_removes_old_audit_and_oauth_sessions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            append_audit_log_entry(
+                str(db_path),
+                AuditLogEntry(event_type="old", created_at="2026-01-01T00:00:00Z"),
+            )
+            append_audit_log_entry(
+                str(db_path),
+                AuditLogEntry(event_type="new", created_at="2026-04-01T00:00:00Z"),
+            )
+            create_oauth_link_session(
+                str(db_path),
+                OauthLinkSession(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    oauth_state="old-completed",
+                    status="completed",
+                    created_at="2026-01-01T00:00:00Z",
+                ),
+            )
+            create_oauth_link_session(
+                str(db_path),
+                OauthLinkSession(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    oauth_state="old-pending",
+                    status="pending",
+                    created_at="2026-01-02T00:00:00Z",
+                ),
+            )
+            create_oauth_link_session(
+                str(db_path),
+                OauthLinkSession(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    oauth_state="fresh-pending",
+                    status="pending",
+                    created_at="2026-04-01T00:00:00Z",
+                ),
+            )
+
+            backlog = summarize_retention_backlog(
+                str(db_path),
+                audit_cutoff_iso="2026-02-01T00:00:00Z",
+                oauth_terminal_cutoff_iso="2026-02-01T00:00:00Z",
+                oauth_pending_cutoff_iso="2026-02-01T00:00:00Z",
+            )
+            self.assertEqual(backlog["audit_overdue"], 1)
+            self.assertEqual(backlog["oauth_terminal_overdue"], 1)
+            self.assertEqual(backlog["oauth_pending_overdue"], 1)
+
+            self.assertEqual(
+                prune_audit_log_entries(str(db_path), cutoff_iso="2026-02-01T00:00:00Z"),
+                1,
+            )
+            oauth_deleted = prune_oauth_link_sessions(
+                str(db_path),
+                terminal_cutoff_iso="2026-02-01T00:00:00Z",
+                pending_cutoff_iso="2026-02-01T00:00:00Z",
+            )
+
+            self.assertEqual(oauth_deleted["deleted"], 2)
+            self.assertEqual(
+                [entry.event_type for entry in load_audit_log_entries(str(db_path))], ["new"]
+            )
+            self.assertIsNotNone(load_latest_oauth_link_session(str(db_path), 123))
+
+    def test_export_and_delete_tenant_data_preserves_audit_log(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            upsert_telegram_user(
+                str(db_path),
+                TelegramUser(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    username="seller",
+                    display_name="Seller",
+                    created_at="2026-04-01T00:00:00Z",
+                    status=TELEGRAM_USER_STATUS_APPROVED,
+                ),
+            )
+            upsert_telegram_chat(
+                str(db_path),
+                TelegramChat(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    created_at="2026-04-01T00:00:00Z",
+                ),
+            )
+            upsert_linked_ebay_account(
+                str(db_path),
+                LinkedEbayAccount(
+                    telegram_user_id=123,
+                    ebay_user_id="seller-ebay",
+                    environment="production",
+                    linked_at="2026-04-01T00:00:00Z",
+                ),
+            )
+            account = resolve_linked_ebay_account(str(db_path), 123, "production")
+            assert account is not None and account.id is not None
+            upsert_ebay_token_set(
+                str(db_path),
+                EbayTokenSet(
+                    ebay_account_id=account.id,
+                    refresh_token_encrypted="secret-token",
+                    access_token="access-token",
+                    status="active",
+                ),
+            )
+            set_notification_subscription_enabled(
+                str(db_path),
+                123,
+                456,
+                True,
+                created_at="2026-04-01T00:00:00Z",
+                updated_at="2026-04-01T00:00:00Z",
+            )
+            save_tenant_runtime_state(
+                str(db_path),
+                123,
+                BotRuntimeState(
+                    notified_order_ids=["order-1"],
+                    last_check="2026-04-01T00:00:00Z",
+                ),
+            )
+            append_audit_log_entry(
+                str(db_path),
+                AuditLogEntry(
+                    event_type="connect",
+                    created_at="2026-04-01T00:00:00Z",
+                    target_telegram_user_id=123,
+                ),
+            )
+
+            exported = export_tenant_data(str(db_path), 123)
+            self.assertEqual(exported["telegram_user_id"], 123)
+            self.assertTrue(exported["ebay_tokens"][0]["refresh_token_configured"])
+            self.assertNotIn("secret-token", str(exported))
+
+            deleted = delete_tenant_data(str(db_path), 123)
+
+            self.assertGreater(deleted["total"], 0)
+            self.assertEqual(load_telegram_users(str(db_path)), [])
+            self.assertEqual(load_linked_ebay_accounts(str(db_path)), [])
+            self.assertEqual(load_ebay_token_sets(str(db_path)), [])
+            self.assertEqual(load_audit_log_entries(str(db_path))[0].event_type, "connect")
 
     def test_operation_queue_roundtrip_and_claim(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

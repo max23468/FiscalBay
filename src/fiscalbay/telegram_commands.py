@@ -918,6 +918,77 @@ def format_admin_watchlist(
     return "\n".join(lines)
 
 
+def format_admin_tenant_export(export_payload: Mapping[str, object]) -> str:
+    user = export_payload.get("user") or {}
+    account_status = export_payload.get("account_status") or {}
+    tenant_id = html.escape(str(export_payload.get("telegram_user_id") or "n/d"))
+    account_label = html.escape(str(account_status.get("account_status") or "unlinked"))
+    token_label = html.escape(str(account_status.get("token_status") or "missing"))
+    payload_json = json.dumps(export_payload, ensure_ascii=False, sort_keys=True)
+    if len(payload_json) > 3200:
+        payload_json = payload_json[:3200] + "\n...troncato nel messaggio Telegram..."
+    return (
+        "📤 <b>Export tenant</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"Tenant: <code>{tenant_id}</code>\n"
+        f"Status: <code>{html.escape(str(user.get('status') or 'missing'))}</code>\n"
+        f"Account: <code>{account_label}</code> token=<code>{token_label}</code>\n"
+        "I token sono esclusi: vengono mostrati solo flag di presenza e metadati.\n"
+        f"<pre>{html.escape(payload_json)}</pre>"
+    )
+
+
+def format_admin_tenant_delete_status(
+    *,
+    telegram_user_id: int,
+    deleted_counts: Mapping[str, int],
+) -> str:
+    total = int(deleted_counts.get("total", 0))
+    rows = [
+        "🧨 <b>Cancellazione tenant</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"Tenant: <code>{telegram_user_id}</code>",
+        f"Righe operative eliminate: <code>{total}</code>",
+        "Audit log: <code>conservato</code> per tracciabilita' minima.",
+    ]
+    for key in sorted(deleted_counts):
+        if key == "total":
+            continue
+        rows.append(
+            f"• {html.escape(str(key))}: <code>{html.escape(str(deleted_counts[key]))}</code>"
+        )
+    return "\n".join(rows)
+
+
+def format_admin_dormant_review(
+    rows: Iterable[Mapping[str, object]],
+    *,
+    threshold_hours: int,
+) -> str:
+    rendered_rows = list(rows)
+    if not rendered_rows:
+        return (
+            "🌙 <b>Review tenant dormienti</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"Nessun tenant operativo inattivo oltre <code>{threshold_hours}h</code>."
+        )
+    lines = [
+        "🌙 <b>Review tenant dormienti</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"Soglia: <code>{threshold_hours}h</code> • Totale: <code>{len(rendered_rows)}</code>",
+        "Questa vista e' solo review: non disattiva e non cancella nulla.",
+    ]
+    for row in rendered_rows:
+        lines.append(
+            "• "
+            f"<code>{html.escape(str(row.get('telegram_user_id') or 'n/d'))}</code> "
+            f"user=<code>{html.escape(str(row.get('username') or 'n/d'))}</code> "
+            f"last=<code>{html.escape(str(row.get('last_activity_at') or 'n/d'))}</code> "
+            f"age=<code>{html.escape(str(row.get('inactive_hours') or 'n/d'))}h</code>"
+        )
+    return "\n".join(lines)
+
+
 def format_admin_status_update(
     *,
     telegram_user_id: int,
@@ -948,6 +1019,7 @@ def format_admin_dashboard(dashboard: Mapping[str, object]) -> str:
     approved = html.escape(str(metrics.get("approved_users", 0)))
     linked = html.escape(str(metrics.get("linked_users", 0)))
     approved_unlinked = html.escape(str(metrics.get("approved_without_link", 0)))
+    inactive = html.escape(str(metrics.get("inactive_users", 0)))
     pending_stale = html.escape(str(metrics.get("pending_stale", 0)))
     revoked_stale = html.escape(str(metrics.get("revoked_stale", 0)))
     oauth_pending_expired = html.escape(str(metrics.get("oauth_pending_expired", 0)))
@@ -960,6 +1032,7 @@ def format_admin_dashboard(dashboard: Mapping[str, object]) -> str:
         f"🕓 Pending: <code>{pending}</code> • ✅ Approved: <code>{approved}</code>",
         f"🔗 Tenant linked: <code>{linked}</code> • "
         f"⌛ Approved non operativi: <code>{approved_unlinked}</code>",
+        f"🌙 Tenant dormienti: <code>{inactive}</code>",
         f"🚨 OAuth failure recenti: <code>{oauth_failures_recent}</code>",
         f"🪪 Sessioni OAuth pending ma scadute: <code>{oauth_pending_expired}</code>",
         f"📦 Queue pending: <code>{queue_pending}</code> • failed: <code>{queue_failed}</code>",
@@ -981,9 +1054,13 @@ def format_admin_maintenance_overview(payload: Mapping[str, object]) -> str:
     metrics = dashboard.get("metrics") or {}
     queue = payload.get("queue") or {}
     oauth = payload.get("oauth_sessions") or {}
+    retention = payload.get("retention") or {}
     queue_samples = list(payload.get("queue_samples") or [])
     mode = html.escape(str(payload.get("service_mode") or "normal"))
     retry_backlog = html.escape(str(payload.get("retry_backlog", 0)))
+    oauth_retention_overdue = int(retention.get("oauth_terminal_overdue", 0)) + int(
+        retention.get("oauth_pending_overdue", 0)
+    )
     lines = [
         "🧹 <b>Maintenance Overview</b>",
         "━━━━━━━━━━━━━━━━━━━━━━━━",
@@ -1008,7 +1085,17 @@ def format_admin_maintenance_overview(payload: Mapping[str, object]) -> str:
             f"🔁 Reconnect persistenti: "
             f"<code>{html.escape(str(metrics.get('revoked_stale', 0)))}</code>"
         ),
+        (
+            f"🗄️ Retention: audit arretrati "
+            f"<code>{html.escape(str(retention.get('audit_overdue', 0)))}</code> • "
+            f"OAuth arretrati <code>{html.escape(str(oauth_retention_overdue))}</code>"
+        ),
     ]
+    if retention.get("last_pruned_at"):
+        lines.append(
+            "• retention last_pruned="
+            f"<code>{html.escape(str(retention.get('last_pruned_at')))}</code>"
+        )
     oldest_pending_user_id = oauth.get("oldest_pending_user_id")
     if oldest_pending_user_id not in {None, 0, "0"}:
         lines.append(
@@ -1460,6 +1547,9 @@ def format_admin_command_help() -> str:
         "Usa <code>/admin</code> come cruscotto operativo.\n"
         "• <code>/admin</code> → dashboard e alert prodotto\n"
         "• <code>/admin manutenzione</code> → backlog operativo e cleanup\n"
+        "• <code>/admin dormant [ore]</code> → review tenant dormienti\n"
+        "• <code>/admin export &lt;id&gt;</code> → export tenant senza segreti\n"
+        "• <code>/admin delete_tenant &lt;id&gt; confirm</code> → cancellazione operativa\n"
         "• <code>/admin service normal|maintenance|degraded</code> → modalita' servizio\n"
         "• <code>/admin_users all|pending|unlinked|reconnect|inactive</code> → liste utenti\n"
         "• <code>/tenant_health [user_id]</code> → salute tenant compatta\n"

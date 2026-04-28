@@ -106,8 +106,10 @@ from .storage.sqlite import (
     append_audit_log_entry,
     apply_telegram_user_access_status,
     create_oauth_link_session,
+    delete_tenant_data,
     disconnect_linked_ebay_account,
     ensure_parent_dir,
+    export_tenant_data,
     list_notification_tenants,
     load_audit_log_entries,
     load_kv_value,
@@ -134,6 +136,7 @@ from .storage.sqlite import (
     set_notification_subscription_enabled,
     summarize_oauth_link_sessions,
     summarize_operation_queue,
+    summarize_retention_backlog,
     summarize_tenant_account_status,
     update_telegram_user_status,
     upsert_notification_subscription,
@@ -174,8 +177,11 @@ from .telegram_commands import (
     format_admin_access_request,
     format_admin_command_help,
     format_admin_dashboard,
+    format_admin_dormant_review,
     format_admin_maintenance_overview,
     format_admin_status_update,
+    format_admin_tenant_delete_status,
+    format_admin_tenant_export,
     format_admin_user_list,
     format_admin_watchlist,
     format_connect_status,
@@ -289,6 +295,21 @@ def coerce_runtime_state(state: BotRuntimeStateLike) -> BotRuntimeState:
 
 def _now_utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _retention_days_from_env(name: str, default: int) -> int:
+    raw_value = os.getenv(name, "").strip()
+    if not raw_value:
+        return default
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        return default
+    return max(1, parsed)
+
+
+def _iso_days_ago(now: datetime, days: int) -> str:
+    return (now - timedelta(days=days)).isoformat().replace("+00:00", "Z")
 
 
 def _branding_sync_enabled() -> bool:
@@ -679,7 +700,11 @@ def _filter_user_rows(
     return [row for row in _build_user_rows(telegram_config) if predicate(row)]
 
 
-def _build_inactive_user_rows(telegram_config: TelegramConfig) -> list[dict[str, object]]:
+def _build_inactive_user_rows(
+    telegram_config: TelegramConfig,
+    *,
+    threshold_hours: int = INACTIVE_TENANT_HOURS,
+) -> list[dict[str, object]]:
     now = datetime.now(timezone.utc)
     inactive_rows: list[dict[str, object]] = []
     for row in _build_user_rows(telegram_config):
@@ -691,9 +716,10 @@ def _build_inactive_user_rows(telegram_config: TelegramConfig) -> list[dict[str,
         if last_activity is None:
             continue
         age_hours = int((now - last_activity).total_seconds() // 3600)
-        if age_hours >= INACTIVE_TENANT_HOURS:
+        if age_hours >= threshold_hours:
             enriched_row = dict(row)
             enriched_row["last_issue"] = f"inactive_{age_hours}h"
+            enriched_row["inactive_hours"] = age_hours
             inactive_rows.append(enriched_row)
     return inactive_rows
 
@@ -845,12 +871,14 @@ def _build_admin_dashboard_payload(telegram_config: TelegramConfig) -> dict[str,
         for row in rows
         if str(row.get("account_status")) == "linked" and str(row.get("token_status")) == "active"
     )
+    inactive_users = len(_build_inactive_user_rows(telegram_config))
     return {
         "service_mode": service_mode,
         "metrics": {
             "pending_users": pending_users,
             "approved_users": approved_users,
             "linked_users": linked_users,
+            "inactive_users": inactive_users,
             "approved_without_link": sum(
                 1
                 for row in rows
@@ -869,6 +897,22 @@ def _build_admin_dashboard_payload(telegram_config: TelegramConfig) -> dict[str,
 
 def _build_admin_maintenance_payload(telegram_config: TelegramConfig) -> dict[str, object]:
     dashboard = _build_admin_dashboard_payload(telegram_config)
+    now = datetime.now(timezone.utc)
+    retention = summarize_retention_backlog(
+        telegram_config.state_path,
+        audit_cutoff_iso=_iso_days_ago(
+            now,
+            _retention_days_from_env("FISCALBAY_AUDIT_RETENTION_DAYS", 180),
+        ),
+        oauth_terminal_cutoff_iso=_iso_days_ago(
+            now,
+            _retention_days_from_env("FISCALBAY_OAUTH_SESSION_RETENTION_DAYS", 30),
+        ),
+        oauth_pending_cutoff_iso=_iso_days_ago(
+            now,
+            _retention_days_from_env("FISCALBAY_OAUTH_PENDING_RETENTION_DAYS", 7),
+        ),
+    )
     return {
         "service_mode": dashboard.get("service_mode", SERVICE_MODE_NORMAL),
         "dashboard": dashboard,
@@ -878,6 +922,7 @@ def _build_admin_maintenance_payload(telegram_config: TelegramConfig) -> dict[st
             telegram_config.state_path,
             now_iso=_now_utc_iso(),
         ),
+        "retention": retention,
         "queue_samples": _build_operation_queue_samples(telegram_config),
     }
 
@@ -1998,6 +2043,12 @@ def process_message(
             args = ["help", *args[1:]]
         elif admin_action in {"manutenzione", "maintenance"}:
             args = ["maintenance", *args[1:]]
+        elif admin_action in {"dormant", "dormienti", "inactive", "inattivi"}:
+            args = ["dormant", *args[1:]]
+        elif admin_action in {"export", "esporta", "tenant_export"}:
+            args = ["export", *args[1:]]
+        elif admin_action in {"delete_tenant", "delete-user", "delete_user", "cancella"}:
+            args = ["delete_tenant", *args[1:]]
         elif admin_action in {"service", "servizio", "mode", "modalita"}:
             command = "/service_mode"
             args = args[1:]
@@ -2173,6 +2224,91 @@ def process_message(
 
     if command in ADMIN_ONLY_COMMANDS and not is_admin_user:
         return ["Solo l'admin puo' usare questo comando."]
+
+    if command == "/admin" and args:
+        admin_action = str(args[0]).strip().lower()
+        if admin_action == "dormant":
+            threshold_hours = INACTIVE_TENANT_HOURS
+            if len(args) > 1:
+                try:
+                    threshold_hours = max(1, int(args[1]))
+                except ValueError:
+                    return ["Uso corretto: <code>/admin dormant [ore]</code>"]
+            return [
+                format_admin_dormant_review(
+                    _build_inactive_user_rows(
+                        telegram_config,
+                        threshold_hours=threshold_hours,
+                    ),
+                    threshold_hours=threshold_hours,
+                )
+            ]
+        if admin_action == "export":
+            if len(args) < 2:
+                return ["Uso corretto: <code>/admin export &lt;telegram_user_id&gt;</code>"]
+            try:
+                target_user_id = int(args[1])
+            except ValueError:
+                return ["Uso corretto: <code>/admin export &lt;telegram_user_id&gt;</code>"]
+            export_payload = export_tenant_data(telegram_config.state_path, target_user_id)
+            _append_audit_log(
+                telegram_config,
+                event_type="tenant_export",
+                created_at=now_iso,
+                actor_telegram_user_id=telegram_user_id,
+                target_telegram_user_id=target_user_id,
+                telegram_chat_id=chat_id,
+                outcome="exported",
+                details={
+                    "has_user": export_payload.get("user") is not None,
+                    "chat_count": len(export_payload.get("chats") or []),
+                    "account_count": len(export_payload.get("ebay_accounts") or []),
+                },
+            )
+            return [format_admin_tenant_export(export_payload)]
+        if admin_action == "delete_tenant":
+            if len(args) < 3:
+                return [
+                    "Uso corretto: "
+                    "<code>/admin delete_tenant &lt;telegram_user_id&gt; confirm</code>"
+                ]
+            try:
+                target_user_id = int(args[1])
+            except ValueError:
+                return [
+                    "Uso corretto: "
+                    "<code>/admin delete_tenant &lt;telegram_user_id&gt; confirm</code>"
+                ]
+            if args[2].strip().lower() != "confirm":
+                return [
+                    "Cancellazione non eseguita. Conferma esplicita richiesta: "
+                    "<code>/admin delete_tenant &lt;telegram_user_id&gt; confirm</code>"
+                ]
+            if target_user_id == telegram_config.admin_user_id:
+                return ["Non cancello il tenant admin globale da comando bot."]
+            export_before_delete = export_tenant_data(telegram_config.state_path, target_user_id)
+            deleted_counts = delete_tenant_data(telegram_config.state_path, target_user_id)
+            _append_audit_log(
+                telegram_config,
+                event_type="tenant_delete",
+                created_at=now_iso,
+                actor_telegram_user_id=telegram_user_id,
+                target_telegram_user_id=target_user_id,
+                telegram_chat_id=chat_id,
+                outcome="deleted" if deleted_counts.get("total", 0) > 0 else "noop",
+                details={
+                    "deleted_counts": deleted_counts,
+                    "had_user": export_before_delete.get("user") is not None,
+                    "had_linked_accounts": bool(export_before_delete.get("ebay_accounts")),
+                    "audit_log_retained": True,
+                },
+            )
+            return [
+                format_admin_tenant_delete_status(
+                    telegram_user_id=target_user_id,
+                    deleted_counts=deleted_counts,
+                )
+            ]
 
     admin_read_response = _handle_admin_read_command(
         command,

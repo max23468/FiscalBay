@@ -5,8 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, TypedDict
 
@@ -18,6 +19,7 @@ from .storage.sqlite import (
     load_retry_queue_entries,
     summarize_multi_tenant_readiness,
     summarize_operation_queue,
+    summarize_retention_backlog,
 )
 
 LOGGER = logging.getLogger("fiscalbay.healthcheck")
@@ -51,6 +53,18 @@ class OperationQueueHealth(TypedDict):
     cancelled: int
 
 
+class RetentionHealth(TypedDict):
+    last_pruned_at: str
+    last_pruned_age_seconds: int | None
+    audit_overdue: int
+    oauth_terminal_overdue: int
+    oauth_pending_overdue: int
+    last_audit_deleted: int
+    last_oauth_deleted: int
+    oldest_audit_created_at: str
+    oldest_oauth_created_at: str
+
+
 class HealthReport(TypedDict):
     ok: bool
     status: str
@@ -67,6 +81,7 @@ class HealthReport(TypedDict):
     metrics: HealthMetrics
     multi_tenant: MultiTenantHealth
     operation_queue: OperationQueueHealth
+    retention: RetentionHealth
     alerts: list[str]
     service_active: bool | None
     service_name: str | None
@@ -84,6 +99,21 @@ def parse_iso8601_utc(value: str) -> datetime:
 
 def default_max_age_seconds(poll_interval_seconds: int) -> int:
     return max(300, poll_interval_seconds * 3)
+
+
+def _retention_days_from_env(name: str, default: int) -> int:
+    raw_value = os.getenv(name, "").strip()
+    if not raw_value:
+        return default
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        return default
+    return max(1, parsed)
+
+
+def _iso_days_ago(now: datetime, days: int) -> str:
+    return (now - timedelta(days=days)).isoformat().replace("+00:00", "Z")
 
 
 def summarize_error_metrics(metrics: BotMetrics) -> tuple[int, int]:
@@ -138,6 +168,20 @@ def build_alerts(
         alerts.append("consecutive_error_cycles_exceeded")
     if max_retry_queue_size is not None and retry_queue_size > max_retry_queue_size:
         alerts.append("retry_queue_size_exceeded")
+    retention = report.get("retention")
+    if retention:
+        if (
+            retention.get("last_pruned_age_seconds") is not None
+            and int(retention.get("last_pruned_age_seconds") or 0) > 48 * 60 * 60
+        ):
+            alerts.append("retention_prune_stale")
+        retention_backlog = (
+            int(retention.get("audit_overdue", 0))
+            + int(retention.get("oauth_terminal_overdue", 0))
+            + int(retention.get("oauth_pending_overdue", 0))
+        )
+        if retention_backlog > 100:
+            alerts.append("retention_backlog_exceeded")
     return alerts
 
 
@@ -182,6 +226,43 @@ def build_health_report(
     ebay_errors, telegram_errors = summarize_error_metrics(state.metrics)
     multi_tenant = summarize_multi_tenant_readiness(telegram_config.state_path)
     operation_queue = summarize_operation_queue(telegram_config.state_path)
+    now = datetime.now(timezone.utc)
+    audit_retention_days = _retention_days_from_env("FISCALBAY_AUDIT_RETENTION_DAYS", 180)
+    oauth_session_retention_days = _retention_days_from_env(
+        "FISCALBAY_OAUTH_SESSION_RETENTION_DAYS",
+        30,
+    )
+    stale_pending_oauth_days = _retention_days_from_env(
+        "FISCALBAY_OAUTH_PENDING_RETENTION_DAYS",
+        7,
+    )
+    retention_summary = summarize_retention_backlog(
+        telegram_config.state_path,
+        audit_cutoff_iso=_iso_days_ago(now, audit_retention_days),
+        oauth_terminal_cutoff_iso=_iso_days_ago(now, oauth_session_retention_days),
+        oauth_pending_cutoff_iso=_iso_days_ago(now, stale_pending_oauth_days),
+    )
+    retention_last_pruned_at = str(retention_summary.get("last_pruned_at") or "")
+    retention_last_age_seconds: int | None = None
+    if retention_last_pruned_at:
+        try:
+            retention_last_age_seconds = max(
+                0,
+                int((now - parse_iso8601_utc(retention_last_pruned_at)).total_seconds()),
+            )
+        except ValueError:
+            retention_last_age_seconds = None
+    else:
+        warnings.append("retention_prune_missing")
+    audit_overdue = as_int(retention_summary.get("audit_overdue", 0))
+    oauth_terminal_overdue = as_int(retention_summary.get("oauth_terminal_overdue", 0))
+    oauth_pending_overdue = as_int(retention_summary.get("oauth_pending_overdue", 0))
+    last_audit_deleted = as_int(retention_summary.get("last_audit_deleted", 0))
+    last_oauth_deleted = as_int(retention_summary.get("last_oauth_deleted", 0))
+    if audit_overdue > 0:
+        warnings.append("audit_retention_backlog")
+    if oauth_terminal_overdue > 0 or oauth_pending_overdue > 0:
+        warnings.append("oauth_retention_backlog")
     multi_tenant_health: MultiTenantHealth = {
         "tenant_users": multi_tenant.get("tenant_users", 0),
         "tenant_chats": multi_tenant.get("tenant_chats", 0),
@@ -198,6 +279,17 @@ def build_health_report(
         "failed": operation_queue.get("failed", 0),
         "completed": operation_queue.get("completed", 0),
         "cancelled": operation_queue.get("cancelled", 0),
+    }
+    retention_health: RetentionHealth = {
+        "last_pruned_at": retention_last_pruned_at,
+        "last_pruned_age_seconds": retention_last_age_seconds,
+        "audit_overdue": audit_overdue,
+        "oauth_terminal_overdue": oauth_terminal_overdue,
+        "oauth_pending_overdue": oauth_pending_overdue,
+        "last_audit_deleted": last_audit_deleted,
+        "last_oauth_deleted": last_oauth_deleted,
+        "oldest_audit_created_at": str(retention_summary.get("oldest_audit_created_at") or ""),
+        "oldest_oauth_created_at": str(retention_summary.get("oldest_oauth_created_at") or ""),
     }
     ignored_reason_set = set(ignored_reasons or [])
     fatal_reasons = [reason for reason in reasons if reason not in ignored_reason_set]
@@ -227,6 +319,7 @@ def build_health_report(
         },
         "multi_tenant": multi_tenant_health,
         "operation_queue": operation_queue_health,
+        "retention": retention_health,
         "alerts": [],
         "service_active": None,
         "service_name": None,
@@ -263,6 +356,10 @@ def build_health_report(
         active_token_sets=multi_tenant["active_token_sets"],
         operation_queue_pending=operation_queue["pending"],
         operation_queue_failed=operation_queue["failed"],
+        retention_audit_overdue=retention_health["audit_overdue"],
+        retention_oauth_overdue=(
+            retention_health["oauth_terminal_overdue"] + retention_health["oauth_pending_overdue"]
+        ),
     )
     return report
 
@@ -288,6 +385,17 @@ def render_text_report(report: HealthReport) -> str:
         "failed": 0,
         "completed": 0,
         "cancelled": 0,
+    }
+    default_retention: RetentionHealth = {
+        "last_pruned_at": "",
+        "last_pruned_age_seconds": None,
+        "audit_overdue": 0,
+        "oauth_terminal_overdue": 0,
+        "oauth_pending_overdue": 0,
+        "last_audit_deleted": 0,
+        "last_oauth_deleted": 0,
+        "oldest_audit_created_at": "",
+        "oldest_oauth_created_at": "",
     }
     lines = [
         f"status: {report['status']}",
@@ -316,6 +424,7 @@ def render_text_report(report: HealthReport) -> str:
     alerts = report["alerts"]
     multi_tenant = report.get("multi_tenant", default_multi_tenant)
     operation_queue = report.get("operation_queue", default_operation_queue)
+    retention = report.get("retention", default_retention)
     lines.append("reasons: " + (", ".join(str(item) for item in reasons) if reasons else "none"))
     lines.append(
         "ignored_reasons: "
@@ -337,6 +446,13 @@ def render_text_report(report: HealthReport) -> str:
             f"operation_queue.pending: {operation_queue.get('pending', 0)}",
             f"operation_queue.running: {operation_queue.get('running', 0)}",
             f"operation_queue.failed: {operation_queue.get('failed', 0)}",
+            f"retention.last_pruned_at: {retention.get('last_pruned_at') or 'none'}",
+            f"retention.last_pruned_age_seconds: {retention.get('last_pruned_age_seconds')}",
+            f"retention.audit_overdue: {retention.get('audit_overdue', 0)}",
+            f"retention.oauth_terminal_overdue: {retention.get('oauth_terminal_overdue', 0)}",
+            f"retention.oauth_pending_overdue: {retention.get('oauth_pending_overdue', 0)}",
+            f"retention.last_audit_deleted: {retention.get('last_audit_deleted', 0)}",
+            f"retention.last_oauth_deleted: {retention.get('last_oauth_deleted', 0)}",
         ]
     )
     return "\n".join(lines)

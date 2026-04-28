@@ -3,14 +3,22 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.fiscalbay.models import OauthLinkSession, TelegramChat, TelegramConfig, TelegramUser
+from src.fiscalbay.models import (
+    AuditLogEntry,
+    OauthLinkSession,
+    TelegramChat,
+    TelegramConfig,
+    TelegramUser,
+)
 from src.fiscalbay.reconcile import (
     enqueue_apply_user_access_operation,
     process_pending_operations,
     run_reconciliation,
 )
 from src.fiscalbay.storage.sqlite import (
+    append_audit_log_entry,
     create_oauth_link_session,
+    load_audit_log_entries,
     load_notification_subscriptions,
     load_oauth_link_session_by_state,
     load_operation_queue_entries,
@@ -82,6 +90,10 @@ class ReconcileTests(unittest.TestCase):
                     created_at="2026-04-06T09:45:00Z",
                 ),
             )
+            append_audit_log_entry(
+                str(db_path),
+                AuditLogEntry(event_type="old_event", created_at="2025-01-01T00:00:00Z"),
+            )
             config = TelegramConfig(
                 token="x",
                 allowed_chat_ids=None,
@@ -99,6 +111,12 @@ class ReconcileTests(unittest.TestCase):
             self.assertIsNotNone(session)
             assert session is not None
             self.assertEqual(session.status, "expired")
+            audit_event_types = [
+                entry.event_type for entry in load_audit_log_entries(str(db_path), limit=5)
+            ]
+            self.assertIn("retention_prune", audit_event_types)
+            self.assertNotIn("old_event", audit_event_types)
+            self.assertEqual(report["retention"]["audit_deleted"], 1)
 
 
 if __name__ == "__main__":

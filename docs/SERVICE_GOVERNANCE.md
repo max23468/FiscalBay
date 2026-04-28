@@ -163,6 +163,9 @@ L'audit log minimo oggi copre:
 - `disconnect`
 - `oauth_success`
 - `oauth_failure`
+- `tenant_export`
+- `tenant_delete`
+- `retention_prune`
 
 ## Retention minima
 
@@ -214,6 +217,8 @@ Retention:
 
 - sessioni `pending` vanno fatte decadere rapidamente
 - sessioni `completed`, `failed`, `expired`, `cancelled` possono essere mantenute fino a `30 giorni`
+- il worker `fiscalbay-reconcile` marca come `expired` le sessioni pending scadute e pota le sessioni concluse oltre retention
+- le sessioni pending molto vecchie sono considerate residue e vengono potate con soglia dedicata
 
 ### Audit log
 
@@ -224,7 +229,8 @@ Comprende:
 Retention:
 
 - `180 giorni` come baseline minima corrente
-- oltre tale finestra, il log puo' essere potato in manutenzione amministrativa
+- oltre tale finestra, il log viene potato automaticamente dalla reconciliation periodica
+- la retention e' configurabile con `FISCALBAY_AUDIT_RETENTION_DAYS`
 
 ### Log runtime
 
@@ -259,6 +265,8 @@ Stato attuale:
 - cancellazione amministrativa assistita
 - non ancora self-service da Telegram
 - l'uscita utente dal servizio va trattata in modo distinto tra scollegamento account eBay e disattivazione dell'accesso al bot
+- l'admin puo' usare `/admin export <telegram_user_id>` per produrre un export operativo senza segreti
+- l'admin puo' usare `/admin delete_tenant <telegram_user_id> confirm` per eliminare i dati operativi locali del tenant
 
 Richiesta minima:
 
@@ -281,6 +289,12 @@ Eccezioni minime:
 
 - audit log gia' scritto puo' essere mantenuto fino alla sua retention per sicurezza e tracciabilita'
 - log runtime di sistema restano soggetti alla retention del journal VPS
+
+Tenant inattivi:
+
+- un tenant approvato e operativo senza attivita' recente e' considerato dormiente, non cancellato
+- `/admin dormant [ore]` e `/admin_users inactive` sono viste di review: non disattivano, non scollegano e non cancellano dati
+- qualsiasi cleanup o cancellazione resta una decisione admin esplicita con comando dedicato e audit
 
 ## Limiti del servizio
 
