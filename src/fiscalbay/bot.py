@@ -22,7 +22,6 @@ from .application import fetch_environment_records as _fetch_environment_records
 from .application import resolve_fetch_context as _resolve_fetch_context
 from .bot_messaging import request_with_backoff
 from .bot_messaging import send_message as _send_message
-from .clients.ebay import revoke_user_refresh_token
 from .clients.telegram import (
     InlineKeyboardMarkup,
     ensure_long_polling,
@@ -1065,22 +1064,11 @@ def _disconnect_account_with_remote_revocation(
     remote_revocation_status = "not_attempted"
     remote_revocation_detail = ""
     if linked_account is not None:
-        tenant_config = load_tenant_config_from_storage(
-            linked_account,
-            environment,
-            telegram_config.state_path,
+        remote_revocation_status = "skipped"
+        remote_revocation_detail = (
+            "revoca remota eBay non automatica; rimuovi FiscalBay da eBay se vuoi "
+            "revocare anche il consenso lato eBay"
         )
-        if tenant_config is None:
-            remote_revocation_status = "skipped"
-            remote_revocation_detail = "refresh token tenant non disponibile"
-        else:
-            try:
-                revoke_user_refresh_token(tenant_config)
-            except Exception as exc:
-                remote_revocation_status = "failed"
-                remote_revocation_detail = str(exc)
-            else:
-                remote_revocation_status = "revoked"
     disconnected_account = disconnect_linked_ebay_account(
         telegram_config.state_path,
         telegram_user_id,

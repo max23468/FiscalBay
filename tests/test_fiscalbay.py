@@ -6,6 +6,7 @@ from src.fiscalbay.clients.ebay import (
     clear_access_token_cache,
     get_access_token,
     request_json,
+    revoke_user_refresh_token,
 )
 from src.fiscalbay.errors import EbayApiError
 from src.fiscalbay.models import (
@@ -66,6 +67,12 @@ class EbayCfToolTests(unittest.TestCase):
         self.assertEqual(get_access_token(first_cfg), "tok-one")
         self.assertEqual(get_access_token(second_cfg), "tok-two")
         self.assertEqual(mock_mint.call_count, 2)
+
+    def test_revoke_user_refresh_token_reports_unsupported_remote_revocation(self) -> None:
+        with self.assertRaises(EbayApiError) as ctx:
+            revoke_user_refresh_token(self._sample_config())
+
+        self.assertIn("Revoca remota OAuth eBay non automatica", str(ctx.exception))
 
     @patch("src.fiscalbay.clients.ebay.logger")
     @patch("src.fiscalbay.clients.ebay.time.sleep", autospec=True)

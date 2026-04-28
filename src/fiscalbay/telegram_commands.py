@@ -1782,14 +1782,11 @@ def _format_remote_revocation_line(status: str, detail: str) -> str:
     if status == "revoked":
         return "☁️ Revoca remota eBay: <code>completata</code>\n"
     if status == "failed":
-        return (
-            "☁️ Revoca remota eBay: <code>non confermata</code>\n"
-            f"📝 Dettaglio remoto: <code>{detail or 'n/d'}</code>\n"
-        )
+        return "☁️ Revoca remota eBay: <code>non confermata</code>\n"
     if status == "skipped":
         return (
             "☁️ Revoca remota eBay: <code>saltata</code>\n"
-            f"📝 Dettaglio remoto: <code>{detail or 'token non disponibile'}</code>\n"
+            f"📝 Nota: <code>{detail or 'token locale rimosso'}</code>\n"
         )
     return "☁️ Revoca remota eBay: <code>non tentata</code>\n"
 

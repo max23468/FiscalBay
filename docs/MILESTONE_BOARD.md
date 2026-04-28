@@ -140,7 +140,7 @@ Deliverable principali:
 Stato corrente:
 
 - `/account` e `/account collega` esistono gia' nel bot
-- `/account scollega` ora tenta anche la revoca remota eBay e mantiene distinta l'uscita completa dal bot
+- `/account scollega` scollega localmente account e token e mantiene distinta l'uscita completa dal bot; la revoca remota eBay resta fuori dal flusso automatico
 - `/settings notifiche on|off` e `/settings` esistono gia' come gestione self-service minima lato chat
 - `/account collega` salva una sessione preliminare in `oauth_link_sessions`
 - il callback OAuth minimale esiste gia' come servizio separato `fiscalbay-oauth`

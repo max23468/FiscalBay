@@ -2547,10 +2547,8 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("Usa <code>/account collega</code>", account_replies[0])
 
     @patch("src.fiscalbay.bot.load_tenant_config_from_storage")
-    @patch("src.fiscalbay.bot.revoke_user_refresh_token")
-    def test_process_message_disconnect_attempts_remote_revocation(
+    def test_process_message_disconnect_skips_remote_revocation(
         self,
-        mock_revoke_user_refresh_token,
         mock_load_tenant_config_from_storage,
     ) -> None:
         mock_load_tenant_config_from_storage.return_value = object()
@@ -2602,74 +2600,14 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             self.assertEqual(len(replies), 1)
-            mock_revoke_user_refresh_token.assert_called_once()
-            self.assertIn("Revoca remota eBay: <code>completata</code>", replies[0])
+            mock_load_tenant_config_from_storage.assert_not_called()
+            self.assertIn("Revoca remota eBay: <code>saltata</code>", replies[0])
+            self.assertIn("revoca remota eBay non automatica", replies[0])
             self.assertIn("accesso al bot resta approvato", replies[0])
 
     @patch("src.fiscalbay.bot.load_tenant_config_from_storage")
-    @patch("src.fiscalbay.bot.revoke_user_refresh_token")
-    def test_process_message_disconnect_reports_remote_revocation_failure(
-        self,
-        mock_revoke_user_refresh_token,
-        mock_load_tenant_config_from_storage,
-    ) -> None:
-        mock_revoke_user_refresh_token.side_effect = RuntimeError("boom")
-        mock_load_tenant_config_from_storage.return_value = object()
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = Path(tmpdir) / "state.db"
-            config = TelegramConfig(
-                token="x",
-                allowed_chat_ids={1, 123, 456, 573159993},
-                notify_chat_ids={456},
-                state_path=str(db_path),
-                retry_queue_path=str(db_path),
-            )
-
-            sync_runtime_contact(
-                config,
-                telegram_user_id=123,
-                chat_id=456,
-                username="seller_user",
-                display_name="Mario Rossi",
-                chat_type="private",
-            )
-            upsert_linked_ebay_account(
-                str(db_path),
-                LinkedEbayAccount(
-                    telegram_user_id=123,
-                    ebay_user_id="seller-ebay",
-                    environment="production",
-                    linked_at="2026-04-06T10:00:00Z",
-                    status="linked",
-                ),
-            )
-            upsert_ebay_token_set(
-                str(db_path),
-                EbayTokenSet(
-                    ebay_account_id=1,
-                    refresh_token_encrypted="plain:tenant-refresh",
-                    access_token="access-token",
-                    scope_set="scope",
-                    status="active",
-                ),
-            )
-
-            replies = process_message(
-                text="/account scollega",
-                chat_id=456,
-                telegram_user_id=123,
-                telegram_config=config,
-                ebay_environment="production",
-            )
-
-            self.assertEqual(len(replies), 1)
-            self.assertIn("non confermata", replies[0])
-
-    @patch("src.fiscalbay.bot.load_tenant_config_from_storage")
-    @patch("src.fiscalbay.bot.revoke_user_refresh_token")
     def test_process_message_leave_bot_resets_access_and_notifications(
         self,
-        mock_revoke_user_refresh_token,
         mock_load_tenant_config_from_storage,
     ) -> None:
         mock_load_tenant_config_from_storage.return_value = object()
@@ -2738,7 +2676,8 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             self.assertEqual(len(replies), 1)
-            mock_revoke_user_refresh_token.assert_called_once()
+            mock_load_tenant_config_from_storage.assert_not_called()
+            self.assertIn("Revoca remota eBay: <code>saltata</code>", replies[0])
             self.assertIn("Accesso operativo al bot: <code>disattivato</code>", replies[0])
             self.assertIn("/request_access", replies[0])
 
