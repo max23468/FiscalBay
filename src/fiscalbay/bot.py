@@ -2873,7 +2873,7 @@ def process_message(
                     "account_status": connect_account_status.get("account_status"),
                     "ebay_user_id": connect_account_status.get("ebay_user_id"),
                     "reconnect": connect_account_status.get("account_status")
-                    in {"linked", "disconnected", "revoked"},
+                    in {"linked", "revoked"},
                     "notifications_enabled": connect_account_status.get("notifications_enabled"),
                     "last_seen_order_id": connect_account_status.get("last_seen_order_id"),
                     "last_seen_order_created_at": connect_account_status.get(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
 import os
@@ -192,7 +193,8 @@ def clear_access_token_cache() -> None:
 
 
 def token_cache_key(config: Config) -> str:
-    return f"{config.client_id}\0{config.environment}\0{config.scopes}"
+    refresh_token_hash = hashlib.sha256(config.refresh_token.encode("utf-8")).hexdigest()
+    return f"{config.client_id}\0{config.environment}\0{config.scopes}\0{refresh_token_hash}"
 
 
 def request_retry_settings() -> tuple[int, float]:

@@ -1016,7 +1016,7 @@ def upsert_linked_ebay_account(path: str, account: LinkedEbayAccount) -> None:
             "ON CONFLICT(telegram_user_id, environment) DO UPDATE SET "
             "ebay_user_id = excluded.ebay_user_id, "
             "scopes = excluded.scopes, "
-            "linked_at = COALESCE(ebay_accounts.linked_at, excluded.linked_at), "
+            "linked_at = excluded.linked_at, "
             "status = excluded.status",
             (
                 account.telegram_user_id,

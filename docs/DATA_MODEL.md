@@ -263,8 +263,11 @@ Campi minimi:
 Note:
 
 - per la prima beta il vincolo e' un solo account attivo per utente e per environment
+- lo stesso `ebay_user_id` puo' comparire su piu' utenti Telegram distinti
 - il supporto multi-account per utente viene esplicitamente rinviato
 - lo stato locale puo' passare da `linked` a `disconnected` quando l'utente usa `/account scollega`
+- un nuovo OAuth completato per lo stesso utente Telegram sostituisce
+  l'identita' eBay precedente nello stesso environment
 
 ### `ebay_tokens`
 

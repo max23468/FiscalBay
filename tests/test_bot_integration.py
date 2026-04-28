@@ -2478,7 +2478,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             self.assertEqual(len(replies), 1)
-            self.assertIn("Ricollega account eBay", replies[0])
+            self.assertIn("Collegamento account eBay", replies[0])
             self.assertIn("Stato account attuale: <code>disconnected</code>", replies[0])
             self.assertIn("seller-ebay", replies[0])
 

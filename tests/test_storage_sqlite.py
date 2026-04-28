@@ -735,6 +735,62 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertEqual(token_set.refresh_token_encrypted, "")
             self.assertEqual(token_set.access_token, "")
 
+    def test_multiple_telegram_users_can_link_same_ebay_account(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+
+            for telegram_user_id in (123, 124):
+                upsert_linked_ebay_account(
+                    str(db_path),
+                    LinkedEbayAccount(
+                        telegram_user_id=telegram_user_id,
+                        ebay_user_id="shared-ebay-seller",
+                        environment="production",
+                        scopes="sell.fulfillment",
+                        linked_at="2026-04-06T10:00:00Z",
+                        status="linked",
+                    ),
+                )
+
+            accounts = load_linked_ebay_accounts(str(db_path))
+            self.assertEqual(len(accounts), 2)
+            self.assertEqual({account.telegram_user_id for account in accounts}, {123, 124})
+            self.assertEqual({account.ebay_user_id for account in accounts}, {"shared-ebay-seller"})
+
+    def test_relinking_same_telegram_user_replaces_ebay_account_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+
+            upsert_linked_ebay_account(
+                str(db_path),
+                LinkedEbayAccount(
+                    telegram_user_id=123,
+                    ebay_user_id="max2348",
+                    environment="production",
+                    scopes="sell.fulfillment",
+                    linked_at="2026-04-06T10:00:00Z",
+                    status="linked",
+                ),
+            )
+            upsert_linked_ebay_account(
+                str(db_path),
+                LinkedEbayAccount(
+                    telegram_user_id=123,
+                    ebay_user_id="numisleo",
+                    environment="production",
+                    scopes="sell.fulfillment commerce.identity",
+                    linked_at="2026-04-07T10:00:00Z",
+                    status="linked",
+                ),
+            )
+
+            accounts = load_linked_ebay_accounts(str(db_path))
+            self.assertEqual(len(accounts), 1)
+            account = resolve_linked_ebay_account(str(db_path), 123, "production")
+            assert account is not None
+            self.assertEqual(account.ebay_user_id, "numisleo")
+            self.assertEqual(account.linked_at, "2026-04-07T10:00:00Z")
+
     def test_set_notification_subscription_enabled_updates_chat_and_subscription(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"

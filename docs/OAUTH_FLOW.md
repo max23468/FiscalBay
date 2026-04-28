@@ -125,8 +125,12 @@ Regola UX:
 - l'Accept URL associato al `RuName` nel portale eBay deve puntare proprio al callback pubblico esposto dal progetto
 - il server espone anche `/` come mini sito vetrina e `/privacy` e `/about` sullo stesso host pubblico, cosi' il portale eBay puo' usare URL coerenti per Privacy Policy e About del branding OAuth
 - il flusso target resta un account eBay attivo per utente e per environment
+- lo stesso account eBay puo' essere collegato da piu' utenti Telegram distinti
 - il refresh token non resta in env e non viene mai considerato configurazione globale del bot
 - il refresh token viene salvato solo in forma cifrata
+- la cache degli access token eBay deve restare separata per refresh token, cosi'
+  uno scollegamento seguito dal collegamento di un account eBay diverso non puo'
+  riusare in memoria il token del collegamento precedente
 - un token revocato o non piu' refreshabile porta l'account in stato da riconnettere
 
 ## Milestone tecnica prima dell'implementazione

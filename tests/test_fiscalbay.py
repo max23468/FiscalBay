@@ -47,6 +47,26 @@ class EbayCfToolTests(unittest.TestCase):
         self.assertEqual(get_access_token(cfg), "tok-one")
         self.assertEqual(mock_mint.call_count, 1)
 
+    @patch("src.fiscalbay.clients.ebay.request_user_access_token_response")
+    def test_get_access_token_cache_is_scoped_to_refresh_token(self, mock_mint) -> None:
+        mock_mint.side_effect = [
+            {"access_token": "tok-one", "expires_in": 7200},
+            {"access_token": "tok-two", "expires_in": 7200},
+        ]
+        first_cfg = self._sample_config()
+        second_cfg = Config(
+            client_id=first_cfg.client_id,
+            client_secret=first_cfg.client_secret,
+            refresh_token="refresh-for-another-ebay-account",
+            environment=first_cfg.environment,
+            scopes=first_cfg.scopes,
+        )
+
+        self.assertEqual(get_access_token(first_cfg), "tok-one")
+        self.assertEqual(get_access_token(first_cfg), "tok-one")
+        self.assertEqual(get_access_token(second_cfg), "tok-two")
+        self.assertEqual(mock_mint.call_count, 2)
+
     @patch("src.fiscalbay.clients.ebay.logger")
     @patch("src.fiscalbay.clients.ebay.time.sleep", autospec=True)
     @patch("src.fiscalbay.clients.ebay.request_json_once")
