@@ -15,7 +15,7 @@ from .clients.telegram import (
 from .errors import EbayApiError, TelegramApiError
 from .logging_utils import log_event
 from .retry import run_with_retry
-from .telegram_commands import chunk_message
+from .telegram_commands import chunk_message, with_fiscal_identifier_copy_markup
 
 LOGGER = logging.getLogger("fiscalbay.telegram_bot")
 
@@ -58,6 +58,8 @@ def send_message(
 ) -> None:
     chunks = chunk_message(text)
     for idx, chunk in enumerate(chunks):
+        base_reply_markup = reply_markup if idx == len(chunks) - 1 else None
+        chunk_reply_markup = with_fiscal_identifier_copy_markup(chunk, base_reply_markup)
         params: dict[str, JsonValue] = {
             "chat_id": chat_id,
             "text": chunk,
@@ -66,8 +68,8 @@ def send_message(
         }
         if message_thread_id is not None:
             params["message_thread_id"] = message_thread_id
-        if reply_markup is not None and idx == len(chunks) - 1:
-            params["reply_markup"] = reply_markup
+        if chunk_reply_markup is not None:
+            params["reply_markup"] = chunk_reply_markup
         try:
             request_fn(token, "sendMessage", params)
         except TelegramApiError as exc:
@@ -80,6 +82,6 @@ def send_message(
             }
             if message_thread_id is not None:
                 fallback_params["message_thread_id"] = message_thread_id
-            if reply_markup is not None and idx == len(chunks) - 1:
-                fallback_params["reply_markup"] = reply_markup
+            if chunk_reply_markup is not None:
+                fallback_params["reply_markup"] = chunk_reply_markup
             request_fn(token, "sendMessage", fallback_params)

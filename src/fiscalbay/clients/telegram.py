@@ -30,9 +30,14 @@ class BotCommand(TypedDict):
     description: str
 
 
-class InlineKeyboardButton(TypedDict):
+class CopyTextButton(TypedDict):
+    text: str
+
+
+class InlineKeyboardButton(TypedDict, total=False):
     text: str
     callback_data: str
+    copy_text: CopyTextButton
 
 
 class InlineKeyboardMarkup(TypedDict):

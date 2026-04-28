@@ -487,6 +487,92 @@ class TelegramBotTests(unittest.TestCase):
         params = mock_telegram_request.call_args.args[2]
         self.assertEqual(params.get("reply_markup"), reply_markup)
 
+    @patch("src.fiscalbay.bot.telegram_request")
+    def test_send_message_adds_copy_button_for_fiscal_identifier(
+        self, mock_telegram_request
+    ) -> None:
+        mock_telegram_request.return_value = {"message_id": 1}
+        text = format_auto_notification(
+            {
+                "orderId": "12-346",
+                "creationDate": "2026-04-03T10:00:00Z",
+                "buyerUsername": "buyer-vat",
+                "taxpayerId": "IT12345678901",
+                "taxIdentifierType": "VAT_NUMBER",
+                "issuingCountry": "IT",
+            }
+        )
+
+        send_message("token", 123, text)
+
+        params = mock_telegram_request.call_args.args[2]
+        self.assertEqual(
+            params.get("reply_markup"),
+            {
+                "inline_keyboard": [
+                    [
+                        {
+                            "text": "Copia P.IVA",
+                            "copy_text": {"text": "IT12345678901"},
+                        }
+                    ]
+                ]
+            },
+        )
+
+    @patch("src.fiscalbay.bot.telegram_request")
+    def test_send_message_merges_copy_button_with_existing_markup(
+        self, mock_telegram_request
+    ) -> None:
+        mock_telegram_request.return_value = {"message_id": 1}
+        text = format_auto_notification(
+            {
+                "orderId": "12-345",
+                "creationDate": "2026-04-03T10:00:00Z",
+                "buyerUsername": "buyer",
+                "taxpayerId": "RSSMRA80A01H501U",
+                "taxIdentifierType": "CODICE_FISCALE",
+                "issuingCountry": "IT",
+            }
+        )
+        reply_markup = build_main_menu_markup()
+
+        send_message("token", 123, text, reply_markup=reply_markup)
+
+        params = mock_telegram_request.call_args.args[2]
+        keyboard = params["reply_markup"]["inline_keyboard"]
+        self.assertEqual(
+            keyboard[0],
+            [
+                {
+                    "text": "Copia CF",
+                    "copy_text": {"text": "RSSMRA80A01H501U"},
+                }
+            ],
+        )
+        self.assertEqual(keyboard[1:], reply_markup["inline_keyboard"])
+
+    @patch("src.fiscalbay.bot.telegram_request")
+    def test_send_message_does_not_add_copy_button_for_missing_fiscal_identifier(
+        self, mock_telegram_request
+    ) -> None:
+        mock_telegram_request.return_value = {"message_id": 1}
+        text = format_auto_notification(
+            {
+                "orderId": "12-345",
+                "creationDate": "2026-04-03T10:00:00Z",
+                "buyerUsername": "buyer",
+                "taxpayerId": "",
+                "taxIdentifierType": "",
+                "issuingCountry": "",
+            }
+        )
+
+        send_message("token", 123, text)
+
+        params = mock_telegram_request.call_args.args[2]
+        self.assertNotIn("reply_markup", params)
+
     @patch("src.fiscalbay.clients.telegram.telegram_request")
     def test_ensure_long_polling_deletes_existing_webhook(self, mock_telegram_request) -> None:
         ensure_long_polling("token")

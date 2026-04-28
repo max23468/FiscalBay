@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import json
+import re
 import urllib.parse
 from datetime import datetime
 from typing import Callable, Iterable, Mapping
@@ -59,6 +60,11 @@ BOT_LONG_DESCRIPTION = (
     "Controlla identificativi fiscali, stato account e ordini eBay da un'unica chat."
 )
 
+_FISCAL_IDENTIFIER_COPY_RE = re.compile(
+    r"💳\s*<b>(?P<label>[^<]+)</b>:\s*<code>(?P<value>.*?)</code>"
+)
+_FISCAL_IDENTIFIER_UNAVAILABLE_VALUES = {"", "non disponibile", "n/d", "none", "null"}
+
 
 def fiscal_identifier_label(tax_identifier_type: str) -> str:
     normalized = str(tax_identifier_type or "").strip().upper()
@@ -98,6 +104,34 @@ def chunk_message(text: str, limit: int = 3500) -> list[str]:
     if current:
         chunks.append("\n".join(current))
     return chunks
+
+
+def with_fiscal_identifier_copy_markup(
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> InlineKeyboardMarkup | None:
+    copy_rows = []
+    seen_values = set()
+    for match in _FISCAL_IDENTIFIER_COPY_RE.finditer(text):
+        label = html.unescape(match.group("label")).strip() or "ID Fiscale"
+        value = html.unescape(match.group("value")).strip()
+        if value.lower() in _FISCAL_IDENTIFIER_UNAVAILABLE_VALUES:
+            continue
+        if len(value) > 256 or value in seen_values:
+            continue
+        seen_values.add(value)
+        copy_rows.append(
+            [
+                {
+                    "text": f"Copia {label}",
+                    "copy_text": {"text": value},
+                }
+            ]
+        )
+    if not copy_rows:
+        return reply_markup
+    existing_rows = list(reply_markup.get("inline_keyboard", [])) if reply_markup else []
+    return {"inline_keyboard": copy_rows + existing_rows}
 
 
 def record_fingerprint(record: OrderRecord) -> str:
