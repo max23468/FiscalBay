@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.17.0](https://github.com/max23468/FiscalBay/compare/v0.16.0...v0.17.0) (2026-04-28)
+
+### Features
+
+* add VPS recovery guardrails ([c485794](https://github.com/max23468/FiscalBay/commit/c485794baf8bda71d27c1478c12791dd6e48a950))
+
 ## [0.16.0](https://github.com/max23468/FiscalBay/compare/v0.15.0...v0.16.0) (2026-04-28)
 
 ### Features
