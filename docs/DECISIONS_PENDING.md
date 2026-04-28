@@ -22,7 +22,8 @@ un'apertura pubblica libera o multiutente a larga scala.
 - il pruning automatico di `audit_log`, sessioni OAuth vecchie e operation queue
   terminale e' parte della reconciliation periodica
 - la cancellazione utente resta amministrativa assistita tramite export e delete
-  tenant; il self-service e' rimandato
+  tenant; l'utente puo' avviare la richiesta con `/settings dati`, mentre la
+  conferma finale resta admin
 - il set admin permanente per `1.0.0` e' composto da `/admin`,
   `/admin manutenzione`, `/admin_users all|pending|unlinked|reconnect|inactive`,
   `/tenant_health`, `/admin dormant [ore]`, `/admin export`,
@@ -36,7 +37,7 @@ un'apertura pubblica libera o multiutente a larga scala.
 
 - Postgres o database gestito prima di un'apertura pubblica multiutente piu' ampia
 - eventuale secret manager dedicato quando il perimetro operativo cresce
-- cancellazione self-service completa da Telegram
+- cancellazione self-service completa da Telegram senza conferma admin
 - ruoli admin multipli o delega operativa
 - alert prodotto persistenti con storico dedicato
 - revoca remota eBay garantita come parte del flusso di disconnect

@@ -24,6 +24,7 @@ Non ci sono fasi aperte bloccanti per `1.0.0`.
 - Fase 9 - Readiness 1.0.0
 - Fase 1.1 - Stabilizzazione operativa post-1.0
 - Fase 1.2 - Disconnect e reconnect piu' robusti
+- Fase 1.3 - Self-service assistito utente
 
 ## Principi 1.x
 
@@ -42,21 +43,6 @@ Principi guida:
   il cambio e' osservabile, deploy VPS e smoke check remoto
 
 ## Roadmap 1.x
-
-### 1.3.0 - Self-service assistito utente
-
-Obiettivo:
-
-- permettere all'utente di avviare richieste sensibili senza rendere distruttivi
-  i comandi lato utente
-
-Direzione:
-
-- introdurre un flusso utente per chiedere uscita dal servizio o cancellazione
-  dati locali
-- mantenere conferma finale admin per export e delete tenant
-- rendere piu' leggibili da bot privacy, dati conservati, retention e prossimi
-  passi operativi
 
 ### 1.4.0 - Admin comfort e osservabilita' leggera
 

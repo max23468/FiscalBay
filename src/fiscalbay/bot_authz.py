@@ -29,6 +29,7 @@ COMMAND_CAPABILITIES: dict[str, str] = {
     "/connect": CAPABILITY_CONNECT_ACCOUNT,
     "/disconnect": CAPABILITY_CONNECT_ACCOUNT,
     "/leave_bot": CAPABILITY_MANAGE_SETTINGS,
+    "/data_request": CAPABILITY_MANAGE_SETTINGS,
     "/notifications": CAPABILITY_MANAGE_NOTIFICATIONS,
     "/settings": CAPABILITY_MANAGE_SETTINGS,
     "/ordini": CAPABILITY_VIEW_ORDERS,

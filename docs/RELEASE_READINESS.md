@@ -73,7 +73,8 @@ Questi punti non bloccano `1.0.0`, ma restano vincoli espliciti del servizio:
 - un solo admin globale
 - un solo account eBay attivo per utente e per environment
 - accesso approvato manualmente, non apertura libera
-- cancellazione utente amministrativa assistita, non ancora self-service
+- cancellazione utente amministrativa assistita, avviabile dall'utente con
+  `/settings dati cancellazione`
 - nessuna dashboard web operativa oltre onboarding/callback/supporto
 - SQLite ammesso solo a bassa scala e con backup/restore mantenuti
 
@@ -86,7 +87,7 @@ stabile iniziale:
 - ruoli admin multipli o team
 - Postgres o database gestito come requisito immediato
 - secret manager dedicato obbligatorio
-- cancellazione self-service completa da Telegram
+- cancellazione self-service completa da Telegram senza conferma admin
 - revoca remota eBay garantita come parte del disconnect locale
 - SLA, alta disponibilita' o multiworker distribuiti
 

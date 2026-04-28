@@ -402,6 +402,121 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertEqual(mock_send_message.call_args.args[1], 123)
 
     @patch("src.fiscalbay.bot.send_message")
+    def test_user_can_request_assisted_data_deletion(self, mock_send_message) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123, 456},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=1000,
+                chat_id=456,
+                username="ops_user",
+                display_name="Ops User",
+                chat_type="private",
+            )
+            update_telegram_user_status(
+                str(db_path),
+                1000,
+                TELEGRAM_USER_STATUS_APPROVED,
+                updated_at="2026-04-06T10:00:00Z",
+            )
+            upsert_linked_ebay_account(
+                str(db_path),
+                LinkedEbayAccount(
+                    telegram_user_id=1000,
+                    ebay_user_id="seller-1000",
+                    environment="production",
+                    linked_at="2026-04-06T10:00:00Z",
+                ),
+            )
+
+            replies = process_message(
+                text="/settings dati cancellazione",
+                chat_id=456,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=1000,
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Richiesta dati registrata", replies[0])
+            self.assertIn("Tipo richiesta: <code>delete</code>", replies[0])
+            self.assertIn("Azione automatica: <code>nessuna cancellazione</code>", replies[0])
+            self.assertIsNotNone(load_telegram_user(str(db_path), 1000))
+            self.assertIsNotNone(resolve_linked_ebay_account(str(db_path), 1000, "production"))
+            mock_send_message.assert_called_once()
+            self.assertEqual(mock_send_message.call_args.args[1], 123)
+            self.assertIn("Richiesta dati utente", mock_send_message.call_args.args[2])
+            self.assertIn("/admin export 1000", mock_send_message.call_args.args[2])
+            self.assertIn("/admin delete_tenant 1000 confirm", mock_send_message.call_args.args[2])
+            audit_entries = load_audit_log_entries(str(db_path), 5)
+            self.assertEqual(audit_entries[0].event_type, "data_request")
+            self.assertEqual(audit_entries[0].outcome, "delete_requested")
+
+    def test_settings_data_explains_retention_and_assisted_actions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123, 456},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=1000,
+                chat_id=456,
+                username="ops_user",
+                display_name="Ops User",
+                chat_type="private",
+            )
+            update_telegram_user_status(
+                str(db_path),
+                1000,
+                TELEGRAM_USER_STATUS_APPROVED,
+                updated_at="2026-04-06T10:00:00Z",
+            )
+
+            replies = process_message(
+                text="/settings dati",
+                chat_id=456,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=1000,
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Dati e privacy", replies[0])
+            self.assertIn("Retention audit", replies[0])
+            self.assertIn("/settings dati export", replies[0])
+            self.assertIn("/settings dati cancellazione", replies[0])
+
+    @patch("src.fiscalbay.bot.send_message")
     def test_admin_can_approve_user_and_user_becomes_operational(self, mock_send_message) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"

@@ -279,6 +279,7 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("/help", text)
         self.assertIn("/request_access", text)
         self.assertIn("/settings notifiche on", text)
+        self.assertIn("/settings dati", text)
         self.assertNotIn("/admin_users", text)
 
         admin_text = build_other_actions_text(is_admin=True)

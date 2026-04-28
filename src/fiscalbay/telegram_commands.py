@@ -329,6 +329,7 @@ def build_other_actions_text(*, is_admin: bool = False) -> str:
         "• <code>/settings notifiche on</code> → attiva notifiche\n"
         "• <code>/settings notifiche off</code> → disattiva notifiche\n"
         "• <code>/settings filtro all|cf|vat</code> → filtro notifiche\n"
+        "• <code>/settings dati</code> → privacy, export e cancellazione assistita\n"
         f"{admin_lines}"
     )
 
@@ -781,6 +782,99 @@ def format_admin_access_request(
         f"🏷️ Nome: <code>{safe_display_name}</code>\n"
         f"💬 Chat iniziale: <code>{chat_id}</code>\n"
         "Usa i pulsanti qui sotto per approvare o rifiutare l'accesso."
+    )
+
+
+def format_admin_data_request(
+    *,
+    telegram_user_id: int,
+    username: str,
+    display_name: str,
+    chat_id: int,
+    request_type: str,
+    account_status: Mapping[str, object],
+) -> str:
+    safe_username = html.escape(username or "n/d")
+    safe_display_name = html.escape(display_name or "n/d")
+    safe_request_type = html.escape(request_type)
+    account_label = html.escape(str(account_status.get("account_status") or "unlinked"))
+    token_label = html.escape(str(account_status.get("token_status") or "missing"))
+    ebay_user_id = html.escape(str(account_status.get("ebay_user_id") or "n/d"))
+    environment = html.escape(str(account_status.get("environment") or "n/d"))
+    if request_type == "delete":
+        admin_next_steps = (
+            f"1. <code>/admin export {telegram_user_id}</code>\n"
+            f"2. <code>/admin delete_tenant {telegram_user_id} confirm</code>"
+        )
+    else:
+        admin_next_steps = f"<code>/admin export {telegram_user_id}</code>"
+    return (
+        "🗂️ <b>Richiesta dati utente</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"Tipo richiesta: <code>{safe_request_type}</code>\n"
+        f"🆔 Telegram user: <code>{telegram_user_id}</code>\n"
+        f"👤 Username: <code>{safe_username}</code>\n"
+        f"🏷️ Nome: <code>{safe_display_name}</code>\n"
+        f"💬 Chat: <code>{chat_id}</code>\n"
+        f"Account: <code>{account_label}</code> token=<code>{token_label}</code>\n"
+        f"eBay: <code>{ebay_user_id}</code> • env=<code>{environment}</code>\n"
+        "Azione richiesta all'admin:\n"
+        f"{admin_next_steps}\n"
+        "La richiesta utente non ha cancellato dati in automatico."
+    )
+
+
+def format_data_request_status(
+    *,
+    request_type: str,
+    admin_notified: bool,
+    account_status: Mapping[str, object],
+) -> str:
+    safe_request_type = html.escape(request_type)
+    account_label = html.escape(str(account_status.get("account_status") or "unlinked"))
+    token_label = html.escape(str(account_status.get("token_status") or "missing"))
+    notified_text = "notificato" if admin_notified else "non raggiungibile ora"
+    if request_type == "delete":
+        next_step = (
+            "l'admin deve prima esportare i dati senza segreti e poi confermare "
+            "la cancellazione locale del tenant"
+        )
+    else:
+        next_step = "l'admin puo' preparare un export operativo senza segreti"
+    return (
+        "🗂️ <b>Richiesta dati registrata</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"Tipo richiesta: <code>{safe_request_type}</code>\n"
+        f"Admin: <code>{notified_text}</code>\n"
+        f"Account locale: <code>{account_label}</code> token=<code>{token_label}</code>\n"
+        "Azione automatica: <code>nessuna cancellazione</code>\n"
+        f"Prossimo passo: {next_step}.\n"
+        "Puoi scollegare subito eBay con <code>/account scollega</code> oppure "
+        "disattivare l'uso del bot con <code>/settings lascia</code>."
+    )
+
+
+def format_data_request_help(policy_status: Mapping[str, object]) -> str:
+    audit_retention_days = html.escape(str(policy_status.get("audit_retention_days", 180)))
+    oauth_retention_days = html.escape(str(policy_status.get("oauth_session_retention_days", 30)))
+    operation_retention_days = html.escape(
+        str(policy_status.get("operation_queue_retention_days", 30))
+    )
+    return (
+        "🗂️ <b>Dati e privacy</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "FiscalBay conserva solo dati operativi minimi: identita' Telegram, mapping "
+        "account eBay, token cifrati, preferenze notifiche, stato runtime e audit.\n"
+        "Non mantiene uno storico locale completo degli ordini: i dettagli ordine "
+        "sono letti da eBay e mostrati quando servono.\n"
+        f"Retention audit: <code>{audit_retention_days} giorni</code>\n"
+        f"Retention sessioni OAuth concluse: <code>{oauth_retention_days} giorni</code>\n"
+        f"Retention operation queue concluse: <code>{operation_retention_days} giorni</code>\n"
+        "Azioni disponibili:\n"
+        "• <code>/settings dati export</code> → chiedi export locale senza segreti\n"
+        "• <code>/settings dati cancellazione</code> → chiedi cancellazione dati locali\n"
+        "La cancellazione resta confermata dall'admin e mantiene l'audit minimo "
+        "fino alla retention."
     )
 
 
@@ -1269,6 +1363,8 @@ def format_policy_status(policy_status: Mapping[str, object]) -> str:
         f"Rate limiting per utente: <code>{rate_limit_status}</code> "
         f"(accesso {request_limit}s, account {connect_limit}s, admin {admin_limit}s).\n"
         "Il bot mostra solo dati fiscali realmente restituiti da eBay.\n"
+        "Privacy e dati: <code>/settings dati</code> mostra dati conservati, retention "
+        "e richieste assistite di export/cancellazione.\n"
         f"Modalita' servizio corrente: <code>{mode}</code>\n"
         "Riferimento operativo: <code>docs/SERVICE_GOVERNANCE.md</code> nel repository."
     )
@@ -1991,7 +2087,8 @@ def format_settings_status(settings_status: Mapping[str, object]) -> str:
         "➡️ Prossimi passi: " + " • ".join(next_actions) + "\n"
         "Comandi utili: <code>/account</code>, <code>/account collega</code>, "
         "<code>/account reconnect</code>, <code>/account scollega</code>, "
-        "<code>/settings lascia</code>, <code>/settings notifiche on</code>, "
+        "<code>/settings lascia</code>, <code>/settings dati</code>, "
+        "<code>/settings notifiche on</code>, "
         "<code>/settings notifiche off</code>."
     )
 

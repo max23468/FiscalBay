@@ -60,7 +60,7 @@ Non rientrano nel contratto `1.0.0`:
 - multi-account eBay per utente nello stesso environment
 - dashboard web come entrypoint operativo primario
 - SLA formale, alta disponibilita' o multiworker distribuiti
-- cancellazione utente self-service completa
+- cancellazione utente self-service completa senza conferma admin
 
 ## Perimetro del prodotto
 
@@ -314,15 +314,17 @@ Retention:
 
 Stato attuale:
 
-- cancellazione amministrativa assistita
-- non ancora self-service da Telegram
+- cancellazione amministrativa assistita, avviabile dall'utente da Telegram
 - l'uscita utente dal servizio va trattata in modo distinto tra scollegamento account eBay e disattivazione dell'accesso al bot
+- l'utente puo' usare `/settings dati` per leggere dati conservati e retention
+- l'utente puo' usare `/settings dati export` o `/settings dati cancellazione`
+  per notificare l'admin senza cancellazioni automatiche
 - l'admin puo' usare `/admin export <telegram_user_id>` per produrre un export operativo senza segreti
 - l'admin puo' usare `/admin delete_tenant <telegram_user_id> confirm` per eliminare i dati operativi locali del tenant
 
 Richiesta minima:
 
-- l'utente puo' chiedere all'admin la rimozione del proprio accesso e dei dati locali associati
+- l'utente puo' chiedere all'admin la rimozione del proprio accesso e dei dati locali associati direttamente dal bot
 
 Obiettivo operativo:
 

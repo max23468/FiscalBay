@@ -468,6 +468,9 @@ Dettagli account, ordini e impostazioni:
 - `/settings notifiche off`
 - `/settings filtro all|cf|vat`
 - `/settings policy`
+- `/settings dati`
+- `/settings dati export`
+- `/settings dati cancellazione`
 - `/settings lascia`
 
 Comandi admin:
@@ -496,7 +499,11 @@ Comportamento:
 - i messaggi ordine con identificativo fiscale valorizzato includono un pulsante inline per copiare direttamente il valore fiscale, ad esempio CF o P.IVA
 - `/stato` mostra ultimo check, contatori e dimensione della coda retry; `/stato servizio` mostra lo stato servizio sintetico
 - `/account` riassume lo stato eBay; `collega`, `reconnect` e `scollega` gestiscono le azioni account e indicano chiaramente se il consenso eBay va rimosso manualmente dalle impostazioni eBay
-- `/settings` riassume preferenze chat e tenant; `notifiche`, `filtro`, `policy` e `lascia` gestiscono le azioni correlate
+- `/settings` riassume preferenze chat e tenant; `notifiche`, `filtro`,
+  `policy`, `dati` e `lascia` gestiscono le azioni correlate
+- `/settings dati` spiega privacy, dati conservati e retention; `export` e
+  `cancellazione` inviano all'admin una richiesta assistita senza cancellare
+  dati automaticamente
 - la tastiera inline varia per contesto: `/account` privilegia collegamento e stato account, `/ordini` mostra azioni ordini/report, `/settings` mostra notifiche e preferenze, `/altre_azioni` raccoglie guida/accesso/preferenze, `/admin` mostra scorciatoie admin; `/start` e `/help` restano il menu generale
 - se `TELEGRAM_ADMIN_USER_ID` e' configurata, gli utenti non ancora approvati possono solo richiedere accesso con `/request_access` (anche quando `TELEGRAM_ALLOWED_CHAT_IDS=*`)
 - quando un nuovo utente viene visto per la prima volta dal runtime, l'admin riceve una notifica proattiva con user id/chat id per gestire subito approvazione o rifiuto

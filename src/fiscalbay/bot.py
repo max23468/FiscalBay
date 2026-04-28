@@ -186,6 +186,7 @@ from .telegram_commands import (
     format_admin_access_request,
     format_admin_command_help,
     format_admin_dashboard,
+    format_admin_data_request,
     format_admin_dormant_review,
     format_admin_maintenance_overview,
     format_admin_status_update,
@@ -194,6 +195,8 @@ from .telegram_commands import (
     format_admin_user_list,
     format_admin_watchlist,
     format_connect_status,
+    format_data_request_help,
+    format_data_request_status,
     format_disconnect_status,
     format_leave_status,
     format_notifications_status,
@@ -636,6 +639,7 @@ def _build_policy_status_payload(state_path: str) -> dict[str, object]:
     mode = str(service_state.get("mode") or SERVICE_MODE_NORMAL)
     public_config = load_public_service_config()
     rate_limit_config = load_rate_limit_config()
+    retention_config = load_retention_config()
     readiness = summarize_multi_tenant_readiness(state_path)
     return {
         "mode": mode,
@@ -653,6 +657,9 @@ def _build_policy_status_payload(state_path: str) -> dict[str, object]:
         "rate_limit_request_access_seconds": rate_limit_config.request_access_seconds,
         "rate_limit_connect_seconds": rate_limit_config.connect_seconds,
         "rate_limit_admin_mutation_seconds": rate_limit_config.admin_mutation_seconds,
+        "audit_retention_days": retention_config.audit_retention_days,
+        "oauth_session_retention_days": retention_config.oauth_session_retention_days,
+        "operation_queue_retention_days": retention_config.operation_queue_retention_days,
     }
 
 
@@ -1934,6 +1941,18 @@ def process_message(
         elif settings_action in {"lascia", "leave", "leave_bot", "esci"}:
             command = "/leave_bot"
             args = args[1:]
+        elif settings_action in {
+            "dati",
+            "data",
+            "privacy-dati",
+            "cancellazione",
+            "cancella",
+            "elimina",
+            "delete",
+            "export",
+        }:
+            command = "/data_request"
+            args = args[1:] if settings_action in {"dati", "data", "privacy-dati"} else args
         elif settings_action in {"policy", "privacy"}:
             command = "/policy"
             args = args[1:]
@@ -1975,6 +1994,83 @@ def process_message(
 
     if command == "/policy":
         return [format_policy_status(_build_policy_status_payload(telegram_config.state_path))]
+
+    if command == "/data_request" and (is_admin_user or can_use_bot):
+        if telegram_user_id is None:
+            return [
+                "🗂️ <b>Dati e privacy</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "Non riesco a identificare l'utente Telegram da questa richiesta."
+            ]
+        request_arg = str(args[0]).strip().lower() if args else ""
+        if request_arg in {"", "help", "aiuto", "privacy", "info", "stato"}:
+            return [
+                format_data_request_help(_build_policy_status_payload(telegram_config.state_path))
+            ]
+        if request_arg in {"export", "esporta", "scarica"}:
+            request_type = "export"
+        elif request_arg in {
+            "cancellazione",
+            "cancella",
+            "elimina",
+            "delete",
+            "rimozione",
+            "rimuovi",
+        }:
+            request_type = "delete"
+        else:
+            return [
+                "Uso corretto: <code>/settings dati export</code> oppure "
+                "<code>/settings dati cancellazione</code>"
+            ]
+        current_user = load_telegram_user(telegram_config.state_path, telegram_user_id)
+        account_status = summarize_tenant_account_status(
+            telegram_config.state_path,
+            telegram_user_id,
+            ebay_environment,
+        )
+        admin_notified = False
+        admin_chat_id = (
+            resolve_primary_chat_id(telegram_config.state_path, telegram_config.admin_user_id)
+            if telegram_config.admin_user_id is not None
+            else None
+        )
+        if admin_chat_id is not None and current_user is not None:
+            send_message(
+                telegram_config.token,
+                admin_chat_id,
+                format_admin_data_request(
+                    telegram_user_id=telegram_user_id,
+                    username=current_user.username,
+                    display_name=current_user.display_name,
+                    chat_id=chat_id,
+                    request_type=request_type,
+                    account_status=account_status,
+                ),
+            )
+            admin_notified = True
+        _append_audit_log(
+            telegram_config,
+            event_type="data_request",
+            created_at=now_iso,
+            actor_telegram_user_id=telegram_user_id,
+            target_telegram_user_id=telegram_user_id,
+            telegram_chat_id=chat_id,
+            environment=ebay_environment,
+            outcome=f"{request_type}_requested",
+            details={
+                "admin_notified": admin_notified,
+                "account_status": account_status.get("account_status"),
+                "token_status": account_status.get("token_status"),
+            },
+        )
+        return [
+            format_data_request_status(
+                request_type=request_type,
+                admin_notified=admin_notified,
+                account_status=account_status,
+            )
+        ]
 
     if command == "/service_mode":
         if not is_admin_user:

@@ -336,7 +336,8 @@ bash scripts/ci_verify.sh
 ### Limiti attuali ancora veri per 1.0.0
 
 - accesso approvato manualmente, non apertura libera
-- cancellazione utente amministrativa assistita, non self-service completa
+- cancellazione utente amministrativa assistita, con richiesta utente avviabile
+  da `/settings dati`
 - revoca consenso eBay classificata come manuale quando non e' disponibile una
   revoca OAuth remota documentata; disconnect locale comunque sicuro
 - SQLite accettato solo nel perimetro `approved_public_small`
@@ -375,7 +376,7 @@ Finding che restano driver per il cambio di scala:
 - singolo admin globale
 - secret key tenant ancora gestita in `.env` su VPS
 - alert prodotto non persistenti come storico dedicato
-- cancellazione self-service non ancora completa
+- cancellazione self-service completa senza conferma admin non ancora presente
 
 Questi finding sono la base esplicita delle scelte gia' fissate in `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md` e `docs/OAUTH_FLOW.md`.
 
@@ -631,7 +632,7 @@ l'evoluzione successiva:
 - Postgres o database gestito prima di un'apertura pubblica multiutente piu'
   ampia
 - secret manager dedicato se il perimetro operativo cresce
-- cancellazione utente self-service da Telegram
+- cancellazione utente completamente self-service da Telegram senza conferma admin
 - ruoli admin multipli o delega operativa
 - alert prodotto persistenti con storico dedicato
 - eventuale automazione ulteriore della revoca consenso eBay se eBay esporra' un

@@ -163,6 +163,9 @@ Controllo accessi Telegram:
 - gli utenti non approvati possono solo usare `/start`, `/help`, `/altre_azioni` e `/request_access`
 - l'admin riceve una richiesta con pulsanti inline `Approva` e `Rifiuta`
 - in alternativa l'admin puo' usare `/admin_users all|pending|unlinked|reconnect|inactive`, `/tenant_health`, `/admin`, `/admin dormant [ore]`, `/admin export <telegram_user_id>`, `/admin delete_tenant <telegram_user_id> confirm`, `/approve_user <telegram_user_id>`, `/reject_user <telegram_user_id>`, `/suspend_user <telegram_user_id>` e `/reactivate_user <telegram_user_id>`
+- quando un utente usa `/settings dati export` o `/settings dati cancellazione`,
+  l'admin riceve una notifica con i comandi operativi suggeriti; la richiesta non
+  modifica o cancella dati finche' l'admin non esegue export/delete
 - il gating passa ora da capability esplicite: `request_access`, `review_access`, `connect_account`, `manage_notifications`, `view_account`, `view_orders`
 - solo gli utenti `approved` o l'`admin` ricevono le capability operative che sbloccano `/account collega`, `/account`, `/settings`, `/settings notifiche` e i comandi ordini
 - approvare o bloccare un utente riallinea anche chat e subscription gia' registrate, quindi l'effetto non dipende solo dal prossimo restart o dal prossimo messaggio
@@ -263,7 +266,11 @@ Reconciliation periodica:
 Retention e cancellazione:
 
 - la policy di riferimento e' definita in `docs/SERVICE_GOVERNANCE.md`
-- stato attuale: la cancellazione utente e' amministrativa, non self-service
+- stato attuale: la cancellazione utente e' amministrativa assistita; l'utente
+  puo' avviare la richiesta da `/settings dati cancellazione`, ma l'esecuzione
+  resta confermata dall'admin
+- `/settings dati` mostra all'utente dati conservati, retention e azioni
+  disponibili per export/cancellazione assistita
 - default retention: `FISCALBAY_AUDIT_RETENTION_DAYS=180`, `FISCALBAY_OAUTH_SESSION_RETENTION_DAYS=30`, `FISCALBAY_OAUTH_PENDING_RETENTION_DAYS=7`, `FISCALBAY_OPERATION_QUEUE_RETENTION_DAYS=30`
 - `/admin export <telegram_user_id>` produce un export tenant senza refresh/access token in chiaro
 - `/admin delete_tenant <telegram_user_id> confirm` elimina token locali, account, chat, subscription, runtime state, retry tenant, sessioni OAuth e operazioni pending del tenant
