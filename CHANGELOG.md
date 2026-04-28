@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.14.0](https://github.com/max23468/FiscalBay/compare/v0.13.4...v0.14.0) (2026-04-28)
+
+### Features
+
+* add Telegram fiscal id copy button ([a23a822](https://github.com/max23468/FiscalBay/commit/a23a822306ca9906cd794f42302a31a3e2b4d73f))
+
 ## [0.13.4](https://github.com/max23468/FiscalBay/compare/v0.13.3...v0.13.4) (2026-04-28)
 
 ### Bug Fixes
