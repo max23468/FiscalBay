@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.13.3](https://github.com/max23468/FiscalBay/compare/v0.13.2...v0.13.3) (2026-04-28)
+
+### Bug Fixes
+
+* improve telegram order formatting ([9a3eb47](https://github.com/max23468/FiscalBay/commit/9a3eb47957a77d2cf51bb1617f2a5698187d8c9d))
+* polish fiscal metadata formatting ([aba2eda](https://github.com/max23468/FiscalBay/commit/aba2eda0baab90cdb894497d3c3c07e685cabea4))
+* show order id in telegram messages ([cbf77b7](https://github.com/max23468/FiscalBay/commit/cbf77b71a0c26bced833426a565b577310cec670))
+* harden VPS automation and OAuth notifications ([8779719](https://github.com/max23468/FiscalBay/commit/87797197e853e4103b4dfa10f6cb95e0d9d19cdf))
+* check failed FiscalBay units in smoke deploy ([5087748](https://github.com/max23468/FiscalBay/commit/50877489444f1c3bcfb32c7cfbbd453be1f3e7df))
+
 ## [0.13.2](https://github.com/max23468/FiscalBay/compare/v0.13.1...v0.13.2) (2026-04-28)
 
 ### Bug Fixes
