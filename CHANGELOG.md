@@ -257,6 +257,6 @@
 
 Questo e' il changelog ufficiale delle release del progetto.
 
-E' gestito automaticamente da `release-please` a partire dalla prossima release GitHub.
+E' gestito dal comando esplicito `scripts/release_now.sh`.
 
 Per lo storico narrativo precedente all'adozione del nuovo flusso, vedere `docs/CHANGELOG.md`.

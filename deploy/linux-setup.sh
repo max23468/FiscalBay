@@ -29,13 +29,6 @@ RECONCILE_SERVICE_TEMPLATE="${APP_DIR}/deploy/fiscalbay-reconcile.service"
 RECONCILE_SERVICE_TARGET="/etc/systemd/system/${RECONCILE_SERVICE_NAME}.service"
 RECONCILE_TIMER_TEMPLATE="${APP_DIR}/deploy/fiscalbay-reconcile.timer"
 RECONCILE_TIMER_TARGET="/etc/systemd/system/${RECONCILE_SERVICE_NAME}.timer"
-RELEASE_SERVICE_NAME="fiscalbay-release-please"
-RELEASE_SERVICE_TEMPLATE="${APP_DIR}/deploy/fiscalbay-release-please.service"
-RELEASE_SERVICE_TARGET="/etc/systemd/system/${RELEASE_SERVICE_NAME}.service"
-RELEASE_TIMER_TEMPLATE="${APP_DIR}/deploy/fiscalbay-release-please.timer"
-RELEASE_TIMER_TARGET="/etc/systemd/system/${RELEASE_SERVICE_NAME}.timer"
-RELEASE_ENV_FILE="${RELEASE_ENV_FILE:-/etc/fiscalbay/release-please.env}"
-INSTALL_RELEASE_PLEASE_LEGACY="${INSTALL_RELEASE_PLEASE_LEGACY:-false}"
 OAUTH_SERVICE_NAME="fiscalbay-oauth"
 OAUTH_SERVICE_TEMPLATE="${APP_DIR}/deploy/fiscalbay-oauth.service"
 OAUTH_SERVICE_TARGET="/etc/systemd/system/${OAUTH_SERVICE_NAME}.service"
@@ -80,42 +73,6 @@ install_packages() {
   exit 1
 }
 
-install_release_packages() {
-  if release_node_ready; then
-    return
-  fi
-  if command -v dnf >/dev/null 2>&1; then
-    sudo dnf module reset -y nodejs || true
-    sudo dnf module enable -y nodejs:20 || return 1
-    sudo dnf install -y nodejs npm || return 1
-    return
-  fi
-  if command -v apt-get >/dev/null 2>&1; then
-    sudo apt-get install -y nodejs npm || return 1
-    return
-  fi
-  if command -v yum >/dev/null 2>&1; then
-    sudo yum module reset -y nodejs || true
-    sudo yum module enable -y nodejs:20 || true
-    sudo yum install -y nodejs npm || return 1
-    return
-  fi
-  if command -v apk >/dev/null 2>&1; then
-    sudo apk add --no-cache nodejs npm || return 1
-    return
-  fi
-  return 1
-}
-
-release_node_ready() {
-  if ! command -v node >/dev/null 2>&1 || ! command -v npx >/dev/null 2>&1; then
-    return 1
-  fi
-  local node_major
-  node_major="$(node -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null || echo 0)"
-  [ "${node_major}" -ge 20 ]
-}
-
 ensure_group() {
   if getent group "${APP_GROUP}" >/dev/null 2>&1; then
     return
@@ -153,9 +110,6 @@ install_service_file() {
 }
 
 install_packages
-if [ "${INSTALL_RELEASE_PLEASE_LEGACY}" = "true" ] && ! install_release_packages; then
-  echo "Avviso: nodejs/npm non installati; release-please legacy richiedera' setup manuale."
-fi
 ensure_group
 ensure_user
 
@@ -186,25 +140,14 @@ install_service_file "${RECONCILE_SERVICE_TEMPLATE}" "${RECONCILE_SERVICE_TARGET
 sudo cp "${BACKUP_TIMER_TEMPLATE}" "${BACKUP_TIMER_TARGET}"
 sudo cp "${ALERT_TIMER_TEMPLATE}" "${ALERT_TIMER_TARGET}"
 sudo cp "${RECONCILE_TIMER_TEMPLATE}" "${RECONCILE_TIMER_TARGET}"
-if [ "${INSTALL_RELEASE_PLEASE_LEGACY}" = "true" ]; then
-  sudo mkdir -p "$(dirname "${RELEASE_ENV_FILE}")"
-  sudo chmod 750 "$(dirname "${RELEASE_ENV_FILE}")"
-  install_service_file "${RELEASE_SERVICE_TEMPLATE}" "${RELEASE_SERVICE_TARGET}"
-  sudo cp "${RELEASE_TIMER_TEMPLATE}" "${RELEASE_TIMER_TARGET}"
-else
-  sudo systemctl disable --now "${RELEASE_SERVICE_NAME}.timer" >/dev/null 2>&1 || true
-fi
+sudo systemctl disable --now fiscalbay-release-please.timer >/dev/null 2>&1 || true
+sudo rm -f \
+  /etc/systemd/system/fiscalbay-release-please.service \
+  /etc/systemd/system/fiscalbay-release-please.timer
 sudo systemctl daemon-reload
 sudo systemctl enable --now "${BACKUP_SERVICE_NAME}.timer"
 sudo systemctl enable --now "${ALERT_SERVICE_NAME}.timer"
 sudo systemctl enable --now "${RECONCILE_SERVICE_NAME}.timer"
-if [ "${INSTALL_RELEASE_PLEASE_LEGACY}" = "true" ]; then
-  if [ -f "${RELEASE_ENV_FILE}" ] && release_node_ready; then
-    sudo systemctl enable --now "${RELEASE_SERVICE_NAME}.timer"
-  else
-    echo "Timer ${RELEASE_SERVICE_NAME}.timer installato ma non abilitato: crea ${RELEASE_ENV_FILE} e verifica Node.js >=20/npx."
-  fi
-fi
 
 echo "Installazione completata."
 echo "Prossimi passi:"
@@ -218,9 +161,6 @@ echo "7. Verifica timer backup: sudo systemctl status ${BACKUP_SERVICE_NAME}.tim
 echo "8. Verifica timer alert: sudo systemctl status ${ALERT_SERVICE_NAME}.timer"
 echo "9. Verifica timer reconcile: sudo systemctl status ${RECONCILE_SERVICE_NAME}.timer"
 echo "10. Release esplicita da Mac locale: scripts/release_now.sh"
-if [ "${INSTALL_RELEASE_PLEASE_LEGACY}" = "true" ]; then
-  echo "11. Fallback legacy release-please: ${RELEASE_ENV_FILE}, Node.js >=20/npx, timer ${RELEASE_SERVICE_NAME}.timer"
-fi
 echo
 echo "Configurazione applicata:"
 echo "- APP_USER=${APP_USER}"

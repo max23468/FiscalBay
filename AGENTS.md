@@ -78,7 +78,7 @@ creati localmente quando li incontri.
 - Il deploy operativo di default e' automatizzato fuori da GitHub Actions tramite
   script locali/VPS e accesso SSH alla VPS FiscalBay.
 - GitHub Actions non e' un canale operativo attivo per deploy FiscalBay. Se una
-  richiesta parla genericamente di "deploy", usa `scripts/local_deploy_vps.sh`
+  richiesta parla genericamente di "deploy", usa `scripts/deploy_now.sh`
   o chiedi conferma quando l'azione remota sarebbe rischiosa o ambigua.
 
 ## GitHub Actions e budget
@@ -91,11 +91,8 @@ creati localmente quando li incontri.
   release, merge, manutenzione e deploy in locale o via VPS FiscalBay.
 - CI, controllo titoli PR, release assets, configurazione public access, diagnostica
   VPS e deploy sono automatizzati da script locali/VPS fuori da GitHub Actions.
-- Pipeline locale standard: `scripts/local_automate.sh`; deploy automatizzato
-  senza Actions: `scripts/local_deploy_vps.sh`.
-- `release-please` resta il riferimento preferito per versioning e changelog, ma
-  va eseguito solo localmente o sostituito da un passaggio manuale esplicitamente
-  richiesto quando serve una release.
+- Deploy operativo standard: `scripts/deploy_now.sh`; release versionata esplicita:
+  `scripts/release_now.sh`.
 
 ## Testing e verifica
 
@@ -145,27 +142,23 @@ creati localmente quando li incontri.
 
 ## Release e versioning
 
-- Questo repository usa `release-please` come riferimento preferito di
-  versionamento, changelog, tag e release, ma senza GitHub Actions attive.
+- Questo repository usa `scripts/release_now.sh` come riferimento preferito di
+  versionamento, changelog, tag e release, senza GitHub Actions attive.
 - Prima di creare un commit, valuta sempre l'impatto release.
 - Per cambi funzionali o osservabili nel runtime, scegli sempre `feat:`, `fix:` o
   `perf:` coerente con l'impatto reale. Non usare `refactor:`, `chore:` o `docs:`
   se il comportamento utente/operatore cambia davvero.
 - Per breaking change, usa `!` nel tipo commit o un footer `BREAKING CHANGE:`.
 - Non eseguire bump manuali di versione in `pyproject.toml`.
-- Nel flusso normale non aggiornare manualmente `CHANGELOG.md` root,
-  `.release-please-manifest.json`, tag Git o release GitHub: sono artefatti
-  controllati da `release-please` e modificarli a mano puo disallineare versione,
-  changelog, tag e release. Fallo solo su richiesta esplicita per riparare il
-  flusso automatico.
-- Se l'utente chiede una release, il percorso standard e' concordare il passaggio
-  manuale: verifiche locali, eventuale `release-please` eseguito localmente,
-  review di changelog/versione, tag/release solo su richiesta esplicita.
+- Nel flusso normale non aggiornare manualmente `CHANGELOG.md` root, tag Git o
+  release GitHub fuori da `scripts/release_now.sh`, salvo riparazioni esplicite.
+- Se l'utente chiede una release, il percorso standard e' eseguire
+  `scripts/release_now.sh` dopo le verifiche locali rilevanti.
 - Se in un turno sono stati fatti cambi funzionali ma manca un Conventional Commit
   adeguato, non considerare il lavoro chiuso finche il commit non e' coerente con
-  il flusso `release-please`.
+  il flusso di release esplicita.
 - Se il flusso release sembra rotto, fermati e spiega il motivo prima di
-  introdurre workaround che bypassano `release-please`.
+  introdurre workaround che bypassano `scripts/release_now.sh`.
 
 Per dettagli e casi limite, seguire `docs/RELEASE_POLICY.md`.
 
@@ -176,7 +169,7 @@ Per dettagli e casi limite, seguire `docs/RELEASE_POLICY.md`.
 - Quando aggiorni `docs/ROADMAP.md`, gli item completati vanno rimossi dalla
   roadmap: non vanno lasciati come checkbox spuntate.
 - `docs/CHANGELOG.md` e' storico; il changelog di release corrente e' `CHANGELOG.md`
-  root ed e' gestito dal percorso release manuale basato su `release-please`.
+  root ed e' gestito da `scripts/release_now.sh`.
 
 ## Policy per agenti
 

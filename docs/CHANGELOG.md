@@ -2,7 +2,8 @@
 
 Nota: questo file resta come archivio narrativo storico.
 
-Il changelog ufficiale delle release correnti e' ora `../CHANGELOG.md`, gestito dal comando esplicito `scripts/release_now.sh`.
+Il changelog ufficiale delle release correnti e' ora `../CHANGELOG.md`, gestito
+dal comando esplicito `scripts/release_now.sh`.
 
 ## Indice rapido
 

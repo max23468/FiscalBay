@@ -11,7 +11,7 @@ EXPECTED_HOSTNAME="${FISCALBAY_VPS_HOSTNAME:-fiscalbay-bot}"
 APP_DIR="${FISCALBAY_APP_DIR:-/opt/fiscalbay}"
 APP_USER="${FISCALBAY_APP_USER:-fiscalbay}"
 APP_GROUP="${FISCALBAY_APP_GROUP:-${APP_USER}}"
-RELEASE_ENV_FILE="${FISCALBAY_RELEASE_ENV_FILE:-/etc/fiscalbay/release-please.env}"
+DEPLOY_ENV_FILE="${FISCALBAY_DEPLOY_ENV_FILE:-/etc/fiscalbay/deploy.env}"
 
 REF=""
 RUN_CI=true
@@ -134,7 +134,7 @@ remote_ref="$(quote_for_remote "${REF}")"
 remote_app_dir="$(quote_for_remote "${APP_DIR}")"
 remote_app_user="$(quote_for_remote "${APP_USER}")"
 remote_app_group="$(quote_for_remote "${APP_GROUP}")"
-remote_env_file="$(quote_for_remote "${RELEASE_ENV_FILE}")"
+remote_env_file="$(quote_for_remote "${DEPLOY_ENV_FILE}")"
 
 echo "Deploy VPS FiscalBay da ref ${REF}..."
 remote_cmd "sudo bash -lc 'set -euo pipefail; if [ -f ${remote_env_file} ]; then set -a; . ${remote_env_file}; set +a; fi; APP_DIR=${remote_app_dir} APP_USER=${remote_app_user} APP_GROUP=${remote_app_group} bash ${remote_app_dir}/deploy/vps-deploy-ref.sh ${remote_ref}'"

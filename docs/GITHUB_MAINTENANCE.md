@@ -75,7 +75,7 @@ limitato.
 
 ## Release Senza Actions
 
-Il percorso standard senza GitHub Actions e senza Release PR automatiche e':
+Il percorso standard senza GitHub Actions e':
 
 1. commit Conventional Commit corretto su `main`
 2. `scripts/deploy_now.sh` per deploy operativo senza nuova versione
@@ -87,10 +87,10 @@ Il percorso standard senza GitHub Actions e senza Release PR automatiche e':
 Non modificare manualmente `pyproject.toml`, `CHANGELOG.md` root, tag o release
 fuori da `scripts/release_now.sh` o da una riparazione esplicita del flusso.
 
-`fiscalbay-release-please.timer` e' legacy/deprecato e non va abilitato nel
-flusso normale. Per creare GitHub Release, usare `gh` locale oppure un token
-GitHub in `GITHUB_TOKEN`, `GH_TOKEN` o `FISCALBAY_GITHUB_TOKEN`. Non committare
-token o file env reali.
+Per creare GitHub Release, usare `gh` locale oppure un token GitHub in
+`GITHUB_TOKEN`, `GH_TOKEN` o `FISCALBAY_GITHUB_TOKEN`. Per il deploy remoto, la
+VPS legge il token da `/etc/fiscalbay/deploy.env`. Non committare token o file env
+reali.
 
 ## Revisione Periodica Consigliata
 

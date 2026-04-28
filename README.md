@@ -59,7 +59,6 @@ Per mantenere il repository allineato alle best practice GitHub anche in contest
 - release versionata esplicita con `scripts/release_now.sh`
 - CI locale con `bash scripts/ci_verify.sh`, richiamata anche dalla pipeline locale
 - `scripts/local_automate.sh` e `scripts/local_deploy_vps.sh` restano utility legacy/fallback
-- `release-please` non gira automaticamente: niente timer Release PR nel flusso normale
 - aggiornamenti dipendenze da fare manualmente; Dependabot alerts/security alerts possono restare nella UI GitHub
 - template per Pull Request (`.github/PULL_REQUEST_TEMPLATE.md`)
 - issue forms per bug e task operativi (`.github/ISSUE_TEMPLATE/*`)
@@ -104,14 +103,13 @@ Regola operativa minima:
 - `MINOR` per nuove funzionalita' compatibili, ad esempio `v0.2.0`
 - `MAJOR` per breaking change, ad esempio `v1.0.0`
 
-Il flusso resta automatizzato senza GitHub Actions, ma non usa piu' Release PR automatiche:
+Il flusso resta automatizzato senza GitHub Actions:
 
 - deploy operativo: `scripts/deploy_now.sh`
 - release versionata: `scripts/release_now.sh`
 - GitHub Release creata da `gh` o API GitHub, senza GitHub Actions
 - CI locale: `bash scripts/ci_verify.sh`
 - build locale quando serve: `python -m build`
-- non riattivare `fiscalbay-release-please.timer` nel flusso normale
 
 Per creare GitHub Release senza `gh` locale puoi usare un token GitHub con permessi
 minimi sul repository, esportato solo nell'ambiente locale:
@@ -120,6 +118,9 @@ minimi sul repository, esportato solo nell'ambiente locale:
 export GITHUB_TOKEN=ghp_...
 scripts/release_now.sh
 ```
+
+Per il deploy remoto del repository privato, la VPS usa un token GitHub letto da
+`/etc/fiscalbay/deploy.env`.
 
 Per i dettagli operativi e le policy di naming/bump vedere `docs/RELEASE_POLICY.md`.
 

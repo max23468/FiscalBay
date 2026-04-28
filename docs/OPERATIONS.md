@@ -252,11 +252,10 @@ scripts/local_deploy_vps.sh
 Da shell aperta direttamente sulla VPS, `./deploy/update.sh` resta disponibile
 come manutenzione operativa locale.
 
-## Release esplicita senza Release Please automatico
+## Release esplicita
 
-Il flusso normale non usa piu' `fiscalbay-release-please.timer` e non apre Release
-PR automatiche. La release resta automatica solo quando viene lanciata
-esplicitamente dal maintainer:
+La release resta automatica solo quando viene lanciata esplicitamente dal
+maintainer:
 
 ```bash
 scripts/release_now.sh
@@ -278,13 +277,8 @@ repository:
 export GITHUB_TOKEN=ghp_...
 ```
 
-Il vecchio servizio `fiscalbay-release-please.service` e il timer
-`fiscalbay-release-please.timer` restano asset legacy/fallback. Non abilitarli nel
-flusso normale. Per fermare un timer esistente:
-
-```bash
-sudo systemctl disable --now fiscalbay-release-please.timer
-```
+Per il deploy remoto del repository privato, la VPS legge il token GitHub da
+`/etc/fiscalbay/deploy.env`.
 
 Guardrail automatici del nuovo flusso:
 

@@ -30,7 +30,6 @@ Per questo repository il flusso da considerare ufficiale e' uno solo:
   quando il maintainer lancia una release esplicita
 - il deploy quotidiano usa `scripts/deploy_now.sh` e non crea versione, changelog
   o tag
-- `release-please` automatico e Release PR automatiche sono deprecati
 
 Regola pratica per agenti e maintainer:
 
@@ -39,8 +38,6 @@ Regola pratica per agenti e maintainer:
 - non usare `refactor:` o `chore:` per cambi che in realta' meritano una release
 - non modificare manualmente `pyproject.toml` o `CHANGELOG.md` root solo per
   forzare una release: usare `scripts/release_now.sh`
-- `.release-please-manifest.json` resta legacy e non governa piu' il flusso
-  normale
 
 ## Checklist agente prima del commit
 
@@ -204,12 +201,8 @@ Il flusso standard e' questo:
 La creazione della GitHub Release usa `gh` se disponibile, altrimenti un token
 GitHub esposto solo nell'ambiente locale come `GITHUB_TOKEN`, `GH_TOKEN` o
 `FISCALBAY_GITHUB_TOKEN`.
-
-I file `deploy/fiscalbay-release-please.service`,
-`deploy/fiscalbay-release-please.timer`, `deploy/release-please-pr.sh` e
-`deploy/github-release-pr.py` restano legacy/fallback. Il timer non va abilitato
-nel flusso normale; `deploy/linux-setup.sh` lo disabilita a meno che
-`INSTALL_RELEASE_PLEASE_LEGACY=true`.
+Il deploy remoto del repository privato usa invece il token presente sulla VPS in
+`/etc/fiscalbay/deploy.env`.
 
 In modalita' main-only:
 

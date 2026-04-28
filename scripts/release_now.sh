@@ -17,7 +17,7 @@ usage() {
 Usage: scripts/release_now.sh [--dry-run] [--skip-ci] [--skip-deploy] [--skip-push]
                               [--bump major|minor|patch] [--version X.Y.Z]
 
-Creates an explicit FiscalBay release without automatic release-please PRs.
+Creates an explicit FiscalBay release without release PR automation.
 
 Default behavior:
   1. verifies no GitHub Actions workflows are versioned
