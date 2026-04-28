@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.20.0](https://github.com/max23468/FiscalBay/compare/v0.19.0...v0.20.0) (2026-04-28)
+
+### Features
+
+* surface admin product metrics ([cf26404](https://github.com/max23468/FiscalBay/commit/cf26404b86a7e128e43ae5e3b83c9fa43b1ba9ce))
+
 ## [0.19.0](https://github.com/max23468/FiscalBay/compare/v0.18.1...v0.19.0) (2026-04-28)
 
 ### Features
