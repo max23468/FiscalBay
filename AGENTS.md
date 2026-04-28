@@ -129,6 +129,12 @@ creati localmente quando li incontri.
   titolo di squash merge della PR.
 - Nella PR includi sintesi cambi, impatto, test eseguiti, note operative e
   limitazioni note.
+- Quando il maintainer chiede di "pubblicare", "pubblica le modifiche", "manda su"
+  o usa formule equivalenti, interpreta la richiesta come flusso completo di
+  chiusura operativa: verifiche locali rilevanti, commit Conventional coerente,
+  push del branch, PR pronta o merge quando naturale, e deploy su VPS FiscalBay
+  con il canale locale/VPS previsto. Non fermarti a una sola parte del flusso
+  salvo istruzione esplicita, blocco tecnico o rischio/ambiguita' da chiarire.
 - Questo repository e' privato e gestito da un solo maintainer: review/commenti
   esterni non sono un passaggio atteso per chiudere il lavoro.
 - Quando la PR e' pronta, i test rilevanti sono verdi e la self-review e' stata

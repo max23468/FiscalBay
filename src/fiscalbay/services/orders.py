@@ -13,7 +13,7 @@ from typing import Iterable, Mapping, Optional, Sequence, TypeAlias
 
 from ..clients.ebay import get_access_token, get_order_detail, get_orders
 from ..errors import EbayApiError
-from ..models import Config, FetchOptions, JsonObject, JsonValue, OrderRecord
+from ..models import Config, FetchOptions, JsonObject, JsonValue, OrderRecord, as_int
 
 DEFAULT_PAGE_SIZE = 50
 
@@ -28,6 +28,16 @@ def _as_mapping(value: object) -> Mapping[str, JsonValue]:
 
 def _as_sequence(value: object) -> Sequence[object]:
     return value if isinstance(value, Sequence) and not isinstance(value, (str, bytes)) else ()
+
+
+def _first_text(*values: object) -> str:
+    for value in values:
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ""
 
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
@@ -167,32 +177,42 @@ def choose_tax_identifier(order: OrderPayload) -> Optional[OrderPayload]:
 
 def extract_record(order: OrderPayload) -> OrderRecord:
     buyer_mapping = _as_mapping(order.get("buyer"))
+    buyer_registration_address = _as_mapping(buyer_mapping.get("buyerRegistrationAddress"))
     tax_identifier = choose_tax_identifier(order) or {}
     taxpayer_id = str(tax_identifier.get("taxpayerId") or "")
     tax_type = str(tax_identifier.get("taxIdentifierType") or "")
 
     line_items = _as_sequence(order.get("lineItems"))
     items_desc = []
+    product_descriptions = []
+    order_quantity = 0
     for item in line_items:
         if not isinstance(item, Mapping):
             continue
-        qty = item.get("quantity", 1)
-        title = item.get("title", "")
+        qty = as_int(item.get("quantity"), 1)
+        title = _first_text(item.get("title"), item.get("sku"))
+        order_quantity += qty
         items_desc.append(f"{qty}x {title}")
+        if title:
+            product_descriptions.append(title)
     items_str = ", ".join(items_desc) if items_desc else "N/D"
+    product_description_str = ", ".join(product_descriptions) if product_descriptions else "N/D"
 
     pricing = _as_mapping(order.get("pricingSummary"))
     total = _as_mapping(pricing.get("total"))
     total_str = f"{total.get('value', '0.00')} {total.get('currency', 'EUR')}"
 
     shipping_addr_str = "N/D"
+    shipping_name = ""
+    shipping_email = ""
     fsi = _as_sequence(order.get("fulfillmentStartInstructions"))
     if fsi:
         first_instruction = _as_mapping(fsi[0])
         shipping_step = first_instruction.get("shippingStep")
         ship_to = _as_mapping(_as_mapping(shipping_step).get("shipTo"))
         contact_mapping = _as_mapping(ship_to.get("contactAddress"))
-        name = ship_to.get("fullName") or ""
+        shipping_name = _first_text(ship_to.get("fullName"))
+        shipping_email = _first_text(ship_to.get("email"))
         lines = [
             contact_mapping.get("addressLine1"),
             contact_mapping.get("addressLine2"),
@@ -201,25 +221,46 @@ def extract_record(order: OrderPayload) -> OrderRecord:
             contact_mapping.get("stateOrProvince"),
         ]
         addr = ", ".join([str(line) for line in lines if line])
-        if name and addr:
-            shipping_addr_str = f"{name}, {addr}"
+        if shipping_name and addr:
+            shipping_addr_str = f"{shipping_name}, {addr}"
         elif addr:
             shipping_addr_str = addr
+
+    payment_summary = _as_mapping(order.get("paymentSummary"))
+    payments = _as_sequence(payment_summary.get("payments"))
+    first_payment = _as_mapping(payments[0]) if payments else {}
+    transaction_status = _first_text(
+        order.get("orderPaymentStatus"),
+        first_payment.get("paymentStatus"),
+        first_payment.get("status"),
+        order.get("orderFulfillmentStatus"),
+    )
 
     return OrderRecord(
         orderId=str(order.get("orderId") or order.get("legacyOrderId") or ""),
         creationDate=order.get("creationDate", ""),
         buyerUsername=buyer_mapping.get("username", ""),
-        buyerName=(
-            (_as_mapping(buyer_mapping.get("taxAddress")).get("fullName", ""))
-            or buyer_mapping.get("fullName", "")
+        buyerName=_first_text(
+            _as_mapping(buyer_mapping.get("taxAddress")).get("fullName", ""),
+            buyer_mapping.get("fullName", ""),
+            buyer_registration_address.get("fullName", ""),
+            shipping_name,
+        ),
+        buyerEmail=_first_text(
+            buyer_mapping.get("email"),
+            buyer_mapping.get("emailAddress"),
+            buyer_registration_address.get("email"),
+            shipping_email,
         ),
         taxpayerId=taxpayer_id,
         taxIdentifierType=tax_type,
         issuingCountry=str(tax_identifier.get("issuingCountry", "")),
         found="yes" if taxpayer_id else "no",
         items=items_str,
+        orderQuantity=str(order_quantity),
+        productDescription=product_description_str,
         total=total_str,
+        transactionStatus=transaction_status or "N/D",
         shippingAddress=shipping_addr_str,
     )
 

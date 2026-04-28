@@ -211,13 +211,31 @@ class TelegramBotTests(unittest.TestCase):
                 "orderId": "12-345",
                 "creationDate": "2026-04-03T10:00:00Z",
                 "buyerUsername": "buyer",
+                "buyerName": "Mario Rossi",
+                "buyerEmail": "mario@example.com",
                 "taxpayerId": "RSSMRA80A01H501U",
                 "taxIdentifierType": "CODICE_FISCALE",
                 "issuingCountry": "IT",
+                "orderQuantity": "2",
+                "productDescription": "Prodotto A",
+                "total": "42.50 EUR",
+                "transactionStatus": "PAID",
+                "shippingAddress": "Mario Rossi, Via Roma 1, Milano",
             }
         )
         self.assertIn("NUOVO ORDINE EBAY RICEVUTO", text)
         self.assertIn("RSSMRA80A01H501U", text)
+        self.assertIn("Data</b>: <code>03/04/2026 12:00</code>", text)
+        self.assertIn("Nome completo", text)
+        self.assertIn("Mario Rossi", text)
+        self.assertEqual(text.count("Mario Rossi"), 1)
+        self.assertIn("mario@example.com", text)
+        self.assertIn("Descrizione prodotto", text)
+        self.assertIn("Prodotto A", text)
+        self.assertIn("Quantità ordine", text)
+        self.assertIn("Stato transazione", text)
+        self.assertIn("Pagato", text)
+        self.assertNotIn("PAID", text)
 
     def test_format_order_fallback_when_missing_fiscal_fields(self) -> None:
         text = format_auto_notification(

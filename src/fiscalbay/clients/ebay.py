@@ -59,9 +59,17 @@ class OrderTaxAddress(TypedDict, total=False):
     fullName: str
 
 
+class OrderRegistrationAddress(TypedDict, total=False):
+    fullName: str
+    email: str
+
+
 class OrderBuyer(TypedDict, total=False):
     username: str
     fullName: str
+    email: str
+    emailAddress: str
+    buyerRegistrationAddress: OrderRegistrationAddress
     taxAddress: OrderTaxAddress
     taxIdentifier: OrderTaxIdentifier
 
@@ -69,6 +77,7 @@ class OrderBuyer(TypedDict, total=False):
 class OrderLineItem(TypedDict, total=False):
     quantity: int | str
     title: str
+    sku: str
 
 
 class MoneyAmount(TypedDict, total=False):
@@ -90,6 +99,7 @@ class ContactAddress(TypedDict, total=False):
 
 class ShipTo(TypedDict, total=False):
     fullName: str
+    email: str
     contactAddress: ContactAddress
 
 
@@ -101,12 +111,24 @@ class FulfillmentInstruction(TypedDict, total=False):
     shippingStep: ShippingStep
 
 
+class Payment(TypedDict, total=False):
+    paymentStatus: str
+    status: str
+
+
+class PaymentSummary(TypedDict, total=False):
+    payments: list[Payment]
+
+
 class EbayOrderPayload(TypedDict, total=False):
     orderId: str
     creationDate: str
+    orderPaymentStatus: str
+    orderFulfillmentStatus: str
     buyer: OrderBuyer
     lineItems: list[OrderLineItem]
     pricingSummary: PricingSummary
+    paymentSummary: PaymentSummary
     fulfillmentStartInstructions: list[FulfillmentInstruction]
 
 

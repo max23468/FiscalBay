@@ -140,6 +140,54 @@ class EbayCfToolTests(unittest.TestCase):
         self.assertEqual(record.issuingCountry, "IT")
         self.assertEqual(record.found, "yes")
 
+    def test_extract_record_reads_notification_order_details(self) -> None:
+        order = {
+            "orderId": "12-34567-89016",
+            "creationDate": "2026-04-03T10:00:00.000Z",
+            "orderPaymentStatus": "PAID",
+            "buyer": {
+                "username": "buyer-test",
+                "buyerRegistrationAddress": {
+                    "fullName": "Mario Rossi",
+                    "email": "mario@example.com",
+                },
+                "taxIdentifier": {
+                    "taxpayerId": "RSSMRA80A01H501U",
+                    "taxIdentifierType": "CODICE_FISCALE",
+                    "issuingCountry": "IT",
+                },
+            },
+            "lineItems": [
+                {"quantity": 2, "title": "Prodotto A"},
+                {"quantity": "3", "title": "Prodotto B"},
+            ],
+            "pricingSummary": {"total": {"value": "42.50", "currency": "EUR"}},
+            "fulfillmentStartInstructions": [
+                {
+                    "shippingStep": {
+                        "shipTo": {
+                            "fullName": "Mario Rossi",
+                            "contactAddress": {
+                                "addressLine1": "Via Roma 1",
+                                "city": "Milano",
+                                "postalCode": "20100",
+                            },
+                        }
+                    }
+                }
+            ],
+        }
+
+        record = extract_record(order)
+
+        self.assertEqual(record.buyerName, "Mario Rossi")
+        self.assertEqual(record.buyerEmail, "mario@example.com")
+        self.assertEqual(record.orderQuantity, "5")
+        self.assertEqual(record.productDescription, "Prodotto A, Prodotto B")
+        self.assertEqual(record.total, "42.50 EUR")
+        self.assertEqual(record.transactionStatus, "PAID")
+        self.assertIn("Via Roma 1", record.shippingAddress)
+
     def test_render_table_contains_header(self) -> None:
         content = render_table(
             [
@@ -170,6 +218,10 @@ class EbayCfToolTests(unittest.TestCase):
         fieldnames = get_csv_fieldnames([])
         self.assertIn("taxpayerId", fieldnames)
         self.assertIn("buyerName", fieldnames)
+        self.assertIn("buyerEmail", fieldnames)
+        self.assertIn("orderQuantity", fieldnames)
+        self.assertIn("productDescription", fieldnames)
+        self.assertIn("transactionStatus", fieldnames)
 
     @patch("src.fiscalbay.services.orders.get_order_detail")
     @patch("src.fiscalbay.services.orders.get_orders")
