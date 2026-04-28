@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.1](https://github.com/max23468/FiscalBay/compare/v1.1.0...v1.1.1) (2026-04-28)
+
+### Bug Fixes
+
+* expose package release tag without git checkout ([1945fbe](https://github.com/max23468/FiscalBay/commit/1945fbe413e9361a77e5327bcdd0b4ece5787926))
+
 ## [1.1.0](https://github.com/max23468/FiscalBay/compare/v1.0.1...v1.1.0) (2026-04-28)
 
 ### Features
