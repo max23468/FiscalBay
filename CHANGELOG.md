@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.0](https://github.com/max23468/FiscalBay/compare/v1.3.0...v1.4.0) (2026-04-28)
+
+### Features
+
+* add admin operational history ([db5530e](https://github.com/max23468/FiscalBay/commit/db5530e527ebdeab74a6475d768948aefa49dcaa))
+
 ## [1.3.0](https://github.com/max23468/FiscalBay/compare/v1.2.0...v1.3.0) (2026-04-28)
 
 ### Features
