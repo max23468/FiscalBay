@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.16.0](https://github.com/max23468/FiscalBay/compare/v0.15.0...v0.16.0) (2026-04-28)
+
+### Features
+
+* complete application storage optimization ([3601a41](https://github.com/max23468/FiscalBay/commit/3601a41f18db3f77f70979a7ee14612e4ed8441a))
+
 ## [0.15.0](https://github.com/max23468/FiscalBay/compare/v0.14.0...v0.15.0) (2026-04-28)
 
 ### Features
