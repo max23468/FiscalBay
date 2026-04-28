@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.19.0](https://github.com/max23468/FiscalBay/compare/v0.18.1...v0.19.0) (2026-04-28)
+
+### Features
+
+* configure user rate limits ([db7cfbd](https://github.com/max23468/FiscalBay/commit/db7cfbd9b13805eea39fb81bb6cc88c61eebf990))
+
 ## [0.18.1](https://github.com/max23468/FiscalBay/compare/v0.18.0...v0.18.1) (2026-04-28)
 
 ### Bug Fixes
