@@ -180,21 +180,22 @@ def format_record(record: OrderRecord) -> str:
     created_at = html.escape(format_order_date(record.creationDate))
     fiscal_meta_parts = []
     if tax_type:
-        fiscal_meta_parts.append(f"🏷️ <b>Tipo</b>: {html.escape(tax_type)}")
+        fiscal_meta_parts.append(f"🏷️ <b>Tipo</b>: <code>{html.escape(tax_type)}</code>")
     if country:
         fiscal_meta_parts.append(f"<b>Paese</b>: <code>{html.escape(country)}</code>")
     fiscal_meta = " · ".join(fiscal_meta_parts)
     fiscal_meta_suffix = f"\n{fiscal_meta}" if fiscal_meta else ""
 
     return (
-        f'🛒 <b>Ordine</b> <a href="{ebay_url}"><code>{order_id}</code></a>\n'
+        f"🛒 <b>Ordine eBay</b>\n"
+        f'🆔 <b>ID ordine</b>: <a href="{ebay_url}"><code>{order_id}</code></a>\n'
         f"📅 <b>Data</b>: <code>{created_at}</code> · "
         f"💰 <b>Totale</b>: <code>{total}</code>\n"
         f"🔄 <b>Stato transazione</b>: <code>{transaction_status}</code>\n\n"
         f"👤 <b>Acquirente</b>: <code>{buyer}</code>\n"
         f"🧾 <b>Nome completo</b>: <code>{buyer_name}</code>\n"
         f"✉️ <b>Email</b>: <code>{buyer_email}</code>\n\n"
-        f"📦 <b>Descrizione prodotto</b>: <i>{product_description}</i>\n"
+        f"📦 <b>Descrizione prodotto</b>: <code>{product_description}</code>\n"
         f"🔢 <b>Quantità ordine</b>: <code>{order_quantity}</code>\n"
         f"📍 <b>Spedizione</b>: <code>{shipping}</code>\n\n"
         f"💳 <b>{html.escape(fiscal_label)}</b>: <code>{html.escape(fiscal_value)}</code>"
