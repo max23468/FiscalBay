@@ -499,6 +499,7 @@ Comandi principali per tutti:
 
 - `/start`
 - `/help`
+- `/onboarding`
 - `/stato`
 - `/support`
 - `/account`
@@ -534,6 +535,7 @@ Comandi admin:
 - `/admin help` (admin)
 - `/admin` (admin)
 - `/ping` (admin, diagnostica rapida)
+- `/admin invite [telegram_user_id]` (admin)
 - `/admin manutenzione` (admin)
 - `/admin scala` (admin)
 - `/admin sicurezza` (admin)
@@ -553,6 +555,7 @@ Regole input:
 
 Comportamento:
 
+- `/onboarding` mostra il percorso selettivo in base allo stato reale: invitato/nuovo, richiesta pending, approvato senza account, reconnect o operativo
 - `/ordini fiscali` mostra solo ordini con identificativo fiscale presente
 - `/ordini tutti` mostra anche ordini senza dato fiscale
 - `/ordini cerca` interroga un ordine specifico
@@ -570,6 +573,7 @@ Comportamento:
 - se `TELEGRAM_ADMIN_USER_ID` è configurata, gli utenti non ancora approvati possono solo richiedere accesso con `/request_access` (anche quando `TELEGRAM_ALLOWED_CHAT_IDS=*`)
 - quando un nuovo utente viene visto per la prima volta dal runtime, l'admin riceve una notifica proattiva con user id/chat id per gestire subito approvazione o rifiuto
 - l'admin può approvare o rifiutare richieste dal messaggio inline o con `/approve_user <telegram_user_id>` e `/reject_user <telegram_user_id>`
+- `/admin invite [telegram_user_id]` genera un testo di invito e una checklist admin per guidare un venditore selezionato verso `/start`, `/request_access`, approvazione e `/account collega`, senza creare registrazione libera
 - `/admin_users` mostra all'admin lo stato degli utenti registrati (`new`, `pending`, `approved`, `blocked`, `admin`) e accorpa i filtri prima esposti come comandi separati
 - `/admin scala` mostra se il profilo SQLite resta dentro policy, se serve solo
   monitorare o se è opportuno preparare o richiedere una migrazione verso

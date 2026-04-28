@@ -154,6 +154,16 @@ Il comando Telegram `/settings`:
 - mostra un riepilogo rapido di scope runtime, ambiente, stato notifiche della chat e stato del collegamento account
 - è il punto di controllo più rapido lato utente prima di usare `/account collega`, `/account scollega` o `/account`
 
+Il comando Telegram `/onboarding`:
+
+- mostra all'utente il percorso selettivo coerente con lo stato corrente:
+  invitato/nuovo, richiesta pending, approvato senza account, reconnect o
+  operativo
+- resta disponibile anche prima dell'approvazione, così l'utente capisce che il
+  prossimo passo è `/request_access` e poi l'attesa dell'admin
+- dopo l'approvazione guida verso `/account collega`, `/account` e
+  `/ordini fiscali`
+
 Il comando Telegram `/support`:
 
 - mostra all'utente uno snapshot leggibile del proprio tenant con stato accesso,
@@ -171,7 +181,7 @@ Controllo accessi Telegram:
 - il runtime normalizza anche alias legacy come `active` e `rejected`, così il controllo accessi resta coerente anche su record vecchi nel `state.db`
 - gli utenti non approvati possono solo usare `/start`, `/help`, `/altre_azioni` e `/request_access`
 - l'admin riceve una richiesta con pulsanti inline `Approva` e `Rifiuta`
-- in alternativa l'admin può usare `/admin_users all|pending|unlinked|reconnect|inactive`, `/tenant_health`, `/admin`, `/admin scala`, `/admin sicurezza`, `/admin dormant [ore]`, `/admin support <telegram_user_id>`, `/admin export <telegram_user_id>`, `/admin delete_tenant <telegram_user_id> confirm`, `/approve_user <telegram_user_id>`, `/reject_user <telegram_user_id>`, `/suspend_user <telegram_user_id>` e `/reactivate_user <telegram_user_id>`
+- in alternativa l'admin può usare `/admin_users all|pending|unlinked|reconnect|inactive`, `/tenant_health`, `/admin`, `/admin scala`, `/admin sicurezza`, `/admin dormant [ore]`, `/admin invite [telegram_user_id]`, `/admin support <telegram_user_id>`, `/admin export <telegram_user_id>`, `/admin delete_tenant <telegram_user_id> confirm`, `/approve_user <telegram_user_id>`, `/reject_user <telegram_user_id>`, `/suspend_user <telegram_user_id>` e `/reactivate_user <telegram_user_id>`
 - per scale readiness l'admin può usare `/admin scala`, che classifica il
   profilo in `within_policy`, `watch`, `migration_recommended` o
   `migration_required` senza eseguire migrazioni automatiche
@@ -185,6 +195,10 @@ Controllo accessi Telegram:
   `/admin support <telegram_user_id>`, che aggrega in un solo messaggio stato
   utente, account, token, ultimo sync, coda retry, audit recente e azioni
   consigliate
+- per invitare un venditore selezionato l'admin può usare
+  `/admin invite [telegram_user_id]`, che genera testo da inviare, stato target
+  se già noto e prossimo passo admin; non approva automaticamente e non apre
+  registrazione libera
 - quando un utente usa `/settings dati export` o `/settings dati cancellazione`,
   l'admin riceve una notifica con i comandi operativi suggeriti; la richiesta non
   modifica o cancella dati finché l'admin non esegue export/delete

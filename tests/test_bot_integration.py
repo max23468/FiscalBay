@@ -401,6 +401,136 @@ class BotIntegrationTests(unittest.TestCase):
             mock_send_message.assert_called_once()
             self.assertEqual(mock_send_message.call_args.args[1], 123)
 
+    def test_onboarding_guides_new_user_to_request_access(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123, 456},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=456,
+                chat_id=456,
+                username="new_user",
+                display_name="New User",
+                chat_type="private",
+            )
+
+            replies = process_message(
+                text="/onboarding",
+                chat_id=456,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=456,
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Onboarding FiscalBay", replies[0])
+            self.assertIn("Invito ricevuto", replies[0])
+            self.assertIn("/request_access", replies[0])
+            self.assertIn("approvato manualmente", replies[0])
+
+    def test_onboarding_guides_approved_user_to_connect_ebay(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123, 456},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=456,
+                chat_id=456,
+                username="approved_user",
+                display_name="Approved User",
+                chat_type="private",
+            )
+            update_telegram_user_status(
+                str(db_path),
+                456,
+                TELEGRAM_USER_STATUS_APPROVED,
+                updated_at="2026-04-06T10:00:00Z",
+            )
+
+            replies = process_message(
+                text="/onboarding",
+                chat_id=456,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=456,
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Collega eBay", replies[0])
+            self.assertIn("/account collega", replies[0])
+            self.assertIn("registrazioni libere", replies[0])
+
+    @patch("src.fiscalbay.bot.send_message")
+    def test_admin_invite_renders_selective_onboarding_copy(self, mock_send_message) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123, 456},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=456,
+                chat_id=456,
+                username="pending_user",
+                display_name="Pending User",
+                chat_type="private",
+            )
+            process_message(
+                text="/request_access",
+                chat_id=456,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=456,
+            )
+            mock_send_message.reset_mock()
+
+            replies = process_message(
+                text="/admin invite 456",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Invito onboarding selettivo", replies[0])
+            self.assertIn("Target: <code>456</code>", replies[0])
+            self.assertIn("/approve_user 456", replies[0])
+            self.assertIn("accesso è selettivo", replies[0])
+            mock_send_message.assert_not_called()
+            audit_entries = load_audit_log_entries(str(db_path), limit=3)
+            self.assertEqual(audit_entries[0].event_type, "onboarding_invite")
+            self.assertEqual(audit_entries[0].outcome, "generated")
+
     @patch("src.fiscalbay.bot.send_message")
     def test_user_can_request_assisted_data_deletion(self, mock_send_message) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

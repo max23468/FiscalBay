@@ -274,6 +274,12 @@ def parse_command(text: str) -> tuple[str, list[str]]:
     return command, parts[1:]
 
 
+def normalize_command_alias(command: str) -> str:
+    if command in {"/onboarding", "/inizia", "/invito"}:
+        return "/onboarding"
+    return command
+
+
 def build_help_text(*, is_admin: bool = False) -> str:
     admin_lines = ""
     if is_admin:
@@ -292,6 +298,7 @@ def build_help_text(*, is_admin: bool = False) -> str:
         "Esperienza consigliata: usa i pulsanti rapidi del bot per muoverti tra "
         "collegamento account, stato e notifiche senza ricordare ogni comando.\n\n"
         "Comandi principali:\n"
+        "• 🧭 <code>/onboarding</code> → percorso guidato accesso e collegamento\n"
         "• 📊 <code>/stato</code> → stato bot e servizio\n"
         "• 👤 <code>/account</code> → stato account eBay e azioni collegamento\n"
         "• 🧾 <code>/support</code> → snapshot supporto del tuo tenant\n"
@@ -326,6 +333,7 @@ def build_other_actions_text(*, is_admin: bool = False) -> str:
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "Qui trovi le azioni lasciate fuori dal menu comandi principale.\n\n"
         "<b>Guida e accesso</b>\n"
+        "• <code>/onboarding</code> → percorso guidato accesso e collegamento\n"
         "• <code>/help</code> → guida rapida\n"
         "• <code>/request_access</code> → richiede accesso all'admin del bot\n\n"
         "<b>Preferenze</b>\n"
@@ -658,6 +666,7 @@ def should_attach_main_menu(command: str) -> bool:
         "/help",
         "/altre_azioni",
         "/ping",
+        "/onboarding",
         "/stato",
         "/support",
         "/account",
@@ -722,7 +731,8 @@ def format_access_required_status(user_status: str, *, is_admin: bool = False) -
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "La tua richiesta è già in attesa di approvazione da parte dell'admin.\n"
             "Quando verrai approvato potrai usare <code>/account collega</code> "
-            "e gli altri comandi."
+            "e gli altri comandi.\n"
+            "Puoi controllare il percorso con <code>/onboarding</code>."
         )
     if is_blocked_telegram_user_status(canonical_status):
         return (
@@ -736,7 +746,8 @@ def format_access_required_status(user_status: str, *, is_admin: bool = False) -
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "Questo bot usa un accesso approvato dall'admin.\n"
         "Usa <code>/request_access</code> per inviare la tua richiesta.\n"
-        "Dopo l'approvazione potrai collegare eBay direttamente da Telegram."
+        "Dopo l'approvazione potrai collegare eBay direttamente da Telegram.\n"
+        "Per vedere tutti i passaggi usa <code>/onboarding</code>."
     )
 
 
@@ -758,18 +769,144 @@ def format_access_request_status(
             "⏳ <b>Richiesta accesso</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "La tua richiesta è già in attesa di approvazione."
+            "\nPuoi controllare i prossimi passaggi con <code>/onboarding</code>."
         )
     if admin_notified:
         return (
             "✅ <b>Richiesta inviata</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "L'admin è stato notificato. Ti scriverà il bot appena l'accesso verrà approvato."
+            "L'admin è stato notificato. Ti scriverà il bot appena l'accesso verrà approvato.\n"
+            "Nel frattempo puoi rileggere il percorso con <code>/onboarding</code>."
         )
     return (
         "✅ <b>Richiesta registrata</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "La tua richiesta è stata salvata, ma l'admin non è ancora "
-        "raggiungibile da questa istanza."
+        "raggiungibile da questa istanza.\n"
+        "Nel frattempo puoi rileggere il percorso con <code>/onboarding</code>."
+    )
+
+
+def format_onboarding_guide(
+    *,
+    user_status: str,
+    account_status: Mapping[str, object] | None = None,
+    is_admin: bool = False,
+) -> str:
+    if is_admin:
+        return (
+            "🧭 <b>Onboarding admin</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Il tuo account è admin: puoi invitare venditori selezionati con "
+            "<code>/admin invite</code> e seguire le richieste con "
+            "<code>/admin_users pending</code>.\n"
+            "Il flusso resta approvato manualmente: nessuna registrazione libera."
+        )
+
+    canonical_status = normalize_telegram_user_status(user_status)
+    account = account_status or {}
+    raw_account_status = str(account.get("account_status") or "unlinked")
+    raw_token_status = str(account.get("token_status") or "missing")
+    ebay_user_id = html.escape(str(account.get("ebay_user_id") or "n/d"))
+    environment = html.escape(str(account.get("environment") or "n/d"))
+
+    if is_blocked_telegram_user_status(canonical_status):
+        stage = "Accesso non approvato"
+        current = "Il tuo accesso risulta bloccato o rifiutato."
+        next_step = "Contatta l'admin se pensi che la valutazione vada rivista."
+    elif is_pending_telegram_user_status(canonical_status):
+        stage = "Richiesta in revisione"
+        current = "Hai già inviato la richiesta: ora serve approvazione admin."
+        next_step = "Attendi l'approvazione, poi torna qui e usa /account collega."
+    elif canonical_status == "new":
+        stage = "Invito ricevuto"
+        current = "Sei stato visto dal bot, ma non hai ancora accesso operativo."
+        next_step = "Usa /request_access dalla chat privata con il bot."
+    elif raw_account_status in {"disconnected", "revoked"} or raw_token_status in {
+        "revoked",
+        "expired",
+        "token_expired",
+    }:
+        stage = "Reconnect eBay"
+        current = "Accesso bot approvato, ma il collegamento eBay richiede un nuovo consenso."
+        next_step = "Usa /account collega per completare il reconnect eBay."
+    elif raw_account_status != "linked":
+        stage = "Collega eBay"
+        current = "Accesso bot approvato, account eBay non ancora collegato."
+        next_step = "Usa /account collega, completa il consenso e torna in chat."
+    else:
+        stage = "Operativo"
+        current = "Accesso bot approvato e account eBay collegato."
+        next_step = "Controlla /ordini fiscali o verifica lo stato con /support."
+
+    checklist = (
+        "1. chat privata con il bot\n"
+        "2. richiesta accesso con <code>/request_access</code>\n"
+        "3. approvazione manuale dell'admin\n"
+        "4. collegamento eBay con <code>/account collega</code>\n"
+        "5. verifica con <code>/account</code> e <code>/ordini fiscali</code>"
+    )
+    return (
+        "🧭 <b>Onboarding FiscalBay</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"Fase attuale: <code>{html.escape(stage)}</code>\n"
+        f"Stato accesso: <code>{html.escape(canonical_status)}</code>\n"
+        f"Account eBay: <code>{html.escape(raw_account_status)}</code> "
+        f"token=<code>{html.escape(raw_token_status)}</code>\n"
+        f"eBay: <code>{ebay_user_id}</code> • env=<code>{environment}</code>\n\n"
+        f"{current}\n"
+        f"Prossimo passo: {next_step}\n\n"
+        "<b>Percorso selettivo</b>\n"
+        f"{checklist}\n\n"
+        "L'accesso resta approvato manualmente: il bot non apre registrazioni libere."
+    )
+
+
+def format_admin_onboarding_invite(
+    *,
+    bot_url: str,
+    telegram_user_id: int | None = None,
+    user_status: str | None = None,
+    account_status: Mapping[str, object] | None = None,
+) -> str:
+    account = account_status or {}
+    canonical_status = (
+        normalize_telegram_user_status(user_status) if user_status is not None else "unknown"
+    )
+    raw_account_status = str(account.get("account_status") or "unlinked")
+    raw_token_status = str(account.get("token_status") or "missing")
+    target = str(telegram_user_id) if telegram_user_id is not None else "generico"
+    safe_bot_url = html.escape(bot_url or "https://t.me/fiscalbay_bot", quote=True)
+    if telegram_user_id is None:
+        admin_next = "Invia il testo al venditore selezionato e attendi /request_access."
+    elif canonical_status in {"new", "pending"}:
+        admin_next = f"Quando sei pronto approva con /approve_user {telegram_user_id}."
+    elif canonical_status == "approved" and raw_account_status != "linked":
+        admin_next = "L'utente è approvato: chiedi di completare /account collega."
+    elif canonical_status == "approved":
+        admin_next = "L'utente sembra già operativo: verifica eventuali dubbi con /admin support."
+    else:
+        admin_next = "Controlla lo stato utente prima di procedere."
+    invite_text = (
+        "Ciao, ti ho invitato a usare FiscalBay.\n"
+        f"Apri il bot: {bot_url or 'https://t.me/fiscalbay_bot'}\n"
+        "1. scrivi /start in chat privata\n"
+        "2. invia /request_access\n"
+        "3. dopo approvazione, usa /account collega per collegare eBay\n"
+        "4. verifica con /account e poi /ordini fiscali\n"
+        "L'accesso è selettivo e viene approvato manualmente."
+    )
+    return (
+        "🧭 <b>Invito onboarding selettivo</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"Target: <code>{html.escape(target)}</code>\n"
+        f"Stato utente: <code>{html.escape(canonical_status)}</code>\n"
+        f"Account: <code>{html.escape(raw_account_status)}</code> "
+        f"token=<code>{html.escape(raw_token_status)}</code>\n"
+        f'Bot pubblico: <a href="{safe_bot_url}">{safe_bot_url}</a>\n\n'
+        "<b>Messaggio da inviare</b>\n"
+        f"<pre>{html.escape(invite_text)}</pre>\n"
+        f"<b>Prossimo passo admin</b>\n{html.escape(admin_next)}"
     )
 
 
@@ -2001,6 +2138,7 @@ def format_admin_command_help() -> str:
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "Usa <code>/admin</code> come cruscotto operativo.\n"
         "• <code>/admin</code> → dashboard e alert prodotto\n"
+        "• <code>/admin invite [id]</code> → testo invito onboarding selettivo\n"
         "• <code>/admin manutenzione</code> → backlog operativo e cleanup\n"
         "• <code>/admin dormant [ore]</code> → review tenant dormienti\n"
         "• <code>/admin export &lt;id&gt;</code> → export tenant senza segreti\n"

@@ -195,6 +195,7 @@ from .telegram_commands import (
     format_admin_dormant_review,
     format_admin_history,
     format_admin_maintenance_overview,
+    format_admin_onboarding_invite,
     format_admin_scale_readiness,
     format_admin_security_report,
     format_admin_status_update,
@@ -209,6 +210,7 @@ from .telegram_commands import (
     format_fiscal_export_messages,
     format_leave_status,
     format_notifications_status,
+    format_onboarding_guide,
     format_order_notification_summary,
     format_orders_command_help,
     format_policy_status,
@@ -223,6 +225,7 @@ from .telegram_commands import (
     format_tenant_health,
     format_why_not_notified_status,
     is_authorized,
+    normalize_command_alias,
     options_for_command,
     parse_command,
     should_attach_main_menu,
@@ -2021,6 +2024,7 @@ def process_message(
         return ["Chat non autorizzata per questo bot."]
 
     command, args = parse_command(text)
+    command = normalize_command_alias(command)
     legacy_command_hints = {
         "/connect": "Usa <code>/account collega</code>.",
         "/disconnect": "Usa <code>/account scollega</code>.",
@@ -2108,6 +2112,8 @@ def process_message(
             args = ["scale", *args[1:]]
         elif admin_action in {"dormant", "dormienti", "inactive", "inattivi"}:
             args = ["dormant", *args[1:]]
+        elif admin_action in {"invite", "invito", "onboarding"}:
+            args = ["invite", *args[1:]]
         elif admin_action in {"export", "esporta", "tenant_export"}:
             args = ["export", *args[1:]]
         elif admin_action in {"delete_tenant", "delete-user", "delete_user", "cancella"}:
@@ -2408,6 +2414,39 @@ def process_message(
                 },
             )
             return [format_admin_tenant_export(export_payload)]
+        if admin_action == "invite":
+            target_user_id: int | None = None
+            target_status: str | None = None
+            account_status: dict[str, object] | None = None
+            if len(args) > 1:
+                try:
+                    target_user_id = int(args[1])
+                except ValueError:
+                    return ["Uso corretto: <code>/admin invite [telegram_user_id]</code>"]
+                target_status = _load_user_status(telegram_config, target_user_id)
+                account_status = summarize_tenant_account_status(
+                    telegram_config.state_path,
+                    target_user_id,
+                    ebay_environment,
+                )
+            _append_audit_log(
+                telegram_config,
+                event_type="onboarding_invite",
+                created_at=now_iso,
+                actor_telegram_user_id=telegram_user_id,
+                target_telegram_user_id=target_user_id,
+                telegram_chat_id=chat_id,
+                outcome="generated",
+                details={"target_known": target_status is not None},
+            )
+            return [
+                format_admin_onboarding_invite(
+                    bot_url=os.getenv("TELEGRAM_PUBLIC_BOT_URL", "https://t.me/fiscalbay_bot"),
+                    telegram_user_id=target_user_id,
+                    user_status=target_status,
+                    account_status=account_status,
+                )
+            ]
         if admin_action == "support":
             if len(args) < 2:
                 return ["Uso corretto: <code>/admin support &lt;telegram_user_id&gt;</code>"]
@@ -2579,7 +2618,8 @@ def process_message(
                         "✅ <b>Accesso approvato</b>\n"
                         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
                         "L'admin ha approvato il tuo accesso. "
-                        "Ora puoi usare <code>/account collega</code>, "
+                        "Apri <code>/onboarding</code> per il percorso guidato "
+                        "oppure usa subito <code>/account collega</code>, "
                         "<code>/account</code> e gli altri comandi."
                     ),
                 )
@@ -2649,6 +2689,7 @@ def process_message(
         "",
         "/start",
         "/help",
+        "/onboarding",
         "/altre_azioni",
         "/request_access",
     ):
@@ -2915,6 +2956,22 @@ def process_message(
         state = load_state_fn(telegram_config.state_path)
         retry_queue_size = len(load_retry_queue_fn(telegram_config.retry_queue_path))
         return [format_status(state, retry_queue_size, runtime_context=command_context)]
+
+    if command == "/onboarding":
+        onboarding_account_status: dict[str, object] | None = None
+        if resolved_telegram_user_id is not None:
+            onboarding_account_status = summarize_tenant_account_status(
+                telegram_config.state_path,
+                resolved_telegram_user_id,
+                resolved_environment,
+            )
+        return [
+            format_onboarding_guide(
+                user_status=user_status or TELEGRAM_USER_STATUS_NEW,
+                account_status=onboarding_account_status,
+                is_admin=is_admin_user,
+            )
+        ]
 
     if command == "/support":
         if resolved_telegram_user_id is None:
