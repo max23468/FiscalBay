@@ -232,6 +232,20 @@ def changelog_entry(
         for commit in commits
         if commit["type"] in {"fix", "perf"} and not commit["breaking"]
     ]
+    maintenance = [
+        commit
+        for commit in commits
+        if commit["type"] in {"build", "chore", "ci", "docs", "refactor", "test"}
+        and not commit["breaking"]
+    ]
+    other = [
+        commit
+        for commit in commits
+        if not commit["breaking"]
+        and commit not in features
+        and commit not in fixes
+        and commit not in maintenance
+    ]
 
     if breaking:
         lines.append(section("Breaking Changes", breaking))
@@ -241,6 +255,12 @@ def changelog_entry(
         lines.append("")
     if fixes:
         lines.append(section("Bug Fixes", fixes))
+        lines.append("")
+    if maintenance:
+        lines.append(section("Maintenance", maintenance))
+        lines.append("")
+    if other:
+        lines.append(section("Other Changes", other))
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
