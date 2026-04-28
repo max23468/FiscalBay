@@ -9,7 +9,7 @@ Set definitivo approvato: logo orizzontale, mark e avatar Telegram nel concept `
 Export operativi pronti: `assets/branding/exports/fiscalbay-avatar-telegram-512.png`, `fiscalbay-mark-512.png`, `fiscalbay-logo-light-2048.png`, `fiscalbay-logo-dark-2048.png`.
 Il server OAuth pubblico espone lo stesso mark anche come `favicon.svg`, `favicon.png` e `apple-touch-icon.png`, cosi' il sito resta riconoscibile anche su Safari e Mac.
 
-Il progetto nasce per un caso pratico molto preciso: interrogare gli ordini recenti, leggere il dettaglio completo di ogni ordine e rendere consultabile da terminale o da Telegram il contenuto di `buyer.taxIdentifier`.
+Il progetto nasce per un caso pratico molto preciso: interrogare gli ordini recenti, leggere il dettaglio completo di ogni ordine e rendere consultabile da terminale o da Telegram l'identificativo fiscale che eBay espone nelle API ufficiali. Il percorso principale legge `buyer.taxIdentifier` dalla Sell Fulfillment API; quando quel campo manca ma l'ordine e' noto, FiscalBay tenta anche il container ufficiale `BuyerTaxIdentifier` della Trading API per lo stesso `orderId`.
 
 ## Panoramica
 
@@ -24,8 +24,8 @@ Funzionalità principali:
 
 - autenticazione OAuth eBay tramite `refresh_token`
 - cache in memoria del token per ridurre chiamate a `/identity/v1/oauth2/token`
-- recupero ordini con `getOrders` e dettaglio con `getOrder`
-- estrazione del campo `buyer.taxIdentifier.taxpayerId`
+- recupero ordini con Sell Fulfillment `getOrders` e dettaglio con `getOrder`
+- estrazione di `buyer.taxIdentifier.taxpayerId`, con fallback su Trading API `BuyerTaxIdentifier`
 - indicazione del tipo di identificativo fiscale, ad esempio `CODICE_FISCALE` o `VAT_NUMBER`
 - output CLI in `table`, `json` o `csv`
 - retry con backoff esponenziale per errori transitori eBay e Telegram
@@ -34,7 +34,7 @@ Funzionalità principali:
 
 ## Limite Importante
 
-Il progetto mostra solo ciò che eBay restituisce davvero. Se `buyer.taxIdentifier` non è presente nella risposta dell'ordine, il tool non può ricostruire o dedurre l'identificativo fiscale in altro modo.
+Il progetto mostra solo ciò che eBay restituisce davvero. Se né Sell Fulfillment `buyer.taxIdentifier` né Trading API `BuyerTaxIdentifier` sono presenti per l'ordine, il tool non può ricostruire o dedurre l'identificativo fiscale in altro modo.
 
 In pratica:
 
@@ -209,6 +209,7 @@ fiscalbay-bot
 | `EBAY_REFRESH_TOKEN` | Sì | - | Refresh token OAuth eBay |
 | `EBAY_ENVIRONMENT` | No | `production` | Ambiente eBay: `production` o `sandbox` |
 | `EBAY_SCOPES` | No | `sell.fulfillment.readonly` | Scope OAuth richiesto |
+| `EBAY_TRADING_SITE_ID` | No | `101` | Site ID Trading API usato per il fallback `BuyerTaxIdentifier`; `101` corrisponde a eBay Italia |
 | `EBAY_HTTP_MAX_RETRIES` | No | `5` | Numero massimo retry per chiamate eBay |
 | `EBAY_HTTP_RETRY_BASE_DELAY` | No | `0.5` | Delay base del backoff eBay |
 | `EBAY_TOKEN_SKEW_SECONDS` | No | `60` | Margine di sicurezza sulla scadenza token |
@@ -376,7 +377,7 @@ I record prodotti dalla CLI includono:
 - `transactionStatus`
 - `shippingAddress`
 
-`found` vale `yes` quando `taxpayerId` è presente, altrimenti `no`.
+`found` vale `yes` quando `taxpayerId` è presente, sia dal dettaglio Sell Fulfillment sia dal fallback Trading API sullo stesso ordine; altrimenti vale `no`.
 
 ## Bot Telegram
 

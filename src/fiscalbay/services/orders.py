@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Iterable, Mapping, Optional, Sequence, TypeAlias
 
 from ..clients.ebay import get_access_token, get_order_detail, get_orders
+from ..clients.trading import get_order_tax_identifiers, get_order_tax_identifiers_by_date
 from ..errors import EbayApiError
 from ..models import Config, FetchOptions, JsonObject, JsonValue, OrderRecord, as_int
 
@@ -173,6 +174,48 @@ def choose_tax_identifier(order: OrderPayload) -> Optional[OrderPayload]:
                 return normalized
 
     return primary or None
+
+
+def _order_lookup_ids(order: OrderPayload) -> list[str]:
+    return [
+        str(value).strip()
+        for value in (order.get("orderId"), order.get("legacyOrderId"))
+        if str(value or "").strip()
+    ]
+
+
+def _apply_tax_identifier_fallbacks(
+    orders: list[OrderPayload],
+    tax_identifiers: Mapping[str, Mapping[str, JsonValue]],
+) -> None:
+    if not tax_identifiers:
+        return
+    for order in orders:
+        current = choose_tax_identifier(order)
+        if current and current.get("taxpayerId"):
+            continue
+        fallback = None
+        for order_id in _order_lookup_ids(order):
+            fallback = tax_identifiers.get(order_id)
+            if fallback is not None:
+                break
+        if fallback is None:
+            continue
+        buyer = order.get("buyer")
+        if not isinstance(buyer, dict):
+            buyer = {}
+            order["buyer"] = buyer
+        buyer["taxIdentifier"] = dict(fallback)
+
+
+def _missing_tax_identifier_order_ids(orders: list[OrderPayload]) -> list[str]:
+    order_ids: list[str] = []
+    for order in orders:
+        current = choose_tax_identifier(order)
+        if current and current.get("taxpayerId"):
+            continue
+        order_ids.extend(_order_lookup_ids(order))
+    return order_ids
 
 
 def extract_record(order: OrderPayload) -> OrderRecord:
@@ -339,6 +382,8 @@ def fetch_records(config: Config, options: FetchOptions) -> list[OrderRecord]:
     details: list[OrderPayload] = []
     order_ids = options.order_ids or []
     delay = order_detail_delay_seconds()
+    created_after: datetime | None = None
+    created_before: datetime | None = None
 
     if order_ids:
         for index, order_id in enumerate(order_ids):
@@ -397,6 +442,23 @@ def fetch_records(config: Config, options: FetchOptions) -> list[OrderRecord]:
                     )
                     details.append(summary)
                 detail_calls += 1
+
+    missing_order_ids = _missing_tax_identifier_order_ids(details)
+    if missing_order_ids:
+        try:
+            tax_identifiers = get_order_tax_identifiers(config, access_token, missing_order_ids)
+            if not tax_identifiers and created_after is not None and created_before is not None:
+                tax_identifiers = get_order_tax_identifiers_by_date(
+                    config,
+                    access_token,
+                    created_after,
+                    created_before,
+                    page_size=options.limit,
+                    max_results=options.max_results,
+                )
+            _apply_tax_identifier_fallbacks(details, tax_identifiers)
+        except EbayApiError as exc:
+            logger.warning("Trading API tax identifier fallback unavailable: %s", exc)
 
     records = [extract_record(order) for order in details]
     if options.only_found:
