@@ -370,12 +370,16 @@ I record prodotti dalla CLI includono:
 - `creationDate`
 - `buyerUsername`
 - `buyerName`
+- `buyerEmail`
 - `taxpayerId`
 - `taxIdentifierType`
 - `issuingCountry`
 - `found`
 - `items`
+- `orderQuantity`
+- `productDescription`
 - `total`
+- `transactionStatus`
 - `shippingAddress`
 
 `found` vale `yes` quando `taxpayerId` è presente, altrimenti `no`.
@@ -425,6 +429,7 @@ Se il bot resta in esecuzione:
 - ogni `EBAY_ORDER_POLL_INTERVAL` secondi legge gli ordini più recenti
 - confronta gli ordini con quelli già notificati
 - invia un messaggio solo quando trova davvero un `taxIdentifierType` valorizzato e un `taxpayerId` presente
+- nel messaggio include i dati ordine restituiti da eBay, tra cui nome, email, indirizzo, quantità, importo, data, stato transazione e descrizione prodotto quando disponibili
 - salva sia `orderId` sia un hash del contenuto dell'ordine per deduplicare meglio
 - se l'invio Telegram fallisce, accoda il messaggio e ritenta nei cicli successivi
 

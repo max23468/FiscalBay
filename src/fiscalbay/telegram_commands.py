@@ -5,7 +5,9 @@ from __future__ import annotations
 import html
 import json
 import urllib.parse
+from datetime import datetime
 from typing import Callable, Iterable, Mapping
+from zoneinfo import ZoneInfo
 
 from .clients.telegram import InlineKeyboardMarkup
 from .errors import UserInputError
@@ -84,6 +86,47 @@ def record_fingerprint(record: OrderRecord) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def format_order_date(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return "N/D"
+    normalized = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return raw
+    if parsed.tzinfo is None:
+        return parsed.strftime("%d/%m/%Y %H:%M")
+    local_dt = parsed.astimezone(ZoneInfo("Europe/Rome"))
+    return local_dt.strftime("%d/%m/%Y %H:%M")
+
+
+def format_transaction_status(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return "N/D"
+    translations = {
+        "AUTHORIZED": "Autorizzato",
+        "CANCELED": "Annullato",
+        "CANCELLED": "Annullato",
+        "COMPLETED": "Completato",
+        "FAILED": "Fallito",
+        "FULLY_REFUNDED": "Rimborsato",
+        "IN_PROGRESS": "In corso",
+        "NOT_PAID": "Non pagato",
+        "PAID": "Pagato",
+        "PARTIALLY_PAID": "Parzialmente pagato",
+        "PARTIALLY_REFUNDED": "Parzialmente rimborsato",
+        "PENDING": "In attesa",
+        "REFUNDED": "Rimborsato",
+        "VOIDED": "Annullato",
+    }
+    normalized = raw.upper().replace("-", "_").replace(" ", "_")
+    if normalized in translations:
+        return translations[normalized]
+    return raw.replace("_", " ").lower().capitalize()
+
+
 def format_record(record: OrderRecord) -> str:
     fiscal_value = record.taxpayerId or "non disponibile"
     tax_type = record.taxIdentifierType or "n/d"
@@ -98,18 +141,30 @@ def format_record(record: OrderRecord) -> str:
 
     ebay_url = f"https://www.ebay.it/sh/ord/details?orderid={urllib.parse.quote(record.orderId)}"
 
-    items = html.escape(record.items or "N/D")
+    product_description = html.escape(record.productDescription or record.items or "N/D")
+    order_quantity = html.escape(record.orderQuantity or "0")
     total = html.escape(record.total or "N/D")
-    shipping = html.escape(record.shippingAddress or "N/D")
     buyer = html.escape(record.buyerUsername or "n/d")
-    created_at = html.escape(record.creationDate)
+    raw_buyer_name = record.buyerName or ""
+    buyer_name = html.escape(raw_buyer_name or "N/D")
+    buyer_email = html.escape(record.buyerEmail or "N/D")
+    transaction_status = html.escape(format_transaction_status(record.transactionStatus))
+    raw_shipping = record.shippingAddress or "N/D"
+    if raw_buyer_name and raw_shipping.startswith(f"{raw_buyer_name}, "):
+        raw_shipping = raw_shipping[len(raw_buyer_name) + 2 :]
+    shipping = html.escape(raw_shipping)
+    created_at = html.escape(format_order_date(record.creationDate))
 
     return (
         f'🛒 <b>Ordine</b> • <a href="{ebay_url}"><code>{order_id}</code></a>\n'
         f"┌ 📅 <b>Data</b>: <code>{created_at}</code>\n"
         f"├ 👤 <b>Acquirente</b>: <code>{buyer}</code>\n"
-        f"├ 📦 <b>Articoli</b>: <i>{items}</i>\n"
+        f"├ 🧾 <b>Nome completo</b>: <code>{buyer_name}</code>\n"
+        f"├ ✉️ <b>Email</b>: <code>{buyer_email}</code>\n"
+        f"├ 📦 <b>Descrizione prodotto</b>: <i>{product_description}</i>\n"
+        f"├ 🔢 <b>Quantità ordine</b>: <code>{order_quantity}</code>\n"
         f"├ 💰 <b>Totale</b>: <code>{total}</code>\n"
+        f"├ 🔄 <b>Stato transazione</b>: <code>{transaction_status}</code>\n"
         f"├ 📍 <b>Spedizione</b>: <code>{shipping}</code>\n"
         f"└ 💳 <b>{html.escape(fiscal_label)}</b>: "
         f"<code>{html.escape(fiscal_value)}</code> "

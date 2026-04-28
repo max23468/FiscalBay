@@ -808,12 +808,16 @@ class OrderRecord:
     creationDate: str = ""
     buyerUsername: str = ""
     buyerName: str = ""
+    buyerEmail: str = ""
     taxpayerId: str = ""
     taxIdentifierType: str = ""
     issuingCountry: str = ""
     found: str = "no"
     items: str = "N/D"
+    orderQuantity: str = "0"
+    productDescription: str = "N/D"
     total: str = "0.00 EUR"
+    transactionStatus: str = "N/D"
     shippingAddress: str = "N/D"
 
     @classmethod
@@ -823,12 +827,16 @@ class OrderRecord:
             creationDate=str(data.get("creationDate", "")),
             buyerUsername=str(data.get("buyerUsername", "")),
             buyerName=str(data.get("buyerName", "")),
+            buyerEmail=str(data.get("buyerEmail", "")),
             taxpayerId=str(data.get("taxpayerId", "")),
             taxIdentifierType=str(data.get("taxIdentifierType", "")),
             issuingCountry=str(data.get("issuingCountry", "")),
             found=str(data.get("found", "no")),
             items=str(data.get("items", "N/D")),
+            orderQuantity=str(data.get("orderQuantity", "0")),
+            productDescription=str(data.get("productDescription", data.get("items", "N/D"))),
             total=str(data.get("total", "0.00 EUR")),
+            transactionStatus=str(data.get("transactionStatus", "N/D")),
             shippingAddress=str(data.get("shippingAddress", "N/D")),
         )
 
