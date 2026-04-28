@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.0](https://github.com/max23468/FiscalBay/compare/v1.2.0...v1.3.0) (2026-04-28)
+
+### Features
+
+* add assisted data requests ([3cc854e](https://github.com/max23468/FiscalBay/commit/3cc854e908c61df1192e5a9bd19ced49eb8b59fe))
+
 ## [1.2.0](https://github.com/max23468/FiscalBay/compare/v1.1.1...v1.2.0) (2026-04-28)
 
 ### Features
