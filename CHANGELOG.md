@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.18.1](https://github.com/max23468/FiscalBay/compare/v0.18.0...v0.18.1) (2026-04-28)
+
+### Bug Fixes
+
+* avoid login shell in hardened services ([7781346](https://github.com/max23468/FiscalBay/commit/7781346922c27f86e131deac2dd5623e4441f8bf))
+
 ## [0.18.0](https://github.com/max23468/FiscalBay/compare/v0.17.0...v0.18.0) (2026-04-28)
 
 ### Features
