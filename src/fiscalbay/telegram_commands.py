@@ -215,44 +215,39 @@ def parse_command(text: str) -> tuple[str, list[str]]:
     return command, parts[1:]
 
 
-def build_help_text() -> str:
+def build_help_text(*, is_admin: bool = False) -> str:
+    admin_lines = ""
+    if is_admin:
+        admin_lines = (
+            "\n<b>Area admin</b>\n"
+            "• 🧭 <code>/admin</code> → cruscotto operativo\n"
+            "• 👥 <code>/admin_users</code> → utenti e richieste accesso\n"
+            "• 🩺 <code>/tenant_health [user_id]</code> → salute tenant\n"
+            "Dettagli admin: <code>/admin help</code>\n"
+        )
     return (
         f"🤖 <b>Benvenuto in {BOT_DISPLAY_NAME}</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"<i>{BOT_TAGLINE}</i>\n\n"
         "Esperienza consigliata: usa i pulsanti rapidi del bot per muoverti tra "
         "collegamento account, stato e notifiche senza ricordare ogni comando.\n\n"
-        "Comandi disponibili:\n"
+        "Comandi principali:\n"
         "• 🟢 <code>/ping</code> → verifica rapida\n"
         "• 📊 <code>/stato</code> → stato bot e servizio\n"
         "• 👤 <code>/account</code> → stato account eBay e azioni collegamento\n"
-        "• 🔗 <code>/account collega</code> → avvia o riprende il collegamento account eBay\n"
-        "• ❌ <code>/account scollega</code> → scollega solo l'account eBay dal bot\n"
         "• 📦 <code>/ordini</code> → centro ordini e riepilogo azioni disponibili\n"
-        "• 🧾 <code>/ordini fiscali [giorni] [max]</code> → ordini con identificativo fiscale\n"
-        "• 📋 <code>/ordini tutti [giorni] [max]</code> → tutti gli ordini recenti\n"
-        "• 🔍 <code>/ordini cerca [id]</code> → dettaglio ordine singolo\n"
-        "• 🧭 <code>/ordini spiega [id]</code> → perche' un ordine non e' notificabile\n"
-        "• 📈 <code>/ordini report [giorni] [max]</code> → mini report fiscale compatto\n"
-        "• 🚦 <code>/ordini priorita [giorni] [max]</code> → ordini ordinati per priorita'\n"
         "• ⚙️ <code>/settings</code> → preferenze chat, notifiche, policy e uscita bot\n"
-        "• 🔔 <code>/settings notifiche on|off</code> → attiva o disattiva notifiche\n"
-        "• 🧪 <code>/settings filtro all|cf|vat</code> → filtra il tipo di avviso fiscale\n"
-        "• 🚪 <code>/settings lascia</code> → disattiva uso bot e richiede nuova approvazione\n"
         "• 🙋 <code>/request_access</code> → richiede accesso all'admin del bot\n"
-        "• 🧭 <code>/admin</code> → cruscotto admin e alert prodotto (admin)\n"
-        "• 👥 <code>/admin_users [all|pending|unlinked|reconnect|inactive]</code> → "
-        "utenti e accessi (admin)\n"
-        "• 🩺 <code>/tenant_health [user_id]</code> → salute tenant compatta (admin)\n"
-        "• ⛔ <code>/suspend_user [id]</code> → sospende un utente approvato (admin)\n"
-        "• ✅ <code>/reactivate_user [id]</code> → riattiva un utente sospeso (admin)\n"
-        "• 🛠️ <code>/service_mode "
-        "[normal|maintenance|degraded]</code> → modalita' servizio (admin)\n"
-        "• ℹ️ <code>/help</code> → questa guida\n\n"
-        "<b>Esempi rapidi</b>\n"
+        "• ℹ️ <code>/help</code> → questa guida rapida\n"
+        f"{admin_lines}\n"
+        "<b>Guide dettagliate</b>\n"
+        "• <code>/ordini</code> → tutte le azioni su ordini, report e notificabilita'\n"
+        "• <code>/settings</code> → preferenze chat e notifiche\n"
+        + ("• <code>/admin help</code> → comandi admin e gestione accessi\n" if is_admin else "")
+        + "\n<b>Esempi rapidi</b>\n"
+        "• <code>/account collega</code>\n"
         "• <code>/ordini fiscali 7 20</code>\n"
-        "• <code>/ordini tutti 3 50</code>\n"
-        "• <code>/ordini cerca 12-34567-89012</code>\n\n"
+        "• <code>/settings notifiche on</code>\n\n"
         f"<i>Limiti input: giorni {TELEGRAM_CMD_MIN_DAYS}-{TELEGRAM_CMD_MAX_DAYS}, "
         f"max ordini {TELEGRAM_CMD_MIN_RESULTS}-{TELEGRAM_CMD_MAX_RESULTS}.</i>"
     )
@@ -375,36 +370,33 @@ def build_main_menu_markup(
     notification_callback = (
         CALLBACK_NOTIFICATIONS_OFF if notifications_enabled else CALLBACK_NOTIFICATIONS_ON
     )
-    third_row = [{"text": connect_label, "callback_data": CALLBACK_CONNECT}]
-    fourth_row = [
-        {"text": notification_label, "callback_data": notification_callback},
+    account_row = [
+        {"text": connect_label, "callback_data": CALLBACK_CONNECT},
+        {"text": "Account", "callback_data": CALLBACK_ACCOUNT},
+    ]
+    orders_row = [
+        {"text": "Ordini fiscali", "callback_data": CALLBACK_ULTIMI},
+        {"text": "Tutti ordini", "callback_data": CALLBACK_TUTTI},
+    ]
+    status_row = [
+        {"text": "Stato", "callback_data": CALLBACK_STATO},
         {"text": "Preferenze", "callback_data": CALLBACK_SETTINGS},
     ]
+    notification_row = [{"text": notification_label, "callback_data": notification_callback}]
     if account_linked:
-        fifth_row = [
-            {"text": "Scollega", "callback_data": CALLBACK_DISCONNECT},
-            {"text": "Guida", "callback_data": CALLBACK_HELP},
-        ]
-    else:
-        fifth_row = [
-            {"text": "Account eBay", "callback_data": CALLBACK_ACCOUNT},
-            {"text": "Guida", "callback_data": CALLBACK_HELP},
-        ]
+        notification_row.append({"text": "Scollega", "callback_data": CALLBACK_DISCONNECT})
+
+    help_row = [
+        {"text": "Guida", "callback_data": CALLBACK_HELP},
+    ]
 
     return {
         "inline_keyboard": [
-            [{"text": "Ordini", "callback_data": CALLBACK_ORDINI}],
-            [
-                {"text": "Ordini fiscali", "callback_data": CALLBACK_ULTIMI},
-                {"text": "Tutti ordini", "callback_data": CALLBACK_TUTTI},
-            ],
-            [
-                {"text": "Stato bot", "callback_data": CALLBACK_STATO},
-                {"text": "Account eBay", "callback_data": CALLBACK_ACCOUNT},
-            ],
-            third_row,
-            fourth_row,
-            fifth_row,
+            account_row,
+            orders_row,
+            status_row,
+            notification_row,
+            help_row,
         ]
     }
 

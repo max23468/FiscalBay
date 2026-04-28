@@ -48,10 +48,31 @@ class TelegramBotTests(unittest.TestCase):
         markup = build_main_menu_markup()
         keyboard = markup.get("inline_keyboard")
         self.assertIsInstance(keyboard, list)
+        self.assertEqual(
+            keyboard,
+            [
+                [
+                    {"text": "Collega eBay", "callback_data": "menu:connect"},
+                    {"text": "Account", "callback_data": "menu:account"},
+                ],
+                [
+                    {"text": "Ordini fiscali", "callback_data": CALLBACK_ULTIMI},
+                    {"text": "Tutti ordini", "callback_data": CALLBACK_TUTTI},
+                ],
+                [
+                    {"text": "Stato", "callback_data": CALLBACK_STATO},
+                    {"text": "Preferenze", "callback_data": CALLBACK_SETTINGS},
+                ],
+                [
+                    {"text": "Disattiva notifiche", "callback_data": "menu:notifications_off"},
+                    {"text": "Scollega", "callback_data": "menu:disconnect"},
+                ],
+                [{"text": "Guida", "callback_data": CALLBACK_HELP}],
+            ],
+        )
         all_callbacks = [button.get("callback_data") for row in keyboard for button in row]
         self.assertIn(CALLBACK_ULTIMI, all_callbacks)
         self.assertIn(CALLBACK_TUTTI, all_callbacks)
-        self.assertIn(CALLBACK_ORDINI, all_callbacks)
         self.assertIn(CALLBACK_STATO, all_callbacks)
         self.assertIn(CALLBACK_HELP, all_callbacks)
         self.assertIn(CALLBACK_SETTINGS, all_callbacks)
@@ -147,19 +168,22 @@ class TelegramBotTests(unittest.TestCase):
     def test_build_help_text_mentions_commands(self) -> None:
         text = build_help_text()
         self.assertIn("pulsanti rapidi", text)
+        self.assertIn("Comandi principali", text)
+        self.assertIn("Guide dettagliate", text)
         self.assertIn("/ordini fiscali", text)
-        self.assertIn("/ordini cerca", text)
         self.assertIn("/settings", text)
-        self.assertIn("/settings lascia", text)
-        self.assertIn("/ordini spiega", text)
-        self.assertIn("/ordini report", text)
-        self.assertIn("/ordini priorita", text)
-        self.assertIn("/settings filtro", text)
         self.assertIn("/settings notifiche on", text)
         self.assertIn("/request_access", text)
-        self.assertIn("/admin_users", text)
-        self.assertIn("/admin", text)
+        self.assertNotIn("/ordini report", text)
+        self.assertNotIn("/admin_users", text)
         self.assertIn(BOT_DISPLAY_NAME, text)
+
+    def test_build_help_text_can_include_admin_shortcuts(self) -> None:
+        text = build_help_text(is_admin=True)
+        self.assertIn("Area admin", text)
+        self.assertIn("/admin_users", text)
+        self.assertIn("/admin help", text)
+        self.assertNotIn("/approve_user", text)
 
     def test_build_telegram_branding_profile_contains_expected_fields(self) -> None:
         profile = build_telegram_branding_profile()

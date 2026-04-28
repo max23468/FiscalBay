@@ -2314,6 +2314,11 @@ def process_message(
     if service_block_message is not None:
         return [service_block_message]
 
+    if command == "/help" and (
+        is_admin_user or can_use_bot or telegram_config.admin_user_id is None
+    ):
+        return [build_help_text(is_admin=is_admin_user)]
+
     if not has_command_capability:
         if command == "/help":
             return [format_access_required_status(user_status or TELEGRAM_USER_STATUS_NEW)]

@@ -212,6 +212,10 @@ Storage:
 
 ### Comandi Telegram attuali
 
+`/help` espone solo la guida rapida e distingue il blocco admin quando lo usa
+l'admin; i dettagli operativi sono concentrati in `/ordini`, `/settings` e
+`/admin help`.
+
 - `/start`
 - `/help`
 - `/ping`
@@ -221,9 +225,10 @@ Storage:
 - `/account reconnect`
 - `/account scollega`
 - `/request_access`
-- `/settings notifiche on|off`
 - `/settings`
+- `/settings notifiche on|off`
 - `/admin`
+- `/admin help`
 - `/admin_users all|pending|unlinked|reconnect|inactive`
 - `/ordini fiscali`
 - `/ordini tutti`
@@ -236,6 +241,8 @@ Nota onboarding:
 - `/account scollega` scollega gia' localmente account e token del tenant corrente dal DB sulla VPS
 - `/settings notifiche on|off` consente gia' alla singola chat di attivare o spegnere le notifiche personali
 - `/settings` mostra gia' un riepilogo leggero delle preferenze utente/chat
+- la tastiera inline sotto i messaggi e' ordinata per flusso operativo:
+  collegamento/account, ordini, stato/preferenze, notifiche e guida
 - se `TELEGRAM_ADMIN_USER_ID` e' configurata, gli utenti non admin entrano in stati `new/pending/approved/blocked` e possono sbloccare il bot solo dopo approvazione admin
 - l'admin puo' gestire gli accessi con callback inline o con `/admin_users`, `/approve_user` e `/reject_user`
 - il runtime normalizza ora centralmente gli stati workflow e applica capability esplicite per i comandi sensibili, invece di affidarsi a semplici check sparsi su stringhe di stato

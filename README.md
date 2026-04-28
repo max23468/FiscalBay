@@ -388,15 +388,26 @@ I record prodotti dalla CLI includono:
 
 ### Comandi disponibili
 
+`/help` resta volutamente breve: mostra solo i comandi principali e, se lo usa
+l'admin, aggiunge il blocco admin. Le guide dettagliate vivono nei rispettivi
+centri comando (`/ordini`, `/settings`, `/admin help`).
+
+Comandi principali per tutti:
+
 - `/start`
 - `/help`
 - `/ping`
 - `/stato`
 - `/account`
+- `/ordini`
+- `/settings`
+- `/request_access`
+
+Dettagli account, ordini e impostazioni:
+
 - `/account collega`
 - `/account reconnect`
 - `/account scollega`
-- `/ordini`
 - `/ordini fiscali 7 20`
 - `/ordini tutti 7 20`
 - `/ordini cerca 12-34567-89012`
@@ -404,13 +415,15 @@ I record prodotti dalla CLI includono:
 - `/ordini report 7 20`
 - `/ordini priorita 7 20`
 - `/ordini spiega 12-34567-89012`
-- `/settings`
 - `/settings notifiche on`
 - `/settings notifiche off`
 - `/settings filtro all|cf|vat`
 - `/settings policy`
 - `/settings lascia`
-- `/request_access`
+
+Comandi admin:
+
+- `/admin help` (admin)
 - `/admin` (admin)
 - `/admin manutenzione` (admin)
 - `/admin_users all|pending|unlinked|reconnect|inactive` (admin)
@@ -433,7 +446,7 @@ Comportamento:
 - `/stato` mostra ultimo check, contatori e dimensione della coda retry; `/stato servizio` mostra lo stato servizio sintetico
 - `/account` riassume lo stato eBay; `collega`, `reconnect` e `scollega` gestiscono le azioni account
 - `/settings` riassume preferenze chat e tenant; `notifiche`, `filtro`, `policy` e `lascia` gestiscono le azioni correlate
-- `/start` e `/help` mostrano anche una tastiera inline con scorciatoie
+- `/start` e `/help` mostrano anche una tastiera inline riordinata con scorciatoie per collegamento/account, ordini, stato/preferenze, notifiche e guida
 - se `TELEGRAM_ADMIN_USER_ID` e' configurata, gli utenti non ancora approvati possono solo richiedere accesso con `/request_access` (anche quando `TELEGRAM_ALLOWED_CHAT_IDS=*`)
 - quando un nuovo utente viene visto per la prima volta dal runtime, l'admin riceve una notifica proattiva con user id/chat id per gestire subito approvazione o rifiuto
 - l'admin puo' approvare o rifiutare richieste dal messaggio inline o con `/approve_user <telegram_user_id>` e `/reject_user <telegram_user_id>`

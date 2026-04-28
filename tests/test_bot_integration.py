@@ -97,6 +97,25 @@ class BotIntegrationTests(unittest.TestCase):
         self.assertEqual(len(replies), 1)
         self.assertIn("/request_access", replies[0])
 
+    def test_process_message_help_is_role_aware_for_admin(self) -> None:
+        replies = process_message(
+            text="/help",
+            chat_id=573159993,
+            telegram_config=TelegramConfig(
+                token="x",
+                allowed_chat_ids={573159993},
+                notify_chat_ids=set(),
+                admin_user_id=573159993,
+            ),
+            ebay_environment="production",
+            telegram_user_id=573159993,
+        )
+
+        self.assertEqual(len(replies), 1)
+        self.assertIn("Area admin", replies[0])
+        self.assertIn("/admin help", replies[0])
+        self.assertIn("/admin_users", replies[0])
+
     def test_removed_legacy_commands_point_to_canonical_commands(self) -> None:
         config = TelegramConfig(
             token="x",
@@ -444,6 +463,8 @@ class BotIntegrationTests(unittest.TestCase):
                 telegram_user_id=999,
             )
             self.assertIn("Benvenuto in FiscalBay", approved_help[0])
+            self.assertIn("Comandi principali", approved_help[0])
+            self.assertNotIn("Area admin", approved_help[0])
 
     def test_process_message_status_reads_real_sqlite_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
