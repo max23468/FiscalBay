@@ -247,6 +247,9 @@ Lo smoke test verifica:
 - health check del bot senza errori bloccanti di avvio
 - `last_check_missing` e `last_check_stale` non bloccano lo smoke deploy, per non confondere problemi upstream eBay temporanei con deploy falliti
 - se `fiscalbay-oauth` e' abilitato, verifica anche che il servizio OAuth risulti attivo
+- se i timer sono abilitati, avvia `fiscalbay-alertcheck.service` e `fiscalbay-reconcile.service`
+- se `/etc/fiscalbay/duckdns.env` esiste, verifica che `fiscalbay-duckdns.timer` sia abilitato e attivo
+- fallisce se restano unit FiscalBay in stato failed
 
 ## Backup e restore
 
@@ -342,6 +345,7 @@ Health check fallisce:
 - lo script di setup supporta un utente di servizio dedicato tramite `APP_USER` e `APP_GROUP`
 - lo script di setup installa e abilita il timer `fiscalbay-backup.timer`
 - lo script di setup installa e abilita anche `fiscalbay-alertcheck.timer` per gli alert runtime minimi
+- lo script di setup installa `fiscalbay-duckdns.timer` e lo abilita solo quando esiste `/etc/fiscalbay/duckdns.env`
 
 Deploy riuscito ma bot non sano:
 

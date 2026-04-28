@@ -51,7 +51,7 @@ Fase 2 completata.
 - [ ] aggiungere un healthcheck esterno HTTPS oltre ai controlli locali
 - [ ] aggiungere un controllo periodico su certificati TLS e raggiungibilita' del callback pubblico
 - [ ] introdurre un inventario rapido di configurazione e stato del servizio per recovery e diagnosi
-- [ ] rendere lo smoke deploy piu' completo, verificando bot, oauth, reconcile timer, healthcheck e endpoint esterno
+- [ ] aggiungere un healthcheck esterno HTTPS programmato oltre allo smoke deploy
 - [ ] aggiungere playbook incidente piu' specifici per token eBay, callback OAuth, `state.db`, `nginx` e notifiche ferme
 
 ## Fase 6 - Consolidamento del Servizio Pubblico

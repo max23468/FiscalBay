@@ -7,6 +7,8 @@ SERVICE_NAME="${1:-fiscalbay-bot}"
 HEALTHCHECK_BIN="${2:-${APP_DIR}/.venv/bin/fiscalbay-healthcheck}"
 ENV_FILE="${3:-${APP_DIR}/.env}"
 OAUTH_SERVICE_NAME="${4:-fiscalbay-oauth}"
+ALERT_SERVICE_NAME="${5:-fiscalbay-alertcheck}"
+RECONCILE_SERVICE_NAME="${6:-fiscalbay-reconcile}"
 
 sudo systemctl is-active --quiet "${SERVICE_NAME}"
 set -a
@@ -21,6 +23,14 @@ healthcheck_args=(
 )
 max_attempts="${SMOKE_CHECK_ATTEMPTS:-12}"
 sleep_seconds="${SMOKE_CHECK_SLEEP_SECONDS:-5}"
+if ! [[ "${max_attempts}" =~ ^[0-9]+$ ]] || [ "${max_attempts}" -lt 1 ]; then
+  echo "SMOKE_CHECK_ATTEMPTS deve essere un intero >= 1." >&2
+  exit 1
+fi
+if ! [[ "${sleep_seconds}" =~ ^[0-9]+$ ]]; then
+  echo "SMOKE_CHECK_SLEEP_SECONDS deve essere un intero >= 0." >&2
+  exit 1
+fi
 
 for attempt in $(seq 1 "${max_attempts}"); do
   if "${HEALTHCHECK_BIN}" "${healthcheck_args[@]}"; then
@@ -34,4 +44,18 @@ for attempt in $(seq 1 "${max_attempts}"); do
 done
 if sudo systemctl is-enabled --quiet "${OAUTH_SERVICE_NAME}"; then
   sudo systemctl is-active --quiet "${OAUTH_SERVICE_NAME}"
+fi
+for service in "${ALERT_SERVICE_NAME}" "${RECONCILE_SERVICE_NAME}"; do
+  if sudo systemctl is-enabled --quiet "${service}.timer"; then
+    sudo systemctl is-active --quiet "${service}.timer"
+    sudo systemctl start "${service}.service"
+  fi
+done
+if [ -f /etc/fiscalbay/duckdns.env ]; then
+  sudo systemctl is-enabled --quiet fiscalbay-duckdns.timer
+  sudo systemctl is-active --quiet fiscalbay-duckdns.timer
+fi
+if sudo systemctl --failed --no-legend 'fiscalbay-*' | grep -q .; then
+  sudo systemctl --failed 'fiscalbay-*' --no-pager
+  exit 1
 fi

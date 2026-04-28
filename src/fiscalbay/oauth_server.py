@@ -26,6 +26,7 @@ from .config import load_config, load_telegram_config
 from .errors import ConfigurationError, EbayApiError
 from .logging_utils import log_event
 from .models import (
+    CAPABILITY_MANAGE_NOTIFICATIONS,
     EBAY_ACCOUNT_STATUS_LINKED,
     OAUTH_SESSION_STATUS_COMPLETED,
     OAUTH_SESSION_STATUS_EXPIRED,
@@ -36,13 +37,17 @@ from .models import (
     LinkedEbayAccount,
     OauthLinkSession,
     TelegramConfig,
+    has_telegram_user_capability,
     normalize_oauth_session_status,
 )
 from .storage.sqlite import (
     append_audit_log_entry,
     load_oauth_link_session_by_state,
+    load_telegram_chats,
+    load_telegram_user,
     resolve_linked_ebay_account,
     save_tenant_account_status_cache,
+    set_notification_subscription_enabled,
     summarize_tenant_account_status,
     update_oauth_link_session,
     upsert_ebay_token_set,
@@ -54,6 +59,7 @@ LOGGER = logging.getLogger("fiscalbay.oauth_server")
 DEFAULT_OAUTH_HOST = "127.0.0.1"
 DEFAULT_OAUTH_PORT = 8787
 DEFAULT_CALLBACK_PATH = "/oauth/callback"
+DEFAULT_PUBLIC_BOT_URL = "https://t.me/fiscalbay_bot"
 PUBLIC_ICON_SVG = textwrap.dedent(
     """
     <svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -240,6 +246,13 @@ def oauth_callback_url() -> str:
     return urllib.parse.urlunparse(rebuilt)
 
 
+def public_bot_url() -> str:
+    return (
+        os.getenv("TELEGRAM_PUBLIC_BOT_URL", DEFAULT_PUBLIC_BOT_URL).strip()
+        or DEFAULT_PUBLIC_BOT_URL
+    )
+
+
 def oauth_runame(environment: str) -> str:
     env_name = environment.strip().lower()
     if env_name == "sandbox":
@@ -376,12 +389,13 @@ def render_oauth_start_help_page() -> bytes:
             "/account collega e torna qui con il link generato per la tua sessione."
         ),
         action_label="Apri Telegram",
-        action_url="https://t.me/",
+        action_url=public_bot_url(),
         hint="Questo passaggio protegge lo stato OAuth e associa il consenso all'utente corretto.",
     )
 
 
 def render_home_page() -> bytes:
+    safe_public_bot_url = html.escape(public_bot_url(), quote=True)
     css = textwrap.dedent(
         """
         :root{
@@ -579,7 +593,9 @@ def render_home_page() -> bytes:
                       porta nella chat Telegram operativa.
                     </p>
                     <div class='actions'>
-                      <a class='button primary' href='https://t.me/'>Apri Telegram</a>
+                      <a class='button primary' href='{safe_public_bot_url}'>
+                        Apri Telegram
+                      </a>
                       <a class='button secondary' href='#prodotto'>Come funziona</a>
                     </div>
                     <p class='note'>
@@ -1100,6 +1116,27 @@ def complete_oauth_link(
             status="active",
         ),
     )
+    can_manage_notifications = False
+    telegram_user = load_telegram_user(telegram_config.state_path, session.telegram_user_id)
+    if telegram_user is not None:
+        can_manage_notifications = has_telegram_user_capability(
+            telegram_user.status,
+            CAPABILITY_MANAGE_NOTIFICATIONS,
+        )
+    chat_exists = any(
+        chat.telegram_user_id == session.telegram_user_id
+        and chat.telegram_chat_id == session.telegram_chat_id
+        for chat in load_telegram_chats(telegram_config.state_path)
+    )
+    if can_manage_notifications and chat_exists:
+        set_notification_subscription_enabled(
+            telegram_config.state_path,
+            session.telegram_user_id,
+            session.telegram_chat_id,
+            True,
+            created_at=timestamp,
+            updated_at=timestamp,
+        )
     update_oauth_link_session(
         telegram_config.state_path,
         oauth_state,
@@ -1317,7 +1354,7 @@ class OAuthHandler(BaseHTTPRequestHandler):
                     "e ti aspetta li'."
                 ),
                 action_label="Apri Telegram",
-                action_url="https://t.me/",
+                action_url=public_bot_url(),
                 hint="Se l'app Telegram e' gia' aperta, puoi semplicemente chiudere questa pagina.",
             ),
         )

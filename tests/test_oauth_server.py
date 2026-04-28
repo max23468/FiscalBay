@@ -4,7 +4,13 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from src.fiscalbay.errors import ConfigurationError
-from src.fiscalbay.models import Config, OauthLinkSession, TelegramConfig
+from src.fiscalbay.models import (
+    Config,
+    OauthLinkSession,
+    TelegramChat,
+    TelegramConfig,
+    TelegramUser,
+)
 from src.fiscalbay.oauth_server import (
     build_oauth_start_redirect,
     complete_oauth_link,
@@ -26,7 +32,10 @@ from src.fiscalbay.storage.sqlite import (
     load_audit_log_entries,
     load_ebay_token_sets,
     load_latest_oauth_link_session,
+    load_notification_subscriptions,
     resolve_linked_ebay_account,
+    upsert_telegram_chat,
+    upsert_telegram_user,
 )
 
 
@@ -51,12 +60,12 @@ class OAuthServerTests(unittest.TestCase):
             "Collegamento riuscito",
             "Messaggio di conferma",
             action_label="Apri Telegram",
-            action_url="https://t.me/",
+            action_url="https://t.me/fiscalbay_bot",
             hint="Puoi chiudere questa pagina.",
         ).decode("utf-8")
 
         self.assertIn("Apri Telegram", body)
-        self.assertIn("https://t.me/", body)
+        self.assertIn("https://t.me/fiscalbay_bot", body)
         self.assertIn("Puoi chiudere questa pagina.", body)
 
     def test_render_privacy_page_describes_data_handling(self) -> None:
@@ -216,6 +225,24 @@ class OAuthServerTests(unittest.TestCase):
                     status="pending",
                 ),
             )
+            upsert_telegram_user(
+                str(db_path),
+                TelegramUser(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    status="approved",
+                    created_at="2026-04-28T10:00:00Z",
+                ),
+            )
+            upsert_telegram_chat(
+                str(db_path),
+                TelegramChat(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    notifications_enabled=True,
+                    created_at="2026-04-28T10:00:00Z",
+                ),
+            )
             telegram_config = TelegramConfig(
                 token="telegram-token",
                 allowed_chat_ids=None,
@@ -258,6 +285,11 @@ class OAuthServerTests(unittest.TestCase):
             token_set = load_ebay_token_sets(str(db_path))[0]
             self.assertEqual(token_set.refresh_token_encrypted, "plain:tenant-refresh")
             self.assertEqual(token_set.status, "active")
+            subscriptions = load_notification_subscriptions(str(db_path))
+            self.assertEqual(len(subscriptions), 1)
+            self.assertEqual(subscriptions[0].telegram_user_id, 123)
+            self.assertEqual(subscriptions[0].telegram_chat_id, 456)
+            self.assertTrue(subscriptions[0].enabled)
             session = load_latest_oauth_link_session(str(db_path), 123)
             assert session is not None
             self.assertEqual(session.status, "completed")

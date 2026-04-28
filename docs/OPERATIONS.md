@@ -196,6 +196,7 @@ Alert basilari runtime:
 - gli alert minimi oggi coprono servizio `systemd` non attivo, troppi errori consecutivi e retry queue oltre soglia
 - soglie di default: `MAX_CONSECUTIVE_ERROR_CYCLES=3` e `MAX_RETRY_QUEUE_SIZE=20`
 - il fallimento del check finisce nel journal del service `fiscalbay-alertcheck`
+- lo smoke check di deploy avvia anche `fiscalbay-alertcheck.service` quando il timer e' abilitato, cosi' un errore di permessi o runtime blocca il deploy
 
 Reconciliation periodica:
 
@@ -203,6 +204,7 @@ Reconciliation periodica:
 - wrapper VPS: `deploy/reconcile.sh`
 - timer `systemd`: `fiscalbay-reconcile.timer`
 - la reconciliation processa la `operation_queue`, riallinea accessi/chat/subscription, scade sessioni OAuth pendenti troppo vecchie e revoca token attivi rimasti su account non piu' collegati
+- lo smoke check di deploy avvia anche `fiscalbay-reconcile.service` quando il timer e' abilitato
 
 Retention e cancellazione:
 
@@ -222,10 +224,11 @@ Suggerimento pratico sui log:
 2. verificare che lo smoke check remoto completi senza errori
 3. se lo smoke check fallisce, leggere i log e valutare rollback
 
-Lo smoke check di deploy verifica che servizi e lock siano sani, ma non blocca il
-deploy per `last_check_missing` o `last_check_stale`: questi restano visibili nel
-report healthcheck e nel timer alert, ma possono dipendere da problemi temporanei
-di eBay esterni al deploy.
+Lo smoke check di deploy verifica bot, healthcheck, OAuth se abilitato, timer
+operativi, alertcheck, reconciliation e assenza di unit FiscalBay fallite. Non
+blocca il deploy per `last_check_missing` o `last_check_stale`: questi restano
+visibili nel report healthcheck e nel timer alert, ma possono dipendere da
+problemi temporanei di eBay esterni al deploy.
 
 Questo e' il percorso di deploy predefinito. GitHub Actions non e' un canale
 operativo attivo per FiscalBay: deploy, diagnostica e configurazione VPS si
@@ -286,7 +289,8 @@ Guardrail automatici del nuovo flusso:
 - working tree pulito prima di deploy/release reali
 - release ufficiale solo da `main`
 - deploy solo sulla VPS con hostname `fiscalbay-bot`
-- smoke check remoto obbligatorio nel deploy
+- smoke check remoto obbligatorio nel deploy, incluso controllo dei oneshot
+  periodici e delle unit FiscalBay fallite
 
 ## Sync locale dopo release GitHub
 

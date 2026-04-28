@@ -363,8 +363,8 @@ Finding audit che guidano questa fase:
 - credenziali eBay ancora globali in `.env`
 - stato runtime, metriche e retry queue ancora condivisi
 - scoping operativo ancora troppo vicino alla chat invece che al tenant utente
-- assenza di audit log per collegamento e scollegamento account
-- assenza di rate limiting per utente
+- audit log e rate limiting esistono ora per i flussi sensibili principali, ma
+  restano da affinare pruning, retention e copertura dei casi amministrativi
 
 Questi finding sono la base esplicita delle scelte gia' fissate in `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md` e `docs/OAUTH_FLOW.md`.
 
@@ -626,6 +626,10 @@ Le cose principali ancora aperte non sono piu' il “mettere in piedi” il prog
 - il bot gira come `systemd` service `fiscalbay-bot`
 - il callback OAuth gira come `systemd` service `fiscalbay-oauth`
 - la reconciliation periodica gira via `fiscalbay-reconcile.timer`
+- `fiscalbay-alertcheck.timer` e `fiscalbay-reconcile.timer` vengono verificati
+  dallo smoke deploy con avvio esplicito delle rispettive unit oneshot
+- `fiscalbay-duckdns.timer` viene installato ma abilitato solo se esiste
+  `/etc/fiscalbay/duckdns.env`
 - il runtime corretto del progetto e' Python `3.11` nel `.venv`
 - il bot usa SQLite locale in `data/state.db`
 - la roadmap da seguire per il lavoro residuo e' `docs/ROADMAP.md`

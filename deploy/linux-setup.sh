@@ -32,6 +32,11 @@ RECONCILE_TIMER_TARGET="/etc/systemd/system/${RECONCILE_SERVICE_NAME}.timer"
 OAUTH_SERVICE_NAME="fiscalbay-oauth"
 OAUTH_SERVICE_TEMPLATE="${APP_DIR}/deploy/fiscalbay-oauth.service"
 OAUTH_SERVICE_TARGET="/etc/systemd/system/${OAUTH_SERVICE_NAME}.service"
+DUCKDNS_SERVICE_NAME="fiscalbay-duckdns"
+DUCKDNS_SERVICE_TEMPLATE="${APP_DIR}/deploy/fiscalbay-duckdns.service"
+DUCKDNS_SERVICE_TARGET="/etc/systemd/system/${DUCKDNS_SERVICE_NAME}.service"
+DUCKDNS_TIMER_TEMPLATE="${APP_DIR}/deploy/fiscalbay-duckdns.timer"
+DUCKDNS_TIMER_TARGET="/etc/systemd/system/${DUCKDNS_SERVICE_NAME}.timer"
 
 select_python_bin() {
   if [ -n "${PYTHON_BIN}" ] && command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
@@ -137,9 +142,11 @@ install_service_file "${OAUTH_SERVICE_TEMPLATE}" "${OAUTH_SERVICE_TARGET}"
 install_service_file "${BACKUP_SERVICE_TEMPLATE}" "${BACKUP_SERVICE_TARGET}"
 install_service_file "${ALERT_SERVICE_TEMPLATE}" "${ALERT_SERVICE_TARGET}"
 install_service_file "${RECONCILE_SERVICE_TEMPLATE}" "${RECONCILE_SERVICE_TARGET}"
+sudo cp "${DUCKDNS_SERVICE_TEMPLATE}" "${DUCKDNS_SERVICE_TARGET}"
 sudo cp "${BACKUP_TIMER_TEMPLATE}" "${BACKUP_TIMER_TARGET}"
 sudo cp "${ALERT_TIMER_TEMPLATE}" "${ALERT_TIMER_TARGET}"
 sudo cp "${RECONCILE_TIMER_TEMPLATE}" "${RECONCILE_TIMER_TARGET}"
+sudo cp "${DUCKDNS_TIMER_TEMPLATE}" "${DUCKDNS_TIMER_TARGET}"
 sudo systemctl disable --now fiscalbay-release-please.timer >/dev/null 2>&1 || true
 sudo rm -f \
   /etc/systemd/system/fiscalbay-release-please.service \
@@ -148,6 +155,11 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now "${BACKUP_SERVICE_NAME}.timer"
 sudo systemctl enable --now "${ALERT_SERVICE_NAME}.timer"
 sudo systemctl enable --now "${RECONCILE_SERVICE_NAME}.timer"
+if [ -f /etc/fiscalbay/duckdns.env ]; then
+  sudo systemctl enable --now "${DUCKDNS_SERVICE_NAME}.timer"
+else
+  sudo systemctl disable --now "${DUCKDNS_SERVICE_NAME}.timer" >/dev/null 2>&1 || true
+fi
 
 echo "Installazione completata."
 echo "Prossimi passi:"
@@ -160,7 +172,8 @@ echo "6. Log OAuth: sudo journalctl -u ${OAUTH_SERVICE_NAME} -f"
 echo "7. Verifica timer backup: sudo systemctl status ${BACKUP_SERVICE_NAME}.timer"
 echo "8. Verifica timer alert: sudo systemctl status ${ALERT_SERVICE_NAME}.timer"
 echo "9. Verifica timer reconcile: sudo systemctl status ${RECONCILE_SERVICE_NAME}.timer"
-echo "10. Release esplicita da Mac locale: scripts/release_now.sh"
+echo "10. Verifica timer DuckDNS, se configurato: sudo systemctl status ${DUCKDNS_SERVICE_NAME}.timer"
+echo "11. Release esplicita da Mac locale: scripts/release_now.sh"
 echo
 echo "Configurazione applicata:"
 echo "- APP_USER=${APP_USER}"

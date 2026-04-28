@@ -137,6 +137,7 @@ EBAY_OAUTH_CONNECT_BASE_URL=https://connect.tuodominio.it/oauth/start
 EBAY_OAUTH_CALLBACK_URL=https://connect.tuodominio.it/oauth/callback
 EBAY_OAUTH_SERVER_HOST=127.0.0.1
 EBAY_OAUTH_SERVER_PORT=8787
+TELEGRAM_PUBLIC_BOT_URL=https://t.me/fiscalbay_bot
 ```
 
 Lascia il server OAuth in bind locale (`127.0.0.1`): l'esposizione pubblica deve

@@ -26,6 +26,11 @@ Obiettivo:
 
 - passare da assetto "funziona" a assetto "regge incidenti semplici"
 
+Stato corrente:
+
+- baseline VPS live con backup, alertcheck, reconciliation e smoke deploy remoto;
+  i follow-up aperti sono ora tracciati nella Fase 5 di `docs/ROADMAP.md`
+
 Dipendenze:
 
 - M0 chiusa
@@ -71,6 +76,11 @@ Deliverable principali:
 - metriche basilari
 - alert minimi
 - troubleshooting guidato
+
+Stato corrente:
+
+- healthcheck, alertcheck timer, reconciliation timer e log strutturati sono
+  operativi; resta aperto il monitoraggio esterno HTTPS e risorse VPS
 
 ### M4 - Progettazione multiutente
 
