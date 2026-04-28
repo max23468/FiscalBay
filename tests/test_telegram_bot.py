@@ -46,6 +46,7 @@ from src.fiscalbay.telegram_commands import (
     CALLBACK_ORDINI_REVIEW,
     build_telegram_branding_profile,
     format_order_date,
+    is_admin_authorized,
 )
 
 
@@ -201,6 +202,27 @@ class TelegramBotTests(unittest.TestCase):
         self.assertEqual(chat_id, 123)
         self.assertEqual(data, CALLBACK_STATO)
         self.assertEqual(thread_id, 9)
+
+    def test_is_admin_authorized_requires_configured_admin(self) -> None:
+        self.assertFalse(
+            is_admin_authorized(
+                123,
+                123,
+                TelegramConfig(token="x", allowed_chat_ids={123}, notify_chat_ids=set()),
+            )
+        )
+        self.assertTrue(
+            is_admin_authorized(
+                123,
+                123,
+                TelegramConfig(
+                    token="x",
+                    allowed_chat_ids={123},
+                    notify_chat_ids=set(),
+                    admin_user_id=123,
+                ),
+            )
+        )
 
     def test_parse_command_strips_bot_suffix(self) -> None:
         command, args = parse_command("/ultimi@mybot 7 5")

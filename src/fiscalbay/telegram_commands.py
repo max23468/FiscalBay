@@ -1819,7 +1819,7 @@ def is_admin_authorized(
     if not is_authorized(chat_id, config):
         return False
     if config.admin_user_id is None:
-        return True
+        return False
     return telegram_user_id == config.admin_user_id
 
 
