@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.0](https://github.com/max23468/FiscalBay/compare/v1.0.1...v1.1.0) (2026-04-28)
+
+### Features
+
+* expose release metadata in admin healthcheck ([3a304cc](https://github.com/max23468/FiscalBay/commit/3a304ccaf5f11ee1dec526b8ba3cd033cf2237fd))
+
 ## [1.0.1](https://github.com/max23468/FiscalBay/compare/v1.0.0...v1.0.1) (2026-04-28)
 
 ### Bug Fixes
