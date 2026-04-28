@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.11.0](https://github.com/max23468/FiscalBay/compare/v0.10.0...v0.11.0) (2026-04-28)
+
+
+### Features
+
+* include order details in fiscal notifications ([c51867b](https://github.com/max23468/FiscalBay/commit/c51867b2ebb6df792dbf1eb675b129b6f9d4c75f))
+
+
+### Bug Fixes
+
+* guard date formatting timezone fallback ([4014b6c](https://github.com/max23468/FiscalBay/commit/4014b6cf8d1ad5721cb636b6e6e30355b0c6ffd0))
+
 ## [0.10.0](https://github.com/max23468/FiscalBay/compare/v0.9.2...v0.10.0) (2026-04-28)
 
 
