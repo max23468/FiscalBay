@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.18.0](https://github.com/max23468/FiscalBay/compare/v0.17.0...v0.18.0) (2026-04-28)
+
+### Features
+
+* consolidate public service operations ([b4448f0](https://github.com/max23468/FiscalBay/commit/b4448f002764e1644552d31e861d323a54864332))
+
 ## [0.17.0](https://github.com/max23468/FiscalBay/compare/v0.16.0...v0.17.0) (2026-04-28)
 
 ### Features
