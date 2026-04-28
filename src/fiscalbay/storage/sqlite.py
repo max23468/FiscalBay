@@ -18,9 +18,14 @@ from ..models import (
     OAUTH_SESSION_STATUS_EXPIRED,
     OAUTH_SESSION_STATUS_FAILED,
     OAUTH_SESSION_STATUS_PENDING,
+    OPERATION_STATUS_CANCELLED,
+    OPERATION_STATUS_COMPLETED,
     OPERATION_STATUS_FAILED,
     OPERATION_STATUS_PENDING,
     OPERATION_STATUS_RUNNING,
+    TELEGRAM_USER_STATUS_ADMIN,
+    TELEGRAM_USER_STATUS_BLOCKED,
+    TELEGRAM_USER_STATUS_PENDING,
     AuditLogEntry,
     BotMetrics,
     BotMetricsPayload,
@@ -300,6 +305,10 @@ def _parse_operational_memory_state(raw_value: str) -> dict[str, object]:
     except json.JSONDecodeError:
         return {}
     return decoded if isinstance(decoded, dict) else {}
+
+
+def _json_dumps(payload: dict[str, object]) -> str:
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def _state_to_model(state: BotRuntimeStatePayload) -> BotRuntimeState:
@@ -1158,7 +1167,14 @@ def save_tenant_account_status_cache(
     snapshot: dict[str, object],
 ) -> None:
     init_db(path)
+    serialized = _json_dumps(snapshot)
     with _connect(path) as conn:
+        existing = conn.execute(
+            "SELECT account_snapshot_json FROM tenant_runtime_state WHERE telegram_user_id = ?",
+            (telegram_user_id,),
+        ).fetchone()
+        if existing is not None and str(existing["account_snapshot_json"] or "") == serialized:
+            return
         conn.execute(
             "INSERT INTO tenant_runtime_state "
             "(telegram_user_id, metrics_json, memory_json, account_snapshot_json, updated_at) "
@@ -1168,7 +1184,7 @@ def save_tenant_account_status_cache(
             "updated_at = CURRENT_TIMESTAMP",
             (
                 telegram_user_id,
-                json.dumps(snapshot),
+                serialized,
             ),
         )
 
@@ -1204,14 +1220,20 @@ def summarize_tenant_account_status(
 ) -> dict[str, object]:
     init_db(path)
     cached_snapshot = load_tenant_account_status_cache(path, telegram_user_id)
-    subscriptions = load_notification_subscriptions(path)
-    enabled_subscription_count = sum(
-        1
-        for subscription in subscriptions
-        if subscription.telegram_user_id == telegram_user_id and subscription.enabled
-    )
-    chats = load_telegram_chats(path)
-    chat_count = sum(1 for chat in chats if chat.telegram_user_id == telegram_user_id)
+    with _connect(path) as conn:
+        enabled_subscription_count = as_int(
+            conn.execute(
+                "SELECT COUNT(*) FROM notification_subscriptions "
+                "WHERE telegram_user_id = ? AND enabled = 1",
+                (telegram_user_id,),
+            ).fetchone()[0]
+        )
+        chat_count = as_int(
+            conn.execute(
+                "SELECT COUNT(*) FROM telegram_chats WHERE telegram_user_id = ?",
+                (telegram_user_id,),
+            ).fetchone()[0]
+        )
     if _cached_account_snapshot_is_usable(cached_snapshot, environment):
         return {
             "telegram_user_id": telegram_user_id,
@@ -1261,18 +1283,23 @@ def summarize_tenant_account_status(
             ).fetchone()
             if token_row is not None:
                 token_set = EbayTokenSet.from_mapping(dict(token_row))
-    latest_reconnect_outcome = ""
-    latest_reconnect_reason = ""
-    for entry in load_audit_log_entries(path, limit=200):
-        if entry.event_type != "oauth_failure":
-            continue
-        if entry.target_telegram_user_id not in {None, telegram_user_id}:
-            continue
-        if environment and entry.environment and entry.environment != environment:
-            continue
-        latest_reconnect_outcome = entry.outcome
-        latest_reconnect_reason = entry.details_json
-        break
+        audit_params: list[object] = [telegram_user_id]
+        audit_query = (
+            "SELECT outcome, details_json FROM audit_log "
+            "WHERE event_type = 'oauth_failure' "
+            "AND (target_telegram_user_id = ? OR target_telegram_user_id IS NULL)"
+        )
+        if environment:
+            audit_query += " AND (environment = ? OR environment = '')"
+            audit_params.append(environment)
+        audit_query += " ORDER BY id DESC LIMIT 1"
+        latest_failure = conn.execute(audit_query, tuple(audit_params)).fetchone()
+    latest_reconnect_outcome = (
+        str(latest_failure["outcome"] or "") if latest_failure is not None else ""
+    )
+    latest_reconnect_reason = (
+        str(latest_failure["details_json"] or "") if latest_failure is not None else ""
+    )
     summary: dict[str, object] = {
         "telegram_user_id": telegram_user_id,
         "linked": linked_account is not None,
@@ -1304,6 +1331,213 @@ def summarize_tenant_account_status(
         },
     )
     return summary
+
+
+def _tenant_operational_state(user_status: str, account_status: str, token_status: str) -> str:
+    normalized_status = normalize_telegram_user_status(user_status)
+    if normalized_status == TELEGRAM_USER_STATUS_PENDING:
+        return "pending"
+    if normalized_status == TELEGRAM_USER_STATUS_BLOCKED:
+        return "blocked"
+    if normalized_status == TELEGRAM_USER_STATUS_ADMIN:
+        return "admin"
+    if account_status == "linked" and token_status == "active":
+        return "ready"
+    if _account_status_requires_reconnect(account_status, token_status):
+        return "reconnect_required"
+    return "waiting_connect"
+
+
+def _last_tenant_activity_at(user: TelegramUser, runtime_state: BotRuntimeState) -> str:
+    return (
+        runtime_state.memory.last_notified_order_created_at
+        or runtime_state.memory.last_seen_order_created_at
+        or runtime_state.memory.last_fetch_end
+        or user.created_at
+        or ""
+    )
+
+
+def save_tenant_status_snapshot(
+    path: str,
+    telegram_user_id: int,
+    snapshot: dict[str, object],
+    *,
+    updated_at: str,
+) -> dict[str, object]:
+    init_db(path)
+    serialized = _json_dumps(snapshot)
+    operational_state = str(snapshot.get("operational_state") or "")
+    last_activity_at = str(snapshot.get("last_activity_at") or "")
+    with _connect(path) as conn:
+        existing = conn.execute(
+            "SELECT snapshot_json, operational_state, last_activity_at "
+            "FROM tenant_status_snapshots WHERE telegram_user_id = ?",
+            (telegram_user_id,),
+        ).fetchone()
+        if (
+            existing is not None
+            and str(existing["snapshot_json"] or "") == serialized
+            and str(existing["operational_state"] or "") == operational_state
+            and str(existing["last_activity_at"] or "") == last_activity_at
+        ):
+            conn.execute(
+                "UPDATE tenant_status_snapshots SET updated_at = ? WHERE telegram_user_id = ?",
+                (updated_at, telegram_user_id),
+            )
+            return snapshot
+        conn.execute(
+            "INSERT INTO tenant_status_snapshots "
+            "(telegram_user_id, snapshot_json, operational_state, last_activity_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT(telegram_user_id) DO UPDATE SET "
+            "snapshot_json = excluded.snapshot_json, "
+            "operational_state = excluded.operational_state, "
+            "last_activity_at = excluded.last_activity_at, "
+            "updated_at = excluded.updated_at",
+            (
+                telegram_user_id,
+                serialized,
+                operational_state,
+                last_activity_at,
+                updated_at,
+            ),
+        )
+    return snapshot
+
+
+def load_tenant_status_snapshot(path: str, telegram_user_id: int) -> dict[str, object]:
+    init_db(path)
+    with _connect(path) as conn:
+        row = conn.execute(
+            "SELECT snapshot_json FROM tenant_status_snapshots WHERE telegram_user_id = ?",
+            (telegram_user_id,),
+        ).fetchone()
+    if row is None:
+        return {}
+    return _parse_operational_memory_state(str(row["snapshot_json"]))
+
+
+def load_tenant_status_snapshots(path: str) -> list[dict[str, object]]:
+    init_db(path)
+    with _connect(path) as conn:
+        rows = conn.execute(
+            "SELECT snapshot_json FROM tenant_status_snapshots ORDER BY telegram_user_id"
+        ).fetchall()
+    return [_parse_operational_memory_state(str(row["snapshot_json"])) for row in rows]
+
+
+def rebuild_tenant_status_snapshot(
+    path: str,
+    telegram_user_id: int,
+    *,
+    now_iso: str | None = None,
+) -> dict[str, object]:
+    user = load_telegram_user(path, telegram_user_id)
+    if user is None:
+        return {}
+    timestamp = now_iso or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    account_status = summarize_tenant_account_status(path, telegram_user_id, "")
+    runtime_state = load_tenant_runtime_state(path, telegram_user_id)
+    latest_session = load_latest_oauth_link_session(path, telegram_user_id)
+    raw_account_status = str(account_status.get("account_status") or "unlinked")
+    raw_token_status = str(account_status.get("token_status") or "missing")
+    operational_state = _tenant_operational_state(
+        user.status,
+        raw_account_status,
+        raw_token_status,
+    )
+    last_issue = str(account_status.get("latest_reconnect_outcome") or "")
+    if not last_issue and operational_state != "ready":
+        last_issue = operational_state
+    snapshot: dict[str, object] = {
+        "telegram_user_id": user.telegram_user_id,
+        "telegram_chat_id": user.telegram_chat_id,
+        "username": user.username,
+        "display_name": user.display_name,
+        "status": user.status,
+        "operational_state": operational_state,
+        "account_status": account_status.get("account_status"),
+        "token_status": account_status.get("token_status"),
+        "environment": account_status.get("environment"),
+        "ebay_user_id": account_status.get("ebay_user_id"),
+        "subscription_count": account_status.get("subscription_count", 0),
+        "chat_count": account_status.get("chat_count", 0),
+        "last_issue": last_issue or "none",
+        "last_activity_at": _last_tenant_activity_at(user, runtime_state),
+        "created_at": user.created_at or "",
+        "last_fetch_end": runtime_state.memory.last_fetch_end,
+        "last_seen_order_id": runtime_state.memory.last_seen_order_id,
+        "last_seen_order_created_at": runtime_state.memory.last_seen_order_created_at,
+        "last_notified_order_id": runtime_state.memory.last_notified_order_id,
+        "last_notified_order_created_at": runtime_state.memory.last_notified_order_created_at,
+        "latest_session_status": latest_session.status if latest_session is not None else "",
+        "latest_session_expires_at": (
+            latest_session.expires_at if latest_session is not None else ""
+        ),
+    }
+    return save_tenant_status_snapshot(path, telegram_user_id, snapshot, updated_at=timestamp)
+
+
+def rebuild_all_tenant_status_snapshots(path: str, *, now_iso: str | None = None) -> dict[str, int]:
+    init_db(path)
+    users = load_telegram_users(path)
+    rebuilt = 0
+    for user in users:
+        if rebuild_tenant_status_snapshot(path, user.telegram_user_id, now_iso=now_iso):
+            rebuilt += 1
+    with _connect(path) as conn:
+        cursor = conn.execute(
+            "DELETE FROM tenant_status_snapshots "
+            "WHERE telegram_user_id NOT IN (SELECT telegram_user_id FROM telegram_users)"
+        )
+    return {
+        "users_scanned": len(users),
+        "snapshots_rebuilt": rebuilt,
+        "snapshots_deleted": int(cursor.rowcount if cursor.rowcount is not None else 0),
+    }
+
+
+def summarize_tenant_status_snapshots(
+    path: str,
+    *,
+    stale_before_iso: str | None = None,
+) -> dict[str, int]:
+    init_db(path)
+    with _connect(path) as conn:
+        total = as_int(conn.execute("SELECT COUNT(*) FROM tenant_status_snapshots").fetchone()[0])
+        ready = as_int(
+            conn.execute(
+                "SELECT COUNT(*) FROM tenant_status_snapshots WHERE operational_state = 'ready'"
+            ).fetchone()[0]
+        )
+        reconnect_required = as_int(
+            conn.execute(
+                "SELECT COUNT(*) FROM tenant_status_snapshots "
+                "WHERE operational_state = 'reconnect_required'"
+            ).fetchone()[0]
+        )
+        waiting_connect = as_int(
+            conn.execute(
+                "SELECT COUNT(*) FROM tenant_status_snapshots "
+                "WHERE operational_state = 'waiting_connect'"
+            ).fetchone()[0]
+        )
+        stale = 0
+        if stale_before_iso:
+            stale = as_int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM tenant_status_snapshots WHERE updated_at < ?",
+                    (stale_before_iso,),
+                ).fetchone()[0]
+            )
+    return {
+        "total": total,
+        "ready": ready,
+        "reconnect_required": reconnect_required,
+        "waiting_connect": waiting_connect,
+        "stale": stale,
+    }
 
 
 def create_oauth_link_session(path: str, session: OauthLinkSession) -> OauthLinkSession:
@@ -1624,25 +1858,41 @@ def prune_oauth_link_sessions(
     }
 
 
+def prune_operation_queue_entries(path: str, *, cutoff_iso: str) -> int:
+    init_db(path)
+    terminal_statuses = (OPERATION_STATUS_COMPLETED, OPERATION_STATUS_CANCELLED)
+    with _connect(path) as conn:
+        placeholders = ", ".join("?" for _ in terminal_statuses)
+        cursor = conn.execute(
+            f"DELETE FROM operation_queue WHERE status IN ({placeholders}) AND created_at < ?",
+            (*terminal_statuses, cutoff_iso),
+        )
+        return int(cursor.rowcount if cursor.rowcount is not None else 0)
+
+
 def save_retention_prune_status(
     path: str,
     *,
     now_iso: str,
     audit_retention_days: int,
     oauth_session_retention_days: int,
+    operation_queue_retention_days: int,
     audit_deleted: int,
     oauth_deleted: int,
     oauth_pending_deleted: int,
     oauth_terminal_deleted: int,
+    operation_queue_deleted: int,
 ) -> dict[str, object]:
     status: dict[str, object] = {
         "last_pruned_at": now_iso,
         "audit_retention_days": audit_retention_days,
         "oauth_session_retention_days": oauth_session_retention_days,
+        "operation_queue_retention_days": operation_queue_retention_days,
         "audit_deleted": audit_deleted,
         "oauth_deleted": oauth_deleted,
         "oauth_pending_deleted": oauth_pending_deleted,
         "oauth_terminal_deleted": oauth_terminal_deleted,
+        "operation_queue_deleted": operation_queue_deleted,
     }
     save_kv_value(
         path,
@@ -1671,6 +1921,7 @@ def summarize_retention_backlog(
     audit_cutoff_iso: str,
     oauth_terminal_cutoff_iso: str,
     oauth_pending_cutoff_iso: str,
+    operation_queue_cutoff_iso: str | None = None,
 ) -> dict[str, object]:
     init_db(path)
     terminal_statuses = (
@@ -1700,6 +1951,19 @@ def summarize_retention_backlog(
                 (OAUTH_SESSION_STATUS_PENDING, oauth_pending_cutoff_iso),
             ).fetchone()[0]
         )
+        operation_queue_overdue = 0
+        if operation_queue_cutoff_iso:
+            operation_queue_overdue = as_int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM operation_queue "
+                    "WHERE status IN (?, ?) AND created_at < ?",
+                    (
+                        OPERATION_STATUS_COMPLETED,
+                        OPERATION_STATUS_CANCELLED,
+                        operation_queue_cutoff_iso,
+                    ),
+                ).fetchone()[0]
+            )
         oldest_audit = conn.execute(
             "SELECT created_at FROM audit_log ORDER BY created_at ASC LIMIT 1"
         ).fetchone()
@@ -1711,9 +1975,11 @@ def summarize_retention_backlog(
         "last_pruned_at": str(last_status.get("last_pruned_at") or ""),
         "last_audit_deleted": as_int(last_status.get("audit_deleted", 0)),
         "last_oauth_deleted": as_int(last_status.get("oauth_deleted", 0)),
+        "last_operation_queue_deleted": as_int(last_status.get("operation_queue_deleted", 0)),
         "audit_overdue": audit_overdue,
         "oauth_terminal_overdue": oauth_terminal_overdue,
         "oauth_pending_overdue": oauth_pending_overdue,
+        "operation_queue_overdue": operation_queue_overdue,
         "oldest_audit_created_at": str(oldest_audit["created_at"] or "")
         if oldest_audit is not None
         else "",
@@ -1923,6 +2189,7 @@ def delete_tenant_data(path: str, telegram_user_id: int) -> dict[str, int]:
             "notification_subscriptions",
             "telegram_chats",
             "tenant_runtime_state",
+            "tenant_status_snapshots",
             "tenant_notified_order_ids",
             "tenant_notified_hashes",
             "tenant_retry_queue",
@@ -1976,12 +2243,14 @@ def summarize_operation_queue(path: str) -> dict[str, int]:
         )
         completed = as_int(
             conn.execute(
-                "SELECT COUNT(*) FROM operation_queue WHERE status = 'completed'",
+                "SELECT COUNT(*) FROM operation_queue WHERE status = ?",
+                (OPERATION_STATUS_COMPLETED,),
             ).fetchone()[0]
         )
         cancelled = as_int(
             conn.execute(
-                "SELECT COUNT(*) FROM operation_queue WHERE status = 'cancelled'",
+                "SELECT COUNT(*) FROM operation_queue WHERE status = ?",
+                (OPERATION_STATUS_CANCELLED,),
             ).fetchone()[0]
         )
     return {

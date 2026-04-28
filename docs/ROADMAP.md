@@ -14,20 +14,7 @@ Fase 3 completata.
 
 ## Fase 4 - Ottimizzazione Applicativa e Storage
 
-- [ ] ridurre scritture SQLite superflue per metriche e stato runtime, privilegiando aggiornamenti solo su cambiamenti significativi
-- [ ] introdurre uno snapshot sintetico dell'ultimo stato utile per tenant, riusabile da UX, admin view e health path senza ricalcoli pesanti
-- [ ] separare meglio i percorsi hot e cold del bot, evitando che audit, review admin o cleanup pesino sul polling ordini e sulle notifiche
-- [ ] rendere healthcheck e reconciliation economici anche con piu' tenant approvati
-- [ ] introdurre pruning e cleanup orientati agli access pattern reali di healthcheck, admin e bot
-- [ ] introdurre indici SQLite mirati per accessi frequenti su utenti, stati, sessioni OAuth, audit log e operation queue
-- [ ] spostare il calcolo di metriche admin e prodotto verso snapshot periodici o reconciliation, evitando query live inutilmente costose
-- [ ] decomporre `src/fiscalbay/bot.py` estraendo almeno authz, OAuth linking e process locking, lasciando nel modulo principale soprattutto orchestrazione runtime
-- [ ] ridurre alias e re-export in `src/fiscalbay/bot.py`, spostando l'eventuale API pubblica di compatibilita' in un modulo dedicato
-- [ ] decomporre `src/fiscalbay/storage/sqlite.py` in repository o facciate piu' piccole per runtime state, accesso Telegram, OAuth/account e audit, mantenendo compatibilita' durante la transizione
-- [ ] consolidare il parsing delle env in `src/fiscalbay/config.py` con helper riusabili e errori di configurazione piu' chiari
-- [ ] ampliare progressivamente il perimetro `mypy --strict` oltre il sottoinsieme attuale e alzare gradualmente il gate di coverage sopra il `fail_under = 64`
-- [ ] formalizzare guardrail soft su dimensione moduli e funzioni, con refactor plan o ADR quando si superano soglie non piu' gestibili
-- [ ] collegare il piano di decomposizione tecnica a milestone incrementali e diff piccoli, reversibili e testabili
+Fase 4 completata.
 
 ## Fase 5 - Robustezza VPS e Recovery
 

@@ -187,8 +187,9 @@ Readiness multiutente nel healthcheck:
 - il report healthcheck espone anche contatori `multi_tenant.*` per utenti, chat, account collegati, token attivi, subscription e stati runtime tenant
 - il flag `multi_tenant.tenant_credentials_ready` indica se il DB ha gia' account collegati e token attivi sufficienti per operare interamente con credenziali tenant
 - questo aiuta a capire sulla VPS quanto siamo vicini al multiutente reale senza interrogare SQLite manualmente
-- il report healthcheck espone ora anche `operation_queue.pending`, `operation_queue.running` e `operation_queue.failed`
-- il report healthcheck espone anche `retention.*`, inclusi ultimo pruning, audit arretrati e sessioni OAuth arretrate
+- il report healthcheck espone ora anche `tenant_snapshots.*`, alimentato dalla reconciliation, per stato operativo sintetico tenant senza ricalcoli live
+- il report healthcheck espone ora anche `operation_queue.pending`, `operation_queue.running`, `operation_queue.failed`, `operation_queue.completed` e `operation_queue.cancelled`
+- il report healthcheck espone anche `retention.*`, inclusi ultimo pruning, audit arretrati, sessioni OAuth arretrate e `operation_queue` terminale arretrata
 
 Alert basilari runtime:
 
@@ -204,14 +205,14 @@ Reconciliation periodica:
 - entrypoint: `fiscalbay-reconcile`
 - wrapper VPS: `deploy/reconcile.sh`
 - timer `systemd`: `fiscalbay-reconcile.timer`
-- la reconciliation processa la `operation_queue`, riallinea accessi/chat/subscription, scade sessioni OAuth pendenti troppo vecchie, revoca token attivi rimasti su account non piu' collegati e applica pruning retention su audit/sessioni OAuth
+- la reconciliation processa la `operation_queue`, riallinea accessi/chat/subscription, scade sessioni OAuth pendenti troppo vecchie, revoca token attivi rimasti su account non piu' collegati, ricostruisce gli snapshot sintetici tenant e applica pruning retention su audit/sessioni OAuth/operazioni terminali
 - lo smoke check di deploy avvia anche `fiscalbay-reconcile.service` quando il timer e' abilitato
 
 Retention e cancellazione:
 
 - la policy di riferimento e' definita in `docs/SERVICE_GOVERNANCE.md`
 - stato attuale: la cancellazione utente e' amministrativa, non self-service
-- default retention: `FISCALBAY_AUDIT_RETENTION_DAYS=180`, `FISCALBAY_OAUTH_SESSION_RETENTION_DAYS=30`, `FISCALBAY_OAUTH_PENDING_RETENTION_DAYS=7`
+- default retention: `FISCALBAY_AUDIT_RETENTION_DAYS=180`, `FISCALBAY_OAUTH_SESSION_RETENTION_DAYS=30`, `FISCALBAY_OAUTH_PENDING_RETENTION_DAYS=7`, `FISCALBAY_OPERATION_QUEUE_RETENTION_DAYS=30`
 - `/admin export <telegram_user_id>` produce un export tenant senza refresh/access token in chiaro
 - `/admin delete_tenant <telegram_user_id> confirm` elimina token locali, account, chat, subscription, runtime state, retry tenant, sessioni OAuth e operazioni pending del tenant
 - l'audit log relativo alla cancellazione resta nel DB fino alla retention audit

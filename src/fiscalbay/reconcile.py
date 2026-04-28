@@ -5,10 +5,10 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 from datetime import datetime, timedelta, timezone
+from typing import cast
 
-from .config import configure_logging, load_telegram_config
+from .config import configure_logging, load_retention_config, load_telegram_config
 from .logging_utils import log_event
 from .models import (
     OPERATION_STATUS_COMPLETED,
@@ -29,6 +29,8 @@ from .storage.sqlite import (
     load_telegram_users,
     prune_audit_log_entries,
     prune_oauth_link_sessions,
+    prune_operation_queue_entries,
+    rebuild_all_tenant_status_snapshots,
     reconcile_account_token_consistency,
     save_retention_prune_status,
     summarize_operation_queue,
@@ -40,17 +42,6 @@ LOGGER = logging.getLogger("fiscalbay.reconcile")
 
 def now_utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def _retention_days_from_env(name: str, default: int) -> int:
-    raw_value = os.getenv(name, "").strip()
-    if not raw_value:
-        return default
-    try:
-        parsed = int(raw_value)
-    except ValueError:
-        return default
-    return max(1, parsed)
 
 
 def _iso_days_ago(now: datetime, days: int) -> str:
@@ -221,34 +212,33 @@ def reconcile_access_permissions(
 def prune_retained_data(state_path: str) -> dict[str, int | str]:
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat().replace("+00:00", "Z")
-    audit_retention_days = _retention_days_from_env("FISCALBAY_AUDIT_RETENTION_DAYS", 180)
-    oauth_session_retention_days = _retention_days_from_env(
-        "FISCALBAY_OAUTH_SESSION_RETENTION_DAYS",
-        30,
-    )
-    stale_pending_oauth_days = _retention_days_from_env(
-        "FISCALBAY_OAUTH_PENDING_RETENTION_DAYS",
-        7,
-    )
-    audit_cutoff = _iso_days_ago(now, audit_retention_days)
-    oauth_terminal_cutoff = _iso_days_ago(now, oauth_session_retention_days)
-    oauth_pending_cutoff = _iso_days_ago(now, stale_pending_oauth_days)
+    retention_config = load_retention_config()
+    audit_cutoff = _iso_days_ago(now, retention_config.audit_retention_days)
+    oauth_terminal_cutoff = _iso_days_ago(now, retention_config.oauth_session_retention_days)
+    oauth_pending_cutoff = _iso_days_ago(now, retention_config.oauth_pending_retention_days)
+    operation_queue_cutoff = _iso_days_ago(now, retention_config.operation_queue_retention_days)
 
     oauth_deleted = prune_oauth_link_sessions(
         state_path,
         terminal_cutoff_iso=oauth_terminal_cutoff,
         pending_cutoff_iso=oauth_pending_cutoff,
     )
+    operation_queue_deleted = prune_operation_queue_entries(
+        state_path,
+        cutoff_iso=operation_queue_cutoff,
+    )
     audit_deleted = prune_audit_log_entries(state_path, cutoff_iso=audit_cutoff)
     save_retention_prune_status(
         state_path,
         now_iso=now_iso,
-        audit_retention_days=audit_retention_days,
-        oauth_session_retention_days=oauth_session_retention_days,
+        audit_retention_days=retention_config.audit_retention_days,
+        oauth_session_retention_days=retention_config.oauth_session_retention_days,
+        operation_queue_retention_days=retention_config.operation_queue_retention_days,
         audit_deleted=audit_deleted,
         oauth_deleted=oauth_deleted["deleted"],
         oauth_pending_deleted=oauth_deleted["pending_deleted"],
         oauth_terminal_deleted=oauth_deleted["terminal_deleted"],
+        operation_queue_deleted=operation_queue_deleted,
     )
     append_audit_log_entry(
         state_path,
@@ -259,12 +249,16 @@ def prune_retained_data(state_path: str) -> dict[str, int | str]:
             details_json=json.dumps(
                 {
                     "audit_deleted": audit_deleted,
-                    "audit_retention_days": audit_retention_days,
+                    "audit_retention_days": retention_config.audit_retention_days,
+                    "operation_queue_deleted": operation_queue_deleted,
+                    "operation_queue_retention_days": (
+                        retention_config.operation_queue_retention_days
+                    ),
                     "oauth_deleted": oauth_deleted["deleted"],
                     "oauth_pending_deleted": oauth_deleted["pending_deleted"],
-                    "oauth_session_retention_days": oauth_session_retention_days,
+                    "oauth_session_retention_days": (retention_config.oauth_session_retention_days),
                     "oauth_terminal_deleted": oauth_deleted["terminal_deleted"],
-                    "stale_pending_oauth_days": stale_pending_oauth_days,
+                    "stale_pending_oauth_days": retention_config.oauth_pending_retention_days,
                 },
                 ensure_ascii=False,
                 sort_keys=True,
@@ -277,9 +271,11 @@ def prune_retained_data(state_path: str) -> dict[str, int | str]:
         "oauth_deleted": oauth_deleted["deleted"],
         "oauth_pending_deleted": oauth_deleted["pending_deleted"],
         "oauth_terminal_deleted": oauth_deleted["terminal_deleted"],
-        "audit_retention_days": audit_retention_days,
-        "oauth_session_retention_days": oauth_session_retention_days,
-        "stale_pending_oauth_days": stale_pending_oauth_days,
+        "operation_queue_deleted": operation_queue_deleted,
+        "audit_retention_days": retention_config.audit_retention_days,
+        "oauth_session_retention_days": retention_config.oauth_session_retention_days,
+        "stale_pending_oauth_days": retention_config.oauth_pending_retention_days,
+        "operation_queue_retention_days": retention_config.operation_queue_retention_days,
     }
 
 
@@ -299,6 +295,10 @@ def run_reconciliation() -> dict[str, object]:
         now_iso=now_utc_iso(),
     )
     revoked_token_sets = reconcile_account_token_consistency(telegram_config.state_path)
+    snapshots = rebuild_all_tenant_status_snapshots(
+        telegram_config.state_path,
+        now_iso=now_utc_iso(),
+    )
     retention = prune_retained_data(telegram_config.state_path)
     queue_summary_after = summarize_operation_queue(telegram_config.state_path)
     report: dict[str, object] = {
@@ -307,6 +307,7 @@ def run_reconciliation() -> dict[str, object]:
         "access": access,
         "expired_oauth_sessions": expired_sessions,
         "revoked_inconsistent_token_sets": revoked_token_sets,
+        "tenant_snapshots": snapshots,
         "retention": retention,
         "operation_queue_before": queue_summary_before,
         "operation_queue_after": queue_summary_after,
@@ -320,8 +321,10 @@ def run_reconciliation() -> dict[str, object]:
         users_adjusted=access["users_adjusted"],
         expired_oauth_sessions=expired_sessions,
         revoked_inconsistent_token_sets=revoked_token_sets,
+        tenant_snapshots_rebuilt=snapshots["snapshots_rebuilt"],
         audit_pruned=retention["audit_deleted"],
         oauth_sessions_pruned=retention["oauth_deleted"],
+        operation_queue_pruned=retention["operation_queue_deleted"],
         queue_pending=queue_summary_after["pending"],
         queue_failed=queue_summary_after["failed"],
     )
@@ -338,15 +341,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         print(json.dumps(report, ensure_ascii=False, sort_keys=True))
     else:
+        operations = cast(dict[str, int], report["operations"])
+        access = cast(dict[str, int], report["access"])
+        snapshots = cast(dict[str, int], report["tenant_snapshots"])
+        retention = cast(dict[str, int | str], report["retention"])
         print(
             "reconciliation ok"
-            f" processed={report['operations']['processed']}"
-            f" failed={report['operations']['failed']}"
-            f" users_adjusted={report['access']['users_adjusted']}"
+            f" processed={operations['processed']}"
+            f" failed={operations['failed']}"
+            f" users_adjusted={access['users_adjusted']}"
             f" expired_sessions={report['expired_oauth_sessions']}"
             f" revoked_tokens={report['revoked_inconsistent_token_sets']}"
-            f" audit_pruned={report['retention']['audit_deleted']}"
-            f" oauth_pruned={report['retention']['oauth_deleted']}"
+            f" snapshots={snapshots['snapshots_rebuilt']}"
+            f" audit_pruned={retention['audit_deleted']}"
+            f" oauth_pruned={retention['oauth_deleted']}"
+            f" operation_queue_pruned={retention['operation_queue_deleted']}"
         )
     return 0
 

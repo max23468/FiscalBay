@@ -195,7 +195,9 @@ Lo stesso SQLite ora puo' ospitare anche tabelle tenant-aware per:
 - token eBay per account
 - subscription notifiche
 - stato runtime per tenant
+- snapshot sintetico per tenant
 - audit log append-only per eventi sensibili
+- operation queue per workflow differibili
 
 Compatibilita' mantenuta:
 
@@ -204,6 +206,7 @@ Compatibilita' mantenuta:
 - quando una chat Telegram e' gia' stata registrata nel DB, i comandi del bot possono risolvere il tenant e leggere stato runtime e retry queue del tenant invece del solo stato globale
 - il fetch applicativo puo' ora risolvere dal DB anche l'account eBay collegato e il relativo `environment`, pur continuando a usare credenziali globali finche' non esistono token utente reali
 - la scelta finale tra credenziali tenant-specifiche e fallback globale passa ora da un contesto applicativo esplicito, invece di essere implicita nei singoli caller
+- `tenant_status_snapshots` materializza l'ultimo stato utile del tenant per dashboard admin, healthcheck e review operative senza ricalcolare ogni volta account, token, subscription e runtime memory
 
 ## Modelli futuri da introdurre
 

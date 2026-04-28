@@ -220,6 +220,23 @@ Retention:
 - il worker `fiscalbay-reconcile` marca come `expired` le sessioni pending scadute e pota le sessioni concluse oltre retention
 - le sessioni pending molto vecchie sono considerate residue e vengono potate con soglia dedicata
 
+### Snapshot tenant
+
+Comprende:
+
+- `tenant_status_snapshots`
+
+Retention:
+
+- e' una cache sintetica derivata dai dati tenant, ricostruita dalla reconciliation
+- viene eliminata insieme al tenant su cancellazione amministrativa
+- non contiene token in chiaro e non sostituisce audit log o dati sorgente
+
+Uso operativo:
+
+- admin dashboard, review tenant e healthcheck leggono questo snapshot quando disponibile
+- lo snapshot riduce query ripetute su account, token, subscription, audit e runtime state
+
 ### Audit log
 
 Comprende:
@@ -231,6 +248,17 @@ Retention:
 - `180 giorni` come baseline minima corrente
 - oltre tale finestra, il log viene potato automaticamente dalla reconciliation periodica
 - la retention e' configurabile con `FISCALBAY_AUDIT_RETENTION_DAYS`
+
+### Operation queue
+
+Comprende:
+
+- `operation_queue`
+
+Retention:
+
+- operazioni `pending`, `running` e `failed` restano finche' servono a recovery o review operativa
+- operazioni `completed` e `cancelled` vengono potate automaticamente oltre `FISCALBAY_OPERATION_QUEUE_RETENTION_DAYS`, default `30 giorni`
 
 ### Log runtime
 

@@ -206,7 +206,8 @@ Stato implementativo corrente:
 - l'approvazione accessi passa ora da un piccolo step applicativo esplicito: oltre al cambio di stato utente, il runtime riallinea chat e subscription gia' note per quel tenant
 - `/account collega` riusa ora l'ultima sessione OAuth ancora pendente e valida per lo stesso tenant/environment, invece di accumulare nuove sessioni inutili a ogni invocazione ripetuta
 - esiste ora anche una `operation_queue` minima in SQLite per le operazioni sensibili differibili, oggi usata soprattutto per applicare in modo robusto i cambi di accesso utente
-- `reconcile.py` fornisce un worker periodico one-shot che processa la queue, riallinea accessi/chat/subscription, scade sessioni OAuth stale e corregge token attivi rimasti su account non piu' collegati
+- `tenant_status_snapshots` conserva lo stato sintetico piu' utile per tenant e sposta dashboard admin/healthcheck su letture economiche quando la reconciliation lo ha aggiornato
+- `reconcile.py` fornisce un worker periodico one-shot che processa la queue, riallinea accessi/chat/subscription, scade sessioni OAuth stale, corregge token attivi rimasti su account non piu' collegati, ricostruisce snapshot tenant e applica retention su dati freddi
 
 ## Decisioni consolidate del refactor (ex ADR)
 
@@ -218,6 +219,11 @@ Le decisioni architetturali principali del refactor, prima tracciate in `docs/ad
 - **Contesto:** il vecchio `bot.py` accentrava polling, parsing, rendering, notifiche e stato runtime, rendendo difficile test e manutenzione.
 - **Decisione:** separare responsabilita' in `telegram_commands.py` (parsing/rendering), `services/telegram_runtime.py` (lifecycle/polling) e `services/notifications.py` (auto-notify/retry), mantenendo `bot.py` come facciata compatibile e wiring.
 - **Conseguenze:** responsabilita' piu' chiare, test piu' mirati e minore accoppiamento tra UI Telegram e logica runtime.
+
+Aggiornamento fase 4: authz, linking OAuth, process lock e lista export compatibile sono stati estratti in moduli dedicati (`bot_authz.py`, `bot_oauth.py`, `bot_process_lock.py`, `bot_compat.py`), cosi' `bot.py` resta soprattutto wiring e orchestrazione dei comandi.
+
+I guardrail soft per dimensione moduli/funzioni e per nuove estrazioni sono
+tracciati in `docs/TECHNICAL_GUARDRAILS.md`.
 
 ### DR-002 - Introdurre modelli tipizzati per stato runtime
 

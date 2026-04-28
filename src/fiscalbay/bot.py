@@ -8,39 +8,39 @@ import json
 import logging
 import os
 import re
-import secrets
-from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional
 
-try:
-    import fcntl
-except ImportError:  # pragma: no cover - Windows
-    fcntl = None
-
 from .application import fetch_environment_records as _fetch_environment_records
 from .application import resolve_fetch_context as _resolve_fetch_context
+from .bot_authz import ADMIN_ONLY_COMMANDS
+from .bot_authz import has_command_capability as _has_command_capability
+from .bot_authz import is_admin_user as _is_admin_user
+from .bot_authz import is_user_approved as _is_user_approved
+from .bot_authz import load_user_status as _load_user_status
+from .bot_compat import PUBLIC_BOT_API
 from .bot_messaging import request_with_backoff
 from .bot_messaging import send_message as _send_message
+from .bot_oauth import (
+    build_connect_entrypoint_url,
+    create_or_reuse_oauth_link_session,
+)
+from .bot_oauth import (
+    is_reusable_oauth_session as _is_reusable_oauth_session,
+)
+from .bot_process_lock import acquire_process_lock, release_process_lock
 from .clients.telegram import (
     InlineKeyboardMarkup,
     ensure_long_polling,
     sync_bot_branding,
     telegram_request,
 )
-from .config import configure_logging, load_config, load_telegram_config
+from .config import configure_logging, load_config, load_retention_config, load_telegram_config
 from .errors import ConfigurationError, EbayApiError, TelegramApiError
 from .logging_utils import log_event
 from .models import (
-    CAPABILITY_CONNECT_ACCOUNT,
     CAPABILITY_MANAGE_NOTIFICATIONS,
-    CAPABILITY_MANAGE_SETTINGS,
-    CAPABILITY_REQUEST_ACCESS,
-    CAPABILITY_REVIEW_ACCESS,
     CAPABILITY_USE_BOT,
-    CAPABILITY_VIEW_ACCOUNT,
-    CAPABILITY_VIEW_ORDERS,
-    OAUTH_SESSION_STATUS_PENDING,
     TELEGRAM_USER_STATUS_ADMIN,
     TELEGRAM_USER_STATUS_APPROVED,
     TELEGRAM_USER_STATUS_BLOCKED,
@@ -53,7 +53,6 @@ from .models import (
     JsonObject,
     LinkedEbayAccount,
     NotificationSubscription,
-    OauthLinkSession,
     OrderRecord,
     OrderRecordLike,
     RetryQueueEntry,
@@ -105,10 +104,8 @@ from .services.telegram_runtime import (
 from .storage.sqlite import (
     append_audit_log_entry,
     apply_telegram_user_access_status,
-    create_oauth_link_session,
     delete_tenant_data,
     disconnect_linked_ebay_account,
-    ensure_parent_dir,
     export_tenant_data,
     list_notification_tenants,
     load_audit_log_entries,
@@ -124,6 +121,8 @@ from .storage.sqlite import (
     load_tenant_account_status_cache,
     load_tenant_retry_queue_entries,
     load_tenant_runtime_state,
+    load_tenant_status_snapshots,
+    rebuild_all_tenant_status_snapshots,
     resolve_ebay_token_set,
     resolve_linked_ebay_account,
     resolve_primary_chat_id,
@@ -226,44 +225,34 @@ from .telegram_commands import (
 from .tenant_credentials import decode_refresh_token, load_tenant_config_from_storage
 
 LOGGER = logging.getLogger("fiscalbay.telegram_bot")
-COMMAND_CAPABILITIES: dict[str, str] = {
-    "/ping": CAPABILITY_REVIEW_ACCESS,
-    "/stato": CAPABILITY_USE_BOT,
-    "/altre_azioni": CAPABILITY_REQUEST_ACCESS,
-    "/account": CAPABILITY_VIEW_ACCOUNT,
-    "/reconnect_status": CAPABILITY_VIEW_ACCOUNT,
-    "/connect": CAPABILITY_CONNECT_ACCOUNT,
-    "/disconnect": CAPABILITY_CONNECT_ACCOUNT,
-    "/leave_bot": CAPABILITY_MANAGE_SETTINGS,
-    "/notifications": CAPABILITY_MANAGE_NOTIFICATIONS,
-    "/settings": CAPABILITY_MANAGE_SETTINGS,
-    "/ordini": CAPABILITY_VIEW_ORDERS,
-    "/ultimi": CAPABILITY_VIEW_ORDERS,
-    "/tutti": CAPABILITY_VIEW_ORDERS,
-    "/ordine": CAPABILITY_VIEW_ORDERS,
-    "/admin": CAPABILITY_REVIEW_ACCESS,
-    "/admin_users": CAPABILITY_REVIEW_ACCESS,
-    "/tenant_health": CAPABILITY_REVIEW_ACCESS,
-    "/approve_user": CAPABILITY_REVIEW_ACCESS,
-    "/reject_user": CAPABILITY_REVIEW_ACCESS,
-    "/suspend_user": CAPABILITY_REVIEW_ACCESS,
-    "/reactivate_user": CAPABILITY_REVIEW_ACCESS,
-    "/service_mode": CAPABILITY_REVIEW_ACCESS,
-    "/request_access": CAPABILITY_REQUEST_ACCESS,
-}
-ADMIN_ONLY_COMMANDS = frozenset(
-    {
-        "/admin",
-        "/admin_users",
-        "/approve_user",
-        "/reject_user",
-        "/suspend_user",
-        "/reactivate_user",
-        "/tenant_health",
-        "/service_mode",
-    }
+_COMPAT_EXPORT_REFERENCES = (
+    CALLBACK_ADMIN_DASHBOARD,
+    CALLBACK_ADMIN_MAINTENANCE,
+    CALLBACK_ADMIN_USERS_PENDING,
+    CALLBACK_ADMIN_USERS_RECONNECT,
+    CALLBACK_HELP,
+    CALLBACK_ORDINI_PRIORITY,
+    CALLBACK_ORDINI_REPORT,
+    CALLBACK_ORDINI_REVIEW,
+    CALLBACK_OTHER_ACTIONS,
+    CALLBACK_REQUEST_ACCESS,
+    CALLBACK_SETTINGS,
+    CALLBACK_STATO,
+    CALLBACK_TUTTI,
+    CALLBACK_ULTIMI,
+    TELEGRAM_CMD_MAX_DAYS,
+    TELEGRAM_CMD_MAX_RESULTS,
+    TELEGRAM_CMD_MIN_DAYS,
+    TELEGRAM_CMD_MIN_RESULTS,
+    build_contextual_menu_markup,
+    build_main_menu_markup,
+    callback_command_from_data,
+    chunk_message,
+    ensure_long_polling,
+    extract_callback_context,
+    extract_message_context,
+    should_attach_main_menu,
 )
-
 SERVICE_MODE_NORMAL = "normal"
 SERVICE_MODE_MAINTENANCE = "maintenance"
 SERVICE_MODE_DEGRADED = "degraded"
@@ -295,17 +284,6 @@ def coerce_runtime_state(state: BotRuntimeStateLike) -> BotRuntimeState:
 
 def _now_utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def _retention_days_from_env(name: str, default: int) -> int:
-    raw_value = os.getenv(name, "").strip()
-    if not raw_value:
-        return default
-    try:
-        parsed = int(raw_value)
-    except ValueError:
-        return default
-    return max(1, parsed)
 
 
 def _iso_days_ago(now: datetime, days: int) -> str:
@@ -687,10 +665,17 @@ def _build_user_row(
 
 
 def _build_user_rows(telegram_config: TelegramConfig) -> list[dict[str, object]]:
-    return [
-        _build_user_row(telegram_config, user=user)
-        for user in load_telegram_users(telegram_config.state_path)
-    ]
+    users = load_telegram_users(telegram_config.state_path)
+    snapshots = load_tenant_status_snapshots(telegram_config.state_path)
+    snapshot_ids = {int(row.get("telegram_user_id") or 0) for row in snapshots}
+    user_ids = {user.telegram_user_id for user in users}
+    if user_ids and user_ids.issubset(snapshot_ids):
+        return [row for row in snapshots if int(row.get("telegram_user_id") or 0) in user_ids]
+    rebuild_all_tenant_status_snapshots(telegram_config.state_path, now_iso=_now_utc_iso())
+    snapshots = load_tenant_status_snapshots(telegram_config.state_path)
+    if snapshots:
+        return [row for row in snapshots if int(row.get("telegram_user_id") or 0) in user_ids]
+    return [_build_user_row(telegram_config, user=user) for user in users]
 
 
 def _filter_user_rows(
@@ -898,19 +883,24 @@ def _build_admin_dashboard_payload(telegram_config: TelegramConfig) -> dict[str,
 def _build_admin_maintenance_payload(telegram_config: TelegramConfig) -> dict[str, object]:
     dashboard = _build_admin_dashboard_payload(telegram_config)
     now = datetime.now(timezone.utc)
+    retention_config = load_retention_config()
     retention = summarize_retention_backlog(
         telegram_config.state_path,
         audit_cutoff_iso=_iso_days_ago(
             now,
-            _retention_days_from_env("FISCALBAY_AUDIT_RETENTION_DAYS", 180),
+            retention_config.audit_retention_days,
         ),
         oauth_terminal_cutoff_iso=_iso_days_ago(
             now,
-            _retention_days_from_env("FISCALBAY_OAUTH_SESSION_RETENTION_DAYS", 30),
+            retention_config.oauth_session_retention_days,
         ),
         oauth_pending_cutoff_iso=_iso_days_ago(
             now,
-            _retention_days_from_env("FISCALBAY_OAUTH_PENDING_RETENTION_DAYS", 7),
+            retention_config.oauth_pending_retention_days,
+        ),
+        operation_queue_cutoff_iso=_iso_days_ago(
+            now,
+            retention_config.operation_queue_retention_days,
         ),
     )
     return {
@@ -1216,64 +1206,7 @@ def now_utc():
     return _now_utc()
 
 
-__all__ = [
-    "CALLBACK_ADMIN_DASHBOARD",
-    "CALLBACK_ADMIN_MAINTENANCE",
-    "CALLBACK_ADMIN_USERS_PENDING",
-    "CALLBACK_ADMIN_USERS_RECONNECT",
-    "CALLBACK_HELP",
-    "CALLBACK_OTHER_ACTIONS",
-    "CALLBACK_ORDINI_PRIORITY",
-    "CALLBACK_ORDINI_REPORT",
-    "CALLBACK_ORDINI_REVIEW",
-    "CALLBACK_REQUEST_ACCESS",
-    "CALLBACK_SETTINGS",
-    "CALLBACK_STATO",
-    "CALLBACK_TUTTI",
-    "CALLBACK_ULTIMI",
-    "TELEGRAM_CMD_MAX_DAYS",
-    "TELEGRAM_CMD_MAX_RESULTS",
-    "TELEGRAM_CMD_MIN_DAYS",
-    "TELEGRAM_CMD_MIN_RESULTS",
-    "TelegramApiError",
-    "TelegramConfig",
-    "acquire_process_lock",
-    "auto_notify_loop",
-    "build_contextual_menu_markup",
-    "build_help_text",
-    "build_main_menu_markup",
-    "build_other_actions_text",
-    "callback_command_from_data",
-    "chunk_message",
-    "ensure_long_polling",
-    "extract_callback_context",
-    "extract_message_context",
-    "fetch_new_order_records",
-    "format_auto_notification",
-    "format_record",
-    "format_records",
-    "format_status",
-    "has_fiscal_identifier",
-    "increment_error_metric",
-    "increment_metric",
-    "is_authorized",
-    "maybe_send_new_order_notifications",
-    "now_utc",
-    "options_for_command",
-    "parse_command",
-    "process_message",
-    "process_retry_queue",
-    "record_fingerprint",
-    "release_process_lock",
-    "request_shutdown",
-    "request_with_backoff",
-    "run_bot",
-    "send_message",
-    "should_attach_main_menu",
-    "sync_runtime_contact",
-    "telegram_request",
-    "update_state_with_records",
-]
+__all__ = PUBLIC_BOT_API
 
 
 def send_message(
@@ -1363,81 +1296,6 @@ def sync_runtime_contact(
                 updated_at=timestamp,
             ),
         )
-
-
-def _is_admin_user(telegram_user_id: int | None, telegram_config: TelegramConfig) -> bool:
-    return (
-        telegram_user_id is not None
-        and telegram_config.admin_user_id is not None
-        and telegram_user_id == telegram_config.admin_user_id
-    )
-
-
-def _load_user_status(
-    telegram_config: TelegramConfig,
-    telegram_user_id: int | None,
-) -> str | None:
-    if telegram_user_id is None:
-        return None
-    if _is_admin_user(telegram_user_id, telegram_config):
-        return TELEGRAM_USER_STATUS_ADMIN
-    user = load_telegram_user(telegram_config.state_path, telegram_user_id)
-    if user is None:
-        return None
-    normalized = normalize_telegram_user_status(user.status)
-    if normalized == TELEGRAM_USER_STATUS_ADMIN:
-        return TELEGRAM_USER_STATUS_APPROVED
-    return normalized
-
-
-def _is_user_approved(
-    telegram_config: TelegramConfig,
-    telegram_user_id: int | None,
-) -> bool:
-    if telegram_config.admin_user_id is None:
-        return True
-    status = _load_user_status(telegram_config, telegram_user_id)
-    return has_telegram_user_capability(status, CAPABILITY_USE_BOT)
-
-
-def _has_command_capability(
-    telegram_config: TelegramConfig,
-    *,
-    telegram_user_id: int | None,
-    command: str,
-) -> bool:
-    if telegram_config.admin_user_id is None:
-        return True
-    required_capability = COMMAND_CAPABILITIES.get(command)
-    if required_capability is None:
-        return True
-    if required_capability == CAPABILITY_REVIEW_ACCESS:
-        return _is_admin_user(telegram_user_id, telegram_config)
-    return has_telegram_user_capability(
-        _load_user_status(telegram_config, telegram_user_id),
-        required_capability,
-    )
-
-
-def _is_reusable_oauth_session(
-    session: OauthLinkSession | None,
-    *,
-    environment: str,
-    now: datetime,
-) -> bool:
-    if session is None:
-        return False
-    if session.environment != environment:
-        return False
-    if session.status != OAUTH_SESSION_STATUS_PENDING:
-        return False
-    if not session.expires_at:
-        return True
-    try:
-        expires_at = datetime.fromisoformat(session.expires_at.replace("Z", "+00:00"))
-    except ValueError:
-        return False
-    return expires_at > now
 
 
 def _build_tenant_ux_context(
@@ -1596,14 +1454,6 @@ def _append_audit_log(
     )
 
 
-def build_connect_entrypoint_url(oauth_state: str) -> str:
-    base_url = os.getenv("EBAY_OAUTH_CONNECT_BASE_URL", "").strip()
-    if not base_url:
-        return ""
-    separator = "&" if "?" in base_url else "?"
-    return f"{base_url}{separator}state={oauth_state}"
-
-
 def resolve_tenant_command_context(
     telegram_config: TelegramConfig,
     *,
@@ -1615,53 +1465,6 @@ def resolve_tenant_command_context(
         telegram_chat_id=chat_id,
         telegram_user_id=telegram_user_id,
     )
-
-
-def acquire_process_lock(lock_path: str):
-    if fcntl is None:
-        log_event(
-            LOGGER,
-            logging.WARNING,
-            "process_lock_unavailable",
-            lock_path=lock_path,
-            reason="fcntl_unavailable",
-        )
-        return None
-    ensure_parent_dir(lock_path)
-    handle = open(lock_path, "a+", encoding="utf-8")
-    try:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        handle.seek(0)
-        holder = handle.read().strip()
-        handle.close()
-        holder_details = f" ({holder})" if holder else ""
-        raise TelegramApiError(
-            "Un'altra istanza del bot e' gia' in esecuzione (lock su "
-            f"{lock_path}{holder_details}). Chiudi l'altra copia o imposta "
-            "TELEGRAM_BOT_LOCK_PATH."
-        ) from None
-    try:
-        os.chmod(lock_path, 0o600)
-    except OSError:
-        pass
-    handle.seek(0)
-    handle.truncate()
-    handle.write(f"pid={os.getpid()}\nstarted_at={datetime.now(timezone.utc).isoformat()}\n")
-    handle.flush()
-    return handle
-
-
-def release_process_lock(lock_handle, lock_path: str) -> None:
-    try:
-        if fcntl is not None:
-            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
-    except OSError:
-        pass
-    with suppress(OSError):
-        lock_handle.close()
-    with suppress(FileNotFoundError, OSError):
-        os.remove(lock_path)
 
 
 def increment_metric(state: BotRuntimeStateLike, metric: str, amount: int = 1) -> None:
@@ -2916,8 +2719,6 @@ def process_message(
             telegram_config.state_path,
             resolved_telegram_user_id,
         )
-        active_session = latest_session
-        created_session = False
         remaining = _command_rate_limit_remaining_seconds(
             telegram_config.state_path,
             telegram_user_id=resolved_telegram_user_id,
@@ -2925,7 +2726,7 @@ def process_message(
             now=now,
         )
         if remaining > 0 and not _is_reusable_oauth_session(
-            active_session,
+            latest_session,
             environment=resolved_environment,
             now=now,
         ):
@@ -2937,7 +2738,7 @@ def process_message(
             now=now,
         )
         if oauth_cooldown_remaining > 0 and not _is_reusable_oauth_session(
-            active_session,
+            latest_session,
             environment=resolved_environment,
             now=now,
         ):
@@ -2947,26 +2748,13 @@ def process_message(
                 "Sono stati rilevati troppi tentativi ravvicinati o failure OAuth recenti.\n"
                 f"Riprova tra <code>{oauth_cooldown_remaining}</code> secondi."
             ]
-        if not _is_reusable_oauth_session(
-            active_session,
+        active_session, created_session = create_or_reuse_oauth_link_session(
+            telegram_config.state_path,
+            telegram_user_id=resolved_telegram_user_id,
+            telegram_chat_id=chat_id,
             environment=resolved_environment,
             now=now,
-        ):
-            active_session = create_oauth_link_session(
-                telegram_config.state_path,
-                OauthLinkSession(
-                    telegram_user_id=resolved_telegram_user_id,
-                    telegram_chat_id=chat_id,
-                    provider="ebay",
-                    environment=resolved_environment,
-                    oauth_state=secrets.token_urlsafe(18),
-                    status=OAUTH_SESSION_STATUS_PENDING,
-                    expires_at=(now + timedelta(minutes=15)).isoformat().replace("+00:00", "Z"),
-                    created_at=now.isoformat().replace("+00:00", "Z"),
-                ),
-            )
-            created_session = True
-        assert active_session is not None
+        )
         _mark_command_usage(
             telegram_config.state_path,
             telegram_user_id=resolved_telegram_user_id,

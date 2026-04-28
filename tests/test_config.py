@@ -2,7 +2,13 @@ import os
 import unittest
 from unittest.mock import patch
 
-from src.fiscalbay.config import DEFAULT_SCOPE, load_config, load_telegram_config
+from src.fiscalbay.config import (
+    DEFAULT_SCOPE,
+    load_config,
+    load_retention_config,
+    load_telegram_config,
+)
+from src.fiscalbay.errors import ConfigurationError
 
 
 class ConfigTests(unittest.TestCase):
@@ -44,6 +50,33 @@ class ConfigTests(unittest.TestCase):
             config = load_telegram_config()
 
         self.assertIsNone(config.allowed_chat_ids)
+
+    def test_load_retention_config_uses_validated_env_helpers(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "FISCALBAY_AUDIT_RETENTION_DAYS": "90",
+                "FISCALBAY_OAUTH_SESSION_RETENTION_DAYS": "20",
+                "FISCALBAY_OAUTH_PENDING_RETENTION_DAYS": "5",
+                "FISCALBAY_OPERATION_QUEUE_RETENTION_DAYS": "12",
+            },
+            clear=True,
+        ):
+            config = load_retention_config()
+
+        self.assertEqual(config.audit_retention_days, 90)
+        self.assertEqual(config.oauth_session_retention_days, 20)
+        self.assertEqual(config.oauth_pending_retention_days, 5)
+        self.assertEqual(config.operation_queue_retention_days, 12)
+
+    def test_invalid_telegram_chat_id_raises_configuration_error(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"TELEGRAM_BOT_TOKEN": "token", "TELEGRAM_ALLOWED_CHAT_IDS": "abc"},
+            clear=True,
+        ):
+            with self.assertRaises(ConfigurationError):
+                load_telegram_config()
 
 
 class AuthorizationTests(unittest.TestCase):

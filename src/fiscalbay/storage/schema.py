@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
@@ -253,6 +253,81 @@ def _create_v9_schema(conn: sqlite3.Connection) -> None:
             )
 
 
+def _create_v10_schema(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS tenant_status_snapshots "
+        "("
+        "telegram_user_id INTEGER PRIMARY KEY, "
+        "snapshot_json TEXT NOT NULL DEFAULT '{}', "
+        "operational_state TEXT NOT NULL DEFAULT '', "
+        "last_activity_at TEXT NOT NULL DEFAULT '', "
+        "updated_at TEXT NOT NULL"
+        ")"
+    )
+    if _table_exists(conn, "telegram_users"):
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_telegram_users_status_updated "
+            "ON telegram_users(status, updated_at)"
+        )
+    if _table_exists(conn, "telegram_chats"):
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_telegram_chats_user_primary "
+            "ON telegram_chats(telegram_user_id, is_primary)"
+        )
+    if _table_exists(conn, "ebay_accounts"):
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ebay_accounts_user_env_status "
+            "ON ebay_accounts(telegram_user_id, environment, status)"
+        )
+    if _table_exists(conn, "ebay_tokens"):
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ebay_tokens_account_status "
+            "ON ebay_tokens(ebay_account_id, status)"
+        )
+    if _table_exists(conn, "notification_subscriptions"):
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_notification_subscriptions_user_enabled "
+            "ON notification_subscriptions(telegram_user_id, enabled)"
+        )
+    if _table_exists(conn, "oauth_link_sessions"):
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_oauth_sessions_user_status_created "
+            "ON oauth_link_sessions(telegram_user_id, status, created_at)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_oauth_sessions_status_created "
+            "ON oauth_link_sessions(status, created_at)"
+        )
+    if _table_exists(conn, "audit_log"):
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_log_target_created "
+            "ON audit_log(target_telegram_user_id, created_at)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_log_event_created "
+            "ON audit_log(event_type, created_at)"
+        )
+    if _table_exists(conn, "operation_queue"):
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_operation_queue_status_available "
+            "ON operation_queue(status, available_at, id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_operation_queue_target_status "
+            "ON operation_queue(target_telegram_user_id, status)"
+        )
+    if _table_exists(conn, "tenant_runtime_state"):
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tenant_runtime_updated "
+            "ON tenant_runtime_state(updated_at)"
+        )
+    if _table_exists(conn, "tenant_retry_queue"):
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tenant_retry_queue_user_id "
+            "ON tenant_retry_queue(telegram_user_id, id)"
+        )
+
+
 def _migrate_legacy_notified_orders(conn: sqlite3.Connection) -> None:
     if not _table_exists(conn, "notified_orders"):
         return
@@ -300,4 +375,7 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         version = 8
     if version < 9:
         _create_v9_schema(conn)
+        version = 9
+    if version < 10:
+        _create_v10_schema(conn)
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")

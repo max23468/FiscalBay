@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from src.fiscalbay.models import (
+    OPERATION_STATUS_CANCELLED,
     OPERATION_STATUS_COMPLETED,
     OPERATION_STATUS_PENDING,
     OPERATION_STATUS_RUNNING,
@@ -45,8 +46,11 @@ from src.fiscalbay.storage.sqlite import (
     load_telegram_users,
     load_tenant_retry_queue_entries,
     load_tenant_runtime_state,
+    load_tenant_status_snapshot,
     prune_audit_log_entries,
     prune_oauth_link_sessions,
+    prune_operation_queue_entries,
+    rebuild_all_tenant_status_snapshots,
     resolve_linked_ebay_account,
     resolve_tenant_chat_context,
     save_retry_queue,
@@ -58,6 +62,7 @@ from src.fiscalbay.storage.sqlite import (
     summarize_operation_queue,
     summarize_retention_backlog,
     summarize_tenant_account_status,
+    summarize_tenant_status_snapshots,
     update_operation_queue_entry,
     upsert_ebay_token_set,
     upsert_linked_ebay_account,
@@ -275,6 +280,45 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             assert updated is not None
             self.assertEqual(updated.status, OPERATION_STATUS_COMPLETED)
             self.assertEqual(summarize_operation_queue(str(db_path))["pending"], 0)
+
+    def test_prune_operation_queue_entries_removes_old_terminal_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            old_completed = enqueue_operation(
+                str(db_path),
+                OperationQueueEntry(
+                    operation_type=OPERATION_TYPE_APPLY_USER_ACCESS_STATE,
+                    status=OPERATION_STATUS_COMPLETED,
+                    created_at="2026-01-01T00:00:00Z",
+                ),
+            )
+            old_cancelled = enqueue_operation(
+                str(db_path),
+                OperationQueueEntry(
+                    operation_type=OPERATION_TYPE_APPLY_USER_ACCESS_STATE,
+                    status=OPERATION_STATUS_CANCELLED,
+                    created_at="2026-01-02T00:00:00Z",
+                ),
+            )
+            enqueue_operation(
+                str(db_path),
+                OperationQueueEntry(
+                    operation_type=OPERATION_TYPE_APPLY_USER_ACCESS_STATE,
+                    status=OPERATION_STATUS_PENDING,
+                    created_at="2026-01-01T00:00:00Z",
+                ),
+            )
+
+            deleted = prune_operation_queue_entries(
+                str(db_path),
+                cutoff_iso="2026-02-01T00:00:00Z",
+            )
+
+            self.assertEqual(deleted, 2)
+            remaining_ids = {entry.id for entry in load_operation_queue_entries(str(db_path))}
+            self.assertNotIn(old_completed.id, remaining_ids)
+            self.assertNotIn(old_cancelled.id, remaining_ids)
+            self.assertEqual(summarize_operation_queue(str(db_path))["pending"], 1)
 
     def test_state_roundtrip_on_temp_sqlite_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -629,6 +673,82 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertEqual(summary["account_status"], "disconnected")
             self.assertEqual(summary["token_status"], "revoked")
             self.assertEqual(summary["subscription_count"], 1)
+
+    def test_rebuild_tenant_status_snapshot_materializes_admin_row(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            upsert_telegram_user(
+                str(db_path),
+                TelegramUser(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    username="seller",
+                    display_name="Seller",
+                    status=TELEGRAM_USER_STATUS_APPROVED,
+                    created_at="2026-04-06T10:00:00Z",
+                ),
+            )
+            upsert_telegram_chat(
+                str(db_path),
+                TelegramChat(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    chat_type="private",
+                    is_primary=True,
+                    notifications_enabled=True,
+                    created_at="2026-04-06T10:00:00Z",
+                    updated_at="2026-04-06T10:00:00Z",
+                ),
+            )
+            upsert_linked_ebay_account(
+                str(db_path),
+                LinkedEbayAccount(
+                    telegram_user_id=123,
+                    ebay_user_id="seller-ebay",
+                    environment="production",
+                    scopes="sell.fulfillment.readonly",
+                    linked_at="2026-04-06T10:00:00Z",
+                    status="linked",
+                ),
+            )
+            account = resolve_linked_ebay_account(str(db_path), 123, "production")
+            self.assertIsNotNone(account)
+            assert account is not None
+            self.assertIsNotNone(account.id)
+            assert account.id is not None
+            upsert_ebay_token_set(
+                str(db_path),
+                EbayTokenSet(
+                    ebay_account_id=account.id,
+                    refresh_token_encrypted="encrypted",
+                    status="active",
+                    updated_at="2026-04-06T10:00:00Z",
+                ),
+            )
+            save_tenant_runtime_state(
+                str(db_path),
+                123,
+                BotRuntimeState.from_mapping(
+                    {
+                        "memory": {
+                            "last_seen_order_id": "order-1",
+                            "last_seen_order_created_at": "2026-04-07T10:00:00Z",
+                        }
+                    }
+                ),
+            )
+
+            summary = rebuild_all_tenant_status_snapshots(
+                str(db_path),
+                now_iso="2026-04-08T10:00:00Z",
+            )
+            snapshot = load_tenant_status_snapshot(str(db_path), 123)
+            snapshot_summary = summarize_tenant_status_snapshots(str(db_path))
+
+            self.assertEqual(summary["snapshots_rebuilt"], 1)
+            self.assertEqual(snapshot["operational_state"], "ready")
+            self.assertEqual(snapshot["last_seen_order_id"], "order-1")
+            self.assertEqual(snapshot_summary["ready"], 1)
 
     def test_tenant_retry_queue_roundtrip_on_shared_db(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
