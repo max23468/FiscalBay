@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.13.2](https://github.com/max23468/FiscalBay/compare/v0.13.1...v0.13.2) (2026-04-28)
+
+### Bug Fixes
+
+* isolate eBay account relink tokens ([860f12c](https://github.com/max23468/FiscalBay/commit/860f12ca2a8a3e1999148c7f8a90124830c63598))
+* force eBay login during account link ([6a6c68a](https://github.com/max23468/FiscalBay/commit/6a6c68a78e45b3e92c79826bc91ed664bb33b0fe))
+* skip unsupported eBay remote revocation ([b49b118](https://github.com/max23468/FiscalBay/commit/b49b118db2989e592c6f1f66d2326e894615b62b))
+* recover fiscal identifiers from trading orders ([0f9922d](https://github.com/max23468/FiscalBay/commit/0f9922d81e367ccfaa61fdc13dfbdc3236959851))
+
 ## [0.13.1](https://github.com/max23468/FiscalBay/compare/v0.13.0...v0.13.1) (2026-04-28)
 
 ### Bug Fixes
