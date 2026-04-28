@@ -191,15 +191,30 @@ Readiness multiutente nel healthcheck:
 - il report healthcheck espone ora anche `operation_queue.pending`, `operation_queue.running`, `operation_queue.failed`, `operation_queue.completed` e `operation_queue.cancelled`
 - il report healthcheck espone anche `retention.*`, inclusi ultimo pruning, audit arretrati, sessioni OAuth arretrate e `operation_queue` terminale arretrata
 - il report healthcheck espone anche `resources.*` per disco, inode e memoria disponibile della VPS
+- il report healthcheck espone anche `public_service.*`: modello pubblico
+  approvato, ruolo web, hosting onboarding, soglie utenti/account/token e stato
+  della raccomandazione di migrazione oltre SQLite
 
 Alert basilari runtime:
 
 - `deploy/alert-check.sh` esegue `fiscalbay-healthcheck` con soglie operative minime
 - `fiscalbay-alertcheck.timer` lancia il controllo ogni 5 minuti
-- gli alert minimi oggi coprono servizio `systemd` non attivo, troppi errori consecutivi, retry queue oltre soglia, disco, inode e memoria disponibile
+- gli alert minimi oggi coprono servizio `systemd` non attivo, troppi errori consecutivi, retry queue oltre soglia, disco, inode, memoria disponibile e superamento soglie del servizio pubblico
 - soglie di default: `MAX_CONSECUTIVE_ERROR_CYCLES=3`, `MAX_RETRY_QUEUE_SIZE=20`, `MAX_DISK_USED_PERCENT=85`, `MAX_INODE_USED_PERCENT=85`, `MIN_MEMORY_AVAILABLE_MB=128`
+- soglie prodotto di default: `FISCALBAY_PUBLIC_MAX_APPROVED_USERS=25`, `FISCALBAY_PUBLIC_MAX_LINKED_ACCOUNTS=25`, `FISCALBAY_PUBLIC_MAX_ACTIVE_TOKEN_SETS=25`, `FISCALBAY_SQLITE_MAX_DB_BYTES=52428800`
 - il fallimento del check finisce nel journal del service `fiscalbay-alertcheck`
 - lo smoke check di deploy avvia anche `fiscalbay-alertcheck.service` quando il timer e' abilitato, cosi' un errore di permessi o runtime blocca il deploy
+
+Policy servizio pubblico:
+
+- FiscalBay resta `Telegram first`
+- la parte web resta onboarding/callback/supporto e non sostituisce il bot
+- onboarding e callback restano sulla VPS attuale finche' il profilo resta piccolo
+  e approvato
+- le notifiche vengono attivate di default quando un utente diventa approvato,
+  salvo opt-out utente o intervento admin
+- prima di superare le soglie `FISCALBAY_PUBLIC_*`, sospendere l'allargamento e
+  preparare database piu' robusto, sizing VPS e processo admin piu' formale
 
 Healthcheck esterno e TLS:
 

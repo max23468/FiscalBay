@@ -921,6 +921,8 @@ class BotIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(len(policy_replies), 1)
         self.assertIn("Policy Servizio", policy_replies[0])
+        self.assertIn("Telegram first", policy_replies[0])
+        self.assertIn("Utenti approvati", policy_replies[0])
 
     def test_service_mode_is_rate_limited(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -12,7 +12,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, TypedDict
 
-from .config import configure_logging, load_retention_config, load_telegram_config
+from .config import (
+    configure_logging,
+    load_public_service_config,
+    load_retention_config,
+    load_telegram_config,
+)
 from .logging_utils import log_event
 from .models import BotMetrics, as_int
 from .storage.sqlite import (
@@ -39,6 +44,9 @@ class HealthMetrics(TypedDict):
 
 class MultiTenantHealth(TypedDict):
     tenant_users: int
+    approved_users: int
+    pending_users: int
+    blocked_users: int
     tenant_chats: int
     linked_accounts: int
     active_token_sets: int
@@ -92,6 +100,23 @@ class ResourceHealth(TypedDict):
     memory_available_percent: float | None
 
 
+class PublicServiceHealth(TypedDict):
+    service_model: str
+    telegram_first: bool
+    web_role: str
+    onboarding_hosting: str
+    approved_users: int
+    approved_users_limit: int
+    linked_accounts: int
+    linked_accounts_limit: int
+    active_token_sets: int
+    active_token_sets_limit: int
+    sqlite_db_bytes: int
+    sqlite_db_limit_bytes: int
+    sqlite_migration_recommended: bool
+    scale_within_policy: bool
+
+
 class HealthReport(TypedDict):
     ok: bool
     status: str
@@ -111,6 +136,7 @@ class HealthReport(TypedDict):
     tenant_snapshots: TenantSnapshotHealth
     retention: RetentionHealth
     resources: ResourceHealth
+    public_service: PublicServiceHealth
     alerts: list[str]
     service_active: bool | None
     service_name: str | None
@@ -256,6 +282,16 @@ def build_alerts(
         alerts.append("consecutive_error_cycles_exceeded")
     if max_retry_queue_size is not None and retry_queue_size > max_retry_queue_size:
         alerts.append("retry_queue_size_exceeded")
+    public_service = report.get("public_service")
+    if public_service:
+        if public_service["approved_users"] > public_service["approved_users_limit"]:
+            alerts.append("public_approved_users_limit_exceeded")
+        if public_service["linked_accounts"] > public_service["linked_accounts_limit"]:
+            alerts.append("public_linked_accounts_limit_exceeded")
+        if public_service["active_token_sets"] > public_service["active_token_sets_limit"]:
+            alerts.append("public_active_token_sets_limit_exceeded")
+        if public_service["sqlite_db_bytes"] > public_service["sqlite_db_limit_bytes"]:
+            alerts.append("sqlite_db_size_limit_exceeded")
     resources = report.get("resources")
     if resources:
         if (
@@ -339,6 +375,7 @@ def build_health_report(
 
     ebay_errors, telegram_errors = summarize_error_metrics(state.metrics)
     multi_tenant = summarize_multi_tenant_readiness(telegram_config.state_path)
+    public_service_config = load_public_service_config()
     operation_queue = summarize_operation_queue(telegram_config.state_path)
     now = datetime.now(timezone.utc)
     retention_config = load_retention_config()
@@ -391,6 +428,9 @@ def build_health_report(
         warnings.append("tenant_snapshot_stale")
     multi_tenant_health: MultiTenantHealth = {
         "tenant_users": multi_tenant.get("tenant_users", 0),
+        "approved_users": multi_tenant.get("approved_users", 0),
+        "pending_users": multi_tenant.get("pending_users", 0),
+        "blocked_users": multi_tenant.get("blocked_users", 0),
         "tenant_chats": multi_tenant.get("tenant_chats", 0),
         "linked_accounts": multi_tenant.get("linked_accounts", 0),
         "active_token_sets": multi_tenant.get("active_token_sets", 0),
@@ -427,6 +467,38 @@ def build_health_report(
         "oldest_oauth_created_at": str(retention_summary.get("oldest_oauth_created_at") or ""),
     }
     resources = collect_resource_health(resource_path)
+    sqlite_db_bytes = 0
+    try:
+        sqlite_db_bytes = Path(telegram_config.state_path).stat().st_size
+    except OSError:
+        sqlite_db_bytes = 0
+    public_scale_within_policy = (
+        multi_tenant_health["approved_users"] <= public_service_config.max_approved_users
+        and multi_tenant_health["linked_accounts"] <= public_service_config.max_linked_accounts
+        and multi_tenant_health["active_token_sets"] <= public_service_config.max_active_token_sets
+        and sqlite_db_bytes <= public_service_config.sqlite_max_db_bytes
+    )
+    public_service_health: PublicServiceHealth = {
+        "service_model": public_service_config.service_model,
+        "telegram_first": True,
+        "web_role": public_service_config.web_role,
+        "onboarding_hosting": public_service_config.onboarding_hosting,
+        "approved_users": multi_tenant_health["approved_users"],
+        "approved_users_limit": public_service_config.max_approved_users,
+        "linked_accounts": multi_tenant_health["linked_accounts"],
+        "linked_accounts_limit": public_service_config.max_linked_accounts,
+        "active_token_sets": multi_tenant_health["active_token_sets"],
+        "active_token_sets_limit": public_service_config.max_active_token_sets,
+        "sqlite_db_bytes": sqlite_db_bytes,
+        "sqlite_db_limit_bytes": public_service_config.sqlite_max_db_bytes,
+        "sqlite_migration_recommended": sqlite_db_bytes > public_service_config.sqlite_max_db_bytes
+        or multi_tenant_health["active_token_sets"] > public_service_config.max_active_token_sets,
+        "scale_within_policy": public_scale_within_policy,
+    }
+    if not public_scale_within_policy:
+        warnings.append("public_service_policy_limit_reached")
+    if public_service_health["sqlite_migration_recommended"]:
+        warnings.append("sqlite_migration_recommended")
     ignored_reason_set = set(ignored_reasons or [])
     fatal_reasons = [reason for reason in reasons if reason not in ignored_reason_set]
     effective_ignored_reasons = [reason for reason in reasons if reason in ignored_reason_set]
@@ -458,6 +530,7 @@ def build_health_report(
         "tenant_snapshots": tenant_snapshot_health,
         "retention": retention_health,
         "resources": resources,
+        "public_service": public_service_health,
         "alerts": [],
         "service_active": None,
         "service_name": None,
@@ -495,6 +568,7 @@ def build_health_report(
         tenant_users=multi_tenant["tenant_users"],
         linked_accounts=multi_tenant["linked_accounts"],
         active_token_sets=multi_tenant["active_token_sets"],
+        approved_users=multi_tenant_health["approved_users"],
         operation_queue_pending=operation_queue["pending"],
         operation_queue_failed=operation_queue["failed"],
         tenant_snapshots_total=tenant_snapshot_health["total"],
@@ -506,6 +580,8 @@ def build_health_report(
         disk_used_percent=resources["disk_used_percent"],
         inode_used_percent=resources["inode_used_percent"],
         memory_available_mb=resources["memory_available_mb"],
+        public_scale_within_policy=public_service_health["scale_within_policy"],
+        sqlite_db_bytes=public_service_health["sqlite_db_bytes"],
     )
     return report
 
@@ -518,6 +594,9 @@ def render_text_report(report: HealthReport) -> str:
     ignored_reasons = report.get("ignored_reasons", [])
     default_multi_tenant: MultiTenantHealth = {
         "tenant_users": 0,
+        "approved_users": 0,
+        "pending_users": 0,
+        "blocked_users": 0,
         "tenant_chats": 0,
         "linked_accounts": 0,
         "active_token_sets": 0,
@@ -566,6 +645,22 @@ def render_text_report(report: HealthReport) -> str:
         "memory_available_mb": None,
         "memory_available_percent": None,
     }
+    default_public_service: PublicServiceHealth = {
+        "service_model": "approved_public_small",
+        "telegram_first": True,
+        "web_role": "onboarding_callback_support",
+        "onboarding_hosting": "vps_oauth_callback",
+        "approved_users": 0,
+        "approved_users_limit": 0,
+        "linked_accounts": 0,
+        "linked_accounts_limit": 0,
+        "active_token_sets": 0,
+        "active_token_sets_limit": 0,
+        "sqlite_db_bytes": 0,
+        "sqlite_db_limit_bytes": 0,
+        "sqlite_migration_recommended": False,
+        "scale_within_policy": True,
+    }
     lines = [
         f"status: {report['status']}",
         f"service_active: {report.get('service_active', 'not_checked')}",
@@ -596,6 +691,7 @@ def render_text_report(report: HealthReport) -> str:
     tenant_snapshots = report.get("tenant_snapshots", default_tenant_snapshots)
     retention = report.get("retention", default_retention)
     resources = report.get("resources", default_resources)
+    public_service = report.get("public_service", default_public_service)
     lines.append("reasons: " + (", ".join(str(item) for item in reasons) if reasons else "none"))
     lines.append(
         "ignored_reasons: "
@@ -606,6 +702,9 @@ def render_text_report(report: HealthReport) -> str:
     lines.extend(
         [
             f"multi_tenant.tenant_users: {multi_tenant.get('tenant_users', 0)}",
+            f"multi_tenant.approved_users: {multi_tenant.get('approved_users', 0)}",
+            f"multi_tenant.pending_users: {multi_tenant.get('pending_users', 0)}",
+            f"multi_tenant.blocked_users: {multi_tenant.get('blocked_users', 0)}",
             f"multi_tenant.tenant_chats: {multi_tenant.get('tenant_chats', 0)}",
             f"multi_tenant.linked_accounts: {multi_tenant.get('linked_accounts', 0)}",
             f"multi_tenant.active_token_sets: {multi_tenant.get('active_token_sets', 0)}",
@@ -637,6 +736,25 @@ def render_text_report(report: HealthReport) -> str:
             f"resources.inode_used_percent: {resources.get('inode_used_percent')}",
             f"resources.memory_available_mb: {resources.get('memory_available_mb')}",
             f"resources.memory_available_percent: {resources.get('memory_available_percent')}",
+            f"public_service.service_model: {public_service.get('service_model')}",
+            f"public_service.web_role: {public_service.get('web_role')}",
+            f"public_service.onboarding_hosting: {public_service.get('onboarding_hosting')}",
+            "public_service.approved_users: "
+            f"{public_service.get('approved_users', 0)}/"
+            f"{public_service.get('approved_users_limit', 0)}",
+            "public_service.linked_accounts: "
+            f"{public_service.get('linked_accounts', 0)}/"
+            f"{public_service.get('linked_accounts_limit', 0)}",
+            "public_service.active_token_sets: "
+            f"{public_service.get('active_token_sets', 0)}/"
+            f"{public_service.get('active_token_sets_limit', 0)}",
+            "public_service.sqlite_db_bytes: "
+            f"{public_service.get('sqlite_db_bytes', 0)}/"
+            f"{public_service.get('sqlite_db_limit_bytes', 0)}",
+            "public_service.sqlite_migration_recommended: "
+            f"{public_service.get('sqlite_migration_recommended', False)}",
+            "public_service.scale_within_policy: "
+            f"{public_service.get('scale_within_policy', True)}",
         ]
     )
     return "\n".join(lines)

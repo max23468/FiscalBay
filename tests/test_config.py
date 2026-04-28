@@ -5,6 +5,7 @@ from unittest.mock import patch
 from src.fiscalbay.config import (
     DEFAULT_SCOPE,
     load_config,
+    load_public_service_config,
     load_retention_config,
     load_telegram_config,
 )
@@ -68,6 +69,30 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.oauth_session_retention_days, 20)
         self.assertEqual(config.oauth_pending_retention_days, 5)
         self.assertEqual(config.operation_queue_retention_days, 12)
+
+    def test_load_public_service_config_uses_scale_thresholds(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "FISCALBAY_PUBLIC_SERVICE_MODEL": "approved_public_small",
+                "FISCALBAY_WEB_ROLE": "oauth_support_only",
+                "FISCALBAY_ONBOARDING_HOSTING": "vps",
+                "FISCALBAY_PUBLIC_MAX_APPROVED_USERS": "12",
+                "FISCALBAY_PUBLIC_MAX_LINKED_ACCOUNTS": "10",
+                "FISCALBAY_PUBLIC_MAX_ACTIVE_TOKEN_SETS": "9",
+                "FISCALBAY_SQLITE_MAX_DB_BYTES": "2097152",
+            },
+            clear=True,
+        ):
+            config = load_public_service_config()
+
+        self.assertEqual(config.service_model, "approved_public_small")
+        self.assertEqual(config.web_role, "oauth_support_only")
+        self.assertEqual(config.onboarding_hosting, "vps")
+        self.assertEqual(config.max_approved_users, 12)
+        self.assertEqual(config.max_linked_accounts, 10)
+        self.assertEqual(config.max_active_token_sets, 9)
+        self.assertEqual(config.sqlite_max_db_bytes, 2097152)
 
     def test_invalid_telegram_chat_id_raises_configuration_error(self) -> None:
         with patch.dict(

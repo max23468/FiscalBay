@@ -52,6 +52,15 @@ DUCKDNS_SERVICE_TEMPLATE="${APP_DIR}/deploy/fiscalbay-duckdns.service"
 DUCKDNS_SERVICE_TARGET="/etc/systemd/system/${DUCKDNS_SERVICE_NAME}.service"
 DUCKDNS_TIMER_TEMPLATE="${APP_DIR}/deploy/fiscalbay-duckdns.timer"
 DUCKDNS_TIMER_TARGET="/etc/systemd/system/${DUCKDNS_SERVICE_NAME}.timer"
+BOT_MEMORY_MAX="${FISCALBAY_BOT_MEMORY_MAX:-512M}"
+BOT_CPU_QUOTA="${FISCALBAY_BOT_CPU_QUOTA:-60%}"
+BOT_TASKS_MAX="${FISCALBAY_BOT_TASKS_MAX:-128}"
+OAUTH_MEMORY_MAX="${FISCALBAY_OAUTH_MEMORY_MAX:-256M}"
+OAUTH_CPU_QUOTA="${FISCALBAY_OAUTH_CPU_QUOTA:-40%}"
+OAUTH_TASKS_MAX="${FISCALBAY_OAUTH_TASKS_MAX:-64}"
+ONESHOT_MEMORY_MAX="${FISCALBAY_ONESHOT_MEMORY_MAX:-256M}"
+ONESHOT_CPU_QUOTA="${FISCALBAY_ONESHOT_CPU_QUOTA:-50%}"
+ONESHOT_TASKS_MAX="${FISCALBAY_ONESHOT_TASKS_MAX:-64}"
 
 select_python_bin() {
   if [ -n "${PYTHON_BIN}" ] && command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
@@ -124,6 +133,15 @@ install_service_file() {
     -e "s|__APP_DIR__|${APP_DIR}|g" \
     -e "s|__VENV_DIR__|${VENV_DIR}|g" \
     -e "s|__ENV_FILE__|${ENV_FILE}|g" \
+    -e "s|__BOT_MEMORY_MAX__|${BOT_MEMORY_MAX}|g" \
+    -e "s|__BOT_CPU_QUOTA__|${BOT_CPU_QUOTA}|g" \
+    -e "s|__BOT_TASKS_MAX__|${BOT_TASKS_MAX}|g" \
+    -e "s|__OAUTH_MEMORY_MAX__|${OAUTH_MEMORY_MAX}|g" \
+    -e "s|__OAUTH_CPU_QUOTA__|${OAUTH_CPU_QUOTA}|g" \
+    -e "s|__OAUTH_TASKS_MAX__|${OAUTH_TASKS_MAX}|g" \
+    -e "s|__ONESHOT_MEMORY_MAX__|${ONESHOT_MEMORY_MAX}|g" \
+    -e "s|__ONESHOT_CPU_QUOTA__|${ONESHOT_CPU_QUOTA}|g" \
+    -e "s|__ONESHOT_TASKS_MAX__|${ONESHOT_TASKS_MAX}|g" \
     "${source_template}" > "${tmp_service}"
   sudo cp "${tmp_service}" "${destination_path}"
   rm -f "${tmp_service}"
@@ -206,3 +224,7 @@ echo "Configurazione applicata:"
 echo "- APP_USER=${APP_USER}"
 echo "- APP_GROUP=${APP_GROUP}"
 echo "- APP_DIR=${APP_DIR}"
+echo "- BOT_MEMORY_MAX=${BOT_MEMORY_MAX}"
+echo "- BOT_CPU_QUOTA=${BOT_CPU_QUOTA}"
+echo "- OAUTH_MEMORY_MAX=${OAUTH_MEMORY_MAX}"
+echo "- OAUTH_CPU_QUOTA=${OAUTH_CPU_QUOTA}"

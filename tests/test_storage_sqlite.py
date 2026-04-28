@@ -1168,6 +1168,96 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertFalse(subscriptions[0].enabled)
             self.assertFalse(chats[0].notifications_enabled)
 
+    def test_apply_telegram_user_access_status_enables_notifications_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+
+            upsert_telegram_user(
+                str(db_path),
+                TelegramUser(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    created_at="2026-04-06T10:00:00Z",
+                    status="pending",
+                ),
+            )
+            upsert_telegram_chat(
+                str(db_path),
+                TelegramChat(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    chat_type="private",
+                    is_primary=True,
+                    notifications_enabled=False,
+                    created_at="2026-04-06T10:00:00Z",
+                    updated_at="2026-04-06T10:00:00Z",
+                ),
+            )
+
+            apply_telegram_user_access_status(
+                str(db_path),
+                123,
+                TELEGRAM_USER_STATUS_APPROVED,
+                updated_at="2026-04-06T10:05:00Z",
+                default_notify_chat_ids=set(),
+            )
+
+            subscriptions = load_notification_subscriptions(str(db_path))
+            chats = load_telegram_chats(str(db_path))
+            self.assertEqual(len(subscriptions), 1)
+            self.assertTrue(subscriptions[0].enabled)
+            self.assertTrue(chats[0].notifications_enabled)
+
+    def test_apply_telegram_user_access_status_preserves_explicit_notification_opt_out(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+
+            upsert_telegram_user(
+                str(db_path),
+                TelegramUser(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    created_at="2026-04-06T10:00:00Z",
+                    status="approved",
+                ),
+            )
+            upsert_telegram_chat(
+                str(db_path),
+                TelegramChat(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    chat_type="private",
+                    is_primary=True,
+                    notifications_enabled=True,
+                    created_at="2026-04-06T10:00:00Z",
+                    updated_at="2026-04-06T10:00:00Z",
+                ),
+            )
+            set_notification_subscription_enabled(
+                str(db_path),
+                123,
+                456,
+                False,
+                created_at="2026-04-06T10:00:00Z",
+                updated_at="2026-04-06T10:01:00Z",
+            )
+
+            apply_telegram_user_access_status(
+                str(db_path),
+                123,
+                TELEGRAM_USER_STATUS_APPROVED,
+                updated_at="2026-04-06T10:05:00Z",
+                default_notify_chat_ids=set(),
+            )
+
+            subscriptions = load_notification_subscriptions(str(db_path))
+            chats = load_telegram_chats(str(db_path))
+            self.assertEqual(len(subscriptions), 1)
+            self.assertFalse(subscriptions[0].enabled)
+            self.assertFalse(chats[0].notifications_enabled)
+
 
 if __name__ == "__main__":
     unittest.main()

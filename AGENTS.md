@@ -132,6 +132,14 @@ creati localmente quando li incontri.
   push del branch, PR pronta o merge quando naturale, e deploy su VPS FiscalBay
   con il canale locale/VPS previsto. Non fermarti a una sola parte del flusso
   salvo istruzione esplicita, blocco tecnico o rischio/ambiguita' da chiarire.
+- Se nello stesso turno sono stati introdotti cambi funzionali, osservabili o
+  operativi che richiedono un commit `feat:`, `fix:` o `perf:`, e il maintainer
+  chiede anche di "pubblicare", "pubblica e deploy", "manda su", "chiudi la fase"
+  o formule equivalenti, la chiusura operativa deve includere anche la release
+  versionata con `scripts/release_now.sh`, non solo `scripts/deploy_now.sh`.
+  Usa solo il deploy operativo senza release quando l'utente lo chiede
+  esplicitamente, quando il cambio non produce bump release, o quando esiste un
+  blocco tecnico/rischio da dichiarare prima di procedere.
 - Questo repository e' privato e gestito da un solo maintainer: review/commenti
   esterni non sono un passaggio atteso per chiudere il lavoro.
 - Quando la PR e' pronta, i test rilevanti sono verdi e la self-review e' stata
@@ -154,6 +162,11 @@ creati localmente quando li incontri.
   release GitHub fuori da `scripts/release_now.sh`, salvo riparazioni esplicite.
 - Se l'utente chiede una release, il percorso standard e' eseguire
   `scripts/release_now.sh` dopo le verifiche locali rilevanti.
+- Se un agente ha gia' eseguito `scripts/deploy_now.sh` per un cambio `feat:`,
+  `fix:` o `perf:` dentro un flusso richiesto come "pubblica e deploy" o
+  "chiudi la fase", deve verificare subito se manca la release versionata; se
+  manca e non ci sono blocchi, deve eseguire `scripts/release_now.sh` prima di
+  considerare il lavoro concluso.
 - Se in un turno sono stati fatti cambi funzionali ma manca un Conventional Commit
   adeguato, non considerare il lavoro chiuso finche il commit non e' coerente con
   il flusso di release esplicita.

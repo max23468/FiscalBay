@@ -178,6 +178,18 @@ Include anche pressione risorse VPS:
 - `resources.memory_available_mb`
 - `resources.memory_available_percent`
 
+Include anche policy e soglie del servizio pubblico:
+
+- `public_service.service_model`
+- `public_service.web_role`
+- `public_service.onboarding_hosting`
+- `public_service.approved_users` e relativo limite
+- `public_service.linked_accounts` e relativo limite
+- `public_service.active_token_sets` e relativo limite
+- `public_service.sqlite_db_bytes` e relativo limite
+- `public_service.sqlite_migration_recommended`
+- `public_service.scale_within_policy`
+
 Alert check periodico:
 
 ```bash
@@ -194,6 +206,8 @@ Soglie minime attuali:
 - disco usato sotto `MAX_DISK_USED_PERCENT` sul path applicativo
 - inode usati sotto `MAX_INODE_USED_PERCENT` sul path applicativo
 - memoria disponibile sopra `MIN_MEMORY_AVAILABLE_MB`
+- utenti approvati, account collegati, token attivi e dimensione SQLite sotto le
+  soglie `FISCALBAY_PUBLIC_*`
 
 Override possibili via env:
 
@@ -203,6 +217,13 @@ Override possibili via env:
 - `MAX_INODE_USED_PERCENT`
 - `MIN_MEMORY_AVAILABLE_MB`
 - `RESOURCE_PATH`
+- `FISCALBAY_PUBLIC_MAX_APPROVED_USERS`
+- `FISCALBAY_PUBLIC_MAX_LINKED_ACCOUNTS`
+- `FISCALBAY_PUBLIC_MAX_ACTIVE_TOKEN_SETS`
+- `FISCALBAY_SQLITE_MAX_DB_BYTES`
+
+Se compare `sqlite_migration_recommended`, non allargare il numero di utenti
+approvati prima di avere un piano di migrazione verso Postgres o equivalente.
 
 Healthcheck esterno HTTPS:
 

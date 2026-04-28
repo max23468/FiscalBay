@@ -13,6 +13,14 @@ Restart=always
 RestartSec=10
 TimeoutStopSec=20
 Environment=PYTHONUNBUFFERED=1
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=__APP_DIR__/data
+MemoryMax=__OAUTH_MEMORY_MAX__
+CPUQuota=__OAUTH_CPU_QUOTA__
+TasksMax=__OAUTH_TASKS_MAX__
 
 [Install]
 WantedBy=multi-user.target

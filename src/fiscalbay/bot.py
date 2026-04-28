@@ -35,7 +35,13 @@ from .clients.telegram import (
     sync_bot_branding,
     telegram_request,
 )
-from .config import configure_logging, load_config, load_retention_config, load_telegram_config
+from .config import (
+    configure_logging,
+    load_config,
+    load_public_service_config,
+    load_retention_config,
+    load_telegram_config,
+)
 from .errors import ConfigurationError, EbayApiError, TelegramApiError
 from .logging_utils import log_event
 from .models import (
@@ -133,6 +139,7 @@ from .storage.sqlite import (
     save_tenant_retry_queue_entries,
     save_tenant_runtime_state,
     set_notification_subscription_enabled,
+    summarize_multi_tenant_readiness,
     summarize_oauth_link_sessions,
     summarize_operation_queue,
     summarize_retention_backlog,
@@ -600,6 +607,26 @@ def _build_service_status_payload(state_path: str) -> dict[str, object]:
         "write_available": mode == SERVICE_MODE_NORMAL,
         "connect_available": mode == SERVICE_MODE_NORMAL,
         "admin_model": "single_admin",
+    }
+
+
+def _build_policy_status_payload(state_path: str) -> dict[str, object]:
+    service_state = _load_service_state(state_path)
+    mode = str(service_state.get("mode") or SERVICE_MODE_NORMAL)
+    public_config = load_public_service_config()
+    readiness = summarize_multi_tenant_readiness(state_path)
+    return {
+        "mode": mode,
+        "service_model": public_config.service_model,
+        "web_role": public_config.web_role,
+        "onboarding_hosting": public_config.onboarding_hosting,
+        "approved_users": readiness.get("approved_users", 0),
+        "approved_users_limit": public_config.max_approved_users,
+        "linked_accounts": readiness.get("linked_accounts", 0),
+        "linked_accounts_limit": public_config.max_linked_accounts,
+        "active_token_sets": readiness.get("active_token_sets", 0),
+        "active_token_sets_limit": public_config.max_active_token_sets,
+        "sqlite_db_limit_mb": public_config.sqlite_max_db_bytes // (1024 * 1024),
     }
 
 
@@ -1872,7 +1899,7 @@ def process_message(
         return [format_service_status(_build_service_status_payload(telegram_config.state_path))]
 
     if command == "/policy":
-        return [format_policy_status({"mode": service_mode})]
+        return [format_policy_status(_build_policy_status_payload(telegram_config.state_path))]
 
     if command == "/service_mode":
         if not is_admin_user:

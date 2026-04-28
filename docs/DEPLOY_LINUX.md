@@ -70,6 +70,30 @@ EBAY_NOTIFY_RETRY_PATH=data/state.db
 TELEGRAM_BOT_LOCK_PATH=data/telegram_bot.lock
 ```
 
+Soglie servizio pubblico consigliate:
+
+```env
+FISCALBAY_PUBLIC_SERVICE_MODEL=approved_public_small
+FISCALBAY_WEB_ROLE=onboarding_callback_support
+FISCALBAY_ONBOARDING_HOSTING=vps_oauth_callback
+FISCALBAY_PUBLIC_MAX_APPROVED_USERS=25
+FISCALBAY_PUBLIC_MAX_LINKED_ACCOUNTS=25
+FISCALBAY_PUBLIC_MAX_ACTIVE_TOKEN_SETS=25
+FISCALBAY_SQLITE_MAX_DB_BYTES=52428800
+```
+
+Limiti `systemd` applicati dal setup, modificabili prima di lanciare
+`deploy/linux-setup.sh`:
+
+```env
+FISCALBAY_BOT_MEMORY_MAX=512M
+FISCALBAY_BOT_CPU_QUOTA=60%
+FISCALBAY_OAUTH_MEMORY_MAX=256M
+FISCALBAY_OAUTH_CPU_QUOTA=40%
+FISCALBAY_ONESHOT_MEMORY_MAX=256M
+FISCALBAY_ONESHOT_CPU_QUOTA=50%
+```
+
 ## Avvio servizio
 
 ```bash
@@ -170,7 +194,14 @@ sudo systemctl status fiscalbay-log-maintenance.timer
 ## Note operative
 
 - usiamo polling, quindi non serve webhook pubblico
+- FiscalBay resta `Telegram first`: web solo onboarding, callback OAuth e pagine
+  minime di supporto
+- onboarding e callback restano sulla VPS attuale finche' le soglie pubbliche
+  restano rispettate
 - SQLite e lock file restano nella directory `data/` del progetto
+- SQLite e' accettabile solo per servizio piccolo ad accesso approvato; se
+  `fiscalbay-healthcheck` segnala `sqlite_migration_recommended`, fermare
+  l'allargamento utenti prima della migrazione database
 - il servizio reale della VPS si chiama `fiscalbay-bot`
 - Docker Compose non e' mantenuto come opzione reale di esercizio sulla VPS attuale
 - lo script di setup supporta `apt-get`, `dnf`, `yum` e `apk`

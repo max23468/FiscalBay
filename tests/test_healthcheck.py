@@ -382,6 +382,93 @@ class HealthcheckTests(unittest.TestCase):
             self.assertIn("inode_used_percent_exceeded", report["alerts"])
             self.assertIn("memory_available_mb_below_minimum", report["alerts"])
 
+    def test_build_health_report_alerts_on_public_service_policy_limits(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            lock_path = Path(tmpdir) / "telegram_bot.lock"
+            lock_path.write_text("pid=123\n", encoding="utf-8")
+            save_state(
+                str(db_path),
+                {
+                    "notified_order_ids": [],
+                    "notified_hashes": [],
+                    "last_check": "2026-04-05T20:00:00Z",
+                    "last_error": None,
+                    "metrics": {
+                        "orders_read": 0,
+                        "orders_with_fiscal_identifier": 0,
+                        "notifications_sent": 0,
+                        "telegram_retries": 0,
+                        "consecutive_error_cycles": 0,
+                        "errors_by_type": {},
+                    },
+                },
+            )
+
+            with patch.dict(
+                "os.environ",
+                {
+                    "FISCALBAY_PUBLIC_MAX_APPROVED_USERS": "1",
+                    "FISCALBAY_PUBLIC_MAX_LINKED_ACCOUNTS": "1",
+                    "FISCALBAY_PUBLIC_MAX_ACTIVE_TOKEN_SETS": "1",
+                    "FISCALBAY_SQLITE_MAX_DB_BYTES": "1048576",
+                },
+                clear=False,
+            ):
+                with patch("src.fiscalbay.healthcheck.datetime") as mock_datetime:
+                    from datetime import datetime, timezone
+
+                    mock_datetime.now.return_value = datetime(
+                        2026, 4, 5, 20, 2, 0, tzinfo=timezone.utc
+                    )
+                    mock_datetime.fromisoformat = datetime.fromisoformat
+                    config = TelegramConfig(
+                        token="x",
+                        allowed_chat_ids=None,
+                        notify_chat_ids={123},
+                        ebay_poll_interval_seconds=120,
+                        state_path=str(db_path),
+                        retry_queue_path=str(db_path),
+                        lock_path=str(lock_path),
+                    )
+                    readiness = {
+                        "tenant_users": 4,
+                        "approved_users": 2,
+                        "pending_users": 1,
+                        "blocked_users": 1,
+                        "tenant_chats": 4,
+                        "linked_accounts": 2,
+                        "active_token_sets": 2,
+                        "notification_subscriptions": 2,
+                        "tenant_runtime_states": 2,
+                    }
+                    resources = collect_resource_health(str(Path(tmpdir)))
+                    with patch(
+                        "src.fiscalbay.healthcheck.load_telegram_config",
+                        return_value=config,
+                    ):
+                        with patch(
+                            "src.fiscalbay.healthcheck.summarize_multi_tenant_readiness",
+                            return_value=readiness,
+                        ):
+                            with patch(
+                                "src.fiscalbay.healthcheck.collect_resource_health",
+                                return_value=resources,
+                            ):
+                                with patch(
+                                    "src.fiscalbay.healthcheck.Path.stat",
+                                    return_value=SimpleNamespace(st_size=2_000_000),
+                                ):
+                                    report = build_health_report()
+
+            self.assertFalse(report["ok"])
+            self.assertIn("public_approved_users_limit_exceeded", report["alerts"])
+            self.assertIn("public_linked_accounts_limit_exceeded", report["alerts"])
+            self.assertIn("public_active_token_sets_limit_exceeded", report["alerts"])
+            self.assertIn("sqlite_db_size_limit_exceeded", report["alerts"])
+            self.assertIn("sqlite_migration_recommended", report["warnings"])
+            self.assertFalse(report["public_service"]["scale_within_policy"])
+
     def test_render_text_report_includes_reasons_and_warnings(self) -> None:
         text = render_text_report(
             {

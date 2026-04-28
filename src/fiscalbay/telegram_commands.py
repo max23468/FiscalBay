@@ -1188,13 +1188,32 @@ def format_service_status(service_status: Mapping[str, object]) -> str:
 
 def format_policy_status(policy_status: Mapping[str, object]) -> str:
     mode = html.escape(str(policy_status.get("mode") or "normal"))
+    service_model = html.escape(str(policy_status.get("service_model") or "approved_public_small"))
+    web_role = html.escape(str(policy_status.get("web_role") or "onboarding_callback_support"))
+    onboarding_hosting = html.escape(
+        str(policy_status.get("onboarding_hosting") or "vps_oauth_callback")
+    )
+    approved_users = html.escape(str(policy_status.get("approved_users", 0)))
+    approved_limit = html.escape(str(policy_status.get("approved_users_limit", 0)))
+    linked_accounts = html.escape(str(policy_status.get("linked_accounts", 0)))
+    linked_limit = html.escape(str(policy_status.get("linked_accounts_limit", 0)))
+    token_sets = html.escape(str(policy_status.get("active_token_sets", 0)))
+    token_limit = html.escape(str(policy_status.get("active_token_sets_limit", 0)))
+    sqlite_limit_mb = html.escape(str(policy_status.get("sqlite_db_limit_mb", 0)))
     return (
         "📜 <b>Policy Servizio</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "Servizio pubblico piccolo e curato, solo chat private Telegram.\n"
+        "Servizio pubblico piccolo e curato, Telegram first e ad accesso approvato.\n"
         "Accesso operativo soggetto ad approvazione di un solo admin globale.\n"
         "Notifiche attive di default per utenti approvati, "
         "salvo scelta utente o intervento admin.\n"
+        f"Modello: <code>{service_model}</code>\n"
+        f"Web: <code>{web_role}</code> su <code>{onboarding_hosting}</code>\n"
+        f"Utenti approvati: <code>{approved_users}/{approved_limit}</code>\n"
+        f"Account collegati: <code>{linked_accounts}/{linked_limit}</code>\n"
+        f"Token attivi: <code>{token_sets}/{token_limit}</code>\n"
+        f"SQLite resta accettabile entro <code>{sqlite_limit_mb}MB</code> "
+        "e bassa concorrenza.\n"
         "Il bot mostra solo dati fiscali realmente restituiti da eBay.\n"
         f"Modalita' servizio corrente: <code>{mode}</code>\n"
         "Riferimento operativo: <code>docs/SERVICE_GOVERNANCE.md</code> nel repository."

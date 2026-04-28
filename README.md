@@ -255,6 +255,13 @@ Nota OAuth eBay:
 
 | Variabile | Default | Descrizione |
 | --- | --- | --- |
+| `FISCALBAY_PUBLIC_SERVICE_MODEL` | `approved_public_small` | Modello operativo dichiarato: servizio pubblico piccolo con accesso approvato |
+| `FISCALBAY_WEB_ROLE` | `onboarding_callback_support` | Ruolo della parte web: supporto onboarding/callback, non entrypoint principale |
+| `FISCALBAY_ONBOARDING_HOSTING` | `vps_oauth_callback` | Decisione hosting attuale per onboarding e callback OAuth |
+| `FISCALBAY_PUBLIC_MAX_APPROVED_USERS` | `25` | Soglia oltre cui rivalutare servizio pubblico, VPS e processo admin |
+| `FISCALBAY_PUBLIC_MAX_LINKED_ACCOUNTS` | `25` | Soglia account eBay collegati oltre cui rivalutare storage e operativita' |
+| `FISCALBAY_PUBLIC_MAX_ACTIVE_TOKEN_SETS` | `25` | Soglia token tenant attivi oltre cui preparare migrazione database |
+| `FISCALBAY_SQLITE_MAX_DB_BYTES` | `52428800` | Soglia dimensione `state.db` oltre cui il passaggio oltre SQLite diventa raccomandato |
 | `FISCALBAY_PUBLIC_HEALTH_URL` | derivata da `EBAY_OAUTH_CALLBACK_URL` se possibile | URL HTTPS pubblico da controllare con l'healthcheck esterno, di norma `/healthz` |
 | `MAX_DISK_USED_PERCENT` | `85` | Soglia alert per spazio disco usato sul path applicativo |
 | `MAX_INODE_USED_PERCENT` | `85` | Soglia alert per inode usati sul path applicativo |
@@ -263,6 +270,15 @@ Nota OAuth eBay:
 | `JOURNAL_VACUUM_TIME` | `14d` | Retention temporale journal applicata dalla manutenzione log |
 | `JOURNAL_VACUUM_SIZE` | `200M` | Retention dimensionale journal applicata dalla manutenzione log |
 | `NGINX_LOG_RETENTION_DAYS` | `30` | Retention dei log nginx FiscalBay gia' ruotati |
+| `FISCALBAY_BOT_MEMORY_MAX` | `512M` | Limite `systemd` memoria per `fiscalbay-bot` |
+| `FISCALBAY_BOT_CPU_QUOTA` | `60%` | Quota CPU `systemd` per `fiscalbay-bot` |
+| `FISCALBAY_BOT_TASKS_MAX` | `128` | Limite task/processi per `fiscalbay-bot` |
+| `FISCALBAY_OAUTH_MEMORY_MAX` | `256M` | Limite memoria per `fiscalbay-oauth` |
+| `FISCALBAY_OAUTH_CPU_QUOTA` | `40%` | Quota CPU per `fiscalbay-oauth` |
+| `FISCALBAY_OAUTH_TASKS_MAX` | `64` | Limite task/processi per `fiscalbay-oauth` |
+| `FISCALBAY_ONESHOT_MEMORY_MAX` | `256M` | Limite memoria per job periodici one-shot |
+| `FISCALBAY_ONESHOT_CPU_QUOTA` | `50%` | Quota CPU per job periodici one-shot |
+| `FISCALBAY_ONESHOT_TASKS_MAX` | `64` | Limite task/processi per job periodici one-shot |
 
 ## Utilizzo CLI
 
@@ -487,6 +503,11 @@ Nota operativa importante:
 ### Stato Locale e Persistenza
 
 Per default il bot usa un database SQLite in `data/state.db`.
+
+SQLite resta la scelta operativa per il servizio pubblico piccolo e approvato.
+Quando `fiscalbay-healthcheck` segnala `sqlite_migration_recommended` o una delle
+soglie `FISCALBAY_PUBLIC_*` viene superata, prima di ampliare gli utenti approvati
+va pianificato il passaggio a un database piu' robusto.
 
 Nello stato locale salva:
 

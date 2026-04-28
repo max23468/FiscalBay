@@ -328,12 +328,28 @@ Tenant inattivi:
 
 Limiti dichiarati oggi:
 
-- servizio pubblico con accesso comunque approvato manualmente
-- numero utenti da mantenere ancora basso, curato e controllato
+- servizio pubblico piccolo e curato con accesso comunque approvato manualmente
+- prodotto `Telegram first`: la parte web resta supporto onboarding/callback e
+  non diventa entrypoint operativo principale
+- onboarding e callback restano sulla VPS FiscalBay attuale finche' il servizio
+  resta dentro le soglie pubbliche dichiarate
+- numero utenti da mantenere basso, curato e controllato
 - traffico atteso non bursty
 - una sola VPS
 - nessuna promessa di alta disponibilita'
 - nessun supporto a carichi elevati o multiworker distribuiti
+
+Soglie operative configurabili:
+
+- `FISCALBAY_PUBLIC_MAX_APPROVED_USERS=25`
+- `FISCALBAY_PUBLIC_MAX_LINKED_ACCOUNTS=25`
+- `FISCALBAY_PUBLIC_MAX_ACTIVE_TOKEN_SETS=25`
+- `FISCALBAY_SQLITE_MAX_DB_BYTES=52428800`
+
+Queste soglie non sono un obiettivo commerciale da raggiungere: sono il punto in
+cui fermare l'allargamento, rivedere la VPS e preparare uno storage piu' robusto.
+Il report `fiscalbay-healthcheck` espone `public_service.*` e segnala
+`sqlite_migration_recommended` quando il servizio esce dal profilo previsto.
 
 Limiti funzionali:
 
@@ -343,10 +359,16 @@ Limiti funzionali:
 
 Soglia oltre cui rivalutare l'assetto:
 
-- piu' di una manciata di tenant attivi contemporaneamente
+- superamento di una soglia `FISCALBAY_PUBLIC_*`
 - uso giornaliero intenso o picchi frequenti
 - richiesta di SLA o affidabilita' superiore al best effort
 - bisogno di retention automatica e cancellazione self-service
+- necessita' di piu' processi bot, piu' VPS o concorrenza database sostenuta
+
+SQLite resta accettabile solo dentro il profilo `approved_public_small`: pochi
+tenant approvati, traffico non bursty, un solo processo principale e backup/restore
+verificati. Prima di aprire davvero il numero di utenti approvati, il target
+diventa Postgres o un database equivalente gestito in modo piu' robusto.
 
 ## Governance applicativa minima
 

@@ -19,6 +19,13 @@ DEFAULT_AUDIT_RETENTION_DAYS = 180
 DEFAULT_OAUTH_SESSION_RETENTION_DAYS = 30
 DEFAULT_OAUTH_PENDING_RETENTION_DAYS = 7
 DEFAULT_OPERATION_QUEUE_RETENTION_DAYS = 30
+DEFAULT_PUBLIC_MAX_APPROVED_USERS = 25
+DEFAULT_PUBLIC_MAX_LINKED_ACCOUNTS = 25
+DEFAULT_PUBLIC_MAX_ACTIVE_TOKEN_SETS = 25
+DEFAULT_SQLITE_MAX_DB_BYTES = 50 * 1024 * 1024
+DEFAULT_PUBLIC_SERVICE_MODEL = "approved_public_small"
+DEFAULT_WEB_ROLE = "onboarding_callback_support"
+DEFAULT_ONBOARDING_HOSTING = "vps_oauth_callback"
 
 
 @dataclass(frozen=True)
@@ -27,6 +34,17 @@ class RetentionConfig:
     oauth_session_retention_days: int = DEFAULT_OAUTH_SESSION_RETENTION_DAYS
     oauth_pending_retention_days: int = DEFAULT_OAUTH_PENDING_RETENTION_DAYS
     operation_queue_retention_days: int = DEFAULT_OPERATION_QUEUE_RETENTION_DAYS
+
+
+@dataclass(frozen=True)
+class PublicServiceConfig:
+    service_model: str = DEFAULT_PUBLIC_SERVICE_MODEL
+    web_role: str = DEFAULT_WEB_ROLE
+    onboarding_hosting: str = DEFAULT_ONBOARDING_HOSTING
+    max_approved_users: int = DEFAULT_PUBLIC_MAX_APPROVED_USERS
+    max_linked_accounts: int = DEFAULT_PUBLIC_MAX_LINKED_ACCOUNTS
+    max_active_token_sets: int = DEFAULT_PUBLIC_MAX_ACTIVE_TOKEN_SETS
+    sqlite_max_db_bytes: int = DEFAULT_SQLITE_MAX_DB_BYTES
 
 
 def configure_logging(default_level: str = "INFO") -> None:
@@ -124,6 +142,34 @@ def load_retention_config() -> RetentionConfig:
             "FISCALBAY_OPERATION_QUEUE_RETENTION_DAYS",
             DEFAULT_OPERATION_QUEUE_RETENTION_DAYS,
             min_value=1,
+        ),
+    )
+
+
+def load_public_service_config() -> PublicServiceConfig:
+    return PublicServiceConfig(
+        service_model=get_env_text("FISCALBAY_PUBLIC_SERVICE_MODEL", DEFAULT_PUBLIC_SERVICE_MODEL),
+        web_role=get_env_text("FISCALBAY_WEB_ROLE", DEFAULT_WEB_ROLE),
+        onboarding_hosting=get_env_text("FISCALBAY_ONBOARDING_HOSTING", DEFAULT_ONBOARDING_HOSTING),
+        max_approved_users=get_env_int(
+            "FISCALBAY_PUBLIC_MAX_APPROVED_USERS",
+            DEFAULT_PUBLIC_MAX_APPROVED_USERS,
+            min_value=1,
+        ),
+        max_linked_accounts=get_env_int(
+            "FISCALBAY_PUBLIC_MAX_LINKED_ACCOUNTS",
+            DEFAULT_PUBLIC_MAX_LINKED_ACCOUNTS,
+            min_value=1,
+        ),
+        max_active_token_sets=get_env_int(
+            "FISCALBAY_PUBLIC_MAX_ACTIVE_TOKEN_SETS",
+            DEFAULT_PUBLIC_MAX_ACTIVE_TOKEN_SETS,
+            min_value=1,
+        ),
+        sqlite_max_db_bytes=get_env_int(
+            "FISCALBAY_SQLITE_MAX_DB_BYTES",
+            DEFAULT_SQLITE_MAX_DB_BYTES,
+            min_value=1024 * 1024,
         ),
     )
 

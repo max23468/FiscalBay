@@ -943,10 +943,23 @@ def apply_telegram_user_access_status(
         CAPABILITY_MANAGE_NOTIFICATIONS,
     )
     notify_chat_ids = default_notify_chat_ids or set()
+    existing_subscriptions = {
+        subscription.telegram_chat_id: subscription
+        for subscription in load_notification_subscriptions(path)
+        if subscription.telegram_user_id == telegram_user_id
+    }
     for chat in load_telegram_chats(path):
         if chat.telegram_user_id != telegram_user_id:
             continue
-        enabled = notifications_allowed and chat.telegram_chat_id in notify_chat_ids
+        existing_subscription = existing_subscriptions.get(chat.telegram_chat_id)
+        if not notifications_allowed:
+            enabled = False
+        elif existing_subscription is not None:
+            enabled = existing_subscription.enabled
+        elif notify_chat_ids:
+            enabled = chat.telegram_chat_id in notify_chat_ids
+        else:
+            enabled = True
         set_notification_subscription_enabled(
             path,
             telegram_user_id,
@@ -2266,6 +2279,22 @@ def summarize_multi_tenant_readiness(path: str) -> dict[str, int]:
     init_db(path)
     with _connect(path) as conn:
         tenant_users = as_int(conn.execute("SELECT COUNT(*) FROM telegram_users").fetchone()[0])
+        approved_users = as_int(
+            conn.execute(
+                "SELECT COUNT(*) FROM telegram_users "
+                "WHERE status IN ('approved', 'admin', 'active')"
+            ).fetchone()[0]
+        )
+        pending_users = as_int(
+            conn.execute(
+                "SELECT COUNT(*) FROM telegram_users WHERE status IN ('pending', 'new')"
+            ).fetchone()[0]
+        )
+        blocked_users = as_int(
+            conn.execute(
+                "SELECT COUNT(*) FROM telegram_users WHERE status IN ('blocked', 'rejected')"
+            ).fetchone()[0]
+        )
         tenant_chats = as_int(conn.execute("SELECT COUNT(*) FROM telegram_chats").fetchone()[0])
         linked_accounts = as_int(
             conn.execute("SELECT COUNT(*) FROM ebay_accounts WHERE status = 'linked'").fetchone()[0]
@@ -2288,6 +2317,9 @@ def summarize_multi_tenant_readiness(path: str) -> dict[str, int]:
         )
     return {
         "tenant_users": tenant_users,
+        "approved_users": approved_users,
+        "pending_users": pending_users,
+        "blocked_users": blocked_users,
         "tenant_chats": tenant_chats,
         "linked_accounts": linked_accounts,
         "active_token_sets": active_token_sets,
