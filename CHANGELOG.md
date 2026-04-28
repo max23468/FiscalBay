@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.0](https://github.com/max23468/FiscalBay/compare/v0.20.0...v1.0.0) (2026-04-28)
+
+### Features
+
+* declare FiscalBay 1.0 readiness ([cb5f868](https://github.com/max23468/FiscalBay/commit/cb5f868bd7fbfe56f6910fcd664c11cb25bb3690))
+
 ## [0.20.0](https://github.com/max23468/FiscalBay/compare/v0.19.0...v0.20.0) (2026-04-28)
 
 ### Features
