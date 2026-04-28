@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.9.0](https://github.com/max23468/FiscalBay/compare/v1.8.0...v1.9.0) (2026-04-29)
+
+### Features
+
+* improve selective onboarding ([5cc0387](https://github.com/max23468/FiscalBay/commit/5cc03873df1b1f1f21a37582006815a8684fddd4))
+
 ## [1.8.0](https://github.com/max23468/FiscalBay/compare/v1.7.0...v1.8.0) (2026-04-29)
 
 ### Features
