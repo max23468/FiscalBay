@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
+import shutil
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -75,6 +77,21 @@ class RetentionHealth(TypedDict):
     oldest_oauth_created_at: str
 
 
+class ResourceHealth(TypedDict):
+    resource_path: str
+    disk_total_bytes: int
+    disk_used_bytes: int
+    disk_free_bytes: int
+    disk_used_percent: float
+    inode_total: int | None
+    inode_used: int | None
+    inode_free: int | None
+    inode_used_percent: float | None
+    memory_total_mb: int | None
+    memory_available_mb: int | None
+    memory_available_percent: float | None
+
+
 class HealthReport(TypedDict):
     ok: bool
     status: str
@@ -93,6 +110,7 @@ class HealthReport(TypedDict):
     operation_queue: OperationQueueHealth
     tenant_snapshots: TenantSnapshotHealth
     retention: RetentionHealth
+    resources: ResourceHealth
     alerts: list[str]
     service_active: bool | None
     service_name: str | None
@@ -141,6 +159,73 @@ def service_is_active(service_name: str) -> bool | None:
     return result.returncode == 0
 
 
+def _read_linux_meminfo(path: str = "/proc/meminfo") -> dict[str, int]:
+    meminfo: dict[str, int] = {}
+    try:
+        with open(path, encoding="utf-8") as meminfo_file:
+            for line in meminfo_file:
+                key, separator, raw_value = line.partition(":")
+                if not separator:
+                    continue
+                parts = raw_value.strip().split()
+                if not parts:
+                    continue
+                try:
+                    meminfo[key] = int(parts[0])
+                except ValueError:
+                    continue
+    except OSError:
+        return {}
+    return meminfo
+
+
+def collect_resource_health(resource_path: str) -> ResourceHealth:
+    disk_usage = shutil.disk_usage(resource_path)
+    disk_used_percent = (
+        round((disk_usage.used / disk_usage.total) * 100, 2) if disk_usage.total else 0.0
+    )
+
+    inode_total: int | None = None
+    inode_used: int | None = None
+    inode_free: int | None = None
+    inode_used_percent: float | None = None
+    try:
+        stat = os.statvfs(resource_path)
+        inode_total = int(stat.f_files)
+        inode_free = int(stat.f_ffree)
+        inode_used = max(0, inode_total - inode_free)
+        inode_used_percent = round((inode_used / inode_total) * 100, 2) if inode_total > 0 else None
+    except OSError:
+        pass
+
+    meminfo = _read_linux_meminfo()
+    memory_total_mb: int | None = None
+    memory_available_mb: int | None = None
+    memory_available_percent: float | None = None
+    memory_total_kb = meminfo.get("MemTotal")
+    memory_available_kb = meminfo.get("MemAvailable")
+    if memory_total_kb:
+        memory_total_mb = memory_total_kb // 1024
+        if memory_available_kb is not None:
+            memory_available_mb = memory_available_kb // 1024
+            memory_available_percent = round((memory_available_kb / memory_total_kb) * 100, 2)
+
+    return {
+        "resource_path": resource_path,
+        "disk_total_bytes": int(disk_usage.total),
+        "disk_used_bytes": int(disk_usage.used),
+        "disk_free_bytes": int(disk_usage.free),
+        "disk_used_percent": disk_used_percent,
+        "inode_total": inode_total,
+        "inode_used": inode_used,
+        "inode_free": inode_free,
+        "inode_used_percent": inode_used_percent,
+        "memory_total_mb": memory_total_mb,
+        "memory_available_mb": memory_available_mb,
+        "memory_available_percent": memory_available_percent,
+    }
+
+
 def build_alerts(
     report: HealthReport,
     *,
@@ -148,6 +233,9 @@ def build_alerts(
     service_name: str,
     max_consecutive_error_cycles: int | None,
     max_retry_queue_size: int | None,
+    max_disk_used_percent: float | None,
+    max_inode_used_percent: float | None,
+    min_memory_available_mb: int | None,
 ) -> list[str]:
     alerts: list[str] = []
     service_active = service_is_active(service_name) if check_service_active else None
@@ -168,6 +256,27 @@ def build_alerts(
         alerts.append("consecutive_error_cycles_exceeded")
     if max_retry_queue_size is not None and retry_queue_size > max_retry_queue_size:
         alerts.append("retry_queue_size_exceeded")
+    resources = report.get("resources")
+    if resources:
+        if (
+            max_disk_used_percent is not None
+            and resources["disk_used_percent"] > max_disk_used_percent
+        ):
+            alerts.append("disk_used_percent_exceeded")
+        inode_used_percent = resources.get("inode_used_percent")
+        if (
+            max_inode_used_percent is not None
+            and inode_used_percent is not None
+            and inode_used_percent > max_inode_used_percent
+        ):
+            alerts.append("inode_used_percent_exceeded")
+        memory_available_mb = resources.get("memory_available_mb")
+        if (
+            min_memory_available_mb is not None
+            and memory_available_mb is not None
+            and memory_available_mb < min_memory_available_mb
+        ):
+            alerts.append("memory_available_mb_below_minimum")
     retention = report.get("retention")
     if retention:
         if (
@@ -193,6 +302,10 @@ def build_health_report(
     service_name: str = "fiscalbay-bot",
     max_consecutive_error_cycles: int | None = None,
     max_retry_queue_size: int | None = None,
+    max_disk_used_percent: float | None = None,
+    max_inode_used_percent: float | None = None,
+    min_memory_available_mb: int | None = None,
+    resource_path: str = ".",
     ignored_reasons: list[str] | None = None,
 ) -> HealthReport:
     telegram_config = load_telegram_config()
@@ -313,6 +426,7 @@ def build_health_report(
         "oldest_audit_created_at": str(retention_summary.get("oldest_audit_created_at") or ""),
         "oldest_oauth_created_at": str(retention_summary.get("oldest_oauth_created_at") or ""),
     }
+    resources = collect_resource_health(resource_path)
     ignored_reason_set = set(ignored_reasons or [])
     fatal_reasons = [reason for reason in reasons if reason not in ignored_reason_set]
     effective_ignored_reasons = [reason for reason in reasons if reason in ignored_reason_set]
@@ -343,6 +457,7 @@ def build_health_report(
         "operation_queue": operation_queue_health,
         "tenant_snapshots": tenant_snapshot_health,
         "retention": retention_health,
+        "resources": resources,
         "alerts": [],
         "service_active": None,
         "service_name": None,
@@ -353,6 +468,9 @@ def build_health_report(
         service_name=service_name,
         max_consecutive_error_cycles=max_consecutive_error_cycles,
         max_retry_queue_size=max_retry_queue_size,
+        max_disk_used_percent=max_disk_used_percent,
+        max_inode_used_percent=max_inode_used_percent,
+        min_memory_available_mb=min_memory_available_mb,
     )
     report["alerts"] = alerts
     if alerts:
@@ -385,6 +503,9 @@ def build_health_report(
         retention_oauth_overdue=(
             retention_health["oauth_terminal_overdue"] + retention_health["oauth_pending_overdue"]
         ),
+        disk_used_percent=resources["disk_used_percent"],
+        inode_used_percent=resources["inode_used_percent"],
+        memory_available_mb=resources["memory_available_mb"],
     )
     return report
 
@@ -431,6 +552,20 @@ def render_text_report(report: HealthReport) -> str:
         "oldest_audit_created_at": "",
         "oldest_oauth_created_at": "",
     }
+    default_resources: ResourceHealth = {
+        "resource_path": ".",
+        "disk_total_bytes": 0,
+        "disk_used_bytes": 0,
+        "disk_free_bytes": 0,
+        "disk_used_percent": 0.0,
+        "inode_total": None,
+        "inode_used": None,
+        "inode_free": None,
+        "inode_used_percent": None,
+        "memory_total_mb": None,
+        "memory_available_mb": None,
+        "memory_available_percent": None,
+    }
     lines = [
         f"status: {report['status']}",
         f"service_active: {report.get('service_active', 'not_checked')}",
@@ -460,6 +595,7 @@ def render_text_report(report: HealthReport) -> str:
     operation_queue = report.get("operation_queue", default_operation_queue)
     tenant_snapshots = report.get("tenant_snapshots", default_tenant_snapshots)
     retention = report.get("retention", default_retention)
+    resources = report.get("resources", default_resources)
     lines.append("reasons: " + (", ".join(str(item) for item in reasons) if reasons else "none"))
     lines.append(
         "ignored_reasons: "
@@ -496,6 +632,11 @@ def render_text_report(report: HealthReport) -> str:
             f"retention.last_oauth_deleted: {retention.get('last_oauth_deleted', 0)}",
             "retention.last_operation_queue_deleted: "
             f"{retention.get('last_operation_queue_deleted', 0)}",
+            f"resources.path: {resources.get('resource_path', '.')}",
+            f"resources.disk_used_percent: {resources.get('disk_used_percent', 0.0)}",
+            f"resources.inode_used_percent: {resources.get('inode_used_percent')}",
+            f"resources.memory_available_mb: {resources.get('memory_available_mb')}",
+            f"resources.memory_available_percent: {resources.get('memory_available_percent')}",
         ]
     )
     return "\n".join(lines)
@@ -534,6 +675,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Dimensione massima accettata della retry queue prima di fallire.",
     )
     parser.add_argument(
+        "--max-disk-used-percent",
+        type=float,
+        help="Percentuale massima di disco usato sul percorso monitorato.",
+    )
+    parser.add_argument(
+        "--max-inode-used-percent",
+        type=float,
+        help="Percentuale massima di inode usati sul percorso monitorato.",
+    )
+    parser.add_argument(
+        "--min-memory-available-mb",
+        type=int,
+        help="Memoria disponibile minima accettata, in MB.",
+    )
+    parser.add_argument(
+        "--resource-path",
+        default=".",
+        help="Percorso filesystem da usare per disco e inode. Default: directory corrente.",
+    )
+    parser.add_argument(
         "--ignore-reason",
         action="append",
         default=[],
@@ -555,6 +716,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         service_name=args.service_name,
         max_consecutive_error_cycles=args.max_consecutive_error_cycles,
         max_retry_queue_size=args.max_retry_queue_size,
+        max_disk_used_percent=args.max_disk_used_percent,
+        max_inode_used_percent=args.max_inode_used_percent,
+        min_memory_available_mb=args.min_memory_available_mb,
+        resource_path=args.resource_path,
         ignored_reasons=args.ignore_reason,
     )
     if args.json:

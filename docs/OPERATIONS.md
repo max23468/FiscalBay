@@ -190,15 +190,31 @@ Readiness multiutente nel healthcheck:
 - il report healthcheck espone ora anche `tenant_snapshots.*`, alimentato dalla reconciliation, per stato operativo sintetico tenant senza ricalcoli live
 - il report healthcheck espone ora anche `operation_queue.pending`, `operation_queue.running`, `operation_queue.failed`, `operation_queue.completed` e `operation_queue.cancelled`
 - il report healthcheck espone anche `retention.*`, inclusi ultimo pruning, audit arretrati, sessioni OAuth arretrate e `operation_queue` terminale arretrata
+- il report healthcheck espone anche `resources.*` per disco, inode e memoria disponibile della VPS
 
 Alert basilari runtime:
 
 - `deploy/alert-check.sh` esegue `fiscalbay-healthcheck` con soglie operative minime
 - `fiscalbay-alertcheck.timer` lancia il controllo ogni 5 minuti
-- gli alert minimi oggi coprono servizio `systemd` non attivo, troppi errori consecutivi e retry queue oltre soglia
-- soglie di default: `MAX_CONSECUTIVE_ERROR_CYCLES=3` e `MAX_RETRY_QUEUE_SIZE=20`
+- gli alert minimi oggi coprono servizio `systemd` non attivo, troppi errori consecutivi, retry queue oltre soglia, disco, inode e memoria disponibile
+- soglie di default: `MAX_CONSECUTIVE_ERROR_CYCLES=3`, `MAX_RETRY_QUEUE_SIZE=20`, `MAX_DISK_USED_PERCENT=85`, `MAX_INODE_USED_PERCENT=85`, `MIN_MEMORY_AVAILABLE_MB=128`
 - il fallimento del check finisce nel journal del service `fiscalbay-alertcheck`
 - lo smoke check di deploy avvia anche `fiscalbay-alertcheck.service` quando il timer e' abilitato, cosi' un errore di permessi o runtime blocca il deploy
+
+Healthcheck esterno e TLS:
+
+- `deploy/external-healthcheck.sh` controlla l'URL pubblico HTTPS del callback, di norma `/healthz`
+- se `FISCALBAY_PUBLIC_HEALTH_URL` non e' configurata, prova a derivarla da `EBAY_OAUTH_CALLBACK_URL`
+- il controllo fallisce se il certificato TLS scade entro `TLS_MIN_DAYS_VALID` giorni
+- `fiscalbay-external-healthcheck.timer` esegue il controllo ogni 15 minuti
+- lo smoke deploy avvia anche `fiscalbay-external-healthcheck.service` se il timer e' abilitato
+
+Recovery e log:
+
+- `deploy/backup.sh` salva anche unit `systemd`, configurazione `nginx` FiscalBay, env operativi leggibili in `/etc/fiscalbay` e inventario servizio
+- `deploy/restore-drill.sh` verifica periodicamente un restore separato in `data/restore-check/`
+- `deploy/log-maintenance.sh` applica vacuum del journal e pulizia dei log nginx FiscalBay gia' ruotati
+- i timer `fiscalbay-restore-drill.timer` e `fiscalbay-log-maintenance.timer` vengono installati dal setup Linux
 
 Reconciliation periodica:
 

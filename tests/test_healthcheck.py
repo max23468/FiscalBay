@@ -2,10 +2,12 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from src.fiscalbay.healthcheck import (
     build_health_report,
+    collect_resource_health,
     default_max_age_seconds,
     main,
     render_text_report,
@@ -292,6 +294,93 @@ class HealthcheckTests(unittest.TestCase):
             self.assertEqual(report["retention"]["audit_overdue"], 1)
             self.assertIn("retention_prune_missing", report["warnings"])
             self.assertIn("audit_retention_backlog", report["warnings"])
+
+    def test_collect_resource_health_reads_disk_inode_and_memory(self) -> None:
+        disk_usage = SimpleNamespace(total=1000, used=850, free=150)
+        statvfs = SimpleNamespace(f_files=100, f_ffree=20)
+        with patch("src.fiscalbay.healthcheck.shutil.disk_usage", return_value=disk_usage):
+            with patch("src.fiscalbay.healthcheck.os.statvfs", return_value=statvfs):
+                with patch(
+                    "src.fiscalbay.healthcheck._read_linux_meminfo",
+                    return_value={"MemTotal": 1024 * 1024, "MemAvailable": 256 * 1024},
+                ):
+                    resources = collect_resource_health("/opt/fiscalbay")
+
+        self.assertEqual(resources["resource_path"], "/opt/fiscalbay")
+        self.assertEqual(resources["disk_used_percent"], 85.0)
+        self.assertEqual(resources["inode_used"], 80)
+        self.assertEqual(resources["inode_used_percent"], 80.0)
+        self.assertEqual(resources["memory_total_mb"], 1024)
+        self.assertEqual(resources["memory_available_mb"], 256)
+        self.assertEqual(resources["memory_available_percent"], 25.0)
+
+    def test_build_health_report_alerts_on_resource_thresholds(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            lock_path = Path(tmpdir) / "telegram_bot.lock"
+            lock_path.write_text("pid=123\n", encoding="utf-8")
+            save_state(
+                str(db_path),
+                {
+                    "notified_order_ids": [],
+                    "notified_hashes": [],
+                    "last_check": "2026-04-05T20:00:00Z",
+                    "last_error": None,
+                    "metrics": {
+                        "orders_read": 0,
+                        "orders_with_fiscal_identifier": 0,
+                        "notifications_sent": 0,
+                        "telegram_retries": 0,
+                        "consecutive_error_cycles": 0,
+                        "errors_by_type": {},
+                    },
+                },
+            )
+
+            with patch("src.fiscalbay.healthcheck.datetime") as mock_datetime:
+                from datetime import datetime, timezone
+
+                mock_datetime.now.return_value = datetime(2026, 4, 5, 20, 2, 0, tzinfo=timezone.utc)
+                mock_datetime.fromisoformat = datetime.fromisoformat
+                config = TelegramConfig(
+                    token="x",
+                    allowed_chat_ids=None,
+                    notify_chat_ids={123},
+                    ebay_poll_interval_seconds=120,
+                    state_path=str(db_path),
+                    retry_queue_path=str(db_path),
+                    lock_path=str(lock_path),
+                )
+                resources = {
+                    "resource_path": "/opt/fiscalbay",
+                    "disk_total_bytes": 1000,
+                    "disk_used_bytes": 920,
+                    "disk_free_bytes": 80,
+                    "disk_used_percent": 92.0,
+                    "inode_total": 100,
+                    "inode_used": 91,
+                    "inode_free": 9,
+                    "inode_used_percent": 91.0,
+                    "memory_total_mb": 1024,
+                    "memory_available_mb": 64,
+                    "memory_available_percent": 6.25,
+                }
+                with patch("src.fiscalbay.healthcheck.load_telegram_config", return_value=config):
+                    with patch(
+                        "src.fiscalbay.healthcheck.collect_resource_health",
+                        return_value=resources,
+                    ):
+                        report = build_health_report(
+                            max_disk_used_percent=90,
+                            max_inode_used_percent=90,
+                            min_memory_available_mb=128,
+                            resource_path="/opt/fiscalbay",
+                        )
+
+            self.assertFalse(report["ok"])
+            self.assertIn("disk_used_percent_exceeded", report["alerts"])
+            self.assertIn("inode_used_percent_exceeded", report["alerts"])
+            self.assertIn("memory_available_mb_below_minimum", report["alerts"])
 
     def test_render_text_report_includes_reasons_and_warnings(self) -> None:
         text = render_text_report(

@@ -9,6 +9,7 @@ ENV_FILE="${3:-${APP_DIR}/.env}"
 OAUTH_SERVICE_NAME="${4:-fiscalbay-oauth}"
 ALERT_SERVICE_NAME="${5:-fiscalbay-alertcheck}"
 RECONCILE_SERVICE_NAME="${6:-fiscalbay-reconcile}"
+EXTERNAL_HEALTH_SERVICE_NAME="${EXTERNAL_HEALTH_SERVICE_NAME:-fiscalbay-external-healthcheck}"
 
 sudo systemctl is-active --quiet "${SERVICE_NAME}"
 set -a
@@ -51,6 +52,10 @@ for service in "${ALERT_SERVICE_NAME}" "${RECONCILE_SERVICE_NAME}"; do
     sudo systemctl start "${service}.service"
   fi
 done
+if sudo systemctl is-enabled --quiet "${EXTERNAL_HEALTH_SERVICE_NAME}.timer"; then
+  sudo systemctl is-active --quiet "${EXTERNAL_HEALTH_SERVICE_NAME}.timer"
+  sudo systemctl start "${EXTERNAL_HEALTH_SERVICE_NAME}.service"
+fi
 if [ -f /etc/fiscalbay/duckdns.env ]; then
   sudo systemctl is-enabled --quiet fiscalbay-duckdns.timer
   sudo systemctl is-active --quiet fiscalbay-duckdns.timer

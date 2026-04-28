@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic restore drill for FiscalBay
+
+[Timer]
+OnCalendar=Sun *-*-* 03:45:00
+Persistent=true
+Unit=fiscalbay-restore-drill.service
+
+[Install]
+WantedBy=timers.target

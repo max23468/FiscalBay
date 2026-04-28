@@ -40,6 +40,9 @@ Note:
 - il servizio `systemd` viene generato con i path reali del clone corrente
 - il file `.env` viene protetto con permessi `600`
 - viene installato e abilitato anche il timer `fiscalbay-backup.timer` per il backup giornaliero
+- vengono installati e abilitati anche i timer `fiscalbay-alertcheck.timer`,
+  `fiscalbay-reconcile.timer`, `fiscalbay-restore-drill.timer`,
+  `fiscalbay-external-healthcheck.timer` e `fiscalbay-log-maintenance.timer`
 - per il setup produttivo corrente il percorso operativo finale atteso e' `/opt/fiscalbay`
 
 ## Variabili da configurare
@@ -101,6 +104,14 @@ sudo journalctl -u fiscalbay-bot -f
 ./.venv/bin/fiscalbay-healthcheck
 ```
 
+Controlli operativi aggiuntivi:
+
+```bash
+./deploy/external-healthcheck.sh
+./deploy/service-inventory.sh
+sudo systemctl list-timers 'fiscalbay-*'
+```
+
 ## Aggiornamento dopo un push
 
 ```bash
@@ -123,6 +134,13 @@ Restore di prova:
 ./deploy/restore.sh /home/fiscalbay/maintenance-backups/<backup-dir>
 ```
 
+Restore drill:
+
+```bash
+./deploy/restore-drill.sh
+sudo systemctl status fiscalbay-restore-drill.timer
+```
+
 Restore in-place:
 
 ```bash
@@ -140,6 +158,13 @@ Verifica timer giornaliero:
 ```bash
 sudo systemctl status fiscalbay-backup.timer
 sudo systemctl list-timers fiscalbay-backup.timer
+```
+
+Manutenzione log:
+
+```bash
+./deploy/log-maintenance.sh
+sudo systemctl status fiscalbay-log-maintenance.timer
 ```
 
 ## Note operative

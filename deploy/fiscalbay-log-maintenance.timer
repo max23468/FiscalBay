@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily log maintenance for FiscalBay
+
+[Timer]
+OnCalendar=*-*-* 04:10:00
+Persistent=true
+Unit=fiscalbay-log-maintenance.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=FiscalBay external HTTPS healthcheck
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=__APP_USER__
+Group=__APP_GROUP__
+WorkingDirectory=__APP_DIR__
+ExecStart=/usr/bin/bash -lc 'exec "__APP_DIR__/deploy/external-healthcheck.sh"'

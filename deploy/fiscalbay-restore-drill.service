@@ -1,0 +1,9 @@
+[Unit]
+Description=FiscalBay restore drill
+
+[Service]
+Type=oneshot
+User=__APP_USER__
+Group=__APP_GROUP__
+WorkingDirectory=__APP_DIR__
+ExecStart=/usr/bin/bash -lc 'exec "__APP_DIR__/deploy/restore-drill.sh"'

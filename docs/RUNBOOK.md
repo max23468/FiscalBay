@@ -171,6 +171,13 @@ Include anche stato queue operativa:
 - `operation_queue.running`
 - `operation_queue.failed`
 
+Include anche pressione risorse VPS:
+
+- `resources.disk_used_percent`
+- `resources.inode_used_percent`
+- `resources.memory_available_mb`
+- `resources.memory_available_percent`
+
 Alert check periodico:
 
 ```bash
@@ -184,11 +191,51 @@ Soglie minime attuali:
 - servizio `fiscalbay-bot` attivo
 - `consecutive_error_cycles <= 3`
 - `retry_queue_size <= 20`
+- disco usato sotto `MAX_DISK_USED_PERCENT` sul path applicativo
+- inode usati sotto `MAX_INODE_USED_PERCENT` sul path applicativo
+- memoria disponibile sopra `MIN_MEMORY_AVAILABLE_MB`
 
 Override possibili via env:
 
 - `MAX_CONSECUTIVE_ERROR_CYCLES`
 - `MAX_RETRY_QUEUE_SIZE`
+- `MAX_DISK_USED_PERCENT`
+- `MAX_INODE_USED_PERCENT`
+- `MIN_MEMORY_AVAILABLE_MB`
+- `RESOURCE_PATH`
+
+Healthcheck esterno HTTPS:
+
+```bash
+./deploy/external-healthcheck.sh
+sudo systemctl status fiscalbay-external-healthcheck.timer
+sudo systemctl list-timers fiscalbay-external-healthcheck.timer
+```
+
+Il check usa `FISCALBAY_PUBLIC_HEALTH_URL`, oppure deriva `/healthz` da
+`EBAY_OAUTH_CALLBACK_URL` quando possibile. Controlla anche che il certificato TLS
+non scada entro `TLS_MIN_DAYS_VALID` giorni.
+
+Inventario rapido:
+
+```bash
+./deploy/service-inventory.sh
+```
+
+L'inventario stampa commit, branch, stato unit/timer `fiscalbay-*`, chiavi env
+presenti senza valori e pressione disco/memoria. Viene incluso anche nei backup
+quando lo script e' disponibile.
+
+Manutenzione log:
+
+```bash
+./deploy/log-maintenance.sh
+sudo systemctl status fiscalbay-log-maintenance.timer
+```
+
+Il timer applica vacuum del journal con `JOURNAL_VACUUM_TIME` e
+`JOURNAL_VACUUM_SIZE`; per nginx rimuove solo log FiscalBay gia' ruotati oltre
+`NGINX_LOG_RETENTION_DAYS`.
 
 Reconciliation periodica:
 
@@ -258,6 +305,10 @@ Asset minimi da proteggere:
 - `${APP_DIR}/.env`
 - `${APP_DIR}/data/state.db`
 - eventuali file `.legacy-json.bak` creati durante la migrazione automatica
+- unit `systemd` `fiscalbay-*`
+- configurazione `nginx` FiscalBay, se presente
+- file env operativi in `/etc/fiscalbay`, se leggibili dal job di backup
+- inventario rapido di servizio per recovery e diagnosi
 
 Backup operativo:
 
@@ -270,7 +321,9 @@ chmod +x deploy/backup.sh
 Comportamento:
 
 - crea backup in `~/maintenance-backups/`
-- include `.env`, `data/state.db` e gli eventuali `.legacy-json.bak`
+- include `.env`, `data/state.db`, gli eventuali `.legacy-json.bak`, unit
+  `systemd`, configurazione `nginx` FiscalBay, env operativi leggibili in
+  `/etc/fiscalbay` e `SERVICE_INVENTORY.txt`
 - applica retention minima di 7 backup, modificabile con `RETENTION_COUNT`
 - i nuovi setup abilitano anche il timer `systemd` `fiscalbay-backup.timer` con esecuzione giornaliera persistente
 
@@ -291,12 +344,28 @@ chmod +x deploy/restore.sh
 ./deploy/restore.sh /home/fiscalbay/maintenance-backups/<backup-dir>
 ```
 
+Restore drill periodico:
+
+```bash
+./deploy/restore-drill.sh
+sudo systemctl status fiscalbay-restore-drill.timer
+sudo systemctl list-timers fiscalbay-restore-drill.timer
+```
+
+Il drill prende l'ultimo backup disponibile, ripristina gli asset in
+`data/restore-check/<backup-dir>/` e verifica che il manifest e almeno un asset
+runtime siano presenti. Non modifica il servizio in produzione.
+
 Restore in-place solo quando serve davvero:
 
 ```bash
 cd /percorso/del/progetto
 ./deploy/restore.sh /home/fiscalbay/maintenance-backups/<backup-dir> --in-place
 ```
+
+Il restore in-place ripristina solo `.env` e `data/state.db`. Le configurazioni
+`systemd` e `nginx` vengono conservate nel backup per diagnosi o ricostruzione,
+ma non vengono sovrascritte automaticamente.
 
 Backup manuale di manutenzione gia' eseguito:
 
@@ -335,6 +404,66 @@ Health check fallisce:
 - controlla se la retry queue non si svuota
 - controlla `last_error` nello state DB
 - se trovi vecchi file `data/notified_orders.json` o `data/failed_notifications.json`, il bot ora li converte da solo a SQLite al primo avvio
+
+### Playbook incidente: token eBay
+
+Sintomi tipici: errori OAuth/eBay nel journal, `consecutive_error_cycles` in
+crescita, utenti in stato `reconnect_required`.
+
+1. leggere `./.venv/bin/fiscalbay-healthcheck --json`
+2. controllare `tenant_snapshots.reconnect_required` e `metrics.ebay_errors`
+3. verificare che `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_OAUTH_RUNAME` e
+   `EBAY_TENANT_TOKEN_KEY` siano presenti senza stamparne i valori
+4. per un tenant specifico, usare `/account` o `/tenant_health`
+5. se serve, mettere il servizio in `/service_mode degraded` finche' i tenant non
+   ricollegano l'account
+
+### Playbook incidente: callback OAuth
+
+Sintomi tipici: `/account collega` restituisce link non usabile, callback non
+raggiungibile, errori TLS o nginx.
+
+1. eseguire `./deploy/external-healthcheck.sh`
+2. controllare `sudo systemctl status fiscalbay-oauth`
+3. controllare `sudo nginx -t`
+4. verificare che l'`Accept URL` eBay coincida con `EBAY_OAUTH_CALLBACK_URL`
+5. controllare `sudo journalctl -u fiscalbay-oauth -n 100 --no-pager`
+
+### Playbook incidente: `state.db`
+
+Sintomi tipici: bot avviato ma stato incoerente, errori SQLite, retry queue o
+tenant mancanti.
+
+1. fermare il bot se il DB sembra corrotto: `sudo systemctl stop fiscalbay-bot`
+2. creare un backup fresco della situazione corrente con `./deploy/backup.sh`
+3. eseguire un restore drill sull'ultimo backup sano con `./deploy/restore-drill.sh`
+4. ripristinare in-place solo se necessario con `./deploy/restore.sh <backup> --in-place`
+5. riavviare bot e reconciliation, poi controllare healthcheck e journal
+
+### Playbook incidente: `nginx` e TLS
+
+Sintomi tipici: sito OAuth non raggiungibile, certificato in scadenza, callback
+pubblico non risponde.
+
+1. eseguire `./deploy/external-healthcheck.sh`
+2. validare nginx con `sudo nginx -t`
+3. leggere i log recenti nginx e `fiscalbay-oauth`
+4. verificare che la configurazione attiva corrisponda al backup in
+   `maintenance-backups/<backup>/nginx/`
+5. rinnovare il certificato con il percorso Certbot configurato sulla VPS
+
+### Playbook incidente: notifiche ferme
+
+Sintomi tipici: ordini letti ma nessun messaggio Telegram, retry queue in crescita,
+`telegram_errors` nel report.
+
+1. controllare `retry_queue_size` e `metrics.telegram_errors`
+2. leggere `sudo journalctl -u fiscalbay-bot -n 100 --no-pager`
+3. verificare `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_CHAT_IDS` e subscription con
+   `/settings` o `/tenant_health`
+4. eseguire `./deploy/reconcile.sh`
+5. se il problema e' esterno a Telegram o eBay, usare `/service_mode degraded`
+   finche' la coda non torna stabile
 
 ## Hardening attivo
 

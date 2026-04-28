@@ -251,6 +251,19 @@ Nota OAuth eBay:
 | `TELEGRAM_HTTP_MAX_RETRIES` | No | `5` | Numero massimo retry per Telegram |
 | `TELEGRAM_HTTP_RETRY_BASE_DELAY` | No | `0.5` | Delay base del backoff Telegram |
 
+### Variabili operative VPS
+
+| Variabile | Default | Descrizione |
+| --- | --- | --- |
+| `FISCALBAY_PUBLIC_HEALTH_URL` | derivata da `EBAY_OAUTH_CALLBACK_URL` se possibile | URL HTTPS pubblico da controllare con l'healthcheck esterno, di norma `/healthz` |
+| `MAX_DISK_USED_PERCENT` | `85` | Soglia alert per spazio disco usato sul path applicativo |
+| `MAX_INODE_USED_PERCENT` | `85` | Soglia alert per inode usati sul path applicativo |
+| `MIN_MEMORY_AVAILABLE_MB` | `128` | Soglia minima di memoria disponibile |
+| `TLS_MIN_DAYS_VALID` | `14` | Giorni minimi residui accettati per il certificato TLS pubblico |
+| `JOURNAL_VACUUM_TIME` | `14d` | Retention temporale journal applicata dalla manutenzione log |
+| `JOURNAL_VACUUM_SIZE` | `200M` | Retention dimensionale journal applicata dalla manutenzione log |
+| `NGINX_LOG_RETENTION_DAYS` | `30` | Retention dei log nginx FiscalBay gia' ruotati |
+
 ## Utilizzo CLI
 
 ### Ordini recenti

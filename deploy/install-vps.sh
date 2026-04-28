@@ -9,6 +9,9 @@ OAUTH_SERVICE_NAME="${OAUTH_SERVICE_NAME:-fiscalbay-oauth}"
 BACKUP_TIMER_NAME="${BACKUP_TIMER_NAME:-fiscalbay-backup.timer}"
 ALERT_TIMER_NAME="${ALERT_TIMER_NAME:-fiscalbay-alertcheck.timer}"
 RECONCILE_TIMER_NAME="${RECONCILE_TIMER_NAME:-fiscalbay-reconcile.timer}"
+RESTORE_DRILL_TIMER_NAME="${RESTORE_DRILL_TIMER_NAME:-fiscalbay-restore-drill.timer}"
+EXTERNAL_HEALTH_TIMER_NAME="${EXTERNAL_HEALTH_TIMER_NAME:-fiscalbay-external-healthcheck.timer}"
+LOG_MAINTENANCE_TIMER_NAME="${LOG_MAINTENANCE_TIMER_NAME:-fiscalbay-log-maintenance.timer}"
 DUCKDNS_TIMER_NAME="${DUCKDNS_TIMER_NAME:-fiscalbay-duckdns.timer}"
 
 bash "${APP_DIR}/deploy/linux-setup.sh"
@@ -25,6 +28,9 @@ sudo systemctl status "${SERVICE_NAME}" --no-pager
 sudo systemctl status "${BACKUP_TIMER_NAME}" --no-pager
 sudo systemctl status "${ALERT_TIMER_NAME}" --no-pager
 sudo systemctl status "${RECONCILE_TIMER_NAME}" --no-pager
+sudo systemctl status "${RESTORE_DRILL_TIMER_NAME}" --no-pager
+sudo systemctl status "${EXTERNAL_HEALTH_TIMER_NAME}" --no-pager
+sudo systemctl status "${LOG_MAINTENANCE_TIMER_NAME}" --no-pager
 if [ -f /etc/fiscalbay/duckdns.env ]; then
   sudo systemctl status "${DUCKDNS_TIMER_NAME}" --no-pager
 fi

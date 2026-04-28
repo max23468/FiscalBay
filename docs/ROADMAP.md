@@ -18,15 +18,7 @@ Fase 4 completata.
 
 ## Fase 5 - Robustezza VPS e Recovery
 
-- [ ] estendere i backup dal solo `state.db` a un backup ricostruibile del servizio: `.env`, unit `systemd`, configurazione `nginx` e componenti necessari al ripristino
-- [ ] introdurre un restore drill periodico del servizio, non solo del database
-- [ ] gestire meglio crescita e retention dei log di bot, oauth, reconcile e `nginx`
-- [ ] aggiungere monitoraggio minimo di disco, memoria, inode e pressione risorse sulla VPS
-- [ ] aggiungere un healthcheck esterno HTTPS oltre ai controlli locali
-- [ ] aggiungere un controllo periodico su certificati TLS e raggiungibilita' del callback pubblico
-- [ ] introdurre un inventario rapido di configurazione e stato del servizio per recovery e diagnosi
-- [ ] aggiungere un healthcheck esterno HTTPS programmato oltre allo smoke deploy
-- [ ] aggiungere playbook incidente piu' specifici per token eBay, callback OAuth, `state.db`, `nginx` e notifiche ferme
+Fase 5 completata.
 
 ## Fase 6 - Consolidamento del Servizio Pubblico
 

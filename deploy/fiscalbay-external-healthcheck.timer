@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic external HTTPS healthcheck for FiscalBay
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+Unit=fiscalbay-external-healthcheck.service
+
+[Install]
+WantedBy=timers.target
