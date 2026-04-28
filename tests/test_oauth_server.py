@@ -195,6 +195,7 @@ class OAuthServerTests(unittest.TestCase):
         )
 
         self.assertIn("https://auth.sandbox.ebay.com/oauth2/authorize?", redirect)
+        self.assertIn("prompt=login", redirect)
         self.assertIn("state=state-123", redirect)
         self.assertIn("redirect_uri=sandbox-ru-name", redirect)
         self.assertIn(

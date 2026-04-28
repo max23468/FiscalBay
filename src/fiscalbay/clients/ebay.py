@@ -355,6 +355,7 @@ def build_user_consent_url(config: Config, *, redirect_uri: str, state: str) -> 
     query = urllib.parse.urlencode(
         {
             "client_id": config.client_id,
+            "prompt": "login",
             "redirect_uri": redirect_uri,
             "response_type": "code",
             "scope": config.scopes,
