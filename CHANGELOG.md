@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/max23468/FiscalBay/compare/v0.12.1...v0.13.0) (2026-04-28)
+
+### Features
+
+* simplify Telegram command menu ([ebddbdc](https://github.com/max23468/FiscalBay/commit/ebddbdce82b16bd372fb8d830e5ddf77a2a982ce))
+* simplify release and deploy workflow ([ca3cae7](https://github.com/max23468/FiscalBay/commit/ca3cae7538a9f8f56c58b41d64fbb59ada42a80e))
+
 ## [0.12.1](https://github.com/max23468/FiscalBay/compare/v0.12.0...v0.12.1) (2026-04-28)
 
 
