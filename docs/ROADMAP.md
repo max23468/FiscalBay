@@ -26,6 +26,7 @@ Non ci sono fasi aperte bloccanti per `1.0.0`.
 - Fase 1.2 - Disconnect e reconnect piu' robusti
 - Fase 1.3 - Self-service assistito utente
 - Fase 1.4 - Admin comfort e osservabilita' leggera
+- Fase 1.5 - Security operations
 
 ## Principi 1.x
 
@@ -44,20 +45,6 @@ Principi guida:
   il cambio e' osservabile, deploy VPS e smoke check remoto
 
 ## Roadmap 1.x
-
-### 1.5.0 - Security operations
-
-Obiettivo:
-
-- rendere piu' pratiche le operazioni di sicurezza ricorrenti
-
-Direzione:
-
-- rafforzare procedure per rotazione segreti, verifica permessi e controlli
-  `.env`
-- migliorare recovery, restore drill e prove di rollback
-- documentare controlli periodici per confermare che il profilo
-  `approved_public_small` resti adeguato
 
 ### 1.6.0 - Scale readiness senza migrazione automatica
 

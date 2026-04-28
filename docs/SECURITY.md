@@ -22,6 +22,7 @@ Segreti principali:
 - `EBAY_CLIENT_ID`
 - `EBAY_CLIENT_SECRET`
 - `EBAY_REFRESH_TOKEN`
+- `EBAY_TENANT_TOKEN_KEY`
 - `TELEGRAM_BOT_TOKEN`
 
 Regole:
@@ -33,6 +34,8 @@ Regole:
 - contenitore autorizzato attuale: `/opt/fiscalbay/.env`
 - permessi attesi del file `.env`: `600`
 - evitare copie superflue di `.env` fuori da backup amministrativi controllati
+- usare `fiscalbay-security-check` o `/admin sicurezza` per verificare inventario
+  e permessi senza stampare valori segreti
 
 ## Rotazione segreti
 
@@ -54,9 +57,33 @@ Procedura minima:
 1. creare un backup amministrativamente controllato dell'attuale `.env`
 2. generare o ottenere il nuovo segreto lato provider
 3. aggiornare `/opt/fiscalbay/.env`
-4. riavviare `fiscalbay-bot`
-5. eseguire `deploy/smoke-check.sh`
-6. invalidare il segreto precedente appena confermato il corretto funzionamento
+4. eseguire `fiscalbay-security-check` e correggere eventuali alert su permessi o
+   fallback plaintext
+5. riavviare `fiscalbay-bot`
+6. eseguire `deploy/smoke-check.sh`
+7. invalidare il segreto precedente appena confermato il corretto funzionamento
+
+## Security operations ricorrenti
+
+Il controllo operativo leggero e':
+
+```bash
+fiscalbay-security-check
+```
+
+Lo stesso riepilogo e' disponibile da Telegram con `/admin sicurezza`.
+
+Il report non stampa valori segreti e copre:
+
+- permessi `.env` e `state.db`
+- presenza delle env operative richieste e consigliate
+- fallback plaintext dei token tenant
+- coerenza del profilo `approved_public_small`
+- ultimo backup manutentivo e ultimo restore drill
+
+Alert bloccanti tipici: `.env` mancante o non `600`, `state.db` con permessi
+larghi, env richieste mancanti, fallback plaintext tenant abilitato, wildcard
+Telegram senza admin configurato.
 
 ## Rischi accettati per 1.0.0
 

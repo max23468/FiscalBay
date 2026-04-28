@@ -50,6 +50,7 @@ from src.fiscalbay.telegram_commands import (
     format_admin_dashboard,
     format_admin_history,
     format_admin_maintenance_overview,
+    format_admin_security_report,
     format_order_date,
     is_admin_authorized,
 )
@@ -357,6 +358,34 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("data_request", text)
         self.assertIn("delete_requested", text)
         self.assertIn("admin_notified=True", text)
+
+    def test_format_admin_security_report_redacts_secret_values(self) -> None:
+        text = format_admin_security_report(
+            {
+                "status": "fail",
+                "alerts": ["required_env_missing"],
+                "warnings": ["backup_missing_or_stale"],
+                "env_file": {"mode": "644", "expected_mode": "600"},
+                "state_db": {"mode": "660", "expected_mode": "600_or_660"},
+                "required_env": [
+                    {"name": "TELEGRAM_BOT_TOKEN", "present": True},
+                    {"name": "EBAY_TENANT_TOKEN_KEY", "present": False},
+                ],
+                "recommended_env": [{"name": "EBAY_OAUTH_RUNAME", "present": True}],
+                "plaintext_tenant_tokens_enabled": False,
+                "telegram_allow_all": True,
+                "admin_configured": True,
+                "public_service_model": "approved_public_small",
+                "backup": {"age_hours": None, "max_age_hours": 36},
+                "restore_drill": {"age_hours": 12, "max_age_hours": 192},
+            }
+        )
+
+        self.assertIn("Security operations", text)
+        self.assertIn("required_env_missing", text)
+        self.assertIn("TELEGRAM_BOT_TOKEN", text)
+        self.assertIn("EBAY_TENANT_TOKEN_KEY", text)
+        self.assertIn("fiscalbay-security-check", text)
 
     def test_admin_maintenance_overview_includes_release_metadata(self) -> None:
         text = format_admin_maintenance_overview(

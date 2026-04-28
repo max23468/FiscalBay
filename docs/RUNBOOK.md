@@ -445,8 +445,9 @@ crescita, utenti in stato `reconnect_required`.
 2. controllare `tenant_snapshots.reconnect_required` e `metrics.ebay_errors`
 3. verificare che `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_OAUTH_RUNAME` e
    `EBAY_TENANT_TOKEN_KEY` siano presenti senza stamparne i valori
-4. per un tenant specifico, usare `/account` o `/tenant_health`
-5. se serve, mettere il servizio in `/service_mode degraded` finche' i tenant non
+4. eseguire `./.venv/bin/fiscalbay-security-check` o leggere `/admin sicurezza`
+5. per un tenant specifico, usare `/account` o `/tenant_health`
+6. se serve, mettere il servizio in `/service_mode degraded` finche' i tenant non
    ricollegano l'account
 
 ### Playbook incidente: callback OAuth

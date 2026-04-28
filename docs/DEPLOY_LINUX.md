@@ -189,6 +189,12 @@ Verifica permessi:
 ./deploy/check-secrets-perms.sh
 ```
 
+Verifica security operations senza stampare segreti:
+
+```bash
+./.venv/bin/fiscalbay-security-check
+```
+
 Verifica timer giornaliero:
 
 ```bash

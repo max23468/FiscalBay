@@ -162,7 +162,10 @@ Controllo accessi Telegram:
 - il runtime normalizza anche alias legacy come `active` e `rejected`, cosi' il controllo accessi resta coerente anche su record vecchi nel `state.db`
 - gli utenti non approvati possono solo usare `/start`, `/help`, `/altre_azioni` e `/request_access`
 - l'admin riceve una richiesta con pulsanti inline `Approva` e `Rifiuta`
-- in alternativa l'admin puo' usare `/admin_users all|pending|unlinked|reconnect|inactive`, `/tenant_health`, `/admin`, `/admin dormant [ore]`, `/admin export <telegram_user_id>`, `/admin delete_tenant <telegram_user_id> confirm`, `/approve_user <telegram_user_id>`, `/reject_user <telegram_user_id>`, `/suspend_user <telegram_user_id>` e `/reactivate_user <telegram_user_id>`
+- in alternativa l'admin puo' usare `/admin_users all|pending|unlinked|reconnect|inactive`, `/tenant_health`, `/admin`, `/admin sicurezza`, `/admin dormant [ore]`, `/admin export <telegram_user_id>`, `/admin delete_tenant <telegram_user_id> confirm`, `/approve_user <telegram_user_id>`, `/reject_user <telegram_user_id>`, `/suspend_user <telegram_user_id>` e `/reactivate_user <telegram_user_id>`
+- per controlli security operations l'admin puo' usare `/admin sicurezza`, che
+  riassume permessi `.env`, stato `state.db`, inventario env, fallback plaintext,
+  backup e restore drill senza mostrare valori segreti
 - per supporto e diagnosi rapida l'admin puo' usare
   `/admin storico [telegram_user_id] [limit]`, che legge l'audit recente senza
   introdurre una dashboard web o un nuovo archivio persistente
@@ -220,6 +223,18 @@ Readiness multiutente nel healthcheck:
 - `/admin` e `/admin manutenzione` riprendono gli stessi metadati release in
   formato compatto, cosi' il confronto tra codice deployato, tag Git e versione
   installata non richiede accesso SSH o query manuali
+
+Security operations check:
+
+- entrypoint CLI: `fiscalbay-security-check`
+- comando Telegram admin: `/admin sicurezza`
+- controlla permessi `.env` attesi a `600` e `state.db` atteso a `600` o `660`
+- verifica presenza delle env operative richieste senza stampare valori segreti
+- segnala `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS=1` come alert operativo
+- segnala `TELEGRAM_ALLOWED_CHAT_IDS=*` senza `TELEGRAM_ADMIN_USER_ID` come
+  configurazione rischiosa
+- controlla ultimo backup manutentivo e ultimo restore drill come warning se
+  mancanti o stali
 
 Alert basilari runtime:
 

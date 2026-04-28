@@ -1188,6 +1188,58 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertNotIn("oauth_failure", replies[0])
             self.assertNotIn("888", replies[0])
 
+    def test_admin_security_surfaces_security_ops_report(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+
+            with patch(
+                "src.fiscalbay.bot.build_security_ops_report",
+                return_value={
+                    "status": "ok",
+                    "alerts": [],
+                    "warnings": [],
+                    "env_file": {"mode": "600", "expected_mode": "600"},
+                    "state_db": {"mode": "660", "expected_mode": "600_or_660"},
+                    "required_env": [{"name": "TELEGRAM_BOT_TOKEN", "present": True}],
+                    "recommended_env": [{"name": "EBAY_OAUTH_RUNAME", "present": True}],
+                    "plaintext_tenant_tokens_enabled": False,
+                    "telegram_allow_all": True,
+                    "admin_configured": True,
+                    "public_service_model": "approved_public_small",
+                    "backup": {"age_hours": 2, "max_age_hours": 36},
+                    "restore_drill": {"age_hours": 24, "max_age_hours": 192},
+                },
+            ):
+                replies = process_message(
+                    text="/admin sicurezza",
+                    chat_id=123,
+                    telegram_config=config,
+                    ebay_environment="production",
+                    telegram_user_id=123,
+                )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Security operations", replies[0])
+            self.assertIn("Stato: <code>ok</code>", replies[0])
+            self.assertIn("TELEGRAM_BOT_TOKEN", replies[0])
+            self.assertIn("fiscalbay-security-check", replies[0])
+
     def test_service_mode_is_rate_limited(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"

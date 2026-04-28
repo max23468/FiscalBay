@@ -75,6 +75,7 @@ from .models import (
 )
 from .reconcile import enqueue_apply_user_access_operation, process_pending_operations
 from .release_info import collect_release_info
+from .security_ops import build_security_ops_report
 from .services.notifications import (
     fetch_new_order_records as _fetch_new_order_records,
 )
@@ -190,6 +191,7 @@ from .telegram_commands import (
     format_admin_dormant_review,
     format_admin_history,
     format_admin_maintenance_overview,
+    format_admin_security_report,
     format_admin_status_update,
     format_admin_tenant_delete_status,
     format_admin_tenant_export,
@@ -1114,6 +1116,8 @@ def _handle_admin_read_command(
             return [
                 format_admin_maintenance_overview(_build_admin_maintenance_payload(telegram_config))
             ]
+        if args and args[0] in {"security", "sicurezza"}:
+            return [format_admin_security_report(build_security_ops_report())]
         if args and args[0] in {"history", "storico", "audit"}:
             target_user_id: int | None = None
             limit = 8
@@ -2088,6 +2092,8 @@ def process_message(
             args = ["help", *args[1:]]
         elif admin_action in {"manutenzione", "maintenance"}:
             args = ["maintenance", *args[1:]]
+        elif admin_action in {"sicurezza", "security"}:
+            args = ["security", *args[1:]]
         elif admin_action in {"dormant", "dormienti", "inactive", "inattivi"}:
             args = ["dormant", *args[1:]]
         elif admin_action in {"export", "esporta", "tenant_export"}:

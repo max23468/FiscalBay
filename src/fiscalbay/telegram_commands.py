@@ -1244,6 +1244,59 @@ def format_admin_history(
     return "\n".join(lines)
 
 
+def _format_admin_env_status(rows: Iterable[Mapping[str, object]]) -> str:
+    parts = []
+    for row in rows:
+        name = html.escape(str(row.get("name") or "unknown"))
+        status = "ok" if bool(row.get("present")) else "missing"
+        parts.append(f"<code>{name}</code>=<code>{status}</code>")
+    return ", ".join(parts) if parts else "n/d"
+
+
+def format_admin_security_report(report: Mapping[str, object]) -> str:
+    env_file = report.get("env_file") or {}
+    state_db = report.get("state_db") or {}
+    backup = report.get("backup") or {}
+    restore_drill = report.get("restore_drill") or {}
+    alerts = [html.escape(str(item)) for item in report.get("alerts") or []]
+    warnings = [html.escape(str(item)) for item in report.get("warnings") or []]
+    required_env = _format_admin_env_status(report.get("required_env") or [])
+    recommended_env = _format_admin_env_status(report.get("recommended_env") or [])
+    status = html.escape(str(report.get("status") or "unknown"))
+    env_mode = html.escape(str(env_file.get("mode") or "missing"))
+    env_expected = html.escape(str(env_file.get("expected_mode") or "600"))
+    state_mode = html.escape(str(state_db.get("mode") or "missing"))
+    state_expected = html.escape(str(state_db.get("expected_mode") or "600_or_660"))
+    public_service_model = html.escape(str(report.get("public_service_model") or "n/d"))
+    backup_age = html.escape(str(backup.get("age_hours")))
+    backup_max = html.escape(str(backup.get("max_age_hours")))
+    restore_age = html.escape(str(restore_drill.get("age_hours")))
+    restore_max = html.escape(str(restore_drill.get("max_age_hours")))
+    plaintext_label = "si" if bool(report.get("plaintext_tenant_tokens_enabled")) else "no"
+    allow_all_label = "si" if bool(report.get("telegram_allow_all")) else "no"
+    admin_label = "si" if bool(report.get("admin_configured")) else "no"
+    lines = [
+        "🛡️ <b>Security operations</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"Stato: <code>{status}</code>",
+        f"Alert: <code>{', '.join(alerts) if alerts else 'none'}</code>",
+        f"Warning: <code>{', '.join(warnings) if warnings else 'none'}</code>",
+        "\n🔐 <b>Segreti e permessi</b>",
+        f".env mode: <code>{env_mode}</code> atteso <code>{env_expected}</code>",
+        f"state.db mode: <code>{state_mode}</code> atteso <code>{state_expected}</code>",
+        f"Env richieste: {required_env}",
+        f"Env consigliate: {recommended_env}",
+        f"Plaintext tenant token: <code>{plaintext_label}</code>",
+        f"Allow all Telegram: <code>{allow_all_label}</code> • admin: <code>{admin_label}</code>",
+        f"Profilo pubblico: <code>{public_service_model}</code>",
+        "\n🧯 <b>Recovery</b>",
+        f"Backup recente: <code>{backup_age}</code>h / max <code>{backup_max}</code>h",
+        f"Restore drill: <code>{restore_age}</code>h / max <code>{restore_max}</code>h",
+        "CLI: <code>fiscalbay-security-check</code>.",
+    ]
+    return "\n".join(lines)
+
+
 def format_admin_maintenance_overview(payload: Mapping[str, object]) -> str:
     dashboard = payload.get("dashboard") or {}
     metrics = dashboard.get("metrics") or {}
@@ -1800,6 +1853,7 @@ def format_admin_command_help() -> str:
         "• <code>/admin export &lt;id&gt;</code> → export tenant senza segreti\n"
         "• <code>/admin delete_tenant &lt;id&gt; confirm</code> → cancellazione operativa\n"
         "• <code>/admin service normal|maintenance|degraded</code> → modalita' servizio\n"
+        "• <code>/admin sicurezza</code> → check security operations\n"
         "• <code>/admin storico [id] [limit]</code> → audit operativo recente\n"
         "• <code>/admin_users all|pending|unlinked|reconnect|inactive</code> → liste utenti\n"
         "• <code>/tenant_health [user_id]</code> → salute tenant compatta\n"

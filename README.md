@@ -387,7 +387,20 @@ Oppure in JSON:
 fiscalbay-healthcheck --json
 ```
 
-Il controllo verifica almeno:
+### Security Operations Check
+
+Per verificare controlli ricorrenti di sicurezza senza esporre segreti:
+
+```bash
+fiscalbay-security-check
+```
+
+Il report controlla permessi `.env` e `state.db`, presenza delle env operative
+richieste, fallback plaintext dei token tenant, profilo `approved_public_small`,
+ultimo backup e ultimo restore drill. In Telegram l'admin puo' leggere la stessa
+sintesi con `/admin sicurezza`.
+
+L'healthcheck verifica almeno:
 
 - presenza del lock del bot
 - freschezza di `last_check`
@@ -479,6 +492,7 @@ Comandi admin:
 - `/admin` (admin)
 - `/ping` (admin, diagnostica rapida)
 - `/admin manutenzione` (admin)
+- `/admin sicurezza` (admin)
 - `/admin storico [telegram_user_id] [limit]` (admin)
 - `/admin_users all|pending|unlinked|reconnect|inactive` (admin)
 - `/tenant_health [telegram_user_id]` (admin)
@@ -510,6 +524,9 @@ Comportamento:
 - quando un nuovo utente viene visto per la prima volta dal runtime, l'admin riceve una notifica proattiva con user id/chat id per gestire subito approvazione o rifiuto
 - l'admin puo' approvare o rifiutare richieste dal messaggio inline o con `/approve_user <telegram_user_id>` e `/reject_user <telegram_user_id>`
 - `/admin_users` mostra all'admin lo stato degli utenti registrati (`new`, `pending`, `approved`, `blocked`, `admin`) e accorpa i filtri prima esposti come comandi separati
+- `/admin sicurezza` mostra il report security operations senza stampare valori
+  segreti: permessi `.env`, stato `state.db`, inventario env, backup e restore
+  drill
 - `/admin storico` mostra gli ultimi eventi audit operativi e puo' filtrare per
   tenant, cosi' supporto e diagnosi restano dentro Telegram
 - gli alias granulari precedenti (`/connect`, `/disconnect`, `/reconnect_status`, `/notifications`, `/leave_bot`, `/ultimi`, `/tutti`, `/ordine`, `/review_orders`, `/report_summary`, `/priority_orders`, `/why_not_notified`, `/service_status`, `/policy`, `/users`, `/pending_users`, `/unlinked_users`, `/reconnect_users`, `/inactive_users`, `/admin_dashboard`, `/maintenance_overview`) sono stati accorpati e ora rimandano ai comandi canonici
