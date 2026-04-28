@@ -1010,10 +1010,19 @@ def format_admin_status_update(
 
 
 def format_admin_dashboard(dashboard: Mapping[str, object]) -> str:
+    product_metrics = dashboard.get("product_metrics") or {}
     metrics = dashboard.get("metrics") or {}
     queue = dashboard.get("queue") or {}
     alerts = dashboard.get("alerts") or []
     mode = html.escape(str(dashboard.get("service_mode") or "normal"))
+    orders_read = html.escape(str(product_metrics.get("orders_read", 0)))
+    orders_with_fiscal = html.escape(str(product_metrics.get("orders_with_fiscal_identifier", 0)))
+    fiscal_rate = html.escape(str(product_metrics.get("fiscal_identifier_rate_percent", 0)))
+    notifications_sent = html.escape(str(product_metrics.get("notifications_sent", 0)))
+    notification_rate = html.escape(str(product_metrics.get("notification_rate_percent", 0)))
+    tenant_users = html.escape(str(product_metrics.get("tenant_users", 0)))
+    active_token_sets = html.escape(str(product_metrics.get("active_token_sets", 0)))
+    linked_rate = html.escape(str(product_metrics.get("approved_to_linked_rate_percent", 0)))
     oauth_failures_recent = html.escape(str(metrics.get("oauth_failures_recent", 0)))
     pending = html.escape(str(metrics.get("pending_users", 0)))
     approved = html.escape(str(metrics.get("approved_users", 0)))
@@ -1029,6 +1038,14 @@ def format_admin_dashboard(dashboard: Mapping[str, object]) -> str:
         "🧭 <b>Admin Dashboard</b>",
         "━━━━━━━━━━━━━━━━━━━━━━━━",
         f"🛠️ Modalita' servizio: <code>{mode}</code>",
+        "\n📈 <b>Metriche prodotto</b>",
+        f"📦 Ordini letti: <code>{orders_read}</code> • fiscali: "
+        f"<code>{orders_with_fiscal}</code> (<code>{fiscal_rate}%</code>)",
+        f"📩 Notifiche inviate: <code>{notifications_sent}</code> "
+        f"(<code>{notification_rate}%</code> sugli ordini fiscali)",
+        f"👥 Tenant: <code>{tenant_users}</code> • token attivi: "
+        f"<code>{active_token_sets}</code> • linked/approved: <code>{linked_rate}%</code>",
+        "\n🧭 <b>Governance</b>",
         f"🕓 Pending: <code>{pending}</code> • ✅ Approved: <code>{approved}</code>",
         f"🔗 Tenant linked: <code>{linked}</code> • "
         f"⌛ Approved non operativi: <code>{approved_unlinked}</code>",

@@ -190,6 +190,16 @@ Include anche policy e soglie del servizio pubblico:
 - `public_service.sqlite_migration_recommended`
 - `public_service.scale_within_policy`
 
+Metriche prodotto lato admin:
+
+- `/admin` mostra il set stabile minimo per governare il servizio piccolo:
+  ordini letti, ordini con dato fiscale, notifiche inviate, tenant noti, token
+  attivi e rapporto tra utenti approvati e account collegati
+- queste metriche vanno lette come segnale operativo di qualita' e carico, non
+  come analytics commerciali
+- se il rapporto linked/approved resta basso, usare `/admin_users unlinked` e
+  `/tenant_health` prima di allargare altri utenti
+
 Alert check periodico:
 
 ```bash

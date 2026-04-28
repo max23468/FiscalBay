@@ -379,6 +379,9 @@ Decisioni valide oggi:
 - audit log minimo obbligatorio per eventi sensibili
 - rate limiting minimo per utente sui comandi sensibili, configurabile con
   `FISCALBAY_RATE_LIMIT_*`
+- metriche prodotto minime visibili stabilmente in `/admin`: ordini letti,
+  ordini con dato fiscale, notifiche inviate, tenant noti, token attivi e
+  rapporto account collegati / utenti approvati
 - token tenant cifrati a riposo
 - isolamento dati per utente/chat/account come default del runtime
 

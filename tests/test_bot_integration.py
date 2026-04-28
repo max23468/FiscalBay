@@ -925,6 +925,91 @@ class BotIntegrationTests(unittest.TestCase):
         self.assertIn("Utenti approvati", policy_replies[0])
         self.assertIn("Rate limiting per utente", policy_replies[0])
 
+    def test_admin_dashboard_surfaces_stable_product_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123, 456},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+            save_state(
+                str(db_path),
+                {
+                    "notified_order_ids": [],
+                    "notified_hashes": [],
+                    "last_check": "2026-04-06T10:00:00Z",
+                    "last_error": None,
+                    "metrics": {
+                        "orders_read": 10,
+                        "orders_with_fiscal_identifier": 4,
+                        "notifications_sent": 2,
+                        "telegram_retries": 0,
+                        "consecutive_error_cycles": 0,
+                        "errors_by_type": {},
+                    },
+                },
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=999,
+                chat_id=456,
+                username="approved_user",
+                display_name="Approved User",
+                chat_type="private",
+            )
+            update_telegram_user_status(
+                str(db_path),
+                999,
+                TELEGRAM_USER_STATUS_APPROVED,
+                updated_at="2026-04-06T10:00:00Z",
+            )
+            upsert_linked_ebay_account(
+                str(db_path),
+                LinkedEbayAccount(
+                    telegram_user_id=999,
+                    ebay_user_id="ready-ebay",
+                    environment="production",
+                    linked_at="2026-04-06T10:05:00Z",
+                    status="linked",
+                ),
+            )
+            account = resolve_linked_ebay_account(str(db_path), 999, "production")
+            self.assertIsNotNone(account)
+            upsert_ebay_token_set(
+                str(db_path),
+                EbayTokenSet(
+                    ebay_account_id=account.id or 0,
+                    refresh_token_encrypted="encrypted",
+                    status="active",
+                ),
+            )
+
+            replies = process_message(
+                text="/admin",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+
+            self.assertIn("Metriche prodotto", replies[0])
+            self.assertIn("Ordini letti: <code>10</code>", replies[0])
+            self.assertIn("fiscali: <code>4</code> (<code>40%</code>)", replies[0])
+            self.assertIn("Notifiche inviate: <code>2</code>", replies[0])
+            self.assertIn("linked/approved: <code>50%</code>", replies[0])
+
     def test_service_mode_is_rate_limited(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"

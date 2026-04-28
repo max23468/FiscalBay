@@ -105,6 +105,13 @@ Queste sono esposte oggi in due posti operativi:
 - comando Telegram `/stato`
 - `./.venv/bin/fiscalbay-healthcheck --json`
 
+Il comando admin `/admin` espone inoltre il set stabile di metriche prodotto
+minime per governance quotidiana:
+
+- ordini letti e quota con dato fiscale
+- notifiche inviate e rapporto sulle righe fiscali
+- tenant noti, token attivi e rapporto account collegati / utenti approvati
+
 Il comando Telegram `/stato` espone anche:
 
 - `Scope runtime`, per vedere se la chat sta usando contesto `tenant` o `global`

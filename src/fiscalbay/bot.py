@@ -805,6 +805,39 @@ def _load_tenant_ux_context_for_command(
     )
 
 
+def _percentage(numerator: int, denominator: int) -> int:
+    if denominator <= 0:
+        return 0
+    return int(round((numerator / denominator) * 100))
+
+
+def _build_product_metrics_payload(telegram_config: TelegramConfig) -> dict[str, int]:
+    runtime_state = load_runtime_state(telegram_config.state_path)
+    runtime_metrics = runtime_state.metrics
+    readiness = summarize_multi_tenant_readiness(telegram_config.state_path)
+    approved_users = int(readiness.get("approved_users", 0))
+    linked_accounts = int(readiness.get("linked_accounts", 0))
+    fiscal_orders = int(runtime_metrics.orders_with_fiscal_identifier)
+    return {
+        "orders_read": int(runtime_metrics.orders_read),
+        "orders_with_fiscal_identifier": fiscal_orders,
+        "fiscal_identifier_rate_percent": _percentage(
+            fiscal_orders,
+            int(runtime_metrics.orders_read),
+        ),
+        "notifications_sent": int(runtime_metrics.notifications_sent),
+        "notification_rate_percent": _percentage(
+            int(runtime_metrics.notifications_sent),
+            fiscal_orders,
+        ),
+        "tenant_users": int(readiness.get("tenant_users", 0)),
+        "approved_users": approved_users,
+        "linked_accounts": linked_accounts,
+        "active_token_sets": int(readiness.get("active_token_sets", 0)),
+        "approved_to_linked_rate_percent": _percentage(linked_accounts, approved_users),
+    }
+
+
 def _build_admin_dashboard_payload(telegram_config: TelegramConfig) -> dict[str, object]:
     rows = _build_user_rows(telegram_config)
     now = datetime.now(timezone.utc)
@@ -910,6 +943,7 @@ def _build_admin_dashboard_payload(telegram_config: TelegramConfig) -> dict[str,
     inactive_users = len(_build_inactive_user_rows(telegram_config))
     return {
         "service_mode": service_mode,
+        "product_metrics": _build_product_metrics_payload(telegram_config),
         "metrics": {
             "pending_users": pending_users,
             "approved_users": approved_users,

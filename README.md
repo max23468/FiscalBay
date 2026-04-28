@@ -527,6 +527,11 @@ Nello stato locale salva:
 
 Se cambi `EBAY_ORDER_STATE_PATH` o `EBAY_NOTIFY_RETRY_PATH`, assicurati che la directory esista o sia scrivibile.
 
+Il comando admin `/admin` espone stabilmente anche un blocco di metriche prodotto
+minime: ordini letti, ordini con dato fiscale, notifiche inviate, tenant noti,
+token attivi e rapporto tra utenti approvati e account collegati. Sono metriche
+operative per governare un servizio piccolo e curato, non analytics commerciali.
+
 Se su un ambiente esistente trovi ancora i vecchi file JSON `data/notified_orders.json` o `data/failed_notifications.json`, il bot li migra automaticamente a SQLite al primo avvio e conserva una copia `.legacy-json.bak`.
 
 ### Lock del Processo

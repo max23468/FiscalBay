@@ -27,3 +27,7 @@ Fase 6 completata.
 ## Fase 7 - Rate Limiting Minimo
 
 Fase 7 completata.
+
+## Fase 8 - Metriche Prodotto Admin
+
+Fase 8 completata.
