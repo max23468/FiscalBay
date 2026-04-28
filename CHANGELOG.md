@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.1](https://github.com/max23468/FiscalBay/compare/v0.12.0...v0.12.1) (2026-04-28)
+
+
+### Bug Fixes
+
+* hide ping from non-admin bot commands ([518ae39](https://github.com/max23468/FiscalBay/commit/518ae39bc22cf648fe565ab4a7cea931964fcdaa))
+* hide Telegram admin controls without configured admin ([071dcfc](https://github.com/max23468/FiscalBay/commit/071dcfc6468212b092192e8f141e1d3803d4515e))
+
 ## [0.12.0](https://github.com/max23468/FiscalBay/compare/v0.11.0...v0.12.0) (2026-04-28)
 
 
