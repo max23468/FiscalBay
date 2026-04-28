@@ -22,6 +22,7 @@ fiscalbay-fix-git-lock = "fiscalbay.git_utils:main"
 fiscalbay-git-safe = "fiscalbay.git_utils:safe_git_main"
 fiscalbay-healthcheck = "fiscalbay.healthcheck:main"
 fiscalbay-reconcile = "fiscalbay.reconcile:main"
+fiscalbay-fiscal-export = "fiscalbay.fiscal_export:main"
 fiscalbay-scale-check = "fiscalbay.scale_readiness:main"
 fiscalbay-security-check = "fiscalbay.security_ops:main"
 

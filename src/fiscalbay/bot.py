@@ -45,6 +45,7 @@ from .config import (
     load_telegram_config,
 )
 from .errors import ConfigurationError, EbayApiError, TelegramApiError
+from .fiscal_export import build_fiscal_export_report
 from .logging_utils import log_event
 from .models import (
     CAPABILITY_MANAGE_NOTIFICATIONS,
@@ -160,6 +161,7 @@ from .telegram_commands import (
     CALLBACK_ADMIN_USERS_PENDING,
     CALLBACK_ADMIN_USERS_RECONNECT,
     CALLBACK_HELP,
+    CALLBACK_ORDINI_EXPORT,
     CALLBACK_ORDINI_PRIORITY,
     CALLBACK_ORDINI_REPORT,
     CALLBACK_ORDINI_REVIEW,
@@ -203,6 +205,7 @@ from .telegram_commands import (
     format_data_request_help,
     format_data_request_status,
     format_disconnect_status,
+    format_fiscal_export_messages,
     format_leave_status,
     format_notifications_status,
     format_order_notification_summary,
@@ -249,6 +252,7 @@ _COMPAT_EXPORT_REFERENCES = (
     CALLBACK_ADMIN_USERS_PENDING,
     CALLBACK_ADMIN_USERS_RECONNECT,
     CALLBACK_HELP,
+    CALLBACK_ORDINI_EXPORT,
     CALLBACK_ORDINI_PRIORITY,
     CALLBACK_ORDINI_REPORT,
     CALLBACK_ORDINI_REVIEW,
@@ -534,7 +538,7 @@ def _format_cooldown_message(command: str, remaining_seconds: int) -> str:
     return (
         "⏱️ <b>Richiesta troppo ravvicinata</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"Il comando <code>{command}</code> e' in cooldown per altri "
+        f"Il comando <code>{command}</code> è in cooldown per altri "
         f"<code>{remaining_seconds}</code> secondi.\n"
         "Attendi un attimo e riprova."
     )
@@ -602,7 +606,7 @@ def _connect_cooldown_remaining_seconds(
 def _service_mode_blocks_command(mode: str, command: str) -> str | None:
     if mode == SERVICE_MODE_MAINTENANCE and command == "/connect":
         return (
-            "🛠️ <b>Modalita' manutenzione</b>\n"
+            "🛠️ <b>Modalità manutenzione</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "I nuovi collegamenti eBay sono temporaneamente sospesi.\n"
             "I comandi informativi restano disponibili."
@@ -618,11 +622,11 @@ def _service_mode_blocks_command(mode: str, command: str) -> str | None:
         "/reactivate_user",
     }:
         return (
-            "🚧 <b>Servizio in modalita' degradata</b>\n"
+            "🚧 <b>Servizio in modalità degradata</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "La consultazione resta disponibile, ma le azioni operative "
             "sono temporaneamente sospese.\n"
-            "Riprova piu' tardi oppure usa <code>/stato servizio</code>."
+            "Riprova più tardi oppure usa <code>/stato servizio</code>."
         )
     return None
 
@@ -881,7 +885,7 @@ def _build_admin_history_rows(
 def _tenant_not_linked_message(title: str) -> list[str]:
     return [
         f"{title}\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "Questa chat non e' ancora associata a un tenant Telegram noto."
+        "Questa chat non è ancora associata a un tenant Telegram noto."
     ]
 
 
@@ -1007,7 +1011,7 @@ def _build_admin_dashboard_payload(telegram_config: TelegramConfig) -> dict[str,
                 "code": "oauth_sessions_expired_pending_cleanup",
                 "message": (
                     f"{oauth_summary.get('pending_expired', 0)} sessioni OAuth risultano "
-                    "pending ma gia' scadute"
+                    "pending ma già scadute"
                 ),
             }
         )
@@ -1764,7 +1768,7 @@ def explain_why_order_not_notified(
     order_id = order.orderId
     fingerprint = record_fingerprint(order)
     delivery_status = "delivery_unknown"
-    delivery_headline = "Il contesto di recapito di questa chat non e' disponibile."
+    delivery_headline = "Il contesto di recapito di questa chat non è disponibile."
     delivery_detail = (
         "Il comando non riesce a verificare preferenze notifiche senza chat o utente Telegram."
     )
@@ -1789,7 +1793,7 @@ def explain_why_order_not_notified(
         )
         if chat is None:
             delivery_status = "chat_not_registered"
-            delivery_headline = "Questa chat non e' ancora registrata come target notifiche."
+            delivery_headline = "Questa chat non è ancora registrata come target notifiche."
             delivery_detail = "Invia un comando al bot da questa chat e verifica poi /settings."
         elif not chat.notifications_enabled:
             delivery_status = "chat_notifications_disabled"
@@ -1805,7 +1809,7 @@ def explain_why_order_not_notified(
             )
         elif not subscription.enabled:
             delivery_status = "chat_subscription_disabled"
-            delivery_headline = "La subscription notifiche di questa chat e' disattivata."
+            delivery_headline = "La subscription notifiche di questa chat è disattivata."
             delivery_detail = (
                 "Riattiva la subscription con /settings notifiche on per ricevere nuovi ordini."
             )
@@ -1813,7 +1817,7 @@ def explain_why_order_not_notified(
             delivery_status = "delivery_ready"
             delivery_headline = "Questa chat risulta abilitata a ricevere notifiche."
             delivery_detail = (
-                "Se l'ordine e' eleggibile e non gia' deduplicato, il recapito qui e' pronto."
+                "Se l'ordine è eleggibile e non già deduplicato, il recapito qui è pronto."
             )
     if not order_id:
         return {
@@ -1844,7 +1848,7 @@ def explain_why_order_not_notified(
             "order_id": order_id,
             "environment": environment,
             "status": "already_notified_order_id",
-            "headline": "L'ordine risulta gia' notificato o tracciato come visto.",
+            "headline": "L'ordine risulta già notificato o tracciato come visto.",
             "detail": "La deduplica per orderId evita una seconda notifica.",
             "delivery_status": delivery_status,
             "delivery_headline": delivery_headline,
@@ -1855,7 +1859,7 @@ def explain_why_order_not_notified(
             "order_id": order_id,
             "environment": environment,
             "status": "already_notified_fingerprint",
-            "headline": "L'ordine collide con una fingerprint gia' notificata.",
+            "headline": "L'ordine collide con una fingerprint già notificata.",
             "detail": "La deduplica per fingerprint evita duplicati anche oltre il solo orderId.",
             "delivery_status": delivery_status,
             "delivery_headline": delivery_headline,
@@ -1868,7 +1872,7 @@ def explain_why_order_not_notified(
         "headline": "Con i criteri attuali questo ordine risulta notificabile.",
         "detail": (
             "Se entra in una finestra nuova del polling e la chat ha notifiche attive, "
-            "il bot lo notifichera'."
+            "il bot lo notificherà."
         ),
         "delivery_status": delivery_status,
         "delivery_headline": delivery_headline,
@@ -2207,11 +2211,11 @@ def process_message(
 
     if command == "/service_mode":
         if not is_admin_user:
-            return ["Solo l'admin puo' usare questo comando."]
+            return ["Solo l'admin può usare questo comando."]
         if not args:
             return [
                 "Uso corretto: <code>/service_mode normal|maintenance|degraded</code>\n"
-                f"Modalita' corrente: <code>{service_mode}</code>."
+                f"Modalità corrente: <code>{service_mode}</code>."
             ]
         requested_mode = str(args[0]).strip().lower()
         if requested_mode not in SERVICE_MODES:
@@ -2247,9 +2251,9 @@ def process_message(
             details={"previous_mode": service_mode},
         )
         return [
-            "🛠️ <b>Modalita' servizio aggiornata</b>\n"
+            "🛠️ <b>Modalità servizio aggiornata</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"Nuova modalita': <code>{requested_mode}</code>."
+            f"Nuova modalità: <code>{requested_mode}</code>."
         ]
 
     if command == "/request_access":
@@ -2265,9 +2269,9 @@ def process_message(
             return [format_access_required_status(TELEGRAM_USER_STATUS_ADMIN, is_admin=True)]
         if has_telegram_user_capability(user_status, CAPABILITY_USE_BOT):
             return [
-                "✅ <b>Accesso gia' approvato</b>\n"
+                "✅ <b>Accesso già approvato</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "Il tuo account e' gia' abilitato all'uso del bot."
+                "Il tuo account è già abilitato all'uso del bot."
             ]
         if is_blocked_telegram_user_status(user_status):
             return [format_access_request_status(blocked=True)]
@@ -2354,10 +2358,10 @@ def process_message(
         return [format_access_request_status(admin_notified=admin_notified)]
 
     if command == "/ping" and telegram_config.admin_user_id is not None and not is_admin_user:
-        return ["Solo l'admin puo' usare questo comando."]
+        return ["Solo l'admin può usare questo comando."]
 
     if command in ADMIN_ONLY_COMMANDS and not is_admin_user:
-        return ["Solo l'admin puo' usare questo comando."]
+        return ["Solo l'admin può usare questo comando."]
 
     if command == "/admin" and args:
         admin_action = str(args[0]).strip().lower()
@@ -2806,7 +2810,7 @@ def process_message(
                             "environment": resolved_environment,
                             "status": "order_not_found",
                             "headline": (
-                                "L'ordine non e' stato trovato con le credenziali correnti."
+                                "L'ordine non è stato trovato con le credenziali correnti."
                             ),
                             "detail": (
                                 "Verifica orderId, ambiente e collegamento account prima "
@@ -2871,6 +2875,23 @@ def process_message(
             assert isinstance(records, list)
             normalized = [coerce_order_record(item) for item in records]
             return format_priority_records(normalized)
+        if order_action in {"export", "esporta", "csv"}:
+            options = options_for_command("/tutti", order_args)
+            try:
+                report = request_with_backoff(
+                    lambda: build_fiscal_export_report(
+                        options,
+                        fetch_records_fn=lambda export_options: fetch_records_for_environment_fn(
+                            resolved_environment,
+                            export_options,
+                        ),
+                    ),
+                    label="fetch_records_ordini_export",
+                )
+            except ConfigurationError as exc:
+                return [f"⚠️ {exc}"]
+            assert not isinstance(report, list)
+            return format_fiscal_export_messages(report)
         return [format_orders_command_help()]
 
     if command == "/stato":
@@ -2932,7 +2953,7 @@ def process_message(
                         "order_id": order_id,
                         "environment": resolved_environment,
                         "status": "order_not_found",
-                        "headline": "L'ordine non e' stato trovato con le credenziali correnti.",
+                        "headline": "L'ordine non è stato trovato con le credenziali correnti.",
                         "detail": (
                             "Verifica orderId, ambiente e collegamento account prima di riprovare."
                         ),
@@ -3230,7 +3251,7 @@ def process_message(
         if current_status == TELEGRAM_USER_STATUS_ADMIN:
             return [
                 "🚪 <b>Disattiva uso bot</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "Per un account admin questo comando non e' disponibile.\n"
+                "Per un account admin questo comando non è disponibile.\n"
                 "Usa <code>/account scollega</code> se vuoi scollegare solo eBay."
             ]
         timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

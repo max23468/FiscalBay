@@ -133,7 +133,7 @@ def build_safe_git_parser() -> argparse.ArgumentParser:
         "--wait-seconds",
         type=float,
         default=5.0,
-        help="Secondi massimi di attesa se index.lock e' detenuto da un processo attivo.",
+        help="Secondi massimi di attesa se index.lock è detenuto da un processo attivo.",
     )
     parser.add_argument(
         "git_args",

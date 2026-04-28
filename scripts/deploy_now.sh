@@ -123,7 +123,7 @@ fi
 
 if [ "${RUN_PUSH}" = true ]; then
   if [ -z "${branch}" ]; then
-    echo "Errore: HEAD detached. Usa --skip-push e --ref con una ref gia' pubblicata." >&2
+    echo "Errore: HEAD detached. Usa --skip-push e --ref con una ref già pubblicata." >&2
     exit 1
   fi
   echo "Push origin/${branch}..."

@@ -332,7 +332,7 @@ try:
 except subprocess.CalledProcessError:
     pass
 else:
-    raise SystemExit(f"Tag gia' esistente: {next_tag}")
+    raise SystemExit(f"Tag già esistente: {next_tag}")
 
 entry = changelog_entry(latest_tag or None, next_version, commits)
 if not dry_run:

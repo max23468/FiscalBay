@@ -16,14 +16,14 @@ senza trasformare il web nel punto di ingresso operativo principale.
 
 ## Scelta DNS
 
-Duck DNS puo' essere usato in due modi:
+Duck DNS può essere usato in due modi:
 
 - dominio Duck DNS diretto: `https://nome.duckdns.org`
 - dominio personalizzato: `https://connect.tuodominio.it` con record `CNAME`
   verso `nome.duckdns.org`
 
-Per un dominio personalizzato e' consigliato usare un sottodominio, per esempio
-`connect.tuodominio.it`. Il dominio root `tuodominio.it` spesso non puo' essere
+Per un dominio personalizzato è consigliato usare un sottodominio, per esempio
+`connect.tuodominio.it`. Il dominio root `tuodominio.it` spesso non può essere
 un `CNAME`; in quel caso usa un record `A` verso l'IP della VPS, oppure una
 funzione `ALIAS` / `ANAME` se il provider DNS la supporta.
 
@@ -89,7 +89,7 @@ sudo dnf install -y nginx certbot python3-certbot-nginx curl bind-utils
 sudo systemctl enable --now nginx
 ```
 
-Su sistemi Debian/Ubuntu il comando equivalente e':
+Su sistemi Debian/Ubuntu il comando equivalente è:
 
 ```bash
 sudo apt-get update
@@ -97,7 +97,7 @@ sudo apt-get install -y nginx certbot python3-certbot-nginx curl dnsutils
 sudo systemctl enable --now nginx
 ```
 
-Se sulla distribuzione della VPS `certbot` non e' disponibile dai repository
+Se sulla distribuzione della VPS `certbot` non è disponibile dai repository
 standard, abilita il repository consigliato dal provider della distribuzione e
 ripeti l'installazione.
 
@@ -159,7 +159,7 @@ Nel RuName eBay usato da `EBAY_OAUTH_RUNAME` configura:
 - Privacy Policy URL: `https://connect.tuodominio.it/privacy`
 - Auth Accepted URL / About URL, se richiesto dal portale: `https://connect.tuodominio.it/about`
 
-Nota importante: verso eBay FiscalBay invia il `RuName`, non la URL libera. La URL
+Nota importante: verso eBay FiscalBay invia il `RuName`, non un URL libero. L'URL
 pubblica resta comunque necessaria per ricevere il callback e deve coincidere con
 la Accept URL configurata nel portale eBay.
 
@@ -180,4 +180,4 @@ https://connect.tuodominio.it/oauth/start
 ```
 
 Se il link apre eBay e il consenso torna alla pagina di conferma FiscalBay, il
-dominio pubblico HTTPS e' correttamente collegato al flusso OAuth.
+dominio pubblico HTTPS è correttamente collegato al flusso OAuth.

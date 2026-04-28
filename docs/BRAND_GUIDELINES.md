@@ -7,7 +7,7 @@ Linee guida operative per il brand pubblico del prodotto e per la sua applicazio
 - nome prodotto: `FiscalBay`
 - descrizione breve: `Assistente fiscale ordini per venditori eBay`
 - promessa: aiutare i seller eBay a leggere rapidamente identificativi fiscali, stato account e segnali operativi
-- personalita': affidabile, operativa, chiara, professionale
+- personalità: affidabile, operativa, chiara, professionale
 - tono di voce: diretto, rassicurante, orientato al prossimo passo
 
 ## Posizionamento
@@ -15,7 +15,7 @@ Linee guida operative per il brand pubblico del prodotto e per la sua applicazio
 - categoria: assistente operativo B2B per seller eBay
 - percezione desiderata: strumento serio, utile ogni giorno, non "botino tecnico"
 - vantaggio chiave: rende consultabili e notificabili i dati fiscali presenti negli ordini eBay in un flusso Telegram semplice
-- messaggio chiave: `FiscalBay rende piu' rapido il controllo operativo di identificativi fiscali, account e ordini eBay in Telegram.`
+- messaggio chiave: `FiscalBay rende più rapido il controllo operativo di identificativi fiscali, account e ordini eBay in Telegram.`
 
 ## Naming Architecture
 
@@ -26,14 +26,14 @@ Linee guida operative per il brand pubblico del prodotto e per la sua applicazio
 ## Voice And Copy
 
 - apri i messaggi spiegando cosa succede e cosa fare dopo
-- preferisci `collega account eBay` invece di formule piu' tecniche
+- preferisci `collega account eBay` invece di formule più tecniche
 - preferisci `prossimo passo` quando il bot richiede un'azione
 - evita claim eccessivi o promesse di dati non disponibili
 - quando possibile, separa stato, contesto e azione in tre righe chiare
 
 ### Esempi di tono
 
-- bene: `Il tuo accesso e' attivo e l'account eBay risulta collegato.`
+- bene: `Il tuo accesso è attivo e l'account eBay risulta collegato.`
 - bene: `Prossimo passo: usa /account collega per completare il reconnect.`
 - da evitare: `Sistema correttamente inizializzato.`
 - da evitare: `L'utente non possiede capability sufficienti.`
@@ -67,7 +67,7 @@ Linee guida operative per il brand pubblico del prodotto e per la sua applicazio
 ## Typography
 
 - stile: sans moderna, chiara, leggibile
-- priorita': gerarchia netta, pochi pesi, alto contrasto
+- priorità: gerarchia netta, pochi pesi, alto contrasto
 - uso consigliato nei materiali: titoli compatti, corpo testo sobrio, nessun effetto decorativo
 
 ## Asset Repository
@@ -84,7 +84,7 @@ Il set finale unisce tre segnali:
 
 - una tessera bianca inclinata come richiamo ai dati fiscali ordine
 - piccoli accenti colore che evocano il mondo eBay senza imitarne il logo
-- una base navy molto solida, per dare affidabilita' e leggibilita' in piccolo
+- una base navy molto solida, per dare affidabilità e leggibilità in piccolo
 
 ## Telegram Application
 
@@ -120,7 +120,7 @@ Per queste due superfici usare BotFather e gli asset in `assets/branding/`.
 
 - tagline: `Assistente fiscale ordini per venditori eBay`
 - sottotitolo operativo: `Controlla identificativi fiscali, stato account e ordini eBay da un'unica chat.`
-- promessa corta: `FiscalBay ti aiuta a controllare account e ordini eBay piu' rapidamente.`
+- promessa corta: `FiscalBay ti aiuta a controllare account e ordini eBay più rapidamente.`
 - CTA primaria sito: `Apri Telegram`
 - CTA secondaria sito: `Come funziona`
 

@@ -65,13 +65,13 @@ Procedura minima:
 
 ## Security operations ricorrenti
 
-Il controllo operativo leggero e':
+Il controllo operativo leggero è:
 
 ```bash
 fiscalbay-security-check
 ```
 
-Lo stesso riepilogo e' disponibile da Telegram con `/admin sicurezza`.
+Lo stesso riepilogo è disponibile da Telegram con `/admin sicurezza`.
 
 Il report non stampa valori segreti e copre:
 
@@ -88,7 +88,7 @@ Telegram senza admin configurato.
 ## Rischi accettati per 1.0.0
 
 Questi rischi sono accettati dentro il perimetro `approved_public_small` della
-`1.0.0`, perche' il servizio resta piccolo, approvato manualmente, Telegram first
+`1.0.0`, perché il servizio resta piccolo, approvato manualmente, Telegram first
 e senza SLA formale:
 
 - SQLite locale come persistence principale, solo entro soglie dichiarate e con
@@ -101,26 +101,26 @@ e senza SLA formale:
 Questi punti non sono blocchi per `1.0.0`, ma diventano driver di revisione se il
 servizio supera le soglie pubbliche dichiarate o cambia perimetro.
 
-## Rischi bloccanti per perimetri piu' ampi
+## Rischi bloccanti per perimetri più ampi
 
-Prima di aprire FiscalBay a un pubblico multiutente piu' ampio o senza
+Prima di aprire FiscalBay a un pubblico multiutente più ampio o senza
 approvazione manuale servono almeno:
 
 - migrazione da SQLite a Postgres o database equivalente gestito
 - revisione dedicata di concorrenza, backup, restore e rollback dati
-- gestione segreti piu' robusta o secret manager dedicato
-- osservabilita' e alerting piu' ricchi
+- gestione segreti più robusta o secret manager dedicato
+- osservabilità e alerting più ricchi
 - policy di supporto, abuso, retention e cancellazione proporzionate al nuovo
   perimetro
 
 ## Cambio di perimetro con la multiutenza
 
-Aprire il bot a piu' utenti cambia il perimetro del progetto:
+Aprire il bot a più utenti cambia il perimetro del progetto:
 
 - da utility personale a servizio applicativo
 - da configurazione globale a credenziali per tenant
 - da stato condiviso a isolamento dati per utente, chat e account
-- da operativita' privata a responsabilita' esplicita su audit, abusi e limiti di servizio
+- da operatività privata a responsabilità esplicita su audit, abusi e limiti di servizio
 
 Per questo la multiutenza non va trattata come sola feature OAuth.
 
@@ -145,7 +145,7 @@ Ogni passo della fase multiutente deve essere giustificato contro questi finding
 - refresh token cifrati a riposo
 - audit log minimo su connect/disconnect
 - rate limiting per utente
-- migliore osservabilita' operativa
+- migliore osservabilità operativa
 - review dedicata del flusso OAuth
 
 ## Vincoli fissati per il servizio pubblico attuale
@@ -155,7 +155,7 @@ Ogni passo della fase multiutente deve essere giustificato contro questi finding
 - gestione esplicita degli stati: attivo, scaduto, revocato, da riconnettere
 - rate limiting minimo per utente prima dell'onboarding self-service
 - audit log minimo per `connect`, `disconnect`, revoca e refresh fallito
-- SQLite ancora accettabile solo finche' il servizio pubblico resta a bassa scala e con accesso approvato
+- SQLite ancora accettabile solo finché il servizio pubblico resta a bassa scala e con accesso approvato
 - Postgres richiesto prima dell'apertura pubblica multiutente
 
 ## Stato attuale dell'adapter token tenant
@@ -163,28 +163,28 @@ Ogni passo della fase multiutente deve essere giustificato contro questi finding
 - il codice applicativo ha ora un adapter dedicato per leggere token tenant dallo storage
 - il percorso standard usa ora cifratura Fernet a riposo con chiave `EBAY_TENANT_TOKEN_KEY`
 - il fallback plaintext resta solo come percorso esplicitamente opt-in per dev o recovery controllato tramite `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS=1`
-- sulla VPS il target corretto e' usare `EBAY_TENANT_TOKEN_KEY` e lasciare disattivato il fallback plaintext
-- con `TELEGRAM_ADMIN_USER_ID` attivo, il runtime del bot non deve piu' usare `EBAY_REFRESH_TOKEN` come credenziale condivisa per i tenant collegati
+- sulla VPS il target corretto è usare `EBAY_TENANT_TOKEN_KEY` e lasciare disattivato il fallback plaintext
+- con `TELEGRAM_ADMIN_USER_ID` attivo, il runtime del bot non deve più usare `EBAY_REFRESH_TOKEN` come credenziale condivisa per i tenant collegati
 
 ## Sufficienza della VPS attuale
 
-Per il servizio pubblico attuale la VPS e' considerata sufficiente solo se restano veri questi vincoli:
+Per il servizio pubblico attuale la VPS è considerata sufficiente solo se restano veri questi vincoli:
 
 - numero di tenant basso
 - traffico non pubblico e non bursty
-- backup, alerting e deploy sicuro gia' mantenuti come baseline
+- backup, alerting e deploy sicuro già mantenuti come baseline
 - nessuna dipendenza da query concorrenti pesanti o code multiworker
 
 Se questi vincoli saltano, i primi componenti da promuovere sono:
 
 - database meglio amministrato o gestito
-- storage token piu' robusto
-- alerting piu' ricco
-- processo di deploy e rollback piu' forte
+- storage token più robusto
+- alerting più ricco
+- processo di deploy e rollback più forte
 
 ## Security review minima per token utente
 
-La review dedicata ai token utente dovra' coprire almeno:
+La review dedicata ai token utente dovrà coprire almeno:
 
 - cifratura a riposo del refresh token
 - gestione chiavi di cifratura, rotazione e backup
@@ -199,6 +199,6 @@ In caso di problema:
 
 1. verificare log e healthcheck
 2. isolare la causa tra deploy, configurazione, eBay, Telegram o stato locale
-3. ruotare i segreti se c'e' rischio di esposizione
+3. ruotare i segreti se c'è rischio di esposizione
 4. usare backup e restore se il problema coinvolge stato o configurazione
 5. annotare l'incidente e l'azione correttiva nel changelog o nella documentazione operativa

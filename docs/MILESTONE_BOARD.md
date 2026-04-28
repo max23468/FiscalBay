@@ -1,6 +1,6 @@
 # Board Milestone Minima
 
-Board minima locale per tenere visibili priorita' e dipendenze finche' non viene aperta una board GitHub dedicata.
+Board minima locale per tenere visibili priorità e dipendenze finché non viene aperta una board GitHub dedicata.
 
 Nota: questo file conserva lo storico di pianificazione precedente alla
 readiness `1.0.0`. La roadmap corrente e il perimetro stabile sono in
@@ -12,7 +12,7 @@ readiness `1.0.0`. La roadmap corrente e il perimetro stabile sono in
 
 Obiettivo:
 
-- rendere il progetto operabile senza ambiguita' su deploy, rollback, segreti e criterio minimo di rilascio
+- rendere il progetto operabile senza ambiguità su deploy, rollback, segreti e criterio minimo di rilascio
 
 Dipendenze:
 
@@ -51,7 +51,7 @@ Deliverable principali:
 
 Obiettivo:
 
-- completare la separazione di responsabilita' senza regressioni funzionali
+- completare la separazione di responsabilità senza regressioni funzionali
 
 Dipendenze:
 
@@ -63,7 +63,7 @@ Deliverable principali:
 - riduzione accoppiamento tra CLI, bot e moduli applicativi
 - decisioni architetturali consolidate in `docs/ARCHITECTURE.md`
 
-### M3 - Operativita' e osservabilita'
+### M3 - Operatività e osservabilità
 
 Obiettivo:
 
@@ -109,7 +109,7 @@ Milestone tecnica proposta:
   - schema dati multiutente documentato e chiavi di isolamento fissate
 - `M4.2`
   - decisione database: SQLite per servizio piccolo approvato, Postgres prima di
-    un'apertura pubblica piu' ampia
+    un'apertura pubblica più ampia
 - `M4.3`
   - strategia token eBay per utente, con refresh token cifrato e revoca prevista
 - `M4.4`
@@ -121,7 +121,7 @@ Vincoli del servizio pubblico piccolo:
 
 - un solo account eBay attivo per utente e per environment
 - SQLite ancora ammesso solo per accesso approvato e bassa scala
-- Postgres prima dell'apertura pubblica piu' ampia
+- Postgres prima dell'apertura pubblica più ampia
 - audit log e rate limiting minimi richiesti prima di onboarding self-service
 
 Milestone di servizio controllato:
@@ -131,7 +131,7 @@ Milestone di servizio controllato:
 - `M4.B2`
   - lifecycle token e audit log minimi definiti
 - `M4.B3`
-  - validazione che VPS e operativita' attuale reggano il servizio approvato
+  - validazione che VPS e operatività attuale reggano il servizio approvato
 - `M4.B4`
   - via libera a stabilizzare il percorso `approved_public_small`
 
@@ -154,13 +154,13 @@ Deliverable principali:
 
 Stato corrente:
 
-- `/account` e `/account collega` esistono gia' nel bot
+- `/account` e `/account collega` esistono già nel bot
 - `/account scollega` scollega localmente account e token e mantiene distinta l'uscita completa dal bot; la revoca remota eBay resta fuori dal flusso automatico
-- `/settings notifiche on|off` e `/settings` esistono gia' come gestione self-service minima lato chat
+- `/settings notifiche on|off` e `/settings` esistono già come gestione self-service minima lato chat
 - `/account collega` salva una sessione preliminare in `oauth_link_sessions`
-- il callback OAuth minimale esiste gia' come servizio separato `fiscalbay-oauth`
-- il token storage tenant usa gia' cifratura a riposo con chiave Fernet da env
-- `/account reconnect`, `/ordini spiega` e il riepilogo explain su `/ordini cerca` sono gia' disponibili
+- il callback OAuth minimale esiste già come servizio separato `fiscalbay-oauth`
+- il token storage tenant usa già cifratura a riposo con chiave Fernet da env
+- `/account reconnect`, `/ordini spiega` e il riepilogo explain su `/ordini cerca` sono già disponibili
 - `/settings lascia` copre ora l'uscita completa dell'utente con disattivazione notifiche e nuova approvazione richiesta
 - resta aperto soprattutto l'affinamento del polling e della riduzione `getOrder`
 
@@ -186,7 +186,7 @@ Stato corrente:
 - assorbita in `docs/SERVICE_GOVERNANCE.md`
 - la pianificazione aperta ora vive in `docs/ROADMAP.md`
 
-## Priorita' correnti
+## Priorità correnti
 
 Le prossime milestone operative sono ora:
 

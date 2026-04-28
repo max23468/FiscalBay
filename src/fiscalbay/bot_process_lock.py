@@ -43,7 +43,7 @@ def acquire_process_lock(lock_path: str) -> TextIO | None:
         handle.close()
         holder_details = f" ({holder})" if holder else ""
         raise TelegramApiError(
-            "Un'altra istanza del bot e' gia' in esecuzione (lock su "
+            "Un'altra istanza del bot è già in esecuzione (lock su "
             f"{lock_path}{holder_details}). Chiudi l'altra copia o imposta "
             "TELEGRAM_BOT_LOCK_PATH."
         ) from None

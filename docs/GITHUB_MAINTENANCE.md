@@ -5,7 +5,7 @@ nel repository.
 
 ## Stato Actions
 
-GitHub Actions e' disattivato come canale operativo.
+GitHub Actions è disattivato come canale operativo.
 
 - non sono versionati workflow in `.github/workflows/`
 - non usare Actions per CI, deploy, release, PR check, diagnostica VPS o update
@@ -14,14 +14,14 @@ GitHub Actions e' disattivato come canale operativo.
 - se GitHub mostra run falliti per billing, spending limit o budget esaurito,
   non rilanciare job: usare automazioni locali/VPS
 
-## Cosa E' Versionato Nel Repo
+## Cosa È Versionato Nel Repo
 
 - PR template: `.github/PULL_REQUEST_TEMPLATE.md`
 - Issue forms: `.github/ISSUE_TEMPLATE/*`
 - Ownership: `.github/CODEOWNERS`
 - Security policy: `SECURITY.md`
 
-Non e' versionato:
+Non è versionato:
 
 - `.github/workflows/*`
 - `.github/dependabot.yml`
@@ -35,7 +35,7 @@ Configurazione consigliata:
 - abilita `Require linear history`
 - disabilita force push e branch deletion su `main`
 - valuta `Require pull request` anche in contesto solo-maintainer, se vuoi audit
-  trail piu' pulito
+  trail più pulito
 - non rendere obbligatorie status check GitHub Actions
 
 Fallback operativo:
@@ -59,7 +59,7 @@ Configurazione consigliata in `Settings > General`:
 - valuta di disabilitare `Allow rebase merging`
 
 Se non usi PR e lavori direttamente su `main`, applica la stessa regola al commit
-message: deve gia' essere nel formato Conventional Commit.
+message: deve già essere nel formato Conventional Commit.
 
 ### Security Tab
 
@@ -70,12 +70,12 @@ Abilitare almeno:
 - Secret scanning
 - Push protection per secret scanning, se disponibile sul piano corrente
 
-Non abilitare Dependabot version updates schedulati finche' il budget Actions resta
+Non abilitare Dependabot version updates schedulati finché il budget Actions resta
 limitato.
 
 ## Release Senza Actions
 
-Il percorso standard senza GitHub Actions e':
+Il percorso standard senza GitHub Actions è:
 
 1. commit Conventional Commit corretto su `main`
 2. `scripts/deploy_now.sh` per deploy operativo senza nuova versione

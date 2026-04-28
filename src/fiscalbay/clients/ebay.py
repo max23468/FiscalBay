@@ -342,7 +342,7 @@ def revoke_user_refresh_token(
     if not token:
         return {
             "status": "missing_token",
-            "detail": "token locale gia' assente: nessuna revoca remota tentabile",
+            "detail": "token locale già assente: nessuna revoca remota tentabile",
             "user_action": "controlla su eBay se FiscalBay risulta ancora tra le app autorizzate",
             "remote_attempted": False,
         }

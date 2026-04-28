@@ -43,7 +43,7 @@ Note:
 - vengono installati e abilitati anche i timer `fiscalbay-alertcheck.timer`,
   `fiscalbay-reconcile.timer`, `fiscalbay-restore-drill.timer`,
   `fiscalbay-external-healthcheck.timer` e `fiscalbay-log-maintenance.timer`
-- per il setup produttivo corrente il percorso operativo finale atteso e' `/opt/fiscalbay`
+- per il setup produttivo corrente il percorso operativo finale atteso è `/opt/fiscalbay`
 
 ## Variabili da configurare
 
@@ -201,6 +201,12 @@ Verifica scale readiness senza migrazione automatica:
 ./.venv/bin/fiscalbay-scale-check
 ```
 
+Export fiscale venditore da CLI:
+
+```bash
+./.venv/bin/fiscalbay-fiscal-export --days 30 --max-results 200 --output export-fiscale.csv
+```
+
 Verifica timer giornaliero:
 
 ```bash
@@ -220,14 +226,14 @@ sudo systemctl status fiscalbay-log-maintenance.timer
 - usiamo polling, quindi non serve webhook pubblico
 - FiscalBay resta `Telegram first`: web solo onboarding, callback OAuth e pagine
   minime di supporto
-- onboarding e callback restano sulla VPS attuale finche' le soglie pubbliche
+- onboarding e callback restano sulla VPS attuale finché le soglie pubbliche
   restano rispettate
 - SQLite e lock file restano nella directory `data/` del progetto
-- SQLite e' accettabile solo per servizio piccolo ad accesso approvato; se
+- SQLite è accettabile solo per servizio piccolo ad accesso approvato; se
   `fiscalbay-healthcheck` segnala `sqlite_migration_recommended`, fermare
   l'allargamento utenti prima della migrazione database
 - il servizio reale della VPS si chiama `fiscalbay-bot`
-- Docker Compose non e' mantenuto come opzione reale di esercizio sulla VPS attuale
+- Docker Compose non è mantenuto come opzione reale di esercizio sulla VPS attuale
 - lo script di setup supporta `apt-get`, `dnf`, `yum` e `apk`
-- il setup puo' creare e usare un utente di servizio dedicato
+- il setup può creare e usare un utente di servizio dedicato
 - se sulla VPS esistono ancora `data/notified_orders.json` o `data/failed_notifications.json`, il bot li migra automaticamente a SQLite al primo avvio utile

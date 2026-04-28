@@ -1,4 +1,4 @@
-# Operativita'
+# Operatività
 
 Guida operativa rapida per l'esercizio quotidiano del servizio.
 
@@ -84,11 +84,11 @@ Health check JSON:
 
 Nota deploy storage:
 
-- il `state.db` del bot in VPS puo' ricevere migrazioni schema per tabelle tenant-aware
-- finche' non vengono caricati tenant, account e subscription reali, restano compatibili i percorsi legacy previsti per CLI o istanze non ancora migrate
+- il `state.db` del bot in VPS può ricevere migrazioni schema per tabelle tenant-aware
+- finché non vengono caricati tenant, account e subscription reali, restano compatibili i percorsi legacy previsti per CLI o istanze non ancora migrate
 - prima di rilasci che toccano `src/fiscalbay/storage/sqlite.py`, mantenere come sempre un backup aggiornato di `data/state.db`
-- il runtime puo' ora registrare utenti/chat Telegram nel DB durante il traffico normale del bot, quindi il backup di `state.db` copre anche questa nuova base tenant-aware
-- quando il DB contiene gia' la mappatura chat/utente, il comando `/stato` legge stato e retry queue del tenant corretto; se la mappatura manca, il fallback resta globale
+- il runtime può ora registrare utenti/chat Telegram nel DB durante il traffico normale del bot, quindi il backup di `state.db` copre anche questa nuova base tenant-aware
+- quando il DB contiene già la mappatura chat/utente, il comando `/stato` legge stato e retry queue del tenant corretto; se la mappatura manca, il fallback resta globale
 
 Metriche runtime leggibili:
 
@@ -115,8 +115,8 @@ minime per governance quotidiana:
 Il comando Telegram `/stato` espone anche:
 
 - `Scope runtime`, per vedere se la chat sta usando contesto `tenant` o `global`
-- `Sorgente credenziali`, per capire se il bot e' ancora su `global_env` o se usa un futuro `tenant_store`
-- `Fallback credenziali`, quando il tenant esiste ma il bot e' ancora costretto a ripiegare sul percorso globale
+- `Sorgente credenziali`, per capire se il bot è ancora su `global_env` o se usa un futuro `tenant_store`
+- `Fallback credenziali`, quando il tenant esiste ma il bot è ancora costretto a ripiegare sul percorso globale
 
 Il comando Telegram `/account` espone invece:
 
@@ -129,8 +129,8 @@ Il comando Telegram `/account` espone invece:
 Il comando Telegram `/account collega`:
 
 - crea una sessione preliminare in `oauth_link_sessions`
-- restituisce un link pubblico solo se sulla VPS e' configurata `EBAY_OAUTH_CONNECT_BASE_URL`
-- senza questa variabile, il bot prepara comunque la sessione ma avvisa che il callback OAuth non e' ancora raggiungibile
+- restituisce un link pubblico solo se sulla VPS è configurata `EBAY_OAUTH_CONNECT_BASE_URL`
+- senza questa variabile, il bot prepara comunque la sessione ma avvisa che il callback OAuth non è ancora raggiungibile
 - il link pubblico punta al callback server `fiscalbay-oauth`, che a sua volta redirige verso eBay e gestisce il ritorno OAuth
 
 Il comando Telegram `/account scollega`:
@@ -152,37 +152,38 @@ Il comando Telegram `/settings notifiche on|off`:
 Il comando Telegram `/settings`:
 
 - mostra un riepilogo rapido di scope runtime, ambiente, stato notifiche della chat e stato del collegamento account
-- e' il punto di controllo piu' rapido lato utente prima di usare `/account collega`, `/account scollega` o `/account`
+- è il punto di controllo più rapido lato utente prima di usare `/account collega`, `/account scollega` o `/account`
 
 Controllo accessi Telegram:
 
 - `TELEGRAM_ALLOWED_CHAT_IDS` limita le chat ammesse; con `*` (o `all`) consente tutte le chat e lascia il filtro operativo al workflow di approvazione admin
 - `TELEGRAM_ADMIN_USER_ID`, quando valorizzata, identifica l'admin globale del bot
 - gli altri utenti vengono registrati nel DB con stati `new`, `pending`, `approved` o `blocked`
-- il runtime normalizza anche alias legacy come `active` e `rejected`, cosi' il controllo accessi resta coerente anche su record vecchi nel `state.db`
+- il runtime normalizza anche alias legacy come `active` e `rejected`, così il controllo accessi resta coerente anche su record vecchi nel `state.db`
 - gli utenti non approvati possono solo usare `/start`, `/help`, `/altre_azioni` e `/request_access`
 - l'admin riceve una richiesta con pulsanti inline `Approva` e `Rifiuta`
-- in alternativa l'admin puo' usare `/admin_users all|pending|unlinked|reconnect|inactive`, `/tenant_health`, `/admin`, `/admin scala`, `/admin sicurezza`, `/admin dormant [ore]`, `/admin export <telegram_user_id>`, `/admin delete_tenant <telegram_user_id> confirm`, `/approve_user <telegram_user_id>`, `/reject_user <telegram_user_id>`, `/suspend_user <telegram_user_id>` e `/reactivate_user <telegram_user_id>`
-- per scale readiness l'admin puo' usare `/admin scala`, che classifica il
+- in alternativa l'admin può usare `/admin_users all|pending|unlinked|reconnect|inactive`, `/tenant_health`, `/admin`, `/admin scala`, `/admin sicurezza`, `/admin dormant [ore]`, `/admin export <telegram_user_id>`, `/admin delete_tenant <telegram_user_id> confirm`, `/approve_user <telegram_user_id>`, `/reject_user <telegram_user_id>`, `/suspend_user <telegram_user_id>` e `/reactivate_user <telegram_user_id>`
+- per scale readiness l'admin può usare `/admin scala`, che classifica il
   profilo in `within_policy`, `watch`, `migration_recommended` o
   `migration_required` senza eseguire migrazioni automatiche
-- per controlli security operations l'admin puo' usare `/admin sicurezza`, che
+- per controlli security operations l'admin può usare `/admin sicurezza`, che
   riassume permessi `.env`, stato `state.db`, inventario env, fallback plaintext,
   backup e restore drill senza mostrare valori segreti
-- per supporto e diagnosi rapida l'admin puo' usare
+- per supporto e diagnosi rapida l'admin può usare
   `/admin storico [telegram_user_id] [limit]`, che legge l'audit recente senza
   introdurre una dashboard web o un nuovo archivio persistente
 - quando un utente usa `/settings dati export` o `/settings dati cancellazione`,
   l'admin riceve una notifica con i comandi operativi suggeriti; la richiesta non
-  modifica o cancella dati finche' l'admin non esegue export/delete
+  modifica o cancella dati finché l'admin non esegue export/delete
 - il gating passa ora da capability esplicite: `request_access`, `review_access`, `connect_account`, `manage_notifications`, `view_account`, `view_orders`
 - solo gli utenti `approved` o l'`admin` ricevono le capability operative che sbloccano `/account collega`, `/account`, `/settings`, `/settings notifiche` e i comandi ordini
-- approvare o bloccare un utente riallinea anche chat e subscription gia' registrate, quindi l'effetto non dipende solo dal prossimo restart o dal prossimo messaggio
-- ripetere `/approve_user` o `/reject_user` sullo stesso stato non genera una nuova transizione ne' una nuova notifica utente, ma riallinea comunque i permessi applicati
-- ripetere `/account collega` mentre esiste gia' una sessione OAuth pendente e valida riusa la sessione esistente invece di crearne una nuova
+- approvare o bloccare un utente riallinea anche chat e subscription già registrate, quindi l'effetto non dipende solo dal prossimo restart o dal prossimo messaggio
+- ripetere `/approve_user` o `/reject_user` sullo stesso stato non genera una nuova transizione né una nuova notifica utente, ma riallinea comunque i permessi applicati
+- ripetere `/account collega` mentre esiste già una sessione OAuth pendente e valida riusa la sessione esistente invece di crearne una nuova
 - i comandi sensibili lato utente hanno ora un rate limit minimo; `/request_access` e `/account collega` applicano anche cooldown dedicati su richieste ravvicinate e failure OAuth ripetuti
 - il bot espone `/stato servizio` come messaggio pubblico minimo di funzionamento e `/settings policy` come riferimento sintetico alla governance del servizio
-- l'admin puo' passare il bot in `/service_mode normal|maintenance|degraded`: la manutenzione sospende nuovi collegamenti, il degrado lascia consultazione disponibile ma blocca azioni operative
+- il venditore può usare `/ordini export [giorni] [max]` per generare un export CSV inline degli ordini del periodo, con stato del dato fiscale e campi mancanti
+- l'admin può passare il bot in `/service_mode normal|maintenance|degraded`: la manutenzione sospende nuovi collegamenti, il degrado lascia consultazione disponibile ma blocca azioni operative
 - il loop di notifica invia anche un riepilogo admin periodico quando trova pending o alert prodotto rilevanti
 - il `state.db` contiene ora anche una `operation_queue` minima per applicazioni sensibili differibili o recuperabili
 
@@ -191,7 +192,7 @@ Audit log minimo:
 - il `state.db` contiene ora anche una tabella append-only `audit_log`
 - eventi tracciati: `request_access`, `approve`, `reject`, `connect`, `disconnect`, `oauth_success`, `oauth_failure`, `data_request`, `tenant_export`, `tenant_delete`, `retention_prune`
 - l'audit log integra i messaggi utente e i log runtime, non li sostituisce
-- l'audit recente e' consultabile da Telegram con `/admin storico`, anche
+- l'audit recente è consultabile da Telegram con `/admin storico`, anche
   filtrando per tenant
 
 Servizio OAuth su VPS:
@@ -199,18 +200,18 @@ Servizio OAuth su VPS:
 - entrypoint: `fiscalbay-oauth-server`
 - servizio `systemd`: `fiscalbay-oauth`
 - endpoint locali minimi: `/`, `/healthz`, `/oauth/start`, `/oauth/callback`, `/privacy`, `/about`, `/favicon.svg`, `/favicon.png`, `/favicon.ico`, `/apple-touch-icon.png`
-- nginx deve inoltrare al servizio OAuth anche `/`, `/privacy`, `/about` e gli asset favicon; la configurazione di riferimento e' `deploy/nginx-fiscalbay-oauth.conf`
+- nginx deve inoltrare al servizio OAuth anche `/`, `/privacy`, `/about` e gli asset favicon; la configurazione di riferimento è `deploy/nginx-fiscalbay-oauth.conf`
 - variabili utili: `EBAY_OAUTH_RUNAME`, `EBAY_OAUTH_RUNAME_SANDBOX`, `EBAY_OAUTH_CONNECT_BASE_URL`, `EBAY_OAUTH_CALLBACK_URL`, `EBAY_OAUTH_SERVER_HOST`, `EBAY_OAUTH_SERVER_PORT`, `EBAY_TENANT_TOKEN_KEY`
-- il percorso corretto su VPS e' usare `EBAY_TENANT_TOKEN_KEY` per cifrare i refresh token utente a riposo
-- con `TELEGRAM_ADMIN_USER_ID` configurato, il bot in produzione usa i token tenant come percorso operativo normale e non deve piu' dipendere da `EBAY_REFRESH_TOKEN` per i tenant collegati
-- verso eBay il parametro `redirect_uri` deve essere il `RuName` registrato nel portale eBay, non la callback URL pubblica
-- la callback URL pubblica del progetto deve invece coincidere con l'`Accept URL` associato a quel `RuName`
+- il percorso corretto su VPS è usare `EBAY_TENANT_TOKEN_KEY` per cifrare i refresh token utente a riposo
+- con `TELEGRAM_ADMIN_USER_ID` configurato, il bot in produzione usa i token tenant come percorso operativo normale e non deve più dipendere da `EBAY_REFRESH_TOKEN` per i tenant collegati
+- verso eBay il parametro `redirect_uri` deve essere il `RuName` registrato nel portale eBay, non l'URL di callback pubblico
+- l'URL di callback pubblico del progetto deve invece coincidere con l'`Accept URL` associato a quel `RuName`
 - `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS=1` va considerato solo fallback di dev o recovery controllato e non configurazione operativa normale
 
 Readiness multiutente nel healthcheck:
 
 - il report healthcheck espone anche contatori `multi_tenant.*` per utenti, chat, account collegati, token attivi, subscription e stati runtime tenant
-- il flag `multi_tenant.tenant_credentials_ready` indica se il DB ha gia' account collegati e token attivi sufficienti per operare interamente con credenziali tenant
+- il flag `multi_tenant.tenant_credentials_ready` indica se il DB ha già account collegati e token attivi sufficienti per operare interamente con credenziali tenant
 - questo aiuta a capire sulla VPS quanto siamo vicini al multiutente reale senza interrogare SQLite manualmente
 - il report healthcheck espone ora anche `tenant_snapshots.*`, alimentato dalla reconciliation, per stato operativo sintetico tenant senza ricalcoli live
 - il report healthcheck espone ora anche `operation_queue.pending`, `operation_queue.running`, `operation_queue.failed`, `operation_queue.completed` e `operation_queue.cancelled`
@@ -224,7 +225,7 @@ Readiness multiutente nel healthcheck:
   dall'ultimo tag e stato release (`tagged_clean`, `package_release`, `dirty`,
   `ahead_of_latest_tag` o `unknown`)
 - `/admin` e `/admin manutenzione` riprendono gli stessi metadati release in
-  formato compatto, cosi' il confronto tra codice deployato, tag Git e versione
+  formato compatto, così il confronto tra codice deployato, tag Git e versione
   installata non richiede accesso SSH o query manuali
 
 Security operations check:
@@ -261,35 +262,35 @@ Alert basilari runtime:
 - soglie di default: `MAX_CONSECUTIVE_ERROR_CYCLES=3`, `MAX_RETRY_QUEUE_SIZE=20`, `MAX_DISK_USED_PERCENT=85`, `MAX_INODE_USED_PERCENT=85`, `MIN_MEMORY_AVAILABLE_MB=128`
 - soglie prodotto di default: `FISCALBAY_PUBLIC_MAX_APPROVED_USERS=25`, `FISCALBAY_PUBLIC_MAX_LINKED_ACCOUNTS=25`, `FISCALBAY_PUBLIC_MAX_ACTIVE_TOKEN_SETS=25`, `FISCALBAY_SQLITE_MAX_DB_BYTES=52428800`
 - il fallimento del check finisce nel journal del service `fiscalbay-alertcheck`
-- lo smoke check di deploy avvia anche `fiscalbay-alertcheck.service` quando il timer e' abilitato, cosi' un errore di permessi o runtime blocca il deploy
+- lo smoke check di deploy avvia anche `fiscalbay-alertcheck.service` quando il timer è abilitato, così un errore di permessi o runtime blocca il deploy
 
 Policy servizio pubblico:
 
 - FiscalBay resta `Telegram first`
 - la parte web resta onboarding/callback/supporto e non sostituisce il bot
-- onboarding e callback restano sulla VPS attuale finche' il profilo resta piccolo
+- onboarding e callback restano sulla VPS attuale finché il profilo resta piccolo
   e approvato
 - le notifiche vengono attivate di default quando un utente diventa approvato,
   salvo opt-out utente o intervento admin
 - i comandi sensibili hanno cooldown per utente configurabili con
   `FISCALBAY_RATE_LIMIT_*`: richiesta accesso, collegamento/scollegamento account,
-  uscita dal bot, cambio modalita' servizio e mutazioni admin non idempotenti
+  uscita dal bot, cambio modalità servizio e mutazioni admin non idempotenti
 - prima di superare le soglie `FISCALBAY_PUBLIC_*`, sospendere l'allargamento e
-  preparare database piu' robusto, sizing VPS e processo admin piu' formale
+  preparare database più robusto, sizing VPS e processo admin più formale
 
 Healthcheck esterno e TLS:
 
 - `deploy/external-healthcheck.sh` controlla l'URL pubblico HTTPS del callback, di norma `/healthz`
-- se `FISCALBAY_PUBLIC_HEALTH_URL` non e' configurata, prova a derivarla da `EBAY_OAUTH_CALLBACK_URL`
+- se `FISCALBAY_PUBLIC_HEALTH_URL` non è configurata, prova a derivarla da `EBAY_OAUTH_CALLBACK_URL`
 - il controllo fallisce se il certificato TLS scade entro `TLS_MIN_DAYS_VALID` giorni
 - `fiscalbay-external-healthcheck.timer` esegue il controllo ogni 15 minuti
-- lo smoke deploy avvia anche `fiscalbay-external-healthcheck.service` se il timer e' abilitato
+- lo smoke deploy avvia anche `fiscalbay-external-healthcheck.service` se il timer è abilitato
 
 Recovery e log:
 
 - `deploy/backup.sh` salva anche unit `systemd`, configurazione `nginx` FiscalBay, env operativi leggibili in `/etc/fiscalbay` e inventario servizio
 - `deploy/restore-drill.sh` verifica periodicamente un restore separato in `data/restore-check/`
-- `deploy/log-maintenance.sh` applica vacuum del journal e pulizia dei log nginx FiscalBay gia' ruotati
+- `deploy/log-maintenance.sh` applica vacuum del journal e pulizia dei log nginx FiscalBay già ruotati
 - i timer `fiscalbay-restore-drill.timer` e `fiscalbay-log-maintenance.timer` vengono installati dal setup Linux
 
 Reconciliation periodica:
@@ -297,18 +298,19 @@ Reconciliation periodica:
 - entrypoint: `fiscalbay-reconcile`
 - wrapper VPS: `deploy/reconcile.sh`
 - timer `systemd`: `fiscalbay-reconcile.timer`
-- la reconciliation processa la `operation_queue`, riallinea accessi/chat/subscription, scade sessioni OAuth pendenti troppo vecchie, revoca token attivi rimasti su account non piu' collegati, ricostruisce gli snapshot sintetici tenant e applica pruning retention su audit/sessioni OAuth/operazioni terminali
-- lo smoke check di deploy avvia anche `fiscalbay-reconcile.service` quando il timer e' abilitato
+- la reconciliation processa la `operation_queue`, riallinea accessi/chat/subscription, scade sessioni OAuth pendenti troppo vecchie, revoca token attivi rimasti su account non più collegati, ricostruisce gli snapshot sintetici tenant e applica pruning retention su audit/sessioni OAuth/operazioni terminali
+- lo smoke check di deploy avvia anche `fiscalbay-reconcile.service` quando il timer è abilitato
 
 Retention e cancellazione:
 
-- la policy di riferimento e' definita in `docs/SERVICE_GOVERNANCE.md`
-- stato attuale: la cancellazione utente e' amministrativa assistita; l'utente
-  puo' avviare la richiesta da `/settings dati cancellazione`, ma l'esecuzione
+- la policy di riferimento è definita in `docs/SERVICE_GOVERNANCE.md`
+- stato attuale: la cancellazione utente è amministrativa assistita; l'utente
+  può avviare la richiesta da `/settings dati cancellazione`, ma l'esecuzione
   resta confermata dall'admin
 - `/settings dati` mostra all'utente dati conservati, retention e azioni
   disponibili per export/cancellazione assistita
 - default retention: `FISCALBAY_AUDIT_RETENTION_DAYS=180`, `FISCALBAY_OAUTH_SESSION_RETENTION_DAYS=30`, `FISCALBAY_OAUTH_PENDING_RETENTION_DAYS=7`, `FISCALBAY_OPERATION_QUEUE_RETENTION_DAYS=30`
+- `fiscalbay-fiscal-export` genera un export fiscale venditore da CLI usando credenziali globali o tenant (`--telegram-user-id`)
 - `/admin export <telegram_user_id>` produce un export tenant senza refresh/access token in chiaro
 - `/admin delete_tenant <telegram_user_id> confirm` elimina token locali, account, chat, subscription, runtime state, retry tenant, sessioni OAuth e operazioni pending del tenant
 - l'audit log relativo alla cancellazione resta nel DB fino alla retention audit
@@ -333,7 +335,7 @@ blocca il deploy per `last_check_missing` o `last_check_stale`: questi restano
 visibili nel report healthcheck e nel timer alert, ma possono dipendere da
 problemi temporanei di eBay esterni al deploy.
 
-Questo e' il percorso di deploy predefinito. GitHub Actions non e' un canale
+Questo è il percorso di deploy predefinito. GitHub Actions non è un canale
 operativo attivo per FiscalBay: deploy, diagnostica e configurazione VPS si
 automatizzano con script locali/VPS via SSH sulla VPS FiscalBay.
 
@@ -398,7 +400,7 @@ Guardrail automatici del nuovo flusso:
 ## Sync locale dopo release GitHub
 
 `scripts/release_now.sh` crea il commit di release localmente prima del push, quindi
-il repository locale resta gia' allineato. Serve un sync manuale solo se una release
+il repository locale resta già allineato. Serve un sync manuale solo se una release
 viene creata da un'altra postazione.
 
 Regola operativa:
@@ -414,19 +416,19 @@ git describe --tags --abbrev=0
 sed -n '1,40p' CHANGELOG.md
 ```
 
-Se questo passaggio viene saltato, e' normale leggere in locale un changelog o una versione ancora
-precedenti anche se la release GitHub e' gia' stata pubblicata.
+Se questo passaggio viene saltato, è normale leggere in locale un changelog o una versione ancora
+precedenti anche se la release GitHub è già stata pubblicata.
 
 ## Percorso minimo pre-release
 
-Finche' non esiste uno staging dedicato persistente, il percorso minimo prima di considerare sano un rilascio e':
+Finché non esiste uno staging dedicato persistente, il percorso minimo prima di considerare sano un rilascio è:
 
 1. eseguire in locale `bash scripts/ci_verify.sh`
 2. verificare gli entrypoint principali nel virtualenv
 3. se il cambiamento tocca bot, deploy o storage, eseguire `./deploy/smoke-check.sh` dopo il deploy
 4. osservare per alcuni minuti `journalctl -u fiscalbay-bot -f`
 
-Questo non sostituisce uno staging vero, ma e' la baseline operativa minima attuale.
+Questo non sostituisce uno staging vero, ma è la baseline operativa minima attuale.
 
 ## Rollback rapido
 
@@ -445,7 +447,7 @@ Se un deploy peggiora il servizio, seguire nell'ordine:
 
 Condizioni di stop:
 
-- non fare restore dati se il problema e' solo applicativo
+- non fare restore dati se il problema è solo applicativo
 - non riutilizzare i vecchi file JSON legacy salvo emergenza documentata
 
 ## Sintomi comuni e prima risposta
@@ -460,10 +462,10 @@ Condizioni di stop:
 ### Git bloccato da `index.lock`
 
 - usare `fiscalbay-fix-git-lock` se vuoi solo rimuovere in sicurezza un lock stale
-- usare `fiscalbay-git-safe -- <comando git>` per operazioni locali che vuoi rendere piu' robuste
+- usare `fiscalbay-git-safe -- <comando git>` per operazioni locali che vuoi rendere più robuste
 - il wrapper aspetta un lock realmente attivo per pochi secondi e rimuove solo quelli stale
 
-### Il processo e' attivo ma non notifica
+### Il processo è attivo ma non notifica
 
 - controllare `last_check`
 - controllare `last_error`
@@ -474,10 +476,10 @@ Condizioni di stop:
 ### Healthcheck non `ok`
 
 - leggere il dettaglio JSON
-- verificare se il problema e' `last_check` troppo vecchio
-- verificare se la retry queue e' bloccata
-- verificare se il servizio e' partito con il path corretto a `state.db`
-- controllare anche le metriche aggregate nel report JSON per capire se il problema e' lato eBay, lato Telegram o backlog retry
+- verificare se il problema è `last_check` troppo vecchio
+- verificare se la retry queue è bloccata
+- verificare se il servizio è partito con il path corretto a `state.db`
+- controllare anche le metriche aggregate nel report JSON per capire se il problema è lato eBay, lato Telegram o backlog retry
 - se il controllo periodico fallisce, leggere `sudo journalctl -u fiscalbay-alertcheck -n 50 --no-pager`
 
 ## Backup operativi

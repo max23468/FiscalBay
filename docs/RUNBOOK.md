@@ -118,12 +118,12 @@ Variabili aggiuntive per onboarding OAuth:
 
 Nota importante:
 
-- il callback server puo' girare anche senza URL pubblico, ma in quel caso `/account collega` non restituisce un link usabile dall'utente
-- l'URL pubblico consigliato e' un dominio HTTPS davanti a nginx, anche se la VPS resta raggiungibile via IP per SSH e deploy; vedi `docs/PUBLIC_ACCESS.md`
-- il percorso operativo corretto e' configurare `EBAY_TENANT_TOKEN_KEY` sulla VPS prima di usare davvero il callback OAuth
-- per eBay il `redirect_uri` non e' una URL arbitraria: va configurato il `RuName` corretto e l'`Accept URL` del portale eBay deve puntare al callback pubblico del progetto
-- per il branding OAuth eBay, nginx deve inoltrare anche `/`, `/privacy` e `/about` verso `fiscalbay-oauth`; la configurazione di riferimento e' `deploy/nginx-fiscalbay-oauth.conf`
-- e' possibile usare il fallback `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS=1` solo per dev o recovery controllato, ma non sostituisce la cifratura reale a riposo e non va lasciato attivo come default
+- il callback server può girare anche senza URL pubblico, ma in quel caso `/account collega` non restituisce un link usabile dall'utente
+- l'URL pubblico consigliato è un dominio HTTPS davanti a nginx, anche se la VPS resta raggiungibile via IP per SSH e deploy; vedi `docs/PUBLIC_ACCESS.md`
+- il percorso operativo corretto è configurare `EBAY_TENANT_TOKEN_KEY` sulla VPS prima di usare davvero il callback OAuth
+- per eBay il `redirect_uri` non è un URL arbitrario: va configurato il `RuName` corretto e l'`Accept URL` del portale eBay deve puntare al callback pubblico del progetto
+- per il branding OAuth eBay, nginx deve inoltrare anche `/`, `/privacy` e `/about` verso `fiscalbay-oauth`; la configurazione di riferimento è `deploy/nginx-fiscalbay-oauth.conf`
+- è possibile usare il fallback `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS=1` solo per dev o recovery controllato, ma non sostituisce la cifratura reale a riposo e non va lasciato attivo come default
 
 Health check:
 
@@ -140,10 +140,10 @@ Health check JSON:
 Nota storage:
 
 - le nuove migrazioni SQLite possono aggiungere tabelle tenant-aware nello stesso `state.db`
-- questo non attiva da solo la multiutenza: finche' il DB non contiene tenant/account/subscription, il bot continua a comportarsi come oggi
+- questo non attiva da solo la multiutenza: finché il DB non contiene tenant/account/subscription, il bot continua a comportarsi come oggi
 - su VPS, prima di deploy che toccano lo storage, verificare di avere un backup fresco di `data/state.db`
 - dal momento in cui il bot registra utenti/chat dal traffico Telegram reale, `state.db` diventa anche la base iniziale della futura migrazione multiutente
-- se il DB contiene gia' la mappatura tra chat Telegram e tenant utente, i comandi del bot leggono gia' lo stato tenant-aware; in assenza di mappatura resta il fallback globale
+- se il DB contiene già la mappatura tra chat Telegram e tenant utente, i comandi del bot leggono già lo stato tenant-aware; in assenza di mappatura resta il fallback globale
 
 Il report JSON include anche metriche runtime aggregate:
 
@@ -203,7 +203,7 @@ Metriche prodotto lato admin:
 - `/admin` mostra il set stabile minimo per governare il servizio piccolo:
   ordini letti, ordini con dato fiscale, notifiche inviate, tenant noti, token
   attivi e rapporto tra utenti approvati e account collegati
-- queste metriche vanno lette come segnale operativo di qualita' e carico, non
+- queste metriche vanno lette come segnale operativo di qualità e carico, non
   come analytics commerciali
 - se il rapporto linked/approved resta basso, usare `/admin_users unlinked` e
   `/tenant_health` prima di allargare altri utenti
@@ -265,7 +265,7 @@ Inventario rapido:
 
 L'inventario stampa commit, branch, stato unit/timer `fiscalbay-*`, chiavi env
 presenti senza valori e pressione disco/memoria. Viene incluso anche nei backup
-quando lo script e' disponibile.
+quando lo script è disponibile.
 
 Manutenzione log:
 
@@ -275,7 +275,7 @@ sudo systemctl status fiscalbay-log-maintenance.timer
 ```
 
 Il timer applica vacuum del journal con `JOURNAL_VACUUM_TIME` e
-`JOURNAL_VACUUM_SIZE`; per nginx rimuove solo log FiscalBay gia' ruotati oltre
+`JOURNAL_VACUUM_SIZE`; per nginx rimuove solo log FiscalBay già ruotati oltre
 `NGINX_LOG_RETENTION_DAYS`.
 
 Reconciliation periodica:
@@ -291,7 +291,7 @@ La reconciliation:
 - processa la `operation_queue`
 - riallinea accessi utente, chat e subscription
 - marca come `expired` le sessioni OAuth pendenti ma scadute
-- revoca localmente eventuali token ancora `active` su account non piu' `linked`
+- revoca localmente eventuali token ancora `active` su account non più `linked`
 
 ## Aggiornamento del bot
 
@@ -334,7 +334,7 @@ Lo smoke test verifica:
 - servizio `systemd` attivo
 - health check del bot senza errori bloccanti di avvio
 - `last_check_missing` e `last_check_stale` non bloccano lo smoke deploy, per non confondere problemi upstream eBay temporanei con deploy falliti
-- se `fiscalbay-oauth` e' abilitato, verifica anche che il servizio OAuth risulti attivo
+- se `fiscalbay-oauth` è abilitato, verifica anche che il servizio OAuth risulti attivo
 - se i timer sono abilitati, avvia `fiscalbay-alertcheck.service` e `fiscalbay-reconcile.service`
 - se `/etc/fiscalbay/duckdns.env` esiste, verifica che `fiscalbay-duckdns.timer` sia abilitato e attivo
 - fallisce se restano unit FiscalBay in stato failed
@@ -408,7 +408,7 @@ Il restore in-place ripristina solo `.env` e `data/state.db`. Le configurazioni
 `systemd` e `nginx` vengono conservate nel backup per diagnosi o ricostruzione,
 ma non vengono sovrascritte automaticamente.
 
-Backup manuale di manutenzione gia' eseguito:
+Backup manuale di manutenzione già eseguito:
 
 - `/home/fiscalbay/maintenance-backups/`
 - `/home/opc/maintenance-backups/2026-04-06-legacy-install-home-opc/fiscalbay-legacy`
@@ -441,7 +441,7 @@ Servizio non parte:
 Health check fallisce:
 
 - controlla se manca il lock del bot
-- controlla se `last_check` e' troppo vecchio
+- controlla se `last_check` è troppo vecchio
 - controlla se la retry queue non si svuota
 - controlla `last_error` nello state DB
 - se trovi vecchi file `data/notified_orders.json` o `data/failed_notifications.json`, il bot ora li converte da solo a SQLite al primo avvio
@@ -457,7 +457,7 @@ crescita, utenti in stato `reconnect_required`.
    `EBAY_TENANT_TOKEN_KEY` siano presenti senza stamparne i valori
 4. eseguire `./.venv/bin/fiscalbay-security-check` o leggere `/admin sicurezza`
 5. per un tenant specifico, usare `/account` o `/tenant_health`
-6. se serve, mettere il servizio in `/service_mode degraded` finche' i tenant non
+6. se serve, mettere il servizio in `/service_mode degraded` finché i tenant non
    ricollegano l'account
 
 ### Playbook incidente: callback OAuth
@@ -504,13 +504,13 @@ Sintomi tipici: ordini letti ma nessun messaggio Telegram, retry queue in cresci
 3. verificare `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_CHAT_IDS` e subscription con
    `/settings` o `/tenant_health`
 4. eseguire `./deploy/reconcile.sh`
-5. se il problema e' esterno a Telegram o eBay, usare `/service_mode degraded`
-   finche' la coda non torna stabile
+5. se il problema è esterno a Telegram o eBay, usare `/service_mode degraded`
+   finché la coda non torna stabile
 
 ## Hardening attivo
 
 - SSH accetta login solo con chiave
-- `PermitRootLogin` e' impostato a `no`
+- `PermitRootLogin` è impostato a `no`
 - firewall espone solo il servizio `ssh`
 - `fail2ban` protegge il jail `sshd`
 - lo script di setup supporta un utente di servizio dedicato tramite `APP_USER` e `APP_GROUP`

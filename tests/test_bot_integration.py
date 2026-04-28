@@ -181,7 +181,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             self.assertEqual(len(replies), 1)
-            self.assertIn("accesso e' approvato", replies[0])
+            self.assertIn("accesso è approvato", replies[0])
             self.assertIn("/account collega", replies[0])
 
     def test_start_for_approved_user_with_linked_account_shows_operational_commands(self) -> None:
@@ -688,7 +688,7 @@ class BotIntegrationTests(unittest.TestCase):
                 telegram_user_id=999,
             )
 
-            self.assertEqual(replies, ["Solo l'admin puo' usare questo comando."])
+            self.assertEqual(replies, ["Solo l'admin può usare questo comando."])
 
     def test_approved_user_cannot_use_admin_commands(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -737,7 +737,7 @@ class BotIntegrationTests(unittest.TestCase):
                         ebay_environment="production",
                         telegram_user_id=456,
                     )
-                    self.assertEqual(replies, ["Solo l'admin puo' usare questo comando."])
+                    self.assertEqual(replies, ["Solo l'admin può usare questo comando."])
 
     def test_persisted_admin_status_does_not_grant_admin_to_non_configured_user(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -781,7 +781,7 @@ class BotIntegrationTests(unittest.TestCase):
                 telegram_user_id=456,
             )
 
-            self.assertEqual(admin_replies, ["Solo l'admin puo' usare questo comando."])
+            self.assertEqual(admin_replies, ["Solo l'admin può usare questo comando."])
             self.assertIn("Benvenuto in FiscalBay", help_replies[0])
             self.assertNotIn("Area admin", help_replies[0])
 
@@ -1000,7 +1000,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("Sessione OAuth", first_replies[0])
             self.assertIn("Sessione OAuth", second_replies[0])
             self.assertIn("Sessione OAuth preparata correttamente", first_replies[0])
-            self.assertIn("Sessione gia' pronta", second_replies[0])
+            self.assertIn("Sessione già pronta", second_replies[0])
 
             audit_entries = load_audit_log_entries(str(db_path), limit=5)
             self.assertEqual(audit_entries[0].event_type, "connect")
@@ -1749,7 +1749,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("retry backlog", replies[0])
             self.assertIn("queue op=", replies[0])
             self.assertIn("pending_session user=", replies[0])
-            self.assertIn("Priorita' consigliate", replies[0])
+            self.assertIn("Priorità consigliate", replies[0])
 
     def test_admin_can_export_and_delete_tenant_data(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2393,7 +2393,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             self.assertEqual(len(replies), 1)
-            self.assertIn("Notificabilita'", replies[0])
+            self.assertIn("Notificabilità", replies[0])
             self.assertIn("would_notify", replies[0])
             self.assertIn("delivery_ready", replies[0])
 
@@ -2658,7 +2658,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("would_notify", replies[0])
             self.assertIn("chat_notifications_disabled", replies[0])
             self.assertIn("/settings notifiche on", replies[0])
-            self.assertIn("chat corrente non e' pronta", replies[0])
+            self.assertIn("chat corrente non è pronta", replies[0])
             self.assertIn("Comando rapido", replies[0])
 
     def test_process_message_account_reports_linked_account_status(self) -> None:
@@ -2948,7 +2948,7 @@ class BotIntegrationTests(unittest.TestCase):
                     telegram_chat_id=456,
                     environment="sandbox",
                     outcome="session_expired",
-                    details_json="La sessione OAuth e' scaduta. Usa di nuovo /account collega.",
+                    details_json="La sessione OAuth è scaduta. Usa di nuovo /account collega.",
                 ),
             )
 
@@ -2994,7 +2994,7 @@ class BotIntegrationTests(unittest.TestCase):
 
             self.assertEqual(len(replies), 1)
             self.assertIn("Sessione OAuth", replies[0])
-            self.assertIn("callback OAuth non e' ancora configurato", replies[0])
+            self.assertIn("callback OAuth non è ancora configurato", replies[0])
             self.assertIn("non un errore del tuo account", replies[0])
             self.assertIn("Stato account attuale: <code>unlinked</code>", replies[0])
 
@@ -3347,7 +3347,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             self.assertEqual(len(replies), 1)
-            self.assertIn("non e' disponibile", replies[0])
+            self.assertIn("non è disponibile", replies[0])
             self.assertIn("/account scollega", replies[0])
 
     def test_process_message_notifications_toggle_subscription_for_chat(self) -> None:
@@ -3738,6 +3738,68 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("Con CF: <code>1</code>", replies[0])
             self.assertIn("Senza dato fiscale: <code>1</code>", replies[0])
             self.assertIn("Paese emissione non IT: <code>1</code>", replies[0])
+
+    @patch("src.fiscalbay.bot.fetch_records")
+    @patch("src.fiscalbay.bot.load_config")
+    def test_process_message_orders_export_renders_seller_fiscal_csv(
+        self,
+        mock_load_config,
+        mock_fetch_records,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={1, 123, 456, 573159993},
+                notify_chat_ids={456},
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=456,
+                username="seller_user",
+                display_name="Mario Rossi",
+                chat_type="private",
+            )
+            mock_load_config.return_value = object()
+            mock_fetch_records.return_value = [
+                {
+                    "orderId": "order-missing",
+                    "creationDate": "2026-04-05T20:00:00Z",
+                    "buyerUsername": "buyer-missing",
+                    "taxpayerId": "",
+                    "taxIdentifierType": "",
+                },
+                {
+                    "orderId": "order-ok",
+                    "creationDate": "2026-04-05T21:00:00Z",
+                    "buyerUsername": "buyer-ok",
+                    "taxpayerId": "IT12345678901",
+                    "taxIdentifierType": "VAT_NUMBER",
+                },
+            ]
+
+            replies = process_message(
+                text="/ordini export 7 20",
+                chat_id=456,
+                telegram_user_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+
+            self.assertEqual(len(replies), 2)
+            self.assertIn("Export Fiscale Venditore", replies[0])
+            self.assertIn("Ordini esportati: <code>2</code>", replies[0])
+            self.assertIn("Con dato fiscale: <code>1</code>", replies[0])
+            self.assertIn("CSV export", replies[1])
+            self.assertIn("periodStart,periodEnd,orderId", replies[1])
+            self.assertIn("order-ok", replies[1])
+            self.assertIn("available", replies[1])
+            self.assertIn("order-missing", replies[1])
+            self.assertIn("missing", replies[1])
 
     @patch("src.fiscalbay.bot.fetch_records")
     @patch("src.fiscalbay.bot.load_config")

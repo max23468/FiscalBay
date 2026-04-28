@@ -376,7 +376,7 @@ def render_oauth_start_page(redirect_url: str) -> bytes:
         ),
         action_label="Continua su eBay",
         action_url=redirect_url,
-        hint=("Se chiudi questa pagina prima del consenso, il collegamento non verra' completato."),
+        hint=("Se chiudi questa pagina prima del consenso, il collegamento non verrà completato."),
         auto_redirect_seconds=0,
     )
 
@@ -548,7 +548,7 @@ def render_home_page() -> bytes:
             <meta name='viewport' content='width=device-width, initial-scale=1'>
             {public_icon_links()}
             <title>FiscalBay | Assistente fiscale ordini eBay</title>
-            <meta name='description' content='FiscalBay e&apos; un assistente
+            <meta name='description' content='FiscalBay è un assistente
             Telegram first per venditori eBay che mostra gli identificativi fiscali
             disponibili nelle API ufficiali eBay.'>
             <style>{css}</style>
@@ -714,7 +714,7 @@ def render_privacy_page() -> bytes:
     return render_public_info_page(
         "Informativa privacy",
         (
-            "FiscalBay e' un assistente operativo Telegram first per venditori eBay. "
+            "FiscalBay è un assistente operativo Telegram first per venditori eBay. "
             "Questa pagina riassume quali dati vengono trattati per mostrare in Telegram "
             "informazioni fiscali e operative restituite dalle API ufficiali."
         ),
@@ -760,7 +760,7 @@ def render_privacy_page() -> bytes:
                         "con cifratura a riposo"
                     ),
                     (
-                        "l'accesso operativo e' soggetto ad approvazione "
+                        "l'accesso operativo è soggetto ad approvazione "
                         "dell'amministratore del servizio"
                     ),
                 ],
@@ -798,13 +798,13 @@ def render_about_page() -> bytes:
             (
                 "Cosa non fa",
                 [
-                    "non e' una dashboard eBay generalista",
+                    "non è una dashboard eBay generalista",
                     "non sostituisce un gestionale ordini completo",
                     (
                         "non inventa partita IVA, codice fiscale o altri dati fiscali "
                         "se eBay non li restituisce"
                     ),
-                    "non sposta l'operativita' fuori da Telegram",
+                    "non sposta l'operatività fuori da Telegram",
                 ],
             ),
             (
@@ -837,14 +837,14 @@ def describe_provider_error(error_value: str) -> OAuthFailurePresentation:
         return OAuthFailurePresentation(
             title="Autorizzazione annullata",
             message=(
-                "L'autorizzazione eBay e' stata annullata prima del completamento. "
+                "L'autorizzazione eBay è stata annullata prima del completamento. "
                 "Torna su Telegram e usa di nuovo /account collega se vuoi riprovare."
             ),
             outcome="user_cancelled",
             notify_text=(
                 "⚠️ <b>Collegamento eBay non completato</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "L'autorizzazione e' stata annullata prima del completamento.\n"
+                "L'autorizzazione è stata annullata prima del completamento.\n"
                 "Usa <code>/account collega</code> se vuoi riprovare."
             ),
         )
@@ -853,14 +853,14 @@ def describe_provider_error(error_value: str) -> OAuthFailurePresentation:
             title="Collegamento non disponibile",
             message=(
                 "eBay ha rifiutato la richiesta di autorizzazione per un problema di "
-                "configurazione del servizio. Riprova piu' tardi o contatta l'admin."
+                "configurazione del servizio. Riprova più tardi o contatta l'admin."
             ),
             outcome="provider_configuration_error",
             notify_text=(
                 "⚠️ <b>Collegamento eBay non disponibile</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 "eBay ha rifiutato la richiesta per un problema di configurazione del servizio.\n"
-                "Non dipende dal tuo account: riprova piu' tardi."
+                "Non dipende dal tuo account: riprova più tardi."
             ),
         )
     return OAuthFailurePresentation(
@@ -887,18 +887,18 @@ def describe_callback_exception(exc: Exception) -> OAuthFailurePresentation:
             return OAuthFailurePresentation(
                 title="Sessione scaduta",
                 message=(
-                    "La sessione di collegamento e' scaduta prima del completamento. "
+                    "La sessione di collegamento è scaduta prima del completamento. "
                     "Torna su Telegram e usa di nuovo /account collega."
                 ),
                 outcome="session_expired",
                 notify_text=(
                     "⚠️ <b>Sessione OAuth scaduta</b>\n"
                     "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    "Il collegamento non e' stato completato in tempo.\n"
+                    "Il collegamento non è stato completato in tempo.\n"
                     "Usa <code>/account collega</code> per aprire una nuova sessione."
                 ),
             )
-        if "non trovata" in message.lower() or "non e' piu' disponibile" in message.lower():
+        if "non trovata" in message.lower() or "non è più disponibile" in message.lower():
             return OAuthFailurePresentation(
                 title="Link non più valido",
                 message=(
@@ -917,14 +917,14 @@ def describe_callback_exception(exc: Exception) -> OAuthFailurePresentation:
             title="Collegamento non disponibile",
             message=(
                 "Il servizio non ha potuto completare il collegamento per un problema di "
-                "configurazione o salvataggio. Riprova piu' tardi o contatta l'admin."
+                "configurazione o salvataggio. Riprova più tardi o contatta l'admin."
             ),
             outcome="service_configuration_error",
             notify_text=(
                 "⚠️ <b>Collegamento eBay non disponibile</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 "Il servizio non ha potuto completare il collegamento per un problema tecnico.\n"
-                "Non dipende dal tuo account: riprova piu' tardi."
+                "Non dipende dal tuo account: riprova più tardi."
             ),
         )
     if isinstance(exc, EbayApiError):
@@ -932,28 +932,28 @@ def describe_callback_exception(exc: Exception) -> OAuthFailurePresentation:
             title="Errore temporaneo eBay",
             message=(
                 "eBay non ha completato correttamente il callback o lo scambio token. "
-                "Riprova piu' tardi da Telegram con /account collega."
+                "Riprova più tardi da Telegram con /account collega."
             ),
             outcome="provider_runtime_error",
             notify_text=(
                 "⚠️ <b>Errore temporaneo durante il collegamento</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 "eBay non ha completato correttamente il callback o lo scambio token.\n"
-                "Usa <code>/account collega</code> per riprovare piu' tardi."
+                "Usa <code>/account collega</code> per riprovare più tardi."
             ),
         )
     return OAuthFailurePresentation(
         title="Collegamento fallito",
         message=(
-            "Il collegamento non e' stato completato per un errore inatteso del servizio. "
-            "Riprova piu' tardi da Telegram con /account collega."
+            "Il collegamento non è stato completato per un errore inatteso del servizio. "
+            "Riprova più tardi da Telegram con /account collega."
         ),
         outcome="callback_error",
         notify_text=(
             "⚠️ <b>Collegamento eBay fallito</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "Il servizio ha incontrato un errore inatteso durante il callback.\n"
-            "Usa <code>/account collega</code> per riprovare piu' tardi."
+            "Usa <code>/account collega</code> per riprovare più tardi."
         ),
     )
 
@@ -988,9 +988,9 @@ def build_oauth_start_redirect(
     if session is None:
         raise ConfigurationError("Sessione OAuth non trovata.")
     if normalize_oauth_session_status(session.status) != OAUTH_SESSION_STATUS_PENDING:
-        raise ConfigurationError("La sessione OAuth non e' piu' disponibile.")
+        raise ConfigurationError("La sessione OAuth non è più disponibile.")
     if session_is_expired(session):
-        raise ConfigurationError("La sessione OAuth e' scaduta. Usa di nuovo /account collega.")
+        raise ConfigurationError("La sessione OAuth è scaduta. Usa di nuovo /account collega.")
 
     config = oauth_consent_config(load_config_fn(session.environment))
     assert hasattr(config, "environment")
@@ -1025,14 +1025,14 @@ def complete_oauth_link(
     if session is None:
         raise ConfigurationError("Sessione OAuth non trovata.")
     if normalize_oauth_session_status(session.status) != OAUTH_SESSION_STATUS_PENDING:
-        raise ConfigurationError("La sessione OAuth non e' piu' disponibile.")
+        raise ConfigurationError("La sessione OAuth non è più disponibile.")
     if session_is_expired(session):
         update_oauth_link_session(
             telegram_config.state_path,
             oauth_state,
             status=OAUTH_SESSION_STATUS_EXPIRED,
         )
-        raise ConfigurationError("La sessione OAuth e' scaduta. Usa di nuovo /account collega.")
+        raise ConfigurationError("La sessione OAuth è scaduta. Usa di nuovo /account collega.")
 
     callback_url = callback_url_fn()
     update_oauth_link_session(
@@ -1350,12 +1350,12 @@ class OAuthHandler(BaseHTTPRequestHandler):
             render_action_html_page(
                 "Collegamento riuscito",
                 (
-                    "Puoi tornare su Telegram: il bot ha gia' confermato il collegamento "
+                    "Puoi tornare su Telegram: il bot ha già confermato il collegamento "
                     "e ti aspetta li'."
                 ),
                 action_label="Apri Telegram",
                 action_url=public_bot_url(),
-                hint="Se l'app Telegram e' gia' aperta, puoi semplicemente chiudere questa pagina.",
+                hint="Se l'app Telegram è già aperta, puoi semplicemente chiudere questa pagina.",
             ),
         )
 

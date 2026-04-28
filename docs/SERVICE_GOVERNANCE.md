@@ -16,7 +16,7 @@ Il documento descrive il servizio reale oggi in esecuzione su VPS, non un assett
 
 ## Modello di servizio
 
-Il bot e' oggi da considerare:
+Il bot è oggi da considerare:
 
 - servizio pubblico raggiungibile su Telegram
 - servizio `Telegram first`
@@ -28,15 +28,15 @@ Il bot e' oggi da considerare:
 
 Regole operative di base:
 
-- solo l'admin puo' approvare o bloccare utenti
+- solo l'admin può approvare o bloccare utenti
 - il modello amministrativo corrente prevede un solo admin globale e nessun co-admin
 - solo utenti `approved` o `admin` possono usare i comandi operativi e collegare un account eBay
 - per gli utenti approvati le notifiche sono attive di default, salvo disattivazione esplicita
-- lato UX l'utente opera sempre sul proprio account eBay gia' collegato, senza dover scegliere tra account o environment multipli
-- il runtime del bot, quando `TELEGRAM_ADMIN_USER_ID` e' configurato, usa token tenant e non refresh token eBay globali condivisi per i tenant collegati
-- il servizio e' `best effort` e non ha SLA formale
+- lato UX l'utente opera sempre sul proprio account eBay già collegato, senza dover scegliere tra account o environment multipli
+- il runtime del bot, quando `TELEGRAM_ADMIN_USER_ID` è configurato, usa token tenant e non refresh token eBay globali condivisi per i tenant collegati
+- il servizio è `best effort` e non ha SLA formale
 - il bot espone `/stato servizio` e `/settings policy` come comandi pubblici minimi di orientamento sul servizio
-- l'admin puo' usare `/service_mode normal|maintenance|degraded` per sospendere nuovi collegamenti o limitare temporaneamente le sole azioni operative
+- l'admin può usare `/service_mode normal|maintenance|degraded` per sospendere nuovi collegamenti o limitare temporaneamente le sole azioni operative
 
 ## Contratto stabile 1.0.0
 
@@ -59,12 +59,12 @@ Non rientrano nel contratto `1.0.0`:
 - ruoli admin multipli
 - multi-account eBay per utente nello stesso environment
 - dashboard web come entrypoint operativo primario
-- SLA formale, alta disponibilita' o multiworker distribuiti
+- SLA formale, alta disponibilità o multiworker distribuiti
 - cancellazione utente self-service completa senza conferma admin
 
 ## Perimetro del prodotto
 
-Il prodotto e':
+Il prodotto è:
 
 - un tool verticale su ordini e identificativi fiscali eBay
 - un servizio `Telegram first`
@@ -72,7 +72,7 @@ Il prodotto e':
 - un servizio operativo focalizzato su consultazione, collegamento account e notifiche utili
 - un tool con memoria operativa minima leggibile, ma non con storico completo del dominio
 
-Il prodotto non e':
+Il prodotto non è:
 
 - una dashboard eBay generalista
 - un gestionale ordini completo
@@ -81,28 +81,28 @@ Il prodotto non e':
 - un prodotto web-first
 - un bot pensato per gruppi o supergruppi Telegram
 
-## Criteri di inclusione delle funzionalita'
+## Criteri di inclusione delle funzionalità
 
-Una funzionalita' nuova entra nel perimetro se migliora almeno uno di questi assi:
+Una funzionalità nuova entra nel perimetro se migliora almeno uno di questi assi:
 
 - flusso core `accesso -> collegamento -> lettura ordini -> notifica -> stato`
 - controllo amministrativo del servizio pubblico con accesso approvato
-- affidabilita', sicurezza o operativita' reale su VPS
-- lifecycle dati, audit, retention o cancellazione gia' necessari al servizio
+- affidabilità, sicurezza o operatività reale su VPS
+- lifecycle dati, audit, retention o cancellazione già necessari al servizio
 
-Una funzionalita' va invece evitata o messa in coda se:
+Una funzionalità va invece evitata o messa in coda se:
 
 - apre un dominio di prodotto nuovo non necessario allo scopo fiscale del tool
-- sposta il baricentro del prodotto da Telegram verso una UI web piu' ampia
-- richiede di supportare gruppi, supergruppi o modelli di amministrazione piu' complessi senza un bisogno diretto del flusso core
-- aumenta molto complessita' operativa o di manutenzione senza migliorare il flusso core
+- sposta il baricentro del prodotto da Telegram verso una UI web più ampia
+- richiede di supportare gruppi, supergruppi o modelli di amministrazione più complessi senza un bisogno diretto del flusso core
+- aumenta molto complessità operativa o di manutenzione senza migliorare il flusso core
 - avvicina il progetto a un gestionale eBay generalista invece che a un tool operativo verticale
 
 ## Dati trattati
 
 ### Dati Telegram
 
-Il servizio tratta e puo' conservare in `state.db`:
+Il servizio tratta e può conservare in `state.db`:
 
 - `telegram_user_id`
 - `telegram_chat_id`
@@ -119,7 +119,7 @@ Uso:
 
 ### Dati account eBay
 
-Il servizio tratta e puo' conservare:
+Il servizio tratta e può conservare:
 
 - `ebay_user_id`
 - `environment`
@@ -143,12 +143,12 @@ Il servizio tratta:
 Regole:
 
 - il refresh token tenant va considerato dato altamente sensibile
-- il percorso normale e' cifratura Fernet con `EBAY_TENANT_TOKEN_KEY`
-- il fallback plaintext e' solo opt-in per dev o recovery controllato e non configurazione normale di produzione
+- il percorso normale è cifratura Fernet con `EBAY_TENANT_TOKEN_KEY`
+- il fallback plaintext è solo opt-in per dev o recovery controllato e non configurazione normale di produzione
 
 ### Dati ordine eBay
 
-Il servizio puo' leggere da eBay:
+Il servizio può leggere da eBay:
 
 - `orderId`
 - data ordine
@@ -166,7 +166,7 @@ Regola importante:
 - il bot non mantiene un archivio storico completo degli ordini nel database locale
 - nel database locale conserva solo stato operativo minimo, ad esempio `notified_order_ids`, fingerprint/hash e metriche runtime
 - i dettagli ordine sono quindi trattati soprattutto in memoria e in output utente, non come storico locale completo
-- una minima memoria operativa leggibile per utente o tenant e' invece ammessa quando serve a spiegare stato collegamento, ultimo errore o ultimo esito utile
+- una minima memoria operativa leggibile per utente o tenant è invece ammessa quando serve a spiegare stato collegamento, ultimo errore o ultimo esito utile
 
 ### Dati operativi e di audit
 
@@ -192,7 +192,7 @@ L'audit log minimo oggi copre:
 - `tenant_delete`
 - `retention_prune`
 
-L'admin puo' consultare uno storico operativo leggero con
+L'admin può consultare uno storico operativo leggero con
 `/admin storico [telegram_user_id] [limit]`; il comando legge l'audit esistente
 e non introduce una dashboard web o uno storico prodotto completo.
 
@@ -210,7 +210,7 @@ Comprende:
 
 Retention:
 
-- tenere mentre l'utente e' attivo, approvato o in attesa
+- tenere mentre l'utente è attivo, approvato o in attesa
 - utenti `blocked` o `rejected` possono essere mantenuti fino a `180 giorni` per audit minimo e prevenzione abusi
 
 ### Account eBay collegati
@@ -221,7 +221,7 @@ Comprende:
 
 Retention:
 
-- tenere mentre il collegamento e' attivo o serve al recupero operativo
+- tenere mentre il collegamento è attivo o serve al recupero operativo
 - record `disconnected` o `revoked` possono restare come metadato leggero fino a `180 giorni`, salvo richiesta di cancellazione
 
 ### Token eBay
@@ -232,9 +232,9 @@ Comprende:
 
 Retention:
 
-- refresh token cifrato: tenere solo mentre l'account e' `linked` e il servizio e' attivo per quell'utente
+- refresh token cifrato: tenere solo mentre l'account è `linked` e il servizio è attivo per quell'utente
 - su `/account scollega` o revoca, il segreto viene eliminato subito dal payload locale
-- eventuale metadato di stato del token puo' restare come traccia tecnica minima finche' necessario al recovery
+- eventuale metadato di stato del token può restare come traccia tecnica minima finché necessario al recovery
 
 ### Sessioni OAuth
 
@@ -257,7 +257,7 @@ Comprende:
 
 Retention:
 
-- e' una cache sintetica derivata dai dati tenant, ricostruita dalla reconciliation
+- è una cache sintetica derivata dai dati tenant, ricostruita dalla reconciliation
 - viene eliminata insieme al tenant su cancellazione amministrativa
 - non contiene token in chiaro e non sostituisce audit log o dati sorgente
 
@@ -276,7 +276,7 @@ Retention:
 
 - `180 giorni` come baseline minima corrente
 - oltre tale finestra, il log viene potato automaticamente dalla reconciliation periodica
-- la retention e' configurabile con `FISCALBAY_AUDIT_RETENTION_DAYS`
+- la retention è configurabile con `FISCALBAY_AUDIT_RETENTION_DAYS`
 
 ### Operation queue
 
@@ -286,7 +286,7 @@ Comprende:
 
 Retention:
 
-- operazioni `pending`, `running` e `failed` restano finche' servono a recovery o review operativa
+- operazioni `pending`, `running` e `failed` restano finché servono a recovery o review operativa
 - operazioni `completed` e `cancelled` vengono potate automaticamente oltre `FISCALBAY_OPERATION_QUEUE_RETENTION_DAYS`, default `30 giorni`
 
 ### Log runtime
@@ -313,7 +313,7 @@ Comprende:
 Retention:
 
 - rolling state operativo, non archivio storico
-- tenere solo finche' utile a evitare duplicati, retry e diagnostica
+- tenere solo finché utile a evitare duplicati, retry e diagnostica
 
 ## Policy di cancellazione utente
 
@@ -321,15 +321,15 @@ Stato attuale:
 
 - cancellazione amministrativa assistita, avviabile dall'utente da Telegram
 - l'uscita utente dal servizio va trattata in modo distinto tra scollegamento account eBay e disattivazione dell'accesso al bot
-- l'utente puo' usare `/settings dati` per leggere dati conservati e retention
-- l'utente puo' usare `/settings dati export` o `/settings dati cancellazione`
+- l'utente può usare `/settings dati` per leggere dati conservati e retention
+- l'utente può usare `/settings dati export` o `/settings dati cancellazione`
   per notificare l'admin senza cancellazioni automatiche
-- l'admin puo' usare `/admin export <telegram_user_id>` per produrre un export operativo senza segreti
-- l'admin puo' usare `/admin delete_tenant <telegram_user_id> confirm` per eliminare i dati operativi locali del tenant
+- l'admin può usare `/admin export <telegram_user_id>` per produrre un export operativo senza segreti
+- l'admin può usare `/admin delete_tenant <telegram_user_id> confirm` per eliminare i dati operativi locali del tenant
 
 Richiesta minima:
 
-- l'utente puo' chiedere all'admin la rimozione del proprio accesso e dei dati locali associati direttamente dal bot
+- l'utente può chiedere all'admin la rimozione del proprio accesso e dei dati locali associati direttamente dal bot
 
 Obiettivo operativo:
 
@@ -342,16 +342,16 @@ Rimozioni attese:
 - subscription notifiche
 - mapping chat e tenant
 - stato runtime tenant
-- sessioni OAuth residue non piu' necessarie
+- sessioni OAuth residue non più necessarie
 
 Eccezioni minime:
 
-- audit log gia' scritto puo' essere mantenuto fino alla sua retention per sicurezza e tracciabilita'
+- audit log già scritto può essere mantenuto fino alla sua retention per sicurezza e tracciabilità
 - log runtime di sistema restano soggetti alla retention del journal VPS
 
 Tenant inattivi:
 
-- un tenant approvato e operativo senza attivita' recente e' considerato dormiente, non cancellato
+- un tenant approvato e operativo senza attività recente è considerato dormiente, non cancellato
 - `/admin dormant [ore]` e `/admin_users inactive` sono viste di review: non disattivano, non scollegano e non cancellano dati
 - qualsiasi cleanup o cancellazione resta una decisione admin esplicita con comando dedicato e audit
 
@@ -362,12 +362,12 @@ Limiti dichiarati oggi:
 - servizio pubblico piccolo e curato con accesso comunque approvato manualmente
 - prodotto `Telegram first`: la parte web resta supporto onboarding/callback e
   non diventa entrypoint operativo principale
-- onboarding e callback restano sulla VPS FiscalBay attuale finche' il servizio
+- onboarding e callback restano sulla VPS FiscalBay attuale finché il servizio
   resta dentro le soglie pubbliche dichiarate
 - numero utenti da mantenere basso, curato e controllato
 - traffico atteso non bursty
 - una sola VPS
-- nessuna promessa di alta disponibilita'
+- nessuna promessa di alta disponibilità
 - nessun supporto a carichi elevati o multiworker distribuiti
 
 Soglie operative configurabili:
@@ -378,7 +378,7 @@ Soglie operative configurabili:
 - `FISCALBAY_SQLITE_MAX_DB_BYTES=52428800`
 
 Queste soglie non sono un obiettivo commerciale da raggiungere: sono il punto in
-cui fermare l'allargamento, rivedere la VPS e preparare uno storage piu' robusto.
+cui fermare l'allargamento, rivedere la VPS e preparare uno storage più robusto.
 Il report `fiscalbay-healthcheck` espone `public_service.*` e segnala
 `sqlite_migration_recommended` quando il servizio esce dal profilo previsto.
 Il report `fiscalbay-scale-check` e il comando Telegram `/admin scala`
@@ -395,14 +395,14 @@ Soglia oltre cui rivalutare l'assetto:
 
 - superamento di una soglia `FISCALBAY_PUBLIC_*`
 - uso giornaliero intenso o picchi frequenti
-- richiesta di SLA o affidabilita' superiore al best effort
+- richiesta di SLA o affidabilità superiore al best effort
 - bisogno di retention automatica e cancellazione self-service
-- necessita' di piu' processi bot, piu' VPS o concorrenza database sostenuta
+- necessità di più processi bot, più VPS o concorrenza database sostenuta
 
 SQLite resta accettabile solo dentro il profilo `approved_public_small`: pochi
 tenant approvati, traffico non bursty, un solo processo principale e backup/restore
 verificati. Prima di aprire davvero il numero di utenti approvati, il target
-diventa Postgres o un database equivalente gestito in modo piu' robusto.
+diventa Postgres o un database equivalente gestito in modo più robusto.
 La migrazione effettiva richiede comunque una fase dedicata: freeze operativo,
 backup verificato, import su copia offline, smoke check e rollback documentato.
 

@@ -147,7 +147,7 @@ def get_env_int_set(
             values.add(int(item))
         except ValueError as exc:
             raise ConfigurationError(
-                f"Variabile ambiente {name} non valida: {item!r} non e' un intero"
+                f"Variabile ambiente {name} non valida: {item!r} non è un intero"
             ) from exc
     return values
 

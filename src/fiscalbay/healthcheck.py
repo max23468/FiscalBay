@@ -800,7 +800,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--max-age-seconds",
         type=int,
-        help="Eta' massima accettata per last_check. Default: max(300, poll_interval*3).",
+        help="Età massima accettata per last_check. Default: max(300, poll_interval*3).",
     )
     parser.add_argument(
         "--check-service-active",

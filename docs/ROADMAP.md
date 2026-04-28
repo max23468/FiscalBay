@@ -1,50 +1,107 @@
 # Roadmap
 
+Aggiornata al 2026-04-29.
+
 ## Stato corrente
 
-La roadmap necessaria per la prima release stabile e' completata.
+FiscalBay è oggi alla versione `1.6.0`.
 
-FiscalBay `1.0.0` stabilizza il perimetro `approved_public_small`: bot Telegram
-pubblico con accesso approvato, singolo admin globale, onboarding OAuth su VPS,
-token tenant cifrati, audit/retention/recovery minimi, metriche admin e deploy
-locale/VPS senza GitHub Actions.
+La roadmap necessaria per la prima release stabile è completata. Il perimetro attuale resta `approved_public_small`: servizio pubblico con accesso approvato, pochi utenti selezionati, onboarding OAuth eBay su VPS, token tenant cifrati, bot Telegram operativo, strumenti admin, audit/retention/recovery minimi, metriche operative, security check e scale readiness.
 
-Non ci sono fasi aperte bloccanti per `1.0.0`.
+Non ci sono rilasci aperti bloccanti per il ramo `1.x`.
 
-## Storico fasi completate
+## Direzione prodotto 2.0
 
-- Fase 1 - Servizio Pubblico con Accesso Approvato
-- Fase 2 - Guardrail e Strumenti Admin
-- Fase 3 - Lifecycle Dati e Retention
-- Fase 4 - Ottimizzazione Applicativa e Storage
-- Fase 5 - Robustezza VPS e Recovery
-- Fase 6 - Consolidamento del Servizio Pubblico
-- Fase 7 - Rate Limiting Minimo
-- Fase 8 - Metriche Prodotto Admin
-- Fase 9 - Readiness 1.0.0
-- Fase 1.1 - Stabilizzazione operativa post-1.0
-- Fase 1.2 - Disconnect e reconnect piu' robusti
-- Fase 1.3 - Self-service assistito utente
-- Fase 1.4 - Admin comfort e osservabilita' leggera
-- Fase 1.5 - Security operations
-- Fase 1.6 - Scale readiness senza migrazione automatica
+La direzione strategica per `v2.0.0` è trasformare FiscalBay in una web app SaaS-first per venditori eBay finali.
 
-## Principi 1.x
+Principi `v2.0.0` già fissati:
 
-La serie `1.x` resta centrata su operativita' curata, release piccole e servizio
-`approved_public_small`.
+- la web app diventerà il modello primario del prodotto
+- il target resta composto da venditori eBay finali
+- il prodotto dovrà essere pubblico e vendibile, ma orientato a pochi utenti selezionati
+- Telegram diventerà un canale complementare per operatività e notifiche
+- feature core, autenticazione, stack frontend/backend e flusso MVP restano da decidere in una pianificazione dedicata futura
 
-Principi guida:
+Questa direzione non apre ancora lo sviluppo di `v2.0.0`: serve come bussola per evitare scelte `1.x` che rendano più costosa la futura web app.
 
-- Telegram resta il punto di ingresso principale
-- ogni minor release deve avere un obiettivo operativo chiaro
-- niente apertura pubblica libera nella prima serie `1.x`
-- SQLite resta il default finche' healthcheck e soglie pubbliche restano sani
-- Postgres, secret manager dedicato, ruoli admin multipli, SLA e multiworker
-  restano backlog condizionato da crescita reale o soglie superate
-- ogni fase deve chiudersi con test locali rilevanti, release versionata quando
-  il cambio e' osservabile, deploy VPS e smoke check remoto
+## Roadmap aperta
 
-## Roadmap 1.x
+### Serie 1.x
 
-Prossima fase da definire in base ai segnali reali di esercizio.
+La serie `1.x` resta centrata su stabilità operativa, servizio curato e miglioramenti piccoli ma completi.
+
+Prossimi rilasci pianificati:
+
+- `v1.7.0` - Export fiscale venditore: export ordinato degli ordini con dati fiscali disponibili, dati mancanti, stato e periodo.
+- `v1.8.0` - Support snapshot utente: riepilogo leggibile per singolo venditore con account collegato, ultimo sync, stato token, ultimi errori, ordini recenti e azioni consigliate.
+- `v1.9.0` - Onboarding selettivo più curato: flusso più chiaro per utente invitato, approvato e collegamento eBay, senza aprire registrazione libera.
+
+Possibili patch `v1.6.x`, `v1.7.x`, `v1.8.x` o `v1.9.x` vanno usate solo per fix mirati, documentazione operativa o piccoli affinamenti legati ai rilasci già pubblicati.
+
+Altre aree possibili, senza ordine vincolante:
+
+- migliorare ulteriormente il comfort operativo admin se emergono attriti reali
+- rafforzare onboarding, reconnect o assistenza utente se i venditori selezionati incontrano blocchi ricorrenti
+- intervenire su performance, storage o polling solo se metriche e healthcheck lo giustificano
+- preparare contratti e superfici interne riusabili dalla futura web app, senza anticipare una migrazione 2.0 prematura
+- migliorare documentazione, runbook e procedure quando cambiano flussi operativi reali
+
+### Non-obiettivi 1.x
+
+Per evitare bloatware, questi lavori non vanno anticipati nella serie `1.x` salvo blocco reale o decisione esplicita:
+
+- dashboard web completa
+- login e gestione account web
+- billing o piani commerciali
+- ruoli avanzati o team
+- automazioni marketing
+- notifiche complesse multicanale
+- migrazione infrastrutturale non giustificata da soglie reali
+
+### Backlog condizionato
+
+Questi lavori non sono rilasci attivi. Vanno ripresi solo se crescita, soglie, rischi operativi o decisioni prodotto li rendono necessari.
+
+- migrazione SQLite -> Postgres
+- secret manager dedicato
+- ruoli admin multipli
+- multiworker o scaling runtime
+- SLA e monitoraggio più strutturato
+- `v2.0.0`: autenticazione web app
+- `v2.0.0`: dashboard web venditore
+- `v2.0.0`: onboarding web self-service
+- `v2.0.0`: billing o packaging commerciale
+
+## Regole operative
+
+- Ogni rilascio `1.x` deve avere un obiettivo operativo chiaro.
+- I lavori completati vanno spostati nello storico e rimossi dalla roadmap aperta.
+- Non aggiungere checkbox completate come backlog residuo.
+- SQLite resta il default finché healthcheck e scale readiness restano sani.
+- Postgres e componenti SaaS più pesanti entrano solo quando sono giustificati.
+- Ogni rilascio osservabile deve chiudersi con test locali rilevanti, release versionata, deploy VPS e smoke check remoto.
+
+## Storico completato
+
+### Serie 1.x
+
+- `v1.6.0` - Scale readiness senza migrazione automatica
+- `v1.5.0` - Security operations
+- `v1.4.0` - Admin comfort e osservabilità leggera
+- `v1.3.0` - Self-service assistito utente
+- `v1.2.0` - Disconnect e reconnect più robusti
+- `v1.1.1` - Fix esposizione release tag nel package installato
+- `v1.1.0` - Stabilizzazione operativa post-1.0 e metadata release in admin healthcheck
+- `v1.0.1` - Fix formattazione notifiche Telegram e struttura iniziale roadmap
+- `v1.0.0` - Readiness prima release stabile
+
+### Costruzione della prima release stabile
+
+- `v0.20.0` - Metriche prodotto admin
+- `v0.19.0` - Rate limiting minimo
+- `v0.18.x` - Consolidamento del servizio pubblico
+- `v0.17.x` - Robustezza VPS e recovery
+- `v0.16.x` - Ottimizzazione applicativa e storage
+- `v0.15.x` - Lifecycle dati e retention
+- `v0.14.x` - Guardrail e strumenti admin
+- `v0.13.x` e precedenti - Servizio pubblico con accesso approvato, onboarding OAuth e perimetro multiutente iniziale

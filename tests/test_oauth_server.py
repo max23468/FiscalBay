@@ -138,14 +138,14 @@ class OAuthServerTests(unittest.TestCase):
 
     def test_describe_callback_exception_for_expired_session(self) -> None:
         presentation = describe_callback_exception(
-            Exception("La sessione OAuth e' scaduta. Usa di nuovo /account collega.")
+            Exception("La sessione OAuth è scaduta. Usa di nuovo /account collega.")
         )
 
         self.assertEqual(presentation.title, "Collegamento fallito")
         self.assertEqual(presentation.outcome, "callback_error")
 
         config_presentation = describe_callback_exception(
-            ConfigurationError("La sessione OAuth e' scaduta. Usa di nuovo /account collega.")
+            ConfigurationError("La sessione OAuth è scaduta. Usa di nuovo /account collega.")
         )
         self.assertEqual(config_presentation.title, "Sessione scaduta")
         self.assertEqual(config_presentation.outcome, "session_expired")
@@ -153,7 +153,7 @@ class OAuthServerTests(unittest.TestCase):
 
     def test_describe_callback_exception_for_unavailable_session(self) -> None:
         config_presentation = describe_callback_exception(
-            ConfigurationError("La sessione OAuth non e' piu' disponibile.")
+            ConfigurationError("La sessione OAuth non è più disponibile.")
         )
 
         self.assertEqual(config_presentation.title, "Link non più valido")

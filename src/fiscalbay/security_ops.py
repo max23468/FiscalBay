@@ -305,13 +305,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-backup-age-hours",
         type=int,
         default=DEFAULT_BACKUP_MAX_AGE_HOURS,
-        help="Eta' massima consigliata per l'ultimo backup.",
+        help="Età massima consigliata per l'ultimo backup.",
     )
     parser.add_argument(
         "--max-restore-drill-age-hours",
         type=int,
         default=DEFAULT_RESTORE_DRILL_MAX_AGE_HOURS,
-        help="Eta' massima consigliata per l'ultimo restore drill.",
+        help="Età massima consigliata per l'ultimo restore drill.",
     )
     return parser
 

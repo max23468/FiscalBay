@@ -1,6 +1,6 @@
 # Modello Dati
 
-Panoramica dei modelli attuali e dei modelli futuri piu' probabili.
+Panoramica dei modelli attuali e dei modelli futuri più probabili.
 
 ## Modelli attuali
 
@@ -66,7 +66,7 @@ Stati attesi:
 - `blocked`
 - `admin`
 
-Nota di compatibilita':
+Nota di compatibilità:
 
 - alias legacy come `active` e `rejected` vengono normalizzati nel dominio rispettivamente a `approved` e `blocked`
 - il runtime deduce ora le capability operative a partire da questo stato canonico
@@ -135,7 +135,7 @@ Campi principali:
 
 Nota:
 
-- oggi e' il modello tipizzato piu' importante per ridurre i `dict` legacy
+- oggi è il modello tipizzato più importante per ridurre i `dict` legacy
 - i servizi `orders`, `notifications` e il fetch condiviso CLI/bot lavorano ormai principalmente su questo modello
 - anche il rendering testuale e le notifiche Telegram passano principalmente da questo modello; le conversioni legacy rimaste sono concentrate nei wrapper compatibili
 
@@ -187,7 +187,7 @@ Lo stato runtime vive in `data/state.db` e comprende:
 - metriche
 - retry queue
 
-Lo stesso SQLite ora puo' ospitare anche tabelle tenant-aware per:
+Lo stesso SQLite ora può ospitare anche tabelle tenant-aware per:
 
 - utenti Telegram
 - chat Telegram
@@ -199,12 +199,12 @@ Lo stesso SQLite ora puo' ospitare anche tabelle tenant-aware per:
 - audit log append-only per eventi sensibili
 - operation queue per workflow differibili
 
-Compatibilita' mantenuta:
+Compatibilità mantenuta:
 
 - i vecchi file JSON vengono migrati automaticamente a SQLite
 - se il database non contiene ancora tenant configurati, restano disponibili i percorsi legacy compatibili dove previsti
-- quando una chat Telegram e' gia' stata registrata nel DB, i comandi del bot possono risolvere il tenant e leggere stato runtime e retry queue del tenant invece del solo stato globale
-- il fetch applicativo puo' ora risolvere dal DB anche l'account eBay collegato e il relativo `environment`, pur continuando a usare credenziali globali finche' non esistono token utente reali
+- quando una chat Telegram è già stata registrata nel DB, i comandi del bot possono risolvere il tenant e leggere stato runtime e retry queue del tenant invece del solo stato globale
+- il fetch applicativo può ora risolvere dal DB anche l'account eBay collegato e il relativo `environment`, pur continuando a usare credenziali globali finché non esistono token utente reali
 - la scelta finale tra credenziali tenant-specifiche e fallback globale passa ora da un contesto applicativo esplicito, invece di essere implicita nei singoli caller
 - `tenant_status_snapshots` materializza l'ultimo stato utile del tenant per dashboard admin, healthcheck e review operative senza ricalcolare ogni volta account, token, subscription e runtime memory
 
@@ -228,7 +228,7 @@ Campi minimi:
 
 Note:
 
-- `telegram_user_id` e' la chiave logica del tenant
+- `telegram_user_id` è la chiave logica del tenant
 - lo user record resta indipendente dalle singole chat
 - `status` governa il workflow di accesso approvato del servizio
 
@@ -248,8 +248,8 @@ Campi minimi:
 Note:
 
 - serve a non confondere utente e chat
-- permette in futuro piu' chat per lo stesso utente
-- nel runtime attuale e' gia' usata per risolvere lo scoping dei comandi del bot insieme a `telegram_user_id`
+- permette in futuro più chat per lo stesso utente
+- nel runtime attuale è già usata per risolvere lo scoping dei comandi del bot insieme a `telegram_user_id`
 
 ### `ebay_accounts`
 
@@ -265,12 +265,12 @@ Campi minimi:
 
 Note:
 
-- per la prima beta il vincolo e' un solo account attivo per utente e per environment
-- lo stesso `ebay_user_id` puo' comparire su piu' utenti Telegram distinti
+- per la prima beta il vincolo è un solo account attivo per utente e per environment
+- lo stesso `ebay_user_id` può comparire su più utenti Telegram distinti
 - il supporto multi-account per utente viene esplicitamente rinviato
-- lo stato locale puo' passare da `linked` a `disconnected` quando l'utente usa `/account scollega`
+- lo stato locale può passare da `linked` a `disconnected` quando l'utente usa `/account scollega`
 - un nuovo OAuth completato per lo stesso utente Telegram sostituisce
-  l'identita' eBay precedente nello stesso environment
+  l'identità eBay precedente nello stesso environment
 
 ### `ebay_tokens`
 
@@ -287,7 +287,7 @@ Possibili campi:
 Note:
 
 - il refresh token va cifrato a riposo
-- l'access token puo' restare cache runtime o storage breve, ma il refresh token non deve stare in env globali
+- l'access token può restare cache runtime o storage breve, ma il refresh token non deve stare in env globali
 - il lifecycle deve supportare refresh riuscito, refresh fallito, token scaduto, token revocato e richiesta di riconnessione utente
 - oggi `/account scollega` porta localmente il token in stato `revoked` e pulisce i segreti dal DB della VPS
 
@@ -325,10 +325,10 @@ Possibili campi:
 
 Stato attuale:
 
-- il modello e la tabella esistono gia' nel progetto corrente
-- `/account collega` salva gia' una sessione preliminare con `oauth_state`, `status=pending`, expiry, environment e correlazione Telegram utente/chat
-- il callback OAuth usa gia' lo stato sessione per chiudere il collegamento e aggiornare account/token nel DB
-- il campo `redirect_uri` conserva oggi la callback URL pubblica attesa dal progetto; verso eBay il valore usato come `redirect_uri` e' invece il `RuName` configurato a parte
+- il modello e la tabella esistono già nel progetto corrente
+- `/account collega` salva già una sessione preliminare con `oauth_state`, `status=pending`, expiry, environment e correlazione Telegram utente/chat
+- il callback OAuth usa già lo stato sessione per chiudere il collegamento e aggiornare account/token nel DB
+- il campo `redirect_uri` conserva oggi l'URL di callback pubblico atteso dal progetto; verso eBay il valore usato come `redirect_uri` è invece il `RuName` configurato a parte
 
 ### `tenant_runtime_state`
 
@@ -343,12 +343,12 @@ Possibili campi:
 
 Note:
 
-- nel servizio attuale puo' restare un payload aggregato, ma la chiave di ownership deve essere il tenant utente
-- il comando Telegram `/stato` usa gia' questo stato tenant-aware quando il bot riesce a risolvere utente e chat dal DB
+- nel servizio attuale può restare un payload aggregato, ma la chiave di ownership deve essere il tenant utente
+- il comando Telegram `/stato` usa già questo stato tenant-aware quando il bot riesce a risolvere utente e chat dal DB
 
 ## Vincoli futuri
 
-- nessuna credenziale eBay deve restare globale quando iniziera' la multiutenza
+- nessuna credenziale eBay deve restare globale quando inizierà la multiutenza
 - i token utente dovranno essere cifrati a riposo
-- il modello dati dovra' introdurre isolamento per tenant e audit minimo
+- il modello dati dovrà introdurre isolamento per tenant e audit minimo
 - nel servizio attuale il modello resta compatibile con SQLite, ma deve essere facilmente migrabile a Postgres

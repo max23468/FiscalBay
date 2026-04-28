@@ -11,7 +11,7 @@ multiutente a larga scala. Dichiara stabile il modello operativo corrente:
 - servizio `Telegram first`
 - storage SQLite locale entro soglie dichiarate
 - token tenant cifrati a riposo
-- audit, retention, alert e recovery minimi gia' operativi
+- audit, retention, alert e recovery minimi già operativi
 - release e deploy gestiti da script locali/VPS, senza GitHub Actions attive
 
 ## Criteri soddisfatti
@@ -38,13 +38,13 @@ Per promuovere FiscalBay a `1.0.0` devono essere vere queste condizioni.
 - I tenant inattivi sono solo segnalati per review: nessun cleanup automatico
   distruttivo parte senza comando admin esplicito.
 - Gli alert prodotto restano non persistenti come dashboard/sintesi admin e
-  healthcheck, mentre audit e metriche runtime restano persistiti dove gia'
+  healthcheck, mentre audit e metriche runtime restano persistiti dove già
   previsto.
 
-### Operativita'
+### Operatività
 
-- `scripts/ci_verify.sh` e' il gate locale preferito.
-- `scripts/release_now.sh` e' il percorso ufficiale per versione, changelog, tag,
+- `scripts/ci_verify.sh` è il gate locale preferito.
+- `scripts/release_now.sh` è il percorso ufficiale per versione, changelog, tag,
   GitHub Release e deploy VPS.
 - `scripts/deploy_now.sh` resta il percorso per deploy operativo senza nuova
   versione.
@@ -59,10 +59,10 @@ Per promuovere FiscalBay a `1.0.0` devono essere vere queste condizioni.
   eBay espone tramite API ufficiali.
 - I refresh token tenant sono cifrati a riposo con `EBAY_TENANT_TOKEN_KEY` nel
   percorso operativo normale.
-- Il fallback plaintext e' solo opt-in per sviluppo o recovery controllato.
+- Il fallback plaintext è solo opt-in per sviluppo o recovery controllato.
 - Audit log, sessioni OAuth, operation queue e retention sono gestiti dalla
   reconciliation periodica.
-- SQLite e' accettato per `1.0.0` solo dentro il profilo
+- SQLite è accettato per `1.0.0` solo dentro il profilo
   `approved_public_small`.
 
 ## Limiti dichiarati della 1.0.0
@@ -89,12 +89,12 @@ stabile iniziale:
 - secret manager dedicato obbligatorio
 - cancellazione self-service completa da Telegram senza conferma admin
 - revoca remota eBay garantita come parte del disconnect locale
-- SLA, alta disponibilita' o multiworker distribuiti
+- SLA, alta disponibilità o multiworker distribuiti
 
 ## Soglie di revisione
 
 Il servizio deve uscire dal profilo `approved_public_small` e rivalutare storage,
-segreti, osservabilita' e processo operativo quando si verifica almeno uno di
+segreti, osservabilità e processo operativo quando si verifica almeno uno di
 questi eventi:
 
 - superamento delle soglie `FISCALBAY_PUBLIC_*`
@@ -102,14 +102,14 @@ questi eventi:
 - `migration_required` in `fiscalbay-scale-check` o `/admin scala`
 - traffico bursty o uso giornaliero intenso
 - richiesta di apertura pubblica libera
-- necessita' di SLA o affidabilita' superiore al best effort
-- bisogno di piu' admin, piu' processi bot o concorrenza database sostenuta
+- necessità di SLA o affidabilità superiore al best effort
+- bisogno di più admin, più processi bot o concorrenza database sostenuta
 
 ## Stato
 
-La readiness `1.0.0` e' considerata completata quando:
+La readiness `1.0.0` è considerata completata quando:
 
-- questo documento e' allineato con `docs/SERVICE_GOVERNANCE.md`,
+- questo documento è allineato con `docs/SERVICE_GOVERNANCE.md`,
   `docs/SECURITY.md`, `docs/OPERATIONS.md` e `docs/RELEASE_POLICY.md`
 - `docs/DECISIONS_PENDING.md` non contiene decisioni bloccanti per `1.0.0`
 - i controlli locali rilevanti passano

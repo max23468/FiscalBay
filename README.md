@@ -1,20 +1,20 @@
 # FiscalBay
 
-FiscalBay e' un tool operativo con CLI e bot Telegram per leggere gli ordini eBay e mostrare l'identificativo fiscale restituito dalle API ufficiali eBay, inclusi casi come `CODICE_FISCALE` e `VAT_NUMBER`.
+FiscalBay è un tool operativo con CLI e bot Telegram per leggere gli ordini eBay e mostrare l'identificativo fiscale restituito dalle API ufficiali eBay, inclusi casi come `CODICE_FISCALE` e `VAT_NUMBER`.
 
 Payoff: `Assistente fiscale ordini per venditori eBay`.
 
 Linee guida brand e asset pronti all'uso: [`docs/BRAND_GUIDELINES.md`](docs/BRAND_GUIDELINES.md), `assets/branding/*`.
 Set definitivo approvato: logo orizzontale, mark e avatar Telegram nel concept `Seller Card`.
 Export operativi pronti: `assets/branding/exports/fiscalbay-avatar-telegram-512.png`, `fiscalbay-mark-512.png`, `fiscalbay-logo-light-2048.png`, `fiscalbay-logo-dark-2048.png`.
-Il server OAuth pubblico espone lo stesso mark anche come `favicon.svg`, `favicon.png` e `apple-touch-icon.png`, cosi' il sito resta riconoscibile anche su Safari e Mac.
+Il server OAuth pubblico espone lo stesso mark anche come `favicon.svg`, `favicon.png` e `apple-touch-icon.png`, così il sito resta riconoscibile anche su Safari e Mac.
 
-Il progetto nasce per un caso pratico molto preciso: interrogare gli ordini recenti, leggere il dettaglio completo di ogni ordine e rendere consultabile da terminale o da Telegram l'identificativo fiscale che eBay espone nelle API ufficiali. Il percorso principale legge `buyer.taxIdentifier` dalla Sell Fulfillment API; quando quel campo manca ma l'ordine e' noto, FiscalBay tenta anche il container ufficiale `BuyerTaxIdentifier` della Trading API per lo stesso `orderId`.
+Il progetto nasce per un caso pratico molto preciso: interrogare gli ordini recenti, leggere il dettaglio completo di ogni ordine e rendere consultabile da terminale o da Telegram l'identificativo fiscale che eBay espone nelle API ufficiali. Il percorso principale legge `buyer.taxIdentifier` dalla Sell Fulfillment API; quando quel campo manca ma l'ordine è noto, FiscalBay tenta anche il container ufficiale `BuyerTaxIdentifier` della Trading API per lo stesso `orderId`.
 
-Il perimetro stabile `1.0.0` e' il servizio pubblico piccolo con accesso
+Il perimetro stabile `1.0.0` è il servizio pubblico piccolo con accesso
 approvato: bot Telegram first, singolo admin globale, onboarding OAuth su VPS,
-token tenant cifrati, SQLite entro soglie dichiarate e operativita' best effort.
-Il dettaglio dei criteri e dei limiti e' in [`docs/RELEASE_READINESS.md`](docs/RELEASE_READINESS.md).
+token tenant cifrati, SQLite entro soglie dichiarate e operatività best effort.
+Il dettaglio dei criteri e dei limiti è in [`docs/RELEASE_READINESS.md`](docs/RELEASE_READINESS.md).
 
 ## Panoramica
 
@@ -24,6 +24,7 @@ Il repository contiene due entry point:
 - `fiscalbay-bot`: bot Telegram con comandi interattivi e notifiche automatiche dei nuovi ordini
 - `fiscalbay-oauth-server`: callback server minimale per l'onboarding self-service Telegram + eBay OAuth
 - `fiscalbay-reconcile`: worker one-shot per reconciliation periodica e coda operativa
+- `fiscalbay-fiscal-export`: export fiscale venditore con stato dati disponibili/mancanti
 
 Funzionalità principali:
 
@@ -77,7 +78,7 @@ Passi consigliati dopo il clone/fork:
 2. abilita secret scanning e Dependabot alerts dal tab Security, ma lascia disattivati workflow/update automatici
 3. usa PR anche da branch personali per lasciare audit trail e checklist standard
 4. usa titoli PR di squash in formato Conventional Commit per tenere coerenti versioni e changelog
-5. in GitHub abilita `Squash merge` e valuta di disabilitare `Merge commit` e `Rebase merge` per rendere il flusso piu' coerente
+5. in GitHub abilita `Squash merge` e valuta di disabilitare `Merge commit` e `Rebase merge` per rendere il flusso più coerente
 
 Per usare Codex su `chatgpt.com` come postazione di lavoro senza Actions, vedi [`docs/CODEX_CLOUD_DEPLOY.md`](docs/CODEX_CLOUD_DEPLOY.md).
 
@@ -86,7 +87,7 @@ Il flusso consigliato da remoto e:
 - Codex o GitHub preparano il codice fino a `main`
 - la pipeline automatica resta locale/VPS, non GitHub Actions
 - GitHub Actions non esegue CI, deploy, release, PR check o merge
-- ogni attivita' operativa viene eseguita da script locali o dalla VPS FiscalBay
+- ogni attività operativa viene eseguita da script locali o dalla VPS FiscalBay
 
 In pratica, da Codex web/mobile ti basta:
 
@@ -105,11 +106,11 @@ Regola operativa minima:
 - lo script calcola il bump dai Conventional Commit (`feat`, `fix`, `perf`, `!`) dall'ultimo tag `v*`
 
 - `PATCH` per bugfix compatibili, ad esempio `v0.1.1`
-- `MINOR` per nuove funzionalita' compatibili, ad esempio `v0.2.0`
+- `MINOR` per nuove funzionalità compatibili, ad esempio `v0.2.0`
 - `MAJOR` per breaking change, ad esempio `v1.0.0`
 
-Il primo salto stabile a `v1.0.0` puo' essere eseguito con override esplicito
-quando la readiness documentata e' completa:
+Il primo salto stabile a `v1.0.0` può essere eseguito con override esplicito
+quando la readiness documentata è completa:
 
 ```bash
 scripts/release_now.sh --version 1.0.0 --bump major
@@ -143,7 +144,7 @@ scripts/deploy_now.sh
 scripts/release_now.sh
 ```
 
-`scripts/local_automate.sh --all` resta disponibile come utility legacy, ma non e'
+`scripts/local_automate.sh --all` resta disponibile come utility legacy, ma non è
 il percorso raccomandato per chiudere una release.
 
 ## Setup Rapido
@@ -238,12 +239,12 @@ fiscalbay-bot
 
 Nota OAuth eBay:
 
-- il parametro `redirect_uri` inviato a eBay non e' una URL libera, ma il `RuName` registrato nel portale developer eBay
+- il parametro `redirect_uri` inviato a eBay non è un URL libero, ma il `RuName` registrato nel portale developer eBay
 - `EBAY_OAUTH_CALLBACK_URL` serve invece al progetto per esporre il callback pubblico che deve essere associato a quel `RuName`
 - sulla VPS, per avere `/account collega` davvero usabile, vanno quindi configurati sia il `RuName` corretto sia l'URL pubblico raggiungibile del callback server
 - lo stesso server OAuth espone anche `/` come mini sito vetrina, `/privacy` come Privacy Policy URL e `/about` come About URL nel branding OAuth del portale eBay
 - il flusso `/account collega` avviato da Telegram aggiunge al consenso anche lo scope pubblico `commerce.identity.readonly`, usato per leggere un identificativo account eBay reale invece del placeholder locale
-- `EBAY_SCOPES` deve restare coerente con gli scope concessi al refresh token globale; non aggiungere scope non presenti nel token gia' emesso
+- `EBAY_SCOPES` deve restare coerente con gli scope concessi al refresh token globale; non aggiungere scope non presenti nel token già emesso
 
 ### Variabili Telegram
 
@@ -271,7 +272,7 @@ Nota OAuth eBay:
 | `FISCALBAY_WEB_ROLE` | `onboarding_callback_support` | Ruolo della parte web: supporto onboarding/callback, non entrypoint principale |
 | `FISCALBAY_ONBOARDING_HOSTING` | `vps_oauth_callback` | Decisione hosting attuale per onboarding e callback OAuth |
 | `FISCALBAY_PUBLIC_MAX_APPROVED_USERS` | `25` | Soglia oltre cui rivalutare servizio pubblico, VPS e processo admin |
-| `FISCALBAY_PUBLIC_MAX_LINKED_ACCOUNTS` | `25` | Soglia account eBay collegati oltre cui rivalutare storage e operativita' |
+| `FISCALBAY_PUBLIC_MAX_LINKED_ACCOUNTS` | `25` | Soglia account eBay collegati oltre cui rivalutare storage e operatività |
 | `FISCALBAY_PUBLIC_MAX_ACTIVE_TOKEN_SETS` | `25` | Soglia token tenant attivi oltre cui preparare migrazione database |
 | `FISCALBAY_SQLITE_MAX_DB_BYTES` | `52428800` | Soglia dimensione `state.db` oltre cui il passaggio oltre SQLite diventa raccomandato |
 | `FISCALBAY_RATE_LIMIT_ENABLED` | `1` | Abilita i cooldown per utente sui comandi sensibili |
@@ -279,7 +280,7 @@ Nota OAuth eBay:
 | `FISCALBAY_RATE_LIMIT_CONNECT_SECONDS` | `10` | Cooldown per utente su `/account collega`, salvo riuso sessione OAuth valida |
 | `FISCALBAY_RATE_LIMIT_DISCONNECT_SECONDS` | `5` | Cooldown per utente su `/account scollega` |
 | `FISCALBAY_RATE_LIMIT_LEAVE_BOT_SECONDS` | `5` | Cooldown per utente su `/settings lascia` |
-| `FISCALBAY_RATE_LIMIT_SERVICE_MODE_SECONDS` | `2` | Cooldown admin su cambio modalita' servizio |
+| `FISCALBAY_RATE_LIMIT_SERVICE_MODE_SECONDS` | `2` | Cooldown admin su cambio modalità servizio |
 | `FISCALBAY_RATE_LIMIT_ADMIN_MUTATION_SECONDS` | `2` | Cooldown admin su cambi stato utente non idempotenti |
 | `FISCALBAY_PUBLIC_HEALTH_URL` | derivata da `EBAY_OAUTH_CALLBACK_URL` se possibile | URL HTTPS pubblico da controllare con l'healthcheck esterno, di norma `/healthz` |
 | `MAX_DISK_USED_PERCENT` | `85` | Soglia alert per spazio disco usato sul path applicativo |
@@ -288,7 +289,7 @@ Nota OAuth eBay:
 | `TLS_MIN_DAYS_VALID` | `14` | Giorni minimi residui accettati per il certificato TLS pubblico |
 | `JOURNAL_VACUUM_TIME` | `14d` | Retention temporale journal applicata dalla manutenzione log |
 | `JOURNAL_VACUUM_SIZE` | `200M` | Retention dimensionale journal applicata dalla manutenzione log |
-| `NGINX_LOG_RETENTION_DAYS` | `30` | Retention dei log nginx FiscalBay gia' ruotati |
+| `NGINX_LOG_RETENTION_DAYS` | `30` | Retention dei log nginx FiscalBay già ruotati |
 | `FISCALBAY_BOT_MEMORY_MAX` | `512M` | Limite `systemd` memoria per `fiscalbay-bot` |
 | `FISCALBAY_BOT_CPU_QUOTA` | `60%` | Quota CPU `systemd` per `fiscalbay-bot` |
 | `FISCALBAY_BOT_TASKS_MAX` | `128` | Limite task/processi per `fiscalbay-bot` |
@@ -337,6 +338,18 @@ fiscalbay \
 fiscalbay --format csv --output risultati.csv
 ```
 
+### Export fiscale venditore
+
+```bash
+fiscalbay-fiscal-export --days 30 --max-results 200 --output export-fiscale.csv
+```
+
+L'export aggiunge periodo, stato del dato fiscale (`available`/`missing`) e campi fiscali mancanti. Per un tenant specifico già collegato via Telegram:
+
+```bash
+fiscalbay-fiscal-export --telegram-user-id 123456789 --state-path data/state.db --output export-fiscale.csv
+```
+
 ### Esportazione JSON
 
 ```bash
@@ -358,9 +371,9 @@ Se Git resta bloccato da un `index.lock` rimasto sporco, puoi usare:
 fiscalbay-fix-git-lock
 ```
 
-Il comando rimuove il lock solo se non risulta piu' detenuto da un processo attivo.
+Il comando rimuove il lock solo se non risulta più detenuto da un processo attivo.
 
-Per rendere piu' robusti i comandi Git locali del progetto puoi anche usare:
+Per rendere più robusti i comandi Git locali del progetto puoi anche usare:
 
 ```bash
 fiscalbay-git-safe -- commit -m "messaggio"
@@ -369,7 +382,7 @@ fiscalbay-git-safe -- push origin main
 
 Questo wrapper:
 
-- aspetta per pochi secondi se il lock e' davvero detenuto da un processo attivo
+- aspetta per pochi secondi se il lock è davvero detenuto da un processo attivo
 - rimuove automaticamente solo i lock stale
 - poi esegue il comando Git richiesto
 
@@ -397,7 +410,7 @@ fiscalbay-security-check
 
 Il report controlla permessi `.env` e `state.db`, presenza delle env operative
 richieste, fallback plaintext dei token tenant, profilo `approved_public_small`,
-ultimo backup e ultimo restore drill. In Telegram l'admin puo' leggere la stessa
+ultimo backup e ultimo restore drill. In Telegram l'admin può leggere la stessa
 sintesi con `/admin sicurezza`.
 
 ### Scale Readiness Check
@@ -410,7 +423,7 @@ fiscalbay-scale-check
 
 Il report classifica lo stato in `within_policy`, `watch`,
 `migration_recommended` o `migration_required` usando soglie pubbliche, dimensione
-SQLite, queue e snapshot tenant. In Telegram l'admin puo' leggere la sintesi con
+SQLite, queue e snapshot tenant. In Telegram l'admin può leggere la sintesi con
 `/admin scala`.
 
 L'healthcheck verifica almeno:
@@ -489,6 +502,7 @@ Dettagli account, ordini e impostazioni:
 - `/ordini controlla 7 20`
 - `/ordini report 7 20`
 - `/ordini priorita 7 20`
+- `/ordini export 7 50`
 - `/ordini spiega 12-34567-89012`
 - `/settings notifiche on`
 - `/settings notifiche off`
@@ -525,6 +539,7 @@ Comportamento:
 - `/ordini fiscali` mostra solo ordini con identificativo fiscale presente
 - `/ordini tutti` mostra anche ordini senza dato fiscale
 - `/ordini cerca` interroga un ordine specifico
+- `/ordini export` genera un export CSV inline con periodo, stato fiscale e campi mancanti per ogni ordine incluso
 - i messaggi ordine con identificativo fiscale valorizzato includono un pulsante inline per copiare direttamente il valore fiscale, ad esempio CF o P.IVA
 - `/stato` mostra ultimo check, contatori e dimensione della coda retry; `/stato servizio` mostra lo stato servizio sintetico
 - `/account` riassume lo stato eBay; `collega`, `reconnect` e `scollega` gestiscono le azioni account e indicano chiaramente se il consenso eBay va rimosso manualmente dalle impostazioni eBay
@@ -534,18 +549,18 @@ Comportamento:
   `cancellazione` inviano all'admin una richiesta assistita senza cancellare
   dati automaticamente
 - la tastiera inline varia per contesto: `/account` privilegia collegamento e stato account, `/ordini` mostra azioni ordini/report, `/settings` mostra notifiche e preferenze, `/altre_azioni` raccoglie guida/accesso/preferenze, `/admin` mostra scorciatoie admin; `/start` e `/help` restano il menu generale
-- se `TELEGRAM_ADMIN_USER_ID` e' configurata, gli utenti non ancora approvati possono solo richiedere accesso con `/request_access` (anche quando `TELEGRAM_ALLOWED_CHAT_IDS=*`)
+- se `TELEGRAM_ADMIN_USER_ID` è configurata, gli utenti non ancora approvati possono solo richiedere accesso con `/request_access` (anche quando `TELEGRAM_ALLOWED_CHAT_IDS=*`)
 - quando un nuovo utente viene visto per la prima volta dal runtime, l'admin riceve una notifica proattiva con user id/chat id per gestire subito approvazione o rifiuto
-- l'admin puo' approvare o rifiutare richieste dal messaggio inline o con `/approve_user <telegram_user_id>` e `/reject_user <telegram_user_id>`
+- l'admin può approvare o rifiutare richieste dal messaggio inline o con `/approve_user <telegram_user_id>` e `/reject_user <telegram_user_id>`
 - `/admin_users` mostra all'admin lo stato degli utenti registrati (`new`, `pending`, `approved`, `blocked`, `admin`) e accorpa i filtri prima esposti come comandi separati
 - `/admin scala` mostra se il profilo SQLite resta dentro policy, se serve solo
-  monitorare o se e' opportuno preparare o richiedere una migrazione verso
+  monitorare o se è opportuno preparare o richiedere una migrazione verso
   Postgres/equivalente; non esegue migrazioni automatiche
 - `/admin sicurezza` mostra il report security operations senza stampare valori
   segreti: permessi `.env`, stato `state.db`, inventario env, backup e restore
   drill
-- `/admin storico` mostra gli ultimi eventi audit operativi e puo' filtrare per
-  tenant, cosi' supporto e diagnosi restano dentro Telegram
+- `/admin storico` mostra gli ultimi eventi audit operativi e può filtrare per
+  tenant, così supporto e diagnosi restano dentro Telegram
 - gli alias granulari precedenti (`/connect`, `/disconnect`, `/reconnect_status`, `/notifications`, `/leave_bot`, `/ultimi`, `/tutti`, `/ordine`, `/review_orders`, `/report_summary`, `/priority_orders`, `/why_not_notified`, `/service_status`, `/policy`, `/users`, `/pending_users`, `/unlinked_users`, `/reconnect_users`, `/inactive_users`, `/admin_dashboard`, `/maintenance_overview`) sono stati accorpati e ora rimandano ai comandi canonici
 
 ### Notifiche automatiche
@@ -572,7 +587,7 @@ Per default il bot usa un database SQLite in `data/state.db`.
 SQLite resta la scelta operativa per il servizio pubblico piccolo e approvato.
 Quando `fiscalbay-healthcheck` segnala `sqlite_migration_recommended` o una delle
 soglie `FISCALBAY_PUBLIC_*` viene superata, prima di ampliare gli utenti approvati
-va pianificato il passaggio a un database piu' robusto.
+va pianificato il passaggio a un database più robusto.
 Il comando `fiscalbay-scale-check` e `/admin scala` rendono esplicito il livello
 decisionale senza cambiare storage: `watch`, `migration_recommended` e
 `migration_required` sono segnali operativi, non automazioni di migrazione.
@@ -593,8 +608,8 @@ minime: ordini letti, ordini con dato fiscale, notifiche inviate, tenant noti,
 token attivi e rapporto tra utenti approvati e account collegati. Sono metriche
 operative per governare un servizio piccolo e curato, non analytics commerciali.
 Lo stesso pannello, insieme a `/admin manutenzione`, mostra anche versione
-deployata, tag, commit breve e stato release, cosi' l'admin puo' confrontare
-subito cio' che gira in produzione con l'ultimo tag pubblicato.
+deployata, tag, commit breve e stato release, così l'admin può confrontare
+subito ciò che gira in produzione con l'ultimo tag pubblicato.
 
 Se su un ambiente esistente trovi ancora i vecchi file JSON `data/notified_orders.json` o `data/failed_notifications.json`, il bot li migra automaticamente a SQLite al primo avvio e conserva una copia `.legacy-json.bak`.
 
@@ -657,7 +672,7 @@ Asset disponibili nel repository, allineati al setup VPS attuale (`fiscalbay`, `
 - `.env.example`
 
 Per esporre il callback OAuth senza usare l'indirizzo IP della VPS, usa un
-dominio HTTPS davanti a nginx. La guida operativa e' in `docs/PUBLIC_ACCESS.md`.
+dominio HTTPS davanti a nginx. La guida operativa è in `docs/PUBLIC_ACCESS.md`.
 
 ## Test
 

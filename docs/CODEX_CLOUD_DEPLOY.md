@@ -5,7 +5,7 @@ locale senza consumare GitHub Actions.
 
 ## Stato attuale
 
-GitHub Actions non e' un canale operativo attivo per FiscalBay. L'automazione
+GitHub Actions non è un canale operativo attivo per FiscalBay. L'automazione
 vive negli script locali e negli script/timer della VPS.
 
 Non sono versionati workflow in `.github/workflows/` e non vanno aggiunti o
@@ -13,7 +13,7 @@ riattivati senza richiesta esplicita del maintainer.
 
 Motivo operativo:
 
-- il budget Actions puo' essere esaurito o non disponibile
+- il budget Actions può essere esaurito o non disponibile
 - i run falliti per billing/spending limit non sono risolvibili rilanciando job
 - deploy, verifica, release e manutenzione devono restare riproducibili anche solo
   da Mac locale e VPS FiscalBay
@@ -53,11 +53,11 @@ Per controllare workflow residui non devono esserci file versionati qui:
 test ! -d .github/workflows || ! find .github/workflows -type f | grep .
 ```
 
-Il risultato atteso e' vuoto o la directory assente.
+Il risultato atteso è vuoto o la directory assente.
 
 ## Deploy Manuale
 
-La VPS FiscalBay corretta e':
+La VPS FiscalBay corretta è:
 
 ```bash
 ssh opc@79.72.45.89

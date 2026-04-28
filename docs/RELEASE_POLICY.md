@@ -22,9 +22,9 @@ La versione del pacchetto resta senza prefisso `v` in `pyproject.toml`.
 
 ## Regola operativa del repository
 
-Per questo repository il flusso da considerare ufficiale e' uno solo:
+Per questo repository il flusso da considerare ufficiale è uno solo:
 
-- si puo' lavorare anche direttamente su `main`
+- si può lavorare anche direttamente su `main`
 - i commit su `main` devono essere Conventional Commit corretti
 - `scripts/release_now.sh` decide bump versione, changelog, tag e GitHub Release
   quando il maintainer lancia una release esplicita
@@ -33,9 +33,9 @@ Per questo repository il flusso da considerare ufficiale e' uno solo:
 
 Regola pratica per agenti e maintainer:
 
-- se il cambiamento e' user-facing o operativo, il commit deve essere `feat:`, `fix:` o `perf:`
-- se il cambiamento e' breaking, usare `!` oppure footer `BREAKING CHANGE:`
-- non usare `refactor:` o `chore:` per cambi che in realta' meritano una release
+- se il cambiamento è user-facing o operativo, il commit deve essere `feat:`, `fix:` o `perf:`
+- se il cambiamento è breaking, usare `!` oppure footer `BREAKING CHANGE:`
+- non usare `refactor:` o `chore:` per cambi che in realtà meritano una release
 - non modificare manualmente `pyproject.toml` o `CHANGELOG.md` root solo per
   forzare una release: usare `scripts/release_now.sh`
 
@@ -43,13 +43,13 @@ Regola pratica per agenti e maintainer:
 
 Prima di creare un commit su `main`, l'agente deve verificare queste domande:
 
-1. Il cambiamento e' osservabile per utente o operatore?
-2. Se si', il commit message e' `feat:`, `fix:` o `perf:` invece di `refactor:` o `chore:`?
-3. C'e' qualche breaking change che richiede `!` o `BREAKING CHANGE:`?
+1. Il cambiamento è osservabile per utente o operatore?
+2. Se sì, il commit message è `feat:`, `fix:` o `perf:` invece di `refactor:` o `chore:`?
+3. C'è qualche breaking change che richiede `!` o `BREAKING CHANGE:`?
 4. Sto modificando versione/changelog/tag fuori da `scripts/release_now.sh`? Se
-   si', fermarmi: non e' il flusso standard.
+   sì, fermarmi: non è il flusso standard.
 
-Se una di queste risposte non e' coerente, il commit va corretto prima del push.
+Se una di queste risposte non è coerente, il commit va corretto prima del push.
 
 ## Regola di bump
 
@@ -57,7 +57,7 @@ Il repository usa Semantic Versioning.
 
 ### Patch
 
-Incrementa `PATCH` per cambi compatibili che correggono un comportamento gia' esistente.
+Incrementa `PATCH` per cambi compatibili che correggono un comportamento già esistente.
 
 Esempi:
 
@@ -74,7 +74,7 @@ fix: corregge il retry Telegram sulle risposte 429
 
 ### Minor
 
-Incrementa `MINOR` per nuove funzionalita' compatibili.
+Incrementa `MINOR` per nuove funzionalità compatibili.
 
 Esempi:
 
@@ -120,7 +120,7 @@ BREAKING CHANGE: il CSV usa intestazioni nuove non compatibili con la versione p
 
 I tipi da usare come default sono questi:
 
-- `feat:` nuova funzionalita' compatibile -> `MINOR`
+- `feat:` nuova funzionalità compatibile -> `MINOR`
 - `fix:` correzione compatibile -> `PATCH`
 - `perf:` miglioramento prestazionale osservabile -> `PATCH`
 - `feat!:` `fix!:` `refactor!:` oppure footer `BREAKING CHANGE:` -> `MAJOR`
@@ -130,7 +130,7 @@ I tipi da usare come default sono questi:
 - `ci:` solo workflow/pipeline -> nessun bump release automatico
 - `refactor:` refactor interno senza impatto funzionale -> nessun bump release automatico
 
-Regola pratica: se il cambiamento modifica cio' che un utente o un operatore osserva nel runtime, usa `fix:` o `feat:`. Se il cambiamento e' solo interno, non deve forzare una release.
+Regola pratica: se il cambiamento modifica ciò che un utente o un operatore osserva nel runtime, usa `fix:` o `feat:`. Se il cambiamento è solo interno, non deve forzare una release.
 
 ## Policy per PR e merge
 
@@ -139,12 +139,12 @@ Per restare allineati a GitHub e al calcolo SemVer locale:
 - usare PR anche da branch personali
 - preferire squash merge
 - impostare il titolo di squash merge in formato Conventional Commit
-- se una PR contiene piu' modifiche, il titolo deve riflettere l'impatto piu' alto
+- se una PR contiene più modifiche, il titolo deve riflettere l'impatto più alto
 - il titolo PR o il commit su `main` va verificato manualmente rispetto al formato
   Conventional Commit richiesto
-- questo repository e' privato e oggi ha un solo maintainer operativo
+- questo repository è privato e oggi ha un solo maintainer operativo
 - quindi review/commenti esterni non sono un prerequisito normale per il merge
-- il flusso standard e': self-review, test rilevanti verdi, PR pronta, merge
+- il flusso standard è: self-review, test rilevanti verdi, PR pronta, merge
 
 Esempi:
 
@@ -173,29 +173,29 @@ e direttamente usabile da `scripts/release_now.sh`.
 
 ## Changelog
 
-`CHANGELOG.md` in root e' il changelog ufficiale e viene aggiornato da
+`CHANGELOG.md` in root è il changelog ufficiale e viene aggiornato da
 `scripts/release_now.sh`.
 
 Principi:
 
 - mostra solo cambi rilevanti per una release
-- evita note manuali sparse in piu' file
+- evita note manuali sparse in più file
 - tiene allineati changelog, tag GitHub e versione pacchetto
 
-Lo storico preesistente resta consultabile in `docs/CHANGELOG.md`, ma non e' piu' il file canonico per le nuove release.
+Lo storico preesistente resta consultabile in `docs/CHANGELOG.md`, ma non è più il file canonico per le nuove release.
 
 ## Flusso GitHub
 
-Il flusso standard e' questo:
+Il flusso standard è questo:
 
 1. un commit Conventional Commit arriva su `main`
-2. il deploy operativo puo' uscire subito con `scripts/deploy_now.sh`
+2. il deploy operativo può uscire subito con `scripts/deploy_now.sh`
 3. quando serve una release versionata, il maintainer lancia
    `scripts/release_now.sh`
 4. lo script aggiorna `CHANGELOG.md` e `pyproject.toml`, crea commit
    `chore: release vX.Y.Z`, tag `vX.Y.Z` e GitHub Release
 5. lo script deploya `main` sulla VPS FiscalBay e attende lo smoke check
-6. non ci sono workflow GitHub Actions versionati finche' il maintainer non decide
+6. non ci sono workflow GitHub Actions versionati finché il maintainer non decide
    di riattivarli
 
 La creazione della GitHub Release usa `gh` se disponibile, altrimenti un token
@@ -204,10 +204,10 @@ GitHub esposto solo nell'ambiente locale come `GITHUB_TOKEN`, `GH_TOKEN` o
 Il deploy remoto del repository privato usa invece il token presente sulla VPS in
 `/etc/fiscalbay/deploy.env`.
 
-In modalita' main-only:
+In modalità main-only:
 
 - il commit su `main` sostituisce il merge della feature PR
-- `scripts/release_now.sh` e' il punto in cui si materializzano versione e
+- `scripts/release_now.sh` è il punto in cui si materializzano versione e
   changelog
 - `scripts/deploy_now.sh` chiude il ciclo operativo quando lo smoke check passa
 
@@ -216,7 +216,7 @@ In modalita' main-only:
 La baseline attuale parte dalla versione `0.1.0`.
 
 Per evitare di riversare automaticamente tutto lo storico precedente nel nuovo
-changelog machine-managed, la baseline resta il commit gia' presente al momento
+changelog machine-managed, la baseline resta il commit già presente al momento
 dell'adozione del changelog root.
 
 In pratica:
@@ -231,7 +231,7 @@ In pratica:
 `1.0.0` stabilizza il perimetro `approved_public_small`: bot Telegram pubblico
 con accesso approvato, singolo admin globale, onboarding OAuth su VPS, token
 tenant cifrati, SQLite entro soglie dichiarate, audit/retention/recovery minimi
-e deploy locale/VPS gia' rodato.
+e deploy locale/VPS già rodato.
 
 Passiamo a `1.0.0` quando sono vere tutte queste condizioni:
 
@@ -239,21 +239,21 @@ Passiamo a `1.0.0` quando sono vere tutte queste condizioni:
 - configurazione e env var principali sono documentate e non in forte movimento
 - il formato di output CLI e i comandi Telegram core sono abbastanza stabili da
   non richiedere cambi frequenti incompatibili
-- esiste un percorso operativo minimo di release e rollback gia' usato con successo
-- `docs/RELEASE_READINESS.md` e' allineato a governance, security e operazioni
+- esiste un percorso operativo minimo di release e rollback già usato con successo
+- `docs/RELEASE_READINESS.md` è allineato a governance, security e operazioni
 - `docs/DECISIONS_PENDING.md` non contiene decisioni bloccanti per il perimetro
   `approved_public_small`
 
-Il salto da `0.x.y` a `1.0.0` puo' essere eseguito con override esplicito:
+Il salto da `0.x.y` a `1.0.0` può essere eseguito con override esplicito:
 
 ```bash
 scripts/release_now.sh --version 1.0.0 --bump major
 ```
 
-Questo override e' ammesso per la prima release stabile anche senza breaking
-change runtime, perche' in SemVer `1.0.0` dichiara il primo contratto pubblico
+Questo override è ammesso per la prima release stabile anche senza breaking
+change runtime, perché in SemVer `1.0.0` dichiara il primo contratto pubblico
 stabile.
 
 `1.0.0` non equivale ad apertura pubblica multiutente libera. Per quel cambio il
-target resta Postgres o database equivalente gestito, piu' revisione dedicata di
-segreti, operativita' e supporto.
+target resta Postgres o database equivalente gestito, più revisione dedicata di
+segreti, operatività e supporto.

@@ -15,7 +15,7 @@ Questo documento serve come contesto persistente per nuove conversazioni con un'
 
 Obiettivo:
 
-- evitare di dover rispiegare ogni volta cos'e' il progetto
+- evitare di dover rispiegare ogni volta cos'è il progetto
 - chiarire lo stato reale del codice, del bot e della VPS
 - documentare il setup operativo attuale
 - distinguere chiaramente tra stato corrente, convenzioni operative e lavori ancora aperti
@@ -24,25 +24,25 @@ Nota importante:
 
 - questo file non deve contenere segreti
 - non inserire token, password, refresh token o chiavi private
-- puo' contenere host, path, utenti di servizio e workflow operativi, ma non credenziali sensibili
+- può contenere host, path, utenti di servizio e workflow operativi, ma non credenziali sensibili
 
-## Cos'e' il progetto
+## Cos'è il progetto
 
-`FiscalBay` e' un progetto Python che legge gli ordini eBay tramite API ufficiali e mostra l'identificativo fiscale disponibile nei dati ordine, in particolare i casi in cui eBay restituisce `buyer.taxIdentifier` con tipo e valore valorizzati.
+`FiscalBay` è un progetto Python che legge gli ordini eBay tramite API ufficiali e mostra l'identificativo fiscale disponibile nei dati ordine, in particolare i casi in cui eBay restituisce `buyer.taxIdentifier` con tipo e valore valorizzati.
 
-Il progetto oggi ha due modalita' principali:
+Il progetto oggi ha due modalità principali:
 
 - CLI locale per interrogazioni manuali
 - bot Telegram con comandi e notifiche automatiche
 
-Il progetto oggi e' da considerare:
+Il progetto oggi è da considerare:
 
 - servizio pubblico raggiungibile su Telegram
 - utilizzabile solo in chat privata col bot
 - accesso operativo governato da approvazione admin
 - multiutente tenant-aware sul piano applicativo
 - ospitato su una singola VPS Linux
-- pensato per un solo account eBay gia' collegato per utente, senza scelte account/environment lato UX
+- pensato per un solo account eBay già collegato per utente, senza scelte account/environment lato UX
 
 ## Scopo funzionale attuale
 
@@ -51,14 +51,14 @@ Il tool serve a:
 - interrogare ordini eBay recenti o specifici
 - recuperare il dettaglio ordine
 - estrarre `buyer.taxIdentifier.taxpayerId`
-- mostrare se il dato fiscale e' presente o assente
+- mostrare se il dato fiscale è presente o assente
 - notificare automaticamente via Telegram i nuovi ordini che contengono davvero un identificativo fiscale
 - mantenere una minima memoria operativa leggibile sullo stato del collegamento e sugli errori recenti utili
 
 Limite strutturale fondamentale:
 
-- il progetto mostra solo cio' che eBay restituisce davvero
-- se eBay non espone `buyer.taxIdentifier`, il tool non puo' dedurre l'identificativo fiscale
+- il progetto mostra solo ciò che eBay restituisce davvero
+- se eBay non espone `buyer.taxIdentifier`, il tool non può dedurre l'identificativo fiscale
 
 ## Perimetro da rispettare
 
@@ -91,7 +91,7 @@ Gli entrypoint `fiscalbay` e `fiscalbay-bot` puntano direttamente al package int
 
 Nota di stato:
 
-- la rifondazione strutturale, l'osservabilita' minima e la base multiutente sono considerate chiuse
+- la rifondazione strutturale, l'osservabilità minima e la base multiutente sono considerate chiuse
 - i prossimi lavori aperti sono descritti in `docs/ROADMAP.md`
 
 ### Struttura codice corrente
@@ -238,22 +238,22 @@ l'admin; il menu comandi Telegram resta limitato a `/stato`, `/account`,
 
 Nota onboarding:
 
-- `/account` mostra gia' il collegamento eBay noto per il tenant della chat
-- `/account collega` prepara gia' una sessione OAuth nel DB e puo' restituire un link pubblico se la VPS espone `EBAY_OAUTH_CONNECT_BASE_URL`
+- `/account` mostra già il collegamento eBay noto per il tenant della chat
+- `/account collega` prepara già una sessione OAuth nel DB e può restituire un link pubblico se la VPS espone `EBAY_OAUTH_CONNECT_BASE_URL`
 - `/account scollega` scollega localmente account e token del tenant corrente
   dal DB sulla VPS e guida l'utente alla revoca manuale del consenso nelle
-  impostazioni eBay quando il refresh token OAuth non e' revocabile dal servizio
-- `/settings notifiche on|off` consente gia' alla singola chat di attivare o spegnere le notifiche personali
-- `/settings` mostra gia' un riepilogo leggero delle preferenze utente/chat
-- la tastiera inline sotto i messaggi e' contestuale: menu generale su
+  impostazioni eBay quando il refresh token OAuth non è revocabile dal servizio
+- `/settings notifiche on|off` consente già alla singola chat di attivare o spegnere le notifiche personali
+- `/settings` mostra già un riepilogo leggero delle preferenze utente/chat
+- la tastiera inline sotto i messaggi è contestuale: menu generale su
   `/start`/`/help`, azioni account su `/account`, azioni ordini su `/ordini`,
   notifiche/preferenze su `/settings`, azioni secondarie su `/altre_azioni` e
   scorciatoie operative admin su `/admin`
-- se `TELEGRAM_ADMIN_USER_ID` e' configurata, gli utenti non admin entrano in stati `new/pending/approved/blocked` e possono sbloccare il bot solo dopo approvazione admin
-- l'admin puo' gestire gli accessi con callback inline o con `/admin_users`, `/approve_user` e `/reject_user`
+- se `TELEGRAM_ADMIN_USER_ID` è configurata, gli utenti non admin entrano in stati `new/pending/approved/blocked` e possono sbloccare il bot solo dopo approvazione admin
+- l'admin può gestire gli accessi con callback inline o con `/admin_users`, `/approve_user` e `/reject_user`
 - il runtime normalizza ora centralmente gli stati workflow e applica capability esplicite per i comandi sensibili, invece di affidarsi a semplici check sparsi su stringhe di stato
-- il workflow accessi non si ferma piu' al solo cambio di stato: approvazione e blocco riallineano anche le permission applicate su chat e subscription gia' esistenti
-- il comando `/account collega` e' ora idempotente rispetto alla sessione OAuth pendente: se la sessione valida esiste gia', viene riusata
+- il workflow accessi non si ferma più al solo cambio di stato: approvazione e blocco riallineano anche le permission applicate su chat e subscription già esistenti
+- il comando `/account collega` è ora idempotente rispetto alla sessione OAuth pendente: se la sessione valida esiste già, viene riusata
 - una `operation_queue` minima in SQLite tiene le applicazioni differibili o recuperabili dei workflow sensibili, e la reconciliation periodica la processa sul server
 - esiste ora anche un callback server minimale separato, che chiude il flusso `/account collega` quando la VPS espone URL pubblici corretti e usa il `RuName` eBay corretto verso il developer portal
 - i passaggi sensibili di accesso e collegamento account lasciano ora anche un audit log minimo append-only nel `state.db`
@@ -267,7 +267,7 @@ Nota onboarding:
 Il bot:
 
 - esegue polling ordini ogni `EBAY_ORDER_POLL_INTERVAL`
-- confronta con lo stato gia' notificato
+- confronta con lo stato già notificato
 - invia notifiche solo se il record contiene davvero `taxIdentifierType` e `taxpayerId`
 - usa sia `orderId` sia fingerprint hash per deduplicare meglio
 - usa una retry queue per i messaggi Telegram falliti
@@ -286,19 +286,19 @@ Default runtime:
 
 Lo stato SQLite contiene:
 
-- ordini gia' notificati
-- hash gia' notificati
+- ordini già notificati
+- hash già notificati
 - `last_check`
 - `last_error`
 - metriche minime
 - retry queue Telegram
 
-Compatibilita' legacy:
+Compatibilità legacy:
 
 - se trova `data/notified_orders.json` o `data/failed_notifications.json`, il progetto oggi li migra automaticamente a SQLite
 - conserva una copia backup durante la migrazione
 
-## Qualita' e tooling
+## Qualità e tooling
 
 Il progetto oggi include:
 
@@ -316,19 +316,19 @@ bash scripts/ci_verify.sh
 
 ## Stato architetturale attuale
 
-### Miglioramenti gia' fatti
+### Miglioramenti già fatti
 
 - package interno introdotto
-- separazione piu' chiara tra config, clients, services e storage
+- separazione più chiara tra config, clients, services e storage
 - separazione tra parsing comandi, runtime Telegram e notifiche automatiche
 - storage SQLite strutturato
 - migrazioni storage introdotte
-- retry queue resa piu' robusta
+- retry queue resa più robusta
 - retry/backoff centralizzato
 - lock file del bot migliorato
 - modelli tipizzati per stato runtime e ordine normalizzato
 - test integrazione su bot, storage e fetch ordini
-- logging piu' coerente
+- logging più coerente
 - healthcheck operativo disponibile
 - CI e quality gate locali presenti
 - percorso di refactor documentato nei documenti stabili e nelle ADR
@@ -338,7 +338,7 @@ bash scripts/ci_verify.sh
 - accesso approvato manualmente, non apertura libera
 - cancellazione utente amministrativa assistita, con richiesta utente avviabile
   da `/settings dati`
-- revoca consenso eBay classificata come manuale quando non e' disponibile una
+- revoca consenso eBay classificata come manuale quando non è disponibile una
   revoca OAuth remota documentata; disconnect locale comunque sicuro
 - SQLite accettato solo nel perimetro `approved_public_small`
 
@@ -347,28 +347,28 @@ Aggiornamento di stato:
 - il bot usa ora utenti/chat/account/token tenant-aware come percorso operativo normale su VPS
 - i comandi del bot risolvono il tenant dai dati runtime Telegram e leggono stato e retry queue del tenant invece del solo stato globale
 - il layer applicativo che sceglie l'environment eBay passa dal tenant e dall'account collegato quando il DB lo consente
-- la sorgente credenziali per il fetch non e' piu' sparsa nei caller: il bot multiutente con admin configurato usa solo token tenant; il fallback `.env` resta confinato ai percorsi legacy adminless o CLI
-- il comando `/stato` mostra esplicitamente se la chat sta lavorando in contesto tenant, se il token tenant e' pronto o se manca ancora il collegamento
-- e' disponibile anche `/account`, che mostra lo stato del collegamento eBay
-  registrato per il tenant della chat ed e' parte del percorso onboarding stabile
+- la sorgente credenziali per il fetch non è più sparsa nei caller: il bot multiutente con admin configurato usa solo token tenant; il fallback `.env` resta confinato ai percorsi legacy adminless o CLI
+- il comando `/stato` mostra esplicitamente se la chat sta lavorando in contesto tenant, se il token tenant è pronto o se manca ancora il collegamento
+- è disponibile anche `/account`, che mostra lo stato del collegamento eBay
+  registrato per il tenant della chat ed è parte del percorso onboarding stabile
 
 ## Multiutenza oltre il perimetro approved_public_small
 
-Il servizio `1.0.0` supporta gia' tenant approvati e token per utente nel modello
+Il servizio `1.0.0` supporta già tenant approvati e token per utente nel modello
 piccolo e controllato.
 
-Una multiutenza pubblica piu' ampia richiede invece:
+Una multiutenza pubblica più ampia richiede invece:
 
 - Postgres o database equivalente gestito
 - revisione dedicata di concorrenza, backup e restore dati
-- supporto operativo piu' formalizzato
-- osservabilita' piu' ricca
-- eventuale gestione segreti piu' robusta
+- supporto operativo più formalizzato
+- osservabilità più ricca
+- eventuale gestione segreti più robusta
 
 Questo passaggio va trattato come cambio di natura del progetto:
 
 - da servizio piccolo con accesso approvato
-- a servizio con requisiti piu' seri di sicurezza, privacy, backup e osservabilita'
+- a servizio con requisiti più seri di sicurezza, privacy, backup e osservabilità
 
 Finding che restano driver per il cambio di scala:
 
@@ -378,7 +378,7 @@ Finding che restano driver per il cambio di scala:
 - alert prodotto non persistenti come storico dedicato
 - cancellazione self-service completa senza conferma admin non ancora presente
 
-Questi finding sono la base esplicita delle scelte gia' fissate in `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md` e `docs/OAUTH_FLOW.md`.
+Questi finding sono la base esplicita delle scelte già fissate in `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md` e `docs/OAUTH_FLOW.md`.
 
 ## VPS attuale
 
@@ -409,10 +409,10 @@ Politica SSH attuale:
 - `PermitRootLogin no`
 - `PubkeyAuthentication yes`
 
-Il warning SSH post-quantum che compariva in passato e' stato risolto:
+Il warning SSH post-quantum che compariva in passato è stato risolto:
 
 - `sshd` ora pubblica anche un KEX ibrido compatibile
-- una connessione SSH semplice non mostra piu' il warning relativo al server
+- una connessione SSH semplice non mostra più il warning relativo al server
 
 ### Caratteristiche VPS
 
@@ -433,9 +433,9 @@ Risorse rilevate durante l'audit:
 
 Nota importante:
 
-- la RAM e' limitata
-- il server e' sufficiente per la fase privata attuale
-- va osservato bene prima di aumentare carico o complessita'
+- la RAM è limitata
+- il server è sufficiente per la fase privata attuale
+- va osservato bene prima di aumentare carico o complessità
 
 ### Hardening attuale VPS
 
@@ -443,7 +443,7 @@ Nota importante:
 - servizio esposto di fatto: `ssh`
 - `fail2ban` installato
 - jail `sshd` attiva
-- OpenSSH aggiornato al pacchetto piu' recente disponibile nei repository Oracle Linux
+- OpenSSH aggiornato al pacchetto più recente disponibile nei repository Oracle Linux
 
 ### Tool presenti sulla VPS
 
@@ -506,9 +506,9 @@ Il report include anche `release.*` con versione package, branch, commit breve,
 tag corrente, ultimo tag e stato release. Gli stessi dati compaiono in forma
 compatta su `/admin` e `/admin manutenzione`.
 
-### Stato manutenzione VPS gia' eseguito
+### Stato manutenzione VPS già eseguito
 
-Gia' fatto:
+Già fatto:
 
 - aggiornamento sistema
 - aggiornamento OpenSSH
@@ -538,7 +538,7 @@ Lì sono stati archiviati:
 
 Questo significa:
 
-- il percorso operativo e' pulito
+- il percorso operativo è pulito
 - ma esiste ancora una rete di sicurezza se serve recuperare qualcosa
 
 ## Login methods rilevanti
@@ -580,7 +580,7 @@ Quando viene fatta una modifica significativa:
 1. modifica locale nel repository
 2. verifica locale con test/tooling
 3. commit e push su `main`
-4. release versionata quando il cambio e' osservabile
+4. release versionata quando il cambio è osservabile
 5. deploy sulla VPS
 6. restart servizio bot se il runtime cambia
 7. verifica finale con log/status/healthcheck
@@ -597,8 +597,8 @@ Situazione attuale:
 
 - il progetto va trattato come servizio Python deployato su VPS Linux
 - il deploy reale vive sulla VPS Linux
-- il repository non ha piu' integrazioni GitHub Actions da considerare
-- deploy, release, CI e diagnostica VPS sono attivita' manuali locali o via SSH
+- il repository non ha più integrazioni GitHub Actions da considerare
+- deploy, release, CI e diagnostica VPS sono attività manuali locali o via SSH
   sulla VPS FiscalBay
 
 ## File operativi importanti
@@ -618,35 +618,35 @@ Script deploy:
 - `deploy/smoke-check.sh`
 - `deploy/fiscalbay-bot.service`
 
-Verifica qualita':
+Verifica qualità:
 
 - `scripts/ci_verify.sh`
 
-## Priorita' dopo 1.0.0
+## Priorità dopo 1.0.0
 
 La prima release stabile copre il servizio pubblico piccolo con accesso approvato.
 
 Le cose principali ancora aperte non sono bloccanti per `1.0.0`, ma guidano
 l'evoluzione successiva:
 
-- Postgres o database gestito prima di un'apertura pubblica multiutente piu'
+- Postgres o database gestito prima di un'apertura pubblica multiutente più
   ampia
 - secret manager dedicato se il perimetro operativo cresce
 - cancellazione utente completamente self-service da Telegram senza conferma admin
 - ruoli admin multipli o delega operativa
 - alert prodotto persistenti con storico dedicato
-- eventuale automazione ulteriore della revoca consenso eBay se eBay esporra' un
+- eventuale automazione ulteriore della revoca consenso eBay se eBay esporrà un
   percorso OAuth moderno applicabile ai refresh token del progetto
 
 ## Cose che un'IA nuova deve sapere subito
 
-- il progetto oggi funziona, e' live ed e' pronto per il perimetro stabile
+- il progetto oggi funziona, è live ed è pronto per il perimetro stabile
   `approved_public_small`
-- il bot e' pubblico su Telegram ma con accesso approvato dall'admin
-- il deploy vero e' su VPS Linux
+- il bot è pubblico su Telegram ma con accesso approvato dall'admin
+- il deploy vero è su VPS Linux
 - la VPS usa Oracle Linux 9.7
-- l'accesso standard e' `ssh opc@79.72.45.89`
-- SSH e' key-only, root login disabilitato
+- l'accesso standard è `ssh opc@79.72.45.89`
+- SSH è key-only, root login disabilitato
 - il bot gira come `systemd` service `fiscalbay-bot`
 - il callback OAuth gira come `systemd` service `fiscalbay-oauth`
 - la reconciliation periodica gira via `fiscalbay-reconcile.timer`
@@ -654,17 +654,17 @@ l'evoluzione successiva:
   dallo smoke deploy con avvio esplicito delle rispettive unit oneshot
 - `fiscalbay-duckdns.timer` viene installato ma abilitato solo se esiste
   `/etc/fiscalbay/duckdns.env`
-- il runtime corretto del progetto e' Python `3.11` nel `.venv`
+- il runtime corretto del progetto è Python `3.11` nel `.venv`
 - il bot usa SQLite locale in `data/state.db`
-- la roadmap da seguire per il lavoro residuo e' `docs/ROADMAP.md`
-- la readiness stabile e' descritta in `docs/RELEASE_READINESS.md`
+- la roadmap da seguire per il lavoro residuo è `docs/ROADMAP.md`
+- la readiness stabile è descritta in `docs/RELEASE_READINESS.md`
 
 ## Come mantenere aggiornato questo file
 
 Aggiornare questo documento quando cambia almeno uno di questi punti:
 
 - struttura del codice
-- modalita' di deploy
+- modalità di deploy
 - host o utente della VPS
 - policy di login SSH
 - runtime Python

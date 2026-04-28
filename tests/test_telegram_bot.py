@@ -43,6 +43,7 @@ from src.fiscalbay.telegram_commands import (
     CALLBACK_ADMIN_MAINTENANCE,
     CALLBACK_ADMIN_USERS_PENDING,
     CALLBACK_ORDINI,
+    CALLBACK_ORDINI_EXPORT,
     CALLBACK_ORDINI_PRIORITY,
     CALLBACK_ORDINI_REPORT,
     CALLBACK_ORDINI_REVIEW,
@@ -114,9 +115,10 @@ class TelegramBotTests(unittest.TestCase):
                     {"text": "Report", "callback_data": CALLBACK_ORDINI_REPORT},
                 ],
                 [
-                    {"text": "Priorita'", "callback_data": CALLBACK_ORDINI_PRIORITY},
-                    {"text": "Account", "callback_data": "menu:account"},
+                    {"text": "Priorità", "callback_data": CALLBACK_ORDINI_PRIORITY},
+                    {"text": "Export", "callback_data": CALLBACK_ORDINI_EXPORT},
                 ],
+                [{"text": "Account", "callback_data": "menu:account"}],
                 [{"text": "Guida", "callback_data": CALLBACK_HELP}],
             ],
         )
@@ -335,7 +337,7 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("1.1.0", text)
         self.assertIn("tagged_clean", text)
         self.assertIn("abc1234", text)
-        self.assertIn("Attivita' 24h", text)
+        self.assertIn("Attività 24h", text)
         self.assertIn("data_request", text)
 
     def test_format_admin_history_renders_compact_audit_rows(self) -> None:
