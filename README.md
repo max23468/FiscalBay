@@ -443,6 +443,7 @@ Comportamento:
 - `/ordini fiscali` mostra solo ordini con identificativo fiscale presente
 - `/ordini tutti` mostra anche ordini senza dato fiscale
 - `/ordini cerca` interroga un ordine specifico
+- i messaggi ordine con identificativo fiscale valorizzato includono un pulsante inline per copiare direttamente il valore fiscale, ad esempio CF o P.IVA
 - `/stato` mostra ultimo check, contatori e dimensione della coda retry; `/stato servizio` mostra lo stato servizio sintetico
 - `/account` riassume lo stato eBay; `collega`, `reconnect` e `scollega` gestiscono le azioni account
 - `/settings` riassume preferenze chat e tenant; `notifiche`, `filtro`, `policy` e `lascia` gestiscono le azioni correlate
@@ -461,6 +462,7 @@ Se il bot resta in esecuzione:
 - confronta gli ordini con quelli già notificati
 - invia un messaggio solo quando trova davvero un `taxIdentifierType` valorizzato e un `taxpayerId` presente
 - nel messaggio include i dati ordine restituiti da eBay, tra cui nome, email, indirizzo, quantità, importo, data, stato transazione e descrizione prodotto quando disponibili
+- aggiunge un pulsante inline per copiare il `taxpayerId` senza selezionare il testo del messaggio
 - salva sia `orderId` sia un hash del contenuto dell'ordine per deduplicare meglio
 - se l'invio Telegram fallisce, accoda il messaggio e ritenta nei cicli successivi
 
