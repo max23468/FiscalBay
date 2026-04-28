@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.1](https://github.com/max23468/FiscalBay/compare/v1.0.0...v1.0.1) (2026-04-28)
+
+### Bug Fixes
+
+* improve telegram order notification formatting ([d6aae5b](https://github.com/max23468/FiscalBay/commit/d6aae5bd6ee619521325e3e626944b83e540c3e0))
+
+### Maintenance
+
+* structure 1.x roadmap ([4370443](https://github.com/max23468/FiscalBay/commit/4370443cb1e6bbee6a2d80e7ebdeb1b1372f16fd))
+
 ## [1.0.0](https://github.com/max23468/FiscalBay/compare/v0.20.0...v1.0.0) (2026-04-28)
 
 ### Features
