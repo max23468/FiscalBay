@@ -187,9 +187,14 @@ L'audit log minimo oggi copre:
 - `disconnect`
 - `oauth_success`
 - `oauth_failure`
+- `data_request`
 - `tenant_export`
 - `tenant_delete`
 - `retention_prune`
+
+L'admin puo' consultare uno storico operativo leggero con
+`/admin storico [telegram_user_id] [limit]`; il comando legge l'audit esistente
+e non introduce una dashboard web o uno storico prodotto completo.
 
 ## Retention minima
 

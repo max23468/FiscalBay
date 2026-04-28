@@ -38,6 +38,7 @@ COMMAND_CAPABILITIES: dict[str, str] = {
     "/ordine": CAPABILITY_VIEW_ORDERS,
     "/admin": CAPABILITY_REVIEW_ACCESS,
     "/admin_users": CAPABILITY_REVIEW_ACCESS,
+    "/admin_history": CAPABILITY_REVIEW_ACCESS,
     "/tenant_health": CAPABILITY_REVIEW_ACCESS,
     "/approve_user": CAPABILITY_REVIEW_ACCESS,
     "/reject_user": CAPABILITY_REVIEW_ACCESS,
@@ -51,6 +52,7 @@ ADMIN_ONLY_COMMANDS = frozenset(
     {
         "/admin",
         "/admin_users",
+        "/admin_history",
         "/approve_user",
         "/reject_user",
         "/suspend_user",

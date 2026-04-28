@@ -188,6 +188,7 @@ from .telegram_commands import (
     format_admin_dashboard,
     format_admin_data_request,
     format_admin_dormant_review,
+    format_admin_history,
     format_admin_maintenance_overview,
     format_admin_status_update,
     format_admin_tenant_delete_status,
@@ -786,6 +787,93 @@ def _build_operation_queue_samples(telegram_config: TelegramConfig) -> list[dict
     ]
 
 
+def _audit_detail_summary(details_json: str) -> str:
+    if not details_json:
+        return ""
+    try:
+        details = json.loads(details_json)
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(details, dict):
+        return ""
+    preferred_keys = (
+        "admin_notified",
+        "status",
+        "account_status",
+        "token_status",
+        "remote_revocation_status",
+        "operations_failed",
+        "previous_mode",
+        "oauth_state",
+        "reason",
+        "error",
+    )
+    parts: list[str] = []
+    for key in preferred_keys:
+        if key not in details:
+            continue
+        value = details.get(key)
+        if isinstance(value, dict | list):
+            continue
+        parts.append(f"{key}={value}")
+        if len(parts) >= 3:
+            break
+    return " ".join(parts)
+
+
+def _audit_entry_to_history_row(entry: AuditLogEntry) -> dict[str, object]:
+    return {
+        "created_at": entry.created_at,
+        "event_type": entry.event_type,
+        "outcome": entry.outcome,
+        "actor_telegram_user_id": entry.actor_telegram_user_id,
+        "target_telegram_user_id": entry.target_telegram_user_id,
+        "telegram_chat_id": entry.telegram_chat_id,
+        "ebay_user_id": entry.ebay_user_id,
+        "environment": entry.environment,
+        "detail": _audit_detail_summary(entry.details_json),
+    }
+
+
+def _build_recent_activity_rows(
+    telegram_config: TelegramConfig,
+    *,
+    hours: int = 24,
+) -> list[dict[str, object]]:
+    now = datetime.now(timezone.utc)
+    counts: dict[str, int] = {}
+    for entry in _load_recent_audit_entries(telegram_config, limit=400):
+        created_at = _parse_iso_timestamp(entry.created_at)
+        if created_at is None:
+            continue
+        if int((now - created_at).total_seconds()) > hours * 60 * 60:
+            continue
+        counts[entry.event_type] = counts.get(entry.event_type, 0) + 1
+    return [
+        {"event_type": event_type, "count": count}
+        for event_type, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:6]
+    ]
+
+
+def _build_admin_history_rows(
+    telegram_config: TelegramConfig,
+    *,
+    target_user_id: int | None = None,
+    limit: int = 8,
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for entry in _load_recent_audit_entries(telegram_config, limit=250):
+        if target_user_id is not None and target_user_id not in {
+            entry.actor_telegram_user_id,
+            entry.target_telegram_user_id,
+        }:
+            continue
+        rows.append(_audit_entry_to_history_row(entry))
+        if len(rows) >= limit:
+            break
+    return rows
+
+
 def _tenant_not_linked_message(title: str) -> list[str]:
     return [
         f"{title}\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -972,6 +1060,7 @@ def _build_admin_dashboard_payload(telegram_config: TelegramConfig) -> dict[str,
         },
         "queue": queue_summary,
         "alerts": alerts,
+        "recent_activity": _build_recent_activity_rows(telegram_config),
     }
 
 
@@ -1024,6 +1113,30 @@ def _handle_admin_read_command(
         if args and args[0] == "maintenance":
             return [
                 format_admin_maintenance_overview(_build_admin_maintenance_payload(telegram_config))
+            ]
+        if args and args[0] in {"history", "storico", "audit"}:
+            target_user_id: int | None = None
+            limit = 8
+            if len(args) > 1 and args[1].strip().lower() not in {"all", "tutti"}:
+                try:
+                    target_user_id = int(args[1])
+                except ValueError:
+                    return ["Uso corretto: <code>/admin storico [telegram_user_id] [limit]</code>"]
+            if len(args) > 2:
+                try:
+                    limit = min(20, max(1, int(args[2])))
+                except ValueError:
+                    return ["Uso corretto: <code>/admin storico [telegram_user_id] [limit]</code>"]
+            return [
+                format_admin_history(
+                    _build_admin_history_rows(
+                        telegram_config,
+                        target_user_id=target_user_id,
+                        limit=limit,
+                    ),
+                    target_user_id=target_user_id,
+                    limit=limit,
+                )
             ]
         return [format_admin_dashboard(_build_admin_dashboard_payload(telegram_config))]
     if command == "/admin_users":
@@ -1132,6 +1245,14 @@ def _handle_admin_read_command(
     if command == "/maintenance_overview":
         return [
             format_admin_maintenance_overview(_build_admin_maintenance_payload(telegram_config))
+        ]
+    if command == "/admin_history":
+        return [
+            format_admin_history(
+                _build_admin_history_rows(telegram_config, limit=8),
+                target_user_id=None,
+                limit=8,
+            )
         ]
     if command == "/tenant_health":
         rows = _build_user_rows(telegram_config)

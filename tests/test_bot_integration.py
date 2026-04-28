@@ -1125,6 +1125,68 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("fiscali: <code>4</code> (<code>40%</code>)", replies[0])
             self.assertIn("Notifiche inviate: <code>2</code>", replies[0])
             self.assertIn("linked/approved: <code>50%</code>", replies[0])
+            self.assertIn("/admin storico", replies[0])
+
+    def test_admin_history_filters_recent_audit_by_tenant(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+            append_audit_log_entry(
+                str(db_path),
+                AuditLogEntry(
+                    event_type="data_request",
+                    created_at="2026-04-28T10:00:00Z",
+                    actor_telegram_user_id=999,
+                    target_telegram_user_id=999,
+                    telegram_chat_id=456,
+                    outcome="delete_requested",
+                    details_json='{"admin_notified": true, "account_status": "linked"}',
+                ),
+            )
+            append_audit_log_entry(
+                str(db_path),
+                AuditLogEntry(
+                    event_type="oauth_failure",
+                    created_at="2026-04-28T10:05:00Z",
+                    actor_telegram_user_id=888,
+                    target_telegram_user_id=888,
+                    telegram_chat_id=457,
+                    outcome="failed",
+                    details_json='{"reason": "token_expired"}',
+                ),
+            )
+
+            replies = process_message(
+                text="/admin storico 999 5",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Storico operativo", replies[0])
+            self.assertIn("Filtro tenant: <code>999</code>", replies[0])
+            self.assertIn("data_request", replies[0])
+            self.assertIn("delete_requested", replies[0])
+            self.assertIn("admin_notified=True", replies[0])
+            self.assertNotIn("oauth_failure", replies[0])
+            self.assertNotIn("888", replies[0])
 
     def test_service_mode_is_rate_limited(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1487,6 +1549,16 @@ class BotIntegrationTests(unittest.TestCase):
             )
             self.assertIn("inactive_user", inactive_replies[0])
             self.assertNotIn("reconnect_user", inactive_replies[0])
+
+            health_replies = process_message(
+                text="/tenant_health 1000",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+            self.assertIn("next=<code>chiedi reconnect</code>", health_replies[0])
+            self.assertIn("activity=", health_replies[0])
 
     def test_admin_maintenance_overview_highlights_queue_and_oauth_cleanup(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

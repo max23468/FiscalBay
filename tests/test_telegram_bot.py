@@ -48,6 +48,7 @@ from src.fiscalbay.telegram_commands import (
     CALLBACK_ORDINI_REVIEW,
     build_telegram_branding_profile,
     format_admin_dashboard,
+    format_admin_history,
     format_admin_maintenance_overview,
     format_order_date,
     is_admin_authorized,
@@ -324,6 +325,7 @@ class TelegramBotTests(unittest.TestCase):
                 "metrics": {},
                 "queue": {},
                 "alerts": [],
+                "recent_activity": [{"event_type": "data_request", "count": 2}],
             }
         )
 
@@ -331,6 +333,30 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("1.1.0", text)
         self.assertIn("tagged_clean", text)
         self.assertIn("abc1234", text)
+        self.assertIn("Attivita' 24h", text)
+        self.assertIn("data_request", text)
+
+    def test_format_admin_history_renders_compact_audit_rows(self) -> None:
+        text = format_admin_history(
+            [
+                {
+                    "created_at": "2026-04-28T10:00:00Z",
+                    "event_type": "data_request",
+                    "outcome": "delete_requested",
+                    "actor_telegram_user_id": 999,
+                    "target_telegram_user_id": 999,
+                    "detail": "admin_notified=True account_status=linked",
+                }
+            ],
+            target_user_id=999,
+            limit=5,
+        )
+
+        self.assertIn("Storico operativo", text)
+        self.assertIn("Filtro tenant: <code>999</code>", text)
+        self.assertIn("data_request", text)
+        self.assertIn("delete_requested", text)
+        self.assertIn("admin_notified=True", text)
 
     def test_admin_maintenance_overview_includes_release_metadata(self) -> None:
         text = format_admin_maintenance_overview(

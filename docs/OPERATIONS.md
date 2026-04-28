@@ -163,6 +163,9 @@ Controllo accessi Telegram:
 - gli utenti non approvati possono solo usare `/start`, `/help`, `/altre_azioni` e `/request_access`
 - l'admin riceve una richiesta con pulsanti inline `Approva` e `Rifiuta`
 - in alternativa l'admin puo' usare `/admin_users all|pending|unlinked|reconnect|inactive`, `/tenant_health`, `/admin`, `/admin dormant [ore]`, `/admin export <telegram_user_id>`, `/admin delete_tenant <telegram_user_id> confirm`, `/approve_user <telegram_user_id>`, `/reject_user <telegram_user_id>`, `/suspend_user <telegram_user_id>` e `/reactivate_user <telegram_user_id>`
+- per supporto e diagnosi rapida l'admin puo' usare
+  `/admin storico [telegram_user_id] [limit]`, che legge l'audit recente senza
+  introdurre una dashboard web o un nuovo archivio persistente
 - quando un utente usa `/settings dati export` o `/settings dati cancellazione`,
   l'admin riceve una notifica con i comandi operativi suggeriti; la richiesta non
   modifica o cancella dati finche' l'admin non esegue export/delete
@@ -180,8 +183,10 @@ Controllo accessi Telegram:
 Audit log minimo:
 
 - il `state.db` contiene ora anche una tabella append-only `audit_log`
-- eventi tracciati: `request_access`, `approve`, `reject`, `connect`, `disconnect`, `oauth_success`, `oauth_failure`, `tenant_export`, `tenant_delete`, `retention_prune`
+- eventi tracciati: `request_access`, `approve`, `reject`, `connect`, `disconnect`, `oauth_success`, `oauth_failure`, `data_request`, `tenant_export`, `tenant_delete`, `retention_prune`
 - l'audit log integra i messaggi utente e i log runtime, non li sostituisce
+- l'audit recente e' consultabile da Telegram con `/admin storico`, anche
+  filtrando per tenant
 
 Servizio OAuth su VPS:
 

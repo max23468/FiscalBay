@@ -479,6 +479,7 @@ Comandi admin:
 - `/admin` (admin)
 - `/ping` (admin, diagnostica rapida)
 - `/admin manutenzione` (admin)
+- `/admin storico [telegram_user_id] [limit]` (admin)
 - `/admin_users all|pending|unlinked|reconnect|inactive` (admin)
 - `/tenant_health [telegram_user_id]` (admin)
 - `/approve_user <telegram_user_id>` e `/reject_user <telegram_user_id>` (admin)
@@ -509,6 +510,8 @@ Comportamento:
 - quando un nuovo utente viene visto per la prima volta dal runtime, l'admin riceve una notifica proattiva con user id/chat id per gestire subito approvazione o rifiuto
 - l'admin puo' approvare o rifiutare richieste dal messaggio inline o con `/approve_user <telegram_user_id>` e `/reject_user <telegram_user_id>`
 - `/admin_users` mostra all'admin lo stato degli utenti registrati (`new`, `pending`, `approved`, `blocked`, `admin`) e accorpa i filtri prima esposti come comandi separati
+- `/admin storico` mostra gli ultimi eventi audit operativi e puo' filtrare per
+  tenant, cosi' supporto e diagnosi restano dentro Telegram
 - gli alias granulari precedenti (`/connect`, `/disconnect`, `/reconnect_status`, `/notifications`, `/leave_bot`, `/ultimi`, `/tutti`, `/ordine`, `/review_orders`, `/report_summary`, `/priority_orders`, `/why_not_notified`, `/service_status`, `/policy`, `/users`, `/pending_users`, `/unlinked_users`, `/reconnect_users`, `/inactive_users`, `/admin_dashboard`, `/maintenance_overview`) sono stati accorpati e ora rimandano ai comandi canonici
 
 ### Notifiche automatiche

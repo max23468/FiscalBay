@@ -1107,6 +1107,7 @@ def format_admin_dashboard(dashboard: Mapping[str, object]) -> str:
     queue = dashboard.get("queue") or {}
     release = dashboard.get("release") or {}
     alerts = dashboard.get("alerts") or []
+    recent_activity = list(dashboard.get("recent_activity") or [])
     mode = html.escape(str(dashboard.get("service_mode") or "normal"))
     package_version = html.escape(str(release.get("package_version") or "unknown"))
     git_tag = html.escape(str(release.get("git_tag") or "none"))
@@ -1170,7 +1171,77 @@ def format_admin_dashboard(dashboard: Mapping[str, object]) -> str:
             f"{html.escape(str(alert.get('message') or ''))}"
             for alert in alerts
         )
+    if recent_activity:
+        sections.append("\n🧾 <b>Attivita' 24h</b>")
+        sections.extend(
+            "• "
+            f"<code>{html.escape(str(row.get('event_type') or 'unknown'))}</code>: "
+            f"<code>{html.escape(str(row.get('count') or 0))}</code>"
+            for row in recent_activity
+        )
+    sections.append("Storico operativo: <code>/admin storico [telegram_user_id] [limit]</code>.")
     return "\n".join(sections)
+
+
+def _admin_next_action_for_row(row: Mapping[str, object]) -> str:
+    status = str(row.get("status") or "")
+    operational_state = str(row.get("operational_state") or "")
+    account_status = str(row.get("account_status") or "unlinked")
+    token_status = str(row.get("token_status") or "missing")
+    if status == "pending":
+        return "approva/rifiuta"
+    if status == "blocked":
+        return "riattiva se serve"
+    if operational_state == "reconnect_required" or token_status in {
+        "revoked",
+        "expired",
+        "token_expired",
+    }:
+        return "chiedi reconnect"
+    if status == "approved" and account_status != "linked":
+        return "invita connect"
+    if operational_state == "ready":
+        return "monitora"
+    if status == "admin":
+        return "admin"
+    return "review"
+
+
+def format_admin_history(
+    rows: Iterable[Mapping[str, object]],
+    *,
+    target_user_id: int | None,
+    limit: int,
+) -> str:
+    rendered_rows = list(rows)
+    target = "tutti" if target_user_id is None else str(target_user_id)
+    if not rendered_rows:
+        return (
+            "🧾 <b>Storico operativo</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"Filtro tenant: <code>{html.escape(target)}</code>\n"
+            "Nessun evento audit recente da mostrare."
+        )
+    lines = [
+        "🧾 <b>Storico operativo</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"Filtro tenant: <code>{html.escape(target)}</code> • limite <code>{limit}</code>",
+    ]
+    for row in rendered_rows:
+        actor = html.escape(str(row.get("actor_telegram_user_id") or "n/d"))
+        target_id = html.escape(str(row.get("target_telegram_user_id") or "n/d"))
+        event_type = html.escape(str(row.get("event_type") or "unknown"))
+        outcome = html.escape(str(row.get("outcome") or "n/d"))
+        created_at = html.escape(str(row.get("created_at") or "n/d"))
+        detail = html.escape(str(row.get("detail") or ""))
+        detail_text = f" • <code>{detail}</code>" if detail else ""
+        lines.append(
+            f"• <code>{created_at}</code> "
+            f"event=<code>{event_type}</code> outcome=<code>{outcome}</code> "
+            f"actor=<code>{actor}</code> target=<code>{target_id}</code>"
+            f"{detail_text}"
+        )
+    return "\n".join(lines)
 
 
 def format_admin_maintenance_overview(payload: Mapping[str, object]) -> str:
@@ -1277,7 +1348,8 @@ def format_admin_maintenance_overview(payload: Mapping[str, object]) -> str:
         lines.extend(f"• {action}" for action in quick_actions)
     lines.append(
         "Usa <code>/admin</code>, <code>/tenant_health</code> e "
-        "<code>/admin_users reconnect</code> per approfondire."
+        "<code>/admin_users reconnect</code> per approfondire. "
+        "Per audit recente usa <code>/admin storico [id]</code>."
     )
     return "\n".join(lines)
 
@@ -1295,6 +1367,7 @@ def format_tenant_health(rows: Iterable[Mapping[str, object]]) -> str:
         "━━━━━━━━━━━━━━━━━━━━━━━━",
     ]
     for row in rendered_rows:
+        next_action = _admin_next_action_for_row(row)
         lines.append(
             "• "
             f"<code>{html.escape(str(row.get('telegram_user_id') or 'n/d'))}</code> "
@@ -1302,7 +1375,9 @@ def format_tenant_health(rows: Iterable[Mapping[str, object]]) -> str:
             f"account=<code>{html.escape(str(row.get('account_status') or 'unlinked'))}</code> "
             f"token=<code>{html.escape(str(row.get('token_status') or 'missing'))}</code> "
             f"notif=<code>{html.escape(str(row.get('subscription_count') or 0))}</code> "
-            f"last=<code>{html.escape(str(row.get('last_issue') or 'none'))}</code>"
+            f"last=<code>{html.escape(str(row.get('last_issue') or 'none'))}</code> "
+            f"activity=<code>{html.escape(str(row.get('last_activity_at') or 'n/d'))}</code> "
+            f"next=<code>{html.escape(next_action)}</code>"
         )
     return "\n".join(lines)
 
@@ -1725,6 +1800,7 @@ def format_admin_command_help() -> str:
         "• <code>/admin export &lt;id&gt;</code> → export tenant senza segreti\n"
         "• <code>/admin delete_tenant &lt;id&gt; confirm</code> → cancellazione operativa\n"
         "• <code>/admin service normal|maintenance|degraded</code> → modalita' servizio\n"
+        "• <code>/admin storico [id] [limit]</code> → audit operativo recente\n"
         "• <code>/admin_users all|pending|unlinked|reconnect|inactive</code> → liste utenti\n"
         "• <code>/tenant_health [user_id]</code> → salute tenant compatta\n"
         "• <code>/approve_user &lt;id&gt;</code> / <code>/reject_user &lt;id&gt;</code> → accessi"
