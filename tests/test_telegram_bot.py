@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from zoneinfo import ZoneInfoNotFoundError
 
 from src.fiscalbay.bot import (
     CALLBACK_HELP,
@@ -37,6 +38,7 @@ from src.fiscalbay.telegram_commands import (
     BOT_DISPLAY_NAME,
     BOT_TAGLINE,
     build_telegram_branding_profile,
+    format_order_date,
 )
 
 
@@ -236,6 +238,13 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("Stato transazione", text)
         self.assertIn("Pagato", text)
         self.assertNotIn("PAID", text)
+
+    def test_format_order_date_falls_back_when_rome_timezone_is_unavailable(self) -> None:
+        with patch(
+            "src.fiscalbay.telegram_commands.ZoneInfo",
+            side_effect=ZoneInfoNotFoundError("No time zone found with key Europe/Rome"),
+        ):
+            self.assertEqual(format_order_date("2026-04-03T10:00:00Z"), "03/04/2026 10:00")
 
     def test_format_order_fallback_when_missing_fiscal_fields(self) -> None:
         text = format_auto_notification(

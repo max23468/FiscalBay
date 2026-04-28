@@ -7,7 +7,7 @@ import json
 import urllib.parse
 from datetime import datetime
 from typing import Callable, Iterable, Mapping
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .clients.telegram import InlineKeyboardMarkup
 from .errors import UserInputError
@@ -97,7 +97,10 @@ def format_order_date(value: str) -> str:
         return raw
     if parsed.tzinfo is None:
         return parsed.strftime("%d/%m/%Y %H:%M")
-    local_dt = parsed.astimezone(ZoneInfo("Europe/Rome"))
+    try:
+        local_dt = parsed.astimezone(ZoneInfo("Europe/Rome"))
+    except ZoneInfoNotFoundError:
+        local_dt = parsed
     return local_dt.strftime("%d/%m/%Y %H:%M")
 
 
