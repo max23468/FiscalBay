@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.10.0](https://github.com/max23468/FiscalBay/compare/v0.9.2...v0.10.0) (2026-04-28)
+
+
+### Features
+
+* add local automation without GitHub Actions ([3f0264c](https://github.com/max23468/FiscalBay/commit/3f0264c413490f4d7cc0582dc526ffa3c7f4e46f))
+* add public FiscalBay landing page ([d8ffb49](https://github.com/max23468/FiscalBay/commit/d8ffb49e3f0884e8d42e25fb8a2b01ab32de053d))
+* add VPS release-please automation ([b5cc004](https://github.com/max23468/FiscalBay/commit/b5cc0045a6d07fa5f76022b4477748a6cb34cb1d))
+* automate full VPS release pipeline ([f38e376](https://github.com/max23468/FiscalBay/commit/f38e37687490ce2d3184d869a730771b906ed1e8))
+* expose OAuth branding pages ([331a814](https://github.com/max23468/FiscalBay/commit/331a814e77837796ab78187fbc469b9409546ba2))
+
+
+### Bug Fixes
+
+* clear stale runtime errors after successful cycles ([25beaaa](https://github.com/max23468/FiscalBay/commit/25beaaabd936eb5ad830b6471764a55a123f9f20))
+* harden VPS release automation ([151c93f](https://github.com/max23468/FiscalBay/commit/151c93facc905888f9f900809835d6538eac1db2))
+* keep public site Telegram-first ([adfe267](https://github.com/max23468/FiscalBay/commit/adfe267756a18bab9316a3792fb646a68f6dc217))
+* proxy public favicon assets ([41ead72](https://github.com/max23468/FiscalBay/commit/41ead727789fba8194614e1d80eeee183b832c1a))
+* separate deploy smoke from upstream health ([13997b2](https://github.com/max23468/FiscalBay/commit/13997b258c52044ee0d3121278113085108740b4))
+* serve public site favicons ([07c1ec4](https://github.com/max23468/FiscalBay/commit/07c1ec4d1c2f2758cca051f1faf5be900a76105c))
+* use accented OAuth invalid-link copy ([28ad40b](https://github.com/max23468/FiscalBay/commit/28ad40be450cca1d2f8a2799e49a16e9fd76615e))
+
 ## [0.9.2](https://github.com/max23468/FiscalBay/compare/v0.9.1...v0.9.2) (2026-04-26)
 
 
