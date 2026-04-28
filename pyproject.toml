@@ -64,6 +64,7 @@ files = [
   "src/fiscalbay/storage/schema.py",
   "src/fiscalbay/storage/sqlite.py",
   "src/fiscalbay/git_utils.py",
+  "src/fiscalbay/release_info.py",
   "src/fiscalbay/logging_utils.py",
   "src/fiscalbay/healthcheck.py",
 ]

@@ -20,6 +20,7 @@ from .config import (
 )
 from .logging_utils import log_event
 from .models import BotMetrics, as_int
+from .release_info import ReleaseInfo, collect_release_info
 from .storage.sqlite import (
     load_effective_runtime_state,
     load_retry_queue_entries,
@@ -137,6 +138,7 @@ class HealthReport(TypedDict):
     retention: RetentionHealth
     resources: ResourceHealth
     public_service: PublicServiceHealth
+    release: ReleaseInfo
     alerts: list[str]
     service_active: bool | None
     service_name: str | None
@@ -499,6 +501,7 @@ def build_health_report(
         warnings.append("public_service_policy_limit_reached")
     if public_service_health["sqlite_migration_recommended"]:
         warnings.append("sqlite_migration_recommended")
+    release_info = collect_release_info()
     ignored_reason_set = set(ignored_reasons or [])
     fatal_reasons = [reason for reason in reasons if reason not in ignored_reason_set]
     effective_ignored_reasons = [reason for reason in reasons if reason in ignored_reason_set]
@@ -531,6 +534,7 @@ def build_health_report(
         "retention": retention_health,
         "resources": resources,
         "public_service": public_service_health,
+        "release": release_info,
         "alerts": [],
         "service_active": None,
         "service_name": None,
@@ -582,6 +586,10 @@ def build_health_report(
         memory_available_mb=resources["memory_available_mb"],
         public_scale_within_policy=public_service_health["scale_within_policy"],
         sqlite_db_bytes=public_service_health["sqlite_db_bytes"],
+        package_version=release_info["package_version"],
+        git_commit=release_info["git_short_commit"],
+        git_tag=release_info["git_tag"],
+        release_status=release_info["release_status"],
     )
     return report
 
@@ -661,6 +669,18 @@ def render_text_report(report: HealthReport) -> str:
         "sqlite_migration_recommended": False,
         "scale_within_policy": True,
     }
+    default_release: ReleaseInfo = {
+        "package_version": "unknown",
+        "package_version_source": "unknown",
+        "git_commit": "",
+        "git_short_commit": "",
+        "git_branch": "",
+        "git_tag": "",
+        "git_latest_tag": "",
+        "git_commits_since_latest_tag": None,
+        "git_dirty": None,
+        "release_status": "unknown",
+    }
     lines = [
         f"status: {report['status']}",
         f"service_active: {report.get('service_active', 'not_checked')}",
@@ -692,6 +712,7 @@ def render_text_report(report: HealthReport) -> str:
     retention = report.get("retention", default_retention)
     resources = report.get("resources", default_resources)
     public_service = report.get("public_service", default_public_service)
+    release = report.get("release", default_release)
     lines.append("reasons: " + (", ".join(str(item) for item in reasons) if reasons else "none"))
     lines.append(
         "ignored_reasons: "
@@ -755,6 +776,15 @@ def render_text_report(report: HealthReport) -> str:
             f"{public_service.get('sqlite_migration_recommended', False)}",
             "public_service.scale_within_policy: "
             f"{public_service.get('scale_within_policy', True)}",
+            f"release.package_version: {release.get('package_version', 'unknown')}",
+            f"release.version_source: {release.get('package_version_source', 'unknown')}",
+            f"release.git_branch: {release.get('git_branch') or 'none'}",
+            f"release.git_commit: {release.get('git_short_commit') or 'none'}",
+            f"release.git_tag: {release.get('git_tag') or 'none'}",
+            f"release.git_latest_tag: {release.get('git_latest_tag') or 'none'}",
+            f"release.git_commits_since_latest_tag: {release.get('git_commits_since_latest_tag')}",
+            f"release.git_dirty: {release.get('git_dirty')}",
+            f"release.status: {release.get('release_status', 'unknown')}",
         ]
     )
     return "\n".join(lines)

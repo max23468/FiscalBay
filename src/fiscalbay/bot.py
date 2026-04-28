@@ -73,6 +73,7 @@ from .models import (
     normalize_telegram_user_status,
 )
 from .reconcile import enqueue_apply_user_access_operation, process_pending_operations
+from .release_info import collect_release_info
 from .services.notifications import (
     fetch_new_order_records as _fetch_new_order_records,
 )
@@ -943,6 +944,7 @@ def _build_admin_dashboard_payload(telegram_config: TelegramConfig) -> dict[str,
     inactive_users = len(_build_inactive_user_rows(telegram_config))
     return {
         "service_mode": service_mode,
+        "release": collect_release_info(),
         "product_metrics": _build_product_metrics_payload(telegram_config),
         "metrics": {
             "pending_users": pending_users,

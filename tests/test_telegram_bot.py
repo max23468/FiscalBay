@@ -47,6 +47,8 @@ from src.fiscalbay.telegram_commands import (
     CALLBACK_ORDINI_REPORT,
     CALLBACK_ORDINI_REVIEW,
     build_telegram_branding_profile,
+    format_admin_dashboard,
+    format_admin_maintenance_overview,
     format_order_date,
     is_admin_authorized,
 )
@@ -303,6 +305,57 @@ class TelegramBotTests(unittest.TestCase):
         self.assertNotIn("settings", {command["command"] for command in commands})
         self.assertNotIn("request_access", {command["command"] for command in commands})
         self.assertNotIn("ping", {command["command"] for command in commands})
+
+    def test_admin_dashboard_includes_release_metadata(self) -> None:
+        text = format_admin_dashboard(
+            {
+                "service_mode": "normal",
+                "release": {
+                    "package_version": "1.1.0",
+                    "git_tag": "v1.1.0",
+                    "git_latest_tag": "v1.1.0",
+                    "git_short_commit": "abc1234",
+                    "git_branch": "main",
+                    "git_dirty": False,
+                    "release_status": "tagged_clean",
+                },
+                "product_metrics": {},
+                "metrics": {},
+                "queue": {},
+                "alerts": [],
+            }
+        )
+
+        self.assertIn("Release", text)
+        self.assertIn("1.1.0", text)
+        self.assertIn("tagged_clean", text)
+        self.assertIn("abc1234", text)
+
+    def test_admin_maintenance_overview_includes_release_metadata(self) -> None:
+        text = format_admin_maintenance_overview(
+            {
+                "service_mode": "normal",
+                "dashboard": {
+                    "release": {
+                        "package_version": "1.1.0",
+                        "git_tag": "v1.1.0",
+                        "git_latest_tag": "v1.1.0",
+                        "git_short_commit": "abc1234",
+                        "git_commits_since_latest_tag": 0,
+                        "release_status": "tagged_clean",
+                    },
+                    "metrics": {},
+                },
+                "queue": {},
+                "oauth_sessions": {},
+                "retention": {},
+                "queue_samples": [],
+            }
+        )
+
+        self.assertIn("Release", text)
+        self.assertIn("Latest tag", text)
+        self.assertIn("abc1234", text)
 
     @patch("src.fiscalbay.bot.fetch_records")
     @patch("src.fiscalbay.bot.load_config")

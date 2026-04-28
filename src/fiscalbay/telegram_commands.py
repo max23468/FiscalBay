@@ -1011,8 +1011,17 @@ def format_admin_dashboard(dashboard: Mapping[str, object]) -> str:
     product_metrics = dashboard.get("product_metrics") or {}
     metrics = dashboard.get("metrics") or {}
     queue = dashboard.get("queue") or {}
+    release = dashboard.get("release") or {}
     alerts = dashboard.get("alerts") or []
     mode = html.escape(str(dashboard.get("service_mode") or "normal"))
+    package_version = html.escape(str(release.get("package_version") or "unknown"))
+    git_tag = html.escape(str(release.get("git_tag") or "none"))
+    git_latest_tag = html.escape(str(release.get("git_latest_tag") or "none"))
+    git_commit = html.escape(str(release.get("git_short_commit") or "none"))
+    git_branch = html.escape(str(release.get("git_branch") or "none"))
+    release_status = html.escape(str(release.get("release_status") or "unknown"))
+    git_dirty = release.get("git_dirty")
+    git_dirty_label = "unknown" if git_dirty is None else ("si" if bool(git_dirty) else "no")
     orders_read = html.escape(str(product_metrics.get("orders_read", 0)))
     orders_with_fiscal = html.escape(str(product_metrics.get("orders_with_fiscal_identifier", 0)))
     fiscal_rate = html.escape(str(product_metrics.get("fiscal_identifier_rate_percent", 0)))
@@ -1036,6 +1045,12 @@ def format_admin_dashboard(dashboard: Mapping[str, object]) -> str:
         "🧭 <b>Admin Dashboard</b>",
         "━━━━━━━━━━━━━━━━━━━━━━━━",
         f"🛠️ Modalita' servizio: <code>{mode}</code>",
+        (f"🏷️ Release: <code>{package_version}</code> • status <code>{release_status}</code>"),
+        (
+            f"🔖 Tag: <code>{git_tag}</code> • latest <code>{git_latest_tag}</code> • "
+            f"commit <code>{git_commit}</code>"
+        ),
+        f"🌿 Branch: <code>{git_branch}</code> • dirty: <code>{git_dirty_label}</code>",
         "\n📈 <b>Metriche prodotto</b>",
         f"📦 Ordini letti: <code>{orders_read}</code> • fiscali: "
         f"<code>{orders_with_fiscal}</code> (<code>{fiscal_rate}%</code>)",
@@ -1067,12 +1082,20 @@ def format_admin_dashboard(dashboard: Mapping[str, object]) -> str:
 def format_admin_maintenance_overview(payload: Mapping[str, object]) -> str:
     dashboard = payload.get("dashboard") or {}
     metrics = dashboard.get("metrics") or {}
+    release = dashboard.get("release") or {}
     queue = payload.get("queue") or {}
     oauth = payload.get("oauth_sessions") or {}
     retention = payload.get("retention") or {}
     queue_samples = list(payload.get("queue_samples") or [])
     mode = html.escape(str(payload.get("service_mode") or "normal"))
     retry_backlog = html.escape(str(payload.get("retry_backlog", 0)))
+    package_version = html.escape(str(release.get("package_version") or "unknown"))
+    release_status = html.escape(str(release.get("release_status") or "unknown"))
+    git_tag = html.escape(str(release.get("git_tag") or "none"))
+    git_latest_tag = html.escape(str(release.get("git_latest_tag") or "none"))
+    git_commit = html.escape(str(release.get("git_short_commit") or "none"))
+    commits_since_tag = release.get("git_commits_since_latest_tag")
+    commits_since_tag_text = "unknown" if commits_since_tag is None else str(commits_since_tag)
     oauth_retention_overdue = int(retention.get("oauth_terminal_overdue", 0)) + int(
         retention.get("oauth_pending_overdue", 0)
     )
@@ -1080,6 +1103,15 @@ def format_admin_maintenance_overview(payload: Mapping[str, object]) -> str:
         "🧹 <b>Maintenance Overview</b>",
         "━━━━━━━━━━━━━━━━━━━━━━━━",
         f"🛠️ Modalita' servizio: <code>{mode}</code>",
+        (
+            f"🏷️ Release: <code>{package_version}</code> • "
+            f"<code>{release_status}</code> • tag <code>{git_tag}</code>"
+        ),
+        (
+            f"🔖 Latest tag: <code>{git_latest_tag}</code> • "
+            f"commit <code>{git_commit}</code> • ahead "
+            f"<code>{html.escape(commits_since_tag_text)}</code>"
+        ),
         (
             f"🪪 OAuth pending attive: "
             f"<code>{html.escape(str(oauth.get('pending_active', 0)))}</code>"

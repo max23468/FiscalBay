@@ -496,6 +496,10 @@ Healthcheck:
 "/opt/fiscalbay/.venv/bin/fiscalbay-healthcheck" --json
 ```
 
+Il report include anche `release.*` con versione package, branch, commit breve,
+tag corrente, ultimo tag e stato release. Gli stessi dati compaiono in forma
+compatta su `/admin` e `/admin manutenzione`.
+
 ### Stato manutenzione VPS gia' eseguito
 
 Gia' fatto:
@@ -570,9 +574,10 @@ Quando viene fatta una modifica significativa:
 1. modifica locale nel repository
 2. verifica locale con test/tooling
 3. commit e push su `main`
-4. deploy sulla VPS
-5. restart servizio bot se il runtime cambia
-6. verifica finale con log/status/healthcheck
+4. release versionata quando il cambio e' osservabile
+5. deploy sulla VPS
+6. restart servizio bot se il runtime cambia
+7. verifica finale con log/status/healthcheck
 
 Convenzione importante:
 

@@ -393,6 +393,8 @@ Il controllo verifica almeno:
 - freschezza di `last_check`
 - dimensione della retry queue
 - eventuale ultimo errore registrato
+- metadati release/deploy (`release.*`): versione package, branch, commit, tag
+  corrente, ultimo tag e stato Git pulito/sporco
 
 Per riallineare periodicamente accessi, sessioni OAuth stale e queue operativa puoi usare:
 
@@ -543,6 +545,9 @@ Il comando admin `/admin` espone stabilmente anche un blocco di metriche prodott
 minime: ordini letti, ordini con dato fiscale, notifiche inviate, tenant noti,
 token attivi e rapporto tra utenti approvati e account collegati. Sono metriche
 operative per governare un servizio piccolo e curato, non analytics commerciali.
+Lo stesso pannello, insieme a `/admin manutenzione`, mostra anche versione
+deployata, tag, commit breve e stato release, cosi' l'admin puo' confrontare
+subito cio' che gira in produzione con l'ultimo tag pubblicato.
 
 Se su un ambiente esistente trovi ancora i vecchi file JSON `data/notified_orders.json` o `data/failed_notifications.json`, il bot li migra automaticamente a SQLite al primo avvio e conserva una copia `.legacy-json.bak`.
 

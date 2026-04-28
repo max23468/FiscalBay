@@ -137,6 +137,8 @@ Vincolo di prodotto:
 - le conversioni compatibili sono state accentrate in adattatori espliciti dentro `bot.py`, invece di essere duplicate tra wrapper diversi
 - i log runtime, client HTTP, notifiche e healthcheck usano eventi strutturati; `cycle_id` correla polling, callback, messaggi e cicli di notifica
 - l'osservabilita' minima passa da `/stato`, `fiscalbay-healthcheck` e dal timer `fiscalbay-alertcheck`, che segnala servizio fermo, backlog retry e troppi errori consecutivi
+- i metadati release/deploy sono raccolti da `release_info.py` e riusati sia
+  dall'healthcheck sia dai pannelli admin Telegram, evitando logiche Git duplicate
 - lo storage espone adattatori tipizzati mantenendo compatibilita' con le API storiche piu' usate nei test
 
 ## Direzione multiutente fissata

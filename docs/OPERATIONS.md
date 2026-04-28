@@ -202,6 +202,13 @@ Readiness multiutente nel healthcheck:
 - il report healthcheck espone anche `public_service.*`: modello pubblico
   approvato, ruolo web, hosting onboarding, soglie utenti/account/token e stato
   della raccomandazione di migrazione oltre SQLite
+- il report healthcheck espone anche `release.*`: versione package installata,
+  sorgente versione, branch, commit breve, tag corrente, ultimo tag, distanza
+  dall'ultimo tag e stato release (`tagged_clean`, `dirty`, `ahead_of_latest_tag`
+  o `unknown`)
+- `/admin` e `/admin manutenzione` riprendono gli stessi metadati release in
+  formato compatto, cosi' il confronto tra codice deployato, tag Git e versione
+  installata non richiede accesso SSH o query manuali
 
 Alert basilari runtime:
 

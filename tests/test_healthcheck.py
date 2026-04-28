@@ -75,6 +75,8 @@ class HealthcheckTests(unittest.TestCase):
             self.assertEqual(report["metrics"]["telegram_errors"], 0)
             self.assertIn("multi_tenant", report)
             self.assertFalse(report["multi_tenant"]["tenant_credentials_ready"])
+            self.assertIn("release", report)
+            self.assertIn("release_status", report["release"])
 
     def test_build_health_report_fails_for_missing_lock_and_stale_check(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -502,6 +504,18 @@ class HealthcheckTests(unittest.TestCase):
                     "tenant_runtime_states": 0,
                     "tenant_credentials_ready": False,
                 },
+                "release": {
+                    "package_version": "1.0.1",
+                    "package_version_source": "pyproject",
+                    "git_commit": "abc123456",
+                    "git_short_commit": "abc1234",
+                    "git_branch": "main",
+                    "git_tag": "v1.0.1",
+                    "git_latest_tag": "v1.0.1",
+                    "git_commits_since_latest_tag": 0,
+                    "git_dirty": False,
+                    "release_status": "tagged_clean",
+                },
             }
         )
         self.assertIn("status: fail", text)
@@ -511,6 +525,8 @@ class HealthcheckTests(unittest.TestCase):
         self.assertIn("ignored_reasons: last_check_stale", text)
         self.assertIn("warnings: retry_queue_not_empty", text)
         self.assertIn("multi_tenant.tenant_users: 1", text)
+        self.assertIn("release.package_version: 1.0.1", text)
+        self.assertIn("release.status: tagged_clean", text)
 
     @patch("src.fiscalbay.healthcheck.build_health_report")
     def test_main_can_render_json(self, mock_build_health_report) -> None:

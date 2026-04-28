@@ -22,6 +22,7 @@ Non ci sono fasi aperte bloccanti per `1.0.0`.
 - Fase 7 - Rate Limiting Minimo
 - Fase 8 - Metriche Prodotto Admin
 - Fase 9 - Readiness 1.0.0
+- Fase 1.1 - Stabilizzazione operativa post-1.0
 
 ## Principi 1.x
 
@@ -40,20 +41,6 @@ Principi guida:
   il cambio e' osservabile, deploy VPS e smoke check remoto
 
 ## Roadmap 1.x
-
-### 1.1.0 - Stabilizzazione operativa post-1.0
-
-Obiettivo:
-
-- rendere immediato capire cosa gira in produzione e se la release e' sana
-
-Direzione:
-
-- esporre meglio versione deployata, tag Git, stato release e salute servizio nei
-  punti admin e healthcheck
-- rifinire checklist post-release, controlli giornalieri e runbook breve
-- rendere piu' chiaro il confronto tra versione locale, tag GitHub e versione
-  installata sulla VPS
 
 ### 1.2.0 - Disconnect e reconnect piu' robusti
 
