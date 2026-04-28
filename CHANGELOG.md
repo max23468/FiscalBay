@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.8.0](https://github.com/max23468/FiscalBay/compare/v1.7.0...v1.8.0) (2026-04-29)
+
+### Features
+
+* add tenant support snapshot ([3e89e51](https://github.com/max23468/FiscalBay/commit/3e89e518fd9b6a5143d1d49aa76ce75bb2cf6f7f))
+
 ## [1.7.0](https://github.com/max23468/FiscalBay/compare/v1.6.0...v1.7.0) (2026-04-29)
 
 ### Features
