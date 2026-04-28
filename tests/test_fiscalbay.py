@@ -82,11 +82,26 @@ class EbayCfToolTests(unittest.TestCase):
         self.assertEqual(get_access_token(second_cfg), "tok-two")
         self.assertEqual(mock_mint.call_count, 2)
 
-    def test_revoke_user_refresh_token_reports_unsupported_remote_revocation(self) -> None:
-        with self.assertRaises(EbayApiError) as ctx:
-            revoke_user_refresh_token(self._sample_config())
+    def test_revoke_user_refresh_token_reports_manual_oauth_revocation(self) -> None:
+        result = revoke_user_refresh_token(self._sample_config())
 
-        self.assertIn("Revoca remota OAuth eBay non automatica", str(ctx.exception))
+        self.assertEqual(result["status"], "manual_required")
+        self.assertFalse(result["remote_attempted"])
+        self.assertIn("Third-party app access", result["user_action"])
+
+    def test_revoke_user_refresh_token_reports_missing_token(self) -> None:
+        cfg = Config(
+            client_id="cid",
+            client_secret="secret",
+            refresh_token="",
+            environment="production",
+            scopes="scope",
+        )
+
+        result = revoke_user_refresh_token(cfg)
+
+        self.assertEqual(result["status"], "missing_token")
+        self.assertFalse(result["remote_attempted"])
 
     @patch("src.fiscalbay.clients.ebay.logger")
     @patch("src.fiscalbay.clients.ebay.time.sleep", autospec=True)

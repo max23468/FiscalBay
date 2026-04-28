@@ -101,7 +101,9 @@ Regola UX:
 - `/start` deve spiegare sempre lo stato reale dell'utente
 - `/account` deve spiegare sempre lo stato reale del collegamento e la prossima azione richiesta
 - `/account reconnect` deve riassumere rapidamente se serve reconnect e qual e' la prossima azione
-- `/account scollega` oggi scollega localmente e rimuove il token locale; la revoca remota eBay resta uno step separato da completare
+- `/account scollega` scollega localmente, rimuove il token locale e classifica
+  la revoca del consenso eBay come `manual_required` quando il refresh token
+  OAuth non e' revocabile dal servizio con API moderne documentate
 
 ## Dati da salvare
 

@@ -23,6 +23,7 @@ Non ci sono fasi aperte bloccanti per `1.0.0`.
 - Fase 8 - Metriche Prodotto Admin
 - Fase 9 - Readiness 1.0.0
 - Fase 1.1 - Stabilizzazione operativa post-1.0
+- Fase 1.2 - Disconnect e reconnect piu' robusti
 
 ## Principi 1.x
 
@@ -41,21 +42,6 @@ Principi guida:
   il cambio e' osservabile, deploy VPS e smoke check remoto
 
 ## Roadmap 1.x
-
-### 1.2.0 - Disconnect e reconnect piu' robusti
-
-Obiettivo:
-
-- rendere piu' leggibile e affidabile il ciclo scollegamento, token revocati e
-  riconnessione
-
-Direzione:
-
-- migliorare UX utente e admin per token scaduti, revocati o da riconnettere
-- consolidare messaggi e stati attorno a `/account scollega`, `/account collega`
-  e `/account reconnect`
-- valutare revoca remota eBay come operazione best effort esplicita, mantenendo
-  fallback locale sicuro
 
 ### 1.3.0 - Self-service assistito utente
 

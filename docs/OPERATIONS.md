@@ -137,8 +137,11 @@ Il comando Telegram `/account scollega`:
 
 - scollega localmente l'account eBay del tenant corrente
 - marca il token nel DB come `revoked` e pulisce refresh/access token dal `state.db`
-- non garantisce ancora una revoca remota lato eBay; quella resta un follow-up
-  post-1.0 distinto dal disconnect locale
+- valuta la revoca OAuth remota come esito esplicito: per i refresh token OAuth
+  eBay il percorso stabile documentato resta manuale dalle impostazioni account
+  eBay, quindi il bot mostra `manual_required` e registra il prossimo passo
+- mantiene sempre il fallback locale sicuro: anche se il consenso eBay resta da
+  rimuovere manualmente, il token locale non resta usabile dal runtime FiscalBay
 
 Il comando Telegram `/settings notifiche on|off`:
 

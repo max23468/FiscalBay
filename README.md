@@ -495,7 +495,7 @@ Comportamento:
 - `/ordini cerca` interroga un ordine specifico
 - i messaggi ordine con identificativo fiscale valorizzato includono un pulsante inline per copiare direttamente il valore fiscale, ad esempio CF o P.IVA
 - `/stato` mostra ultimo check, contatori e dimensione della coda retry; `/stato servizio` mostra lo stato servizio sintetico
-- `/account` riassume lo stato eBay; `collega`, `reconnect` e `scollega` gestiscono le azioni account
+- `/account` riassume lo stato eBay; `collega`, `reconnect` e `scollega` gestiscono le azioni account e indicano chiaramente se il consenso eBay va rimosso manualmente dalle impostazioni eBay
 - `/settings` riassume preferenze chat e tenant; `notifiche`, `filtro`, `policy` e `lascia` gestiscono le azioni correlate
 - la tastiera inline varia per contesto: `/account` privilegia collegamento e stato account, `/ordini` mostra azioni ordini/report, `/settings` mostra notifiche e preferenze, `/altre_azioni` raccoglie guida/accesso/preferenze, `/admin` mostra scorciatoie admin; `/start` e `/help` restano il menu generale
 - se `TELEGRAM_ADMIN_USER_ID` e' configurata, gli utenti non ancora approvati possono solo richiedere accesso con `/request_access` (anche quando `TELEGRAM_ALLOWED_CHAT_IDS=*`)

@@ -1336,8 +1336,8 @@ def format_account_status(account_status: Mapping[str, object]) -> str:
             f"🪪 Ultimo utente eBay: <code>{ebay_user_id}</code>\n"
             f"🌍 Ambiente: <code>{environment}</code>\n"
             f"🔐 Token: <code>{token_status}</code>\n"
-            "Il collegamento risulta revocato e va autorizzato di nuovo con "
-            "<code>/account collega</code>."
+            "Il collegamento risulta revocato o non piu' utilizzabile. "
+            "Prossimo passo: usa <code>/account collega</code> per autorizzare di nuovo eBay."
             f"{personal_snapshot}"
             f"{reconnect_hint}"
         )
@@ -1350,8 +1350,8 @@ def format_account_status(account_status: Mapping[str, object]) -> str:
             f"🪪 Ultimo utente eBay: <code>{ebay_user_id}</code>\n"
             f"🌍 Ambiente: <code>{environment}</code>\n"
             f"🔐 Token: <code>{token_status}</code>\n"
-            "L'account e' stato scollegato dal bot. Usa <code>/account collega</code> "
-            "per ricollegarlo."
+            "L'account e' scollegato dal bot e il token locale e' stato rimosso. "
+            "Prossimo passo: usa <code>/account collega</code> per ricollegarlo."
             f"{personal_snapshot}"
             f"{reconnect_hint}"
         )
@@ -1405,13 +1405,18 @@ def format_reconnect_status(account_status: Mapping[str, object]) -> str:
     personal_snapshot = _format_personal_snapshot(account_status)
 
     if raw_account_status in {"revoked", "disconnected"}:
+        next_step = (
+            "usa <code>/account collega</code> per collegare di nuovo l'account"
+            if raw_account_status == "disconnected"
+            else "usa <code>/account collega</code> per autorizzare di nuovo eBay"
+        )
         return (
             "🔁 <b>Reconnect status</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"📌 Stato attuale: <code>{html.escape(raw_account_status)}</code>\n"
             f"🪪 Ultimo utente eBay: <code>{ebay_user_id}</code>\n"
             f"🌍 Ambiente: <code>{environment}</code>\n"
-            "Prossima azione: usa <code>/account collega</code> per collegare di nuovo l'account."
+            f"Prossima azione: {next_step}."
             f"{personal_snapshot}"
             f"{reconnect_hint}"
         )
@@ -1992,10 +1997,26 @@ def format_settings_status(settings_status: Mapping[str, object]) -> str:
 
 
 def _format_remote_revocation_line(status: str, detail: str) -> str:
+    safe_detail = detail or "token locale gia' assente"
     if status == "revoked":
         return "☁️ Revoca remota eBay: <code>completata</code>\n"
     if status == "failed":
         return "☁️ Revoca remota eBay: <code>non confermata</code>\n"
+    if status == "manual_required":
+        return (
+            "☁️ Revoca consenso eBay: <code>manuale</code>\n"
+            f"📝 Prossimo passo eBay: <code>{detail}</code>\n"
+        )
+    if status == "missing_token":
+        return (
+            "☁️ Revoca consenso eBay: <code>non verificabile</code>\n"
+            f"📝 Nota: <code>{safe_detail}</code>\n"
+        )
+    if status == "token_unavailable":
+        return (
+            "☁️ Revoca consenso eBay: <code>manuale</code>\n"
+            "📝 Nota: <code>token non leggibile localmente; token locale comunque rimosso</code>\n"
+        )
     if status == "skipped":
         return (
             "☁️ Revoca remota eBay: <code>saltata</code>\n"

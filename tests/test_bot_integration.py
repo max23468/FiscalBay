@@ -16,6 +16,7 @@ from src.fiscalbay.models import (
     AuditLogEntry,
     BotOperationalMemory,
     BotRuntimeState,
+    Config,
     EbayTokenSet,
     LinkedEbayAccount,
     OauthLinkSession,
@@ -2848,14 +2849,20 @@ class BotIntegrationTests(unittest.TestCase):
                 ebay_environment="production",
             )
             self.assertIn("Stato: <code>disconnected</code>", account_replies[0])
-            self.assertIn("Usa <code>/account collega</code>", account_replies[0])
+            self.assertIn("usa <code>/account collega</code>", account_replies[0])
 
     @patch("src.fiscalbay.bot.load_tenant_config_from_storage")
-    def test_process_message_disconnect_skips_remote_revocation(
+    def test_process_message_disconnect_guides_manual_ebay_revocation(
         self,
         mock_load_tenant_config_from_storage,
     ) -> None:
-        mock_load_tenant_config_from_storage.return_value = object()
+        mock_load_tenant_config_from_storage.return_value = Config(
+            client_id="cid",
+            client_secret="secret",
+            refresh_token="refresh-token",
+            environment="production",
+            scopes="scope",
+        )
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
@@ -2904,9 +2911,9 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             self.assertEqual(len(replies), 1)
-            mock_load_tenant_config_from_storage.assert_not_called()
-            self.assertIn("Revoca remota eBay: <code>saltata</code>", replies[0])
-            self.assertIn("revoca remota eBay non automatica", replies[0])
+            mock_load_tenant_config_from_storage.assert_called_once()
+            self.assertIn("Revoca consenso eBay: <code>manuale</code>", replies[0])
+            self.assertIn("Third-party app access", replies[0])
             self.assertIn("accesso al bot resta approvato", replies[0])
 
     @patch("src.fiscalbay.bot.load_tenant_config_from_storage")
@@ -2914,7 +2921,13 @@ class BotIntegrationTests(unittest.TestCase):
         self,
         mock_load_tenant_config_from_storage,
     ) -> None:
-        mock_load_tenant_config_from_storage.return_value = object()
+        mock_load_tenant_config_from_storage.return_value = Config(
+            client_id="cid",
+            client_secret="secret",
+            refresh_token="refresh-token",
+            environment="production",
+            scopes="scope",
+        )
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
             config = TelegramConfig(
@@ -2980,8 +2993,9 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             self.assertEqual(len(replies), 1)
-            mock_load_tenant_config_from_storage.assert_not_called()
-            self.assertIn("Revoca remota eBay: <code>saltata</code>", replies[0])
+            mock_load_tenant_config_from_storage.assert_called_once()
+            self.assertIn("Revoca consenso eBay: <code>manuale</code>", replies[0])
+            self.assertIn("Third-party app access", replies[0])
             self.assertIn("Accesso operativo al bot: <code>disattivato</code>", replies[0])
             self.assertIn("/request_access", replies[0])
 

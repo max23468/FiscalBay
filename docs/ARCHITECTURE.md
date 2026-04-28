@@ -195,7 +195,10 @@ Stato implementativo corrente:
 - anche `/stato` espone ora lo scope runtime e la sorgente credenziali, cosi' si vede subito se una chat sta usando `tenant_store`, `tenant_required` o un percorso legacy adminless
 - `/account` fornisce ora una vista tenant-aware del collegamento eBay gia' presente nel DB, senza richiedere ancora il flusso OAuth completo
 - `/account collega` crea ora una sessione preliminare in `oauth_link_sessions` e, se la VPS espone `EBAY_OAUTH_CONNECT_BASE_URL`, restituisce anche il link pubblico di ingresso al futuro callback server
-- `/account scollega` scollega ora localmente l'account tenant dal `state.db`, marca il token come revocato e cancella il segreto dal runtime locale, lasciando la futura revoca remota eBay a uno step successivo
+- `/account scollega` scollega localmente l'account tenant dal `state.db`, marca
+  il token come revocato, cancella il segreto dal runtime locale e rende
+  esplicito l'esito della revoca consenso eBay (`manual_required` quando serve
+  intervento utente su eBay)
 - `/settings notifiche on|off` aggiorna ora in modo coerente sia `notification_subscriptions` sia `telegram_chats.notifications_enabled`
 - `/settings` espone ora un riepilogo user-facing delle preferenze tenant/chat senza dover ispezionare direttamente il DB
 - `oauth_server.py` espone ora `/oauth/start`, `/oauth/callback` e `/healthz`, valida `state`, usa il `RuName` eBay corretto per lo scambio OAuth e aggiorna account/token nel DB tenant-aware

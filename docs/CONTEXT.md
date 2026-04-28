@@ -240,7 +240,9 @@ Nota onboarding:
 
 - `/account` mostra gia' il collegamento eBay noto per il tenant della chat
 - `/account collega` prepara gia' una sessione OAuth nel DB e puo' restituire un link pubblico se la VPS espone `EBAY_OAUTH_CONNECT_BASE_URL`
-- `/account scollega` scollega gia' localmente account e token del tenant corrente dal DB sulla VPS
+- `/account scollega` scollega localmente account e token del tenant corrente
+  dal DB sulla VPS e guida l'utente alla revoca manuale del consenso nelle
+  impostazioni eBay quando il refresh token OAuth non e' revocabile dal servizio
 - `/settings notifiche on|off` consente gia' alla singola chat di attivare o spegnere le notifiche personali
 - `/settings` mostra gia' un riepilogo leggero delle preferenze utente/chat
 - la tastiera inline sotto i messaggi e' contestuale: menu generale su
@@ -256,7 +258,9 @@ Nota onboarding:
 - esiste ora anche un callback server minimale separato, che chiude il flusso `/account collega` quando la VPS espone URL pubblici corretti e usa il `RuName` eBay corretto verso il developer portal
 - i passaggi sensibili di accesso e collegamento account lasciano ora anche un audit log minimo append-only nel `state.db`
 - i refresh token tenant usano ora cifratura Fernet a riposo con chiave da env sulla VPS
-- restano ancora aperti hardening finale e revoca remota verso eBay
+- restano ancora aperti hardening finale e automazioni future attorno al consenso
+  eBay, ma il disconnect locale ora espone un esito `manual_required` invece di
+  nascondere la revoca come step indefinito
 
 ### Notifiche automatiche
 
@@ -333,7 +337,8 @@ bash scripts/ci_verify.sh
 
 - accesso approvato manualmente, non apertura libera
 - cancellazione utente amministrativa assistita, non self-service completa
-- revoca remota eBay non garantita come parte del disconnect locale
+- revoca consenso eBay classificata come manuale quando non e' disponibile una
+  revoca OAuth remota documentata; disconnect locale comunque sicuro
 - SQLite accettato solo nel perimetro `approved_public_small`
 
 Aggiornamento di stato:
@@ -629,7 +634,8 @@ l'evoluzione successiva:
 - cancellazione utente self-service da Telegram
 - ruoli admin multipli o delega operativa
 - alert prodotto persistenti con storico dedicato
-- revoca remota eBay garantita come parte del disconnect locale
+- eventuale automazione ulteriore della revoca consenso eBay se eBay esporra' un
+  percorso OAuth moderno applicabile ai refresh token del progetto
 
 ## Cose che un'IA nuova deve sapere subito
 

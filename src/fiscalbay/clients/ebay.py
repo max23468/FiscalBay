@@ -50,6 +50,13 @@ class OAuthTokenResponse(TypedDict, total=False):
     scope: str
 
 
+class TokenRevocationResult(TypedDict):
+    status: str
+    detail: str
+    user_action: str
+    remote_attempted: bool
+
+
 class OrderTaxIdentifier(TypedDict, total=False):
     taxpayerId: str
     taxIdentifierType: str
@@ -327,15 +334,30 @@ def request_authorization_code_token_response(
     return _coerce_oauth_token_response(response)
 
 
-def revoke_user_refresh_token(config: Config, refresh_token: str | None = None) -> None:
+def revoke_user_refresh_token(
+    config: Config,
+    refresh_token: str | None = None,
+) -> TokenRevocationResult:
     token = (refresh_token or config.refresh_token).strip()
     if not token:
-        raise EbayApiError("Refresh token mancante: impossibile revocare il collegamento eBay.")
-    raise EbayApiError(
-        "Revoca remota OAuth eBay non automatica: scollega localmente FiscalBay e, "
-        "se vuoi revocare anche il consenso lato eBay, rimuovi l'app dalle pagine "
-        "di accesso di terze parti dell'account eBay."
-    )
+        return {
+            "status": "missing_token",
+            "detail": "token locale gia' assente: nessuna revoca remota tentabile",
+            "user_action": "controlla su eBay se FiscalBay risulta ancora tra le app autorizzate",
+            "remote_attempted": False,
+        }
+    return {
+        "status": "manual_required",
+        "detail": (
+            "eBay documenta la revoca OAuth utente dalle impostazioni account; "
+            "la RevokeToken API disponibile riguarda i token Trading legacy Auth'n'Auth"
+        ),
+        "user_action": (
+            "su eBay apri Account settings > Sign in and security > "
+            "Third-party app access e rimuovi FiscalBay se vuoi revocare anche il consenso"
+        ),
+        "remote_attempted": False,
+    }
 
 
 def build_user_consent_url(config: Config, *, redirect_uri: str, state: str) -> str:
