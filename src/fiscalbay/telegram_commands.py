@@ -35,6 +35,7 @@ CALLBACK_ULTIMI = CALLBACK_ORDINI_FISCALI
 CALLBACK_TUTTI = CALLBACK_ORDINI_TUTTI
 CALLBACK_STATO = "menu:stato"
 CALLBACK_HELP = "menu:help"
+CALLBACK_OTHER_ACTIONS = "menu:other_actions"
 CALLBACK_ACCOUNT = "menu:account"
 CALLBACK_CONNECT = "menu:connect"
 CALLBACK_DISCONNECT = "menu:disconnect"
@@ -243,13 +244,12 @@ def build_help_text(*, is_admin: bool = False) -> str:
         "• 📊 <code>/stato</code> → stato bot e servizio\n"
         "• 👤 <code>/account</code> → stato account eBay e azioni collegamento\n"
         "• 📦 <code>/ordini</code> → centro ordini e riepilogo azioni disponibili\n"
-        "• ⚙️ <code>/settings</code> → preferenze chat, notifiche, policy e uscita bot\n"
-        "• 🙋 <code>/request_access</code> → richiede accesso all'admin del bot\n"
-        "• ℹ️ <code>/help</code> → questa guida rapida\n"
+        "• 🧩 <code>/altre_azioni</code> → guida, preferenze e accesso\n"
         f"{admin_lines}\n"
         "<b>Guide dettagliate</b>\n"
         "• <code>/ordini</code> → tutte le azioni su ordini, report e notificabilita'\n"
         "• <code>/settings</code> → preferenze chat e notifiche\n"
+        "• <code>/request_access</code> → richiede accesso all'admin del bot\n"
         + ("• <code>/admin help</code> → comandi admin e gestione accessi\n" if is_admin else "")
         + "\n<b>Esempi rapidi</b>\n"
         "• <code>/account collega</code>\n"
@@ -260,18 +260,41 @@ def build_help_text(*, is_admin: bool = False) -> str:
     )
 
 
+def build_other_actions_text(*, is_admin: bool = False) -> str:
+    admin_lines = ""
+    if is_admin:
+        admin_lines = (
+            "\n<b>Admin</b>\n"
+            "• <code>/admin</code> → dashboard operativa\n"
+            "• <code>/admin_users</code> → utenti e richieste accesso\n"
+            "• <code>/tenant_health [user_id]</code> → salute tenant\n"
+        )
+    return (
+        "🧩 <b>Altre azioni</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "Qui trovi le azioni lasciate fuori dal menu comandi principale.\n\n"
+        "<b>Guida e accesso</b>\n"
+        "• <code>/help</code> → guida rapida\n"
+        "• <code>/request_access</code> → richiede accesso all'admin del bot\n\n"
+        "<b>Preferenze</b>\n"
+        "• <code>/settings</code> → preferenze chat e tenant\n"
+        "• <code>/settings notifiche on</code> → attiva notifiche\n"
+        "• <code>/settings notifiche off</code> → disattiva notifiche\n"
+        "• <code>/settings filtro all|cf|vat</code> → filtro notifiche\n"
+        f"{admin_lines}"
+    )
+
+
 def build_telegram_branding_profile() -> dict[str, object]:
     return {
         "name": BOT_DISPLAY_NAME,
         "short_description": BOT_TAGLINE,
         "description": BOT_LONG_DESCRIPTION,
         "commands": [
-            {"command": "help", "description": "Guida rapida del bot"},
             {"command": "stato", "description": "Stato bot e servizio"},
             {"command": "account", "description": "Controlla stato account eBay"},
             {"command": "ordini", "description": "Consulta ordini e riepiloghi fiscali"},
-            {"command": "settings", "description": "Preferenze chat, notifiche e tenant"},
-            {"command": "request_access", "description": "Richiedi accesso al bot"},
+            {"command": "altre_azioni", "description": "Guida, preferenze e accesso"},
         ],
     }
 
@@ -373,10 +396,6 @@ def build_main_menu_markup(
     notifications_enabled: bool = True,
 ) -> InlineKeyboardMarkup:
     connect_label = "Ricollega eBay" if reconnect_required else "Collega eBay"
-    notification_label = "Disattiva notifiche" if notifications_enabled else "Attiva notifiche"
-    notification_callback = (
-        CALLBACK_NOTIFICATIONS_OFF if notifications_enabled else CALLBACK_NOTIFICATIONS_ON
-    )
     account_row = [
         {"text": connect_label, "callback_data": CALLBACK_CONNECT},
         {"text": "Account", "callback_data": CALLBACK_ACCOUNT},
@@ -387,14 +406,7 @@ def build_main_menu_markup(
     ]
     status_row = [
         {"text": "Stato", "callback_data": CALLBACK_STATO},
-        {"text": "Preferenze", "callback_data": CALLBACK_SETTINGS},
-    ]
-    notification_row = [{"text": notification_label, "callback_data": notification_callback}]
-    if account_linked:
-        notification_row.append({"text": "Scollega", "callback_data": CALLBACK_DISCONNECT})
-
-    help_row = [
-        {"text": "Guida", "callback_data": CALLBACK_HELP},
+        {"text": "Altre azioni", "callback_data": CALLBACK_OTHER_ACTIONS},
     ]
 
     return {
@@ -402,8 +414,6 @@ def build_main_menu_markup(
             account_row,
             orders_row,
             status_row,
-            notification_row,
-            help_row,
         ]
     }
 
@@ -510,6 +520,25 @@ def build_contextual_menu_markup(
             ]
         }
 
+    if command_name == "/altre_azioni":
+        keyboard = [
+            [
+                {"text": "Preferenze", "callback_data": CALLBACK_SETTINGS},
+                {"text": "Guida", "callback_data": CALLBACK_HELP},
+            ],
+            [
+                {"text": notification_label, "callback_data": notification_callback},
+                {"text": "Richiedi accesso", "callback_data": CALLBACK_REQUEST_ACCESS},
+            ],
+            [
+                {"text": "Stato", "callback_data": CALLBACK_STATO},
+                {"text": "Account", "callback_data": CALLBACK_ACCOUNT},
+            ],
+        ]
+        if account_linked:
+            keyboard.append([{"text": "Scollega", "callback_data": CALLBACK_DISCONNECT}])
+        return {"inline_keyboard": keyboard}
+
     if command_name in {"/stato", "/service_status", "/ping"}:
         return {
             "inline_keyboard": [
@@ -541,6 +570,7 @@ def callback_command_from_data(data: str) -> str | None:
         CALLBACK_ORDINI_REPORT: "/ordini report 7 20",
         CALLBACK_ORDINI_PRIORITY: "/ordini priorita 7 20",
         CALLBACK_STATO: "/stato",
+        CALLBACK_OTHER_ACTIONS: "/altre_azioni",
         CALLBACK_ACCOUNT: "/account",
         CALLBACK_CONNECT: "/account collega",
         CALLBACK_DISCONNECT: "/account scollega",
@@ -570,6 +600,7 @@ def should_attach_main_menu(command: str) -> bool:
         "",
         "/start",
         "/help",
+        "/altre_azioni",
         "/ping",
         "/stato",
         "/account",

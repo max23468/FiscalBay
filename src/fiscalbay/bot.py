@@ -150,6 +150,7 @@ from .telegram_commands import (
     CALLBACK_ORDINI_PRIORITY,
     CALLBACK_ORDINI_REPORT,
     CALLBACK_ORDINI_REVIEW,
+    CALLBACK_OTHER_ACTIONS,
     CALLBACK_REQUEST_ACCESS,
     CALLBACK_SETTINGS,
     CALLBACK_STATO,
@@ -163,6 +164,7 @@ from .telegram_commands import (
     build_contextual_menu_markup,
     build_help_text,
     build_main_menu_markup,
+    build_other_actions_text,
     build_start_text,
     build_telegram_branding_profile,
     callback_command_from_data,
@@ -222,6 +224,7 @@ LOGGER = logging.getLogger("fiscalbay.telegram_bot")
 COMMAND_CAPABILITIES: dict[str, str] = {
     "/ping": CAPABILITY_REVIEW_ACCESS,
     "/stato": CAPABILITY_USE_BOT,
+    "/altre_azioni": CAPABILITY_REQUEST_ACCESS,
     "/account": CAPABILITY_VIEW_ACCOUNT,
     "/reconnect_status": CAPABILITY_VIEW_ACCOUNT,
     "/connect": CAPABILITY_CONNECT_ACCOUNT,
@@ -1186,6 +1189,7 @@ __all__ = [
     "CALLBACK_ADMIN_USERS_PENDING",
     "CALLBACK_ADMIN_USERS_RECONNECT",
     "CALLBACK_HELP",
+    "CALLBACK_OTHER_ACTIONS",
     "CALLBACK_ORDINI_PRIORITY",
     "CALLBACK_ORDINI_REPORT",
     "CALLBACK_ORDINI_REVIEW",
@@ -1205,6 +1209,7 @@ __all__ = [
     "build_contextual_menu_markup",
     "build_help_text",
     "build_main_menu_markup",
+    "build_other_actions_text",
     "callback_command_from_data",
     "chunk_message",
     "ensure_long_polling",
@@ -2344,6 +2349,9 @@ def process_message(
     ):
         return [build_help_text(is_admin=is_admin_user)]
 
+    if command == "/altre_azioni" and has_command_capability:
+        return [build_other_actions_text(is_admin=is_admin_user)]
+
     if not has_command_capability:
         if command == "/help":
             return [format_access_required_status(user_status or TELEGRAM_USER_STATUS_NEW)]
@@ -2356,7 +2364,13 @@ def process_message(
             "Usa <code>/request_access</code> per inviare la richiesta all'admin."
         ]
 
-    if not can_use_bot and command not in ("", "/start", "/help", "/request_access"):
+    if not can_use_bot and command not in (
+        "",
+        "/start",
+        "/help",
+        "/altre_azioni",
+        "/request_access",
+    ):
         return [
             "Utente non ancora approvato per questo bot. "
             "Usa <code>/request_access</code> per inviare la richiesta all'admin."

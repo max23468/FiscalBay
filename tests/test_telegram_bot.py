@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfoNotFoundError
 
 from src.fiscalbay.bot import (
     CALLBACK_HELP,
+    CALLBACK_OTHER_ACTIONS,
     CALLBACK_REQUEST_ACCESS,
     CALLBACK_SETTINGS,
     CALLBACK_STATO,
@@ -18,6 +19,7 @@ from src.fiscalbay.bot import (
     build_contextual_menu_markup,
     build_help_text,
     build_main_menu_markup,
+    build_other_actions_text,
     callback_command_from_data,
     chunk_message,
     ensure_long_polling,
@@ -68,22 +70,15 @@ class TelegramBotTests(unittest.TestCase):
                 ],
                 [
                     {"text": "Stato", "callback_data": CALLBACK_STATO},
-                    {"text": "Preferenze", "callback_data": CALLBACK_SETTINGS},
+                    {"text": "Altre azioni", "callback_data": CALLBACK_OTHER_ACTIONS},
                 ],
-                [
-                    {"text": "Disattiva notifiche", "callback_data": "menu:notifications_off"},
-                    {"text": "Scollega", "callback_data": "menu:disconnect"},
-                ],
-                [{"text": "Guida", "callback_data": CALLBACK_HELP}],
             ],
         )
         all_callbacks = [button.get("callback_data") for row in keyboard for button in row]
         self.assertIn(CALLBACK_ULTIMI, all_callbacks)
         self.assertIn(CALLBACK_TUTTI, all_callbacks)
         self.assertIn(CALLBACK_STATO, all_callbacks)
-        self.assertIn(CALLBACK_HELP, all_callbacks)
-        self.assertIn(CALLBACK_SETTINGS, all_callbacks)
-        self.assertIn("menu:notifications_off", all_callbacks)
+        self.assertIn(CALLBACK_OTHER_ACTIONS, all_callbacks)
 
     def test_build_main_menu_markup_can_reflect_unlinked_state(self) -> None:
         markup = build_main_menu_markup(
@@ -96,7 +91,7 @@ class TelegramBotTests(unittest.TestCase):
             for row in markup.get("inline_keyboard", [])
             for button in row
         ]
-        self.assertIn("menu:notifications_on", all_callbacks)
+        self.assertIn(CALLBACK_OTHER_ACTIONS, all_callbacks)
         self.assertNotIn("menu:disconnect", all_callbacks)
 
     def test_build_contextual_menu_markup_for_orders_focuses_order_actions(self) -> None:
@@ -180,6 +175,7 @@ class TelegramBotTests(unittest.TestCase):
         self.assertEqual(
             callback_command_from_data(CALLBACK_ADMIN_MAINTENANCE), "/admin manutenzione"
         )
+        self.assertEqual(callback_command_from_data(CALLBACK_OTHER_ACTIONS), "/altre_azioni")
         self.assertEqual(callback_command_from_data(CALLBACK_REQUEST_ACCESS), "/request_access")
         self.assertEqual(callback_command_from_data("access:approve:321"), "/approve_user 321")
         self.assertEqual(callback_command_from_data("access:reject:321"), "/reject_user 321")
@@ -265,6 +261,7 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("pulsanti rapidi", text)
         self.assertIn("Comandi principali", text)
         self.assertIn("Guide dettagliate", text)
+        self.assertIn("/altre_azioni", text)
         self.assertIn("/ordini fiscali", text)
         self.assertIn("/settings", text)
         self.assertIn("/settings notifiche on", text)
@@ -273,6 +270,17 @@ class TelegramBotTests(unittest.TestCase):
         self.assertNotIn("/ordini report", text)
         self.assertNotIn("/admin_users", text)
         self.assertIn(BOT_DISPLAY_NAME, text)
+
+    def test_build_other_actions_text_collects_secondary_commands(self) -> None:
+        text = build_other_actions_text()
+        self.assertIn("Altre azioni", text)
+        self.assertIn("/help", text)
+        self.assertIn("/request_access", text)
+        self.assertIn("/settings notifiche on", text)
+        self.assertNotIn("/admin_users", text)
+
+        admin_text = build_other_actions_text(is_admin=True)
+        self.assertIn("/admin_users", admin_text)
 
     def test_build_help_text_can_include_admin_shortcuts(self) -> None:
         text = build_help_text(is_admin=True)
@@ -288,10 +296,32 @@ class TelegramBotTests(unittest.TestCase):
         self.assertEqual(profile["short_description"], BOT_TAGLINE)
         commands = profile["commands"]
         self.assertIsInstance(commands, list)
-        self.assertGreaterEqual(len(commands), 6)
-        self.assertEqual(commands[0]["command"], "help")
-        self.assertEqual(commands[1]["command"], "stato")
+        self.assertEqual(len(commands), 4)
+        self.assertEqual(commands[0]["command"], "stato")
+        self.assertEqual(commands[-1]["command"], "altre_azioni")
+        self.assertNotIn("help", {command["command"] for command in commands})
+        self.assertNotIn("settings", {command["command"] for command in commands})
+        self.assertNotIn("request_access", {command["command"] for command in commands})
         self.assertNotIn("ping", {command["command"] for command in commands})
+
+    @patch("src.fiscalbay.bot.fetch_records")
+    @patch("src.fiscalbay.bot.load_config")
+    def test_process_message_for_other_actions(self, mock_load_config, mock_fetch_records) -> None:
+        replies = process_message(
+            text="/altre_azioni",
+            chat_id=1,
+            telegram_config=TelegramConfig(
+                token="x",
+                allowed_chat_ids={1, 123, 456, 573159993},
+                notify_chat_ids=set(),
+            ),
+            ebay_environment="production",
+        )
+        self.assertEqual(len(replies), 1)
+        self.assertIn("/settings", replies[0])
+        self.assertIn("/request_access", replies[0])
+        mock_load_config.assert_not_called()
+        mock_fetch_records.assert_not_called()
 
     @patch("src.fiscalbay.bot.fetch_records")
     @patch("src.fiscalbay.bot.load_config")
