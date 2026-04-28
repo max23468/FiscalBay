@@ -169,20 +169,19 @@ def format_record(record: OrderRecord) -> str:
     created_at = html.escape(format_order_date(record.creationDate))
 
     return (
-        f'🛒 <b>Ordine</b> • <a href="{ebay_url}"><code>{order_id}</code></a>\n'
-        f"┌ 📅 <b>Data</b>: <code>{created_at}</code>\n"
-        f"├ 👤 <b>Acquirente</b>: <code>{buyer}</code>\n"
-        f"├ 🧾 <b>Nome completo</b>: <code>{buyer_name}</code>\n"
-        f"├ ✉️ <b>Email</b>: <code>{buyer_email}</code>\n"
-        f"├ 📦 <b>Descrizione prodotto</b>: <i>{product_description}</i>\n"
-        f"├ 🔢 <b>Quantità ordine</b>: <code>{order_quantity}</code>\n"
-        f"├ 💰 <b>Totale</b>: <code>{total}</code>\n"
-        f"├ 🔄 <b>Stato transazione</b>: <code>{transaction_status}</code>\n"
-        f"├ 📍 <b>Spedizione</b>: <code>{shipping}</code>\n"
-        f"└ 💳 <b>{html.escape(fiscal_label)}</b>: "
-        f"<code>{html.escape(fiscal_value)}</code> "
-        f"<i>({html.escape(tax_type)})</i> • "
-        f"<code>{html.escape(country)}</code>"
+        f'🛒 <b>Ordine</b> <a href="{ebay_url}"><code>{order_id}</code></a>\n'
+        f"📅 <b>Data</b>: <code>{created_at}</code> · "
+        f"💰 <b>Totale</b>: <code>{total}</code>\n"
+        f"🔄 <b>Stato transazione</b>: <code>{transaction_status}</code>\n\n"
+        f"👤 <b>Acquirente</b>: <code>{buyer}</code>\n"
+        f"🧾 <b>Nome completo</b>: <code>{buyer_name}</code>\n"
+        f"✉️ <b>Email</b>: <code>{buyer_email}</code>\n\n"
+        f"📦 <b>Descrizione prodotto</b>: <i>{product_description}</i>\n"
+        f"🔢 <b>Quantità ordine</b>: <code>{order_quantity}</code>\n"
+        f"📍 <b>Spedizione</b>: <code>{shipping}</code>\n\n"
+        f"💳 <b>{html.escape(fiscal_label)}</b>: <code>{html.escape(fiscal_value)}</code>\n"
+        f"🏷️ <b>Tipo</b>: <code>{html.escape(tax_type)}</code> · "
+        f"<b>Paese</b>: <code>{html.escape(country)}</code>"
         f"{missing_fiscal}"
     )
 
@@ -206,11 +205,10 @@ def format_records(
         page_no = (start // page_size) + 1
         total_pages = (len(rows) + page_size - 1) // page_size
         header = (
-            "📋 <b>Riepilogo ordini</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"📦 Totale: <code>{len(rows)}</code> • 📄 Pagina: <code>{page_no}/{total_pages}</code>"
+            "📋 <b>Ordini eBay</b>\n"
+            f"<code>{len(rows)}</code> risultati · pagina <code>{page_no}/{total_pages}</code>"
         )
-        body = "\n\n".join(format_record(row) for row in page_rows)
+        body = "\n\n———\n\n".join(format_record(row) for row in page_rows)
         pages.append(header + "\n\n" + body)
     return pages
 
@@ -1896,7 +1894,7 @@ def has_fiscal_identifier(record: OrderRecord) -> bool:
 
 
 def format_auto_notification(record: OrderRecord) -> str:
-    prefix = "🚨 <b>NUOVO ORDINE EBAY RICEVUTO!</b> 🚨\n━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    prefix = "🚨 <b>Nuovo ordine eBay</b>\n\n"
     return prefix + format_record(record)
 
 

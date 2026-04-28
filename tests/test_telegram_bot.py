@@ -382,7 +382,7 @@ class TelegramBotTests(unittest.TestCase):
                 "shippingAddress": "Mario Rossi, Via Roma 1, Milano",
             }
         )
-        self.assertIn("NUOVO ORDINE EBAY RICEVUTO", text)
+        self.assertIn("Nuovo ordine eBay", text)
         self.assertIn("RSSMRA80A01H501U", text)
         self.assertIn("Data</b>: <code>03/04/2026 12:00</code>", text)
         self.assertIn("Nome completo", text)
