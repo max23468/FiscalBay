@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.7.0](https://github.com/max23468/FiscalBay/compare/v1.6.0...v1.7.0) (2026-04-29)
+
+### Features
+
+* add seller fiscal export ([e521531](https://github.com/max23468/FiscalBay/commit/e5215311412e074b0832637d2065ad8596fd314b))
+
 ## [1.6.0](https://github.com/max23468/FiscalBay/compare/v1.5.0...v1.6.0) (2026-04-28)
 
 ### Features
