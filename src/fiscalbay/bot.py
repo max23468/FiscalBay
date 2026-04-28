@@ -252,6 +252,7 @@ ADMIN_ONLY_COMMANDS = frozenset(
         "/suspend_user",
         "/reactivate_user",
         "/tenant_health",
+        "/service_mode",
     }
 )
 
@@ -1345,7 +1346,10 @@ def _load_user_status(
     user = load_telegram_user(telegram_config.state_path, telegram_user_id)
     if user is None:
         return None
-    return normalize_telegram_user_status(user.status)
+    normalized = normalize_telegram_user_status(user.status)
+    if normalized == TELEGRAM_USER_STATUS_ADMIN:
+        return TELEGRAM_USER_STATUS_APPROVED
+    return normalized
 
 
 def _is_user_approved(
@@ -1369,6 +1373,8 @@ def _has_command_capability(
     required_capability = COMMAND_CAPABILITIES.get(command)
     if required_capability is None:
         return True
+    if required_capability == CAPABILITY_REVIEW_ACCESS:
+        return _is_admin_user(telegram_user_id, telegram_config)
     return has_telegram_user_capability(
         _load_user_status(telegram_config, telegram_user_id),
         required_capability,
@@ -2022,7 +2028,7 @@ def process_message(
         return [format_policy_status({"mode": service_mode})]
 
     if command == "/service_mode":
-        if not has_command_capability:
+        if not is_admin_user:
             return ["Solo l'admin puo' usare questo comando."]
         if not args:
             return [
@@ -2169,7 +2175,7 @@ def process_message(
         )
         return [format_access_request_status(admin_notified=admin_notified)]
 
-    if command in ADMIN_ONLY_COMMANDS and not has_command_capability:
+    if command in ADMIN_ONLY_COMMANDS and not is_admin_user:
         return ["Solo l'admin puo' usare questo comando."]
 
     admin_read_response = _handle_admin_read_command(

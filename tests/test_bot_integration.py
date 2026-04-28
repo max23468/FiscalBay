@@ -572,6 +572,100 @@ class BotIntegrationTests(unittest.TestCase):
 
             self.assertEqual(replies, ["Solo l'admin puo' usare questo comando."])
 
+    def test_approved_user_cannot_use_admin_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123, 456},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=456,
+                chat_id=456,
+                username="approved_user",
+                display_name="Approved User",
+                chat_type="private",
+            )
+            update_telegram_user_status(
+                str(db_path),
+                456,
+                TELEGRAM_USER_STATUS_APPROVED,
+                updated_at="2026-04-28T10:00:00Z",
+            )
+
+            for command in (
+                "/admin",
+                "/admin help",
+                "/admin_users all",
+                "/tenant_health",
+                "/approve_user 999",
+                "/reject_user 999",
+                "/suspend_user 999",
+                "/reactivate_user 999",
+                "/service_mode maintenance",
+            ):
+                with self.subTest(command=command):
+                    replies = process_message(
+                        text=command,
+                        chat_id=456,
+                        telegram_config=config,
+                        ebay_environment="production",
+                        telegram_user_id=456,
+                    )
+                    self.assertEqual(replies, ["Solo l'admin puo' usare questo comando."])
+
+    def test_persisted_admin_status_does_not_grant_admin_to_non_configured_user(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123, 456},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=456,
+                chat_id=456,
+                username="stale_admin",
+                display_name="Stale Admin",
+                chat_type="private",
+            )
+            update_telegram_user_status(
+                str(db_path),
+                456,
+                TELEGRAM_USER_STATUS_ADMIN,
+                updated_at="2026-04-28T10:00:00Z",
+            )
+
+            admin_replies = process_message(
+                text="/admin_users all",
+                chat_id=456,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=456,
+            )
+            help_replies = process_message(
+                text="/help",
+                chat_id=456,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=456,
+            )
+
+            self.assertEqual(admin_replies, ["Solo l'admin puo' usare questo comando."])
+            self.assertIn("Benvenuto in FiscalBay", help_replies[0])
+            self.assertNotIn("Area admin", help_replies[0])
+
     @patch("src.fiscalbay.bot.send_message")
     def test_admin_users_view_highlights_pending_waiting_connect_and_ready(
         self,
