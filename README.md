@@ -446,7 +446,7 @@ Comportamento:
 - `/stato` mostra ultimo check, contatori e dimensione della coda retry; `/stato servizio` mostra lo stato servizio sintetico
 - `/account` riassume lo stato eBay; `collega`, `reconnect` e `scollega` gestiscono le azioni account
 - `/settings` riassume preferenze chat e tenant; `notifiche`, `filtro`, `policy` e `lascia` gestiscono le azioni correlate
-- `/start` e `/help` mostrano anche una tastiera inline riordinata con scorciatoie per collegamento/account, ordini, stato/preferenze, notifiche e guida
+- la tastiera inline varia per contesto: `/account` privilegia collegamento e stato account, `/ordini` mostra azioni ordini/report, `/settings` mostra notifiche e preferenze, `/admin` mostra scorciatoie admin; `/start` e `/help` restano il menu generale
 - se `TELEGRAM_ADMIN_USER_ID` e' configurata, gli utenti non ancora approvati possono solo richiedere accesso con `/request_access` (anche quando `TELEGRAM_ALLOWED_CHAT_IDS=*`)
 - quando un nuovo utente viene visto per la prima volta dal runtime, l'admin riceve una notifica proattiva con user id/chat id per gestire subito approvazione o rifiuto
 - l'admin puo' approvare o rifiutare richieste dal messaggio inline o con `/approve_user <telegram_user_id>` e `/reject_user <telegram_user_id>`

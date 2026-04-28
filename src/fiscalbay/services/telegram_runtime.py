@@ -26,7 +26,7 @@ from ..storage.sqlite import (
 )
 from ..telegram_commands import (
     build_access_request_markup,
-    build_main_menu_markup,
+    build_contextual_menu_markup,
     callback_command_from_data,
     is_admin_authorized,
     is_authorized,
@@ -50,6 +50,7 @@ def _sync_branding_if_configured(
 def _build_contextual_main_menu(
     telegram_config: TelegramConfig,
     *,
+    command: str,
     chat_id: int,
     telegram_user_id: int | None,
     ebay_environment: str,
@@ -87,10 +88,12 @@ def _build_contextual_main_menu(
             for subscription in load_notification_subscriptions(telegram_config.state_path)
         )
 
-    return build_main_menu_markup(
+    return build_contextual_menu_markup(
+        command,
         account_linked=account_linked,
         reconnect_required=reconnect_required,
         notifications_enabled=notifications_enabled,
+        is_admin=is_admin_authorized(chat_id, telegram_user_id, telegram_config),
     )
 
 
@@ -381,6 +384,7 @@ def run_bot(
                                     reply_markup=(
                                         _build_contextual_main_menu(
                                             telegram_config,
+                                            command=callback_text,
                                             chat_id=callback_chat_id,
                                             telegram_user_id=callback_user_id,
                                             ebay_environment=ebay_environment,
@@ -522,6 +526,7 @@ def run_bot(
                             reply_markup=(
                                 _build_contextual_main_menu(
                                     telegram_config,
+                                    command=msg_text,
                                     chat_id=cid,
                                     telegram_user_id=message_user_id,
                                     ebay_environment=ebay_environment,

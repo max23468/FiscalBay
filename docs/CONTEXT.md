@@ -241,8 +241,9 @@ Nota onboarding:
 - `/account scollega` scollega gia' localmente account e token del tenant corrente dal DB sulla VPS
 - `/settings notifiche on|off` consente gia' alla singola chat di attivare o spegnere le notifiche personali
 - `/settings` mostra gia' un riepilogo leggero delle preferenze utente/chat
-- la tastiera inline sotto i messaggi e' ordinata per flusso operativo:
-  collegamento/account, ordini, stato/preferenze, notifiche e guida
+- la tastiera inline sotto i messaggi e' contestuale: menu generale su
+  `/start`/`/help`, azioni account su `/account`, azioni ordini su `/ordini`,
+  notifiche/preferenze su `/settings` e scorciatoie operative admin su `/admin`
 - se `TELEGRAM_ADMIN_USER_ID` e' configurata, gli utenti non admin entrano in stati `new/pending/approved/blocked` e possono sbloccare il bot solo dopo approvazione admin
 - l'admin puo' gestire gli accessi con callback inline o con `/admin_users`, `/approve_user` e `/reject_user`
 - il runtime normalizza ora centralmente gli stati workflow e applica capability esplicite per i comandi sensibili, invece di affidarsi a semplici check sparsi su stringhe di stato

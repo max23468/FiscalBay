@@ -142,7 +142,14 @@ from .storage.sqlite import (
     upsert_telegram_user,
 )
 from .telegram_commands import (
+    CALLBACK_ADMIN_DASHBOARD,
+    CALLBACK_ADMIN_MAINTENANCE,
+    CALLBACK_ADMIN_USERS_PENDING,
+    CALLBACK_ADMIN_USERS_RECONNECT,
     CALLBACK_HELP,
+    CALLBACK_ORDINI_PRIORITY,
+    CALLBACK_ORDINI_REPORT,
+    CALLBACK_ORDINI_REVIEW,
     CALLBACK_REQUEST_ACCESS,
     CALLBACK_SETTINGS,
     CALLBACK_STATO,
@@ -153,6 +160,7 @@ from .telegram_commands import (
     TELEGRAM_CMD_MIN_DAYS,
     TELEGRAM_CMD_MIN_RESULTS,
     build_admin_approval_markup,
+    build_contextual_menu_markup,
     build_help_text,
     build_main_menu_markup,
     build_start_text,
@@ -1172,7 +1180,14 @@ def now_utc():
 
 
 __all__ = [
+    "CALLBACK_ADMIN_DASHBOARD",
+    "CALLBACK_ADMIN_MAINTENANCE",
+    "CALLBACK_ADMIN_USERS_PENDING",
+    "CALLBACK_ADMIN_USERS_RECONNECT",
     "CALLBACK_HELP",
+    "CALLBACK_ORDINI_PRIORITY",
+    "CALLBACK_ORDINI_REPORT",
+    "CALLBACK_ORDINI_REVIEW",
     "CALLBACK_REQUEST_ACCESS",
     "CALLBACK_SETTINGS",
     "CALLBACK_STATO",
@@ -1186,6 +1201,7 @@ __all__ = [
     "TelegramConfig",
     "acquire_process_lock",
     "auto_notify_loop",
+    "build_contextual_menu_markup",
     "build_help_text",
     "build_main_menu_markup",
     "callback_command_from_data",

@@ -15,6 +15,7 @@ from src.fiscalbay.bot import (
     TelegramApiError,
     TelegramConfig,
     acquire_process_lock,
+    build_contextual_menu_markup,
     build_help_text,
     build_main_menu_markup,
     callback_command_from_data,
@@ -37,7 +38,12 @@ from src.fiscalbay.storage.sqlite import load_kv_value
 from src.fiscalbay.telegram_commands import (
     BOT_DISPLAY_NAME,
     BOT_TAGLINE,
+    CALLBACK_ADMIN_MAINTENANCE,
+    CALLBACK_ADMIN_USERS_PENDING,
     CALLBACK_ORDINI,
+    CALLBACK_ORDINI_PRIORITY,
+    CALLBACK_ORDINI_REPORT,
+    CALLBACK_ORDINI_REVIEW,
     build_telegram_branding_profile,
     format_order_date,
 )
@@ -92,10 +98,71 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("menu:notifications_on", all_callbacks)
         self.assertNotIn("menu:disconnect", all_callbacks)
 
+    def test_build_contextual_menu_markup_for_orders_focuses_order_actions(self) -> None:
+        markup = build_contextual_menu_markup("/ordini fiscali 7 20")
+        keyboard = markup.get("inline_keyboard")
+        self.assertEqual(
+            keyboard,
+            [
+                [
+                    {"text": "Ordini fiscali", "callback_data": CALLBACK_ULTIMI},
+                    {"text": "Tutti ordini", "callback_data": CALLBACK_TUTTI},
+                ],
+                [
+                    {"text": "Da controllare", "callback_data": CALLBACK_ORDINI_REVIEW},
+                    {"text": "Report", "callback_data": CALLBACK_ORDINI_REPORT},
+                ],
+                [
+                    {"text": "Priorita'", "callback_data": CALLBACK_ORDINI_PRIORITY},
+                    {"text": "Account", "callback_data": "menu:account"},
+                ],
+                [{"text": "Guida", "callback_data": CALLBACK_HELP}],
+            ],
+        )
+
+    def test_build_contextual_menu_markup_for_account_reflects_state(self) -> None:
+        markup = build_contextual_menu_markup(
+            "/account",
+            account_linked=True,
+            reconnect_required=True,
+            notifications_enabled=False,
+        )
+        keyboard = markup.get("inline_keyboard")
+        self.assertEqual(
+            keyboard[0][0], {"text": "Ricollega eBay", "callback_data": "menu:connect"}
+        )
+        self.assertEqual(keyboard[0][1], {"text": "Scollega", "callback_data": "menu:disconnect"})
+        self.assertIn(
+            {"text": "Attiva notifiche", "callback_data": "menu:notifications_on"}, keyboard[2]
+        )
+
+    def test_build_contextual_menu_markup_for_admin_uses_admin_actions(self) -> None:
+        markup = build_contextual_menu_markup("/admin", is_admin=True)
+        all_callbacks = [
+            button.get("callback_data")
+            for row in markup.get("inline_keyboard", [])
+            for button in row
+        ]
+        self.assertIn(CALLBACK_ADMIN_USERS_PENDING, all_callbacks)
+        self.assertIn(CALLBACK_ADMIN_MAINTENANCE, all_callbacks)
+        self.assertNotIn("menu:connect", all_callbacks)
+
     def test_callback_command_from_data_maps_buttons(self) -> None:
         self.assertEqual(callback_command_from_data(CALLBACK_ORDINI), "/ordini")
         self.assertEqual(callback_command_from_data(CALLBACK_ULTIMI), "/ordini fiscali 7 20")
         self.assertEqual(callback_command_from_data(CALLBACK_TUTTI), "/ordini tutti 7 20")
+        self.assertEqual(
+            callback_command_from_data(CALLBACK_ORDINI_REVIEW),
+            "/ordini controlla 7 20",
+        )
+        self.assertEqual(
+            callback_command_from_data(CALLBACK_ORDINI_REPORT),
+            "/ordini report 7 20",
+        )
+        self.assertEqual(
+            callback_command_from_data(CALLBACK_ORDINI_PRIORITY),
+            "/ordini priorita 7 20",
+        )
         self.assertEqual(callback_command_from_data(CALLBACK_STATO), "/stato")
         self.assertEqual(callback_command_from_data(CALLBACK_SETTINGS), "/settings")
         self.assertEqual(
@@ -105,6 +172,12 @@ class TelegramBotTests(unittest.TestCase):
         self.assertEqual(
             callback_command_from_data("menu:notifications_off"),
             "/settings notifiche off",
+        )
+        self.assertEqual(
+            callback_command_from_data(CALLBACK_ADMIN_USERS_PENDING), "/admin_users pending"
+        )
+        self.assertEqual(
+            callback_command_from_data(CALLBACK_ADMIN_MAINTENANCE), "/admin manutenzione"
         )
         self.assertEqual(callback_command_from_data(CALLBACK_REQUEST_ACCESS), "/request_access")
         self.assertEqual(callback_command_from_data("access:approve:321"), "/approve_user 321")

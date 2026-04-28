@@ -41,6 +41,13 @@ CALLBACK_DISCONNECT = "menu:disconnect"
 CALLBACK_SETTINGS = "menu:settings"
 CALLBACK_NOTIFICATIONS_ON = "menu:notifications_on"
 CALLBACK_NOTIFICATIONS_OFF = "menu:notifications_off"
+CALLBACK_ORDINI_REVIEW = "menu:ordini:review"
+CALLBACK_ORDINI_REPORT = "menu:ordini:report"
+CALLBACK_ORDINI_PRIORITY = "menu:ordini:priority"
+CALLBACK_ADMIN_DASHBOARD = "menu:admin:dashboard"
+CALLBACK_ADMIN_USERS_PENDING = "menu:admin_users:pending"
+CALLBACK_ADMIN_USERS_RECONNECT = "menu:admin_users:reconnect"
+CALLBACK_ADMIN_MAINTENANCE = "menu:admin:maintenance"
 CALLBACK_REQUEST_ACCESS = "access:request"
 CALLBACK_APPROVE_PREFIX = "access:approve:"
 CALLBACK_REJECT_PREFIX = "access:reject:"
@@ -401,12 +408,138 @@ def build_main_menu_markup(
     }
 
 
+def build_contextual_menu_markup(
+    command: str,
+    *,
+    account_linked: bool = True,
+    reconnect_required: bool = False,
+    notifications_enabled: bool = True,
+    is_admin: bool = False,
+) -> InlineKeyboardMarkup:
+    command_name, _ = parse_command(command)
+    connect_label = "Ricollega eBay" if reconnect_required else "Collega eBay"
+    notification_label = "Disattiva notifiche" if notifications_enabled else "Attiva notifiche"
+    notification_callback = (
+        CALLBACK_NOTIFICATIONS_OFF if notifications_enabled else CALLBACK_NOTIFICATIONS_ON
+    )
+
+    if is_admin and command_name in {
+        "/admin",
+        "/admin_users",
+        "/tenant_health",
+        "/approve_user",
+        "/reject_user",
+        "/suspend_user",
+        "/reactivate_user",
+        "/service_mode",
+    }:
+        return {
+            "inline_keyboard": [
+                [
+                    {"text": "Dashboard", "callback_data": CALLBACK_ADMIN_DASHBOARD},
+                    {"text": "Pending", "callback_data": CALLBACK_ADMIN_USERS_PENDING},
+                ],
+                [
+                    {"text": "Reconnect", "callback_data": CALLBACK_ADMIN_USERS_RECONNECT},
+                    {"text": "Manutenzione", "callback_data": CALLBACK_ADMIN_MAINTENANCE},
+                ],
+                [
+                    {"text": "Stato", "callback_data": CALLBACK_STATO},
+                    {"text": "Guida", "callback_data": CALLBACK_HELP},
+                ],
+            ]
+        }
+
+    if command_name in {"/ordini", "/ultimi", "/tutti", "/ordine", "/why_not_notified"}:
+        return {
+            "inline_keyboard": [
+                [
+                    {"text": "Ordini fiscali", "callback_data": CALLBACK_ULTIMI},
+                    {"text": "Tutti ordini", "callback_data": CALLBACK_TUTTI},
+                ],
+                [
+                    {"text": "Da controllare", "callback_data": CALLBACK_ORDINI_REVIEW},
+                    {"text": "Report", "callback_data": CALLBACK_ORDINI_REPORT},
+                ],
+                [
+                    {"text": "Priorita'", "callback_data": CALLBACK_ORDINI_PRIORITY},
+                    {"text": "Account", "callback_data": CALLBACK_ACCOUNT},
+                ],
+                [{"text": "Guida", "callback_data": CALLBACK_HELP}],
+            ]
+        }
+
+    if command_name in {"/account", "/connect", "/disconnect", "/reconnect_status"}:
+        notification_row = [
+            {"text": notification_label, "callback_data": notification_callback},
+            {"text": "Preferenze", "callback_data": CALLBACK_SETTINGS},
+        ]
+        account_actions = [
+            {"text": connect_label, "callback_data": CALLBACK_CONNECT},
+            {"text": "Account", "callback_data": CALLBACK_ACCOUNT},
+        ]
+        if account_linked:
+            account_actions = [
+                {"text": connect_label, "callback_data": CALLBACK_CONNECT},
+                {"text": "Scollega", "callback_data": CALLBACK_DISCONNECT},
+            ]
+        return {
+            "inline_keyboard": [
+                account_actions,
+                [
+                    {"text": "Ordini fiscali", "callback_data": CALLBACK_ULTIMI},
+                    {"text": "Stato", "callback_data": CALLBACK_STATO},
+                ],
+                notification_row,
+                [{"text": "Guida", "callback_data": CALLBACK_HELP}],
+            ]
+        }
+
+    if command_name in {"/settings", "/notifications", "/policy", "/leave_bot"}:
+        return {
+            "inline_keyboard": [
+                [
+                    {"text": notification_label, "callback_data": notification_callback},
+                    {"text": "Stato", "callback_data": CALLBACK_STATO},
+                ],
+                [
+                    {"text": "Account", "callback_data": CALLBACK_ACCOUNT},
+                    {"text": "Ordini fiscali", "callback_data": CALLBACK_ULTIMI},
+                ],
+                [{"text": "Guida", "callback_data": CALLBACK_HELP}],
+            ]
+        }
+
+    if command_name in {"/stato", "/service_status", "/ping"}:
+        return {
+            "inline_keyboard": [
+                [
+                    {"text": "Account", "callback_data": CALLBACK_ACCOUNT},
+                    {"text": "Ordini fiscali", "callback_data": CALLBACK_ULTIMI},
+                ],
+                [
+                    {"text": "Preferenze", "callback_data": CALLBACK_SETTINGS},
+                    {"text": "Guida", "callback_data": CALLBACK_HELP},
+                ],
+            ]
+        }
+
+    return build_main_menu_markup(
+        account_linked=account_linked,
+        reconnect_required=reconnect_required,
+        notifications_enabled=notifications_enabled,
+    )
+
+
 def callback_command_from_data(data: str) -> str | None:
     normalized = data.strip()
     mapping = {
         CALLBACK_ORDINI: "/ordini",
         CALLBACK_ULTIMI: "/ordini fiscali 7 20",
         CALLBACK_TUTTI: "/ordini tutti 7 20",
+        CALLBACK_ORDINI_REVIEW: "/ordini controlla 7 20",
+        CALLBACK_ORDINI_REPORT: "/ordini report 7 20",
+        CALLBACK_ORDINI_PRIORITY: "/ordini priorita 7 20",
         CALLBACK_STATO: "/stato",
         CALLBACK_ACCOUNT: "/account",
         CALLBACK_CONNECT: "/account collega",
@@ -414,6 +547,10 @@ def callback_command_from_data(data: str) -> str | None:
         CALLBACK_SETTINGS: "/settings",
         CALLBACK_NOTIFICATIONS_ON: "/settings notifiche on",
         CALLBACK_NOTIFICATIONS_OFF: "/settings notifiche off",
+        CALLBACK_ADMIN_DASHBOARD: "/admin",
+        CALLBACK_ADMIN_USERS_PENDING: "/admin_users pending",
+        CALLBACK_ADMIN_USERS_RECONNECT: "/admin_users reconnect",
+        CALLBACK_ADMIN_MAINTENANCE: "/admin manutenzione",
         CALLBACK_REQUEST_ACCESS: "/request_access",
         CALLBACK_HELP: "/help",
     }
@@ -443,6 +580,12 @@ def should_attach_main_menu(command: str) -> bool:
         "/settings",
         "/admin",
         "/admin_users",
+        "/tenant_health",
+        "/approve_user",
+        "/reject_user",
+        "/suspend_user",
+        "/reactivate_user",
+        "/service_mode",
     )
 
 
