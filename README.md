@@ -262,6 +262,13 @@ Nota OAuth eBay:
 | `FISCALBAY_PUBLIC_MAX_LINKED_ACCOUNTS` | `25` | Soglia account eBay collegati oltre cui rivalutare storage e operativita' |
 | `FISCALBAY_PUBLIC_MAX_ACTIVE_TOKEN_SETS` | `25` | Soglia token tenant attivi oltre cui preparare migrazione database |
 | `FISCALBAY_SQLITE_MAX_DB_BYTES` | `52428800` | Soglia dimensione `state.db` oltre cui il passaggio oltre SQLite diventa raccomandato |
+| `FISCALBAY_RATE_LIMIT_ENABLED` | `1` | Abilita i cooldown per utente sui comandi sensibili |
+| `FISCALBAY_RATE_LIMIT_REQUEST_ACCESS_SECONDS` | `60` | Cooldown per utente su `/request_access` |
+| `FISCALBAY_RATE_LIMIT_CONNECT_SECONDS` | `10` | Cooldown per utente su `/account collega`, salvo riuso sessione OAuth valida |
+| `FISCALBAY_RATE_LIMIT_DISCONNECT_SECONDS` | `5` | Cooldown per utente su `/account scollega` |
+| `FISCALBAY_RATE_LIMIT_LEAVE_BOT_SECONDS` | `5` | Cooldown per utente su `/settings lascia` |
+| `FISCALBAY_RATE_LIMIT_SERVICE_MODE_SECONDS` | `2` | Cooldown admin su cambio modalita' servizio |
+| `FISCALBAY_RATE_LIMIT_ADMIN_MUTATION_SECONDS` | `2` | Cooldown admin su cambi stato utente non idempotenti |
 | `FISCALBAY_PUBLIC_HEALTH_URL` | derivata da `EBAY_OAUTH_CALLBACK_URL` se possibile | URL HTTPS pubblico da controllare con l'healthcheck esterno, di norma `/healthz` |
 | `MAX_DISK_USED_PERCENT` | `85` | Soglia alert per spazio disco usato sul path applicativo |
 | `MAX_INODE_USED_PERCENT` | `85` | Soglia alert per inode usati sul path applicativo |

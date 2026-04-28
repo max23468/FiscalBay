@@ -39,6 +39,7 @@ from .config import (
     configure_logging,
     load_config,
     load_public_service_config,
+    load_rate_limit_config,
     load_retention_config,
     load_telegram_config,
 )
@@ -274,12 +275,11 @@ PENDING_STALE_HOURS = 48
 UNLINKED_STALE_HOURS = 72
 REVOKED_STALE_HOURS = 72
 INACTIVE_TENANT_HOURS = 96
-COMMAND_RATE_LIMIT_SECONDS: dict[str, int] = {
-    "/request_access": 60,
-    "/connect": 10,
-    "/disconnect": 5,
-    "/leave_bot": 5,
-    "/service_mode": 2,
+ADMIN_MUTATION_COMMANDS = {
+    "/approve_user",
+    "/reject_user",
+    "/suspend_user",
+    "/reactivate_user",
 }
 
 
@@ -413,6 +413,25 @@ def _command_rate_limit_key(telegram_user_id: int, command: str) -> str:
     return f"command_guard:{telegram_user_id}:{safe_command}"
 
 
+def _command_rate_limit_seconds(command: str) -> int:
+    config = load_rate_limit_config()
+    if not config.enabled:
+        return 0
+    if command == "/request_access":
+        return config.request_access_seconds
+    if command == "/connect":
+        return config.connect_seconds
+    if command == "/disconnect":
+        return config.disconnect_seconds
+    if command == "/leave_bot":
+        return config.leave_bot_seconds
+    if command == "/service_mode":
+        return config.service_mode_seconds
+    if command in ADMIN_MUTATION_COMMANDS:
+        return config.admin_mutation_seconds
+    return 0
+
+
 def _admin_summary_key() -> str:
     return "admin_summary:last_sent_at"
 
@@ -470,7 +489,7 @@ def _mark_command_usage(
     command: str,
     timestamp: str,
 ) -> None:
-    if telegram_user_id is None or command not in COMMAND_RATE_LIMIT_SECONDS:
+    if telegram_user_id is None or _command_rate_limit_seconds(command) <= 0:
         return
     save_kv_value(
         state_path,
@@ -488,7 +507,7 @@ def _command_rate_limit_remaining_seconds(
 ) -> int:
     if telegram_user_id is None:
         return 0
-    limit_seconds = COMMAND_RATE_LIMIT_SECONDS.get(command, 0)
+    limit_seconds = _command_rate_limit_seconds(command)
     if limit_seconds <= 0:
         return 0
     previous = load_kv_value(
@@ -614,6 +633,7 @@ def _build_policy_status_payload(state_path: str) -> dict[str, object]:
     service_state = _load_service_state(state_path)
     mode = str(service_state.get("mode") or SERVICE_MODE_NORMAL)
     public_config = load_public_service_config()
+    rate_limit_config = load_rate_limit_config()
     readiness = summarize_multi_tenant_readiness(state_path)
     return {
         "mode": mode,
@@ -627,6 +647,10 @@ def _build_policy_status_payload(state_path: str) -> dict[str, object]:
         "active_token_sets": readiness.get("active_token_sets", 0),
         "active_token_sets_limit": public_config.max_active_token_sets,
         "sqlite_db_limit_mb": public_config.sqlite_max_db_bytes // (1024 * 1024),
+        "rate_limit_enabled": rate_limit_config.enabled,
+        "rate_limit_request_access_seconds": rate_limit_config.request_access_seconds,
+        "rate_limit_connect_seconds": rate_limit_config.connect_seconds,
+        "rate_limit_admin_mutation_seconds": rate_limit_config.admin_mutation_seconds,
     }
 
 
@@ -2148,7 +2172,7 @@ def process_message(
     if admin_read_response is not None:
         return admin_read_response
 
-    if command in {"/approve_user", "/reject_user", "/suspend_user", "/reactivate_user"}:
+    if command in ADMIN_MUTATION_COMMANDS:
         if not args:
             action_map = {
                 "/approve_user": "approve_user",
@@ -2169,14 +2193,6 @@ def process_message(
             }
             action = action_map[command]
             return [f"Uso corretto: <code>/{action} &lt;telegram_user_id&gt;</code>"]
-        remaining = _command_rate_limit_remaining_seconds(
-            telegram_config.state_path,
-            telegram_user_id=telegram_user_id,
-            command=command,
-            now=now,
-        )
-        if remaining > 0:
-            return [_format_cooldown_message(command, remaining)]
         timestamp = now_iso
         next_status_map = {
             "/approve_user": TELEGRAM_USER_STATUS_APPROVED,
@@ -2190,6 +2206,15 @@ def process_message(
             current_user is None
             or normalize_telegram_user_status(current_user.status) != next_status
         )
+        if status_changed:
+            remaining = _command_rate_limit_remaining_seconds(
+                telegram_config.state_path,
+                telegram_user_id=telegram_user_id,
+                command=command,
+                now=now,
+            )
+            if remaining > 0:
+                return [_format_cooldown_message(command, remaining)]
         updated_user = update_telegram_user_status(
             telegram_config.state_path,
             target_user_id,
@@ -2237,12 +2262,13 @@ def process_message(
                 "operations_failed": operation_summary["failed"],
             },
         )
-        _mark_command_usage(
-            telegram_config.state_path,
-            telegram_user_id=telegram_user_id,
-            command=command,
-            timestamp=timestamp,
-        )
+        if status_changed:
+            _mark_command_usage(
+                telegram_config.state_path,
+                telegram_user_id=telegram_user_id,
+                command=command,
+                timestamp=timestamp,
+            )
         if updated_user is not None and status_changed and operation_summary["failed"] == 0:
             if next_status == TELEGRAM_USER_STATUS_APPROVED:
                 _notify_user_access_status(

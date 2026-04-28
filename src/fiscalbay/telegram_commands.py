@@ -1200,6 +1200,11 @@ def format_policy_status(policy_status: Mapping[str, object]) -> str:
     token_sets = html.escape(str(policy_status.get("active_token_sets", 0)))
     token_limit = html.escape(str(policy_status.get("active_token_sets_limit", 0)))
     sqlite_limit_mb = html.escape(str(policy_status.get("sqlite_db_limit_mb", 0)))
+    rate_limit_enabled = bool(policy_status.get("rate_limit_enabled", True))
+    request_limit = html.escape(str(policy_status.get("rate_limit_request_access_seconds", 0)))
+    connect_limit = html.escape(str(policy_status.get("rate_limit_connect_seconds", 0)))
+    admin_limit = html.escape(str(policy_status.get("rate_limit_admin_mutation_seconds", 0)))
+    rate_limit_status = "attivo" if rate_limit_enabled else "disattivato"
     return (
         "📜 <b>Policy Servizio</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -1214,6 +1219,8 @@ def format_policy_status(policy_status: Mapping[str, object]) -> str:
         f"Token attivi: <code>{token_sets}/{token_limit}</code>\n"
         f"SQLite resta accettabile entro <code>{sqlite_limit_mb}MB</code> "
         "e bassa concorrenza.\n"
+        f"Rate limiting per utente: <code>{rate_limit_status}</code> "
+        f"(accesso {request_limit}s, account {connect_limit}s, admin {admin_limit}s).\n"
         "Il bot mostra solo dati fiscali realmente restituiti da eBay.\n"
         f"Modalita' servizio corrente: <code>{mode}</code>\n"
         "Riferimento operativo: <code>docs/SERVICE_GOVERNANCE.md</code> nel repository."

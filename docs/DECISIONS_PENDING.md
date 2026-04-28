@@ -11,7 +11,6 @@ Decisioni ancora aperte che influenzano le prossime fasi.
 
 - decidere se introdurre pruning automatico per `audit_log` e sessioni OAuth vecchie
 - decidere se portare la cancellazione utente da procedura amministrativa a flusso self-service
-- decidere il livello minimo di rate limiting per un bot pubblico con accesso approvato
 - definire il set minimo di strumenti admin permanenti per governare un servizio piccolo e curato
 - decidere quali metriche prodotto minime debbano essere visibili all'admin in modo stabile
 - decidere come trattare tenant inattivi o dormienti senza introdurre complessita' inutile

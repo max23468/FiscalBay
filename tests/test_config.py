@@ -6,6 +6,7 @@ from src.fiscalbay.config import (
     DEFAULT_SCOPE,
     load_config,
     load_public_service_config,
+    load_rate_limit_config,
     load_retention_config,
     load_telegram_config,
 )
@@ -93,6 +94,44 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.max_linked_accounts, 10)
         self.assertEqual(config.max_active_token_sets, 9)
         self.assertEqual(config.sqlite_max_db_bytes, 2097152)
+
+    def test_load_rate_limit_config_uses_public_service_cooldowns(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "FISCALBAY_RATE_LIMIT_ENABLED": "1",
+                "FISCALBAY_RATE_LIMIT_REQUEST_ACCESS_SECONDS": "90",
+                "FISCALBAY_RATE_LIMIT_CONNECT_SECONDS": "20",
+                "FISCALBAY_RATE_LIMIT_DISCONNECT_SECONDS": "8",
+                "FISCALBAY_RATE_LIMIT_LEAVE_BOT_SECONDS": "7",
+                "FISCALBAY_RATE_LIMIT_SERVICE_MODE_SECONDS": "3",
+                "FISCALBAY_RATE_LIMIT_ADMIN_MUTATION_SECONDS": "4",
+            },
+            clear=True,
+        ):
+            config = load_rate_limit_config()
+
+        self.assertTrue(config.enabled)
+        self.assertEqual(config.request_access_seconds, 90)
+        self.assertEqual(config.connect_seconds, 20)
+        self.assertEqual(config.disconnect_seconds, 8)
+        self.assertEqual(config.leave_bot_seconds, 7)
+        self.assertEqual(config.service_mode_seconds, 3)
+        self.assertEqual(config.admin_mutation_seconds, 4)
+
+    def test_load_rate_limit_config_can_be_disabled(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "FISCALBAY_RATE_LIMIT_ENABLED": "off",
+                "FISCALBAY_RATE_LIMIT_ADMIN_MUTATION_SECONDS": "-1",
+            },
+            clear=True,
+        ):
+            config = load_rate_limit_config()
+
+        self.assertFalse(config.enabled)
+        self.assertEqual(config.admin_mutation_seconds, 0)
 
     def test_invalid_telegram_chat_id_raises_configuration_error(self) -> None:
         with patch.dict(

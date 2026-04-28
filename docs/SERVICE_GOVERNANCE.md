@@ -377,6 +377,8 @@ Decisioni valide oggi:
 - admin globale unico identificato da `TELEGRAM_ADMIN_USER_ID`
 - approvazione esplicita prima dell'uso operativo del bot
 - audit log minimo obbligatorio per eventi sensibili
+- rate limiting minimo per utente sui comandi sensibili, configurabile con
+  `FISCALBAY_RATE_LIMIT_*`
 - token tenant cifrati a riposo
 - isolamento dati per utente/chat/account come default del runtime
 

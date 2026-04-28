@@ -85,8 +85,8 @@ Per questo la multiutenza non va trattata come sola feature OAuth.
   - impedisce onboarding self-service sicuro
 - assenza di audit log di `connect` e `disconnect`
   - insufficiente per un bot multiutente
-- assenza di rate limiting per utente
-  - espone a uso improprio e rumorosita' tra tenant
+- rate limiting per utente ancora minimale
+  - va osservato sul traffico reale e irrigidito solo se emergono abusi o rumore operativo
 
 Ogni passo della fase multiutente deve essere giustificato contro questi finding.
 

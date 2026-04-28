@@ -213,6 +213,9 @@ Policy servizio pubblico:
   e approvato
 - le notifiche vengono attivate di default quando un utente diventa approvato,
   salvo opt-out utente o intervento admin
+- i comandi sensibili hanno cooldown per utente configurabili con
+  `FISCALBAY_RATE_LIMIT_*`: richiesta accesso, collegamento/scollegamento account,
+  uscita dal bot, cambio modalita' servizio e mutazioni admin non idempotenti
 - prima di superare le soglie `FISCALBAY_PUBLIC_*`, sospendere l'allargamento e
   preparare database piu' robusto, sizing VPS e processo admin piu' formale
 

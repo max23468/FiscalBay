@@ -923,6 +923,7 @@ class BotIntegrationTests(unittest.TestCase):
         self.assertIn("Policy Servizio", policy_replies[0])
         self.assertIn("Telegram first", policy_replies[0])
         self.assertIn("Utenti approvati", policy_replies[0])
+        self.assertIn("Rate limiting per utente", policy_replies[0])
 
     def test_service_mode_is_rate_limited(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -962,6 +963,66 @@ class BotIntegrationTests(unittest.TestCase):
                 telegram_user_id=123,
             )
             self.assertIn("cooldown", second_replies[0])
+
+    @patch("src.fiscalbay.bot.send_message")
+    def test_admin_status_mutations_are_rate_limited_per_admin(self, mock_send_message) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123, 456, 789},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+            for telegram_user_id, chat_id in ((999, 456), (888, 789)):
+                sync_runtime_contact(
+                    config,
+                    telegram_user_id=telegram_user_id,
+                    chat_id=chat_id,
+                    username=f"user_{telegram_user_id}",
+                    display_name=f"User {telegram_user_id}",
+                    chat_type="private",
+                )
+                process_message(
+                    text="/request_access",
+                    chat_id=chat_id,
+                    telegram_config=config,
+                    ebay_environment="production",
+                    telegram_user_id=telegram_user_id,
+                )
+            mock_send_message.reset_mock()
+
+            first_replies = process_message(
+                text="/approve_user 999",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+            second_replies = process_message(
+                text="/approve_user 888",
+                chat_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=123,
+            )
+
+            self.assertIn("approved", first_replies[0])
+            self.assertIn("cooldown", second_replies[0])
+            blocked_user = load_telegram_user(str(db_path), 888)
+            self.assertIsNotNone(blocked_user)
+            self.assertEqual(blocked_user.status, "pending")
 
     @patch("src.fiscalbay.bot.send_message")
     def test_admin_can_filter_pending_and_unlinked_users(self, mock_send_message) -> None:

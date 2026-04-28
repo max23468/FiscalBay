@@ -26,6 +26,12 @@ DEFAULT_SQLITE_MAX_DB_BYTES = 50 * 1024 * 1024
 DEFAULT_PUBLIC_SERVICE_MODEL = "approved_public_small"
 DEFAULT_WEB_ROLE = "onboarding_callback_support"
 DEFAULT_ONBOARDING_HOSTING = "vps_oauth_callback"
+DEFAULT_RATE_LIMIT_REQUEST_ACCESS_SECONDS = 60
+DEFAULT_RATE_LIMIT_CONNECT_SECONDS = 10
+DEFAULT_RATE_LIMIT_DISCONNECT_SECONDS = 5
+DEFAULT_RATE_LIMIT_LEAVE_BOT_SECONDS = 5
+DEFAULT_RATE_LIMIT_SERVICE_MODE_SECONDS = 2
+DEFAULT_RATE_LIMIT_ADMIN_MUTATION_SECONDS = 2
 
 
 @dataclass(frozen=True)
@@ -45,6 +51,17 @@ class PublicServiceConfig:
     max_linked_accounts: int = DEFAULT_PUBLIC_MAX_LINKED_ACCOUNTS
     max_active_token_sets: int = DEFAULT_PUBLIC_MAX_ACTIVE_TOKEN_SETS
     sqlite_max_db_bytes: int = DEFAULT_SQLITE_MAX_DB_BYTES
+
+
+@dataclass(frozen=True)
+class RateLimitConfig:
+    enabled: bool = True
+    request_access_seconds: int = DEFAULT_RATE_LIMIT_REQUEST_ACCESS_SECONDS
+    connect_seconds: int = DEFAULT_RATE_LIMIT_CONNECT_SECONDS
+    disconnect_seconds: int = DEFAULT_RATE_LIMIT_DISCONNECT_SECONDS
+    leave_bot_seconds: int = DEFAULT_RATE_LIMIT_LEAVE_BOT_SECONDS
+    service_mode_seconds: int = DEFAULT_RATE_LIMIT_SERVICE_MODE_SECONDS
+    admin_mutation_seconds: int = DEFAULT_RATE_LIMIT_ADMIN_MUTATION_SECONDS
 
 
 def configure_logging(default_level: str = "INFO") -> None:
@@ -96,6 +113,20 @@ def get_env_optional_int(name: str) -> int | None:
         raise ConfigurationError(
             f"Variabile ambiente {name} non valida: atteso intero, ricevuto {raw_value!r}"
         ) from exc
+
+
+def get_env_bool(name: str, default: bool) -> bool:
+    raw_value = get_env_text(name)
+    if not raw_value:
+        return default
+    normalized = raw_value.lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ConfigurationError(
+        f"Variabile ambiente {name} non valida: atteso booleano, ricevuto {raw_value!r}"
+    )
 
 
 def get_env_int_set(
@@ -170,6 +201,42 @@ def load_public_service_config() -> PublicServiceConfig:
             "FISCALBAY_SQLITE_MAX_DB_BYTES",
             DEFAULT_SQLITE_MAX_DB_BYTES,
             min_value=1024 * 1024,
+        ),
+    )
+
+
+def load_rate_limit_config() -> RateLimitConfig:
+    return RateLimitConfig(
+        enabled=get_env_bool("FISCALBAY_RATE_LIMIT_ENABLED", True),
+        request_access_seconds=get_env_int(
+            "FISCALBAY_RATE_LIMIT_REQUEST_ACCESS_SECONDS",
+            DEFAULT_RATE_LIMIT_REQUEST_ACCESS_SECONDS,
+            min_value=0,
+        ),
+        connect_seconds=get_env_int(
+            "FISCALBAY_RATE_LIMIT_CONNECT_SECONDS",
+            DEFAULT_RATE_LIMIT_CONNECT_SECONDS,
+            min_value=0,
+        ),
+        disconnect_seconds=get_env_int(
+            "FISCALBAY_RATE_LIMIT_DISCONNECT_SECONDS",
+            DEFAULT_RATE_LIMIT_DISCONNECT_SECONDS,
+            min_value=0,
+        ),
+        leave_bot_seconds=get_env_int(
+            "FISCALBAY_RATE_LIMIT_LEAVE_BOT_SECONDS",
+            DEFAULT_RATE_LIMIT_LEAVE_BOT_SECONDS,
+            min_value=0,
+        ),
+        service_mode_seconds=get_env_int(
+            "FISCALBAY_RATE_LIMIT_SERVICE_MODE_SECONDS",
+            DEFAULT_RATE_LIMIT_SERVICE_MODE_SECONDS,
+            min_value=0,
+        ),
+        admin_mutation_seconds=get_env_int(
+            "FISCALBAY_RATE_LIMIT_ADMIN_MUTATION_SECONDS",
+            DEFAULT_RATE_LIMIT_ADMIN_MUTATION_SECONDS,
+            min_value=0,
         ),
     )
 

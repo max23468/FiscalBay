@@ -23,3 +23,7 @@ Fase 5 completata.
 ## Fase 6 - Consolidamento del Servizio Pubblico
 
 Fase 6 completata.
+
+## Fase 7 - Rate Limiting Minimo
+
+Fase 7 completata.
