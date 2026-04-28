@@ -396,7 +396,6 @@ Comandi principali per tutti:
 
 - `/start`
 - `/help`
-- `/ping`
 - `/stato`
 - `/account`
 - `/ordini`
@@ -425,6 +424,7 @@ Comandi admin:
 
 - `/admin help` (admin)
 - `/admin` (admin)
+- `/ping` (admin, diagnostica rapida)
 - `/admin manutenzione` (admin)
 - `/admin_users all|pending|unlinked|reconnect|inactive` (admin)
 - `/tenant_health [telegram_user_id]` (admin)

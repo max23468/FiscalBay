@@ -220,7 +220,7 @@ from .tenant_credentials import decode_refresh_token, load_tenant_config_from_st
 
 LOGGER = logging.getLogger("fiscalbay.telegram_bot")
 COMMAND_CAPABILITIES: dict[str, str] = {
-    "/ping": CAPABILITY_USE_BOT,
+    "/ping": CAPABILITY_REVIEW_ACCESS,
     "/stato": CAPABILITY_USE_BOT,
     "/account": CAPABILITY_VIEW_ACCOUNT,
     "/reconnect_status": CAPABILITY_VIEW_ACCOUNT,
@@ -2174,6 +2174,9 @@ def process_message(
             timestamp=timestamp,
         )
         return [format_access_request_status(admin_notified=admin_notified)]
+
+    if command == "/ping" and telegram_config.admin_user_id is not None and not is_admin_user:
+        return ["Solo l'admin puo' usare questo comando."]
 
     if command in ADMIN_ONLY_COMMANDS and not is_admin_user:
         return ["Solo l'admin puo' usare questo comando."]
