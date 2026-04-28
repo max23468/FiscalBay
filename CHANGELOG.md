@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.6.0](https://github.com/max23468/FiscalBay/compare/v1.5.0...v1.6.0) (2026-04-28)
+
+### Features
+
+* add scale readiness check ([0cea3f4](https://github.com/max23468/FiscalBay/commit/0cea3f4959b503b7bc4adae378da4b0b1c5397c0))
+
 ## [1.5.0](https://github.com/max23468/FiscalBay/compare/v1.4.0...v1.5.0) (2026-04-28)
 
 ### Features
