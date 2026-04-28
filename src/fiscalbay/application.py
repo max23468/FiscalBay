@@ -71,7 +71,7 @@ def resolve_fetch_context(
         if telegram_user_id is not None and not allow_global_fallback:
             raise ConfigurationError(
                 "Le credenziali tenant eBay richiedono un reconnect. "
-                "Completa di nuovo /connect per collegare un token valido."
+                "Completa di nuovo /account collega per collegare un token valido."
             )
         return ResolvedFetchContext(
             config=load_config_fn(resolved_environment),
@@ -109,11 +109,11 @@ def resolve_fetch_context(
         if fallback_reason == "tenant_credentials_unavailable":
             raise ConfigurationError(
                 "Credenziali tenant eBay non disponibili per questo utente. "
-                "Completa di nuovo /connect per collegare un token valido."
+                "Completa di nuovo /account collega per collegare un token valido."
             )
         raise ConfigurationError(
             "Nessun account eBay collegato per questo utente. "
-            "Usa /connect per collegare il tuo account eBay."
+            "Usa /account collega per collegare il tuo account eBay."
         )
 
     return ResolvedFetchContext(

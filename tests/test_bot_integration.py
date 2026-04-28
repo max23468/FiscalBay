@@ -76,9 +76,9 @@ class BotIntegrationTests(unittest.TestCase):
         )
 
         self.assertEqual(len(replies), 1)
-        self.assertIn("/admin_dashboard", replies[0])
-        self.assertIn("/maintenance_overview", replies[0])
-        self.assertIn("/reconnect_users", replies[0])
+        self.assertIn("/admin", replies[0])
+        self.assertIn("/admin manutenzione", replies[0])
+        self.assertIn("/admin_users reconnect", replies[0])
 
     def test_process_message_prompts_request_for_non_approved_user(self) -> None:
         replies = process_message(
@@ -96,6 +96,33 @@ class BotIntegrationTests(unittest.TestCase):
 
         self.assertEqual(len(replies), 1)
         self.assertIn("/request_access", replies[0])
+
+    def test_removed_legacy_commands_point_to_canonical_commands(self) -> None:
+        config = TelegramConfig(
+            token="x",
+            allowed_chat_ids={573159993},
+            notify_chat_ids=set(),
+        )
+
+        cases = {
+            "/connect": "/account collega",
+            "/disconnect": "/account scollega",
+            "/notifications": "/settings notifiche",
+            "/ultimi": "/ordini fiscali",
+            "/ordine 12-34567-89012": "/ordini cerca",
+        }
+        for command, expected_hint in cases.items():
+            with self.subTest(command=command):
+                replies = process_message(
+                    text=command,
+                    chat_id=573159993,
+                    telegram_config=config,
+                    ebay_environment="production",
+                    telegram_user_id=111111,
+                )
+                self.assertEqual(len(replies), 1)
+                self.assertIn("Comando accorpato", replies[0])
+                self.assertIn(expected_hint, replies[0])
 
     def test_start_for_approved_user_without_account_prompts_connect(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -133,7 +160,7 @@ class BotIntegrationTests(unittest.TestCase):
 
             self.assertEqual(len(replies), 1)
             self.assertIn("accesso e' approvato", replies[0])
-            self.assertIn("/connect", replies[0])
+            self.assertIn("/account collega", replies[0])
 
     def test_start_for_approved_user_with_linked_account_shows_operational_commands(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -193,7 +220,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertEqual(len(replies), 1)
             self.assertIn("account eBay risulta collegato", replies[0])
             self.assertIn("seller-ebay", replies[0])
-            self.assertIn("/ultimi", replies[0])
+            self.assertIn("/ordini fiscali", replies[0])
 
     def test_sync_runtime_contact_persists_new_non_admin_user(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -515,7 +542,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             replies = process_message(
-                text="/users",
+                text="/admin_users all",
                 chat_id=456,
                 telegram_config=config,
                 ebay_environment="production",
@@ -613,7 +640,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             replies = process_message(
-                text="/users",
+                text="/admin_users all",
                 chat_id=123,
                 telegram_config=config,
                 ebay_environment="production",
@@ -714,7 +741,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             first_replies = process_message(
-                text="/connect",
+                text="/account collega",
                 chat_id=456,
                 telegram_config=config,
                 ebay_environment="production",
@@ -724,7 +751,7 @@ class BotIntegrationTests(unittest.TestCase):
             assert first_session is not None
 
             second_replies = process_message(
-                text="/connect",
+                text="/account collega",
                 chat_id=456,
                 telegram_config=config,
                 ebay_environment="production",
@@ -745,9 +772,9 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertEqual(audit_entries[0].event_type, "connect")
             self.assertEqual(audit_entries[0].outcome, "session_reused")
 
-    def test_service_status_and_policy_are_public_commands(self) -> None:
+    def test_service_status_and_policy_are_available_through_canonical_commands(self) -> None:
         replies = process_message(
-            text="/service_status",
+            text="/stato servizio",
             chat_id=573159993,
             telegram_config=TelegramConfig(
                 token="x",
@@ -763,7 +790,7 @@ class BotIntegrationTests(unittest.TestCase):
         self.assertIn("accesso approvato", replies[0])
 
         policy_replies = process_message(
-            text="/policy",
+            text="/settings policy",
             chat_id=573159993,
             telegram_config=TelegramConfig(
                 token="x",
@@ -868,7 +895,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             pending_replies = process_message(
-                text="/pending_users",
+                text="/admin_users pending",
                 chat_id=123,
                 telegram_config=config,
                 ebay_environment="production",
@@ -878,7 +905,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertNotIn("approved_user", pending_replies[0])
 
             unlinked_replies = process_message(
-                text="/unlinked_users",
+                text="/admin_users unlinked",
                 chat_id=123,
                 telegram_config=config,
                 ebay_environment="production",
@@ -910,7 +937,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             pending_replies = process_message(
-                text="/pending_users",
+                text="/admin_users pending",
                 chat_id=123,
                 telegram_config=config,
                 ebay_environment="production",
@@ -919,7 +946,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("Nessuna richiesta accesso pending", pending_replies[0])
 
             unlinked_replies = process_message(
-                text="/unlinked_users",
+                text="/admin_users unlinked",
                 chat_id=123,
                 telegram_config=config,
                 ebay_environment="production",
@@ -931,7 +958,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             reconnect_replies = process_message(
-                text="/reconnect_users",
+                text="/admin_users reconnect",
                 chat_id=123,
                 telegram_config=config,
                 ebay_environment="production",
@@ -940,7 +967,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("Nessun tenant richiede reconnect", reconnect_replies[0])
 
             inactive_replies = process_message(
-                text="/inactive_users",
+                text="/admin_users inactive",
                 chat_id=123,
                 telegram_config=config,
                 ebay_environment="production",
@@ -949,7 +976,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("Nessun tenant operativo risulta inattivo", inactive_replies[0])
 
             maintenance_replies = process_message(
-                text="/maintenance_overview",
+                text="/admin manutenzione",
                 chat_id=123,
                 telegram_config=config,
                 ebay_environment="production",
@@ -1060,7 +1087,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             reconnect_replies = process_message(
-                text="/reconnect_users",
+                text="/admin_users reconnect",
                 chat_id=123,
                 telegram_config=config,
                 ebay_environment="production",
@@ -1070,7 +1097,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertNotIn("inactive_user", reconnect_replies[0])
 
             inactive_replies = process_message(
-                text="/inactive_users",
+                text="/admin_users inactive",
                 chat_id=123,
                 telegram_config=config,
                 ebay_environment="production",
@@ -1151,7 +1178,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertEqual(len(queue_entries), 1)
 
             replies = process_message(
-                text="/maintenance_overview",
+                text="/admin manutenzione",
                 chat_id=123,
                 telegram_config=config,
                 ebay_environment="production",
@@ -1210,7 +1237,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("maintenance", mode_replies[0])
 
             connect_replies = process_message(
-                text="/connect",
+                text="/account collega",
                 chat_id=456,
                 telegram_config=config,
                 ebay_environment="production",
@@ -1557,7 +1584,7 @@ class BotIntegrationTests(unittest.TestCase):
             ]
 
             replies = process_message(
-                text="/ordine order-1",
+                text="/ordini cerca order-1",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -1598,7 +1625,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             replies = process_message(
-                text="/ordine order-1",
+                text="/ordini cerca order-1",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -1606,7 +1633,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             self.assertEqual(len(replies), 1)
-            self.assertIn("Usa /connect", replies[0])
+            self.assertIn("Usa /account collega", replies[0])
 
     @patch("src.fiscalbay.bot.fetch_records")
     @patch("src.fiscalbay.bot.load_config")
@@ -1645,7 +1672,7 @@ class BotIntegrationTests(unittest.TestCase):
             ]
 
             replies = process_message(
-                text="/ordine order-4",
+                text="/ordini cerca order-4",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -1694,7 +1721,7 @@ class BotIntegrationTests(unittest.TestCase):
             ]
 
             replies = process_message(
-                text="/why_not_notified order-1",
+                text="/ordini spiega order-1",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -1744,7 +1771,7 @@ class BotIntegrationTests(unittest.TestCase):
             ]
 
             replies = process_message(
-                text="/why_not_notified order-vat-1",
+                text="/ordini spiega order-vat-1",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -1801,7 +1828,7 @@ class BotIntegrationTests(unittest.TestCase):
             ]
 
             replies = process_message(
-                text="/why_not_notified order-1",
+                text="/ordini spiega order-1",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -1849,7 +1876,7 @@ class BotIntegrationTests(unittest.TestCase):
             ]
 
             replies = process_message(
-                text="/why_not_notified order-2",
+                text="/ordini spiega order-2",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -1907,7 +1934,7 @@ class BotIntegrationTests(unittest.TestCase):
             ]
 
             replies = process_message(
-                text="/why_not_notified order-3",
+                text="/ordini spiega order-3",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -1917,7 +1944,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertEqual(len(replies), 1)
             self.assertIn("would_notify", replies[0])
             self.assertIn("chat_notifications_disabled", replies[0])
-            self.assertIn("/notifications on", replies[0])
+            self.assertIn("/settings notifiche on", replies[0])
             self.assertIn("chat corrente non e' pronta", replies[0])
             self.assertIn("Comando rapido", replies[0])
 
@@ -2017,7 +2044,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             replies = process_message(
-                text="/reconnect_status",
+                text="/account reconnect",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2049,7 +2076,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             replies = process_message(
-                text="/reconnect_status",
+                text="/account reconnect",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2058,7 +2085,7 @@ class BotIntegrationTests(unittest.TestCase):
 
             self.assertEqual(len(replies), 1)
             self.assertIn("Stato attuale: <code>unlinked</code>", replies[0])
-            self.assertIn("/connect", replies[0])
+            self.assertIn("/account collega", replies[0])
 
     def test_process_message_reconnect_status_reports_reconnect_required_for_revoked_token(
         self,
@@ -2103,7 +2130,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             replies = process_message(
-                text="/reconnect_status",
+                text="/account reconnect",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2113,7 +2140,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertEqual(len(replies), 1)
             self.assertIn("Stato attuale: <code>reconnect_required</code>", replies[0])
             self.assertIn("Stato token: <code>revoked</code>", replies[0])
-            self.assertIn("/connect", replies[0])
+            self.assertIn("/account collega", replies[0])
 
     def test_process_message_reconnect_status_reports_ready_connect_session(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2148,7 +2175,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             replies = process_message(
-                text="/reconnect_status",
+                text="/account reconnect",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2208,12 +2235,12 @@ class BotIntegrationTests(unittest.TestCase):
                     telegram_chat_id=456,
                     environment="sandbox",
                     outcome="session_expired",
-                    details_json="La sessione OAuth e' scaduta. Usa di nuovo /connect.",
+                    details_json="La sessione OAuth e' scaduta. Usa di nuovo /account collega.",
                 ),
             )
 
             replies = process_message(
-                text="/reconnect_status",
+                text="/account reconnect",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2222,7 +2249,7 @@ class BotIntegrationTests(unittest.TestCase):
 
             self.assertEqual(len(replies), 1)
             self.assertIn("Sessione OAuth scaduta", replies[0])
-            self.assertIn("Usa di nuovo /connect", replies[0])
+            self.assertIn("Usa di nuovo /account collega", replies[0])
 
     def test_process_message_connect_creates_oauth_session(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2245,7 +2272,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             replies = process_message(
-                text="/connect",
+                text="/account collega",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2284,7 +2311,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             replies = process_message(
-                text="/connect",
+                text="/account collega",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2294,7 +2321,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertEqual(len(replies), 1)
             self.assertIn("https://example.com/oauth/start?state=", replies[0])
             self.assertIn("1. apri il link", replies[0])
-            self.assertIn("/reconnect_status", replies[0])
+            self.assertIn("/account reconnect", replies[0])
 
     def test_process_message_connect_reconnects_from_disconnected_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2327,7 +2354,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             replies = process_message(
-                text="/connect",
+                text="/account collega",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2383,7 +2410,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             replies = process_message(
-                text="/disconnect",
+                text="/account scollega",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2401,7 +2428,7 @@ class BotIntegrationTests(unittest.TestCase):
                 ebay_environment="production",
             )
             self.assertIn("Stato: <code>disconnected</code>", account_replies[0])
-            self.assertIn("Usa <code>/connect</code>", account_replies[0])
+            self.assertIn("Usa <code>/account collega</code>", account_replies[0])
 
     @patch("src.fiscalbay.bot.load_tenant_config_from_storage")
     @patch("src.fiscalbay.bot.revoke_user_refresh_token")
@@ -2451,7 +2478,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             replies = process_message(
-                text="/disconnect",
+                text="/account scollega",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2512,7 +2539,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             replies = process_message(
-                text="/disconnect",
+                text="/account scollega",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2587,7 +2614,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             replies = process_message(
-                text="/leave_bot",
+                text="/settings lascia",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2647,7 +2674,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             replies = process_message(
-                text="/leave_bot",
+                text="/settings lascia",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2656,7 +2683,7 @@ class BotIntegrationTests(unittest.TestCase):
 
             self.assertEqual(len(replies), 1)
             self.assertIn("non e' disponibile", replies[0])
-            self.assertIn("/disconnect", replies[0])
+            self.assertIn("/account scollega", replies[0])
 
     def test_process_message_notifications_toggle_subscription_for_chat(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2679,7 +2706,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             off_replies = process_message(
-                text="/notifications off",
+                text="/settings notifiche off",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2692,7 +2719,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertFalse(subscriptions[0].enabled)
 
             on_replies = process_message(
-                text="/notifications on",
+                text="/settings notifiche on",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2723,7 +2750,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             replies = process_message(
-                text="/notifications",
+                text="/settings notifiche",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2732,7 +2759,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertEqual(len(replies), 1)
             self.assertIn("Notifiche chat", replies[0])
             self.assertIn("attive", replies[0])
-            self.assertIn("/connect", replies[0])
+            self.assertIn("/account collega", replies[0])
 
     def test_process_message_notifications_filter_updates_subscription(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2755,7 +2782,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             replies = process_message(
-                text="/notifications filter vat",
+                text="/settings filtro vat",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2789,21 +2816,21 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             process_message(
-                text="/notifications filter vat",
+                text="/settings filtro vat",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
                 ebay_environment="production",
             )
             process_message(
-                text="/notifications off",
+                text="/settings notifiche off",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
                 ebay_environment="production",
             )
             replies = process_message(
-                text="/notifications on",
+                text="/settings notifiche on",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2874,7 +2901,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("Ultima finestra polling", replies[0])
             self.assertIn("seen-order", replies[0])
             self.assertIn("sent-order", replies[0])
-            self.assertIn("/leave_bot", replies[0])
+            self.assertIn("/settings lascia", replies[0])
             self.assertIn("Prossimi passi", replies[0])
 
     def test_process_message_settings_reports_ready_connect_session(self) -> None:
@@ -2967,7 +2994,7 @@ class BotIntegrationTests(unittest.TestCase):
             ]
 
             replies = process_message(
-                text="/review_orders 7 20",
+                text="/ordini controlla 7 20",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -3033,7 +3060,7 @@ class BotIntegrationTests(unittest.TestCase):
             ]
 
             replies = process_message(
-                text="/report_summary 7 20",
+                text="/ordini report 7 20",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -3101,7 +3128,7 @@ class BotIntegrationTests(unittest.TestCase):
             ]
 
             replies = process_message(
-                text="/priority_orders 7 20",
+                text="/ordini priorita 7 20",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -3184,7 +3211,7 @@ class BotIntegrationTests(unittest.TestCase):
                 ),
             )
             process_message(
-                text="/notifications filter vat",
+                text="/settings filtro vat",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,

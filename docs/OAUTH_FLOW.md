@@ -4,8 +4,8 @@ Documento di riferimento per l'onboarding self-service.
 
 Stato attuale:
 
-- il bot espone gia' `/connect` come entrypoint Telegram
-- `/connect` crea una sessione preliminare in `oauth_link_sessions`
+- il bot espone gia' `/account collega` come entrypoint Telegram
+- `/account collega` crea una sessione preliminare in `oauth_link_sessions`
 - se sulla VPS e' valorizzata `EBAY_OAUTH_CONNECT_BASE_URL`, il bot restituisce anche il link pubblico di avvio
 - l'entrypoint web `/oauth/start` mostra ora una pagina intermedia semplice e leggibile prima del consenso eBay
 - esiste anche un callback server minimale che valida `state`, scambia `code` con token e salva account/token nel `state.db`
@@ -20,7 +20,7 @@ Permettere a un utente Telegram di collegare il proprio account eBay senza inter
 
 ## Flusso target
 
-1. l'utente apre il bot e usa `/connect`
+1. l'utente apre il bot e usa `/account collega`
 2. il bot risponde con un link di collegamento
 3. il link apre una pagina web controllata dal progetto
 4. la pagina spiega il passaggio e avvia OAuth verso eBay
@@ -66,7 +66,7 @@ reintrodurre ambiguita' nei messaggi Telegram.
 - `approved`
   - utente approvato e operativo
   - puo' usare comandi account, ordini e notifiche
-  - messaggio atteso: prossimo passo principale `/connect` se l'account non e' ancora collegato
+  - messaggio atteso: prossimo passo principale `/account collega` se l'account non e' ancora collegato
 - `blocked`
   - accesso rifiutato o sospeso dall'admin
   - non puo' usare i comandi operativi
@@ -79,19 +79,19 @@ reintrodurre ambiguita' nei messaggi Telegram.
 
 - `unlinked`
   - nessun collegamento attivo o storico utile
-  - prossima azione: `/connect`
+  - prossima azione: `/account collega`
 - `linked`
   - account collegato e token usabile
   - prossima azione: nessuna, il bot puo' lavorare normalmente
 - `reconnect_required`
   - account presente ma token non piu' usabile, revocato o scaduto
-  - prossima azione: `/connect`
+  - prossima azione: `/account collega`
 - `disconnected`
   - utente ha scollegato il bot localmente
-  - prossima azione: `/connect`
+  - prossima azione: `/account collega`
 - `revoked`
   - collegamento non piu' valido o revocato
-  - prossima azione: `/connect`
+  - prossima azione: `/account collega`
 - `error`
   - stato incoerente o fallimento non classificato
   - prossima azione: messaggio chiaro di errore servizio e retry guidato
@@ -100,8 +100,8 @@ Regola UX:
 
 - `/start` deve spiegare sempre lo stato reale dell'utente
 - `/account` deve spiegare sempre lo stato reale del collegamento e la prossima azione richiesta
-- `/reconnect_status` deve riassumere rapidamente se serve reconnect e qual e' la prossima azione
-- `/disconnect` oggi scollega localmente e rimuove il token locale; la revoca remota eBay resta uno step separato da completare
+- `/account reconnect` deve riassumere rapidamente se serve reconnect e qual e' la prossima azione
+- `/account scollega` oggi scollega localmente e rimuove il token locale; la revoca remota eBay resta uno step separato da completare
 
 ## Dati da salvare
 
@@ -116,7 +116,7 @@ Regola UX:
 ## Decisioni di progettazione gia' fissate
 
 - il tenant logico resta l'utente Telegram, non la singola chat
-- la chat che avvia `/connect` viene comunque tracciata per tornare con la conferma nel posto giusto
+- la chat che avvia `/account collega` viene comunque tracciata per tornare con la conferma nel posto giusto
 - il flusso usera' una tabella dedicata `oauth_link_sessions` con `state`, expiry e stato della richiesta
 - il callback OAuth salva o aggiorna `ebay_accounts` e `ebay_tokens`, poi marca chiusa la sessione OAuth
 - il callback server attuale gira come servizio separato `fiscalbay-oauth` sulla VPS
@@ -135,10 +135,10 @@ Regola UX:
 2. spostare credenziali eBay da env globale a repository/account storage
    Stato attuale: il progetto usa gia' token tenant cifrati come percorso operativo normale del bot su VPS; il fallback `.env` resta solo per CLI o istanze legacy adminless.
 3. creare endpoint o mini web app per avvio OAuth e callback
-   Stato attuale: il comando `/connect`, la tabella `oauth_link_sessions` e il servizio web minimale esistono gia'; restano da rifinire deploy pubblico, RuName/Accept URL nel portale eBay, revoca remota e hardening finale del flusso.
-4. aggiungere comandi `/connect`, `/disconnect` e `/account`
-   Stato attuale: `/account`, `/connect` e `/disconnect` sono gia' presenti nel bot; resta da completare l'hardening finale del percorso end-to-end e la gestione completa del token storage sicuro.
-   In piu', il bot espone gia' `/notifications on|off` e `/settings` per rendere piu' self-service anche la gestione della chat dopo il collegamento.
+   Stato attuale: il comando `/account collega`, la tabella `oauth_link_sessions` e il servizio web minimale esistono gia'; restano da rifinire deploy pubblico, RuName/Accept URL nel portale eBay, revoca remota e hardening finale del flusso.
+4. aggiungere comandi `/account collega`, `/account scollega` e `/account`
+   Stato attuale: `/account`, `/account collega` e `/account scollega` sono gia' presenti nel bot; resta da completare l'hardening finale del percorso end-to-end e la gestione completa del token storage sicuro.
+   In piu', il bot espone gia' `/settings notifiche on|off` e `/settings` per rendere piu' self-service anche la gestione della chat dopo il collegamento.
 5. spostare scheduler e notifiche da stato globale a stato per tenant
 
 ## Questioni aperte

@@ -217,30 +217,32 @@ Storage:
 - `/ping`
 - `/stato`
 - `/account`
-- `/connect`
-- `/disconnect`
+- `/account collega`
+- `/account reconnect`
+- `/account scollega`
 - `/request_access`
-- `/notifications on|off`
+- `/settings notifiche on|off`
 - `/settings`
-- `/users`
-- `/ultimi`
-- `/tutti`
-- `/ordine`
+- `/admin`
+- `/admin_users all|pending|unlinked|reconnect|inactive`
+- `/ordini fiscali`
+- `/ordini tutti`
+- `/ordini cerca`
 
 Nota onboarding:
 
 - `/account` mostra gia' il collegamento eBay noto per il tenant della chat
-- `/connect` prepara gia' una sessione OAuth nel DB e puo' restituire un link pubblico se la VPS espone `EBAY_OAUTH_CONNECT_BASE_URL`
-- `/disconnect` scollega gia' localmente account e token del tenant corrente dal DB sulla VPS
-- `/notifications on|off` consente gia' alla singola chat di attivare o spegnere le notifiche personali
+- `/account collega` prepara gia' una sessione OAuth nel DB e puo' restituire un link pubblico se la VPS espone `EBAY_OAUTH_CONNECT_BASE_URL`
+- `/account scollega` scollega gia' localmente account e token del tenant corrente dal DB sulla VPS
+- `/settings notifiche on|off` consente gia' alla singola chat di attivare o spegnere le notifiche personali
 - `/settings` mostra gia' un riepilogo leggero delle preferenze utente/chat
 - se `TELEGRAM_ADMIN_USER_ID` e' configurata, gli utenti non admin entrano in stati `new/pending/approved/blocked` e possono sbloccare il bot solo dopo approvazione admin
-- l'admin puo' gestire gli accessi con callback inline o con `/users`, `/approve_user` e `/reject_user`
+- l'admin puo' gestire gli accessi con callback inline o con `/admin_users`, `/approve_user` e `/reject_user`
 - il runtime normalizza ora centralmente gli stati workflow e applica capability esplicite per i comandi sensibili, invece di affidarsi a semplici check sparsi su stringhe di stato
 - il workflow accessi non si ferma piu' al solo cambio di stato: approvazione e blocco riallineano anche le permission applicate su chat e subscription gia' esistenti
-- il comando `/connect` e' ora idempotente rispetto alla sessione OAuth pendente: se la sessione valida esiste gia', viene riusata
+- il comando `/account collega` e' ora idempotente rispetto alla sessione OAuth pendente: se la sessione valida esiste gia', viene riusata
 - una `operation_queue` minima in SQLite tiene le applicazioni differibili o recuperabili dei workflow sensibili, e la reconciliation periodica la processa sul server
-- esiste ora anche un callback server minimale separato, che chiude il flusso `/connect` quando la VPS espone URL pubblici corretti e usa il `RuName` eBay corretto verso il developer portal
+- esiste ora anche un callback server minimale separato, che chiude il flusso `/account collega` quando la VPS espone URL pubblici corretti e usa il `RuName` eBay corretto verso il developer portal
 - i passaggi sensibili di accesso e collegamento account lasciano ora anche un audit log minimo append-only nel `state.db`
 - i refresh token tenant usano ora cifratura Fernet a riposo con chiave da env sulla VPS
 - restano ancora aperti hardening finale e revoca remota verso eBay

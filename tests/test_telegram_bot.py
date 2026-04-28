@@ -37,6 +37,7 @@ from src.fiscalbay.storage.sqlite import load_kv_value
 from src.fiscalbay.telegram_commands import (
     BOT_DISPLAY_NAME,
     BOT_TAGLINE,
+    CALLBACK_ORDINI,
     build_telegram_branding_profile,
     format_order_date,
 )
@@ -50,10 +51,10 @@ class TelegramBotTests(unittest.TestCase):
         all_callbacks = [button.get("callback_data") for row in keyboard for button in row]
         self.assertIn(CALLBACK_ULTIMI, all_callbacks)
         self.assertIn(CALLBACK_TUTTI, all_callbacks)
+        self.assertIn(CALLBACK_ORDINI, all_callbacks)
         self.assertIn(CALLBACK_STATO, all_callbacks)
         self.assertIn(CALLBACK_HELP, all_callbacks)
         self.assertIn(CALLBACK_SETTINGS, all_callbacks)
-        self.assertIn("menu:reconnect_status", all_callbacks)
         self.assertIn("menu:notifications_off", all_callbacks)
 
     def test_build_main_menu_markup_can_reflect_unlinked_state(self) -> None:
@@ -71,13 +72,19 @@ class TelegramBotTests(unittest.TestCase):
         self.assertNotIn("menu:disconnect", all_callbacks)
 
     def test_callback_command_from_data_maps_buttons(self) -> None:
-        self.assertEqual(callback_command_from_data(CALLBACK_ULTIMI), "/ultimi 7 20")
-        self.assertEqual(callback_command_from_data(CALLBACK_TUTTI), "/tutti 7 20")
+        self.assertEqual(callback_command_from_data(CALLBACK_ORDINI), "/ordini")
+        self.assertEqual(callback_command_from_data(CALLBACK_ULTIMI), "/ordini fiscali 7 20")
+        self.assertEqual(callback_command_from_data(CALLBACK_TUTTI), "/ordini tutti 7 20")
         self.assertEqual(callback_command_from_data(CALLBACK_STATO), "/stato")
         self.assertEqual(callback_command_from_data(CALLBACK_SETTINGS), "/settings")
-        self.assertEqual(callback_command_from_data("menu:reconnect_status"), "/reconnect_status")
-        self.assertEqual(callback_command_from_data("menu:notifications_on"), "/notifications on")
-        self.assertEqual(callback_command_from_data("menu:notifications_off"), "/notifications off")
+        self.assertEqual(
+            callback_command_from_data("menu:notifications_on"),
+            "/settings notifiche on",
+        )
+        self.assertEqual(
+            callback_command_from_data("menu:notifications_off"),
+            "/settings notifiche off",
+        )
         self.assertEqual(callback_command_from_data(CALLBACK_REQUEST_ACCESS), "/request_access")
         self.assertEqual(callback_command_from_data("access:approve:321"), "/approve_user 321")
         self.assertEqual(callback_command_from_data("access:reject:321"), "/reject_user 321")
@@ -140,20 +147,18 @@ class TelegramBotTests(unittest.TestCase):
     def test_build_help_text_mentions_commands(self) -> None:
         text = build_help_text()
         self.assertIn("pulsanti rapidi", text)
-        self.assertIn("/ultimi", text)
-        self.assertIn("/ordine", text)
+        self.assertIn("/ordini fiscali", text)
+        self.assertIn("/ordini cerca", text)
         self.assertIn("/settings", text)
-        self.assertIn("/leave_bot", text)
-        self.assertIn("/reconnect_status", text)
-        self.assertIn("/why_not_notified", text)
-        self.assertIn("/review_orders", text)
-        self.assertIn("/report_summary", text)
-        self.assertIn("/priority_orders", text)
-        self.assertIn("/notifications filter", text)
-        self.assertIn("/notifications on", text)
+        self.assertIn("/settings lascia", text)
+        self.assertIn("/ordini spiega", text)
+        self.assertIn("/ordini report", text)
+        self.assertIn("/ordini priorita", text)
+        self.assertIn("/settings filtro", text)
+        self.assertIn("/settings notifiche on", text)
         self.assertIn("/request_access", text)
-        self.assertIn("/users", text)
-        self.assertIn("/maintenance_overview", text)
+        self.assertIn("/admin_users", text)
+        self.assertIn("/admin", text)
         self.assertIn(BOT_DISPLAY_NAME, text)
 
     def test_build_telegram_branding_profile_contains_expected_fields(self) -> None:
@@ -164,7 +169,7 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIsInstance(commands, list)
         self.assertGreaterEqual(len(commands), 6)
         self.assertEqual(commands[0]["command"], "help")
-        self.assertEqual(commands[1]["command"], "connect")
+        self.assertEqual(commands[1]["command"], "stato")
 
     @patch("src.fiscalbay.bot.fetch_records")
     @patch("src.fiscalbay.bot.load_config")

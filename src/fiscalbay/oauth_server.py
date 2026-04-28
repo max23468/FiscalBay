@@ -372,8 +372,8 @@ def render_oauth_start_help_page() -> bytes:
     return render_action_html_page(
         "Collegamento da Telegram",
         (
-            "Il collegamento eBay parte dal bot FiscalBay: apri Telegram, usa /connect "
-            "e torna qui con il link generato per la tua sessione."
+            "Il collegamento eBay parte dal bot FiscalBay: apri Telegram, usa "
+            "/account collega e torna qui con il link generato per la tua sessione."
         ),
         action_label="Apri Telegram",
         action_url="https://t.me/",
@@ -822,14 +822,14 @@ def describe_provider_error(error_value: str) -> OAuthFailurePresentation:
             title="Autorizzazione annullata",
             message=(
                 "L'autorizzazione eBay e' stata annullata prima del completamento. "
-                "Torna su Telegram e usa di nuovo /connect se vuoi riprovare."
+                "Torna su Telegram e usa di nuovo /account collega se vuoi riprovare."
             ),
             outcome="user_cancelled",
             notify_text=(
                 "⚠️ <b>Collegamento eBay non completato</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 "L'autorizzazione e' stata annullata prima del completamento.\n"
-                "Usa <code>/connect</code> se vuoi riprovare."
+                "Usa <code>/account collega</code> se vuoi riprovare."
             ),
         )
     if normalized in {"invalid_scope", "unauthorized_client"}:
@@ -852,14 +852,14 @@ def describe_provider_error(error_value: str) -> OAuthFailurePresentation:
         message=(
             "eBay non ha completato l'autorizzazione richiesta. "
             f"Codice restituito: {error_value or 'n/d'}. "
-            "Torna su Telegram e usa /connect per riprovare."
+            "Torna su Telegram e usa /account collega per riprovare."
         ),
         outcome="provider_error",
         notify_text=(
             "⚠️ <b>Collegamento eBay non completato</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "eBay non ha completato l'autorizzazione richiesta.\n"
-            "Usa <code>/connect</code> per riprovare."
+            "Usa <code>/account collega</code> per riprovare."
         ),
     )
 
@@ -872,14 +872,14 @@ def describe_callback_exception(exc: Exception) -> OAuthFailurePresentation:
                 title="Sessione scaduta",
                 message=(
                     "La sessione di collegamento e' scaduta prima del completamento. "
-                    "Torna su Telegram e usa di nuovo /connect."
+                    "Torna su Telegram e usa di nuovo /account collega."
                 ),
                 outcome="session_expired",
                 notify_text=(
                     "⚠️ <b>Sessione OAuth scaduta</b>\n"
                     "━━━━━━━━━━━━━━━━━━━━━━━━\n"
                     "Il collegamento non e' stato completato in tempo.\n"
-                    "Usa <code>/connect</code> per aprire una nuova sessione."
+                    "Usa <code>/account collega</code> per aprire una nuova sessione."
                 ),
             )
         if "non trovata" in message.lower() or "non e' piu' disponibile" in message.lower():
@@ -887,14 +887,14 @@ def describe_callback_exception(exc: Exception) -> OAuthFailurePresentation:
                 title="Link non più valido",
                 message=(
                     "Il link di collegamento non è più valido o non è più disponibile. "
-                    "Torna su Telegram e usa /connect per generarne uno nuovo."
+                    "Torna su Telegram e usa /account collega per generarne uno nuovo."
                 ),
                 outcome="session_unavailable",
                 notify_text=(
                     "⚠️ <b>Link di collegamento non più valido</b>\n"
                     "━━━━━━━━━━━━━━━━━━━━━━━━\n"
                     "La sessione OAuth non è più disponibile.\n"
-                    "Usa <code>/connect</code> per generarne una nuova."
+                    "Usa <code>/account collega</code> per generarne una nuova."
                 ),
             )
         return OAuthFailurePresentation(
@@ -916,28 +916,28 @@ def describe_callback_exception(exc: Exception) -> OAuthFailurePresentation:
             title="Errore temporaneo eBay",
             message=(
                 "eBay non ha completato correttamente il callback o lo scambio token. "
-                "Riprova piu' tardi da Telegram con /connect."
+                "Riprova piu' tardi da Telegram con /account collega."
             ),
             outcome="provider_runtime_error",
             notify_text=(
                 "⚠️ <b>Errore temporaneo durante il collegamento</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 "eBay non ha completato correttamente il callback o lo scambio token.\n"
-                "Usa <code>/connect</code> per riprovare piu' tardi."
+                "Usa <code>/account collega</code> per riprovare piu' tardi."
             ),
         )
     return OAuthFailurePresentation(
         title="Collegamento fallito",
         message=(
             "Il collegamento non e' stato completato per un errore inatteso del servizio. "
-            "Riprova piu' tardi da Telegram con /connect."
+            "Riprova piu' tardi da Telegram con /account collega."
         ),
         outcome="callback_error",
         notify_text=(
             "⚠️ <b>Collegamento eBay fallito</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "Il servizio ha incontrato un errore inatteso durante il callback.\n"
-            "Usa <code>/connect</code> per riprovare piu' tardi."
+            "Usa <code>/account collega</code> per riprovare piu' tardi."
         ),
     )
 
@@ -974,7 +974,7 @@ def build_oauth_start_redirect(
     if normalize_oauth_session_status(session.status) != OAUTH_SESSION_STATUS_PENDING:
         raise ConfigurationError("La sessione OAuth non e' piu' disponibile.")
     if session_is_expired(session):
-        raise ConfigurationError("La sessione OAuth e' scaduta. Usa di nuovo /connect.")
+        raise ConfigurationError("La sessione OAuth e' scaduta. Usa di nuovo /account collega.")
 
     config = oauth_consent_config(load_config_fn(session.environment))
     assert hasattr(config, "environment")
@@ -1016,7 +1016,7 @@ def complete_oauth_link(
             oauth_state,
             status=OAUTH_SESSION_STATUS_EXPIRED,
         )
-        raise ConfigurationError("La sessione OAuth e' scaduta. Usa di nuovo /connect.")
+        raise ConfigurationError("La sessione OAuth e' scaduta. Usa di nuovo /account collega.")
 
     callback_url = callback_url_fn()
     update_oauth_link_session(
@@ -1141,7 +1141,7 @@ def complete_oauth_link(
             f"🌍 Ambiente: <code>{html.escape(session.environment)}</code>\n"
             "Ora puoi usare <code>/account</code> per controllare lo stato,\n"
             "<code>/settings</code> per verificare la chat e "
-            "<code>/ultimi</code> per controllare gli ordini recenti."
+            "<code>/ordini fiscali</code> per controllare gli ordini recenti."
         ),
     )
     return OAuthCallbackResult(

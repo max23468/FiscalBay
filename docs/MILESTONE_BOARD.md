@@ -132,21 +132,21 @@ Dipendenze:
 
 Deliverable principali:
 
-- flow `/connect`
+- flow `/account collega`
 - callback OAuth
 - storage sicuro token
-- comandi `/account` e `/disconnect`
+- comandi `/account` e `/account scollega`
 
 Stato corrente:
 
-- `/account` e `/connect` esistono gia' nel bot
-- `/disconnect` ora tenta anche la revoca remota eBay e mantiene distinta l'uscita completa dal bot
-- `/notifications on|off` e `/settings` esistono gia' come gestione self-service minima lato chat
-- `/connect` salva una sessione preliminare in `oauth_link_sessions`
+- `/account` e `/account collega` esistono gia' nel bot
+- `/account scollega` ora tenta anche la revoca remota eBay e mantiene distinta l'uscita completa dal bot
+- `/settings notifiche on|off` e `/settings` esistono gia' come gestione self-service minima lato chat
+- `/account collega` salva una sessione preliminare in `oauth_link_sessions`
 - il callback OAuth minimale esiste gia' come servizio separato `fiscalbay-oauth`
 - il token storage tenant usa gia' cifratura a riposo con chiave Fernet da env
-- `/reconnect_status`, `/why_not_notified` e il riepilogo explain su `/ordine` sono gia' disponibili
-- `/leave_bot` copre ora l'uscita completa dell'utente con disattivazione notifiche e nuova approvazione richiesta
+- `/account reconnect`, `/ordini spiega` e il riepilogo explain su `/ordini cerca` sono gia' disponibili
+- `/settings lascia` copre ora l'uscita completa dell'utente con disattivazione notifiche e nuova approvazione richiesta
 - resta aperto soprattutto l'affinamento del polling e della riduzione `getOrder`
 
 ### M6 - Governance del prodotto

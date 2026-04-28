@@ -163,6 +163,7 @@ from .telegram_commands import (
     format_access_required_status,
     format_account_status,
     format_admin_access_request,
+    format_admin_command_help,
     format_admin_dashboard,
     format_admin_maintenance_overview,
     format_admin_status_update,
@@ -173,6 +174,7 @@ from .telegram_commands import (
     format_leave_status,
     format_notifications_status,
     format_order_notification_summary,
+    format_orders_command_help,
     format_policy_status,
     format_priority_records,
     format_reconnect_status,
@@ -219,21 +221,13 @@ COMMAND_CAPABILITIES: dict[str, str] = {
     "/leave_bot": CAPABILITY_MANAGE_SETTINGS,
     "/notifications": CAPABILITY_MANAGE_NOTIFICATIONS,
     "/settings": CAPABILITY_MANAGE_SETTINGS,
-    "/why_not_notified": CAPABILITY_VIEW_ORDERS,
-    "/report_summary": CAPABILITY_VIEW_ORDERS,
-    "/priority_orders": CAPABILITY_VIEW_ORDERS,
-    "/review_orders": CAPABILITY_VIEW_ORDERS,
+    "/ordini": CAPABILITY_VIEW_ORDERS,
     "/ultimi": CAPABILITY_VIEW_ORDERS,
     "/tutti": CAPABILITY_VIEW_ORDERS,
     "/ordine": CAPABILITY_VIEW_ORDERS,
-    "/users": CAPABILITY_REVIEW_ACCESS,
-    "/pending_users": CAPABILITY_REVIEW_ACCESS,
-    "/unlinked_users": CAPABILITY_REVIEW_ACCESS,
-    "/reconnect_users": CAPABILITY_REVIEW_ACCESS,
-    "/inactive_users": CAPABILITY_REVIEW_ACCESS,
+    "/admin": CAPABILITY_REVIEW_ACCESS,
+    "/admin_users": CAPABILITY_REVIEW_ACCESS,
     "/tenant_health": CAPABILITY_REVIEW_ACCESS,
-    "/admin_dashboard": CAPABILITY_REVIEW_ACCESS,
-    "/maintenance_overview": CAPABILITY_REVIEW_ACCESS,
     "/approve_user": CAPABILITY_REVIEW_ACCESS,
     "/reject_user": CAPABILITY_REVIEW_ACCESS,
     "/suspend_user": CAPABILITY_REVIEW_ACCESS,
@@ -243,18 +237,13 @@ COMMAND_CAPABILITIES: dict[str, str] = {
 }
 ADMIN_ONLY_COMMANDS = frozenset(
     {
+        "/admin",
+        "/admin_users",
         "/approve_user",
         "/reject_user",
         "/suspend_user",
         "/reactivate_user",
-        "/users",
-        "/pending_users",
-        "/unlinked_users",
-        "/reconnect_users",
-        "/inactive_users",
         "/tenant_health",
-        "/admin_dashboard",
-        "/maintenance_overview",
     }
 )
 
@@ -587,7 +576,7 @@ def _service_mode_blocks_command(mode: str, command: str) -> str | None:
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "La consultazione resta disponibile, ma le azioni operative "
             "sono temporaneamente sospese.\n"
-            "Riprova piu' tardi oppure usa <code>/service_status</code>."
+            "Riprova piu' tardi oppure usa <code>/stato servizio</code>."
         )
     return None
 
@@ -888,6 +877,66 @@ def _handle_admin_read_command(
     telegram_config: TelegramConfig,
     args: list[str],
 ) -> list[str] | None:
+    if command == "/admin":
+        if args and args[0] == "help":
+            return [format_admin_command_help()]
+        if args and args[0] == "maintenance":
+            return [
+                format_admin_maintenance_overview(_build_admin_maintenance_payload(telegram_config))
+            ]
+        return [format_admin_dashboard(_build_admin_dashboard_payload(telegram_config))]
+    if command == "/admin_users":
+        filter_name = str(args[0]).strip().lower() if args else "all"
+        if filter_name in {"all", "tutti"}:
+            return [format_admin_user_list(_build_user_rows(telegram_config))]
+        if filter_name in {"pending", "richieste"}:
+            pending_rows = _filter_user_rows(
+                telegram_config,
+                lambda row: str(row.get("status")) == TELEGRAM_USER_STATUS_PENDING,
+            )
+            return [
+                format_admin_user_list(
+                    pending_rows,
+                    title="🕓 <b>Richieste pending</b>",
+                    empty_message="Nessuna richiesta accesso pending al momento.",
+                )
+            ]
+        if filter_name in {"unlinked", "non_collegati", "non-collegati"}:
+            unlinked_rows = _filter_user_rows(
+                telegram_config,
+                lambda row: (
+                    str(row.get("status")) == TELEGRAM_USER_STATUS_APPROVED
+                    and str(row.get("account_status") or "unlinked") != "linked"
+                ),
+            )
+            return [
+                format_admin_user_list(
+                    unlinked_rows,
+                    title="🔗 <b>Utenti non operativi</b>",
+                    empty_message="Nessun utente approvato in attesa di collegamento.",
+                )
+            ]
+        if filter_name in {"reconnect", "ricollega"}:
+            reconnect_rows = _filter_user_rows(
+                telegram_config,
+                lambda row: str(row.get("operational_state") or "") == "reconnect_required",
+            )
+            return [
+                format_admin_watchlist(
+                    reconnect_rows,
+                    title="🔁 <b>Tenant Da Ricollegare</b>",
+                    empty_message="Nessun tenant richiede reconnect in questo momento.",
+                )
+            ]
+        if filter_name in {"inactive", "inattivi"}:
+            return [
+                format_admin_watchlist(
+                    _build_inactive_user_rows(telegram_config),
+                    title="🌙 <b>Tenant Inattivi</b>",
+                    empty_message="Nessun tenant operativo risulta inattivo oltre soglia.",
+                )
+            ]
+        return ["Uso corretto: <code>/admin_users all|pending|unlinked|reconnect|inactive</code>"]
     if command == "/users":
         return [format_admin_user_list(_build_user_rows(telegram_config))]
     if command == "/pending_users":
@@ -1395,7 +1444,8 @@ def _format_order_lookup_error(
             f"<code>{html.escape(environment)}</code>\n"
             "Controlla che l'ID sia nel formato atteso (es. <code>12-34567-89012</code>) "
             "e che appartenga allo stesso account eBay collegato al bot.\n"
-            "Suggerimento: usa prima <code>/tutti 30 200</code> e copia l'orderId mostrato dal bot."
+            "Suggerimento: usa prima <code>/ordini tutti 30 200</code> "
+            "e copia l'orderId mostrato dal bot."
         )
     return f"⚠️ {html.escape(message)}"
 
@@ -1639,14 +1689,12 @@ def explain_why_order_not_notified(
         if chat is None:
             delivery_status = "chat_not_registered"
             delivery_headline = "Questa chat non e' ancora registrata come target notifiche."
-            delivery_detail = (
-                "Invia un comando al bot da questa chat e verifica poi /settings o /notifications."
-            )
+            delivery_detail = "Invia un comando al bot da questa chat e verifica poi /settings."
         elif not chat.notifications_enabled:
             delivery_status = "chat_notifications_disabled"
             delivery_headline = "Le notifiche risultano disabilitate per questa chat."
             delivery_detail = (
-                "Riattiva la chat con /notifications on prima di aspettarti nuovi avvisi."
+                "Riattiva la chat con /settings notifiche on prima di aspettarti nuovi avvisi."
             )
         elif subscription is None:
             delivery_status = "chat_not_subscribed"
@@ -1658,7 +1706,7 @@ def explain_why_order_not_notified(
             delivery_status = "chat_subscription_disabled"
             delivery_headline = "La subscription notifiche di questa chat e' disattivata."
             delivery_detail = (
-                "Riattiva la subscription con /notifications on per ricevere nuovi ordini."
+                "Riattiva la subscription con /settings notifiche on per ricevere nuovi ordini."
             )
         else:
             delivery_status = "delivery_ready"
@@ -1866,6 +1914,78 @@ def process_message(
         return ["Chat non autorizzata per questo bot."]
 
     command, args = parse_command(text)
+    legacy_command_hints = {
+        "/connect": "Usa <code>/account collega</code>.",
+        "/disconnect": "Usa <code>/account scollega</code>.",
+        "/reconnect_status": "Usa <code>/account reconnect</code>.",
+        "/notifications": (
+            "Usa <code>/settings notifiche on|off</code> "
+            "o <code>/settings filtro all|cf|vat</code>."
+        ),
+        "/leave_bot": "Usa <code>/settings lascia</code>.",
+        "/ultimi": "Usa <code>/ordini fiscali [giorni] [max]</code>.",
+        "/tutti": "Usa <code>/ordini tutti [giorni] [max]</code>.",
+        "/ordine": "Usa <code>/ordini cerca &lt;order_id&gt;</code>.",
+        "/why_not_notified": "Usa <code>/ordini spiega &lt;order_id&gt;</code>.",
+        "/review_orders": "Usa <code>/ordini controlla [giorni] [max]</code>.",
+        "/report_summary": "Usa <code>/ordini report [giorni] [max]</code>.",
+        "/priority_orders": "Usa <code>/ordini priorita [giorni] [max]</code>.",
+        "/service_status": "Usa <code>/stato</code> o <code>/stato servizio</code>.",
+        "/policy": "Usa <code>/settings policy</code>.",
+        "/users": "Usa <code>/admin_users all</code>.",
+        "/pending_users": "Usa <code>/admin_users pending</code>.",
+        "/unlinked_users": "Usa <code>/admin_users unlinked</code>.",
+        "/reconnect_users": "Usa <code>/admin_users reconnect</code>.",
+        "/inactive_users": "Usa <code>/admin_users inactive</code>.",
+        "/admin_dashboard": "Usa <code>/admin</code>.",
+        "/maintenance_overview": "Usa <code>/admin manutenzione</code>.",
+    }
+    if command in legacy_command_hints:
+        return [f"Comando accorpato nel nuovo menu semplificato. {legacy_command_hints[command]}"]
+
+    if command == "/account" and args:
+        account_action = args[0].strip().lower()
+        if account_action in {"collega", "connect", "ricollega"}:
+            command = "/connect"
+            args = args[1:]
+        elif account_action in {"scollega", "disconnect"}:
+            command = "/disconnect"
+            args = args[1:]
+        elif account_action in {"stato", "status"}:
+            command = "/account"
+            args = args[1:]
+        elif account_action in {"reconnect", "reconnect_status", "reconnect-status"}:
+            command = "/reconnect_status"
+            args = args[1:]
+
+    if command == "/settings" and args:
+        settings_action = args[0].strip().lower()
+        if settings_action in {"notifiche", "notifications"}:
+            command = "/notifications"
+            args = args[1:]
+        elif settings_action in {"filtro", "filter"}:
+            command = "/notifications"
+            args = ["filter", *args[1:]]
+        elif settings_action in {"lascia", "leave", "leave_bot", "esci"}:
+            command = "/leave_bot"
+            args = args[1:]
+        elif settings_action in {"policy", "privacy"}:
+            command = "/policy"
+            args = args[1:]
+
+    if command == "/stato" and args and args[0].strip().lower() in {"servizio", "service"}:
+        command = "/service_status"
+        args = args[1:]
+
+    if command == "/admin" and args:
+        admin_action = args[0].strip().lower()
+        if admin_action in {"help", "aiuto"}:
+            args = ["help", *args[1:]]
+        elif admin_action in {"manutenzione", "maintenance"}:
+            args = ["maintenance", *args[1:]]
+        elif admin_action in {"service", "servizio", "mode", "modalita"}:
+            command = "/service_mode"
+            args = args[1:]
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat().replace("+00:00", "Z")
     is_admin_user = _is_admin_user(telegram_user_id, telegram_config)
@@ -2148,7 +2268,7 @@ def process_message(
                         "✅ <b>Accesso approvato</b>\n"
                         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
                         "L'admin ha approvato il tuo accesso. "
-                        "Ora puoi usare <code>/connect</code>, "
+                        "Ora puoi usare <code>/account collega</code>, "
                         "<code>/account</code> e gli altri comandi."
                     ),
                 )
@@ -2287,6 +2407,167 @@ def process_message(
                 if account_status.get("linked")
                 else "tenant_account_unlinked"
             )
+
+    if command == "/ordini":
+        if not args:
+            return [format_orders_command_help()]
+        order_action = args[0].strip().lower()
+        order_args = args[1:]
+        if order_action in {"fiscali", "fiscale", "ultimi", "cf", "piva"}:
+            options = options_for_command("/ultimi", order_args)
+            try:
+                records = request_with_backoff(
+                    lambda: fetch_records_for_environment_fn(resolved_environment, options),
+                    label="fetch_records_ordini_fiscali",
+                )
+            except ConfigurationError as exc:
+                return [f"⚠️ {exc}"]
+            assert isinstance(records, list)
+            return _format_records(records, only_found=options.only_found)
+        if order_action in {"tutti", "all"}:
+            options = options_for_command("/tutti", order_args)
+            try:
+                records = request_with_backoff(
+                    lambda: fetch_records_for_environment_fn(resolved_environment, options),
+                    label="fetch_records_ordini_tutti",
+                )
+            except ConfigurationError as exc:
+                return [f"⚠️ {exc}"]
+            assert isinstance(records, list)
+            return _format_records(records, only_found=options.only_found)
+        if order_action in {"cerca", "ordine", "dettaglio", "detail"}:
+            if not order_args:
+                return ["Uso corretto: <code>/ordini cerca &lt;order_id&gt;</code>"]
+            order_id = order_args[0]
+            options = FetchOptions(order_ids=[order_id], only_found=False, max_results=1)
+            try:
+                records = request_with_backoff(
+                    lambda: fetch_records_for_environment_fn(resolved_environment, options),
+                    label="fetch_records_ordini_cerca",
+                )
+            except EbayApiError as exc:
+                return [
+                    _format_order_lookup_error(
+                        exc=exc,
+                        order_id=order_id,
+                        environment=resolved_environment,
+                    )
+                ]
+            except ConfigurationError as exc:
+                return [f"⚠️ {exc}"]
+            assert isinstance(records, list)
+            if not records:
+                return ["🔎 Nessun ordine trovato nella selezione richiesta."]
+            order_record = coerce_order_record(records[0])
+            state = load_state_fn(telegram_config.state_path)
+            explanation = explain_why_order_not_notified(
+                order_record,
+                state,
+                environment=resolved_environment,
+                state_path=telegram_config.state_path,
+                telegram_user_id=resolved_telegram_user_id,
+                chat_id=chat_id,
+            )
+            return [
+                _format_record(order_record)
+                + "\n\n"
+                + format_order_notification_summary(explanation)
+            ]
+        if order_action in {"spiega", "explain", "notifica", "notificabilita"}:
+            if not order_args:
+                return ["Uso corretto: <code>/ordini spiega &lt;order_id&gt;</code>"]
+            order_id = order_args[0]
+            options = FetchOptions(order_ids=[order_id], only_found=False, max_results=1)
+            try:
+                records = request_with_backoff(
+                    lambda: fetch_records_for_environment_fn(resolved_environment, options),
+                    label="fetch_records_ordini_spiega",
+                )
+            except EbayApiError as exc:
+                return [
+                    _format_order_lookup_error(
+                        exc=exc,
+                        order_id=order_id,
+                        environment=resolved_environment,
+                    )
+                ]
+            except ConfigurationError as exc:
+                return [f"⚠️ {exc}"]
+            assert isinstance(records, list)
+            if not records:
+                return [
+                    format_why_not_notified_status(
+                        {
+                            "order_id": order_id,
+                            "environment": resolved_environment,
+                            "status": "order_not_found",
+                            "headline": (
+                                "L'ordine non e' stato trovato con le credenziali correnti."
+                            ),
+                            "detail": (
+                                "Verifica orderId, ambiente e collegamento account prima "
+                                "di riprovare."
+                            ),
+                        }
+                    )
+                ]
+            state = load_state_fn(telegram_config.state_path)
+            explanation = explain_why_order_not_notified(
+                coerce_order_record(records[0]),
+                state,
+                environment=resolved_environment,
+                state_path=telegram_config.state_path,
+                telegram_user_id=resolved_telegram_user_id,
+                chat_id=chat_id,
+            )
+            return [format_why_not_notified_status(explanation)]
+        if order_action in {"controlla", "review", "revisiona", "da_controllare"}:
+            options = options_for_command("/tutti", order_args)
+            try:
+                records = request_with_backoff(
+                    lambda: fetch_records_for_environment_fn(resolved_environment, options),
+                    label="fetch_records_ordini_controlla",
+                )
+            except ConfigurationError as exc:
+                return [f"⚠️ {exc}"]
+            assert isinstance(records, list)
+            review_records = [
+                record
+                for record in (coerce_order_record(item) for item in records)
+                if not record.has_fiscal_identifier()
+            ]
+            return format_review_records(review_records)
+        if order_action in {"report", "riepilogo"}:
+            options = options_for_command("/tutti", order_args)
+            try:
+                records = request_with_backoff(
+                    lambda: fetch_records_for_environment_fn(resolved_environment, options),
+                    label="fetch_records_ordini_report",
+                )
+            except ConfigurationError as exc:
+                return [f"⚠️ {exc}"]
+            assert isinstance(records, list)
+            normalized = [coerce_order_record(item) for item in records]
+            return [
+                format_report_summary(
+                    normalized,
+                    days=options.days or 7,
+                    max_results=options.max_results,
+                )
+            ]
+        if order_action in {"priorita", "prioritari", "priority"}:
+            options = options_for_command("/tutti", order_args)
+            try:
+                records = request_with_backoff(
+                    lambda: fetch_records_for_environment_fn(resolved_environment, options),
+                    label="fetch_records_ordini_priorita",
+                )
+            except ConfigurationError as exc:
+                return [f"⚠️ {exc}"]
+            assert isinstance(records, list)
+            normalized = [coerce_order_record(item) for item in records]
+            return format_priority_records(normalized)
+        return [format_orders_command_help()]
 
     if command == "/stato":
         state = load_state_fn(telegram_config.state_path)
@@ -2661,7 +2942,7 @@ def process_message(
             return [
                 "🚪 <b>Disattiva uso bot</b>\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 "Per un account admin questo comando non e' disponibile.\n"
-                "Usa <code>/disconnect</code> se vuoi scollegare solo eBay."
+                "Usa <code>/account scollega</code> se vuoi scollegare solo eBay."
             ]
         timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         (
@@ -2736,7 +3017,7 @@ def process_message(
     if command == "/notifications":
         if resolved_telegram_user_id is None:
             return _tenant_not_linked_message("🔔 <b>Notifiche chat</b>")
-        command_args = parse_command(text)[1]
+        command_args = args
         subscriptions = load_notification_subscriptions(telegram_config.state_path)
         current_subscription = next(
             (
@@ -2760,9 +3041,9 @@ def process_message(
             if command_args[0] == "filter":
                 if len(command_args) < 2 or command_args[1] not in {"all", "cf", "vat"}:
                     return [
-                        "Uso corretto: <code>/notifications filter all</code>, "
-                        "<code>/notifications filter cf</code> oppure "
-                        "<code>/notifications filter vat</code>."
+                        "Uso corretto: <code>/settings filtro all</code>, "
+                        "<code>/settings filtro cf</code> oppure "
+                        "<code>/settings filtro vat</code>."
                     ]
                 filter_mode = command_args[1]
                 timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -2784,10 +3065,10 @@ def process_message(
             elif command_args[0] not in {"on", "off"}:
                 return [
                     (
-                        "Uso corretto: <code>/notifications</code>, "
-                        "<code>/notifications on</code> "
-                        "<code>/notifications off</code> o "
-                        "<code>/notifications filter all|cf|vat</code>."
+                        "Uso corretto: <code>/settings notifiche</code>, "
+                        "<code>/settings notifiche on</code> "
+                        "<code>/settings notifiche off</code> o "
+                        "<code>/settings filtro all|cf|vat</code>."
                     )
                 ]
             else:

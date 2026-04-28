@@ -34,7 +34,7 @@ Linee guida operative per il brand pubblico del prodotto e per la sua applicazio
 ### Esempi di tono
 
 - bene: `Il tuo accesso e' attivo e l'account eBay risulta collegato.`
-- bene: `Prossimo passo: usa /connect per completare il reconnect.`
+- bene: `Prossimo passo: usa /account collega per completare il reconnect.`
 - da evitare: `Sistema correttamente inizializzato.`
 - da evitare: `L'utente non possiede capability sufficienti.`
 

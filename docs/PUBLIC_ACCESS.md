@@ -172,7 +172,7 @@ curl -I https://connect.tuodominio.it/privacy
 curl -I https://connect.tuodominio.it/about
 ```
 
-Poi da Telegram esegui `/connect` e verifica che il link inizi con:
+Poi da Telegram esegui `/account collega` e verifica che il link inizi con:
 
 ```text
 https://connect.tuodominio.it/oauth/start

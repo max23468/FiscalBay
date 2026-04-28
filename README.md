@@ -221,7 +221,7 @@ fiscalbay-bot
 | `EBAY_ORDER_DETAIL_DELAY_SECONDS` | No | `0` | Pausa tra chiamate `getOrder` |
 | `EBAY_OAUTH_RUNAME` | Consigliata per OAuth production | vuoto | RuName eBay usato come `redirect_uri` nel flusso OAuth production |
 | `EBAY_OAUTH_RUNAME_SANDBOX` | No | fallback a `EBAY_OAUTH_RUNAME` | RuName eBay dedicato al sandbox, se diverso dalla production |
-| `EBAY_OAUTH_CONNECT_BASE_URL` | No | vuoto | URL pubblico usato da `/connect` per aprire il flusso OAuth |
+| `EBAY_OAUTH_CONNECT_BASE_URL` | No | vuoto | URL pubblico usato da `/account collega` per aprire il flusso OAuth |
 | `EBAY_OAUTH_CALLBACK_URL` | No | derivato da `EBAY_OAUTH_CONNECT_BASE_URL` | URL pubblico di callback esposto dal progetto; deve coincidere con l'Accept URL configurato nel RuName eBay |
 | `EBAY_OAUTH_SERVER_HOST` | No | `127.0.0.1` | Host di bind del callback server |
 | `EBAY_OAUTH_SERVER_PORT` | No | `8787` | Porta locale del callback server |
@@ -233,9 +233,9 @@ Nota OAuth eBay:
 
 - il parametro `redirect_uri` inviato a eBay non e' una URL libera, ma il `RuName` registrato nel portale developer eBay
 - `EBAY_OAUTH_CALLBACK_URL` serve invece al progetto per esporre il callback pubblico che deve essere associato a quel `RuName`
-- sulla VPS, per avere `/connect` davvero usabile, vanno quindi configurati sia il `RuName` corretto sia l'URL pubblico raggiungibile del callback server
+- sulla VPS, per avere `/account collega` davvero usabile, vanno quindi configurati sia il `RuName` corretto sia l'URL pubblico raggiungibile del callback server
 - lo stesso server OAuth espone anche `/` come mini sito vetrina, `/privacy` come Privacy Policy URL e `/about` come About URL nel branding OAuth del portale eBay
-- il flusso `/connect` avviato da Telegram aggiunge al consenso anche lo scope pubblico `commerce.identity.readonly`, usato per leggere un identificativo account eBay reale invece del placeholder locale
+- il flusso `/account collega` avviato da Telegram aggiunge al consenso anche lo scope pubblico `commerce.identity.readonly`, usato per leggere un identificativo account eBay reale invece del placeholder locale
 - `EBAY_SCOPES` deve restare coerente con gli scope concessi al refresh token globale; non aggiungere scope non presenti nel token gia' emesso
 
 ### Variabili Telegram
@@ -393,16 +393,31 @@ I record prodotti dalla CLI includono:
 - `/ping`
 - `/stato`
 - `/account`
-- `/connect`
-- `/disconnect`
-- `/request_access`
-- `/notifications on`
-- `/notifications off`
+- `/account collega`
+- `/account reconnect`
+- `/account scollega`
+- `/ordini`
+- `/ordini fiscali 7 20`
+- `/ordini tutti 7 20`
+- `/ordini cerca 12-34567-89012`
+- `/ordini controlla 7 20`
+- `/ordini report 7 20`
+- `/ordini priorita 7 20`
+- `/ordini spiega 12-34567-89012`
 - `/settings`
-- `/users`
-- `/ultimi 7 20`
-- `/tutti 7 20`
-- `/ordine 12-34567-89012`
+- `/settings notifiche on`
+- `/settings notifiche off`
+- `/settings filtro all|cf|vat`
+- `/settings policy`
+- `/settings lascia`
+- `/request_access`
+- `/admin` (admin)
+- `/admin manutenzione` (admin)
+- `/admin_users all|pending|unlinked|reconnect|inactive` (admin)
+- `/tenant_health [telegram_user_id]` (admin)
+- `/approve_user <telegram_user_id>` e `/reject_user <telegram_user_id>` (admin)
+- `/suspend_user <telegram_user_id>` e `/reactivate_user <telegram_user_id>` (admin)
+- `/service_mode normal|maintenance|degraded` (admin)
 
 Regole input:
 
@@ -412,15 +427,18 @@ Regole input:
 
 Comportamento:
 
-- `/ultimi` mostra solo ordini con identificativo fiscale presente
-- `/tutti` mostra anche ordini senza dato fiscale
-- `/ordine` interroga un ordine specifico
-- `/stato` mostra ultimo check, contatori e dimensione della coda retry
+- `/ordini fiscali` mostra solo ordini con identificativo fiscale presente
+- `/ordini tutti` mostra anche ordini senza dato fiscale
+- `/ordini cerca` interroga un ordine specifico
+- `/stato` mostra ultimo check, contatori e dimensione della coda retry; `/stato servizio` mostra lo stato servizio sintetico
+- `/account` riassume lo stato eBay; `collega`, `reconnect` e `scollega` gestiscono le azioni account
+- `/settings` riassume preferenze chat e tenant; `notifiche`, `filtro`, `policy` e `lascia` gestiscono le azioni correlate
 - `/start` e `/help` mostrano anche una tastiera inline con scorciatoie
 - se `TELEGRAM_ADMIN_USER_ID` e' configurata, gli utenti non ancora approvati possono solo richiedere accesso con `/request_access` (anche quando `TELEGRAM_ALLOWED_CHAT_IDS=*`)
 - quando un nuovo utente viene visto per la prima volta dal runtime, l'admin riceve una notifica proattiva con user id/chat id per gestire subito approvazione o rifiuto
 - l'admin puo' approvare o rifiutare richieste dal messaggio inline o con `/approve_user <telegram_user_id>` e `/reject_user <telegram_user_id>`
-- `/users` mostra all'admin lo stato degli utenti registrati (`new`, `pending`, `approved`, `blocked`, `admin`)
+- `/admin_users` mostra all'admin lo stato degli utenti registrati (`new`, `pending`, `approved`, `blocked`, `admin`) e accorpa i filtri prima esposti come comandi separati
+- gli alias granulari precedenti (`/connect`, `/disconnect`, `/reconnect_status`, `/notifications`, `/leave_bot`, `/ultimi`, `/tutti`, `/ordine`, `/review_orders`, `/report_summary`, `/priority_orders`, `/why_not_notified`, `/service_status`, `/policy`, `/users`, `/pending_users`, `/unlinked_users`, `/reconnect_users`, `/inactive_users`, `/admin_dashboard`, `/maintenance_overview`) sono stati accorpati e ora rimandano ai comandi canonici
 
 ### Notifiche automatiche
 

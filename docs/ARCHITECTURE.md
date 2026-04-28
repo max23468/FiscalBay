@@ -192,19 +192,19 @@ Stato implementativo corrente:
 - l'healthcheck operativo espone ora anche contatori di readiness multi-tenant, cosi' la maturita' del DB tenant-aware e' osservabile direttamente sul server
 - anche `/stato` espone ora lo scope runtime e la sorgente credenziali, cosi' si vede subito se una chat sta usando `tenant_store`, `tenant_required` o un percorso legacy adminless
 - `/account` fornisce ora una vista tenant-aware del collegamento eBay gia' presente nel DB, senza richiedere ancora il flusso OAuth completo
-- `/connect` crea ora una sessione preliminare in `oauth_link_sessions` e, se la VPS espone `EBAY_OAUTH_CONNECT_BASE_URL`, restituisce anche il link pubblico di ingresso al futuro callback server
-- `/disconnect` scollega ora localmente l'account tenant dal `state.db`, marca il token come revocato e cancella il segreto dal runtime locale, lasciando la futura revoca remota eBay a uno step successivo
-- `/notifications on|off` aggiorna ora in modo coerente sia `notification_subscriptions` sia `telegram_chats.notifications_enabled`
+- `/account collega` crea ora una sessione preliminare in `oauth_link_sessions` e, se la VPS espone `EBAY_OAUTH_CONNECT_BASE_URL`, restituisce anche il link pubblico di ingresso al futuro callback server
+- `/account scollega` scollega ora localmente l'account tenant dal `state.db`, marca il token come revocato e cancella il segreto dal runtime locale, lasciando la futura revoca remota eBay a uno step successivo
+- `/settings notifiche on|off` aggiorna ora in modo coerente sia `notification_subscriptions` sia `telegram_chats.notifications_enabled`
 - `/settings` espone ora un riepilogo user-facing delle preferenze tenant/chat senza dover ispezionare direttamente il DB
 - `oauth_server.py` espone ora `/oauth/start`, `/oauth/callback` e `/healthz`, valida `state`, usa il `RuName` eBay corretto per lo scambio OAuth e aggiorna account/token nel DB tenant-aware
 - `tenant_credentials.py` usa ora Fernet con chiave `EBAY_TENANT_TOKEN_KEY` come percorso standard di cifratura a riposo dei refresh token tenant
 - `TELEGRAM_ADMIN_USER_ID` puo' ora definire un admin globale: gli altri utenti restano discoverable, ma passano da uno stato `new` o `pending` e possono usare il bot solo dopo approvazione esplicita
-- il workflow di approvazione e' interno al bot: richiesta accesso, notifica admin, approvazione o rifiuto e sblocco successivo di `/connect` e dei comandi tenant-aware
+- il workflow di approvazione e' interno al bot: richiesta accesso, notifica admin, approvazione o rifiuto e sblocco successivo di `/account collega` e dei comandi tenant-aware
 - gli eventi sensibili principali scrivono ora anche su un audit log append-only in SQLite, separato dai soli log runtime
 - gli stati utente e di sessione OAuth passano ora da normalizzazione centrale nel dominio, cosi' alias legacy come `active` e `rejected` non restano sparsi nel runtime
 - il gating dei comandi non dipende piu' solo da controlli ad hoc `admin / approved`, ma da capability esplicite come `request_access`, `review_access`, `connect_account`, `manage_notifications` e `view_orders`
 - l'approvazione accessi passa ora da un piccolo step applicativo esplicito: oltre al cambio di stato utente, il runtime riallinea chat e subscription gia' note per quel tenant
-- `/connect` riusa ora l'ultima sessione OAuth ancora pendente e valida per lo stesso tenant/environment, invece di accumulare nuove sessioni inutili a ogni invocazione ripetuta
+- `/account collega` riusa ora l'ultima sessione OAuth ancora pendente e valida per lo stesso tenant/environment, invece di accumulare nuove sessioni inutili a ogni invocazione ripetuta
 - esiste ora anche una `operation_queue` minima in SQLite per le operazioni sensibili differibili, oggi usata soprattutto per applicare in modo robusto i cambi di accesso utente
 - `reconcile.py` fornisce un worker periodico one-shot che processa la queue, riallinea accessi/chat/subscription, scade sessioni OAuth stale e corregge token attivi rimasti su account non piu' collegati
 

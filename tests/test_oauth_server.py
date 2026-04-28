@@ -43,7 +43,7 @@ class OAuthServerTests(unittest.TestCase):
         body = render_oauth_start_help_page().decode("utf-8")
 
         self.assertIn("Collegamento da Telegram", body)
-        self.assertIn("/connect", body)
+        self.assertIn("/account collega", body)
         self.assertIn("Apri Telegram", body)
 
     def test_render_action_html_page_can_include_hint_and_action(self) -> None:
@@ -124,23 +124,23 @@ class OAuthServerTests(unittest.TestCase):
 
         self.assertEqual(presentation.title, "Autorizzazione annullata")
         self.assertEqual(presentation.outcome, "user_cancelled")
-        self.assertIn("/connect", presentation.message)
-        self.assertIn("/connect", presentation.notify_text)
+        self.assertIn("/account collega", presentation.message)
+        self.assertIn("/account collega", presentation.notify_text)
 
     def test_describe_callback_exception_for_expired_session(self) -> None:
         presentation = describe_callback_exception(
-            Exception("La sessione OAuth e' scaduta. Usa di nuovo /connect.")
+            Exception("La sessione OAuth e' scaduta. Usa di nuovo /account collega.")
         )
 
         self.assertEqual(presentation.title, "Collegamento fallito")
         self.assertEqual(presentation.outcome, "callback_error")
 
         config_presentation = describe_callback_exception(
-            ConfigurationError("La sessione OAuth e' scaduta. Usa di nuovo /connect.")
+            ConfigurationError("La sessione OAuth e' scaduta. Usa di nuovo /account collega.")
         )
         self.assertEqual(config_presentation.title, "Sessione scaduta")
         self.assertEqual(config_presentation.outcome, "session_expired")
-        self.assertIn("/connect", config_presentation.notify_text)
+        self.assertIn("/account collega", config_presentation.notify_text)
 
     def test_describe_callback_exception_for_unavailable_session(self) -> None:
         config_presentation = describe_callback_exception(
@@ -268,7 +268,7 @@ class OAuthServerTests(unittest.TestCase):
             success_message = send_message_mock.call_args.args[2]
             self.assertIn("/account", success_message)
             self.assertIn("/settings", success_message)
-            self.assertIn("/ultimi", success_message)
+            self.assertIn("/ordini fiscali", success_message)
 
 
 if __name__ == "__main__":

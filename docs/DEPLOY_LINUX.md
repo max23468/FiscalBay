@@ -77,7 +77,7 @@ sudo systemctl status fiscalbay-bot
 ## Accesso pubblico OAuth
 
 Il bot usa polling Telegram, quindi non richiede webhook pubblico. Il dominio
-HTTPS serve invece al flusso `/connect` per completare l'OAuth eBay.
+HTTPS serve invece al flusso `/account collega` per completare l'OAuth eBay.
 
 Setup consigliato:
 

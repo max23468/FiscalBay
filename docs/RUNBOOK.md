@@ -118,7 +118,7 @@ Variabili aggiuntive per onboarding OAuth:
 
 Nota importante:
 
-- il callback server puo' girare anche senza URL pubblico, ma in quel caso `/connect` non restituisce un link usabile dall'utente
+- il callback server puo' girare anche senza URL pubblico, ma in quel caso `/account collega` non restituisce un link usabile dall'utente
 - l'URL pubblico consigliato e' un dominio HTTPS davanti a nginx, anche se la VPS resta raggiungibile via IP per SSH e deploy; vedi `docs/PUBLIC_ACCESS.md`
 - il percorso operativo corretto e' configurare `EBAY_TENANT_TOKEN_KEY` sulla VPS prima di usare davvero il callback OAuth
 - per eBay il `redirect_uri` non e' una URL arbitraria: va configurato il `RuName` corretto e l'`Accept URL` del portale eBay deve puntare al callback pubblico del progetto
