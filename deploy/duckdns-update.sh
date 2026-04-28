@@ -16,7 +16,7 @@ if [ -z "${DUCKDNS_TOKEN}" ]; then
 fi
 
 curl_args=(
-  --fsS
+  -fsS
   --get
   --data-urlencode "domains=${DUCKDNS_DOMAIN}"
   --data-urlencode "token=${DUCKDNS_TOKEN}"
