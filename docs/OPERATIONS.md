@@ -137,7 +137,8 @@ Il comando Telegram `/account scollega`:
 
 - scollega localmente l'account eBay del tenant corrente
 - marca il token nel DB come `revoked` e pulisce refresh/access token dal `state.db`
-- non esegue ancora una revoca remota lato eBay; quella resta parte del flusso OAuth completo di fase 4
+- non garantisce ancora una revoca remota lato eBay; quella resta un follow-up
+  post-1.0 distinto dal disconnect locale
 
 Il comando Telegram `/settings notifiche on|off`:
 

@@ -11,6 +11,11 @@ Il server OAuth pubblico espone lo stesso mark anche come `favicon.svg`, `favico
 
 Il progetto nasce per un caso pratico molto preciso: interrogare gli ordini recenti, leggere il dettaglio completo di ogni ordine e rendere consultabile da terminale o da Telegram l'identificativo fiscale che eBay espone nelle API ufficiali. Il percorso principale legge `buyer.taxIdentifier` dalla Sell Fulfillment API; quando quel campo manca ma l'ordine e' noto, FiscalBay tenta anche il container ufficiale `BuyerTaxIdentifier` della Trading API per lo stesso `orderId`.
 
+Il perimetro stabile `1.0.0` e' il servizio pubblico piccolo con accesso
+approvato: bot Telegram first, singolo admin globale, onboarding OAuth su VPS,
+token tenant cifrati, SQLite entro soglie dichiarate e operativita' best effort.
+Il dettaglio dei criteri e dei limiti e' in [`docs/RELEASE_READINESS.md`](docs/RELEASE_READINESS.md).
+
 ## Panoramica
 
 Il repository contiene due entry point:
@@ -102,6 +107,13 @@ Regola operativa minima:
 - `PATCH` per bugfix compatibili, ad esempio `v0.1.1`
 - `MINOR` per nuove funzionalita' compatibili, ad esempio `v0.2.0`
 - `MAJOR` per breaking change, ad esempio `v1.0.0`
+
+Il primo salto stabile a `v1.0.0` puo' essere eseguito con override esplicito
+quando la readiness documentata e' completa:
+
+```bash
+scripts/release_now.sh --version 1.0.0 --bump major
+```
 
 Il flusso resta automatizzato senza GitHub Actions:
 

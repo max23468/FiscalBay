@@ -142,7 +142,11 @@ Regola UX:
 2. spostare credenziali eBay da env globale a repository/account storage
    Stato attuale: il progetto usa gia' token tenant cifrati come percorso operativo normale del bot su VPS; il fallback `.env` resta solo per CLI o istanze legacy adminless.
 3. creare endpoint o mini web app per avvio OAuth e callback
-   Stato attuale: il comando `/account collega`, la tabella `oauth_link_sessions` e il servizio web minimale esistono gia'; restano da rifinire deploy pubblico, RuName/Accept URL nel portale eBay, revoca remota e hardening finale del flusso.
+   Stato attuale: il comando `/account collega`, la tabella
+   `oauth_link_sessions` e il servizio web minimale esistono gia' nel perimetro
+   `1.0.0`; RuName/Accept URL e deploy pubblico vanno verificati come parte
+   dell'operativita' VPS, mentre revoca remota eBay e hardening ulteriore
+   restano follow-up post-1.0.
 4. aggiungere comandi `/account collega`, `/account scollega` e `/account`
    Stato attuale: `/account`, `/account collega` e `/account scollega` sono gia' presenti nel bot; resta da completare l'hardening finale del percorso end-to-end e la gestione completa del token storage sicuro.
    In piu', il bot espone gia' `/settings notifiche on|off` e `/settings` per rendere piu' self-service anche la gestione della chat dopo il collegamento.

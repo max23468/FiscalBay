@@ -1,33 +1,36 @@
 # Roadmap
 
-## Fase 1 - Servizio Pubblico con Accesso Approvato
+## Stato corrente
 
-Fase 1 completata.
+La roadmap necessaria per la prima release stabile e' completata.
 
-## Fase 2 - Guardrail e Strumenti Admin
+FiscalBay `1.0.0` stabilizza il perimetro `approved_public_small`: bot Telegram
+pubblico con accesso approvato, singolo admin globale, onboarding OAuth su VPS,
+token tenant cifrati, audit/retention/recovery minimi, metriche admin e deploy
+locale/VPS senza GitHub Actions.
 
-Fase 2 completata.
+Non ci sono fasi aperte bloccanti per `1.0.0`.
 
-## Fase 3 - Lifecycle Dati e Retention
+## Storico fasi completate
 
-Fase 3 completata.
+- Fase 1 - Servizio Pubblico con Accesso Approvato
+- Fase 2 - Guardrail e Strumenti Admin
+- Fase 3 - Lifecycle Dati e Retention
+- Fase 4 - Ottimizzazione Applicativa e Storage
+- Fase 5 - Robustezza VPS e Recovery
+- Fase 6 - Consolidamento del Servizio Pubblico
+- Fase 7 - Rate Limiting Minimo
+- Fase 8 - Metriche Prodotto Admin
+- Fase 9 - Readiness 1.0.0
 
-## Fase 4 - Ottimizzazione Applicativa e Storage
+## Dopo 1.0.0
 
-Fase 4 completata.
+Le prossime evoluzioni non sono prerequisiti della prima release stabile.
 
-## Fase 5 - Robustezza VPS e Recovery
-
-Fase 5 completata.
-
-## Fase 6 - Consolidamento del Servizio Pubblico
-
-Fase 6 completata.
-
-## Fase 7 - Rate Limiting Minimo
-
-Fase 7 completata.
-
-## Fase 8 - Metriche Prodotto Admin
-
-Fase 8 completata.
+- Postgres o database gestito prima di un'apertura pubblica multiutente piu'
+  ampia
+- secret manager dedicato se il perimetro operativo cresce
+- cancellazione self-service da Telegram
+- ruoli admin multipli o delega operativa
+- alert prodotto persistenti con storico dedicato
+- revoca remota eBay garantita come parte del flusso di disconnect

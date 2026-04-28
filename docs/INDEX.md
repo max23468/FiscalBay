@@ -20,7 +20,7 @@ Indice centrale della documentazione del progetto.
 - `docs/DATA_MODEL.md`
   - modelli attuali e modelli futuri previsti
 - `docs/OAUTH_FLOW.md`
-  - flusso target del futuro onboarding OAuth
+  - flusso OAuth di onboarding e reconnect
 - `docs/ARCHITECTURE.md` (sezione decisioni consolidate)
   - decisioni architetturali persistenti del refactor
 
@@ -32,6 +32,8 @@ Indice centrale della documentazione del progetto.
   - controlli rapidi, rollback, backup e criteri di salute
 - `docs/RELEASE_POLICY.md`
   - regole ufficiali per versioni, changelog, release PR e tag GitHub
+- `docs/RELEASE_READINESS.md`
+  - perimetro, criteri e limiti della prima release stabile `1.0.0`
 - `docs/CODEX_CLOUD_DEPLOY.md`
   - flusso per lavorare da Codex web/cloud senza usare GitHub Actions
 - `docs/DEPLOY_LINUX.md`

@@ -58,11 +58,33 @@ Procedura minima:
 5. eseguire `deploy/smoke-check.sh`
 6. invalidare il segreto precedente appena confermato il corretto funzionamento
 
-## Rischi ancora aperti
+## Rischi accettati per 1.0.0
 
-- SQLite locale come persistence principale
-- metriche e alerting ancora minimi
-- gestione chiave di cifratura token ancora affidata a `.env` su VPS, non a un secret manager dedicato
+Questi rischi sono accettati dentro il perimetro `approved_public_small` della
+`1.0.0`, perche' il servizio resta piccolo, approvato manualmente, Telegram first
+e senza SLA formale:
+
+- SQLite locale come persistence principale, solo entro soglie dichiarate e con
+  backup/restore mantenuti
+- metriche e alerting minimi, basati su healthcheck, dashboard admin, timer
+  `fiscalbay-alertcheck` e riepiloghi admin
+- gestione chiave di cifratura token affidata a `.env` su VPS con permessi
+  stretti, non ancora a un secret manager dedicato
+
+Questi punti non sono blocchi per `1.0.0`, ma diventano driver di revisione se il
+servizio supera le soglie pubbliche dichiarate o cambia perimetro.
+
+## Rischi bloccanti per perimetri piu' ampi
+
+Prima di aprire FiscalBay a un pubblico multiutente piu' ampio o senza
+approvazione manuale servono almeno:
+
+- migrazione da SQLite a Postgres o database equivalente gestito
+- revisione dedicata di concorrenza, backup, restore e rollback dati
+- gestione segreti piu' robusta o secret manager dedicato
+- osservabilita' e alerting piu' ricchi
+- policy di supporto, abuso, retention e cancellazione proporzionate al nuovo
+  perimetro
 
 ## Cambio di perimetro con la multiutenza
 

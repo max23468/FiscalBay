@@ -228,13 +228,32 @@ In pratica:
 
 ## Quando passare a 1.0.0
 
-Regola proposta per questo repository:
+`1.0.0` stabilizza il perimetro `approved_public_small`: bot Telegram pubblico
+con accesso approvato, singolo admin globale, onboarding OAuth su VPS, token
+tenant cifrati, SQLite entro soglie dichiarate, audit/retention/recovery minimi
+e deploy locale/VPS gia' rodato.
 
 Passiamo a `1.0.0` quando sono vere tutte queste condizioni:
 
 - onboarding OAuth e flusso bot sono considerati stabili sul percorso principale
 - configurazione e env var principali sono documentate e non in forte movimento
-- il formato di output CLI e i comandi Telegram core sono abbastanza stabili da non richiedere cambi frequenti incompatibili
+- il formato di output CLI e i comandi Telegram core sono abbastanza stabili da
+  non richiedere cambi frequenti incompatibili
 - esiste un percorso operativo minimo di release e rollback gia' usato con successo
+- `docs/RELEASE_READINESS.md` e' allineato a governance, security e operazioni
+- `docs/DECISIONS_PENDING.md` non contiene decisioni bloccanti per il perimetro
+  `approved_public_small`
 
-Fino a quel momento, restiamo serenamente su `0.x.y`.
+Il salto da `0.x.y` a `1.0.0` puo' essere eseguito con override esplicito:
+
+```bash
+scripts/release_now.sh --version 1.0.0 --bump major
+```
+
+Questo override e' ammesso per la prima release stabile anche senza breaking
+change runtime, perche' in SemVer `1.0.0` dichiara il primo contratto pubblico
+stabile.
+
+`1.0.0` non equivale ad apertura pubblica multiutente libera. Per quel cambio il
+target resta Postgres o database equivalente gestito, piu' revisione dedicata di
+segreti, operativita' e supporto.

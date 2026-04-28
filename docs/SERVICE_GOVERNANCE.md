@@ -38,6 +38,30 @@ Regole operative di base:
 - il bot espone `/stato servizio` e `/settings policy` come comandi pubblici minimi di orientamento sul servizio
 - l'admin puo' usare `/service_mode normal|maintenance|degraded` per sospendere nuovi collegamenti o limitare temporaneamente le sole azioni operative
 
+## Contratto stabile 1.0.0
+
+FiscalBay `1.0.0` dichiara stabile il modello `approved_public_small`.
+
+Nel contratto stabile iniziale rientrano:
+
+- bot Telegram pubblico con accesso approvato manualmente
+- singolo admin globale configurato con `TELEGRAM_ADMIN_USER_ID`
+- onboarding e reconnect eBay OAuth gestiti dalla VPS FiscalBay
+- token tenant cifrati a riposo nel percorso operativo normale
+- SQLite locale entro soglie dichiarate
+- audit log, retention, operation queue, backup, restore drill e alert minimi
+- metriche prodotto admin visibili in `/admin`
+- UX utente centrata su collegamento account, stato, impostazioni e notifiche
+
+Non rientrano nel contratto `1.0.0`:
+
+- apertura pubblica libera senza approvazione
+- ruoli admin multipli
+- multi-account eBay per utente nello stesso environment
+- dashboard web come entrypoint operativo primario
+- SLA formale, alta disponibilita' o multiworker distribuiti
+- cancellazione utente self-service completa
+
 ## Perimetro del prodotto
 
 Il prodotto e':

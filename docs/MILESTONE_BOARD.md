@@ -2,6 +2,10 @@
 
 Board minima locale per tenere visibili priorita' e dipendenze finche' non viene aperta una board GitHub dedicata.
 
+Nota: questo file conserva lo storico di pianificazione precedente alla
+readiness `1.0.0`. La roadmap corrente e il perimetro stabile sono in
+`docs/ROADMAP.md` e `docs/RELEASE_READINESS.md`.
+
 ## Milestone attive
 
 ### M0 - Baseline e sicurezza immediata
@@ -97,14 +101,15 @@ Deliverable principali:
 - modello dati tenant-aware
 - strategia token utente
 - decisione SQLite vs Postgres
-- milestone di beta privata
+- milestone di servizio pubblico controllato
 
 Milestone tecnica proposta:
 
 - `M4.1`
   - schema dati multiutente documentato e chiavi di isolamento fissate
 - `M4.2`
-  - decisione database: SQLite per beta privata, Postgres prima dell'apertura pubblica
+  - decisione database: SQLite per servizio piccolo approvato, Postgres prima di
+    un'apertura pubblica piu' ampia
 - `M4.3`
   - strategia token eBay per utente, con refresh token cifrato e revoca prevista
 - `M4.4`
@@ -112,23 +117,23 @@ Milestone tecnica proposta:
 - `M4.5`
   - piano di migrazione da stato globale a stato per tenant
 
-Vincoli della prima beta privata:
+Vincoli del servizio pubblico piccolo:
 
 - un solo account eBay attivo per utente e per environment
-- SQLite ancora ammesso solo per beta privata controllata
-- Postgres prima dell'apertura pubblica
+- SQLite ancora ammesso solo per accesso approvato e bassa scala
+- Postgres prima dell'apertura pubblica piu' ampia
 - audit log e rate limiting minimi richiesti prima di onboarding self-service
 
-Milestone di beta privata:
+Milestone di servizio controllato:
 
 - `M4.B1`
   - schema tenant-aware e token storage definiti
 - `M4.B2`
   - lifecycle token e audit log minimi definiti
 - `M4.B3`
-  - validazione che VPS e operativita' attuale reggano una beta privata chiusa
+  - validazione che VPS e operativita' attuale reggano il servizio approvato
 - `M4.B4`
-  - via libera a iniziare implementazione fase 4
+  - via libera a stabilizzare il percorso `approved_public_small`
 
 ### M5 - Onboarding self-service
 

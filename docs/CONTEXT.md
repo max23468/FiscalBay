@@ -329,10 +329,12 @@ bash scripts/ci_verify.sh
 - CI e quality gate locali presenti
 - percorso di refactor documentato nei documenti stabili e nelle ADR
 
-### Limiti attuali ancora veri
+### Limiti attuali ancora veri per 1.0.0
 
-- niente onboarding self-service pubblico
-- hardening governance/privacy ora documentato, ma ancora senza automatismi di retention o cancellazione self-service
+- accesso approvato manualmente, non apertura libera
+- cancellazione utente amministrativa assistita, non self-service completa
+- revoca remota eBay non garantita come parte del disconnect locale
+- SQLite accettato solo nel perimetro `approved_public_small`
 
 Aggiornamento di stato:
 
@@ -341,30 +343,34 @@ Aggiornamento di stato:
 - il layer applicativo che sceglie l'environment eBay passa dal tenant e dall'account collegato quando il DB lo consente
 - la sorgente credenziali per il fetch non e' piu' sparsa nei caller: il bot multiutente con admin configurato usa solo token tenant; il fallback `.env` resta confinato ai percorsi legacy adminless o CLI
 - il comando `/stato` mostra esplicitamente se la chat sta lavorando in contesto tenant, se il token tenant e' pronto o se manca ancora il collegamento
-- e' disponibile anche `/account`, che mostra lo stato del collegamento eBay registrato per il tenant della chat e rappresenta il primo comando davvero orientato all'onboarding fase 4
+- e' disponibile anche `/account`, che mostra lo stato del collegamento eBay
+  registrato per il tenant della chat ed e' parte del percorso onboarding stabile
 
-## Multiutenza futura
+## Multiutenza oltre il perimetro approved_public_small
 
-Direzione prevista, non ancora implementata:
+Il servizio `1.0.0` supporta gia' tenant approvati e token per utente nel modello
+piccolo e controllato.
 
-- ogni utente Telegram collega il proprio account eBay
-- ogni utente vede solo i propri ordini/notifiche
-- token eBay per utente
-- flusso Telegram -> web -> OAuth eBay
-- probabile passaggio a datastore piu' adatto della semplice modalita' attuale
+Una multiutenza pubblica piu' ampia richiede invece:
+
+- Postgres o database equivalente gestito
+- revisione dedicata di concorrenza, backup e restore dati
+- supporto operativo piu' formalizzato
+- osservabilita' piu' ricca
+- eventuale gestione segreti piu' robusta
 
 Questo passaggio va trattato come cambio di natura del progetto:
 
-- da utility personale/privata
+- da servizio piccolo con accesso approvato
 - a servizio con requisiti piu' seri di sicurezza, privacy, backup e osservabilita'
 
-Finding audit che guidano questa fase:
+Finding che restano driver per il cambio di scala:
 
-- credenziali eBay ancora globali in `.env`
-- stato runtime, metriche e retry queue ancora condivisi
-- scoping operativo ancora troppo vicino alla chat invece che al tenant utente
-- audit log e rate limiting esistono ora per i flussi sensibili principali, ma
-  restano da affinare pruning, retention e copertura dei casi amministrativi
+- SQLite locale come persistence principale
+- singolo admin globale
+- secret key tenant ancora gestita in `.env` su VPS
+- alert prodotto non persistenti come storico dedicato
+- cancellazione self-service non ancora completa
 
 Questi finding sono la base esplicita delle scelte gia' fissate in `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md` e `docs/OAUTH_FLOW.md`.
 
@@ -605,19 +611,25 @@ Verifica qualita':
 
 - `scripts/ci_verify.sh`
 
-## Priorita' aperte
+## Priorita' dopo 1.0.0
 
-Le cose principali ancora aperte non sono piu' il “mettere in piedi” il progetto, ma:
+La prima release stabile copre il servizio pubblico piccolo con accesso approvato.
 
-- rifinitura del servizio pubblico con accesso approvato
-- pruning e lifecycle dati coerenti con la governance dichiarata
-- revoca remota eBay e affinamento dell'onboarding pubblico
-- chiarimento dei limiti operativi della VPS attuale
-- decisione su hosting stabile del componente web di onboarding
+Le cose principali ancora aperte non sono bloccanti per `1.0.0`, ma guidano
+l'evoluzione successiva:
+
+- Postgres o database gestito prima di un'apertura pubblica multiutente piu'
+  ampia
+- secret manager dedicato se il perimetro operativo cresce
+- cancellazione utente self-service da Telegram
+- ruoli admin multipli o delega operativa
+- alert prodotto persistenti con storico dedicato
+- revoca remota eBay garantita come parte del disconnect locale
 
 ## Cose che un'IA nuova deve sapere subito
 
-- il progetto oggi funziona ed e' live
+- il progetto oggi funziona, e' live ed e' pronto per il perimetro stabile
+  `approved_public_small`
 - il bot e' pubblico su Telegram ma con accesso approvato dall'admin
 - il deploy vero e' su VPS Linux
 - la VPS usa Oracle Linux 9.7
@@ -633,6 +645,7 @@ Le cose principali ancora aperte non sono piu' il “mettere in piedi” il prog
 - il runtime corretto del progetto e' Python `3.11` nel `.venv`
 - il bot usa SQLite locale in `data/state.db`
 - la roadmap da seguire per il lavoro residuo e' `docs/ROADMAP.md`
+- la readiness stabile e' descritta in `docs/RELEASE_READINESS.md`
 
 ## Come mantenere aggiornato questo file
 
