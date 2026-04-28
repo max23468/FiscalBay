@@ -24,7 +24,8 @@ Motivo operativo:
 2. esegui o chiedi di eseguire verifiche locali quando il lavoro torna sul Mac
 3. porta le modifiche su `main` solo dopo self-review
 4. non avviare GitHub Actions
-5. quando il lavoro torna sul Mac locale, usa `scripts/local_automate.sh`
+5. quando il lavoro torna sul Mac locale, usa `scripts/deploy_now.sh` o
+   `scripts/release_now.sh`
 
 ## Verifiche Manuali
 
@@ -34,10 +35,10 @@ Gate locale preferito:
 bash scripts/ci_verify.sh
 ```
 
-Pipeline automatica locale:
+Deploy operativo:
 
 ```bash
-scripts/local_automate.sh
+scripts/deploy_now.sh
 ```
 
 Quando il cambio tocca packaging o release:
@@ -77,13 +78,13 @@ fiscalbay-bot
 Deploy automatizzato da Mac locale:
 
 ```bash
-scripts/local_deploy_vps.sh
+scripts/deploy_now.sh
 ```
 
-Pipeline completa:
+Release versionata:
 
 ```bash
-scripts/local_automate.sh --all
+scripts/release_now.sh
 ```
 
 Dopo questa verifica, seguire `docs/RUNBOOK.md` e `docs/OPERATIONS.md` per
@@ -91,10 +92,10 @@ diagnostica o rollback.
 
 ## Release Senza Actions
 
-`release-please` resta il riferimento per changelog/versione. Senza GitHub Actions,
-la pipeline gira dalla VPS FiscalBay: crea/aggiorna la Release PR, la valida, la
-mergea, crea tag/GitHub Release e ridistribuisce `main`.
+`scripts/release_now.sh` resta il riferimento per changelog/versione. Senza GitHub
+Actions, la release viene lanciata esplicitamente dal Mac locale: calcola SemVer,
+aggiorna changelog/versione, crea tag/GitHub Release e ridistribuisce `main`.
 
 Non creare tag, GitHub Release, bump di versione o modifiche manuali a
-`CHANGELOG.md` root fuori dalla pipeline `release-please` o da una riparazione
+`CHANGELOG.md` root fuori da `scripts/release_now.sh` o da una riparazione
 esplicita del flusso.

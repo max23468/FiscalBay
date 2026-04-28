@@ -35,6 +35,7 @@ RELEASE_SERVICE_TARGET="/etc/systemd/system/${RELEASE_SERVICE_NAME}.service"
 RELEASE_TIMER_TEMPLATE="${APP_DIR}/deploy/fiscalbay-release-please.timer"
 RELEASE_TIMER_TARGET="/etc/systemd/system/${RELEASE_SERVICE_NAME}.timer"
 RELEASE_ENV_FILE="${RELEASE_ENV_FILE:-/etc/fiscalbay/release-please.env}"
+INSTALL_RELEASE_PLEASE_LEGACY="${INSTALL_RELEASE_PLEASE_LEGACY:-false}"
 OAUTH_SERVICE_NAME="fiscalbay-oauth"
 OAUTH_SERVICE_TEMPLATE="${APP_DIR}/deploy/fiscalbay-oauth.service"
 OAUTH_SERVICE_TARGET="/etc/systemd/system/${OAUTH_SERVICE_NAME}.service"
@@ -152,8 +153,8 @@ install_service_file() {
 }
 
 install_packages
-if ! install_release_packages; then
-  echo "Avviso: nodejs/npm non installati; il timer release-please richiedera' setup manuale."
+if [ "${INSTALL_RELEASE_PLEASE_LEGACY}" = "true" ] && ! install_release_packages; then
+  echo "Avviso: nodejs/npm non installati; release-please legacy richiedera' setup manuale."
 fi
 ensure_group
 ensure_user
@@ -176,27 +177,33 @@ if [ ! -f "${ENV_FILE}" ]; then
 fi
 sudo chown "${APP_USER}:${APP_GROUP}" "${ENV_FILE}"
 sudo chmod 600 "${ENV_FILE}"
-sudo mkdir -p "$(dirname "${RELEASE_ENV_FILE}")"
-sudo chmod 750 "$(dirname "${RELEASE_ENV_FILE}")"
 
 install_service_file "${SERVICE_TEMPLATE}" "${SERVICE_TARGET}"
 install_service_file "${OAUTH_SERVICE_TEMPLATE}" "${OAUTH_SERVICE_TARGET}"
 install_service_file "${BACKUP_SERVICE_TEMPLATE}" "${BACKUP_SERVICE_TARGET}"
 install_service_file "${ALERT_SERVICE_TEMPLATE}" "${ALERT_SERVICE_TARGET}"
 install_service_file "${RECONCILE_SERVICE_TEMPLATE}" "${RECONCILE_SERVICE_TARGET}"
-install_service_file "${RELEASE_SERVICE_TEMPLATE}" "${RELEASE_SERVICE_TARGET}"
 sudo cp "${BACKUP_TIMER_TEMPLATE}" "${BACKUP_TIMER_TARGET}"
 sudo cp "${ALERT_TIMER_TEMPLATE}" "${ALERT_TIMER_TARGET}"
 sudo cp "${RECONCILE_TIMER_TEMPLATE}" "${RECONCILE_TIMER_TARGET}"
-sudo cp "${RELEASE_TIMER_TEMPLATE}" "${RELEASE_TIMER_TARGET}"
+if [ "${INSTALL_RELEASE_PLEASE_LEGACY}" = "true" ]; then
+  sudo mkdir -p "$(dirname "${RELEASE_ENV_FILE}")"
+  sudo chmod 750 "$(dirname "${RELEASE_ENV_FILE}")"
+  install_service_file "${RELEASE_SERVICE_TEMPLATE}" "${RELEASE_SERVICE_TARGET}"
+  sudo cp "${RELEASE_TIMER_TEMPLATE}" "${RELEASE_TIMER_TARGET}"
+else
+  sudo systemctl disable --now "${RELEASE_SERVICE_NAME}.timer" >/dev/null 2>&1 || true
+fi
 sudo systemctl daemon-reload
 sudo systemctl enable --now "${BACKUP_SERVICE_NAME}.timer"
 sudo systemctl enable --now "${ALERT_SERVICE_NAME}.timer"
 sudo systemctl enable --now "${RECONCILE_SERVICE_NAME}.timer"
-if [ -f "${RELEASE_ENV_FILE}" ] && release_node_ready; then
-  sudo systemctl enable --now "${RELEASE_SERVICE_NAME}.timer"
-else
-  echo "Timer ${RELEASE_SERVICE_NAME}.timer installato ma non abilitato: crea ${RELEASE_ENV_FILE} e verifica Node.js >=20/npx."
+if [ "${INSTALL_RELEASE_PLEASE_LEGACY}" = "true" ]; then
+  if [ -f "${RELEASE_ENV_FILE}" ] && release_node_ready; then
+    sudo systemctl enable --now "${RELEASE_SERVICE_NAME}.timer"
+  else
+    echo "Timer ${RELEASE_SERVICE_NAME}.timer installato ma non abilitato: crea ${RELEASE_ENV_FILE} e verifica Node.js >=20/npx."
+  fi
 fi
 
 echo "Installazione completata."
@@ -210,7 +217,10 @@ echo "6. Log OAuth: sudo journalctl -u ${OAUTH_SERVICE_NAME} -f"
 echo "7. Verifica timer backup: sudo systemctl status ${BACKUP_SERVICE_NAME}.timer"
 echo "8. Verifica timer alert: sudo systemctl status ${ALERT_SERVICE_NAME}.timer"
 echo "9. Verifica timer reconcile: sudo systemctl status ${RECONCILE_SERVICE_NAME}.timer"
-echo "10. Configura release automation: ${RELEASE_ENV_FILE}, verifica Node.js >=20/npx, poi sudo systemctl enable --now ${RELEASE_SERVICE_NAME}.timer"
+echo "10. Release esplicita da Mac locale: scripts/release_now.sh"
+if [ "${INSTALL_RELEASE_PLEASE_LEGACY}" = "true" ]; then
+  echo "11. Fallback legacy release-please: ${RELEASE_ENV_FILE}, Node.js >=20/npx, timer ${RELEASE_SERVICE_NAME}.timer"
+fi
 echo
 echo "Configurazione applicata:"
 echo "- APP_USER=${APP_USER}"

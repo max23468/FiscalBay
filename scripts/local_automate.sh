@@ -13,12 +13,16 @@ usage() {
   cat <<'EOF'
 Usage: scripts/local_automate.sh [--build] [--push] [--deploy] [--all] [--ref REF]
 
-Local automation pipeline that replaces GitHub Actions:
+Legacy local automation pipeline that replaces GitHub Actions:
   1. verifies no GitHub Actions workflows are versioned
   2. runs local CI checks
   3. optionally builds package artifacts
   4. optionally pushes the current branch
   5. optionally deploys to the FiscalBay VPS via SSH
+
+Preferred commands:
+  scripts/deploy_now.sh      daily deploy of an already committed ref
+  scripts/release_now.sh     explicit versioned release, tag, GitHub Release and deploy
 
 Common commands:
   scripts/local_automate.sh
@@ -105,6 +109,6 @@ if [ "${RUN_PUSH}" = true ]; then
 fi
 
 if [ "${RUN_DEPLOY}" = true ]; then
-  echo "Deploy VPS FiscalBay..."
+  echo "Deploy VPS FiscalBay con percorso legacy local_deploy_vps.sh..."
   bash scripts/local_deploy_vps.sh --ref "${REF}"
 fi

@@ -218,7 +218,7 @@ Suggerimento pratico sui log:
 
 ## Sequenza standard dopo update
 
-1. da Mac locale, eseguire `scripts/local_automate.sh --all`
+1. da Mac locale, eseguire `scripts/deploy_now.sh`
 2. verificare che lo smoke check remoto completi senza errori
 3. se lo smoke check fallisce, leggere i log e valutare rollback
 
@@ -231,19 +231,19 @@ Questo e' il percorso di deploy predefinito. GitHub Actions non e' un canale
 operativo attivo per FiscalBay: deploy, diagnostica e configurazione VPS si
 automatizzano con script locali/VPS via SSH sulla VPS FiscalBay.
 
-Pipeline locale standard:
+Deploy operativo standard:
 
 ```bash
-scripts/local_automate.sh
+scripts/deploy_now.sh
 ```
 
-Pipeline completa con build, push e deploy:
+Release versionata esplicita:
 
 ```bash
-scripts/local_automate.sh --all
+scripts/release_now.sh
 ```
 
-Solo deploy verso la VPS FiscalBay:
+Fallback deploy via archivio locale:
 
 ```bash
 scripts/local_deploy_vps.sh
@@ -252,60 +252,58 @@ scripts/local_deploy_vps.sh
 Da shell aperta direttamente sulla VPS, `./deploy/update.sh` resta disponibile
 come manutenzione operativa locale.
 
-## Pipeline release automatica su VPS
+## Release esplicita senza Release Please automatico
 
-La VPS apre o aggiorna automaticamente la Release PR di `release-please`, la valida,
-la mergea, crea tag/GitHub Release e ridistribuisce `main`, senza usare GitHub
-Actions. Il timer installato e' `fiscalbay-release-please.timer`; il servizio
-eseguito e' `fiscalbay-release-please.service`.
-
-Prima di abilitarlo, verificare che Node.js >=20 e `npm`/`npx` siano disponibili e creare
-sulla VPS un EnvironmentFile fuori dal repository:
+Il flusso normale non usa piu' `fiscalbay-release-please.timer` e non apre Release
+PR automatiche. La release resta automatica solo quando viene lanciata
+esplicitamente dal maintainer:
 
 ```bash
-node --version
-command -v npx
-sudo install -d -m 750 /etc/fiscalbay
-sudo tee /etc/fiscalbay/release-please.env >/dev/null <<'EOF'
-GITHUB_TOKEN=ghp_...
-FISCALBAY_RELEASE_REPO_URL=max23468/FiscalBay
-FISCALBAY_RELEASE_TARGET_BRANCH=main
-# default: true. Impostare false solo per fermare temporaneamente un passo.
-FISCALBAY_RELEASE_AUTO_MERGE=true
-FISCALBAY_RELEASE_AUTO_GITHUB_RELEASE=true
-FISCALBAY_RELEASE_AUTO_DEPLOY=true
-EOF
-sudo chmod 600 /etc/fiscalbay/release-please.env
+scripts/release_now.sh
 ```
 
-Comandi operativi:
+Lo script:
+
+- legge l'ultimo tag `v*`
+- calcola il bump SemVer dai Conventional Commit
+- aggiorna `CHANGELOG.md` e `pyproject.toml`
+- crea commit `chore: release vX.Y.Z` e tag `vX.Y.Z`
+- crea la GitHub Release con `gh` o API GitHub
+- deploya `main` sulla VPS tramite `scripts/deploy_now.sh`
+
+Per creare GitHub Release senza `gh` locale, esportare un token GitHub fuori dal
+repository:
 
 ```bash
-sudo systemctl enable --now fiscalbay-release-please.timer
-sudo systemctl start fiscalbay-release-please.service
-sudo systemctl status fiscalbay-release-please.timer
-sudo journalctl -u fiscalbay-release-please.service -n 100 --no-pager
+export GITHUB_TOKEN=ghp_...
 ```
 
-Guardrail automatici:
+Il vecchio servizio `fiscalbay-release-please.service` e il timer
+`fiscalbay-release-please.timer` restano asset legacy/fallback. Non abilitarli nel
+flusso normale. Per fermare un timer esistente:
 
-- la Release PR deve essere mergeable
-- il titolo deve essere quello atteso da `release-please`
-- i file modificati devono essere solo quelli di release attesi
-- il deploy finale passa da `deploy/vps-deploy-ref.sh` e dallo smoke check locale
+```bash
+sudo systemctl disable --now fiscalbay-release-please.timer
+```
+
+Guardrail automatici del nuovo flusso:
+
+- nessun workflow GitHub Actions versionato
+- working tree pulito prima di deploy/release reali
+- release ufficiale solo da `main`
+- deploy solo sulla VPS con hostname `fiscalbay-bot`
+- smoke check remoto obbligatorio nel deploy
 
 ## Sync locale dopo release GitHub
 
-Quando la pipeline VPS mergea una Release PR di `release-please`, il commit finale
-che aggiorna `CHANGELOG.md`, `pyproject.toml` e `.release-please-manifest.json`
-nasce su `main` lato remoto. Il repository locale quindi non vede la nuova versione
-finche' non viene riallineato.
+`scripts/release_now.sh` crea il commit di release localmente prima del push, quindi
+il repository locale resta gia' allineato. Serve un sync manuale solo se una release
+viene creata da un'altra postazione.
 
 Regola operativa:
 
-1. verificare che `fiscalbay-release-please.service` sia passato
-2. eseguire in locale `git pull --ff-only origin main`
-3. solo dopo verificare `CHANGELOG.md`, tag GitHub e versione pacchetto
+1. eseguire in locale `git pull --ff-only origin main`
+2. verificare tag GitHub e versione pacchetto
 
 Check rapido consigliato:
 

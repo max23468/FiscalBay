@@ -210,10 +210,16 @@ La reconciliation:
 Da Mac locale, percorso standard automatizzato senza GitHub Actions:
 
 ```bash
-scripts/local_automate.sh --all
+scripts/deploy_now.sh
 ```
 
-Solo deploy verso la VPS FiscalBay:
+Release versionata esplicita:
+
+```bash
+scripts/release_now.sh
+```
+
+Fallback deploy via archivio locale verso la VPS FiscalBay:
 
 ```bash
 scripts/local_deploy_vps.sh

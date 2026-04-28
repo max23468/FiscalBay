@@ -42,11 +42,12 @@ Fallback operativo:
 
 - lavorare comunque con commit Conventional Commit corretti
 - trattare ogni commit su `main` come se fosse il titolo di una PR squash
-- usare `scripts/local_automate.sh` come pipeline locale standard
+- usare `scripts/deploy_now.sh` come deploy operativo standard
+- usare `scripts/release_now.sh` per release versionate esplicite
 - eseguire localmente `bash scripts/ci_verify.sh` prima dei cambi runtime,
   storage, deploy o packaging quando serve un gate mirato
-- non fare bump manuali, tag manuali o release manuali fuori dalla pipeline
-  `release-please` o da una riparazione esplicita
+- non fare bump manuali, tag manuali o release manuali fuori da
+  `scripts/release_now.sh` o da una riparazione esplicita
 
 ### Merge Options
 
@@ -74,27 +75,22 @@ limitato.
 
 ## Release Senza Actions
 
-Il percorso standard automatizzato senza GitHub Actions e':
+Il percorso standard senza GitHub Actions e senza Release PR automatiche e':
 
 1. commit Conventional Commit corretto su `main`
-2. `fiscalbay-release-please.timer` sulla VPS apre o aggiorna la Release PR con
-   `release-please`
-3. la VPS valida che la Release PR sia mergeable e tocchi solo file di release attesi
-4. la VPS mergea la Release PR
-5. `release-please github-release` crea tag e GitHub Release
-6. la VPS ridistribuisce `main` e riesegue lo smoke check locale
-7. `scripts/local_automate.sh --all` resta disponibile per pubblicare/deployare
-   manualmente codice gia' committato
+2. `scripts/deploy_now.sh` per deploy operativo senza nuova versione
+3. `scripts/release_now.sh` quando serve una versione nuova
+4. lo script calcola SemVer, aggiorna `CHANGELOG.md` e `pyproject.toml`
+5. lo script crea commit `chore: release vX.Y.Z`, tag e GitHub Release
+6. lo script ridistribuisce `main` sulla VPS e riesegue lo smoke check remoto
 
-Non modificare manualmente `pyproject.toml`, `.release-please-manifest.json`,
-`CHANGELOG.md` root, tag o release fuori dalla pipeline `release-please` o da una
-riparazione esplicita del flusso.
+Non modificare manualmente `pyproject.toml`, `CHANGELOG.md` root, tag o release
+fuori da `scripts/release_now.sh` o da una riparazione esplicita del flusso.
 
-Il timer richiede Node.js >=20 e un token GitHub salvato fuori dal repository in
-`/etc/fiscalbay/release-please.env`. Non committare token o file env reali. La
-pipeline release completa gira dalla VPS e sostituisce Release PR, merge, tag,
-GitHub Release e deploy che prima sarebbero stati tipicamente orchestrati da
-GitHub Actions.
+`fiscalbay-release-please.timer` e' legacy/deprecato e non va abilitato nel
+flusso normale. Per creare GitHub Release, usare `gh` locale oppure un token
+GitHub in `GITHUB_TOKEN`, `GH_TOKEN` o `FISCALBAY_GITHUB_TOKEN`. Non committare
+token o file env reali.
 
 ## Revisione Periodica Consigliata
 

@@ -55,10 +55,11 @@ In pratica:
 Per mantenere il repository allineato alle best practice GitHub anche in contesto single-maintainer, il progetto include:
 
 - nessun workflow GitHub Actions versionato: CI, deploy, release e manutenzione si automatizzano fuori da Actions
-- pipeline locale con `scripts/local_automate.sh`
+- deploy esplicito con `scripts/deploy_now.sh`
+- release versionata esplicita con `scripts/release_now.sh`
 - CI locale con `bash scripts/ci_verify.sh`, richiamata anche dalla pipeline locale
-- deploy automatizzato sulla VPS FiscalBay via `scripts/local_deploy_vps.sh`
-- pipeline release automatica sulla VPS FiscalBay con `release-please`, senza GitHub Actions
+- `scripts/local_automate.sh` e `scripts/local_deploy_vps.sh` restano utility legacy/fallback
+- `release-please` non gira automaticamente: niente timer Release PR nel flusso normale
 - aggiornamenti dipendenze da fare manualmente; Dependabot alerts/security alerts possono restare nella UI GitHub
 - template per Pull Request (`.github/PULL_REQUEST_TEMPLATE.md`)
 - issue forms per bug e task operativi (`.github/ISSUE_TEMPLATE/*`)
@@ -95,36 +96,29 @@ Il repository usa Semantic Versioning con tag GitHub nel formato `vX.Y.Z`.
 
 Regola operativa minima:
 
-- su `main` non fare bump manuali di versione, tag manuali o release manuali nel flusso normale; il bump lo decide sempre `release-please` a partire dal tipo di commit (`feat`, `fix`, `perf`, `!`)
+- il deploy normale non crea versioni, changelog o tag
+- una release versionata si lancia esplicitamente con `scripts/release_now.sh`
+- lo script calcola il bump dai Conventional Commit (`feat`, `fix`, `perf`, `!`) dall'ultimo tag `v*`
 
 - `PATCH` per bugfix compatibili, ad esempio `v0.1.1`
 - `MINOR` per nuove funzionalita' compatibili, ad esempio `v0.2.0`
 - `MAJOR` per breaking change, ad esempio `v1.0.0`
 
-Il flusso resta automatizzato senza GitHub Actions:
+Il flusso resta automatizzato senza GitHub Actions, ma non usa piu' Release PR automatiche:
 
-- `release-please` gira sulla VPS FiscalBay tramite `fiscalbay-release-please.timer` per aprire/aggiornare la Release PR
-- la VPS valida e mergea automaticamente la Release PR quando e' mergeable e contiene solo file di release attesi
-- la VPS crea tag/GitHub Release con `release-please github-release` e ridistribuisce `main`
+- deploy operativo: `scripts/deploy_now.sh`
+- release versionata: `scripts/release_now.sh`
+- GitHub Release creata da `gh` o API GitHub, senza GitHub Actions
 - CI locale: `bash scripts/ci_verify.sh`
 - build locale quando serve: `python -m build`
-- non fare bump manuali di versione, tag o release fuori dalla pipeline `release-please`
+- non riattivare `fiscalbay-release-please.timer` nel flusso normale
 
-Per abilitare il timer sulla VPS servono Node.js >=20, `npm`/`npx` e un token GitHub con
-permessi minimi sul repository, salvato fuori dal repo:
+Per creare GitHub Release senza `gh` locale puoi usare un token GitHub con permessi
+minimi sul repository, esportato solo nell'ambiente locale:
 
 ```bash
-sudo install -d -m 750 /etc/fiscalbay
-sudo tee /etc/fiscalbay/release-please.env >/dev/null <<'EOF'
-GITHUB_TOKEN=ghp_...
-FISCALBAY_RELEASE_REPO_URL=max23468/FiscalBay
-FISCALBAY_RELEASE_TARGET_BRANCH=main
-FISCALBAY_RELEASE_AUTO_MERGE=true
-FISCALBAY_RELEASE_AUTO_GITHUB_RELEASE=true
-FISCALBAY_RELEASE_AUTO_DEPLOY=true
-EOF
-sudo chmod 600 /etc/fiscalbay/release-please.env
-sudo systemctl enable --now fiscalbay-release-please.timer
+export GITHUB_TOKEN=ghp_...
+scripts/release_now.sh
 ```
 
 Per i dettagli operativi e le policy di naming/bump vedere `docs/RELEASE_POLICY.md`.
@@ -132,13 +126,12 @@ Per i dettagli operativi e le policy di naming/bump vedere `docs/RELEASE_POLICY.
 Comandi principali senza Actions:
 
 ```bash
-scripts/local_automate.sh
-scripts/local_automate.sh --build
-scripts/local_automate.sh --build --push
-scripts/local_automate.sh --all
+scripts/deploy_now.sh
+scripts/release_now.sh
 ```
 
-`--all` esegue verifica locale, build, push e deploy sulla VPS FiscalBay.
+`scripts/local_automate.sh --all` resta disponibile come utility legacy, ma non e'
+il percorso raccomandato per chiudere una release.
 
 ## Setup Rapido
 
@@ -503,11 +496,14 @@ Per il deploy standard su VPS Linux con `systemd`, vedi:
 - `docs/RUNBOOK.md`
 - `docs/DEPLOY_LINUX.md`
 
-Da Mac locale puoi automatizzare il deploy senza GitHub Actions con:
+Da Mac locale puoi automatizzare il deploy quotidiano senza GitHub Actions con:
 
 ```bash
-scripts/local_deploy_vps.sh
+scripts/deploy_now.sh
 ```
+
+`scripts/local_deploy_vps.sh` resta un fallback operativo quando serve caricare
+un archivio locale direttamente sulla VPS.
 
 ## Documentazione
 
@@ -531,6 +527,8 @@ Documenti principali:
 Asset disponibili nel repository, allineati al setup VPS attuale (`fiscalbay`, `/opt/fiscalbay`, servizio `fiscalbay-bot`):
 
 - `scripts/local_automate.sh`
+- `scripts/deploy_now.sh`
+- `scripts/release_now.sh`
 - `scripts/local_deploy_vps.sh`
 - `deploy/linux-setup.sh`
 - `deploy/update.sh`

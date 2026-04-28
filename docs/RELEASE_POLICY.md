@@ -15,8 +15,8 @@ Questa guida definisce il flusso ufficiale di versionamento, changelog e release
 - tag GitHub: `vX.Y.Z`
 - changelog ufficiale: `CHANGELOG.md` in root
 - archivio storico precedente: `docs/CHANGELOG.md`
-- meccanismo preferito di release: `release-please`, eseguito dalla VPS FiscalBay
-  senza GitHub Actions
+- meccanismo preferito di release: `scripts/release_now.sh`, esplicito e senza
+  GitHub Actions
 
 La versione del pacchetto resta senza prefisso `v` in `pyproject.toml`.
 
@@ -26,19 +26,21 @@ Per questo repository il flusso da considerare ufficiale e' uno solo:
 
 - si puo' lavorare anche direttamente su `main`
 - i commit su `main` devono essere Conventional Commit corretti
-- `release-please` decide bump versione, changelog, tag e release nel percorso
-  automatico VPS
-- bump manuali, tag manuali e release manuali sono eccezioni e non il percorso standard
+- `scripts/release_now.sh` decide bump versione, changelog, tag e GitHub Release
+  quando il maintainer lancia una release esplicita
+- il deploy quotidiano usa `scripts/deploy_now.sh` e non crea versione, changelog
+  o tag
+- `release-please` automatico e Release PR automatiche sono deprecati
 
 Regola pratica per agenti e maintainer:
 
 - se il cambiamento e' user-facing o operativo, il commit deve essere `feat:`, `fix:` o `perf:`
 - se il cambiamento e' breaking, usare `!` oppure footer `BREAKING CHANGE:`
 - non usare `refactor:` o `chore:` per cambi che in realta' meritano una release
-- non modificare manualmente `pyproject.toml`, `.release-please-manifest.json` o `CHANGELOG.md` root solo per forzare una release, salvo riparazioni straordinarie richieste esplicitamente
-- quando serve una release straordinaria fuori pipeline, concordare prima il
-  percorso manuale: verifiche locali, eventuale uso locale di `release-please`,
-  review di changelog/versione, tag e GitHub Release
+- non modificare manualmente `pyproject.toml` o `CHANGELOG.md` root solo per
+  forzare una release: usare `scripts/release_now.sh`
+- `.release-please-manifest.json` resta legacy e non governa piu' il flusso
+  normale
 
 ## Checklist agente prima del commit
 
@@ -47,7 +49,8 @@ Prima di creare un commit su `main`, l'agente deve verificare queste domande:
 1. Il cambiamento e' osservabile per utente o operatore?
 2. Se si', il commit message e' `feat:`, `fix:` o `perf:` invece di `refactor:` o `chore:`?
 3. C'e' qualche breaking change che richiede `!` o `BREAKING CHANGE:`?
-4. Sto per fare un bump/tag/release manuale non richiesto? Se si', fermarmi: non e' il flusso standard.
+4. Sto modificando versione/changelog/tag fuori da `scripts/release_now.sh`? Se
+   si', fermarmi: non e' il flusso standard.
 
 Se una di queste risposte non e' coerente, il commit va corretto prima del push.
 
@@ -134,7 +137,7 @@ Regola pratica: se il cambiamento modifica cio' che un utente o un operatore oss
 
 ## Policy per PR e merge
 
-Per restare allineati a GitHub e a `release-please`:
+Per restare allineati a GitHub e al calcolo SemVer locale:
 
 - usare PR anche da branch personali
 - preferire squash merge
@@ -168,11 +171,13 @@ Per rendere effettivo il flusso anche lato UI GitHub:
 - valutare di disabilitare `Merge commit`
 - valutare di disabilitare `Rebase merge`
 
-Con questa configurazione il commit che arriva su `main` resta uno solo, leggibile e direttamente usabile da `release-please`.
+Con questa configurazione il commit che arriva su `main` resta uno solo, leggibile
+e direttamente usabile da `scripts/release_now.sh`.
 
 ## Changelog
 
-`CHANGELOG.md` in root e' il changelog ufficiale e viene aggiornato automaticamente dalla Release PR.
+`CHANGELOG.md` in root e' il changelog ufficiale e viene aggiornato da
+`scripts/release_now.sh`.
 
 Principi:
 
@@ -187,45 +192,46 @@ Lo storico preesistente resta consultabile in `docs/CHANGELOG.md`, ma non e' piu
 Il flusso standard e' questo:
 
 1. un commit Conventional Commit arriva su `main`
-2. la VPS FiscalBay esegue `release-please release-pr` tramite
-   `fiscalbay-release-please.timer`, senza GitHub Actions
-3. la pipeline VPS valida la Release PR generata e la mergea automaticamente se
-   e' mergeable e contiene solo file di release attesi
-4. dopo il merge la VPS esegue `release-please github-release` per creare tag e
-   GitHub Release, sempre senza GitHub Actions
-5. non ci sono workflow GitHub Actions versionati finche' il maintainer non decide
+2. il deploy operativo puo' uscire subito con `scripts/deploy_now.sh`
+3. quando serve una release versionata, il maintainer lancia
+   `scripts/release_now.sh`
+4. lo script aggiorna `CHANGELOG.md` e `pyproject.toml`, crea commit
+   `chore: release vX.Y.Z`, tag `vX.Y.Z` e GitHub Release
+5. lo script deploya `main` sulla VPS FiscalBay e attende lo smoke check
+6. non ci sono workflow GitHub Actions versionati finche' il maintainer non decide
    di riattivarli
-6. la Release PR aggiorna:
-   - `CHANGELOG.md`
-   - `pyproject.toml`
-   - `.release-please-manifest.json`
-7. la VPS ridistribuisce il `main` aggiornato e riesegue lo smoke deploy locale
 
-La configurazione del timer vive nei file `deploy/fiscalbay-release-please.service`,
-`deploy/fiscalbay-release-please.timer`, `deploy/release-please-pr.sh`,
-`deploy/github-release-pr.py` e `deploy/vps-deploy-ref.sh`. Il token GitHub
-necessario al servizio deve stare fuori dal repository, per default in
-`/etc/fiscalbay/release-please.env`. Il runtime Node.js della VPS deve essere >=20,
-coerente con la versione pin di `release-please` usata dallo script.
+La creazione della GitHub Release usa `gh` se disponibile, altrimenti un token
+GitHub esposto solo nell'ambiente locale come `GITHUB_TOKEN`, `GH_TOKEN` o
+`FISCALBAY_GITHUB_TOKEN`.
+
+I file `deploy/fiscalbay-release-please.service`,
+`deploy/fiscalbay-release-please.timer`, `deploy/release-please-pr.sh` e
+`deploy/github-release-pr.py` restano legacy/fallback. Il timer non va abilitato
+nel flusso normale; `deploy/linux-setup.sh` lo disabilita a meno che
+`INSTALL_RELEASE_PLEASE_LEGACY=true`.
 
 In modalita' main-only:
 
 - il commit su `main` sostituisce il merge della feature PR
-- la Release PR di `release-please` resta il punto in cui si materializzano versione e changelog
-- la VPS chiude automaticamente il ciclo release quando i guardrail della pipeline
-  passano
+- `scripts/release_now.sh` e' il punto in cui si materializzano versione e
+  changelog
+- `scripts/deploy_now.sh` chiude il ciclo operativo quando lo smoke check passa
 
 ## Baseline iniziale
 
 La baseline attuale parte dalla versione `0.1.0`.
 
-Per evitare di riversare automaticamente tutto lo storico precedente nel nuovo changelog machine-managed, `release-please` e' stato configurato con una bootstrap baseline sul commit gia' presente al momento dell'adozione.
+Per evitare di riversare automaticamente tutto lo storico precedente nel nuovo
+changelog machine-managed, la baseline resta il commit gia' presente al momento
+dell'adozione del changelog root.
 
 In pratica:
 
 - `docs/CHANGELOG.md` conserva lo storico precedente
 - `CHANGELOG.md` in root parte come changelog ufficiale del nuovo flusso
-- le prossime release gestite da `release-please` includeranno solo i cambi successivi all'adozione
+- le prossime release gestite da `scripts/release_now.sh` includeranno solo i
+  cambi successivi all'ultimo tag `v*`
 
 ## Quando passare a 1.0.0
 
