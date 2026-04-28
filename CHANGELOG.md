@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.15.0](https://github.com/max23468/FiscalBay/compare/v0.14.0...v0.15.0) (2026-04-28)
+
+### Features
+
+* complete data lifecycle retention ([307661c](https://github.com/max23468/FiscalBay/commit/307661c051245ad0edc3387f79bbb81e0ef83388))
+
 ## [0.14.0](https://github.com/max23468/FiscalBay/compare/v0.13.4...v0.14.0) (2026-04-28)
 
 ### Features
