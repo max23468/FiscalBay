@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/max23468/FiscalBay/compare/v1.10.0...v1.11.0) (2026-05-01)
+
+
+### Features
+
+* add fiscal search and missing tax alerts ([060bdab](https://github.com/max23468/FiscalBay/commit/060bdabd051a8ebfc5fec041d509c14d9b48b3fe))
+
 ## [1.10.0](https://github.com/max23468/FiscalBay/compare/v1.9.0...v1.10.0) (2026-05-01)
 
 ### Features
