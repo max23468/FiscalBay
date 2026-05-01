@@ -25,7 +25,7 @@ Usage: scripts/deploy_now.sh [--ref REF] [--skip-ci] [--skip-push] [--dry-run]
 Deploys an already committed FiscalBay ref to the production VPS.
 
 Default behavior:
-  1. verifies only the allowlisted lightweight CI workflow is present
+  1. verifies only allowlisted GitHub Actions workflows are present
   2. requires a clean working tree
   3. runs local CI checks
   4. pushes the current branch

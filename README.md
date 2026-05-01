@@ -62,6 +62,7 @@ In pratica:
 Per mantenere il repository allineato alle best practice GitHub anche in contesto single-maintainer, il progetto include:
 
 - workflow GitHub Actions allowlist `.github/workflows/ci.yml` per CI leggera su PR verso `main` e avvio manuale
+- Release Please GitHub in `.github/workflows/release-please.yml` per release PR, tag e GitHub Release
 - deploy esplicito con `scripts/deploy_now.sh`
 - release versionata esplicita con `scripts/release_now.sh`
 - CI locale con `bash scripts/ci_verify.sh`, richiamata anche dal workflow leggero e dalla pipeline locale
@@ -87,7 +88,7 @@ Il flusso consigliato da remoto e:
 
 - Codex o GitHub preparano il codice fino a `main`
 - la pipeline operativa resta locale/VPS, non GitHub Actions
-- GitHub Actions esegue solo la CI leggera su PR o manuale; non esegue deploy, release o merge
+- GitHub Actions esegue solo CI leggera e Release Please; non esegue deploy o merge
 - ogni attività operativa viene eseguita da script locali o dalla VPS FiscalBay
 
 In pratica, da Codex web/mobile ti basta:
@@ -124,6 +125,7 @@ Il flusso operativo resta automatizzato fuori da GitHub Actions:
 - GitHub Release creata da `gh` o API GitHub, senza GitHub Actions
 - CI locale: `bash scripts/ci_verify.sh`
 - CI GitHub leggera: `.github/workflows/ci.yml`, solo PR verso `main` e avvio manuale
+- Release Please GitHub: `.github/workflows/release-please.yml`, push su `main` e avvio manuale
 - build locale quando serve: `python -m build`
 
 Per creare GitHub Release senza `gh` locale puoi usare un token GitHub con permessi

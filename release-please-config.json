@@ -1,0 +1,9 @@
+{
+  "bootstrap-sha": "ce846a872022beeee8156f8286ff7e825813eec3",
+  "packages": {
+    ".": {
+      "release-type": "python",
+      "package-name": "fiscalbay"
+    }
+  }
+}

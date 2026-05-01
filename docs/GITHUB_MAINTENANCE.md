@@ -5,11 +5,13 @@ nel repository.
 
 ## Stato Actions
 
-GitHub Actions è riattivato solo come CI leggera a basso consumo.
+GitHub Actions è riattivato solo per automazioni GitHub leggere e a basso consumo.
 
-- il solo workflow versionato ammesso è `.github/workflows/ci.yml`
-- il workflow parte su PR verso `main` e con `workflow_dispatch`
-- non usare Actions per deploy, release, diagnostica VPS, merge o update
+- i soli workflow versionati ammessi sono `.github/workflows/ci.yml` e
+  `.github/workflows/release-please.yml`
+- la CI parte su PR verso `main` e con `workflow_dispatch`
+- Release Please parte su push a `main` e con `workflow_dispatch`
+- non usare Actions per deploy, diagnostica VPS, merge o update
   dipendenze
 - non aggiungere altri workflow senza richiesta esplicita del maintainer
 - se GitHub mostra run falliti per billing, spending limit o budget esaurito,
@@ -19,6 +21,8 @@ GitHub Actions è riattivato solo come CI leggera a basso consumo.
 
 - PR template: `.github/PULL_REQUEST_TEMPLATE.md`
 - Lightweight CI: `.github/workflows/ci.yml`
+- Release Please: `.github/workflows/release-please.yml`,
+  `release-please-config.json`, `.release-please-manifest.json`
 - Issue forms: `.github/ISSUE_TEMPLATE/*`
 - Ownership: `.github/CODEOWNERS`
 - Security policy: `SECURITY.md`
@@ -87,9 +91,27 @@ Il workflow `.github/workflows/ci.yml` replica il gate locale minimo:
 - niente build package automatica
 - concurrency con cancellazione dei run precedenti sulla stessa PR/ref
 
-## Release Fuori Da Actions
+## Release Please
 
-Il percorso standard operativo resta fuori da GitHub Actions:
+Release Please gestisce il percorso GitHub-native:
+
+- legge Conventional Commit su `main`
+- apre o aggiorna una release PR
+- aggiorna `CHANGELOG.md`, `pyproject.toml` e `.release-please-manifest.json`
+- quando la release PR viene mergeata, crea tag e GitHub Release
+- non esegue deploy VPS e non pubblica artifact applicativi
+
+Il workflow usa `GITHUB_TOKEN` per ridurre segreti e superficie operativa. Con
+questa scelta, le PR/release create da Release Please non rilanciano altri
+workflow automaticamente; se in futuro serve CI automatica sulle release PR,
+configurare un PAT dedicato e rivalutare il budget.
+
+La baseline iniziale è `1.10.0`, con `bootstrap-sha` puntato al commit di release
+`v1.10.0`, così Release Please non rigenera lo storico già pubblicato.
+
+## Release Locale Con Deploy
+
+Il percorso operativo completo resta disponibile fuori da GitHub Actions:
 
 1. commit Conventional Commit corretto su `main`
 2. `scripts/deploy_now.sh` per deploy operativo senza nuova versione
@@ -110,7 +132,8 @@ reali.
 
 Frequenza minima mensile:
 
-1. verificare che `.github/workflows/` contenga solo `ci.yml`
+1. verificare che `.github/workflows/` contenga solo `ci.yml` e
+   `release-please.yml`
 2. verificare dipendenze manualmente quando serve
 3. verificare alert Security e Dependabot
 4. verificare consumi Actions e falsi negativi prima di rendere il check required

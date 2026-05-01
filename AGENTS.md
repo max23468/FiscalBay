@@ -83,15 +83,16 @@ creati localmente quando li incontri.
 
 ## GitHub Actions e budget
 
-- Il repository può contenere solo il workflow GitHub Actions allowlist
-  `.github/workflows/ci.yml`, usato come CI leggera su PR verso `main` e avvio
-  manuale. Non aggiungere altri workflow senza richiesta esplicita del
-  maintainer.
+- Il repository può contenere solo i workflow GitHub Actions allowlist
+  `.github/workflows/ci.yml` e `.github/workflows/release-please.yml`.
+  Il primo è CI leggera su PR verso `main` e avvio manuale; il secondo gestisce
+  Release Please su push a `main` e avvio manuale. Non aggiungere altri workflow
+  senza richiesta esplicita del maintainer.
 - Se GitHub segnala fallimenti Actions per billing, spending limit o budget
   esaurito, non rilanciare run e non tentare fix tramite Actions: esegui verifiche,
   release, merge, manutenzione e deploy in locale o via VPS FiscalBay.
-- Release assets, configurazione public access, diagnostica VPS e deploy restano
-  automatizzati da script locali/VPS fuori da GitHub Actions.
+- Configurazione public access, diagnostica VPS e deploy restano automatizzati da
+  script locali/VPS fuori da GitHub Actions.
 - Il check Actions non è obbligatorio su `main` nella fase iniziale: consideralo
   un segnale aggiuntivo, non un blocco operativo.
 - Deploy operativo standard: `scripts/deploy_now.sh`; release versionata esplicita:

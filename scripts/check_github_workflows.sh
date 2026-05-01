@@ -6,7 +6,10 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 cd "${REPO_ROOT}"
 
-ALLOWED_WORKFLOW=".github/workflows/ci.yml"
+ALLOWED_WORKFLOWS=(
+  ".github/workflows/ci.yml"
+  ".github/workflows/release-please.yml"
+)
 
 if [ -f ".github/dependabot.yml" ] || [ -f ".github/dependabot.yaml" ]; then
   echo "Errore: gli update Dependabot schedulati non sono autorizzati in questa fase." >&2
@@ -20,14 +23,22 @@ fi
 
 unexpected_workflows=()
 while IFS= read -r workflow_file; do
-  if [ "${workflow_file}" != "${ALLOWED_WORKFLOW}" ]; then
+  allowed=false
+  for allowed_workflow in "${ALLOWED_WORKFLOWS[@]}"; do
+    if [ "${workflow_file}" = "${allowed_workflow}" ]; then
+      allowed=true
+      break
+    fi
+  done
+  if [ "${allowed}" != true ]; then
     unexpected_workflows+=("${workflow_file}")
   fi
 done < <(find .github/workflows -type f | sort)
 
 if [ "${#unexpected_workflows[@]}" -gt 0 ]; then
   echo "Errore: il repository contiene workflow GitHub Actions non autorizzati." >&2
-  printf 'Workflow consentito: %s\n' "${ALLOWED_WORKFLOW}" >&2
+  printf 'Workflow consentiti:\n' >&2
+  printf '  - %s\n' "${ALLOWED_WORKFLOWS[@]}" >&2
   printf 'Workflow non consentiti:\n' >&2
   printf '  - %s\n' "${unexpected_workflows[@]}" >&2
   exit 1

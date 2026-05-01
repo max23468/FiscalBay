@@ -14,7 +14,7 @@ usage() {
 Usage: scripts/local_automate.sh [--build] [--push] [--deploy] [--all] [--ref REF]
 
 Legacy local automation pipeline that keeps deploy/release outside GitHub Actions:
-  1. verifies only the allowlisted lightweight CI workflow is present
+  1. verifies only allowlisted GitHub Actions workflows are present
   2. runs local CI checks
   3. optionally builds package artifacts
   4. optionally pushes the current branch
