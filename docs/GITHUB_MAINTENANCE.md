@@ -121,9 +121,9 @@ questa scelta, le PR/release create da Release Please non rilanciano altri
 workflow automaticamente; se in futuro serve CI automatica sulle release PR,
 configurare un PAT dedicato e rivalutare il budget.
 
-Il workflow forza l'esecuzione delle JavaScript actions su Node 24 con
-`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`, seguendo la migrazione GitHub da Node
-20 a Node 24 e rimuovendo il warning non bloccante sui runner.
+Il workflow usa `googleapis/release-please-action@v5`, che aggiorna l'action a
+Node 24. La config imposta `include-component-in-tag=false` per restare
+compatibile con i tag `vX.Y.Z` già usati dal repository.
 
 La baseline iniziale è `1.10.0`, con `bootstrap-sha` puntato al commit di release
 `v1.10.0`, così Release Please non rigenera lo storico già pubblicato.
