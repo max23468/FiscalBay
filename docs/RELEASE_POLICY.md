@@ -189,12 +189,17 @@ Lo storico preesistente resta consultabile in `docs/CHANGELOG.md`, ma non è pi�
 Il flusso standard è questo:
 
 1. un commit Conventional Commit arriva su `main`
-2. il deploy operativo può uscire subito con `scripts/deploy_now.sh`
-3. quando serve una release versionata, il maintainer lancia
+2. la pubblicazione del codice termina con push/merge su GitHub
+3. il deploy operativo esce con `scripts/deploy_now.sh` solo quando richiesto o
+   necessario per aggiornare il runtime sulla VPS
+4. quando serve una release versionata, il maintainer lancia
    `scripts/release_now.sh`
-4. lo script aggiorna `CHANGELOG.md` e `pyproject.toml`, crea commit
+5. lo script aggiorna `CHANGELOG.md` e `pyproject.toml`, crea commit
    `chore: release vX.Y.Z`, tag `vX.Y.Z` e GitHub Release
-5. lo script deploya `main` sulla VPS FiscalBay e attende lo smoke check
+6. lo script deploya `main` sulla VPS FiscalBay e attende lo smoke check
+
+La richiesta generica "pubblica" significa pubblicare il codice. Non implica da
+sola deploy VPS o release versionata se il cambiamento non lo richiede.
 
 La creazione della GitHub Release usa `gh` se disponibile, altrimenti un token
 GitHub esposto solo nell'ambiente locale come `GITHUB_TOKEN`, `GH_TOKEN` o
@@ -213,7 +218,8 @@ In modalità main-only:
 - il commit su `main` sostituisce il merge della feature PR
 - `scripts/release_now.sh` è il punto in cui si materializzano versione e
   changelog
-- `scripts/deploy_now.sh` chiude il ciclo operativo quando lo smoke check passa
+- `scripts/deploy_now.sh` chiude il ciclo di deploy quando il deploy è richiesto
+  o necessario e lo smoke check passa
 
 ## Baseline iniziale
 

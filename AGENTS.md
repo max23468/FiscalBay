@@ -133,17 +133,26 @@ creati localmente quando li incontri.
 - Nella PR includi sintesi cambi, impatto, test eseguiti, note operative e
   limitazioni note.
 - Quando il maintainer chiede di "pubblicare", "pubblica le modifiche", "manda su"
-  o usa formule equivalenti, interpreta la richiesta come flusso completo di
-  chiusura operativa: verifiche locali rilevanti, commit Conventional coerente,
-  push del branch, PR pronta o merge quando naturale, e deploy su VPS FiscalBay
-  con il canale locale/VPS previsto. Non fermarti a una sola parte del flusso
-  salvo istruzione esplicita, blocco tecnico o rischio/ambiguità da chiarire.
+  o usa formule equivalenti senza nominare deploy o release, interpreta la richiesta
+  come pubblicazione del codice: verifiche locali rilevanti, commit Conventional
+  coerente, push del branch, PR pronta o merge quando naturale. Non eseguire deploy
+  su VPS o release versionata solo per effetto della parola "pubblica" se ritieni
+  che non siano necessari; in quel caso dichiara esplicitamente che li hai saltati.
+- Esegui deploy su VPS solo quando il maintainer lo chiede esplicitamente, quando
+  usa formule come "pubblica e deploy", "deploya" o "rilascia", oppure quando il
+  deploy è davvero necessario per rendere effettiva la modifica richiesta nel
+  runtime operativo. Anche per richieste ampie come "chiudi la fase", non fare
+  passaggi aggiuntivi come deploy o release se ritieni che non siano necessari.
+  In caso di dubbio tra solo push e deploy, fermati e chiedi conferma prima di
+  toccare la VPS.
 - Se nello stesso turno sono stati introdotti cambi funzionali, osservabili o
   operativi che richiedono un commit `feat:`, `fix:` o `perf:`, e il maintainer
-  chiede anche di "pubblicare", "pubblica e deploy", "manda su", "chiudi la fase"
-  o formule equivalenti, la chiusura operativa deve includere anche la release
-  versionata con `scripts/release_now.sh`, non solo `scripts/deploy_now.sh`.
-  Usa solo il deploy operativo senza release quando l'utente lo chiede
+  chiede anche deploy, release, "pubblica e deploy", "rilascia" o formule
+  equivalenti che richiedono davvero la messa in produzione, la chiusura operativa
+  deve includere anche la release versionata con `scripts/release_now.sh`, non
+  solo `scripts/deploy_now.sh`.
+  La sola richiesta "pubblica" non basta a forzare release o deploy quando non
+  servono. Usa solo il deploy operativo senza release quando l'utente lo chiede
   esplicitamente, quando il cambio non produce bump release, o quando esiste un
   blocco tecnico/rischio da dichiarare prima di procedere.
 - Questo repository è privato e gestito da un solo maintainer: review/commenti
