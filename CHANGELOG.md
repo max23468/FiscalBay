@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.10.0](https://github.com/max23468/FiscalBay/compare/v1.9.0...v1.10.0) (2026-05-01)
+
+### Features
+
+* reintroduce lightweight github actions ci ([176d99b](https://github.com/max23468/FiscalBay/commit/176d99b63caf59f5cc229d99fb32b8f75c98df62))
+
 ## [1.9.0](https://github.com/max23468/FiscalBay/compare/v1.8.0...v1.9.0) (2026-04-29)
 
 ### Features
