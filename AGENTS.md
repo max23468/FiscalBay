@@ -83,14 +83,17 @@ creati localmente quando li incontri.
 
 ## GitHub Actions e budget
 
-- Il repository non deve contenere workflow GitHub Actions attivi. Non aggiungere
-  file in `.github/workflows/` e non riattivare trigger Actions senza richiesta
-  esplicita del maintainer.
+- Il repository può contenere solo il workflow GitHub Actions allowlist
+  `.github/workflows/ci.yml`, usato come CI leggera su PR verso `main` e avvio
+  manuale. Non aggiungere altri workflow senza richiesta esplicita del
+  maintainer.
 - Se GitHub segnala fallimenti Actions per billing, spending limit o budget
   esaurito, non rilanciare run e non tentare fix tramite Actions: esegui verifiche,
   release, merge, manutenzione e deploy in locale o via VPS FiscalBay.
-- CI, controllo titoli PR, release assets, configurazione public access, diagnostica
-  VPS e deploy sono automatizzati da script locali/VPS fuori da GitHub Actions.
+- Release assets, configurazione public access, diagnostica VPS e deploy restano
+  automatizzati da script locali/VPS fuori da GitHub Actions.
+- Il check Actions non è obbligatorio su `main` nella fase iniziale: consideralo
+  un segnale aggiuntivo, non un blocco operativo.
 - Deploy operativo standard: `scripts/deploy_now.sh`; release versionata esplicita:
   `scripts/release_now.sh`.
 
@@ -151,7 +154,7 @@ creati localmente quando li incontri.
 ## Release e versioning
 
 - Questo repository usa `scripts/release_now.sh` come riferimento preferito di
-  versionamento, changelog, tag e release, senza GitHub Actions attive.
+  versionamento, changelog, tag e release, fuori da GitHub Actions.
 - Prima di creare un commit, valuta sempre l'impatto release.
 - Per cambi funzionali o osservabili nel runtime, scegli sempre `feat:`, `fix:` o
   `perf:` coerente con l'impatto reale. Non usare `refactor:`, `chore:` o `docs:`

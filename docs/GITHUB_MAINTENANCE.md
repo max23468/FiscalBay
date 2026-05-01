@@ -5,25 +5,27 @@ nel repository.
 
 ## Stato Actions
 
-GitHub Actions è disattivato come canale operativo.
+GitHub Actions è riattivato solo come CI leggera a basso consumo.
 
-- non sono versionati workflow in `.github/workflows/`
-- non usare Actions per CI, deploy, release, PR check, diagnostica VPS o update
+- il solo workflow versionato ammesso è `.github/workflows/ci.yml`
+- il workflow parte su PR verso `main` e con `workflow_dispatch`
+- non usare Actions per deploy, release, diagnostica VPS, merge o update
   dipendenze
-- non aggiungere workflow senza richiesta esplicita del maintainer
+- non aggiungere altri workflow senza richiesta esplicita del maintainer
 - se GitHub mostra run falliti per billing, spending limit o budget esaurito,
   non rilanciare job: usare automazioni locali/VPS
 
 ## Cosa È Versionato Nel Repo
 
 - PR template: `.github/PULL_REQUEST_TEMPLATE.md`
+- Lightweight CI: `.github/workflows/ci.yml`
 - Issue forms: `.github/ISSUE_TEMPLATE/*`
 - Ownership: `.github/CODEOWNERS`
 - Security policy: `SECURITY.md`
 
 Non è versionato:
 
-- `.github/workflows/*`
+- altri workflow in `.github/workflows/*`
 - `.github/dependabot.yml`
 
 ## UI GitHub Consigliata
@@ -36,7 +38,8 @@ Configurazione consigliata:
 - disabilita force push e branch deletion su `main`
 - valuta `Require pull request` anche in contesto solo-maintainer, se vuoi audit
   trail più pulito
-- non rendere obbligatorie status check GitHub Actions
+- non rendere obbligatorio il check GitHub Actions finché non passa qualche PR
+  senza falsi negativi
 
 Fallback operativo:
 
@@ -73,9 +76,20 @@ Abilitare almeno:
 Non abilitare Dependabot version updates schedulati finché il budget Actions resta
 limitato.
 
-## Release Senza Actions
+## CI A Basso Consumo
 
-Il percorso standard senza GitHub Actions è:
+Il workflow `.github/workflows/ci.yml` replica il gate locale minimo:
+
+- una sola versione Python: `3.10`
+- `bash scripts/ci_verify.sh` come comando unico di verifica
+- nessun trigger `push`
+- nessun trigger schedulato
+- niente build package automatica
+- concurrency con cancellazione dei run precedenti sulla stessa PR/ref
+
+## Release Fuori Da Actions
+
+Il percorso standard operativo resta fuori da GitHub Actions:
 
 1. commit Conventional Commit corretto su `main`
 2. `scripts/deploy_now.sh` per deploy operativo senza nuova versione
@@ -96,7 +110,7 @@ reali.
 
 Frequenza minima mensile:
 
-1. verificare che `.github/workflows/` resti assente o vuota
+1. verificare che `.github/workflows/` contenga solo `ci.yml`
 2. verificare dipendenze manualmente quando serve
 3. verificare alert Security e Dependabot
-4. verificare che i ruleset di `main` siano ancora coerenti con il flusso manuale
+4. verificare consumi Actions e falsi negativi prima di rendere il check required

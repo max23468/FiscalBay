@@ -20,7 +20,7 @@ Usage: scripts/release_now.sh [--dry-run] [--skip-ci] [--skip-deploy] [--skip-pu
 Creates an explicit FiscalBay release without release PR automation.
 
 Default behavior:
-  1. verifies no GitHub Actions workflows are versioned
+  1. verifies only the allowlisted lightweight CI workflow is present
   2. requires a clean working tree on main
   3. runs local CI checks
   4. calculates the next SemVer version from Conventional Commits since last v* tag
@@ -75,10 +75,7 @@ done
 
 cd "${REPO_ROOT}"
 
-if git ls-files '.github/workflows/*' | grep -q .; then
-  echo "Errore: il repository contiene workflow GitHub Actions versionati." >&2
-  exit 1
-fi
+bash scripts/check_github_workflows.sh
 
 current_branch="$(git branch --show-current)"
 if [ "${DRY_RUN}" != true ] && [ "${current_branch}" != "main" ]; then

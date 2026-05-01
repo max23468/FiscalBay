@@ -61,10 +61,10 @@ In pratica:
 
 Per mantenere il repository allineato alle best practice GitHub anche in contesto single-maintainer, il progetto include:
 
-- nessun workflow GitHub Actions versionato: CI, deploy, release e manutenzione si automatizzano fuori da Actions
+- workflow GitHub Actions allowlist `.github/workflows/ci.yml` per CI leggera su PR verso `main` e avvio manuale
 - deploy esplicito con `scripts/deploy_now.sh`
 - release versionata esplicita con `scripts/release_now.sh`
-- CI locale con `bash scripts/ci_verify.sh`, richiamata anche dalla pipeline locale
+- CI locale con `bash scripts/ci_verify.sh`, richiamata anche dal workflow leggero e dalla pipeline locale
 - `scripts/local_automate.sh` e `scripts/local_deploy_vps.sh` restano utility legacy/fallback
 - aggiornamenti dipendenze da fare manualmente; Dependabot alerts/security alerts possono restare nella UI GitHub
 - template per Pull Request (`.github/PULL_REQUEST_TEMPLATE.md`)
@@ -75,19 +75,19 @@ Per mantenere il repository allineato alle best practice GitHub anche in contest
 
 Passi consigliati dopo il clone/fork:
 
-1. verifica branch protection su `main` (almeno: linear history; niente status check Actions obbligatorie)
+1. verifica branch protection su `main` (almeno: linear history; non rendere ancora obbligatorio il check Actions)
 2. abilita secret scanning e Dependabot alerts dal tab Security, ma lascia disattivati workflow/update automatici
 3. usa PR anche da branch personali per lasciare audit trail e checklist standard
 4. usa titoli PR di squash in formato Conventional Commit per tenere coerenti versioni e changelog
 5. in GitHub abilita `Squash merge` e valuta di disabilitare `Merge commit` e `Rebase merge` per rendere il flusso più coerente
 
-Per usare Codex su `chatgpt.com` come postazione di lavoro senza Actions, vedi [`docs/CODEX_CLOUD_DEPLOY.md`](docs/CODEX_CLOUD_DEPLOY.md).
+Per usare Codex su `chatgpt.com` come postazione di lavoro senza deploy/release via Actions, vedi [`docs/CODEX_CLOUD_DEPLOY.md`](docs/CODEX_CLOUD_DEPLOY.md).
 
 Il flusso consigliato da remoto e:
 
 - Codex o GitHub preparano il codice fino a `main`
-- la pipeline automatica resta locale/VPS, non GitHub Actions
-- GitHub Actions non esegue CI, deploy, release, PR check o merge
+- la pipeline operativa resta locale/VPS, non GitHub Actions
+- GitHub Actions esegue solo la CI leggera su PR o manuale; non esegue deploy, release o merge
 - ogni attività operativa viene eseguita da script locali o dalla VPS FiscalBay
 
 In pratica, da Codex web/mobile ti basta:
@@ -117,12 +117,13 @@ quando la readiness documentata è completa:
 scripts/release_now.sh --version 1.0.0 --bump major
 ```
 
-Il flusso resta automatizzato senza GitHub Actions:
+Il flusso operativo resta automatizzato fuori da GitHub Actions:
 
 - deploy operativo: `scripts/deploy_now.sh`
 - release versionata: `scripts/release_now.sh`
 - GitHub Release creata da `gh` o API GitHub, senza GitHub Actions
 - CI locale: `bash scripts/ci_verify.sh`
+- CI GitHub leggera: `.github/workflows/ci.yml`, solo PR verso `main` e avvio manuale
 - build locale quando serve: `python -m build`
 
 Per creare GitHub Release senza `gh` locale puoi usare un token GitHub con permessi
@@ -138,7 +139,7 @@ Per il deploy remoto del repository privato, la VPS usa un token GitHub letto da
 
 Per i dettagli operativi e le policy di naming/bump vedere `docs/RELEASE_POLICY.md`.
 
-Comandi principali senza Actions:
+Comandi principali fuori da Actions:
 
 ```bash
 scripts/deploy_now.sh
@@ -650,7 +651,7 @@ Per il deploy standard su VPS Linux con `systemd`, vedi:
 - `docs/RUNBOOK.md`
 - `docs/DEPLOY_LINUX.md`
 
-Da Mac locale puoi automatizzare il deploy quotidiano senza GitHub Actions con:
+Da Mac locale puoi automatizzare il deploy quotidiano fuori da GitHub Actions con:
 
 ```bash
 scripts/deploy_now.sh

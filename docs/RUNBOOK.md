@@ -295,7 +295,7 @@ La reconciliation:
 
 ## Aggiornamento del bot
 
-Da Mac locale, percorso standard automatizzato senza GitHub Actions:
+Da Mac locale, percorso standard automatizzato fuori da GitHub Actions:
 
 ```bash
 scripts/deploy_now.sh

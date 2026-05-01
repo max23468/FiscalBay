@@ -1,15 +1,15 @@
-# Codex Senza GitHub Actions
+# Codex Senza Deploy Via GitHub Actions
 
 Questa guida descrive il flusso operativo quando si usa Codex da web/mobile o da
-locale senza consumare GitHub Actions.
+locale mantenendo deploy e release fuori da GitHub Actions.
 
 ## Stato attuale
 
-GitHub Actions non è un canale operativo attivo per FiscalBay. L'automazione
-vive negli script locali e negli script/timer della VPS.
+GitHub Actions è attivo solo come CI leggera su PR verso `main` e avvio manuale.
+L'automazione operativa vive negli script locali e negli script/timer della VPS.
 
-Non sono versionati workflow in `.github/workflows/` e non vanno aggiunti o
-riattivati senza richiesta esplicita del maintainer.
+Il solo workflow versionato ammesso è `.github/workflows/ci.yml`. Non aggiungere
+o riattivare altri workflow senza richiesta esplicita del maintainer.
 
 Motivo operativo:
 
@@ -23,7 +23,8 @@ Motivo operativo:
 1. prepara codice e documentazione nel repository
 2. esegui o chiedi di eseguire verifiche locali quando il lavoro torna sul Mac
 3. porta le modifiche su `main` solo dopo self-review
-4. non avviare GitHub Actions
+4. usa Actions solo per la CI leggera su PR/manuale, non per operazioni
+   produttive
 5. quando il lavoro torna sul Mac locale, usa `scripts/deploy_now.sh` o
    `scripts/release_now.sh`
 
@@ -47,13 +48,13 @@ Quando il cambio tocca packaging o release:
 python -m build
 ```
 
-Per controllare workflow residui non devono esserci file versionati qui:
+Per controllare workflow residui deve esserci solo il workflow allowlist:
 
 ```bash
-test ! -d .github/workflows || ! find .github/workflows -type f | grep .
+scripts/check_github_workflows.sh
 ```
 
-Il risultato atteso è vuoto o la directory assente.
+Il risultato atteso è exit code `0`.
 
 ## Deploy Manuale
 
@@ -90,11 +91,11 @@ scripts/release_now.sh
 Dopo questa verifica, seguire `docs/RUNBOOK.md` e `docs/OPERATIONS.md` per
 diagnostica o rollback.
 
-## Release Senza Actions
+## Release Fuori Da Actions
 
-`scripts/release_now.sh` resta il riferimento per changelog/versione. Senza GitHub
-Actions, la release viene lanciata esplicitamente dal Mac locale: calcola SemVer,
-aggiorna changelog/versione, crea tag/GitHub Release e ridistribuisce `main`.
+`scripts/release_now.sh` resta il riferimento per changelog/versione. La release
+viene lanciata esplicitamente dal Mac locale: calcola SemVer, aggiorna
+changelog/versione, crea tag/GitHub Release e ridistribuisce `main`.
 
 Non creare tag, GitHub Release, bump di versione o modifiche manuali a
 `CHANGELOG.md` root fuori da `scripts/release_now.sh` o da una riparazione

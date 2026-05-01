@@ -12,7 +12,7 @@ multiutente a larga scala. Dichiara stabile il modello operativo corrente:
 - storage SQLite locale entro soglie dichiarate
 - token tenant cifrati a riposo
 - audit, retention, alert e recovery minimi già operativi
-- release e deploy gestiti da script locali/VPS, senza GitHub Actions attive
+- release e deploy gestiti da script locali/VPS, fuori da GitHub Actions
 
 ## Criteri soddisfatti
 

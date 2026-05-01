@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+cd "${REPO_ROOT}"
+
+ALLOWED_WORKFLOW=".github/workflows/ci.yml"
+
+if [ -f ".github/dependabot.yml" ] || [ -f ".github/dependabot.yaml" ]; then
+  echo "Errore: gli update Dependabot schedulati non sono autorizzati in questa fase." >&2
+  echo "Usa Dependabot alerts/security updates dalla UI GitHub senza file versionato." >&2
+  exit 1
+fi
+
+if [ ! -d ".github/workflows" ]; then
+  exit 0
+fi
+
+unexpected_workflows=()
+while IFS= read -r workflow_file; do
+  if [ "${workflow_file}" != "${ALLOWED_WORKFLOW}" ]; then
+    unexpected_workflows+=("${workflow_file}")
+  fi
+done < <(find .github/workflows -type f | sort)
+
+if [ "${#unexpected_workflows[@]}" -gt 0 ]; then
+  echo "Errore: il repository contiene workflow GitHub Actions non autorizzati." >&2
+  printf 'Workflow consentito: %s\n' "${ALLOWED_WORKFLOW}" >&2
+  printf 'Workflow non consentiti:\n' >&2
+  printf '  - %s\n' "${unexpected_workflows[@]}" >&2
+  exit 1
+fi

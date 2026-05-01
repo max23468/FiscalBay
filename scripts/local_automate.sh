@@ -13,8 +13,8 @@ usage() {
   cat <<'EOF'
 Usage: scripts/local_automate.sh [--build] [--push] [--deploy] [--all] [--ref REF]
 
-Legacy local automation pipeline that replaces GitHub Actions:
-  1. verifies no GitHub Actions workflows are versioned
+Legacy local automation pipeline that keeps deploy/release outside GitHub Actions:
+  1. verifies only the allowlisted lightweight CI workflow is present
   2. runs local CI checks
   3. optionally builds package artifacts
   4. optionally pushes the current branch
@@ -73,11 +73,7 @@ done
 
 cd "${REPO_ROOT}"
 
-if git ls-files '.github/workflows/*' | grep -q .; then
-  echo "Errore: il repository contiene workflow GitHub Actions versionati." >&2
-  echo "Rimuovi .github/workflows/* o aggiorna la policy prima di procedere." >&2
-  exit 1
-fi
+bash scripts/check_github_workflows.sh
 
 if [ "${RUN_PUSH}" = true ] || [ "${RUN_DEPLOY}" = true ]; then
   if ! git diff --quiet || ! git diff --cached --quiet; then

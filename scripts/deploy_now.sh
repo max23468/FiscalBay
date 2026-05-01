@@ -25,7 +25,7 @@ Usage: scripts/deploy_now.sh [--ref REF] [--skip-ci] [--skip-push] [--dry-run]
 Deploys an already committed FiscalBay ref to the production VPS.
 
 Default behavior:
-  1. verifies no GitHub Actions workflows are versioned
+  1. verifies only the allowlisted lightweight CI workflow is present
   2. requires a clean working tree
   3. runs local CI checks
   4. pushes the current branch
@@ -70,10 +70,7 @@ done
 
 cd "${REPO_ROOT}"
 
-if git ls-files '.github/workflows/*' | grep -q .; then
-  echo "Errore: il repository contiene workflow GitHub Actions versionati." >&2
-  exit 1
-fi
+bash scripts/check_github_workflows.sh
 
 branch="$(git branch --show-current)"
 if [ -z "${REF}" ]; then

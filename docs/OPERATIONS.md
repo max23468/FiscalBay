@@ -366,9 +366,9 @@ blocca il deploy per `last_check_missing` o `last_check_stale`: questi restano
 visibili nel report healthcheck e nel timer alert, ma possono dipendere da
 problemi temporanei di eBay esterni al deploy.
 
-Questo è il percorso di deploy predefinito. GitHub Actions non è un canale
-operativo attivo per FiscalBay: deploy, diagnostica e configurazione VPS si
-automatizzano con script locali/VPS via SSH sulla VPS FiscalBay.
+Questo è il percorso di deploy predefinito. GitHub Actions è ammesso solo come CI
+leggera su PR/manuale: deploy, diagnostica e configurazione VPS si automatizzano
+con script locali/VPS via SSH sulla VPS FiscalBay.
 
 Deploy operativo standard:
 
@@ -421,7 +421,7 @@ Per il deploy remoto del repository privato, la VPS legge il token GitHub da
 
 Guardrail automatici del nuovo flusso:
 
-- nessun workflow GitHub Actions versionato
+- solo il workflow GitHub Actions allowlist `.github/workflows/ci.yml`
 - working tree pulito prima di deploy/release reali
 - release ufficiale solo da `main`
 - deploy solo sulla VPS con hostname `fiscalbay-bot`
