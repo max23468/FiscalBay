@@ -44,7 +44,7 @@ from .config import (
     load_retention_config,
     load_telegram_config,
 )
-from .errors import ConfigurationError, EbayApiError, TelegramApiError
+from .errors import ConfigurationError, EbayApiError, TelegramApiError, UserInputError
 from .fiscal_export import build_fiscal_export_report
 from .logging_utils import log_event
 from .models import (
@@ -218,6 +218,7 @@ from .telegram_commands import (
     format_reconnect_status,
     format_report_summary,
     format_review_records,
+    format_search_records,
     format_service_status,
     format_settings_status,
     format_status,
@@ -241,6 +242,12 @@ from .telegram_commands import (
 )
 from .telegram_commands import (
     has_fiscal_identifier as _has_fiscal_identifier,
+)
+from .telegram_commands import (
+    looks_like_order_id as _looks_like_order_id,
+)
+from .telegram_commands import (
+    order_record_matches_search as _order_record_matches_search,
 )
 from .telegram_commands import (
     process_message as _process_message,
@@ -2803,8 +2810,35 @@ def process_message(
             return _format_records(records, only_found=options.only_found)
         if order_action in {"cerca", "ordine", "dettaglio", "detail"}:
             if not order_args:
-                return ["Uso corretto: <code>/ordini cerca &lt;order_id&gt;</code>"]
-            order_id = order_args[0]
+                return [
+                    "Uso corretto: <code>/ordini cerca &lt;order_id|testo&gt; [giorni] [max]</code>"
+                ]
+            query = order_args[0]
+            if not _looks_like_order_id(query):
+                try:
+                    options = options_for_command("/tutti", order_args[1:])
+                except UserInputError as exc:
+                    return [f"⚠️ {html.escape(str(exc))}"]
+                try:
+                    records = request_with_backoff(
+                        lambda: fetch_records_for_environment_fn(resolved_environment, options),
+                        label="fetch_records_ordini_cerca_testo",
+                    )
+                except ConfigurationError as exc:
+                    return [f"⚠️ {exc}"]
+                assert isinstance(records, list)
+                matched = [
+                    record
+                    for record in (coerce_order_record(item) for item in records)
+                    if _order_record_matches_search(record, query)
+                ]
+                return format_search_records(
+                    matched,
+                    query=query,
+                    days=options.days or 7,
+                    max_results=options.max_results,
+                )
+            order_id = query
             options = FetchOptions(order_ids=[order_id], only_found=False, max_results=1)
             try:
                 records = request_with_backoff(

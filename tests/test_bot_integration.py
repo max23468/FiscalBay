@@ -2201,6 +2201,88 @@ class BotIntegrationTests(unittest.TestCase):
     @patch("src.fiscalbay.bot.fetch_records")
     @patch("src.fiscalbay.bot.load_config")
     @patch("src.fiscalbay.bot.send_message")
+    @patch.dict(
+        "os.environ",
+        {
+            "FISCALBAY_MISSING_TAX_ALERT_MIN_MISSING": "2",
+            "FISCALBAY_MISSING_TAX_ALERT_MIN_PERCENT": "50",
+            "FISCALBAY_MISSING_TAX_ALERT_COOLDOWN_SECONDS": "3600",
+        },
+        clear=False,
+    )
+    def test_subsequent_poll_alerts_on_missing_tax_identifier_spike(
+        self,
+        mock_send_message,
+        mock_load_config,
+        mock_fetch_records,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            save_state(
+                str(db_path),
+                {
+                    "notified_order_ids": [],
+                    "notified_hashes": [],
+                    "last_check": "2026-04-05T19:30:00Z",
+                    "last_error": None,
+                    "metrics": {
+                        "orders_read": 0,
+                        "orders_with_fiscal_identifier": 0,
+                        "notifications_sent": 0,
+                        "errors_by_type": {},
+                    },
+                },
+            )
+            mock_load_config.return_value = object()
+            mock_fetch_records.return_value = [
+                {
+                    "orderId": "missing-1",
+                    "creationDate": "2026-04-05T20:00:00Z",
+                    "buyerUsername": "buyer-missing-1",
+                    "taxpayerId": "",
+                    "taxIdentifierType": "",
+                },
+                {
+                    "orderId": "missing-2",
+                    "creationDate": "2026-04-05T20:05:00Z",
+                    "buyerUsername": "buyer-missing-2",
+                    "taxpayerId": "",
+                    "taxIdentifierType": "",
+                },
+                {
+                    "orderId": "fiscal-1",
+                    "creationDate": "2026-04-05T20:10:00Z",
+                    "buyerUsername": "buyer-fiscal",
+                    "taxpayerId": "RSSMRA80A01H501U",
+                    "taxIdentifierType": "CODICE_FISCALE",
+                    "issuingCountry": "IT",
+                },
+            ]
+
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={1, 123, 456, 573159993},
+                notify_chat_ids={123},
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            maybe_send_new_order_notifications(config, "production")
+
+            sent_texts = [call.args[2] for call in mock_send_message.call_args_list]
+            self.assertTrue(any("Spike ordini senza dato fiscale" in text for text in sent_texts))
+            self.assertTrue(any("fiscal-1" in text for text in sent_texts))
+            state = load_state(str(db_path))
+            self.assertNotIn("missing-1", state["notified_order_ids"])
+            self.assertIn("fiscal-1", state["notified_order_ids"])
+            self.assertEqual(state["metrics"]["orders_read"], 3)
+            self.assertEqual(state["metrics"]["orders_with_fiscal_identifier"], 1)
+            self.assertEqual(state["metrics"]["notifications_sent"], 2)
+            self.assertTrue(state["memory"]["last_missing_tax_alert_at"])
+
+    @patch("src.fiscalbay.bot.fetch_records")
+    @patch("src.fiscalbay.bot.load_config")
+    @patch("src.fiscalbay.bot.send_message")
     def test_poll_uses_last_fetch_end_for_incremental_window(
         self,
         mock_send_message,
@@ -2526,6 +2608,78 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertIn("Notificabilità", replies[0])
             self.assertIn("would_notify", replies[0])
             self.assertIn("delivery_ready", replies[0])
+
+    @patch("src.fiscalbay.bot.fetch_records")
+    @patch("src.fiscalbay.bot.load_config")
+    def test_process_message_orders_search_matches_buyer_fields(
+        self,
+        mock_load_config,
+        mock_fetch_records,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={1, 123, 456, 573159993},
+                notify_chat_ids={456},
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=456,
+                username="seller_user",
+                display_name="Mario Rossi",
+                chat_type="private",
+            )
+            mock_load_config.return_value = object()
+            mock_fetch_records.return_value = [
+                {
+                    "orderId": "plainorder1",
+                    "creationDate": "2026-04-05T20:00:00Z",
+                    "buyerUsername": "mario-shop",
+                    "buyerEmail": "mario@example.com",
+                    "taxpayerId": "",
+                    "taxIdentifierType": "",
+                },
+                {
+                    "orderId": "plainorder2",
+                    "creationDate": "2026-04-05T21:00:00Z",
+                    "buyerUsername": "buyer-vat",
+                    "buyerEmail": "vat@example.com",
+                    "taxpayerId": "IT12345678901",
+                    "taxIdentifierType": "VAT_NUMBER",
+                },
+                {
+                    "orderId": "plainorder3",
+                    "creationDate": "2026-04-05T22:00:00Z",
+                    "buyerUsername": "other",
+                    "buyerName": "Mario Rossi",
+                    "buyerEmail": "other@example.com",
+                    "taxpayerId": "RSSMRA80A01H501U",
+                    "taxIdentifierType": "CODICE_FISCALE",
+                },
+            ]
+
+            replies = process_message(
+                text="/ordini cerca mario 30 100",
+                chat_id=456,
+                telegram_user_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Ricerca Ordini", replies[0])
+            self.assertIn("plainorder1", replies[0])
+            self.assertIn("plainorder3", replies[0])
+            self.assertNotIn("plainorder2", replies[0])
+            options = mock_fetch_records.call_args.args[1]
+            self.assertEqual(options.days, 30)
+            self.assertEqual(options.max_results, 100)
+            self.assertFalse(options.only_found)
 
     @patch("src.fiscalbay.bot.fetch_records")
     @patch("src.fiscalbay.bot.load_config")

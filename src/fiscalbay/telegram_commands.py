@@ -266,6 +266,77 @@ def format_records(
     return pages
 
 
+def _normalize_search_text(value: str) -> str:
+    return str(value or "").strip().lower()
+
+
+def order_record_matches_search(record: OrderRecord, query: str) -> bool:
+    needle = _normalize_search_text(query)
+    if not needle:
+        return False
+    fields = (
+        record.orderId,
+        record.buyerUsername,
+        record.buyerName,
+        record.buyerEmail,
+        record.taxpayerId,
+    )
+    return any(needle in _normalize_search_text(field) for field in fields)
+
+
+def looks_like_order_id(value: str) -> bool:
+    raw = str(value or "").strip()
+    if not raw:
+        return False
+    return bool(re.fullmatch(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+", raw))
+
+
+def format_search_records(
+    records: Iterable[OrderRecord],
+    *,
+    query: str,
+    days: int,
+    max_results: int,
+    page_size: int = 8,
+) -> list[str]:
+    rows = list(records)
+    escaped_query = html.escape(query)
+    if not rows:
+        return [
+            "🔎 <b>Ricerca Ordini</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"Nessun ordine trovato per <code>{escaped_query}</code> "
+            f"negli ultimi <code>{days}</code> giorni."
+        ]
+    pages: list[str] = []
+    for start in range(0, len(rows), page_size):
+        page_rows = rows[start : start + page_size]
+        page_no = (start // page_size) + 1
+        total_pages = (len(rows) + page_size - 1) // page_size
+        lines = [
+            "🔎 <b>Ricerca Ordini</b>",
+            "━━━━━━━━━━━━━━━━━━━━━━━━",
+            (
+                f"Query: <code>{escaped_query}</code> • finestra: <code>{days}</code> giorni "
+                f"• limite: <code>{max_results}</code>"
+            ),
+            (f"Risultati: <code>{len(rows)}</code> • pagina: <code>{page_no}/{total_pages}</code>"),
+            "Usa <code>/ordini cerca &lt;order_id&gt;</code> per aprire il dettaglio.",
+            "",
+        ]
+        for record in page_rows:
+            fiscal_label = fiscal_identifier_label(record.taxIdentifierType)
+            fiscal_value = record.taxpayerId.upper() if record.taxpayerId else "non disponibile"
+            lines.append(
+                f"• <code>{html.escape(record.orderId or 'n/d')}</code> • "
+                f"<code>{html.escape(format_order_date(record.creationDate))}</code> • "
+                f"buyer=<code>{html.escape(record.buyerUsername or 'n/d')}</code> • "
+                f"{html.escape(fiscal_label)}=<code>{html.escape(fiscal_value)}</code>"
+            )
+        pages.append("\n".join(lines))
+    return pages
+
+
 def parse_command(text: str) -> tuple[str, list[str]]:
     parts = text.strip().split()
     if not parts:
@@ -2084,6 +2155,8 @@ def format_orders_command_help() -> str:
         "• <code>/ordini fiscali [giorni] [max]</code> → ordini con identificativo fiscale\n"
         "• <code>/ordini tutti [giorni] [max]</code> → tutti gli ordini recenti\n"
         "• <code>/ordini cerca &lt;order_id&gt;</code> → dettaglio ordine\n"
+        "• <code>/ordini cerca &lt;testo&gt; [giorni] [max]</code> "
+        "→ cerca buyer, email, CF o P.IVA\n"
         "• <code>/ordini controlla [giorni] [max]</code> → ordini senza dato fiscale\n"
         "• <code>/ordini report [giorni] [max]</code> → riepilogo fiscale compatto\n"
         "• <code>/ordini priorita [giorni] [max]</code> → casi ordinati per priorità\n"
@@ -2652,6 +2725,41 @@ def has_fiscal_identifier(record: OrderRecord) -> bool:
 def format_auto_notification(record: OrderRecord) -> str:
     prefix = "🚨 <b>Nuovo ordine eBay</b>\n\n"
     return prefix + format_record(record)
+
+
+def format_missing_tax_spike_alert(
+    records: Iterable[OrderRecord],
+    *,
+    threshold_missing: int,
+    threshold_percent: int,
+) -> str:
+    rows = list(records)
+    missing = [record for record in rows if not record.has_fiscal_identifier()]
+    total = len(rows)
+    percent = round((len(missing) / total) * 100) if total else 0
+    examples = missing[:5]
+    example_lines = []
+    for record in examples:
+        example_lines.append(
+            f"• <code>{html.escape(record.orderId or 'n/d')}</code> • "
+            f"<code>{html.escape(format_order_date(record.creationDate))}</code> • "
+            f"buyer=<code>{html.escape(record.buyerUsername or 'n/d')}</code>"
+        )
+    examples_text = "\n".join(example_lines) if example_lines else "Nessun esempio disponibile."
+    return (
+        "⚠️ <b>Spike ordini senza dato fiscale</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📦 Ordini letti nella finestra: <code>{total}</code>\n"
+        f"🕳️ Senza dato fiscale: <code>{len(missing)}</code> "
+        f"(<code>{percent}%</code>)\n"
+        f"🎚️ Soglia alert: almeno <code>{threshold_missing}</code> ordini e "
+        f"<code>{threshold_percent}%</code> della finestra.\n"
+        "ℹ️ FiscalBay non deduce dati assenti: segnala solo che eBay non li ha "
+        "restituiti in questa finestra.\n\n"
+        f"{examples_text}\n\n"
+        "➡️ Prossima azione: usa <code>/ordini controlla 7 50</code> "
+        "o <code>/ordini report 7 50</code>."
+    )
 
 
 def process_message(

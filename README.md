@@ -268,6 +268,10 @@ Nota OAuth eBay:
 | `EBAY_ORDER_POLL_INTERVAL` | No | `120` | Intervallo polling nuovi ordini |
 | `EBAY_ORDER_STATE_PATH` | No | `data/state.db` | File SQLite per stato e metriche |
 | `EBAY_NOTIFY_RETRY_PATH` | No | `data/state.db` | File SQLite per coda retry; di default coincide con lo state DB |
+| `FISCALBAY_MISSING_TAX_ALERT_ENABLED` | No | `1` | Abilita alert automatico quando una finestra di polling contiene molti ordini senza dato fiscale |
+| `FISCALBAY_MISSING_TAX_ALERT_MIN_MISSING` | No | `3` | Numero minimo di ordini senza dato fiscale richiesto per inviare l'alert |
+| `FISCALBAY_MISSING_TAX_ALERT_MIN_PERCENT` | No | `60` | Percentuale minima di ordini senza dato fiscale nella finestra per inviare l'alert |
+| `FISCALBAY_MISSING_TAX_ALERT_COOLDOWN_SECONDS` | No | `21600` | Cooldown tra alert spike senza dato fiscale |
 | `TELEGRAM_HTTP_MAX_RETRIES` | No | `5` | Numero massimo retry per Telegram |
 | `TELEGRAM_HTTP_RETRY_BASE_DELAY` | No | `0.5` | Delay base del backoff Telegram |
 
@@ -522,6 +526,7 @@ Dettagli account, ordini e impostazioni:
 - `/ordini fiscali 7 20`
 - `/ordini tutti 7 20`
 - `/ordini cerca 12-34567-89012`
+- `/ordini cerca mario 30 100`
 - `/ordini controlla 7 20`
 - `/ordini report 7 20`
 - `/ordini priorita 7 20`
@@ -564,7 +569,7 @@ Comportamento:
 - `/onboarding` mostra il percorso selettivo in base allo stato reale: invitato/nuovo, richiesta pending, approvato senza account, reconnect o operativo
 - `/ordini fiscali` mostra solo ordini con identificativo fiscale presente
 - `/ordini tutti` mostra anche ordini senza dato fiscale
-- `/ordini cerca` interroga un ordine specifico
+- `/ordini cerca` interroga un ordine specifico quando il valore sembra un orderId eBay; altrimenti cerca negli ordini recenti per buyer username, nome, email o identificativo fiscale già restituito da eBay
 - `/ordini export` genera un export CSV inline con periodo, stato fiscale e campi mancanti per ogni ordine incluso
 - i messaggi ordine con identificativo fiscale valorizzato includono un pulsante inline per copiare direttamente il valore fiscale, ad esempio CF o P.IVA
 - `/stato` mostra ultimo check, contatori e dimensione della coda retry; `/stato servizio` mostra lo stato servizio sintetico
@@ -600,6 +605,7 @@ Se il bot resta in esecuzione:
 - ogni `EBAY_ORDER_POLL_INTERVAL` secondi legge gli ordini più recenti
 - confronta gli ordini con quelli già notificati
 - invia un messaggio solo quando trova davvero un `taxIdentifierType` valorizzato e un `taxpayerId` presente
+- invia un alert separato se una finestra di polling contiene uno spike di ordini senza dato fiscale, secondo le soglie `FISCALBAY_MISSING_TAX_ALERT_*`
 - nel messaggio include i dati ordine restituiti da eBay, tra cui nome, email, indirizzo, quantità, importo, data, stato transazione e descrizione prodotto quando disponibili
 - aggiunge un pulsante inline per copiare il `taxpayerId` senza selezionare il testo del messaggio
 - salva sia `orderId` sia un hash del contenuto dell'ordine per deduplicare meglio
