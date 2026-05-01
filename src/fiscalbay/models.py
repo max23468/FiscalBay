@@ -698,6 +698,8 @@ class BotOperationalMemory:
     last_seen_order_created_at: str | None = None
     last_notified_order_id: str = ""
     last_notified_order_created_at: str | None = None
+    last_missing_tax_alert_at: str | None = None
+    last_missing_tax_alert_signature: str = ""
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, object]) -> "BotOperationalMemory":
@@ -715,6 +717,10 @@ class BotOperationalMemory:
             last_notified_order_created_at=str(data["last_notified_order_created_at"])
             if data.get("last_notified_order_created_at")
             else None,
+            last_missing_tax_alert_at=str(data["last_missing_tax_alert_at"])
+            if data.get("last_missing_tax_alert_at")
+            else None,
+            last_missing_tax_alert_signature=str(data.get("last_missing_tax_alert_signature", "")),
         )
 
     def as_dict(self) -> dict[str, object]:
@@ -726,6 +732,8 @@ class BotOperationalMemory:
             "last_seen_order_created_at": self.last_seen_order_created_at,
             "last_notified_order_id": self.last_notified_order_id,
             "last_notified_order_created_at": self.last_notified_order_created_at,
+            "last_missing_tax_alert_at": self.last_missing_tax_alert_at,
+            "last_missing_tax_alert_signature": self.last_missing_tax_alert_signature,
         }
 
 
