@@ -31,7 +31,7 @@ Indice centrale della documentazione del progetto.
 - `docs/OPERATIONS.md`
   - controlli rapidi, rollback, backup e criteri di salute
 - `docs/RELEASE_POLICY.md`
-  - regole ufficiali per versioni, changelog, release PR e tag GitHub
+  - regole ufficiali per versioni, changelog, GitHub Release e tag GitHub
 - `docs/RELEASE_READINESS.md`
   - perimetro, criteri e limiti della prima release stabile `1.0.0`
 - `docs/CODEX_CLOUD_DEPLOY.md`

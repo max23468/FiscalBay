@@ -7,13 +7,12 @@ nel repository.
 
 GitHub Actions è riattivato solo per automazioni GitHub leggere e a basso consumo.
 
-- i soli workflow versionati ammessi sono `.github/workflows/ci.yml` e
-  `.github/workflows/release-please.yml`, più i controlli conservativi
-  `.github/workflows/pr-title.yml`, `.github/workflows/dependency-review.yml`,
-  `.github/workflows/actionlint.yml` e `.github/workflows/package-build.yml`
+- i soli workflow versionati ammessi sono `.github/workflows/ci.yml`, più i
+  controlli conservativi `.github/workflows/pr-title.yml`,
+  `.github/workflows/dependency-review.yml`, `.github/workflows/actionlint.yml`
+  e `.github/workflows/package-build.yml`
 - la CI parte su PR verso `main` e con `workflow_dispatch`
-- Release Please parte su push a `main` e con `workflow_dispatch`
-- il package build parte solo manualmente
+- il package build parte solo su PR che toccano packaging e con `workflow_dispatch`
 - Dependency Review parte solo su PR che toccano file di dipendenze
 - actionlint parte solo su PR che toccano workflow
 - non usare Actions per deploy, diagnostica VPS, merge o update
@@ -29,9 +28,7 @@ GitHub Actions è riattivato solo per automazioni GitHub leggere e a basso consu
 - PR title check: `.github/workflows/pr-title.yml`
 - Dependency Review: `.github/workflows/dependency-review.yml`
 - Actionlint: `.github/workflows/actionlint.yml`
-- Manual package build: `.github/workflows/package-build.yml`
-- Release Please: `.github/workflows/release-please.yml`,
-  `release-please-config.json`, `.release-please-manifest.json`
+- Package build mirato: `.github/workflows/package-build.yml`
 - Dependabot version updates: `.github/dependabot.yml`
 - Issue forms: `.github/ISSUE_TEMPLATE/*`
 - Ownership: `.github/CODEOWNERS`
@@ -101,32 +98,20 @@ I workflow a basso consumo sono:
 - `.github/workflows/dependency-review.yml`: parte solo quando cambiano file di
   dipendenze e fallisce da severità `high`
 - `.github/workflows/actionlint.yml`: parte solo quando cambiano workflow
-- `.github/workflows/package-build.yml`: esegue `python -m build` solo su avvio
-  manuale
+- `.github/workflows/package-build.yml`: esegue `python -m build` su PR che
+  toccano packaging e su avvio manuale
 - tutti i workflow usano concurrency con cancellazione dei run precedenti sulla
   stessa PR/ref quando applicabile
 
-## Release Please
+## Release
 
-Release Please gestisce il percorso GitHub-native:
+Release Please non è più un percorso attivo: il repository usa un solo flusso
+versionato, locale e deploy-aware, tramite `scripts/release_now.sh`.
 
-- legge Conventional Commit su `main`
-- apre o aggiorna una release PR
-- aggiorna `CHANGELOG.md`, `pyproject.toml` e `.release-please-manifest.json`
-- quando la release PR viene mergeata, crea tag e GitHub Release
-- non esegue deploy VPS e non pubblica artifact applicativi
-
-Il workflow usa `GITHUB_TOKEN` per ridurre segreti e superficie operativa. Con
-questa scelta, le PR/release create da Release Please non rilanciano altri
-workflow automaticamente; se in futuro serve CI automatica sulle release PR,
-configurare un PAT dedicato e rivalutare il budget.
-
-Il workflow usa `googleapis/release-please-action@v5`, che aggiorna l'action a
-Node 24. La config imposta `include-component-in-tag=false` per restare
-compatibile con i tag `vX.Y.Z` già usati dal repository.
-
-La baseline iniziale è `1.10.0`, con `bootstrap-sha` puntato al commit di release
-`v1.10.0`, così Release Please non rigenera lo storico già pubblicato.
+La scelta evita drift tra manifest GitHub-native, `pyproject.toml`, changelog e
+tag. Se in futuro si vuole riattivare Release Please, va fatto come decisione
+esplicita aggiornando workflow allowlist, documentazione, manifest e policy di
+deploy.
 
 ## Release Locale Con Deploy
 

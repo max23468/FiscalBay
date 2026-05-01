@@ -5,11 +5,15 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.fiscalbay.git_utils import (
+    build_parser,
+    build_safe_git_parser,
     ensure_index_lock_available,
     list_index_lock_holders,
+    main,
     remove_stale_index_lock,
     resolve_git_dir,
     run_git_command,
+    safe_git_main,
 )
 
 
@@ -161,6 +165,125 @@ class GitUtilsTests(unittest.TestCase):
             text=True,
         )
         self.assertEqual(result.stdout, "ok\n")
+
+    @patch("src.fiscalbay.git_utils.subprocess.run")
+    def test_resolve_git_dir_rejects_empty_git_dir(self, mock_run) -> None:
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["git", "rev-parse", "--git-dir"],
+            returncode=0,
+            stdout="\n",
+            stderr="",
+        )
+
+        with self.assertRaises(RuntimeError):
+            resolve_git_dir("/repo")
+
+    @patch("src.fiscalbay.git_utils.subprocess.run")
+    def test_list_index_lock_holders_reports_lsof_errors(self, mock_run) -> None:
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["lsof", "/tmp/index.lock"],
+            returncode=2,
+            stdout="",
+            stderr="permesso negato",
+        )
+
+        with self.assertRaises(RuntimeError) as ctx:
+            list_index_lock_holders(Path("/tmp/index.lock"))
+
+        self.assertIn("permesso negato", str(ctx.exception))
+
+    @patch("src.fiscalbay.git_utils.resolve_git_dir")
+    def test_remove_stale_index_lock_reports_when_absent(self, mock_resolve_git_dir) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            git_dir = Path(tmpdir) / ".git"
+            git_dir.mkdir()
+            mock_resolve_git_dir.return_value = git_dir
+
+            message = remove_stale_index_lock(tmpdir)
+
+            self.assertIn("Nessun index.lock", message)
+
+    @patch("src.fiscalbay.git_utils.time.monotonic", side_effect=[0.0, 1.0])
+    @patch("src.fiscalbay.git_utils.time.sleep")
+    @patch("src.fiscalbay.git_utils.list_index_lock_holders")
+    @patch("src.fiscalbay.git_utils.resolve_git_dir")
+    def test_ensure_index_lock_available_times_out_for_active_lock(
+        self,
+        mock_resolve_git_dir,
+        mock_list_holders,
+        _mock_sleep,
+        _mock_monotonic,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            git_dir = Path(tmpdir) / ".git"
+            git_dir.mkdir()
+            lock_path = git_dir / "index.lock"
+            lock_path.write_text("", encoding="utf-8")
+            mock_resolve_git_dir.return_value = git_dir
+            mock_list_holders.return_value = ["git 123 user 3uW REG ... index.lock"]
+
+            with self.assertRaises(RuntimeError) as ctx:
+                ensure_index_lock_available(tmpdir, wait_seconds=0.1, poll_interval=0.01)
+
+            self.assertIn("ancora in uso", str(ctx.exception))
+
+    def test_parsers_accept_expected_arguments(self) -> None:
+        self.assertEqual(build_parser().parse_args(["/repo"]).repo, "/repo")
+        args = build_safe_git_parser().parse_args(
+            ["--repo", "/repo", "--wait-seconds", "2", "--", "status"]
+        )
+
+        self.assertEqual(args.repo, "/repo")
+        self.assertEqual(args.wait_seconds, 2.0)
+        self.assertEqual(args.git_args, ["--", "status"])
+
+    @patch("src.fiscalbay.git_utils.remove_stale_index_lock")
+    def test_main_prints_success_and_errors(self, mock_remove_lock) -> None:
+        mock_remove_lock.return_value = "ok"
+        with patch("builtins.print") as print_mock:
+            self.assertEqual(main(["/repo"]), 0)
+        print_mock.assert_called_once_with("ok")
+
+        mock_remove_lock.side_effect = RuntimeError("rotto")
+        with patch("builtins.print") as print_mock:
+            self.assertEqual(main(["/repo"]), 1)
+        print_mock.assert_called_once()
+
+    @patch("src.fiscalbay.git_utils.run_git_command")
+    def test_safe_git_main_handles_missing_args_and_streams_output(self, mock_run_git) -> None:
+        with patch("builtins.print") as print_mock:
+            self.assertEqual(safe_git_main(["--repo", "/repo"]), 2)
+        print_mock.assert_called_once()
+
+        mock_run_git.return_value = subprocess.CompletedProcess(
+            args=["git", "status"],
+            returncode=0,
+            stdout="clean\n",
+            stderr="nota\n",
+        )
+        with patch("builtins.print") as print_mock:
+            self.assertEqual(safe_git_main(["--repo", "/repo", "--", "status"]), 0)
+
+        mock_run_git.assert_called_once_with(["status"], repo_path="/repo", wait_seconds=5.0)
+        self.assertEqual(print_mock.call_count, 2)
+
+    @patch("src.fiscalbay.git_utils.run_git_command")
+    def test_safe_git_main_reports_runtime_and_git_errors(self, mock_run_git) -> None:
+        mock_run_git.side_effect = RuntimeError("lock attivo")
+        with patch("builtins.print") as print_mock:
+            self.assertEqual(safe_git_main(["status"]), 1)
+        print_mock.assert_called_once()
+
+        mock_run_git.side_effect = None
+        mock_run_git.return_value = subprocess.CompletedProcess(
+            args=["git", "status"],
+            returncode=128,
+            stdout="",
+            stderr="fatal\n",
+        )
+        with patch("builtins.print") as print_mock:
+            self.assertEqual(safe_git_main(["status"]), 128)
+        print_mock.assert_called_once()
 
 
 if __name__ == "__main__":

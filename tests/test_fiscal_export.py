@@ -1,14 +1,19 @@
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import Mock, patch
 
 from src.fiscalbay.fiscal_export import (
+    build_fiscal_export,
     build_fiscal_export_report,
+    main,
     normalize_fiscal_export_options,
     render_fiscal_export_csv,
     render_fiscal_export_json,
     render_fiscal_export_summary,
 )
-from src.fiscalbay.models import FetchOptions, OrderRecord
+from src.fiscalbay.models import Config, FetchOptions, OrderRecord, ResolvedFetchContext
 
 
 def fixed_now() -> datetime:
@@ -99,6 +104,107 @@ class FiscalExportTests(unittest.TestCase):
 
         self.assertIn('"total_orders": 1', render_fiscal_export_json(report))
         self.assertIn("Senza dato fiscale: 1", render_fiscal_export_summary(report))
+
+    def test_normalize_fiscal_export_options_uses_explicit_order_window(self) -> None:
+        options, period_start, period_end = normalize_fiscal_export_options(
+            FetchOptions(
+                order_ids=["order-1"],
+                created_after="2026-05-01T00:00:00Z",
+                created_before="2026-05-02T00:00:00Z",
+                only_found=True,
+            ),
+            now_fn=fixed_now,
+        )
+
+        self.assertEqual(period_start, "2026-05-01T00:00:00Z")
+        self.assertEqual(period_end, "2026-05-02T00:00:00Z")
+        self.assertTrue(options.include_details)
+        self.assertTrue(options.only_found)
+
+    def test_normalize_fiscal_export_options_rejects_inverted_window(self) -> None:
+        with self.assertRaises(Exception) as ctx:
+            normalize_fiscal_export_options(
+                FetchOptions(
+                    created_after="2026-05-02T00:00:00Z",
+                    created_before="2026-05-01T00:00:00Z",
+                ),
+                now_fn=fixed_now,
+            )
+
+        self.assertIn("created-after", str(ctx.exception))
+
+    def test_build_fiscal_export_passes_config_to_fetch_function(self) -> None:
+        config = Config("cid", "secret", "refresh", "production", "scope")
+        fetch_mock = Mock(return_value=[{"orderId": "order-1", "taxpayerId": "IT123"}])
+
+        report = build_fiscal_export(
+            config,
+            FetchOptions(days=1),
+            fetch_records_fn=fetch_mock,
+            now_fn=fixed_now,
+        )
+
+        self.assertEqual(report.records[0].orderId, "order-1")
+        self.assertIs(fetch_mock.call_args.args[0], config)
+        self.assertIsInstance(fetch_mock.call_args.args[1], FetchOptions)
+
+    def test_main_writes_output_file_for_global_config(self) -> None:
+        config = Config("cid", "secret", "refresh", "production", "scope")
+        config_module = Mock(load_config=Mock(return_value=config))
+        with TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "export.txt"
+            with (
+                patch("src.fiscalbay.fiscal_export.import_module", return_value=config_module),
+                patch(
+                    "src.fiscalbay.fiscal_export.build_fiscal_export",
+                    return_value=build_fiscal_export_report(
+                        FetchOptions(order_ids=["order-1"]),
+                        fetch_records_fn=lambda _options: [OrderRecord(orderId="order-1")],
+                        now_fn=fixed_now,
+                    ),
+                ),
+            ):
+                exit_code = main(["--format", "summary", "--output", str(output_path)])
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Export fiscale venditore", output_path.read_text(encoding="utf-8"))
+
+    def test_main_uses_tenant_fetch_context_when_telegram_user_is_provided(self) -> None:
+        config = Config("cid", "secret", "refresh", "sandbox", "scope")
+        resolved = ResolvedFetchContext(config=config, environment="sandbox", telegram_user_id=123)
+        application_module = Mock(resolve_fetch_context=Mock(return_value=resolved))
+        report = build_fiscal_export_report(
+            FetchOptions(order_ids=["order-1"]),
+            fetch_records_fn=lambda _options: [OrderRecord(orderId="order-1")],
+            now_fn=fixed_now,
+        )
+
+        with (
+            patch("src.fiscalbay.fiscal_export.import_module", return_value=application_module),
+            patch("src.fiscalbay.fiscal_export.build_fiscal_export", return_value=report),
+            patch("builtins.print") as print_mock,
+        ):
+            exit_code = main(
+                [
+                    "--environment",
+                    "sandbox",
+                    "--telegram-user-id",
+                    "123",
+                    "--state-path",
+                    "tenant.db",
+                    "--format",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        application_module.resolve_fetch_context.assert_called_once_with(
+            "sandbox",
+            telegram_user_id=123,
+            state_path="tenant.db",
+            allow_global_fallback=False,
+        )
+        self.assertIn('"rows"', print_mock.call_args.args[0])
 
 
 if __name__ == "__main__":

@@ -195,8 +195,6 @@ Il flusso standard è questo:
 4. lo script aggiorna `CHANGELOG.md` e `pyproject.toml`, crea commit
    `chore: release vX.Y.Z`, tag `vX.Y.Z` e GitHub Release
 5. lo script deploya `main` sulla VPS FiscalBay e attende lo smoke check
-6. GitHub Actions può gestire Release Please per release PR, tag e GitHub
-   Release; il deploy non passa da workflow GitHub
 
 La creazione della GitHub Release usa `gh` se disponibile, altrimenti un token
 GitHub esposto solo nell'ambiente locale come `GITHUB_TOKEN`, `GH_TOKEN` o
@@ -204,10 +202,8 @@ GitHub esposto solo nell'ambiente locale come `GITHUB_TOKEN`, `GH_TOKEN` o
 Il deploy remoto del repository privato usa invece il token presente sulla VPS in
 `/etc/fiscalbay/deploy.env`.
 
-In alternativa al flusso locale completo, `.github/workflows/release-please.yml`
-può aprire una release PR da `main`. Dopo il merge della release PR, Release
-Please crea tag e GitHub Release, ma il deploy VPS resta da eseguire con
-`scripts/deploy_now.sh`.
+Non esiste un flusso Release Please attivo: versioni, changelog, tag e GitHub
+Release passano da `scripts/release_now.sh`.
 
 I workflow PR title, CI, Dependency Review, actionlint e package build manuale
 sono controlli di qualità: non creano release e non sostituiscono il deploy VPS.

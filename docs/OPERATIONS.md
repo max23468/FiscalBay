@@ -367,7 +367,7 @@ visibili nel report healthcheck e nel timer alert, ma possono dipendere da
 problemi temporanei di eBay esterni al deploy.
 
 Questo è il percorso di deploy predefinito. GitHub Actions è ammesso solo per
-controlli GitHub conservativi, Dependabot e Release Please: deploy, diagnostica
+controlli GitHub conservativi e Dependabot: deploy, diagnostica
 e configurazione VPS si automatizzano con script locali/VPS via SSH sulla VPS
 FiscalBay.
 

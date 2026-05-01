@@ -5,9 +5,8 @@ locale mantenendo deploy e release fuori da GitHub Actions.
 
 ## Stato attuale
 
-GitHub Actions è attivo solo per controlli GitHub conservativi, Dependabot e
-Release Please. L'automazione operativa vive negli script locali e negli
-script/timer della VPS.
+GitHub Actions è attivo solo per controlli GitHub conservativi e Dependabot.
+L'automazione operativa vive negli script locali e negli script/timer della VPS.
 
 I workflow versionati ammessi sono solo quelli dichiarati in
 `scripts/check_github_workflows.sh`. Non aggiungere o riattivare altri workflow
@@ -25,7 +24,7 @@ Motivo operativo:
 1. prepara codice e documentazione nel repository
 2. esegui o chiedi di eseguire verifiche locali quando il lavoro torna sul Mac
 3. porta le modifiche su `main` solo dopo self-review
-4. usa Actions solo per controlli GitHub conservativi e Release Please, non per
+4. usa Actions solo per controlli GitHub conservativi, non per
    operazioni VPS
 5. quando il lavoro torna sul Mac locale, usa `scripts/deploy_now.sh` o
    `scripts/release_now.sh`

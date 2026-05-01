@@ -18,6 +18,7 @@ if [ -x ".venv/bin/coverage" ]; then
   COVERAGE_BIN=".venv/bin/coverage"
 fi
 
+bash scripts/check_github_workflows.sh
 "$RUFF_BIN" format --check src tests
 "$RUFF_BIN" check src tests
 "$MYPY_BIN"

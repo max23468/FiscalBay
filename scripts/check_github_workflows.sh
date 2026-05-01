@@ -12,7 +12,6 @@ ALLOWED_WORKFLOWS=(
   ".github/workflows/dependency-review.yml"
   ".github/workflows/package-build.yml"
   ".github/workflows/pr-title.yml"
-  ".github/workflows/release-please.yml"
 )
 
 if [ -f ".github/dependabot.yaml" ]; then

@@ -1,6 +1,15 @@
 name: Package Build
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "pyproject.toml"
+      - "setup.py"
+      - "setup.cfg"
+      - "MANIFEST.in"
+      - "src/fiscalbay/__init__.py"
   workflow_dispatch:
 
 concurrency:

@@ -8,8 +8,9 @@ __pycache__/
 .eggs/
 build/
 dist/
-.coverage
+.coverage*
 *.pyc
 .DS_Store
 data/*.db
 data/*.lock
+state.db

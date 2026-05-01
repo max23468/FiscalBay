@@ -86,7 +86,7 @@ creati localmente quando li incontri.
 - Il repository può contenere solo i workflow GitHub Actions allowlist
   `.github/workflows/actionlint.yml`, `.github/workflows/ci.yml`,
   `.github/workflows/dependency-review.yml`, `.github/workflows/package-build.yml`,
-  `.github/workflows/pr-title.yml` e `.github/workflows/release-please.yml`.
+  e `.github/workflows/pr-title.yml`.
   Non aggiungere altri workflow senza richiesta esplicita del maintainer.
 - `.github/dependabot.yml` è ammesso solo con schedule conservativa e limite basso
   di PR aperte.

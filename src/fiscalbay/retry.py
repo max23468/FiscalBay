@@ -15,7 +15,7 @@ def compute_backoff_delay(
     *,
     jitter_max: float = 0.25,
 ) -> float:
-    return base_delay * (2**attempt_index) + random.uniform(0, jitter_max)
+    return float(base_delay * (2**attempt_index) + random.uniform(0, jitter_max))
 
 
 def run_with_retry(
