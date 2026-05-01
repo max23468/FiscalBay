@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.11.0](https://github.com/max23468/FiscalBay/compare/v1.10.0...v1.11.0) (2026-05-01)
+
+### Features
+
+* add fiscal search and missing tax alerts ([060bdab](https://github.com/max23468/FiscalBay/commit/060bdabd051a8ebfc5fec041d509c14d9b48b3fe))
+
+### Maintenance
+
+* add release please automation ([399772a](https://github.com/max23468/FiscalBay/commit/399772a93bf6e486b42659376db6b060f8d92155))
+* add conservative github automation ([d38c565](https://github.com/max23468/FiscalBay/commit/d38c565d38c43a65e41d127325168b469f517a4e))
+* run release please on node 24 ([1702643](https://github.com/max23468/FiscalBay/commit/1702643163ffdc78f750fa90febac3ea8f6ed899))
+* update release please to node 24 ([16791f4](https://github.com/max23468/FiscalBay/commit/16791f42292e4ff97d08c09a59651393fe42f7ed))
+
 ## [1.10.0](https://github.com/max23468/FiscalBay/compare/v1.9.0...v1.10.0) (2026-05-01)
 
 ### Features
