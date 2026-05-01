@@ -5,12 +5,13 @@ locale mantenendo deploy e release fuori da GitHub Actions.
 
 ## Stato attuale
 
-GitHub Actions è attivo solo come CI leggera e Release Please. L'automazione
-operativa vive negli script locali e negli script/timer della VPS.
+GitHub Actions è attivo solo per controlli GitHub conservativi, Dependabot e
+Release Please. L'automazione operativa vive negli script locali e negli
+script/timer della VPS.
 
-I soli workflow versionati ammessi sono `.github/workflows/ci.yml` e
-`.github/workflows/release-please.yml`. Non aggiungere o riattivare altri
-workflow senza richiesta esplicita del maintainer.
+I workflow versionati ammessi sono solo quelli dichiarati in
+`scripts/check_github_workflows.sh`. Non aggiungere o riattivare altri workflow
+senza richiesta esplicita del maintainer.
 
 Motivo operativo:
 
@@ -24,7 +25,8 @@ Motivo operativo:
 1. prepara codice e documentazione nel repository
 2. esegui o chiedi di eseguire verifiche locali quando il lavoro torna sul Mac
 3. porta le modifiche su `main` solo dopo self-review
-4. usa Actions solo per CI leggera e Release Please, non per operazioni VPS
+4. usa Actions solo per controlli GitHub conservativi e Release Please, non per
+   operazioni VPS
 5. quando il lavoro torna sul Mac locale, usa `scripts/deploy_now.sh` o
    `scripts/release_now.sh`
 

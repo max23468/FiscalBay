@@ -84,10 +84,12 @@ creati localmente quando li incontri.
 ## GitHub Actions e budget
 
 - Il repository può contenere solo i workflow GitHub Actions allowlist
-  `.github/workflows/ci.yml` e `.github/workflows/release-please.yml`.
-  Il primo è CI leggera su PR verso `main` e avvio manuale; il secondo gestisce
-  Release Please su push a `main` e avvio manuale. Non aggiungere altri workflow
-  senza richiesta esplicita del maintainer.
+  `.github/workflows/actionlint.yml`, `.github/workflows/ci.yml`,
+  `.github/workflows/dependency-review.yml`, `.github/workflows/package-build.yml`,
+  `.github/workflows/pr-title.yml` e `.github/workflows/release-please.yml`.
+  Non aggiungere altri workflow senza richiesta esplicita del maintainer.
+- `.github/dependabot.yml` è ammesso solo con schedule conservativa e limite basso
+  di PR aperte.
 - Se GitHub segnala fallimenti Actions per billing, spending limit o budget
   esaurito, non rilanciare run e non tentare fix tramite Actions: esegui verifiche,
   release, merge, manutenzione e deploy in locale o via VPS FiscalBay.

@@ -7,13 +7,16 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
 ALLOWED_WORKFLOWS=(
+  ".github/workflows/actionlint.yml"
   ".github/workflows/ci.yml"
+  ".github/workflows/dependency-review.yml"
+  ".github/workflows/package-build.yml"
+  ".github/workflows/pr-title.yml"
   ".github/workflows/release-please.yml"
 )
 
-if [ -f ".github/dependabot.yml" ] || [ -f ".github/dependabot.yaml" ]; then
-  echo "Errore: gli update Dependabot schedulati non sono autorizzati in questa fase." >&2
-  echo "Usa Dependabot alerts/security updates dalla UI GitHub senza file versionato." >&2
+if [ -f ".github/dependabot.yaml" ]; then
+  echo "Errore: usa solo .github/dependabot.yml per la configurazione Dependabot." >&2
   exit 1
 fi
 

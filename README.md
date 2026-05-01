@@ -62,12 +62,13 @@ In pratica:
 Per mantenere il repository allineato alle best practice GitHub anche in contesto single-maintainer, il progetto include:
 
 - workflow GitHub Actions allowlist `.github/workflows/ci.yml` per CI leggera su PR verso `main` e avvio manuale
+- controlli GitHub Actions conservativi per titolo PR, Dependency Review, actionlint e build package manuale
 - Release Please GitHub in `.github/workflows/release-please.yml` per release PR, tag e GitHub Release
 - deploy esplicito con `scripts/deploy_now.sh`
 - release versionata esplicita con `scripts/release_now.sh`
 - CI locale con `bash scripts/ci_verify.sh`, richiamata anche dal workflow leggero e dalla pipeline locale
 - `scripts/local_automate.sh` e `scripts/local_deploy_vps.sh` restano utility legacy/fallback
-- aggiornamenti dipendenze da fare manualmente; Dependabot alerts/security alerts possono restare nella UI GitHub
+- aggiornamenti dipendenze automatici via `.github/dependabot.yml`, con schedule settimanale e limite basso di PR aperte
 - template per Pull Request (`.github/PULL_REQUEST_TEMPLATE.md`)
 - issue forms per bug e task operativi (`.github/ISSUE_TEMPLATE/*`)
 - `CODEOWNERS` per ownership esplicita (`.github/CODEOWNERS`)
@@ -77,7 +78,7 @@ Per mantenere il repository allineato alle best practice GitHub anche in contest
 Passi consigliati dopo il clone/fork:
 
 1. verifica branch protection su `main` (almeno: linear history; non rendere ancora obbligatorio il check Actions)
-2. abilita secret scanning e Dependabot alerts dal tab Security, ma lascia disattivati workflow/update automatici
+2. abilita secret scanning e Dependabot alerts dal tab Security; gli update automatici sono limitati da `.github/dependabot.yml`
 3. usa PR anche da branch personali per lasciare audit trail e checklist standard
 4. usa titoli PR di squash in formato Conventional Commit per tenere coerenti versioni e changelog
 5. in GitHub abilita `Squash merge` e valuta di disabilitare `Merge commit` e `Rebase merge` per rendere il flusso più coerente
@@ -88,7 +89,7 @@ Il flusso consigliato da remoto e:
 
 - Codex o GitHub preparano il codice fino a `main`
 - la pipeline operativa resta locale/VPS, non GitHub Actions
-- GitHub Actions esegue solo CI leggera e Release Please; non esegue deploy o merge
+- GitHub Actions esegue solo controlli GitHub conservativi e Release Please; non esegue deploy o merge
 - ogni attività operativa viene eseguita da script locali o dalla VPS FiscalBay
 
 In pratica, da Codex web/mobile ti basta:
@@ -125,7 +126,9 @@ Il flusso operativo resta automatizzato fuori da GitHub Actions:
 - GitHub Release creata da `gh` o API GitHub, senza GitHub Actions
 - CI locale: `bash scripts/ci_verify.sh`
 - CI GitHub leggera: `.github/workflows/ci.yml`, solo PR verso `main` e avvio manuale
+- controlli PR: titolo Conventional Commit, Dependency Review e actionlint mirato
 - Release Please GitHub: `.github/workflows/release-please.yml`, push su `main` e avvio manuale
+- build package GitHub: `.github/workflows/package-build.yml`, solo avvio manuale
 - build locale quando serve: `python -m build`
 
 Per creare GitHub Release senza `gh` locale puoi usare un token GitHub con permessi

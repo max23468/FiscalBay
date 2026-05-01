@@ -209,6 +209,9 @@ può aprire una release PR da `main`. Dopo il merge della release PR, Release
 Please crea tag e GitHub Release, ma il deploy VPS resta da eseguire con
 `scripts/deploy_now.sh`.
 
+I workflow PR title, CI, Dependency Review, actionlint e package build manuale
+sono controlli di qualità: non creano release e non sostituiscono il deploy VPS.
+
 In modalità main-only:
 
 - il commit su `main` sostituisce il merge della feature PR
