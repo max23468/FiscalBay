@@ -651,6 +651,18 @@ def save_tenant_retry_queue_entries(
             )
 
 
+def summarize_retry_queue_backlog(path: str) -> dict[str, int]:
+    init_db(path)
+    with _connect(path) as conn:
+        global_count = as_int(conn.execute("SELECT COUNT(*) FROM retry_queue").fetchone()[0])
+        tenant_count = as_int(conn.execute("SELECT COUNT(*) FROM tenant_retry_queue").fetchone()[0])
+    return {
+        "global": global_count,
+        "tenant": tenant_count,
+        "total": global_count + tenant_count,
+    }
+
+
 def upsert_telegram_user(path: str, user: TelegramUser) -> None:
     init_db(path)
     with _connect(path) as conn:
@@ -1300,7 +1312,7 @@ def summarize_tenant_account_status(
         audit_query = (
             "SELECT outcome, details_json FROM audit_log "
             "WHERE event_type = 'oauth_failure' "
-            "AND (target_telegram_user_id = ? OR target_telegram_user_id IS NULL)"
+            "AND target_telegram_user_id = ?"
         )
         if environment:
             audit_query += " AND (environment = ? OR environment = '')"

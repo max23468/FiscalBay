@@ -55,6 +55,7 @@ from src.fiscalbay.telegram_commands import (
     format_admin_security_report,
     format_order_date,
     is_admin_authorized,
+    looks_like_order_id,
 )
 
 
@@ -549,6 +550,11 @@ class TelegramBotTests(unittest.TestCase):
         ):
             self.assertEqual(format_order_date("2026-04-03T10:00:00Z"), "03/04/2026 10:00")
 
+    def test_looks_like_order_id_requires_ebay_numeric_segments(self) -> None:
+        self.assertTrue(looks_like_order_id("12-34567-89012"))
+        self.assertFalse(looks_like_order_id("mario-shop"))
+        self.assertFalse(looks_like_order_id("order-1"))
+
     def test_format_order_fallback_when_missing_fiscal_fields(self) -> None:
         text = format_auto_notification(
             {
@@ -791,6 +797,31 @@ class TelegramBotTests(unittest.TestCase):
 
             self.assertEqual(mock_sync_bot_branding.call_count, 1)
             self.assertEqual(load_kv_value(str(db_path), "branding_sync:profile_hash"), None)
+            self.assertIsNotNone(load_kv_value(str(db_path), "branding_sync:retry_at"))
+
+    @patch("src.fiscalbay.bot.sync_bot_branding")
+    def test_sync_runtime_branding_parses_telegram_retry_after_wording(
+        self,
+        mock_sync_bot_branding,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="token",
+                allowed_chat_ids=set(),
+                notify_chat_ids=set(),
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+            mock_sync_bot_branding.side_effect = TelegramApiError(
+                "Errore Telegram su setMyName: HTTP 429: Too Many Requests: retry after 120",
+                status_code=429,
+            )
+
+            sync_runtime_branding(config)
+            sync_runtime_branding(config)
+
+            self.assertEqual(mock_sync_bot_branding.call_count, 1)
             self.assertIsNotNone(load_kv_value(str(db_path), "branding_sync:retry_at"))
 
     def test_process_lock_writes_metadata_and_removes_file_on_release(self) -> None:

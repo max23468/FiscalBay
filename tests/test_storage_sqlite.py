@@ -61,6 +61,7 @@ from src.fiscalbay.storage.sqlite import (
     set_notification_subscription_enabled,
     summarize_operation_queue,
     summarize_retention_backlog,
+    summarize_retry_queue_backlog,
     summarize_tenant_account_status,
     summarize_tenant_status_snapshots,
     update_operation_queue_entry,
@@ -674,6 +675,59 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertEqual(summary["token_status"], "revoked")
             self.assertEqual(summary["subscription_count"], 1)
 
+    def test_summarize_tenant_account_status_ignores_unscoped_oauth_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            upsert_linked_ebay_account(
+                str(db_path),
+                LinkedEbayAccount(
+                    telegram_user_id=123,
+                    ebay_user_id="seller-ebay",
+                    environment="production",
+                    linked_at="2026-04-06T10:00:00Z",
+                    status="linked",
+                ),
+            )
+            account = resolve_linked_ebay_account(str(db_path), 123, "production")
+            assert account is not None and account.id is not None
+            upsert_ebay_token_set(
+                str(db_path),
+                EbayTokenSet(
+                    ebay_account_id=account.id,
+                    refresh_token_encrypted="plain:tenant-refresh",
+                    access_token="",
+                    scope_set="scope",
+                    status="revoked",
+                ),
+            )
+            append_audit_log_entry(
+                str(db_path),
+                AuditLogEntry(
+                    event_type="oauth_failure",
+                    created_at="2026-04-06T11:00:00Z",
+                    target_telegram_user_id=123,
+                    environment="production",
+                    outcome="session_expired",
+                    details_json="tenant failure",
+                ),
+            )
+            append_audit_log_entry(
+                str(db_path),
+                AuditLogEntry(
+                    event_type="oauth_failure",
+                    created_at="2026-04-06T11:05:00Z",
+                    target_telegram_user_id=None,
+                    environment="production",
+                    outcome="unknown_session",
+                    details_json="unscoped failure",
+                ),
+            )
+
+            summary = summarize_tenant_account_status(str(db_path), 123, "production")
+
+            self.assertEqual(summary["latest_reconnect_outcome"], "session_expired")
+            self.assertEqual(summary["latest_reconnect_reason"], "tenant failure")
+
     def test_rebuild_tenant_status_snapshot_materializes_admin_row(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
@@ -765,6 +819,25 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertEqual(restored[0].chat_id, 456)
             self.assertEqual(restored[0].text, "hello")
             self.assertEqual(restored[0].attempts, 1)
+
+    def test_summarize_retry_queue_backlog_counts_global_and_tenant_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            save_retry_queue(
+                str(db_path),
+                [{"chat_id": 456, "text": "global retry", "attempts": 2}],
+            )
+            save_tenant_retry_queue_entries(
+                str(db_path),
+                123,
+                [RetryQueueEntry(chat_id=456, text="tenant retry", attempts=1)],
+            )
+
+            backlog = summarize_retry_queue_backlog(str(db_path))
+
+            self.assertEqual(backlog["global"], 1)
+            self.assertEqual(backlog["tenant"], 1)
+            self.assertEqual(backlog["total"], 2)
 
     def test_multi_tenant_entities_and_notification_targets_roundtrip(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

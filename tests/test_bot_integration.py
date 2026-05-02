@@ -20,6 +20,7 @@ from src.fiscalbay.models import (
     EbayTokenSet,
     LinkedEbayAccount,
     OauthLinkSession,
+    RetryQueueEntry,
     TelegramConfig,
 )
 from src.fiscalbay.storage.sqlite import (
@@ -37,6 +38,7 @@ from src.fiscalbay.storage.sqlite import (
     resolve_linked_ebay_account,
     save_retry_queue,
     save_state,
+    save_tenant_retry_queue_entries,
     save_tenant_runtime_state,
     set_notification_subscription_enabled,
     update_telegram_user_status,
@@ -1857,6 +1859,11 @@ class BotIntegrationTests(unittest.TestCase):
                     {"chat_id": 456, "text": "retry me", "attempts": 2},
                 ],
             )
+            save_tenant_retry_queue_entries(
+                str(db_path),
+                1000,
+                [RetryQueueEntry(chat_id=456, text="tenant retry", attempts=1)],
+            )
             enqueue_apply_user_access_operation(
                 state_path=str(db_path),
                 actor_telegram_user_id=123,
@@ -1876,7 +1883,7 @@ class BotIntegrationTests(unittest.TestCase):
 
             self.assertEqual(len(replies), 1)
             self.assertIn("OAuth pending scadute", replies[0])
-            self.assertIn("retry backlog", replies[0])
+            self.assertIn("retry backlog: <code>2</code>", replies[0])
             self.assertIn("queue op=", replies[0])
             self.assertIn("pending_session user=", replies[0])
             self.assertIn("Priorità consigliate", replies[0])
@@ -2502,14 +2509,14 @@ class BotIntegrationTests(unittest.TestCase):
             )
             mock_fetch_records.return_value = [
                 {
-                    "orderId": "order-1",
+                    "orderId": "12-34567-89012",
                     "creationDate": "2026-04-06T10:30:00Z",
                     "buyerUsername": "buyer",
                 }
             ]
 
             replies = process_message(
-                text="/ordini cerca order-1",
+                text="/ordini cerca 12-34567-89012",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2550,7 +2557,7 @@ class BotIntegrationTests(unittest.TestCase):
             )
 
             replies = process_message(
-                text="/ordini cerca order-1",
+                text="/ordini cerca 12-34567-89012",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2587,7 +2594,7 @@ class BotIntegrationTests(unittest.TestCase):
             mock_load_config.return_value = object()
             mock_fetch_records.return_value = [
                 {
-                    "orderId": "order-4",
+                    "orderId": "12-34567-89012",
                     "creationDate": "2026-04-05T20:00:00Z",
                     "buyerUsername": "buyer",
                     "taxpayerId": "RSSMRA80A01H501U",
@@ -2597,7 +2604,7 @@ class BotIntegrationTests(unittest.TestCase):
             ]
 
             replies = process_message(
-                text="/ordini cerca order-4",
+                text="/ordini cerca 12-34567-89012",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2664,7 +2671,7 @@ class BotIntegrationTests(unittest.TestCase):
             ]
 
             replies = process_message(
-                text="/ordini cerca mario 30 100",
+                text="/ordini cerca mario-shop 30 100",
                 chat_id=456,
                 telegram_user_id=123,
                 telegram_config=config,
@@ -2674,7 +2681,7 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertEqual(len(replies), 1)
             self.assertIn("Ricerca Ordini", replies[0])
             self.assertIn("plainorder1", replies[0])
-            self.assertIn("plainorder3", replies[0])
+            self.assertNotIn("plainorder3", replies[0])
             self.assertNotIn("plainorder2", replies[0])
             options = mock_fetch_records.call_args.args[1]
             self.assertEqual(options.days, 30)
