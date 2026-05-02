@@ -1,10 +1,10 @@
 # Roadmap
 
-Aggiornata al 2026-04-29.
+Aggiornata al 2026-05-02.
 
 ## Stato corrente
 
-FiscalBay è oggi alla versione `1.9.0`.
+FiscalBay è oggi alla versione `1.11.2`.
 
 La roadmap necessaria per la prima release stabile è completata. Il perimetro attuale resta `approved_public_small`: servizio pubblico con accesso approvato, pochi utenti selezionati, onboarding OAuth eBay su VPS, token tenant cifrati, bot Telegram operativo, strumenti admin, audit/retention/recovery minimi, metriche operative, security check e scale readiness.
 
@@ -32,7 +32,7 @@ La serie `1.x` resta centrata su stabilità operativa, servizio curato e miglior
 
 Prossimi rilasci pianificati:
 
-- nessun rilascio `1.x` successivo è pianificato al momento; eventuali patch `v1.9.x` devono restare correzioni o piccoli affinamenti operativi.
+- nessun rilascio `1.x` successivo è pianificato al momento; eventuali patch `v1.11.x` devono restare correzioni o piccoli affinamenti operativi.
 
 Possibili nuove minor `1.x` vanno aperte solo se emergono attriti reali nei venditori selezionati o blocchi operativi misurabili.
 
@@ -83,6 +83,10 @@ Questi lavori non sono rilasci attivi. Vanno ripresi solo se crescita, soglie, r
 
 ### Serie 1.x
 
+- `v1.11.2` - Fix conteggio backlog retry dopo migrazione legacy
+- `v1.11.1` - Correzioni review bot e manutenzione automazioni GitHub
+- `v1.11.0` - Ricerca fiscale ordini e alert su spike dati fiscali mancanti
+- `v1.10.0` - CI GitHub Actions leggera reintrodotta
 - `v1.9.0` - Onboarding selettivo più curato
 - `v1.8.0` - Support snapshot utente
 - `v1.7.0` - Export fiscale venditore
