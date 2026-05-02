@@ -158,9 +158,9 @@ creati localmente quando li incontri.
 - Questo repository è privato e gestito da un solo maintainer: review/commenti
   esterni non sono un passaggio atteso per chiudere il lavoro.
 - Quando nel giro operativo ordinario ti occupi di controllare i commenti del bot,
-  verifica in generale tutti i commenti rimasti in sospeso, inclusi quelli su PR
-  precedenti o diverse da quella su cui stai lavorando in quel momento, e poi
-  gestiscili o riportali in modo esplicito.
+  verifica in generale tutti i commenti rimasti in sospeso su tutte le PR,
+  incluse PR aperte, chiuse o già mergiate, precedenti o diverse da quella su cui
+  stai lavorando in quel momento, e poi gestiscili o riportali in modo esplicito.
 - Quando la PR è pronta, i test rilevanti sono verdi e la self-review è stata
   completata, commit, push e merge possono essere il modo migliore per chiudere
   davvero il lavoro. Procedi quando sono il passo naturale del flusso richiesto o
