@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.11.1](https://github.com/max23468/FiscalBay/compare/v1.11.0...v1.11.1) (2026-05-02)
+
+### Bug Fixes
+
+* resolve pending bot review findings ([b25a177](https://github.com/max23468/FiscalBay/commit/b25a177883da5481281dc71deb69f0f350df41da))
+
+### Maintenance
+
+* raise coverage gate and simplify checks ([a84561b](https://github.com/max23468/FiscalBay/commit/a84561b5022f041d53ac525cff81aae815ae13f6))
+* clarify publish versus deploy policy ([d3426d8](https://github.com/max23468/FiscalBay/commit/d3426d8f41cb1dccb8f8edf7944fb49768802c17))
+* clarify bot comment review scope ([92a5735](https://github.com/max23468/FiscalBay/commit/92a573504727c959ac2167bc30238975b5e568bf))
+* require all-pr bot comment checks ([289129a](https://github.com/max23468/FiscalBay/commit/289129a556175a3fbd671fcce5310a947ad95a57))
+
 ## [1.11.0](https://github.com/max23468/FiscalBay/compare/v1.10.0...v1.11.0) (2026-05-01)
 
 ### Features
