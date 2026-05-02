@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.11.2](https://github.com/max23468/FiscalBay/compare/v1.11.1...v1.11.2) (2026-05-02)
+
+### Bug Fixes
+
+* migrate retry backlog before counting ([2d7b180](https://github.com/max23468/FiscalBay/commit/2d7b1807ae8f898c2adb53e4e2882ec5719acb77))
+
 ## [1.11.1](https://github.com/max23468/FiscalBay/compare/v1.11.0...v1.11.1) (2026-05-02)
 
 ### Bug Fixes
