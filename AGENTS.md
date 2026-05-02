@@ -135,7 +135,10 @@ creati localmente quando li incontri.
 - Quando il maintainer chiede di "pubblicare", "pubblica le modifiche", "manda su"
   o usa formule equivalenti senza nominare deploy o release, interpreta la richiesta
   come pubblicazione del codice: verifiche locali rilevanti, commit Conventional
-  coerente, push del branch, PR pronta o merge quando naturale. Non eseguire deploy
+  coerente, push del branch, PR pronta o merge quando naturale. Se la PR è pronta,
+  i controlli rilevanti sono verdi e non ci sono blocchi o ambiguità, non lasciare
+  il lavoro a metà: fai merge, chiudi la PR e cancella il branch remoto/locale
+  quando non serve più. Non eseguire deploy
   su VPS o release versionata solo per effetto della parola "pubblica" se ritieni
   che non siano necessari; in quel caso dichiara esplicitamente che li hai saltati.
 - Esegui deploy su VPS solo quando il maintainer lo chiede esplicitamente, quando
