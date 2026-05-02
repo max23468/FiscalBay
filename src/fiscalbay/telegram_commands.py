@@ -288,7 +288,7 @@ def looks_like_order_id(value: str) -> bool:
     raw = str(value or "").strip()
     if not raw:
         return False
-    return bool(re.fullmatch(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+", raw))
+    return bool(re.fullmatch(r"\d+(?:-\d+){2,}", raw))
 
 
 def format_search_records(

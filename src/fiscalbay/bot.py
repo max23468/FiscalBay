@@ -149,6 +149,7 @@ from .storage.sqlite import (
     summarize_oauth_link_sessions,
     summarize_operation_queue,
     summarize_retention_backlog,
+    summarize_retry_queue_backlog,
     summarize_tenant_account_status,
     update_telegram_user_status,
     upsert_notification_subscription,
@@ -344,7 +345,7 @@ def _branding_sync_retry_at_key() -> str:
 def _extract_retry_after_seconds(error: TelegramApiError) -> int | None:
     if error.status_code != 429:
         return None
-    match = re.search(r"retry_after[_ =:]+(\d+)", str(error), flags=re.IGNORECASE)
+    match = re.search(r"\bretry[_ -]?after[_ =:]+(\d+)", str(error), flags=re.IGNORECASE)
     if match is None:
         return None
     return max(1, int(match.group(1)))
@@ -1111,7 +1112,7 @@ def _build_admin_maintenance_payload(telegram_config: TelegramConfig) -> dict[st
         "service_mode": dashboard.get("service_mode", SERVICE_MODE_NORMAL),
         "dashboard": dashboard,
         "queue": summarize_operation_queue(telegram_config.state_path),
-        "retry_backlog": len(load_retry_queue_entries(telegram_config.retry_queue_path)),
+        "retry_backlog": summarize_retry_queue_backlog(telegram_config.retry_queue_path)["total"],
         "oauth_sessions": summarize_oauth_link_sessions(
             telegram_config.state_path,
             now_iso=_now_utc_iso(),
