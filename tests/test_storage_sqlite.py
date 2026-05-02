@@ -839,6 +839,21 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertEqual(backlog["tenant"], 1)
             self.assertEqual(backlog["total"], 2)
 
+    def test_summarize_retry_queue_backlog_migrates_legacy_json_queue(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "retry-queue.json"
+            db_path.write_text(
+                '[{"chat_id": 456, "text": "legacy retry", "attempts": 2}]',
+                encoding="utf-8",
+            )
+
+            backlog = summarize_retry_queue_backlog(str(db_path))
+
+            self.assertEqual(backlog["global"], 1)
+            self.assertEqual(backlog["tenant"], 0)
+            self.assertEqual(backlog["total"], 1)
+            self.assertTrue(Path(f"{db_path}.legacy-json.bak").exists())
+
     def test_multi_tenant_entities_and_notification_targets_roundtrip(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"

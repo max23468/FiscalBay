@@ -652,6 +652,7 @@ def save_tenant_retry_queue_entries(
 
 
 def summarize_retry_queue_backlog(path: str) -> dict[str, int]:
+    _migrate_legacy_json_retry_queue(path)
     init_db(path)
     with _connect(path) as conn:
         global_count = as_int(conn.execute("SELECT COUNT(*) FROM retry_queue").fetchone()[0])
