@@ -161,6 +161,11 @@ creati localmente quando li incontri.
   verifica in generale tutti i commenti rimasti in sospeso su tutte le PR,
   incluse PR aperte, chiuse o già mergiate, precedenti o diverse da quella su cui
   stai lavorando in quel momento, e poi gestiscili o riportali in modo esplicito.
+  Se una PR è già stata controllata almeno due volte di fila senza trovare nuovi
+  commenti o azioni da fare, non ricontrollarla ancora nei passaggi immediatamente
+  successivi salvo nuovi segnali espliciti: nuove review, nuovi commenti, push
+  successivi, riapertura della PR o richiesta diretta del maintainer. In quel caso
+  segnala brevemente che è stata saltata per evitare controlli ripetitivi.
 - Quando la PR è pronta, i test rilevanti sono verdi e la self-review è stata
   completata, commit, push e merge possono essere il modo migliore per chiudere
   davvero il lavoro. Procedi quando sono il passo naturale del flusso richiesto o
