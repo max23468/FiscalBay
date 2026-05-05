@@ -1351,7 +1351,7 @@ class OAuthHandler(BaseHTTPRequestHandler):
                 "Collegamento riuscito",
                 (
                     "Puoi tornare su Telegram: il bot ha già confermato il collegamento "
-                    "e ti aspetta li'."
+                    "e ti aspetta lì."
                 ),
                 action_label="Apri Telegram",
                 action_url=public_bot_url(),
