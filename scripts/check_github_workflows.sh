@@ -9,6 +9,7 @@ cd "${REPO_ROOT}"
 ALLOWED_WORKFLOWS=(
   ".github/workflows/actionlint.yml"
   ".github/workflows/ci.yml"
+  ".github/workflows/codex-pr-comments.yml"
   ".github/workflows/dependency-review.yml"
   ".github/workflows/package-build.yml"
   ".github/workflows/pr-title.yml"

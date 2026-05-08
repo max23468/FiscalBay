@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -79,6 +80,9 @@ class ReconcileTests(unittest.TestCase):
             db_path = Path(tmpdir) / "state.db"
             lock_path = Path(tmpdir) / "telegram_bot.lock"
             lock_path.write_text("pid=123\n", encoding="utf-8")
+            now = datetime.now(timezone.utc)
+            created_at = (now - timedelta(hours=2)).isoformat().replace("+00:00", "Z")
+            expires_at = (now - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
             create_oauth_link_session(
                 str(db_path),
                 OauthLinkSession(
@@ -86,8 +90,8 @@ class ReconcileTests(unittest.TestCase):
                     telegram_chat_id=456,
                     oauth_state="state-1",
                     status="pending",
-                    expires_at="2026-04-06T10:00:00Z",
-                    created_at="2026-04-06T09:45:00Z",
+                    expires_at=expires_at,
+                    created_at=created_at,
                 ),
             )
             append_audit_log_entry(
