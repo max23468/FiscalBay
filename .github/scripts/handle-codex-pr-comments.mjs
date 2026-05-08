@@ -107,6 +107,13 @@ async function listPullRequests() {
     prsByNumber.set(pr.number, pr);
   }
 
+  for (const prNumber of await listInboxPullRequestNumbers()) {
+    if (prsByNumber.has(prNumber)) continue;
+
+    const inboxPr = await githubJson(`/repos/${owner}/${repo}/pulls/${prNumber}`);
+    prsByNumber.set(inboxPr.number, inboxPr);
+  }
+
   if (eventPullRequestNumber && !prsByNumber.has(eventPullRequestNumber)) {
     const eventPr = await githubJson(`/repos/${owner}/${repo}/pulls/${eventPullRequestNumber}`);
     prsByNumber.set(eventPr.number, eventPr);
@@ -119,6 +126,22 @@ async function listPullRequests() {
 
 async function listAllPullRequests() {
   return listPullRequestPages({ state: "all" });
+}
+
+async function listInboxPullRequestNumbers() {
+  const existingIssue = chooseCanonicalInboxIssue(await findInboxIssues());
+
+  return existingIssue ? extractInboxPullRequestNumbers(existingIssue.body ?? "") : [];
+}
+
+function extractInboxPullRequestNumbers(body) {
+  return [
+    ...new Set(
+      [...body.matchAll(/^### PR #(\d+) - /gm)]
+        .map((match) => Number.parseInt(match[1], 10))
+        .filter(Number.isInteger),
+    ),
+  ];
 }
 
 async function listOpenPullRequests() {
