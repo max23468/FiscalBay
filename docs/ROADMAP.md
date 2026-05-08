@@ -73,6 +73,9 @@ Questi lavori non sono rilasci attivi. Vanno ripresi solo se crescita, soglie, r
 ## Regole operative
 
 - Ogni rilascio `1.x` deve avere un obiettivo operativo chiaro.
+- Ogni decisione di prodotto, tecnica o operativa condivisa in chat deve essere
+  riportata qui quando cambia direzione, priorità, perimetro o backlog del
+  progetto.
 - I lavori completati vanno spostati nello storico e rimossi dalla roadmap aperta.
 - Non aggiungere checkbox completate come backlog residuo.
 - SQLite resta il default finché healthcheck e scale readiness restano sani.

@@ -115,6 +115,10 @@ creati localmente quando li incontri.
 - Non inventare risultati di test o comandi non eseguiti.
 - Se un controllo non può essere eseguito per limiti di ambiente, tempo o permessi,
   dichiaralo esplicitamente.
+- Ogni volta che termini un'attività, includi nelle conclusioni i prossimi passi
+  consigliati quando c'è un seguito operativo reale. Devono essere concreti,
+  ordinati e proporzionati al lavoro appena concluso; se non c'è un prossimo
+  passo utile, dichiaralo esplicitamente.
 
 ## Commit e PR
 
@@ -205,6 +209,10 @@ Per dettagli e casi limite, seguire `docs/RELEASE_POLICY.md`.
 
 - Aggiorna documentazione e commenti quando il comportamento cambia.
 - Se aggiungi o cambi configurazioni/env var, documentale in `README.md` o `docs/`.
+- Ogni decisione di prodotto, tecnica o operativa condivisa in chat deve confluire
+  in `docs/ROADMAP.md` quando cambia direzione, priorità, perimetro o backlog
+  del progetto. Non serve aggiornare la roadmap per micro-decisioni esecutive già
+  chiuse nello stesso intervento.
 - Quando aggiorni `docs/ROADMAP.md`, gli item completati vanno rimossi dalla
   roadmap: non vanno lasciati come checkbox spuntate.
 - `docs/CHANGELOG.md` è storico; il changelog di release corrente è `CHANGELOG.md`
