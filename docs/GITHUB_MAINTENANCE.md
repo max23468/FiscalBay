@@ -9,12 +9,15 @@ GitHub Actions è riattivato solo per automazioni GitHub leggere e a basso consu
 
 - i soli workflow versionati ammessi sono `.github/workflows/ci.yml`, più i
   controlli conservativi `.github/workflows/pr-title.yml`,
-  `.github/workflows/dependency-review.yml`, `.github/workflows/actionlint.yml`
-  e `.github/workflows/package-build.yml`
+  `.github/workflows/dependency-review.yml`, `.github/workflows/actionlint.yml`,
+  `.github/workflows/package-build.yml` e
+  `.github/workflows/codex-pr-comments.yml`
 - la CI parte su PR verso `main` e con `workflow_dispatch`
 - il package build parte solo su PR che toccano packaging e con `workflow_dispatch`
 - Dependency Review parte solo su PR che toccano file di dipendenze
 - actionlint parte solo su PR che toccano workflow
+- Codex PR comments aggiorna la issue `Codex feedback inbox` su eventi PR
+  trusted, commenti issue, avvio manuale e riallineamento programmato ogni 6 ore
 - non usare Actions per deploy, diagnostica VPS, merge o update
   dipendenze fuori da Dependabot
 - non aggiungere altri workflow senza richiesta esplicita del maintainer
@@ -29,6 +32,8 @@ GitHub Actions è riattivato solo per automazioni GitHub leggere e a basso consu
 - Dependency Review: `.github/workflows/dependency-review.yml`
 - Actionlint: `.github/workflows/actionlint.yml`
 - Package build mirato: `.github/workflows/package-build.yml`
+- Codex feedback inbox: `.github/workflows/codex-pr-comments.yml` e
+  `.github/scripts/handle-codex-pr-comments.mjs`
 - Dependabot version updates: `.github/dependabot.yml`
 - Issue forms: `.github/ISSUE_TEMPLATE/*`
 - Ownership: `.github/CODEOWNERS`
@@ -100,6 +105,10 @@ I workflow a basso consumo sono:
 - `.github/workflows/actionlint.yml`: parte solo quando cambiano workflow
 - `.github/workflows/package-build.yml`: esegue `python -m build` su PR che
   toccano packaging e su avvio manuale
+- `.github/workflows/codex-pr-comments.yml`: legge i review thread GitHub in
+  contesto trusted, aggiorna la issue `Codex feedback inbox`, separa thread
+  actionable e storico, e pubblica una richiesta Codex sulle PR con commenti
+  ancora da gestire senza committare file di stato
 - tutti i workflow usano concurrency con cancellazione dei run precedenti sulla
   stessa PR/ref quando applicabile
 

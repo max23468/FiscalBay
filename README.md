@@ -62,7 +62,7 @@ In pratica:
 Per mantenere il repository allineato alle best practice GitHub anche in contesto single-maintainer, il progetto include:
 
 - workflow GitHub Actions allowlist `.github/workflows/ci.yml` per CI leggera su PR verso `main` e avvio manuale
-- controlli GitHub Actions conservativi per titolo PR, Dependency Review, actionlint e build package mirato
+- controlli GitHub Actions conservativi per titolo PR, Dependency Review, actionlint, build package mirato e inbox commenti Codex
 - deploy esplicito con `scripts/deploy_now.sh`
 - release versionata esplicita con `scripts/release_now.sh`
 - CI locale con `bash scripts/ci_verify.sh`, richiamata anche dal workflow leggero e dalla pipeline locale
