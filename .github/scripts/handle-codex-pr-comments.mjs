@@ -7,7 +7,10 @@ const repository = process.env.GITHUB_REPOSITORY;
 const token = process.env.GITHUB_TOKEN;
 const codexLoginPattern = new RegExp(process.env.CODEX_BOT_LOGIN_PATTERN ?? "codex", "i");
 const inboxIssueTitle = process.env.CODEX_INBOX_ISSUE_TITLE ?? "Codex feedback inbox";
-const inboxMarker = "<!-- fiscalbay-codex-feedback-inbox -->";
+const repositoryName = repository?.split("/")[1] ?? "repository";
+const inboxMarker =
+  process.env.CODEX_INBOX_MARKER ??
+  `<!-- ${normalizeInboxMarkerName(repositoryName)}-codex-feedback-inbox -->`;
 const dryRun = process.env.DRY_RUN === "true";
 const eventName = process.env.GITHUB_EVENT_NAME ?? "";
 const eventPayload = await readGitHubEventPayload();
@@ -516,6 +519,15 @@ function parsePositiveInteger(value, fallback) {
   const parsed = Number.parseInt(value ?? "", 10);
 
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizeInboxMarkerName(value) {
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "repository"
+  );
 }
 
 async function githubJson(path, body, method) {
