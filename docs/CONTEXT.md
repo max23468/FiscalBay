@@ -457,7 +457,7 @@ Presenti e utili:
 - `sqlite3`
 - `htop`
 - `fail2ban-client`
-- `python3.11`
+- `python3.13`
 
 ### Runtime applicativo sulla VPS
 
@@ -471,7 +471,7 @@ Virtualenv attivo del progetto:
 
 Runtime applicativo stabile:
 
-- Python `3.11`
+- Python `3.13`
 
 Python di sistema:
 
@@ -479,7 +479,7 @@ Python di sistema:
 
 Scelta operativa corretta:
 
-- il progetto gira nel proprio `.venv` su Python `3.11`
+- il progetto gira nel proprio `.venv` su Python `3.13`
 - non affidarsi al Python di sistema per il runtime del bot
 - gli upgrade del runtime Python vanno fatti in modo esplicito con
   `FISCALBAY_PYTHON_BIN` e, quando cambia la minor version del `.venv`,
@@ -516,7 +516,7 @@ Già fatto:
 - aggiornamento sistema
 - aggiornamento OpenSSH
 - hardening SSH
-- installazione Python 3.11
+- installazione Python 3.11 e successiva migrazione controllata a Python 3.13
 - ricreazione virtualenv applicativo
 - attivazione `fail2ban`
 - installazione strumenti base operativi
@@ -657,7 +657,7 @@ l'evoluzione successiva:
   dallo smoke deploy con avvio esplicito delle rispettive unit oneshot
 - `fiscalbay-duckdns.timer` viene installato ma abilitato solo se esiste
   `/etc/fiscalbay/duckdns.env`
-- il runtime corrente del progetto è Python `3.11` nel `.venv`; eventuali
+- il runtime corrente del progetto è Python `3.13` nel `.venv`; eventuali
   migrazioni runtime devono usare la procedura esplicita con
   `FISCALBAY_PYTHON_BIN` e ricreazione controllata del `.venv`
 - il bot usa SQLite locale in `data/state.db`

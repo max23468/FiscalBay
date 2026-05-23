@@ -108,10 +108,11 @@ FISCALBAY_ONESHOT_CPU_QUOTA=50%
 
 Runtime Python:
 
-- di default `deploy/linux-setup.sh` preferisce `python3.11`, poi `python3.12`,
-  poi `python3.10`, poi `python3`
+- il runtime operativo corrente sulla VPS FiscalBay è Python `3.13`
+- di default `deploy/linux-setup.sh` preferisce `python3.13`, poi `python3.12`,
+  poi `python3.11`, poi `python3.10`, poi `python3`
 - per imporre un runtime specifico usare `FISCALBAY_PYTHON_BIN`, ad esempio
-  `/usr/bin/python3.12` o `/usr/bin/python3.14`
+  `/usr/bin/python3.13` o `/usr/bin/python3.12`
 - se il `.venv` esiste già e usa una minor version diversa da quella richiesta,
   lo script si ferma invece di migrare in modo implicito
 - per ricreare il `.venv` in modo esplicito usare `FISCALBAY_RECREATE_VENV=1`;
@@ -121,7 +122,7 @@ Runtime Python:
 Esempio di migrazione runtime da Mac locale tramite deploy standard:
 
 ```bash
-FISCALBAY_PYTHON_BIN=/usr/bin/python3.12 \
+FISCALBAY_PYTHON_BIN=/usr/bin/python3.13 \
   FISCALBAY_RECREATE_VENV=1 \
   scripts/deploy_now.sh
 ```
