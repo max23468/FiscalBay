@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.12.0](https://github.com/max23468/FiscalBay/compare/v1.11.2...v1.12.0) (2026-05-23)
+
+### Features
+
+* support controlled Python runtime migration ([2dbb340](https://github.com/max23468/FiscalBay/commit/2dbb340ff3c7128a5060b5bf99025759b196a737))
+
+### Bug Fixes
+
+* corregge accento nel messaggio callback OAuth (#67) ([5be8328](https://github.com/max23468/FiscalBay/commit/5be8328e06039f83fae74932e0d00bbed7e28262))
+* preserve Codex feedback inbox entries ([45cb921](https://github.com/max23468/FiscalBay/commit/45cb9214ca257bb900eeab3ebc3980dbea4b0bd7))
+* align Codex feedback inbox workflow ([b54063f](https://github.com/max23468/FiscalBay/commit/b54063fdc48aab22704a825b3139f8dcb05b7c9d))
+* preserve inbox entries on partial scans ([55994dc](https://github.com/max23468/FiscalBay/commit/55994dc04d5e59b6e1d5d541133978e83f004e35))
+
+### Maintenance
+
+* limit repeated bot comment checks ([55df277](https://github.com/max23468/FiscalBay/commit/55df277827d95347fbac695e304f98f4043f06ce))
+* complete publish flow instructions ([2f3532a](https://github.com/max23468/FiscalBay/commit/2f3532a227a46ba52517647503f18c8df257f90e))
+* split telegram command handlers ([2e848eb](https://github.com/max23468/FiscalBay/commit/2e848ebbf0fc0ac33d50487afd144ad367b0f15d))
+* add Codex feedback inbox workflow ([6fe89e1](https://github.com/max23468/FiscalBay/commit/6fe89e15db71288774ee3d8a03665bb47da6d94a))
+* document chat next steps policy ([387dc43](https://github.com/max23468/FiscalBay/commit/387dc4341dc8d592ad69059e3290462c5f92c23a))
+* unify Codex feedback inbox (#73) ([0bc64a4](https://github.com/max23468/FiscalBay/commit/0bc64a4c5226966b3382a3e95178a7a5dd1bda4c))
+* harden Codex inbox detection (#74) ([ad64aba](https://github.com/max23468/FiscalBay/commit/ad64aba1faecc98f69af70225c127391a3e70867))
+* retry Codex GitHub rate limits (#75) ([12eda71](https://github.com/max23468/FiscalBay/commit/12eda7180bd6807f28171f9432c3159ee97f7359))
+
 ## [1.11.2](https://github.com/max23468/FiscalBay/compare/v1.11.1...v1.11.2) (2026-05-02)
 
 ### Bug Fixes
