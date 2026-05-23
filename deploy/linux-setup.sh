@@ -10,7 +10,13 @@ APP_DIR="${APP_DIR:-${REPO_DIR}}"
 VENV_DIR="${APP_DIR}/.venv"
 DATA_DIR="${APP_DIR}/data"
 ENV_FILE="${APP_DIR}/.env"
-PYTHON_BIN="${PYTHON_BIN:-}"
+PYTHON_BIN="${FISCALBAY_PYTHON_BIN:-${PYTHON_BIN:-}}"
+PYTHON_BIN_WAS_REQUESTED=false
+if [ -n "${PYTHON_BIN}" ]; then
+  PYTHON_BIN_WAS_REQUESTED=true
+fi
+RECREATE_VENV="${FISCALBAY_RECREATE_VENV:-false}"
+VENV_BACKUP_PATH="${FISCALBAY_VENV_BACKUP_PATH:-}"
 SERVICE_NAME="fiscalbay-bot"
 SERVICE_TEMPLATE="${APP_DIR}/deploy/fiscalbay-bot.service"
 SERVICE_TARGET="/etc/systemd/system/${SERVICE_NAME}.service"
@@ -67,8 +73,12 @@ select_python_bin() {
     echo "${PYTHON_BIN}"
     return
   fi
+  if [ -n "${PYTHON_BIN}" ]; then
+    echo "Python runtime richiesto non trovato: ${PYTHON_BIN}" >&2
+    exit 1
+  fi
 
-  for candidate in python3.11 python3.10 python3; do
+  for candidate in python3.11 python3.12 python3.10 python3; do
     if command -v "${candidate}" >/dev/null 2>&1; then
       echo "${candidate}"
       return
@@ -78,7 +88,87 @@ select_python_bin() {
   echo "python3"
 }
 
+is_truthy() {
+  case "$1" in
+    1|true|TRUE|yes|YES|y|Y)
+      return 0
+      ;;
+    ""|0|false|FALSE|no|NO|n|N)
+      return 1
+      ;;
+    *)
+      echo "Valore booleano non valido: $1" >&2
+      exit 1
+      ;;
+  esac
+}
+
+python_minor_version() {
+  "$1" - <<'PY'
+import sys
+
+print(f"{sys.version_info.major}.{sys.version_info.minor}")
+PY
+}
+
+ensure_supported_python() {
+  local python_bin="$1"
+  if ! "${python_bin}" - <<'PY'
+import sys
+
+raise SystemExit(0 if sys.version_info >= (3, 10) else 1)
+PY
+  then
+    echo "Python runtime non supportato: $("${python_bin}" --version 2>&1). Serve Python >= 3.10." >&2
+    exit 1
+  fi
+}
+
+maybe_recreate_venv() {
+  if ! is_truthy "${RECREATE_VENV}"; then
+    return
+  fi
+  if [ ! -d "${VENV_DIR}" ]; then
+    return
+  fi
+
+  local backup_path="${VENV_BACKUP_PATH}"
+  if [ -z "${backup_path}" ]; then
+    backup_path="${VENV_DIR}.backup.$(date +%Y%m%d%H%M%S)"
+  fi
+  if [ -e "${backup_path}" ]; then
+    echo "Backup venv gia' presente: ${backup_path}" >&2
+    exit 1
+  fi
+
+  echo "Ricreo virtualenv: sposto ${VENV_DIR} in ${backup_path}"
+  sudo mv "${VENV_DIR}" "${backup_path}"
+}
+
+ensure_existing_venv_matches_requested_python() {
+  if [ ! -x "${VENV_DIR}/bin/python" ]; then
+    return
+  fi
+  if [ "${PYTHON_BIN_WAS_REQUESTED}" != true ]; then
+    return
+  fi
+  if is_truthy "${RECREATE_VENV}"; then
+    return
+  fi
+
+  local requested_minor
+  local current_minor
+  requested_minor="$(python_minor_version "${PYTHON_BIN}")"
+  current_minor="$(python_minor_version "${VENV_DIR}/bin/python")"
+  if [ "${requested_minor}" != "${current_minor}" ]; then
+    echo "Il venv esistente usa Python ${current_minor}, ma e' stato richiesto Python ${requested_minor}." >&2
+    echo "Usa FISCALBAY_RECREATE_VENV=1 per ricrearlo in modo esplicito." >&2
+    exit 1
+  fi
+}
+
 PYTHON_BIN="$(select_python_bin)"
+ensure_supported_python "${PYTHON_BIN}"
 
 install_packages() {
   if command -v apt-get >/dev/null 2>&1; then
@@ -156,6 +246,9 @@ sudo chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}"
 sudo chmod 750 "${APP_DIR}"
 sudo chmod 750 "${DATA_DIR}"
 
+ensure_existing_venv_matches_requested_python
+maybe_recreate_venv
+
 if [ ! -d "${VENV_DIR}" ]; then
   sudo -u "${APP_USER}" "${PYTHON_BIN}" -m venv "${VENV_DIR}"
 fi
@@ -224,6 +317,8 @@ echo "Configurazione applicata:"
 echo "- APP_USER=${APP_USER}"
 echo "- APP_GROUP=${APP_GROUP}"
 echo "- APP_DIR=${APP_DIR}"
+echo "- PYTHON_BIN=${PYTHON_BIN}"
+echo "- VENV_DIR=${VENV_DIR}"
 echo "- BOT_MEMORY_MAX=${BOT_MEMORY_MAX}"
 echo "- BOT_CPU_QUOTA=${BOT_CPU_QUOTA}"
 echo "- OAUTH_MEMORY_MAX=${OAUTH_MEMORY_MAX}"

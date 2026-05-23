@@ -132,8 +132,26 @@ remote_app_dir="$(quote_for_remote "${APP_DIR}")"
 remote_app_user="$(quote_for_remote "${APP_USER}")"
 remote_app_group="$(quote_for_remote "${APP_GROUP}")"
 remote_env_file="$(quote_for_remote "${DEPLOY_ENV_FILE}")"
+remote_env_overrides=()
+
+append_remote_env_if_set() {
+  local name="$1"
+  local value="${!name:-}"
+  if [ -n "${value}" ]; then
+    remote_env_overrides+=("${name}=$(quote_for_remote "${value}")")
+  fi
+}
+
+append_remote_env_if_set FISCALBAY_PYTHON_BIN
+append_remote_env_if_set FISCALBAY_RECREATE_VENV
+append_remote_env_if_set FISCALBAY_VENV_BACKUP_PATH
+
+remote_env_prefix=""
+if [ "${#remote_env_overrides[@]}" -gt 0 ]; then
+  remote_env_prefix="${remote_env_overrides[*]} "
+fi
 
 echo "Deploy VPS FiscalBay da ref ${REF}..."
-remote_cmd "sudo bash -lc 'set -euo pipefail; if [ -f ${remote_env_file} ]; then set -a; . ${remote_env_file}; set +a; fi; APP_DIR=${remote_app_dir} APP_USER=${remote_app_user} APP_GROUP=${remote_app_group} bash ${remote_app_dir}/deploy/vps-deploy-ref.sh ${remote_ref}'"
+remote_cmd "sudo bash -lc 'set -euo pipefail; if [ -f ${remote_env_file} ]; then set -a; . ${remote_env_file}; set +a; fi; ${remote_env_prefix}APP_DIR=${remote_app_dir} APP_USER=${remote_app_user} APP_GROUP=${remote_app_group} bash ${remote_app_dir}/deploy/vps-deploy-ref.sh ${remote_ref}'"
 
 echo "Deploy completato e smoke check passato."
