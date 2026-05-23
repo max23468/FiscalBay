@@ -28,6 +28,9 @@ Environment overrides:
   FISCALBAY_VPS_PORT       default: 22
   FISCALBAY_VPS_HOSTNAME   default: fiscalbay-bot
   FISCALBAY_APP_DIR        default: /opt/fiscalbay
+  FISCALBAY_PYTHON_BIN     optional Python runtime for install-vps.sh
+  FISCALBAY_RECREATE_VENV  set to 1 to recreate the remote .venv explicitly
+  FISCALBAY_VENV_BACKUP_PATH optional backup path for the previous .venv
 EOF
 }
 
@@ -66,6 +69,28 @@ ssh_args=(
 remote_cmd() {
   ssh "${ssh_args[@]}" "$1"
 }
+
+quote_for_remote() {
+  printf "%q" "$1"
+}
+
+remote_env_overrides=()
+append_remote_env_if_set() {
+  local name="$1"
+  local value="${!name:-}"
+  if [ -n "${value}" ]; then
+    remote_env_overrides+=("${name}=$(quote_for_remote "${value}")")
+  fi
+}
+
+append_remote_env_if_set FISCALBAY_PYTHON_BIN
+append_remote_env_if_set FISCALBAY_RECREATE_VENV
+append_remote_env_if_set FISCALBAY_VENV_BACKUP_PATH
+
+remote_install_env_prefix=""
+if [ "${#remote_env_overrides[@]}" -gt 0 ]; then
+  remote_install_env_prefix="${remote_env_overrides[*]} "
+fi
 
 short_ref="$(git -C "${REPO_ROOT}" rev-parse --short "${REF}")"
 tmpdir="$(mktemp -d)"
@@ -117,4 +142,4 @@ if [ "${SKIP_INSTALL}" = true ]; then
 fi
 
 echo "Installo, riavvio servizi e lancio smoke check sulla VPS..."
-remote_cmd "sudo APP_DIR='${APP_DIR}' APP_USER='${APP_USER}' APP_GROUP='${APP_GROUP}' bash '${APP_DIR}/deploy/install-vps.sh'"
+remote_cmd "sudo ${remote_install_env_prefix}APP_DIR=$(quote_for_remote "${APP_DIR}") APP_USER=$(quote_for_remote "${APP_USER}") APP_GROUP=$(quote_for_remote "${APP_GROUP}") bash $(quote_for_remote "${APP_DIR}/deploy/install-vps.sh")"
