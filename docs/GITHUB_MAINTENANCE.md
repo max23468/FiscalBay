@@ -17,9 +17,7 @@ GitHub Actions è riattivato solo per automazioni GitHub leggere e a basso consu
 - Dependency Review parte solo su PR che toccano file di dipendenze
 - actionlint parte solo su PR che toccano workflow
 - Codex PR comments aggiorna la issue `Codex feedback inbox` su eventi PR
-  trusted, commenti issue, avvio manuale e riallineamento programmato ogni 6 ore;
-  nei run parziali rilegge anche le PR già presenti nella inbox per non far
-  sparire temporaneamente commenti storici o actionable non recenti
+  trusted, commenti issue, avvio manuale e riallineamento programmato ogni 6 ore
 - non usare Actions per deploy, diagnostica VPS, merge o update
   dipendenze fuori da Dependabot
 - non aggiungere altri workflow senza richiesta esplicita del maintainer
@@ -108,9 +106,9 @@ I workflow a basso consumo sono:
 - `.github/workflows/package-build.yml`: esegue `python -m build` su PR che
   toccano packaging e su avvio manuale
 - `.github/workflows/codex-pr-comments.yml`: legge i review thread GitHub in
-  contesto trusted, aggiorna la issue `Codex feedback inbox`, separa thread
-  actionable e storico, e pubblica una richiesta Codex sulle PR con commenti
-  ancora da gestire senza committare file di stato
+  contesto trusted, aggiorna la issue `Codex feedback inbox` e separa thread
+  actionable e storico senza pubblicare commenti automatici sulle PR o
+  committare file di stato
 - tutti i workflow usano concurrency con cancellazione dei run precedenti sulla
   stessa PR/ref quando applicabile
 
