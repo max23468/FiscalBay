@@ -168,7 +168,6 @@ ensure_existing_venv_matches_requested_python() {
 }
 
 PYTHON_BIN="$(select_python_bin)"
-ensure_supported_python "${PYTHON_BIN}"
 
 install_packages() {
   if command -v apt-get >/dev/null 2>&1; then
@@ -238,6 +237,7 @@ install_service_file() {
 }
 
 install_packages
+ensure_supported_python "${PYTHON_BIN}"
 ensure_group
 ensure_user
 
