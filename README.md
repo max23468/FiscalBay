@@ -678,13 +678,16 @@ Indice centrale:
 Documenti principali:
 
 - `docs/ROADMAP.md`
+- `docs/BACKLOG.md`
 - `docs/CONTEXT.md`
+- `docs/TOOLCHAIN.md`
 - `docs/ARCHITECTURE.md`
 - `docs/OPERATIONS.md`
 - `docs/DATA_MODEL.md`
 - `docs/SECURITY.md`
 - `docs/SERVICE_GOVERNANCE.md`
 - `docs/DECISIONS_PENDING.md`
+- `docs/decisions/`
 - `docs/OAUTH_FLOW.md`
 - `docs/CHANGELOG.md`
 

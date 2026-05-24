@@ -58,17 +58,9 @@ Per evitare bloatware, questi lavori non vanno anticipati nella serie `1.x` salv
 
 ### Backlog condizionato
 
-Questi lavori non sono rilasci attivi. Vanno ripresi solo se crescita, soglie, rischi operativi o decisioni prodotto li rendono necessari.
-
-- migrazione SQLite -> Postgres
-- secret manager dedicato
-- ruoli admin multipli
-- multiworker o scaling runtime
-- SLA e monitoraggio più strutturato
-- `v2.0.0`: autenticazione web app
-- `v2.0.0`: dashboard web venditore
-- `v2.0.0`: onboarding web self-service
-- `v2.0.0`: billing o packaging commerciale
+I lavori condizionati non ancora promossi stanno in [BACKLOG.md](./BACKLOG.md).
+Vanno ripresi solo se crescita, soglie, rischi operativi o decisioni prodotto li
+rendono necessari.
 
 ## Regole operative
 

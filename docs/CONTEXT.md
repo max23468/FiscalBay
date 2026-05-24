@@ -12,6 +12,12 @@ Questo documento serve come contesto persistente per nuove conversazioni con un'
   - esercizio operativo, rollback e criteri di salute
 - `docs/ROADMAP.md`
   - lavoro ancora aperto e ordine delle prossime fasi
+- `docs/BACKLOG.md`
+  - idee, debiti e attività condizionate non ancora promosse
+- `docs/TOOLCHAIN.md`
+  - runtime, comandi, tool esterni e guardrail di versione
+- `docs/decisions/`
+  - ADR leggere per nuove decisioni strutturali o migrazioni progressive
 
 Obiettivo:
 

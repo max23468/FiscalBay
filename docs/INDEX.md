@@ -32,6 +32,8 @@ Indice centrale della documentazione del progetto.
   - controlli rapidi, rollback, backup e criteri di salute
 - `docs/RELEASE_POLICY.md`
   - regole ufficiali per versioni, changelog, GitHub Release e tag GitHub
+- `docs/TOOLCHAIN.md`
+  - runtime, comandi, tool esterni e guardrail di versione
 - `docs/RELEASE_READINESS.md`
   - perimetro, criteri e limiti della prima release stabile `1.0.0`
 - `docs/CODEX_CLOUD_DEPLOY.md`
@@ -51,8 +53,12 @@ Indice centrale della documentazione del progetto.
   - fasi, task aperti e direzione delle prossime fasi
 - `docs/MILESTONE_BOARD.md`
   - milestone e dipendenze di alto livello
+- `docs/BACKLOG.md`
+  - idee, debiti e attività condizionate non ancora promosse in roadmap
 - `docs/DECISIONS_PENDING.md`
   - scelte ancora aperte che influenzano le prossime fasi
+- `docs/decisions/`
+  - ADR leggere per nuove decisioni strutturali o migrazioni progressive
 
 ## Storico
 
