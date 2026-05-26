@@ -480,4 +480,4 @@ Questo è il changelog ufficiale delle release del progetto.
 
 È gestito dal comando esplicito `scripts/release_now.sh`.
 
-Per lo storico narrativo precedente all'adozione del nuovo flusso, vedere `docs/CHANGELOG.md`.
+Per lo storico narrativo precedente all'adozione del nuovo flusso, vedere `docs/CHANGELOG_ARCHIVE.md`.

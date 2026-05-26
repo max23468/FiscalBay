@@ -33,7 +33,7 @@ Documenti collegati:
 
 - `docs/INDEX.md`
 - `docs/RUNBOOK.md`
-- `docs/SECURITY.md`
+- `docs/SECURITY_OPERATIONS.md`
 - `docs/SERVICE_GOVERNANCE.md`
 
 ## Check giornalieri minimi

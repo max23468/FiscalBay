@@ -20,7 +20,7 @@ Dipendenze:
 
 Deliverable minimi:
 
-- baseline operativa minima assorbita in `docs/OPERATIONS.md` e `docs/SECURITY.md`
+- baseline operativa minima assorbita in `docs/OPERATIONS.md` e `docs/SECURITY_OPERATIONS.md`
 - `docs/RUNBOOK.md` aggiornato
 - `docs/ROADMAP.md` allineata allo stato reale
 

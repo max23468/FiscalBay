@@ -110,7 +110,7 @@ questi eventi:
 La readiness `1.0.0` è considerata completata quando:
 
 - questo documento è allineato con `docs/SERVICE_GOVERNANCE.md`,
-  `docs/SECURITY.md`, `docs/OPERATIONS.md` e `docs/RELEASE_POLICY.md`
+  `docs/SECURITY_OPERATIONS.md`, `docs/OPERATIONS.md` e `docs/RELEASE_POLICY.md`
 - `docs/DECISIONS_PENDING.md` non contiene decisioni bloccanti per `1.0.0`
 - i controlli locali rilevanti passano
 - `scripts/release_now.sh --version 1.0.0 --bump major` completa release e deploy

@@ -4,13 +4,13 @@ This file is provided to integrate with GitHub's native **Security** tab.
 
 For full operational details, vulnerability workflow, and hardening guidance, refer to:
 
-- [`docs/SECURITY.md`](docs/SECURITY.md)
+- [`docs/SECURITY_OPERATIONS.md`](docs/SECURITY_OPERATIONS.md)
 
 ## Reporting a Vulnerability
 
 Please **do not** open a public issue for security vulnerabilities.
 
-Use private channels described in `docs/SECURITY.md` and include:
+Use private channels described in `docs/SECURITY_OPERATIONS.md` and include:
 
 - impacted component
 - reproduction details
