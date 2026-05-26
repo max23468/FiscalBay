@@ -34,7 +34,7 @@ procedure operative restano in [OPERATIONS.md](./OPERATIONS.md),
 
 | Tool | Versione/canale | Uso |
 | --- | --- | --- |
-| `ruff` | `0.15.9` | format e lint |
+| `ruff` | `0.15.14` | format e lint |
 | `mypy` | `>=1.18.2` | typecheck graduale |
 | `coverage` | `>=7.10.7` | copertura test |
 | `build` | `>=1.2.2` | package build |
