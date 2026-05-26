@@ -4,6 +4,8 @@ Questo documento serve come contesto persistente per nuove conversazioni con un'
 
 ## Indice rapido
 
+- `AGENTS.md`
+  - regole operative, publish/deploy/release e policy GitHub
 - `docs/INDEX.md`
   - indice centrale della documentazione
 - `docs/ARCHITECTURE.md`
@@ -16,6 +18,8 @@ Questo documento serve come contesto persistente per nuove conversazioni con un'
   - idee, debiti e attività condizionate non ancora promosse
 - `docs/TOOLCHAIN.md`
   - runtime, comandi, tool esterni e guardrail di versione
+- `docs/DECISIONS.md`
+  - indice decisionale stabile e ADR leggere
 - `docs/decisions/`
   - ADR leggere per nuove decisioni strutturali o migrazioni progressive
 
@@ -31,6 +35,16 @@ Nota importante:
 - questo file non deve contenere segreti
 - non inserire token, password, refresh token o chiavi private
 - può contenere host, path, utenti di servizio e workflow operativi, ma non credenziali sensibili
+
+## Stato progetto
+
+- Fase: servizio Telegram-first pubblico con accesso approvato e VPS operativa.
+- Versione/release: `../CHANGELOG.md`, tag GitHub e
+  `docs/RELEASE_POLICY.md`.
+- Deploy corrente: VPS `fiscalbay-bot`, via script locali/VPS fuori da GitHub
+  Actions.
+- Source of truth: `AGENTS.md`, `docs/INDEX.md`, `docs/TOOLCHAIN.md`,
+  `docs/DECISIONS.md`, `docs/DECISIONS_PENDING.md` e documenti operativi.
 
 ## Cos'è il progetto
 
@@ -49,6 +63,17 @@ Il progetto oggi è da considerare:
 - multiutente tenant-aware sul piano applicativo
 - ospitato su una singola VPS Linux
 - pensato per un solo account eBay già collegato per utente, senza scelte account/environment lato UX
+
+## Riepilogo Atlas
+
+- Versione/release: `../CHANGELOG.md`, tag GitHub e `docs/RELEASE_POLICY.md`
+  sono la source of truth.
+- Deploy corrente: VPS `fiscalbay-bot`, con deploy tramite script locali/VPS
+  dichiarati in `AGENTS.md` e `docs/RUNBOOK.md`.
+- Eccezione repo-specifica: supporto Python `>=3.10` nel manifest, con Python
+  `3.13` come runtime operativo controllato sulla VPS.
+- Pubblicazione proporzionata: modifiche docs-only richiedono review
+  documentale e `git diff --check`, senza deploy o release.
 
 ## Scopo funzionale attuale
 

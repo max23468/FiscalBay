@@ -51,7 +51,7 @@ Documenti collegati:
 
 - la roadmap entra nella nuova fase 3 con una progettazione multiutente più concreta: schema dati iniziale, milestone tecnica e direzione database sono ora fissati nei documenti stabili.
 - `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`, `docs/OAUTH_FLOW.md` e `docs/MILESTONE_BOARD.md` descrivono ora il target tenant-aware minimo, la separazione tra utente e chat, la strategia token per utente e la scelta SQLite ora / Postgres prima dell'apertura pubblica.
-- `docs/CONTEXT.md` e `docs/SECURITY.md` trattano ora esplicitamente la multiutenza come cambio di natura del progetto e collegano la roadmap ai finding audit su segreti globali, stato condiviso e assenza di audit/rate limiting per tenant.
+- `docs/CONTEXT.md` e `docs/SECURITY_OPERATIONS.md` trattano ora esplicitamente la multiutenza come cambio di natura del progetto e collegano la roadmap ai finding audit su segreti globali, stato condiviso e assenza di audit/rate limiting per tenant.
 - la prima beta privata multiutente è ora vincolata a `1 account eBay attivo per utente per environment`, refresh token cifrato a riposo, lifecycle token esplicito, audit log minimo e rate limiting per utente.
 - `src/fiscalbay/storage/sqlite.py`, `src/fiscalbay/models.py` e `src/fiscalbay/bot.py` iniziano ora a introdurre la base tecnica tenant-aware: tabelle SQLite per utenti/chat/account/token/subscription, stato runtime per tenant e scheduler notifiche con fallback single-tenant compatibile.
 - `src/fiscalbay/services/telegram_runtime.py` e `src/fiscalbay/bot.py` iniziano anche a registrare utenti/chat/subscription dal traffico Telegram reale, così la migrazione multiutente può partire senza fermare il bot in VPS.

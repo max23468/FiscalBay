@@ -528,4 +528,4 @@ Deploy riuscito ma bot non sano:
 I requisiti minimi di baseline e sicurezza immediata sono ora assorbiti in:
 
 - `docs/OPERATIONS.md`
-- `docs/SECURITY.md`
+- `docs/SECURITY_OPERATIONS.md`

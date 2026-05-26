@@ -14,7 +14,7 @@ Questa guida definisce il flusso ufficiale di versionamento, changelog e release
 - versione pacchetto: `X.Y.Z`
 - tag GitHub: `vX.Y.Z`
 - changelog ufficiale: `CHANGELOG.md` in root
-- archivio storico precedente: `docs/CHANGELOG.md`
+- archivio storico precedente: `docs/CHANGELOG_ARCHIVE.md`
 - meccanismo preferito di release: `scripts/release_now.sh`, esplicito e senza
   GitHub Actions
 
@@ -182,7 +182,7 @@ Principi:
 - evita note manuali sparse in più file
 - tiene allineati changelog, tag GitHub e versione pacchetto
 
-Lo storico preesistente resta consultabile in `docs/CHANGELOG.md`, ma non è più il file canonico per le nuove release.
+Lo storico preesistente resta consultabile in `docs/CHANGELOG_ARCHIVE.md`, ma non è più il file canonico per le nuove release.
 
 ## Flusso GitHub
 
@@ -231,7 +231,7 @@ dell'adozione del changelog root.
 
 In pratica:
 
-- `docs/CHANGELOG.md` conserva lo storico precedente
+- `docs/CHANGELOG_ARCHIVE.md` conserva lo storico precedente
 - `CHANGELOG.md` in root parte come changelog ufficiale del nuovo flusso
 - le prossime release gestite da `scripts/release_now.sh` includeranno solo i
   cambi successivi all'ultimo tag `v*`

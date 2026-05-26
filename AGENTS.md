@@ -215,7 +215,7 @@ Per dettagli e casi limite, seguire `docs/RELEASE_POLICY.md`.
   chiuse nello stesso intervento.
 - Quando aggiorni `docs/ROADMAP.md`, gli item completati vanno rimossi dalla
   roadmap: non vanno lasciati come checkbox spuntate.
-- `docs/CHANGELOG.md` è storico; il changelog di release corrente è `CHANGELOG.md`
+- `docs/CHANGELOG_ARCHIVE.md` è storico; il changelog di release corrente è `CHANGELOG.md`
   root ed è gestito da `scripts/release_now.sh`.
 
 ## Policy per agenti

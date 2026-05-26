@@ -423,7 +423,7 @@ Decisioni valide oggi:
 
 ## Documenti collegati
 
-- `docs/SECURITY.md`
+- `docs/SECURITY_OPERATIONS.md`
 - `docs/OPERATIONS.md`
 - `docs/RUNBOOK.md`
 - `docs/DATA_MODEL.md`

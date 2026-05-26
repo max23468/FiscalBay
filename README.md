@@ -684,12 +684,12 @@ Documenti principali:
 - `docs/ARCHITECTURE.md`
 - `docs/OPERATIONS.md`
 - `docs/DATA_MODEL.md`
-- `docs/SECURITY.md`
+- `docs/SECURITY_OPERATIONS.md`
 - `docs/SERVICE_GOVERNANCE.md`
 - `docs/DECISIONS_PENDING.md`
 - `docs/decisions/`
 - `docs/OAUTH_FLOW.md`
-- `docs/CHANGELOG.md`
+- `docs/CHANGELOG_ARCHIVE.md`
 
 Asset disponibili nel repository, allineati al setup VPS attuale (`fiscalbay`, `/opt/fiscalbay`, servizio `fiscalbay-bot`):
 

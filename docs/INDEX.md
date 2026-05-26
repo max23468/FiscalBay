@@ -4,6 +4,8 @@ Indice centrale della documentazione del progetto.
 
 ## Partenza rapida
 
+- `../AGENTS.md`
+  - regole operative per agenti, publish, deploy, release e policy GitHub
 - `../README.md`
   - panoramica generale, setup rapido, uso CLI e link principali
 - `docs/BRAND_GUIDELINES.md`
@@ -42,7 +44,7 @@ Indice centrale della documentazione del progetto.
   - guida specifica al deploy Linux
 - `docs/PUBLIC_ACCESS.md`
   - setup dominio pubblico con Duck DNS, nginx, HTTPS e callback OAuth
-- `docs/SECURITY.md`
+- `docs/SECURITY_OPERATIONS.md`
   - perimetro di sicurezza, segreti e requisiti futuri
 - `docs/SERVICE_GOVERNANCE.md`
   - dati trattati, retention, cancellazione utente e limiti del servizio
@@ -57,6 +59,8 @@ Indice centrale della documentazione del progetto.
   - idee, debiti e attività condizionate non ancora promosse in roadmap
 - `docs/DECISIONS_PENDING.md`
   - scelte ancora aperte che influenzano le prossime fasi
+- `docs/DECISIONS.md`
+  - indice decisionale stabile e regole per ADR leggere
 - `docs/decisions/`
   - ADR leggere per nuove decisioni strutturali o migrazioni progressive
 
@@ -64,5 +68,5 @@ Indice centrale della documentazione del progetto.
 
 - `../CHANGELOG.md`
   - changelog ufficiale delle release correnti
-- `docs/CHANGELOG.md`
+- `docs/CHANGELOG_ARCHIVE.md`
   - archivio storico narrativo precedente al flusso automatico
