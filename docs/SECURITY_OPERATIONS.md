@@ -30,38 +30,33 @@ Regole:
 - non salvare segreti nel repository
 - non inserire segreti in documentazione o commit
 - limitare la lettura di `.env`
-- ruotare i segreti in caso di sospetto leak o cambio manutentore
+- applicare sostituzione credenziali in caso di sospetto leak o cambiamento accessi
 - contenitore autorizzato attuale: `/opt/fiscalbay/.env`
 - permessi attesi del file `.env`: `600`
 - evitare copie superflue di `.env` fuori da backup amministrativi controllati
 - usare `fiscalbay-security-check` o `/admin sicurezza` per verificare inventario
   e permessi senza stampare valori segreti
 
-## Rotazione segreti
+## Sostituzione credenziali in incidente
 
-Eventi che impongono rotazione:
+Eventi che richiedono intervento immediato:
 
 - sospetto leak o condivisione impropria
 - cambio manutentore o accesso SSH compromesso
 - debug con copia accidentale di `.env`
 - revoca o reset lato eBay o Telegram
 
-Cadenza minima ricorrente:
-
-- verifica mensile dell'inventario segreti
-- rotazione trimestrale di `TELEGRAM_BOT_TOKEN` se sostenibile
-- rotazione trimestrale di `EBAY_REFRESH_TOKEN` o prima se eBay forza rinnovo
-
-Procedura minima:
+In questi casi, eseguire:
 
 1. creare un backup amministrativamente controllato dell'attuale `.env`
-2. generare o ottenere il nuovo segreto lato provider
-3. aggiornare `/opt/fiscalbay/.env`
-4. eseguire `fiscalbay-security-check` e correggere eventuali alert su permessi o
-   fallback plaintext
-5. riavviare `fiscalbay-bot`
-6. eseguire `deploy/smoke-check.sh`
-7. invalidare il segreto precedente appena confermato il corretto funzionamento
+2. aggiornare `/opt/fiscalbay/.env` con il valore corretto lato provider
+3. eseguire `fiscalbay-security-check` e correggere eventuali alert
+4. riavviare `fiscalbay-bot`
+5. eseguire `deploy/smoke-check.sh`
+
+Passaggio extra:
+
+- evitare sostituzioni programmate: questo piano non prevede rotazioni periodiche preventive.
 
 ## Security operations ricorrenti
 
@@ -187,7 +182,7 @@ Se questi vincoli saltano, i primi componenti da promuovere sono:
 La review dedicata ai token utente dovrà coprire almeno:
 
 - cifratura a riposo del refresh token
-- gestione chiavi di cifratura, rotazione e backup
+- gestione chiavi di cifratura, backup e processo di sostituzione su incidente
 - audit degli eventi `connect`, `disconnect`, refresh e revoca
 - percorso di revoca e riconnessione
 - esposizione dei token nei log e nei backup
@@ -199,6 +194,6 @@ In caso di problema:
 
 1. verificare log e healthcheck
 2. isolare la causa tra deploy, configurazione, eBay, Telegram o stato locale
-3. ruotare i segreti se c'è rischio di esposizione
+3. sostituire i token se c'è rischio di esposizione
 4. usare backup e restore se il problema coinvolge stato o configurazione
 5. annotare l'incidente e l'azione correttiva nel changelog o nella documentazione operativa
