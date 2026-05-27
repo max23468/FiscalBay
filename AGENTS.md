@@ -91,9 +91,9 @@ creati localmente quando li incontri.
   Non aggiungere altri workflow senza richiesta esplicita del maintainer.
 - `.github/dependabot.yml` è ammesso solo con schedule conservativa e limite basso
   di PR aperte.
-- Se GitHub segnala fallimenti Actions per billing, spending limit o budget
-  esaurito, non rilanciare run e non tentare fix tramite Actions: esegui verifiche,
-  release, merge, manutenzione e deploy in locale o via VPS FiscalBay.
+- Se GitHub segnala fallimenti Actions persistenti non recuperabili con un rerun
+  contestuale, registra il caso, non rilanciare automaticamente in loop e applica
+  le verifiche locali previste prima di ripianificare la pubblicazione.
 - Configurazione public access, diagnostica VPS e deploy restano automatizzati da
   script locali/VPS fuori da GitHub Actions.
 - Il check Actions non è obbligatorio su `main` nella fase iniziale: consideralo
