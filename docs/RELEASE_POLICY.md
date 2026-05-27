@@ -198,8 +198,15 @@ Il flusso standard è questo:
    `chore: release vX.Y.Z`, tag `vX.Y.Z` e GitHub Release
 6. lo script deploya `main` sulla VPS FiscalBay e attende lo smoke check
 
-La richiesta generica "pubblica" significa pubblicare il codice. Non implica da
-sola deploy VPS o release versionata se il cambiamento non lo richiede.
+La richiesta generica "pubblica" significa portare la modifica nel flusso completo:
+
+- PR/merge su `main` se la richiesta segue il flusso standard della repo (o commit diretto documentato solo per docs-only ammessi);
+- verifiche locali/remote previste;
+- deploy VPS solo se richiesto esplicitamente o necessario alla modifica;
+- pulizia del checkout al termine, includendo branch e worktree locali e branch remoti non più utili.
+
+Non implica automaticamente deploy VPS o release versionata se il cambiamento non lo
+richiede.
 
 La creazione della GitHub Release usa `gh` se disponibile, altrimenti un token
 GitHub esposto solo nell'ambiente locale come `GITHUB_TOKEN`, `GH_TOKEN` o

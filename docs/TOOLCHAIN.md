@@ -64,8 +64,9 @@ procedure operative restano in [OPERATIONS.md](./OPERATIONS.md),
 
 ## Release, deploy e GitHub
 
-- La richiesta generica "pubblica" significa pubblicare il codice: commit,
-  push, PR/merge naturale e cleanup branch.
+- La richiesta generica "pubblica" significa pubblicare il codice tramite il flusso
+  della repo: commit, push, PR/merge verso `main` quando previsto, verifica e cleanup
+  esplicito di branch/worktree locali e branch remoti assorbiti.
 - Deploy VPS e release versionata non sono impliciti per cambi documentali o per
   publish di codice che non richiede aggiornamento runtime immediato.
 - GitHub Actions resta solo per controlli leggeri allowlist; non è canale
