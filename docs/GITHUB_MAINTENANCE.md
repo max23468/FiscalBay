@@ -24,8 +24,9 @@ GitHub Actions è riattivato solo per automazioni GitHub leggere e a basso consu
 - non usare Actions per deploy, diagnostica VPS, merge o update
   dipendenze fuori da Dependabot
 - non aggiungere altri workflow senza richiesta esplicita del maintainer
-- se GitHub mostra run falliti per billing, spending limit o budget esaurito,
-  non rilanciare job: usare automazioni locali/VPS
+- se GitHub mostra run falliti non risolvibili con un rerun contestuale,
+  non rilanciare automaticamente job: esegui prime verifiche locali, registra
+  il rischio operativo e pianifica un recupero.
 
 ## Cosa È Versionato Nel Repo
 

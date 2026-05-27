@@ -14,8 +14,10 @@ senza richiesta esplicita del maintainer.
 
 Motivo operativo:
 
-- il budget Actions può essere esaurito o non disponibile
-- i run falliti per billing/spending limit non sono risolvibili rilanciando job
+- la disponibilità di GitHub Actions può essere limitata o temporaneamente
+  non disponibile
+- i run falliti non sono sempre risolvibili rilanciando job; in quei casi
+  applicare le verifiche locali di fallback e riprogrammare
 - deploy, verifica, release e manutenzione devono restare riproducibili anche solo
   da Mac locale e VPS FiscalBay
 
