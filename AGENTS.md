@@ -143,14 +143,15 @@ creati localmente quando li incontri.
   coerente, push del branch, PR pronta o merge quando naturale. Se la PR è pronta,
   i controlli rilevanti sono verdi e non ci sono blocchi o ambiguità, non lasciare
   il lavoro a metà: fai merge, chiudi la PR e cancella il branch remoto/locale
-  quando non serve più. Non eseguire deploy
-  su VPS o release versionata solo per effetto della parola "pubblica" se ritieni
-  che non siano necessari; in quel caso dichiara esplicitamente che li hai saltati.
+  quando non serve più.
 - Esegui deploy su VPS solo quando il maintainer lo chiede esplicitamente, quando
   usa formule come "pubblica e deploy", "deploya" o "rilascia", oppure quando il
   deploy è davvero necessario per rendere effettiva la modifica richiesta nel
   runtime operativo. Anche per richieste ampie come "chiudi la fase", non fare
   passaggi aggiuntivi come deploy o release se ritieni che non siano necessari.
+  In caso di "pubblica" con deploy necessario o esplicitamente richiesto, la chiusura
+  del ciclo include merge/PR completi + verifiche post-deploy + pulizia branch e
+  worktree locali/remoti non più necessari.
   In caso di dubbio tra solo push e deploy, fermati e chiedi conferma prima di
   toccare la VPS.
 - Se nello stesso turno sono stati introdotti cambi funzionali, osservabili o
