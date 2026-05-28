@@ -139,31 +139,22 @@ creati localmente quando li incontri.
   limitazioni note.
 - Quando il maintainer chiede di "pubblicare", "pubblica le modifiche", "manda su"
   o usa formule equivalenti senza nominare deploy o release, interpreta la richiesta
-  come pubblicazione del codice: verifiche locali rilevanti, commit Conventional
-  coerente, push del branch, PR pronta o merge quando naturale. Se la PR è pronta,
-  i controlli rilevanti sono verdi e non ci sono blocchi o ambiguità, non lasciare
-  il lavoro a metà: fai merge, chiudi la PR e cancella il branch remoto/locale
-  quando non serve più.
-- Esegui deploy su VPS solo quando il maintainer lo chiede esplicitamente, quando
-  usa formule come "pubblica e deploy", "deploya" o "rilascia", oppure quando il
-  deploy è davvero necessario per rendere effettiva la modifica richiesta nel
-  runtime operativo. Anche per richieste ampie come "chiudi la fase", non fare
-  passaggi aggiuntivi come deploy o release se ritieni che non siano necessari.
-  In caso di "pubblica" con deploy necessario o esplicitamente richiesto, la chiusura
-  del ciclo include merge/PR completi + verifiche post-deploy + pulizia branch e
+  come pubblicazione completa: verifica locale rilevante, commit Conventional
+  coerente, push del branch, PR pronta o merge quando naturale e chiusura operativa
+  con cleanup branch/worktree locali e remoti assorbiti.
+- Per una pubblicazione completa, quando la modifica incide sul runtime operativo
+  o la policy corrente la prevede, includi anche deploy VPS con verifiche post-deploy.
+- In caso di "pubblica" con flusso runtime, la chiusura richiede merge/PR completi
+  + deploy operativo quando necessario + verifiche post-deploy + pulizia branch e
   worktree locali/remoti non più necessari.
-  In caso di dubbio tra solo push e deploy, fermati e chiedi conferma prima di
-  toccare la VPS.
+  In caso di dubbio tra sola pubblicazione e passaggio operativo, fermati e chiedi
+  conferma prima di toccare la VPS.
 - Se nello stesso turno sono stati introdotti cambi funzionali, osservabili o
   operativi che richiedono un commit `feat:`, `fix:` o `perf:`, e il maintainer
   chiede anche deploy, release, "pubblica e deploy", "rilascia" o formule
   equivalenti che richiedono davvero la messa in produzione, la chiusura operativa
-  deve includere anche la release versionata con `scripts/release_now.sh`, non
-  solo `scripts/deploy_now.sh`.
-  La sola richiesta "pubblica" non basta a forzare release o deploy quando non
-  servono. Usa solo il deploy operativo senza release quando l'utente lo chiede
-  esplicitamente, quando il cambio non produce bump release, o quando esiste un
-  blocco tecnico/rischio da dichiarare prima di procedere.
+  deve includere anche la release versionata con `scripts/release_now.sh`, non solo
+  `scripts/deploy_now.sh`.
 - Questo repository è privato e gestito da un solo maintainer: review/commenti
   esterni non sono un passaggio atteso per chiudere il lavoro.
 - Quando nel giro operativo ordinario ti occupi di controllare i commenti del bot,
