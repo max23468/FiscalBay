@@ -49,7 +49,7 @@ Eventi che richiedono intervento immediato:
 In questi casi, eseguire:
 
 1. creare un backup amministrativamente controllato dell'attuale `.env`
-2. aggiornare `/opt/fiscalbay/.env` con il valore corretto lato provider
+2. applicare misure di isolamento immediato lato bot e aggiornare `/opt/fiscalbay/.env` con il valore operativo già approvato dal runbook, senza rotazioni preventive
 3. eseguire `fiscalbay-security-check` e correggere eventuali alert
 4. riavviare `fiscalbay-bot`
 5. eseguire `deploy/smoke-check.sh`
