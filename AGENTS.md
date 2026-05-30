@@ -252,6 +252,22 @@ Per dettagli e casi limite, seguire `docs/RELEASE_POLICY.md`.
   rischi residui, stato publish, release e deploy, branch/worktree se coinvolti e,
   quando utile, come è stato verificato.
 
+## Definizione di completamento
+
+Un lavoro è chiuso quando:
+
+- risolve la richiesta senza allargare lo scope;
+- non sovrascrive modifiche non tue;
+- include verifiche proporzionate al rischio o dichiara perché non sono
+  applicabili;
+- aggiorna documentazione, changelog, versione, release o deploy solo quando il
+  cambio lo richiede;
+- non lascia segreti, dati personali, file temporanei o modifiche non correlate;
+- publish, release e deploy sono stati completati oppure dichiarati non
+  applicabili con motivo;
+- branch/worktree locali e remoti creati per il lavoro sono stati puliti oppure
+  il residuo è dichiarato esplicitamente.
+
 ## Sotto-moduli
 
 Per regole specifiche di sotto-moduli, aggiungere `AGENTS.md` nelle relative
