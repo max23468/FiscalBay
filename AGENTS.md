@@ -11,8 +11,8 @@ senza introdurre lavoro collaterale non richiesto.
 ## Priorità delle istruzioni
 
 1. Istruzioni di sistema/developer ricevute nella sessione corrente.
-2. Questo file `AGENTS.md`.
-3. Eventuali `AGENTS.md` più profondi nella cartella toccata, che prevalgono sulle regole root per il loro scope.
+2. Eventuali `AGENTS.md` più profondi nella cartella toccata, che prevalgono sulle regole root per il loro scope.
+3. Questo file `AGENTS.md`.
 4. Documentazione progetto (`README.md`, `docs/INDEX.md`, `docs/CONTEXT.md`, `docs/ROADMAP.md`, `docs/BACKLOG.md`, `docs/TOOLCHAIN.md`, `docs/DECISIONS.md`, `docs/DECISIONS_PENDING.md`, `docs/decisions/` e guide/runbook collegati).
 5. Convenzioni dedotte da codice, test e configurazioni vicine.
 6. Assunzioni dell'agente, solo per dettagli marginali.
