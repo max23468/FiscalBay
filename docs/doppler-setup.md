@@ -20,7 +20,8 @@ Questo progetto è pronto per l'iniezione dei segreti da Doppler in CI/ambiente 
 È stato aggiunto `.github/workflows/doppler-check.yml`.
 
 ### Come usarlo
-- Apri la pagina *Actions* della repo e lancia manualmente `doppler-check`.
+- Il controllo `doppler-check` parte automaticamente sulle Pull Request verso `main`.
+- In alternativa, puoi lanciarlo manualmente dalla pagina *Actions* con `workflow_dispatch`.
 - Se `DOPPLER_TOKEN`, `DOPPLER_PROJECT` e `DOPPLER_CONFIG` sono corretti, il workflow prova il fetch dei segreti Doppler.
 
 ## Comandi GitHub (facoltativi)

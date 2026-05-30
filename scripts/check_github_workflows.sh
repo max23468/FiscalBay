@@ -11,6 +11,7 @@ ALLOWED_WORKFLOWS=(
   ".github/workflows/ci.yml"
   ".github/workflows/codex-pr-comments.yml"
   ".github/workflows/dependency-review.yml"
+  ".github/workflows/doppler-check.yml"
   ".github/workflows/package-build.yml"
   ".github/workflows/pr-title.yml"
 )
