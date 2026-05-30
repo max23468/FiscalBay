@@ -36,6 +36,8 @@ Indice centrale della documentazione del progetto.
   - regole ufficiali per versioni, changelog, GitHub Release e tag GitHub
 - `docs/TOOLCHAIN.md`
   - runtime, comandi, tool esterni e guardrail di versione
+- `docs/doppler-setup.md`
+  - integrazione Doppler, variabili GitHub e verifica segreti CI
 - `docs/RELEASE_READINESS.md`
   - perimetro, criteri e limiti della prima release stabile `1.0.0`
 - `docs/CODEX_CLOUD_DEPLOY.md`
