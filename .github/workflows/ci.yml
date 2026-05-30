@@ -26,7 +26,7 @@ jobs:
     env:
       DOPPLER_PROJECT: ${{ vars.DOPPLER_PROJECT }}
       DOPPLER_CONFIG: ${{ vars.DOPPLER_CONFIG }}
-      DOPPLER_TOKEN_PRESENT: ${{ secrets.DOPPLER_TOKEN }}
+      DOPPLER_TOKEN_PRESENT: ${{ secrets.DOPPLER_TOKEN != '' }}
     timeout-minutes: 10
 
     steps:
@@ -41,14 +41,14 @@ jobs:
           if [ -z "${DOPPLER_CONFIG:-}" ]; then
             echo "::warning::DOPPLER_CONFIG non impostata"
           fi
-          if [ -z "${DOPPLER_TOKEN_PRESENT:-}" ]; then
+          if [ "${DOPPLER_TOKEN_PRESENT}" != "true" ]; then
             echo "::notice::DOPPLER_TOKEN assente: il fetch non verrà eseguito."
           fi
 
       - name: Determina se eseguire il fetch Doppler
         id: doppler_fetch_gate
         run: |
-          if [ -n "${DOPPLER_TOKEN_PRESENT:-}" ] && [ -n "${DOPPLER_PROJECT:-}" ] && [ -n "${DOPPLER_CONFIG:-}" ]; then
+          if [ "${DOPPLER_TOKEN_PRESENT}" = "true" ] && [ -n "${DOPPLER_PROJECT:-}" ] && [ -n "${DOPPLER_CONFIG:-}" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"

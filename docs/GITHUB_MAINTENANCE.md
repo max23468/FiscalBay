@@ -10,7 +10,7 @@ GitHub Actions è riattivato solo per automazioni GitHub leggere e a basso consu
 - i soli workflow versionati ammessi sono `.github/workflows/ci.yml`, più i
   controlli conservativi `.github/workflows/pr-title.yml`,
   `.github/workflows/dependency-review.yml`, `.github/workflows/actionlint.yml`,
-  `.github/workflows/package-build.yml` e
+  `.github/workflows/package-build.yml`, `.github/workflows/doppler-check.yml` e
   `.github/workflows/codex-pr-comments.yml`
 - la CI parte su PR verso `main` e con `workflow_dispatch`
 - il package build parte solo su PR che toccano packaging e con `workflow_dispatch`
@@ -36,6 +36,7 @@ GitHub Actions è riattivato solo per automazioni GitHub leggere e a basso consu
 - Dependency Review: `.github/workflows/dependency-review.yml`
 - Actionlint: `.github/workflows/actionlint.yml`
 - Package build mirato: `.github/workflows/package-build.yml`
+- Doppler check: `.github/workflows/doppler-check.yml`
 - Codex feedback inbox: `.github/workflows/codex-pr-comments.yml` e
   `.github/scripts/handle-codex-pr-comments.mjs`
 - Dependabot version updates: `.github/dependabot.yml`
@@ -109,6 +110,8 @@ I workflow a basso consumo sono:
 - `.github/workflows/actionlint.yml`: parte solo quando cambiano workflow
 - `.github/workflows/package-build.yml`: esegue `python -m build` su PR che
   toccano packaging e su avvio manuale
+- `.github/workflows/doppler-check.yml`: verifica configurazione Doppler su PR
+  verso `main` e su avvio manuale, senza esporre il valore del token nei log
 - `.github/workflows/codex-pr-comments.yml`: legge i review thread GitHub in
   contesto trusted, aggiorna la issue `Codex feedback inbox`, separa thread
   actionable e storico, preserva le PR già elencate nei run parziali, ignora le

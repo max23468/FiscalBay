@@ -54,9 +54,14 @@ In questi casi, eseguire:
 4. riavviare `fiscalbay-bot`
 5. eseguire `deploy/smoke-check.sh`
 
-Passaggio extra:
+Regole di rotazione:
 
-- evitare sostituzioni programmate: questo piano non prevede rotazioni periodiche preventive.
+- ruotare o sostituire le credenziali ogni volta che c'è esposizione possibile,
+  sospetta o confermata, anche se il valore non è stato pubblicato apertamente
+- revocare prima i token/provider compromessi o potenzialmente compromessi, poi
+  installare i nuovi valori approvati
+- evitare sostituzioni programmate: questo piano non prevede rotazioni periodiche
+  preventive quando non ci sono esposizioni, cambi di accesso o incidenti
 
 ## Security operations ricorrenti
 

@@ -217,8 +217,9 @@ Il deploy remoto del repository privato usa invece il token presente sulla VPS i
 Non esiste un flusso Release Please attivo: versioni, changelog, tag e GitHub
 Release passano da `scripts/release_now.sh`.
 
-I workflow PR title, CI, Dependency Review, actionlint e package build manuale
-sono controlli di qualità: non creano release e non sostituiscono il deploy VPS.
+I workflow PR title, CI, Dependency Review, actionlint, Doppler check e package
+build manuale sono controlli di qualità: non creano release e non sostituiscono
+il deploy VPS.
 
 In modalità main-only:
 
