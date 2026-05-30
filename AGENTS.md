@@ -12,7 +12,7 @@ senza introdurre lavoro collaterale non richiesto.
 
 1. Istruzioni di sistema/developer ricevute nella sessione corrente.
 2. Questo file `AGENTS.md`.
-3. Eventuali `AGENTS.md` più profondi nella cartella toccata.
+3. Eventuali `AGENTS.md` più profondi nella cartella toccata, che prevalgono sulle regole root per il loro scope.
 4. Documentazione progetto (`README.md`, `docs/INDEX.md`, `docs/CONTEXT.md`, `docs/ROADMAP.md`, `docs/BACKLOG.md`, `docs/TOOLCHAIN.md`, `docs/DECISIONS.md`, `docs/DECISIONS_PENDING.md`, `docs/decisions/` e guide/runbook collegati).
 5. Convenzioni dedotte da codice, test e configurazioni vicine.
 6. Assunzioni dell'agente, solo per dettagli marginali.
@@ -29,6 +29,8 @@ In caso di conflitto, seguire sempre il livello più alto.
 - Il prodotto resta `Telegram first`: la parte web serve soprattutto onboarding,
   callback e supporto operativo, non deve diventare il punto di ingresso principale
   senza una decisione esplicita.
+- FiscalBay non è un gestionale fiscale completo, non è un help desk umano e non
+  deve diventare una dashboard web-first senza una decisione esplicita.
 
 ## Principi generali
 
@@ -63,6 +65,10 @@ In caso di conflitto, seguire sempre il livello più alto.
    aggiunge valore al riepilogo: test eseguiti o falliti, controlli non eseguiti,
    rischi residui o modifiche a codice/configurazione. Evita footer rituali sulle
    verifiche per risposte semplici o cambi puramente minori.
+
+Per lavori non banali usa branch dedicata `codex/<tema>` e PR verso `main`.
+Se il checkout contiene modifiche non tue, l'intervento è lungo o serve
+preservare lo stato operativo, usa un worktree separato da una base pulita.
 
 I file `.DS_Store` non fanno parte del repository: ignorali sempre e rimuovi quelli
 creati localmente quando li incontri.
@@ -174,6 +180,9 @@ creati localmente quando li incontri.
   Lo storico operativo dei commenti Codex va controllato dalla issue GitHub
   `Codex feedback inbox`, aggiornata dal workflow `Codex PR comments`, non da
   file di stato committati nel repository.
+- Prima di PR ready, merge, pubblicazione, deploy o release controlla la
+  `Codex feedback inbox`: i thread actionable vanno risolti o dichiarati fuori
+  scope prima di chiudere.
 - Quando la PR è pronta, i test rilevanti sono verdi e la self-review è stata
   completata, commit, push e merge possono essere il modo migliore per chiudere
   davvero il lavoro. Procedi quando sono il passo naturale del flusso richiesto o
@@ -184,6 +193,8 @@ creati localmente quando li incontri.
 
 - Questo repository usa `scripts/release_now.sh` come riferimento preferito di
   versionamento, changelog, tag e release, fuori da GitHub Actions.
+- Release Please non è un percorso attivo: non delegare changelog, versioni, tag
+  o GitHub Release a bot automatici senza decisione esplicita della repo.
 - Prima di creare un commit, valuta sempre l'impatto release.
 - Per cambi funzionali o osservabili nel runtime, scegli sempre `feat:`, `fix:` o
   `perf:` coerente con l'impatto reale. Non usare `refactor:`, `chore:` o `docs:`
@@ -219,10 +230,16 @@ Per dettagli e casi limite, seguire `docs/RELEASE_POLICY.md`.
   roadmap: non vanno lasciati come checkbox spuntate.
 - `docs/CHANGELOG_ARCHIVE.md` è storico; il changelog di release corrente è `CHANGELOG.md`
   root ed è gestito da `scripts/release_now.sh`.
+- Non creare documenti doppi con stesso scopo o basename. Durante migrazioni,
+  rinomini o merge documentali preserva i contenuti utili, aggiorna i link e
+  dichiara nel riepilogo ciò che viene rimosso perché superato.
 
 ## Policy per agenti
 
 - Se un'informazione è incerta, dichiara assunzioni e limiti.
+- Per API eBay, Telegram, provider, prezzi, limiti o policy variabili, verifica
+  fonti ufficiali correnti prima di fissare decisioni operative. Per modifiche
+  alla parte web, verifica UI, callback e accessibilità in modo proporzionato.
 - Se una richiesta è ambigua su scope, comportamento atteso, rischio o tradeoff,
   chiedi chiarimento prima di procedere. Procedi con un'assunzione dichiarata solo
   per dettagli marginali che non cambiano il risultato sostanziale.
@@ -232,7 +249,7 @@ Per dettagli e casi limite, seguire `docs/RELEASE_POLICY.md`.
 - Non trattare l'assenza di review esterne come blocco, ma non saltare self-review,
   test rilevanti e controllo dell'impatto release.
 - Mantieni output e riepiloghi finali concreti: cosa è cambiato, dove, eventuali
-  rischi residui, stato publish/release/deploy, branch/worktree se coinvolti e,
+  rischi residui, stato publish, release e deploy, branch/worktree se coinvolti e,
   quando utile, come è stato verificato.
 
 ## Sotto-moduli
