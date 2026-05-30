@@ -23,11 +23,46 @@ jobs:
   verify:
     name: Python 3.10
     runs-on: ubuntu-latest
+    env:
+      DOPPLER_PROJECT: ${{ vars.DOPPLER_PROJECT }}
+      DOPPLER_CONFIG: ${{ vars.DOPPLER_CONFIG }}
+      DOPPLER_TOKEN_PRESENT: ${{ secrets.DOPPLER_TOKEN }}
     timeout-minutes: 10
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Verifica variabili Doppler
+        run: |
+          if [ -z "${DOPPLER_PROJECT:-}" ]; then
+            echo "::warning::DOPPLER_PROJECT non impostato"
+          fi
+          if [ -z "${DOPPLER_CONFIG:-}" ]; then
+            echo "::warning::DOPPLER_CONFIG non impostata"
+          fi
+          if [ -z "${DOPPLER_TOKEN_PRESENT:-}" ]; then
+            echo "::notice::DOPPLER_TOKEN assente: il fetch non verrà eseguito."
+          fi
+
+      - name: Determina se eseguire il fetch Doppler
+        id: doppler_fetch_gate
+        run: |
+          if [ -n "${DOPPLER_TOKEN_PRESENT:-}" ] && [ -n "${DOPPLER_PROJECT:-}" ] && [ -n "${DOPPLER_CONFIG:-}" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch secrets from Doppler
+        if: ${{ steps.doppler_fetch_gate.outputs.run == 'true' }}
+        continue-on-error: true
+        uses: dopplerhq/secrets-fetch-action@v2.0.0
+        with:
+          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
+          doppler-project: ${{ vars.DOPPLER_PROJECT }}
+          doppler-config: ${{ vars.DOPPLER_CONFIG }}
+          inject-env-vars: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
