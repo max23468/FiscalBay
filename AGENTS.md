@@ -12,8 +12,10 @@ senza introdurre lavoro collaterale non richiesto.
 
 1. Istruzioni di sistema/developer ricevute nella sessione corrente.
 2. Questo file `AGENTS.md`.
-3. Documentazione progetto (`README.md`, `docs/*`).
-4. Assunzioni dell'agente.
+3. Eventuali `AGENTS.md` più profondi nella cartella toccata.
+4. Documentazione progetto (`README.md`, `docs/INDEX.md`, `docs/CONTEXT.md`, `docs/ROADMAP.md`, `docs/BACKLOG.md`, `docs/TOOLCHAIN.md`, `docs/DECISIONS.md`, `docs/DECISIONS_PENDING.md`, `docs/decisions/` e guide/runbook collegati).
+5. Convenzioni dedotte da codice, test e configurazioni vicine.
+6. Assunzioni dell'agente, solo per dettagli marginali.
 
 In caso di conflitto, seguire sempre il livello più alto.
 
@@ -55,7 +57,9 @@ In caso di conflitto, seguire sempre il livello più alto.
 3. Aggiorna README o `docs/*` quando cambiano comportamento, comandi, env var,
    deploy, policy operative o flussi utente.
 4. Esegui i test/controlli rilevanti prima di finalizzare.
-5. Riporta in modo esplicito cosa è stato verificato e cosa no solo quando
+5. Valuta impatto su documentazione, changelog, versione, release e deploy prima
+   di chiudere, anche quando il risultato è "non applicabile".
+6. Riporta in modo esplicito cosa è stato verificato e cosa no solo quando
    aggiunge valore al riepilogo: test eseguiti o falliti, controlli non eseguiti,
    rischi residui o modifiche a codice/configurazione. Evita footer rituali sulle
    verifiche per risposte semplici o cambi puramente minori.
@@ -112,6 +116,9 @@ creati localmente quando li incontri.
 - Per cambi molto piccoli, esegui almeno i test mirati più vicini alla modifica.
 - Per modifiche solo documentali, non serve inventare test applicativi: dichiara che
   la verifica è stata una review del documento.
+- Usa tre corsie di verifica: `veloce` per docs/governance a basso rischio,
+  `standard` per codice/config ordinari, `completa` per release, deploy,
+  sicurezza, dati, OAuth, bot o VPS.
 - Non inventare risultati di test o comandi non eseguiti.
 - Se un controllo non può essere eseguito per limiti di ambiente, tempo o permessi,
   dichiaralo esplicitamente.
@@ -144,6 +151,9 @@ creati localmente quando li incontri.
   con cleanup branch/worktree locali e remoti assorbiti.
 - Per una pubblicazione completa, quando la modifica incide sul runtime operativo
   o la policy corrente la prevede, includi anche deploy VPS con verifiche post-deploy.
+- Release e deploy vanno valutati insieme quando entrambi sono applicabili:
+  non chiudere una release senza dichiarare lo stato del deploy, e non chiudere
+  un deploy senza dichiarare se la release è necessaria o `N/A`.
 - In caso di "pubblica" con flusso runtime, la chiusura richiede merge/PR completi
   + deploy operativo quando necessario + verifiche post-deploy + pulizia branch e
   worktree locali/remoti non più necessari.
@@ -222,7 +232,8 @@ Per dettagli e casi limite, seguire `docs/RELEASE_POLICY.md`.
 - Non trattare l'assenza di review esterne come blocco, ma non saltare self-review,
   test rilevanti e controllo dell'impatto release.
 - Mantieni output e riepiloghi finali concreti: cosa è cambiato, dove, eventuali
-  rischi residui e, quando utile, come è stato verificato.
+  rischi residui, stato publish/release/deploy, branch/worktree se coinvolti e,
+  quando utile, come è stato verificato.
 
 ## Sotto-moduli
 
