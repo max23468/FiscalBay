@@ -50,7 +50,7 @@ In pratica:
 
 ## Requisiti
 
-- Python 3.10 o superiore
+- Python 3.13
 - credenziali eBay valide:
   - `EBAY_CLIENT_ID`
   - `EBAY_CLIENT_SECRET`

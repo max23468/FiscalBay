@@ -9,10 +9,10 @@ procedure operative restano in [OPERATIONS.md](./OPERATIONS.md),
 
 | Area | Versione/canale | Fonte |
 | --- | --- | --- |
-| Python manifest | `>=3.10` | `pyproject.toml` |
-| Python typecheck/lint target | `3.10` | `pyproject.toml` |
-| Python CI GitHub | `3.10` | `.github/workflows/ci.yml` |
-| Python VPS operativo | `3.13` preferito, con compatibilità controllata | `docs/DEPLOY_LINUX.md`, `docs/CONTEXT.md` |
+| Python manifest | `>=3.13` | `pyproject.toml` |
+| Python typecheck/lint target | `3.13` | `pyproject.toml` |
+| Python CI GitHub | `3.13` | `.github/workflows/ci.yml` |
+| Python VPS operativo | `3.13` | `docs/DEPLOY_LINUX.md`, `docs/CONTEXT.md` |
 | Node.js | non applicabile al runtime | nessun `package.json` |
 | Database | SQLite locale/VPS | `docs/DATA_MODEL.md`, `docs/OPERATIONS.md` |
 | Runtime servizio | bot Telegram, OAuth callback e worker su VPS Linux con `systemd` | `docs/RUNBOOK.md` |
@@ -77,10 +77,9 @@ procedure operative restano in [OPERATIONS.md](./OPERATIONS.md),
 
 ## Eccezioni e guardrail
 
-- Non usare sintassi o dipendenze incompatibili con Python `3.10` finché
-  manifest, mypy, ruff e CI non vengono aggiornati insieme.
-- La VPS può usare Python `3.13`, ma questa è compatibilità runtime operativa,
-  non autorizzazione a rompere il supporto dichiarato `>=3.10`.
+- Python `3.13` è la baseline unica per manifest, typecheck, lint, CI e VPS.
+  Non abbassare il supporto o introdurre fallback a minor version precedenti
+  senza decisione esplicita.
 - Non dedurre dati fiscali assenti: mostrare solo campi realmente restituiti da
   eBay, in particolare `buyer.taxIdentifier`, `taxpayerId` e
   `taxIdentifierType`.

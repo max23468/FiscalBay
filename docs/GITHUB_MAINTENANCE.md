@@ -101,7 +101,7 @@ limite basso di PR aperte per `pip` e `github-actions`.
 
 I workflow a basso consumo sono:
 
-- `.github/workflows/ci.yml`: una sola versione Python `3.10`, comando unico
+- `.github/workflows/ci.yml`: una sola versione Python `3.13`, comando unico
   `bash scripts/ci_verify.sh`, nessun trigger `push`, nessun trigger schedulato
 - `.github/workflows/pr-title.yml`: valida il titolo PR in formato Conventional
   Commit

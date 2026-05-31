@@ -7,7 +7,7 @@ name = "fiscalbay"
 version = "1.12.0"
 description = "CLI e bot Telegram per leggere identificativi fiscali dagli ordini eBay (API ufficiali)."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 license = "MIT"
 authors = [{ name = "FiscalBay" }]
 dependencies = [
@@ -43,7 +43,7 @@ dev = [
 where = ["src"]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py313"
 line-length = 100
 src = ["src", "tests"]
 
@@ -55,7 +55,7 @@ select = [
 ]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.13"
 files = [
   "src/fiscalbay/models.py",
   "src/fiscalbay/config.py",
