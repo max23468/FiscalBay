@@ -135,6 +135,11 @@ creati localmente quando li incontri.
   - runtime condiviso, dati, OAuth/eBay, bot, deploy/config o release/versioning:
     `bash scripts/ci_verify.sh` e, se pertinente, build package, smoke VPS o
     script di deploy/release dedicati.
+  - parte web/OAuth callback (`src/fiscalbay/oauth_server.py`, template HTML,
+    nginx, `/`, `/privacy`, `/about`, `/account collega` o callback eBay):
+    aggiungi test mirati su OAuth/server, controllo browser o HTTP delle pagine
+    toccate e `deploy/smoke-check.sh` solo quando il diff arriva alla VPS o
+    cambia routing/config esposta.
 - Non inventare risultati di test o comandi non eseguiti.
 - Se un controllo non può essere eseguito per limiti di ambiente, tempo o permessi,
   dichiaralo esplicitamente.
@@ -255,7 +260,9 @@ Per dettagli e casi limite, seguire `docs/RELEASE_POLICY.md`.
 - Se un'informazione è incerta, dichiara assunzioni e limiti.
 - Per API eBay, Telegram, provider, prezzi, limiti o policy variabili, verifica
   fonti ufficiali correnti prima di fissare decisioni operative. Per modifiche
-  alla parte web, verifica UI, callback e accessibilità in modo proporzionato.
+  alla parte web, verifica UI, callback e accessibilità in modo proporzionato:
+  non basta che il bot funzioni se il consenso OAuth, le pagine pubbliche o i
+  redirect possono rompersi.
 - Se una richiesta è ambigua su scope, comportamento atteso, rischio o tradeoff,
   chiedi chiarimento prima di procedere. Procedi con un'assunzione dichiarata solo
   per dettagli marginali che non cambiano il risultato sostanziale.
