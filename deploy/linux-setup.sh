@@ -167,20 +167,21 @@ ensure_existing_venv_matches_requested_python() {
   fi
 }
 
-PYTHON_BIN="$(select_python_bin)"
-
 install_packages() {
   if command -v apt-get >/dev/null 2>&1; then
     sudo apt-get update
-    sudo apt-get install -y python3 python3-venv python3-pip git
+    sudo apt-get install -y python3.13 python3.13-venv python3-pip git \
+      || sudo apt-get install -y python3 python3-venv python3-pip git
     return
   fi
   if command -v dnf >/dev/null 2>&1; then
-    sudo dnf install -y python3 python3-pip git
+    sudo dnf install -y python3.13 python3.13-pip git \
+      || sudo dnf install -y python3 python3-pip git
     return
   fi
   if command -v yum >/dev/null 2>&1; then
-    sudo yum install -y python3 python3-pip git
+    sudo yum install -y python3.13 python3.13-pip git \
+      || sudo yum install -y python3 python3-pip git
     return
   fi
   if command -v apk >/dev/null 2>&1; then
@@ -237,6 +238,7 @@ install_service_file() {
 }
 
 install_packages
+PYTHON_BIN="$(select_python_bin)"
 ensure_supported_python "${PYTHON_BIN}"
 ensure_group
 ensure_user

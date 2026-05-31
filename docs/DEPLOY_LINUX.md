@@ -109,7 +109,8 @@ FISCALBAY_ONESHOT_CPU_QUOTA=50%
 Runtime Python:
 
 - il runtime operativo corrente sulla VPS FiscalBay è Python `3.13`
-- di default `deploy/linux-setup.sh` preferisce `python3.13`, poi `python3`
+- di default `deploy/linux-setup.sh` prova a installare `python3.13` dove il
+  package manager lo espone, poi seleziona `python3.13` o `python3`
 - per imporre un runtime specifico usare `FISCALBAY_PYTHON_BIN`, ad esempio
   `/usr/bin/python3.13`
 - se il `.venv` esiste già e usa una minor version diversa da quella richiesta,
