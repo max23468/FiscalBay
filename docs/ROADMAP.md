@@ -20,7 +20,7 @@ e negli ADR.
 
 ## Prossimo
 
-- Gestire eventuali patch `v1.11.x` come correzioni o piccoli affinamenti
+- Gestire eventuali patch `v1.12.x` come correzioni o piccoli affinamenti
   operativi, con obiettivo chiaro e deploy VPS verificabile quando applicabile.
 - Migliorare comfort admin, onboarding, reconnect, performance, storage,
   polling, documentazione o runbook solo se metriche e uso reale lo giustificano.
@@ -45,7 +45,7 @@ e negli ADR.
 ## Fatto recente
 
 - La prima release stabile è completata.
-- La versione corrente documentata è `1.11.2`.
+- La versione corrente documentata è `1.12.0`.
 - La linea `1.x` ha consolidato onboarding controllato, multiutenza Telegram,
   OAuth eBay, token tenant, audit, retention, recovery, osservabilità e scale
   readiness.
