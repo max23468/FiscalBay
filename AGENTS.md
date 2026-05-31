@@ -125,6 +125,16 @@ creati localmente quando li incontri.
 - Usa tre corsie di verifica: `veloce` per docs/governance a basso rischio,
   `standard` per codice/config ordinari, `completa` per release, deploy,
   sicurezza, dati, OAuth, bot o VPS.
+- Mappa il rischio prima dei comandi:
+  - sola analisi o nessuna modifica: nessun test applicativo, dichiarare solo
+    fonti e limiti;
+  - docs-only: review documentale e `git diff --check` quando utile;
+  - documenti operativi critici, runbook, workflow o config: almeno review
+    mirata e gate locale se il testo cambia procedure eseguibili;
+  - test-only o runtime piccolo: test mirati vicini alla modifica;
+  - runtime condiviso, dati, OAuth/eBay, bot, deploy/config o release/versioning:
+    `bash scripts/ci_verify.sh` e, se pertinente, build package, smoke VPS o
+    script di deploy/release dedicati.
 - Non inventare risultati di test o comandi non eseguiti.
 - Se un controllo non può essere eseguito per limiti di ambiente, tempo o permessi,
   dichiaralo esplicitamente.
