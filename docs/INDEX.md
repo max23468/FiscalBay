@@ -2,6 +2,11 @@
 
 Indice centrale della documentazione del progetto.
 
+La root resta per ingresso ed esecuzione: `README.md`, `AGENTS.md`,
+`CHANGELOG.md`, `SECURITY.md`, manifest, configurazioni, script e codice.
+`docs/` contiene architettura, runbook, operations, sicurezza, roadmap,
+backlog, decisioni, guide operative, storico e governance del servizio.
+
 ## Partenza rapida
 
 - `../AGENTS.md`
@@ -72,3 +77,10 @@ Indice centrale della documentazione del progetto.
   - changelog ufficiale delle release correnti
 - `docs/CHANGELOG_ARCHIVE.md`
   - archivio storico narrativo precedente al flusso automatico
+
+## Manutenzione catalogo
+
+Non creare documenti paralleli con lo stesso titolo, scopo o ruolo canonico.
+Se un documento viene migrato, rinominato o assorbito, aggiorna questo indice,
+preserva contenuti utili e lascia un rinvio temporaneo quando serve
+tracciabilità.
