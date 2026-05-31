@@ -178,8 +178,9 @@ creati localmente quando li incontri.
   incluse PR aperte, chiuse o già mergiate, precedenti o diverse da quella su cui
   stai lavorando in quel momento, e poi gestiscili o riportali in modo esplicito.
   Lo storico operativo dei commenti Codex va controllato dalla issue GitHub
-  `Codex feedback inbox`, aggiornata dal workflow `Codex PR comments`, non da
-  file di stato committati nel repository.
+  `Codex feedback inbox`, marcata dalla label `codex-feedback-inbox` e
+  aggiornata dal workflow `Codex PR comments`, non da file di stato committati
+  nel repository.
 - Prima di PR ready, merge, pubblicazione, deploy o release controlla la
   `Codex feedback inbox`: i thread actionable vanno risolti o dichiarati fuori
   scope prima di chiudere.
