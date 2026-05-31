@@ -171,7 +171,7 @@ creati localmente quando li incontri.
   equivalenti che richiedono davvero la messa in produzione, la chiusura operativa
   deve includere anche la release versionata con `scripts/release_now.sh`, non solo
   `scripts/deploy_now.sh`.
-- Questo repository è privato e gestito da un solo maintainer: review/commenti
+- Questo repository è pubblico e gestito da un solo maintainer: review/commenti
   esterni non sono un passaggio atteso per chiudere il lavoro.
 - Quando nel giro operativo ordinario ti occupi di controllare i commenti del bot,
   verifica in generale tutti i commenti rimasti in sospeso su tutte le PR,

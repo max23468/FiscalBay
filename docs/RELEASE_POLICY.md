@@ -142,7 +142,7 @@ Per restare allineati a GitHub e al calcolo SemVer locale:
 - se una PR contiene più modifiche, il titolo deve riflettere l'impatto più alto
 - il titolo PR o il commit su `main` va verificato manualmente rispetto al formato
   Conventional Commit richiesto
-- questo repository è privato e oggi ha un solo maintainer operativo
+- questo repository è pubblico e oggi ha un solo maintainer operativo
 - quindi review/commenti esterni non sono un prerequisito normale per il merge
 - il flusso standard è: self-review, test rilevanti verdi, PR pronta, merge
 
@@ -211,7 +211,7 @@ richiede.
 La creazione della GitHub Release usa `gh` se disponibile, altrimenti un token
 GitHub esposto solo nell'ambiente locale come `GITHUB_TOKEN`, `GH_TOKEN` o
 `FISCALBAY_GITHUB_TOKEN`.
-Il deploy remoto del repository privato usa invece il token presente sulla VPS in
+Il deploy remoto del repository GitHub usa invece il token presente sulla VPS in
 `/etc/fiscalbay/deploy.env`.
 
 Non esiste un flusso Release Please attivo: versioni, changelog, tag e GitHub
