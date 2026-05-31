@@ -9,7 +9,7 @@ Stato attuale:
 - Le decisioni consolidate storiche sono distribuite nei documenti specialistici
   (`ARCHITECTURE.md`, `ROADMAP.md`, `RELEASE_POLICY.md`, `OPERATIONS.md`).
 - Le nuove decisioni strutturali dovrebbero essere aggiunte qui usando
-  [decisions/0000-template.md](decisions/0000-template.md).
+  [decisions/template.md](decisions/template.md).
 
 La migrazione di decisioni storiche verso questa cartella va fatta
 progressivamente, preservando contenuti, motivazioni e conseguenze operative.
