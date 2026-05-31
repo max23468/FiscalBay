@@ -220,6 +220,10 @@ Per dettagli e casi limite, seguire `docs/RELEASE_POLICY.md`.
 
 ## Documentazione e roadmap
 
+- Il catalogo documentale canonico è `docs/INDEX.md`.
+- La root resta per ingresso e file convenzionali (`README.md`, `AGENTS.md`,
+  `CHANGELOG.md`, `SECURITY.md`); architettura, runbook, operations,
+  sicurezza, roadmap, backlog, decisioni e guide operative vivono in `docs/`.
 - Aggiorna documentazione e commenti quando il comportamento cambia.
 - Se aggiungi o cambi configurazioni/env var, documentale in `README.md` o `docs/`.
 - Ogni decisione di prodotto, tecnica o operativa condivisa in chat deve confluire
