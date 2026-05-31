@@ -230,8 +230,9 @@ Per dettagli e casi limite, seguire `docs/RELEASE_POLICY.md`.
   in `docs/ROADMAP.md` quando cambia direzione, priorità, perimetro o backlog
   del progetto. Non serve aggiornare la roadmap per micro-decisioni esecutive già
   chiuse nello stesso intervento.
-- Quando aggiorni `docs/ROADMAP.md`, gli item completati vanno rimossi dalla
-  roadmap: non vanno lasciati come checkbox spuntate.
+- Quando aggiorni `docs/ROADMAP.md`, gli item completati vanno rimossi,
+  sintetizzati come fatto recente o spostati in changelog/archivio: la roadmap
+  non deve diventare storico release.
 - `docs/CHANGELOG_ARCHIVE.md` è storico; il changelog di release corrente è `CHANGELOG.md`
   root ed è gestito da `scripts/release_now.sh`.
 - Non creare documenti doppi con stesso scopo o basename. Durante migrazioni,
