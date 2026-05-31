@@ -70,7 +70,6 @@ Per mantenere il repository allineato alle best practice GitHub anche in contest
 - aggiornamenti dipendenze automatici via `.github/dependabot.yml`, con schedule settimanale e limite basso di PR aperte
 - template per Pull Request (`.github/PULL_REQUEST_TEMPLATE.md`)
 - issue forms per bug e task operativi (`.github/ISSUE_TEMPLATE/*`)
-- `CODEOWNERS` per ownership esplicita (`.github/CODEOWNERS`)
 - security policy riconosciuta dalla Security tab (`SECURITY.md`)
 - guida operativa GitHub per le impostazioni da completare nella UI (`docs/GITHUB_MAINTENANCE.md`)
 
@@ -138,7 +137,7 @@ export GITHUB_TOKEN=ghp_...
 scripts/release_now.sh
 ```
 
-Per il deploy remoto del repository privato, la VPS usa un token GitHub letto da
+Per il deploy remoto del repository GitHub, la VPS usa un token GitHub letto da
 `/etc/fiscalbay/deploy.env`.
 
 Per i dettagli operativi e le policy di naming/bump vedere `docs/RELEASE_POLICY.md`.

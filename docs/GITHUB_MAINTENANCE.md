@@ -41,12 +41,12 @@ GitHub Actions è riattivato solo per automazioni GitHub leggere e a basso consu
   `.github/scripts/handle-codex-pr-comments.mjs`
 - Dependabot version updates: `.github/dependabot.yml`
 - Issue forms: `.github/ISSUE_TEMPLATE/*`
-- Ownership: `.github/CODEOWNERS`
 - Security policy: `SECURITY.md`
 
 Non è versionato:
 
 - altri workflow in `.github/workflows/*`
+- `.github/CODEOWNERS`
 - `.github/dependabot.yaml`
 
 ## UI GitHub Consigliata

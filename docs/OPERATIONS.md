@@ -417,7 +417,7 @@ repository:
 export GITHUB_TOKEN=ghp_...
 ```
 
-Per il deploy remoto del repository privato, la VPS legge il token GitHub da
+Per il deploy remoto del repository GitHub, la VPS legge il token GitHub da
 `/etc/fiscalbay/deploy.env`.
 
 Guardrail automatici del nuovo flusso:
