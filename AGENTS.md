@@ -73,6 +73,12 @@ preservare lo stato operativo, usa un worktree separato da una base pulita.
 I file `.DS_Store` non fanno parte del repository: ignorali sempre e rimuovi quelli
 creati localmente quando li incontri.
 
+Non committare output runtime, file temporanei, build artifact o stato locale.
+In particolare restano fuori Git `build/`, `dist/`, `.coverage*`, `data/*.db`,
+`data/*.lock`, `state.db`, backup, restore drill, export CSV/JSON personali e
+log locali. Gli export fiscali e gli snapshot supporto sono output operativi:
+salvali in repo solo se sintetici, privacy-safe e richiesti esplicitamente.
+
 ## Deploy
 
 - La VPS operativa corretta per FiscalBay è solo `opc@79.72.45.89`
