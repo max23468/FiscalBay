@@ -34,8 +34,6 @@ rischi operativi o decisioni prodotto li rendono necessari.
 
 - Creare ADR in `docs/decisions/` per decisioni strutturali nuove o per la
   progressiva migrazione da documenti storici.
-- Riallineare manifest, typecheck, CI e VPS prima di dichiarare completo
-  l'upgrade Python oltre il supporto `3.10`.
 - Preparare contratti interni riusabili dalla futura web app senza anticipare
   una migrazione `2.0` prematura.
 - Intervenire su performance, storage o polling solo se metriche e healthcheck

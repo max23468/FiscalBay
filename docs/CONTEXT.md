@@ -14,8 +14,8 @@ file.
   `docs/RELEASE_POLICY.md` sono la source of truth.
 - Deploy corrente: VPS `fiscalbay-bot`, via script locali/VPS fuori da GitHub
   Actions.
-- Runtime: supporto Python `>=3.10` nel manifest; runtime operativo controllato
-  su VPS con Python `3.13`.
+- Runtime: Python `>=3.13` nel manifest; runtime operativo controllato su VPS
+  con Python `3.13`.
 - Source of truth: `AGENTS.md`, `docs/INDEX.md`, `docs/ROADMAP.md`,
   `docs/TOOLCHAIN.md`, `docs/DECISIONS.md`,
   `docs/DECISIONS_PENDING.md` e documenti operativi collegati.
