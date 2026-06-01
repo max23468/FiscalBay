@@ -34,6 +34,8 @@ In caso di conflitto, seguire sempre il livello più alto.
   senza una decisione esplicita.
 - FiscalBay non è un gestionale fiscale completo, non è un help desk umano e non
   deve diventare una dashboard web-first senza una decisione esplicita.
+- Brand, naming pubblico, tono, microcopy Telegram e asset sono governati da
+  `docs/BRAND_GUIDELINES.md`.
 
 ## Principi generali
 
@@ -251,6 +253,8 @@ Per dettagli e casi limite, seguire `docs/RELEASE_POLICY.md`.
   sicurezza, roadmap, backlog, decisioni e guide operative vivono in `docs/`.
 - Aggiorna documentazione e commenti quando il comportamento cambia.
 - Se aggiungi o cambi configurazioni/env var, documentale in `README.md` o `docs/`.
+- Se tocchi naming pubblico, messaggi del bot, menu Telegram, profilo, asset o
+  tono utente, aggiorna o verifica `docs/BRAND_GUIDELINES.md`.
 - Ogni decisione di prodotto, tecnica o operativa condivisa in chat deve confluire
   in `docs/ROADMAP.md` quando cambia direzione, priorità, perimetro o backlog
   del progetto. Non serve aggiornare la roadmap per micro-decisioni esecutive già
