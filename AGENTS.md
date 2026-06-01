@@ -84,6 +84,18 @@ In particolare restano fuori Git `build/`, `dist/`, `.coverage*`, `data/*.db`,
 log locali. Gli export fiscali e gli snapshot supporto sono output operativi:
 salvali in repo solo se sintetici, privacy-safe e richiesti esplicitamente.
 
+## Skill operative
+
+Usa le skill Superpowers pertinenti per lavori non banali: pianificazione,
+debugging sistematico, worktree, esecuzione di piani, review e verifica finale.
+Le skill non sostituiscono le regole fiscali, di sicurezza, VPS/deploy o release
+di FiscalBay.
+
+Usa o proponi `grill-me` quando una scelta va stressata prima di implementarla:
+architetture, refactor trasversali, integrazioni eBay/Telegram/VPS, sicurezza,
+release/deploy o scope ambiguo. Non renderla obbligatoria per refusi,
+micro-docs, cleanup o modifiche meccaniche a basso rischio.
+
 ## Deploy
 
 - La VPS operativa corretta per FiscalBay è solo `opc@79.72.45.89`
