@@ -23,6 +23,9 @@ In caso di conflitto, seguire sempre il livello più alto.
 
 - FiscalBay è un tool operativo con CLI, bot Telegram, callback OAuth e worker di
   reconciliation per leggere ordini eBay tramite API ufficiali.
+- Fase operativa: produzione Telegram-first con VPS attiva e release gestite da
+  policy repo-specifica; deploy e release si fanno solo quando richiesti dal
+  diff o dalla procedura corrente.
 - Il dato fiscale supportato arriva da `buyer.taxIdentifier` e dai relativi campi,
   come `taxpayerId` e `taxIdentifierType`. Non dedurre, ricostruire o inventare dati
   fiscali assenti dalla risposta eBay.
@@ -289,6 +292,8 @@ Un lavoro è chiuso quando:
 - non sovrascrive modifiche non tue;
 - include verifiche proporzionate al rischio o dichiara perché non sono
   applicabili;
+- controlla la `Codex feedback inbox` quando il flusso prevede PR ready, merge,
+  publish, deploy o release;
 - aggiorna documentazione, changelog, versione, release o deploy solo quando il
   cambio lo richiede;
 - non lascia segreti, dati personali, file temporanei o modifiche non correlate;
@@ -296,6 +301,7 @@ Un lavoro è chiuso quando:
   applicabili con motivo;
 - branch/worktree locali e remoti creati per il lavoro sono stati puliti oppure
   il residuo è dichiarato esplicitamente.
+- rischi residui e prossimo passo operativo sono dichiarati quando esistono.
 
 ## Sotto-moduli
 
