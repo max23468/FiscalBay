@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 from zoneinfo import ZoneInfoNotFoundError
 
+from src.fiscalbay import telegram_commands as telegram_commands_module
 from src.fiscalbay.bot import (
     CALLBACK_HELP,
     CALLBACK_OTHER_ACTIONS,
@@ -15,6 +16,8 @@ from src.fiscalbay.bot import (
     TELEGRAM_CMD_MAX_DAYS,
     TelegramApiError,
     TelegramConfig,
+    _handle_orders_command,
+    _normalize_grouped_command,
     acquire_process_lock,
     build_contextual_menu_markup,
     build_help_text,
@@ -36,7 +39,9 @@ from src.fiscalbay.bot import (
     update_state_with_records,
 )
 from src.fiscalbay.clients.telegram import sync_bot_branding
-from src.fiscalbay.models import TelegramUser
+from src.fiscalbay.errors import ConfigurationError, EbayApiError
+from src.fiscalbay.fiscal_export import FiscalExportReport
+from src.fiscalbay.models import BotRuntimeState, OrderRecord, TelegramUser
 from src.fiscalbay.storage.sqlite import load_kv_value
 from src.fiscalbay.telegram_commands import (
     BOT_DISPLAY_NAME,
@@ -49,19 +54,73 @@ from src.fiscalbay.telegram_commands import (
     CALLBACK_ORDINI_REPORT,
     CALLBACK_ORDINI_REVIEW,
     build_telegram_branding_profile,
+    format_access_request_status,
+    format_access_required_status,
+    format_admin_command_help,
     format_admin_dashboard,
     format_admin_history,
     format_admin_maintenance_overview,
     format_admin_scale_readiness,
     format_admin_security_report,
     format_admin_user_list,
+    format_disconnect_status,
+    format_fiscal_export_messages,
+    format_leave_status,
+    format_notifications_status,
+    format_onboarding_guide,
     format_order_date,
+    format_order_notification_summary,
+    format_priority_records,
+    format_reconnect_reason_hint,
+    format_report_summary,
+    format_review_records,
+    format_settings_status,
+    format_why_not_notified_status,
     is_admin_authorized,
     looks_like_order_id,
 )
 
 
 class TelegramBotTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self._tmp_path = Path(self._tmpdir.name)
+
+    def _base_config(self) -> TelegramConfig:
+        return TelegramConfig(
+            token="token",
+            allowed_chat_ids={456},
+            notify_chat_ids=set(),
+            state_path=str(self._tmp_path / "state.db"),
+            retry_queue_path=str(self._tmp_path / "retry.db"),
+        )
+
+    def _order(
+        self,
+        order_id: str,
+        *,
+        buyer_username: str = "buyer",
+        taxpayer_id: str = "",
+        tax_identifier_type: str = "",
+        issuing_country: str = "IT",
+        buyer_email: str = "buyer@example.com",
+    ) -> OrderRecord:
+        return OrderRecord(
+            orderId=order_id,
+            creationDate="2026-04-05T20:00:00Z",
+            buyerUsername=buyer_username,
+            buyerEmail=buyer_email,
+            taxpayerId=taxpayer_id,
+            taxIdentifierType=tax_identifier_type,
+            issuingCountry=issuing_country,
+        )
+
+    @staticmethod
+    def _run_backoff(callback, label=None):  # type: ignore[no-untyped-def]
+        del label
+        return callback()
+
     def test_build_main_menu_markup_contains_inline_keyboard(self) -> None:
         markup = build_main_menu_markup()
         keyboard = markup.get("inline_keyboard")
@@ -153,6 +212,42 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn(CALLBACK_ADMIN_MAINTENANCE, all_callbacks)
         self.assertNotIn("menu:connect", all_callbacks)
 
+    def test_build_contextual_menu_markup_covers_settings_other_actions_and_status(self) -> None:
+        settings_markup = build_contextual_menu_markup(
+            "/settings",
+            account_linked=True,
+            notifications_enabled=False,
+        )
+        settings_callbacks = [
+            button.get("callback_data")
+            for row in settings_markup.get("inline_keyboard", [])
+            for button in row
+        ]
+        self.assertIn("menu:notifications_on", settings_callbacks)
+        self.assertIn("menu:account", settings_callbacks)
+
+        other_actions_markup = build_contextual_menu_markup(
+            "/altre_azioni",
+            account_linked=True,
+            notifications_enabled=True,
+        )
+        other_actions_callbacks = [
+            button.get("callback_data")
+            for row in other_actions_markup.get("inline_keyboard", [])
+            for button in row
+        ]
+        self.assertIn("menu:disconnect", other_actions_callbacks)
+        self.assertIn(CALLBACK_REQUEST_ACCESS, other_actions_callbacks)
+
+        status_markup = build_contextual_menu_markup("/service_status")
+        status_callbacks = [
+            button.get("callback_data")
+            for row in status_markup.get("inline_keyboard", [])
+            for button in row
+        ]
+        self.assertIn("menu:account", status_callbacks)
+        self.assertIn(CALLBACK_HELP, status_callbacks)
+
     def test_callback_command_from_data_maps_buttons(self) -> None:
         self.assertEqual(callback_command_from_data(CALLBACK_ORDINI), "/ordini")
         self.assertEqual(callback_command_from_data(CALLBACK_ULTIMI), "/ordini fiscali 7 20")
@@ -192,6 +287,528 @@ class TelegramBotTests(unittest.TestCase):
         self.assertEqual(callback_command_from_data(CALLBACK_HELP), "/help")
         self.assertIsNone(callback_command_from_data("menu:unknown"))
 
+    def test_normalize_grouped_command_maps_secondary_aliases(self) -> None:
+        cases = [
+            ("/account", ["status", "ora"], ("/account", ["ora"])),
+            ("/account", ["reconnect-status"], ("/reconnect_status", [])),
+            ("/settings", ["dati"], ("/data_request", [])),
+            ("/settings", ["delete", "subito"], ("/data_request", ["delete", "subito"])),
+            ("/settings", ["privacy"], ("/policy", [])),
+            ("/stato", ["servizio"], ("/service_status", [])),
+            ("/admin", ["service"], ("/service_mode", [])),
+            ("/admin", ["support", "123"], ("/admin", ["support", "123"])),
+        ]
+
+        for command, args, expected in cases:
+            with self.subTest(command=command, args=args):
+                self.assertEqual(_normalize_grouped_command(command, args), expected)
+
+    def test_simple_telegram_commands_process_message_core_paths(self) -> None:
+        config = self._base_config()
+
+        self.assertEqual(
+            telegram_commands_module.process_message(
+                "/ping",
+                999,
+                config,
+                "production",
+                load_state_fn=lambda _path: BotRuntimeState(),
+                load_retry_queue_fn=lambda _path: [],
+                fetch_records_for_environment_fn=lambda _env, _options: [],
+                request_with_backoff_fn=self._run_backoff,
+            ),
+            ["Chat non autorizzata per questo bot."],
+        )
+
+        status_reply = telegram_commands_module.process_message(
+            "/stato",
+            456,
+            config,
+            "production",
+            load_state_fn=lambda _path: BotRuntimeState(last_check="2026-04-05T20:00:00Z"),
+            load_retry_queue_fn=lambda _path: [object()],
+            fetch_records_for_environment_fn=lambda _env, _options: [],
+            request_with_backoff_fn=self._run_backoff,
+        )
+        self.assertIn("Stato del Bot", status_reply[0])
+        self.assertIn("2026-04-05T20:00:00Z", status_reply[0])
+
+        self.assertEqual(
+            telegram_commands_module.process_message(
+                "/unknown",
+                456,
+                config,
+                "production",
+                load_state_fn=lambda _path: BotRuntimeState(),
+                load_retry_queue_fn=lambda _path: [],
+                fetch_records_for_environment_fn=lambda _env, _options: [],
+                request_with_backoff_fn=self._run_backoff,
+            ),
+            ["Comando non riconosciuto. Usa /help per vedere i comandi disponibili."],
+        )
+
+        fetch_reply = telegram_commands_module.process_message(
+            "/tutti 7 5",
+            456,
+            config,
+            "sandbox",
+            load_state_fn=lambda _path: BotRuntimeState(),
+            load_retry_queue_fn=lambda _path: [],
+            fetch_records_for_environment_fn=lambda _env, _options: [
+                self._order("12-34567-89012", buyer_username="buyer-1")
+            ],
+            request_with_backoff_fn=self._run_backoff,
+        )
+        self.assertIn("12-34567-89012", fetch_reply[0])
+
+    @patch("src.fiscalbay.bot.request_with_backoff")
+    def test_handle_orders_command_help_lists_and_summary_paths(self, mock_backoff) -> None:
+        config = self._base_config()
+        mock_backoff.side_effect = self._run_backoff
+
+        help_reply = _handle_orders_command(
+            "/ordini",
+            [],
+            telegram_config=config,
+            chat_id=456,
+            resolved_environment="sandbox",
+            resolved_telegram_user_id=123,
+            load_state_fn=lambda _path: BotRuntimeState(),
+            fetch_records_for_environment_fn=lambda _env, _options: [],
+        )
+        self.assertIsNotNone(help_reply)
+        self.assertIn("Usa <code>/ordini</code>", help_reply[0])
+
+        fiscali_reply = _handle_orders_command(
+            "/ordini",
+            ["fiscali", "7", "5"],
+            telegram_config=config,
+            chat_id=456,
+            resolved_environment="sandbox",
+            resolved_telegram_user_id=123,
+            load_state_fn=lambda _path: BotRuntimeState(),
+            fetch_records_for_environment_fn=lambda _env, _options: [
+                self._order(
+                    "12-34567-89012",
+                    taxpayer_id="RSSMRA80A01H501U",
+                    tax_identifier_type="CODICE_FISCALE",
+                )
+            ],
+        )
+        self.assertIn("12-34567-89012", fiscali_reply[0])
+
+        tutti_reply = _handle_orders_command(
+            "/ordini",
+            ["tutti", "7", "5"],
+            telegram_config=config,
+            chat_id=456,
+            resolved_environment="sandbox",
+            resolved_telegram_user_id=123,
+            load_state_fn=lambda _path: BotRuntimeState(),
+            fetch_records_for_environment_fn=lambda _env, _options: [
+                self._order("12-34567-89013", buyer_username="buyer-all")
+            ],
+        )
+        self.assertIn("12-34567-89013", tutti_reply[0])
+
+        search_reply = _handle_orders_command(
+            "/ordini",
+            ["cerca", "buyer-vat", "7", "20"],
+            telegram_config=config,
+            chat_id=456,
+            resolved_environment="sandbox",
+            resolved_telegram_user_id=123,
+            load_state_fn=lambda _path: BotRuntimeState(),
+            fetch_records_for_environment_fn=lambda _env, _options: [
+                self._order("plain-order-1", buyer_username="other"),
+                self._order(
+                    "plain-order-2",
+                    buyer_username="buyer-vat",
+                    taxpayer_id="IT12345678901",
+                    tax_identifier_type="VAT_NUMBER",
+                ),
+            ],
+        )
+        self.assertIn("buyer-vat", search_reply[0])
+        self.assertNotIn("plain-order-1", search_reply[0])
+
+        review_reply = _handle_orders_command(
+            "/ordini",
+            ["controlla", "7", "20"],
+            telegram_config=config,
+            chat_id=456,
+            resolved_environment="sandbox",
+            resolved_telegram_user_id=123,
+            load_state_fn=lambda _path: BotRuntimeState(),
+            fetch_records_for_environment_fn=lambda _env, _options: [
+                self._order("order-missing"),
+                self._order(
+                    "order-ok",
+                    taxpayer_id="IT12345678901",
+                    tax_identifier_type="VAT_NUMBER",
+                ),
+            ],
+        )
+        self.assertIn("order-missing", review_reply[0])
+        self.assertNotIn("order-ok", review_reply[0])
+
+        report_reply = _handle_orders_command(
+            "/ordini",
+            ["report", "7", "20"],
+            telegram_config=config,
+            chat_id=456,
+            resolved_environment="sandbox",
+            resolved_telegram_user_id=123,
+            load_state_fn=lambda _path: BotRuntimeState(),
+            fetch_records_for_environment_fn=lambda _env, _options: [
+                self._order("order-missing"),
+                self._order(
+                    "order-vat",
+                    taxpayer_id="IT12345678901",
+                    tax_identifier_type="VAT_NUMBER",
+                    issuing_country="DE",
+                ),
+            ],
+        )
+        self.assertIn("Mini Report Fiscale", report_reply[0])
+        self.assertIn("Senza dato fiscale: <code>1</code>", report_reply[0])
+
+        priority_reply = _handle_orders_command(
+            "/ordini",
+            ["priorita", "7", "20"],
+            telegram_config=config,
+            chat_id=456,
+            resolved_environment="sandbox",
+            resolved_telegram_user_id=123,
+            load_state_fn=lambda _path: BotRuntimeState(),
+            fetch_records_for_environment_fn=lambda _env, _options: [
+                self._order(
+                    "order-cf",
+                    taxpayer_id="RSSMRA80A01H501U",
+                    tax_identifier_type="CODICE_FISCALE",
+                ),
+                self._order("order-review"),
+                self._order(
+                    "order-vat",
+                    taxpayer_id="IT12345678901",
+                    tax_identifier_type="VAT_NUMBER",
+                ),
+            ],
+        )
+        self.assertIn("Ordini Prioritari", priority_reply[0])
+        self.assertLess(
+            priority_reply[0].index("order-review"),
+            priority_reply[0].index("order-vat"),
+        )
+
+        export_reply = _handle_orders_command(
+            "/ordini",
+            ["export", "7", "20"],
+            telegram_config=config,
+            chat_id=456,
+            resolved_environment="sandbox",
+            resolved_telegram_user_id=123,
+            load_state_fn=lambda _path: BotRuntimeState(),
+            fetch_records_for_environment_fn=lambda _env, _options: [
+                self._order("order-export-1"),
+                self._order(
+                    "order-export-2",
+                    taxpayer_id="IT12345678901",
+                    tax_identifier_type="VAT_NUMBER",
+                ),
+            ],
+        )
+        self.assertEqual(len(export_reply), 2)
+        self.assertIn("Export Fiscale Venditore", export_reply[0])
+        self.assertIn("CSV export", export_reply[1])
+
+        unknown_reply = _handle_orders_command(
+            "/ordini",
+            ["boh"],
+            telegram_config=config,
+            chat_id=456,
+            resolved_environment="sandbox",
+            resolved_telegram_user_id=123,
+            load_state_fn=lambda _path: BotRuntimeState(),
+            fetch_records_for_environment_fn=lambda _env, _options: [],
+        )
+        self.assertIn("Ordini", unknown_reply[0])
+
+    def test_handle_orders_command_covers_usage_and_error_paths(self) -> None:
+        config = self._base_config()
+
+        self.assertEqual(
+            _handle_orders_command(
+                "/ordini",
+                ["cerca"],
+                telegram_config=config,
+                chat_id=456,
+                resolved_environment="sandbox",
+                resolved_telegram_user_id=123,
+                load_state_fn=lambda _path: BotRuntimeState(),
+                fetch_records_for_environment_fn=lambda _env, _options: [],
+            ),
+            ["Uso corretto: <code>/ordini cerca &lt;order_id|testo&gt; [giorni] [max]</code>"],
+        )
+
+        invalid_search = _handle_orders_command(
+            "/ordini",
+            ["cerca", "buyer", "nope"],
+            telegram_config=config,
+            chat_id=456,
+            resolved_environment="sandbox",
+            resolved_telegram_user_id=123,
+            load_state_fn=lambda _path: BotRuntimeState(),
+            fetch_records_for_environment_fn=lambda _env, _options: [],
+        )
+        self.assertIn("Il numero di giorni deve essere un intero", invalid_search[0])
+
+        with patch(
+            "src.fiscalbay.bot.request_with_backoff",
+            side_effect=lambda callback, label=None: (_ for _ in ()).throw(
+                ConfigurationError("config mancante")
+            ),
+        ):
+            for args in (
+                ["fiscali", "7", "5"],
+                ["tutti", "7", "5"],
+                ["cerca", "buyer"],
+                ["controlla", "7", "5"],
+                ["report", "7", "5"],
+                ["priorita", "7", "5"],
+                ["export", "7", "5"],
+            ):
+                with self.subTest(args=args):
+                    reply = _handle_orders_command(
+                        "/ordini",
+                        args,
+                        telegram_config=config,
+                        chat_id=456,
+                        resolved_environment="sandbox",
+                        resolved_telegram_user_id=123,
+                        load_state_fn=lambda _path: BotRuntimeState(),
+                        fetch_records_for_environment_fn=lambda _env, _options: [],
+                    )
+                    self.assertEqual(reply, ["⚠️ config mancante"])
+
+        with patch(
+            "src.fiscalbay.bot.request_with_backoff",
+            side_effect=lambda callback, label=None: (_ for _ in ()).throw(
+                EbayApiError("Invalid Order Id", status_code=400)
+            ),
+        ):
+            search_error = _handle_orders_command(
+                "/ordini",
+                ["cerca", "12-34567-89012"],
+                telegram_config=config,
+                chat_id=456,
+                resolved_environment="sandbox",
+                resolved_telegram_user_id=123,
+                load_state_fn=lambda _path: BotRuntimeState(),
+                fetch_records_for_environment_fn=lambda _env, _options: [],
+            )
+            self.assertIn("eBay ha rifiutato questo orderId", search_error[0])
+
+            explain_error = _handle_orders_command(
+                "/ordini",
+                ["spiega", "12-34567-89012"],
+                telegram_config=config,
+                chat_id=456,
+                resolved_environment="sandbox",
+                resolved_telegram_user_id=123,
+                load_state_fn=lambda _path: BotRuntimeState(),
+                fetch_records_for_environment_fn=lambda _env, _options: [],
+            )
+            self.assertIn("eBay ha rifiutato questo orderId", explain_error[0])
+
+        self.assertEqual(
+            _handle_orders_command(
+                "/ordini",
+                ["spiega"],
+                telegram_config=config,
+                chat_id=456,
+                resolved_environment="sandbox",
+                resolved_telegram_user_id=123,
+                load_state_fn=lambda _path: BotRuntimeState(),
+                fetch_records_for_environment_fn=lambda _env, _options: [],
+            ),
+            ["Uso corretto: <code>/ordini spiega &lt;order_id&gt;</code>"],
+        )
+
+    @patch("src.fiscalbay.bot.request_with_backoff")
+    def test_handle_orders_command_detail_and_alias_success_paths(self, mock_backoff) -> None:
+        config = self._base_config()
+        mock_backoff.side_effect = self._run_backoff
+
+        no_match_reply = _handle_orders_command(
+            "/ordini",
+            ["cerca", "12-34567-89012"],
+            telegram_config=config,
+            chat_id=456,
+            resolved_environment="sandbox",
+            resolved_telegram_user_id=123,
+            load_state_fn=lambda _path: BotRuntimeState(),
+            fetch_records_for_environment_fn=lambda _env, _options: [],
+        )
+        self.assertEqual(no_match_reply, ["🔎 Nessun ordine trovato nella selezione richiesta."])
+
+        detail_reply = _handle_orders_command(
+            "/ordini",
+            ["cerca", "12-34567-89012"],
+            telegram_config=config,
+            chat_id=456,
+            resolved_environment="sandbox",
+            resolved_telegram_user_id=123,
+            load_state_fn=lambda _path: BotRuntimeState(),
+            fetch_records_for_environment_fn=lambda _env, _options: [
+                self._order(
+                    "12-34567-89012",
+                    taxpayer_id="IT12345678901",
+                    tax_identifier_type="VAT_NUMBER",
+                )
+            ],
+        )
+        self.assertIn("Notificabilità", detail_reply[0])
+        self.assertIn("12-34567-89012", detail_reply[0])
+
+        explain_not_found = _handle_orders_command(
+            "/ordini",
+            ["spiega", "12-34567-89012"],
+            telegram_config=config,
+            chat_id=456,
+            resolved_environment="sandbox",
+            resolved_telegram_user_id=123,
+            load_state_fn=lambda _path: BotRuntimeState(),
+            fetch_records_for_environment_fn=lambda _env, _options: [],
+        )
+        self.assertIn("order_not_found", explain_not_found[0])
+
+        explain_reply = _handle_orders_command(
+            "/ordini",
+            ["spiega", "12-34567-89012"],
+            telegram_config=config,
+            chat_id=456,
+            resolved_environment="sandbox",
+            resolved_telegram_user_id=123,
+            load_state_fn=lambda _path: BotRuntimeState(),
+            fetch_records_for_environment_fn=lambda _env, _options: [
+                self._order(
+                    "12-34567-89012",
+                    taxpayer_id="IT12345678901",
+                    tax_identifier_type="VAT_NUMBER",
+                )
+            ],
+        )
+        self.assertIn("Why Not Notified", explain_reply[0])
+        self.assertIn("would_notify", explain_reply[0])
+
+        why_not_reply = _handle_orders_command(
+            "/why_not_notified",
+            ["12-34567-89012"],
+            telegram_config=config,
+            chat_id=456,
+            resolved_environment="sandbox",
+            resolved_telegram_user_id=123,
+            load_state_fn=lambda _path: BotRuntimeState(),
+            fetch_records_for_environment_fn=lambda _env, _options: [
+                self._order(
+                    "12-34567-89012",
+                    taxpayer_id="IT12345678901",
+                    tax_identifier_type="VAT_NUMBER",
+                )
+            ],
+        )
+        self.assertIn("Why Not Notified", why_not_reply[0])
+
+        review_alias = _handle_orders_command(
+            "/review_orders",
+            ["7", "20"],
+            telegram_config=config,
+            chat_id=456,
+            resolved_environment="sandbox",
+            resolved_telegram_user_id=123,
+            load_state_fn=lambda _path: BotRuntimeState(),
+            fetch_records_for_environment_fn=lambda _env, _options: [
+                self._order("order-missing"),
+                self._order(
+                    "order-ok",
+                    taxpayer_id="IT12345678901",
+                    tax_identifier_type="VAT_NUMBER",
+                ),
+            ],
+        )
+        self.assertIn("order-missing", review_alias[0])
+
+        report_alias = _handle_orders_command(
+            "/report_summary",
+            ["7", "20"],
+            telegram_config=config,
+            chat_id=456,
+            resolved_environment="sandbox",
+            resolved_telegram_user_id=123,
+            load_state_fn=lambda _path: BotRuntimeState(),
+            fetch_records_for_environment_fn=lambda _env, _options: [
+                self._order("order-missing"),
+                self._order(
+                    "order-vat",
+                    taxpayer_id="IT12345678901",
+                    tax_identifier_type="VAT_NUMBER",
+                ),
+            ],
+        )
+        self.assertIn("Mini Report Fiscale", report_alias[0])
+
+        priority_alias = _handle_orders_command(
+            "/priority_orders",
+            ["7", "20"],
+            telegram_config=config,
+            chat_id=456,
+            resolved_environment="sandbox",
+            resolved_telegram_user_id=123,
+            load_state_fn=lambda _path: BotRuntimeState(),
+            fetch_records_for_environment_fn=lambda _env, _options: [
+                self._order(
+                    "order-cf",
+                    taxpayer_id="RSSMRA80A01H501U",
+                    tax_identifier_type="CODICE_FISCALE",
+                ),
+                self._order("order-review"),
+            ],
+        )
+        self.assertIn("Ordini Prioritari", priority_alias[0])
+
+        self.assertEqual(
+            _handle_orders_command(
+                "/ordine",
+                [],
+                telegram_config=config,
+                chat_id=456,
+                resolved_environment="sandbox",
+                resolved_telegram_user_id=123,
+                load_state_fn=lambda _path: BotRuntimeState(),
+                fetch_records_for_environment_fn=lambda _env, _options: [],
+            ),
+            ["Uso corretto: <code>/ordine &lt;order_id&gt;</code>"],
+        )
+
+        detail_alias = _handle_orders_command(
+            "/ordine",
+            ["12-34567-89012"],
+            telegram_config=config,
+            chat_id=456,
+            resolved_environment="sandbox",
+            resolved_telegram_user_id=123,
+            load_state_fn=lambda _path: BotRuntimeState(),
+            fetch_records_for_environment_fn=lambda _env, _options: [
+                self._order(
+                    "12-34567-89012",
+                    taxpayer_id="RSSMRA80A01H501U",
+                    tax_identifier_type="CODICE_FISCALE",
+                )
+            ],
+        )
+        self.assertIn("Notificabilità", detail_alias[0])
+
     def test_format_admin_user_list_renders_telegram_user_rows(self) -> None:
         content = format_admin_user_list(
             [
@@ -208,6 +825,223 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("<code>123</code>", content)
         self.assertIn("status=<code>approved</code>", content)
         self.assertIn("user=<code>seller_user</code>", content)
+
+    def test_format_access_required_status_covers_admin_pending_blocked_and_new(self) -> None:
+        self.assertIn("Admin del bot", format_access_required_status("approved", is_admin=True))
+        self.assertIn("Accesso in attesa", format_access_required_status("pending"))
+        self.assertIn("Accesso non approvato", format_access_required_status("blocked"))
+        self.assertIn("Accesso richiesto", format_access_required_status("new"))
+
+    def test_format_access_request_status_covers_all_outcomes(self) -> None:
+        self.assertIn("bloccato", format_access_request_status(blocked=True))
+        self.assertIn("già in attesa", format_access_request_status(already_pending=True))
+        self.assertIn("admin è stato notificato", format_access_request_status(admin_notified=True))
+        self.assertIn("Richiesta registrata", format_access_request_status())
+
+    def test_format_onboarding_guide_covers_full_user_journey(self) -> None:
+        self.assertIn(
+            "Onboarding admin",
+            format_onboarding_guide(user_status="approved", is_admin=True),
+        )
+        self.assertIn(
+            "Accesso non approvato",
+            format_onboarding_guide(user_status="blocked", account_status={}),
+        )
+        self.assertIn(
+            "Richiesta in revisione",
+            format_onboarding_guide(user_status="pending", account_status={}),
+        )
+        self.assertIn(
+            "Invito ricevuto",
+            format_onboarding_guide(user_status="new", account_status={}),
+        )
+        self.assertIn(
+            "Reconnect eBay",
+            format_onboarding_guide(
+                user_status="approved",
+                account_status={
+                    "account_status": "revoked",
+                    "token_status": "expired",
+                },
+            ),
+        )
+
+    def test_format_misc_renderers_cover_remaining_edge_paths(self) -> None:
+        self.assertIn("cruscotto operativo", format_admin_command_help())
+        self.assertIn(
+            "Link di collegamento non più valido",
+            format_reconnect_reason_hint(
+                {
+                    "latest_reconnect_outcome": "session_unavailable",
+                    "latest_reconnect_reason": "sessione chiusa",
+                }
+            ),
+        )
+        self.assertIn(
+            "Autorizzazione annullata",
+            format_reconnect_reason_hint({"latest_reconnect_outcome": "user_cancelled"}),
+        )
+        self.assertIn(
+            "Problema di configurazione o salvataggio lato servizio",
+            format_reconnect_reason_hint(
+                {"latest_reconnect_outcome": "service_configuration_error"}
+            ),
+        )
+
+        why_not = format_why_not_notified_status(
+            {
+                "order_id": "12-34567-89012",
+                "environment": "sandbox",
+                "status": "already_notified_fingerprint",
+                "delivery_status": "chat_notifications_disabled",
+                "headline": "Gia visto",
+            }
+        )
+        self.assertIn("collide con una fingerprint", why_not)
+        self.assertIn("/ordini cerca 12-34567-89012", why_not)
+
+        why_not_delivery = format_why_not_notified_status(
+            {
+                "order_id": "12-34567-89012",
+                "environment": "sandbox",
+                "status": "would_notify",
+                "delivery_status": "chat_notifications_disabled",
+                "headline": "Recapito fermo",
+            }
+        )
+        self.assertIn("/settings notifiche on", why_not_delivery)
+
+        summary = format_order_notification_summary(
+            {
+                "status": "missing_order_id",
+                "delivery_status": "chat_not_registered",
+            }
+        )
+        self.assertIn("Manca un identificativo ordine stabile", summary)
+
+        self.assertIn(
+            "Nessun account eBay collegato",
+            format_disconnect_status({"disconnected": False}),
+        )
+        self.assertIn(
+            "non verificabile",
+            format_disconnect_status(
+                {
+                    "disconnected": True,
+                    "ebay_user_id": "seller",
+                    "environment": "sandbox",
+                    "remote_revocation_status": "missing_token",
+                }
+            ),
+        )
+        self.assertIn(
+            "saltata",
+            format_leave_status(
+                {
+                    "account_was_linked": True,
+                    "ebay_user_id": "seller",
+                    "environment": "sandbox",
+                    "remote_revocation_status": "skipped",
+                }
+            ),
+        )
+
+        self.assertIn(
+            "/account collega",
+            format_notifications_status(
+                {
+                    "enabled": False,
+                    "tenant_scope": "tenant:123",
+                    "chat_id": 456,
+                    "environment": "sandbox",
+                    "account_linked": False,
+                }
+            ),
+        )
+        self.assertIn("Nessun ordine recente", format_review_records([])[0])
+        self.assertIn("Nessun ordine disponibile", format_priority_records([])[0])
+
+        unknown_identifier = self._order(
+            "unknown-id",
+            taxpayer_id="ABC123",
+            tax_identifier_type="CUSTOM_ID",
+            issuing_country="FR",
+        )
+        self.assertIn(
+            "Con CF: <code>1</code>",
+            format_report_summary([unknown_identifier], days=7, max_results=20),
+        )
+        self.assertIn(
+            "motivo=<code>id_fiscale_presente</code>",
+            format_priority_records([unknown_identifier])[0],
+        )
+
+        settings_admin = format_settings_status(
+            {
+                "tenant_scope": "tenant:123",
+                "environment": "sandbox",
+                "notifications_enabled": False,
+                "account_linked": False,
+                "user_status": "admin",
+                "latest_session_status": "ready",
+            }
+        )
+        self.assertIn("Accesso bot: <code>admin</code>", settings_admin)
+        self.assertIn("Ultima sessione connect", settings_admin)
+
+        settings_blocked = format_settings_status(
+            {
+                "tenant_scope": "tenant:123",
+                "environment": "sandbox",
+                "notifications_enabled": True,
+                "account_linked": True,
+                "user_status": "blocked",
+                "session_ready": True,
+                "latest_session_expires_at": "2099-01-01T00:00:00Z",
+            }
+        )
+        self.assertIn("Accesso bot: <code>bloccato</code>", settings_blocked)
+        self.assertIn("Sessione connect pronta", settings_blocked)
+
+    def test_format_fiscal_export_messages_splits_large_csv(self) -> None:
+        records = tuple(
+            self._order(
+                f"12-34567-{89000 + idx}",
+                taxpayer_id="IT12345678901",
+                tax_identifier_type="VAT_NUMBER",
+            )
+            for idx in range(80)
+        )
+        report = FiscalExportReport(
+            generated_at="2026-04-05T20:00:00Z",
+            period_start="2026-04-01T00:00:00Z",
+            period_end="2026-04-05T20:00:00Z",
+            records=records,
+        )
+
+        messages = format_fiscal_export_messages(report)
+
+        self.assertGreater(len(messages), 2)
+        self.assertIn("parte <code>2</code>", messages[2])
+        self.assertIn(
+            "Collega eBay",
+            format_onboarding_guide(
+                user_status="approved",
+                account_status={"account_status": "unlinked"},
+            ),
+        )
+        self.assertIn(
+            "Accesso bot approvato e account eBay collegato",
+            format_onboarding_guide(
+                user_status="approved",
+                account_status={
+                    "account_status": "linked",
+                    "token_status": "active",
+                    "ebay_user_id": "seller-ebay",
+                    "environment": "sandbox",
+                },
+            ),
+        )
 
     def test_extract_callback_context_reads_callback_query(self) -> None:
         update = {
