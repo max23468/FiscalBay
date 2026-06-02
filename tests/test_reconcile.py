@@ -81,6 +81,56 @@ class ReconcileTests(unittest.TestCase):
             self.assertEqual(len(subscriptions), 1)
             self.assertFalse(subscriptions[0].enabled)
 
+    def test_process_pending_operations_ignores_unknown_requested_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            upsert_telegram_user(
+                str(db_path),
+                TelegramUser(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    username="seller_user",
+                    display_name="Mario Rossi",
+                    created_at="2026-04-06T10:00:00Z",
+                    status="approved",
+                ),
+            )
+            upsert_telegram_chat(
+                str(db_path),
+                TelegramChat(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    chat_type="private",
+                    is_primary=True,
+                    notifications_enabled=True,
+                    created_at="2026-04-06T10:00:00Z",
+                    updated_at="2026-04-06T10:00:00Z",
+                ),
+            )
+            enqueue_operation(
+                str(db_path),
+                OperationQueueEntry(
+                    operation_type="apply_user_access_state",
+                    created_at="2026-04-06T10:00:00Z",
+                    target_telegram_user_id=123,
+                    payload_json='{"requested_status": "unexpected"}',
+                ),
+            )
+
+            summary = process_pending_operations(
+                state_path=str(db_path),
+                default_notify_chat_ids={456},
+            )
+
+            self.assertEqual(summary["processed"], 1)
+            self.assertEqual(summary["completed"], 1)
+            updated_user = load_telegram_user(str(db_path), 123)
+            assert updated_user is not None
+            self.assertEqual(updated_user.status, "approved")
+            subscriptions = load_notification_subscriptions(str(db_path))
+            self.assertEqual(len(subscriptions), 1)
+            self.assertTrue(subscriptions[0].enabled)
+
     def test_process_pending_operations_applies_user_access_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
