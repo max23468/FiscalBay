@@ -96,6 +96,19 @@ def _notification_snapshot(
     return tuple(sorted(snapshot))
 
 
+def _requested_status_for_operation(claimed: OperationQueueEntry, current_status: str) -> str:
+    if not claimed.payload_json:
+        return current_status
+    try:
+        payload = json.loads(claimed.payload_json)
+    except json.JSONDecodeError:
+        return current_status
+    if not isinstance(payload, dict):
+        return current_status
+    requested_status = payload.get("requested_status")
+    return str(requested_status or current_status)
+
+
 def process_pending_operations(
     *,
     state_path: str,
@@ -147,10 +160,11 @@ def process_pending_operations(
             continue
 
         before = _notification_snapshot(state_path, target_user_id)
+        requested_status = _requested_status_for_operation(claimed, user.status)
         applied_user = apply_telegram_user_access_status(
             state_path,
             target_user_id,
-            user.status,
+            requested_status,
             updated_at=now_utc_iso(),
             default_notify_chat_ids=default_notify_chat_ids,
         )
