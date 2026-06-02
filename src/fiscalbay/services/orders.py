@@ -352,7 +352,7 @@ def write_output(records: Sequence[OrderRecord], fmt: str, output_path: Optional
         writer.writerows(normalized_records)
         content = string_io.getvalue().rstrip("\n")
     else:
-        content = render_table(normalized_records)
+        content = render_table(records)
 
     if output_path:
         with open(output_path, "w", encoding="utf-8") as handle:

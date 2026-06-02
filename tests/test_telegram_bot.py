@@ -36,6 +36,7 @@ from src.fiscalbay.bot import (
     update_state_with_records,
 )
 from src.fiscalbay.clients.telegram import sync_bot_branding
+from src.fiscalbay.models import TelegramUser
 from src.fiscalbay.storage.sqlite import load_kv_value
 from src.fiscalbay.telegram_commands import (
     BOT_DISPLAY_NAME,
@@ -53,6 +54,7 @@ from src.fiscalbay.telegram_commands import (
     format_admin_maintenance_overview,
     format_admin_scale_readiness,
     format_admin_security_report,
+    format_admin_user_list,
     format_order_date,
     is_admin_authorized,
     looks_like_order_id,
@@ -189,6 +191,23 @@ class TelegramBotTests(unittest.TestCase):
         self.assertEqual(callback_command_from_data("access:reject:321"), "/reject_user 321")
         self.assertEqual(callback_command_from_data(CALLBACK_HELP), "/help")
         self.assertIsNone(callback_command_from_data("menu:unknown"))
+
+    def test_format_admin_user_list_renders_telegram_user_rows(self) -> None:
+        content = format_admin_user_list(
+            [
+                TelegramUser(
+                    telegram_user_id=123,
+                    telegram_chat_id=456,
+                    username="seller_user",
+                    display_name="Mario Rossi",
+                    status="approved",
+                )
+            ]
+        )
+
+        self.assertIn("<code>123</code>", content)
+        self.assertIn("status=<code>approved</code>", content)
+        self.assertIn("user=<code>seller_user</code>", content)
 
     def test_extract_callback_context_reads_callback_query(self) -> None:
         update = {
