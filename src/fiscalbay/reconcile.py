@@ -16,6 +16,7 @@ from .models import (
     OPERATION_TYPE_APPLY_USER_ACCESS_STATE,
     AuditLogEntry,
     OperationQueueEntry,
+    normalize_telegram_user_status,
 )
 from .storage.sqlite import (
     append_audit_log_entry,
@@ -97,16 +98,20 @@ def _notification_snapshot(
 
 
 def _requested_status_for_operation(claimed: OperationQueueEntry, current_status: str) -> str:
+    normalized_current_status = normalize_telegram_user_status(current_status)
     if not claimed.payload_json:
-        return current_status
+        return normalized_current_status
     try:
         payload = json.loads(claimed.payload_json)
     except json.JSONDecodeError:
-        return current_status
+        return normalized_current_status
     if not isinstance(payload, dict):
-        return current_status
+        return normalized_current_status
     requested_status = payload.get("requested_status")
-    return str(requested_status or current_status)
+    return normalize_telegram_user_status(
+        str(requested_status or ""),
+        default=normalized_current_status,
+    )
 
 
 def process_pending_operations(
