@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from datetime import timezone
@@ -20,9 +21,12 @@ from src.fiscalbay.services.orders import (
     extract_record,
     fetch_records,
     get_csv_fieldnames,
+    order_detail_delay_seconds,
+    parse_args,
     parse_iso8601,
     render_table,
     resolve_date_window_from_options,
+    write_output,
 )
 
 
@@ -119,6 +123,41 @@ class EbayCfToolTests(unittest.TestCase):
         self.assertEqual(dt.tzinfo, timezone.utc)
         self.assertEqual(dt.year, 2026)
         self.assertEqual(dt.minute, 11)
+
+    def test_parse_iso8601_assumes_utc_when_timezone_missing(self) -> None:
+        dt = parse_iso8601("2026-04-03T10:11:12")
+        self.assertEqual(dt.tzinfo, timezone.utc)
+        self.assertEqual(dt.hour, 10)
+
+    def test_parse_args_accepts_repeated_order_ids_and_output_flags(self) -> None:
+        args = parse_args(
+            [
+                "--environment",
+                "sandbox",
+                "--days",
+                "3",
+                "--order-id",
+                "order-1",
+                "--order-id",
+                "order-2",
+                "--format",
+                "csv",
+                "--output",
+                "orders.csv",
+                "--only-found",
+            ]
+        )
+
+        self.assertEqual(args.environment, "sandbox")
+        self.assertEqual(args.days, 3)
+        self.assertEqual(args.order_ids, ["order-1", "order-2"])
+        self.assertEqual(args.format, "csv")
+        self.assertEqual(args.output, "orders.csv")
+        self.assertTrue(args.only_found)
+
+    @patch.dict("os.environ", {"EBAY_ORDER_DETAIL_DELAY_SECONDS": "   "}, clear=False)
+    def test_order_detail_delay_seconds_ignores_blank_env(self) -> None:
+        self.assertEqual(order_detail_delay_seconds(), 0.0)
 
     def test_extract_record_reads_tax_identifier(self) -> None:
         order = {
@@ -268,6 +307,44 @@ class EbayCfToolTests(unittest.TestCase):
         self.assertEqual(record.transactionStatus, "PAID")
         self.assertIn("Via Roma 1", record.shippingAddress)
 
+    def test_extract_record_handles_sparse_items_and_shipping_fallback(self) -> None:
+        order = {
+            "legacyOrderId": "legacy-1",
+            "creationDate": "2026-04-03T10:00:00.000Z",
+            "orderFulfillmentStatus": "FULFILLED",
+            "buyer": {
+                "username": "buyer-test",
+                "fullName": "Mario Rossi",
+                "emailAddress": "buyer@example.com",
+            },
+            "lineItems": [
+                "unexpected",
+                {"quantity": 1, "sku": "SKU-1"},
+            ],
+            "fulfillmentStartInstructions": [
+                {
+                    "shippingStep": {
+                        "shipTo": {
+                            "email": "shipto@example.com",
+                            "contactAddress": {
+                                "addressLine1": "Via Roma 1",
+                                "city": "Milano",
+                            },
+                        }
+                    }
+                }
+            ],
+        }
+
+        record = extract_record(order)
+
+        self.assertEqual(record.orderId, "legacy-1")
+        self.assertEqual(record.items, "1x SKU-1")
+        self.assertEqual(record.productDescription, "SKU-1")
+        self.assertEqual(record.buyerEmail, "buyer@example.com")
+        self.assertEqual(record.shippingAddress, "Via Roma 1, Milano")
+        self.assertEqual(record.transactionStatus, "FULFILLED")
+
     def test_render_table_contains_header(self) -> None:
         content = render_table(
             [
@@ -284,6 +361,74 @@ class EbayCfToolTests(unittest.TestCase):
         )
         self.assertIn("orderId", content)
         self.assertIn("CODICE_FISCALE", content)
+
+    @patch("builtins.print")
+    def test_write_output_renders_table_to_stdout(self, mock_print) -> None:
+        write_output(
+            [
+                OrderRecord(
+                    orderId="1",
+                    creationDate="2026-04-03T10:00:00Z",
+                    buyerUsername="foo",
+                    taxpayerId="RSSMRA80A01H501U",
+                    taxIdentifierType="CODICE_FISCALE",
+                    issuingCountry="IT",
+                    found="yes",
+                )
+            ],
+            "table",
+            None,
+        )
+
+        rendered = mock_print.call_args.args[0]
+        self.assertIn("orderId", rendered)
+        self.assertIn("CODICE_FISCALE", rendered)
+
+    def test_write_output_writes_csv_file(self) -> None:
+        records = [
+            OrderRecord(
+                orderId="1",
+                creationDate="2026-04-03T10:00:00Z",
+                buyerUsername="foo",
+                taxpayerId="RSSMRA80A01H501U",
+                taxIdentifierType="CODICE_FISCALE",
+                issuingCountry="IT",
+                found="yes",
+            )
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = f"{tmpdir}/orders.csv"
+            write_output(records, "csv", output_path)
+
+            with open(output_path, encoding="utf-8") as handle:
+                content = handle.read()
+
+        self.assertIn("orderId", content)
+        self.assertIn("RSSMRA80A01H501U", content)
+
+    def test_write_output_writes_json_file_with_trailing_newline(self) -> None:
+        records = [
+            OrderRecord(
+                orderId="ordine-è",
+                creationDate="2026-04-03T10:00:00Z",
+                buyerUsername="foo",
+                taxpayerId="",
+                taxIdentifierType="",
+                issuingCountry="IT",
+                found="no",
+            )
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = f"{tmpdir}/orders.json"
+            write_output(records, "json", output_path)
+
+            with open(output_path, encoding="utf-8") as handle:
+                content = handle.read()
+
+        self.assertTrue(content.endswith("\n"))
+        self.assertIn("ordine-è", content)
 
     def test_resolve_date_window_from_options_rejects_invalid_range(self) -> None:
         with self.assertRaises(Exception):
@@ -302,6 +447,10 @@ class EbayCfToolTests(unittest.TestCase):
         self.assertIn("orderQuantity", fieldnames)
         self.assertIn("productDescription", fieldnames)
         self.assertIn("transactionStatus", fieldnames)
+
+    def test_get_csv_fieldnames_accepts_mapping_rows(self) -> None:
+        fieldnames = get_csv_fieldnames([{"orderId": "1", "buyerUsername": "foo"}])
+        self.assertEqual(fieldnames, ["orderId", "buyerUsername"])
 
     @patch("src.fiscalbay.services.orders.get_order_detail")
     @patch("src.fiscalbay.services.orders.get_orders")

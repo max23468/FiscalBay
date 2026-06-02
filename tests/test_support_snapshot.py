@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from src.fiscalbay.models import (
     TELEGRAM_USER_STATUS_APPROVED,
@@ -23,12 +24,46 @@ from src.fiscalbay.storage.sqlite import (
     upsert_telegram_user,
 )
 from src.fiscalbay.support_snapshot import (
+    SupportSnapshotReport,
+    _build_actions,
+    _filter_tenant_audit,
     build_support_snapshot,
     render_support_snapshot_text,
+)
+from src.fiscalbay.support_snapshot import (
+    main as support_snapshot_main,
 )
 
 
 class SupportSnapshotTests(unittest.TestCase):
+    def _sample_report(self) -> SupportSnapshotReport:
+        return SupportSnapshotReport(
+            generated_at="2026-04-07T08:00:02Z",
+            telegram_user_id=123,
+            user=TelegramUser(
+                telegram_user_id=123,
+                telegram_chat_id=456,
+                username="seller_user",
+                display_name="Mario Rossi",
+                status=TELEGRAM_USER_STATUS_APPROVED,
+            ),
+            account_status={
+                "linked": True,
+                "environment": "production",
+                "ebay_user_id": "seller-ebay",
+                "account_status": "linked",
+                "token_status": "active",
+            },
+            runtime_state=BotRuntimeState(
+                last_check="2026-04-07T08:00:00Z",
+                memory=BotOperationalMemory(last_seen_order_id="order-3"),
+            ),
+            retry_queue=(),
+            recent_audit=(),
+            tenant_snapshot={"operational_state": "ready"},
+            actions=("nessuna azione urgente",),
+        )
+
     def test_build_support_snapshot_reports_ready_tenant(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = str(Path(tmpdir) / "state.db")
@@ -160,3 +195,90 @@ class SupportSnapshotTests(unittest.TestCase):
                 report.actions,
                 ("verifica telegram_user_id o attendi il primo /start dell'utente",),
             )
+
+    def test_filter_tenant_audit_ignores_unrelated_entries_and_applies_limit(self) -> None:
+        entries = [
+            AuditLogEntry(
+                event_type="other",
+                created_at="2026-04-07T08:00:00Z",
+                actor_telegram_user_id=999,
+                target_telegram_user_id=999,
+            ),
+            AuditLogEntry(
+                event_type="match-1",
+                created_at="2026-04-07T08:00:01Z",
+                actor_telegram_user_id=123,
+                target_telegram_user_id=999,
+            ),
+            AuditLogEntry(
+                event_type="match-2",
+                created_at="2026-04-07T08:00:02Z",
+                actor_telegram_user_id=999,
+                target_telegram_user_id=123,
+            ),
+            AuditLogEntry(
+                event_type="match-3",
+                created_at="2026-04-07T08:00:03Z",
+                actor_telegram_user_id=123,
+                target_telegram_user_id=123,
+            ),
+        ]
+
+        filtered = _filter_tenant_audit(entries, 123, limit=2)
+
+        self.assertEqual([entry.event_type for entry in filtered], ["match-1", "match-2"])
+
+    def test_build_actions_covers_pending_user_and_runtime_signals(self) -> None:
+        actions = _build_actions(
+            user=TelegramUser(telegram_user_id=123, telegram_chat_id=456, status="pending"),
+            account_status={"account_status": "unlinked", "token_status": "missing"},
+            runtime_state=BotRuntimeState(last_error="boom"),
+            retry_queue=(RetryQueueEntry(chat_id=456, text="retry me", attempts=1),),
+        )
+
+        self.assertIn("valuta e approva l'accesso utente", actions)
+        self.assertIn("invita l'utente a usare /account collega", actions)
+        self.assertIn("controlla ultimo errore runtime tenant", actions)
+        self.assertIn("verifica coda notifiche tenant", actions)
+        self.assertIn("attendi il primo ciclo di sync o chiedi /ordini fiscali", actions)
+        self.assertIn("nessun ordine recente tracciato: prova /ordini tutti", actions)
+
+    def test_build_actions_covers_blocked_user_path(self) -> None:
+        actions = _build_actions(
+            user=TelegramUser(telegram_user_id=123, telegram_chat_id=456, status="blocked"),
+            account_status={"account_status": "linked", "token_status": "active"},
+            runtime_state=BotRuntimeState(),
+            retry_queue=(),
+        )
+
+        self.assertIn("utente bloccato: riattiva solo se previsto", actions)
+        self.assertIn("attendi il primo ciclo di sync o chiedi /ordini fiscali", actions)
+        self.assertIn("nessun ordine recente tracciato: prova /ordini tutti", actions)
+
+    @patch("builtins.print")
+    @patch("src.fiscalbay.support_snapshot.build_support_snapshot")
+    def test_main_prints_json_report(self, mock_build_support_snapshot, mock_print) -> None:
+        mock_build_support_snapshot.return_value = self._sample_report()
+
+        exit_code = support_snapshot_main(["123", "--json", "--environment", "production"])
+
+        self.assertEqual(exit_code, 0)
+        mock_build_support_snapshot.assert_called_once_with(
+            "data/state.db",
+            123,
+            environment="production",
+        )
+        rendered = mock_print.call_args.args[0]
+        self.assertIn('"status": "ready"', rendered)
+
+    @patch("builtins.print")
+    @patch("src.fiscalbay.support_snapshot.build_support_snapshot")
+    def test_main_prints_text_report(self, mock_build_support_snapshot, mock_print) -> None:
+        mock_build_support_snapshot.return_value = self._sample_report()
+
+        exit_code = support_snapshot_main(["123"])
+
+        self.assertEqual(exit_code, 0)
+        rendered = mock_print.call_args.args[0]
+        self.assertIn("Support snapshot utente", rendered)
+        self.assertIn("seller-ebay", rendered)

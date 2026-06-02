@@ -38,6 +38,11 @@ rischi operativi o decisioni prodotto li rendono necessari.
   una migrazione `2.0` prematura.
 - Intervenire su performance, storage o polling solo se metriche e healthcheck
   lo giustificano.
+- Coverage Atlas verso il target 90%: dopo la slice offline su
+  `services/orders.py`, `support_snapshot.py` e formatter admin Telegram resta
+  un gap locale di circa `3.59` punti; prossimo incremento consigliato su
+  rami offline di `bot.py` e `telegram_commands.py` legati a `/stato`,
+  fallback CLI e comandi non riconosciuti.
 
 ## Operatività
 
