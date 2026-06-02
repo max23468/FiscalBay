@@ -82,13 +82,18 @@ from src.fiscalbay.telegram_commands import (
 
 
 class TelegramBotTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self._tmp_path = Path(self._tmpdir.name)
+
     def _base_config(self) -> TelegramConfig:
         return TelegramConfig(
             token="token",
             allowed_chat_ids={456},
             notify_chat_ids=set(),
-            state_path="/tmp/fiscalbay-state.db",
-            retry_queue_path="/tmp/fiscalbay-retry.db",
+            state_path=str(self._tmp_path / "state.db"),
+            retry_queue_path=str(self._tmp_path / "retry.db"),
         )
 
     def _order(
