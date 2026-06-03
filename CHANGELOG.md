@@ -1,5 +1,51 @@
 # Changelog
 
+## [1.12.1](https://github.com/max23468/FiscalBay/compare/v1.12.0...v1.12.1) (2026-06-03)
+
+### Bug Fixes
+
+* defer Python setup validation ([d722853](https://github.com/max23468/FiscalBay/commit/d7228536086d98ebf7aeb69ff038f22be5fb6b95))
+* harden Doppler secret check (#88) ([125b4c0](https://github.com/max23468/FiscalBay/commit/125b4c000f074683ae93db952b42ec02c610bd8e))
+* harden CI secret handling and security docs ([297bee0](https://github.com/max23468/FiscalBay/commit/297bee0777cb690c5b0e8303582ad05d47541bc7))
+* bootstrap Python 3.13 before runtime selection ([f8d1042](https://github.com/max23468/FiscalBay/commit/f8d10420a50dab02e3edf6e96c0085a9f5e14163))
+* honor queued reconciliation status payloads (#110) ([7fda2ad](https://github.com/max23468/FiscalBay/commit/7fda2adf06ebb6eec0a4cc55c6e296f42b4704b4))
+* increase coverage for offline order flows (#111) ([c14ae32](https://github.com/max23468/FiscalBay/commit/c14ae32bd38fc216b0bcc982909d9e18ef54d5b8))
+* validate queued access status payloads ([9c65f9a](https://github.com/max23468/FiscalBay/commit/9c65f9a6821874762744468fb2f09fd30d6cd5da))
+* preserve queued access state for invalid statuses (#112) ([44383a9](https://github.com/max23468/FiscalBay/commit/44383a9e3d47b5ae80c98732cd85cb2a1f86ae30))
+
+### Maintenance
+
+* align Linux setup with Python 3.13 runtime (#77) ([01e09a2](https://github.com/max23468/FiscalBay/commit/01e09a2f2163a2862b26ca3cb0f17be190e07b25))
+* align Atlas semantic governance [skip ci] ([2ce0456](https://github.com/max23468/FiscalBay/commit/2ce0456d2f56f9f407e529bd132827e7852c785a))
+* update Python tooling pins [skip ci] (#80) ([d67c912](https://github.com/max23468/FiscalBay/commit/d67c9127f0f1b962051a4fa40f0f80b3954d5b92))
+* publish pending local changes (FiscalBay) (#81) ([be05702](https://github.com/max23468/FiscalBay/commit/be05702f4f2f62bfc39cdbe00e42297fe7d3cd87))
+* align publish semantics across repo policy (#82) ([9ab0ce2](https://github.com/max23468/FiscalBay/commit/9ab0ce2caf0066b656f6a7467b51ab252251f6a5))
+* add security hardening plan ([ac24cf5](https://github.com/max23468/FiscalBay/commit/ac24cf58aa6be1a04d053dd5f963c6f6a1a5cef0))
+* address Codex feedback in security operations docs (#84) ([ce8baa2](https://github.com/max23468/FiscalBay/commit/ce8baa248b5ea7f3c0827c25b8f37ea0d0ea2959))
+* resolve Codex actionable comments (#85) ([b29b35a](https://github.com/max23468/FiscalBay/commit/b29b35a96ce338895b49c725edfdf4e5bae0dd51))
+* add Doppler setup checks to workflows (#87) ([5dec954](https://github.com/max23468/FiscalBay/commit/5dec954b83736f107254b0b04ac537052a1d9a3c))
+* allow automatic doppler-check workflow ([29c44ff](https://github.com/max23468/FiscalBay/commit/29c44ffa07443aa0cd4328e66286796fba61323b))
+* align AGENTS operating rules ([65bb3fe](https://github.com/max23468/FiscalBay/commit/65bb3fed714ec390b035fb12cf659ae3e9f131e0))
+* close AGENTS decision gaps (#90) ([adc5de5](https://github.com/max23468/FiscalBay/commit/adc5de54b409919e16ee31648cb9b79454bf971c))
+* chiarisci catalogo documentale agenti (#91) ([dbff3c7](https://github.com/max23468/FiscalBay/commit/dbff3c787ac7445c38da566d787ff3aa0ace3644))
+* completa manutenzione catalogo (#92) ([10b1292](https://github.com/max23468/FiscalBay/commit/10b129242f95ed45923650391cf093bc8558b238))
+* normalizza roadmap ([6bb36b5](https://github.com/max23468/FiscalBay/commit/6bb36b54be9e518f8751bcd1f5d78e72f333a94a))
+* allinea versione roadmap ([f851a6b](https://github.com/max23468/FiscalBay/commit/f851a6bef609136a530db2f1fd0e059637aca9a0))
+* normalize ADR template path (#95) ([1f9cd16](https://github.com/max23468/FiscalBay/commit/1f9cd167d7a7a7e3ac6db8d3c696e09fdc59257b))
+* align context handoff (#96) ([29919ce](https://github.com/max23468/FiscalBay/commit/29919ce137478fec3baf63c8b2bfc923073a768a))
+* align Python runtime to 3.13 ([ea0f12a](https://github.com/max23468/FiscalBay/commit/ea0f12acab6d9f1d428652aef54849134fab577c))
+* label Codex feedback inbox (#99) ([6ea8b57](https://github.com/max23468/FiscalBay/commit/6ea8b571a798041505e159705c917495a713908e))
+* preserve Codex inbox label migration ([043fd56](https://github.com/max23468/FiscalBay/commit/043fd56c14aba0fbd6c216c535c58e717cf244cf))
+* remove CODEOWNERS (#101) ([ab8d86d](https://github.com/max23468/FiscalBay/commit/ab8d86d02aa3e95102aa4aeb8c0f483aa0f96586))
+* align verification lanes (#102) ([691ddaf](https://github.com/max23468/FiscalBay/commit/691ddafa259b0b64c8c22ddc234d78f4baf82138))
+* clarify web OAuth checks ([3afa56f](https://github.com/max23468/FiscalBay/commit/3afa56f5e3a004344893ce8056113d21d73c384f))
+* clarify runtime output exclusions (#104) ([79cd4bc](https://github.com/max23468/FiscalBay/commit/79cd4bcf27679b014a0539619554d6fe021867c1))
+* bump ruff from 0.15.14 to 0.15.15 (#105) ([876efda](https://github.com/max23468/FiscalBay/commit/876efdaba823bed884ca4198a1f47f4b2fd0c4d8))
+* bump the github-actions group with 4 updates (#106) ([3faf4ef](https://github.com/max23468/FiscalBay/commit/3faf4efd31e0fe83a6fedcae61872d60d977d5b3))
+* clarify project maturity and completion criteria (#107) ([df174d2](https://github.com/max23468/FiscalBay/commit/df174d2fea290cdb0bc872e2f79cb861a58bf22f))
+* clarify brand and glossary governance (#108) ([d22e7f9](https://github.com/max23468/FiscalBay/commit/d22e7f9433d47b16169c9f81e8f603df140ac69a))
+* document Superpowers operating rules (#109) ([2f92a95](https://github.com/max23468/FiscalBay/commit/2f92a959e42f53d0516c9da403f0d5370da11156))
+
 ## [1.12.0](https://github.com/max23468/FiscalBay/compare/v1.11.2...v1.12.0) (2026-05-23)
 
 ### Features
