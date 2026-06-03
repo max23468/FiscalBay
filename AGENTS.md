@@ -184,6 +184,11 @@ micro-docs, cleanup o modifiche meccaniche a basso rischio.
   - `refactor: ...` solo per ristrutturazioni senza cambi funzionali
 - Se una PR contiene sia refactor sia bugfix o feature, il titolo/commit deve
   riflettere l'impatto più alto, ad esempio `fix:` o `feat:`.
+- Quando Codex crea una PR, non usare il nome branch `codex/<tema>` come titolo:
+  passa sempre un titolo PR Conventional Commit esplicito, per esempio
+  `gh pr create --title "docs: update FiscalBay governance"`, oppure correggi
+  subito una PR già aperta con `gh pr edit --title "docs: ..."` prima di
+  dichiararla pronta o pubblicata.
 - Se lavori direttamente su `main`, tratta il commit message come l'equivalente del
   titolo di squash merge della PR.
 - Nella PR includi sintesi cambi, impatto, test eseguiti, note operative e
