@@ -35,7 +35,7 @@ procedure operative restano in [OPERATIONS.md](./OPERATIONS.md),
 | Tool | Versione/canale | Uso |
 | --- | --- | --- |
 | `ruff` | `0.15.22` | format e lint |
-| `mypy` | `>=1.18.2` | typecheck graduale |
+| `mypy` | `>=2.3.0` | typecheck graduale |
 | `coverage` | `>=7.15.2` | copertura test |
 | `build` | `>=1.5.0` | package build |
 | `gh` | CLI autenticata locale | PR, issue, release e controlli GitHub |
