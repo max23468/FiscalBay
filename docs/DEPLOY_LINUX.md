@@ -109,10 +109,23 @@ FISCALBAY_ONESHOT_CPU_QUOTA=50%
 Runtime Python:
 
 - il runtime operativo corrente sulla VPS FiscalBay è Python `3.13`
-- di default `deploy/linux-setup.sh` prova a installare `python3.13` dove il
-  package manager lo espone, poi seleziona `python3.13` o `python3`
+- di default `deploy/linux-setup.sh` installa `python3.13` solo se assente
+  (non lo aggiorna quando è già presente), poi seleziona `python3.13` o `python3`
 - per imporre un runtime specifico usare `FISCALBAY_PYTHON_BIN`, ad esempio
   `/usr/bin/python3.13`
+
+Compatibilità SQLite:
+
+- alcune distro (es. Oracle Linux 9) restano su una `libsqlite3` di sistema che
+  non esporta `sqlite3_deserialize`, richiesto dal modulo `_sqlite3` di Python
+  `>= 3.13.14`: in quel caso l'`import sqlite3` fallisce e i servizi vanno in
+  crash-loop
+- `deploy/linux-setup.sh` rileva l'incompatibilità, compila una `libsqlite3`
+  recente (serve `gcc`) in `SQLITE_SHIM_DIR` (default `/usr/local/lib`) senza
+  toccare la libreria di sistema, e inietta `LD_LIBRARY_PATH` nei drop-in
+  systemd dei servizi FiscalBay
+- override disponibili: `FISCALBAY_SQLITE_SHIM_DIR` e
+  `FISCALBAY_SQLITE_AMALGAMATION_URL` (URL dell'amalgamation autoconf da sqlite.org)
 - se il `.venv` esiste già e usa una minor version diversa da quella richiesta,
   lo script si ferma invece di migrare in modo implicito
 - per ricreare il `.venv` in modo esplicito usare `FISCALBAY_RECREATE_VENV=1`;

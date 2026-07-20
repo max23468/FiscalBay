@@ -15,6 +15,14 @@ sudo systemctl is-active --quiet "${SERVICE_NAME}"
 set -a
 source "${ENV_FILE}"
 set +a
+# Il healthcheck qui gira fuori da systemd: eredita l'eventuale LD_LIBRARY_PATH
+# del servizio (shim libsqlite3, vedi deploy/linux-setup.sh) cosi' lo smoke usa
+# lo stesso runtime dei servizi. No-op quando lo shim non e' in uso.
+service_ld_library_path="$(systemctl show "${SERVICE_NAME}" -p Environment --value 2>/dev/null \
+  | tr ' ' '\n' | sed -n 's/^LD_LIBRARY_PATH=//p' | head -1)"
+if [ -n "${service_ld_library_path}" ]; then
+  export LD_LIBRARY_PATH="${service_ld_library_path}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+fi
 cd "${APP_DIR}"
 healthcheck_args=(
   --check-service-active

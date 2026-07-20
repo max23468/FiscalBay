@@ -67,6 +67,24 @@ OAUTH_TASKS_MAX="${FISCALBAY_OAUTH_TASKS_MAX:-64}"
 ONESHOT_MEMORY_MAX="${FISCALBAY_ONESHOT_MEMORY_MAX:-256M}"
 ONESHOT_CPU_QUOTA="${FISCALBAY_ONESHOT_CPU_QUOTA:-50%}"
 ONESHOT_TASKS_MAX="${FISCALBAY_ONESHOT_TASKS_MAX:-64}"
+# Alcune distro (es. Oracle Linux 9) restano su una libsqlite3 di sistema che non
+# esporta sqlite3_deserialize, richiesto dal modulo _sqlite3 di Python >= 3.13.14.
+# In quel caso compiliamo una libsqlite3 compatibile e la carichiamo nei servizi
+# via LD_LIBRARY_PATH, senza toccare la libreria di sistema.
+SQLITE_SHIM_DIR="${FISCALBAY_SQLITE_SHIM_DIR:-/usr/local/lib}"
+SQLITE_AMALGAMATION_URL="${FISCALBAY_SQLITE_AMALGAMATION_URL:-https://www.sqlite.org/2026/sqlite-autoconf-3530300.tar.gz}"
+SQLITE_SHIM_ACTIVE=false
+FISCALBAY_SERVICE_NAMES=(
+  fiscalbay-bot
+  fiscalbay-oauth
+  fiscalbay-backup
+  fiscalbay-alertcheck
+  fiscalbay-reconcile
+  fiscalbay-restore-drill
+  fiscalbay-external-healthcheck
+  fiscalbay-log-maintenance
+  fiscalbay-duckdns
+)
 
 select_python_bin() {
   if [ -n "${PYTHON_BIN}" ] && command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
@@ -168,28 +186,123 @@ ensure_existing_venv_matches_requested_python() {
 }
 
 install_packages() {
+  # Non aggiornare Python quando e' gia' presente: un upgrade non richiesto puo'
+  # introdurre un _sqlite3 incompatibile con la libsqlite3 di sistema (vedi
+  # ensure_sqlite_runtime). Installiamo solo cio' che manca.
+  local have_python=false
+  if command -v python3.13 >/dev/null 2>&1; then
+    have_python=true
+  fi
   if command -v apt-get >/dev/null 2>&1; then
     sudo apt-get update
-    sudo apt-get install -y python3.13 python3.13-venv python3-pip git \
-      || sudo apt-get install -y python3 python3-venv python3-pip git
+    if [ "${have_python}" = true ]; then
+      command -v git >/dev/null 2>&1 || sudo apt-get install -y git
+    else
+      sudo apt-get install -y python3.13 python3.13-venv python3-pip git \
+        || sudo apt-get install -y python3 python3-venv python3-pip git
+    fi
     return
   fi
   if command -v dnf >/dev/null 2>&1; then
-    sudo dnf install -y python3.13 python3.13-pip git \
-      || sudo dnf install -y python3 python3-pip git
+    if [ "${have_python}" = true ]; then
+      command -v git >/dev/null 2>&1 || sudo dnf install -y git
+    else
+      sudo dnf install -y python3.13 python3.13-pip git \
+        || sudo dnf install -y python3 python3-pip git
+    fi
     return
   fi
   if command -v yum >/dev/null 2>&1; then
-    sudo yum install -y python3.13 python3.13-pip git \
-      || sudo yum install -y python3 python3-pip git
+    if [ "${have_python}" = true ]; then
+      command -v git >/dev/null 2>&1 || sudo yum install -y git
+    else
+      sudo yum install -y python3.13 python3.13-pip git \
+        || sudo yum install -y python3 python3-pip git
+    fi
     return
   fi
   if command -v apk >/dev/null 2>&1; then
-    sudo apk add --no-cache python3 py3-pip git
+    if [ "${have_python}" = true ]; then
+      command -v git >/dev/null 2>&1 || sudo apk add --no-cache git
+    else
+      sudo apk add --no-cache python3 py3-pip git
+    fi
     return
   fi
   echo "Package manager non supportato automaticamente. Installa manualmente python3, pip e git." >&2
   exit 1
+}
+
+python_sqlite_ok() {
+  local python_bin="$1"
+  local libpath="${2:-}"
+  if [ -n "${libpath}" ]; then
+    LD_LIBRARY_PATH="${libpath}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" \
+      "${python_bin}" -c 'import sqlite3; sqlite3.connect(":memory:").execute("select 1")' >/dev/null 2>&1
+  else
+    "${python_bin}" -c 'import sqlite3; sqlite3.connect(":memory:").execute("select 1")' >/dev/null 2>&1
+  fi
+}
+
+build_sqlite_shim() {
+  if ! command -v gcc >/dev/null 2>&1; then
+    echo "gcc assente: impossibile compilare una libsqlite3 compatibile." >&2
+    exit 1
+  fi
+  local workdir
+  workdir="$(mktemp -d)"
+  echo "Compilo una libsqlite3 compatibile da ${SQLITE_AMALGAMATION_URL}"
+  (
+    cd "${workdir}"
+    if command -v curl >/dev/null 2>&1; then
+      curl -fsSLO "${SQLITE_AMALGAMATION_URL}"
+    elif command -v wget >/dev/null 2>&1; then
+      wget -q "${SQLITE_AMALGAMATION_URL}"
+    else
+      echo "Ne' curl ne' wget disponibili per scaricare l'amalgamation SQLite." >&2
+      exit 1
+    fi
+    local tarball
+    tarball="$(ls sqlite-autoconf-*.tar.gz)"
+    tar xzf "${tarball}"
+    cd sqlite-autoconf-*/
+    gcc -O2 -fPIC -shared \
+      -DSQLITE_ENABLE_FTS5 -DSQLITE_ENABLE_RTREE -DSQLITE_ENABLE_GEOPOLY \
+      -DSQLITE_ENABLE_MATH_FUNCTIONS -DSQLITE_ENABLE_JSON1 \
+      -o libsqlite3.so.0.8.6 sqlite3.c -lpthread -lm -ldl
+    sudo install -d "${SQLITE_SHIM_DIR}"
+    sudo install -m 0755 libsqlite3.so.0.8.6 "${SQLITE_SHIM_DIR}/"
+    sudo ln -sf libsqlite3.so.0.8.6 "${SQLITE_SHIM_DIR}/libsqlite3.so.0"
+    sudo ln -sf libsqlite3.so.0.8.6 "${SQLITE_SHIM_DIR}/libsqlite3.so"
+  )
+  rm -rf "${workdir}"
+}
+
+ensure_sqlite_runtime() {
+  local python_bin="$1"
+  if python_sqlite_ok "${python_bin}"; then
+    return
+  fi
+  echo "Il modulo sqlite3 di ${python_bin} non carica con la libsqlite3 di sistema."
+  if ! python_sqlite_ok "${python_bin}" "${SQLITE_SHIM_DIR}"; then
+    build_sqlite_shim
+  fi
+  if ! python_sqlite_ok "${python_bin}" "${SQLITE_SHIM_DIR}"; then
+    echo "sqlite3 non carica nemmeno con lo shim in ${SQLITE_SHIM_DIR}." >&2
+    exit 1
+  fi
+  SQLITE_SHIM_ACTIVE=true
+  echo "Shim libsqlite3 attivo in ${SQLITE_SHIM_DIR} (LD_LIBRARY_PATH nei servizi)."
+}
+
+install_sqlite_dropins() {
+  local service
+  for service in "${FISCALBAY_SERVICE_NAMES[@]}"; do
+    local dropin_dir="/etc/systemd/system/${service}.service.d"
+    sudo mkdir -p "${dropin_dir}"
+    printf '[Service]\nEnvironment=LD_LIBRARY_PATH=%s\n' "${SQLITE_SHIM_DIR}" \
+      | sudo tee "${dropin_dir}/10-sqlite-libpath.conf" >/dev/null
+  done
 }
 
 ensure_group() {
@@ -240,6 +353,7 @@ install_service_file() {
 install_packages
 PYTHON_BIN="$(select_python_bin)"
 ensure_supported_python "${PYTHON_BIN}"
+ensure_sqlite_runtime "${PYTHON_BIN}"
 ensure_group
 ensure_user
 
@@ -285,6 +399,9 @@ sudo systemctl disable --now fiscalbay-release-please.timer >/dev/null 2>&1 || t
 sudo rm -f \
   /etc/systemd/system/fiscalbay-release-please.service \
   /etc/systemd/system/fiscalbay-release-please.timer
+if [ "${SQLITE_SHIM_ACTIVE}" = true ]; then
+  install_sqlite_dropins
+fi
 sudo systemctl daemon-reload
 sudo systemctl enable --now "${BACKUP_SERVICE_NAME}.timer"
 sudo systemctl enable --now "${ALERT_SERVICE_NAME}.timer"
