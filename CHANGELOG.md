@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.12.2](https://github.com/max23468/FiscalBay/compare/v1.12.1...v1.12.2) (2026-07-21)
+
+### Bug Fixes
+
+* prevent VPS deploy from breaking sqlite on Python upgrade ([6ac2bdf](https://github.com/max23468/FiscalBay/commit/6ac2bdf84e6fee89594459658c13b766d825bd17))
+
+### Maintenance
+
+* prevent invalid PR titles (#114) ([4939cec](https://github.com/max23468/FiscalBay/commit/4939cece170a51a680df79a00fef81d5b7680267))
+* retry transient GraphQL 401 in codex inbox sync ([dfe55f3](https://github.com/max23468/FiscalBay/commit/dfe55f3e0caf4d2af06c72bb4c3007f0ef03b63a))
+* bump dev toolchain pins (ruff 0.15.22, coverage 7.15.2, build 1.5.0) ([95977dc](https://github.com/max23468/FiscalBay/commit/95977dcec19b9580c0d73441bbf1fc9a9fb9c58b))
+
+### Other Changes
+
+* Track CLAUDE.md (project instructions, mirror di AGENTS.md) ([493d304](https://github.com/max23468/FiscalBay/commit/493d304c343229eb33e510935f8ced94e62d84ca))
+* Point CLAUDE.md to AGENTS.md via @import ([cbef548](https://github.com/max23468/FiscalBay/commit/cbef54837ded191838da81f01c1472285f4dcac5))
+
 ## [1.12.1](https://github.com/max23468/FiscalBay/compare/v1.12.0...v1.12.1) (2026-06-03)
 
 ### Bug Fixes
