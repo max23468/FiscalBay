@@ -58,6 +58,11 @@ DUCKDNS_SERVICE_TEMPLATE="${APP_DIR}/deploy/fiscalbay-duckdns.service"
 DUCKDNS_SERVICE_TARGET="/etc/systemd/system/${DUCKDNS_SERVICE_NAME}.service"
 DUCKDNS_TIMER_TEMPLATE="${APP_DIR}/deploy/fiscalbay-duckdns.timer"
 DUCKDNS_TIMER_TARGET="/etc/systemd/system/${DUCKDNS_SERVICE_NAME}.timer"
+AUTODEPLOY_SERVICE_NAME="fiscalbay-autodeploy"
+AUTODEPLOY_SERVICE_TEMPLATE="${APP_DIR}/deploy/fiscalbay-autodeploy.service"
+AUTODEPLOY_SERVICE_TARGET="/etc/systemd/system/${AUTODEPLOY_SERVICE_NAME}.service"
+AUTODEPLOY_TIMER_TEMPLATE="${APP_DIR}/deploy/fiscalbay-autodeploy.timer"
+AUTODEPLOY_TIMER_TARGET="/etc/systemd/system/${AUTODEPLOY_SERVICE_NAME}.timer"
 BOT_MEMORY_MAX="${FISCALBAY_BOT_MEMORY_MAX:-512M}"
 BOT_CPU_QUOTA="${FISCALBAY_BOT_CPU_QUOTA:-60%}"
 BOT_TASKS_MAX="${FISCALBAY_BOT_TASKS_MAX:-128}"
@@ -395,6 +400,8 @@ sudo cp "${RESTORE_DRILL_TIMER_TEMPLATE}" "${RESTORE_DRILL_TIMER_TARGET}"
 sudo cp "${EXTERNAL_HEALTH_TIMER_TEMPLATE}" "${EXTERNAL_HEALTH_TIMER_TARGET}"
 sudo cp "${LOG_MAINTENANCE_TIMER_TEMPLATE}" "${LOG_MAINTENANCE_TIMER_TARGET}"
 sudo cp "${DUCKDNS_TIMER_TEMPLATE}" "${DUCKDNS_TIMER_TARGET}"
+install_service_file "${AUTODEPLOY_SERVICE_TEMPLATE}" "${AUTODEPLOY_SERVICE_TARGET}"
+sudo cp "${AUTODEPLOY_TIMER_TEMPLATE}" "${AUTODEPLOY_TIMER_TARGET}"
 sudo systemctl disable --now fiscalbay-release-please.timer >/dev/null 2>&1 || true
 sudo rm -f \
   /etc/systemd/system/fiscalbay-release-please.service \
@@ -409,6 +416,7 @@ sudo systemctl enable --now "${RECONCILE_SERVICE_NAME}.timer"
 sudo systemctl enable --now "${RESTORE_DRILL_SERVICE_NAME}.timer"
 sudo systemctl enable --now "${EXTERNAL_HEALTH_SERVICE_NAME}.timer"
 sudo systemctl enable --now "${LOG_MAINTENANCE_SERVICE_NAME}.timer"
+sudo systemctl enable --now "${AUTODEPLOY_SERVICE_NAME}.timer"
 if [ -f /etc/fiscalbay/duckdns.env ]; then
   sudo systemctl enable --now "${DUCKDNS_SERVICE_NAME}.timer"
 else

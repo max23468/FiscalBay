@@ -1,0 +1,11 @@
+[Unit]
+Description=FiscalBay auto-deploy (poll main e deploy con rollback)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Gira come root: deploy/vps-deploy-ref.sh esegue operazioni privilegiate
+# (scrittura in __APP_DIR__, chown, systemctl restart) come il deploy manuale.
+ExecStart=/usr/bin/bash __APP_DIR__/deploy/autodeploy.sh
+TimeoutStartSec=1800

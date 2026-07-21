@@ -110,6 +110,13 @@ micro-docs, cleanup o modifiche meccaniche a basso rischio.
   e verificare che risponda `fiscalbay-bot`.
 - Il deploy operativo di default è automatizzato fuori da GitHub Actions tramite
   script locali/VPS e accesso SSH alla VPS FiscalBay.
+- Sul VPS gira anche un auto-deploy (`deploy/autodeploy.sh` via
+  `fiscalbay-autodeploy.timer`, ~ogni 10 min): confronta il SHA di `main` con
+  quello deployato e, se cambia, deploya con `deploy/vps-deploy-ref.sh`
+  (smoke-check + rollback automatico al commit precedente se lo smoke fallisce).
+  I merge su `main` (inclusi i dependabot auto-mergiati) raggiungono così la
+  produzione da soli. Resta un meccanismo VPS-pull, non un deploy via Actions;
+  `scripts/deploy_now.sh` continua a funzionare per il deploy manuale/immediato.
 - GitHub Actions non è un canale operativo attivo per deploy FiscalBay. Se una
   richiesta parla genericamente di "deploy", usa `scripts/deploy_now.sh`
   o chiedi conferma quando l'azione remota sarebbe rischiosa o ambigua.
