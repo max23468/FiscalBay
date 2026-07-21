@@ -10,6 +10,7 @@ ALLOWED_WORKFLOWS=(
   ".github/workflows/actionlint.yml"
   ".github/workflows/ci.yml"
   ".github/workflows/codex-pr-comments.yml"
+  ".github/workflows/dependabot-auto-merge.yml"
   ".github/workflows/dependency-review.yml"
   ".github/workflows/doppler-check.yml"
   ".github/workflows/package-build.yml"

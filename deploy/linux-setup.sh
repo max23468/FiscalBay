@@ -415,6 +415,9 @@ else
   sudo systemctl disable --now "${DUCKDNS_SERVICE_NAME}.timer" >/dev/null 2>&1 || true
 fi
 
+echo "[setup] configuro l'aggiornamento automatico dell'OS (dnf-automatic)"
+sudo bash "${APP_DIR}/deploy/install-auto-updates.sh"
+
 echo "Installazione completata."
 echo "Prossimi passi:"
 echo "1. Modifica ${ENV_FILE}"

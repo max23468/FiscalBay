@@ -119,11 +119,16 @@ micro-docs, cleanup o modifiche meccaniche a basso rischio.
 - Il repository può contenere solo i workflow GitHub Actions allowlist
   `.github/workflows/actionlint.yml`, `.github/workflows/ci.yml`,
   `.github/workflows/codex-pr-comments.yml`,
+  `.github/workflows/dependabot-auto-merge.yml`,
   `.github/workflows/dependency-review.yml`, `.github/workflows/doppler-check.yml`,
   `.github/workflows/package-build.yml` e `.github/workflows/pr-title.yml`.
   Non aggiungere altri workflow senza richiesta esplicita del maintainer.
-- `.github/dependabot.yml` è ammesso solo con schedule conservativa e limite basso
-  di PR aperte.
+  L'allowlist è verificata da `scripts/check_github_workflows.sh`: aggiornala lì
+  in parallelo quando l'elenco cambia.
+- `.github/dependabot.yml` usa raggruppamento e limite di PR aperte tarato per
+  non far accumulare la coda: le PR idonee vengono chiuse in auto-merge dopo CI
+  verde da `dependabot-auto-merge.yml` (major delle dipendenze runtime esclusi,
+  restano a review manuale). L'auto-merge aggiorna solo `main`, non fa deploy.
 - Se GitHub segnala fallimenti Actions persistenti non recuperabili con un rerun
   contestuale, registra il caso, non rilanciare automaticamente in loop e applica
   le verifiche locali previste prima di ripianificare la pubblicazione.

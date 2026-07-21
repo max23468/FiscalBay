@@ -194,6 +194,33 @@ cd "/opt/fiscalbay"
 ./deploy/smoke-check.sh
 ```
 
+## Aggiornamenti automatici
+
+Per evitare deriva (OS e dipendenze ferme per settimane) il progetto tiene le
+superfici aggiornate da sé, su tre livelli:
+
+- **OS del VPS**: `deploy/install-auto-updates.sh` configura `dnf-automatic`
+  (config in `deploy/fiscalbay-dnf-automatic.conf`) per applicare tutti gli
+  update e riavviare quando serve nella finestra notturna
+  (`FISCALBAY_AUTOUPDATE_TIME`, default `03:30`). È idempotente ed è richiamato
+  da `deploy/linux-setup.sh` a ogni deploy. `best=0` evita che un conflitto
+  singolo (es. `tuned`/OCI) blocchi l'intera transazione. Lo shim `libsqlite3` e
+  `preserve_hostname:true` rendono sicuri gli upgrade di Python e i reboot
+  automatici.
+- **Dipendenze Python e GitHub Actions**: `.github/dependabot.yml` (raggruppate)
+  + `.github/workflows/dependabot-auto-merge.yml`, che mergia le PR idonee dopo
+  CI verde. I major delle dipendenze runtime (es. `cryptography`) restano a
+  review manuale.
+- **Deploy dell'app**: resta **manuale** (`scripts/deploy_now.sh`). L'auto-update
+  aggiorna OS e `main`, ma non spinge codice nuovo in produzione senza controllo.
+
+Verifiche utili sul VPS:
+
+```bash
+systemctl list-timers dnf-automatic.timer --all
+sudo journalctl -u dnf-automatic.service --since "-2 days"
+```
+
 ## Backup, restore e permessi segreti
 
 Backup:
