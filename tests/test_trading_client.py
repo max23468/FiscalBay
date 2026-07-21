@@ -146,6 +146,20 @@ class TradingClientTests(unittest.TestCase):
             trading.request_trading_xml_once(sample_config(), "access", b"<xml />")
         self.assertIn("error 123", str(ack_ctx.exception))
 
+    @patch("src.fiscalbay.clients.trading.urllib.request.urlopen")
+    def test_request_trading_xml_once_rejects_xml_with_entities(self, urlopen_mock) -> None:
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = (
+            '<?xml version="1.0"?>'
+            '<!DOCTYPE GetOrdersResponse [<!ENTITY xxe "boom">]>'
+            f'<GetOrdersResponse xmlns="{trading.TRADING_NAMESPACE}">'
+            "<Ack>Success</Ack>&xxe;</GetOrdersResponse>"
+        ).encode("utf-8")
+        urlopen_mock.return_value = response
+        with self.assertRaises(EbayApiError) as ctx:
+            trading.request_trading_xml_once(sample_config(), "access", b"<xml />")
+        self.assertIn("XML non valida", str(ctx.exception))
+
     @patch("src.fiscalbay.retry.time.sleep")
     @patch("src.fiscalbay.clients.trading.request_trading_xml_once")
     def test_request_trading_xml_retries_transient_trading_errors(
