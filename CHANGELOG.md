@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.13.0](https://github.com/max23468/FiscalBay/compare/v1.12.2...v1.13.0) (2026-07-21)
+
+### Features
+
+* automated update mechanism for OS, dependencies and actions (#118) ([9aee8ad](https://github.com/max23468/FiscalBay/commit/9aee8ade00912270216661de5e5142605a7d5f64))
+* self-updating VPS auto-deploy with smoke-gate and rollback (#119) ([a2366a8](https://github.com/max23468/FiscalBay/commit/a2366a857a473d2c4deaf98317eb5febc241947d))
+
+### Bug Fixes
+
+* harden eBay Trading XML parsing against entity attacks (#120) ([aca0711](https://github.com/max23468/FiscalBay/commit/aca0711024f80be6a3675b8ee8381723df592ab0))
+
+### Maintenance
+
+* bump cryptography floor to >=49 and mypy to >=2.3.0 ([7725943](https://github.com/max23468/FiscalBay/commit/772594309f0fc85eba19d28b5a16e7df20058a5d))
+* bump the github-actions group across 1 directory with 3 updates (#117) ([6d29950](https://github.com/max23468/FiscalBay/commit/6d29950e133c42e599b820520ed96059dce3cb9b))
+
 ## [1.12.2](https://github.com/max23468/FiscalBay/compare/v1.12.1...v1.12.2) (2026-07-21)
 
 ### Bug Fixes
