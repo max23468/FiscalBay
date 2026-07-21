@@ -10,6 +10,9 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from xml.sax.saxutils import escape
 
+from defusedxml.common import DefusedXmlException
+from defusedxml.ElementTree import fromstring as safe_fromstring
+
 from ..errors import EbayApiError
 from ..logging_utils import log_event
 from ..models import Config, JsonValue
@@ -117,8 +120,8 @@ def request_trading_xml_once(config: Config, access_token: str, payload: bytes) 
         raise EbayApiError(f"Errore di rete verso Trading API GetOrders: {exc.reason}") from exc
 
     try:
-        root = ET.fromstring(body)
-    except ET.ParseError as exc:
+        root = safe_fromstring(body)
+    except (ET.ParseError, DefusedXmlException) as exc:
         raise EbayApiError("Risposta XML non valida da Trading API GetOrders.") from exc
 
     ack = root.findtext("e:Ack", default="", namespaces=NS)

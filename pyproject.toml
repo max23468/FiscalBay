@@ -12,6 +12,7 @@ license = "MIT"
 authors = [{ name = "FiscalBay" }]
 dependencies = [
   "cryptography>=49.0.0",
+  "defusedxml>=0.7.1",
 ]
 
 [project.scripts]
