@@ -15,21 +15,24 @@ if [ "$(hostname)" != "${EXPECTED_HOSTNAME}" ]; then
   exit 1
 fi
 
-if [ -z "${GITHUB_AUTH_TOKEN}" ]; then
-  echo "Errore: token GitHub mancante." >&2
-  exit 1
-fi
-
 archive="$(mktemp "/tmp/fiscalbay-${REF//\//-}.XXXXXX.tar.gz")"
 cleanup() {
   rm -f "${archive}"
 }
 trap cleanup EXIT
 
+# Il repository e' pubblico: il token e' opzionale (serve solo per alzare i
+# rate limit o se il repo diventasse privato). L'auto-deploy sul VPS puo' quindi
+# girare senza secret. Aggiungiamo l'header Authorization solo se presente.
+curl_auth=()
+if [ -n "${GITHUB_AUTH_TOKEN}" ]; then
+  curl_auth=(-H "Authorization: Bearer ${GITHUB_AUTH_TOKEN}")
+fi
+
 echo "Scarico ${REPO_URL}@${REF}..."
 curl -fsSL \
   -H "Accept: application/vnd.github+json" \
-  -H "Authorization: Bearer ${GITHUB_AUTH_TOKEN}" \
+  "${curl_auth[@]}" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
   "https://api.github.com/repos/${REPO_URL}/tarball/${REF}" \
   -o "${archive}"
@@ -40,4 +43,5 @@ tar --warning=no-unknown-keyword --strip-components=1 -xzf "${archive}" -C "${AP
 rm -rf "${APP_DIR}/.github/workflows" "${APP_DIR}/.github/dependabot.yml"
 chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}"
 
-APP_DIR="${APP_DIR}" APP_USER="${APP_USER}" APP_GROUP="${APP_GROUP}" bash "${APP_DIR}/deploy/install-vps.sh"
+export APP_DIR APP_USER APP_GROUP
+bash "${APP_DIR}/deploy/install-vps.sh"

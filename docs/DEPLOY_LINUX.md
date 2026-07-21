@@ -211,14 +211,21 @@ superfici aggiornate da sé, su tre livelli:
   + `.github/workflows/dependabot-auto-merge.yml`, che mergia le PR idonee dopo
   CI verde. I major delle dipendenze runtime (es. `cryptography`) restano a
   review manuale.
-- **Deploy dell'app**: resta **manuale** (`scripts/deploy_now.sh`). L'auto-update
-  aggiorna OS e `main`, ma non spinge codice nuovo in produzione senza controllo.
+- **Deploy dell'app**: automatico via `deploy/autodeploy.sh`, eseguito dal timer
+  `fiscalbay-autodeploy.timer` (~ogni 10 min). Confronta il SHA di `main` con
+  quello deployato; se cambia deploya con `deploy/vps-deploy-ref.sh` (che include
+  lo smoke-check) e, **se lo smoke fallisce, fa rollback** al commit precedente
+  noto-buono. Resta fuori da GitHub Actions: è il VPS che tira (repo pubblico,
+  nessun secret necessario). Il deploy manuale con `scripts/deploy_now.sh`
+  continua a funzionare in parallelo.
 
 Verifiche utili sul VPS:
 
 ```bash
-systemctl list-timers dnf-automatic.timer --all
+systemctl list-timers dnf-automatic.timer fiscalbay-autodeploy.timer --all
 sudo journalctl -u dnf-automatic.service --since "-2 days"
+sudo journalctl -u fiscalbay-autodeploy.service --since "-2 days"
+cat /var/lib/fiscalbay-autodeploy/deployed_sha
 ```
 
 ## Backup, restore e permessi segreti
