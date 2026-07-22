@@ -1,6 +1,7 @@
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from src.fiscalbay.models import (
@@ -397,7 +398,7 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
 
-            with sqlite3.connect(db_path) as conn:
+            with closing(sqlite3.connect(db_path)) as conn, conn:
                 conn.execute("CREATE TABLE notified_orders (order_id TEXT, hash TEXT)")
                 conn.execute(
                     "CREATE TABLE retry_queue "
@@ -421,7 +422,7 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertEqual(restored["notified_hashes"], ["legacy-hash"])
             self.assertEqual(restored["last_check"], "2026-04-05T20:00:00Z")
 
-            with sqlite3.connect(db_path) as conn:
+            with closing(sqlite3.connect(db_path)) as conn, conn:
                 version = conn.execute("PRAGMA user_version").fetchone()[0]
                 self.assertEqual(version, SCHEMA_VERSION)
                 legacy = conn.execute(
@@ -437,7 +438,7 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
 
-            with sqlite3.connect(db_path) as conn:
+            with closing(sqlite3.connect(db_path)) as conn, conn:
                 conn.row_factory = sqlite3.Row
                 conn.execute("PRAGMA user_version = 8")
                 conn.execute("CREATE TABLE notified_order_ids (order_id TEXT PRIMARY KEY)")
@@ -589,7 +590,7 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertEqual(restored["last_check"], "2026-04-05T20:00:00Z")
             self.assertTrue((Path(tmpdir) / "notified_orders.json.legacy-json.bak").exists())
 
-            with sqlite3.connect(db_path) as conn:
+            with closing(sqlite3.connect(db_path)) as conn, conn:
                 version = conn.execute("PRAGMA user_version").fetchone()[0]
                 self.assertEqual(version, SCHEMA_VERSION)
 

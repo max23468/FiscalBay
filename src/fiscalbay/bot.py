@@ -926,7 +926,7 @@ def _load_tenant_ux_context_for_command(
 def _percentage(numerator: int, denominator: int) -> int:
     if denominator <= 0:
         return 0
-    return int(round((numerator / denominator) * 100))
+    return round((numerator / denominator) * 100)
 
 
 def _build_product_metrics_payload(telegram_config: TelegramConfig) -> dict[str, int]:
@@ -2112,7 +2112,6 @@ def _handle_orders_command(
                 )
             except ConfigurationError as exc:
                 return [f"⚠️ {exc}"]
-            assert isinstance(records, list)
             return _format_records(records, only_found=options.only_found)
         if order_action in {"tutti", "all"}:
             options = options_for_command("/tutti", order_args)
@@ -2123,7 +2122,6 @@ def _handle_orders_command(
                 )
             except ConfigurationError as exc:
                 return [f"⚠️ {exc}"]
-            assert isinstance(records, list)
             return _format_records(records, only_found=options.only_found)
         if order_action in {"cerca", "ordine", "dettaglio", "detail"}:
             if not order_args:
@@ -2143,7 +2141,6 @@ def _handle_orders_command(
                     )
                 except ConfigurationError as exc:
                     return [f"⚠️ {exc}"]
-                assert isinstance(records, list)
                 matched = [
                     record
                     for record in (coerce_order_record(item) for item in records)
@@ -2172,7 +2169,6 @@ def _handle_orders_command(
                 ]
             except ConfigurationError as exc:
                 return [f"⚠️ {exc}"]
-            assert isinstance(records, list)
             if not records:
                 return ["🔎 Nessun ordine trovato nella selezione richiesta."]
             order_record = coerce_order_record(records[0])
@@ -2210,7 +2206,6 @@ def _handle_orders_command(
                 ]
             except ConfigurationError as exc:
                 return [f"⚠️ {exc}"]
-            assert isinstance(records, list)
             if not records:
                 return [
                     format_why_not_notified_status(
@@ -2247,7 +2242,6 @@ def _handle_orders_command(
                 )
             except ConfigurationError as exc:
                 return [f"⚠️ {exc}"]
-            assert isinstance(records, list)
             review_records = [
                 record
                 for record in (coerce_order_record(item) for item in records)
@@ -2263,7 +2257,6 @@ def _handle_orders_command(
                 )
             except ConfigurationError as exc:
                 return [f"⚠️ {exc}"]
-            assert isinstance(records, list)
             normalized = [coerce_order_record(item) for item in records]
             return [
                 format_report_summary(
@@ -2281,7 +2274,6 @@ def _handle_orders_command(
                 )
             except ConfigurationError as exc:
                 return [f"⚠️ {exc}"]
-            assert isinstance(records, list)
             normalized = [coerce_order_record(item) for item in records]
             return format_priority_records(normalized)
         if order_action in {"export", "esporta", "csv"}:
@@ -2299,7 +2291,6 @@ def _handle_orders_command(
                 )
             except ConfigurationError as exc:
                 return [f"⚠️ {exc}"]
-            assert not isinstance(report, list)
             return format_fiscal_export_messages(report)
         return [format_orders_command_help()]
 
@@ -2323,7 +2314,6 @@ def _handle_orders_command(
             ]
         except ConfigurationError as exc:
             return [f"⚠️ {exc}"]
-        assert isinstance(records, list)
         if not records:
             return [
                 format_why_not_notified_status(
@@ -2358,7 +2348,6 @@ def _handle_orders_command(
             )
         except ConfigurationError as exc:
             return [f"⚠️ {exc}"]
-        assert isinstance(records, list)
         review_records = [
             record
             for record in (coerce_order_record(item) for item in records)
@@ -2375,7 +2364,6 @@ def _handle_orders_command(
             )
         except ConfigurationError as exc:
             return [f"⚠️ {exc}"]
-        assert isinstance(records, list)
         normalized = [coerce_order_record(item) for item in records]
         return [
             format_report_summary(
@@ -2394,7 +2382,6 @@ def _handle_orders_command(
             )
         except ConfigurationError as exc:
             return [f"⚠️ {exc}"]
-        assert isinstance(records, list)
         normalized = [coerce_order_record(item) for item in records]
         return format_priority_records(normalized)
 
@@ -2418,7 +2405,6 @@ def _handle_orders_command(
             ]
         except ConfigurationError as exc:
             return [f"⚠️ {exc}"]
-        assert isinstance(records, list)
         if not records:
             return ["🔎 Nessun ordine trovato nella selezione richiesta."]
         order_record = coerce_order_record(records[0])
@@ -2459,7 +2445,8 @@ def _handle_account_command(
         )
         if missing_response is not None:
             return missing_response
-        assert account_status is not None
+        if account_status is None:
+            return _tenant_not_linked_message("👤 <b>Account eBay</b>")
         return [format_account_status(account_status)]
 
     if command == "/reconnect_status":
@@ -2472,7 +2459,8 @@ def _handle_account_command(
         )
         if missing_response is not None:
             return missing_response
-        assert account_status is not None
+        if account_status is None:
+            return _tenant_not_linked_message("🔁 <b>Reconnect status</b>")
         return [format_reconnect_status(account_status)]
 
     if command == "/connect":
@@ -2485,7 +2473,8 @@ def _handle_account_command(
         )
         if missing_response is not None:
             return missing_response
-        assert connect_account_status is not None
+        if connect_account_status is None:
+            return _tenant_not_linked_message("🔗 <b>Collegamento account eBay</b>")
         latest_session = load_latest_oauth_link_session(
             telegram_config.state_path,
             resolved_telegram_user_id,

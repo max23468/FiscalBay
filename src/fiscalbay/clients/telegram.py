@@ -121,7 +121,8 @@ def telegram_api_request(
     max_retries, base_delay = telegram_retry_settings()
 
     def on_retry(exc: Exception, attempt_no: int, total_attempts: int, delay: float) -> None:
-        assert isinstance(exc, TelegramApiError)
+        if not isinstance(exc, TelegramApiError):
+            return
         log_event(
             LOGGER,
             logging.WARNING,

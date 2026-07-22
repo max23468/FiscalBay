@@ -259,7 +259,8 @@ def request_json(
     max_retries, base_delay = request_retry_settings()
 
     def on_retry(exc: Exception, attempt_no: int, total_attempts: int, delay: float) -> None:
-        assert isinstance(exc, EbayApiError)
+        if not isinstance(exc, EbayApiError):
+            return
         endpoint = urllib.parse.urlparse(url).path or url
         log_event(
             logger,

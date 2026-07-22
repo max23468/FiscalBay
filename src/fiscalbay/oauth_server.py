@@ -8,7 +8,7 @@ import logging
 import os
 import textwrap
 import urllib.parse
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -17,6 +17,8 @@ from typing import Callable
 from .bot_messaging import send_message
 from .clients.ebay import (
     DEFAULT_IDENTITY_SCOPE,
+    JsonObject,
+    OAuthTokenResponse,
     build_user_consent_url,
     get_authenticated_user_profile,
     merge_scopes,
@@ -33,6 +35,7 @@ from .models import (
     OAUTH_SESSION_STATUS_FAILED,
     OAUTH_SESSION_STATUS_PENDING,
     AuditLogEntry,
+    Config,
     EbayTokenSet,
     LinkedEbayAccount,
     OauthLinkSession,
@@ -958,20 +961,8 @@ def describe_callback_exception(exc: Exception) -> OAuthFailurePresentation:
     )
 
 
-def oauth_consent_config(config: object) -> object:
-    assert hasattr(config, "client_id")
-    assert hasattr(config, "client_secret")
-    assert hasattr(config, "refresh_token")
-    assert hasattr(config, "environment")
-    assert hasattr(config, "scopes")
-    consent_scopes = merge_scopes(str(config.scopes), DEFAULT_IDENTITY_SCOPE)
-    return type(config)(
-        client_id=config.client_id,
-        client_secret=config.client_secret,
-        refresh_token=config.refresh_token,
-        environment=config.environment,
-        scopes=consent_scopes,
-    )
+def oauth_consent_config(config: Config) -> Config:
+    return replace(config, scopes=merge_scopes(config.scopes, DEFAULT_IDENTITY_SCOPE))
 
 
 def build_oauth_start_redirect(
@@ -981,7 +972,7 @@ def build_oauth_start_redirect(
     load_session_fn: Callable[
         [str, str, str], OauthLinkSession | None
     ] = load_oauth_link_session_by_state,
-    load_config_fn: Callable[[str], object] = load_config,
+    load_config_fn: Callable[[str], Config] = load_config,
     runame_fn: Callable[[str], str] = oauth_runame,
 ) -> str:
     session = load_session_fn(state_path, oauth_state, "ebay")
@@ -993,9 +984,6 @@ def build_oauth_start_redirect(
         raise ConfigurationError("La sessione OAuth è scaduta. Usa di nuovo /account collega.")
 
     config = oauth_consent_config(load_config_fn(session.environment))
-    assert hasattr(config, "environment")
-    assert hasattr(config, "client_id")
-    assert hasattr(config, "scopes")
     return build_user_consent_url(
         config,
         redirect_uri=runame_fn(session.environment),
@@ -1011,13 +999,13 @@ def complete_oauth_link(
     load_session_fn: Callable[
         [str, str, str], OauthLinkSession | None
     ] = load_oauth_link_session_by_state,
-    load_config_fn: Callable[[str], object] = load_config,
+    load_config_fn: Callable[[str], Config] = load_config,
     callback_url_fn: Callable[[], str] = oauth_callback_url,
     runame_fn: Callable[[str], str] = oauth_runame,
     exchange_code_fn: Callable[
-        [object, str, str], dict
+        [Config, str, str], OAuthTokenResponse
     ] = request_authorization_code_token_response,
-    fetch_user_profile_fn: Callable[[object, str], dict] = get_authenticated_user_profile,
+    fetch_user_profile_fn: Callable[[Config, str], JsonObject] = get_authenticated_user_profile,
     encode_refresh_token_fn: Callable[[str], str | None] = encode_refresh_token,
     send_message_fn: Callable[..., None] = send_message,
 ) -> OAuthCallbackResult:
@@ -1190,10 +1178,15 @@ def complete_oauth_link(
     )
 
 
+class FiscalBayOAuthHTTPServer(ThreadingHTTPServer):
+    telegram_config: TelegramConfig
+
+
 class OAuthHandler(BaseHTTPRequestHandler):
+    server: FiscalBayOAuthHTTPServer
     server_version = "FiscalBayOAuth/0.1"
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
         if path == "/healthz":
@@ -1232,7 +1225,7 @@ class OAuthHandler(BaseHTTPRequestHandler):
         try:
             redirect_url = build_oauth_start_redirect(
                 oauth_state, self.server.telegram_config.state_path
-            )  # type: ignore[attr-defined]
+            )
         except Exception as exc:
             log_event(LOGGER, logging.ERROR, "oauth_start_failed", error=exc, state=oauth_state)
             self._write_response(
@@ -1246,14 +1239,14 @@ class OAuthHandler(BaseHTTPRequestHandler):
         oauth_state = (params.get("state") or [""])[0]
         error_value = (params.get("error") or [""])[0]
         session = load_oauth_link_session_by_state(
-            self.server.telegram_config.state_path,  # type: ignore[attr-defined]
+            self.server.telegram_config.state_path,
             oauth_state,
             "ebay",
         )
         if error_value:
             presentation = describe_provider_error(error_value)
             append_oauth_audit_log(
-                self.server.telegram_config,  # type: ignore[attr-defined]
+                self.server.telegram_config,
                 event_type="oauth_failure",
                 created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                 actor_telegram_user_id=session.telegram_user_id if session is not None else None,
@@ -1265,17 +1258,17 @@ class OAuthHandler(BaseHTTPRequestHandler):
             )
             if session is not None:
                 update_oauth_link_session(
-                    self.server.telegram_config.state_path,  # type: ignore[attr-defined]
+                    self.server.telegram_config.state_path,
                     oauth_state,
                     status=OAUTH_SESSION_STATUS_FAILED,
                 )
                 summarize_tenant_account_status(
-                    self.server.telegram_config.state_path,  # type: ignore[attr-defined]
+                    self.server.telegram_config.state_path,
                     session.telegram_user_id,
                     session.environment,
                 )
                 send_message(
-                    self.server.telegram_config.token,  # type: ignore[attr-defined]
+                    self.server.telegram_config.token,
                     session.telegram_chat_id,
                     presentation.notify_text,
                 )
@@ -1294,7 +1287,7 @@ class OAuthHandler(BaseHTTPRequestHandler):
             result = complete_oauth_link(
                 oauth_state,
                 code,
-                telegram_config=self.server.telegram_config,  # type: ignore[attr-defined]
+                telegram_config=self.server.telegram_config,
             )
             log_event(
                 LOGGER,
@@ -1307,7 +1300,7 @@ class OAuthHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             presentation = describe_callback_exception(exc)
             append_oauth_audit_log(
-                self.server.telegram_config,  # type: ignore[attr-defined]
+                self.server.telegram_config,
                 event_type="oauth_failure",
                 created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                 actor_telegram_user_id=session.telegram_user_id if session is not None else None,
@@ -1319,17 +1312,17 @@ class OAuthHandler(BaseHTTPRequestHandler):
             )
             if session is not None:
                 update_oauth_link_session(
-                    self.server.telegram_config.state_path,  # type: ignore[attr-defined]
+                    self.server.telegram_config.state_path,
                     oauth_state,
                     status=OAUTH_SESSION_STATUS_FAILED,
                 )
                 summarize_tenant_account_status(
-                    self.server.telegram_config.state_path,  # type: ignore[attr-defined]
+                    self.server.telegram_config.state_path,
                     session.telegram_user_id,
                     session.environment,
                 )
                 send_message(
-                    self.server.telegram_config.token,  # type: ignore[attr-defined]
+                    self.server.telegram_config.token,
                     session.telegram_chat_id,
                     presentation.notify_text,
                 )
@@ -1341,7 +1334,7 @@ class OAuthHandler(BaseHTTPRequestHandler):
             return
 
         summarize_tenant_account_status(
-            self.server.telegram_config.state_path,  # type: ignore[attr-defined]
+            self.server.telegram_config.state_path,
             result.telegram_user_id,
             result.environment,
         )
@@ -1379,8 +1372,8 @@ def run_oauth_server() -> int:
     telegram_config = load_telegram_config()
     host = os.getenv("EBAY_OAUTH_SERVER_HOST", DEFAULT_OAUTH_HOST).strip() or DEFAULT_OAUTH_HOST
     port = int(os.getenv("EBAY_OAUTH_SERVER_PORT", str(DEFAULT_OAUTH_PORT)))
-    server = ThreadingHTTPServer((host, port), OAuthHandler)
-    server.telegram_config = telegram_config  # type: ignore[attr-defined]
+    server = FiscalBayOAuthHTTPServer((host, port), OAuthHandler)
+    server.telegram_config = telegram_config
     log_event(LOGGER, logging.INFO, "oauth_server_started", host=host, port=port)
     try:
         server.serve_forever()
