@@ -127,7 +127,7 @@ micro-docs, cleanup o modifiche meccaniche a basso rischio.
   `.github/workflows/actionlint.yml`, `.github/workflows/ci.yml`,
   `.github/workflows/codex-pr-comments.yml`,
   `.github/workflows/dependabot-auto-merge.yml`,
-  `.github/workflows/dependency-review.yml`, `.github/workflows/doppler-check.yml`,
+  `.github/workflows/dependency-review.yml`,
   `.github/workflows/package-build.yml` e `.github/workflows/pr-title.yml`.
   Non aggiungere altri workflow senza richiesta esplicita del maintainer.
   L'allowlist è verificata da `scripts/check_github_workflows.sh`: aggiornala lì
