@@ -141,7 +141,8 @@ def request_trading_xml_once(config: Config, access_token: str, payload: bytes) 
 
 def request_trading_xml(config: Config, access_token: str, payload: bytes) -> ET.Element:
     def on_retry(exc: Exception, attempt_no: int, total_attempts: int, delay: float) -> None:
-        assert isinstance(exc, EbayApiError)
+        if not isinstance(exc, EbayApiError):
+            return
         log_event(
             LOGGER,
             logging.WARNING,

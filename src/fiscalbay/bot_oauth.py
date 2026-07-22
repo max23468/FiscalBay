@@ -49,8 +49,11 @@ def create_or_reuse_oauth_link_session(
 ) -> tuple[OauthLinkSession, bool]:
     current_time = now or datetime.now(timezone.utc)
     latest_session = load_latest_oauth_link_session(state_path, telegram_user_id)
-    if is_reusable_oauth_session(latest_session, environment=environment, now=current_time):
-        assert latest_session is not None
+    if latest_session is not None and is_reusable_oauth_session(
+        latest_session,
+        environment=environment,
+        now=current_time,
+    ):
         return latest_session, False
     created = create_oauth_link_session(
         state_path,

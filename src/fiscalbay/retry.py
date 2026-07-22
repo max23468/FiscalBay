@@ -45,5 +45,6 @@ def run_with_retry(
             if on_retry is not None:
                 on_retry(exc, attempt_index + 1, attempts, delay)
             sleep_fn(delay)
-    assert last_error is not None
+    if last_error is None:
+        raise RuntimeError("Retry terminato senza un errore da rilanciare.")
     raise last_error

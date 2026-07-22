@@ -330,7 +330,7 @@ def render_table(records: Iterable[OrderRecord]) -> str:
     header = format_row({column: column for column in columns})
     separator = "-+-".join("-" * widths[column] for column in columns)
     body = [format_row(row) for row in rows]
-    return "\n".join([header, separator] + body) if body else header + "\n" + separator
+    return "\n".join([header, separator, *body]) if body else header + "\n" + separator
 
 
 def write_output(records: Sequence[OrderRecord], fmt: str, output_path: Optional[str]) -> None:

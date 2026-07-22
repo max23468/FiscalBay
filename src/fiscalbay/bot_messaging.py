@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Mapping, Optional
+from typing import Callable, Mapping, Optional, TypeVar
 
 from .clients.telegram import (
     InlineKeyboardMarkup,
@@ -18,14 +18,15 @@ from .retry import run_with_retry
 from .telegram_commands import chunk_message, with_fiscal_identifier_copy_markup
 
 LOGGER = logging.getLogger("fiscalbay.telegram_bot")
+T = TypeVar("T")
 
 
 def request_with_backoff(
-    fn,
+    fn: Callable[[], T],
     label: str,
     attempts: int = 4,
     initial_delay: float = 1.0,
-) -> object:
+) -> T:
     def on_retry(exc: Exception, attempt_no: int, total_attempts: int, delay: float) -> None:
         log_event(
             LOGGER,

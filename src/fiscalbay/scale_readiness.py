@@ -36,7 +36,7 @@ class ScaleReadinessReport(TypedDict):
 def _usage_percent(current: int, limit: int) -> int:
     if limit <= 0:
         return 0
-    return min(999, int(round((current / limit) * 100)))
+    return min(999, round((current / limit) * 100))
 
 
 def _trigger_level(current: int, limit: int) -> str:

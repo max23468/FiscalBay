@@ -2796,5 +2796,6 @@ def process_message(
         lambda: fetch_records_for_environment_fn(ebay_environment, options),
         label=f"fetch_records_{command}",
     )
-    assert isinstance(records, list)
+    if not isinstance(records, list):
+        raise TypeError(f"Risposta non valida per fetch_records_{command}: attesa una lista.")
     return format_records(records, only_found=options.only_found)

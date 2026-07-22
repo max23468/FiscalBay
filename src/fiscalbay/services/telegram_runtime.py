@@ -297,18 +297,19 @@ def run_bot(
                 timeout_seconds=poll_timeout,
             )
             updates = request_with_backoff_fn(
-                lambda: telegram_request(
+                lambda current_offset=offset, current_poll_timeout=poll_timeout: telegram_request(
                     telegram_config.token,
                     "getUpdates",
                     {
-                        "offset": offset,
-                        "timeout": poll_timeout,
+                        "offset": current_offset,
+                        "timeout": current_poll_timeout,
                         "allowed_updates": ["message", "edited_message", "callback_query"],
                     },
                 ),
                 label="getUpdates",
             )
-            assert isinstance(updates, list)
+            if not isinstance(updates, list):
+                raise TypeError("Risposta non valida per getUpdates: attesa una lista.")
             log_event(
                 LOGGER,
                 logging.INFO,

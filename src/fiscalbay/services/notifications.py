@@ -145,7 +145,8 @@ def fetch_order_window_records(
         ),
         label="fetch_new_orders",
     )
-    assert isinstance(records, list)
+    if not isinstance(records, list):
+        raise TypeError("Risposta non valida per fetch_new_orders: attesa una lista.")
     state.memory.last_fetch_start = start
     state.memory.last_fetch_end = end
     state.memory.last_fetch_count = len(records)
