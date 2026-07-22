@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.13.1](https://github.com/max23468/FiscalBay/compare/v1.13.0...v1.13.1) (2026-07-22)
+
+### Bug Fixes
+
+* harden runtime type boundaries and resource cleanup ([a82d8a0](https://github.com/max23468/FiscalBay/commit/a82d8a0ceb2556002ae400ea52ae17ac8249493d))
+
+### Maintenance
+
+* remove Doppler integration (#121) ([446dd01](https://github.com/max23468/FiscalBay/commit/446dd0166719a6764db5729bb940df6cbe427d65))
+
 ## [1.13.0](https://github.com/max23468/FiscalBay/compare/v1.12.2...v1.13.0) (2026-07-21)
 
 ### Features
