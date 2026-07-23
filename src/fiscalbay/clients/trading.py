@@ -111,7 +111,8 @@ def request_trading_xml_once(config: Config, access_token: str, payload: bytes) 
         with urllib.request.urlopen(request, timeout=60) as response:
             body = response.read()
     except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
+        with exc:  # chiude il socket sottostante: senza, l'errore lascia un ResourceWarning
+            body = exc.read().decode("utf-8", errors="replace")
         raise EbayApiError(
             f"HTTP {exc.code} su Trading API GetOrders: {body or str(exc)}",
             status_code=exc.code,

@@ -233,7 +233,8 @@ def request_json_once(
         with urllib.request.urlopen(request) as response:
             payload = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
+        with exc:  # chiude il socket sottostante: senza, l'errore lascia un ResourceWarning
+            body = exc.read().decode("utf-8", errors="replace")
         try:
             parsed = cast(EbayErrorPayload, _parse_json_object(body, url=url))
             message = parsed.get("message") or parsed.get("error_description") or body

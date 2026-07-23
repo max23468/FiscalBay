@@ -92,7 +92,8 @@ def telegram_api_request_once(
         with urllib.request.urlopen(request, timeout=60) as response:
             payload = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
+        with exc:  # chiude il socket sottostante: senza, l'errore lascia un ResourceWarning
+            body = exc.read().decode("utf-8", errors="replace")
         try:
             error_payload = cast(TelegramErrorPayload, _parse_json_object(body, method=method))
             description = error_payload.get("description") or body
