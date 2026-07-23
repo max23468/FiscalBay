@@ -65,6 +65,26 @@ class EbayClientAdditionalTests(unittest.TestCase):
             ebay.request_json_once("GET", "https://api.ebay.com/x")
         self.assertIn("Errore di rete", str(network_ctx.exception))
 
+    @patch("src.fiscalbay.clients.ebay.urllib.request.urlopen")
+    def test_request_json_once_closes_http_error_body(self, urlopen_mock) -> None:
+        body = BytesIO(b'{"message": "boom"}')
+        urlopen_mock.side_effect = urllib.error.HTTPError(
+            "https://api.ebay.com/x", 400, "Bad Request", {}, body
+        )
+        with self.assertRaises(EbayApiError):
+            ebay.request_json_once("GET", "https://api.ebay.com/x")
+        self.assertTrue(body.closed)
+
+    @patch("src.fiscalbay.clients.telegram.urllib.request.urlopen")
+    def test_telegram_api_request_once_closes_http_error_body(self, urlopen_mock) -> None:
+        body = BytesIO(b'{"description": "boom"}')
+        urlopen_mock.side_effect = urllib.error.HTTPError(
+            "https://api.telegram.org/bottoken/sendMessage", 429, "Too Many", {}, body
+        )
+        with self.assertRaises(TelegramApiError):
+            telegram.telegram_api_request_once("token", "sendMessage")
+        self.assertTrue(body.closed)
+
     def test_retry_settings_bases_and_retryable_statuses_are_normalized(self) -> None:
         with patch.dict(
             "os.environ",

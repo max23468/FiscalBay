@@ -147,6 +147,16 @@ class TradingClientTests(unittest.TestCase):
         self.assertIn("error 123", str(ack_ctx.exception))
 
     @patch("src.fiscalbay.clients.trading.urllib.request.urlopen")
+    def test_request_trading_xml_once_closes_http_error_body(self, urlopen_mock) -> None:
+        body = BytesIO(b"down")
+        urlopen_mock.side_effect = urllib.error.HTTPError(
+            "https://api.ebay.com/ws/api.dll", 500, "Server Error", {}, body
+        )
+        with self.assertRaises(EbayApiError):
+            trading.request_trading_xml_once(sample_config(), "access", b"<xml />")
+        self.assertTrue(body.closed)
+
+    @patch("src.fiscalbay.clients.trading.urllib.request.urlopen")
     def test_request_trading_xml_once_rejects_xml_with_entities(self, urlopen_mock) -> None:
         response = MagicMock()
         response.__enter__.return_value.read.return_value = (
