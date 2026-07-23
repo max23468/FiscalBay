@@ -375,7 +375,8 @@ if [ ! -d "${VENV_DIR}" ]; then
 fi
 
 sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install --upgrade pip
-sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install -e "${APP_DIR}"
+sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install --require-hashes -r "${APP_DIR}/requirements.lock"
+sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install -e "${APP_DIR}" --no-deps
 
 if [ ! -f "${ENV_FILE}" ]; then
   sudo cp "${APP_DIR}/.env.example" "${ENV_FILE}"
