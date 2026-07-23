@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.13.2](https://github.com/max23468/FiscalBay/compare/v1.13.1...v1.13.2) (2026-07-23)
+
+### Bug Fixes
+
+* chiude il corpo degli HTTPError nei client HTTP (#123) ([3072600](https://github.com/max23468/FiscalBay/commit/307260011396864577d0d8229fee367cc37ab850))
+
 ## [1.13.1](https://github.com/max23468/FiscalBay/compare/v1.13.0...v1.13.1) (2026-07-22)
 
 ### Bug Fixes
