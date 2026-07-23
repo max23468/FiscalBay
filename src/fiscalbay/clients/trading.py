@@ -20,7 +20,7 @@ from ..retry import run_with_retry
 
 LOGGER = logging.getLogger(__name__)
 
-TRADING_API_VERSION = "1451"
+TRADING_API_VERSION = "1455"
 DEFAULT_TRADING_SITE_ID = "101"
 DEFAULT_TRADING_BATCH_SIZE = 20
 TRADING_NAMESPACE = "urn:ebay:apis:eBLBaseComponents"
