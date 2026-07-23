@@ -9,7 +9,8 @@ SERVICE_NAME="fiscalbay-bot"
 OAUTH_SERVICE_NAME="fiscalbay-oauth"
 
 sudo -u "${APP_USER}" git -C "${APP_DIR}" pull --ff-only
-sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install -e "${APP_DIR}"
+sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install --require-hashes -r "${APP_DIR}/requirements.lock"
+sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install -e "${APP_DIR}" --no-deps
 sudo systemctl restart "${SERVICE_NAME}"
 sudo systemctl is-active "${SERVICE_NAME}"
 if sudo systemctl is-enabled --quiet "${OAUTH_SERVICE_NAME}"; then

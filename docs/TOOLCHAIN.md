@@ -20,7 +20,13 @@ procedure operative restano in [OPERATIONS.md](./OPERATIONS.md),
 ## Package manager e lockfile
 
 - Python: `pip` dentro virtualenv.
-- Lockfile Python: non presente; dipendenze e vincoli sono in `pyproject.toml`.
+- Lockfile Python: `requirements.lock` (dipendenze runtime pinnate + hash),
+  generato da `pyproject.toml` con `uv` (`make lock`). Il deploy VPS installa da
+  qui con `pip install --require-hashes -r requirements.lock` più
+  `pip install -e . --no-deps`, quindi la produzione è riproducibile. Dopo ogni
+  modifica alle dipendenze runtime rigenera il lock con `make lock` e ricommittalo;
+  `scripts/ci_verify.sh` verifica la sincronia con `pyproject.toml` quando `uv` è
+  disponibile.
 - JavaScript/TypeScript: non applicabile.
 - Lockfile JS: non applicabile.
 
