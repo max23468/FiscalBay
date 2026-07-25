@@ -4,12 +4,6 @@ on:
   pull_request:
     branches:
       - main
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
-      - ".github/CODEOWNERS"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/PULL_REQUEST_TEMPLATE.md"
   workflow_dispatch:
 
 concurrency:
