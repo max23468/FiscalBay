@@ -22,15 +22,50 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect docs-only diff
+        id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          docs_only=false
+          if [ -n "${BASE_SHA}" ] && [ -n "${HEAD_SHA}" ]; then
+            changed="$(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")"
+            echo "File modificati:"
+            echo "${changed}"
+            if [ -n "${changed}" ]; then
+              docs_only=true
+              while IFS= read -r file; do
+                case "${file}" in
+                  *.md | docs/* | .github/CODEOWNERS | .github/ISSUE_TEMPLATE/*) ;;
+                  *)
+                    docs_only=false
+                    break
+                    ;;
+                esac
+              done <<< "${changed}"
+            fi
+          fi
+          echo "docs_only=${docs_only}" >> "${GITHUB_OUTPUT}"
+          if [ "${docs_only}" = "true" ]; then
+            echo "Diff docs-only: il gate applicativo viene saltato."
+          fi
 
       - name: Set up Python
+        if: steps.detect.outputs.docs_only != 'true'
         uses: actions/setup-python@v7
         with:
           python-version: "3.13"
           cache: pip
 
       - name: Install dependencies
+        if: steps.detect.outputs.docs_only != 'true'
         run: python -m pip install --upgrade pip && python -m pip install -e '.[dev]'
 
       - name: Run local CI gate
+        if: steps.detect.outputs.docs_only != 'true'
         run: bash scripts/ci_verify.sh
