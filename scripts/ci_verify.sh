@@ -19,8 +19,11 @@ if [ -x ".venv/bin/coverage" ]; then
 fi
 
 if command -v uv >/dev/null 2>&1; then
-  if ! uv pip compile pyproject.toml --universal --generate-hashes --no-header -o - 2>/dev/null \
-    | diff -u requirements.lock - >/dev/null; then
+  compiled_lock="$(mktemp)"
+  trap 'rm -f "$compiled_lock"' EXIT
+  if ! uv pip compile pyproject.toml --universal --generate-hashes --no-header \
+    -o "$compiled_lock" >/dev/null 2>&1 \
+    || ! diff -u requirements.lock "$compiled_lock" >/dev/null; then
     echo "requirements.lock non e' allineato a pyproject.toml: esegui 'make lock' e ricommitta." >&2
     exit 1
   fi
