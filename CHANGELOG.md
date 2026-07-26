@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.13.5](https://github.com/max23468/FiscalBay/compare/v1.13.4...v1.13.5) (2026-07-26)
+
+### Bug Fixes
+
+* harden shared deploy state (#132) ([cd5946d](https://github.com/max23468/FiscalBay/commit/cd5946dc9453c906d6387e5f5dd5e825e8f1421d))
+
 ## [1.13.4](https://github.com/max23468/FiscalBay/compare/v1.13.3...v1.13.4) (2026-07-26)
 
 ### Bug Fixes
