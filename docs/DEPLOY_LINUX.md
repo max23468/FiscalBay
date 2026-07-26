@@ -220,7 +220,9 @@ superfici aggiornate da sé, su tre livelli:
   Actions: è il VPS che tira (repo pubblico, nessun secret necessario). Il deploy
   manuale con `scripts/deploy_now.sh` usa lo stesso percorso protetto. Il lock è
   `/run/fiscalbay-deploy.lock`; `FISCALBAY_DEPLOY_LOCK_FILE` serve solo per test o
-  installazioni non standard.
+  installazioni non standard. Una copia dello SHA noto-buono resta anche in
+  `/opt/fiscalbay/.fiscalbay-deployed-sha`, come fallback se lo stato
+  dell’autodeploy viene perso.
 
 Verifiche utili sul VPS:
 
