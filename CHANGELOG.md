@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.13.4](https://github.com/max23468/FiscalBay/compare/v1.13.3...v1.13.4) (2026-07-26)
+
+### Bug Fixes
+
+* preserve deploy state and lock pins ([b1ec8c0](https://github.com/max23468/FiscalBay/commit/b1ec8c02e9653e587c5706434da7005d0bfba4c8))
+
 ## [1.13.3](https://github.com/max23468/FiscalBay/compare/v1.13.2...v1.13.3) (2026-07-26)
 
 ### Bug Fixes
