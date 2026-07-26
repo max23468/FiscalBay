@@ -8,12 +8,17 @@
 # token. Se /etc/fiscalbay/deploy.env definisce un token viene comunque usato.
 set -euo pipefail
 
+DEPLOY_ENV_FILE="${FISCALBAY_DEPLOY_ENV_FILE:-/etc/fiscalbay/deploy.env}"
+set -a
+# shellcheck disable=SC1090
+[ -f "${DEPLOY_ENV_FILE}" ] && . "${DEPLOY_ENV_FILE}"
+set +a
+
 APP_DIR="${APP_DIR:-/opt/fiscalbay}"
 APP_USER="${APP_USER:-fiscalbay}"
 APP_GROUP="${APP_GROUP:-${APP_USER}}"
 REPO="${FISCALBAY_RELEASE_REPO_URL:-max23468/FiscalBay}"
 BRANCH="${FISCALBAY_RELEASE_TARGET_BRANCH:-main}"
-DEPLOY_ENV_FILE="${FISCALBAY_DEPLOY_ENV_FILE:-/etc/fiscalbay/deploy.env}"
 STATE_DIR="${FISCALBAY_AUTODEPLOY_STATE_DIR:-/var/lib/fiscalbay-autodeploy}"
 DEPLOYED_FILE="${STATE_DIR}/deployed_sha"
 DEPLOYED_MARKER="${APP_DIR}/.fiscalbay-deployed-sha"
@@ -50,10 +55,6 @@ fi
 deploy_ref() {
   local ref="$1"
   (
-    set -a
-    # shellcheck disable=SC1090
-    [ -f "${DEPLOY_ENV_FILE}" ] && . "${DEPLOY_ENV_FILE}"
-    set +a
     export APP_DIR APP_USER APP_GROUP FISCALBAY_DEPLOY_LOCK_FD=9
     bash "${APP_DIR}/deploy/vps-deploy-ref.sh" "${ref}"
   )
