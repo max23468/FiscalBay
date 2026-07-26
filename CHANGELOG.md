@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.13.3](https://github.com/max23468/FiscalBay/compare/v1.13.2...v1.13.3) (2026-07-26)
+
+### Bug Fixes
+
+* streamline agent guidance and lock checks ([13059af](https://github.com/max23468/FiscalBay/commit/13059afe18d5a5dd05135eece141909e77024f27))
+* serialize deploys and enforce lock checks ([18548db](https://github.com/max23468/FiscalBay/commit/18548dbad206a1918cdcc110c0b7da3c8fb4d738))
+
+### Maintenance
+
+* allinea Trading API compatibility level a 1455 (#124) ([fd9ef5a](https://github.com/max23468/FiscalBay/commit/fd9ef5a464d78bffb813a5c674e92ede6c5dd7d3))
+* aggiungi requirements.lock e installa dal lock nel deploy (#125) ([3ffcfd0](https://github.com/max23468/FiscalBay/commit/3ffcfd0231187d27ceaf42525c2b82a1ea6e9720))
+* fai girare la CI anche sui PR docs-only (#127) ([66524e1](https://github.com/max23468/FiscalBay/commit/66524e1f50b3a1fcd718d2b2e00b658e4f5dc7c9))
+* rimuovi i riferimenti alla repo Atlas (#126) ([1a7be1c](https://github.com/max23468/FiscalBay/commit/1a7be1c172d6911ac9deb95d57038ec7553edfd2))
+* salta il gate applicativo sui PR docs-only (#128) ([b289010](https://github.com/max23468/FiscalBay/commit/b2890106998c3d477bfb4ba53fc6380b1a3eebb4))
+
 ## [1.13.2](https://github.com/max23468/FiscalBay/compare/v1.13.1...v1.13.2) (2026-07-23)
 
 ### Bug Fixes
