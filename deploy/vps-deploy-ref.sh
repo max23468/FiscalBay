@@ -7,6 +7,7 @@ APP_GROUP="${APP_GROUP:-${APP_USER}}"
 REPO_URL="${FISCALBAY_RELEASE_REPO_URL:-max23468/FiscalBay}"
 TARGET_BRANCH="${FISCALBAY_RELEASE_TARGET_BRANCH:-main}"
 EXPECTED_HOSTNAME="${FISCALBAY_VPS_HOSTNAME:-fiscalbay-bot}"
+LOCK_FILE="${FISCALBAY_DEPLOY_LOCK_FILE:-/run/fiscalbay-deploy.lock}"
 REF="${1:-${TARGET_BRANCH}}"
 GITHUB_AUTH_TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-${FISCALBAY_GITHUB_TOKEN:-}}}"
 
@@ -14,6 +15,10 @@ if [ "$(hostname)" != "${EXPECTED_HOSTNAME}" ]; then
   echo "Errore: host inatteso: $(hostname)." >&2
   exit 1
 fi
+
+exec 9>"${LOCK_FILE}"
+echo "Attendo il lock deploy ${LOCK_FILE}..."
+flock 9
 
 archive="$(mktemp "/tmp/fiscalbay-${REF//\//-}.XXXXXX.tar.gz")"
 cleanup() {

@@ -16,17 +16,8 @@ BRANCH="${FISCALBAY_RELEASE_TARGET_BRANCH:-main}"
 DEPLOY_ENV_FILE="${FISCALBAY_DEPLOY_ENV_FILE:-/etc/fiscalbay/deploy.env}"
 STATE_DIR="${FISCALBAY_AUTODEPLOY_STATE_DIR:-/var/lib/fiscalbay-autodeploy}"
 DEPLOYED_FILE="${STATE_DIR}/deployed_sha"
-LOCK_FILE="/run/fiscalbay-autodeploy.lock"
 
 log() { echo "[autodeploy] $*"; }
-
-# Un solo deploy alla volta (il timer non deve accavallarsi a un deploy manuale
-# lungo). Se il lock e' occupato, esce senza errore.
-exec 9>"${LOCK_FILE}"
-if ! flock -n 9; then
-  log "deploy gia' in corso, salto questo giro"
-  exit 0
-fi
 
 mkdir -p "${STATE_DIR}"
 
@@ -38,14 +29,6 @@ if ! printf '%s' "${latest_sha}" | grep -qE '^[0-9a-f]{40}$'; then
 fi
 
 deployed_sha="$(cat "${DEPLOYED_FILE}" 2>/dev/null || true)"
-
-# Primo avvio senza stato: registra il commit corrente senza deployare (la box
-# e' appena stata deployata a mano). Evita un redeploy inutile all'attivazione.
-if [ -z "${deployed_sha}" ] && [ ! -f "${DEPLOYED_FILE}" ]; then
-  log "primo avvio: registro ${latest_sha} come baseline senza deploy"
-  printf '%s\n' "${latest_sha}" > "${DEPLOYED_FILE}"
-  exit 0
-fi
 
 if [ "${latest_sha}" = "${deployed_sha}" ]; then
   log "gia' aggiornato (${latest_sha})"

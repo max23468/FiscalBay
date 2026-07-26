@@ -8,5 +8,5 @@ lock:
 # Verifica che requirements.lock sia allineato a pyproject.toml senza riscriverlo.
 lock-check:
 	@tmp=$$(mktemp); trap 'rm -f "$$tmp"' EXIT; \
-	uv pip compile pyproject.toml --universal --generate-hashes --no-header -o "$$tmp"; \
+	uv pip compile pyproject.toml --universal --generate-hashes --no-header -o "$$tmp" >/dev/null; \
 	diff -u requirements.lock "$$tmp"
