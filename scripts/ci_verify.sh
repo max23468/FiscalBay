@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PYTHON_BIN="python3"
 RUFF_BIN="ruff"
 MYPY_BIN="mypy"
 COVERAGE_BIN="coverage"
-if [ -x ".venv/bin/python" ]; then
-  PYTHON_BIN=".venv/bin/python"
-fi
 if [ -x ".venv/bin/ruff" ]; then
   RUFF_BIN=".venv/bin/ruff"
 fi
@@ -18,18 +14,11 @@ if [ -x ".venv/bin/coverage" ]; then
   COVERAGE_BIN=".venv/bin/coverage"
 fi
 
-if command -v uv >/dev/null 2>&1; then
-  compiled_lock="$(mktemp)"
-  trap 'rm -f "$compiled_lock"' EXIT
-  if ! uv pip compile pyproject.toml --universal --generate-hashes --no-header \
-    -o "$compiled_lock" >/dev/null 2>&1 \
-    || ! diff -u requirements.lock "$compiled_lock" >/dev/null; then
-    echo "requirements.lock non e' allineato a pyproject.toml: esegui 'make lock' e ricommitta." >&2
-    exit 1
-  fi
-else
-  echo "uv non disponibile: salto il check di sincronia di requirements.lock." >&2
+if ! command -v uv >/dev/null 2>&1; then
+  echo "uv e' richiesto per verificare requirements.lock." >&2
+  exit 1
 fi
+make lock-check
 
 bash scripts/check_github_workflows.sh
 "$RUFF_BIN" format --check src tests

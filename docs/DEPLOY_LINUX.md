@@ -215,9 +215,12 @@ superfici aggiornate da sé, su tre livelli:
   `fiscalbay-autodeploy.timer` (~ogni 10 min). Confronta il SHA di `main` con
   quello deployato; se cambia deploya con `deploy/vps-deploy-ref.sh` (che include
   lo smoke-check) e, **se lo smoke fallisce, fa rollback** al commit precedente
-  noto-buono. Resta fuori da GitHub Actions: è il VPS che tira (repo pubblico,
-  nessun secret necessario). Il deploy manuale con `scripts/deploy_now.sh`
-  continua a funzionare in parallelo.
+  noto-buono. Lo stesso script serializza deploy automatici e manuali con un lock
+  condiviso e registra lo SHA solo dopo uno smoke riuscito. Resta fuori da GitHub
+  Actions: è il VPS che tira (repo pubblico, nessun secret necessario). Il deploy
+  manuale con `scripts/deploy_now.sh` usa lo stesso percorso protetto. Il lock è
+  `/run/fiscalbay-deploy.lock`; `FISCALBAY_DEPLOY_LOCK_FILE` serve solo per test o
+  installazioni non standard.
 
 Verifiche utili sul VPS:
 

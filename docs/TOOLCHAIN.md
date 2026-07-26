@@ -25,8 +25,8 @@ procedure operative restano in [OPERATIONS.md](./OPERATIONS.md),
   qui con `pip install --require-hashes -r requirements.lock` più
   `pip install -e . --no-deps`, quindi la produzione è riproducibile. Dopo ogni
   modifica alle dipendenze runtime rigenera il lock con `make lock` e ricommittalo;
-  `scripts/ci_verify.sh` verifica la sincronia con `pyproject.toml` quando `uv` è
-  disponibile.
+  `scripts/ci_verify.sh` richiede `uv` e verifica sempre la sincronia con
+  `pyproject.toml`.
 - JavaScript/TypeScript: non applicabile.
 - Lockfile JS: non applicabile.
 
@@ -44,6 +44,7 @@ procedure operative restano in [OPERATIONS.md](./OPERATIONS.md),
 | `mypy` | `>=2.3.0` | typecheck graduale |
 | `coverage` | `>=7.15.2` | copertura test |
 | `build` | `>=1.5.0` | package build |
+| `uv` | CLI locale e CI | generazione e verifica obbligatoria del lock Python |
 | `gh` | CLI autenticata locale | PR, issue, release e controlli GitHub |
 | `ssh` | client locale | deploy e diagnostica VPS FiscalBay |
 
