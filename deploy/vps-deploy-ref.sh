@@ -44,8 +44,10 @@ if ! printf '%s' "${deploy_sha}" | grep -qE '^[0-9a-f]{40}$'; then
 fi
 
 archive="$(mktemp "/tmp/fiscalbay-${deploy_sha}.XXXXXX.tar.gz")"
+marker_tmp=""
 cleanup() {
   rm -f "${archive}"
+  [ -z "${marker_tmp}" ] || rm -f "${marker_tmp}"
 }
 trap cleanup EXIT
 
@@ -69,5 +71,7 @@ bash "${APP_DIR}/deploy/install-vps.sh"
 mkdir -p "${STATE_DIR}"
 printf '%s\n' "${deploy_sha}" > "${DEPLOYED_FILE}.tmp"
 mv "${DEPLOYED_FILE}.tmp" "${DEPLOYED_FILE}"
-printf '%s\n' "${deploy_sha}" > "${DEPLOYED_MARKER}.tmp"
-mv "${DEPLOYED_MARKER}.tmp" "${DEPLOYED_MARKER}"
+marker_tmp="$(mktemp "${STATE_DIR}/deployed-marker.XXXXXX")"
+printf '%s\n' "${deploy_sha}" > "${marker_tmp}"
+mv -T "${marker_tmp}" "${DEPLOYED_MARKER}"
+marker_tmp=""

@@ -88,6 +88,9 @@ class DeployGuardTests(unittest.TestCase):
             (bin_dir / "chown").write_text("#!/bin/sh\nexit 0\n")
             for script in (bin_dir / "curl", bin_dir / "chown"):
                 script.chmod(0o755)
+            victim = root / "victim"
+            victim.write_text("unchanged")
+            (app / ".fiscalbay-deployed-sha.tmp").symlink_to(victim)
             env = os.environ | {
                 "APP_DIR": str(app),
                 "APP_USER": "fiscalbay",
@@ -115,6 +118,7 @@ class DeployGuardTests(unittest.TestCase):
             self.assertEqual(log.read_text().splitlines(), ["start", "end", "start", "end"])
             self.assertEqual((root / "state/deployed_sha").read_text().strip(), "b" * 40)
             self.assertEqual((app / ".fiscalbay-deployed-sha").read_text().strip(), "b" * 40)
+            self.assertEqual(victim.read_text(), "unchanged")
 
     @unittest.skipUnless(shutil.which("flock"), "flock è disponibile sulla VPS e in CI Linux")
     def test_autodeploy_prevents_concurrent_state_updates(self) -> None:
@@ -173,6 +177,57 @@ class DeployGuardTests(unittest.TestCase):
             )
             self.assertEqual((state / "deployed_sha").read_text().strip(), previous_sha)
             self.assertEqual((app / ".fiscalbay-deployed-sha").read_text().strip(), previous_sha)
+
+    @unittest.skipUnless(shutil.which("flock"), "flock è disponibile sulla VPS e in CI Linux")
+    def test_autodeploy_loads_configured_lock_before_acquiring_it(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            app = root / "app"
+            (app / "deploy").mkdir(parents=True)
+            custom_lock = root / "custom.lock"
+            ready = root / "ready"
+            deploy_log = root / "deploy.log"
+            deploy_env = root / "deploy.env"
+            deploy_env.write_text(f"FISCALBAY_DEPLOY_LOCK_FILE={custom_lock}\n")
+            (app / "deploy/vps-deploy-ref.sh").write_text(
+                '#!/bin/sh\nprintf "deployed\\n" > "$DEPLOY_LOG"\n'
+            )
+            (app / "deploy/vps-deploy-ref.sh").chmod(0o755)
+            holder = subprocess.Popen(
+                [
+                    "bash",
+                    "-c",
+                    'exec 8>"$1"; flock 8; touch "$2"; sleep 5',
+                    "holder",
+                    str(custom_lock),
+                    str(ready),
+                ]
+            )
+            try:
+                for _ in range(50):
+                    if ready.exists():
+                        break
+                    time.sleep(0.02)
+                result = subprocess.run(
+                    ["bash", str(ROOT / "deploy/autodeploy.sh")],
+                    env=os.environ
+                    | {
+                        "APP_DIR": str(app),
+                        "DEPLOY_LOG": str(deploy_log),
+                        "FISCALBAY_DEPLOY_ENV_FILE": str(deploy_env),
+                        "FISCALBAY_AUTODEPLOY_STATE_DIR": str(root / "state"),
+                    },
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                )
+            finally:
+                holder.terminate()
+                holder.wait()
+
+            self.assertEqual(result.returncode, 0)
+            self.assertIn("deploy gia' in corso", result.stdout)
+            self.assertFalse(deploy_log.exists())
 
     def test_lock_check_seeds_committed_pins(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
