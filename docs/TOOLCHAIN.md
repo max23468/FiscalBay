@@ -26,7 +26,7 @@ procedure operative restano in [OPERATIONS.md](./OPERATIONS.md),
   `pip install -e . --no-deps`, quindi la produzione è riproducibile. Dopo ogni
   modifica alle dipendenze runtime rigenera il lock con `make lock` e ricommittalo;
   `scripts/ci_verify.sh` richiede `uv` e verifica sempre la sincronia con
-  `pyproject.toml`.
+  `pyproject.toml`, mantenendo le versioni già pinnate nel lock.
 - JavaScript/TypeScript: non applicabile.
 - Lockfile JS: non applicabile.
 
