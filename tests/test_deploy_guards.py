@@ -88,6 +88,7 @@ class DeployGuardTests(unittest.TestCase):
             (bin_dir / "chown").write_text("#!/bin/sh\nexit 0\n")
             for script in (bin_dir / "curl", bin_dir / "chown"):
                 script.chmod(0o755)
+            app.mkdir()
             victim = root / "victim"
             victim.write_text("unchanged")
             (app / ".fiscalbay-deployed-sha.tmp").symlink_to(victim)
