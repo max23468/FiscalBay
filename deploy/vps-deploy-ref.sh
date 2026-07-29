@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+RUNTIME_IDENTITY_FILE="${FISCALBAY_RUNTIME_IDENTITY_FILE:-/etc/fiscalbay/runtime.env}"
+# shellcheck disable=SC1090
+[ -f "${RUNTIME_IDENTITY_FILE}" ] && . "${RUNTIME_IDENTITY_FILE}"
 APP_DIR="${APP_DIR:-/opt/fiscalbay}"
 APP_USER="${APP_USER:-fiscalbay}"
 APP_GROUP="${APP_GROUP:-${APP_USER}}"

@@ -9,9 +9,12 @@
 set -euo pipefail
 
 DEPLOY_ENV_FILE="${FISCALBAY_DEPLOY_ENV_FILE:-/etc/fiscalbay/deploy.env}"
+RUNTIME_IDENTITY_FILE="${FISCALBAY_RUNTIME_IDENTITY_FILE:-/etc/fiscalbay/runtime.env}"
 set -a
 # shellcheck disable=SC1090
 [ -f "${DEPLOY_ENV_FILE}" ] && . "${DEPLOY_ENV_FILE}"
+# shellcheck disable=SC1090
+[ -f "${RUNTIME_IDENTITY_FILE}" ] && . "${RUNTIME_IDENTITY_FILE}"
 set +a
 
 APP_DIR="${APP_DIR:-/opt/fiscalbay}"

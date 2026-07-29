@@ -10,6 +10,7 @@ APP_DIR="${APP_DIR:-${REPO_DIR}}"
 VENV_DIR="${APP_DIR}/.venv"
 DATA_DIR="${APP_DIR}/data"
 ENV_FILE="${APP_DIR}/.env"
+RUNTIME_IDENTITY_FILE="${FISCALBAY_RUNTIME_IDENTITY_FILE:-/etc/fiscalbay/runtime.env}"
 PYTHON_BIN="${FISCALBAY_PYTHON_BIN:-${PYTHON_BIN:-}}"
 SERVICE_NAME="fiscalbay-bot"
 SERVICE_TEMPLATE="${APP_DIR}/deploy/fiscalbay-bot.service"
@@ -120,28 +121,29 @@ PY
 
 install_fresh_venv() (
   set -euo pipefail
-  staged_venv="$(sudo mktemp -d /var/tmp/fiscalbay-venv.XXXXXX)"
   previous_venv="${VENV_DIR}.previous"
-  trap '[ -z "${staged_venv:-}" ] || sudo rm -rf "${staged_venv}"' EXIT
-
-  sudo "${PYTHON_BIN}" -m venv "${staged_venv}"
-  sudo "${staged_venv}/bin/pip" install --upgrade pip
-  sudo "${staged_venv}/bin/pip" install --require-hashes -r "${APP_DIR}/requirements.lock"
-  sudo "${staged_venv}/bin/pip" install "${APP_DIR}" --no-deps
-  sudo "${staged_venv}/bin/python" -c "import fiscalbay"
-  sudo chown -R root:"${APP_GROUP}" "${staged_venv}"
-  sudo chmod -R u=rwX,g=rX,o= "${staged_venv}"
+  restore_previous_venv() {
+    local status=$?
+    trap - EXIT
+    sudo rm -rf "${VENV_DIR}"
+    [ ! -e "${previous_venv}" ] || sudo mv "${previous_venv}" "${VENV_DIR}"
+    exit "${status}"
+  }
 
   sudo rm -rf "${previous_venv}"
   if [ -e "${VENV_DIR}" ]; then
     sudo mv "${VENV_DIR}" "${previous_venv}"
   fi
-  if ! sudo mv "${staged_venv}" "${VENV_DIR}"; then
-    [ ! -e "${previous_venv}" ] || sudo mv "${previous_venv}" "${VENV_DIR}"
-    exit 1
-  fi
-  staged_venv=""
+  trap restore_previous_venv EXIT
+  sudo "${PYTHON_BIN}" -m venv "${VENV_DIR}"
+  sudo "${VENV_DIR}/bin/pip" install --upgrade pip
+  sudo "${VENV_DIR}/bin/pip" install --require-hashes -r "${APP_DIR}/requirements.lock"
+  sudo "${VENV_DIR}/bin/pip" install "${APP_DIR}" --no-deps
+  sudo "${VENV_DIR}/bin/python" -c "import fiscalbay"
+  sudo chown -R root:"${APP_GROUP}" "${VENV_DIR}"
+  sudo chmod -R u=rwX,g=rX,o= "${VENV_DIR}"
   sudo rm -rf "${previous_venv}"
+  trap - EXIT
 )
 
 install_packages() {
@@ -349,6 +351,11 @@ sudo cp "${LOG_MAINTENANCE_TIMER_TEMPLATE}" "${LOG_MAINTENANCE_TIMER_TARGET}"
 sudo cp "${DUCKDNS_TIMER_TEMPLATE}" "${DUCKDNS_TIMER_TARGET}"
 install_service_file "${AUTODEPLOY_SERVICE_TEMPLATE}" "${AUTODEPLOY_SERVICE_TARGET}"
 sudo cp "${AUTODEPLOY_TIMER_TEMPLATE}" "${AUTODEPLOY_TIMER_TARGET}"
+sudo install -d -o root -g root -m 755 "$(dirname "${RUNTIME_IDENTITY_FILE}")"
+printf 'APP_USER=%q\nAPP_GROUP=%q\n' "${APP_USER}" "${APP_GROUP}" \
+  | sudo tee "${RUNTIME_IDENTITY_FILE}" >/dev/null
+sudo chown root:root "${RUNTIME_IDENTITY_FILE}"
+sudo chmod 644 "${RUNTIME_IDENTITY_FILE}"
 sudo systemctl disable --now fiscalbay-release-please.timer >/dev/null 2>&1 || true
 sudo rm -f \
   /etc/systemd/system/fiscalbay-release-please.service \

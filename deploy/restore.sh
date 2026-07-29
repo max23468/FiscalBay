@@ -29,8 +29,11 @@ APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${APP_DIR}/.env"
 DATA_DIR="${APP_DIR}/data"
 STATE_DB="${DATA_DIR}/state.db"
+RUNTIME_IDENTITY_FILE="${FISCALBAY_RUNTIME_IDENTITY_FILE:-/etc/fiscalbay/runtime.env}"
+# shellcheck disable=SC1090
+[ -f "${RUNTIME_IDENTITY_FILE}" ] && . "${RUNTIME_IDENTITY_FILE}"
 APP_USER="${APP_USER:-fiscalbay}"
-APP_GROUP="${APP_GROUP:-fiscalbay}"
+APP_GROUP="${APP_GROUP:-${APP_USER}}"
 
 first_present_file() {
   for source_path in "$@"; do

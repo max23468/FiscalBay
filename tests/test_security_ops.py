@@ -1,4 +1,6 @@
+import grp
 import os
+import pwd
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +13,36 @@ def _write_env(path: Path, values: dict[str, str]) -> None:
 
 
 class SecurityOpsTests(unittest.TestCase):
+    def test_build_security_ops_report_uses_deployed_runtime_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            env_path = root / ".env"
+            state_db = root / "state.db"
+            identity_path = root / "runtime.env"
+            _write_env(env_path, {})
+            state_db.write_text("sqlite", encoding="utf-8")
+            os.chmod(env_path, 0o640)
+            os.chmod(state_db, 0o600)
+            _write_env(
+                identity_path,
+                {
+                    "APP_USER": pwd.getpwuid(os.getuid()).pw_name,
+                    "APP_GROUP": grp.getgrgid(os.getgid()).gr_name,
+                },
+            )
+
+            report = build_security_ops_report(
+                env_file=str(env_path),
+                state_db_path=str(state_db),
+                runtime_identity_file=str(identity_path),
+                backup_root=str(root / "backups"),
+                restore_check_root=str(root / "restore-check"),
+                env_expected_uid=os.getuid(),
+            )
+
+            self.assertTrue(report["env_file"]["owner_ok"])
+            self.assertTrue(report["state_db"]["owner_ok"])
+
     def test_build_security_ops_report_accepts_locked_down_runtime_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

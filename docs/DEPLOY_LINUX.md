@@ -37,9 +37,11 @@ APP_USER=fiscalbay APP_GROUP=fiscalbay ./deploy/linux-setup.sh
 Note:
 
 - se `APP_USER` o `APP_GROUP` non esistono, lo script li crea come account di servizio
+- il setup registra l’identità effettiva in `/etc/fiscalbay/runtime.env`; deploy,
+  restore e controlli security la riusano automaticamente
 - il servizio `systemd` viene generato con i path reali del clone corrente
-- il codice applicativo resta `root:fiscalbay`; solo `.venv` e `data` sono scrivibili
-  dall'utente di servizio
+- il codice applicativo e `.venv` restano `root:fiscalbay`; solo `data` è
+  scrivibile dall'utente di servizio
 - il file `.env` è `root:fiscalbay` con permessi `640`
 - viene installato e abilitato anche il timer `fiscalbay-backup.timer` per il backup giornaliero
 - vengono installati e abilitati anche i timer `fiscalbay-alertcheck.timer`,
