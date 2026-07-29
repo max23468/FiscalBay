@@ -18,6 +18,7 @@ DEFAULT_BACKUP_MAX_AGE_HOURS = 36
 DEFAULT_RESTORE_DRILL_MAX_AGE_HOURS = 8 * 24
 DEFAULT_BACKUP_ROOT = "~/maintenance-backups"
 DEFAULT_RESTORE_CHECK_ROOT = "data/restore-check"
+DEFAULT_RUNTIME_IDENTITY_FILE = "/etc/fiscalbay/runtime.env"
 REQUIRED_ENV_NAMES = (
     "TELEGRAM_BOT_TOKEN",
     "TELEGRAM_ALLOWED_CHAT_IDS",
@@ -217,6 +218,7 @@ def build_security_ops_report(
     state_db_path: str | None = None,
     backup_root: str | None = None,
     restore_check_root: str | None = None,
+    runtime_identity_file: str | None = None,
     max_backup_age_hours: int = DEFAULT_BACKUP_MAX_AGE_HOURS,
     max_restore_drill_age_hours: int = DEFAULT_RESTORE_DRILL_MAX_AGE_HOURS,
     env_expected_uid: int = 0,
@@ -239,8 +241,14 @@ def build_security_ops_report(
         or DEFAULT_RESTORE_CHECK_ROOT
     )
     restore_path = Path(restore_check_root_value).expanduser()
-    app_user = os.getenv("FISCALBAY_APP_USER", "fiscalbay")
-    app_group = os.getenv("FISCALBAY_APP_GROUP", app_user)
+    runtime_identity_path = Path(
+        runtime_identity_file
+        or os.getenv("FISCALBAY_RUNTIME_IDENTITY_FILE")
+        or DEFAULT_RUNTIME_IDENTITY_FILE
+    ).expanduser()
+    runtime_identity = read_env_file(runtime_identity_path)
+    app_user = runtime_identity.get("APP_USER", "fiscalbay")
+    app_group = runtime_identity.get("APP_GROUP", app_user)
     resolved_app_uid, resolved_app_gid = _identity_ids(user=app_user, group=app_group)
     if env_expected_gid is None:
         env_expected_gid = resolved_app_gid

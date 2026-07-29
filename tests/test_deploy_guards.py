@@ -15,6 +15,7 @@ class DeployGuardTests(unittest.TestCase):
         setup_script = (ROOT / "deploy/linux-setup.sh").read_text()
         local_deploy_script = (ROOT / "scripts/local_deploy_vps.sh").read_text()
         secrets_check = (ROOT / "deploy/check-secrets-perms.sh").read_text()
+        autodeploy_script = (ROOT / "deploy/autodeploy.sh").read_text()
 
         self.assertIn('chown -R root:"${APP_GROUP}" "${APP_DIR}"', deploy_script)
         self.assertIn('sudo chown -R root:"${APP_GROUP}" "${APP_DIR}"', setup_script)
@@ -22,16 +23,30 @@ class DeployGuardTests(unittest.TestCase):
         self.assertIn('sudo chmod 640 "${ENV_FILE}"', setup_script)
         self.assertNotIn('pip" install -e "${APP_DIR}"', setup_script)
         self.assertIn(
-            'sudo "${staged_venv}/bin/pip" install "${APP_DIR}" --no-deps',
+            'sudo "${PYTHON_BIN}" -m venv "${VENV_DIR}"',
             setup_script,
         )
-        self.assertIn('sudo chown -R root:"${APP_GROUP}" "${staged_venv}"', setup_script)
+        self.assertNotIn("staged_venv", setup_script)
+        self.assertNotIn("/var/tmp/fiscalbay-venv", setup_script)
+        self.assertIn('sudo chown -R root:"${APP_GROUP}" "${VENV_DIR}"', setup_script)
         self.assertNotIn('chown -R "${APP_USER}:${APP_GROUP}" "${VENV_DIR}"', setup_script)
         self.assertNotIn(
             'sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install "${APP_DIR}"',
             setup_script,
         )
-        self.assertNotIn('sudo "${VENV_DIR}/bin/pip"', setup_script)
+        self.assertIn('sudo "${VENV_DIR}/bin/pip"', setup_script)
+        self.assertIn('sudo mv "${previous_venv}" "${VENV_DIR}"', setup_script)
+        self.assertIn('sudo tee "${RUNTIME_IDENTITY_FILE}"', setup_script)
+        self.assertIn(
+            '[ -f "${RUNTIME_IDENTITY_FILE}" ] && . "${RUNTIME_IDENTITY_FILE}"', secrets_check
+        )
+        for identity_consumer in (deploy_script, autodeploy_script):
+            self.assertIn(
+                '[ -f "${RUNTIME_IDENTITY_FILE}" ] && . "${RUNTIME_IDENTITY_FILE}"',
+                identity_consumer,
+            )
+        restore_script = (ROOT / "deploy/restore.sh").read_text()
+        self.assertIn('APP_GROUP="${APP_GROUP:-${APP_USER}}"', restore_script)
         self.assertIn(
             "sudo chown -R root:'${APP_GROUP}' '${APP_DIR}'",
             local_deploy_script,
