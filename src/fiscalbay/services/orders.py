@@ -333,6 +333,15 @@ def render_table(records: Iterable[OrderRecord]) -> str:
     return "\n".join([header, separator, *body]) if body else header + "\n" + separator
 
 
+def spreadsheet_safe_csv_row(row: Mapping[str, object]) -> dict[str, object]:
+    return {
+        key: f"'{value}"
+        if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@"))
+        else value
+        for key, value in row.items()
+    }
+
+
 def write_output(records: Sequence[OrderRecord], fmt: str, output_path: Optional[str]) -> None:
     normalized_records = [record.as_dict() for record in records]
     if fmt == "json":
@@ -342,14 +351,14 @@ def write_output(records: Sequence[OrderRecord], fmt: str, output_path: Optional
             with open(output_path, "w", newline="", encoding="utf-8") as handle:
                 writer = csv.DictWriter(handle, fieldnames=get_csv_fieldnames(normalized_records))
                 writer.writeheader()
-                writer.writerows(normalized_records)
+                writer.writerows(map(spreadsheet_safe_csv_row, normalized_records))
             return
         from io import StringIO
 
         string_io = StringIO()
         writer = csv.DictWriter(string_io, fieldnames=get_csv_fieldnames(normalized_records))
         writer.writeheader()
-        writer.writerows(normalized_records)
+        writer.writerows(map(spreadsheet_safe_csv_row, normalized_records))
         content = string_io.getvalue().rstrip("\n")
     else:
         content = render_table(records)

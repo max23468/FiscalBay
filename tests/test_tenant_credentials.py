@@ -21,6 +21,15 @@ class TenantCredentialsTests(unittest.TestCase):
         with patch.dict(os.environ, {"EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS": "1"}, clear=False):
             self.assertEqual(decode_refresh_token("plain:tenant-refresh"), "tenant-refresh")
 
+    def test_false_plaintext_opt_in_does_not_enable_plaintext(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS": "false"},
+            clear=False,
+        ):
+            self.assertIsNone(encode_refresh_token("tenant-refresh"))
+            self.assertIsNone(decode_refresh_token("plain:tenant-refresh"))
+
     def test_load_token_cipher_returns_none_without_key(self) -> None:
         with patch.dict(os.environ, {}, clear=False):
             self.assertIsNone(load_token_cipher())

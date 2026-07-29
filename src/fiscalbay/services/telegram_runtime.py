@@ -164,6 +164,12 @@ def extract_callback_actor(
     )
 
 
+def extract_update_chat_type(update: dict) -> str:
+    callback = update.get("callback_query") or {}
+    message = callback.get("message") or update.get("message") or update.get("edited_message") or {}
+    return str((message.get("chat") or {}).get("type") or "private")
+
+
 def request_shutdown(
     signum: int,
     frame: object | None,
@@ -321,6 +327,15 @@ def run_bot(
             for update in updates:
                 update_id = int(update["update_id"])
                 offset = max(offset, update_id + 1)
+                if extract_update_chat_type(update) != "private":
+                    log_event(
+                        LOGGER,
+                        logging.WARNING,
+                        "non_private_chat_rejected",
+                        cycle_id=poll_cycle_id,
+                        update_id=update_id,
+                    )
+                    continue
                 callback_id, callback_chat_id, callback_data, callback_thread_id = (
                     extract_callback_context(update)
                 )

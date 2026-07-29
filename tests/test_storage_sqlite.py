@@ -53,6 +53,7 @@ from src.fiscalbay.storage.sqlite import (
     prune_operation_queue_entries,
     rebuild_all_tenant_status_snapshots,
     resolve_linked_ebay_account,
+    resolve_primary_chat_id,
     resolve_tenant_chat_context,
     save_retry_queue,
     save_state,
@@ -913,18 +914,43 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
                     created_at="2026-04-06T10:06:00Z",
                 ),
             )
-
             self.assertEqual(len(load_telegram_users(str(db_path))), 1)
             self.assertEqual(len(load_telegram_chats(str(db_path))), 1)
             self.assertEqual(len(load_linked_ebay_accounts(str(db_path))), 1)
             self.assertEqual(len(load_ebay_token_sets(str(db_path))), 1)
             self.assertEqual(len(load_notification_subscriptions(str(db_path))), 1)
+            self.assertEqual(resolve_primary_chat_id(str(db_path), 123), 456)
 
             tenants = list_notification_tenants(str(db_path))
             self.assertEqual(len(tenants), 1)
             self.assertEqual(tenants[0].telegram_user_id, 123)
             self.assertEqual(tenants[0].environment, "production")
             self.assertEqual(tenants[0].notify_chat_ids, {456})
+
+            upsert_telegram_chat(
+                str(db_path),
+                TelegramChat(
+                    telegram_user_id=123,
+                    telegram_chat_id=-789,
+                    chat_type="group",
+                    is_primary=True,
+                    notifications_enabled=True,
+                    created_at="2026-04-06T10:07:00Z",
+                ),
+            )
+            upsert_notification_subscription(
+                str(db_path),
+                NotificationSubscription(
+                    telegram_user_id=123,
+                    telegram_chat_id=-789,
+                    enabled=True,
+                    filters="",
+                    created_at="2026-04-06T10:07:00Z",
+                ),
+            )
+
+            self.assertEqual(resolve_primary_chat_id(str(db_path), 123), 456)
+            self.assertEqual(list_notification_tenants(str(db_path))[0].notify_chat_ids, {456})
 
     def test_resolve_tenant_chat_context_prefers_exact_user_mapping(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -426,7 +426,7 @@ chmod +x deploy/check-secrets-perms.sh
 
 Atteso:
 
-- `.env` con permessi `600`
+- `.env` `root:fiscalbay` con permessi `640`
 - `data/state.db` con permessi `600` o `660`
 
 ## Problemi operativi comuni

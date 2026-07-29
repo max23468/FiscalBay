@@ -389,7 +389,7 @@ class EbayCfToolTests(unittest.TestCase):
             OrderRecord(
                 orderId="1",
                 creationDate="2026-04-03T10:00:00Z",
-                buyerUsername="foo",
+                buyerUsername='=HYPERLINK("https://attacker.invalid")',
                 taxpayerId="RSSMRA80A01H501U",
                 taxIdentifierType="CODICE_FISCALE",
                 issuingCountry="IT",
@@ -406,6 +406,7 @@ class EbayCfToolTests(unittest.TestCase):
 
         self.assertIn("orderId", content)
         self.assertIn("RSSMRA80A01H501U", content)
+        self.assertIn("'=HYPERLINK", content)
 
     def test_write_output_writes_json_file_with_trailing_newline(self) -> None:
         records = [

@@ -10,6 +10,16 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeployGuardTests(unittest.TestCase):
+    def test_privileged_units_cannot_execute_service_owned_code(self) -> None:
+        deploy_script = (ROOT / "deploy/vps-deploy-ref.sh").read_text()
+        setup_script = (ROOT / "deploy/linux-setup.sh").read_text()
+
+        self.assertIn('chown -R root:"${APP_GROUP}" "${APP_DIR}"', deploy_script)
+        self.assertIn('sudo chown -R root:"${APP_GROUP}" "${APP_DIR}"', setup_script)
+        self.assertIn('sudo chown root:"${APP_GROUP}" "${ENV_FILE}"', setup_script)
+        self.assertIn('sudo chmod 640 "${ENV_FILE}"', setup_script)
+        self.assertNotIn('pip" install -e "${APP_DIR}"', setup_script)
+
     def test_autodeploy_records_only_a_successful_deploy(self) -> None:
         sha = "a" * 40
         with tempfile.TemporaryDirectory() as tmpdir:

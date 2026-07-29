@@ -12,6 +12,7 @@ from src.fiscalbay.models import (
     TelegramUser,
 )
 from src.fiscalbay.oauth_server import (
+    OAuthHandler,
     build_oauth_start_redirect,
     complete_oauth_link,
     describe_callback_exception,
@@ -40,6 +41,29 @@ from src.fiscalbay.storage.sqlite import (
 
 
 class OAuthServerTests(unittest.TestCase):
+    @patch("src.fiscalbay.oauth_server.append_oauth_audit_log")
+    @patch("src.fiscalbay.oauth_server.load_oauth_link_session_by_state", return_value=None)
+    def test_invalid_state_error_callback_is_not_audited(
+        self,
+        _load_session_mock,
+        append_audit_mock,
+    ) -> None:
+        handler = object.__new__(OAuthHandler)
+        handler.server = Mock(
+            telegram_config=TelegramConfig(
+                token="token",
+                allowed_chat_ids=set(),
+                notify_chat_ids=set(),
+                state_path="unused.db",
+            )
+        )
+        handler._write_response = Mock()
+
+        handler._handle_callback({"state": ["missing"], "error": ["x" * 1000]})
+
+        append_audit_mock.assert_not_called()
+        handler._write_response.assert_called_once()
+
     def test_render_oauth_start_page_contains_cta_and_refresh(self) -> None:
         body = render_oauth_start_page("https://example.com/continue").decode("utf-8")
 
@@ -302,6 +326,41 @@ class OAuthServerTests(unittest.TestCase):
             self.assertIn("/account", success_message)
             self.assertIn("/settings", success_message)
             self.assertIn("/ordini fiscali", success_message)
+
+    def test_complete_oauth_link_rejects_group_session(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            create_oauth_link_session(
+                str(db_path),
+                OauthLinkSession(
+                    telegram_user_id=123,
+                    telegram_chat_id=-456,
+                    environment="sandbox",
+                    oauth_state="group-state",
+                    status="pending",
+                ),
+            )
+            upsert_telegram_chat(
+                str(db_path),
+                TelegramChat(
+                    telegram_user_id=123,
+                    telegram_chat_id=-456,
+                    chat_type="group",
+                ),
+            )
+            telegram_config = TelegramConfig(
+                token="token",
+                allowed_chat_ids=None,
+                notify_chat_ids=set(),
+                state_path=str(db_path),
+            )
+
+            with self.assertRaisesRegex(ConfigurationError, "chat privata"):
+                complete_oauth_link(
+                    "group-state",
+                    "oauth-code",
+                    telegram_config=telegram_config,
+                )
 
 
 if __name__ == "__main__":

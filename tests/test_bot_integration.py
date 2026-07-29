@@ -276,6 +276,28 @@ class BotIntegrationTests(unittest.TestCase):
             self.assertEqual(len(chats), 1)
             self.assertEqual(subscriptions, [])
 
+    def test_sync_runtime_contact_rejects_non_private_chat(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids=None,
+                notify_chat_ids={456},
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+
+            sync_runtime_contact(
+                config,
+                telegram_user_id=999,
+                chat_id=456,
+                chat_type="group",
+            )
+
+            self.assertEqual(load_telegram_users(str(db_path)), [])
+            self.assertEqual(load_telegram_chats(str(db_path)), [])
+
     @patch("src.fiscalbay.bot.send_message")
     def test_sync_runtime_contact_does_not_notify_admin_on_first_seen_user(
         self, mock_send_message
@@ -599,6 +621,16 @@ class BotIntegrationTests(unittest.TestCase):
             audit_entries = load_audit_log_entries(str(db_path), 5)
             self.assertEqual(audit_entries[0].event_type, "data_request")
             self.assertEqual(audit_entries[0].outcome, "delete_requested")
+
+            repeated = process_message(
+                text="/settings dati cancellazione",
+                chat_id=456,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=1000,
+            )
+            self.assertIn("cooldown", repeated[0])
+            mock_send_message.assert_called_once()
 
     def test_settings_data_explains_retention_and_assisted_actions(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2461,6 +2493,7 @@ class BotIntegrationTests(unittest.TestCase):
             "EBAY_CLIENT_ID": "cid",
             "EBAY_CLIENT_SECRET": "secret",
             "EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS": "1",
+            "FISCALBAY_RATE_LIMIT_ENABLED": "off",
         },
         clear=False,
     )
@@ -2528,6 +2561,16 @@ class BotIntegrationTests(unittest.TestCase):
             resolved_config = mock_fetch_records.call_args.args[0]
             self.assertEqual(resolved_config.environment, "sandbox")
             self.assertEqual(resolved_config.refresh_token, "tenant-refresh")
+
+            repeated = process_message(
+                text="/ordini cerca 12-34567-89012",
+                chat_id=456,
+                telegram_user_id=123,
+                telegram_config=config,
+                ebay_environment="production",
+            )
+            self.assertIn("cooldown", repeated[0])
+            mock_fetch_records.assert_called_once()
 
     def test_process_message_order_requires_connected_tenant_credentials(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

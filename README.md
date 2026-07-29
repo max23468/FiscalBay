@@ -257,7 +257,7 @@ Nota OAuth eBay:
 | `TELEGRAM_BOT_TOKEN` | Sì per il bot | - | Token del bot Telegram |
 | `TELEGRAM_PUBLIC_BOT_URL` | No | `https://t.me/fiscalbay_bot` | URL pubblico usato dalle CTA del sito vetrina e dalle pagine OAuth per tornare al bot |
 | `TELEGRAM_ADMIN_USER_ID` | Consigliata | vuoto | Se valorizzata, questo utente Telegram diventa admin globale e approva l'accesso degli altri utenti |
-| `TELEGRAM_ALLOWED_CHAT_IDS` | **Sì** | vuoto (deny-all) | Chat autorizzate, separate da virgola. Usa `*` (o `all`) per accettare tutte le chat e demandare il filtro al workflow di approvazione admin |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | **Sì** | vuoto (deny-all) | Chat private autorizzate, separate da virgola. `*` (o `all`) richiede `TELEGRAM_ADMIN_USER_ID`; gruppi e supergruppi restano rifiutati |
 | `TELEGRAM_NOTIFY_CHAT_IDS` | Consigliata | stessi valori di `TELEGRAM_ALLOWED_CHAT_IDS` | Chat che ricevono notifiche automatiche |
 | `TELEGRAM_POLL_TIMEOUT` | No | `30` | Timeout long polling Telegram |
 | `TELEGRAM_SYNC_BRANDING` | No | `1` | Se attiva, sincronizza nome, descrizione e menu comandi Telegram quando il profilo cambia; in caso di rate limit applica un backoff automatico |
