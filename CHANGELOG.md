@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.13.6](https://github.com/max23468/FiscalBay/compare/v1.13.5...v1.13.6) (2026-07-29)
+
+### Bug Fixes
+
+* harden runtime and deploy security boundaries (#134) ([2971dd2](https://github.com/max23468/FiscalBay/commit/2971dd2b00434cc4299f19184e9b86ed93d29905))
+
 ## [1.13.5](https://github.com/max23468/FiscalBay/compare/v1.13.4...v1.13.5) (2026-07-26)
 
 ### Bug Fixes
