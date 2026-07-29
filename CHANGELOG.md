@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.13.10](https://github.com/max23468/FiscalBay/compare/v1.13.9...v1.13.10) (2026-07-29)
+
+### Bug Fixes
+
+* guard virtualenv deploy cutover (#138) ([d748c9e](https://github.com/max23468/FiscalBay/commit/d748c9e5af3f71f1feb0ced3126aac8674441071))
+
 ## [1.13.9](https://github.com/max23468/FiscalBay/compare/v1.13.8...v1.13.9) (2026-07-29)
 
 ### Bug Fixes
