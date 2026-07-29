@@ -78,6 +78,7 @@ class FiscalExportTests(unittest.TestCase):
                 OrderRecord(
                     orderId="order-ok",
                     creationDate="2026-04-29T09:00:00Z",
+                    buyerName='=HYPERLINK("https://attacker.invalid")',
                     taxpayerId="RSSMRA80A01H501U",
                     taxIdentifierType="CODICE_FISCALE",
                 ),
@@ -94,6 +95,7 @@ class FiscalExportTests(unittest.TestCase):
         self.assertIn("order-missing", csv_content)
         self.assertIn("missing", csv_content)
         self.assertIn("taxpayerId,taxIdentifierType", csv_content)
+        self.assertIn("'=HYPERLINK", csv_content)
 
     def test_render_fiscal_export_json_and_summary_include_counts(self) -> None:
         report = build_fiscal_export_report(

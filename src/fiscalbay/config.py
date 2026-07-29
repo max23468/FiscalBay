@@ -297,6 +297,8 @@ def load_telegram_config() -> TelegramConfig:
     timeout = get_env_int("TELEGRAM_POLL_TIMEOUT", 30, min_value=1)
     ebay_poll_interval = get_env_int("EBAY_ORDER_POLL_INTERVAL", 120, min_value=30)
     admin_user_id = get_env_optional_int("TELEGRAM_ADMIN_USER_ID")
+    if allowed_chat_ids is None and admin_user_id is None:
+        raise ConfigurationError("TELEGRAM_ALLOWED_CHAT_IDS=* richiede TELEGRAM_ADMIN_USER_ID.")
 
     return TelegramConfig(
         token=token,

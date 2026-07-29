@@ -308,6 +308,8 @@ ADMIN_MUTATION_COMMANDS = {
     "/suspend_user",
     "/reactivate_user",
 }
+ORDER_COMMAND_COOLDOWN_SECONDS = 10
+DATA_REQUEST_COOLDOWN_SECONDS = 3600
 
 
 def coerce_runtime_state(state: BotRuntimeStateLike) -> BotRuntimeState:
@@ -441,6 +443,10 @@ def _command_rate_limit_key(telegram_user_id: int, command: str) -> str:
 
 
 def _command_rate_limit_seconds(command: str) -> int:
+    if command == "/ordini":
+        return ORDER_COMMAND_COOLDOWN_SECONDS
+    if command == "/data_request":
+        return DATA_REQUEST_COOLDOWN_SECONDS
     config = load_rate_limit_config()
     if not config.enabled:
         return 0
@@ -577,9 +583,9 @@ def _connect_cooldown_remaining_seconds(
     recent_failure_times: list[datetime] = []
     latest_failure: datetime | None = None
     for entry in entries:
-        if entry.target_telegram_user_id not in {telegram_user_id, None}:
+        if entry.target_telegram_user_id != telegram_user_id:
             continue
-        if entry.environment and entry.environment != environment:
+        if entry.environment != environment:
             continue
         created_at = _parse_iso_timestamp(entry.created_at)
         if created_at is None:
@@ -603,8 +609,8 @@ def _connect_cooldown_remaining_seconds(
                 _parse_iso_timestamp(entry.created_at)
                 for entry in entries
                 if entry.event_type == "connect"
-                and entry.target_telegram_user_id in {telegram_user_id, None}
-                and (not entry.environment or entry.environment == environment)
+                and entry.target_telegram_user_id == telegram_user_id
+                and entry.environment == environment
                 and _parse_iso_timestamp(entry.created_at) is not None
             ),
             None,
@@ -1490,6 +1496,8 @@ def sync_runtime_contact(
     display_name: str = "",
     chat_type: str = "private",
 ) -> None:
+    if chat_type != "private":
+        return
     if not is_authorized(chat_id, telegram_config):
         return
     if not telegram_user_id or not chat_id:
@@ -3301,6 +3309,20 @@ def process_message(
                 "Uso corretto: <code>/settings dati export</code> oppure "
                 "<code>/settings dati cancellazione</code>"
             ]
+        remaining = _command_rate_limit_remaining_seconds(
+            telegram_config.state_path,
+            telegram_user_id=telegram_user_id,
+            command=command,
+            now=now,
+        )
+        if remaining > 0:
+            return [_format_cooldown_message(command, remaining)]
+        _mark_command_usage(
+            telegram_config.state_path,
+            telegram_user_id=telegram_user_id,
+            command=command,
+            timestamp=now_iso,
+        )
         current_user = load_telegram_user(telegram_config.state_path, telegram_user_id)
         account_status = summarize_tenant_account_status(
             telegram_config.state_path,
@@ -3598,6 +3620,22 @@ def process_message(
                 if account_status.get("linked")
                 else "tenant_account_unlinked"
             )
+
+    if command == "/ordini" and args:
+        remaining = _command_rate_limit_remaining_seconds(
+            telegram_config.state_path,
+            telegram_user_id=resolved_telegram_user_id,
+            command=command,
+            now=now,
+        )
+        if remaining > 0:
+            return [_format_cooldown_message(command, remaining)]
+        _mark_command_usage(
+            telegram_config.state_path,
+            telegram_user_id=resolved_telegram_user_id,
+            command=command,
+            timestamp=now_iso,
+        )
 
     orders_response = _handle_orders_command(
         command,

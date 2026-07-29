@@ -63,7 +63,7 @@ echo "Estraggo ${deploy_sha} in ${APP_DIR}..."
 mkdir -p "${APP_DIR}"
 tar --warning=no-unknown-keyword --strip-components=1 -xzf "${archive}" -C "${APP_DIR}"
 rm -rf "${APP_DIR}/.github/workflows" "${APP_DIR}/.github/dependabot.yml"
-chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}"
+chown -R root:"${APP_GROUP}" "${APP_DIR}"
 
 export APP_DIR APP_USER APP_GROUP
 bash "${APP_DIR}/deploy/install-vps.sh"

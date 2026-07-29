@@ -197,7 +197,7 @@ def build_security_ops_report(
     )
     restore_path = Path(restore_check_root_value).expanduser()
 
-    env_file_status = _check_file(env_path, expected_modes={0o600})
+    env_file_status = _check_file(env_path, expected_modes={0o640})
     state_db_status = _check_file(state_path, expected_modes={0o600, 0o660})
     required_env = _env_status(env_values, REQUIRED_ENV_NAMES)
     recommended_env = _env_status(env_values, RECOMMENDED_ENV_NAMES)

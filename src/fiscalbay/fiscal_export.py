@@ -14,6 +14,7 @@ from typing import Callable, Mapping, Optional, Sequence, cast
 
 from .errors import EbayApiError
 from .models import Config, FetchOptions, OrderRecord
+from .services.orders import spreadsheet_safe_csv_row
 
 FISCAL_EXPORT_FIELDNAMES = [
     "periodStart",
@@ -209,7 +210,7 @@ def render_fiscal_export_csv(report: FiscalExportReport) -> str:
     string_io = StringIO()
     writer = csv.DictWriter(string_io, fieldnames=FISCAL_EXPORT_FIELDNAMES)
     writer.writeheader()
-    writer.writerows(fiscal_export_rows(report))
+    writer.writerows(map(spreadsheet_safe_csv_row, fiscal_export_rows(report)))
     return string_io.getvalue().rstrip("\n")
 
 

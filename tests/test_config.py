@@ -43,10 +43,22 @@ class ConfigTests(unittest.TestCase):
 
         self.assertEqual(config.allowed_chat_ids, set())
 
-    def test_load_telegram_config_allows_all_with_wildcard(self) -> None:
+    def test_load_telegram_config_requires_admin_with_wildcard(self) -> None:
         with patch.dict(
             os.environ,
             {"TELEGRAM_BOT_TOKEN": "token", "TELEGRAM_ALLOWED_CHAT_IDS": "*"},
+            clear=True,
+        ):
+            with self.assertRaises(ConfigurationError):
+                load_telegram_config()
+
+        with patch.dict(
+            os.environ,
+            {
+                "TELEGRAM_BOT_TOKEN": "token",
+                "TELEGRAM_ALLOWED_CHAT_IDS": "*",
+                "TELEGRAM_ADMIN_USER_ID": "123",
+            },
             clear=True,
         ):
             config = load_telegram_config()

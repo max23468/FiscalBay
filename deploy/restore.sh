@@ -29,6 +29,7 @@ APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${APP_DIR}/.env"
 DATA_DIR="${APP_DIR}/data"
 STATE_DB="${DATA_DIR}/state.db"
+APP_GROUP="${APP_GROUP:-fiscalbay}"
 
 first_present_file() {
   for source_path in "$@"; do
@@ -65,6 +66,10 @@ STATE_SOURCE="$(first_present_file "${BACKUP_DIR}/runtime/state.db" "${BACKUP_DI
 
 if [ "${MODE}" = "--in-place" ]; then
   restore_file "${ENV_SOURCE}" "${ENV_FILE}"
+  if [ -f "${ENV_FILE}" ]; then
+    chown root:"${APP_GROUP}" "${ENV_FILE}"
+    chmod 640 "${ENV_FILE}"
+  fi
   restore_file "${STATE_SOURCE}" "${STATE_DB}"
   echo "Restore in-place completato in ${APP_DIR}"
   if [ -d "${BACKUP_DIR}/systemd" ] || [ -d "${BACKUP_DIR}/nginx" ]; then

@@ -26,7 +26,7 @@ check_file_mode() {
 }
 
 status=0
-check_file_mode "${ENV_FILE}" "600" || status=1
+check_file_mode "${ENV_FILE}" "640" || status=1
 
 if [ -e "${STATE_DB}" ]; then
   db_mode="$(stat -c '%a' "${STATE_DB}")"

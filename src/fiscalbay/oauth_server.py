@@ -283,6 +283,15 @@ def session_is_expired(session: OauthLinkSession, *, now: datetime | None = None
     return expires_at <= reference
 
 
+def oauth_session_uses_private_chat(state_path: str, session: OauthLinkSession) -> bool:
+    return any(
+        chat.telegram_user_id == session.telegram_user_id
+        and chat.telegram_chat_id == session.telegram_chat_id
+        and chat.chat_type == "private"
+        for chat in load_telegram_chats(state_path)
+    )
+
+
 def render_html_page(title: str, message: str, *, is_error: bool = False) -> bytes:
     accent = "#9a3412" if is_error else "#166534"
     badge = "Errore" if is_error else "OK"
@@ -1021,6 +1030,8 @@ def complete_oauth_link(
             status=OAUTH_SESSION_STATUS_EXPIRED,
         )
         raise ConfigurationError("La sessione OAuth è scaduta. Usa di nuovo /account collega.")
+    if not oauth_session_uses_private_chat(telegram_config.state_path, session):
+        raise ConfigurationError("La sessione OAuth non proviene da una chat privata.")
 
     callback_url = callback_url_fn()
     update_oauth_link_session(
@@ -1114,6 +1125,7 @@ def complete_oauth_link(
     chat_exists = any(
         chat.telegram_user_id == session.telegram_user_id
         and chat.telegram_chat_id == session.telegram_chat_id
+        and chat.chat_type == "private"
         for chat in load_telegram_chats(telegram_config.state_path)
     )
     if can_manage_notifications and chat_exists:
@@ -1245,18 +1257,18 @@ class OAuthHandler(BaseHTTPRequestHandler):
         )
         if error_value:
             presentation = describe_provider_error(error_value)
-            append_oauth_audit_log(
-                self.server.telegram_config,
-                event_type="oauth_failure",
-                created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                actor_telegram_user_id=session.telegram_user_id if session is not None else None,
-                target_telegram_user_id=session.telegram_user_id if session is not None else None,
-                telegram_chat_id=session.telegram_chat_id if session is not None else None,
-                environment=session.environment if session is not None else "",
-                outcome=presentation.outcome,
-                details_json=error_value,
-            )
             if session is not None:
+                append_oauth_audit_log(
+                    self.server.telegram_config,
+                    event_type="oauth_failure",
+                    created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                    actor_telegram_user_id=session.telegram_user_id,
+                    target_telegram_user_id=session.telegram_user_id,
+                    telegram_chat_id=session.telegram_chat_id,
+                    environment=session.environment,
+                    outcome=presentation.outcome,
+                    details_json=error_value[:200],
+                )
                 update_oauth_link_session(
                     self.server.telegram_config.state_path,
                     oauth_state,
@@ -1299,18 +1311,18 @@ class OAuthHandler(BaseHTTPRequestHandler):
             )
         except Exception as exc:
             presentation = describe_callback_exception(exc)
-            append_oauth_audit_log(
-                self.server.telegram_config,
-                event_type="oauth_failure",
-                created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                actor_telegram_user_id=session.telegram_user_id if session is not None else None,
-                target_telegram_user_id=session.telegram_user_id if session is not None else None,
-                telegram_chat_id=session.telegram_chat_id if session is not None else None,
-                environment=session.environment if session is not None else "",
-                outcome=presentation.outcome,
-                details_json=str(exc),
-            )
             if session is not None:
+                append_oauth_audit_log(
+                    self.server.telegram_config,
+                    event_type="oauth_failure",
+                    created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                    actor_telegram_user_id=session.telegram_user_id,
+                    target_telegram_user_id=session.telegram_user_id,
+                    telegram_chat_id=session.telegram_chat_id,
+                    environment=session.environment,
+                    outcome=presentation.outcome,
+                    details_json=str(exc)[:200],
+                )
                 update_oauth_link_session(
                     self.server.telegram_config.state_path,
                     oauth_state,

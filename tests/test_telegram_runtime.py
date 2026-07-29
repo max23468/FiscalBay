@@ -159,6 +159,52 @@ class TelegramRuntimeTests(unittest.TestCase):
         )
 
     @patch("src.fiscalbay.services.telegram_runtime.signal.signal")
+    @patch("src.fiscalbay.services.telegram_runtime.telegram_request")
+    @patch("src.fiscalbay.services.telegram_runtime.ensure_long_polling")
+    def test_run_bot_ignores_non_private_updates(
+        self,
+        _ensure_long_polling_mock,
+        telegram_request_mock,
+        _signal_mock,
+    ) -> None:
+        process_message_mock = Mock()
+        register_contact_mock = Mock()
+
+        def request_with_backoff(_action, *, label: str):
+            self.assertEqual(label, "getUpdates")
+            if request_with_backoff.calls:
+                raise KeyboardInterrupt
+            request_with_backoff.calls += 1
+            return [
+                {
+                    "update_id": 20,
+                    "message": {
+                        "chat": {"id": -456, "type": "supergroup"},
+                        "from": {"id": 123},
+                        "text": "/ordini fiscali",
+                    },
+                }
+            ]
+
+        request_with_backoff.calls = 0
+        exit_code = telegram_runtime.run_bot(
+            configure_logging_fn=Mock(),
+            load_telegram_config_fn=Mock(return_value=self.telegram_config()),
+            acquire_process_lock_fn=Mock(return_value="lock"),
+            release_process_lock_fn=Mock(),
+            process_message_fn=process_message_mock,
+            register_runtime_contact_fn=register_contact_mock,
+            send_message_fn=Mock(),
+            maybe_send_new_order_notifications_fn=Mock(),
+            request_with_backoff_fn=request_with_backoff,
+        )
+
+        self.assertEqual(exit_code, 0)
+        process_message_mock.assert_not_called()
+        register_contact_mock.assert_not_called()
+        telegram_request_mock.assert_not_called()
+
+    @patch("src.fiscalbay.services.telegram_runtime.signal.signal")
     @patch("src.fiscalbay.services.telegram_runtime.ensure_long_polling")
     def test_run_bot_reports_configuration_errors_and_releases_acquired_lock(
         self,

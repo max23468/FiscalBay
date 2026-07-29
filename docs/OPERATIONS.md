@@ -175,7 +175,8 @@ Il comando Telegram `/support`:
 
 Controllo accessi Telegram:
 
-- `TELEGRAM_ALLOWED_CHAT_IDS` limita le chat ammesse; con `*` (o `all`) consente tutte le chat e lascia il filtro operativo al workflow di approvazione admin
+- `TELEGRAM_ALLOWED_CHAT_IDS` limita le chat ammesse; `*` (o `all`) richiede
+  `TELEGRAM_ADMIN_USER_ID`, mentre gruppi e supergruppi vengono sempre rifiutati
 - `TELEGRAM_ADMIN_USER_ID`, quando valorizzata, identifica l'admin globale del bot
 - gli altri utenti vengono registrati nel DB con stati `new`, `pending`, `approved` o `blocked`
 - il runtime normalizza anche alias legacy come `active` e `rejected`, così il controllo accessi resta coerente anche su record vecchi nel `state.db`
@@ -259,7 +260,7 @@ Security operations check:
 
 - entrypoint CLI: `fiscalbay-security-check`
 - comando Telegram admin: `/admin sicurezza`
-- controlla permessi `.env` attesi a `600` e `state.db` atteso a `600` o `660`
+- controlla permessi `.env` attesi a `640` e `state.db` atteso a `600` o `660`
 - verifica presenza delle env operative richieste senza stampare valori segreti
 - segnala `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS=1` come alert operativo
 - segnala `TELEGRAM_ALLOWED_CHAT_IDS=*` senza `TELEGRAM_ADMIN_USER_ID` come

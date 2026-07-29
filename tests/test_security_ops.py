@@ -38,7 +38,7 @@ class SecurityOpsTests(unittest.TestCase):
                 },
             )
             state_db.write_text("sqlite", encoding="utf-8")
-            os.chmod(env_path, 0o600)
+            os.chmod(env_path, 0o640)
             os.chmod(state_db, 0o660)
 
             report = build_security_ops_report(
@@ -51,7 +51,7 @@ class SecurityOpsTests(unittest.TestCase):
 
             self.assertTrue(report["ok"])
             self.assertEqual(report["alerts"], [])
-            self.assertEqual(report["env_file"]["mode"], "600")
+            self.assertEqual(report["env_file"]["mode"], "640")
             self.assertEqual(report["state_db"]["mode"], "660")
             self.assertTrue(report["telegram_allow_all"])
             self.assertTrue(report["admin_configured"])

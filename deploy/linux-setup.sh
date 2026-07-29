@@ -363,27 +363,30 @@ ensure_group
 ensure_user
 
 sudo mkdir -p "${DATA_DIR}"
-sudo chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}"
+sudo chown -R root:"${APP_GROUP}" "${APP_DIR}"
 sudo chmod 750 "${APP_DIR}"
+sudo chown -R "${APP_USER}:${APP_GROUP}" "${DATA_DIR}"
+[ ! -d "${VENV_DIR}" ] || sudo chown -R "${APP_USER}:${APP_GROUP}" "${VENV_DIR}"
 sudo chmod 750 "${DATA_DIR}"
 
 ensure_existing_venv_matches_requested_python
 maybe_recreate_venv
 
-if [ ! -d "${VENV_DIR}" ]; then
+if [ ! -x "${VENV_DIR}/bin/python" ]; then
+  sudo install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 750 "${VENV_DIR}"
   sudo -u "${APP_USER}" "${PYTHON_BIN}" -m venv "${VENV_DIR}"
 fi
 
 sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install --upgrade pip
 sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install --require-hashes -r "${APP_DIR}/requirements.lock"
-sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install -e "${APP_DIR}" --no-deps
+sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install "${APP_DIR}" --no-deps
 
 if [ ! -f "${ENV_FILE}" ]; then
   sudo cp "${APP_DIR}/.env.example" "${ENV_FILE}"
   echo "Creato ${ENV_FILE}. Compila il file prima di avviare il servizio."
 fi
-sudo chown "${APP_USER}:${APP_GROUP}" "${ENV_FILE}"
-sudo chmod 600 "${ENV_FILE}"
+sudo chown root:"${APP_GROUP}" "${ENV_FILE}"
+sudo chmod 640 "${ENV_FILE}"
 
 install_service_file "${SERVICE_TEMPLATE}" "${SERVICE_TARGET}"
 install_service_file "${OAUTH_SERVICE_TEMPLATE}" "${OAUTH_SERVICE_TARGET}"

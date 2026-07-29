@@ -1031,7 +1031,7 @@ def resolve_primary_chat_id(path: str, telegram_user_id: int) -> int | None:
         row = conn.execute(
             "SELECT telegram_chat_id "
             "FROM telegram_chats "
-            "WHERE telegram_user_id = ? "
+            "WHERE telegram_user_id = ? AND chat_type = 'private' "
             "ORDER BY CASE WHEN is_primary = 1 THEN 0 ELSE 1 END, telegram_chat_id "
             "LIMIT 1",
             (telegram_user_id,),
@@ -1812,9 +1812,12 @@ def list_notification_tenants(path: str) -> list[NotificationTenantTarget]:
         rows = conn.execute(
             "SELECT s.telegram_user_id, s.telegram_chat_id, a.environment "
             "FROM notification_subscriptions AS s "
+            "JOIN telegram_chats AS c "
+            "ON c.telegram_user_id = s.telegram_user_id "
+            "AND c.telegram_chat_id = s.telegram_chat_id "
             "JOIN ebay_accounts AS a "
             "ON a.telegram_user_id = s.telegram_user_id "
-            "WHERE s.enabled = 1 AND a.status = 'linked' "
+            "WHERE s.enabled = 1 AND c.chat_type = 'private' AND a.status = 'linked' "
             "ORDER BY s.telegram_user_id, a.environment, s.telegram_chat_id"
         ).fetchall()
         for row in rows:

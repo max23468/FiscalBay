@@ -32,7 +32,8 @@ Regole:
 - limitare la lettura di `.env`
 - applicare sostituzione credenziali in caso di sospetto leak o cambiamento accessi
 - contenitore autorizzato attuale: `/opt/fiscalbay/.env`
-- permessi attesi del file `.env`: `600`
+- proprietà attesa del file `.env`: `root:fiscalbay`
+- permessi attesi del file `.env`: `640`
 - evitare copie superflue di `.env` fuori da backup amministrativi controllati
 - usare `fiscalbay-security-check` o `/admin sicurezza` per verificare inventario
   e permessi senza stampare valori segreti
@@ -81,7 +82,7 @@ Il report non stampa valori segreti e copre:
 - coerenza del profilo `approved_public_small`
 - ultimo backup manutentivo e ultimo restore drill
 
-Alert bloccanti tipici: `.env` mancante o non `600`, `state.db` con permessi
+Alert bloccanti tipici: `.env` mancante o non `640`, `state.db` con permessi
 larghi, env richieste mancanti, fallback plaintext tenant abilitato, wildcard
 Telegram senza admin configurato.
 

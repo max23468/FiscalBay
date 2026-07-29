@@ -7,7 +7,7 @@ from typing import Callable
 
 from cryptography.fernet import Fernet, InvalidToken
 
-from .config import load_config_with_refresh_token
+from .config import get_env_bool, load_config_with_refresh_token
 from .models import Config, EbayTokenSet, LinkedEbayAccount
 from .storage.sqlite import resolve_ebay_token_set
 
@@ -36,7 +36,7 @@ def decode_refresh_token(refresh_token_encrypted: str) -> str | None:
             return cipher.decrypt(payload).decode("utf-8")
         except (InvalidToken, UnicodeDecodeError):
             return None
-    if not os.getenv(ENABLE_PLAINTEXT_TENANT_TOKENS):
+    if not get_env_bool(ENABLE_PLAINTEXT_TENANT_TOKENS, False):
         return None
     if refresh_token_encrypted.startswith(PLAINTEXT_TENANT_TOKEN_PREFIX):
         return refresh_token_encrypted.removeprefix(PLAINTEXT_TENANT_TOKEN_PREFIX)
@@ -50,7 +50,7 @@ def encode_refresh_token(refresh_token: str) -> str | None:
     if cipher is not None:
         encrypted = cipher.encrypt(refresh_token.encode("utf-8")).decode("utf-8")
         return f"{FERNET_TENANT_TOKEN_PREFIX}{encrypted}"
-    if not os.getenv(ENABLE_PLAINTEXT_TENANT_TOKENS):
+    if not get_env_bool(ENABLE_PLAINTEXT_TENANT_TOKENS, False):
         return None
     return f"{PLAINTEXT_TENANT_TOKEN_PREFIX}{refresh_token}"
 
