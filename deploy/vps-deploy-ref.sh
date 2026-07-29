@@ -2,11 +2,22 @@
 set -euo pipefail
 
 RUNTIME_IDENTITY_FILE="${FISCALBAY_RUNTIME_IDENTITY_FILE:-/etc/fiscalbay/runtime.env}"
+requested_app_user="${APP_USER:-}"
+requested_app_group="${APP_GROUP:-}"
+unset APP_USER APP_GROUP
 # shellcheck disable=SC1090
 [ -f "${RUNTIME_IDENTITY_FILE}" ] && . "${RUNTIME_IDENTITY_FILE}"
+persisted_app_user="${APP_USER:-}"
+persisted_app_group="${APP_GROUP:-}"
+APP_USER="${requested_app_user:-${persisted_app_user:-fiscalbay}}"
+if [ -n "${requested_app_group}" ]; then
+  APP_GROUP="${requested_app_group}"
+elif [ -n "${requested_app_user}" ]; then
+  APP_GROUP="${APP_USER}"
+else
+  APP_GROUP="${persisted_app_group:-${APP_USER}}"
+fi
 APP_DIR="${APP_DIR:-/opt/fiscalbay}"
-APP_USER="${APP_USER:-fiscalbay}"
-APP_GROUP="${APP_GROUP:-${APP_USER}}"
 REPO_URL="${FISCALBAY_RELEASE_REPO_URL:-max23468/FiscalBay}"
 TARGET_BRANCH="${FISCALBAY_RELEASE_TARGET_BRANCH:-main}"
 EXPECTED_HOSTNAME="${FISCALBAY_VPS_HOSTNAME:-fiscalbay-bot}"

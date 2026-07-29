@@ -51,8 +51,12 @@ for attempt in $(seq 1 "${max_attempts}"); do
   echo "Healthcheck non ancora stabile (${attempt}/${max_attempts}), nuovo tentativo tra ${sleep_seconds}s..."
   sleep "${sleep_seconds}"
 done
-if sudo systemctl is-enabled --quiet "${OAUTH_SERVICE_NAME}"; then
+if [ "${SMOKE_CHECK_SKIP_OAUTH_CHECK:-false}" != true ] \
+  && sudo systemctl is-enabled --quiet "${OAUTH_SERVICE_NAME}"; then
   sudo systemctl is-active --quiet "${OAUTH_SERVICE_NAME}"
+fi
+if [ "${SMOKE_CHECK_SKIP_BACKGROUND_UNITS:-false}" = true ]; then
+  exit 0
 fi
 for service in "${ALERT_SERVICE_NAME}" "${RECONCILE_SERVICE_NAME}"; do
   if sudo systemctl is-enabled --quiet "${service}.timer"; then
