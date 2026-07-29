@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.13.8](https://github.com/max23468/FiscalBay/compare/v1.13.7...v1.13.8) (2026-07-29)
+
+### Bug Fixes
+
+* close privileged deploy review gaps (#136) ([458f45c](https://github.com/max23468/FiscalBay/commit/458f45c233e02cae5c592605a1e19c16ec497008))
+
 ## [1.13.7](https://github.com/max23468/FiscalBay/compare/v1.13.6...v1.13.7) (2026-07-29)
 
 ### Bug Fixes
