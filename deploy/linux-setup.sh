@@ -67,6 +67,7 @@ OAUTH_TASKS_MAX="${FISCALBAY_OAUTH_TASKS_MAX:-64}"
 ONESHOT_MEMORY_MAX="${FISCALBAY_ONESHOT_MEMORY_MAX:-256M}"
 ONESHOT_CPU_QUOTA="${FISCALBAY_ONESHOT_CPU_QUOTA:-50%}"
 ONESHOT_TASKS_MAX="${FISCALBAY_ONESHOT_TASKS_MAX:-64}"
+QUIESCE_TIMEOUT_SECONDS="${FISCALBAY_DEPLOY_QUIESCE_TIMEOUT_SECONDS:-300}"
 # Alcune distro (es. Oracle Linux 9) restano su una libsqlite3 di sistema che non
 # esporta sqlite3_deserialize, richiesto dal modulo _sqlite3 di Python >= 3.13.14.
 # In quel caso compiliamo una libsqlite3 compatibile e la carichiamo nei servizi
@@ -122,19 +123,118 @@ PY
 install_fresh_venv() (
   set -euo pipefail
   previous_venv="${VENV_DIR}.previous"
+  replacement_started=false
+  units_replaced=false
+  unit_backup_dir="$(mktemp -d)"
+  unit_targets=("${SERVICE_TARGET}" "${OAUTH_SERVICE_TARGET}")
+  timer_units=(
+    "${BACKUP_SERVICE_NAME}.timer"
+    "${ALERT_SERVICE_NAME}.timer"
+    "${RECONCILE_SERVICE_NAME}.timer"
+    "${RESTORE_DRILL_SERVICE_NAME}.timer"
+    "${EXTERNAL_HEALTH_SERVICE_NAME}.timer"
+    "${LOG_MAINTENANCE_SERVICE_NAME}.timer"
+    "${DUCKDNS_SERVICE_NAME}.timer"
+    "${AUTODEPLOY_SERVICE_NAME}.timer"
+  )
+  active_timer_units=()
+  for unit in "${timer_units[@]}"; do
+    if sudo systemctl is-active --quiet "${unit}"; then
+      active_timer_units+=("${unit}")
+    fi
+  done
+  long_running_service_units=("${SERVICE_NAME}" "${OAUTH_SERVICE_NAME}")
+  oneshot_service_units=(
+    "${BACKUP_SERVICE_NAME}"
+    "${ALERT_SERVICE_NAME}"
+    "${RECONCILE_SERVICE_NAME}"
+    "${RESTORE_DRILL_SERVICE_NAME}"
+    "${EXTERNAL_HEALTH_SERVICE_NAME}"
+    "${LOG_MAINTENANCE_SERVICE_NAME}"
+    "${DUCKDNS_SERVICE_NAME}"
+  )
+  installed_long_running_units=()
+  active_long_running_units=()
+  start_long_running_units() {
+    if [ "${#active_long_running_units[@]}" -gt 0 ]; then
+      sudo systemctl start "${active_long_running_units[@]}"
+    fi
+  }
+  start_timer_units() {
+    if [ "${#active_timer_units[@]}" -gt 0 ]; then
+      sudo systemctl start "${active_timer_units[@]}"
+    fi
+  }
+  restart_runtime_units() {
+    start_long_running_units
+    start_timer_units
+  }
   restore_previous_venv() {
     local status=$?
     trap - EXIT
-    sudo rm -rf "${VENV_DIR}"
-    [ ! -e "${previous_venv}" ] || sudo mv "${previous_venv}" "${VENV_DIR}"
+    if [ "${replacement_started}" = true ]; then
+      if [ "${#installed_long_running_units[@]}" -gt 0 ]; then
+        sudo systemctl stop "${installed_long_running_units[@]}" || true
+      fi
+      sudo rm -rf "${VENV_DIR}"
+      [ ! -e "${previous_venv}" ] || sudo mv "${previous_venv}" "${VENV_DIR}"
+    fi
+    if [ "${units_replaced}" = true ]; then
+      for unit_target in "${unit_targets[@]}"; do
+        unit_backup="${unit_backup_dir}/$(basename "${unit_target}")"
+        if [ -f "${unit_backup}" ]; then
+          sudo cp "${unit_backup}" "${unit_target}"
+        else
+          sudo rm -f "${unit_target}"
+        fi
+      done
+      sudo systemctl daemon-reload
+    fi
+    restart_runtime_units || true
+    rm -rf "${unit_backup_dir}"
     exit "${status}"
   }
+  trap restore_previous_venv EXIT
 
+  if [ "${#active_timer_units[@]}" -gt 0 ]; then
+    sudo systemctl stop "${active_timer_units[@]}"
+  fi
+  quiesce_deadline=$((SECONDS + QUIESCE_TIMEOUT_SECONDS))
+  for unit in "${oneshot_service_units[@]}"; do
+    while unit_state="$(sudo systemctl show --property=ActiveState --value "${unit}")" \
+      && [[ "${unit_state}" == active || "${unit_state}" == activating ]]; do
+      if [ "${SECONDS}" -ge "${quiesce_deadline}" ]; then
+        echo "Timeout in attesa della conclusione di ${unit}." >&2
+        exit 1
+      fi
+      sleep 1
+    done
+  done
+  for unit in "${long_running_service_units[@]}"; do
+    if sudo systemctl cat "${unit}" >/dev/null 2>&1; then
+      installed_long_running_units+=("${unit}")
+      if sudo systemctl is-active --quiet "${unit}"; then
+        active_long_running_units+=("${unit}")
+      fi
+    fi
+  done
+  if [ "${#installed_long_running_units[@]}" -gt 0 ]; then
+    sudo systemctl stop "${installed_long_running_units[@]}"
+  fi
   sudo rm -rf "${previous_venv}"
   if [ -e "${VENV_DIR}" ]; then
     sudo mv "${VENV_DIR}" "${previous_venv}"
   fi
-  trap restore_previous_venv EXIT
+  replacement_started=true
+  for unit_target in "${unit_targets[@]}"; do
+    if [ -f "${unit_target}" ]; then
+      sudo cp "${unit_target}" "${unit_backup_dir}/$(basename "${unit_target}")"
+    fi
+  done
+  units_replaced=true
+  install_service_file "${SERVICE_TEMPLATE}" "${SERVICE_TARGET}"
+  install_service_file "${OAUTH_SERVICE_TEMPLATE}" "${OAUTH_SERVICE_TARGET}"
+  sudo systemctl daemon-reload
   sudo "${PYTHON_BIN}" -m venv "${VENV_DIR}"
   sudo "${VENV_DIR}/bin/pip" install --upgrade pip
   sudo "${VENV_DIR}/bin/pip" install --require-hashes -r "${APP_DIR}/requirements.lock"
@@ -142,8 +242,30 @@ install_fresh_venv() (
   sudo "${VENV_DIR}/bin/python" -c "import fiscalbay"
   sudo chown -R root:"${APP_GROUP}" "${VENV_DIR}"
   sudo chmod -R u=rwX,g=rX,o= "${VENV_DIR}"
-  sudo rm -rf "${previous_venv}"
+  if [ "${SQLITE_SHIM_ACTIVE}" = true ]; then
+    install_sqlite_dropins
+    sudo systemctl daemon-reload
+  fi
+  start_long_running_units
+  if [ "${#active_long_running_units[@]}" -gt 0 ]; then
+    sleep 2
+    for unit in "${active_long_running_units[@]}"; do
+      sudo systemctl is-active --quiet "${unit}"
+    done
+  fi
+  if printf '%s\n' "${active_long_running_units[@]}" | grep -qx "${SERVICE_NAME}"; then
+    SMOKE_CHECK_SKIP_OAUTH_CHECK=true \
+    SMOKE_CHECK_SKIP_BACKGROUND_UNITS=true \
+      bash "${APP_DIR}/deploy/smoke-check.sh" \
+        "${SERVICE_NAME}" \
+        "${VENV_DIR}/bin/fiscalbay-healthcheck" \
+        "${ENV_FILE}" \
+        "${OAUTH_SERVICE_NAME}"
+  fi
+  start_timer_units
   trap - EXIT
+  sudo rm -rf "${previous_venv}"
+  rm -rf "${unit_backup_dir}"
 )
 
 install_packages() {
@@ -333,8 +455,6 @@ fi
 sudo chown root:"${APP_GROUP}" "${ENV_FILE}"
 sudo chmod 640 "${ENV_FILE}"
 
-install_service_file "${SERVICE_TEMPLATE}" "${SERVICE_TARGET}"
-install_service_file "${OAUTH_SERVICE_TEMPLATE}" "${OAUTH_SERVICE_TARGET}"
 install_service_file "${BACKUP_SERVICE_TEMPLATE}" "${BACKUP_SERVICE_TARGET}"
 install_service_file "${ALERT_SERVICE_TEMPLATE}" "${ALERT_SERVICE_TARGET}"
 install_service_file "${RECONCILE_SERVICE_TEMPLATE}" "${RECONCILE_SERVICE_TARGET}"

@@ -42,6 +42,9 @@ Note:
 - il servizio `systemd` viene generato con i path reali del clone corrente
 - il codice applicativo e `.venv` restano `root:fiscalbay`; solo `data` è
   scrivibile dall'utente di servizio
+- durante la ricostruzione di `.venv`, deploy sospende i timer, attende la
+  conclusione dei job one-shot e ferma solo bot/OAuth; su errore ripristina
+  automaticamente il runtime precedente
 - il file `.env` è `root:fiscalbay` con permessi `640`
 - viene installato e abilitato anche il timer `fiscalbay-backup.timer` per il backup giornaliero
 - vengono installati e abilitati anche i timer `fiscalbay-alertcheck.timer`,

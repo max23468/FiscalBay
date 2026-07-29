@@ -13,6 +13,7 @@ class DeployGuardTests(unittest.TestCase):
     def test_privileged_units_cannot_execute_service_owned_code(self) -> None:
         deploy_script = (ROOT / "deploy/vps-deploy-ref.sh").read_text()
         setup_script = (ROOT / "deploy/linux-setup.sh").read_text()
+        manual_deploy_script = (ROOT / "scripts/deploy_now.sh").read_text()
         local_deploy_script = (ROOT / "scripts/local_deploy_vps.sh").read_text()
         secrets_check = (ROOT / "deploy/check-secrets-perms.sh").read_text()
         autodeploy_script = (ROOT / "deploy/autodeploy.sh").read_text()
@@ -36,6 +37,46 @@ class DeployGuardTests(unittest.TestCase):
         )
         self.assertIn('sudo "${VENV_DIR}/bin/pip"', setup_script)
         self.assertIn('sudo mv "${previous_venv}" "${VENV_DIR}"', setup_script)
+        self.assertLess(
+            setup_script.index('sudo systemctl stop "${active_timer_units[@]}"'),
+            setup_script.index('for unit in "${oneshot_service_units[@]}"'),
+        )
+        self.assertLess(
+            setup_script.index('sudo systemctl stop "${installed_long_running_units[@]}"'),
+            setup_script.index('sudo "${PYTHON_BIN}" -m venv "${VENV_DIR}"'),
+        )
+        service_install_position = setup_script.index(
+            '  install_service_file "${SERVICE_TEMPLATE}"'
+        )
+        self.assertLess(
+            setup_script.index('unit_backup_dir="$(mktemp -d)"'),
+            service_install_position,
+        )
+        self.assertLess(
+            service_install_position,
+            setup_script.index("\n  start_long_running_units\n", service_install_position),
+        )
+        self.assertIn(
+            'sudo cp "${unit_backup}" "${unit_target}"',
+            setup_script,
+        )
+        self.assertIn(
+            '[[ "${unit_state}" == active || "${unit_state}" == activating ]]',
+            setup_script,
+        )
+        self.assertNotIn('sudo systemctl stop "${oneshot_service_units[@]}"', setup_script)
+        smoke_position = setup_script.index('bash "${APP_DIR}/deploy/smoke-check.sh"')
+        self.assertLess(smoke_position, setup_script.index("trap - EXIT", smoke_position))
+        self.assertLess(
+            smoke_position, setup_script.index('sudo rm -rf "${previous_venv}"', smoke_position)
+        )
+        smoke_script = (ROOT / "deploy/smoke-check.sh").read_text()
+        self.assertIn("SMOKE_CHECK_SKIP_BACKGROUND_UNITS:-false", smoke_script)
+        self.assertIn("SMOKE_CHECK_SKIP_OAUTH_CHECK:-false", smoke_script)
+        self.assertLess(
+            setup_script.rindex("install_sqlite_dropins", 0, smoke_position), smoke_position
+        )
+        self.assertIn("restart_runtime_units || true", setup_script)
         self.assertIn('sudo tee "${RUNTIME_IDENTITY_FILE}"', setup_script)
         self.assertIn(
             '[ -f "${RUNTIME_IDENTITY_FILE}" ] && . "${RUNTIME_IDENTITY_FILE}"', secrets_check
@@ -45,6 +86,14 @@ class DeployGuardTests(unittest.TestCase):
                 '[ -f "${RUNTIME_IDENTITY_FILE}" ] && . "${RUNTIME_IDENTITY_FILE}"',
                 identity_consumer,
             )
+        self.assertIn('requested_app_user="${APP_USER:-}"', deploy_script)
+        self.assertIn(
+            'APP_USER="${requested_app_user:-${persisted_app_user:-fiscalbay}}"', deploy_script
+        )
+        self.assertIn('if [ -n "${requested_app_group}" ]', deploy_script)
+        self.assertIn('APP_USER="${FISCALBAY_APP_USER:-}"', manual_deploy_script)
+        self.assertIn('APP_GROUP="${FISCALBAY_APP_GROUP:-}"', manual_deploy_script)
+        self.assertNotIn("APP_USER=${remote_app_user}", manual_deploy_script)
         restore_script = (ROOT / "deploy/restore.sh").read_text()
         self.assertIn('APP_GROUP="${APP_GROUP:-${APP_USER}}"', restore_script)
         self.assertIn(

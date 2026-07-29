@@ -9,8 +9,8 @@ VPS_USER="${FISCALBAY_VPS_USER:-opc}"
 VPS_PORT="${FISCALBAY_VPS_PORT:-22}"
 EXPECTED_HOSTNAME="${FISCALBAY_VPS_HOSTNAME:-fiscalbay-bot}"
 APP_DIR="${FISCALBAY_APP_DIR:-/opt/fiscalbay}"
-APP_USER="${FISCALBAY_APP_USER:-fiscalbay}"
-APP_GROUP="${FISCALBAY_APP_GROUP:-${APP_USER}}"
+APP_USER="${FISCALBAY_APP_USER:-}"
+APP_GROUP="${FISCALBAY_APP_GROUP:-}"
 DEPLOY_ENV_FILE="${FISCALBAY_DEPLOY_ENV_FILE:-/etc/fiscalbay/deploy.env}"
 
 REF=""
@@ -129,8 +129,6 @@ fi
 
 remote_ref="$(quote_for_remote "${REF}")"
 remote_app_dir="$(quote_for_remote "${APP_DIR}")"
-remote_app_user="$(quote_for_remote "${APP_USER}")"
-remote_app_group="$(quote_for_remote "${APP_GROUP}")"
 remote_env_file="$(quote_for_remote "${DEPLOY_ENV_FILE}")"
 remote_env_overrides=()
 
@@ -143,6 +141,12 @@ append_remote_env_if_set() {
 }
 
 append_remote_env_if_set FISCALBAY_PYTHON_BIN
+if [ -n "${APP_USER}" ]; then
+  remote_env_overrides+=("APP_USER=$(quote_for_remote "${APP_USER}")")
+fi
+if [ -n "${APP_GROUP}" ]; then
+  remote_env_overrides+=("APP_GROUP=$(quote_for_remote "${APP_GROUP}")")
+fi
 
 remote_env_prefix=""
 if [ "${#remote_env_overrides[@]}" -gt 0 ]; then
@@ -150,6 +154,6 @@ if [ "${#remote_env_overrides[@]}" -gt 0 ]; then
 fi
 
 echo "Deploy VPS FiscalBay da ref ${REF}..."
-remote_cmd "sudo bash -lc 'set -euo pipefail; if [ -f ${remote_env_file} ]; then set -a; . ${remote_env_file}; set +a; fi; ${remote_env_prefix}APP_DIR=${remote_app_dir} APP_USER=${remote_app_user} APP_GROUP=${remote_app_group} bash ${remote_app_dir}/deploy/vps-deploy-ref.sh ${remote_ref}'"
+remote_cmd "sudo bash -lc 'set -euo pipefail; if [ -f ${remote_env_file} ]; then set -a; . ${remote_env_file}; set +a; fi; ${remote_env_prefix}APP_DIR=${remote_app_dir} bash ${remote_app_dir}/deploy/vps-deploy-ref.sh ${remote_ref}'"
 
 echo "Deploy completato e smoke check passato."
