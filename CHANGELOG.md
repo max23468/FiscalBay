@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.13.9](https://github.com/max23468/FiscalBay/compare/v1.13.8...v1.13.9) (2026-07-29)
+
+### Bug Fixes
+
+* build immutable venv at final path ([b87d35b](https://github.com/max23468/FiscalBay/commit/b87d35bd81e53e631302a1c5037439c065e840ed))
+
 ## [1.13.8](https://github.com/max23468/FiscalBay/compare/v1.13.7...v1.13.8) (2026-07-29)
 
 ### Bug Fixes
