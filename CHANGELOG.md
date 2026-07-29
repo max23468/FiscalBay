@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.13.7](https://github.com/max23468/FiscalBay/compare/v1.13.6...v1.13.7) (2026-07-29)
+
+### Bug Fixes
+
+* install root-owned application during deploy (#135) ([f618804](https://github.com/max23468/FiscalBay/commit/f618804171957a89ac1d6d7ab01ce10241294450))
+
 ## [1.13.6](https://github.com/max23468/FiscalBay/compare/v1.13.5...v1.13.6) (2026-07-29)
 
 ### Bug Fixes
