@@ -697,7 +697,6 @@ Asset disponibili nel repository, allineati al setup VPS attuale (`fiscalbay`, `
 - `scripts/release_now.sh`
 - `scripts/local_deploy_vps.sh`
 - `deploy/linux-setup.sh`
-- `deploy/update.sh`
 - `deploy/smoke-check.sh`
 - `deploy/nginx-fiscalbay-oauth-site.conf`
 - `deploy/duckdns-update.sh`

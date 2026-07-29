@@ -11,12 +11,6 @@ VENV_DIR="${APP_DIR}/.venv"
 DATA_DIR="${APP_DIR}/data"
 ENV_FILE="${APP_DIR}/.env"
 PYTHON_BIN="${FISCALBAY_PYTHON_BIN:-${PYTHON_BIN:-}}"
-PYTHON_BIN_WAS_REQUESTED=false
-if [ -n "${PYTHON_BIN}" ]; then
-  PYTHON_BIN_WAS_REQUESTED=true
-fi
-RECREATE_VENV="${FISCALBAY_RECREATE_VENV:-false}"
-VENV_BACKUP_PATH="${FISCALBAY_VENV_BACKUP_PATH:-}"
 SERVICE_NAME="fiscalbay-bot"
 SERVICE_TEMPLATE="${APP_DIR}/deploy/fiscalbay-bot.service"
 SERVICE_TARGET="/etc/systemd/system/${SERVICE_NAME}.service"
@@ -111,29 +105,6 @@ select_python_bin() {
   echo "python3"
 }
 
-is_truthy() {
-  case "$1" in
-    1|true|TRUE|yes|YES|y|Y)
-      return 0
-      ;;
-    ""|0|false|FALSE|no|NO|n|N)
-      return 1
-      ;;
-    *)
-      echo "Valore booleano non valido: $1" >&2
-      exit 1
-      ;;
-  esac
-}
-
-python_minor_version() {
-  "$1" - <<'PY'
-import sys
-
-print(f"{sys.version_info.major}.{sys.version_info.minor}")
-PY
-}
-
 ensure_supported_python() {
   local python_bin="$1"
   if ! "${python_bin}" - <<'PY'
@@ -147,48 +118,31 @@ PY
   fi
 }
 
-maybe_recreate_venv() {
-  if ! is_truthy "${RECREATE_VENV}"; then
-    return
-  fi
-  if [ ! -d "${VENV_DIR}" ]; then
-    return
-  fi
+install_fresh_venv() (
+  set -euo pipefail
+  staged_venv="$(sudo mktemp -d /var/tmp/fiscalbay-venv.XXXXXX)"
+  previous_venv="${VENV_DIR}.previous"
+  trap '[ -z "${staged_venv:-}" ] || sudo rm -rf "${staged_venv}"' EXIT
 
-  local backup_path="${VENV_BACKUP_PATH}"
-  if [ -z "${backup_path}" ]; then
-    backup_path="${VENV_DIR}.backup.$(date +%Y%m%d%H%M%S)"
+  sudo "${PYTHON_BIN}" -m venv "${staged_venv}"
+  sudo "${staged_venv}/bin/pip" install --upgrade pip
+  sudo "${staged_venv}/bin/pip" install --require-hashes -r "${APP_DIR}/requirements.lock"
+  sudo "${staged_venv}/bin/pip" install "${APP_DIR}" --no-deps
+  sudo "${staged_venv}/bin/python" -c "import fiscalbay"
+  sudo chown -R root:"${APP_GROUP}" "${staged_venv}"
+  sudo chmod -R u=rwX,g=rX,o= "${staged_venv}"
+
+  sudo rm -rf "${previous_venv}"
+  if [ -e "${VENV_DIR}" ]; then
+    sudo mv "${VENV_DIR}" "${previous_venv}"
   fi
-  if [ -e "${backup_path}" ]; then
-    echo "Backup venv gia' presente: ${backup_path}" >&2
+  if ! sudo mv "${staged_venv}" "${VENV_DIR}"; then
+    [ ! -e "${previous_venv}" ] || sudo mv "${previous_venv}" "${VENV_DIR}"
     exit 1
   fi
-
-  echo "Ricreo virtualenv: sposto ${VENV_DIR} in ${backup_path}"
-  sudo mv "${VENV_DIR}" "${backup_path}"
-}
-
-ensure_existing_venv_matches_requested_python() {
-  if [ ! -x "${VENV_DIR}/bin/python" ]; then
-    return
-  fi
-  if [ "${PYTHON_BIN_WAS_REQUESTED}" != true ]; then
-    return
-  fi
-  if is_truthy "${RECREATE_VENV}"; then
-    return
-  fi
-
-  local requested_minor
-  local current_minor
-  requested_minor="$(python_minor_version "${PYTHON_BIN}")"
-  current_minor="$(python_minor_version "${VENV_DIR}/bin/python")"
-  if [ "${requested_minor}" != "${current_minor}" ]; then
-    echo "Il venv esistente usa Python ${current_minor}, ma e' stato richiesto Python ${requested_minor}." >&2
-    echo "Usa FISCALBAY_RECREATE_VENV=1 per ricrearlo in modo esplicito." >&2
-    exit 1
-  fi
-}
+  staged_venv=""
+  sudo rm -rf "${previous_venv}"
+)
 
 install_packages() {
   # Non aggiornare Python quando e' gia' presente: un upgrade non richiesto puo'
@@ -366,20 +320,9 @@ sudo mkdir -p "${DATA_DIR}"
 sudo chown -R root:"${APP_GROUP}" "${APP_DIR}"
 sudo chmod 750 "${APP_DIR}"
 sudo chown -R "${APP_USER}:${APP_GROUP}" "${DATA_DIR}"
-[ ! -d "${VENV_DIR}" ] || sudo chown -R "${APP_USER}:${APP_GROUP}" "${VENV_DIR}"
 sudo chmod 750 "${DATA_DIR}"
 
-ensure_existing_venv_matches_requested_python
-maybe_recreate_venv
-
-if [ ! -x "${VENV_DIR}/bin/python" ]; then
-  sudo install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 750 "${VENV_DIR}"
-  sudo -u "${APP_USER}" "${PYTHON_BIN}" -m venv "${VENV_DIR}"
-fi
-
-sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install --upgrade pip
-sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install --require-hashes -r "${APP_DIR}/requirements.lock"
-sudo "${VENV_DIR}/bin/pip" install "${APP_DIR}" --no-deps
+install_fresh_venv
 
 if [ ! -f "${ENV_FILE}" ]; then
   sudo cp "${APP_DIR}/.env.example" "${ENV_FILE}"

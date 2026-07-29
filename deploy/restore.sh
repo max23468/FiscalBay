@@ -5,7 +5,7 @@ usage() {
   cat <<'EOF'
 Uso:
   ./deploy/restore.sh /percorso/backup
-  ./deploy/restore.sh /percorso/backup --in-place
+  sudo ./deploy/restore.sh /percorso/backup --in-place
 
 Senza --in-place esegue un restore di prova in una directory separata.
 EOF
@@ -29,6 +29,7 @@ APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${APP_DIR}/.env"
 DATA_DIR="${APP_DIR}/data"
 STATE_DB="${DATA_DIR}/state.db"
+APP_USER="${APP_USER:-fiscalbay}"
 APP_GROUP="${APP_GROUP:-fiscalbay}"
 
 first_present_file() {
@@ -65,12 +66,20 @@ ENV_SOURCE="$(first_present_file "${BACKUP_DIR}/runtime/.env" "${BACKUP_DIR}/.en
 STATE_SOURCE="$(first_present_file "${BACKUP_DIR}/runtime/state.db" "${BACKUP_DIR}/state.db" || true)"
 
 if [ "${MODE}" = "--in-place" ]; then
+  if [ "${EUID}" -ne 0 ]; then
+    echo "Il restore in-place richiede root: usa sudo $0 \"${BACKUP_DIR}\" --in-place" >&2
+    exit 1
+  fi
   restore_file "${ENV_SOURCE}" "${ENV_FILE}"
   if [ -f "${ENV_FILE}" ]; then
     chown root:"${APP_GROUP}" "${ENV_FILE}"
     chmod 640 "${ENV_FILE}"
   fi
   restore_file "${STATE_SOURCE}" "${STATE_DB}"
+  if [ -f "${STATE_DB}" ]; then
+    chown "${APP_USER}:${APP_GROUP}" "${STATE_DB}"
+    chmod 600 "${STATE_DB}"
+  fi
   echo "Restore in-place completato in ${APP_DIR}"
   if [ -d "${BACKUP_DIR}/systemd" ] || [ -d "${BACKUP_DIR}/nginx" ]; then
     echo "Nota: systemd/nginx sono nel backup ma non vengono ripristinati automaticamente."

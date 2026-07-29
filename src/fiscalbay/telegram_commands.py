@@ -1547,8 +1547,16 @@ def format_admin_security_report(report: Mapping[str, object]) -> str:
     status = html.escape(str(report.get("status") or "unknown"))
     env_mode = html.escape(str(env_file.get("mode") or "missing"))
     env_expected = html.escape(str(env_file.get("expected_mode") or "600"))
+    env_owner = html.escape(f"{env_file.get('uid')}:{env_file.get('gid')}")
+    env_expected_owner = html.escape(
+        f"{env_file.get('expected_uid')}:{env_file.get('expected_gid')}"
+    )
     state_mode = html.escape(str(state_db.get("mode") or "missing"))
     state_expected = html.escape(str(state_db.get("expected_mode") or "600_or_660"))
+    state_owner = html.escape(f"{state_db.get('uid')}:{state_db.get('gid')}")
+    state_expected_owner = html.escape(
+        f"{state_db.get('expected_uid')}:{state_db.get('expected_gid')}"
+    )
     public_service_model = html.escape(str(report.get("public_service_model") or "n/d"))
     backup_age = html.escape(str(backup.get("age_hours")))
     backup_max = html.escape(str(backup.get("max_age_hours")))
@@ -1565,7 +1573,9 @@ def format_admin_security_report(report: Mapping[str, object]) -> str:
         f"Warning: <code>{', '.join(warnings) if warnings else 'none'}</code>",
         "\n🔐 <b>Segreti e permessi</b>",
         f".env mode: <code>{env_mode}</code> atteso <code>{env_expected}</code>",
+        f".env owner: <code>{env_owner}</code> atteso <code>{env_expected_owner}</code>",
         f"state.db mode: <code>{state_mode}</code> atteso <code>{state_expected}</code>",
+        f"state.db owner: <code>{state_owner}</code> atteso <code>{state_expected_owner}</code>",
         f"Env richieste: {required_env}",
         f"Env consigliate: {recommended_env}",
         f"Plaintext tenant token: <code>{plaintext_label}</code>",

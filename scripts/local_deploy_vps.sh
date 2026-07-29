@@ -29,8 +29,6 @@ Environment overrides:
   FISCALBAY_VPS_HOSTNAME   default: fiscalbay-bot
   FISCALBAY_APP_DIR        default: /opt/fiscalbay
   FISCALBAY_PYTHON_BIN     optional Python runtime for install-vps.sh
-  FISCALBAY_RECREATE_VENV  set to 1 to recreate the remote .venv explicitly
-  FISCALBAY_VENV_BACKUP_PATH optional backup path for the previous .venv
 EOF
 }
 
@@ -84,8 +82,6 @@ append_remote_env_if_set() {
 }
 
 append_remote_env_if_set FISCALBAY_PYTHON_BIN
-append_remote_env_if_set FISCALBAY_RECREATE_VENV
-append_remote_env_if_set FISCALBAY_VENV_BACKUP_PATH
 
 remote_install_env_prefix=""
 if [ "${#remote_env_overrides[@]}" -gt 0 ]; then
@@ -133,7 +129,7 @@ if ! scp \
 fi
 
 echo "Estraggo in ${APP_DIR}..."
-remote_cmd "sudo mkdir -p '${APP_DIR}' && sudo tar --warning=no-unknown-keyword -xzf '${remote_archive}' -C '${APP_DIR}' && sudo chown -R '${APP_USER}:${APP_GROUP}' '${APP_DIR}'"
+remote_cmd "sudo mkdir -p '${APP_DIR}' && sudo tar --warning=no-unknown-keyword -xzf '${remote_archive}' -C '${APP_DIR}' && sudo chown -R root:'${APP_GROUP}' '${APP_DIR}' && sudo chmod 750 '${APP_DIR}'"
 remote_cmd "sudo rm -rf '${APP_DIR}/.github/workflows' '${APP_DIR}/.github/dependabot.yml'"
 
 if [ "${SKIP_INSTALL}" = true ]; then

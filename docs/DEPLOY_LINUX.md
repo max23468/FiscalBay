@@ -52,7 +52,7 @@ Note:
 File:
 
 ```bash
-nano "/opt/fiscalbay/.env"
+sudoedit "/opt/fiscalbay/.env"
 ```
 
 Minimo indispensabile:
@@ -128,23 +128,16 @@ Compatibilità SQLite:
   systemd dei servizi FiscalBay
 - override disponibili: `FISCALBAY_SQLITE_SHIM_DIR` e
   `FISCALBAY_SQLITE_AMALGAMATION_URL` (URL dell'amalgamation autoconf da sqlite.org)
-- se il `.venv` esiste già e usa una minor version diversa da quella richiesta,
-  lo script si ferma invece di migrare in modo implicito
-- per ricreare il `.venv` in modo esplicito usare `FISCALBAY_RECREATE_VENV=1`;
-  il vecchio ambiente viene spostato in un backup con timestamp, oppure nel path
-  indicato da `FISCALBAY_VENV_BACKUP_PATH`
+- ogni installazione costruisce un nuovo `.venv` root-owned in una directory
+  temporanea, lo verifica e lo sostituisce solo a build completata; il service
+  user può eseguirlo ma non modificarlo
 
 Esempio di migrazione runtime da Mac locale tramite deploy standard:
 
 ```bash
 FISCALBAY_PYTHON_BIN=/usr/bin/python3.13 \
-  FISCALBAY_RECREATE_VENV=1 \
   scripts/deploy_now.sh
 ```
-
-`FISCALBAY_RECREATE_VENV=1` è una leva una tantum: non lasciarla configurata in
-modo permanente in `/etc/fiscalbay/deploy.env`, altrimenti il `.venv` verrebbe
-ricreato a ogni deploy.
 
 ## Avvio servizio
 
@@ -191,9 +184,7 @@ sudo systemctl list-timers 'fiscalbay-*'
 ## Aggiornamento dopo un push
 
 ```bash
-cd "/opt/fiscalbay"
-./deploy/update.sh
-./deploy/smoke-check.sh
+scripts/deploy_now.sh
 ```
 
 ## Aggiornamenti automatici
@@ -259,7 +250,7 @@ sudo systemctl status fiscalbay-restore-drill.timer
 Restore in-place:
 
 ```bash
-./deploy/restore.sh /home/fiscalbay/maintenance-backups/<backup-dir> --in-place
+sudo ./deploy/restore.sh /home/fiscalbay/maintenance-backups/<backup-dir> --in-place
 ```
 
 Verifica permessi:

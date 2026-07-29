@@ -10,6 +10,7 @@ from src.fiscalbay.bot import (
     record_fingerprint,
     sync_runtime_contact,
 )
+from src.fiscalbay.errors import TelegramApiError
 from src.fiscalbay.models import (
     TELEGRAM_USER_STATUS_ADMIN,
     TELEGRAM_USER_STATUS_APPROVED,
@@ -631,6 +632,56 @@ class BotIntegrationTests(unittest.TestCase):
             )
             self.assertIn("cooldown", repeated[0])
             mock_send_message.assert_called_once()
+
+    @patch("src.fiscalbay.bot.send_message", side_effect=TelegramApiError("send ko"))
+    def test_failed_data_request_notification_does_not_start_cooldown(
+        self, mock_send_message
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123, 456},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=1000,
+                chat_id=456,
+                username="ops_user",
+                display_name="Ops User",
+                chat_type="private",
+            )
+            update_telegram_user_status(
+                str(db_path),
+                1000,
+                TELEGRAM_USER_STATUS_APPROVED,
+                updated_at="2026-04-06T10:00:00Z",
+            )
+
+            for _ in range(2):
+                with self.assertRaises(TelegramApiError):
+                    process_message(
+                        text="/settings dati cancellazione",
+                        chat_id=456,
+                        telegram_config=config,
+                        ebay_environment="production",
+                        telegram_user_id=1000,
+                    )
+
+            self.assertEqual(mock_send_message.call_count, 2)
+            self.assertEqual(load_audit_log_entries(str(db_path), 5), [])
 
     def test_settings_data_explains_retention_and_assisted_actions(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
