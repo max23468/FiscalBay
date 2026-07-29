@@ -19,6 +19,11 @@ class DeployGuardTests(unittest.TestCase):
         self.assertIn('sudo chown root:"${APP_GROUP}" "${ENV_FILE}"', setup_script)
         self.assertIn('sudo chmod 640 "${ENV_FILE}"', setup_script)
         self.assertNotIn('pip" install -e "${APP_DIR}"', setup_script)
+        self.assertIn('sudo "${VENV_DIR}/bin/pip" install "${APP_DIR}" --no-deps', setup_script)
+        self.assertNotIn(
+            'sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install "${APP_DIR}"',
+            setup_script,
+        )
 
     def test_autodeploy_records_only_a_successful_deploy(self) -> None:
         sha = "a" * 40
