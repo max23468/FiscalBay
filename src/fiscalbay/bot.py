@@ -3317,12 +3317,6 @@ def process_message(
         )
         if remaining > 0:
             return [_format_cooldown_message(command, remaining)]
-        _mark_command_usage(
-            telegram_config.state_path,
-            telegram_user_id=telegram_user_id,
-            command=command,
-            timestamp=now_iso,
-        )
         current_user = load_telegram_user(telegram_config.state_path, telegram_user_id)
         account_status = summarize_tenant_account_status(
             telegram_config.state_path,
@@ -3363,6 +3357,12 @@ def process_message(
                 "account_status": account_status.get("account_status"),
                 "token_status": account_status.get("token_status"),
             },
+        )
+        _mark_command_usage(
+            telegram_config.state_path,
+            telegram_user_id=telegram_user_id,
+            command=command,
+            timestamp=now_iso,
         )
         return [
             format_data_request_status(

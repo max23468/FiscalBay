@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import grp
 import json
 import os
+import pwd
 import stat
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,6 +43,12 @@ class FileSecurityStatus(TypedDict):
     exists: bool
     mode: str
     expected_mode: str
+    uid: int | None
+    gid: int | None
+    expected_uid: int | None
+    expected_gid: int | None
+    mode_ok: bool
+    owner_ok: bool
     ok: bool
 
 
@@ -76,21 +84,52 @@ def _normalize_mode(mode: int | None) -> str:
     return oct(mode)[-3:]
 
 
-def _path_mode(path: Path) -> int | None:
+def _identity_ids(*, user: str, group: str) -> tuple[int | None, int | None]:
     try:
-        return stat.S_IMODE(path.stat().st_mode)
+        uid = pwd.getpwnam(user).pw_uid
+    except KeyError:
+        uid = None
+    try:
+        gid = grp.getgrnam(group).gr_gid
+    except KeyError:
+        gid = None
+    return uid, gid
+
+
+def _check_file(
+    path: Path,
+    *,
+    expected_modes: set[int],
+    expected_uid: int | None,
+    expected_gid: int | None,
+) -> FileSecurityStatus:
+    try:
+        file_stat = path.stat()
     except OSError:
-        return None
-
-
-def _check_file(path: Path, *, expected_modes: set[int]) -> FileSecurityStatus:
-    mode = _path_mode(path)
+        file_stat = None
+    mode = stat.S_IMODE(file_stat.st_mode) if file_stat is not None else None
+    uid = file_stat.st_uid if file_stat is not None else None
+    gid = file_stat.st_gid if file_stat is not None else None
+    mode_ok = mode in expected_modes
+    owner_ok = (
+        file_stat is not None
+        and expected_uid is not None
+        and expected_gid is not None
+        and uid == expected_uid
+        and gid == expected_gid
+    )
     return {
         "path": str(path),
-        "exists": mode is not None,
+        "exists": file_stat is not None,
         "mode": _normalize_mode(mode),
         "expected_mode": "_or_".join(_normalize_mode(item) for item in sorted(expected_modes)),
-        "ok": mode in expected_modes,
+        "uid": uid,
+        "gid": gid,
+        "expected_uid": expected_uid,
+        "expected_gid": expected_gid,
+        "mode_ok": mode_ok,
+        "owner_ok": owner_ok,
+        "ok": mode_ok and owner_ok,
     }
 
 
@@ -180,6 +219,10 @@ def build_security_ops_report(
     restore_check_root: str | None = None,
     max_backup_age_hours: int = DEFAULT_BACKUP_MAX_AGE_HOURS,
     max_restore_drill_age_hours: int = DEFAULT_RESTORE_DRILL_MAX_AGE_HOURS,
+    env_expected_uid: int = 0,
+    env_expected_gid: int | None = None,
+    state_expected_uid: int | None = None,
+    state_expected_gid: int | None = None,
 ) -> SecurityOpsReport:
     now = datetime.now(timezone.utc)
     env_file_value = env_file or os.getenv("FISCALBAY_ENV_FILE") or ".env"
@@ -196,9 +239,28 @@ def build_security_ops_report(
         or DEFAULT_RESTORE_CHECK_ROOT
     )
     restore_path = Path(restore_check_root_value).expanduser()
+    app_user = os.getenv("FISCALBAY_APP_USER", "fiscalbay")
+    app_group = os.getenv("FISCALBAY_APP_GROUP", app_user)
+    resolved_app_uid, resolved_app_gid = _identity_ids(user=app_user, group=app_group)
+    if env_expected_gid is None:
+        env_expected_gid = resolved_app_gid
+    if state_expected_uid is None:
+        state_expected_uid = resolved_app_uid
+    if state_expected_gid is None:
+        state_expected_gid = resolved_app_gid
 
-    env_file_status = _check_file(env_path, expected_modes={0o640})
-    state_db_status = _check_file(state_path, expected_modes={0o600, 0o660})
+    env_file_status = _check_file(
+        env_path,
+        expected_modes={0o640},
+        expected_uid=env_expected_uid,
+        expected_gid=env_expected_gid,
+    )
+    state_db_status = _check_file(
+        state_path,
+        expected_modes={0o600, 0o660},
+        expected_uid=state_expected_uid,
+        expected_gid=state_expected_gid,
+    )
     required_env = _env_status(env_values, REQUIRED_ENV_NAMES)
     recommended_env = _env_status(env_values, RECOMMENDED_ENV_NAMES)
     plaintext_enabled = _truthy_env(env_values.get("EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS", ""))
@@ -220,10 +282,15 @@ def build_security_ops_report(
     warnings: list[str] = []
     if not env_file_status["exists"]:
         alerts.append("env_file_missing")
-    elif not env_file_status["ok"]:
+    elif not env_file_status["mode_ok"]:
         alerts.append("env_file_bad_mode")
-    if state_db_status["exists"] and not state_db_status["ok"]:
-        alerts.append("state_db_bad_mode")
+    if env_file_status["exists"] and not env_file_status["owner_ok"]:
+        alerts.append("env_file_bad_owner")
+    if state_db_status["exists"]:
+        if not state_db_status["mode_ok"]:
+            alerts.append("state_db_bad_mode")
+        if not state_db_status["owner_ok"]:
+            alerts.append("state_db_bad_owner")
     elif not state_db_status["exists"]:
         warnings.append("state_db_missing")
     missing_required = [item["name"] for item in required_env if not item["present"]]
@@ -275,9 +342,15 @@ def render_security_ops_report(report: SecurityOpsReport) -> str:
         f"env_file.path: {report['env_file']['path']}",
         f"env_file.mode: {report['env_file']['mode']}",
         f"env_file.expected_mode: {report['env_file']['expected_mode']}",
+        f"env_file.owner: {report['env_file']['uid']}:{report['env_file']['gid']}",
+        "env_file.expected_owner: "
+        f"{report['env_file']['expected_uid']}:{report['env_file']['expected_gid']}",
         f"state_db.path: {report['state_db']['path']}",
         f"state_db.mode: {report['state_db']['mode']}",
         f"state_db.expected_mode: {report['state_db']['expected_mode']}",
+        f"state_db.owner: {report['state_db']['uid']}:{report['state_db']['gid']}",
+        "state_db.expected_owner: "
+        f"{report['state_db']['expected_uid']}:{report['state_db']['expected_gid']}",
         "required_env: " + _render_env_status(report["required_env"]),
         "recommended_env: " + _render_env_status(report["recommended_env"]),
         f"plaintext_tenant_tokens_enabled: {report['plaintext_tenant_tokens_enabled']}",

@@ -390,8 +390,8 @@ Fallback deploy via archivio locale:
 scripts/local_deploy_vps.sh
 ```
 
-Da shell aperta direttamente sulla VPS, `./deploy/update.sh` resta disponibile
-come manutenzione operativa locale.
+Gli aggiornamenti applicativi passano solo dai deploy script eseguiti dalla
+postazione di manutenzione; il service user non aggiorna codice o virtualenv.
 
 ## Release esplicita
 

@@ -58,7 +58,7 @@ APP_USER=fiscalbay APP_GROUP=fiscalbay ./deploy/linux-setup.sh
 Poi:
 
 ```bash
-nano "./.env"
+sudoedit "./.env"
 sudo systemctl enable --now fiscalbay-bot
 sudo systemctl enable --now fiscalbay-oauth
 sudo systemctl status fiscalbay-bot
@@ -313,13 +313,8 @@ Fallback deploy via archivio locale verso la VPS FiscalBay:
 scripts/local_deploy_vps.sh
 ```
 
-Da shell aperta direttamente sulla VPS, percorso operativo locale:
-
-```bash
-cd /percorso/del/progetto
-chmod +x deploy/update.sh
-./deploy/update.sh
-```
+Non aggiornare codice o virtualenv dalla shell del service user: usa
+`scripts/deploy_now.sh` dalla postazione di manutenzione.
 
 ## Smoke test post-deploy
 
@@ -401,7 +396,7 @@ Restore in-place solo quando serve davvero:
 
 ```bash
 cd /percorso/del/progetto
-./deploy/restore.sh /home/fiscalbay/maintenance-backups/<backup-dir> --in-place
+sudo ./deploy/restore.sh /home/fiscalbay/maintenance-backups/<backup-dir> --in-place
 ```
 
 Il restore in-place ripristina solo `.env` e `data/state.db`. Le configurazioni
@@ -479,7 +474,7 @@ tenant mancanti.
 1. fermare il bot se il DB sembra corrotto: `sudo systemctl stop fiscalbay-bot`
 2. creare un backup fresco della situazione corrente con `./deploy/backup.sh`
 3. eseguire un restore drill sull'ultimo backup sano con `./deploy/restore-drill.sh`
-4. ripristinare in-place solo se necessario con `./deploy/restore.sh <backup> --in-place`
+4. ripristinare in-place solo se necessario con `sudo ./deploy/restore.sh <backup> --in-place`
 5. riavviare bot e reconciliation, poi controllare healthcheck e journal
 
 ### Playbook incidente: `nginx` e TLS

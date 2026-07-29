@@ -47,6 +47,10 @@ class SecurityOpsTests(unittest.TestCase):
                 restore_check_root=str(root / "restore-check"),
                 max_backup_age_hours=24,
                 max_restore_drill_age_hours=24,
+                env_expected_uid=os.getuid(),
+                env_expected_gid=os.getgid(),
+                state_expected_uid=os.getuid(),
+                state_expected_gid=os.getgid(),
             )
 
             self.assertTrue(report["ok"])
@@ -80,6 +84,10 @@ class SecurityOpsTests(unittest.TestCase):
                 env_file=str(env_path),
                 backup_root=str(root / "backups"),
                 restore_check_root=str(root / "restore-check"),
+                env_expected_uid=os.getuid(),
+                env_expected_gid=os.getgid(),
+                state_expected_uid=os.getuid(),
+                state_expected_gid=os.getgid(),
             )
             rendered = render_security_ops_report(report)
 
@@ -92,6 +100,25 @@ class SecurityOpsTests(unittest.TestCase):
             self.assertNotIn("telegram-secret", rendered)
             self.assertNotIn("ebay-secret", rendered)
             self.assertIn("TELEGRAM_BOT_TOKEN=ok", rendered)
+
+    def test_build_security_ops_report_rejects_unsafe_env_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            env_path = root / ".env"
+            _write_env(env_path, {})
+            os.chmod(env_path, 0o640)
+
+            report = build_security_ops_report(
+                env_file=str(env_path),
+                state_db_path=str(root / "missing.db"),
+                backup_root=str(root / "backups"),
+                restore_check_root=str(root / "restore-check"),
+                env_expected_uid=os.getuid() + 1,
+                env_expected_gid=os.getgid(),
+            )
+
+            self.assertIn("env_file_bad_owner", report["alerts"])
+            self.assertFalse(report["env_file"]["owner_ok"])
 
 
 if __name__ == "__main__":

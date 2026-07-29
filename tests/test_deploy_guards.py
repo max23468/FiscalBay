@@ -13,17 +13,48 @@ class DeployGuardTests(unittest.TestCase):
     def test_privileged_units_cannot_execute_service_owned_code(self) -> None:
         deploy_script = (ROOT / "deploy/vps-deploy-ref.sh").read_text()
         setup_script = (ROOT / "deploy/linux-setup.sh").read_text()
+        local_deploy_script = (ROOT / "scripts/local_deploy_vps.sh").read_text()
+        secrets_check = (ROOT / "deploy/check-secrets-perms.sh").read_text()
 
         self.assertIn('chown -R root:"${APP_GROUP}" "${APP_DIR}"', deploy_script)
         self.assertIn('sudo chown -R root:"${APP_GROUP}" "${APP_DIR}"', setup_script)
         self.assertIn('sudo chown root:"${APP_GROUP}" "${ENV_FILE}"', setup_script)
         self.assertIn('sudo chmod 640 "${ENV_FILE}"', setup_script)
         self.assertNotIn('pip" install -e "${APP_DIR}"', setup_script)
-        self.assertIn('sudo "${VENV_DIR}/bin/pip" install "${APP_DIR}" --no-deps', setup_script)
+        self.assertIn(
+            'sudo "${staged_venv}/bin/pip" install "${APP_DIR}" --no-deps',
+            setup_script,
+        )
+        self.assertIn('sudo chown -R root:"${APP_GROUP}" "${staged_venv}"', setup_script)
+        self.assertNotIn('chown -R "${APP_USER}:${APP_GROUP}" "${VENV_DIR}"', setup_script)
         self.assertNotIn(
             'sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install "${APP_DIR}"',
             setup_script,
         )
+        self.assertNotIn('sudo "${VENV_DIR}/bin/pip"', setup_script)
+        self.assertIn(
+            "sudo chown -R root:'${APP_GROUP}' '${APP_DIR}'",
+            local_deploy_script,
+        )
+        self.assertIn('"root:${APP_GROUP}"', secrets_check)
+        self.assertIn("BADOWNER", secrets_check)
+        self.assertFalse((ROOT / "deploy/update.sh").exists())
+
+    @unittest.skipIf(os.geteuid() == 0, "il test verifica il rifiuto per utenti non-root")
+    def test_in_place_restore_requires_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            backup = Path(tmpdir) / "backup"
+            (backup / "runtime").mkdir(parents=True)
+            (backup / "runtime/.env").write_text("TOKEN=test\n")
+
+            result = subprocess.run(
+                ["bash", str(ROOT / "deploy/restore.sh"), str(backup), "--in-place"],
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("richiede root", result.stderr)
 
     def test_autodeploy_records_only_a_successful_deploy(self) -> None:
         sha = "a" * 40

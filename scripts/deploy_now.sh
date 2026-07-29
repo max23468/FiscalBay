@@ -143,8 +143,6 @@ append_remote_env_if_set() {
 }
 
 append_remote_env_if_set FISCALBAY_PYTHON_BIN
-append_remote_env_if_set FISCALBAY_RECREATE_VENV
-append_remote_env_if_set FISCALBAY_VENV_BACKUP_PATH
 
 remote_env_prefix=""
 if [ "${#remote_env_overrides[@]}" -gt 0 ]; then
