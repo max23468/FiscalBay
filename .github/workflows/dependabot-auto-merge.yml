@@ -110,7 +110,11 @@ jobs:
               failures.append("PR is draft")
           if pr.get("baseRefName") != "main":
               failures.append("base is not main")
-          if pr.get("author", {}).get("login") not in {"dependabot", "dependabot[bot]"}:
+          if pr.get("author", {}).get("login") not in {
+              "app/dependabot",
+              "dependabot",
+              "dependabot[bot]",
+          }:
               failures.append("author is not Dependabot")
           if "dependabot-automerge" not in labels:
               failures.append("missing dependabot-automerge label")
