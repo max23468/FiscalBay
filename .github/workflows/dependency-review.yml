@@ -7,6 +7,7 @@ on:
     paths:
       - "pyproject.toml"
       - "requirements*.txt"
+      - "requirements.lock"
       - "constraints*.txt"
       - "setup.py"
       - "setup.cfg"

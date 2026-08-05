@@ -73,7 +73,7 @@ QUIESCE_TIMEOUT_SECONDS="${FISCALBAY_DEPLOY_QUIESCE_TIMEOUT_SECONDS:-300}"
 # In quel caso compiliamo una libsqlite3 compatibile e la carichiamo nei servizi
 # via LD_LIBRARY_PATH, senza toccare la libreria di sistema.
 SQLITE_SHIM_DIR="${FISCALBAY_SQLITE_SHIM_DIR:-/usr/local/lib}"
-SQLITE_AMALGAMATION_URL="${FISCALBAY_SQLITE_AMALGAMATION_URL:-https://www.sqlite.org/2026/sqlite-autoconf-3530300.tar.gz}"
+SQLITE_AMALGAMATION_URL="${FISCALBAY_SQLITE_AMALGAMATION_URL:-https://www.sqlite.org/2026/sqlite-autoconf-3530400.tar.gz}"
 SQLITE_SHIM_ACTIVE=false
 FISCALBAY_SERVICE_NAMES=(
   fiscalbay-bot

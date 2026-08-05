@@ -359,6 +359,16 @@ class DeployGuardTests(unittest.TestCase):
                 check=True,
             )
 
+    def test_dependency_automation_covers_runtime_lock(self) -> None:
+        makefile = (ROOT / "Makefile").read_text()
+        dependency_review = (ROOT / ".github/workflows/dependency-review.yml").read_text()
+        auto_merge = (ROOT / ".github/workflows/dependabot-auto-merge.yml").read_text()
+
+        lock_command = makefile.split("lock:\n", 1)[1].split("lock-check:\n", 1)[0]
+        self.assertIn("--upgrade", lock_command)
+        self.assertIn('"requirements.lock"', dependency_review)
+        self.assertIn('"app/dependabot"', auto_merge)
+
     def test_ci_fails_when_uv_is_missing(self) -> None:
         bash = shutil.which("bash")
         self.assertIsNotNone(bash)
