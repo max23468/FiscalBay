@@ -368,6 +368,8 @@ class DeployGuardTests(unittest.TestCase):
         self.assertIn("--upgrade", lock_command)
         self.assertIn('"requirements.lock"', dependency_review)
         self.assertIn('".github/workflows/dependency-review.yml"', dependency_review)
+        self.assertIn("actions/setup-python@v7", dependency_review)
+        self.assertIn('python-version: "3.13"', dependency_review)
         self.assertIn("pypa/gh-action-pip-audit@v1.1.0", dependency_review)
         self.assertIn("inputs: requirements.lock", dependency_review)
         self.assertIn("require-hashes: true", dependency_review)
