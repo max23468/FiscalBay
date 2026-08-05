@@ -40,3 +40,9 @@ jobs:
         with:
           fail-on-severity: high
           comment-summary-in-pr: never
+
+      - name: Audit locked Python dependencies
+        uses: pypa/gh-action-pip-audit@v1.1.0
+        with:
+          inputs: requirements.lock
+          require-hashes: true
