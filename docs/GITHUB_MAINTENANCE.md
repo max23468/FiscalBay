@@ -105,7 +105,8 @@ I workflow a basso consumo sono:
 - `.github/workflows/pr-title.yml`: valida il titolo PR in formato Conventional
   Commit
 - `.github/workflows/dependency-review.yml`: parte solo quando cambiano file di
-  dipendenze e fallisce da severità `high`
+  dipendenze, fallisce da severità `high` e verifica esplicitamente
+  `requirements.lock` con `pip-audit` e hash obbligatori
 - `.github/workflows/actionlint.yml`: parte solo quando cambiano workflow
 - `.github/workflows/package-build.yml`: esegue `python -m build` su PR che
   toccano packaging e su avvio manuale

@@ -15,6 +15,7 @@ on:
       - "poetry.lock"
       - "uv.lock"
       - ".github/dependabot.yml"
+      - ".github/workflows/dependency-review.yml"
   workflow_dispatch:
 
 concurrency:
@@ -40,3 +41,14 @@ jobs:
         with:
           fail-on-severity: high
           comment-summary-in-pr: never
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Audit locked Python dependencies
+        uses: pypa/gh-action-pip-audit@v1.1.0
+        with:
+          inputs: requirements.lock
+          require-hashes: true

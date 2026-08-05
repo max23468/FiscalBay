@@ -367,6 +367,12 @@ class DeployGuardTests(unittest.TestCase):
         lock_command = makefile.split("lock:\n", 1)[1].split("lock-check:\n", 1)[0]
         self.assertIn("--upgrade", lock_command)
         self.assertIn('"requirements.lock"', dependency_review)
+        self.assertIn('".github/workflows/dependency-review.yml"', dependency_review)
+        self.assertIn("actions/setup-python@v7", dependency_review)
+        self.assertIn('python-version: "3.13"', dependency_review)
+        self.assertIn("pypa/gh-action-pip-audit@v1.1.0", dependency_review)
+        self.assertIn("inputs: requirements.lock", dependency_review)
+        self.assertIn("require-hashes: true", dependency_review)
         self.assertIn('"app/dependabot"', auto_merge)
 
     def test_ci_fails_when_uv_is_missing(self) -> None:
