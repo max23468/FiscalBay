@@ -52,13 +52,6 @@ copy_if_present "${STATE_DB}" "${BACKUP_DIR}"
 copy_if_present "${ENV_FILE}" "${BACKUP_DIR}/runtime"
 copy_if_present "${STATE_DB}" "${BACKUP_DIR}/runtime"
 
-if compgen -G "${DATA_DIR}/*.legacy-json.bak" >/dev/null; then
-  mkdir -p "${BACKUP_DIR}/legacy"
-  chmod 700 "${BACKUP_DIR}/legacy"
-  cp -p "${DATA_DIR}"/*.legacy-json.bak "${BACKUP_DIR}/legacy/"
-  chmod 600 "${BACKUP_DIR}/legacy/"*.legacy-json.bak
-fi
-
 copy_glob_if_present "${SYSTEMD_DIR}/fiscalbay-*.service" "${BACKUP_DIR}/systemd"
 copy_glob_if_present "${SYSTEMD_DIR}/fiscalbay-*.timer" "${BACKUP_DIR}/systemd"
 copy_glob_if_present "${APP_CONFIG_DIR}/*.env" "${BACKUP_DIR}/etc-fiscalbay"

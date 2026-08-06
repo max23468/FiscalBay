@@ -9,7 +9,7 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from .config import get_env_bool, load_config_with_refresh_token
 from .models import Config, EbayTokenSet, LinkedEbayAccount
-from .storage.sqlite import resolve_ebay_token_set
+from .storage.users import resolve_ebay_token_set
 
 FERNET_TENANT_TOKEN_PREFIX = "fernet:"
 PLAINTEXT_TENANT_TOKEN_PREFIX = "plain:"

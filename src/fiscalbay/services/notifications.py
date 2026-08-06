@@ -16,11 +16,11 @@ from ..models import (
     RetryQueueEntry,
     TelegramConfig,
 )
-from ..telegram_commands import (
+from ..telegram_common import record_fingerprint
+from ..telegram_orders import (
     format_auto_notification,
     format_missing_tax_spike_alert,
     has_fiscal_identifier,
-    record_fingerprint,
 )
 
 LOGGER = logging.getLogger("fiscalbay.notifications")

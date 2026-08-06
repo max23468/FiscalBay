@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
 
 SCHEMA_VERSION = 10
@@ -217,42 +216,6 @@ def _create_v8_schema(conn: sqlite3.Connection) -> None:
         )
 
 
-def _rename_metrics_payload_key(raw_value: str | None) -> str | None:
-    if not raw_value:
-        return raw_value
-    try:
-        decoded = json.loads(raw_value)
-    except json.JSONDecodeError:
-        return raw_value
-    if not isinstance(decoded, dict):
-        return raw_value
-    if "orders_with_cf" not in decoded:
-        return raw_value
-    decoded["orders_with_fiscal_identifier"] = decoded.pop("orders_with_cf")
-    return json.dumps(decoded, separators=(",", ":"))
-
-
-def _create_v9_schema(conn: sqlite3.Connection) -> None:
-    kv_row = conn.execute("SELECT value FROM kv_store WHERE key = 'metrics'").fetchone()
-    if kv_row is not None:
-        updated_value = _rename_metrics_payload_key(str(kv_row["value"]))
-        if updated_value is not None and updated_value != kv_row["value"]:
-            conn.execute("UPDATE kv_store SET value = ? WHERE key = 'metrics'", (updated_value,))
-
-    if _table_exists(conn, "tenant_runtime_state"):
-        rows = conn.execute(
-            "SELECT telegram_user_id, metrics_json FROM tenant_runtime_state"
-        ).fetchall()
-        for row in rows:
-            updated_metrics = _rename_metrics_payload_key(str(row["metrics_json"]))
-            if updated_metrics is None or updated_metrics == row["metrics_json"]:
-                continue
-            conn.execute(
-                "UPDATE tenant_runtime_state SET metrics_json = ? WHERE telegram_user_id = ?",
-                (updated_metrics, row["telegram_user_id"]),
-            )
-
-
 def _create_v10_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE TABLE IF NOT EXISTS tenant_status_snapshots "
@@ -328,25 +291,6 @@ def _create_v10_schema(conn: sqlite3.Connection) -> None:
         )
 
 
-def _migrate_legacy_notified_orders(conn: sqlite3.Connection) -> None:
-    if not _table_exists(conn, "notified_orders"):
-        return
-
-    rows = conn.execute("SELECT order_id, hash FROM notified_orders").fetchall()
-    for row in rows:
-        if row["order_id"]:
-            conn.execute(
-                "INSERT OR IGNORE INTO notified_order_ids (order_id) VALUES (?)",
-                (row["order_id"],),
-            )
-        if row["hash"]:
-            conn.execute(
-                "INSERT OR IGNORE INTO notified_hashes (hash) VALUES (?)",
-                (row["hash"],),
-            )
-    conn.execute("DROP TABLE notified_orders")
-
-
 def migrate_db(conn: sqlite3.Connection) -> None:
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     if version >= SCHEMA_VERSION:
@@ -354,7 +298,6 @@ def migrate_db(conn: sqlite3.Connection) -> None:
 
     if version < 2:
         _create_v2_schema(conn)
-        _migrate_legacy_notified_orders(conn)
         version = 2
     if version < 3:
         _create_v3_schema(conn)
@@ -374,7 +317,6 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         _create_v8_schema(conn)
         version = 8
     if version < 9:
-        _create_v9_schema(conn)
         version = 9
     if version < 10:
         _create_v10_schema(conn)

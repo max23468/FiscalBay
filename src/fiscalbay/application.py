@@ -9,7 +9,7 @@ from .config import load_config
 from .errors import ConfigurationError
 from .models import Config, FetchOptions, LinkedEbayAccount, OrderRecord, ResolvedFetchContext
 from .services.orders import fetch_records
-from .storage.sqlite import load_tenant_account_status_cache, resolve_linked_ebay_account
+from .storage.users import load_tenant_account_status_cache, resolve_linked_ebay_account
 from .tenant_credentials import load_tenant_config_from_storage
 
 
@@ -67,7 +67,7 @@ def resolve_fetch_context(
     )
 
     if linked_account is not None and cached_requires_reconnect:
-        fallback_reason = "tenant_reconnect_required"
+        fallback_reason: str | None = "tenant_reconnect_required"
         if telegram_user_id is not None and not allow_global_fallback:
             raise ConfigurationError(
                 "Le credenziali tenant eBay richiedono un reconnect. "

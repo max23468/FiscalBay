@@ -159,7 +159,7 @@ def _coerce_order_payload(payload: Mapping[str, JsonValue]) -> EbayOrderPayload:
     return cast(EbayOrderPayload, dict(payload))
 
 
-def _coerce_order_list(value: JsonValue) -> list[EbayOrderPayload]:
+def _coerce_order_list(value: object) -> list[EbayOrderPayload]:
     if not isinstance(value, list):
         return []
     orders: list[EbayOrderPayload] = []
@@ -397,7 +397,7 @@ def get_access_token(config: Config) -> str:
                 return token
 
     response = request_user_access_token_response(config)
-    token = response.get("access_token")
+    token = str(response.get("access_token") or "")
     if not token:
         raise EbayApiError("La risposta OAuth non contiene access_token.")
     expires_in = int(response.get("expires_in", 7200))

@@ -7,7 +7,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from .models import OAUTH_SESSION_STATUS_PENDING, OauthLinkSession
-from .storage.sqlite import create_oauth_link_session, load_latest_oauth_link_session
+from .storage.oauth import create_oauth_link_session, load_latest_oauth_link_session
 
 
 def is_reusable_oauth_session(

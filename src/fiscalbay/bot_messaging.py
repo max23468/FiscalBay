@@ -15,9 +15,10 @@ from .clients.telegram import (
 from .errors import EbayApiError, TelegramApiError
 from .logging_utils import log_event
 from .retry import run_with_retry
-from .telegram_commands import chunk_message, with_fiscal_identifier_copy_markup
+from .telegram_common import chunk_message, with_fiscal_identifier_copy_markup
 
 LOGGER = logging.getLogger("fiscalbay.telegram_bot")
+
 T = TypeVar("T")
 
 
@@ -55,13 +56,13 @@ def send_message(
     text: str,
     message_thread_id: Optional[int] = None,
     reply_markup: InlineKeyboardMarkup | None = None,
-    request_fn: Callable[[str, str, Mapping[str, JsonValue] | None], JsonValue] = _telegram_request,
+    request_fn: Callable[[str, str, Mapping[str, object] | None], JsonValue] = _telegram_request,
 ) -> None:
     chunks = chunk_message(text)
     for idx, chunk in enumerate(chunks):
         base_reply_markup = reply_markup if idx == len(chunks) - 1 else None
         chunk_reply_markup = with_fiscal_identifier_copy_markup(chunk, base_reply_markup)
-        params: dict[str, JsonValue] = {
+        params: dict[str, object] = {
             "chat_id": chat_id,
             "text": chunk,
             "parse_mode": "HTML",
@@ -76,7 +77,7 @@ def send_message(
         except TelegramApiError as exc:
             if getattr(exc, "status_code", None) != 400 and "HTTP 400" not in str(exc):
                 raise
-            fallback_params: dict[str, JsonValue] = {
+            fallback_params: dict[str, object] = {
                 "chat_id": chat_id,
                 "text": chunk,
                 "disable_web_page_preview": True,

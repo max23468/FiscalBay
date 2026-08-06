@@ -18,7 +18,7 @@ from .models import (
     has_telegram_user_capability,
     normalize_telegram_user_status,
 )
-from .storage.sqlite import load_telegram_user
+from .storage.users import load_telegram_user
 
 COMMAND_CAPABILITIES: dict[str, str] = {
     "/ping": CAPABILITY_REVIEW_ACCESS,
@@ -36,10 +36,8 @@ COMMAND_CAPABILITIES: dict[str, str] = {
     "/ordini": CAPABILITY_VIEW_ORDERS,
     "/ultimi": CAPABILITY_VIEW_ORDERS,
     "/tutti": CAPABILITY_VIEW_ORDERS,
-    "/ordine": CAPABILITY_VIEW_ORDERS,
     "/admin": CAPABILITY_REVIEW_ACCESS,
     "/admin_users": CAPABILITY_REVIEW_ACCESS,
-    "/admin_history": CAPABILITY_REVIEW_ACCESS,
     "/tenant_health": CAPABILITY_REVIEW_ACCESS,
     "/approve_user": CAPABILITY_REVIEW_ACCESS,
     "/reject_user": CAPABILITY_REVIEW_ACCESS,
@@ -53,7 +51,6 @@ ADMIN_ONLY_COMMANDS = frozenset(
     {
         "/admin",
         "/admin_users",
-        "/admin_history",
         "/approve_user",
         "/reject_user",
         "/suspend_user",
