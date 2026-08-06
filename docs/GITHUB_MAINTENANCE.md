@@ -11,7 +11,8 @@ GitHub Actions è riattivato solo per automazioni GitHub leggere e a basso consu
   controlli conservativi `.github/workflows/pr-title.yml`,
   `.github/workflows/dependency-review.yml`, `.github/workflows/actionlint.yml`,
   `.github/workflows/package-build.yml` e
-  `.github/workflows/codex-pr-comments.yml`
+  `.github/workflows/codex-pr-comments.yml`, più il gate
+  `.github/workflows/codex-review-gate.yml`
 - la CI parte su PR verso `main` e con `workflow_dispatch`
 - il package build parte solo su PR che toccano packaging e con `workflow_dispatch`
 - Dependency Review parte solo su PR che toccano file di dipendenze
@@ -21,6 +22,8 @@ GitHub Actions è riattivato solo per automazioni GitHub leggere e a basso consu
   nei run parziali rilegge anche le PR già presenti nella inbox per non far
   sparire temporaneamente commenti storici o actionable non recenti, saltando
   singole PR stale o non più raggiungibili senza interrompere l'intera sync
+- Codex review gate pubblica lo status required `codex-review` sull'HEAD esatto
+  della PR ed esegue soltanto il codice presente su `main`
 - non usare Actions per deploy, diagnostica VPS, merge o update
   dipendenze fuori da Dependabot
 - non aggiungere altri workflow senza richiesta esplicita del maintainer
@@ -38,6 +41,8 @@ GitHub Actions è riattivato solo per automazioni GitHub leggere e a basso consu
 - Package build mirato: `.github/workflows/package-build.yml`
 - Codex feedback inbox: `.github/workflows/codex-pr-comments.yml` e
   `.github/scripts/handle-codex-pr-comments.mjs`
+- Codex review gate: `.github/workflows/codex-review-gate.yml`,
+  `scripts/codex-review-gate.mjs` e `scripts/codex-review-gate.test.mjs`
 - Dependabot version updates: `.github/dependabot.yml`
 - Issue forms: `.github/ISSUE_TEMPLATE/*`
 - Security policy: `SECURITY.md`
@@ -58,8 +63,8 @@ Configurazione consigliata:
 - disabilita force push e branch deletion su `main`
 - valuta `Require pull request` anche in contesto solo-maintainer, se vuoi audit
   trail più pulito
-- non rendere obbligatorio il check GitHub Actions finché non passa qualche PR
-  senza falsi negativi
+- richiedi `Python 3.13` e `codex-review`, senza rimuovere gli altri check
+  esistenti né aggiungere bypass
 
 Fallback operativo:
 
@@ -115,6 +120,9 @@ I workflow a basso consumo sono:
   actionable e storico, preserva le PR già elencate nei run parziali, ignora le
   singole PR stale non trovate e non pubblica commenti automatici sulle PR né
   committa file di stato
+- `.github/workflows/codex-review-gate.yml`: usa `pull_request_target` e checkout
+  fissato di `main`, pubblica `codex-review` sull'HEAD della PR e invalida ogni
+  evidenza di review appartenente a commit o tentativi precedenti
 - tutti i workflow usano concurrency con cancellazione dei run precedenti sulla
   stessa PR/ref quando applicabile
 
