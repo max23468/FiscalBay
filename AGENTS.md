@@ -107,6 +107,14 @@ Se host o hostname non coincidono, fermati. Non usare VPS di altri progetti.
   tag, GitHub Release e deploy.
 - Non modificare manualmente versione, `CHANGELOG.md`, tag o release nel flusso
   normale.
+- Una riparazione esplicitamente autorizzata di una release errata segue
+  l'eccezione documentata in `docs/RELEASE_POLICY.md`, senza riscrivere `main`.
+- Usa `!` o `BREAKING CHANGE:` solo quando cambia un contratto osservabile da
+  utenti od operatori. La rimozione di API interne senza consumatori esterni è
+  un `refactor:` e non deve causare un major.
+- `v2.0.0` è riservata al milestone SaaS-first descritto in `docs/ROADMAP.md`:
+  una release major richiede una decisione di prodotto esplicita e il comando
+  `scripts/release_now.sh --version X.Y.Z --bump major`.
 - Un cambio runtime `feat`, `fix` o `perf` richiesto in produzione richiede anche
   la release versionata prevista da `docs/RELEASE_POLICY.md`.
 
