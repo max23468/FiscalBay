@@ -27,21 +27,18 @@ from src.fiscalbay.bot import (
     chunk_message,
     ensure_long_polling,
     extract_callback_context,
-    format_auto_notification,
-    format_records,
-    has_fiscal_identifier,
     options_for_command,
     parse_command,
     process_message,
     release_process_lock,
     send_message,
     sync_runtime_branding,
-    update_state_with_records,
 )
 from src.fiscalbay.clients.telegram import sync_bot_branding
 from src.fiscalbay.errors import ConfigurationError, EbayApiError
 from src.fiscalbay.fiscal_export import FiscalExportReport
 from src.fiscalbay.models import BotRuntimeState, OrderRecord, TelegramUser
+from src.fiscalbay.services.notifications import update_state_with_records
 from src.fiscalbay.storage.sqlite import load_kv_value
 from src.fiscalbay.telegram_commands import (
     BOT_DISPLAY_NAME,
@@ -63,6 +60,7 @@ from src.fiscalbay.telegram_commands import (
     format_admin_scale_readiness,
     format_admin_security_report,
     format_admin_user_list,
+    format_auto_notification,
     format_disconnect_status,
     format_fiscal_export_messages,
     format_leave_status,
@@ -72,10 +70,12 @@ from src.fiscalbay.telegram_commands import (
     format_order_notification_summary,
     format_priority_records,
     format_reconnect_reason_hint,
+    format_records,
     format_report_summary,
     format_review_records,
     format_settings_status,
     format_why_not_notified_status,
+    has_fiscal_identifier,
     is_admin_authorized,
     looks_like_order_id,
 )
@@ -303,63 +303,18 @@ class TelegramBotTests(unittest.TestCase):
             with self.subTest(command=command, args=args):
                 self.assertEqual(_normalize_grouped_command(command, args), expected)
 
-    def test_simple_telegram_commands_process_message_core_paths(self) -> None:
+    def test_command_rendering_module_does_not_own_runtime_dispatch(self) -> None:
         config = self._base_config()
-
+        self.assertFalse(hasattr(telegram_commands_module, "process_message"))
         self.assertEqual(
-            telegram_commands_module.process_message(
-                "/ping",
-                999,
-                config,
-                "production",
-                load_state_fn=lambda _path: BotRuntimeState(),
-                load_retry_queue_fn=lambda _path: [],
-                fetch_records_for_environment_fn=lambda _env, _options: [],
-                request_with_backoff_fn=self._run_backoff,
-            ),
-            ["Chat non autorizzata per questo bot."],
-        )
-
-        status_reply = telegram_commands_module.process_message(
-            "/stato",
-            456,
-            config,
-            "production",
-            load_state_fn=lambda _path: BotRuntimeState(last_check="2026-04-05T20:00:00Z"),
-            load_retry_queue_fn=lambda _path: [object()],
-            fetch_records_for_environment_fn=lambda _env, _options: [],
-            request_with_backoff_fn=self._run_backoff,
-        )
-        self.assertIn("Stato del Bot", status_reply[0])
-        self.assertIn("2026-04-05T20:00:00Z", status_reply[0])
-
-        self.assertEqual(
-            telegram_commands_module.process_message(
-                "/unknown",
-                456,
-                config,
-                "production",
-                load_state_fn=lambda _path: BotRuntimeState(),
-                load_retry_queue_fn=lambda _path: [],
-                fetch_records_for_environment_fn=lambda _env, _options: [],
-                request_with_backoff_fn=self._run_backoff,
+            process_message(
+                text="/unknown",
+                chat_id=456,
+                telegram_config=config,
+                ebay_environment="production",
             ),
             ["Comando non riconosciuto. Usa /help per vedere i comandi disponibili."],
         )
-
-        fetch_reply = telegram_commands_module.process_message(
-            "/tutti 7 5",
-            456,
-            config,
-            "sandbox",
-            load_state_fn=lambda _path: BotRuntimeState(),
-            load_retry_queue_fn=lambda _path: [],
-            fetch_records_for_environment_fn=lambda _env, _options: [
-                self._order("12-34567-89012", buyer_username="buyer-1")
-            ],
-            request_with_backoff_fn=self._run_backoff,
-        )
-        self.assertIn("12-34567-89012", fetch_reply[0])
 
     @patch("src.fiscalbay.bot.request_with_backoff")
     def test_handle_orders_command_help_lists_and_summary_paths(self, mock_backoff) -> None:
@@ -1347,32 +1302,32 @@ class TelegramBotTests(unittest.TestCase):
         self.assertEqual(replies, ["pong ✅"])
 
     def test_update_state_with_records_tracks_ids(self) -> None:
-        state = {"notified_order_ids": ["1"], "last_check": None}
+        state = BotRuntimeState(notified_order_ids=["1"])
         updated = update_state_with_records(
             state,
-            [{"orderId": "2"}, {"orderId": "1"}],
+            [OrderRecord(orderId="2"), OrderRecord(orderId="1")],
             checked_at="2026-04-03T20:00:00Z",
         )
-        self.assertEqual(updated["notified_order_ids"], ["1", "2"])
-        self.assertEqual(updated["last_check"], "2026-04-03T20:00:00Z")
+        self.assertEqual(updated.notified_order_ids, ["1", "2"])
+        self.assertEqual(updated.last_check, "2026-04-03T20:00:00Z")
 
     def test_format_auto_notification_mentions_new_order(self) -> None:
         text = format_auto_notification(
-            {
-                "orderId": "12-345",
-                "creationDate": "2026-04-03T10:00:00Z",
-                "buyerUsername": "buyer",
-                "buyerName": "Mario Rossi",
-                "buyerEmail": "mario@example.com",
-                "taxpayerId": "rssmra80a01h501u",
-                "taxIdentifierType": "CODICE_FISCALE",
-                "issuingCountry": "IT",
-                "orderQuantity": "2",
-                "productDescription": "Prodotto A",
-                "total": "42.50 EUR",
-                "transactionStatus": "PAID",
-                "shippingAddress": "Mario Rossi, Via Roma 1, Milano",
-            }
+            OrderRecord(
+                orderId="12-345",
+                creationDate="2026-04-03T10:00:00Z",
+                buyerUsername="buyer",
+                buyerName="Mario Rossi",
+                buyerEmail="mario@example.com",
+                taxpayerId="rssmra80a01h501u",
+                taxIdentifierType="CODICE_FISCALE",
+                issuingCountry="IT",
+                orderQuantity="2",
+                productDescription="Prodotto A",
+                total="42.50 EUR",
+                transactionStatus="PAID",
+                shippingAddress="Mario Rossi, Via Roma 1, Milano",
+            )
         )
         self.assertIn("Nuovo ordine eBay", text)
         self.assertIn("Ordine eBay", text)
@@ -1410,14 +1365,11 @@ class TelegramBotTests(unittest.TestCase):
 
     def test_format_order_fallback_when_missing_fiscal_fields(self) -> None:
         text = format_auto_notification(
-            {
-                "orderId": "12-345",
-                "creationDate": "2026-04-03T10:00:00Z",
-                "buyerUsername": "buyer",
-                "taxpayerId": "",
-                "taxIdentifierType": "",
-                "issuingCountry": "",
-            }
+            OrderRecord(
+                orderId="12-345",
+                creationDate="2026-04-03T10:00:00Z",
+                buyerUsername="buyer",
+            )
         )
         self.assertIn("Dati fiscali non presenti", text)
         self.assertNotIn("Paese</b>: <code>n/d</code>", text)
@@ -1425,39 +1377,24 @@ class TelegramBotTests(unittest.TestCase):
     def test_has_fiscal_identifier_requires_type_and_value(self) -> None:
         self.assertTrue(
             has_fiscal_identifier(
-                {
-                    "taxIdentifierType": "CODICE_FISCALE",
-                    "taxpayerId": "RSSMRA80A01H501U",
-                }
+                OrderRecord(taxIdentifierType="CODICE_FISCALE", taxpayerId="RSSMRA80A01H501U")
             )
         )
         self.assertTrue(
-            has_fiscal_identifier(
-                {
-                    "taxIdentifierType": "VAT_NUMBER",
-                    "taxpayerId": "IT123",
-                }
-            )
+            has_fiscal_identifier(OrderRecord(taxIdentifierType="VAT_NUMBER", taxpayerId="IT123"))
         )
-        self.assertFalse(
-            has_fiscal_identifier(
-                {
-                    "taxIdentifierType": "CODICE_FISCALE",
-                    "taxpayerId": "",
-                }
-            )
-        )
+        self.assertFalse(has_fiscal_identifier(OrderRecord(taxIdentifierType="CODICE_FISCALE")))
 
     def test_format_auto_notification_uses_vat_label_when_available(self) -> None:
         text = format_auto_notification(
-            {
-                "orderId": "12-346",
-                "creationDate": "2026-04-03T10:00:00Z",
-                "buyerUsername": "buyer-vat",
-                "taxpayerId": "IT12345678901",
-                "taxIdentifierType": "VAT_NUMBER",
-                "issuingCountry": "IT",
-            }
+            OrderRecord(
+                orderId="12-346",
+                creationDate="2026-04-03T10:00:00Z",
+                buyerUsername="buyer-vat",
+                taxpayerId="IT12345678901",
+                taxIdentifierType="VAT_NUMBER",
+                issuingCountry="IT",
+            )
         )
         self.assertIn("P.IVA", text)
         self.assertNotIn("Tipo</b>", text)
@@ -1492,14 +1429,14 @@ class TelegramBotTests(unittest.TestCase):
     ) -> None:
         mock_telegram_request.return_value = {"message_id": 1}
         text = format_auto_notification(
-            {
-                "orderId": "12-346",
-                "creationDate": "2026-04-03T10:00:00Z",
-                "buyerUsername": "buyer-vat",
-                "taxpayerId": "IT12345678901",
-                "taxIdentifierType": "VAT_NUMBER",
-                "issuingCountry": "IT",
-            }
+            OrderRecord(
+                orderId="12-346",
+                creationDate="2026-04-03T10:00:00Z",
+                buyerUsername="buyer-vat",
+                taxpayerId="IT12345678901",
+                taxIdentifierType="VAT_NUMBER",
+                issuingCountry="IT",
+            )
         )
 
         send_message("token", 123, text)
@@ -1525,14 +1462,14 @@ class TelegramBotTests(unittest.TestCase):
     ) -> None:
         mock_telegram_request.return_value = {"message_id": 1}
         text = format_auto_notification(
-            {
-                "orderId": "12-345",
-                "creationDate": "2026-04-03T10:00:00Z",
-                "buyerUsername": "buyer",
-                "taxpayerId": "RSSMRA80A01H501U",
-                "taxIdentifierType": "CODICE_FISCALE",
-                "issuingCountry": "IT",
-            }
+            OrderRecord(
+                orderId="12-345",
+                creationDate="2026-04-03T10:00:00Z",
+                buyerUsername="buyer",
+                taxpayerId="RSSMRA80A01H501U",
+                taxIdentifierType="CODICE_FISCALE",
+                issuingCountry="IT",
+            )
         )
         reply_markup = build_main_menu_markup()
 
@@ -1557,14 +1494,11 @@ class TelegramBotTests(unittest.TestCase):
     ) -> None:
         mock_telegram_request.return_value = {"message_id": 1}
         text = format_auto_notification(
-            {
-                "orderId": "12-345",
-                "creationDate": "2026-04-03T10:00:00Z",
-                "buyerUsername": "buyer",
-                "taxpayerId": "",
-                "taxIdentifierType": "",
-                "issuingCountry": "",
-            }
+            OrderRecord(
+                orderId="12-345",
+                creationDate="2026-04-03T10:00:00Z",
+                buyerUsername="buyer",
+            )
         )
 
         send_message("token", 123, text)

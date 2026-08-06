@@ -18,7 +18,6 @@ from .bot_authz import has_command_capability as _has_command_capability
 from .bot_authz import is_admin_user as _is_admin_user
 from .bot_authz import is_user_approved as _is_user_approved
 from .bot_authz import load_user_status as _load_user_status
-from .bot_compat import PUBLIC_BOT_API
 from .bot_messaging import request_with_backoff
 from .bot_messaging import send_message as _send_message
 from .bot_oauth import (
@@ -57,13 +56,11 @@ from .models import (
     TELEGRAM_USER_STATUS_PENDING,
     AuditLogEntry,
     BotRuntimeState,
-    BotRuntimeStateLike,
     FetchOptions,
     JsonObject,
     LinkedEbayAccount,
     NotificationSubscription,
     OrderRecord,
-    OrderRecordLike,
     RetryQueueEntry,
     TelegramChat,
     TelegramConfig,
@@ -79,25 +76,7 @@ from .release_info import collect_release_info
 from .scale_readiness import build_scale_readiness_report
 from .security_ops import build_security_ops_report
 from .services.notifications import (
-    fetch_new_order_records as _fetch_new_order_records,
-)
-from .services.notifications import (
-    increment_error_metric as _increment_error_metric,
-)
-from .services.notifications import (
-    increment_metric as _increment_metric,
-)
-from .services.notifications import (
     maybe_send_new_order_notifications as _maybe_send_new_order_notifications,
-)
-from .services.notifications import (
-    now_utc as _now_utc,
-)
-from .services.notifications import (
-    process_retry_queue as _process_retry_queue,
-)
-from .services.notifications import (
-    update_state_with_records as _update_state_with_records,
 )
 from .services.orders import fetch_records
 from .services.telegram_runtime import (
@@ -230,10 +209,8 @@ from .telegram_commands import (
     normalize_command_alias,
     options_for_command,
     parse_command,
+    record_fingerprint,
     should_attach_main_menu,
-)
-from .telegram_commands import (
-    format_auto_notification as _format_auto_notification,
 )
 from .telegram_commands import (
     format_record as _format_record,
@@ -242,19 +219,10 @@ from .telegram_commands import (
     format_records as _format_records,
 )
 from .telegram_commands import (
-    has_fiscal_identifier as _has_fiscal_identifier,
-)
-from .telegram_commands import (
     looks_like_order_id as _looks_like_order_id,
 )
 from .telegram_commands import (
     order_record_matches_search as _order_record_matches_search,
-)
-from .telegram_commands import (
-    process_message as _process_message,
-)
-from .telegram_commands import (
-    record_fingerprint as _record_fingerprint,
 )
 from .tenant_credentials import decode_refresh_token, load_tenant_config_from_storage
 
@@ -310,12 +278,6 @@ ADMIN_MUTATION_COMMANDS = {
 }
 ORDER_COMMAND_COOLDOWN_SECONDS = 10
 DATA_REQUEST_COOLDOWN_SECONDS = 3600
-
-
-def coerce_runtime_state(state: BotRuntimeStateLike) -> BotRuntimeState:
-    if isinstance(state, BotRuntimeState):
-        return state
-    return BotRuntimeState.from_mapping(state)
 
 
 def _now_utc_iso() -> str:
@@ -1373,48 +1335,13 @@ def _disconnect_account_with_remote_revocation(
     return disconnected_account, remote_revocation_status, remote_revocation_detail
 
 
-def coerce_order_records(records: list[OrderRecordLike]) -> list[OrderRecord]:
-    normalized: list[OrderRecord] = []
-    for record in records:
-        if isinstance(record, OrderRecord):
-            normalized.append(record)
-        else:
-            normalized.append(OrderRecord.from_mapping(record))
-    return normalized
-
-
-def coerce_order_record(record: OrderRecordLike) -> OrderRecord:
-    if isinstance(record, OrderRecord):
-        return record
-    return OrderRecord.from_mapping(record)
-
-
 def fetch_environment_records(ebay_environment: str, options) -> list[OrderRecord]:
-    return coerce_order_records(
-        _fetch_environment_records(
-            ebay_environment,
-            options,
-            load_config_fn=load_config,
-            fetch_records_fn=fetch_records,
-        )
-    )
-
-
-def fetch_tenant_records(
-    ebay_environment: str,
-    options,
-    *,
-    telegram_user_id: int | None,
-    state_path: str,
-) -> list[OrderRecord]:
-    records = _fetch_tenant_records_for_user(
+    return _fetch_environment_records(
         ebay_environment,
         options,
-        telegram_user_id=telegram_user_id,
-        state_path=state_path,
-        allow_global_fallback=False,
+        load_config_fn=load_config,
+        fetch_records_fn=fetch_records,
     )
-    return coerce_order_records(records)
 
 
 def _fetch_tenant_records_for_user(
@@ -1435,39 +1362,6 @@ def _fetch_tenant_records_for_user(
         load_tenant_config_fn=load_tenant_config_from_storage,
     )
     return fetch_records(resolved.config, options)
-
-
-def record_fingerprint(record: OrderRecordLike) -> str:
-    return _record_fingerprint(coerce_order_record(record))
-
-
-def format_record(record: OrderRecordLike) -> str:
-    return _format_record(coerce_order_record(record))
-
-
-def format_records(
-    records: list[OrderRecordLike], only_found: bool, page_size: int = 5
-) -> list[str]:
-    return _format_records(
-        coerce_order_records(records),
-        only_found=only_found,
-        page_size=page_size,
-    )
-
-
-def has_fiscal_identifier(record: OrderRecordLike) -> bool:
-    return _has_fiscal_identifier(coerce_order_record(record))
-
-
-def format_auto_notification(record: OrderRecordLike) -> str:
-    return _format_auto_notification(coerce_order_record(record))
-
-
-def now_utc():
-    return _now_utc()
-
-
-__all__ = PUBLIC_BOT_API
 
 
 def send_message(
@@ -1730,53 +1624,6 @@ def resolve_tenant_command_context(
     )
 
 
-def increment_metric(state: BotRuntimeStateLike, metric: str, amount: int = 1) -> None:
-    _increment_metric(coerce_runtime_state(state), metric, amount)
-
-
-def increment_error_metric(state: BotRuntimeStateLike, error_type: str) -> None:
-    _increment_error_metric(coerce_runtime_state(state), error_type)
-
-
-def process_retry_queue(telegram_config: TelegramConfig, state: BotRuntimeStateLike) -> None:
-    _process_retry_queue(
-        telegram_config,
-        coerce_runtime_state(state),
-        load_retry_queue_fn=load_retry_queue_entries,
-        save_retry_queue_fn=save_retry_queue_entries,
-        send_message_fn=send_message,
-    )
-
-
-def fetch_new_order_records(
-    ebay_environment: str,
-    state: BotRuntimeStateLike,
-    lookback_minutes: int = 180,
-) -> list[OrderRecord]:
-    return _fetch_new_order_records(
-        ebay_environment,
-        coerce_runtime_state(state),
-        fetch_records_for_environment_fn=fetch_environment_records,
-        request_with_backoff_fn=request_with_backoff,
-        lookback_minutes=lookback_minutes,
-    )
-
-
-def update_state_with_records(
-    state: BotRuntimeStateLike,
-    records: list[OrderRecordLike],
-    checked_at: Optional[str] = None,
-    max_tracked_orders: int = 1000,
-) -> JsonObject:
-    updated_state = _update_state_with_records(
-        coerce_runtime_state(state),
-        coerce_order_records(records),
-        checked_at=checked_at,
-        max_tracked_orders=max_tracked_orders,
-    )
-    return updated_state.as_dict()
-
-
 def explain_why_order_not_notified(
     order: OrderRecord,
     state: BotRuntimeState,
@@ -1851,7 +1698,7 @@ def explain_why_order_not_notified(
             "delivery_headline": delivery_headline,
             "delivery_detail": delivery_detail,
         }
-    if not has_fiscal_identifier(order):
+    if not order.has_fiscal_identifier():
         return {
             "order_id": order_id,
             "environment": environment,
@@ -1997,14 +1844,12 @@ def maybe_send_new_order_notifications(
                 save_tenant_retry_queue_entries(telegram_config.retry_queue_path, user_id, queue)
             ),
             fetch_records_for_environment_fn=lambda env, options, user_id=target.telegram_user_id: (
-                coerce_order_records(
-                    _fetch_tenant_records_for_user(
-                        env,
-                        options,
-                        telegram_user_id=user_id,
-                        state_path=telegram_config.state_path,
-                        allow_global_fallback=not strict_tenant_credentials,
-                    )
+                _fetch_tenant_records_for_user(
+                    env,
+                    options,
+                    telegram_user_id=user_id,
+                    state_path=telegram_config.state_path,
+                    allow_global_fallback=not strict_tenant_credentials,
                 )
             ),
             send_message_fn=send_message,
@@ -2150,9 +1995,7 @@ def _handle_orders_command(
                 except ConfigurationError as exc:
                     return [f"⚠️ {exc}"]
                 matched = [
-                    record
-                    for record in (coerce_order_record(item) for item in records)
-                    if _order_record_matches_search(record, query)
+                    record for record in records if _order_record_matches_search(record, query)
                 ]
                 return format_search_records(
                     matched,
@@ -2179,7 +2022,7 @@ def _handle_orders_command(
                 return [f"⚠️ {exc}"]
             if not records:
                 return ["🔎 Nessun ordine trovato nella selezione richiesta."]
-            order_record = coerce_order_record(records[0])
+            order_record = records[0]
             state = load_state_fn(telegram_config.state_path)
             explanation = explain_why_order_not_notified(
                 order_record,
@@ -2233,7 +2076,7 @@ def _handle_orders_command(
                 ]
             state = load_state_fn(telegram_config.state_path)
             explanation = explain_why_order_not_notified(
-                coerce_order_record(records[0]),
+                records[0],
                 state,
                 environment=resolved_environment,
                 state_path=telegram_config.state_path,
@@ -2250,11 +2093,7 @@ def _handle_orders_command(
                 )
             except ConfigurationError as exc:
                 return [f"⚠️ {exc}"]
-            review_records = [
-                record
-                for record in (coerce_order_record(item) for item in records)
-                if not record.has_fiscal_identifier()
-            ]
+            review_records = [record for record in records if not record.has_fiscal_identifier()]
             return format_review_records(review_records)
         if order_action in {"report", "riepilogo"}:
             options = options_for_command("/tutti", order_args)
@@ -2265,10 +2104,9 @@ def _handle_orders_command(
                 )
             except ConfigurationError as exc:
                 return [f"⚠️ {exc}"]
-            normalized = [coerce_order_record(item) for item in records]
             return [
                 format_report_summary(
-                    normalized,
+                    records,
                     days=options.days or 7,
                     max_results=options.max_results,
                 )
@@ -2282,8 +2120,7 @@ def _handle_orders_command(
                 )
             except ConfigurationError as exc:
                 return [f"⚠️ {exc}"]
-            normalized = [coerce_order_record(item) for item in records]
-            return format_priority_records(normalized)
+            return format_priority_records(records)
         if order_action in {"export", "esporta", "csv"}:
             options = options_for_command("/tutti", order_args)
             try:
@@ -2338,7 +2175,7 @@ def _handle_orders_command(
             ]
         state = load_state_fn(telegram_config.state_path)
         explanation = explain_why_order_not_notified(
-            coerce_order_record(records[0]),
+            records[0],
             state,
             environment=resolved_environment,
             state_path=telegram_config.state_path,
@@ -2356,11 +2193,7 @@ def _handle_orders_command(
             )
         except ConfigurationError as exc:
             return [f"⚠️ {exc}"]
-        review_records = [
-            record
-            for record in (coerce_order_record(item) for item in records)
-            if not record.has_fiscal_identifier()
-        ]
+        review_records = [record for record in records if not record.has_fiscal_identifier()]
         return format_review_records(review_records)
 
     if command == "/report_summary":
@@ -2372,10 +2205,9 @@ def _handle_orders_command(
             )
         except ConfigurationError as exc:
             return [f"⚠️ {exc}"]
-        normalized = [coerce_order_record(item) for item in records]
         return [
             format_report_summary(
-                normalized,
+                records,
                 days=options.days or 7,
                 max_results=options.max_results,
             )
@@ -2390,8 +2222,7 @@ def _handle_orders_command(
             )
         except ConfigurationError as exc:
             return [f"⚠️ {exc}"]
-        normalized = [coerce_order_record(item) for item in records]
-        return format_priority_records(normalized)
+        return format_priority_records(records)
 
     if command == "/ordine":
         if not args:
@@ -2415,7 +2246,7 @@ def _handle_orders_command(
             return [f"⚠️ {exc}"]
         if not records:
             return ["🔎 Nessun ordine trovato nella selezione richiesta."]
-        order_record = coerce_order_record(records[0])
+        order_record = records[0]
         state = load_state_fn(telegram_config.state_path)
         explanation = explain_why_order_not_notified(
             order_record,
@@ -3576,14 +3407,12 @@ def process_message(
             env: str,
             options: FetchOptions,
         ) -> list[OrderRecord]:
-            return coerce_order_records(
-                _fetch_tenant_records_for_user(
-                    env,
-                    options,
-                    telegram_user_id=tenant_user_id,
-                    state_path=telegram_config.state_path,
-                    allow_global_fallback=not strict_tenant_credentials,
-                )
+            return _fetch_tenant_records_for_user(
+                env,
+                options,
+                telegram_user_id=tenant_user_id,
+                state_path=telegram_config.state_path,
+                allow_global_fallback=not strict_tenant_credentials,
             )
 
     command_context: dict[str, object] = {
@@ -3708,19 +3537,11 @@ def process_message(
     if settings_response is not None:
         return settings_response
 
-    try:
-        return _process_message(
-            text=text,
-            chat_id=chat_id,
-            telegram_config=telegram_config,
-            ebay_environment=resolved_environment,
-            load_state_fn=load_state_fn,
-            load_retry_queue_fn=load_retry_queue_fn,
-            fetch_records_for_environment_fn=fetch_records_for_environment_fn,
-            request_with_backoff_fn=request_with_backoff,
-        )
-    except ConfigurationError as exc:
-        return [f"⚠️ {exc}"]
+    if command == "/help":
+        return [build_help_text()]
+    if command == "/ping":
+        return ["pong ✅"]
+    return ["Comando non riconosciuto. Usa /help per vedere i comandi disponibili."]
 
 
 def auto_notify_loop(telegram_config: TelegramConfig, ebay_environment: str) -> None:

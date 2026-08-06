@@ -136,8 +136,8 @@ Campi principali:
 Nota:
 
 - oggi è il modello tipizzato più importante per ridurre i `dict` legacy
-- i servizi `orders`, `notifications` e il fetch condiviso CLI/bot lavorano ormai principalmente su questo modello
-- anche il rendering testuale e le notifiche Telegram passano principalmente da questo modello; le conversioni legacy rimaste sono concentrate nei wrapper compatibili
+- servizi `orders`, notifiche, fetch condiviso CLI/bot e rendering lavorano
+  direttamente su questo modello
 
 ### `BotMetrics`
 
