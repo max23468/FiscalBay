@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.0.0](https://github.com/max23468/FiscalBay/compare/v1.13.10...v2.0.0) (2026-08-06)
+
+### Breaking Changes
+
+* remove bot compatibility facade (#145) ([3b57f05](https://github.com/max23468/FiscalBay/commit/3b57f05eca74dcb076ae8b2eccae4c4eb99fbb64))
+
+### Bug Fixes
+
+* update security dependencies and lock automation (#139) ([a1abc21](https://github.com/max23468/FiscalBay/commit/a1abc21aa9d6fd78374f4d72a4750c12eced807c))
+* audit locked Python dependencies (#140) ([2c7f645](https://github.com/max23468/FiscalBay/commit/2c7f645fd0600861b17c2bef44f92d88de829991))
+* bind Codex findings to reviewed commit (#143) ([7ecd0a1](https://github.com/max23468/FiscalBay/commit/7ecd0a15181fb388795f18636cc8f253399edbe0))
+
+### Maintenance
+
+* bump ruff from 0.15.22 to 0.16.1 in the python-minor-patch group across 1 directory (#133) ([ad7fd95](https://github.com/max23468/FiscalBay/commit/ad7fd951500051cd9a5e7dac8a40622f71664494))
+* add exact-HEAD Codex review gate (#141) ([25512de](https://github.com/max23468/FiscalBay/commit/25512de9a2bc935c35a8cf5286ee44345b1cd5fb))
+* remove legacy Codex feedback inbox (#144) ([ef744f0](https://github.com/max23468/FiscalBay/commit/ef744f04b682493b7d3afde2bf39f01e5336bd1b))
+
 ## [1.13.10](https://github.com/max23468/FiscalBay/compare/v1.13.9...v1.13.10) (2026-07-29)
 
 ### Bug Fixes
