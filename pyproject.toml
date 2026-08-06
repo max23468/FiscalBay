@@ -62,7 +62,6 @@ files = [
   "src/fiscalbay/config.py",
   "src/fiscalbay/errors.py",
   "src/fiscalbay/bot_authz.py",
-  "src/fiscalbay/bot_compat.py",
   "src/fiscalbay/bot_oauth.py",
   "src/fiscalbay/bot_process_lock.py",
   "src/fiscalbay/reconcile.py",

@@ -7,7 +7,7 @@ import json
 import re
 import urllib.parse
 from datetime import datetime
-from typing import Callable, Iterable, Mapping
+from typing import Iterable, Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .clients.telegram import InlineKeyboardMarkup
@@ -17,7 +17,6 @@ from .models import (
     BotRuntimeState,
     FetchOptions,
     OrderRecord,
-    RetryQueueEntry,
     TelegramConfig,
     TelegramUser,
     is_blocked_telegram_user_status,
@@ -2770,42 +2769,3 @@ def format_missing_tax_spike_alert(
         "➡️ Prossima azione: usa <code>/ordini controlla 7 50</code> "
         "o <code>/ordini report 7 50</code>."
     )
-
-
-def process_message(
-    text: str,
-    chat_id: int,
-    telegram_config: TelegramConfig,
-    ebay_environment: str,
-    *,
-    load_state_fn: Callable[[str], BotRuntimeState],
-    load_retry_queue_fn: Callable[[str], list[RetryQueueEntry]],
-    fetch_records_for_environment_fn: Callable[[str, FetchOptions], list[OrderRecord]],
-    request_with_backoff_fn: Callable[..., object],
-) -> list[str]:
-    if not is_authorized(chat_id, telegram_config):
-        return ["Chat non autorizzata per questo bot."]
-
-    command, args = parse_command(text)
-    if command in ("", "/start", "/help"):
-        return [build_help_text()]
-
-    if command == "/ping":
-        return ["pong ✅"]
-
-    if command == "/stato":
-        state = load_state_fn(telegram_config.state_path)
-        retry_queue_size = len(load_retry_queue_fn(telegram_config.retry_queue_path))
-        return [format_status(state, retry_queue_size)]
-
-    if command not in ("/ultimi", "/ordine", "/tutti"):
-        return ["Comando non riconosciuto. Usa /help per vedere i comandi disponibili."]
-
-    options = options_for_command(command, args)
-    records = request_with_backoff_fn(
-        lambda: fetch_records_for_environment_fn(ebay_environment, options),
-        label=f"fetch_records_{command}",
-    )
-    if not isinstance(records, list):
-        raise TypeError(f"Risposta non valida per fetch_records_{command}: attesa una lista.")
-    return format_records(records, only_found=options.only_found)

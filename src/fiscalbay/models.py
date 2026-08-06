@@ -890,8 +890,6 @@ class RetryQueueItemPayload(TypedDict, total=False):
     attempts: int
 
 
-OrderRecordLike = Union[OrderRecord, Mapping[str, object]]
-BotRuntimeStateLike = Union[BotRuntimeState, Mapping[str, object]]
 RetryQueueEntryLike = Union[RetryQueueEntry, Mapping[str, object]]
 TelegramUserLike = Union[TelegramUser, Mapping[str, object]]
 LinkedEbayAccountLike = Union[LinkedEbayAccount, Mapping[str, object]]

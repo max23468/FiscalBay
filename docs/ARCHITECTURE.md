@@ -9,7 +9,7 @@ Panoramica rapida dell'architettura corrente del progetto.
 - flussi principali
 - decisioni architetturali attuali
 - limiti da tenere presenti
-- compatibilità mantenuta durante il refactor
+- contratti runtime correnti
 
 Documenti collegati:
 
@@ -41,7 +41,7 @@ Vincolo di prodotto:
 - `src/fiscalbay/cli.py`
   - esegue il flusso CLI
 - `src/fiscalbay/bot.py`
-  - espone la facciata compatibile del bot e collega i servizi
+  - orchestra i comandi del bot e collega i servizi
 - `src/fiscalbay/oauth_server.py`
   - espone il mini callback server OAuth per l'onboarding self-service
 - `src/fiscalbay/application.py`
@@ -106,7 +106,8 @@ Vincolo di prodotto:
 1. `bot.py` carica configurazione e acquisisce il lock di processo.
 2. `clients/telegram.py` forza `deleteWebhook` e prepara il long polling.
 3. `services/telegram_runtime.py` legge gli update da Telegram.
-4. `telegram_commands.py` interpreta i comandi utente.
+4. `bot.py` esegue l'unico dispatch usando parsing e renderer di
+   `telegram_commands.py`.
 5. se serve, `application.py` coordina il fetch ordini per l'ambiente corretto.
 6. `telegram_commands.py` formatta la risposta.
 7. `clients/telegram.py` invia i messaggi.
@@ -128,13 +129,13 @@ Vincolo di prodotto:
 - il modello amministrativo attuale prevede un solo admin globale
 - l'uso supportato lato Telegram è la chat privata, non gruppi o supergruppi
 - il prodotto conserva una minima memoria operativa leggibile, ma non uno storico completo degli ordini
-- i wrapper storici restano compatibili per non rompere entrypoint e test
 - il refactor corrente ha separato parsing comandi, runtime Telegram e notifiche automatiche
 - i client esterni usano retry condiviso invece di logiche duplicate
 - stato runtime e retry queue hanno modelli tipizzati dedicati
-- i servizi core del bot lavorano ormai su `OrderRecord`, `BotRuntimeState` e `RetryQueueEntry`; le conversioni legacy restano ai bordi
-- anche il rendering CLI/Telegram usa principalmente `OrderRecord`; i wrapper compatibili di `bot.py` assorbono i payload legacy usati dai test storici
-- le conversioni compatibili sono state accentrate in adattatori espliciti dentro `bot.py`, invece di essere duplicate tra wrapper diversi
+- servizi, rendering e wiring del bot condividono direttamente `OrderRecord`,
+  `BotRuntimeState` e `RetryQueueEntry`, senza conversioni compatibili intermedie
+- `telegram_commands.py` contiene parsing e rendering; il dispatch runtime resta
+  unico in `bot.py`
 - i log runtime, client HTTP, notifiche e healthcheck usano eventi strutturati; `cycle_id` correla polling, callback, messaggi e cicli di notifica
 - l'osservabilità minima passa da `/stato`, `fiscalbay-healthcheck` e dal timer `fiscalbay-alertcheck`, che segnala servizio fermo, backlog retry e troppi errori consecutivi
 - i metadati release/deploy sono raccolti da `release_info.py` e riusati sia
@@ -222,10 +223,12 @@ Le decisioni architetturali principali del refactor, prima tracciate in `docs/ad
 
 - **Stato:** accettata
 - **Contesto:** il vecchio `bot.py` accentrava polling, parsing, rendering, notifiche e stato runtime, rendendo difficile test e manutenzione.
-- **Decisione:** separare responsabilità in `telegram_commands.py` (parsing/rendering), `services/telegram_runtime.py` (lifecycle/polling) e `services/notifications.py` (auto-notify/retry), mantenendo `bot.py` come facciata compatibile e wiring.
+- **Decisione:** separare responsabilità in `telegram_commands.py` (parsing/rendering), `services/telegram_runtime.py` (lifecycle/polling) e `services/notifications.py` (auto-notify/retry), mantenendo in `bot.py` il solo dispatch e wiring condiviso.
 - **Conseguenze:** responsabilità più chiare, test più mirati e minore accoppiamento tra UI Telegram e logica runtime.
 
-Aggiornamento fase 4: authz, linking OAuth, process lock e lista export compatibile sono stati estratti in moduli dedicati (`bot_authz.py`, `bot_oauth.py`, `bot_process_lock.py`, `bot_compat.py`), così `bot.py` resta soprattutto wiring e orchestrazione dei comandi.
+Authz, linking OAuth e process lock sono in moduli dedicati (`bot_authz.py`,
+`bot_oauth.py`, `bot_process_lock.py`); il catalogo di export legacy e il secondo
+router dei comandi sono stati rimossi.
 
 I guardrail soft per dimensione moduli/funzioni e per nuove estrazioni sono
 tracciati in `docs/TECHNICAL_GUARDRAILS.md`.
@@ -266,14 +269,15 @@ tracciati in `docs/TECHNICAL_GUARDRAILS.md`.
 - le credenziali eBay sono ancora globali
 - i comandi tenant-aware usano già stato e scoping per tenant, ma il fetch ordini usa ancora credenziali globali finché non arriva l'OAuth per utente
 - la risoluzione dell'account collegato e dell'environment è già tenant-aware, ma la sorgente delle credenziali resta ancora `.env` globale finché non saranno attivi token utente reali
-- resta un layer di compatibilità nel bot per i test e i wrapper storici, anche se il dominio core è ormai tipizzato
 - la multiutenza richiederà un modello dati nuovo e un nuovo flusso OAuth
 - il callback web OAuth esiste in forma minimale, ma restano aperti hardening finale e revoca remota verso eBay
 - il gating accessi oggi è pensato per un servizio pubblico controllato: le capability sono esplicite, ma non esistono ancora ruoli multipli oltre a `admin`, utente approvato, in attesa o bloccato
 - la queue operativa è ancora minimale: oggi copre soprattutto access application e recovery, non un workflow completo di revoca remota eBay
 - alcuni alias storici interni sono stati rimossi dai client eBay; i caller devono usare i nomi canonici del modulo
 
-## Compatibilità mantenuta durante il refactor
+## Contratti runtime correnti
 
 - gli entrypoint di packaging puntano direttamente a `src/fiscalbay/cli.py` e `src/fiscalbay/bot.py`
+- il fetch condiviso restituisce `OrderRecord`; bot, renderer e notifiche non
+  accettano payload `dict` alternativi
 - il formato persistito in SQLite resta compatibile con il runbook operativo attuale

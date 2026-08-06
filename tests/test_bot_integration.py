@@ -7,7 +7,6 @@ from src.fiscalbay.bot import (
     enqueue_apply_user_access_operation,
     maybe_send_new_order_notifications,
     process_message,
-    record_fingerprint,
     sync_runtime_contact,
 )
 from src.fiscalbay.errors import TelegramApiError
@@ -21,6 +20,7 @@ from src.fiscalbay.models import (
     EbayTokenSet,
     LinkedEbayAccount,
     OauthLinkSession,
+    OrderRecord,
     RetryQueueEntry,
     TelegramConfig,
 )
@@ -46,6 +46,11 @@ from src.fiscalbay.storage.sqlite import (
     upsert_ebay_token_set,
     upsert_linked_ebay_account,
 )
+from src.fiscalbay.telegram_commands import record_fingerprint
+
+
+def _order_records(records: list[dict[str, object]]) -> list[OrderRecord]:
+    return [OrderRecord.from_mapping(record) for record in records]
 
 
 class BotIntegrationTests(unittest.TestCase):
@@ -2199,16 +2204,18 @@ class BotIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
             mock_load_config.return_value = object()
-            mock_fetch_records.return_value = [
-                {
-                    "orderId": "new-order",
-                    "creationDate": "2026-04-05T20:00:00Z",
-                    "buyerUsername": "buyer",
-                    "taxpayerId": "RSSMRA80A01H501U",
-                    "taxIdentifierType": "CODICE_FISCALE",
-                    "issuingCountry": "IT",
-                }
-            ]
+            mock_fetch_records.return_value = _order_records(
+                [
+                    {
+                        "orderId": "new-order",
+                        "creationDate": "2026-04-05T20:00:00Z",
+                        "buyerUsername": "buyer",
+                        "taxpayerId": "RSSMRA80A01H501U",
+                        "taxIdentifierType": "CODICE_FISCALE",
+                        "issuingCountry": "IT",
+                    }
+                ]
+            )
 
             config = TelegramConfig(
                 token="x",
@@ -2236,22 +2243,22 @@ class BotIntegrationTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
-            old_record = {
-                "orderId": "old-order",
-                "creationDate": "2026-04-05T19:00:00Z",
-                "buyerUsername": "buyer-old",
-                "taxpayerId": "RSSOLD80A01H501U",
-                "taxIdentifierType": "CODICE_FISCALE",
-                "issuingCountry": "IT",
-            }
-            new_record = {
-                "orderId": "new-order",
-                "creationDate": "2026-04-05T20:00:00Z",
-                "buyerUsername": "buyer-new",
-                "taxpayerId": "RSSNEW80A01H501U",
-                "taxIdentifierType": "CODICE_FISCALE",
-                "issuingCountry": "IT",
-            }
+            old_record = OrderRecord(
+                orderId="old-order",
+                creationDate="2026-04-05T19:00:00Z",
+                buyerUsername="buyer-old",
+                taxpayerId="RSSOLD80A01H501U",
+                taxIdentifierType="CODICE_FISCALE",
+                issuingCountry="IT",
+            )
+            new_record = OrderRecord(
+                orderId="new-order",
+                creationDate="2026-04-05T20:00:00Z",
+                buyerUsername="buyer-new",
+                taxpayerId="RSSNEW80A01H501U",
+                taxIdentifierType="CODICE_FISCALE",
+                issuingCountry="IT",
+            )
 
             save_state(
                 str(db_path),
@@ -2324,30 +2331,32 @@ class BotIntegrationTests(unittest.TestCase):
                 },
             )
             mock_load_config.return_value = object()
-            mock_fetch_records.return_value = [
-                {
-                    "orderId": "missing-1",
-                    "creationDate": "2026-04-05T20:00:00Z",
-                    "buyerUsername": "buyer-missing-1",
-                    "taxpayerId": "",
-                    "taxIdentifierType": "",
-                },
-                {
-                    "orderId": "missing-2",
-                    "creationDate": "2026-04-05T20:05:00Z",
-                    "buyerUsername": "buyer-missing-2",
-                    "taxpayerId": "",
-                    "taxIdentifierType": "",
-                },
-                {
-                    "orderId": "fiscal-1",
-                    "creationDate": "2026-04-05T20:10:00Z",
-                    "buyerUsername": "buyer-fiscal",
-                    "taxpayerId": "RSSMRA80A01H501U",
-                    "taxIdentifierType": "CODICE_FISCALE",
-                    "issuingCountry": "IT",
-                },
-            ]
+            mock_fetch_records.return_value = _order_records(
+                [
+                    {
+                        "orderId": "missing-1",
+                        "creationDate": "2026-04-05T20:00:00Z",
+                        "buyerUsername": "buyer-missing-1",
+                        "taxpayerId": "",
+                        "taxIdentifierType": "",
+                    },
+                    {
+                        "orderId": "missing-2",
+                        "creationDate": "2026-04-05T20:05:00Z",
+                        "buyerUsername": "buyer-missing-2",
+                        "taxpayerId": "",
+                        "taxIdentifierType": "",
+                    },
+                    {
+                        "orderId": "fiscal-1",
+                        "creationDate": "2026-04-05T20:10:00Z",
+                        "buyerUsername": "buyer-fiscal",
+                        "taxpayerId": "RSSMRA80A01H501U",
+                        "taxIdentifierType": "CODICE_FISCALE",
+                        "issuingCountry": "IT",
+                    },
+                ]
+            )
 
             config = TelegramConfig(
                 token="x",
@@ -2591,13 +2600,15 @@ class BotIntegrationTests(unittest.TestCase):
                     status="active",
                 ),
             )
-            mock_fetch_records.return_value = [
-                {
-                    "orderId": "12-34567-89012",
-                    "creationDate": "2026-04-06T10:30:00Z",
-                    "buyerUsername": "buyer",
-                }
-            ]
+            mock_fetch_records.return_value = _order_records(
+                [
+                    {
+                        "orderId": "12-34567-89012",
+                        "creationDate": "2026-04-06T10:30:00Z",
+                        "buyerUsername": "buyer",
+                    }
+                ]
+            )
 
             replies = process_message(
                 text="/ordini cerca 12-34567-89012",
@@ -2686,16 +2697,18 @@ class BotIntegrationTests(unittest.TestCase):
                 chat_type="private",
             )
             mock_load_config.return_value = object()
-            mock_fetch_records.return_value = [
-                {
-                    "orderId": "12-34567-89012",
-                    "creationDate": "2026-04-05T20:00:00Z",
-                    "buyerUsername": "buyer",
-                    "taxpayerId": "RSSMRA80A01H501U",
-                    "taxIdentifierType": "CODICE_FISCALE",
-                    "issuingCountry": "IT",
-                }
-            ]
+            mock_fetch_records.return_value = _order_records(
+                [
+                    {
+                        "orderId": "12-34567-89012",
+                        "creationDate": "2026-04-05T20:00:00Z",
+                        "buyerUsername": "buyer",
+                        "taxpayerId": "RSSMRA80A01H501U",
+                        "taxIdentifierType": "CODICE_FISCALE",
+                        "issuingCountry": "IT",
+                    }
+                ]
+            )
 
             replies = process_message(
                 text="/ordini cerca 12-34567-89012",
@@ -2736,33 +2749,35 @@ class BotIntegrationTests(unittest.TestCase):
                 chat_type="private",
             )
             mock_load_config.return_value = object()
-            mock_fetch_records.return_value = [
-                {
-                    "orderId": "plainorder1",
-                    "creationDate": "2026-04-05T20:00:00Z",
-                    "buyerUsername": "mario-shop",
-                    "buyerEmail": "mario@example.com",
-                    "taxpayerId": "",
-                    "taxIdentifierType": "",
-                },
-                {
-                    "orderId": "plainorder2",
-                    "creationDate": "2026-04-05T21:00:00Z",
-                    "buyerUsername": "buyer-vat",
-                    "buyerEmail": "vat@example.com",
-                    "taxpayerId": "IT12345678901",
-                    "taxIdentifierType": "VAT_NUMBER",
-                },
-                {
-                    "orderId": "plainorder3",
-                    "creationDate": "2026-04-05T22:00:00Z",
-                    "buyerUsername": "other",
-                    "buyerName": "Mario Rossi",
-                    "buyerEmail": "other@example.com",
-                    "taxpayerId": "RSSMRA80A01H501U",
-                    "taxIdentifierType": "CODICE_FISCALE",
-                },
-            ]
+            mock_fetch_records.return_value = _order_records(
+                [
+                    {
+                        "orderId": "plainorder1",
+                        "creationDate": "2026-04-05T20:00:00Z",
+                        "buyerUsername": "mario-shop",
+                        "buyerEmail": "mario@example.com",
+                        "taxpayerId": "",
+                        "taxIdentifierType": "",
+                    },
+                    {
+                        "orderId": "plainorder2",
+                        "creationDate": "2026-04-05T21:00:00Z",
+                        "buyerUsername": "buyer-vat",
+                        "buyerEmail": "vat@example.com",
+                        "taxpayerId": "IT12345678901",
+                        "taxIdentifierType": "VAT_NUMBER",
+                    },
+                    {
+                        "orderId": "plainorder3",
+                        "creationDate": "2026-04-05T22:00:00Z",
+                        "buyerUsername": "other",
+                        "buyerName": "Mario Rossi",
+                        "buyerEmail": "other@example.com",
+                        "taxpayerId": "RSSMRA80A01H501U",
+                        "taxIdentifierType": "CODICE_FISCALE",
+                    },
+                ]
+            )
 
             replies = process_message(
                 text="/ordini cerca mario-shop 30 100",
@@ -2807,16 +2822,18 @@ class BotIntegrationTests(unittest.TestCase):
                 chat_type="private",
             )
             mock_load_config.return_value = object()
-            mock_fetch_records.return_value = [
-                {
-                    "orderId": "order-1",
-                    "creationDate": "2026-04-05T20:00:00Z",
-                    "buyerUsername": "buyer",
-                    "taxpayerId": "",
-                    "taxIdentifierType": "",
-                    "issuingCountry": "IT",
-                }
-            ]
+            mock_fetch_records.return_value = _order_records(
+                [
+                    {
+                        "orderId": "order-1",
+                        "creationDate": "2026-04-05T20:00:00Z",
+                        "buyerUsername": "buyer",
+                        "taxpayerId": "",
+                        "taxIdentifierType": "",
+                        "issuingCountry": "IT",
+                    }
+                ]
+            )
 
             replies = process_message(
                 text="/ordini spiega order-1",
@@ -2857,16 +2874,18 @@ class BotIntegrationTests(unittest.TestCase):
                 chat_type="private",
             )
             mock_load_config.return_value = object()
-            mock_fetch_records.return_value = [
-                {
-                    "orderId": "order-vat-1",
-                    "creationDate": "2026-04-05T20:00:00Z",
-                    "buyerUsername": "buyer",
-                    "taxpayerId": "IT12345678901",
-                    "taxIdentifierType": "VAT_NUMBER",
-                    "issuingCountry": "IT",
-                }
-            ]
+            mock_fetch_records.return_value = _order_records(
+                [
+                    {
+                        "orderId": "order-vat-1",
+                        "creationDate": "2026-04-05T20:00:00Z",
+                        "buyerUsername": "buyer",
+                        "taxpayerId": "IT12345678901",
+                        "taxIdentifierType": "VAT_NUMBER",
+                        "issuingCountry": "IT",
+                    }
+                ]
+            )
 
             replies = process_message(
                 text="/ordini spiega order-vat-1",
@@ -2914,16 +2933,18 @@ class BotIntegrationTests(unittest.TestCase):
                 ),
             )
             mock_load_config.return_value = object()
-            mock_fetch_records.return_value = [
-                {
-                    "orderId": "order-1",
-                    "creationDate": "2026-04-05T20:00:00Z",
-                    "buyerUsername": "buyer",
-                    "taxpayerId": "RSSMRA80A01H501U",
-                    "taxIdentifierType": "CODICE_FISCALE",
-                    "issuingCountry": "IT",
-                }
-            ]
+            mock_fetch_records.return_value = _order_records(
+                [
+                    {
+                        "orderId": "order-1",
+                        "creationDate": "2026-04-05T20:00:00Z",
+                        "buyerUsername": "buyer",
+                        "taxpayerId": "RSSMRA80A01H501U",
+                        "taxIdentifierType": "CODICE_FISCALE",
+                        "issuingCountry": "IT",
+                    }
+                ]
+            )
 
             replies = process_message(
                 text="/ordini spiega order-1",
@@ -2962,16 +2983,18 @@ class BotIntegrationTests(unittest.TestCase):
                 chat_type="private",
             )
             mock_load_config.return_value = object()
-            mock_fetch_records.return_value = [
-                {
-                    "orderId": "order-2",
-                    "creationDate": "2026-04-05T20:00:00Z",
-                    "buyerUsername": "buyer",
-                    "taxpayerId": "RSSMRA80A01H501U",
-                    "taxIdentifierType": "CODICE_FISCALE",
-                    "issuingCountry": "IT",
-                }
-            ]
+            mock_fetch_records.return_value = _order_records(
+                [
+                    {
+                        "orderId": "order-2",
+                        "creationDate": "2026-04-05T20:00:00Z",
+                        "buyerUsername": "buyer",
+                        "taxpayerId": "RSSMRA80A01H501U",
+                        "taxIdentifierType": "CODICE_FISCALE",
+                        "issuingCountry": "IT",
+                    }
+                ]
+            )
 
             replies = process_message(
                 text="/ordini spiega order-2",
@@ -3020,16 +3043,18 @@ class BotIntegrationTests(unittest.TestCase):
                 updated_at="2026-04-06T10:05:00Z",
             )
             mock_load_config.return_value = object()
-            mock_fetch_records.return_value = [
-                {
-                    "orderId": "order-3",
-                    "creationDate": "2026-04-05T20:00:00Z",
-                    "buyerUsername": "buyer",
-                    "taxpayerId": "RSSMRA80A01H501U",
-                    "taxIdentifierType": "CODICE_FISCALE",
-                    "issuingCountry": "IT",
-                }
-            ]
+            mock_fetch_records.return_value = _order_records(
+                [
+                    {
+                        "orderId": "order-3",
+                        "creationDate": "2026-04-05T20:00:00Z",
+                        "buyerUsername": "buyer",
+                        "taxpayerId": "RSSMRA80A01H501U",
+                        "taxIdentifierType": "CODICE_FISCALE",
+                        "issuingCountry": "IT",
+                    }
+                ]
+            )
 
             replies = process_message(
                 text="/ordini spiega order-3",
@@ -4024,24 +4049,26 @@ class BotIntegrationTests(unittest.TestCase):
                 chat_type="private",
             )
             mock_load_config.return_value = object()
-            mock_fetch_records.return_value = [
-                {
-                    "orderId": "order-missing",
-                    "creationDate": "2026-04-05T20:00:00Z",
-                    "buyerUsername": "buyer-missing",
-                    "taxpayerId": "",
-                    "taxIdentifierType": "",
-                    "issuingCountry": "IT",
-                },
-                {
-                    "orderId": "order-ok",
-                    "creationDate": "2026-04-05T21:00:00Z",
-                    "buyerUsername": "buyer-ok",
-                    "taxpayerId": "IT12345678901",
-                    "taxIdentifierType": "VAT_NUMBER",
-                    "issuingCountry": "IT",
-                },
-            ]
+            mock_fetch_records.return_value = _order_records(
+                [
+                    {
+                        "orderId": "order-missing",
+                        "creationDate": "2026-04-05T20:00:00Z",
+                        "buyerUsername": "buyer-missing",
+                        "taxpayerId": "",
+                        "taxIdentifierType": "",
+                        "issuingCountry": "IT",
+                    },
+                    {
+                        "orderId": "order-ok",
+                        "creationDate": "2026-04-05T21:00:00Z",
+                        "buyerUsername": "buyer-ok",
+                        "taxpayerId": "IT12345678901",
+                        "taxIdentifierType": "VAT_NUMBER",
+                        "issuingCountry": "IT",
+                    },
+                ]
+            )
 
             replies = process_message(
                 text="/ordini controlla 7 20",
@@ -4082,32 +4109,34 @@ class BotIntegrationTests(unittest.TestCase):
                 chat_type="private",
             )
             mock_load_config.return_value = object()
-            mock_fetch_records.return_value = [
-                {
-                    "orderId": "order-missing",
-                    "creationDate": "2026-04-05T20:00:00Z",
-                    "buyerUsername": "buyer-missing",
-                    "taxpayerId": "",
-                    "taxIdentifierType": "",
-                    "issuingCountry": "IT",
-                },
-                {
-                    "orderId": "order-cf",
-                    "creationDate": "2026-04-05T21:00:00Z",
-                    "buyerUsername": "buyer-cf",
-                    "taxpayerId": "RSSMRA80A01H501U",
-                    "taxIdentifierType": "CODICE_FISCALE",
-                    "issuingCountry": "IT",
-                },
-                {
-                    "orderId": "order-vat",
-                    "creationDate": "2026-04-05T22:00:00Z",
-                    "buyerUsername": "buyer-vat",
-                    "taxpayerId": "IT12345678901",
-                    "taxIdentifierType": "VAT_NUMBER",
-                    "issuingCountry": "DE",
-                },
-            ]
+            mock_fetch_records.return_value = _order_records(
+                [
+                    {
+                        "orderId": "order-missing",
+                        "creationDate": "2026-04-05T20:00:00Z",
+                        "buyerUsername": "buyer-missing",
+                        "taxpayerId": "",
+                        "taxIdentifierType": "",
+                        "issuingCountry": "IT",
+                    },
+                    {
+                        "orderId": "order-cf",
+                        "creationDate": "2026-04-05T21:00:00Z",
+                        "buyerUsername": "buyer-cf",
+                        "taxpayerId": "RSSMRA80A01H501U",
+                        "taxIdentifierType": "CODICE_FISCALE",
+                        "issuingCountry": "IT",
+                    },
+                    {
+                        "orderId": "order-vat",
+                        "creationDate": "2026-04-05T22:00:00Z",
+                        "buyerUsername": "buyer-vat",
+                        "taxpayerId": "IT12345678901",
+                        "taxIdentifierType": "VAT_NUMBER",
+                        "issuingCountry": "DE",
+                    },
+                ]
+            )
 
             replies = process_message(
                 text="/ordini report 7 20",
@@ -4150,22 +4179,24 @@ class BotIntegrationTests(unittest.TestCase):
                 chat_type="private",
             )
             mock_load_config.return_value = object()
-            mock_fetch_records.return_value = [
-                {
-                    "orderId": "order-missing",
-                    "creationDate": "2026-04-05T20:00:00Z",
-                    "buyerUsername": "buyer-missing",
-                    "taxpayerId": "",
-                    "taxIdentifierType": "",
-                },
-                {
-                    "orderId": "order-ok",
-                    "creationDate": "2026-04-05T21:00:00Z",
-                    "buyerUsername": "buyer-ok",
-                    "taxpayerId": "IT12345678901",
-                    "taxIdentifierType": "VAT_NUMBER",
-                },
-            ]
+            mock_fetch_records.return_value = _order_records(
+                [
+                    {
+                        "orderId": "order-missing",
+                        "creationDate": "2026-04-05T20:00:00Z",
+                        "buyerUsername": "buyer-missing",
+                        "taxpayerId": "",
+                        "taxIdentifierType": "",
+                    },
+                    {
+                        "orderId": "order-ok",
+                        "creationDate": "2026-04-05T21:00:00Z",
+                        "buyerUsername": "buyer-ok",
+                        "taxpayerId": "IT12345678901",
+                        "taxIdentifierType": "VAT_NUMBER",
+                    },
+                ]
+            )
 
             replies = process_message(
                 text="/ordini export 7 20",
@@ -4212,32 +4243,34 @@ class BotIntegrationTests(unittest.TestCase):
                 chat_type="private",
             )
             mock_load_config.return_value = object()
-            mock_fetch_records.return_value = [
-                {
-                    "orderId": "order-cf",
-                    "creationDate": "2026-04-05T21:00:00Z",
-                    "buyerUsername": "buyer-cf",
-                    "taxpayerId": "RSSMRA80A01H501U",
-                    "taxIdentifierType": "CODICE_FISCALE",
-                    "issuingCountry": "IT",
-                },
-                {
-                    "orderId": "order-review",
-                    "creationDate": "2026-04-05T20:00:00Z",
-                    "buyerUsername": "buyer-review",
-                    "taxpayerId": "",
-                    "taxIdentifierType": "",
-                    "issuingCountry": "IT",
-                },
-                {
-                    "orderId": "order-vat",
-                    "creationDate": "2026-04-05T22:00:00Z",
-                    "buyerUsername": "buyer-vat",
-                    "taxpayerId": "IT12345678901",
-                    "taxIdentifierType": "VAT_NUMBER",
-                    "issuingCountry": "IT",
-                },
-            ]
+            mock_fetch_records.return_value = _order_records(
+                [
+                    {
+                        "orderId": "order-cf",
+                        "creationDate": "2026-04-05T21:00:00Z",
+                        "buyerUsername": "buyer-cf",
+                        "taxpayerId": "RSSMRA80A01H501U",
+                        "taxIdentifierType": "CODICE_FISCALE",
+                        "issuingCountry": "IT",
+                    },
+                    {
+                        "orderId": "order-review",
+                        "creationDate": "2026-04-05T20:00:00Z",
+                        "buyerUsername": "buyer-review",
+                        "taxpayerId": "",
+                        "taxIdentifierType": "",
+                        "issuingCountry": "IT",
+                    },
+                    {
+                        "orderId": "order-vat",
+                        "creationDate": "2026-04-05T22:00:00Z",
+                        "buyerUsername": "buyer-vat",
+                        "taxpayerId": "IT12345678901",
+                        "taxIdentifierType": "VAT_NUMBER",
+                        "issuingCountry": "IT",
+                    },
+                ]
+            )
 
             replies = process_message(
                 text="/ordini priorita 7 20",
@@ -4330,24 +4363,26 @@ class BotIntegrationTests(unittest.TestCase):
                 ebay_environment="production",
             )
             mock_load_config.return_value = object()
-            mock_fetch_records.return_value = [
-                {
-                    "orderId": "order-cf",
-                    "creationDate": "2026-04-05T20:00:00Z",
-                    "buyerUsername": "buyer-cf",
-                    "taxpayerId": "RSSMRA80A01H501U",
-                    "taxIdentifierType": "CODICE_FISCALE",
-                    "issuingCountry": "IT",
-                },
-                {
-                    "orderId": "order-vat",
-                    "creationDate": "2026-04-05T21:00:00Z",
-                    "buyerUsername": "buyer-vat",
-                    "taxpayerId": "IT12345678901",
-                    "taxIdentifierType": "VAT_NUMBER",
-                    "issuingCountry": "IT",
-                },
-            ]
+            mock_fetch_records.return_value = _order_records(
+                [
+                    {
+                        "orderId": "order-cf",
+                        "creationDate": "2026-04-05T20:00:00Z",
+                        "buyerUsername": "buyer-cf",
+                        "taxpayerId": "RSSMRA80A01H501U",
+                        "taxIdentifierType": "CODICE_FISCALE",
+                        "issuingCountry": "IT",
+                    },
+                    {
+                        "orderId": "order-vat",
+                        "creationDate": "2026-04-05T21:00:00Z",
+                        "buyerUsername": "buyer-vat",
+                        "taxpayerId": "IT12345678901",
+                        "taxIdentifierType": "VAT_NUMBER",
+                        "issuingCountry": "IT",
+                    },
+                ]
+            )
 
             maybe_send_new_order_notifications(config, "production")
 
