@@ -226,6 +226,26 @@ test("ignora finding top-level appartenenti a SHA o tentativi precedenti", () =>
   );
 });
 
+test("un finding senza SHA arrivato da un tentativo concorrente non blocca l'HEAD", () => {
+  assert.equal(
+    classify({
+      comments: [
+        {
+          user: bot,
+          created_at: "2026-08-04T12:00:01Z",
+          body: "**P1** Finding senza prova del commit recensito.",
+        },
+        {
+          user: bot,
+          created_at: "2026-08-04T12:00:02Z",
+          body: `Codex Review: Didn't find any major issues.\n\n**Reviewed commit:** \`${headSha.slice(0, 10)}\``,
+        },
+      ],
+    }).state,
+    "success",
+  );
+});
+
 test("usage limit e unknown error chiudono il tentativo corrente", () => {
   for (const body of [
     "You have reached your Codex usage limits for code reviews.",
