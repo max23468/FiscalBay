@@ -20,7 +20,7 @@ from src.fiscalbay.services.notifications import (
     process_retry_queue,
     should_send_missing_tax_spike_alert,
 )
-from src.fiscalbay.telegram_commands import record_fingerprint
+from src.fiscalbay.telegram_common import record_fingerprint
 
 
 def make_record(

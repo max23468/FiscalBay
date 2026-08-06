@@ -128,9 +128,9 @@ class ModelsTests(unittest.TestCase):
         self.assertEqual(tenant_context.environment, "sandbox")
         self.assertTrue(tenant_context.notifications_enabled)
 
-    def test_normalize_telegram_user_status_maps_legacy_aliases(self) -> None:
-        self.assertEqual(normalize_telegram_user_status("active"), "approved")
-        self.assertEqual(normalize_telegram_user_status("rejected"), "blocked")
+    def test_normalize_telegram_user_status_rejects_unknown_values(self) -> None:
+        self.assertEqual(normalize_telegram_user_status("active"), "new")
+        self.assertEqual(normalize_telegram_user_status("rejected"), "new")
         self.assertEqual(normalize_telegram_user_status("pending"), "pending")
 
     def test_get_telegram_user_capabilities_varies_by_workflow_status(self) -> None:

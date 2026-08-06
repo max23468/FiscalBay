@@ -10,7 +10,7 @@ from src.fiscalbay.application import (
 )
 from src.fiscalbay.errors import ConfigurationError
 from src.fiscalbay.models import Config, FetchOptions, LinkedEbayAccount, OrderRecord
-from src.fiscalbay.storage.sqlite import save_tenant_account_status_cache
+from src.fiscalbay.storage.users import save_tenant_account_status_cache
 
 
 class ApplicationTests(unittest.TestCase):

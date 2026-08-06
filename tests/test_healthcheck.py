@@ -13,12 +13,8 @@ from src.fiscalbay.healthcheck import (
     render_text_report,
 )
 from src.fiscalbay.models import AuditLogEntry, BotMetrics, BotRuntimeState, TelegramConfig
-from src.fiscalbay.storage.sqlite import (
-    append_audit_log_entry,
-    save_retry_queue,
-    save_state,
-    save_tenant_runtime_state,
-)
+from src.fiscalbay.storage.queues import append_audit_log_entry
+from src.fiscalbay.storage.runtime import save_retry_queue, save_state, save_tenant_runtime_state
 
 
 class HealthcheckTests(unittest.TestCase):
