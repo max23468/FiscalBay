@@ -29,6 +29,35 @@ def fiscal_identifier_label(tax_identifier_type: str) -> str:
     return "ID Fiscale"
 
 
+def format_remote_revocation_line(status: str, detail: str) -> str:
+    safe_detail = detail or "token locale già assente"
+    if status == "revoked":
+        return "☁️ Revoca remota eBay: <code>completata</code>\n"
+    if status == "failed":
+        return "☁️ Revoca remota eBay: <code>non confermata</code>\n"
+    if status == "manual_required":
+        return (
+            "☁️ Revoca consenso eBay: <code>manuale</code>\n"
+            f"📝 Prossimo passo eBay: <code>{detail}</code>\n"
+        )
+    if status == "missing_token":
+        return (
+            "☁️ Revoca consenso eBay: <code>non verificabile</code>\n"
+            f"📝 Nota: <code>{safe_detail}</code>\n"
+        )
+    if status == "token_unavailable":
+        return (
+            "☁️ Revoca consenso eBay: <code>manuale</code>\n"
+            "📝 Nota: <code>token non leggibile localmente; token locale comunque rimosso</code>\n"
+        )
+    if status == "skipped":
+        return (
+            "☁️ Revoca remota eBay: <code>saltata</code>\n"
+            f"📝 Nota: <code>{detail or 'token locale rimosso'}</code>\n"
+        )
+    return "☁️ Revoca remota eBay: <code>non tentata</code>\n"
+
+
 def chunk_message(text: str, limit: int = 3500) -> list[str]:
     if len(text) <= limit:
         return [text]

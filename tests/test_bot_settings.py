@@ -30,6 +30,7 @@ from src.fiscalbay.storage.runtime import (
     save_tenant_runtime_state,
 )
 from src.fiscalbay.storage.users import (
+    load_telegram_user,
     load_telegram_users,
     resolve_linked_ebay_account,
     update_telegram_user_status,
@@ -176,58 +177,7 @@ class BotSettingsTests(unittest.TestCase):
         self.assertIn("Utenti approvati", policy_replies[0])
         self.assertIn("Rate limiting per utente", policy_replies[0])
 
-    @patch("src.fiscalbay.bot_common.fetch_records")
-    @patch("src.fiscalbay.bot_common.load_config")
-    def test_process_message_order_includes_notification_summary(
-        self,
-        mock_load_config,
-        mock_fetch_records,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = Path(tmpdir) / "state.db"
-            config = TelegramConfig(
-                token="x",
-                allowed_chat_ids={1, 123, 456, 573159993},
-                notify_chat_ids={456},
-                state_path=str(db_path),
-                retry_queue_path=str(db_path),
-            )
-            sync_runtime_contact(
-                config,
-                telegram_user_id=123,
-                chat_id=456,
-                username="seller_user",
-                display_name="Mario Rossi",
-                chat_type="private",
-            )
-            mock_load_config.return_value = object()
-            mock_fetch_records.return_value = _order_records(
-                [
-                    {
-                        "orderId": "12-34567-89012",
-                        "creationDate": "2026-04-05T20:00:00Z",
-                        "buyerUsername": "buyer",
-                        "taxpayerId": "RSSMRA80A01H501U",
-                        "taxIdentifierType": "CODICE_FISCALE",
-                        "issuingCountry": "IT",
-                    }
-                ]
-            )
-
-            replies = process_message(
-                text="/ordini cerca 12-34567-89012",
-                chat_id=456,
-                telegram_user_id=123,
-                telegram_config=config,
-                ebay_environment="production",
-            )
-
-            self.assertEqual(len(replies), 1)
-            self.assertIn("Notificabilità", replies[0])
-            self.assertIn("would_notify", replies[0])
-            self.assertIn("delivery_ready", replies[0])
-
-    @patch("src.fiscalbay.bot_account.load_tenant_config_from_storage")
+    @patch("src.fiscalbay.services.account.load_tenant_config_from_storage")
     def test_process_message_leave_bot_resets_access_and_notifications(
         self,
         mock_load_tenant_config_from_storage,
@@ -737,6 +687,83 @@ class BotSettingsTests(unittest.TestCase):
             sent_text = mock_send_message.call_args.args[2]
             self.assertIn("order-vat", sent_text)
             self.assertNotIn("order-cf", sent_text)
+
+    @patch("src.fiscalbay.bot_common.send_message")
+    def test_user_can_request_assisted_data_deletion(self, mock_send_message) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            config = TelegramConfig(
+                token="x",
+                allowed_chat_ids={123, 456},
+                notify_chat_ids=set(),
+                admin_user_id=123,
+                state_path=str(db_path),
+                retry_queue_path=str(db_path),
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=123,
+                chat_id=123,
+                username="admin_user",
+                display_name="Admin",
+                chat_type="private",
+            )
+            sync_runtime_contact(
+                config,
+                telegram_user_id=1000,
+                chat_id=456,
+                username="ops_user",
+                display_name="Ops User",
+                chat_type="private",
+            )
+            update_telegram_user_status(
+                str(db_path),
+                1000,
+                TELEGRAM_USER_STATUS_APPROVED,
+                updated_at="2026-04-06T10:00:00Z",
+            )
+            upsert_linked_ebay_account(
+                str(db_path),
+                LinkedEbayAccount(
+                    telegram_user_id=1000,
+                    ebay_user_id="seller-1000",
+                    environment="production",
+                    linked_at="2026-04-06T10:00:00Z",
+                ),
+            )
+
+            replies = process_message(
+                text="/settings dati cancellazione",
+                chat_id=456,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=1000,
+            )
+
+            self.assertEqual(len(replies), 1)
+            self.assertIn("Richiesta dati registrata", replies[0])
+            self.assertIn("Tipo richiesta: <code>delete</code>", replies[0])
+            self.assertIn("Azione automatica: <code>nessuna cancellazione</code>", replies[0])
+            self.assertIsNotNone(load_telegram_user(str(db_path), 1000))
+            self.assertIsNotNone(resolve_linked_ebay_account(str(db_path), 1000, "production"))
+            mock_send_message.assert_called_once()
+            self.assertEqual(mock_send_message.call_args.args[1], 123)
+            self.assertIn("Richiesta dati utente", mock_send_message.call_args.args[2])
+            self.assertIn("/admin export 1000", mock_send_message.call_args.args[2])
+            self.assertIn("/admin delete_tenant 1000 confirm", mock_send_message.call_args.args[2])
+            audit_entries = load_audit_log_entries(str(db_path), 5)
+            self.assertEqual(audit_entries[0].event_type, "data_request")
+            self.assertEqual(audit_entries[0].outcome, "delete_requested")
+
+            repeated = process_message(
+                text="/settings dati cancellazione",
+                chat_id=456,
+                telegram_config=config,
+                ebay_environment="production",
+                telegram_user_id=1000,
+            )
+            self.assertIn("cooldown", repeated[0])
+            mock_send_message.assert_called_once()
 
 
 if __name__ == "__main__":

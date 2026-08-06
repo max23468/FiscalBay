@@ -457,9 +457,9 @@ def summarize_multi_tenant_readiness(path: str) -> dict[str, int]:
             ).fetchone()[0]
         )
         blocked_users = as_int(
-            conn.execute(
-                "SELECT COUNT(*) FROM telegram_users WHERE status IN ('blocked', 'rejected')"
-            ).fetchone()[0]
+            conn.execute("SELECT COUNT(*) FROM telegram_users WHERE status = 'blocked'").fetchone()[
+                0
+            ]
         )
         tenant_chats = as_int(conn.execute("SELECT COUNT(*) FROM telegram_chats").fetchone()[0])
         linked_accounts = as_int(

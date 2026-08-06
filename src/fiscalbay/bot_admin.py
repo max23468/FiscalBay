@@ -8,6 +8,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Callable, cast
 
+from . import bot_common
 from .bot_authz import ADMIN_ONLY_COMMANDS
 from .bot_authz import load_user_status as _load_user_status
 from .bot_common import (
@@ -25,12 +26,14 @@ from .bot_common import (
     _parse_iso_timestamp,
     _save_service_state,
     _seconds_between,
+    load_recent_audit_entries,
     send_message,
 )
 from .config import (
     load_retention_config,
 )
 from .models import (
+    CAPABILITY_USE_BOT,
     TELEGRAM_USER_STATUS_ADMIN,
     TELEGRAM_USER_STATUS_APPROVED,
     TELEGRAM_USER_STATUS_BLOCKED,
@@ -39,17 +42,17 @@ from .models import (
     AuditLogEntry,
     TelegramConfig,
     TelegramUser,
+    has_telegram_user_capability,
+    is_blocked_telegram_user_status,
+    is_pending_telegram_user_status,
     normalize_telegram_user_status,
 )
 from .reconcile import enqueue_apply_user_access_operation, process_pending_operations
 from .release_info import collect_release_info
 from .scale_readiness import build_scale_readiness_report
 from .security_ops import build_security_ops_report
-from .storage.queues import (
-    load_audit_log_entries,
-    load_operation_queue_entries,
-    summarize_operation_queue,
-)
+from .services.tenant_status import rebuild_all_tenant_status_snapshots
+from .storage.queues import load_operation_queue_entries, summarize_operation_queue
 from .storage.retention import (
     delete_tenant_data,
     export_tenant_data,
@@ -68,13 +71,14 @@ from .storage.users import (
     load_telegram_user,
     load_telegram_users,
     load_tenant_status_snapshots,
-    rebuild_all_tenant_status_snapshots,
     resolve_primary_chat_id,
     summarize_tenant_account_status,
     update_telegram_user_status,
+    upsert_telegram_user,
 )
 from .support_snapshot import build_support_snapshot
 from .telegram_admin import (
+    format_admin_access_request,
     format_admin_command_help,
     format_admin_dashboard,
     format_admin_dormant_review,
@@ -91,6 +95,11 @@ from .telegram_admin import (
     format_support_snapshot,
     format_tenant_health,
 )
+from .telegram_commands import (
+    build_admin_approval_markup,
+    format_access_request_status,
+    format_access_required_status,
+)
 
 LOGGER = logging.getLogger("fiscalbay.telegram_bot")
 
@@ -105,20 +114,124 @@ REVOKED_STALE_HOURS = 72
 INACTIVE_TENANT_HOURS = 96
 
 
+def handle_access_request(
+    command: str,
+    *,
+    telegram_config: TelegramConfig,
+    chat_id: int,
+    telegram_user_id: int | None,
+    is_admin_user: bool,
+    user_status: str | None,
+    now: datetime,
+    now_iso: str,
+) -> list[str] | None:
+    if command != "/request_access":
+        return None
+    if telegram_config.admin_user_id is None:
+        return [
+            "✅ <b>Accesso libero</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Questa istanza del bot non richiede approvazione admin."
+        ]
+    if telegram_user_id is None:
+        return [format_access_request_status(admin_notified=False)]
+    if is_admin_user:
+        return [format_access_required_status(TELEGRAM_USER_STATUS_ADMIN, is_admin=True)]
+    if has_telegram_user_capability(user_status, CAPABILITY_USE_BOT):
+        return [
+            "✅ <b>Accesso già approvato</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Il tuo account è già abilitato all'uso del bot."
+        ]
+    if is_blocked_telegram_user_status(user_status):
+        return [format_access_request_status(blocked=True)]
+    remaining = _command_rate_limit_remaining_seconds(
+        telegram_config.state_path,
+        telegram_user_id=telegram_user_id,
+        command=command,
+        now=now,
+    )
+    if remaining > 0:
+        return [_format_cooldown_message(command, remaining)]
+
+    existing_user = load_telegram_user(telegram_config.state_path, telegram_user_id)
+    if existing_user is None:
+        upsert_telegram_user(
+            telegram_config.state_path,
+            TelegramUser(
+                telegram_user_id=telegram_user_id,
+                telegram_chat_id=chat_id,
+                username="",
+                display_name="",
+                created_at=now_iso,
+                status=TELEGRAM_USER_STATUS_PENDING,
+            ),
+        )
+        existing_user = load_telegram_user(telegram_config.state_path, telegram_user_id)
+    elif is_pending_telegram_user_status(existing_user.status):
+        _append_audit_log(
+            telegram_config,
+            event_type="request_access",
+            created_at=now_iso,
+            actor_telegram_user_id=telegram_user_id,
+            target_telegram_user_id=telegram_user_id,
+            telegram_chat_id=chat_id,
+            outcome="already_pending",
+            details={"user_status": existing_user.status},
+        )
+        return [format_access_request_status(already_pending=True)]
+    else:
+        update_telegram_user_status(
+            telegram_config.state_path,
+            telegram_user_id,
+            TELEGRAM_USER_STATUS_PENDING,
+            updated_at=now_iso,
+        )
+        existing_user = load_telegram_user(telegram_config.state_path, telegram_user_id)
+
+    admin_notified = False
+    admin_chat_id = resolve_primary_chat_id(
+        telegram_config.state_path,
+        telegram_config.admin_user_id,
+    )
+    if admin_chat_id is not None and existing_user is not None:
+        bot_common.send_message(
+            telegram_config.token,
+            admin_chat_id,
+            format_admin_access_request(
+                telegram_user_id=telegram_user_id,
+                username=existing_user.username,
+                display_name=existing_user.display_name,
+                chat_id=chat_id,
+            ),
+            reply_markup=build_admin_approval_markup(telegram_user_id),
+        )
+        admin_notified = True
+    _append_audit_log(
+        telegram_config,
+        event_type="request_access",
+        created_at=now_iso,
+        actor_telegram_user_id=telegram_user_id,
+        target_telegram_user_id=telegram_user_id,
+        telegram_chat_id=chat_id,
+        outcome="pending",
+        details={"admin_notified": admin_notified},
+    )
+    _mark_command_usage(
+        telegram_config.state_path,
+        telegram_user_id=telegram_user_id,
+        command=command,
+        timestamp=now_iso,
+    )
+    return [format_access_request_status(admin_notified=admin_notified)]
+
+
 def _admin_summary_key() -> str:
     return "admin_summary:last_sent_at"
 
 
 def _admin_summary_hash_key() -> str:
     return "admin_summary:last_payload_hash"
-
-
-def _load_recent_audit_entries(
-    telegram_config: TelegramConfig,
-    *,
-    limit: int = 300,
-) -> list[AuditLogEntry]:
-    return load_audit_log_entries(telegram_config.state_path, limit=limit)
 
 
 def _build_user_row(
@@ -304,7 +417,7 @@ def _build_recent_activity_rows(
 ) -> list[dict[str, Any]]:
     now = datetime.now(timezone.utc)
     counts: dict[str, int] = {}
-    for entry in _load_recent_audit_entries(telegram_config, limit=400):
+    for entry in load_recent_audit_entries(telegram_config, limit=400):
         created_at = _parse_iso_timestamp(entry.created_at)
         if created_at is None:
             continue
@@ -324,7 +437,7 @@ def _build_admin_history_rows(
     limit: int = 8,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for entry in _load_recent_audit_entries(telegram_config, limit=250):
+    for entry in load_recent_audit_entries(telegram_config, limit=250):
         if target_user_id is not None and target_user_id not in {
             entry.actor_telegram_user_id,
             entry.target_telegram_user_id,
@@ -372,7 +485,7 @@ def _build_product_metrics_payload(telegram_config: TelegramConfig) -> dict[str,
 def _build_admin_dashboard_payload(telegram_config: TelegramConfig) -> dict[str, Any]:
     rows = _build_user_rows(telegram_config)
     now = datetime.now(timezone.utc)
-    audit_entries = _load_recent_audit_entries(telegram_config, limit=400)
+    audit_entries = load_recent_audit_entries(telegram_config, limit=400)
     oauth_summary = summarize_oauth_link_sessions(
         telegram_config.state_path,
         now_iso=_now_utc_iso(),
@@ -643,7 +756,7 @@ def _handle_admin_read_command(
     return None
 
 
-def _maybe_send_admin_summary(telegram_config: TelegramConfig) -> None:
+def maybe_send_admin_summary(telegram_config: TelegramConfig) -> None:
     if telegram_config.admin_user_id is None:
         return
     admin_chat_id = resolve_primary_chat_id(
@@ -676,7 +789,7 @@ def _maybe_send_admin_summary(telegram_config: TelegramConfig) -> None:
     save_kv_value(telegram_config.state_path, _admin_summary_hash_key(), payload_hash)
 
 
-def _handle_admin_command(
+def handle_admin_command(
     command: str,
     args: list[str],
     *,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Mapping, Optional
+from typing import Callable, Mapping, Optional
 
 from .application import fetch_environment_records as _fetch_environment_records
 from .application import resolve_fetch_context as _resolve_fetch_context
@@ -30,9 +30,11 @@ from .models import (
     TELEGRAM_USER_STATUS_APPROVED,
     TELEGRAM_USER_STATUS_NEW,
     AuditLogEntry,
+    BotRuntimeState,
     FetchOptions,
     NotificationSubscription,
     OrderRecord,
+    RetryQueueEntry,
     TelegramChat,
     TelegramConfig,
     TelegramUser,
@@ -47,9 +49,7 @@ from .storage.notifications import (
     upsert_notification_subscription,
 )
 from .storage.oauth import load_latest_oauth_link_session
-from .storage.queues import (
-    append_audit_log_entry,
-)
+from .storage.queues import append_audit_log_entry, load_audit_log_entries
 from .storage.retention import (
     summarize_multi_tenant_readiness,
 )
@@ -66,7 +66,12 @@ from .storage.users import (
     upsert_telegram_chat,
     upsert_telegram_user,
 )
-from .telegram_commands import is_authorized
+from .telegram_commands import (
+    build_help_text,
+    build_other_actions_text,
+    format_status,
+    is_authorized,
+)
 from .tenant_credentials import load_tenant_config_from_storage
 
 LOGGER = logging.getLogger("fiscalbay.telegram_bot")
@@ -82,6 +87,44 @@ SERVICE_MODES = {
     SERVICE_MODE_MAINTENANCE,
     SERVICE_MODE_DEGRADED,
 }
+
+
+def load_recent_audit_entries(
+    telegram_config: TelegramConfig,
+    *,
+    limit: int = 300,
+) -> list[AuditLogEntry]:
+    return load_audit_log_entries(telegram_config.state_path, limit=limit)
+
+
+def handle_common_command(
+    command: str,
+    *,
+    telegram_config: TelegramConfig,
+    is_admin_user: bool,
+    runtime_context: dict[str, object],
+    load_state_fn: Callable[[str], BotRuntimeState],
+    load_retry_queue_fn: Callable[[str], list[RetryQueueEntry]],
+) -> list[str] | None:
+    if command == "/stato":
+        state = load_state_fn(telegram_config.state_path)
+        retry_queue_size = len(load_retry_queue_fn(telegram_config.retry_queue_path))
+        return [format_status(state, retry_queue_size, runtime_context=runtime_context)]
+    if command == "/help":
+        return [build_help_text(is_admin=is_admin_user)]
+    if command == "/altre_azioni":
+        return [build_other_actions_text(is_admin=is_admin_user)]
+    if command == "/ping":
+        return ["pong ✅"]
+    return None
+
+
+def tenant_not_linked_message(title: str) -> list[str]:
+    return [
+        f"{title}\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "Questa chat non è ancora associata a un tenant Telegram noto."
+    ]
+
 
 ORDER_COMMAND_COOLDOWN_SECONDS = 10
 

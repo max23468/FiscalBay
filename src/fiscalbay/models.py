@@ -178,11 +178,6 @@ def is_blocked_telegram_user_status(status: str | None) -> bool:
     return normalize_telegram_user_status(status) == TELEGRAM_USER_STATUS_BLOCKED
 
 
-def is_approved_telegram_user_status(status: str | None) -> bool:
-    canonical = normalize_telegram_user_status(status)
-    return canonical in {TELEGRAM_USER_STATUS_APPROVED, TELEGRAM_USER_STATUS_ADMIN}
-
-
 def get_telegram_user_capabilities(status: str | None) -> frozenset[str]:
     canonical = normalize_telegram_user_status(status)
     if canonical == TELEGRAM_USER_STATUS_ADMIN:

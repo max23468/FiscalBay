@@ -2,25 +2,28 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import json
 
 from ..models import (
-    CAPABILITY_MANAGE_NOTIFICATIONS,
-    TELEGRAM_USER_STATUS_ADMIN,
-    TELEGRAM_USER_STATUS_BLOCKED,
-    TELEGRAM_USER_STATUS_PENDING,
-    BotRuntimeState,
     EbayTokenSet,
     LinkedEbayAccount,
     TelegramChat,
     TelegramUser,
     as_int,
-    has_telegram_user_capability,
-    normalize_telegram_user_status,
 )
 from .connection import _connect, init_db
-from .notifications import load_notification_subscriptions, set_notification_subscription_enabled
-from .runtime import _json_dumps, _parse_operational_memory_state, load_tenant_runtime_state
+
+
+def _parse_json_object(raw_value: str) -> dict[str, object]:
+    try:
+        decoded = json.loads(raw_value)
+    except json.JSONDecodeError:
+        return {}
+    return decoded if isinstance(decoded, dict) else {}
+
+
+def _dump_json_object(payload: dict[str, object]) -> str:
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def upsert_telegram_user(path: str, user: TelegramUser) -> None:
@@ -101,57 +104,6 @@ def update_telegram_user_status(
         conn.execute(
             "UPDATE telegram_users SET status = ?, updated_at = ? WHERE telegram_user_id = ?",
             (status, updated_at, telegram_user_id),
-        )
-    return load_telegram_user(path, telegram_user_id)
-
-
-def apply_telegram_user_access_status(
-    path: str,
-    telegram_user_id: int,
-    status: str,
-    *,
-    updated_at: str,
-    default_notify_chat_ids: set[int] | None = None,
-) -> TelegramUser | None:
-    normalized_status = normalize_telegram_user_status(status)
-    user = update_telegram_user_status(
-        path,
-        telegram_user_id,
-        normalized_status,
-        updated_at=updated_at,
-    )
-    if user is None:
-        return None
-
-    notifications_allowed = has_telegram_user_capability(
-        normalized_status,
-        CAPABILITY_MANAGE_NOTIFICATIONS,
-    )
-    notify_chat_ids = default_notify_chat_ids or set()
-    existing_subscriptions = {
-        subscription.telegram_chat_id: subscription
-        for subscription in load_notification_subscriptions(path)
-        if subscription.telegram_user_id == telegram_user_id
-    }
-    for chat in load_telegram_chats(path):
-        if chat.telegram_user_id != telegram_user_id:
-            continue
-        existing_subscription = existing_subscriptions.get(chat.telegram_chat_id)
-        if not notifications_allowed:
-            enabled = False
-        elif existing_subscription is not None:
-            enabled = existing_subscription.enabled
-        elif notify_chat_ids:
-            enabled = chat.telegram_chat_id in notify_chat_ids
-        else:
-            enabled = True
-        set_notification_subscription_enabled(
-            path,
-            telegram_user_id,
-            chat.telegram_chat_id,
-            enabled,
-            created_at=chat.created_at or updated_at,
-            updated_at=updated_at,
         )
     return load_telegram_user(path, telegram_user_id)
 
@@ -356,7 +308,7 @@ def load_tenant_account_status_cache(path: str, telegram_user_id: int) -> dict[s
         ).fetchone()
         if row is None or row["account_snapshot_json"] is None:
             return {}
-    return _parse_operational_memory_state(str(row["account_snapshot_json"]))
+    return _parse_json_object(str(row["account_snapshot_json"]))
 
 
 def save_tenant_account_status_cache(
@@ -365,7 +317,7 @@ def save_tenant_account_status_cache(
     snapshot: dict[str, object],
 ) -> None:
     init_db(path)
-    serialized = _json_dumps(snapshot)
+    serialized = _dump_json_object(snapshot)
     with _connect(path) as conn:
         existing = conn.execute(
             "SELECT account_snapshot_json FROM tenant_runtime_state WHERE telegram_user_id = ?",
@@ -531,31 +483,6 @@ def summarize_tenant_account_status(
     return summary
 
 
-def _tenant_operational_state(user_status: str, account_status: str, token_status: str) -> str:
-    normalized_status = normalize_telegram_user_status(user_status)
-    if normalized_status == TELEGRAM_USER_STATUS_PENDING:
-        return "pending"
-    if normalized_status == TELEGRAM_USER_STATUS_BLOCKED:
-        return "blocked"
-    if normalized_status == TELEGRAM_USER_STATUS_ADMIN:
-        return "admin"
-    if account_status == "linked" and token_status == "active":
-        return "ready"
-    if _account_status_requires_reconnect(account_status, token_status):
-        return "reconnect_required"
-    return "waiting_connect"
-
-
-def _last_tenant_activity_at(user: TelegramUser, runtime_state: BotRuntimeState) -> str:
-    return (
-        runtime_state.memory.last_notified_order_created_at
-        or runtime_state.memory.last_seen_order_created_at
-        or runtime_state.memory.last_fetch_end
-        or user.created_at
-        or ""
-    )
-
-
 def save_tenant_status_snapshot(
     path: str,
     telegram_user_id: int,
@@ -564,7 +491,7 @@ def save_tenant_status_snapshot(
     updated_at: str,
 ) -> dict[str, object]:
     init_db(path)
-    serialized = _json_dumps(snapshot)
+    serialized = _dump_json_object(snapshot)
     operational_state = str(snapshot.get("operational_state") or "")
     last_activity_at = str(snapshot.get("last_activity_at") or "")
     with _connect(path) as conn:
@@ -613,7 +540,7 @@ def load_tenant_status_snapshot(path: str, telegram_user_id: int) -> dict[str, o
         ).fetchone()
     if row is None:
         return {}
-    return _parse_operational_memory_state(str(row["snapshot_json"]))
+    return _parse_json_object(str(row["snapshot_json"]))
 
 
 def load_tenant_status_snapshots(path: str) -> list[dict[str, object]]:
@@ -622,80 +549,7 @@ def load_tenant_status_snapshots(path: str) -> list[dict[str, object]]:
         rows = conn.execute(
             "SELECT snapshot_json FROM tenant_status_snapshots ORDER BY telegram_user_id"
         ).fetchall()
-    return [_parse_operational_memory_state(str(row["snapshot_json"])) for row in rows]
-
-
-def rebuild_tenant_status_snapshot(
-    path: str,
-    telegram_user_id: int,
-    *,
-    now_iso: str | None = None,
-) -> dict[str, object]:
-    from .oauth import load_latest_oauth_link_session
-
-    user = load_telegram_user(path, telegram_user_id)
-    if user is None:
-        return {}
-    timestamp = now_iso or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    account_status = summarize_tenant_account_status(path, telegram_user_id, "")
-    runtime_state = load_tenant_runtime_state(path, telegram_user_id)
-    latest_session = load_latest_oauth_link_session(path, telegram_user_id)
-    raw_account_status = str(account_status.get("account_status") or "unlinked")
-    raw_token_status = str(account_status.get("token_status") or "missing")
-    operational_state = _tenant_operational_state(
-        user.status,
-        raw_account_status,
-        raw_token_status,
-    )
-    last_issue = str(account_status.get("latest_reconnect_outcome") or "")
-    if not last_issue and operational_state != "ready":
-        last_issue = operational_state
-    snapshot: dict[str, object] = {
-        "telegram_user_id": user.telegram_user_id,
-        "telegram_chat_id": user.telegram_chat_id,
-        "username": user.username,
-        "display_name": user.display_name,
-        "status": user.status,
-        "operational_state": operational_state,
-        "account_status": account_status.get("account_status"),
-        "token_status": account_status.get("token_status"),
-        "environment": account_status.get("environment"),
-        "ebay_user_id": account_status.get("ebay_user_id"),
-        "subscription_count": account_status.get("subscription_count", 0),
-        "chat_count": account_status.get("chat_count", 0),
-        "last_issue": last_issue or "none",
-        "last_activity_at": _last_tenant_activity_at(user, runtime_state),
-        "created_at": user.created_at or "",
-        "last_fetch_end": runtime_state.memory.last_fetch_end,
-        "last_seen_order_id": runtime_state.memory.last_seen_order_id,
-        "last_seen_order_created_at": runtime_state.memory.last_seen_order_created_at,
-        "last_notified_order_id": runtime_state.memory.last_notified_order_id,
-        "last_notified_order_created_at": runtime_state.memory.last_notified_order_created_at,
-        "latest_session_status": latest_session.status if latest_session is not None else "",
-        "latest_session_expires_at": (
-            latest_session.expires_at if latest_session is not None else ""
-        ),
-    }
-    return save_tenant_status_snapshot(path, telegram_user_id, snapshot, updated_at=timestamp)
-
-
-def rebuild_all_tenant_status_snapshots(path: str, *, now_iso: str | None = None) -> dict[str, int]:
-    init_db(path)
-    users = load_telegram_users(path)
-    rebuilt = 0
-    for user in users:
-        if rebuild_tenant_status_snapshot(path, user.telegram_user_id, now_iso=now_iso):
-            rebuilt += 1
-    with _connect(path) as conn:
-        cursor = conn.execute(
-            "DELETE FROM tenant_status_snapshots "
-            "WHERE telegram_user_id NOT IN (SELECT telegram_user_id FROM telegram_users)"
-        )
-    return {
-        "users_scanned": len(users),
-        "snapshots_rebuilt": rebuilt,
-        "snapshots_deleted": int(cursor.rowcount if cursor.rowcount is not None else 0),
-    }
+    return [_parse_json_object(str(row["snapshot_json"])) for row in rows]
 
 
 def summarize_tenant_status_snapshots(

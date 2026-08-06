@@ -5,9 +5,11 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from .bot_account import _disconnect_account_with_remote_revocation, _tenant_not_linked_message
+from . import bot_common
 from .bot_common import (
     _append_audit_log,
+    _build_policy_status_payload,
+    _build_service_status_payload,
     _build_tenant_ux_context,
     _command_rate_limit_remaining_seconds,
     _format_cooldown_message,
@@ -15,6 +17,7 @@ from .bot_common import (
     _notification_filter_label,
     _notification_filter_mode_from_filters,
     _notification_filter_payload,
+    tenant_not_linked_message,
 )
 from .models import (
     TELEGRAM_USER_STATUS_ADMIN,
@@ -24,6 +27,8 @@ from .models import (
     TenantChatContext,
     normalize_telegram_user_status,
 )
+from .services.account import disconnect_account_with_remote_revocation
+from .services.user_access import apply_telegram_user_access_status
 from .storage.notifications import (
     load_notification_subscriptions,
     set_notification_subscription_enabled,
@@ -34,20 +39,126 @@ from .storage.runtime import (
     load_tenant_runtime_state,
 )
 from .storage.users import (
-    apply_telegram_user_access_status,
     load_telegram_user,
+    resolve_primary_chat_id,
     summarize_tenant_account_status,
 )
+from .telegram_admin import format_admin_data_request
 from .telegram_settings import (
+    format_data_request_help,
+    format_data_request_status,
     format_leave_status,
     format_notifications_status,
+    format_policy_status,
+    format_service_status,
     format_settings_status,
 )
 
 LOGGER = logging.getLogger("fiscalbay.telegram_bot")
 
 
-def _handle_settings_command(
+def handle_public_settings_command(
+    command: str,
+    args: list[str],
+    *,
+    telegram_config: TelegramConfig,
+    chat_id: int,
+    environment: str,
+    telegram_user_id: int | None,
+    is_admin_user: bool,
+    can_use_bot: bool,
+    now: datetime,
+    now_iso: str,
+) -> list[str] | None:
+    if command == "/service_status":
+        return [format_service_status(_build_service_status_payload(telegram_config.state_path))]
+    if command == "/policy":
+        return [format_policy_status(_build_policy_status_payload(telegram_config.state_path))]
+    if command != "/data_request" or not (is_admin_user or can_use_bot):
+        return None
+    if telegram_user_id is None:
+        return [
+            "🗂️ <b>Dati e privacy</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Non riesco a identificare l'utente Telegram da questa richiesta."
+        ]
+    request_arg = str(args[0]).strip().lower() if args else ""
+    if request_arg in {"", "help"}:
+        return [format_data_request_help(_build_policy_status_payload(telegram_config.state_path))]
+    if request_arg == "export":
+        request_type = "export"
+    elif request_arg == "cancellazione":
+        request_type = "delete"
+    else:
+        return [
+            "Uso corretto: <code>/settings dati export</code> oppure "
+            "<code>/settings dati cancellazione</code>"
+        ]
+    remaining = _command_rate_limit_remaining_seconds(
+        telegram_config.state_path,
+        telegram_user_id=telegram_user_id,
+        command=command,
+        now=now,
+    )
+    if remaining > 0:
+        return [_format_cooldown_message(command, remaining)]
+    current_user = load_telegram_user(telegram_config.state_path, telegram_user_id)
+    account_status = summarize_tenant_account_status(
+        telegram_config.state_path,
+        telegram_user_id,
+        environment,
+    )
+    admin_notified = False
+    admin_chat_id = (
+        resolve_primary_chat_id(telegram_config.state_path, telegram_config.admin_user_id)
+        if telegram_config.admin_user_id is not None
+        else None
+    )
+    if admin_chat_id is not None and current_user is not None:
+        bot_common.send_message(
+            telegram_config.token,
+            admin_chat_id,
+            format_admin_data_request(
+                telegram_user_id=telegram_user_id,
+                username=current_user.username,
+                display_name=current_user.display_name,
+                chat_id=chat_id,
+                request_type=request_type,
+                account_status=account_status,
+            ),
+        )
+        admin_notified = True
+    _append_audit_log(
+        telegram_config,
+        event_type="data_request",
+        created_at=now_iso,
+        actor_telegram_user_id=telegram_user_id,
+        target_telegram_user_id=telegram_user_id,
+        telegram_chat_id=chat_id,
+        environment=environment,
+        outcome=f"{request_type}_requested",
+        details={
+            "admin_notified": admin_notified,
+            "account_status": str(account_status.get("account_status") or ""),
+            "token_status": str(account_status.get("token_status") or ""),
+        },
+    )
+    _mark_command_usage(
+        telegram_config.state_path,
+        telegram_user_id=telegram_user_id,
+        command=command,
+        timestamp=now_iso,
+    )
+    return [
+        format_data_request_status(
+            request_type=request_type,
+            admin_notified=admin_notified,
+            account_status=account_status,
+        )
+    ]
+
+
+def handle_settings_command(
     command: str,
     args: list[str],
     *,
@@ -61,7 +172,7 @@ def _handle_settings_command(
 ) -> list[str] | None:
     if command == "/leave_bot":
         if resolved_telegram_user_id is None:
-            return _tenant_not_linked_message("🚪 <b>Disattiva uso bot</b>")
+            return tenant_not_linked_message("🚪 <b>Disattiva uso bot</b>")
         remaining = _command_rate_limit_remaining_seconds(
             telegram_config.state_path,
             telegram_user_id=resolved_telegram_user_id,
@@ -88,7 +199,7 @@ def _handle_settings_command(
             disconnected_account,
             remote_revocation_status,
             remote_revocation_detail,
-        ) = _disconnect_account_with_remote_revocation(
+        ) = disconnect_account_with_remote_revocation(
             telegram_config=telegram_config,
             telegram_user_id=resolved_telegram_user_id,
             environment=resolved_environment,
@@ -155,7 +266,7 @@ def _handle_settings_command(
 
     if command == "/notifications":
         if resolved_telegram_user_id is None:
-            return _tenant_not_linked_message("🔔 <b>Notifiche chat</b>")
+            return tenant_not_linked_message("🔔 <b>Notifiche chat</b>")
         command_args = args
         subscriptions = load_notification_subscriptions(telegram_config.state_path)
         current_subscription = next(

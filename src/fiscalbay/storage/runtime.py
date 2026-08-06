@@ -272,12 +272,6 @@ def save_kv_value(path: str, key: str, value: str) -> None:
         )
 
 
-def delete_kv_value(path: str, key: str) -> None:
-    init_db(path)
-    with _connect(path) as conn:
-        conn.execute("DELETE FROM kv_store WHERE key = ?", (key,))
-
-
 def save_state(path: str, state: BotRuntimeStatePayload) -> None:
     init_db(path)
     with _connect(path) as conn:

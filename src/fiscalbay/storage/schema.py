@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
@@ -43,7 +43,7 @@ def _create_v3_schema(conn: sqlite3.Connection) -> None:
         "telegram_user_id INTEGER NOT NULL UNIQUE, "
         "username TEXT NOT NULL DEFAULT '', "
         "display_name TEXT NOT NULL DEFAULT '', "
-        "status TEXT NOT NULL DEFAULT 'active', "
+        "status TEXT NOT NULL DEFAULT 'new', "
         "created_at TEXT, "
         "updated_at TEXT"
         ")"
@@ -291,6 +291,11 @@ def _create_v10_schema(conn: sqlite3.Connection) -> None:
         )
 
 
+def _create_v11_schema(conn: sqlite3.Connection) -> None:
+    if _table_exists(conn, "telegram_users"):
+        conn.execute("UPDATE telegram_users SET status = 'blocked' WHERE status = 'rejected'")
+
+
 def migrate_db(conn: sqlite3.Connection) -> None:
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     if version >= SCHEMA_VERSION:
@@ -320,4 +325,6 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         version = 9
     if version < 10:
         _create_v10_schema(conn)
+    if version < 11:
+        _create_v11_schema(conn)
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")

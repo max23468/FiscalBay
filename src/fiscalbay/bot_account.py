@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from .bot_admin import _load_recent_audit_entries
 from .bot_common import (
     _append_audit_log,
     _build_tenant_ux_context,
@@ -13,6 +12,8 @@ from .bot_common import (
     _format_cooldown_message,
     _mark_command_usage,
     _parse_iso_timestamp,
+    load_recent_audit_entries,
+    tenant_not_linked_message,
 )
 from .bot_oauth import (
     build_connect_entrypoint_url,
@@ -21,24 +22,27 @@ from .bot_oauth import (
 from .bot_oauth import (
     is_reusable_oauth_session as _is_reusable_oauth_session,
 )
-from .clients.ebay import revoke_user_refresh_token
-from .errors import ConfigurationError
 from .models import (
-    LinkedEbayAccount,
+    TELEGRAM_USER_STATUS_ADMIN,
+    TELEGRAM_USER_STATUS_APPROVED,
+    TELEGRAM_USER_STATUS_NEW,
     TelegramConfig,
 )
-from .storage.oauth import disconnect_linked_ebay_account, load_latest_oauth_link_session
+from .services.account import disconnect_account_with_remote_revocation
+from .storage.oauth import load_latest_oauth_link_session
 from .storage.users import (
-    resolve_linked_ebay_account,
     summarize_tenant_account_status,
 )
+from .support_snapshot import build_support_snapshot
 from .telegram_account import (
     format_account_status,
     format_connect_status,
     format_disconnect_status,
+    format_onboarding_guide,
     format_reconnect_status,
 )
-from .tenant_credentials import load_tenant_config_from_storage
+from .telegram_admin import format_support_snapshot
+from .telegram_commands import build_start_text
 
 LOGGER = logging.getLogger("fiscalbay.telegram_bot")
 
@@ -50,7 +54,7 @@ def _connect_cooldown_remaining_seconds(
     environment: str,
     now: datetime,
 ) -> int:
-    entries = _load_recent_audit_entries(telegram_config, limit=300)
+    entries = load_recent_audit_entries(telegram_config, limit=300)
     connect_attempts = 0
     recent_failure_times: list[datetime] = []
     latest_failure: datetime | None = None
@@ -94,13 +98,6 @@ def _connect_cooldown_remaining_seconds(
     return 0
 
 
-def _tenant_not_linked_message(title: str) -> list[str]:
-    return [
-        f"{title}\n━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "Questa chat non è ancora associata a un tenant Telegram noto."
-    ]
-
-
 def _load_tenant_ux_context_for_command(
     telegram_config: TelegramConfig,
     *,
@@ -110,7 +107,7 @@ def _load_tenant_ux_context_for_command(
     title: str,
 ) -> tuple[dict[str, object] | None, list[str] | None]:
     if telegram_user_id is None:
-        return None, _tenant_not_linked_message(title)
+        return None, tenant_not_linked_message(title)
     return (
         _build_tenant_ux_context(
             telegram_config,
@@ -122,48 +119,7 @@ def _load_tenant_ux_context_for_command(
     )
 
 
-def _disconnect_account_with_remote_revocation(
-    *,
-    telegram_config: TelegramConfig,
-    telegram_user_id: int,
-    environment: str,
-) -> tuple[LinkedEbayAccount | None, str, str]:
-    linked_account = resolve_linked_ebay_account(
-        telegram_config.state_path,
-        telegram_user_id,
-        environment,
-    )
-    remote_revocation_status = "not_attempted"
-    remote_revocation_detail = ""
-    if linked_account is not None:
-        try:
-            tenant_config = load_tenant_config_from_storage(
-                linked_account,
-                environment,
-                telegram_config.state_path,
-            )
-        except ConfigurationError as exc:
-            tenant_config = None
-            remote_revocation_status = "token_unavailable"
-            remote_revocation_detail = str(exc)
-        if tenant_config is not None:
-            revocation = revoke_user_refresh_token(tenant_config)
-            remote_revocation_status = str(revocation.get("status") or "not_attempted")
-            remote_revocation_detail = str(
-                revocation.get("user_action") or revocation.get("detail") or ""
-            )
-        elif remote_revocation_status == "not_attempted":
-            remote_revocation_status = "token_unavailable"
-            remote_revocation_detail = "token tenant assente o non decifrabile"
-    disconnected_account = disconnect_linked_ebay_account(
-        telegram_config.state_path,
-        telegram_user_id,
-        environment,
-    )
-    return disconnected_account, remote_revocation_status, remote_revocation_detail
-
-
-def _handle_account_command(
+def handle_account_command(
     command: str,
     args: list[str],
     *,
@@ -173,7 +129,62 @@ def _handle_account_command(
     resolved_telegram_user_id: int | None,
     now: datetime,
     now_iso: str,
+    is_admin_user: bool,
+    user_status: str | None,
 ) -> list[str] | None:
+    if command in {"", "/start"}:
+        if is_admin_user:
+            return [build_start_text(user_status=TELEGRAM_USER_STATUS_ADMIN, is_admin=True)]
+        account_status: dict[str, object] | None = None
+        if telegram_user_id := resolved_telegram_user_id:
+            account_status = summarize_tenant_account_status(
+                telegram_config.state_path,
+                telegram_user_id,
+                resolved_environment,
+            )
+        return [
+            build_start_text(
+                user_status=(
+                    user_status
+                    or (
+                        TELEGRAM_USER_STATUS_NEW
+                        if telegram_config.admin_user_id is not None
+                        else TELEGRAM_USER_STATUS_APPROVED
+                    )
+                ),
+                account_status=account_status,
+            )
+        ]
+
+    if command == "/onboarding":
+        account_status = None
+        if resolved_telegram_user_id is not None:
+            account_status = summarize_tenant_account_status(
+                telegram_config.state_path,
+                resolved_telegram_user_id,
+                resolved_environment,
+            )
+        return [
+            format_onboarding_guide(
+                user_status=user_status or TELEGRAM_USER_STATUS_NEW,
+                account_status=account_status,
+                is_admin=is_admin_user,
+            )
+        ]
+
+    if command == "/support":
+        if resolved_telegram_user_id is None:
+            return ["Non riesco a identificare l'utente Telegram per lo snapshot supporto."]
+        return [
+            format_support_snapshot(
+                build_support_snapshot(
+                    telegram_config.state_path,
+                    resolved_telegram_user_id,
+                    environment=resolved_environment,
+                )
+            )
+        ]
+
     if command == "/account":
         account_status, missing_response = _load_tenant_ux_context_for_command(
             telegram_config,
@@ -185,7 +196,7 @@ def _handle_account_command(
         if missing_response is not None:
             return missing_response
         if account_status is None:
-            return _tenant_not_linked_message("👤 <b>Account eBay</b>")
+            return tenant_not_linked_message("👤 <b>Account eBay</b>")
         return [format_account_status(account_status)]
 
     if command == "/reconnect_status":
@@ -199,12 +210,12 @@ def _handle_account_command(
         if missing_response is not None:
             return missing_response
         if account_status is None:
-            return _tenant_not_linked_message("🔁 <b>Reconnect status</b>")
+            return tenant_not_linked_message("🔁 <b>Reconnect status</b>")
         return [format_reconnect_status(account_status)]
 
     if command == "/connect":
         if resolved_telegram_user_id is None:
-            return _tenant_not_linked_message("🔗 <b>Collegamento account eBay</b>")
+            return tenant_not_linked_message("🔗 <b>Collegamento account eBay</b>")
         connect_account_status, missing_response = _load_tenant_ux_context_for_command(
             telegram_config,
             telegram_user_id=resolved_telegram_user_id,
@@ -215,7 +226,7 @@ def _handle_account_command(
         if missing_response is not None:
             return missing_response
         if connect_account_status is None:
-            return _tenant_not_linked_message("🔗 <b>Collegamento account eBay</b>")
+            return tenant_not_linked_message("🔗 <b>Collegamento account eBay</b>")
         latest_session = load_latest_oauth_link_session(
             telegram_config.state_path,
             resolved_telegram_user_id,
@@ -305,7 +316,7 @@ def _handle_account_command(
 
     if command == "/disconnect":
         if resolved_telegram_user_id is None:
-            return _tenant_not_linked_message("❌ <b>Scollega account eBay</b>")
+            return tenant_not_linked_message("❌ <b>Scollega account eBay</b>")
         remaining = _command_rate_limit_remaining_seconds(
             telegram_config.state_path,
             telegram_user_id=resolved_telegram_user_id,
@@ -318,7 +329,7 @@ def _handle_account_command(
             disconnected_account,
             remote_revocation_status,
             remote_revocation_detail,
-        ) = _disconnect_account_with_remote_revocation(
+        ) = disconnect_account_with_remote_revocation(
             telegram_config=telegram_config,
             telegram_user_id=resolved_telegram_user_id,
             environment=resolved_environment,

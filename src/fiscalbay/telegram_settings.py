@@ -8,6 +8,7 @@ from typing import Any, Mapping
 from .models import (
     normalize_telegram_user_status,
 )
+from .telegram_common import format_remote_revocation_line
 
 
 def format_data_request_status(
@@ -135,7 +136,7 @@ def format_leave_status(leave_status: Mapping[str, Any]) -> str:
         str(leave_status.get("remote_revocation_status", "not_attempted"))
     )
     remote_revocation_detail = html.escape(str(leave_status.get("remote_revocation_detail", "")))
-    remote_line = _format_remote_revocation_line(
+    remote_line = format_remote_revocation_line(
         remote_revocation_status,
         remote_revocation_detail,
     )
@@ -275,32 +276,3 @@ def format_settings_status(settings_status: Mapping[str, Any]) -> str:
         "<code>/settings notifiche on</code>, "
         "<code>/settings notifiche off</code>."
     )
-
-
-def _format_remote_revocation_line(status: str, detail: str) -> str:
-    safe_detail = detail or "token locale già assente"
-    if status == "revoked":
-        return "☁️ Revoca remota eBay: <code>completata</code>\n"
-    if status == "failed":
-        return "☁️ Revoca remota eBay: <code>non confermata</code>\n"
-    if status == "manual_required":
-        return (
-            "☁️ Revoca consenso eBay: <code>manuale</code>\n"
-            f"📝 Prossimo passo eBay: <code>{detail}</code>\n"
-        )
-    if status == "missing_token":
-        return (
-            "☁️ Revoca consenso eBay: <code>non verificabile</code>\n"
-            f"📝 Nota: <code>{safe_detail}</code>\n"
-        )
-    if status == "token_unavailable":
-        return (
-            "☁️ Revoca consenso eBay: <code>manuale</code>\n"
-            "📝 Nota: <code>token non leggibile localmente; token locale comunque rimosso</code>\n"
-        )
-    if status == "skipped":
-        return (
-            "☁️ Revoca remota eBay: <code>saltata</code>\n"
-            f"📝 Nota: <code>{detail or 'token locale rimosso'}</code>\n"
-        )
-    return "☁️ Revoca remota eBay: <code>non tentata</code>\n"

@@ -18,6 +18,8 @@ from .models import (
     OperationQueueEntry,
     normalize_telegram_user_status,
 )
+from .services.tenant_status import rebuild_all_tenant_status_snapshots
+from .services.user_access import apply_telegram_user_access_status
 from .storage.notifications import load_notification_subscriptions
 from .storage.queues import (
     append_audit_log_entry,
@@ -35,11 +37,9 @@ from .storage.retention import (
     save_retention_prune_status,
 )
 from .storage.users import (
-    apply_telegram_user_access_status,
     load_telegram_chats,
     load_telegram_user,
     load_telegram_users,
-    rebuild_all_tenant_status_snapshots,
 )
 
 LOGGER = logging.getLogger("fiscalbay.reconcile")

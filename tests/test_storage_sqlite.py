@@ -1,5 +1,7 @@
+import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from src.fiscalbay.models import (
@@ -22,6 +24,8 @@ from src.fiscalbay.models import (
     TelegramChat,
     TelegramUser,
 )
+from src.fiscalbay.services.tenant_status import rebuild_all_tenant_status_snapshots
+from src.fiscalbay.services.user_access import apply_telegram_user_access_status
 from src.fiscalbay.storage.notifications import (
     list_notification_tenants,
     load_notification_subscriptions,
@@ -63,13 +67,11 @@ from src.fiscalbay.storage.runtime import (
     summarize_retry_queue_backlog,
 )
 from src.fiscalbay.storage.users import (
-    apply_telegram_user_access_status,
     load_ebay_token_sets,
     load_linked_ebay_accounts,
     load_telegram_chats,
     load_telegram_users,
     load_tenant_status_snapshot,
-    rebuild_all_tenant_status_snapshots,
     resolve_linked_ebay_account,
     resolve_primary_chat_id,
     save_tenant_account_status_cache,
@@ -83,6 +85,35 @@ from src.fiscalbay.storage.users import (
 
 
 class SQLiteStorageIntegrationTests(unittest.TestCase):
+    def test_schema_migrates_rejected_users_to_blocked_before_loading(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            with closing(sqlite3.connect(db_path)) as conn:
+                conn.execute(
+                    "CREATE TABLE telegram_users ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "telegram_user_id INTEGER NOT NULL UNIQUE, "
+                    "username TEXT NOT NULL DEFAULT '', "
+                    "display_name TEXT NOT NULL DEFAULT '', "
+                    "status TEXT NOT NULL, created_at TEXT, updated_at TEXT)"
+                )
+                conn.execute(
+                    "INSERT INTO telegram_users "
+                    "(telegram_user_id, username, display_name, status) "
+                    "VALUES (123, 'seller', 'Seller', 'rejected')"
+                )
+                conn.execute(
+                    "CREATE TABLE telegram_chats ("
+                    "telegram_user_id INTEGER NOT NULL, "
+                    "telegram_chat_id INTEGER NOT NULL, is_primary INTEGER NOT NULL DEFAULT 1)"
+                )
+                conn.execute("PRAGMA user_version = 10")
+                conn.commit()
+
+            users = load_telegram_users(str(db_path))
+
+            self.assertEqual(users[0].status, TELEGRAM_USER_STATUS_BLOCKED)
+
     def test_audit_log_roundtrip(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"

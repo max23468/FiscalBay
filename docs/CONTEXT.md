@@ -78,7 +78,10 @@ Fuori perimetro senza decisione esplicita:
 - `src/fiscalbay/telegram_commands.py`: parsing, menu e callback.
 - `src/fiscalbay/telegram_{common,admin,orders,account,settings}.py`: rendering per dominio.
 - `src/fiscalbay/services/orders.py`: fetch e normalizzazione ordini.
+- `src/fiscalbay/services/account.py`: scollegamento locale e revoca remota eBay.
 - `src/fiscalbay/services/notifications.py`: deduplica, notifiche e retry.
+- `src/fiscalbay/services/tenant_status.py`: composizione degli snapshot tenant.
+- `src/fiscalbay/services/user_access.py`: stato accesso e sincronizzazione notifiche.
 - `src/fiscalbay/services/telegram_runtime.py`: polling Telegram e lifecycle.
 - `src/fiscalbay/clients/ebay.py`: API eBay.
 - `src/fiscalbay/clients/telegram.py`: Telegram Bot API.

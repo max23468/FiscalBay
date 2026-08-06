@@ -10,7 +10,7 @@ from .models import (
     is_pending_telegram_user_status,
     normalize_telegram_user_status,
 )
-from .telegram_settings import _format_remote_revocation_line
+from .telegram_common import format_remote_revocation_line
 
 
 def format_onboarding_guide(
@@ -366,7 +366,7 @@ def format_disconnect_status(disconnect_status: Mapping[str, Any]) -> str:
     remote_revocation_detail = html.escape(
         str(disconnect_status.get("remote_revocation_detail", ""))
     )
-    remote_line = _format_remote_revocation_line(
+    remote_line = format_remote_revocation_line(
         remote_revocation_status,
         remote_revocation_detail,
     )

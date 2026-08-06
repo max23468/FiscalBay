@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfoNotFoundError
 from src.fiscalbay import telegram_commands as telegram_commands_module
 from src.fiscalbay.bot import process_message, sync_runtime_branding
 from src.fiscalbay.bot_common import send_message
-from src.fiscalbay.bot_orders import _handle_orders_command
+from src.fiscalbay.bot_orders import handle_orders_command
 from src.fiscalbay.bot_process_lock import acquire_process_lock, release_process_lock
 from src.fiscalbay.clients.telegram import ensure_long_polling, sync_bot_branding
 from src.fiscalbay.errors import ConfigurationError, EbayApiError, TelegramApiError
@@ -304,7 +304,7 @@ class TelegramBotTests(unittest.TestCase):
         config = self._base_config()
         mock_backoff.side_effect = self._run_backoff
 
-        help_reply = _handle_orders_command(
+        help_reply = handle_orders_command(
             "/ordini",
             [],
             telegram_config=config,
@@ -317,7 +317,7 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIsNotNone(help_reply)
         self.assertIn("Usa <code>/ordini</code>", help_reply[0])
 
-        fiscali_reply = _handle_orders_command(
+        fiscali_reply = handle_orders_command(
             "/ordini",
             ["fiscali", "7", "5"],
             telegram_config=config,
@@ -335,7 +335,7 @@ class TelegramBotTests(unittest.TestCase):
         )
         self.assertIn("12-34567-89012", fiscali_reply[0])
 
-        tutti_reply = _handle_orders_command(
+        tutti_reply = handle_orders_command(
             "/ordini",
             ["tutti", "7", "5"],
             telegram_config=config,
@@ -349,7 +349,7 @@ class TelegramBotTests(unittest.TestCase):
         )
         self.assertIn("12-34567-89013", tutti_reply[0])
 
-        search_reply = _handle_orders_command(
+        search_reply = handle_orders_command(
             "/ordini",
             ["cerca", "buyer-vat", "7", "20"],
             telegram_config=config,
@@ -370,7 +370,7 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("buyer-vat", search_reply[0])
         self.assertNotIn("plain-order-1", search_reply[0])
 
-        review_reply = _handle_orders_command(
+        review_reply = handle_orders_command(
             "/ordini",
             ["controlla", "7", "20"],
             telegram_config=config,
@@ -390,7 +390,7 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("order-missing", review_reply[0])
         self.assertNotIn("order-ok", review_reply[0])
 
-        report_reply = _handle_orders_command(
+        report_reply = handle_orders_command(
             "/ordini",
             ["report", "7", "20"],
             telegram_config=config,
@@ -411,7 +411,7 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("Mini Report Fiscale", report_reply[0])
         self.assertIn("Senza dato fiscale: <code>1</code>", report_reply[0])
 
-        priority_reply = _handle_orders_command(
+        priority_reply = handle_orders_command(
             "/ordini",
             ["priorita", "7", "20"],
             telegram_config=config,
@@ -439,7 +439,7 @@ class TelegramBotTests(unittest.TestCase):
             priority_reply[0].index("order-vat"),
         )
 
-        export_reply = _handle_orders_command(
+        export_reply = handle_orders_command(
             "/ordini",
             ["export", "7", "20"],
             telegram_config=config,
@@ -460,7 +460,7 @@ class TelegramBotTests(unittest.TestCase):
         self.assertIn("Export Fiscale Venditore", export_reply[0])
         self.assertIn("CSV export", export_reply[1])
 
-        unknown_reply = _handle_orders_command(
+        unknown_reply = handle_orders_command(
             "/ordini",
             ["boh"],
             telegram_config=config,
@@ -476,7 +476,7 @@ class TelegramBotTests(unittest.TestCase):
         config = self._base_config()
 
         self.assertEqual(
-            _handle_orders_command(
+            handle_orders_command(
                 "/ordini",
                 ["cerca"],
                 telegram_config=config,
@@ -489,7 +489,7 @@ class TelegramBotTests(unittest.TestCase):
             ["Uso corretto: <code>/ordini cerca &lt;order_id|testo&gt; [giorni] [max]</code>"],
         )
 
-        invalid_search = _handle_orders_command(
+        invalid_search = handle_orders_command(
             "/ordini",
             ["cerca", "buyer", "nope"],
             telegram_config=config,
@@ -517,7 +517,7 @@ class TelegramBotTests(unittest.TestCase):
                 ["export", "7", "5"],
             ):
                 with self.subTest(args=args):
-                    reply = _handle_orders_command(
+                    reply = handle_orders_command(
                         "/ordini",
                         args,
                         telegram_config=config,
@@ -535,7 +535,7 @@ class TelegramBotTests(unittest.TestCase):
                 EbayApiError("Invalid Order Id", status_code=400)
             ),
         ):
-            search_error = _handle_orders_command(
+            search_error = handle_orders_command(
                 "/ordini",
                 ["cerca", "12-34567-89012"],
                 telegram_config=config,
@@ -547,7 +547,7 @@ class TelegramBotTests(unittest.TestCase):
             )
             self.assertIn("eBay ha rifiutato questo orderId", search_error[0])
 
-            explain_error = _handle_orders_command(
+            explain_error = handle_orders_command(
                 "/ordini",
                 ["spiega", "12-34567-89012"],
                 telegram_config=config,
@@ -560,7 +560,7 @@ class TelegramBotTests(unittest.TestCase):
             self.assertIn("eBay ha rifiutato questo orderId", explain_error[0])
 
         self.assertEqual(
-            _handle_orders_command(
+            handle_orders_command(
                 "/ordini",
                 ["spiega"],
                 telegram_config=config,

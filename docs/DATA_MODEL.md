@@ -202,6 +202,8 @@ Comportamento corrente:
 - il fetch applicativo può ora risolvere dal DB anche l'account eBay collegato e il relativo `environment`, pur continuando a usare credenziali globali finché non esistono token utente reali
 - la scelta finale tra credenziali tenant-specifiche e fallback globale passa ora da un contesto applicativo esplicito, invece di essere implicita nei singoli caller
 - `tenant_status_snapshots` materializza l'ultimo stato utile del tenant per dashboard admin, healthcheck e review operative senza ricalcolare ogni volta account, token, subscription e runtime memory
+- la migrazione schema v11 converte gli stati Telegram storici `rejected` in
+  `blocked` prima delle letture; il modello runtime accetta soltanto gli stati canonici
 
 ## Modelli futuri da introdurre
 

@@ -10,6 +10,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional, cast
 
+from .bot_admin import maybe_send_admin_summary
 from .bot_common import (
     _parse_iso_timestamp,
     send_message,
@@ -46,6 +47,12 @@ from .storage.runtime import (
     save_kv_value,
 )
 from .telegram_commands import build_telegram_branding_profile
+
+
+def _run_notification_cycle(telegram_config: TelegramConfig, ebay_environment: str) -> None:
+    maybe_send_new_order_notifications(telegram_config, ebay_environment)
+    maybe_send_admin_summary(telegram_config)
+
 
 LOGGER = logging.getLogger("fiscalbay.telegram_bot")
 
@@ -160,7 +167,7 @@ def auto_notify_loop(telegram_config: TelegramConfig, ebay_environment: str) -> 
         telegram_config,
         ebay_environment,
         shutdown_event=threading.Event(),
-        maybe_send_new_order_notifications_fn=maybe_send_new_order_notifications,
+        maybe_send_new_order_notifications_fn=_run_notification_cycle,
     )
 
 
@@ -177,7 +184,7 @@ def run_bot() -> int:
         process_message_fn=process_message,
         register_runtime_contact_fn=sync_runtime_contact,
         send_message_fn=send_message,
-        maybe_send_new_order_notifications_fn=maybe_send_new_order_notifications,
+        maybe_send_new_order_notifications_fn=_run_notification_cycle,
         request_with_backoff_fn=request_with_backoff,
         sync_bot_branding_fn=sync_runtime_branding,
     )

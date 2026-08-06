@@ -164,7 +164,9 @@ Vincolo di prodotto:
 - presentazione Telegram: `telegram_common.py`, `telegram_admin.py`, `telegram_orders.py`, `telegram_account.py` e `telegram_settings.py`; `telegram_commands.py` conserva parsing, menu e callback
 - storage: `connection.py` e `schema.py` per core; `runtime.py`, `users.py`, `oauth.py`, `notifications.py`, `queues.py` e `retention.py` per dominio
 - OAuth web: `oauth_rendering.py` per HTML, `oauth_callback.py` per flusso applicativo e `oauth_server.py` per HTTP
-- servizi: `services/orders.py`, `services/notifications.py` e `services/telegram_runtime.py`
+- servizi: `services/account.py`, `services/orders.py`, `services/notifications.py`,
+  `services/tenant_status.py`, `services/user_access.py` e `services/telegram_runtime.py`;
+  i coordinatori compongono storage di dominio indipendenti
 
 Le API interne sono funzioni semplici per dominio. Non esistono repository wrapper,
 facade di storage, alias di comandi storici o migrazioni JSON residue.

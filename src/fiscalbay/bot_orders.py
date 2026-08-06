@@ -6,7 +6,6 @@ import html
 import logging
 from typing import Callable
 
-from .bot_admin import _maybe_send_admin_summary
 from .bot_common import (
     _fetch_tenant_records_for_user,
     _notification_filter_mode_from_filters,
@@ -231,7 +230,6 @@ def maybe_send_new_order_notifications(
                 send_message_fn=send_message,
                 request_with_backoff_fn=request_with_backoff,
             )
-            _maybe_send_admin_summary(telegram_config)
             return
         log_event(
             LOGGER,
@@ -239,7 +237,6 @@ def maybe_send_new_order_notifications(
             "notify_skipped",
             reason="no_tenant_targets",
         )
-        _maybe_send_admin_summary(telegram_config)
         return
 
     for target in tenant_targets:
@@ -343,10 +340,9 @@ def maybe_send_new_order_notifications(
             request_with_backoff_fn=request_with_backoff,
             should_deliver_record_fn=should_deliver,
         )
-    _maybe_send_admin_summary(telegram_config)
 
 
-def _handle_orders_command(
+def handle_orders_command(
     command: str,
     args: list[str],
     *,
