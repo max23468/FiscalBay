@@ -130,7 +130,21 @@ I tipi da usare come default sono questi:
 - `ci:` solo workflow/pipeline -> nessun bump release automatico
 - `refactor:` refactor interno senza impatto funzionale -> nessun bump release automatico
 
-Regola pratica: se il cambiamento modifica ciò che un utente o un operatore osserva nel runtime, usa `fix:` o `feat:`. Se il cambiamento è solo interno, non deve forzare una release.
+Regole pratiche:
+
+- se il cambiamento modifica ciò che un utente o un operatore osserva nel
+  runtime, usa `fix:` o `feat:`;
+- una API interna senza consumatori esterni non è un contratto pubblico: la sua
+  rimozione usa `refactor:`, non `refactor!`;
+- se il cambiamento è solo interno, non deve forzare una release;
+- una release major non viene mai calcolata automaticamente: richiede una
+  decisione di prodotto esplicita e l'uso congiunto di
+  `--version X.Y.Z --bump major`;
+- il flusso normale preserva i tag locali non ancora pubblicati, utili per
+  riprendere una release interrotta; solo la procedura eccezionale elimina
+  esplicitamente il tag locale già ritirato;
+- `v2.0.0` resta riservata alla web app SaaS-first finché la roadmap non apre
+  esplicitamente quel milestone.
 
 ## Policy per PR e merge
 
@@ -183,6 +197,30 @@ Principi:
 - tiene allineati changelog, tag GitHub e versione pacchetto
 
 Lo storico preesistente resta consultabile in `docs/CHANGELOG_ARCHIVE.md`, ma non è più il file canonico per le nuove release.
+
+### Riparazione eccezionale di una release errata
+
+Se una versione riservata viene pubblicata per errore, la riparazione richiede
+autorizzazione esplicita e non usa il calcolo automatico del changelog, perché
+la cronologia conserva sia il commit classificato male sia il commit della
+release ritirata.
+
+La procedura è:
+
+1. preparare e unire una PR che corregge la causa nel tooling ma conserva i
+   metadati della versione errata finché la sostituzione non è pronta;
+2. preparare localmente un commit `chore: release vX.Y.Z` che ricostruisce i
+   metadati corretti, esclude il commit della release ritirata e riclassifica i
+   cambi interni come manutenzione;
+3. creare localmente il tag corretto e pubblicare commit e tag insieme con
+   `git push --atomic origin main vX.Y.Z`;
+4. creare la GitHub Release corretta;
+5. eliminare GitHub Release e tag errati, sia remoto sia locale;
+6. deployare `main`, eseguire smoke check e verificare versione e salute del
+   servizio.
+
+Non lasciare su `main` codice nuovo con una versione già usata, e non riscrivere
+o forzare la cronologia già pubblicata.
 
 ## Flusso GitHub
 

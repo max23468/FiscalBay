@@ -10,6 +10,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeployGuardTests(unittest.TestCase):
+    def test_major_release_requires_explicit_version_and_bump(self) -> None:
+        release_script = (ROOT / "scripts/release_now.sh").read_text()
+
+        self.assertIn(
+            "next_version_tuple[0] > current_version[0]",
+            release_script,
+        )
+        self.assertIn(
+            "usa insieme --version X.Y.Z --bump major",
+            release_script,
+        )
+
     def test_privileged_units_cannot_execute_service_owned_code(self) -> None:
         deploy_script = (ROOT / "deploy/vps-deploy-ref.sh").read_text()
         setup_script = (ROOT / "deploy/linux-setup.sh").read_text()

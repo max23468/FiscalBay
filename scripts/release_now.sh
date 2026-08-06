@@ -317,6 +317,13 @@ if version_override:
     next_version_tuple = parse_version(version_override)
 else:
     next_version_tuple = bump_version(current_version, bump)
+if next_version_tuple[0] > current_version[0] and (
+    bump_override != "major" or not version_override
+):
+    raise SystemExit(
+        "Una release major richiede una decisione di prodotto esplicita: "
+        "usa insieme --version X.Y.Z --bump major."
+    )
 if next_version_tuple <= current_version:
     raise SystemExit(
         f"La nuova versione {version_string(next_version_tuple)} deve essere maggiore di {version_string(current_version)}."
