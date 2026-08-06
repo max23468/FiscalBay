@@ -72,9 +72,6 @@ quando costituiscono un limite reale.
 - “Pubblica” significa verifica, commit, push, PR/merge e pulizia di branch e
   worktree assorbiti. Deploy e release si aggiungono solo quando il diff o la
   richiesta li rendono applicabili.
-- Prima di rendere pronta o unire una PR, pubblicare, fare deploy o release,
-  controlla la issue GitHub `Codex feedback inbox` con label
-  `codex-feedback-inbox`; risolvi i thread actionable o dichiarali fuori scope.
 - Il repository ha un solo maintainer: review esterne non sono un prerequisito,
   ma self-review e verifiche pertinenti sì.
 
@@ -82,7 +79,6 @@ Sono ammessi solo questi workflow:
 
 - `.github/workflows/actionlint.yml`
 - `.github/workflows/ci.yml`
-- `.github/workflows/codex-pr-comments.yml`
 - `.github/workflows/codex-review-gate.yml`
 - `.github/workflows/dependabot-auto-merge.yml`
 - `.github/workflows/dependency-review.yml`
