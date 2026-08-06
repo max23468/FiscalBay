@@ -16,7 +16,7 @@ Definisce:
 
 Uso:
 
-- configurazione eBay di base per CLI e percorsi legacy amministrativi
+- configurazione eBay di base per la CLI amministrativa
 
 ### `FetchOptions`
 
@@ -66,10 +66,7 @@ Stati attesi:
 - `blocked`
 - `admin`
 
-Nota di compatibilità:
-
-- alias legacy come `active` e `rejected` vengono normalizzati nel dominio rispettivamente a `approved` e `blocked`
-- il runtime deduce ora le capability operative a partire da questo stato canonico
+Il runtime accetta soltanto questi stati canonici e ne deduce le capability operative.
 
 ### `LinkedEbayAccount`
 
@@ -135,7 +132,7 @@ Campi principali:
 
 Nota:
 
-- oggi è il modello tipizzato più importante per ridurre i `dict` legacy
+- è il modello tipizzato condiviso dai flussi ordine
 - servizi `orders`, notifiche, fetch condiviso CLI/bot e rendering lavorano
   direttamente su questo modello
 
@@ -163,7 +160,7 @@ Contiene:
 Uso:
 
 - stato runtime tipizzato per notifiche automatiche, healthcheck e stato del bot
-- le conversioni da payload SQLite legacy restano ai bordi del sistema
+- le conversioni dai payload SQLite restano ai bordi del sistema
 
 ### `RetryQueueEntry`
 
@@ -199,10 +196,8 @@ Lo stesso SQLite ora può ospitare anche tabelle tenant-aware per:
 - audit log append-only per eventi sensibili
 - operation queue per workflow differibili
 
-Compatibilità mantenuta:
+Comportamento corrente:
 
-- i vecchi file JSON vengono migrati automaticamente a SQLite
-- se il database non contiene ancora tenant configurati, restano disponibili i percorsi legacy compatibili dove previsti
 - quando una chat Telegram è già stata registrata nel DB, i comandi del bot possono risolvere il tenant e leggere stato runtime e retry queue del tenant invece del solo stato globale
 - il fetch applicativo può ora risolvere dal DB anche l'account eBay collegato e il relativo `environment`, pur continuando a usare credenziali globali finché non esistono token utente reali
 - la scelta finale tra credenziali tenant-specifiche e fallback globale passa ora da un contesto applicativo esplicito, invece di essere implicita nei singoli caller
@@ -346,9 +341,9 @@ Note:
 - nel servizio attuale può restare un payload aggregato, ma la chiave di ownership deve essere il tenant utente
 - il comando Telegram `/stato` usa già questo stato tenant-aware quando il bot riesce a risolvere utente e chat dal DB
 
-## Vincoli futuri
+## Vincoli correnti
 
-- nessuna credenziale eBay deve restare globale quando inizierà la multiutenza
-- i token utente dovranno essere cifrati a riposo
-- il modello dati dovrà introdurre isolamento per tenant e audit minimo
-- nel servizio attuale il modello resta compatibile con SQLite, ma deve essere facilmente migrabile a Postgres
+- il bot usa credenziali eBay isolate per tenant e refresh token cifrati a riposo
+- audit, runtime, notifiche, code e OAuth sono scoperati per `telegram_user_id`
+- SQLite resta il database operativo finché le soglie di readiness documentate
+  non richiedono la migrazione a Postgres

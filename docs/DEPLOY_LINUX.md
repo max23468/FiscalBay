@@ -317,4 +317,3 @@ sudo systemctl status fiscalbay-log-maintenance.timer
 - Docker Compose non è mantenuto come opzione reale di esercizio sulla VPS attuale
 - lo script di setup supporta `apt-get`, `dnf`, `yum` e `apk`
 - il setup può creare e usare un utente di servizio dedicato
-- se sulla VPS esistono ancora `data/notified_orders.json` o `data/failed_notifications.json`, il bot li migra automaticamente a SQLite al primo avvio utile

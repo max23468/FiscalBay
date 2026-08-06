@@ -85,8 +85,7 @@ Health check JSON:
 Nota deploy storage:
 
 - il `state.db` del bot in VPS può ricevere migrazioni schema per tabelle tenant-aware
-- finché non vengono caricati tenant, account e subscription reali, restano compatibili i percorsi legacy previsti per CLI o istanze non ancora migrate
-- prima di rilasci che toccano `src/fiscalbay/storage/sqlite.py`, mantenere come sempre un backup aggiornato di `data/state.db`
+- prima di rilasci che toccano `src/fiscalbay/storage/`, mantenere come sempre un backup aggiornato di `data/state.db`
 - il runtime può ora registrare utenti/chat Telegram nel DB durante il traffico normale del bot, quindi il backup di `state.db` copre anche questa nuova base tenant-aware
 - quando il DB contiene già la mappatura chat/utente, il comando `/stato` legge stato e retry queue del tenant corretto; se la mappatura manca, il fallback resta globale
 
@@ -179,7 +178,7 @@ Controllo accessi Telegram:
   `TELEGRAM_ADMIN_USER_ID`, mentre gruppi e supergruppi vengono sempre rifiutati
 - `TELEGRAM_ADMIN_USER_ID`, quando valorizzata, identifica l'admin globale del bot
 - gli altri utenti vengono registrati nel DB con stati `new`, `pending`, `approved` o `blocked`
-- il runtime normalizza anche alias legacy come `active` e `rejected`, così il controllo accessi resta coerente anche su record vecchi nel `state.db`
+- il runtime accetta soltanto gli stati canonici `new`, `pending`, `approved`, `blocked` e `admin`
 - gli utenti non approvati possono solo usare `/start`, `/help`, `/altre_azioni` e `/request_access`
 - l'admin riceve una richiesta con pulsanti inline `Approva` e `Rifiuta`
 - in alternativa l'admin può usare `/admin_users all|pending|unlinked|reconnect|inactive`, `/tenant_health`, `/admin`, `/admin scala`, `/admin sicurezza`, `/admin dormant [ore]`, `/admin invite [telegram_user_id]`, `/admin support <telegram_user_id>`, `/admin export <telegram_user_id>`, `/admin delete_tenant <telegram_user_id> confirm`, `/approve_user <telegram_user_id>`, `/reject_user <telegram_user_id>`, `/suspend_user <telegram_user_id>` e `/reactivate_user <telegram_user_id>`
@@ -384,12 +383,6 @@ Release versionata esplicita:
 scripts/release_now.sh
 ```
 
-Fallback deploy via archivio locale:
-
-```bash
-scripts/local_deploy_vps.sh
-```
-
 Gli aggiornamenti applicativi passano solo dai deploy script eseguiti dalla
 postazione di manutenzione; il service user non aggiorna codice o virtualenv.
 
@@ -482,7 +475,6 @@ Se un deploy peggiora il servizio, seguire nell'ordine:
 Condizioni di stop:
 
 - non fare restore dati se il problema è solo applicativo
-- non riutilizzare i vecchi file JSON legacy salvo emergenza documentata
 
 ## Sintomi comuni e prima risposta
 
@@ -541,7 +533,6 @@ Asset minimi da proteggere:
 
 - `.env`
 - `data/state.db`
-- eventuali file `.legacy-json.bak`
 
 ## Criteri minimi per considerare sano il servizio
 

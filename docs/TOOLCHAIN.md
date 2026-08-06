@@ -70,7 +70,6 @@ procedure operative restano in [OPERATIONS.md](./OPERATIONS.md),
 - build package: `python -m build`
 - workflow allowlist: `scripts/check_github_workflows.sh`
 - deploy operativo: `scripts/deploy_now.sh`
-- deploy fallback locale/VPS: `scripts/local_deploy_vps.sh`
 - release versionata: `scripts/release_now.sh`
 
 ## Release, deploy e GitHub

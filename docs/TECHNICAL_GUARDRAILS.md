@@ -20,9 +20,9 @@ roadmap.
 
 ## Applicazione corrente
 
-- `src/fiscalbay/bot.py` resta il punto di dispatch e orchestrazione; nuova logica
-  di authz, OAuth linking e process lock va nei moduli dedicati
-- `src/fiscalbay/storage/sqlite.py` mantiene la compatibilità pubblica storica;
-  nuove aree coese possono passare da facciate in `src/fiscalbay/storage/`
+- `src/fiscalbay/bot.py` contiene solo wiring; il dispatch resta in
+  `bot_dispatch.py` e la logica va nel modulo di dominio pertinente
+- `src/fiscalbay/storage/` espone funzioni semplici divise per dominio; non
+  aggiungere facade o repository wrapper senza un consumatore reale
 - metriche admin, healthcheck e review tenant devono preferire snapshot
   periodici o dati già materializzati dalla reconciliation
