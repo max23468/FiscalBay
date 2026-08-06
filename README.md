@@ -62,7 +62,7 @@ In pratica:
 Per mantenere il repository allineato alle best practice GitHub anche in contesto single-maintainer, il progetto include:
 
 - workflow GitHub Actions allowlist `.github/workflows/ci.yml` per CI leggera su PR verso `main` e avvio manuale
-- controlli GitHub Actions conservativi per titolo PR, Dependency Review, actionlint, build package mirato e inbox commenti Codex
+- controlli GitHub Actions conservativi per titolo PR, Dependency Review, actionlint, build package mirato, inbox commenti Codex e review Codex exact-HEAD
 - deploy esplicito con `scripts/deploy_now.sh`
 - release versionata esplicita con `scripts/release_now.sh`
 - CI locale con `bash scripts/ci_verify.sh`, richiamata anche dal workflow leggero e dalla pipeline locale
@@ -75,7 +75,7 @@ Per mantenere il repository allineato alle best practice GitHub anche in contest
 
 Passi consigliati dopo il clone/fork:
 
-1. verifica branch protection su `main` (almeno: linear history; non rendere ancora obbligatorio il check Actions)
+1. verifica branch protection su `main` e mantieni richiesti `Python 3.13` e `codex-review`
 2. abilita secret scanning e Dependabot alerts dal tab Security; gli update automatici sono limitati da `.github/dependabot.yml`
 3. usa PR anche da branch personali per lasciare audit trail e checklist standard
 4. usa titoli PR di squash in formato Conventional Commit per tenere coerenti versioni e changelog
