@@ -10,18 +10,12 @@ GitHub Actions è riattivato solo per automazioni GitHub leggere e a basso consu
 - i soli workflow versionati ammessi sono `.github/workflows/ci.yml`, più i
   controlli conservativi `.github/workflows/pr-title.yml`,
   `.github/workflows/dependency-review.yml`, `.github/workflows/actionlint.yml`,
-  `.github/workflows/package-build.yml` e
-  `.github/workflows/codex-pr-comments.yml`, più il gate
+  `.github/workflows/package-build.yml` e il gate
   `.github/workflows/codex-review-gate.yml`
 - la CI parte su PR verso `main` e con `workflow_dispatch`
 - il package build parte solo su PR che toccano packaging e con `workflow_dispatch`
 - Dependency Review parte solo su PR che toccano file di dipendenze
 - actionlint parte solo su PR che toccano workflow
-- Codex PR comments aggiorna la issue `Codex feedback inbox` su eventi PR
-  trusted, commenti issue, avvio manuale e riallineamento programmato ogni 6 ore;
-  nei run parziali rilegge anche le PR già presenti nella inbox per non far
-  sparire temporaneamente commenti storici o actionable non recenti, saltando
-  singole PR stale o non più raggiungibili senza interrompere l'intera sync
 - Codex review gate pubblica lo status required `codex-review` sull'HEAD esatto
   della PR ed esegue soltanto il codice presente su `main`
 - non usare Actions per deploy, diagnostica VPS, merge o update
@@ -39,8 +33,6 @@ GitHub Actions è riattivato solo per automazioni GitHub leggere e a basso consu
 - Dependency Review: `.github/workflows/dependency-review.yml`
 - Actionlint: `.github/workflows/actionlint.yml`
 - Package build mirato: `.github/workflows/package-build.yml`
-- Codex feedback inbox: `.github/workflows/codex-pr-comments.yml` e
-  `.github/scripts/handle-codex-pr-comments.mjs`
 - Codex review gate: `.github/workflows/codex-review-gate.yml`,
   `scripts/codex-review-gate.mjs` e `scripts/codex-review-gate.test.mjs`
 - Dependabot version updates: `.github/dependabot.yml`
@@ -115,11 +107,6 @@ I workflow a basso consumo sono:
 - `.github/workflows/actionlint.yml`: parte solo quando cambiano workflow
 - `.github/workflows/package-build.yml`: esegue `python -m build` su PR che
   toccano packaging e su avvio manuale
-- `.github/workflows/codex-pr-comments.yml`: legge i review thread GitHub in
-  contesto trusted, aggiorna la issue `Codex feedback inbox`, separa thread
-  actionable e storico, preserva le PR già elencate nei run parziali, ignora le
-  singole PR stale non trovate e non pubblica commenti automatici sulle PR né
-  committa file di stato
 - `.github/workflows/codex-review-gate.yml`: usa `pull_request_target` e checkout
   fissato di `main`, pubblica `codex-review` sull'HEAD della PR e invalida ogni
   evidenza di review appartenente a commit o tentativi precedenti

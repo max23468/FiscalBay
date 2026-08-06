@@ -46,8 +46,6 @@ rischi operativi o decisioni prodotto li rendono necessari.
 
 ## Operatività
 
-- Verificare periodicamente la `Codex feedback inbox` prima di publish, merge o
-  controlli bot.
 - Usare `scripts/deploy_now.sh` solo quando serve davvero aggiornare la VPS.
 - Usare `scripts/release_now.sh` solo per release versionate esplicite.
 - Mantenere GitHub Actions nella allowlist leggera dichiarata, senza aggiungere
@@ -56,8 +54,6 @@ rischi operativi o decisioni prodotto li rendono necessari.
 ## Bug
 
 - Nessun bug aperto in questo documento.
-- I thread Codex actionable restano tracciati nella issue GitHub
-  `Codex feedback inbox`.
 
 ## Regole
 

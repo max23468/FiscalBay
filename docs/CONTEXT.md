@@ -112,9 +112,7 @@ Prima di procedere:
 4. se il task tocca runtime, deploy, OAuth, storage, segreti o VPS, leggere
    `docs/RUNBOOK.md`, `docs/OPERATIONS.md`, `docs/OAUTH_FLOW.md` e
    `docs/SECURITY_OPERATIONS.md`;
-5. controllare Codex feedback inbox prima di PR ready, merge, publish, deploy o
-   release;
-6. scegliere verifiche proporzionate: docs-only di solito review documentale e
+5. scegliere verifiche proporzionate: docs-only di solito review documentale e
    `git diff --check`; runtime o config richiede `bash scripts/ci_verify.sh` e
    controlli operativi pertinenti.
 
