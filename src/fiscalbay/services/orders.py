@@ -9,21 +9,21 @@ import logging
 import os
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Iterable, Mapping, Optional, Sequence, TypeAlias
+from typing import Any, Iterable, Mapping, Optional, Sequence, TypeAlias, cast
 
 from ..clients.ebay import get_access_token, get_order_detail, get_orders
 from ..clients.trading import get_order_tax_identifiers, get_order_tax_identifiers_by_date
 from ..errors import EbayApiError
-from ..models import Config, FetchOptions, JsonObject, JsonValue, OrderRecord, as_int
+from ..models import Config, FetchOptions, JsonValue, OrderRecord, as_int
 
 DEFAULT_PAGE_SIZE = 50
 
 logger = logging.getLogger(__name__)
 
-OrderPayload: TypeAlias = JsonObject
+OrderPayload: TypeAlias = dict[str, Any]
 
 
-def _as_mapping(value: object) -> Mapping[str, JsonValue]:
+def _as_mapping(value: object) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
@@ -136,7 +136,7 @@ def _is_invalid_order_id_error(exc: EbayApiError) -> bool:
     return "invalid order id" in str(exc).lower()
 
 
-def _normalize_tax_identifier(raw: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
+def _normalize_tax_identifier(raw: Mapping[str, Any]) -> OrderPayload:
     container = _as_mapping(raw.get("taxIdentifier")) or raw
     taxpayer_id = (
         container.get("taxpayerId")
@@ -201,10 +201,11 @@ def _apply_tax_identifier_fallbacks(
                 break
         if fallback is None:
             continue
-        buyer = order.get("buyer")
-        if not isinstance(buyer, dict):
-            buyer = {}
-            order["buyer"] = buyer
+        buyer_value = order.get("buyer")
+        buyer: OrderPayload = (
+            cast(OrderPayload, buyer_value) if isinstance(buyer_value, dict) else {}
+        )
+        order["buyer"] = buyer
         buyer["taxIdentifier"] = dict(fallback)
 
 
@@ -281,8 +282,8 @@ def extract_record(order: OrderPayload) -> OrderRecord:
 
     return OrderRecord(
         orderId=str(order.get("orderId") or order.get("legacyOrderId") or ""),
-        creationDate=order.get("creationDate", ""),
-        buyerUsername=buyer_mapping.get("username", ""),
+        creationDate=_first_text(order.get("creationDate")),
+        buyerUsername=_first_text(buyer_mapping.get("username")),
         buyerName=_first_text(
             _as_mapping(buyer_mapping.get("taxAddress")).get("fullName", ""),
             buyer_mapping.get("fullName", ""),
@@ -399,7 +400,7 @@ def fetch_records(config: Config, options: FetchOptions) -> list[OrderRecord]:
             if index and delay:
                 time.sleep(delay)
             try:
-                details.append(get_order_detail(config, access_token, order_id))
+                details.append(dict(get_order_detail(config, access_token, order_id)))
             except EbayApiError as exc:
                 if not _is_invalid_order_id_error(exc):
                     raise
@@ -420,17 +421,17 @@ def fetch_records(config: Config, options: FetchOptions) -> list[OrderRecord]:
             max_results=options.max_results,
         )
         if not options.include_details:
-            details = [summary for summary in summaries if summary.get("orderId")]
+            details = [dict(summary) for summary in summaries if summary.get("orderId")]
         else:
             detail_calls = 0
             for summary in summaries:
-                order_id = summary.get("orderId")
+                order_id = str(summary.get("orderId") or "")
                 if not order_id:
                     continue
                 if detail_calls and delay:
                     time.sleep(delay)
                 try:
-                    details.append(get_order_detail(config, access_token, order_id))
+                    details.append(dict(get_order_detail(config, access_token, order_id)))
                 except EbayApiError as exc:
                     if not _is_invalid_order_id_error(exc):
                         raise
@@ -441,7 +442,9 @@ def fetch_records(config: Config, options: FetchOptions) -> list[OrderRecord]:
                             legacy_order_id,
                             order_id,
                         )
-                        details.append(get_order_detail(config, access_token, legacy_order_id))
+                        details.append(
+                            dict(get_order_detail(config, access_token, legacy_order_id))
+                        )
                         detail_calls += 1
                         continue
                     logger.warning(
@@ -449,7 +452,7 @@ def fetch_records(config: Config, options: FetchOptions) -> list[OrderRecord]:
                         "using list endpoint summary for normalization.",
                         order_id,
                     )
-                    details.append(summary)
+                    details.append(dict(summary))
                 detail_calls += 1
 
     missing_order_ids = _missing_tax_identifier_order_ids(details)

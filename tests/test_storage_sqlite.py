@@ -24,58 +24,96 @@ from src.fiscalbay.models import (
     TelegramChat,
     TelegramUser,
 )
-from src.fiscalbay.storage.sqlite import (
-    SCHEMA_VERSION,
-    append_audit_log_entry,
-    apply_telegram_user_access_status,
-    claim_pending_operation,
-    create_oauth_link_session,
-    delete_tenant_data,
-    disconnect_linked_ebay_account,
-    enqueue_operation,
-    export_tenant_data,
+from src.fiscalbay.services.tenant_status import rebuild_all_tenant_status_snapshots
+from src.fiscalbay.services.user_access import apply_telegram_user_access_status
+from src.fiscalbay.storage.notifications import (
     list_notification_tenants,
-    load_audit_log_entries,
-    load_ebay_token_sets,
-    load_latest_oauth_link_session,
-    load_linked_ebay_accounts,
     load_notification_subscriptions,
+    resolve_tenant_chat_context,
+    set_notification_subscription_enabled,
+    upsert_notification_subscription,
+)
+from src.fiscalbay.storage.oauth import (
+    create_oauth_link_session,
+    disconnect_linked_ebay_account,
+    load_latest_oauth_link_session,
+)
+from src.fiscalbay.storage.queues import (
+    append_audit_log_entry,
+    claim_pending_operation,
+    enqueue_operation,
+    load_audit_log_entries,
     load_operation_queue_entries,
-    load_retry_queue,
-    load_state,
-    load_telegram_chats,
-    load_telegram_users,
-    load_tenant_retry_queue_entries,
-    load_tenant_runtime_state,
-    load_tenant_status_snapshot,
+    summarize_operation_queue,
+    update_operation_queue_entry,
+)
+from src.fiscalbay.storage.retention import (
+    delete_tenant_data,
+    export_tenant_data,
     prune_audit_log_entries,
     prune_oauth_link_sessions,
     prune_operation_queue_entries,
-    rebuild_all_tenant_status_snapshots,
-    resolve_linked_ebay_account,
-    resolve_primary_chat_id,
-    resolve_tenant_chat_context,
+    summarize_retention_backlog,
+)
+from src.fiscalbay.storage.runtime import (
+    load_retry_queue,
+    load_state,
+    load_tenant_retry_queue_entries,
+    load_tenant_runtime_state,
     save_retry_queue,
     save_state,
-    save_tenant_account_status_cache,
     save_tenant_retry_queue_entries,
     save_tenant_runtime_state,
-    set_notification_subscription_enabled,
-    summarize_operation_queue,
-    summarize_retention_backlog,
     summarize_retry_queue_backlog,
+)
+from src.fiscalbay.storage.users import (
+    load_ebay_token_sets,
+    load_linked_ebay_accounts,
+    load_telegram_chats,
+    load_telegram_users,
+    load_tenant_status_snapshot,
+    resolve_linked_ebay_account,
+    resolve_primary_chat_id,
+    save_tenant_account_status_cache,
     summarize_tenant_account_status,
     summarize_tenant_status_snapshots,
-    update_operation_queue_entry,
     upsert_ebay_token_set,
     upsert_linked_ebay_account,
-    upsert_notification_subscription,
     upsert_telegram_chat,
     upsert_telegram_user,
 )
 
 
 class SQLiteStorageIntegrationTests(unittest.TestCase):
+    def test_schema_migrates_rejected_users_to_blocked_before_loading(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "state.db"
+            with closing(sqlite3.connect(db_path)) as conn:
+                conn.execute(
+                    "CREATE TABLE telegram_users ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "telegram_user_id INTEGER NOT NULL UNIQUE, "
+                    "username TEXT NOT NULL DEFAULT '', "
+                    "display_name TEXT NOT NULL DEFAULT '', "
+                    "status TEXT NOT NULL, created_at TEXT, updated_at TEXT)"
+                )
+                conn.execute(
+                    "INSERT INTO telegram_users "
+                    "(telegram_user_id, username, display_name, status) "
+                    "VALUES (123, 'seller', 'Seller', 'rejected')"
+                )
+                conn.execute(
+                    "CREATE TABLE telegram_chats ("
+                    "telegram_user_id INTEGER NOT NULL, "
+                    "telegram_chat_id INTEGER NOT NULL, is_primary INTEGER NOT NULL DEFAULT 1)"
+                )
+                conn.execute("PRAGMA user_version = 10")
+                conn.commit()
+
+            users = load_telegram_users(str(db_path))
+
+            self.assertEqual(users[0].status, TELEGRAM_USER_STATUS_BLOCKED)
+
     def test_audit_log_roundtrip(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
@@ -395,113 +433,6 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertEqual(restored[1]["attempts"], 2)
             self.assertIn("id", restored[1])
 
-    def test_legacy_notified_orders_table_is_migrated(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = Path(tmpdir) / "state.db"
-
-            with closing(sqlite3.connect(db_path)) as conn, conn:
-                conn.execute("CREATE TABLE notified_orders (order_id TEXT, hash TEXT)")
-                conn.execute(
-                    "CREATE TABLE retry_queue "
-                    "("
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                    "chat_id INTEGER, text TEXT, attempts INTEGER"
-                    ")"
-                )
-                conn.execute("CREATE TABLE kv_store (key TEXT PRIMARY KEY, value TEXT)")
-                conn.execute(
-                    "INSERT INTO notified_orders (order_id, hash) VALUES (?, ?)",
-                    ("legacy-order", "legacy-hash"),
-                )
-                conn.execute(
-                    "INSERT INTO kv_store (key, value) VALUES (?, ?)",
-                    ("last_check", "2026-04-05T20:00:00Z"),
-                )
-
-            restored = load_state(str(db_path))
-            self.assertEqual(restored["notified_order_ids"], ["legacy-order"])
-            self.assertEqual(restored["notified_hashes"], ["legacy-hash"])
-            self.assertEqual(restored["last_check"], "2026-04-05T20:00:00Z")
-
-            with closing(sqlite3.connect(db_path)) as conn, conn:
-                version = conn.execute("PRAGMA user_version").fetchone()[0]
-                self.assertEqual(version, SCHEMA_VERSION)
-                legacy = conn.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name='notified_orders'"
-                ).fetchone()
-                self.assertIsNone(legacy)
-                ids = conn.execute("SELECT order_id FROM notified_order_ids").fetchall()
-                hashes = conn.execute("SELECT hash FROM notified_hashes").fetchall()
-                self.assertEqual(ids[0][0], "legacy-order")
-                self.assertEqual(hashes[0][0], "legacy-hash")
-
-    def test_legacy_metrics_key_is_migrated_to_new_name(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = Path(tmpdir) / "state.db"
-
-            with closing(sqlite3.connect(db_path)) as conn, conn:
-                conn.row_factory = sqlite3.Row
-                conn.execute("PRAGMA user_version = 8")
-                conn.execute("CREATE TABLE notified_order_ids (order_id TEXT PRIMARY KEY)")
-                conn.execute("CREATE TABLE notified_hashes (hash TEXT PRIMARY KEY)")
-                conn.execute(
-                    "CREATE TABLE retry_queue "
-                    "("
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                    "chat_id INTEGER NOT NULL, "
-                    "text TEXT NOT NULL, "
-                    "attempts INTEGER NOT NULL DEFAULT 0"
-                    ")"
-                )
-                conn.execute("CREATE TABLE kv_store (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-                conn.execute(
-                    "CREATE TABLE tenant_runtime_state "
-                    "("
-                    "telegram_user_id INTEGER PRIMARY KEY, "
-                    "last_check TEXT, "
-                    "last_error TEXT, "
-                    "metrics_json TEXT NOT NULL DEFAULT '{}', "
-                    "memory_json TEXT NOT NULL DEFAULT '{}', "
-                    "account_snapshot_json TEXT NOT NULL DEFAULT '{}', "
-                    "updated_at TEXT"
-                    ")"
-                )
-                conn.execute(
-                    "CREATE TABLE tenant_notified_order_ids "
-                    "("
-                    "telegram_user_id INTEGER NOT NULL, "
-                    "order_id TEXT NOT NULL, "
-                    "PRIMARY KEY (telegram_user_id, order_id)"
-                    ")"
-                )
-                conn.execute(
-                    "CREATE TABLE tenant_notified_hashes "
-                    "("
-                    "telegram_user_id INTEGER NOT NULL, "
-                    "hash TEXT NOT NULL, "
-                    "PRIMARY KEY (telegram_user_id, hash)"
-                    ")"
-                )
-                conn.execute(
-                    "INSERT INTO kv_store (key, value) VALUES (?, ?)",
-                    (
-                        "metrics",
-                        '{"orders_read":2,"orders_with_cf":1,"notifications_sent":1}',
-                    ),
-                )
-                conn.execute(
-                    "INSERT INTO tenant_runtime_state "
-                    "(telegram_user_id, metrics_json, memory_json, account_snapshot_json) "
-                    "VALUES (?, ?, '{}', '{}')",
-                    (123, '{"orders_read":3,"orders_with_cf":2,"notifications_sent":1}'),
-                )
-
-            restored = load_state(str(db_path))
-            self.assertEqual(restored["metrics"]["orders_with_fiscal_identifier"], 1)
-
-            tenant_state = load_tenant_runtime_state(str(db_path), 123)
-            self.assertEqual(tenant_state.metrics.orders_with_fiscal_identifier, 2)
-
     def test_save_state_removes_stale_values_without_duplicates(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "state.db"
@@ -569,47 +500,6 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertEqual(restored[0]["attempts"], 3)
             self.assertEqual(restored[1]["chat_id"], 789)
             self.assertEqual(restored[1]["text"], "msg-3")
-
-    def test_legacy_json_state_file_is_migrated_to_sqlite(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = Path(tmpdir) / "notified_orders.json"
-            db_path.write_text(
-                (
-                    '{"notified_order_ids":["order-1"],'
-                    '"notified_hashes":["hash-1"],'
-                    '"last_check":"2026-04-05T20:00:00Z",'
-                    '"last_error":null,'
-                    '"metrics":{"orders_read":2,"orders_with_fiscal_identifier":1,"notifications_sent":1,"telegram_retries":0,"consecutive_error_cycles":0,"errors_by_type":{}}}'
-                ),
-                encoding="utf-8",
-            )
-
-            restored = load_state(str(db_path))
-
-            self.assertEqual(restored["notified_order_ids"], ["order-1"])
-            self.assertEqual(restored["notified_hashes"], ["hash-1"])
-            self.assertEqual(restored["last_check"], "2026-04-05T20:00:00Z")
-            self.assertTrue((Path(tmpdir) / "notified_orders.json.legacy-json.bak").exists())
-
-            with closing(sqlite3.connect(db_path)) as conn, conn:
-                version = conn.execute("PRAGMA user_version").fetchone()[0]
-                self.assertEqual(version, SCHEMA_VERSION)
-
-    def test_legacy_json_retry_queue_file_is_migrated_to_sqlite(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = Path(tmpdir) / "failed_notifications.json"
-            db_path.write_text(
-                '[{"chat_id":123,"text":"retry me","attempts":2}]',
-                encoding="utf-8",
-            )
-
-            restored = load_retry_queue(str(db_path))
-
-            self.assertEqual(len(restored), 1)
-            self.assertEqual(restored[0]["chat_id"], 123)
-            self.assertEqual(restored[0]["text"], "retry me")
-            self.assertEqual(restored[0]["attempts"], 2)
-            self.assertTrue((Path(tmpdir) / "failed_notifications.json.legacy-json.bak").exists())
 
     def test_tenant_runtime_state_roundtrip_on_shared_db(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -840,21 +730,6 @@ class SQLiteStorageIntegrationTests(unittest.TestCase):
             self.assertEqual(backlog["global"], 1)
             self.assertEqual(backlog["tenant"], 1)
             self.assertEqual(backlog["total"], 2)
-
-    def test_summarize_retry_queue_backlog_migrates_legacy_json_queue(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = Path(tmpdir) / "retry-queue.json"
-            db_path.write_text(
-                '[{"chat_id": 456, "text": "legacy retry", "attempts": 2}]',
-                encoding="utf-8",
-            )
-
-            backlog = summarize_retry_queue_backlog(str(db_path))
-
-            self.assertEqual(backlog["global"], 1)
-            self.assertEqual(backlog["tenant"], 0)
-            self.assertEqual(backlog["total"], 1)
-            self.assertTrue(Path(f"{db_path}.legacy-json.bak").exists())
 
     def test_multi_tenant_entities_and_notification_targets_roundtrip(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

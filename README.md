@@ -66,7 +66,6 @@ Per mantenere il repository allineato alle best practice GitHub anche in contest
 - deploy esplicito con `scripts/deploy_now.sh`
 - release versionata esplicita con `scripts/release_now.sh`
 - CI locale con `bash scripts/ci_verify.sh`, richiamata anche dal workflow leggero e dalla pipeline locale
-- `scripts/local_automate.sh` e `scripts/local_deploy_vps.sh` restano utility legacy/fallback
 - aggiornamenti dipendenze automatici via `.github/dependabot.yml`, con schedule settimanale e limite basso di PR aperte
 - template per Pull Request (`.github/PULL_REQUEST_TEMPLATE.md`)
 - issue forms per bug e task operativi (`.github/ISSUE_TEMPLATE/*`)
@@ -147,9 +146,6 @@ Comandi principali fuori da Actions:
 scripts/deploy_now.sh
 scripts/release_now.sh
 ```
-
-`scripts/local_automate.sh --all` resta disponibile come utility legacy, ma non è
-il percorso raccomandato per chiudere una release.
 
 ## Setup Rapido
 
@@ -593,7 +589,6 @@ Comportamento:
   tenant, così supporto e diagnosi restano dentro Telegram
 - `/admin support <telegram_user_id>` mostra lo stesso snapshot supporto per un
   tenant specifico, utile prima di chiedere screenshot o log all'utente
-- gli alias granulari precedenti (`/connect`, `/disconnect`, `/reconnect_status`, `/notifications`, `/leave_bot`, `/ultimi`, `/tutti`, `/ordine`, `/review_orders`, `/report_summary`, `/priority_orders`, `/why_not_notified`, `/service_status`, `/policy`, `/users`, `/pending_users`, `/unlinked_users`, `/reconnect_users`, `/inactive_users`, `/admin_dashboard`, `/maintenance_overview`) sono stati accorpati e ora rimandano ai comandi canonici
 
 ### Notifiche automatiche
 
@@ -644,8 +639,6 @@ Lo stesso pannello, insieme a `/admin manutenzione`, mostra anche versione
 deployata, tag, commit breve e stato release, così l'admin può confrontare
 subito ciò che gira in produzione con l'ultimo tag pubblicato.
 
-Se su un ambiente esistente trovi ancora i vecchi file JSON `data/notified_orders.json` o `data/failed_notifications.json`, il bot li migra automaticamente a SQLite al primo avvio e conserva una copia `.legacy-json.bak`.
-
 ### Lock del Processo
 
 Su Unix e macOS il bot usa un lock esclusivo su `TELEGRAM_BOT_LOCK_PATH` tramite `fcntl`. Questo evita di eseguire due processi con lo stesso token Telegram e due loop concorrenti su `getUpdates`.
@@ -664,9 +657,6 @@ Da Mac locale puoi automatizzare il deploy quotidiano fuori da GitHub Actions co
 ```bash
 scripts/deploy_now.sh
 ```
-
-`scripts/local_deploy_vps.sh` resta un fallback operativo quando serve caricare
-un archivio locale direttamente sulla VPS.
 
 ## Documentazione
 
@@ -692,10 +682,8 @@ Documenti principali:
 
 Asset disponibili nel repository, allineati al setup VPS attuale (`fiscalbay`, `/opt/fiscalbay`, servizio `fiscalbay-bot`):
 
-- `scripts/local_automate.sh`
 - `scripts/deploy_now.sh`
 - `scripts/release_now.sh`
-- `scripts/local_deploy_vps.sh`
 - `deploy/linux-setup.sh`
 - `deploy/smoke-check.sh`
 - `deploy/nginx-fiscalbay-oauth-site.conf`

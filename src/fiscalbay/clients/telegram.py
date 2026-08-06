@@ -73,7 +73,7 @@ def telegram_error_retryable(exc: TelegramApiError) -> bool:
 def telegram_api_request_once(
     token: str,
     method: str,
-    params: Mapping[str, JsonValue] | None = None,
+    params: Mapping[str, object] | None = None,
 ) -> JsonValue:
     encoded_method = urllib.parse.quote(method, safe="")
     url = f"{TELEGRAM_API_BASE}/bot{token}/{encoded_method}"
@@ -117,7 +117,7 @@ def telegram_api_request_once(
 def telegram_api_request(
     token: str,
     method: str,
-    params: Mapping[str, JsonValue] | None = None,
+    params: Mapping[str, object] | None = None,
 ) -> JsonValue:
     max_retries, base_delay = telegram_retry_settings()
 
@@ -178,7 +178,7 @@ def sync_bot_branding(
 def telegram_request_once(
     token: str,
     method: str,
-    params: Mapping[str, JsonValue] | None = None,
+    params: Mapping[str, object] | None = None,
 ) -> JsonValue:
     return telegram_api_request_once(token, method, params)
 
@@ -186,6 +186,6 @@ def telegram_request_once(
 def telegram_request(
     token: str,
     method: str,
-    params: Mapping[str, JsonValue] | None = None,
+    params: Mapping[str, object] | None = None,
 ) -> JsonValue:
     return telegram_api_request(token, method, params)

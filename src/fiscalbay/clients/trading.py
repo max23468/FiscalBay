@@ -8,10 +8,11 @@ import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
+from typing import cast
 from xml.sax.saxutils import escape
 
-from defusedxml.common import DefusedXmlException
-from defusedxml.ElementTree import fromstring as safe_fromstring
+from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped]
+from defusedxml.ElementTree import fromstring as safe_fromstring  # type: ignore[import-untyped]
 
 from ..errors import EbayApiError
 from ..logging_utils import log_event
@@ -137,7 +138,7 @@ def request_trading_xml_once(config: Config, access_token: str, payload: bytes) 
             message = f"Trading API GetOrders error {code}: {short or long or message}"
         raise EbayApiError(message)
 
-    return root
+    return cast(ET.Element, root)
 
 
 def request_trading_xml(config: Config, access_token: str, payload: bytes) -> ET.Element:

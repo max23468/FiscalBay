@@ -16,11 +16,11 @@ from ..models import (
     RetryQueueEntry,
     TelegramConfig,
 )
-from ..telegram_commands import (
+from ..telegram_common import record_fingerprint
+from ..telegram_orders import (
     format_auto_notification,
     format_missing_tax_spike_alert,
     has_fiscal_identifier,
-    record_fingerprint,
 )
 
 LOGGER = logging.getLogger("fiscalbay.notifications")
@@ -193,26 +193,6 @@ def filter_new_order_records(
         new_records.append(record)
     new_records.sort(key=order_sort_key)
     return new_records
-
-
-def fetch_new_order_records(
-    ebay_environment: str,
-    state: BotRuntimeState,
-    *,
-    fetch_records_for_environment_fn: Callable[[str, FetchOptions], list[OrderRecord]],
-    request_with_backoff_fn: Callable[..., object],
-    lookback_minutes: int = 180,
-    cycle_id: str,
-) -> list[OrderRecord]:
-    records = fetch_order_window_records(
-        ebay_environment,
-        state,
-        fetch_records_for_environment_fn=fetch_records_for_environment_fn,
-        request_with_backoff_fn=request_with_backoff_fn,
-        lookback_minutes=lookback_minutes,
-        cycle_id=cycle_id,
-    )
-    return filter_new_notifiable_order_records(state, records)
 
 
 def missing_tax_alert_signature(records: list[OrderRecord]) -> str:

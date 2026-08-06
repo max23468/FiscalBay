@@ -307,12 +307,6 @@ Release versionata esplicita:
 scripts/release_now.sh
 ```
 
-Fallback deploy via archivio locale verso la VPS FiscalBay:
-
-```bash
-scripts/local_deploy_vps.sh
-```
-
 Non aggiornare codice o virtualenv dalla shell del service user: usa
 `scripts/deploy_now.sh` dalla postazione di manutenzione.
 
@@ -340,7 +334,6 @@ Asset minimi da proteggere:
 
 - `${APP_DIR}/.env`
 - `${APP_DIR}/data/state.db`
-- eventuali file `.legacy-json.bak` creati durante la migrazione automatica
 - unit `systemd` `fiscalbay-*`
 - configurazione `nginx` FiscalBay, se presente
 - file env operativi in `/etc/fiscalbay`, se leggibili dal job di backup
@@ -357,7 +350,7 @@ chmod +x deploy/backup.sh
 Comportamento:
 
 - crea backup in `~/maintenance-backups/`
-- include `.env`, `data/state.db`, gli eventuali `.legacy-json.bak`, unit
+- include `.env`, `data/state.db`, unit
   `systemd`, configurazione `nginx` FiscalBay, env operativi leggibili in
   `/etc/fiscalbay` e `SERVICE_INVENTORY.txt`
 - applica retention minima di 7 backup, modificabile con `RETENTION_COUNT`
@@ -439,7 +432,6 @@ Health check fallisce:
 - controlla se `last_check` è troppo vecchio
 - controlla se la retry queue non si svuota
 - controlla `last_error` nello state DB
-- se trovi vecchi file `data/notified_orders.json` o `data/failed_notifications.json`, il bot ora li converte da solo a SQLite al primo avvio
 
 ### Playbook incidente: token eBay
 

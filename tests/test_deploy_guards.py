@@ -26,7 +26,6 @@ class DeployGuardTests(unittest.TestCase):
         deploy_script = (ROOT / "deploy/vps-deploy-ref.sh").read_text()
         setup_script = (ROOT / "deploy/linux-setup.sh").read_text()
         manual_deploy_script = (ROOT / "scripts/deploy_now.sh").read_text()
-        local_deploy_script = (ROOT / "scripts/local_deploy_vps.sh").read_text()
         secrets_check = (ROOT / "deploy/check-secrets-perms.sh").read_text()
         autodeploy_script = (ROOT / "deploy/autodeploy.sh").read_text()
 
@@ -108,10 +107,6 @@ class DeployGuardTests(unittest.TestCase):
         self.assertNotIn("APP_USER=${remote_app_user}", manual_deploy_script)
         restore_script = (ROOT / "deploy/restore.sh").read_text()
         self.assertIn('APP_GROUP="${APP_GROUP:-${APP_USER}}"', restore_script)
-        self.assertIn(
-            "sudo chown -R root:'${APP_GROUP}' '${APP_DIR}'",
-            local_deploy_script,
-        )
         self.assertIn('"root:${APP_GROUP}"', secrets_check)
         self.assertIn("BADOWNER", secrets_check)
         self.assertFalse((ROOT / "deploy/update.sh").exists())

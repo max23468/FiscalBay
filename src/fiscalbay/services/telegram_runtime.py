@@ -7,9 +7,9 @@ import logging
 import signal
 import threading
 import time
-from typing import Callable
+from typing import Any, Callable, Protocol, TextIO
 
-from ..clients.telegram import ensure_long_polling, telegram_request
+from ..clients.telegram import InlineKeyboardMarkup, ensure_long_polling, telegram_request
 from ..errors import AppError, TelegramApiError
 from ..logging_utils import generate_operation_id, log_event
 from ..models import (
@@ -18,12 +18,8 @@ from ..models import (
     TelegramConfig,
     has_telegram_user_capability,
 )
-from ..storage.sqlite import (
-    load_notification_subscriptions,
-    load_telegram_user,
-    resolve_tenant_chat_context,
-    summarize_tenant_account_status,
-)
+from ..storage.notifications import load_notification_subscriptions, resolve_tenant_chat_context
+from ..storage.users import load_telegram_user, summarize_tenant_account_status
 from ..telegram_commands import (
     build_access_request_markup,
     build_contextual_menu_markup,
@@ -36,6 +32,18 @@ from ..telegram_commands import (
 
 LOGGER = logging.getLogger("fiscalbay.telegram_runtime")
 _ACTIVE_SHUTDOWN_EVENT: threading.Event | None = None
+
+
+class ProcessMessageFn(Protocol):
+    def __call__(
+        self,
+        *,
+        text: str,
+        chat_id: int,
+        telegram_config: TelegramConfig,
+        ebay_environment: str,
+        telegram_user_id: int | None,
+    ) -> list[str]: ...
 
 
 def _sync_branding_if_configured(
@@ -54,7 +62,7 @@ def _build_contextual_main_menu(
     chat_id: int,
     telegram_user_id: int | None,
     ebay_environment: str,
-):
+) -> InlineKeyboardMarkup:
     account_linked = False
     reconnect_required = False
     notifications_enabled = False
@@ -97,7 +105,7 @@ def _build_contextual_main_menu(
     )
 
 
-def extract_message_context(update: dict) -> tuple[int | None, str, int | None]:
+def extract_message_context(update: dict[str, Any]) -> tuple[int | None, str, int | None]:
     message = update.get("message") or update.get("edited_message") or {}
     chat = message.get("chat") or {}
     text = message.get("text") or ""
@@ -107,7 +115,7 @@ def extract_message_context(update: dict) -> tuple[int | None, str, int | None]:
     return chat.get("id"), text, None
 
 
-def _display_name_from_user(user: dict) -> str:
+def _display_name_from_user(user: dict[str, Any]) -> str:
     first_name = str(user.get("first_name") or "").strip()
     last_name = str(user.get("last_name") or "").strip()
     full_name = " ".join(part for part in (first_name, last_name) if part).strip()
@@ -117,7 +125,7 @@ def _display_name_from_user(user: dict) -> str:
 
 
 def extract_message_actor(
-    update: dict,
+    update: dict[str, Any],
 ) -> tuple[int | None, int | None, str, str, str]:
     message = update.get("message") or update.get("edited_message") or {}
     chat = message.get("chat") or {}
@@ -132,7 +140,7 @@ def extract_message_actor(
 
 
 def extract_callback_context(
-    update: dict,
+    update: dict[str, Any],
 ) -> tuple[str | None, int | None, str | None, int | None]:
     callback = update.get("callback_query") or {}
     callback_id = callback.get("id")
@@ -149,7 +157,7 @@ def extract_callback_context(
 
 
 def extract_callback_actor(
-    update: dict,
+    update: dict[str, Any],
 ) -> tuple[int | None, int | None, str, str, str]:
     callback = update.get("callback_query") or {}
     user = callback.get("from") or {}
@@ -164,7 +172,7 @@ def extract_callback_actor(
     )
 
 
-def extract_update_chat_type(update: dict) -> str:
+def extract_update_chat_type(update: dict[str, Any]) -> str:
     callback = update.get("callback_query") or {}
     message = callback.get("message") or update.get("message") or update.get("edited_message") or {}
     return str((message.get("chat") or {}).get("type") or "private")
@@ -213,9 +221,9 @@ def run_bot(
     *,
     configure_logging_fn: Callable[[], None],
     load_telegram_config_fn: Callable[[], TelegramConfig],
-    acquire_process_lock_fn: Callable[[str], object],
-    release_process_lock_fn: Callable[[object, str], None],
-    process_message_fn: Callable[[str, int, TelegramConfig, str, int | None], list[str]],
+    acquire_process_lock_fn: Callable[[str], TextIO | None],
+    release_process_lock_fn: Callable[[TextIO | None, str], None],
+    process_message_fn: ProcessMessageFn,
     register_runtime_contact_fn: Callable[..., None],
     send_message_fn: Callable[..., None],
     maybe_send_new_order_notifications_fn: Callable[[TelegramConfig, str], None],
@@ -227,7 +235,7 @@ def run_bot(
     _ACTIVE_SHUTDOWN_EVENT = shutdown_event
     configure_logging_fn()
     shutdown_event.clear()
-    lock_handle = None
+    lock_handle: TextIO | None = None
     telegram_config = None
     try:
         telegram_config = load_telegram_config_fn()

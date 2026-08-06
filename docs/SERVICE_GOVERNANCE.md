@@ -211,7 +211,7 @@ Comprende:
 Retention:
 
 - tenere mentre l'utente è attivo, approvato o in attesa
-- utenti `blocked` o `rejected` possono essere mantenuti fino a `180 giorni` per audit minimo e prevenzione abusi
+- utenti `blocked` possono essere mantenuti fino a `180 giorni` per audit minimo e prevenzione abusi
 
 ### Account eBay collegati
 

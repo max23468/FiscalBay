@@ -3,7 +3,8 @@ from http import HTTPStatus
 from unittest.mock import Mock, patch
 
 from src.fiscalbay.models import OauthLinkSession, TelegramConfig
-from src.fiscalbay.oauth_server import OAuthCallbackResult, OAuthHandler
+from src.fiscalbay.oauth_callback import OAuthCallbackResult
+from src.fiscalbay.oauth_server import OAuthHandler
 
 
 def telegram_config() -> TelegramConfig:

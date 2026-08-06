@@ -24,9 +24,6 @@ TELEGRAM_USER_STATUSES = frozenset(
         TELEGRAM_USER_STATUS_ADMIN,
     }
 )
-LEGACY_APPROVED_TELEGRAM_USER_STATUSES = frozenset({"active"})
-LEGACY_BLOCKED_TELEGRAM_USER_STATUSES = frozenset({"rejected"})
-
 EBAY_ACCOUNT_STATUS_LINKED = "linked"
 EBAY_ACCOUNT_STATUS_DISCONNECTED = "disconnected"
 EBAY_ACCOUNT_STATUS_REVOKED = "revoked"
@@ -131,10 +128,6 @@ def normalize_telegram_user_status(
     normalized = str(status or "").strip().lower()
     if not normalized:
         return default
-    if normalized in LEGACY_APPROVED_TELEGRAM_USER_STATUSES:
-        return TELEGRAM_USER_STATUS_APPROVED
-    if normalized in LEGACY_BLOCKED_TELEGRAM_USER_STATUSES:
-        return TELEGRAM_USER_STATUS_BLOCKED
     if normalized in TELEGRAM_USER_STATUSES:
         return normalized
     return default
@@ -183,11 +176,6 @@ def is_pending_telegram_user_status(status: str | None) -> bool:
 
 def is_blocked_telegram_user_status(status: str | None) -> bool:
     return normalize_telegram_user_status(status) == TELEGRAM_USER_STATUS_BLOCKED
-
-
-def is_approved_telegram_user_status(status: str | None) -> bool:
-    canonical = normalize_telegram_user_status(status)
-    return canonical in {TELEGRAM_USER_STATUS_APPROVED, TELEGRAM_USER_STATUS_ADMIN}
 
 
 def get_telegram_user_capabilities(status: str | None) -> frozenset[str]:

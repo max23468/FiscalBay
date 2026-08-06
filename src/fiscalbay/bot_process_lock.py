@@ -10,7 +10,9 @@ from typing import Any, TextIO
 
 from .errors import TelegramApiError
 from .logging_utils import log_event
-from .storage.sqlite import ensure_parent_dir
+from .storage.connection import ensure_parent_dir
+
+LOGGER = logging.getLogger("fiscalbay.telegram_bot")
 
 _fcntl: Any
 try:
@@ -19,8 +21,6 @@ except ImportError:  # pragma: no cover - Windows
     _fcntl = None
 
 fcntl: Any = _fcntl
-
-LOGGER = logging.getLogger("fiscalbay.telegram_bot.lock")
 
 
 def acquire_process_lock(lock_path: str) -> TextIO | None:
