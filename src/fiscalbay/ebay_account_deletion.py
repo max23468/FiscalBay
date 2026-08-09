@@ -13,7 +13,7 @@ import time
 import urllib.parse
 import urllib.request
 from collections import deque
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import cast
 
 from cryptography.exceptions import InvalidSignature
@@ -29,7 +29,6 @@ APPLICATION_SCOPE = "https://api.ebay.com/oauth/api_scope"
 PUBLIC_KEY_CACHE_SECONDS = 3600
 PUBLIC_KEY_LOOKUP_LIMIT = 20
 PUBLIC_KEY_LOOKUP_WINDOW_SECONDS = 60
-PROCESSING_LEASE_SECONDS = 60
 PUBLIC_KEY_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 VERIFICATION_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{32,80}$")
 
@@ -37,14 +36,6 @@ _cache_lock = threading.Lock()
 _application_token: tuple[str, float] | None = None
 _public_keys: dict[str, tuple[str, str, float]] = {}
 _public_key_lookups: deque[float] = deque()
-
-
-class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *args: object, **kwargs: object) -> None:
-        return None
-
-
-_forward_opener = urllib.request.build_opener(_NoRedirectHandler())
 
 
 class AccountDeletionError(Exception):
@@ -126,49 +117,24 @@ def process_notification(state_path: str, body: bytes, signature_header: str) ->
         verification_token.encode(), identifiers[0].encode(), hashlib.sha256
     ).hexdigest()
 
-    now = datetime.now(timezone.utc)
-    started_at = now.isoformat().replace("+00:00", "Z")
-    stale_before = (
-        (now - timedelta(seconds=PROCESSING_LEASE_SECONDS)).isoformat().replace("+00:00", "Z")
-    )
     init_db(state_path)
     with _connect(state_path) as conn:
-        inserted = conn.execute(
+        existing = conn.execute(
+            "SELECT status FROM ebay_account_deletion_requests WHERE notification_id = ?",
+            (notification_id,),
+        ).fetchone()
+        if existing is not None and existing["status"] == "processed":
+            return 0
+        conn.execute(
             "INSERT INTO ebay_account_deletion_requests "
-            "(notification_id, user_id_hash, status, processing_started_at) "
-            "VALUES (?, ?, 'processing', ?) "
-            "ON CONFLICT(notification_id) DO NOTHING",
-            (notification_id, user_id_hash, started_at),
+            "(notification_id, user_id_hash, status) "
+            "VALUES (?, ?, 'processing') "
+            "ON CONFLICT(notification_id) DO UPDATE SET "
+            "user_id_hash = excluded.user_id_hash, status = 'processing'",
+            (notification_id, user_id_hash),
         )
-        if inserted.rowcount == 0:
-            existing = conn.execute(
-                "SELECT status FROM ebay_account_deletion_requests WHERE notification_id = ?",
-                (notification_id,),
-            ).fetchone()
-            if existing is not None and existing["status"] == "processed":
-                return 0
-            claimed = conn.execute(
-                "UPDATE ebay_account_deletion_requests "
-                "SET user_id_hash = ?, status = 'processing', processing_started_at = ? "
-                "WHERE notification_id = ? AND "
-                "(status = 'retryable' OR processing_started_at <= ?)",
-                (user_id_hash, started_at, notification_id, stale_before),
-            )
-            if claimed.rowcount == 0:
-                raise AccountDeletionError(
-                    "notification_processing", "Notifica eBay già in elaborazione."
-                )
 
-    try:
-        _forward_to_hub(body, signature_header)
-    except Exception:
-        with _connect(state_path) as conn:
-            conn.execute(
-                "UPDATE ebay_account_deletion_requests SET status = 'retryable' "
-                "WHERE notification_id = ? AND status = 'processing'",
-                (notification_id,),
-            )
-        raise
+    _forward_to_hub(body, signature_header)
     with _connect(state_path) as conn:
         conn.execute(
             "UPDATE ebay_account_deletion_requests SET status = 'processed', processed_at = ? "
@@ -287,7 +253,7 @@ def _forward_to_hub(body: bytes, signature_header: str) -> None:
     request = urllib.request.Request(endpoint, data=body, method="POST")
     request.add_header("Content-Type", "application/json")
     request.add_header("X-EBAY-SIGNATURE", signature_header)
-    with _forward_opener.open(request, timeout=5) as response:
+    with urllib.request.urlopen(request, timeout=5) as response:
         if response.status not in {200, 201, 202, 204}:
             raise AccountDeletionError(
                 "hub_forward_failed", "Hub Fatture non ha accettato la richiesta."
