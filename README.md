@@ -233,6 +233,9 @@ fiscalbay-bot
 | `EBAY_OAUTH_CALLBACK_URL` | No | derivato da `EBAY_OAUTH_CONNECT_BASE_URL` | URL pubblico di callback esposto dal progetto; deve coincidere con l'Accept URL configurato nel RuName eBay |
 | `EBAY_OAUTH_SERVER_HOST` | No | `127.0.0.1` | Host di bind del callback server |
 | `EBAY_OAUTH_SERVER_PORT` | No | `8787` | Porta locale del callback server |
+| `EBAY_ACCOUNT_DELETION_ENDPOINT_URL` | Sì per le notifiche | vuoto | URL HTTPS esatto registrato nel portale eBay |
+| `EBAY_ACCOUNT_DELETION_VERIFICATION_TOKEN` | Sì per le notifiche | vuoto | Token di verifica eBay da 32 a 80 caratteri |
+| `HUB_FATTURE_EBAY_ACCOUNT_DELETION_URL` | Sì per le notifiche | vuoto | Endpoint HTTPS Hub Fatture a cui inoltrare il payload originale già verificato; FiscalBay non elimina il tenant venditore |
 | `EBAY_TENANT_TOKEN_KEY` | Consigliata per OAuth multiutente | vuoto | Chiave Fernet usata per cifrare i refresh token tenant a riposo |
 | `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS` | No | vuoto | Opt-in solo dev o recovery controllato per salvare il refresh token tenant in formato `plain:` |
 | `LOG_LEVEL` | No | `WARNING` per CLI, `INFO` per bot se impostato così | Livello log |
