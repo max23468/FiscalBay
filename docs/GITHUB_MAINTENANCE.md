@@ -109,7 +109,8 @@ I workflow a basso consumo sono:
   toccano packaging e su avvio manuale
 - `.github/workflows/codex-review-gate.yml`: usa `pull_request_target` e checkout
   fissato di `main`, pubblica `codex-review` sull'HEAD della PR e invalida ogni
-  evidenza di review appartenente a commit o tentativi precedenti
+  evidenza di review appartenente a commit o tentativi precedenti; P0/P1
+  bloccano, mentre P2/P3 restano advisory dopo la conclusione della review
 - tutti i workflow usano concurrency con cancellazione dei run precedenti sulla
   stessa PR/ref quando applicabile
 
