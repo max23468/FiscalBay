@@ -26,6 +26,7 @@ from .storage.connection import _connect, init_db
 
 ACCOUNT_DELETION_PATH = "/ebay/account-deletion"
 APPLICATION_SCOPE = "https://api.ebay.com/oauth/api_scope"
+LOOKUP_TIMEOUT_SECONDS = 5
 PUBLIC_KEY_CACHE_SECONDS = 3600
 PUBLIC_KEY_LOOKUP_LIMIT = 20
 PUBLIC_KEY_LOOKUP_WINDOW_SECONDS = 60
@@ -189,6 +190,7 @@ def _application_access_token() -> str:
         data=urllib.parse.urlencode(
             {"grant_type": "client_credentials", "scope": APPLICATION_SCOPE}
         ).encode(),
+        timeout=LOOKUP_TIMEOUT_SECONDS,
     )
     token = str(response.get("access_token") or "")
     if not token:
@@ -225,6 +227,7 @@ def _public_key(key_id: str) -> tuple[str, str]:
         "https://api.ebay.com/commerce/notification/v1/public_key/"
         + urllib.parse.quote(key_id, safe=""),
         headers={"Authorization": f"Bearer {_application_access_token()}"},
+        timeout=LOOKUP_TIMEOUT_SECONDS,
     )
     key = str(response.get("key") or "")
     algorithm = str(response.get("algorithm") or "").upper()

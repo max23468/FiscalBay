@@ -83,6 +83,12 @@ class EbayAccountDeletionTests(unittest.TestCase):
                 _public_key("unknown-over-limit")
 
         self.assertEqual(request_json.call_count, ebay_account_deletion.PUBLIC_KEY_LOOKUP_LIMIT)
+        self.assertTrue(
+            all(
+                call.kwargs["timeout"] == ebay_account_deletion.LOOKUP_TIMEOUT_SECONDS
+                for call in request_json.call_args_list
+            )
+        )
 
     @patch.dict(
         "os.environ",
