@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.14.0](https://github.com/max23468/FiscalBay/compare/v1.13.11...v1.14.0) (2026-08-09)
+
+### Features
+
+* inoltra le notifiche di cancellazione eBay (#149) ([1d1a945](https://github.com/max23468/FiscalBay/commit/1d1a9456d085a49d9f1956ccb16dd7088ec34f45))
+
+### Maintenance
+
+* split runtime domains and remove legacy paths (#147) ([30cdc7c](https://github.com/max23468/FiscalBay/commit/30cdc7c0be4813a05134720ed4600fcab2a0f515))
+* uniforma il gate Codex (#148) ([23ea1c8](https://github.com/max23468/FiscalBay/commit/23ea1c8108e1cca5c5993c2a50518c8fc68592c3))
+* uniforma il ciclo completo di pubblicazione (#150) ([6c0bf2e](https://github.com/max23468/FiscalBay/commit/6c0bf2e74a453e93318fe7d6b2a457c295ad1026))
+
 ## [1.13.11](https://github.com/max23468/FiscalBay/compare/v1.13.10...v1.13.11) (2026-08-06)
 
 ### Bug Fixes
