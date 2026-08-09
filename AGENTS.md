@@ -11,8 +11,9 @@ Prevalgono, nell’ordine:
 4. documentazione canonica, codice, test e configurazione vicini.
 
 Decidi autonomamente i dettagli di routine. Chiedi conferma solo per azioni
-distruttive o difficili da annullare, deploy e release, oppure quando due letture
-della richiesta produrrebbero lavori materialmente diversi.
+distruttive o difficili da annullare, deploy e release non già autorizzati da una
+richiesta di pubblicazione, oppure quando due letture della richiesta
+produrrebbero lavori materialmente diversi.
 
 ## Contesto del prodotto
 
@@ -62,6 +63,27 @@ esegui `ruff format src tests`. Per packaging o build aggiungi `python -m build`
 quando pertinente. Non inventare risultati e dichiara i controlli non eseguiti
 quando costituiscono un limite reale.
 
+## Significato di `Pubblica`
+
+Quando il proprietario dice `Pubblica`, `pubblica`, parla di `pubblicare` o usa
+espressioni equivalenti, autorizza l'intero ciclo tecnico applicabile alla
+repository. L'agente non si ferma a stati intermedi: prepara e verifica la
+modifica; crea branch e commit; esegue push; apre o aggiorna la PR; attende e
+soddisfa i soli gate bloccanti; esegue il merge; completa deploy o promozione
+tecnica e verifica live quando applicabili; crea versione, tag e GitHub Release
+quando previsti dalla policy; infine aggiorna e verifica la branch di base,
+elimina branch e worktree temporanei locali e remoti già assorbiti e controlla
+stash e altri residui.
+
+Se un passaggio non è applicabile, lo dichiara e prosegue con gli altri. La
+richiesta di pubblicazione vale come autorizzazione a PR, merge, deploy tecnico
+e release previsti dal ciclo, senza una seconda conferma. Non autorizza
+pubblicazione di temi Shopify live, submission Shopify App Store, billing o
+nuove attivazioni produttive, TestFlight o App Store, invii Aruba, email o
+scansioni reali, né aggiornamenti Notion: queste azioni richiedono una richiesta
+esplicita separata. Non dichiarare `pubblicato` finché il ciclo applicabile e la
+rilettura finale di PR, check, deploy, release e stato Git non sono completi.
+
 ## GitHub e pubblicazione
 
 - Usa commit atomici e Conventional Commit: `feat`, `fix` o `perf` per
@@ -69,9 +91,6 @@ quando costituiscono un limite reale.
   quando non cambia il runtime. Usa `!` o `BREAKING CHANGE:` per cambi incompatibili.
 - Il titolo PR deve essere Conventional Commit e descrivere l’impatto reale, non
   il nome della branch. Preferisci squash merge.
-- “Pubblica” significa verifica, commit, push, PR/merge e pulizia di branch e
-  worktree assorbiti. Deploy e release si aggiungono solo quando il diff o la
-  richiesta li rendono applicabili.
 - Il repository ha un solo maintainer: review esterne non sono un prerequisito,
   ma self-review e verifiche pertinenti sì.
 
@@ -118,8 +137,8 @@ Se host o hostname non coincidono, fermati. Non usare VPS di altri progetti.
 - Un cambio runtime `feat`, `fix` o `perf` richiesto in produzione richiede anche
   la release versionata prevista da `docs/RELEASE_POLICY.md`.
 
-Deploy e release richiedono conferma esplicita. Per una pubblicazione docs-only
-sono entrambi non applicabili.
+Fuori da una richiesta di pubblicazione, deploy e release richiedono conferma
+esplicita. Per una pubblicazione docs-only sono entrambi non applicabili.
 
 ## Documentazione canonica
 
