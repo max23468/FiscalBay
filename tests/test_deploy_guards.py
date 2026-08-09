@@ -10,6 +10,23 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeployGuardTests(unittest.TestCase):
+    def test_account_deletion_route_is_rate_limited_before_proxying(self) -> None:
+        site = (ROOT / "deploy/nginx-fiscalbay-oauth-site.conf").read_text()
+        snippet = (ROOT / "deploy/nginx-fiscalbay-oauth.conf").read_text()
+
+        self.assertIn("limit_req_zone $binary_remote_addr", site)
+        for config in (site, snippet):
+            location = config.split("location = /ebay/account-deletion", 1)[1]
+            self.assertLess(location.index("limit_req zone="), location.index("proxy_pass "))
+
+    def test_account_deletion_route_is_verified_by_the_deploy_smoke(self) -> None:
+        smoke = (ROOT / "deploy/smoke-check.sh").read_text()
+
+        self.assertIn('"${EBAY_ACCOUNT_DELETION_ENDPOINT_URL:-}"', smoke)
+        self.assertIn('"${HUB_FATTURE_EBAY_ACCOUNT_DELETION_URL:-}"', smoke)
+        self.assertIn('"fiscalbay-deploy-smoke"', smoke)
+        self.assertIn("urllib.request.urlopen(", smoke)
+
     def test_major_release_requires_explicit_version_and_bump(self) -> None:
         release_script = (ROOT / "scripts/release_now.sh").read_text()
 

@@ -224,13 +224,14 @@ def request_json_once(
     url: str,
     headers: Optional[dict[str, str]] = None,
     data: Optional[bytes] = None,
+    timeout: float | None = None,
 ) -> JsonObject:
     request = urllib.request.Request(url=url, data=data, method=method)
     for key, value in (headers or {}).items():
         request.add_header(key, value)
 
     try:
-        with urllib.request.urlopen(request) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         with exc:  # chiude il socket sottostante: senza, l'errore lascia un ResourceWarning
@@ -256,6 +257,7 @@ def request_json(
     url: str,
     headers: Optional[dict[str, str]] = None,
     data: Optional[bytes] = None,
+    timeout: float | None = None,
 ) -> JsonObject:
     max_retries, base_delay = request_retry_settings()
 
@@ -277,7 +279,7 @@ def request_json(
         )
 
     return run_with_retry(
-        lambda: request_json_once(method, url, headers=headers, data=data),
+        lambda: request_json_once(method, url, headers=headers, data=data, timeout=timeout),
         max_attempts=max_retries,
         should_retry=lambda exc: isinstance(exc, EbayApiError) and ebay_error_retryable(exc),
         on_retry=on_retry,

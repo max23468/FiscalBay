@@ -162,8 +162,18 @@ Setup consigliato:
 - un sottodominio personalizzato, per esempio `connect.tuodominio.it`, punta al
   record Duck DNS con `CNAME`
 - nginx espone solo `/`, `/oauth/*`, `/privacy`, `/about`, `/healthz` e gli
-  asset favicon pubblici
+  asset favicon pubblici; quando si abilitano le notifiche di cancellazione
+  account, aggiungere anche il blocco `/ebay/account-deletion` e la relativa
+  `limit_req_zone` dai template `deploy/nginx-fiscalbay-oauth*.conf`, quindi
+  validare con `sudo nginx -t` e ricaricare nginx
 - Certbot gestisce il certificato HTTPS
+
+Il deploy verifica la challenge HTTPS pubblica quando almeno una delle tre
+variabili `EBAY_ACCOUNT_DELETION_ENDPOINT_URL`,
+`EBAY_ACCOUNT_DELETION_VERIFICATION_TOKEN` e
+`HUB_FATTURE_EBAY_ACCOUNT_DELETION_URL` è valorizzata. Devono essere presenti
+tutte: routing nginx, TLS, token o inoltro incompleti fanno fallire lo smoke e
+attivano il rollback previsto dal deploy.
 
 Guida completa:
 

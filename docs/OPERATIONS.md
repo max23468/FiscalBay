@@ -226,12 +226,13 @@ Servizio OAuth su VPS:
 
 - entrypoint: `fiscalbay-oauth-server`
 - servizio `systemd`: `fiscalbay-oauth`
-- endpoint locali minimi: `/`, `/healthz`, `/oauth/start`, `/oauth/callback`, `/privacy`, `/about`, `/favicon.svg`, `/favicon.png`, `/favicon.ico`, `/apple-touch-icon.png`
+- endpoint locali minimi: `/`, `/healthz`, `/oauth/start`, `/oauth/callback`, `/ebay/account-deletion`, `/privacy`, `/about`, `/favicon.svg`, `/favicon.png`, `/favicon.ico`, `/apple-touch-icon.png`
 - nginx deve inoltrare al servizio OAuth anche `/`, `/privacy`, `/about` e gli asset favicon; la configurazione di riferimento è `deploy/nginx-fiscalbay-oauth.conf`
-- variabili utili: `EBAY_OAUTH_RUNAME`, `EBAY_OAUTH_RUNAME_SANDBOX`, `EBAY_OAUTH_CONNECT_BASE_URL`, `EBAY_OAUTH_CALLBACK_URL`, `EBAY_OAUTH_SERVER_HOST`, `EBAY_OAUTH_SERVER_PORT`, `EBAY_TENANT_TOKEN_KEY`
+- variabili utili: `EBAY_OAUTH_RUNAME`, `EBAY_OAUTH_RUNAME_SANDBOX`, `EBAY_OAUTH_CONNECT_BASE_URL`, `EBAY_OAUTH_CALLBACK_URL`, `EBAY_OAUTH_SERVER_HOST`, `EBAY_OAUTH_SERVER_PORT`, `EBAY_TENANT_TOKEN_KEY`, `EBAY_ACCOUNT_DELETION_ENDPOINT_URL`, `EBAY_ACCOUNT_DELETION_VERIFICATION_TOKEN`, `HUB_FATTURE_EBAY_ACCOUNT_DELETION_URL`
 - il percorso corretto su VPS è usare `EBAY_TENANT_TOKEN_KEY` per cifrare i refresh token utente a riposo
 - con `TELEGRAM_ADMIN_USER_ID` configurato, il bot in produzione usa i token tenant come percorso operativo normale e non deve più dipendere da `EBAY_REFRESH_TOKEN` per i tenant collegati
 - verso eBay il parametro `redirect_uri` deve essere il `RuName` registrato nel portale eBay, non l'URL di callback pubblico
+- la notifica di cancellazione identifica un compratore: FiscalBay verifica e inoltra il payload originale a Hub Fatture, senza eliminare il tenant venditore
 - l'URL di callback pubblico del progetto deve invece coincidere con l'`Accept URL` associato a quel `RuName`
 - `EBAY_ENABLE_PLAINTEXT_TENANT_TOKENS=1` va considerato solo fallback di dev o recovery controllato e non configurazione operativa normale
 

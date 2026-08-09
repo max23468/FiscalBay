@@ -1,3 +1,6 @@
+import hashlib
+import io
+import json
 import unittest
 from http import HTTPStatus
 from unittest.mock import Mock, patch
@@ -22,6 +25,8 @@ def make_handler(path: str = "/") -> OAuthHandler:
     handler.path = path
     handler.server = Mock(telegram_config=telegram_config())
     handler._write_response = Mock()
+    handler.headers = {}
+    handler.rfile = io.BytesIO()
     return handler
 
 
@@ -67,6 +72,43 @@ class OAuthHandlerTests(unittest.TestCase):
         handler = make_handler("/missing")
         handler.do_GET()
         self.assertEqual(handler._write_response.call_args.args[0], HTTPStatus.NOT_FOUND)
+
+    @patch.dict(
+        "os.environ",
+        {
+            "EBAY_ACCOUNT_DELETION_ENDPOINT_URL": "https://example.com/ebay/account-deletion",
+            "EBAY_ACCOUNT_DELETION_VERIFICATION_TOKEN": "v" * 32,
+        },
+        clear=False,
+    )
+    def test_account_deletion_challenge_uses_exact_endpoint_and_token(self) -> None:
+        handler = make_handler("/ebay/account-deletion?challenge_code=abc")
+
+        handler.do_GET()
+
+        status, body, content_type = handler._write_response.call_args.args
+        expected = hashlib.sha256(
+            ("abc" + "v" * 32 + "https://example.com/ebay/account-deletion").encode()
+        ).hexdigest()
+        self.assertEqual(status, HTTPStatus.OK)
+        self.assertEqual(json.loads(body), {"challengeResponse": expected})
+        self.assertEqual(content_type, "application/json")
+
+    @patch("src.fiscalbay.oauth_server.process_notification")
+    def test_account_deletion_post_preserves_raw_body_and_signature(self, process_mock) -> None:
+        body = b'{"notification":{"notificationId":"n-1"}}'
+        handler = make_handler("/ebay/account-deletion")
+        handler.headers = {
+            "Content-Length": str(len(body)),
+            "Content-Type": "application/json",
+            "X-EBAY-SIGNATURE": "raw-signature",
+        }
+        handler.rfile = io.BytesIO(body)
+
+        handler.do_POST()
+
+        process_mock.assert_called_once_with("state.db", body, "raw-signature")
+        self.assertEqual(handler._write_response.call_args.args[0], HTTPStatus.OK)
 
     @patch("src.fiscalbay.oauth_server.build_oauth_start_redirect")
     def test_handle_start_renders_help_success_and_failure(self, redirect_mock) -> None:

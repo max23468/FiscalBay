@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import urllib.parse
@@ -11,6 +12,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .bot_messaging import send_message
 from .config import load_telegram_config
+from .ebay_account_deletion import (
+    ACCOUNT_DELETION_PATH,
+    AccountDeletionError,
+    account_deletion_config,
+    challenge_response,
+    process_notification,
+)
 from .logging_utils import log_event
 from .models import (
     OAUTH_SESSION_STATUS_FAILED,
@@ -58,6 +66,9 @@ class OAuthHandler(BaseHTTPRequestHandler):
         if path == "/healthz":
             self._write_response(HTTPStatus.OK, b"ok", "text/plain; charset=utf-8")
             return
+        if path == ACCOUNT_DELETION_PATH:
+            self._handle_account_deletion_challenge(parsed)
+            return
         public_asset = render_public_icon_asset_for_path(path)
         if public_asset is not None:
             body, content_type = public_asset
@@ -82,6 +93,71 @@ class OAuthHandler(BaseHTTPRequestHandler):
                 "Risorsa non trovata", "Percorso OAuth non riconosciuto.", is_error=True
             ),
         )
+
+    def do_POST(self) -> None:
+        path = urllib.parse.urlparse(self.path).path.rstrip("/") or "/"
+        if path != ACCOUNT_DELETION_PATH:
+            self._write_response(HTTPStatus.NOT_FOUND, b"not found", "text/plain; charset=utf-8")
+            return
+        if self.headers.get("Content-Type", "").split(";", 1)[0].strip() != "application/json":
+            self._write_response(
+                HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+                b"content type unsupported",
+                "text/plain; charset=utf-8",
+            )
+            return
+        raw_length = self.headers.get("Content-Length", "")
+        try:
+            content_length = int(raw_length)
+        except ValueError:
+            content_length = -1
+        if content_length < 0 or content_length > 128 * 1024:
+            self._write_response(
+                HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                b"payload too large",
+                "text/plain; charset=utf-8",
+            )
+            return
+        body = self.rfile.read(content_length)
+        try:
+            process_notification(
+                self.server.telegram_config.state_path,
+                body,
+                self.headers.get("X-EBAY-SIGNATURE", ""),
+            )
+        except AccountDeletionError as exc:
+            status = (
+                HTTPStatus.PRECONDITION_FAILED
+                if exc.code.startswith("signature")
+                else HTTPStatus.SERVICE_UNAVAILABLE
+            )
+            self._write_response(status, exc.code.encode(), "text/plain; charset=utf-8")
+            return
+        except Exception as exc:
+            log_event(LOGGER, logging.ERROR, "ebay_account_deletion_failed", error=exc)
+            self._write_response(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                b"processing_error",
+                "text/plain; charset=utf-8",
+            )
+            return
+        self._write_response(HTTPStatus.OK, b"", "text/plain; charset=utf-8")
+
+    def _handle_account_deletion_challenge(self, parsed: urllib.parse.ParseResult) -> None:
+        challenge_code = (urllib.parse.parse_qs(parsed.query).get("challenge_code") or [""])[0]
+        if not challenge_code:
+            self._write_response(HTTPStatus.BAD_REQUEST, b"challenge code missing")
+            return
+        try:
+            endpoint, verification_token = account_deletion_config()
+        except Exception:
+            self._write_response(HTTPStatus.SERVICE_UNAVAILABLE, b"not configured")
+            return
+        body = json.dumps(
+            {"challengeResponse": challenge_response(challenge_code, verification_token, endpoint)},
+            separators=(",", ":"),
+        ).encode()
+        self._write_response(HTTPStatus.OK, body, "application/json")
 
     def _handle_start(self, params: dict[str, list[str]]) -> None:
         oauth_state = (params.get("state") or [""])[0]
