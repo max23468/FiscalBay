@@ -3,12 +3,16 @@ import json
 import tempfile
 import threading
 import unittest
+from collections import deque
 from pathlib import Path
 from unittest.mock import patch
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
+from src.fiscalbay import ebay_account_deletion
 from src.fiscalbay.ebay_account_deletion import (
+    AccountDeletionError,
+    _public_key,
     parse_notification,
     process_notification,
     verify_notification,
@@ -61,6 +65,42 @@ class EbayAccountDeletionTests(unittest.TestCase):
             return_value=(public_key, "SHA256"),
         ):
             verify_notification(notification(), header)
+
+    @patch("src.fiscalbay.ebay_account_deletion._application_access_token")
+    @patch("src.fiscalbay.ebay_account_deletion.request_json")
+    def test_public_key_lookup_budget_bounds_unknown_key_ids(self, request_json, _token) -> None:
+        request_json.return_value = {
+            "key": "-----BEGIN PUBLIC KEY-----key-----END PUBLIC KEY-----",
+            "algorithm": "ECDSA",
+            "digest": "SHA256",
+        }
+        with (
+            patch.object(ebay_account_deletion, "_public_keys", {}),
+            patch.object(ebay_account_deletion, "_public_key_lookups", deque()),
+        ):
+            for index in range(ebay_account_deletion.PUBLIC_KEY_LOOKUP_LIMIT):
+                _public_key(f"unknown-{index}")
+            with self.assertRaisesRegex(AccountDeletionError, "temporaneamente limitato"):
+                _public_key("unknown-over-limit")
+
+        self.assertEqual(request_json.call_count, ebay_account_deletion.PUBLIC_KEY_LOOKUP_LIMIT)
+
+    @patch.dict(
+        "os.environ",
+        {
+            "HUB_FATTURE_EBAY_ACCOUNT_DELETION_URL": (
+                "https://hub.example.com/webhooks/ebay/account-deletion"
+            )
+        },
+        clear=False,
+    )
+    def test_hub_forwarder_uses_an_opener_that_rejects_redirects(self) -> None:
+        redirect_handler = next(
+            handler
+            for handler in ebay_account_deletion._forward_opener.handlers
+            if isinstance(handler, ebay_account_deletion._NoRedirectHandler)
+        )
+        self.assertIsNone(redirect_handler.redirect_request())
 
     @patch.dict(
         "os.environ",

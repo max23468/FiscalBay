@@ -12,6 +12,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import cast
 
@@ -26,6 +27,8 @@ from .storage.connection import _connect, init_db
 ACCOUNT_DELETION_PATH = "/ebay/account-deletion"
 APPLICATION_SCOPE = "https://api.ebay.com/oauth/api_scope"
 PUBLIC_KEY_CACHE_SECONDS = 3600
+PUBLIC_KEY_LOOKUP_LIMIT = 20
+PUBLIC_KEY_LOOKUP_WINDOW_SECONDS = 60
 PROCESSING_LEASE_SECONDS = 60
 PUBLIC_KEY_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 VERIFICATION_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{32,80}$")
@@ -33,6 +36,15 @@ VERIFICATION_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{32,80}$")
 _cache_lock = threading.Lock()
 _application_token: tuple[str, float] | None = None
 _public_keys: dict[str, tuple[str, str, float]] = {}
+_public_key_lookups: deque[float] = deque()
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args: object, **kwargs: object) -> None:
+        return None
+
+
+_forward_opener = urllib.request.build_opener(_NoRedirectHandler())
 
 
 class AccountDeletionError(Exception):
@@ -231,6 +243,17 @@ def _public_key(key_id: str) -> tuple[str, str]:
         cached = _public_keys.get(key_id)
         if cached and cached[2] > now:
             return cached[0], cached[1]
+        while _public_key_lookups and _public_key_lookups[0] <= (
+            now - PUBLIC_KEY_LOOKUP_WINDOW_SECONDS
+        ):
+            _public_key_lookups.popleft()
+        if len(_public_key_lookups) >= PUBLIC_KEY_LOOKUP_LIMIT:
+            raise AccountDeletionError(
+                "public_key_lookup_limited",
+                "Lookup delle chiavi pubbliche eBay temporaneamente limitato.",
+            )
+        # ponytail: limite globale; passare a quote distribuite solo con più processi.
+        _public_key_lookups.append(now)
     response: JsonObject = request_json(
         "GET",
         "https://api.ebay.com/commerce/notification/v1/public_key/"
@@ -264,7 +287,7 @@ def _forward_to_hub(body: bytes, signature_header: str) -> None:
     request = urllib.request.Request(endpoint, data=body, method="POST")
     request.add_header("Content-Type", "application/json")
     request.add_header("X-EBAY-SIGNATURE", signature_header)
-    with urllib.request.urlopen(request, timeout=5) as response:
+    with _forward_opener.open(request, timeout=5) as response:
         if response.status not in {200, 201, 202, 204}:
             raise AccountDeletionError(
                 "hub_forward_failed", "Hub Fatture non ha accettato la richiesta."
