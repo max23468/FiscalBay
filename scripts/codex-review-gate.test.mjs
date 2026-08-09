@@ -153,7 +153,7 @@ test("i finding P2/P3 passano dopo la review conclusa", () => {
           original_commit_id: headSha,
           commit_id: headSha,
           created_at: "2026-08-04T12:00:01Z",
-          body: "**P2** Suggerimento advisory",
+          body: "**P2** Suggerimento advisory che cita P0/P1 nella spiegazione",
         },
       ],
       reviews: [
@@ -166,6 +166,22 @@ test("i finding P2/P3 passano dopo la review conclusa", () => {
     }).state,
     "success",
   );
+});
+
+test("l'assestamento advisory parte dal segnale più recente", () => {
+  const input = {
+    reviewComments: [
+      {
+        user: bot,
+        commit_id: headSha,
+        created_at: "2026-08-04T12:00:29Z",
+        body: "**P2** Suggerimento advisory",
+      },
+    ],
+    reviews: [{ user: bot, commit_id: headSha, submitted_at: "2026-08-04T12:00:00Z" }],
+  };
+  assert.equal(classify({ ...input, now: new Date("2026-08-04T12:00:30Z").getTime() }).state, "pending");
+  assert.equal(classify({ ...input, now: new Date("2026-08-04T12:01:00Z").getTime() }).state, "success");
 });
 
 test("ignora finding vecchi dopo rebase, nuovo commit e nuovo tentativo", () => {
