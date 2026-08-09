@@ -10,6 +10,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeployGuardTests(unittest.TestCase):
+    def test_account_deletion_route_is_rate_limited_before_proxying(self) -> None:
+        site = (ROOT / "deploy/nginx-fiscalbay-oauth-site.conf").read_text()
+        snippet = (ROOT / "deploy/nginx-fiscalbay-oauth.conf").read_text()
+
+        self.assertIn("limit_req_zone $binary_remote_addr", site)
+        for config in (site, snippet):
+            location = config.split("location = /ebay/account-deletion", 1)[1]
+            self.assertLess(location.index("limit_req zone="), location.index("proxy_pass "))
+
     def test_major_release_requires_explicit_version_and_bump(self) -> None:
         release_script = (ROOT / "scripts/release_now.sh").read_text()
 

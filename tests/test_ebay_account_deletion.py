@@ -2,15 +2,13 @@ import base64
 import json
 import tempfile
 import unittest
-from collections import deque
 from pathlib import Path
 from unittest.mock import patch
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
-from src.fiscalbay import ebay_account_deletion
 from src.fiscalbay.ebay_account_deletion import (
-    AccountDeletionError,
+    LOOKUP_TIMEOUT_SECONDS,
     _public_key,
     parse_notification,
     process_notification,
@@ -67,28 +65,16 @@ class EbayAccountDeletionTests(unittest.TestCase):
 
     @patch("src.fiscalbay.ebay_account_deletion._application_access_token")
     @patch("src.fiscalbay.ebay_account_deletion.request_json")
-    def test_public_key_lookup_budget_bounds_unknown_key_ids(self, request_json, _token) -> None:
+    def test_public_key_lookup_has_a_finite_timeout(self, request_json, _token) -> None:
         request_json.return_value = {
             "key": "-----BEGIN PUBLIC KEY-----key-----END PUBLIC KEY-----",
             "algorithm": "ECDSA",
             "digest": "SHA256",
         }
-        with (
-            patch.object(ebay_account_deletion, "_public_keys", {}),
-            patch.object(ebay_account_deletion, "_public_key_lookups", deque()),
-        ):
-            for index in range(ebay_account_deletion.PUBLIC_KEY_LOOKUP_LIMIT):
-                _public_key(f"unknown-{index}")
-            with self.assertRaisesRegex(AccountDeletionError, "temporaneamente limitato"):
-                _public_key("unknown-over-limit")
+        with patch("src.fiscalbay.ebay_account_deletion._public_keys", {}):
+            _public_key("unknown-1")
 
-        self.assertEqual(request_json.call_count, ebay_account_deletion.PUBLIC_KEY_LOOKUP_LIMIT)
-        self.assertTrue(
-            all(
-                call.kwargs["timeout"] == ebay_account_deletion.LOOKUP_TIMEOUT_SECONDS
-                for call in request_json.call_args_list
-            )
-        )
+        self.assertEqual(request_json.call_args.kwargs["timeout"], LOOKUP_TIMEOUT_SECONDS)
 
     @patch.dict(
         "os.environ",
