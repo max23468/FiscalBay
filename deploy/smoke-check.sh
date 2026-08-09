@@ -15,6 +15,38 @@ sudo systemctl is-active --quiet "${SERVICE_NAME}"
 set -a
 source "${ENV_FILE}"
 set +a
+
+account_deletion_values=(
+  "${EBAY_ACCOUNT_DELETION_ENDPOINT_URL:-}"
+  "${EBAY_ACCOUNT_DELETION_VERIFICATION_TOKEN:-}"
+  "${HUB_FATTURE_EBAY_ACCOUNT_DELETION_URL:-}"
+)
+if printf '%s\n' "${account_deletion_values[@]}" | grep -q .; then
+  if printf '%s\n' "${account_deletion_values[@]}" | grep -q '^$'; then
+    echo "Le notifiche eBay richiedono tutte e tre le variabili di account deletion." >&2
+    exit 1
+  fi
+  "${APP_DIR}/.venv/bin/python" - <<'PY'
+import hashlib
+import json
+import os
+import urllib.parse
+import urllib.request
+
+challenge = "fiscalbay-deploy-smoke"
+endpoint = os.environ["EBAY_ACCOUNT_DELETION_ENDPOINT_URL"]
+separator = "&" if urllib.parse.urlsplit(endpoint).query else "?"
+with urllib.request.urlopen(
+    f"{endpoint}{separator}{urllib.parse.urlencode({'challenge_code': challenge})}", timeout=10
+) as response:
+    payload = json.load(response)
+expected = hashlib.sha256(
+    f"{challenge}{os.environ['EBAY_ACCOUNT_DELETION_VERIFICATION_TOKEN']}{endpoint}".encode()
+).hexdigest()
+if payload != {"challengeResponse": expected}:
+    raise SystemExit("Challenge pubblica eBay non valida.")
+PY
+fi
 # Il healthcheck qui gira fuori da systemd: eredita l'eventuale LD_LIBRARY_PATH
 # del servizio (shim libsqlite3, vedi deploy/linux-setup.sh) cosi' lo smoke usa
 # lo stesso runtime dei servizi. No-op quando lo shim non e' in uso.
