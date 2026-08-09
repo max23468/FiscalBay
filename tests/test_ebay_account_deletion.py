@@ -1,6 +1,7 @@
 import base64
 import json
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -109,6 +110,42 @@ class EbayAccountDeletionTests(unittest.TestCase):
                 ).fetchone()
                 self.assertEqual(request["status"], "processed")
                 self.assertNotEqual(request["user_id_hash"], "immutable-user-1")
+
+    @patch.dict(
+        "os.environ",
+        {
+            "EBAY_ACCOUNT_DELETION_ENDPOINT_URL": "https://example.com/ebay/account-deletion",
+            "EBAY_ACCOUNT_DELETION_VERIFICATION_TOKEN": "v" * 32,
+        },
+        clear=False,
+    )
+    @patch("src.fiscalbay.ebay_account_deletion._forward_to_hub")
+    @patch("src.fiscalbay.ebay_account_deletion.verify_notification")
+    def test_process_notification_claims_concurrent_delivery_once(self, _verify, forward) -> None:
+        entered = threading.Event()
+        release = threading.Event()
+
+        def block_forward(*_args) -> None:
+            entered.set()
+            release.wait(timeout=2)
+
+        forward.side_effect = block_forward
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = str(Path(tmpdir) / "state.db")
+            init_db(path)
+            worker = threading.Thread(
+                target=process_notification,
+                args=(path, notification(), "signature"),
+            )
+            worker.start()
+            self.assertTrue(entered.wait(timeout=2))
+            with self.assertRaisesRegex(Exception, "già in elaborazione"):
+                process_notification(path, notification(), "signature")
+            release.set()
+            worker.join(timeout=2)
+
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(forward.call_count, 1)
 
 
 if __name__ == "__main__":

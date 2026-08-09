@@ -108,7 +108,7 @@ class OAuthHandlerTests(unittest.TestCase):
         handler.do_POST()
 
         process_mock.assert_called_once_with("state.db", body, "raw-signature")
-        self.assertEqual(handler._write_response.call_args.args[0], HTTPStatus.NO_CONTENT)
+        self.assertEqual(handler._write_response.call_args.args[0], HTTPStatus.OK)
 
     @patch("src.fiscalbay.oauth_server.build_oauth_start_redirect")
     def test_handle_start_renders_help_success_and_failure(self, redirect_mock) -> None:

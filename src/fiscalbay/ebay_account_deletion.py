@@ -12,7 +12,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import cast
 
 from cryptography.exceptions import InvalidSignature
@@ -26,6 +26,7 @@ from .storage.connection import _connect, init_db
 ACCOUNT_DELETION_PATH = "/ebay/account-deletion"
 APPLICATION_SCOPE = "https://api.ebay.com/oauth/api_scope"
 PUBLIC_KEY_CACHE_SECONDS = 3600
+PROCESSING_LEASE_SECONDS = 60
 PUBLIC_KEY_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 VERIFICATION_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{32,80}$")
 
@@ -113,24 +114,49 @@ def process_notification(state_path: str, body: bytes, signature_header: str) ->
         verification_token.encode(), identifiers[0].encode(), hashlib.sha256
     ).hexdigest()
 
+    now = datetime.now(timezone.utc)
+    started_at = now.isoformat().replace("+00:00", "Z")
+    stale_before = (
+        (now - timedelta(seconds=PROCESSING_LEASE_SECONDS)).isoformat().replace("+00:00", "Z")
+    )
     init_db(state_path)
     with _connect(state_path) as conn:
-        existing = conn.execute(
-            "SELECT status FROM ebay_account_deletion_requests WHERE notification_id = ?",
-            (notification_id,),
-        ).fetchone()
-        if existing is not None and existing["status"] == "processed":
-            return 0
-        conn.execute(
+        inserted = conn.execute(
             "INSERT INTO ebay_account_deletion_requests "
-            "(notification_id, user_id_hash, status) "
-            "VALUES (?, ?, 'processing') "
-            "ON CONFLICT(notification_id) DO UPDATE SET "
-            "user_id_hash = excluded.user_id_hash, status = 'processing'",
-            (notification_id, user_id_hash),
+            "(notification_id, user_id_hash, status, processing_started_at) "
+            "VALUES (?, ?, 'processing', ?) "
+            "ON CONFLICT(notification_id) DO NOTHING",
+            (notification_id, user_id_hash, started_at),
         )
+        if inserted.rowcount == 0:
+            existing = conn.execute(
+                "SELECT status FROM ebay_account_deletion_requests WHERE notification_id = ?",
+                (notification_id,),
+            ).fetchone()
+            if existing is not None and existing["status"] == "processed":
+                return 0
+            claimed = conn.execute(
+                "UPDATE ebay_account_deletion_requests "
+                "SET user_id_hash = ?, status = 'processing', processing_started_at = ? "
+                "WHERE notification_id = ? AND "
+                "(status = 'retryable' OR processing_started_at <= ?)",
+                (user_id_hash, started_at, notification_id, stale_before),
+            )
+            if claimed.rowcount == 0:
+                raise AccountDeletionError(
+                    "notification_processing", "Notifica eBay già in elaborazione."
+                )
 
-    _forward_to_hub(body, signature_header)
+    try:
+        _forward_to_hub(body, signature_header)
+    except Exception:
+        with _connect(state_path) as conn:
+            conn.execute(
+                "UPDATE ebay_account_deletion_requests SET status = 'retryable' "
+                "WHERE notification_id = ? AND status = 'processing'",
+                (notification_id,),
+            )
+        raise
     with _connect(state_path) as conn:
         conn.execute(
             "UPDATE ebay_account_deletion_requests SET status = 'processed', processed_at = ? "

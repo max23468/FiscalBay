@@ -141,7 +141,7 @@ class OAuthHandler(BaseHTTPRequestHandler):
                 "text/plain; charset=utf-8",
             )
             return
-        self._write_response(HTTPStatus.NO_CONTENT, b"", "text/plain; charset=utf-8")
+        self._write_response(HTTPStatus.OK, b"", "text/plain; charset=utf-8")
 
     def _handle_account_deletion_challenge(self, parsed: urllib.parse.ParseResult) -> None:
         challenge_code = (urllib.parse.parse_qs(parsed.query).get("challenge_code") or [""])[0]

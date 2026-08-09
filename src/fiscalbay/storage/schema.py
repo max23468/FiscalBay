@@ -304,6 +304,7 @@ def _create_v12_schema(conn: sqlite3.Connection) -> None:
         "user_id_hash TEXT NOT NULL, "
         "status TEXT NOT NULL, "
         "received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+        "processing_started_at TEXT NOT NULL, "
         "processed_at TEXT"
         ")"
     )
