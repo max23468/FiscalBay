@@ -27,6 +27,7 @@ export function classifyCodexReview({
 }) {
   const completions = [];
   const advisoryFindings = [];
+  const topLevelAdvisoryFindings = [];
   const cleanComments = [];
   const latestEyesAt = progressReactions
     .filter(
@@ -77,7 +78,9 @@ export function classifyCodexReview({
           description: "Codex ha trovato problemi P0/P1 nell'ultimo commit",
         });
       } else {
-        advisoryFindings.push(timestamp(comment.created_at));
+        const advisoryAt = timestamp(comment.created_at);
+        advisoryFindings.push(advisoryAt);
+        topLevelAdvisoryFindings.push(advisoryAt);
       }
     }
 
@@ -133,7 +136,12 @@ export function classifyCodexReview({
     .filter((reviewAt) => Math.abs(reviewAt - latestAdvisoryAt) <= 30_000)
     .sort((left, right) => right - left)[0];
   const settledAt = Math.max(latestAdvisoryAt, matchingReviewAt ?? 0);
-  if (latestAdvisoryAt && matchingReviewAt && now - settledAt >= 30_000) {
+  const topLevelAdvisoryAt = Math.max(...topLevelAdvisoryFindings, 0);
+  if (
+    latestAdvisoryAt &&
+    (matchingReviewAt || topLevelAdvisoryAt === latestAdvisoryAt) &&
+    now - settledAt >= 30_000
+  ) {
     completions.push({
       state: "success",
       at: settledAt,

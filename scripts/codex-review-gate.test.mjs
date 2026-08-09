@@ -184,6 +184,22 @@ test("l'assestamento advisory parte dal segnale più recente", () => {
   assert.equal(classify({ ...input, now: new Date("2026-08-04T12:01:00Z").getTime() }).state, "success");
 });
 
+test("un advisory top-level marcato sull'HEAD completa il gate", () => {
+  assert.equal(
+    classify({
+      now: new Date("2026-08-04T12:01:00Z").getTime(),
+      comments: [
+        {
+          user: bot,
+          created_at: "2026-08-04T12:00:01Z",
+          body: `**P2** Suggerimento advisory\n\n**Reviewed commit:** \`${headSha.slice(0, 10)}\``,
+        },
+      ],
+    }).state,
+    "success",
+  );
+});
+
 test("ignora finding vecchi dopo rebase, nuovo commit e nuovo tentativo", () => {
   assert.equal(
     classify({
