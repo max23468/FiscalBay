@@ -74,7 +74,7 @@ Per mantenere il repository allineato alle best practice GitHub anche in contest
 
 Passi consigliati dopo il clone/fork:
 
-1. verifica branch protection su `main` e mantieni richiesti `Python 3.13` e `codex-review`
+1. verifica branch protection su `main` e mantieni richiesto `Python 3.13`
 2. abilita secret scanning e Dependabot alerts dal tab Security; gli update automatici sono limitati da `.github/dependabot.yml`
 3. usa PR anche da branch personali per lasciare audit trail e checklist standard
 4. usa titoli PR di squash in formato Conventional Commit per tenere coerenti versioni e changelog

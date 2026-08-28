@@ -49,7 +49,6 @@ procedure operative restano in [OPERATIONS.md](./OPERATIONS.md),
 | `uv` | CLI locale e CI | generazione e verifica obbligatoria del lock Python |
 | `gh` | CLI autenticata locale | PR, issue, release e controlli GitHub |
 | `ssh` | client locale | deploy e diagnostica VPS FiscalBay |
-| `node` | runtime locale e CI | gate e test `codex-review` senza dipendenze |
 
 ## Tool runtime/VPS
 
@@ -64,7 +63,6 @@ procedure operative restano in [OPERATIONS.md](./OPERATIONS.md),
 
 - install locale: `python3 -m pip install -e .[dev]`
 - test completo: `python3 -m unittest discover -s tests -v`
-- test gate Codex: `node --test scripts/codex-review-gate.test.mjs`
 - gate locale preferito: `bash scripts/ci_verify.sh`
 - format: `ruff format src tests`
 - build package: `python -m build`
