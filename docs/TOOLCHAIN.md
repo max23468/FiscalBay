@@ -13,7 +13,6 @@ procedure operative restano in [OPERATIONS.md](./OPERATIONS.md),
 | Python typecheck/lint target | `3.13` | `pyproject.toml` |
 | Python CI GitHub | `3.13` | `.github/workflows/ci.yml` |
 | Python VPS operativo | `3.13` | `docs/DEPLOY_LINUX.md`, `docs/CONTEXT.md` |
-| Node.js | solo tooling GitHub | gate Codex senza dipendenze, tramite `node:test` |
 | Database | SQLite locale/VPS | `docs/DATA_MODEL.md`, `docs/OPERATIONS.md` |
 | Runtime servizio | bot Telegram, OAuth callback e worker su VPS Linux con `systemd` | `docs/RUNBOOK.md` |
 
@@ -28,9 +27,6 @@ procedure operative restano in [OPERATIONS.md](./OPERATIONS.md),
   il comando aggiorna tutte le dipendenze runtime alla versione compatibile più recente.
   `scripts/ci_verify.sh` richiede `uv` e verifica sempre la sincronia con
   `pyproject.toml`, mantenendo le versioni già pinnate nel lock.
-- JavaScript/TypeScript: nessun package manager; il gate Codex usa solo Node.js
-  standard library.
-- Lockfile JS: non applicabile.
 
 ## Dipendenze applicative principali
 
