@@ -21,7 +21,6 @@ fi
 make lock-check
 
 bash scripts/check_github_workflows.sh
-node --test scripts/codex-review-gate.test.mjs
 "$RUFF_BIN" format --check src tests
 "$RUFF_BIN" check src tests
 "$MYPY_BIN"

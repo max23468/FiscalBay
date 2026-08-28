@@ -9,15 +9,12 @@ GitHub Actions è riattivato solo per automazioni GitHub leggere e a basso consu
 
 - i soli workflow versionati ammessi sono `.github/workflows/ci.yml`, più i
   controlli conservativi `.github/workflows/pr-title.yml`,
-  `.github/workflows/dependency-review.yml`, `.github/workflows/actionlint.yml`,
-  `.github/workflows/package-build.yml` e il gate
-  `.github/workflows/codex-review-gate.yml`
+  `.github/workflows/dependency-review.yml`, `.github/workflows/actionlint.yml` e
+  `.github/workflows/package-build.yml`
 - la CI parte su PR verso `main` e con `workflow_dispatch`
 - il package build parte solo su PR che toccano packaging e con `workflow_dispatch`
 - Dependency Review parte solo su PR che toccano file di dipendenze
 - actionlint parte solo su PR che toccano workflow
-- Codex review gate pubblica lo status required `codex-review` sull'HEAD esatto
-  della PR ed esegue soltanto il codice presente su `main`
 - non usare Actions per deploy, diagnostica VPS, merge o update
   dipendenze fuori da Dependabot
 - non aggiungere altri workflow senza richiesta esplicita del maintainer
@@ -33,8 +30,6 @@ GitHub Actions è riattivato solo per automazioni GitHub leggere e a basso consu
 - Dependency Review: `.github/workflows/dependency-review.yml`
 - Actionlint: `.github/workflows/actionlint.yml`
 - Package build mirato: `.github/workflows/package-build.yml`
-- Codex review gate: `.github/workflows/codex-review-gate.yml`,
-  `scripts/codex-review-gate.mjs` e `scripts/codex-review-gate.test.mjs`
 - Dependabot version updates: `.github/dependabot.yml`
 - Issue forms: `.github/ISSUE_TEMPLATE/*`
 - Security policy: `SECURITY.md`
@@ -55,7 +50,7 @@ Configurazione consigliata:
 - disabilita force push e branch deletion su `main`
 - valuta `Require pull request` anche in contesto solo-maintainer, se vuoi audit
   trail più pulito
-- richiedi `Python 3.13` e `codex-review`, senza rimuovere gli altri check
+- richiedi `Python 3.13`, senza rimuovere gli altri check
   esistenti né aggiungere bypass
 
 Fallback operativo:
@@ -107,12 +102,6 @@ I workflow a basso consumo sono:
 - `.github/workflows/actionlint.yml`: parte solo quando cambiano workflow
 - `.github/workflows/package-build.yml`: esegue `python -m build` su PR che
   toccano packaging e su avvio manuale
-- `.github/workflows/codex-review-gate.yml`: usa `pull_request_target` e checkout
-  fissato di `main`, pubblica `codex-review` sull'HEAD della PR e invalida ogni
-  evidenza di review appartenente a commit o tentativi precedenti; P0/P1
-  bloccano, mentre P2/P3 restano advisory dopo la conclusione della review; il
-  primo giro parte automaticamente, dopo un nuovo commit o per un retry si usa
-  una sola riga `@codex review`
 - tutti i workflow usano concurrency con cancellazione dei run precedenti sulla
   stessa PR/ref quando applicabile
 
