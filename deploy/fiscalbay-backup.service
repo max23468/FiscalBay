@@ -1,9 +1,0 @@
-[Unit]
-Description=FiscalBay backup job
-
-[Service]
-Type=oneshot
-User=__APP_USER__
-Group=__APP_GROUP__
-WorkingDirectory=__APP_DIR__
-ExecStart=/usr/bin/bash -lc 'exec "__APP_DIR__/deploy/backup.sh"'

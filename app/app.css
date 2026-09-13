@@ -1,0 +1,64 @@
+:root {
+  color: #162033;
+  background: #f4f7fb;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+}
+main {
+  width: min(72rem, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 4rem 0;
+}
+header {
+  max-width: 42rem;
+  margin-bottom: 2rem;
+}
+h1 {
+  margin: 0.25rem 0 0.75rem;
+  font-size: clamp(2.25rem, 6vw, 4rem);
+}
+.eyebrow {
+  color: #3558b8;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.empty,
+article {
+  border: 1px solid #d9e1ee;
+  border-radius: 1rem;
+  background: white;
+  padding: 1.5rem;
+  box-shadow: 0 0.75rem 2.5rem rgb(33 52 85 / 8%);
+}
+.orders {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 1rem;
+}
+article > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+dl div {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 0.75rem;
+}
+dt {
+  color: #59677d;
+}
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.error pre {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 1rem;
+}

@@ -3,7 +3,7 @@ name: Dependabot Auto Merge
 on:
   pull_request_target:
     branches:
-      - main
+      - develop
     types:
       - opened
       - synchronize
@@ -26,7 +26,7 @@ concurrency:
 jobs:
   mark-candidate:
     name: Mark candidate
-    if: github.event_name == 'pull_request_target' && github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.base.ref == 'main' && !github.event.pull_request.draft
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.base.ref == 'develop' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -108,8 +108,8 @@ jobs:
               failures.append("PR is not open")
           if pr.get("isDraft"):
               failures.append("PR is draft")
-          if pr.get("baseRefName") != "main":
-              failures.append("base is not main")
+          if pr.get("baseRefName") != "develop":
+              failures.append("base is not develop")
           if pr.get("author", {}).get("login") not in {
               "app/dependabot",
               "dependabot",

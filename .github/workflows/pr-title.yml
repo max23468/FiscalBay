@@ -8,7 +8,7 @@ on:
       - reopened
       - synchronize
     branches:
-      - main
+      - develop
   workflow_dispatch:
 
 concurrency:

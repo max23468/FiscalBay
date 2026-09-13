@@ -1,16 +1,17 @@
-.env
-.env.*
-!.env.example
-.venv/
-.vscode/
-__pycache__/
-*.egg-info/
-.eggs/
-build/
-dist/
-.coverage*
-*.pyc
 .DS_Store
-data/*.db
-data/*.lock
-state.db
+.env
+/node_modules/
+*.tsbuildinfo
+
+# React Router
+/.react-router/
+/build/
+
+# Cloudflare
+.mf
+.wrangler
+.dev.vars*
+worker-configuration.d.ts
+
+!.dev.vars.example
+!.env.example

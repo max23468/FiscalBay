@@ -1,0 +1,34 @@
+[
+  {
+    "file": "logo-concept-4-originale.png",
+    "original_filename": "concept_fiscalbay_identità_moderna_e_minimale.png",
+    "sha256": "64ad724218f0ecc407ca54a4e268bb1d50b7659329aa5193994c032fbcab8644",
+    "bytes": 1186411,
+    "role": "Logo: Concept 4 originale",
+    "note": "Unico riferimento principale. Bay da grigio a blu del fondo; bordo destro esterno blu continuo/regolare, senza cambiare tessera, inclinazione, composizione e quattro accenti."
+  },
+  {
+    "file": "ui-ordini-due-card.png",
+    "original_filename": "dashboard_fiscalbay_con_ordini_e_app_mobile.png",
+    "sha256": "f1624c35e3e5edde61bebe978ee9f01c0b726d73220585c911669fb5607f5dbe",
+    "bytes": 1528094,
+    "role": "Ordini: due schede per riga",
+    "note": "Riferimento di formato e gerarchia. Comportamenti veri: top nav 3 destinazioni, Carica altri, drawer senza cronologia, sblocco per ordine; i dati dimostrativi non sono specifiche."
+  },
+  {
+    "file": "ui-negozi-lista.png",
+    "original_filename": "dashboard_fiscalbay_negozi_ebay_ovunque.png",
+    "sha256": "f49a11574a639b9433100d4d827e07f338c99c211e5fe15c9833218000488825",
+    "bytes": 1395205,
+    "role": "Negozi: elenco strutturato",
+    "note": "Lista/righe con pannello e stati, non griglia di schede. Il piano appartiene allo spazio, non a ogni negozio; eventuali etichette errate nel concept non diventano requisiti."
+  },
+  {
+    "file": "ui-impostazioni-categorie.png",
+    "original_filename": "impostazioni_fiscalbay_desktop_e_mobile.png",
+    "sha256": "6f0c51a476bf6a19ce9143787c67c599c0556f7659f56204c56616f0d94b72fb",
+    "bytes": 1294030,
+    "role": "Impostazioni: categorie e contenuto",
+    "note": "Categorie a sinistra e contenuto a destra, mobile elenco→dettaglio. Export è una sezione operativa; profilo/avatar e campanella seguono le decisioni finali."
+  }
+]
