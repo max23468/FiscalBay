@@ -24,7 +24,7 @@ Questa sezione è un registro operativo iniziale, **non una prova di avvio già 
 | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | Milestone / task in esecuzione                              | M0; gate account/provider M0-02..06, M0-08/09/12/13                                                       |
 | Prossimo task eleggibile                                    | Acquisire le sessioni console controllate e il keyset eBay descritti nei blocchi M0                       |
-| Repository / branch / commit osservati nell’implementazione | `max23468/FiscalBay`; worktree isolato, branch `codex/adopt-2-0-m0`, base `origin/main` `ffc4f56`         |
+| Repository / branch / commit osservati nell’implementazione | `max23468/FiscalBay`; worktree isolato, branch `codex/adopt-2-0-m0`, commit candidato `d62e053`, base `origin/main` `ffc4f56` |
 | Blocchi noti iniziali                                       | Console web non autenticate; keyset/callback eBay e Google assenti; mittente email e dati legali mancanti |
 | Materiale privato                                           | Inventario fuori checkout: riferimento locale `FiscalBay/m0-inventory` nella custodia Codex privata       |
 | Operazioni remote parziali da riconciliare                  | Timer autodeploy 1.x disabilitato; nessun push, merge, deploy 2.0, nuovo provider o costo attivato        |
@@ -233,7 +233,7 @@ Sul candidato migliore: login→link seller→ordine→DB→pagina minima, con p
 
 **Criterio di completamento:** Flusso osservato con risorsa e commit identificati, errori gestiti e nessun segreto nel client; setup e trattamento dati già qualificati, non aggiunti retroattivamente.
 
-**Blocco:** slice locale ordine→D1→pagina, Auth e permessi è eseguibile e testata; login reale→consenso seller→ordine richiede la chiusura dei gate provider e trattamento sopra. HTTP locale della pagina minima: 200; nessun segreto nel client.
+**Blocco:** slice locale ordine→D1→pagina, Auth e permessi nel commit `d62e053` è eseguibile e testata; login reale→consenso seller→ordine richiede la chiusura dei gate provider e trattamento sopra. HTTP locale della pagina minima: 200; nessun segreto nel client.
 
 ### M0-14 — Memo di scelta e via owner
 
