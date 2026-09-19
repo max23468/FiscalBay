@@ -20,15 +20,21 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "fiscalbay-m0-local",
-      "database_id": "local",
+      "database_name": "fiscalbay-m0-test",
+      "database_id": "341b0b58-f55b-46d3-b68e-980c81b9658c",
       "migrations_dir": "migrations",
     },
   ],
   "observability": {
     "enabled": true,
-    "logs": { "enabled": true, "head_sampling_rate": 1 },
-    "traces": { "enabled": true, "head_sampling_rate": 0.01 },
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.01,
+    },
   },
   "upload_source_maps": true,
 }
