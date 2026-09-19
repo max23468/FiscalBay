@@ -59,9 +59,15 @@ describe("Better Auth su Workers e D1", () => {
 
     if (provider === "ebay") {
       expect(authorizationUrl.searchParams.get("redirect_uri")).toBe("fiscalbay-m0-test-runame");
-      const scope = authorizationUrl.searchParams.get("scope") ?? "";
-      expect(scope).toContain("commerce.identity.readonly");
-      expect(scope).not.toContain("sell.fulfillment");
+      const scopes = new Set((authorizationUrl.searchParams.get("scope") ?? "").split(" "));
+      expect(scopes).toEqual(
+        new Set([
+          "https://api.ebay.com/oauth/api_scope",
+          "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
+          "https://api.ebay.com/oauth/api_scope/commerce.identity.email.readonly",
+          "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+        ]),
+      );
     }
   });
 });
