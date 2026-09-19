@@ -17,6 +17,7 @@
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm verify:docs"
   },
   "dependencies": {
+    "@better-auth/infra": "0.4.9",
     "@better-auth/passkey": "1.7.4",
     "better-auth": "1.7.4",
     "exceljs": "4.4.0",

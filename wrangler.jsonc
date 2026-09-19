@@ -12,6 +12,7 @@
   "secrets": {
     "required": [
       "BETTER_AUTH_SECRET",
+      "BETTER_AUTH_API_KEY",
       "GOOGLE_CLIENT_ID",
       "GOOGLE_CLIENT_SECRET",
       "EBAY_CLIENT_ID",

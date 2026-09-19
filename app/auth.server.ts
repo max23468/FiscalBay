@@ -1,4 +1,5 @@
 import { passkey } from "@better-auth/passkey";
+import { dash } from "@better-auth/infra";
 import { betterAuth, type Auth, type BetterAuthOptions } from "better-auth";
 import { genericOAuth } from "better-auth/plugins";
 import { z } from "zod";
@@ -130,6 +131,9 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
           },
         ],
       }),
+      ...(environment.BETTER_AUTH_API_KEY
+        ? [dash({ apiKey: environment.BETTER_AUTH_API_KEY })]
+        : []),
     ],
   };
 }

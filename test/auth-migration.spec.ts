@@ -15,6 +15,14 @@ it("mantiene lo schema D1 allineato ai quattro metodi Auth", async () => {
 });
 
 describe("Better Auth su Workers e D1", () => {
+  it("collega la dashboard gestita solo quando è presente la chiave dedicata", () => {
+    const options = createAuthOptions({
+      ...env,
+      BETTER_AUTH_API_KEY: "m0-dashboard-key",
+    });
+    expect(options.plugins?.map((plugin) => plugin.id)).toContain("dash");
+  });
+
   it("cifra i token OAuth e non li espone tramite le route HTTP", async () => {
     expect(createAuthOptions(env).account?.encryptOAuthTokens).toBe(true);
 
