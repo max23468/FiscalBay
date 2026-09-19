@@ -1,4 +1,5 @@
 # Valori locali di prova. Non copiare credenziali Production nel repository.
+APP_ORIGIN=http://localhost:5173
 BETTER_AUTH_SECRET=replace-with-at-least-32-random-bytes
 GOOGLE_CLIENT_ID=replace-with-test-client-id
 GOOGLE_CLIENT_SECRET=replace-with-test-client-secret
