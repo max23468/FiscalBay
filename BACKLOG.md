@@ -121,9 +121,9 @@ Leggere piani, quote e consumi degli account pertinenti, inclusi altri progetti;
 
 Se una verifica richiede un piano a pagamento prima della scelta finale, ottenere un’autorizzazione limitata alla prova e registrare costi/reversibilità. Il via di fine M0 non sana spese già effettuate senza consenso.
 
-**Evidenza parziale:** Supabase è stato riletto in Dashboard; il piano Free e la capacità condivisa osservata sono riportati sopra. Cloudflare CLI ha escluso le risorse CF-Ready dal perimetro FiscalBay. La Dashboard ha confermato piani, scadenze, utilizzo e costo del ciclo: Workers Paid cessa il 2026-09-20, R2 Paid resta attivo e tutto l'uso osservato è rimasto entro l'incluso.
+**Evidenza parziale:** Supabase è stato riletto in Dashboard; il piano Free e la capacità condivisa osservata sono riportati sopra e restano evidenza dell'alternativa esclusa. Cloudflare CLI ha escluso le risorse CF-Ready dal perimetro FiscalBay e ha confermato l'assenza di risorse FiscalBay. La Dashboard ha rilevato piani, scadenze, utilizzo e costo del ciclo concluso: Workers Paid risultava in cessazione il 2026-09-20, R2 Paid attivo e tutto l'uso osservato entro l'incluso.
 
-**Blocco:** mancano costo e capacità residua del runner che sostituirà Workers Paid, limiti operativi del piano Supabase scelto e decisione sulla capacità condivisa. Nessun upgrade eseguito.
+**Blocco:** il costo nominale del candidato è scelto; mancano il readback successivo alla data di cessazione del piano Workers Paid, la capacità residua corrente e le quote operative di email e log. Nessun rinnovo o upgrade è stato eseguito.
 
 ### M0-04 — Qualifica dei quattro accessi
 
@@ -163,7 +163,7 @@ Misurare strategia incrementale, disponibilità eventi utili, manuale, 10/30min,
 
 **Criterio di completamento:** Budget chiamate/messaggi realistico con margine, eventi non presunti, nessuna invasione quote altrui.
 
-**Evidenza parziale:** il budget puro polling/coda è calcolato sopra. Supabase Cron, Queues e consumo concorrente sono stati provati localmente sul volume mensile di riferimento; il runner ogni minuto resta ampiamente sotto la quota nominale Edge Functions Free anche aggiungendo retry moderati. Trading `GetOrders` ha 5.000 chiamate/giorno e non sostiene i 12.000 cicli/giorno previsti. Il candidato per il polling è Fulfillment `getOrders`, con limite predefinito ufficiale di 100.000 chiamate/giorno; Trading resta ammissibile soltanto per letture mirate necessarie.
+**Evidenza parziale:** il budget Workers Queues è calcolato sopra e resta vicino alla quota inclusa anche al volume mensile di riferimento. La prova concorrente Supabase è conservata come evidenza storica del carico, mentre la coda Cloudflare remota attende il consumer effettivo. Trading `GetOrders` ha 5.000 chiamate/giorno e non sostiene i 12.000 cicli/giorno previsti. Il candidato per il polling è Fulfillment `getOrders`, con limite predefinito ufficiale di 100.000 chiamate/giorno; Trading resta ammissibile soltanto per letture mirate necessarie.
 
 **Blocco:** Developer Analytics non ha restituito la risorsa Fulfillment Order del keyset, quindi limite effettivo, paginazione, backfill, retry, eventi utili e margine restano da misurare nella prova read-only autorizzata di M0-05.
 
@@ -203,9 +203,9 @@ Verificare le protezioni native dei candidati ancora ammissibili; approfondire i
 
 Specificare come conoscere cancellazioni/revoche avvenute dopo lo snapshot: il marker nello stesso DB ripristinato non basta. Distinguere dati ripristinabili, stati riconciliabili, configurazione ricreabile ed export rigenerabili, senza introdurre backup indipendenti.
 
-**Evidenza parziale:** il percorso Supabase + R2 è tecnicamente valido nella prova locale descritta sopra. Il backup utile seleziona `auth,public`, conserva la sequenza Auth, cifra prima dell'upload e verifica il digest dopo il download. Il restore applica schema e dati in transazione; i ruoli gestiti restano responsabilità del target Supabase. Nessun bucket remoto, scheduler o costo è stato creato.
+**Evidenza parziale:** D1 Time Travel è la protezione nativa scelta e offre una retention nominale fino a 30 giorni sul piano Paid. La ricostruzione locale dalle migration applicative e Better Auth è verde e tutte le tabelle attese sono state rilette. Il round trip cifrato Supabase + R2 resta una prova storica sul dataset, senza definire il runbook Cloudflare. Nessun bucket, database, scheduler o costo remoto FiscalBay è stato creato.
 
-**Blocco:** restano ammissibili D1 con Time Travel, Supabase Pro con backup giornalieri nativi e Supabase con dump cifrati R2 se l'owner approva la deroga. Servono piano account effettivo, costo accettabile, runner e retention, custodia e rotazione della chiave, percorso Auth/email, eventuale copertura separata degli oggetti Storage e fonte riconciliabile delle cancellazioni successive allo snapshot.
+**Blocco:** servono il piano Workers Paid effettivo, una D1 FiscalBay remota di test e una prova mirata di backup e restore, oltre a retention, percorso Auth/email e fonte riconciliabile delle cancellazioni o revoche successive allo snapshot. Il drill conclusivo resta pre go-live.
 
 ### M0-10 — Qualifica export e runtime
 
