@@ -18,6 +18,33 @@ const ebayIdentitySchema = z.object({
     .optional(),
 });
 
+const authEmailFrom = "accesso@auth.fiscalbay.it";
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+async function sendAuthEmail(
+  environment: Env,
+  email: string,
+  subject: string,
+  message: string,
+  url: string,
+): Promise<void> {
+  const safeUrl = escapeHtml(url);
+  await environment.AUTH_EMAIL.send({
+    from: { email: authEmailFrom, name: "FiscalBay" },
+    to: email,
+    subject,
+    text: `${message}\n\n${url}`,
+    html: `<p>${message}</p><p><a href="${safeUrl}">Continua su FiscalBay</a></p>`,
+  });
+}
+
 export function createAuthOptions(environment: Env): BetterAuthOptions {
   const appOrigin = new URL(environment.APP_ORIGIN);
 
@@ -30,6 +57,24 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: true,
+      sendResetPassword: ({ user, url }) =>
+        sendAuthEmail(
+          environment,
+          user.email,
+          "Reimposta la password di FiscalBay",
+          "Hai richiesto di reimpostare la password.",
+          url,
+        ),
+    },
+    emailVerification: {
+      sendVerificationEmail: ({ user, url }) =>
+        sendAuthEmail(
+          environment,
+          user.email,
+          "Conferma l’indirizzo email di FiscalBay",
+          "Conferma il tuo indirizzo email per accedere a FiscalBay.",
+          url,
+        ),
     },
     socialProviders: {
       google: {

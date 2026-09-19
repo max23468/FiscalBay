@@ -25,6 +25,12 @@
       "migrations_dir": "migrations",
     },
   ],
+  "send_email": [
+    {
+      "name": "AUTH_EMAIL",
+      "allowed_sender_addresses": ["accesso@auth.fiscalbay.it"],
+    },
+  ],
   "observability": {
     "enabled": true,
     "logs": {
