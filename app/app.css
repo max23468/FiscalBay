@@ -27,72 +27,12 @@ h1 {
   text-transform: uppercase;
 }
 .empty,
-.auth,
-.session,
 article {
   border: 1px solid #d9e1ee;
   border-radius: 1rem;
   background: white;
   padding: 1.5rem;
   box-shadow: 0 0.75rem 2.5rem rgb(33 52 85 / 8%);
-}
-.status {
-  min-height: 1.5rem;
-  color: #42516a;
-}
-.auth {
-  max-width: 28rem;
-}
-.auth form,
-.auth label {
-  display: grid;
-  gap: 0.5rem;
-}
-.auth form {
-  gap: 1rem;
-}
-input {
-  min-height: 2.75rem;
-  box-sizing: border-box;
-  border: 1px solid #9caac0;
-  border-radius: 0.5rem;
-  padding: 0.65rem 0.75rem;
-  font: inherit;
-}
-button {
-  min-height: 2.75rem;
-  border: 0;
-  border-radius: 0.5rem;
-  background: #244bb5;
-  color: white;
-  padding: 0.65rem 1rem;
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-.secondary {
-  border: 1px solid #9caac0;
-  background: white;
-  color: #24324a;
-}
-.auth > .secondary {
-  width: 100%;
-  margin-top: 0.75rem;
-}
-.session {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-.session div {
-  display: flex;
-  gap: 0.75rem;
 }
 .orders {
   display: grid;
@@ -108,10 +48,6 @@ dl div {
   display: grid;
   grid-template-columns: 1fr 2fr;
   gap: 0.75rem;
-}
-article button {
-  width: 100%;
-  margin-top: 0.75rem;
 }
 dt {
   color: #59677d;
