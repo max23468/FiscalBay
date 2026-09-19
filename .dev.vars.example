@@ -1,7 +1,3 @@
-# Valori locali di prova. Non copiare credenziali Production nel repository.
-BETTER_AUTH_SECRET=replace-with-at-least-32-random-bytes
-GOOGLE_CLIENT_ID=replace-with-test-client-id
-GOOGLE_CLIENT_SECRET=replace-with-test-client-secret
-EBAY_CLIENT_ID=replace-with-test-client-id
-EBAY_CLIENT_SECRET=replace-with-test-client-secret
-EBAY_RUNAME=replace-with-test-runame
+# Override locali facoltativi. La chiave publishable è pubblica; non inserire service role.
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_PUBLISHABLE_KEY=replace-with-publishable-key

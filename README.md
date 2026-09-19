@@ -1,6 +1,6 @@
 # FiscalBay 2.0 — Avvio, ripresa e documenti
 
-La baseline contiene la specifica approvata del prodotto, il backlog, gli strumenti documentali e i riferimenti grafici. M0 aggiunge il candidato locale Workers/D1/Better Auth e le prove mirate; non contiene credenziali o configurazioni provider già qualificate. Lo stato eseguibile e i blocchi correnti sono nel solo [BACKLOG.md](BACKLOG.md#stato).
+La baseline contiene la specifica approvata del prodotto, il backlog, gli strumenti documentali e i riferimenti grafici. M0 aggiunge il candidato locale React Router/Cloudflare con Supabase Auth e PostgreSQL, oltre alle prove mirate; non contiene credenziali provider. Lo stato eseguibile e i blocchi correnti sono nel solo [BACKLOG.md](BACKLOG.md#stato).
 
 <a id="avvio"></a>
 
@@ -44,12 +44,14 @@ Usare Node 26.8.2 e pnpm 12.4.1 indicati in `mise.toml` e `package.json`. L’in
 
 ```sh
 pnpm install --frozen-lockfile
+supabase start --exclude realtime,storage-api,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+supabase db reset --local
+supabase test db supabase/tests/m0_candidate.sql
 pnpm verify
-pnpm exec wrangler d1 migrations apply DB --local
 pnpm dev
 ```
 
-Per provare gli endpoint Auth con account controllati, copiare `.dev.vars.example` in `.dev.vars` e sostituire i soli valori test. `EBAY_RUNAME` è il RuName eBay dell’ambiente test, distinto dall’autorizzazione seller. Il file `.dev.vars` resta ignorato da Git. Nessun comando applicativo esegue deploy.
+La configurazione committata punta soltanto allo stack Supabase locale. Per un endpoint controllato diverso, copiare `.dev.vars.example` in `.dev.vars` e impostare URL e chiave publishable; non usare mai la service role nel browser. Il file `.dev.vars` resta ignorato da Git. Nessun comando applicativo esegue deploy.
 
 ### Mandato pronto da inviare quando si intende partire
 
