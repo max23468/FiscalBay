@@ -54,6 +54,9 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
     database: environment.DB,
     secret: environment.BETTER_AUTH_SECRET,
     trustedOrigins: [appOrigin.origin],
+    account: {
+      encryptOAuthTokens: true,
+    },
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: true,

@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { getMigrations } from "better-auth/db/migration";
 import { describe, expect, it } from "vitest";
 
+import { handleAuthRequest } from "../app/auth-route.server";
 import { createAuth, createAuthOptions } from "../app/auth.server";
 
 it("mantiene lo schema D1 allineato ai quattro metodi Auth", async () => {
@@ -14,6 +15,22 @@ it("mantiene lo schema D1 allineato ai quattro metodi Auth", async () => {
 });
 
 describe("Better Auth su Workers e D1", () => {
+  it("cifra i token OAuth e non li espone tramite le route HTTP", async () => {
+    expect(createAuthOptions(env).account?.encryptOAuthTokens).toBe(true);
+
+    for (const path of ["get-access-token", "refresh-token"]) {
+      const response = await handleAuthRequest(
+        new Request(`http://localhost:5173/api/auth/${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ accountId: "account-m0" }),
+        }),
+        env,
+      );
+      expect(response.status).toBe(404);
+    }
+  });
+
   it("crea un account email non verificato nel database locale", async () => {
     const response = await createAuth(env).handler(
       new Request("http://localhost:5173/api/auth/sign-up/email", {

@@ -1,12 +1,12 @@
 import { env } from "cloudflare:workers";
 
-import { createAuth } from "../auth.server";
+import { handleAuthRequest } from "../auth-route.server";
 import type { Route } from "./+types/auth";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  return createAuth(env).handler(request);
+  return handleAuthRequest(request, env);
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  return createAuth(env).handler(request);
+  return handleAuthRequest(request, env);
 }
