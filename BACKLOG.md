@@ -25,7 +25,7 @@ Questa sezione è un registro operativo iniziale, **non una prova di avvio già 
 | Milestone / task in esecuzione                              | M0; gate account/provider M0-02..06, M0-08/09/12/13                                                       |
 | Prossimo task eleggibile                                    | Preparare callback HTTPS su `test.fiscalbay.it` e trasporto email; configurare poi Google OAuth dedicato   |
 | Repository / branch / commit osservati nell’implementazione | `max23468/FiscalBay`; worktree `/Users/Matteo/Progetti/FiscalBay-m0`, branch `codex/adopt-2-0-m0`, ultimo commit verificato `deebe17`, base `origin/main` `ffc4f56` |
-| Blocchi noti iniziali                                       | Attivazione e prova Stripe non autorizzate; destinazione di `test.fiscalbay.it`, TLS valido, casella/mittente email, preflight dati e payload eBay sanificato mancanti |
+| Blocchi noti iniziali                                       | Attivazione e prova Stripe non autorizzate; zona Cloudflare, destinazione di `test.fiscalbay.it`, TLS valido, indirizzo iCloud e trasporto Auth, preflight dati e payload eBay sanificato mancanti |
 | Materiale privato                                           | Inventario fuori checkout: riferimento locale `FiscalBay/m0-inventory` nella custodia Codex privata       |
 | Operazioni remote parziali da riconciliare                  | Timer autodeploy 1.x riletto `disabled` / `inactive` il 2026-09-19; bot e callback 1.x attivi. Creato il progetto Google dedicato `fiscalbay-2-0-max23468`, senza billing, API o credenziali. Ripristinato il progetto Supabase Free FiscalBay dalla pausa automatica, senza costo; stato finale riletto `ACTIVE_HEALTHY`. Creata D1 `fiscalbay-m0-test` con giurisdizione UE, applicate tre migration e completato un restore Time Travel con sola riga sintetica. Nessun push, merge, deploy 2.0, nuovo provider o costo aggiuntivo attivato |
 | Prossima azione alla ripresa                                | Preparare callback ed email di test; mantenere ferme l'attivazione Stripe e le credenziali OAuth finché gli URL non sono definiti |
@@ -37,6 +37,7 @@ Questa sezione è un registro operativo iniziale, **non una prova di avvio già 
 | Adozione baseline e avvio M0 | REGISTRATO 2026-09-13 | Mandato corrente; ZIP esatto `FiscalBay_2.0_Finale.zip`, SHA-256 `4321784a3c58670dcbcf7d5b9a3f13599ad82dbc9ee74a00c7255b75ee3f85ba` |
 | Riapertura candidato Supabase | REGISTRATO 2026-09-13 | L'owner accetta che le passkey Supabase siano sperimentali come rischio da provare in M0; la combinazione Supabase va confrontata con il candidato Cloudflare e non è esclusa per questo limite |
 | Scelta candidato Cloudflare | REGISTRATO 2026-09-19 | L'owner sceglie Workers + D1 + Queues + Better Auth perché Supabase Pro non rientra nel budget. Workers Free resta il default fino all'apertura pubblica; capacità e piano vengono rivalutati progressivamente |
+| Dominio e posta            | REGISTRATO 2026-09-19 | Spostare la zona DNS autorevole su Cloudflare mantenendo Register.it come registrar. Il vecchio hosting e i record email Register non hanno consumatori da preservare; la posta umana userà iCloud Custom Email Domain. Il trasporto transazionale Auth resta una scelta distinta da qualificare |
 | Upgrade Workers Paid        | DIFFERITO / CHECKPOINT | Le soglie di attenzione sono 80.000 richieste dinamiche/giorno, CPU p95 di 8 ms, 8.000 operazioni Queue/giorno, 4 milioni righe D1 lette/giorno, 80.000 scritte/giorno, 4 GB D1, 160.000 eventi log/giorno o necessità di retention Time Travel oltre 7 giorni. Il raggiungimento apre una rivalutazione con dati correnti; non autorizza da solo costi o attivazioni. L'apertura pubblica M9 è il checkpoint naturale per decidere Paid |
 | Fine M0                      | IN ATTESA             | Assetto, account, piani/costi, Auth/database, prove residue e rischi approvati                                                      |
 | M1 brand/design              | IN ATTESA             | Asset/prototipo identificato e approvazione owner                                                                                   |
@@ -108,9 +109,9 @@ Configurare accessi minimi e inventario privato; preparare solo l’endpoint tes
 
 **Criterio di completamento:** Prerequisiti di prova osservabili: endpoint/TLS, destinatario email controllato, account/ambiente corretti, autorizzazioni e lista tool. Mancanze segnate BLOCKED; nessuna spesa, PII pubblica o scrittura estranea. Le prove eseguibili usano la toolchain qualificata in M0-11.
 
-**Evidenza DNS/TLS:** il 2026-09-19 `fiscalbay.it` risolve a `195.110.124.133`, `www` è un CNAME verso l'apex e `test.fiscalbay.it` non risolve. I nameserver sono `ns1.register.it` e `ns2.register.it`; MX e SPF esistenti restano su Register.it. Apex e `www` rispondono HTTP 200 da Apache con una pagina statica, mentre HTTPS presenta un certificato `*.dadapro.com` privo di SAN FiscalBay e fallisce la verifica. Nessun record, nameserver o contenuto è stato modificato.
+**Evidenza DNS/TLS:** il 2026-09-19 `fiscalbay.it` risolve a `195.110.124.133`, `www` è un CNAME verso l'apex e `test.fiscalbay.it` non risolve. I nameserver sono `ns1.register.it` e `ns2.register.it`; MX e SPF esistenti puntano a Register.it, ma l'owner conferma che non esistono caselle attive da preservare. Apex e `www` rispondono HTTP 200 da Apache con una pagina statica, mentre HTTPS presenta un certificato `*.dadapro.com` privo di SAN FiscalBay e fallisce la verifica. La posta umana userà iCloud Custom Email Domain; non serve importare messaggi o indirizzi precedenti. Nessun record, nameserver o contenuto è stato modificato.
 
-**Blocco:** servono controllo DNS/hosting autorizzato, record per `test.fiscalbay.it`, certificato valido e destinazione del callback prima di creare client OAuth o credenziali legate a URL provvisori.
+**Blocco:** servono creazione e inventario della zona Cloudflare, sostituzione controllata dei nameserver, record iCloud forniti durante il setup, indirizzo umano scelto, Custom Domain Worker per `test.fiscalbay.it`, certificato valido e destinazione del callback prima di creare client OAuth o credenziali legate a URL provvisori. Il trasporto transazionale Better Auth resta separato dalla casella iCloud.
 
 ### M0-03 — Inventario risorse Cloudflare/Supabase
 
@@ -140,7 +141,7 @@ Qualificare SSR/helper eventuali, RP ID e origini separati test/live, riuso del 
 
 **Evidenza parziale:** Google Cloud è autenticato. I quattro progetti preesistenti sono stati esclusi e il progetto dedicato `fiscalbay-2-0-max23468` è stato creato attivo, senza billing, API o credenziali e senza cambiare il progetto CLI predefinito.
 
-**Blocco:** servono origine HTTPS controllata, client Google OAuth collegato agli URL definitivi di test, scope e RuName eBay destinati alla 2.0 e trasporto email per linking, recupero, revoca, riuso sessione e MFA effettivi. eBay Developers è autenticato e il keyset FiscalBay è identificato, ma il callback e lo scope Identity della 2.0 non sono configurati. L'owner accetta il rischio sperimentale delle passkey per la qualifica.
+**Blocco:** servono origine HTTPS controllata, client Google OAuth collegato agli URL definitivi di test, scope e RuName eBay destinati alla 2.0 e trasporto transazionale Better Auth per linking, recupero, revoca, riuso sessione e MFA effettivi. La casella umana su iCloud Custom Email Domain non chiude da sola questo requisito. eBay Developers è autenticato e il keyset FiscalBay è identificato, ma il callback e lo scope Identity della 2.0 non sono configurati. L'owner accetta il rischio sperimentale delle passkey per la qualifica.
 
 ### M0-05 — Qualifica fonti eBay e keyset
 
@@ -346,9 +347,9 @@ Realizzare top navigation desktop e bottom navigation mobile con tre destinazion
 
 **Stato:** TODO · **Prerequisiti:** M0 · **Contratto:** [§24](docs/MASTER_PLAN.md#s24)
 
-Consolidare il bootstrap test predisposto in M0-02: DNS/TLS/redirect, configurazione Production, iCloud info/supporto e trasporto transazionale selezionato. Verificare inventario record, callback, SPF/DKIM/DMARC e isolamento; nessun servizio Register aggiuntivo.
+Consolidare il bootstrap test predisposto in M0-02: DNS/TLS/redirect, configurazione Production, iCloud info/supporto e trasporto transazionale selezionato. Verificare inventario record, callback, SPF/DKIM/DMARC e isolamento; dismettere i record Register senza consumatori dopo il readback Cloudflare e non attivare servizi Register aggiuntivi.
 
-**Criterio di completamento:** HTTP/TLS e callback test/live coerenti, posta umana e Auth provate, record esistenti preservati; nessun cookie/RP ID condiviso accidentalmente e nessun setup iniziale rinviato dopo il gate che lo richiedeva.
+**Criterio di completamento:** HTTP/TLS e callback test/live coerenti, posta umana e Auth provate, record attivi preservati o sostituiti con prova; nessun cookie/RP ID condiviso accidentalmente e nessun setup iniziale rinviato dopo il gate che lo richiedeva.
 
 <a id="m2"></a>
 
