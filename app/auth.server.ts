@@ -57,6 +57,9 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
     secret: environment.BETTER_AUTH_SECRET,
     trustedOrigins: [appOrigin.origin],
     advanced: {
+      database: {
+        joins: true,
+      },
       ipAddress: {
         ipAddressHeaders: ["cf-connecting-ip"],
       },

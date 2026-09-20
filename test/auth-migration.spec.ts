@@ -27,6 +27,7 @@ describe("Better Auth su Workers e D1", () => {
     const options = createAuthOptions(env);
     expect(options.account?.encryptOAuthTokens).toBe(true);
     expect(options.advanced?.ipAddress?.ipAddressHeaders).toEqual(["cf-connecting-ip"]);
+    expect(options.advanced?.database?.joins).toBe(true);
     expect(options.onAPIError?.errorURL).toBe("/auth/error");
 
     for (const path of ["get-access-token", "refresh-token"]) {
