@@ -24,7 +24,10 @@ describe("Better Auth su Workers e D1", () => {
   });
 
   it("cifra i token OAuth e non li espone tramite le route HTTP", async () => {
-    expect(createAuthOptions(env).account?.encryptOAuthTokens).toBe(true);
+    const options = createAuthOptions(env);
+    expect(options.account?.encryptOAuthTokens).toBe(true);
+    expect(options.advanced?.ipAddress?.ipAddressHeaders).toEqual(["cf-connecting-ip"]);
+    expect(options.onAPIError?.errorURL).toBe("/auth/error");
 
     for (const path of ["get-access-token", "refresh-token"]) {
       const response = await handleAuthRequest(

@@ -2,6 +2,7 @@ import { passkey } from "@better-auth/passkey";
 import { dash } from "@better-auth/infra";
 import { betterAuth, type Auth, type BetterAuthOptions } from "better-auth";
 import { genericOAuth } from "better-auth/plugins";
+import { waitUntil } from "cloudflare:workers";
 import { z } from "zod";
 
 const ebayIdentitySchema = z.object({
@@ -55,30 +56,44 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
     database: environment.DB,
     secret: environment.BETTER_AUTH_SECRET,
     trustedOrigins: [appOrigin.origin],
+    advanced: {
+      ipAddress: {
+        ipAddressHeaders: ["cf-connecting-ip"],
+      },
+    },
+    onAPIError: {
+      errorURL: "/auth/error",
+    },
     account: {
       encryptOAuthTokens: true,
     },
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: true,
-      sendResetPassword: ({ user, url }) =>
-        sendAuthEmail(
-          environment,
-          user.email,
-          "Reimposta la password di FiscalBay",
-          "Hai richiesto di reimpostare la password.",
-          url,
-        ),
+      sendResetPassword: async ({ user, url }) => {
+        waitUntil(
+          sendAuthEmail(
+            environment,
+            user.email,
+            "Reimposta la password di FiscalBay",
+            "Hai richiesto di reimpostare la password.",
+            url,
+          ),
+        );
+      },
     },
     emailVerification: {
-      sendVerificationEmail: ({ user, url }) =>
-        sendAuthEmail(
-          environment,
-          user.email,
-          "Conferma l’indirizzo email di FiscalBay",
-          "Conferma il tuo indirizzo email per accedere a FiscalBay.",
-          url,
-        ),
+      sendVerificationEmail: async ({ user, url }) => {
+        waitUntil(
+          sendAuthEmail(
+            environment,
+            user.email,
+            "Conferma l’indirizzo email di FiscalBay",
+            "Conferma il tuo indirizzo email per accedere a FiscalBay.",
+            url,
+          ),
+        );
+      },
     },
     socialProviders: {
       google: {
