@@ -182,6 +182,17 @@ Includere il contratto delle notifiche obbligatorie di cancellazione eBay, disti
 
 **Blocco:** manca il diritto `commerce.identity.email.readonly` sul keyset Production; la documentazione eBay lo assegna soltanto a partner approvati e il portale non offre quello scope a `botCF`. Serve inoltre la prova del linking eBay 2.0 sul callback del dominio di test. Il limite effettivo Fulfillment, la struttura non fiscale di lista/dettaglio, la presenza reale di `BuyerTaxIdentifier` tramite Trading e la fixture sanitizzata della fonte fiscale primaria sono provati. Le notifiche di cancellazione marketplace restano sul callback 1.x condiviso: un endpoint 2.0 separato non può essere attivato sullo stesso App ID senza un cutover coordinato.
 
+**Checklist operativa al riscontro eBay:**
+
+1. Registrare esito, data e riferimento `260920-000007`; rileggere sul keyset `botCF` il diritto effettivo senza modificare scope, RuName o callback legacy.
+2. Se il diritto è concesso, verificare che `commerce.identity.email.readonly` sia realmente autorizzabile e che il RuName dedicato FiscalBay resti attivo. Applicare alla D1 test la sola migration pendente `0004_tax_identifier_source.sql`, rileggere schema e registro, quindi distribuire sul Worker test l'esatto commit candidato dopo gate verde. Le route e la migration applicativa Stripe restano escluse.
+3. Da una sessione email verificata controllata, avviare il linking eBay con `state` e PKCE, completare consenso e callback su `test.fiscalbay.it`, quindi rileggere D1: un solo utente, account eBay collegato allo stesso user ID, nessun duplicato e token cifrati non esposti dalle route HTTP.
+4. Provare logout e revoca globale della sessione FiscalBay, rinnovo del token provider quando necessario e revoca/scollegamento controllati secondo il contratto eBay corrente; nessun token, email, identificativo o payload personale deve comparire in log o backlog.
+5. Con il seller controllato già autorizzato, leggere al massimo l'ordine necessario via Fulfillment e la relativa osservazione fiscale mirata via Trading, persistere fonte e Paese eventualmente nullo, quindi verificare nella pagina minima che sessione, workspace e grant mostrino soltanto l'ordine autorizzato. Conservare soltanto evidenza aggregata o sintetica.
+6. Rileggere sessioni, account, migration, Worker/versione e stato delle risorse; revocare le sessioni residue della prova senza disattivare il RuName o il callback 1.x condiviso. Eseguire `pnpm verify`, identificare il commit e portare M0-04, M0-05 e M0-13 a DONE solo con tutte le prove effettive.
+7. Se il diritto è negato, limitato o non applicabile al keyset, non eliminare automaticamente il quarto login e non simulare l'email. Registrare motivazione e alternative ufficiali offerte da eBay; se non esiste un percorso tecnico equivalente, richiedere all'owner una decisione esplicita sul requisito prima di cambiare Auth o perimetro. M0 resta bloccata e nessuna attività M1 dipendente parte.
+8. Dopo la chiusura tecnica eBay, completare M0-14 con matrice finale, rischi residui e via owner; nessun esito del ticket vale da solo come approvazione del checkpoint.
+
 ### M0-06 — Qualifica eventi, polling e lavoro API
 
 **Stato:** DONE · **Prerequisiti:** M0-05 · **Contratto:** [§11](docs/MASTER_PLAN.md#s11) · [§36](docs/MASTER_PLAN.md#s36)
