@@ -22,7 +22,7 @@ const orders: ExportOrder[] = [
   },
 ];
 
-describe("export M0", () => {
+describe("export ordini", () => {
   it("genera un CSV integro e neutralizza le formule", () => {
     const csv = strFromU8(createCsv(orders));
     expect(csv).toContain('"\'=1+1"');
