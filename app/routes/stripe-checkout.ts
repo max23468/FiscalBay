@@ -7,7 +7,6 @@ import {
   createStripeClient,
   type PremiumOffer,
 } from "../domain/stripe.server";
-import type { Route } from "./+types/stripe-checkout";
 
 const checkoutSchema = z.object({
   offer: z.enum(["monthly", "annual", "lifetime"]),
@@ -22,7 +21,7 @@ const priceByOffer: Record<
   lifetime: "STRIPE_PRICE_LIFETIME",
 };
 
-export async function action({ request }: Route.ActionArgs) {
+export async function action({ request }: { request: Request }) {
   if (request.headers.get("origin") !== new URL(env.APP_ORIGIN).origin) {
     return new Response("Origine non valida", { status: 403 });
   }

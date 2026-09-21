@@ -2,9 +2,8 @@ import { env } from "cloudflare:workers";
 import type Stripe from "stripe";
 
 import { recordStripeEvent, verifyStripeEvent } from "../domain/stripe.server";
-import type { Route } from "./+types/stripe-webhook";
 
-export async function action({ request }: Route.ActionArgs) {
+export async function action({ request }: { request: Request }) {
   const signature = request.headers.get("stripe-signature");
   if (!signature) return new Response("Firma mancante", { status: 400 });
 

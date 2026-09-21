@@ -238,7 +238,7 @@ In sandbox è stato creato il catalogo equivalente con lo stesso testo e i tre p
 
 Il gate completo della repository è verde con formattazione, lint, typecheck, 21 test, build e controlli documentali.
 
-**Residuo assegnato:** il candidato non è distribuito. Segreto ristretto Cloudflare, migration remota, endpoint webhook Stripe, riconciliazione dei diritti e collegamento della UI appartengono a M5 e richiedono il relativo ciclo di integrazione e pubblicazione. Prepagamento durante prova, cambi piano, Portal/Link e ricevute sono coperti da M5-04..06; comparsa dell'acquisto nell'app Link e comunicazioni effettive restano prove live M8/M9. I dati fiscali dell'account restano fuori da questo intervento per decisione owner.
+**Residuo assegnato:** il candidato non è distribuito e le route Checkout/webhook restano intenzionalmente escluse dal router applicativo. Segreto ristretto Cloudflare, migration remota, registrazione delle route e dell'endpoint webhook Stripe, riconciliazione dei diritti e collegamento della UI appartengono a M5 e richiedono il relativo ciclo di integrazione e pubblicazione. Prepagamento durante prova, cambi piano, Portal/Link e ricevute sono coperti da M5-04..06; comparsa dell'acquisto nell'app Link e comunicazioni effettive restano prove live M8/M9. I dati fiscali dell'account restano fuori da questo intervento per decisione owner.
 
 ### M0-09 — Recovery nativa e limiti
 
