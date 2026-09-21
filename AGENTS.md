@@ -33,7 +33,7 @@ Seguire feature branch → `develop`, test dai merge, `main` candidato e workflo
 
 pnpm, latest stable **qualificata**, pin nei manifest/lockfile. Dipendenze opzionali solo con un uso concreto. Primitive native per HTTP/crypto e servizi scelti per code/retry quando bastano; mantenere deduplica e invarianti applicativi. Entità logiche non impongono altrettante tabelle; nessuna versione dati senza cambiamento utile.
 
-Gli artefatti durevoli descrivono prodotto, dominio e comportamento, non il piano di lavoro. Non usare nomi o sigle di milestone, task, fasi, spike o vertical slice nel codice o nei nomi di componenti, moduli, file, cartelle, servizi, risorse provider, package/versioni tecniche, configurazioni, fixture, test, log, metriche o copy runtime. Tali riferimenti restano nella documentazione di piano e in `BACKLOG.md`; fuori da lì sono ammessi soltanto per artefatti realmente temporanei, identificati come tali e destinati alla rimozione.
+Gli artefatti durevoli descrivono prodotto, dominio e comportamento, non il piano di lavoro. Non usare nomi o sigle di milestone, task, fasi, spike o vertical slice nel codice o nei nomi di componenti, moduli, file, cartelle, servizi, risorse provider, package/versioni tecniche, configurazioni, fixture, test, log, metriche o copy runtime. Tali riferimenti restano nella documentazione di piano e in `BACKLOG.md`; fuori da lì sono ammessi soltanto per artefatti realmente temporanei, identificati come tali e destinati alla rimozione. Non rinominare per questo motivo una migration già applicata: il nome registrato dal database è un vincolo di compatibilità.
 
 ## Verifica, dati e ripresa
 
