@@ -18,7 +18,7 @@ describe("Better Auth su Workers e D1", () => {
   it("collega la dashboard gestita solo quando è presente la chiave dedicata", () => {
     const options = createAuthOptions({
       ...env,
-      BETTER_AUTH_API_KEY: "m0-dashboard-key",
+      BETTER_AUTH_API_KEY: "dashboard-test-key",
     });
     expect(options.plugins?.map((plugin) => plugin.id)).toContain("dash");
   });
@@ -26,6 +26,7 @@ describe("Better Auth su Workers e D1", () => {
   it("cifra i token OAuth e non li espone tramite le route HTTP", async () => {
     const options = createAuthOptions(env);
     expect(options.account?.encryptOAuthTokens).toBe(true);
+    expect(options.account?.accountLinking?.allowDifferentEmails).toBe(true);
     expect(options.advanced?.ipAddress?.ipAddressHeaders).toEqual(["cf-connecting-ip"]);
     expect(options.advanced?.database?.joins).toBe(true);
     expect(options.onAPIError?.errorURL).toBe("/auth/error");
@@ -35,12 +36,35 @@ describe("Better Auth su Workers e D1", () => {
         new Request(`http://localhost:5173/api/auth/${path}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ accountId: "account-m0" }),
+          body: JSON.stringify({ accountId: "account-test" }),
         }),
         env,
       );
       expect(response.status).toBe(404);
     }
+  });
+
+  it("rifiuta callback eBay ambigui o privi di stato senza creare account", async () => {
+    for (const query of [
+      "code=synthetic",
+      "code=synthetic&state=one&state=two",
+      "code=synthetic&error=access_denied&state=one",
+    ]) {
+      const response = await handleAuthRequest(
+        new Request(`http://localhost:5173/api/auth/callback/ebay?${query}`),
+        env,
+      );
+      expect(response.status).toBe(303);
+      expect(response.headers.get("location")).toBe("http://localhost:5173/auth/error");
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    }
+
+    const account = await env.DB.prepare(
+      'SELECT COUNT(*) AS total FROM "account" WHERE "providerId" = ?',
+    )
+      .bind("ebay")
+      .first<{ total: number }>();
+    expect(account?.total).toBe(0);
   });
 
   it("crea un account email non verificato nel database locale", async () => {
@@ -49,18 +73,18 @@ describe("Better Auth su Workers e D1", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          name: "Utente M0",
-          email: "m0@example.invalid",
-          password: "Una-password-M0-molto-lunga",
+          name: "Utente test",
+          email: "auth@example.invalid",
+          password: "Una-password-auth-molto-lunga",
         }),
       }),
     );
 
     expect(response.status).toBe(200);
     const user = await env.DB.prepare('SELECT email, "emailVerified" FROM "user" WHERE email = ?')
-      .bind("m0@example.invalid")
+      .bind("auth@example.invalid")
       .first<{ email: string; emailVerified: number }>();
-    expect(user).toEqual({ email: "m0@example.invalid", emailVerified: 0 });
+    expect(user).toEqual({ email: "auth@example.invalid", emailVerified: 0 });
   });
 
   it("espone il percorso passkey solo a una sessione autenticata", async () => {
@@ -87,7 +111,10 @@ describe("Better Auth su Workers e D1", () => {
     expect(authorizationUrl.hostname).toBe(host);
 
     if (provider === "ebay") {
-      expect(authorizationUrl.searchParams.get("redirect_uri")).toBe("fiscalbay-m0-test-runame");
+      expect(authorizationUrl.searchParams.get("redirect_uri")).toBe("fiscalbay-test-runame");
+      expect(authorizationUrl.searchParams.get("state")).toBeTruthy();
+      expect(authorizationUrl.searchParams.get("code_challenge")).toBeTruthy();
+      expect(authorizationUrl.searchParams.get("code_challenge_method")).toBe("S256");
       const scopes = new Set((authorizationUrl.searchParams.get("scope") ?? "").split(" "));
       expect(scopes).toEqual(
         new Set([

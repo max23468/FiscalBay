@@ -7,8 +7,9 @@ export type VisibleOrder = {
   totalMinor: number;
   taxIdentifiers: Array<{
     type: string;
-    issuingCountry: string;
+    issuingCountry: string | null;
     value: string;
+    source: string;
   }>;
 };
 
@@ -31,7 +32,7 @@ export async function listVisibleOrders(
        )
        SELECT o.id, o.ebay_order_id, o.creation_time, o.last_modified_time,
               o.currency, o.total_minor, ti.identifier_type,
-              ti.issuing_country, ti.value
+              ti.issuing_country, ti.value, ti.source
          FROM visible_orders vo
          JOIN orders o ON o.id = vo.id
          LEFT JOIN order_grants g
@@ -51,6 +52,7 @@ export async function listVisibleOrders(
       identifier_type: string | null;
       issuing_country: string | null;
       value: string | null;
+      source: string | null;
     }>();
 
   const orders = new Map<string, VisibleOrder>();
@@ -64,11 +66,12 @@ export async function listVisibleOrders(
       totalMinor: row.total_minor,
       taxIdentifiers: [],
     };
-    if (row.identifier_type && row.issuing_country && row.value) {
+    if (row.identifier_type && row.value && row.source) {
       order.taxIdentifiers.push({
         type: row.identifier_type,
         issuingCountry: row.issuing_country,
         value: row.value,
+        source: row.source,
       });
     }
     orders.set(row.id, order);

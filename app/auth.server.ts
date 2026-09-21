@@ -69,6 +69,9 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
     },
     account: {
       encryptOAuthTokens: true,
+      accountLinking: {
+        allowDifferentEmails: true,
+      },
     },
     emailAndPassword: {
       enabled: true,
@@ -121,6 +124,8 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
             clientSecret: environment.EBAY_CLIENT_SECRET,
             redirectURI: environment.EBAY_RUNAME,
             authentication: "basic",
+            pkce: true,
+            allowIdpInitiated: false,
             scopes: [
               "https://api.ebay.com/oauth/api_scope",
               "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",

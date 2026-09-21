@@ -1,35 +1,43 @@
 import { env } from "cloudflare:workers";
 
+import { createAuth } from "../auth.server";
 import { listVisibleOrders } from "../domain/orders.server";
 import type { Route } from "./+types/home";
 
 export function meta(): Route.MetaDescriptors {
   return [
-    { title: "FiscalBay — Qualifica M0" },
-    { name: "description", content: "Vertical slice locale FiscalBay 2.0" },
+    { title: "FiscalBay — Ordini" },
+    { name: "description", content: "Ordini eBay disponibili in FiscalBay" },
   ];
 }
 
-export async function loader() {
-  return { orders: await listVisibleOrders(env.DB, "m0-demo-user") };
+export async function loader({ request }: Route.LoaderArgs) {
+  const session = await createAuth(env).api.getSession({ headers: request.headers });
+  if (!session) return { authenticated: false, orders: [] };
+  return {
+    authenticated: true,
+    orders: await listVisibleOrders(env.DB, session.user.id),
+  };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
   return (
     <main>
       <header>
-        <p className="eyebrow">FiscalBay 2.0 · M0</p>
+        <p className="eyebrow">FiscalBay 2.0</p>
         <h1>Ordini</h1>
-        <p>
-          Slice locale per verificare persistenza D1, isolamento per spazio e sblocco atomico dei
-          dati fiscali.
-        </p>
+        <p>Gli ordini e i dati fiscali accessibili sono isolati per spazio.</p>
       </header>
 
-      {loaderData.orders.length === 0 ? (
+      {!loaderData.authenticated ? (
+        <section className="empty">
+          <h2>Accesso richiesto</h2>
+          <p>Gli ordini sono disponibili soltanto per lo spazio dell’utente autenticato.</p>
+        </section>
+      ) : loaderData.orders.length === 0 ? (
         <section className="empty">
           <h2>Nessun ordine nella fixture locale</h2>
-          <p>Le integrazioni eBay e Auth reali restano soggette ai gate M0.</p>
+          <p>Collega un negozio eBay per importare gli ordini disponibili.</p>
         </section>
       ) : (
         <section className="orders" aria-label="Ordini qualificati">

@@ -1,7 +1,16 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import {
+  buildLastModifiedFilter,
+  classifyEbayRetry,
+  mergeFulfillmentOrders,
+  parseFulfillmentPage,
+} from "../app/domain/ebay-fulfillment.server";
+import { mapTradingTaxIdentifiers } from "../app/domain/ebay-tax-identifiers.server";
 import { grantFreeOrder, listVisibleOrders } from "../app/domain/orders.server";
+import { createAuth } from "../app/auth.server";
+import { loader as loadHome } from "../app/routes/home";
 
 const now = "2026-09-13T20:00:00.000Z";
 
@@ -38,10 +47,10 @@ async function seed(): Promise<void> {
     ).bind(now, now, now, now),
     env.DB.prepare(
       `INSERT INTO tax_identifiers
-        (id, order_id, identifier_type, issuing_country, value, observed_at)
-       VALUES ('t-a1', 'o-a', 'CODICE_FISCALE', 'IT', 'RSSMRA80A01H501U', ?),
-              ('t-a2', 'o-a', 'VAT_ID', 'IT', '01234567890', ?),
-              ('t-b', 'o-b', 'CODICE_FISCALE', 'IT', 'BNCLGU80A01H501Z', ?)`,
+        (id, order_id, identifier_type, issuing_country, value, source, observed_at)
+       VALUES ('t-a1', 'o-a', 'CODICE_FISCALE', NULL, 'RSSMRA80A01H501U', 'ebay_trading_get_orders', ?),
+              ('t-a2', 'o-a', 'VAT_ID', 'IT', '01234567890', 'ebay_trading_get_orders', ?),
+              ('t-b', 'o-b', 'CODICE_FISCALE', 'IT', 'BNCLGU80A01H501Z', 'synthetic_fixture', ?)`,
     ).bind(now, now, now),
     env.DB.prepare(
       `INSERT INTO order_items
@@ -58,7 +67,121 @@ async function seed(): Promise<void> {
   ]);
 }
 
-describe("vertical slice M0", () => {
+describe("percorso ordini", () => {
+  it("lega la pagina ordini alla sessione e al tenant senza consenso eBay", async () => {
+    await seed();
+
+    const anonymous = await loadHome({
+      request: new Request("http://localhost:5173/"),
+    } as Parameters<typeof loadHome>[0]);
+    expect(anonymous).toEqual({ authenticated: false, orders: [] });
+
+    const auth = createAuth(env);
+    await auth.handler(
+      new Request("http://localhost:5173/api/auth/sign-up/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Utente ordini",
+          email: "orders@example.invalid",
+          password: "Una-password-orders-molto-lunga",
+        }),
+      }),
+    );
+    const user = await env.DB.prepare('SELECT id FROM "user" WHERE email = ?')
+      .bind("orders@example.invalid")
+      .first<{ id: string }>();
+    expect(user).not.toBeNull();
+    await env.DB.batch([
+      env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?').bind(user!.id),
+      env.DB.prepare("UPDATE workspace_members SET user_id = ? WHERE workspace_id = 'w-a'").bind(
+        user!.id,
+      ),
+    ]);
+
+    const signIn = await auth.handler(
+      new Request("http://localhost:5173/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: "orders@example.invalid",
+          password: "Una-password-orders-molto-lunga",
+        }),
+      }),
+    );
+    expect(signIn.status).toBe(200);
+    const cookie = signIn.headers.get("set-cookie");
+    expect(cookie).toBeTruthy();
+
+    const authenticated = await loadHome({
+      request: new Request("http://localhost:5173/", { headers: { cookie: cookie! } }),
+    } as Parameters<typeof loadHome>[0]);
+    expect(authenticated.authenticated).toBe(true);
+    expect(authenticated.orders.map(({ ebayOrderId }) => ebayOrderId)).toEqual(["ebay-a"]);
+  });
+
+  it("conserva l'ultima osservazione anche per un ordine vecchio modificato nell'overlap", () => {
+    const first = parseFulfillmentPage({
+      orders: [
+        { orderId: "order-a", orderFulfillmentStatus: "NOT_STARTED" },
+        {
+          orderId: "order-b",
+          creationDate: "2026-06-01T08:00:00.000Z",
+          lastModifiedDate: "2026-09-20T11:55:00.000Z",
+          orderFulfillmentStatus: "NOT_STARTED",
+        },
+      ],
+      total: 2,
+    });
+    const second = parseFulfillmentPage({
+      orders: [
+        {
+          orderId: "order-b",
+          creationDate: "2026-06-01T08:00:00.000Z",
+          lastModifiedDate: "2026-09-20T12:05:00.000Z",
+          orderFulfillmentStatus: "FULFILLED",
+        },
+      ],
+      total: 1,
+    });
+
+    expect(mergeFulfillmentOrders([first, second])).toEqual([
+      { orderId: "order-a", orderFulfillmentStatus: "NOT_STARTED" },
+      {
+        orderId: "order-b",
+        creationDate: "2026-06-01T08:00:00.000Z",
+        lastModifiedDate: "2026-09-20T12:05:00.000Z",
+        orderFulfillmentStatus: "FULFILLED",
+      },
+    ]);
+    expect(
+      buildLastModifiedFilter(
+        new Date("2026-09-20T12:00:00.000Z"),
+        new Date("2026-09-20T12:30:00.000Z"),
+        60 * 60 * 1000,
+      ),
+    ).toBe("lastmodifieddate:[2026-09-20T11:00:00.000Z..2026-09-20T12:30:00.000Z]");
+    expect(() =>
+      buildLastModifiedFilter(
+        new Date("2026-09-20T12:00:00.000Z"),
+        new Date("2026-09-20T12:30:00.000Z"),
+        Number.NaN,
+      ),
+    ).toThrow("Intervallo incrementale eBay non valido");
+  });
+
+  it("classifica i retry eBay senza riprovare gli errori client definitivi", () => {
+    expect(classifyEbayRetry(400, null, 1)).toEqual({ retryable: false });
+    expect(classifyEbayRetry(429, "120", 1)).toEqual({
+      retryable: true,
+      delaySeconds: 120,
+    });
+    expect(classifyEbayRetry(503, null, 3)).toEqual({
+      retryable: true,
+      delaySeconds: 4,
+    });
+  });
+
   it("mostra i dati fiscali dell'ordine sbloccato solo al tenant proprietario", async () => {
     await seed();
     await grantFreeOrder(env.DB, {
@@ -76,12 +199,44 @@ describe("vertical slice M0", () => {
     expect(ownerOrders[0]?.taxIdentifiers).toEqual([
       {
         type: "CODICE_FISCALE",
-        issuingCountry: "IT",
+        issuingCountry: null,
         value: "RSSMRA80A01H501U",
+        source: "ebay_trading_get_orders",
       },
-      { type: "VAT_ID", issuingCountry: "IT", value: "01234567890" },
+      {
+        type: "VAT_ID",
+        issuingCountry: "IT",
+        value: "01234567890",
+        source: "ebay_trading_get_orders",
+      },
     ]);
     expect(otherTenantOrders[0]?.taxIdentifiers).toEqual([]);
+  });
+
+  it("mappa la fonte fiscale Trading senza inventare il Paese emittente", () => {
+    expect(
+      mapTradingTaxIdentifiers([
+        { id: "SYNTHETIC-ID", type: "CODICE_FISCALE" },
+        {
+          id: "SYNTHETIC-VAT",
+          type: "VAT_ID",
+          attributes: [{ name: "IssuingCountry", value: "IT" }],
+        },
+      ]),
+    ).toEqual([
+      {
+        type: "CODICE_FISCALE",
+        issuingCountry: null,
+        value: "SYNTHETIC-ID",
+        source: "ebay_trading_get_orders",
+      },
+      {
+        type: "VAT_ID",
+        issuingCountry: "IT",
+        value: "SYNTHETIC-VAT",
+        source: "ebay_trading_get_orders",
+      },
+    ]);
   });
 
   it("consuma la quota una sola volta con due sblocchi concorrenti", async () => {

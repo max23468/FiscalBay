@@ -8,12 +8,12 @@ export default defineConfig({
       miniflare: {
         bindings: {
           APP_ORIGIN: "http://localhost:5173",
-          BETTER_AUTH_SECRET: "fiscalbay-m0-test-secret-32-bytes",
+          BETTER_AUTH_SECRET: "fiscalbay-test-secret-at-least-32-bytes",
           GOOGLE_CLIENT_ID: "google-test-client",
           GOOGLE_CLIENT_SECRET: "google-test-secret",
           EBAY_CLIENT_ID: "ebay-test-client",
           EBAY_CLIENT_SECRET: "ebay-test-secret",
-          EBAY_RUNAME: "fiscalbay-m0-test-runame",
+          EBAY_RUNAME: "fiscalbay-test-runame",
           TEST_MIGRATIONS: await readD1Migrations("./migrations"),
         },
       },
