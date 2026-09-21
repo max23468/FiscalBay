@@ -8,6 +8,9 @@
   "routes": [{ "pattern": "test.fiscalbay.it", "custom_domain": true }],
   "vars": {
     "APP_ORIGIN": "https://test.fiscalbay.it",
+    "STRIPE_PRICE_MONTHLY": "price_1UHlnnJP7SSN14Zph79bnCQu",
+    "STRIPE_PRICE_ANNUAL": "price_1UHlnnJP7SSN14Zpc0f7vZkS",
+    "STRIPE_PRICE_LIFETIME": "price_1UHlngJP7SSN14ZpuFWGNO5w",
   },
   "secrets": {
     "required": [
@@ -18,6 +21,8 @@
       "EBAY_CLIENT_ID",
       "EBAY_CLIENT_SECRET",
       "EBAY_RUNAME",
+      "STRIPE_SECRET_KEY",
+      "STRIPE_WEBHOOK_SECRET",
     ],
   },
   "d1_databases": [

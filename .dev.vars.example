@@ -7,3 +7,5 @@ GOOGLE_CLIENT_SECRET=replace-with-test-client-secret
 EBAY_CLIENT_ID=replace-with-test-client-id
 EBAY_CLIENT_SECRET=replace-with-test-client-secret
 EBAY_RUNAME=replace-with-test-runame
+STRIPE_SECRET_KEY=replace-with-restricted-test-key
+STRIPE_WEBHOOK_SECRET=replace-with-test-webhook-secret
