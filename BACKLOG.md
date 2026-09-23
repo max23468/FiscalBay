@@ -183,6 +183,23 @@ Includere il contratto delle notifiche obbligatorie di cancellazione eBay, disti
 
 **Chiusura M0:** il collegamento del negozio seller non richiede lo scope email ed è provato dalla slice M0-13 con dati reali. Il diritto `commerce.identity.email.readonly` serve soltanto a Sign in with eBay, rinviato a [M2-09](#m2-09) per decisione owner del 2026-09-23. Il limite effettivo Fulfillment, la struttura non fiscale di lista/dettaglio, la presenza reale di `BuyerTaxIdentifier` tramite Trading e la fixture sanitizzata della fonte fiscale primaria sono provati. Le notifiche di cancellazione marketplace restano sul callback 1.x condiviso: un endpoint 2.0 separato non può essere attivato sullo stesso App ID senza un cutover coordinato, assegnato alle milestone successive.
 
+**Matrice fonte-campo-età-stato:**
+
+| Dato | Fonte primaria | Finestra ed età | Mascheramenti e assenze | Esito M0 |
+|---|---|---|---|---|
+| Scoperta e stato ordini: `orderId`, creazione, ultima modifica, stato pagamento, fulfillment e cancellazione | Fulfillment `getOrders`, pagine fino a 200, filtri per creazione, modifica e stato | Fino a due anni | Assenti gli acquisti pending-payment con pagamento anticipato; presenti ordini non pagati senza pagamento anticipato; `legacyOrderId` ancora restituito ma non usato come chiave | PASS: campione Production con paginazione e overlap (M0-06) |
+| Dettaglio, righe, totali | Fulfillment `getOrder` o riga di `getOrders` | Fino a due anni | Lista e dettaglio con struttura identica sul campione | PASS: campione controllato e import della slice (M0-13) |
+| Immagine articolo | Trading `GetItem` tramite `legacyItemId` della riga | Legata all'annuncio | Assente in Fulfillment: la riga reale espone `legacyItemId` e `title`, nessun campo immagine | Fonte individuata; lettura, dominio immagini e SSRF in M3-02 |
+| Destinatario di spedizione | Fulfillment `shipTo` | PII mascherata oltre 90 giorni | Solo osservato, mai persistito | PASS osservato |
+| Email buyer | Fulfillment `shipTo` | Fino a 14 giorni dalla creazione | Assente dopo 14 giorni | PASS osservato |
+| Identificativo fiscale: tipo, valore, Paese emittente | Trading `GetOrders` `BuyerTaxIdentifier`; Fulfillment `buyer.taxIdentifier` solo come seconda osservazione | Trading: 90 giorni | Paese emittente può mancare; Fulfillment può non esporre l'identificativo | PASS reale (M0-05, M0-13) |
+| Identità seller stabile | Commerce Identity `getUser`, scope `commerce.identity.readonly` | Non applicabile | Nessuna | PASS nella slice M0-13 |
+| Email dell'account per il login | Commerce Identity con `commerce.identity.email.readonly` | Non applicabile | Diritto non concesso al keyset | RINVIATO a M2-09 |
+| Evento nuovo ordine | Notification `ORDER_CONFIRMATION` | Tre tentativi di consegna | Non copre aggiornamenti; il polling resta autorevole | PASS documentale e `getTopic` (M0-06) |
+| Cancellazione account marketplace | Notifica obbligatoria di account deletion | Retry per 24 ore, correzione entro 30 giorni | Oggi servita dal callback 1.x condiviso | Contratto qualificato; cutover in M7 |
+
+Quote effettive sul keyset `botCF`: Fulfillment 100.000 chiamate/giorno, Trading `GetOrders` e `GetItem` 5.000 ciascuna (M0-06).
+
 La checklist operativa al riscontro eBay è in [M2-09](#m2-09).
 
 ### M0-06 — Qualifica eventi, polling e lavoro API
@@ -241,7 +258,9 @@ In sandbox è stato creato il catalogo equivalente con lo stesso testo e i tre p
 
 Il gate completo della repository è verde con formattazione, lint, typecheck, 21 test, build e controlli documentali.
 
-**Residuo assegnato:** il candidato non è distribuito e le route Checkout/webhook restano intenzionalmente escluse dal router applicativo. Segreto ristretto Cloudflare, migration remota, registrazione delle route e dell'endpoint webhook Stripe, riconciliazione dei diritti e collegamento della UI appartengono a M5 e richiedono il relativo ciclo di integrazione e pubblicazione. Prepagamento durante prova, cambi piano, Portal/Link e ricevute sono coperti da M5-04..06; comparsa dell'acquisto nell'app Link e comunicazioni effettive restano prove live M8/M9. I dati fiscali dell'account restano fuori da questo intervento per decisione owner.
+**Prepagamento durante prova e posti lifetime (sandbox, 2026-09-23):** la documentazione Managed Payments non elenca `subscription_data.trial_end`, `billing_cycle_anchor` o `expires_at` fra i parametri rimossi e consente carrelli misti di prezzi una tantum e ricorrenti. In sandbox due Checkout Session Managed Payments in modalità abbonamento, con sei giorni di prova residui, sono state accettate con due righe: il prezzo ricorrente con `trial_end` pari alla scadenza originale più un periodo e un prezzo una tantum pari al primo periodo. La sessione mensile espone oggi 4,90 EUR sulla sola riga una tantum e zero sulla riga ricorrente; quella annuale 49 EUR. Il modello Q567 è quindi realizzabile senza cambiare la regola: incasso immediato del primo periodo, rinnovo dopo i giorni residui più il periodo acquistato, nessun secondo addebito a fine prova. Per i posti lifetime, `expires_at` accetta valori da 30 minuti a meno di 24 ore e rifiuta 25 ore; la scadenza forzata via API porta la sessione a `expired`/`unpaid` ed emette `checkout.session.expired`. La sessione di pagamento lifetime propone carta e Bancontact: i metodi sono dinamici e non soltanto carte, quindi gli esiti asincroni vanno gestiti. Le sessioni sono state fatte scadere e i due prezzi una tantum temporanei archiviati; nessun pagamento è stato completato.
+
+**Residuo assegnato:** il candidato non è distribuito e le route Checkout/webhook restano intenzionalmente escluse dal router applicativo. Segreto ristretto Cloudflare, migration remota, registrazione delle route e dell'endpoint webhook Stripe, riconciliazione dei diritti e collegamento della UI appartengono a M5 e richiedono il relativo ciclo di integrazione e pubblicazione. Il completamento con Test Clock del modello Q567 e la sua rappresentazione in Link e Portal sono assegnati a M5-04; cambi piano, Portal/Link e ricevute a M5-05..06; comparsa dell'acquisto nell'app Link e comunicazioni effettive restano prove live M8/M9. I dati fiscali dell'account restano fuori da questo intervento per decisione owner.
 
 ### M0-09 — Recovery nativa e limiti
 
@@ -284,6 +303,8 @@ Qualificare localmente Node/TS/pnpm/ReactRouter/Vite/lint/test/CLI e una baselin
 Eseguire questo task prima delle prove che usano il codice: l’ordine numerico degli ID non è la sequenza operativa. Verificare compiler API/LSP/generatori e dipendenze SSR beta, oltre a build/typecheck; non installare automaticamente compatibility layer non necessari.
 
 **Evidenza:** pin e lockfile del candidato, configurazione `mise` per Node 26.8.2 e pnpm 12.4.1, configurazione Workers tipizzata, install frozen, peer check, typecheck, 14 test Workerd, build React Router e documentazione verdi. `@better-auth/infra` 0.4.9 dichiara compatibilità con Better Auth 1.4 o successivo e viene caricato soltanto in presenza del secret dedicato. Vitest 4.1.11 è l’ultima 4.x compatibile con `@cloudflare/vitest-plugin` 1.1.8, che richiede `^4.1.0`; Vitest 5 è stato escluso dopo peer check.
+
+**Generatore dei client (2026-09-23):** nessun generatore OAS nella 2.0 per ora. TypeScript 7.0.2 non espone l'API JavaScript del compilatore (`factory`, `createPrinter` e `createSourceFile` sono assenti) e i generatori candidati la usano: `openapi-typescript` 7.13.0 richiede TypeScript `^5.x`, `@hey-api/openapi-ts` 0.99.0 genera tramite quella API. Adottarli introdurrebbe un secondo compilatore, escluso da [§25](docs/MASTER_PLAN.md#s25). La superficie usata è piccola (Identity, Fulfillment, Trading XML senza OAS) e resta coperta da schemi Zod mirati, validati a runtime e con fixture; Stripe usa l'SDK ufficiale tipizzato. Rivalutare in [M3-02](#m3-02) se la superficie cresce o se un generatore supporta TypeScript 7 senza secondo compilatore.
 
 ### M0-12 — Consolidamento dei vincoli legali preliminari
 
@@ -348,11 +369,11 @@ Confrontare costo/complessità/capacità/Auth/recovery/jobs/lock-in, scegliere u
 | Capacità | Fulfillment offre 100.000 chiamate/giorno; Trading 5.000. Il budget prudenziale Queue Free copre 33 negozi nel mix un Premium ogni due Free entro l'80% della quota. D1 e query hanno margine sul dataset M0. | Il target di 150 negozi non è compatibile con un messaggio Queue per ogni polling sul Free. La CPU condivisa CF-Ready e la Queue reale vanno rimisurate prima dell'apertura pubblica; la capacità pubblica non è approvata in M0. |
 | Auth | Un solo Better Auth su D1. Email/password, verifica, recupero, logout/revoca, passkey e Google sono provati sul dominio test; token OAuth cifrati e non esposti via HTTP. Infrastructure cloud resta rimovibile senza sostituire il core self-hosted. | Sign in with eBay è rinviato a M2-09 in attesa del diritto email Identity; un diniego richiede una decisione owner sul requisito prima della chiusura di M2. DPA, subprocessori, trasferimenti, cancellazione e piano Infrastructure Production sono gate M7-07; TOTP è escluso e la MFA admin resta M2-04. |
 | eBay e dati fiscali | Fulfillment acquisisce e aggiorna gli ordini; Trading `GetOrders` è la fonte fiscale primaria mirata. Quote, paginazione, overlap, retry, campione controllato, `BuyerTaxIdentifier` reale e fixture sintetica sono provati. La slice collega un seller reale senza scope email e porta un ordine reale fino alla pagina. | Consenso e callback seller 2.0 dal vivo, storage cifrato e rinnovo del token sono M2-05. Il callback account-deletion 1.x resta attivo fino al cutover coordinato successivo. |
-| Pagamenti | Stripe Managed Payments è idoneo e pronto sul conto; catalogo, Checkout sandbox, mensile/annuale/lifetime, rinnovo, rimborso e firma webhook sono qualificati. Paddle resta inattivo. | Route, secret ristretto, migration applicativa, endpoint remoto e diritti appartengono a M5; nessuna transazione live è stata eseguita. |
+| Pagamenti | Stripe Managed Payments è idoneo e pronto sul conto; catalogo, Checkout sandbox, mensile/annuale/lifetime, rinnovo, rimborso e firma webhook sono qualificati; il prepagamento durante la prova (Q567) è realizzabile con prezzo una tantum più `trial_end` esteso, e la scadenza delle sessioni lifetime è limitata a meno di 24 ore con evento di scadenza. Paddle resta inattivo. | Route, secret ristretto, migration applicativa, endpoint remoto e diritti appartengono a M5; nessuna transazione live è stata eseguita. |
 | Recovery e lock-in | Time Travel D1 Free conserva 7 giorni; restore sintetico riuscito. Prima del restore si congelano effetti e si estraggono marker, poi si riconciliano provider prima della riapertura. Configurazione e migration restano ricostruibili dal repository. | Corruzione che renda il DB illeggibile mantiene il servizio chiuso. Runbook eseguibile e drill conclusivo restano pre go-live; non viene introdotto un backup parallelo. |
 | Decisione owner | Confermare Workers + D1 + Queues + Better Auth, costi differiti, limiti di capacità, fallback Infrastructure, rinvio di Sign in with eBay a M2-09 e rischi sopra. | `RINVIO LOGIN EBAY: REGISTRATO 2026-09-23`; `VIA FINE M0: IN ATTESA`. Nessuna attività M1 dipendente parte prima del via. |
 
-**Stato residuo:** tutte le prove tecniche M0 sono chiuse o assegnate in modo esplicito a task successivi: Sign in with eBay a M2-09, consenso seller live e token a M2-05, requisiti Better Auth Infrastructure a M7-07, MFA amministrativa a M2-04, runbook e drill di recovery al pre go-live. Il readback Free e le misure giornaliere dopo la cessazione di Workers Paid sono un controllo operativo differito. L'invio email a utenti arbitrari richiede Workers Paid e appartiene al checkpoint pre pubblico. Manca soltanto il via owner di fine M0; M1 resta ferma fino al via.
+**Stato residuo:** tutte le prove tecniche M0 sono chiuse o assegnate in modo esplicito a task successivi: Sign in with eBay a M2-09, consenso seller live e token a M2-05, requisiti Better Auth Infrastructure a M7-07, MFA amministrativa a M2-04, runbook e drill di recovery al pre go-live. Il readback Free e le misure giornaliere dopo la cessazione di Workers Paid sono un controllo operativo differito. L'invio email a utenti arbitrari richiede Workers Paid e appartiene al checkpoint pre pubblico. Il progetto Supabase Free del candidato escluso resta attivo senza costo: pausa o eliminazione richiedono una decisione owner e non bloccano M0. Manca soltanto il via owner di fine M0; M1 resta ferma fino al via.
 
 <a id="m1"></a>
 
@@ -564,6 +585,8 @@ Implementare stato corrente e snapshot degli ordini, mapping delle chiavi estern
 
 Entità logiche accorpabili quando sicuro; mantenere dati correnti e snapshot dell’ordine senza duplicati a ogni sync. Lo storico di tutte le variazioni fiscali effettive resta richiesto.
 
+<a id="m3-02"></a>
+
 ### M3-02 — Client eBay e normalizzazione
 
 **Stato:** TODO · **Prerequisiti:** M3-01, G-EBAY · **Contratto:** [§11](docs/MASTER_PLAN.md#s11) · [§28](docs/MASTER_PLAN.md#s28)
@@ -571,6 +594,8 @@ Entità logiche accorpabili quando sicuro; mantenere dati correnti e snapshot de
 Integrare client generati o adapter REST e Trading mirato, errori tipizzati, provenienza dei campi e stati normalizzati.
 
 **Criterio di completamento:** Contract test con fixture; stati sconosciuti non inventati; ordini pagati, non pagati e dati mascherati classificati correttamente.
+
+Da M0: immagini articolo da Trading `GetItem` tramite `legacyItemId`, con domini e formati qualificati contro SSRF; nessun generatore OAS finché TypeScript 7 non espone un'API compatibile (M0-11).
 
 ### M3-03 — Import recenti e backfill
 
@@ -750,6 +775,8 @@ Implementare il percorso qualificato Q567 per mensile e annuale: incasso volonta
 
 Separare istante incasso, termine trial, inizio/fine copertura e prossimo rinnovo; test fine mese/anno bisestile e assenza di un secondo addebito alla scadenza del trial.
 
+Costruzione qualificata in M0-08: Checkout Managed Payments in modalità abbonamento con prezzo una tantum pari al primo periodo e prezzo ricorrente con `trial_end` pari alla scadenza originale più il periodo. Verificare con Test Clock rinnovo e assenza di addebito a fine prova, e come Link e Portal mostrano un periodo pagato che Stripe registra come `trialing`, incluse cancellazione e rimborso in quella fase.
+
 ### M5-05 — Webhook e riconciliazione
 
 **Stato:** TODO · **Prerequisiti:** M5-03 · **Contratto:** [§6](docs/MASTER_PLAN.md#s06) · [§28](docs/MASTER_PLAN.md#s28)
@@ -779,6 +806,8 @@ Gestire 20 disponibilità fra vendite e omaggi, prenotazioni atomiche con scaden
 **Criterio di completamento:** Test ultimo posto concorrente, webhook tardivo e rimborso; nessuna sovravendita o incasso fittizio. Lifetime valido anche dopo cambio provider.
 
 La scadenza locale della prenotazione deve essere coerente con la possibilità residua di incasso del checkout. Provare ultimo posto, sessione scaduta, pagamento asincrono, conferma tardiva e ripresa dopo crash: nessuna liberazione prematura.
+
+Dati qualificati in M0-08: `expires_at` fra 30 minuti e meno di 24 ore; `checkout.session.expired` libera il posto solo se la sessione non è stata completata; i metodi dinamici includono anche Bancontact, quindi una sessione completata con pagamento non ancora confermato tiene il posto fino a `checkout.session.async_payment_succeeded` o `failed`.
 
 ### M5-08 — Rimborsi, dispute e recovery commerciale
 
