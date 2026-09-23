@@ -20,8 +20,22 @@ export async function action({ request }: Route.ActionArgs) {
     return withCookies("/", await auth.api.signOut({ headers: request.headers, asResponse: true }));
   }
 
+  const credentials = {
+    email: String(form.get("email") ?? ""),
+    password: String(form.get("password") ?? ""),
+  };
+  if (form.get("intent") === "registrati") {
+    // La registrazione non apre la sessione: l'accesso richiede l'email verificata.
+    const response = await auth.api.signUpEmail({
+      body: { ...credentials, name: credentials.email },
+      headers: request.headers,
+      asResponse: true,
+    });
+    return redirect(`/?accesso=${response.ok ? "registrato" : "errore"}`, 303);
+  }
+
   const response = await auth.api.signInEmail({
-    body: { email: String(form.get("email") ?? ""), password: String(form.get("password") ?? "") },
+    body: credentials,
     headers: request.headers,
     asResponse: true,
   });

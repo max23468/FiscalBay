@@ -81,7 +81,7 @@ describe("percorso ordini", () => {
     const anonymous = await loadHome({
       request: new Request("http://localhost:5173/"),
     } as Parameters<typeof loadHome>[0]);
-    expect(anonymous).toEqual({ authenticated: false, signInFailed: false, orders: [] });
+    expect(anonymous).toEqual({ authenticated: false, signInNotice: null, orders: [] });
 
     const auth = createAuth(env);
     await auth.handler(
@@ -386,7 +386,7 @@ function storeCallback(query: string, cookie: string): Request {
 }
 
 describe("collegamento negozio eBay", () => {
-  it("apre la sessione dal modulo di accesso solo dalla propria origine", async () => {
+  it("registra e apre la sessione dal modulo di accesso solo dalla propria origine", async () => {
     await verifiedSession("accesso@example.invalid");
     const submit = (password: string, origin = "http://localhost:5173") =>
       signIn({
@@ -405,6 +405,24 @@ describe("collegamento negozio eBay", () => {
     const rejected = await submit("password-sbagliata-ma-lunga");
     expect(rejected.headers.get("location")).toBe("/?accesso=errore");
     expect(rejected.headers.getSetCookie()).toEqual([]);
+
+    const signUp = (await signIn({
+      request: new Request("http://localhost:5173/accesso", {
+        method: "POST",
+        headers: { origin: "http://localhost:5173" },
+        body: new URLSearchParams({
+          intent: "registrati",
+          email: "nuovo@example.invalid",
+          password: "Una-password-nuova-molto-lunga",
+        }),
+      }),
+    } as Parameters<typeof signIn>[0])) as Response;
+    expect(signUp.headers.get("location")).toBe("/?accesso=registrato");
+    expect(signUp.headers.getSetCookie()).toEqual([]);
+    const created = await env.DB.prepare('SELECT "emailVerified" FROM "user" WHERE email = ?')
+      .bind("nuovo@example.invalid")
+      .first();
+    expect(created).toEqual({ emailVerified: 0 });
 
     expect(
       (await submit("Una-password-negozio-molto-lunga", "https://esempio.invalid")).status,

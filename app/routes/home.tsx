@@ -19,11 +19,20 @@ const storeNotices: Record<string, string> = {
   errore: "Collegamento non riuscito. Riprova.",
 };
 
+const signInNotices: Record<string, string> = {
+  errore: "Operazione non riuscita. Controlla email e password.",
+  registrato: "Utente creato. Conferma l’indirizzo email, poi accedi.",
+};
+
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await createAuth(env).api.getSession({ headers: request.headers });
   const search = new URL(request.url).searchParams;
   if (!session) {
-    return { authenticated: false, signInFailed: search.get("accesso") === "errore", orders: [] };
+    return {
+      authenticated: false,
+      signInNotice: signInNotices[search.get("accesso") ?? ""] ?? null,
+      orders: [],
+    };
   }
   const notice = search.get("negozio");
   return {
@@ -61,7 +70,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <section className="empty">
           <h2>Accesso richiesto</h2>
           <p>Gli ordini sono disponibili soltanto per lo spazio dell’utente autenticato.</p>
-          {loaderData.signInFailed ? <p role="alert">Email o password non validi.</p> : null}
+          {loaderData.signInNotice ? <p role="status">{loaderData.signInNotice}</p> : null}
           <form method="post" action="/accesso">
             <label>
               Email <input name="email" type="email" autoComplete="username" required />
@@ -71,6 +80,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               <input name="password" type="password" autoComplete="current-password" required />
             </label>
             <button type="submit">Accedi</button>
+            <button type="submit" name="intent" value="registrati">
+              Crea utente
+            </button>
           </form>
         </section>
       ) : loaderData.orders.length === 0 ? (

@@ -148,7 +148,6 @@ export async function completeStoreLink(input: {
   if (link.expired || input.sessionUserId !== link.userId) return "errore";
   if (search.has("error")) return "negato";
 
-  const db = environment.DB;
   const now = (input.now ?? new Date()).toISOString();
   const token = tokenSchema.parse(
     await ebayJson(fetcher, "https://api.ebay.com/identity/v1/oauth2/token", {
@@ -165,14 +164,32 @@ export async function completeStoreLink(input: {
       }),
     }),
   );
-  const bearer = { authorization: `Bearer ${token.access_token}` };
+  return importStoreOrders({
+    db: environment.DB,
+    userId: link.userId,
+    accessToken: token.access_token,
+    fetcher,
+    now,
+  });
+}
+
+// Collega il negozio al primo spazio dell'utente e importa l'ordine più recente con la fonte fiscale.
+export async function importStoreOrders(input: {
+  db: D1Database;
+  userId: string;
+  accessToken: string;
+  fetcher: typeof fetch;
+  now: string;
+}): Promise<"collegato" | "altro-spazio"> {
+  const { db, fetcher, now } = input;
+  const bearer = { authorization: `Bearer ${input.accessToken}` };
   const identity = identitySchema.parse(
     await ebayJson(fetcher, "https://apiz.ebay.com/commerce/identity/v1/user/", {
       headers: bearer,
     }),
   );
 
-  const workspaceId = await workspaceFor(db, link.userId, now);
+  const workspaceId = await workspaceFor(db, input.userId, now);
   await db
     .prepare(
       `INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at)
@@ -186,7 +203,6 @@ export async function completeStoreLink(input: {
     .first<{ id: string; workspace_id: string }>();
   if (!store || store.workspace_id !== workspaceId) return "altro-spazio";
 
-  // Import minimo della slice: l'ordine più recente e la sua osservazione fiscale Trading.
   const page = ordersPageSchema.parse(
     await ebayJson(fetcher, "https://api.ebay.com/sell/fulfillment/v1/order?limit=1", {
       headers: bearer,
@@ -224,7 +240,7 @@ export async function completeStoreLink(input: {
       "x-ebay-api-call-name": "GetOrders",
       "x-ebay-api-siteid": tradingSiteId,
       "x-ebay-api-compatibility-level": tradingApiVersion,
-      "x-ebay-api-iaf-token": token.access_token,
+      "x-ebay-api-iaf-token": input.accessToken,
     },
     body:
       '<?xml version="1.0" encoding="utf-8"?>' +
