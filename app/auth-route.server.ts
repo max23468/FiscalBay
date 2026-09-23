@@ -1,4 +1,5 @@
 import { createAuth } from "./auth.server";
+import { completeStoreLink, takeStoreLinkSession } from "./domain/ebay-store-link.server";
 
 const serverOnlyAuthPaths = new Set(["/api/auth/get-access-token", "/api/auth/refresh-token"]);
 const ebayCallbackPath = "/api/auth/callback/ebay";
@@ -26,15 +27,40 @@ function noStore(response: Response): Response {
   });
 }
 
+async function handleEbayCallback(
+  request: Request,
+  environment: Env,
+  fetcher: typeof fetch,
+): Promise<Response> {
+  if (!validEbayCallback(request)) {
+    return noStore(Response.redirect(new URL("/auth/error", environment.APP_ORIGIN), 303));
+  }
+  // Il RuName ha un solo callback: lo state distingue il collegamento negozio dal login eBay.
+  const search = new URL(request.url).searchParams;
+  const link = await takeStoreLinkSession(environment.DB, search.get("state")!);
+  if (!link) return noStore(await createAuth(environment).handler(request));
+
+  const session = await createAuth(environment).api.getSession({ headers: request.headers });
+  const outcome = await completeStoreLink({
+    environment,
+    link,
+    sessionUserId: session?.user.id ?? null,
+    search,
+    fetcher,
+  }).catch((error: unknown) => {
+    console.error("ebay_store_link_failed", error instanceof Error ? error.message : "unknown");
+    return "errore" as const;
+  });
+  return noStore(Response.redirect(new URL(`/?negozio=${outcome}`, environment.APP_ORIGIN), 303));
+}
+
 export function handleAuthRequest(
   request: Request,
   environment: Env,
+  fetcher: typeof fetch = fetch,
 ): Promise<Response> | Response {
   const pathname = new URL(request.url).pathname.replace(/\/+$/u, "");
   if (serverOnlyAuthPaths.has(pathname)) return new Response(null, { status: 404 });
   if (pathname !== ebayCallbackPath) return createAuth(environment).handler(request);
-  if (!validEbayCallback(request)) {
-    return noStore(Response.redirect(new URL("/auth/error", environment.APP_ORIGIN), 303));
-  }
-  return createAuth(environment).handler(request).then(noStore);
+  return handleEbayCallback(request, environment, fetcher);
 }

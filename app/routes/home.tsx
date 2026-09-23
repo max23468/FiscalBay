@@ -11,11 +11,25 @@ export function meta(): Route.MetaDescriptors {
   ];
 }
 
+const storeNotices: Record<string, string> = {
+  collegato: "Negozio eBay collegato.",
+  negato: "Collegamento annullato su eBay.",
+  "altro-spazio": "Questo negozio eBay è già collegato a un altro spazio.",
+  accesso: "Verifica l’indirizzo email prima di collegare un negozio.",
+  errore: "Collegamento non riuscito. Riprova.",
+};
+
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await createAuth(env).api.getSession({ headers: request.headers });
-  if (!session) return { authenticated: false, orders: [] };
+  const search = new URL(request.url).searchParams;
+  if (!session) {
+    return { authenticated: false, signInFailed: search.get("accesso") === "errore", orders: [] };
+  }
+  const notice = search.get("negozio");
   return {
     authenticated: true,
+    canLinkStore: session.user.emailVerified,
+    storeNotice: notice ? (storeNotices[notice] ?? null) : null,
     orders: await listVisibleOrders(env.DB, session.user.id),
   };
 }
@@ -29,14 +43,39 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <p>Gli ordini e i dati fiscali accessibili sono isolati per spazio.</p>
       </header>
 
+      {loaderData.storeNotice ? <p role="status">{loaderData.storeNotice}</p> : null}
+      {loaderData.authenticated ? (
+        <form method="post" action="/accesso">
+          <button type="submit" name="intent" value="esci">
+            Esci
+          </button>
+        </form>
+      ) : null}
+      {loaderData.canLinkStore ? (
+        <form method="post" action="/negozi/collega">
+          <button type="submit">Collega negozio eBay</button>
+        </form>
+      ) : null}
+
       {!loaderData.authenticated ? (
         <section className="empty">
           <h2>Accesso richiesto</h2>
           <p>Gli ordini sono disponibili soltanto per lo spazio dell’utente autenticato.</p>
+          {loaderData.signInFailed ? <p role="alert">Email o password non validi.</p> : null}
+          <form method="post" action="/accesso">
+            <label>
+              Email <input name="email" type="email" autoComplete="username" required />
+            </label>
+            <label>
+              Password{" "}
+              <input name="password" type="password" autoComplete="current-password" required />
+            </label>
+            <button type="submit">Accedi</button>
+          </form>
         </section>
       ) : loaderData.orders.length === 0 ? (
         <section className="empty">
-          <h2>Nessun ordine nella fixture locale</h2>
+          <h2>Nessun ordine</h2>
           <p>Collega un negozio eBay per importare gli ordini disponibili.</p>
         </section>
       ) : (
