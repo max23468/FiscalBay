@@ -30,6 +30,8 @@ Integrare i file mediante un diff controllato nei percorsi corrispondenti del re
 
 Verificare che la sessione usi davvero le istruzioni 2.0 dopo l’allineamento; se mantiene il contesto precedente, riprendere con una nuova sessione sul checkout. Registrare mandato e stato in [BACKLOG.md](BACKLOG.md#stato). Da quel momento il workflow è feature branch → `develop` per test; `main` è candidato, non deploy automatico. [Istruzioni Codex](docs/SOURCES.md#s25)
 
+Dopo il via owner di fine M0, eseguire il [cutover repository M1-00](BACKLOG.md#m1-00) prima del bootstrap M1-01. Il passaggio rende canonici codice e documentazione 2.0 e congela la 1.x in un riferimento Git separato; la dismissione dei componenti 1.x ancora live resta un cutover operativo distinto e deve essere provata sullo stato remoto.
+
 ### Eseguire M0 senza costruire più prodotti
 
 Dopo M0-01, inventario in lettura M0-03 e toolchain minima M0-11 possono avanzare indipendentemente; M0-02 prepara callback/email soltanto per le prove che ne dipendono. Leggere i prerequisiti del [backlog M0](BACKLOG.md#m0), non dedurre l’ordine dal numero dei task.

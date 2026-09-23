@@ -383,9 +383,21 @@ Confrontare costo/complessità/capacità/Auth/recovery/jobs/lock-in, scegliere u
 
 **Autorizzazione:** Via owner al logo rifinito, brand foundation e design system.
 
+<a id="m1-00"></a>
+
+### M1-00 — Cutover repository 1.x → 2.0
+
+**Stato:** TODO · **Prerequisiti:** M0-14 completata e via owner di fine M0 · **Contratto:** [§33](docs/MASTER_PLAN.md#s33) · [§34](docs/MASTER_PLAN.md#s34)
+
+Rendere la 2.0 canonica nell'albero attivo con un diff controllato di istruzioni di progetto, documentazione, codice, test, dipendenze, toolchain e CI. Congelare la 1.x in un riferimento Git identificabile per la sola manutenzione residua, senza mantenere due implementazioni o due fonti canoniche in `main`.
+
+Prima dell'integrazione riconciliare i commit sopraggiunti sulla 1.x e rileggere hook, workflow, release script, timer e autodeploy. Disinnescare ogni percorso per cui il merge della 2.0 potrebbe distribuire il runtime 1.x. Conservare temporaneamente l'inventario operativo necessario a bot e callback ancora attivi, con proprietario e condizione di spegnimento espliciti: il cutover del repository non prova né implica la loro dismissione remota.
+
+**Criterio di completamento:** Un checkout pulito presenta una sola implementazione e una sola documentazione canonica 2.0; la 1.x resta recuperabile dal riferimento Git dichiarato; nessun merge avvia il deploy legacy; componenti 1.x ancora live e successivo cutover operativo sono registrati senza duplicarne codice e istruzioni nell'albero attivo.
+
 ### M1-01 — Bootstrap monorepo e comandi comuni
 
-**Stato:** TODO · **Prerequisiti:** M0 · **Contratto:** [§25](docs/MASTER_PLAN.md#s25) · [§26](docs/MASTER_PLAN.md#s26) · [§33](docs/MASTER_PLAN.md#s33)
+**Stato:** TODO · **Prerequisiti:** M1-00 · **Contratto:** [§25](docs/MASTER_PLAN.md#s25) · [§26](docs/MASTER_PLAN.md#s26) · [§33](docs/MASTER_PLAN.md#s33)
 
 Strutturare web/dominio/contratti/integrazioni/jobs/UI solo dove utile; script pnpm di controllo e manifest lockati.
 
