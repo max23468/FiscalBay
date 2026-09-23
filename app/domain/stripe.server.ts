@@ -1,5 +1,8 @@
 import Stripe from "stripe";
 
+// Segreti caricati sul Worker soltanto in M5, insieme alle route Stripe.
+export type StripeSecrets = { STRIPE_SECRET_KEY: string; STRIPE_WEBHOOK_SECRET: string };
+
 export type PremiumOffer = "monthly" | "annual" | "lifetime";
 
 const integrationIdentifier = "fiscalbay_mp_qnwjrzta";

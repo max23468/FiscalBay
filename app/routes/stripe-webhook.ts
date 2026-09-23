@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import type Stripe from "stripe";
 
-import { recordStripeEvent, verifyStripeEvent } from "../domain/stripe.server";
+import { recordStripeEvent, verifyStripeEvent, type StripeSecrets } from "../domain/stripe.server";
 
 export async function action({ request }: { request: Request }) {
   const signature = request.headers.get("stripe-signature");
@@ -9,7 +9,11 @@ export async function action({ request }: { request: Request }) {
 
   let event: Stripe.Event;
   try {
-    event = await verifyStripeEvent(await request.text(), signature, env.STRIPE_WEBHOOK_SECRET);
+    event = await verifyStripeEvent(
+      await request.text(),
+      signature,
+      (env as Env & StripeSecrets).STRIPE_WEBHOOK_SECRET,
+    );
   } catch {
     return new Response("Firma non valida", { status: 400 });
   }

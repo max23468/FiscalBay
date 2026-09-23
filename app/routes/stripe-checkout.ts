@@ -6,6 +6,7 @@ import {
   createManagedCheckout,
   createStripeClient,
   type PremiumOffer,
+  type StripeSecrets,
 } from "../domain/stripe.server";
 
 const checkoutSchema = z.object({
@@ -39,13 +40,16 @@ export async function action({ request }: { request: Request }) {
     .first<{ workspace_id: string }>();
   if (!membership) return new Response("Account senza area di lavoro", { status: 403 });
 
-  const checkout = await createManagedCheckout(createStripeClient(env.STRIPE_SECRET_KEY), {
-    offer: parsed.data.offer,
-    priceId: env[priceByOffer[parsed.data.offer]],
-    workspaceId: membership.workspace_id,
-    email: session.user.email,
-    appOrigin: new URL(env.APP_ORIGIN).origin,
-  });
+  const checkout = await createManagedCheckout(
+    createStripeClient((env as Env & StripeSecrets).STRIPE_SECRET_KEY),
+    {
+      offer: parsed.data.offer,
+      priceId: env[priceByOffer[parsed.data.offer]],
+      workspaceId: membership.workspace_id,
+      email: session.user.email,
+      appOrigin: new URL(env.APP_ORIGIN).origin,
+    },
+  );
   if (!checkout.url) return new Response("Checkout non disponibile", { status: 502 });
 
   return new Response(null, { status: 303, headers: { Location: checkout.url } });

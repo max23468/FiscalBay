@@ -21,8 +21,6 @@
       "EBAY_CLIENT_ID",
       "EBAY_CLIENT_SECRET",
       "EBAY_RUNAME",
-      "STRIPE_SECRET_KEY",
-      "STRIPE_WEBHOOK_SECRET",
     ],
   },
   "d1_databases": [
