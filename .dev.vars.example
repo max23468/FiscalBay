@@ -1,0 +1,11 @@
+# Valori locali di prova. Non copiare credenziali Production nel repository.
+APP_ORIGIN=http://localhost:5173
+BETTER_AUTH_SECRET=replace-with-at-least-32-random-bytes
+BETTER_AUTH_API_KEY=replace-with-dashboard-project-key
+GOOGLE_CLIENT_ID=replace-with-test-client-id
+GOOGLE_CLIENT_SECRET=replace-with-test-client-secret
+EBAY_CLIENT_ID=replace-with-test-client-id
+EBAY_CLIENT_SECRET=replace-with-test-client-secret
+EBAY_RUNAME=replace-with-test-runame
+STRIPE_SECRET_KEY=replace-with-restricted-test-key
+STRIPE_WEBHOOK_SECRET=replace-with-test-webhook-secret

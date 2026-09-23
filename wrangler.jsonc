@@ -1,0 +1,52 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fiscalbay-test",
+  "compatibility_date": "2026-09-13",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "./workers/app.ts",
+  "workers_dev": false,
+  "routes": [{ "pattern": "test.fiscalbay.it", "custom_domain": true }],
+  "vars": {
+    "APP_ORIGIN": "https://test.fiscalbay.it",
+    "STRIPE_PRICE_MONTHLY": "price_1UHlnnJP7SSN14Zph79bnCQu",
+    "STRIPE_PRICE_ANNUAL": "price_1UHlnnJP7SSN14Zpc0f7vZkS",
+    "STRIPE_PRICE_LIFETIME": "price_1UHlngJP7SSN14ZpuFWGNO5w",
+  },
+  "secrets": {
+    "required": [
+      "BETTER_AUTH_SECRET",
+      "BETTER_AUTH_API_KEY",
+      "GOOGLE_CLIENT_ID",
+      "GOOGLE_CLIENT_SECRET",
+      "EBAY_CLIENT_ID",
+      "EBAY_CLIENT_SECRET",
+      "EBAY_RUNAME",
+    ],
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "fiscalbay-m0-test",
+      "database_id": "341b0b58-f55b-46d3-b68e-980c81b9658c",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "send_email": [
+    {
+      "name": "AUTH_EMAIL",
+      "allowed_sender_addresses": ["accesso@auth.fiscalbay.it"],
+    },
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.01,
+    },
+  },
+  "upload_source_maps": true,
+}

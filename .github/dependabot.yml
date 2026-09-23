@@ -9,8 +9,9 @@
 
 version: 2
 updates:
-  - package-ecosystem: pip
+  - package-ecosystem: npm
     directory: /
+    target-branch: develop
     open-pull-requests-limit: 10
     schedule:
       interval: weekly
@@ -23,11 +24,11 @@ updates:
       include: scope
     labels:
       - dependencies
-      - python
+      - javascript
     groups:
       # Un'unica PR per tutti i minor/patch (auto-merge dopo CI). I major restano
-      # PR singole: quelli runtime (cryptography) hanno review manuale.
-      python-minor-patch:
+      # PR singole: quelli runtime hanno review manuale.
+      javascript-minor-patch:
         patterns:
           - "*"
         update-types:
@@ -36,6 +37,7 @@ updates:
 
   - package-ecosystem: github-actions
     directory: /
+    target-branch: develop
     open-pull-requests-limit: 10
     schedule:
       interval: weekly

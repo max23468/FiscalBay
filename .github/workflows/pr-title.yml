@@ -8,6 +8,7 @@ on:
       - reopened
       - synchronize
     branches:
+      - develop
       - main
   workflow_dispatch:
 
