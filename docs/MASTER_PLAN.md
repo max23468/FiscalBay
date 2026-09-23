@@ -247,7 +247,7 @@ La prenotazione di un posto lifetime non si libera mentre il relativo checkout p
 <a id="s07"></a>
 ## 7. Autenticazione, identità e sessioni
 
-Quattro metodi obbligatori nella 2.0: **email/password, Google, Sign in with eBay e passkey**. Non due sistemi Auth sovrapposti. Cloudflare-only: Better Auth candidato; con Supabase valutare Auth nativa senza Better Auth. M0 qualifica tutti e quattro, inclusi recupero, collegamento identità, revoca e supporto runtime. Un limite del provider non autorizza a togliere un login. Passkey Supabase sperimentali: rischio esplicito del gate; niente dichiarazione preventiva di stabilità. [S04](SOURCES.md#s04) [S05](SOURCES.md#s05)
+Quattro metodi obbligatori nella 2.0: **email/password, Google, Sign in with eBay e passkey**. Non due sistemi Auth sovrapposti. Cloudflare-only: Better Auth candidato; con Supabase valutare Auth nativa senza Better Auth. M0 qualifica tutti e quattro, inclusi recupero, collegamento identità, revoca e supporto runtime; per decisione owner del 2026-09-23 la sola qualifica di Sign in with eBay, bloccata dal diritto eBay sull'email Identity, passa a M2-09 secondo [§36.2](#s36), senza dichiararla collaudata. Un limite del provider non autorizza a togliere un login. Passkey Supabase sperimentali: rischio esplicito del gate; niente dichiarazione preventiva di stabilità. [S04](SOURCES.md#s04) [S05](SOURCES.md#s05)
 
 Registrazione essenziale: email di contatto verificata, nome facoltativo. Niente P.IVA per utenti Free. Verifica prima di collegare eBay, riutilizzando la verifica affidabile del provider. Se eBay non prova un'email utilizzabile, richiedere verifica nel prodotto senza inventare l'attributo. Passkey può essere aggiunta dopo account confermato: non implica necessariamente signup passkey-first.
 
@@ -866,7 +866,7 @@ Ogni milestone aggiorna `BACKLOG.md`, contratti coinvolti e prove. Dipendenze ri
 
 ### M2 — Account, Auth e Negozi eBay
 
-**Prerequisiti:** foundation/Auth gate. **Attività:** quattro login, verifica email/linking, sessioni/reauth/MFA admin, profilo, OAuth login vs seller, connessioni/reconnect, pausa/scollega/elimina, unicità negozio/spazio, stati UI e reminder; instradamento utente autenticato/sito pubblico.
+**Prerequisiti:** foundation/Auth gate. **Attività:** quattro login, compresa la qualifica di Sign in with eBay rinviata da M0, verifica email/linking, sessioni/reauth/MFA admin, profilo, OAuth login vs seller, connessioni/reconnect, pausa/scollega/elimina, unicità negozio/spazio, stati UI e reminder; instradamento utente autenticato/sito pubblico.
 
 **Output:** flusso utente e account completo e testabile. **DoD:** i percorsi positivi e negativi dei quattro accessi passano; nessun trasferimento/merge improprio; segreti isolati; cronologie e azioni non approvate assenti.
 
