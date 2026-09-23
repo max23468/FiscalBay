@@ -23,7 +23,7 @@ Questa sezione è un registro operativo iniziale, **non una prova di avvio già 
 | Campo                                                       | Stato osservato il 2026-09-20                                                                             |
 | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | Milestone / task in esecuzione                              | M1 aperta dopo il via di fine M0 del 2026-09-23 |
-| Prossimo task eleggibile                                    | Primo task M1 secondo i prerequisiti del backlog. M2-09 attende il riscontro eBay `260920-000007` |
+| Prossimo task eleggibile                                    | M1-01 dopo il merge del cutover M1-00. M2-09 attende il riscontro eBay `260920-000007` |
 | Repository / branch / commit osservati nell’implementazione | `max23468/FiscalBay`; worktree `/Users/Matteo/Progetti/FiscalBay-m0`, branch `codex/adopt-2-0-m0`, commit di ingresso verificato `aa5e19f`, base `origin/main` `66f158b` |
 | Blocchi noti iniziali                                       | La lettura Production sull'account amministratore ha restituito zero ordini; sul secondo account controllato Fulfillment non esponeva l'identificativo fiscale, trovato invece nel primo ordine letto tramite Trading; diritto email Identity mancante, con Sign in with eBay rinviato a M2-09; notifiche account-deletion ancora servite dal callback 1.x condiviso. Il deploy dell'handler Stripe, il segreto ristretto remoto, la registrazione dell'endpoint e la riconciliazione dei diritti appartengono a M5, non bloccano la qualifica M0 |
 | Materiale privato                                           | Inventario fuori checkout: riferimento locale `FiscalBay/m0-inventory` nella custodia Codex privata       |
@@ -387,13 +387,17 @@ Confrontare costo/complessità/capacità/Auth/recovery/jobs/lock-in, scegliere u
 
 ### M1-00 — Cutover repository 1.x → 2.0
 
-**Stato:** TODO · **Prerequisiti:** M0-14 completata e via owner di fine M0 · **Contratto:** [§33](docs/MASTER_PLAN.md#s33) · [§34](docs/MASTER_PLAN.md#s34)
+**Stato:** DONE · **Prerequisiti:** M0-14 completata e via owner di fine M0 · **Contratto:** [§33](docs/MASTER_PLAN.md#s33) · [§34](docs/MASTER_PLAN.md#s34)
 
 Rendere la 2.0 canonica nell'albero attivo con un diff controllato di istruzioni di progetto, documentazione, codice, test, dipendenze, toolchain e CI. Congelare la 1.x in un riferimento Git identificabile per la sola manutenzione residua, senza mantenere due implementazioni o due fonti canoniche in `main`.
 
 Prima dell'integrazione riconciliare i commit sopraggiunti sulla 1.x e rileggere hook, workflow, release script, timer e autodeploy. Disinnescare ogni percorso per cui il merge della 2.0 potrebbe distribuire il runtime 1.x. Conservare temporaneamente l'inventario operativo necessario a bot e callback ancora attivi, con proprietario e condizione di spegnimento espliciti: il cutover del repository non prova né implica la loro dismissione remota.
 
 **Criterio di completamento:** Un checkout pulito presenta una sola implementazione e una sola documentazione canonica 2.0; la 1.x resta recuperabile dal riferimento Git dichiarato; nessun merge avvia il deploy legacy; componenti 1.x ancora live e successivo cutover operativo sono registrati senza duplicarne codice e istruzioni nell'albero attivo.
+
+**Evidenza del 2026-09-23:** via owner di fine M0 registrato; l'owner ha chiesto push di backup, commit della pianificazione M1-00 e cutover. La 1.x è congelata nella branch `legacy/1.x` al commit `508ded8`, ultima release `v1.14.0`. I tre commit arrivati su `main` dopo la base M0 sono riconciliati: i due aggiornamenti di ruff toccano soltanto `pyproject.toml`, assente nella 2.0; la centralizzazione delle istruzioni comuni è applicata all'AGENTS 2.0. L'albero unito contiene una sola implementazione (React Router su Workers, D1, Better Auth) e una sola documentazione canonica 2.0, senza `src/`, `deploy/`, script di release o workflow 1.x. I workflow CI e titolo PR girano anche sulle PR verso `main`; nessun workflow fa deploy. Sulla VPS verificata `fiscalbay-bot` soltanto `autodeploy.sh` e `vps-deploy-ref.sh` leggono GitHub: `fiscalbay-autodeploy.timer` è riletto `disabled`/`inactive` e il servizio `static`/`inactive`, quindi il merge non avvia il deploy legacy. Il mascheramento systemd non è applicabile perché il timer è definito in `/etc/systemd/system`; il tentativo è fallito senza effetti.
+
+**Componenti 1.x ancora attivi fino al cutover operativo:** sulla VPS `fiscalbay-bot` restano attivi il bot Telegram (`fiscalbay-bot`), il callback OAuth con le notifiche eBay di cancellazione account inoltrate a Hub Fatture (`fiscalbay-oauth`) e i timer `reconcile`, `alertcheck`, `external-healthcheck`, `backup`, `log-maintenance`, `restore-drill` e `duckdns`. Eseguono il checkout locale in `/opt/fiscalbay` e non dipendono da `main`. Proprietario: owner. Condizione di spegnimento: callback di cancellazione 2.0 attivo e cutover coordinato del consumatore Hub Fatture (M7), poi dismissione 1.x in M9. Il loro codice resta recuperabile da `legacy/1.x`; un eventuale deploy manuale 1.x usa quel riferimento.
 
 ### M1-01 — Bootstrap monorepo e comandi comuni
 

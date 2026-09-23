@@ -9,6 +9,7 @@ on:
       - synchronize
     branches:
       - develop
+      - main
   workflow_dispatch:
 
 concurrency:
