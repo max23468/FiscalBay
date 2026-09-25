@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { redirect } from "react-router";
 
 import { createAuth } from "../auth.server";
-import { startStoreLink } from "../domain/ebay-store-link.server";
+import { startStoreLink } from "../integrations/ebay/store-link.server";
 import type { Route } from "./+types/store-link";
 
 export async function action({ request }: Route.ActionArgs) {

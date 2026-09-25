@@ -7,7 +7,7 @@ import {
   createStripeClient,
   type PremiumOffer,
   type StripeSecrets,
-} from "../domain/stripe.server";
+} from "../integrations/stripe.server";
 
 const checkoutSchema = z.object({
   offer: z.enum(["monthly", "annual", "lifetime"]),

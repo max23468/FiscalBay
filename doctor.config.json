@@ -1,0 +1,10 @@
+{
+  "$schema": "https://react.doctor/schema/config.json",
+  "blocking": "warning",
+  "supplyChain": {
+    "enabled": false
+  },
+  "ignore": {
+    "files": ["build/**", ".react-router/**", "worker-configuration.d.ts"]
+  }
+}

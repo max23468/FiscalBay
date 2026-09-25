@@ -372,7 +372,7 @@ La preferenza «solo ordini con dato fiscale» filtra i **nuovi ordini privi del
 
 Email operative per Auth, sicurezza e problemi importanti a tutti i piani; niente digest ordini via email nella 2.0. Stripe gestisce comunicazioni di pagamento/rinnovo/carte/rimborso; evitare doppioni FiscalBay. Avviso prodotto solo se aggiunge informazione utile.
 
-Indirizzi umani iCloud+: **info@fiscalbay.it**, **supporto@fiscalbay.it**; terzo indirizzo libero, nessuna casella privacy/sicurezza obbligatoria. Richieste privacy e sicurezza via supporto. **noreply@fiscalbay.it** è un mittente transazionale separato, non SMTP iCloud per invii automatici massivi. Configurare Reply-To appropriato e gestione risposte involontarie. Provider transazionale scelto nel perimetro economico approvato; nessun nuovo abbonamento implicito.
+Indirizzi umani iCloud+: **info@fiscalbay.it**, **supporto@fiscalbay.it**; terzo indirizzo libero, nessuna casella privacy/sicurezza obbligatoria. **supporto@** serve soltanto all’assistenza clienti; ogni altro contatto (privacy, sicurezza, contatti sviluppatore e di provider, comunicazioni amministrative) usa **info@**. **noreply@fiscalbay.it** è un mittente transazionale separato, non SMTP iCloud per invii automatici massivi. Configurare Reply-To appropriato e gestione risposte involontarie. Provider transazionale scelto nel perimetro economico approvato; nessun nuovo abbonamento implicito.
 
 Supporto IT/EN, pagina pubblica con FAQ/form e pannello in-app con contenuti essenziali. Nessun ticketing completo, chatbot o chat live. Form raccoglie il minimo contesto utile, account e consenso/accesso necessario; non invia PII fiscali automaticamente. No SLA pubblico, obiettivo qualitativo di risposta rapida. Richieste MoR con scadenza prioritarie su supporto e alert admin.
 
@@ -580,7 +580,7 @@ Pin esatti dei pacchetti diretti dove appropriato, lockfile unico e install ripr
 | Stripe | SDK ufficiale server-side, Hosted Checkout; niente Elements per il solo redirect |
 | HTTP, UUID, crittografia | fetch, crypto.randomUUID, Web Crypto del runtime ove qualificato |
 | Test | Vitest, Testing Library/user-event, Playwright, axe/Playwright |
-| Qualità | Oxlint, Oxfmt, typecheck compiler, CI e sicurezza dipendenze |
+| Qualità | Oxlint, Oxfmt, React Doctor bloccante dai warning, typecheck compiler, CI e sicurezza dipendenze |
 | CLI di piattaforma | Wrangler e/o Supabase CLI soltanto per i servizi scelti |
 
 **Opzionali, non negati:** helper Auth/SSR del provider scelto (incluso `@supabase/ssr` se qualificato), Drizzle/driver SQL o Data API/RPC; React Hook Form/resolver; date-fns/timezone; Motion; TanStack Table; MSW; grammY; client OAuth/Notification eBay; generatore client OAS; libreria XLSX/ZIP; coverage; query cache; Storybook; monitoring esterno. Si aggiungono se eliminano più complessità di quanta ne introducono. XLSX e ZIP restano requisiti: opzionale è la dipendenza che li realizza. i18n e Lucide restano confermati.
@@ -754,7 +754,7 @@ Le skill non cambiano scope, checkpoint o policy dati. Dati esterni non sono com
 
 Branch feature→`develop`, integrato su `test.fiscalbay.it`; `main` candidato Production. Nessun deploy live automatico al merge main. Autodeploy test dopo merge develop con gate e separazione dati; le migrazioni pericolose non diventano innocue per il solo ambiente test. Verificare lo stato dei timer/autodeploy 1.x prima di introdurre nuovi workflow.
 
-Pipeline minima: install frozen lockfile → format check → lint → typecheck → unit/integration → build. Smoke Playwright per modifiche UI/backend pertinenti, contract/concurrency test in base all'impatto. CodeQL/dependency review/secret scanning e controlli licenze dove disponibili; non presumere capacità o costi GitHub del piano senza preflight. PR da fork senza segreti/live writes, action pin e permessi minimi.
+Pipeline minima: install frozen lockfile → format check → lint → typecheck → React Doctor → unit/integration → build. Smoke Playwright per modifiche UI/backend pertinenti, contract/concurrency test in base all'impatto. CodeQL/dependency review/secret scanning e controlli licenze dove disponibili; non presumere capacità o costi GitHub del piano senza preflight. PR da fork senza segreti/live writes, action pin e permessi minimi.
 
 Versioni interne `2.0.0-alpha.N`→`2.0.0-rc.N`→`2.0.0`. Non significano beta pubblica. `CHANGELOG.md` unica storia delle modifiche rilevanti; GitHub Release derivata per ogni versione Production, non ogni deploy test. Nessuna riscrittura tag pubblicati per correggere un errore.
 

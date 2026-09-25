@@ -42,7 +42,7 @@ Il memo M0-14 porta al checkpoint di fine M0: scelta proposta, motivazioni, cost
 
 ### Eseguire il candidato locale
 
-Usare Node 26.8.2 e pnpm 12.4.1 indicati in `mise.toml` e `package.json`. L’installazione e i gate locali non creano risorse remote:
+Usare Node 26.10.0 e pnpm 12.6.0 indicati in `mise.toml` e `package.json`. L’installazione e i gate locali non creano risorse remote:
 
 ```sh
 pnpm install --frozen-lockfile

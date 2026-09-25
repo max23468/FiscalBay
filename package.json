@@ -7,44 +7,46 @@
     "build": "react-router build",
     "cf:typegen": "wrangler types",
     "dev": "react-router dev",
+    "doctor:react": "react-doctor --scope full --blocking warning .",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "lint": "oxlint .",
     "postinstall": "wrangler types",
     "test": "vitest run",
     "typecheck": "wrangler types && react-router typegen && tsc -b",
-    "verify:docs": "node scripts/verify-docs.mjs",
-    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm verify:docs"
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm doctor:react && pnpm test && pnpm build && pnpm verify:docs",
+    "verify:docs": "node scripts/verify-docs.mjs"
   },
   "dependencies": {
-    "@better-auth/infra": "0.4.9",
-    "@better-auth/passkey": "1.7.5",
-    "better-auth": "1.7.5",
+    "@better-auth/infra": "0.4.11",
+    "@better-auth/passkey": "1.7.6",
+    "better-auth": "1.7.6",
     "exceljs": "4.4.0",
     "fflate": "0.8.3",
     "isbot": "5.2.2",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "react-router": "8.3.1",
+    "react-router": "8.4.0",
     "stripe": "22.6.2",
-    "zod": "4.6.4"
+    "zod": "4.6.5"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.54.8",
-    "@cloudflare/vitest-plugin": "1.1.8",
-    "@react-router/dev": "8.3.1",
-    "@types/node": "26.5.1",
+    "@cloudflare/vite-plugin": "1.60.0",
+    "@cloudflare/vitest-plugin": "1.2.6",
+    "@react-router/dev": "8.4.0",
+    "@types/node": "26.6.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "oxfmt": "0.67.0",
-    "oxlint": "1.82.0",
+    "oxfmt": "0.70.0",
+    "oxlint": "1.85.0",
+    "react-doctor": "0.9.14",
     "typescript": "7.0.2",
-    "vite": "8.3.0",
+    "vite": "8.3.1",
     "vitest": "4.1.11",
-    "wrangler": "4.131.1"
+    "wrangler": "4.139.0"
   },
   "engines": {
-    "node": "26.8.2"
+    "node": "26.10.0"
   },
-  "packageManager": "pnpm@12.4.1"
+  "packageManager": "pnpm@12.6.0"
 }

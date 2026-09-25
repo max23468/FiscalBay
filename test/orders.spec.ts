@@ -6,11 +6,11 @@ import {
   classifyEbayRetry,
   mergeFulfillmentOrders,
   parseFulfillmentPage,
-} from "../app/domain/ebay-fulfillment.server";
+} from "../app/integrations/ebay/fulfillment.server";
 import {
   mapTradingTaxIdentifiers,
   parseTradingOrderTaxIdentifiers,
-} from "../app/domain/ebay-tax-identifiers.server";
+} from "../app/integrations/ebay/tax-identifiers.server";
 import { grantFreeOrder, listVisibleOrders } from "../app/domain/orders.server";
 import { createAuth } from "../app/auth.server";
 import { handleAuthRequest } from "../app/auth-route.server";

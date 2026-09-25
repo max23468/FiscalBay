@@ -1,21 +1,21 @@
-# Security Policy
+# Politica di sicurezza
 
-## Supported Versions
+## Segnalare una vulnerabilità
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+Non aprire issue, pull request o discussioni pubbliche per una vulnerabilità.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+Usare la [segnalazione privata di GitHub](https://github.com/max23468/FiscalBay/security/advisories/new) oppure scrivere a **info@fiscalbay.it** indicando:
 
-## Reporting a Vulnerability
+- componente o URL interessato;
+- passi per riprodurre il problema;
+- impatto potenziale;
+- eventuale mitigazione nota.
 
-Use this section to tell people how to report a vulnerability.
+Non includere dati reali di acquirenti, codici fiscali, token o credenziali: bastano dati sintetici o una descrizione. Riceverai una conferma di ricezione e, dopo la verifica, l’esito e i tempi della correzione.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+## Versioni supportate
+
+| Versione | Stato |
+| --- | --- |
+| 2.0, branch `main` | Supportata |
+| 1.x, branch `legacy/1.x` | Solo correzioni residue fino alla dismissione |
