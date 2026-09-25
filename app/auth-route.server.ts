@@ -1,5 +1,5 @@
 import { createAuth } from "./auth.server";
-import { completeStoreLink, takeStoreLinkSession } from "./domain/ebay-store-link.server";
+import { completeStoreLink, takeStoreLinkSession } from "./integrations/ebay/store-link.server";
 
 const serverOnlyAuthPaths = new Set(["/api/auth/get-access-token", "/api/auth/refresh-token"]);
 const ebayCallbackPath = "/api/auth/callback/ebay";
