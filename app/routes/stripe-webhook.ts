@@ -1,7 +1,11 @@
 import { env } from "cloudflare:workers";
 import type Stripe from "stripe";
 
-import { recordStripeEvent, verifyStripeEvent, type StripeSecrets } from "../domain/stripe.server";
+import {
+  recordStripeEvent,
+  verifyStripeEvent,
+  type StripeSecrets,
+} from "../integrations/stripe.server";
 
 export async function action({ request }: { request: Request }) {
   const signature = request.headers.get("stripe-signature");

@@ -6,7 +6,7 @@ import {
   buildManagedCheckoutParams,
   recordStripeEvent,
   verifyStripeEvent,
-} from "../app/domain/stripe.server";
+} from "../app/integrations/stripe.server";
 
 const event = {
   id: "evt_checkout_completed",

@@ -3,7 +3,7 @@ import { z } from "zod";
 import {
   mapTradingTaxIdentifiers,
   parseTradingOrderTaxIdentifiers,
-} from "./ebay-tax-identifiers.server";
+} from "./tax-identifiers.server";
 
 // Il collegamento del negozio non chiede l'email: resta separato dal login eBay.
 export const ebayStoreScopes = [
