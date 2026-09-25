@@ -1,0 +1,56 @@
+name: React Doctor
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: react-doctor-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  react-doctor:
+    name: react-doctor
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Stesse versioni del gate locale: nessun `latest` risolto a ogni run.
+      - name: Read pinned versions
+        id: versions
+        run: |
+          {
+            echo "doctor=$(node -p 'require("./package.json").devDependencies["react-doctor"]')"
+            echo "node=$(node -p 'require("./package.json").engines.node')"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Scan
+        uses: millionco/react-doctor@013f7373f91a3b9e68bd1dc7d4d354f4b041b117 # v2.2.9
+        with:
+          version: ${{ steps.versions.outputs.doctor }}
+          node-version: ${{ steps.versions.outputs.node }}
+          scope: ${{ github.event_name == 'pull_request' && 'changed' || 'full' }}
+          blocking: warning
+          comment: "false"
+          review-comments: "true"
+          commit-status: "false"

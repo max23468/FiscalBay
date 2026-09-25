@@ -417,13 +417,15 @@ Nello stesso intervento la toolchain passa a Node 26.10.0 e pnpm 12.6.0 (`mise.t
 
 ### M1-02 — Ambienti e CI fondamentale
 
-**Stato:** TODO · **Prerequisiti:** M1-01 · **Contratto:** [§34](docs/MASTER_PLAN.md#s34)
+**Stato:** IN PROGRESS · **Prerequisiti:** M1-01 · **Contratto:** [§34](docs/MASTER_PLAN.md#s34)
 
 Develop/main, PR test/lint/type/build, test deploy controllato; guardrail branch/credential e segreti ambienti separati.
 
 **Criterio di completamento:** PR senza segreti eseguibile, test genera artefatto proprio; il merge main da solo non pubblica.
 
 Non attivare deploy test se endpoint e segreti minimi non sono pronti; pubblicazioni serializzate per ambiente. Fork/PR non fidate non devono acquisire segreti tramite workflow privilegiati.
+
+**Evidenza parziale del 2026-09-26 (React Doctor, D140):** `react-doctor` 0.9.14 fissato e `doctor.config.json` bloccante dai warning; lo script `pnpm doctor:react` (non `pnpm doctor`, comando integrato di pnpm) entra in `pnpm verify` e quindi nel job `Node 26`, già obbligatorio su `main`. Il workflow `react-doctor` usa l'Action ufficiale v2.2.9 fissata a commit, con versione e Node letti da `package.json`, scope `changed` sulle PR con commenti inline e `full` su `main`; salta i diff solo documentali. La prima scansione ha trovato tre warning, corretti: upsert dell'ordine e lettura Trading eseguiti in parallelo nel collegamento negozio, `minimumReleaseAge` e `trustPolicy: no-downgrade` espliciti in `pnpm-workspace.yaml` con la sola esclusione motivata di `semver@6.3.1`. La prima scansione è uscita con codice non zero, a conferma che i warning bloccano; dopo le correzioni punteggio 100/100, 26 test e actionlint verdi. Restano da fare in M1-02 il riordino della CI, i passi Python nei workflow, l'analisi CodeQL Python e il deploy test controllato.
 
 ### M1-03 — Fondazioni DB, tenant e grant
 

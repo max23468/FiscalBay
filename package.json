@@ -7,14 +7,15 @@
     "build": "react-router build",
     "cf:typegen": "wrangler types",
     "dev": "react-router dev",
+    "doctor:react": "react-doctor --scope full --blocking warning .",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "lint": "oxlint .",
     "postinstall": "wrangler types",
     "test": "vitest run",
     "typecheck": "wrangler types && react-router typegen && tsc -b",
-    "verify:docs": "node scripts/verify-docs.mjs",
-    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm verify:docs"
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm doctor:react && pnpm test && pnpm build && pnpm verify:docs",
+    "verify:docs": "node scripts/verify-docs.mjs"
   },
   "dependencies": {
     "@better-auth/infra": "0.4.11",
@@ -38,6 +39,7 @@
     "@types/react-dom": "19.3.0",
     "oxfmt": "0.70.0",
     "oxlint": "1.85.0",
+    "react-doctor": "0.9.14",
     "typescript": "7.0.2",
     "vite": "8.3.1",
     "vitest": "4.1.11",
