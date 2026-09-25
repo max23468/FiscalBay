@@ -76,9 +76,13 @@ function getAnchors(text, name) {
     found.add(m[1]);
   }
   for (const m of text.matchAll(/^#{1,6}\s+(.+?)(?:\s+#+)?$/gm)) {
-    const slug = m[1]
-      .toLowerCase()
-      .replace(/<[^>]*>/g, "")
+    let heading = m[1].toLowerCase();
+    // Ripete la rimozione finché non resta alcun tag, anche se annidato o spezzato.
+    for (let previous; previous !== heading;) {
+      previous = heading;
+      heading = heading.replace(/<[^>]*>/g, "");
+    }
+    const slug = heading
       .replace(/[^\p{L}\p{N}\s_-]/gu, "")
       .trim()
       .replace(/\s/g, "-");
