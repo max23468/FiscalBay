@@ -211,9 +211,11 @@ export async function importStoreOrders(input: {
   const order = page.orders[0];
   if (!order) return "collegato";
 
-  const saved = await db
-    .prepare(
-      `INSERT INTO orders
+  // L'upsert dell'ordine e la lettura Trading sono indipendenti: partono insieme.
+  const [saved, tradingResponse] = await Promise.all([
+    db
+      .prepare(
+        `INSERT INTO orders
          (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(store_id, ebay_order_id) DO UPDATE SET
@@ -221,35 +223,35 @@ export async function importStoreOrders(input: {
          currency = excluded.currency,
          total_minor = excluded.total_minor
        RETURNING id`,
-    )
-    .bind(
-      crypto.randomUUID(),
-      store.id,
-      order.orderId,
-      order.creationDate,
-      order.lastModifiedDate,
-      order.pricingSummary.total.currency,
-      toMinor(order.pricingSummary.total.value),
-    )
-    .first<{ id: string }>();
-
-  const tradingResponse = await fetcher("https://api.ebay.com/ws/api.dll", {
-    method: "POST",
-    headers: {
-      "content-type": "text/xml;charset=UTF-8",
-      "x-ebay-api-call-name": "GetOrders",
-      "x-ebay-api-siteid": tradingSiteId,
-      "x-ebay-api-compatibility-level": tradingApiVersion,
-      "x-ebay-api-iaf-token": input.accessToken,
-    },
-    body:
-      '<?xml version="1.0" encoding="utf-8"?>' +
-      '<GetOrdersRequest xmlns="urn:ebay:apis:eBLBaseComponents">' +
-      `<Version>${tradingApiVersion}</Version><DetailLevel>ReturnAll</DetailLevel>` +
-      "<OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>" +
-      `<OrderIDArray><OrderID>${order.orderId.replace(/[<>&]/gu, "")}</OrderID></OrderIDArray>` +
-      "</GetOrdersRequest>",
-  });
+      )
+      .bind(
+        crypto.randomUUID(),
+        store.id,
+        order.orderId,
+        order.creationDate,
+        order.lastModifiedDate,
+        order.pricingSummary.total.currency,
+        toMinor(order.pricingSummary.total.value),
+      )
+      .first<{ id: string }>(),
+    fetcher("https://api.ebay.com/ws/api.dll", {
+      method: "POST",
+      headers: {
+        "content-type": "text/xml;charset=UTF-8",
+        "x-ebay-api-call-name": "GetOrders",
+        "x-ebay-api-siteid": tradingSiteId,
+        "x-ebay-api-compatibility-level": tradingApiVersion,
+        "x-ebay-api-iaf-token": input.accessToken,
+      },
+      body:
+        '<?xml version="1.0" encoding="utf-8"?>' +
+        '<GetOrdersRequest xmlns="urn:ebay:apis:eBLBaseComponents">' +
+        `<Version>${tradingApiVersion}</Version><DetailLevel>ReturnAll</DetailLevel>` +
+        "<OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>" +
+        `<OrderIDArray><OrderID>${order.orderId.replace(/[<>&]/gu, "")}</OrderID></OrderIDArray>` +
+        "</GetOrdersRequest>",
+    }),
+  ]);
   if (!tradingResponse.ok) throw new Error(`ebay_http_${tradingResponse.status}`);
   const observations = mapTradingTaxIdentifiers(
     parseTradingOrderTaxIdentifiers(await tradingResponse.text(), order.orderId),

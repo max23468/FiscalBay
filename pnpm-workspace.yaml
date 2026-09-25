@@ -6,3 +6,11 @@ allowBuilds:
 # `exceljs` dichiara `uuid` 8, con vulnerabilità nota; la 11 è compatibile.
 overrides:
   uuid: 11.1.1
+# Installa solo release pubblicate da almeno un giorno e rifiuta i pacchetti
+# che perdono firme o provenance rispetto alle versioni precedenti.
+minimumReleaseAge: 1440
+trustPolicy: no-downgrade
+# Backport ufficiale della serie 6, pubblicato dopo le 7.x con provenance;
+# arriva da Babel tramite `@react-router/dev`.
+trustPolicyExclude:
+  - semver@6.3.1
