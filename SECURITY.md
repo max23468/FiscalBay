@@ -4,7 +4,7 @@
 
 Non aprire issue, pull request o discussioni pubbliche per una vulnerabilità.
 
-Usare la [segnalazione privata di GitHub](https://github.com/max23468/FiscalBay/security/advisories/new) oppure scrivere a **supporto@fiscalbay.it** indicando:
+Usare la [segnalazione privata di GitHub](https://github.com/max23468/FiscalBay/security/advisories/new) oppure scrivere a **info@fiscalbay.it** indicando:
 
 - componente o URL interessato;
 - passi per riprodurre il problema;

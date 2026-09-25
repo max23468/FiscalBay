@@ -475,7 +475,7 @@ Realizzare top navigation desktop e bottom navigation mobile con tre destinazion
 
 **Stato:** TODO · **Prerequisiti:** M0 · **Contratto:** [§24](docs/MASTER_PLAN.md#s24)
 
-Consolidare il bootstrap test predisposto in M0-02: DNS/TLS/redirect, configurazione Production, iCloud info/supporto e trasporto transazionale selezionato. Verificare inventario record, callback, SPF/DKIM/DMARC e isolamento; dismettere i record Register senza consumatori dopo il readback Cloudflare e non attivare servizi Register aggiuntivi.
+Consolidare il bootstrap test predisposto in M0-02: DNS/TLS/redirect, configurazione Production, iCloud info/supporto e trasporto transazionale selezionato. Verificare inventario record, callback, SPF/DKIM/DMARC e isolamento; allineare i contatti dei provider alla regola email di [§14](docs/MASTER_PLAN.md#s14), a partire dal branding Google OAuth che usa ancora `supporto@` come contatto sviluppatore e l’email personale dell’owner come assistenza utenti; dismettere i record Register senza consumatori dopo il readback Cloudflare e non attivare servizi Register aggiuntivi.
 
 **Criterio di completamento:** HTTP/TLS e callback test/live coerenti, posta umana e Auth provate, record attivi preservati o sostituiti con prova; nessun cookie/RP ID condiviso accidentalmente e nessun setup iniziale rinviato dopo il gate che lo richiedeva.
 
