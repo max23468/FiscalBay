@@ -1155,9 +1155,9 @@ Rileggere in una checklist DNS/TLS/www/test, email, Auth, eBay, Telegram, Stripe
 
 **Stato:** TODO · **Prerequisiti:** M9-03 e comando owner · **Contratto:** [§34](docs/MASTER_PLAN.md#s34)
 
-Dopo Pubblica dell’owner, eseguire workflow sul commit atteso: gate, migrazioni, deploy, readback e poi tag, release e changelog.
+Dopo Pubblica dell’owner, eseguire workflow sul commit atteso: gate, migrazioni, deploy, readback, tag, release e changelog; concludere con l'inventario e la pulizia Git di [§34](docs/MASTER_PLAN.md#s34).
 
-**Criterio di completamento:** Artefatto e servizi attivi corrispondono; checkout allineato. Dichiarazione di pubblicazione soltanto dopo conclusione del ciclo applicabile.
+**Criterio di completamento:** Artefatto e servizi attivi corrispondono; branch e worktree temporanei conclusi sono rimossi e il checkout è allineato. Eventuali riferimenti conservati per lavoro in corso o ripresa sono motivati qui. Dichiarazione di pubblicazione soltanto dopo conclusione del ciclo applicabile.
 
 Via riferito a commit/manifest, ambiente serializzato e artefatto verificato; ricevute per migration/deploy/tag. Se fallisce solo la Release GitHub dopo deploy riuscito, riprendere il passo mancante senza riscrivere dati o ripubblicare ciecamente.
 
