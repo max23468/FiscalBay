@@ -7,6 +7,7 @@ import {
   recordStripeEvent,
   verifyStripeEvent,
 } from "../app/integrations/stripe.server";
+import { action as checkoutAction } from "../app/routes/stripe-checkout";
 
 const event = {
   id: "evt_checkout_completed",
@@ -25,6 +26,27 @@ beforeEach(async () => {
 });
 
 describe("Stripe Managed Payments", () => {
+  it("rifiuta il checkout senza prezzo prima di usare Auth", async () => {
+    const previous = env.STRIPE_PRICE_MONTHLY;
+    env.STRIPE_PRICE_MONTHLY = "";
+    try {
+      const response = await checkoutAction({
+        request: new Request("http://localhost:5173/stripe-checkout", {
+          method: "POST",
+          headers: {
+            origin: "http://localhost:5173",
+            "content-type": "application/x-www-form-urlencoded",
+          },
+          body: "offer=monthly",
+        }),
+      });
+      expect(response.status).toBe(403);
+      expect((await response.json()).code).toBe("FORBIDDEN");
+    } finally {
+      env.STRIPE_PRICE_MONTHLY = previous;
+    }
+  });
+
   it("crea soltanto parametri compatibili con Managed Payments", () => {
     const params = buildManagedCheckoutParams({
       offer: "monthly",

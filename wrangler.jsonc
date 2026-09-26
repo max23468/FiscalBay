@@ -26,8 +26,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "fiscalbay-m0-test",
-      "database_id": "341b0b58-f55b-46d3-b68e-980c81b9658c",
+      "database_name": "fiscalbay-test",
+      "database_id": "d6e693f0-6156-44ea-a0fb-902aaccc72f1",
       "migrations_dir": "migrations",
     },
   ],
@@ -55,6 +55,9 @@
       "routes": [{ "pattern": "fiscalbay.it", "custom_domain": true }],
       "vars": {
         "APP_ORIGIN": "https://fiscalbay.it",
+        "STRIPE_PRICE_MONTHLY": "",
+        "STRIPE_PRICE_ANNUAL": "",
+        "STRIPE_PRICE_LIFETIME": "",
       },
       "secrets": {
         "required": [
