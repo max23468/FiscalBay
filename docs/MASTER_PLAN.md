@@ -99,7 +99,7 @@ Una prova breve, un test o il log CI pertinenti possono bastare: non serve una r
 
 ### 0.5 Avvio e continuità
 
-La procedura di adozione e ripresa è unica nel [README](../README.md#avvio). Allineare le istruzioni 1.x e verificare i trigger legacy prima di push/merge, senza alterare istruzioni globali o lavoro altrui. `BACKLOG.md` conserva stato, checkpoint ed effetti remoti incompleti, non la cronaca di ogni comando.
+La procedura di adozione e ripresa è unica nel [README](../README.md#avvio). Allineare le istruzioni 1.x e verificare i trigger legacy nell'inventario iniziale, senza alterare istruzioni globali o lavoro altrui. `BACKLOG.md` conserva stato, checkpoint ed effetti remoti incompleti, non la cronaca di ogni comando.
 
 Accessi, dati legali, destinatario del test e date promo si acquisiscono secondo il [catalogo input](engineering/AGENT_SETUP.md#input). Non occorre ricostruire le decisioni dalla chat; una credenziale mancante blocca soltanto il lavoro dipendente. Le [responsabilità documentali](engineering/AGENT_SETUP.md#deliverable) indicano dove mantenere le informazioni prodotte nello sviluppo, senza imporre file anticipati.
 
@@ -752,13 +752,15 @@ Le skill non cambiano scope, checkpoint o policy dati. Dati esterni non sono com
 <a id="s34"></a>
 ## 34. Git, CI/CD, versioning e workflow Pubblica
 
-Branch feature→`develop`, integrato su `test.fiscalbay.it`; `main` candidato Production. Nessun deploy live automatico al merge main. Autodeploy test dopo merge develop con gate e separazione dati; le migrazioni pericolose non diventano innocue per il solo ambiente test. Verificare lo stato dei timer/autodeploy 1.x prima di introdurre nuovi workflow.
+Branch feature→`develop`, integrato su `test.fiscalbay.it`; `main` candidato Production. Nessun deploy live automatico al merge main. Autodeploy test dopo merge develop con gate e separazione dati; le migrazioni pericolose non diventano innocue per il solo ambiente test.
 
 Pipeline minima: install frozen lockfile → format check → lint → typecheck → React Doctor → unit/integration → build. Smoke Playwright per modifiche UI/backend pertinenti, contract/concurrency test in base all'impatto. CodeQL/dependency review/secret scanning e controlli licenze dove disponibili; non presumere capacità o costi GitHub del piano senza preflight. PR da fork senza segreti/live writes, action pin e permessi minimi.
 
 Versioni interne `2.0.0-alpha.N`→`2.0.0-rc.N`→`2.0.0`. Non significano beta pubblica. `CHANGELOG.md` unica storia delle modifiche rilevanti; GitHub Release derivata per ogni versione Production, non ogni deploy test. Nessuna riscrittura tag pubblicati per correggere un errore.
 
 **Pubblica** è un atto esplicito che autorizza l'intero ciclo tecnico applicabile nel perimetro: commit atteso, gate, preflight provider, migration controllate, deploy, smoke/readback, ricevuta, tag/release solo dopo successo. Non fermarsi dopo push o prima del readback; non estendere il comando a provider/scopi non approvati. Cinque checkpoint owner restano separati dalle normali attività.
+
+La chiusura di ogni PR unita a `develop` comprende il readback del merge e del deploy test applicabile, seguito dalla pulizia dei suoi riferimenti temporanei. `Pubblica` comprende, dopo il readback Production e tag/release riusciti, anche l'inventario e la pulizia dei branch e worktree temporanei già conclusi, inclusi i residui di cicli precedenti. Il coordinatore verifica per ciascuno PR e contenuto integrato anche quando il merge è squash, stato pulito, commit non pubblicati, file non tracciati e processi o altri lavori che usano il checkout. Solo allora elimina il branch remoto, libera il worktree e rimuove il branch locale e i riferimenti remoti obsoleti; riallinea il checkout principale alla branch di riferimento. Conserva `main`, `develop`, `legacy/1.x`, tag, rollback e ogni lavoro non integrato o ancora in uso. Se una pulizia non è sicura o un passo del ciclo fallisce, registra il residuo e la ripresa in `BACKLOG.md`, senza dichiarare conclusa la pulizia.
 
 Migrazioni versionate, testate su schema/dati rappresentativi, forward-only dove sensato, approccio expand/contract se serve compatibilità. Release manifest collega codice, schema, config e artifact immutabile. Rollback codice automatico se sicuro, altrimenti forward-fix; recovery dati separato. Nessun comando di pubblicazione deve contenere token/PII nelle evidenze.
 
