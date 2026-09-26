@@ -321,7 +321,7 @@ describe("percorso ordini", () => {
       grantFreeOrder(env.DB, "u-a", {
         id: "g-expired",
         ...input,
-        grantedAt: "2026-10-01T00:00:00Z",
+        grantedAt: "2026-10-01T00:00:00.000Z",
       }),
     ).rejects.toThrow();
     expect(await env.DB.prepare("SELECT used FROM free_cycles WHERE id = 'c-a'").first()).toEqual({
