@@ -908,9 +908,11 @@ Ogni milestone aggiorna `BACKLOG.md`, contratti coinvolti e prove. Dipendenze ri
 
 ### M9 — Go-live
 
-**Prerequisiti:** M0–M8 chiuse, RC, controlli commerciali live e via owner. **Attività:** fissare date promo globale, validare checklist unica §41, restore drill unico, Pubblica, readback, tag/release/changelog; aprire iscrizioni con ammissione corretta, sorveglianza rafforzata iniziale senza beta pubblica.
+**Prerequisiti:** M0–M8 chiuse, RC, controlli commerciali live e via owner. **Attività:** fissare date promo globale, validare checklist unica §41, restore drill unico, Pubblica, readback, tag/release/changelog; aprire iscrizioni con ammissione corretta, sorveglianza rafforzata iniziale senza beta pubblica. Conclusa la sorveglianza e dismessa la 1.x, chiudere il passaggio definitivo alla 2.x eliminando `legacy/1.x` secondo il criterio sotto.
 
 **Output:** `2.0.0` realmente pubblicata e verificata, no claim anticipato. **DoD:** dominio/posta/provider/diritti/job/alert/supporto/SEO operativi; rollback o forward-fix pronto; nessuna vecchia automazione concorrente. Il mantenimento del bot 1.x non è prerequisito: può essere dismesso prima, preservando identità bot/keyset utili e storia Git.
+
+La branch `legacy/1.x` resta disponibile durante il cutover operativo e la sorveglianza iniziale. Eliminarla, sia in locale sia sul remoto, soltanto dopo M9-05 e la sorveglianza prevista da M9-06: runtime e automazioni 1.x inattivi, consumatori e callback trasferiti e verificati, nessun intervento o rollback operativo ancora dipendente dal codice 1.x. Prima della cancellazione verificare che il commit finale 1.x sia raggiungibile da un tag Git permanente pubblicato sul remoto; registrare nel backlog commit, tag e readback della rimozione. La cancellazione della branch non elimina la storia Git né le identità bot o i keyset condivisi.
 
 <a id="s38"></a>
 ## 38. Registro rischi operativo
