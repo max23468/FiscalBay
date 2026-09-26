@@ -23,6 +23,7 @@ const now = "2026-09-13T20:00:00.000Z";
 beforeEach(async () => {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM ebay_store_link_sessions"),
+    env.DB.prepare("DELETE FROM lifetime_allocations"),
     env.DB.prepare("DELETE FROM order_grants"),
     env.DB.prepare("DELETE FROM free_cycles"),
     env.DB.prepare("DELETE FROM tax_identifiers"),
@@ -191,7 +192,7 @@ describe("percorso ordini", () => {
 
   it("mostra i dati fiscali dell'ordine sbloccato solo al tenant proprietario", async () => {
     await seed();
-    await grantFreeOrder(env.DB, {
+    await grantFreeOrder(env.DB, "u-a", {
       id: "g-a",
       workspaceId: "w-a",
       orderId: "o-a",
@@ -255,15 +256,20 @@ describe("percorso ordini", () => {
     )
       .bind(now, now)
       .run();
+    await env.DB.prepare(
+      "INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at) VALUES ('t-a3', 'o-a2', 'VAT_ID', '01234567890', 'synthetic_fixture', ?)",
+    )
+      .bind(now)
+      .run();
     const outcomes = await Promise.allSettled([
-      grantFreeOrder(env.DB, {
+      grantFreeOrder(env.DB, "u-a", {
         id: "g-a",
         workspaceId: "w-a",
         orderId: "o-a",
         cycleId: "c-a",
         grantedAt: now,
       }),
-      grantFreeOrder(env.DB, {
+      grantFreeOrder(env.DB, "u-a", {
         id: "g-a2",
         workspaceId: "w-a",
         orderId: "o-a2",
@@ -285,7 +291,7 @@ describe("percorso ordini", () => {
     await seed();
 
     await expect(
-      grantFreeOrder(env.DB, {
+      grantFreeOrder(env.DB, "u-a", {
         id: "g-cross-tenant",
         workspaceId: "w-a",
         orderId: "o-b",
@@ -298,6 +304,109 @@ describe("percorso ordini", () => {
       "SELECT used, quota FROM free_cycles WHERE id = 'c-a'",
     ).first<{ used: number; quota: number }>();
     expect(cycle).toEqual({ used: 0, quota: 1 });
+  });
+
+  it("nega sblocco senza appartenenza, dato fiscale o ciclo valido", async () => {
+    await seed();
+    const input = { workspaceId: "w-a", orderId: "o-a", cycleId: "c-a", grantedAt: now };
+    await expect(grantFreeOrder(env.DB, "u-b", { id: "g-other", ...input })).rejects.toThrow();
+    await env.DB.prepare("DELETE FROM tax_identifiers WHERE order_id = 'o-a'").run();
+    await expect(grantFreeOrder(env.DB, "u-a", { id: "g-empty", ...input })).rejects.toThrow();
+    await env.DB.prepare(
+      "INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at) VALUES ('t-new', 'o-a', 'VAT_ID', '01234567890', 'synthetic_fixture', ?)",
+    )
+      .bind(now)
+      .run();
+    await expect(
+      grantFreeOrder(env.DB, "u-a", {
+        id: "g-expired",
+        ...input,
+        grantedAt: "2026-10-01T00:00:00.000Z",
+      }),
+    ).rejects.toThrow();
+    expect(await env.DB.prepare("SELECT used FROM free_cycles WHERE id = 'c-a'").first()).toEqual({
+      used: 0,
+    });
+  });
+
+  it("annulla il duplicato senza consumare ancora quota o cambiare proprietario", async () => {
+    await seed();
+    const input = { workspaceId: "w-a", orderId: "o-a", cycleId: "c-a", grantedAt: now };
+    await grantFreeOrder(env.DB, "u-a", { id: "g-first", ...input });
+    await expect(grantFreeOrder(env.DB, "u-a", { id: "g-second", ...input })).rejects.toThrow();
+    await expect(
+      env.DB.prepare("UPDATE order_grants SET workspace_id = 'w-b' WHERE id = 'g-first'").run(),
+    ).rejects.toThrow();
+    expect(await env.DB.prepare("SELECT used FROM free_cycles WHERE id = 'c-a'").first()).toEqual({
+      used: 1,
+    });
+    expect(
+      await env.DB.prepare("SELECT workspace_id FROM order_grants WHERE id = 'g-first'").first(),
+    ).toEqual({ workspace_id: "w-a" });
+  });
+
+  it("vincola a un solo spazio per utente e ai venti posti lifetime", async () => {
+    await seed();
+    await expect(
+      env.DB.prepare(
+        "INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ('w-b', 'u-a', 'owner')",
+      ).run(),
+    ).rejects.toThrow();
+    await expect(
+      env.DB.prepare(
+        "INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ('w-a', 'u-c', 'owner')",
+      ).run(),
+    ).rejects.toThrow();
+    await env.DB.prepare(
+      "INSERT INTO lifetime_allocations (slot, workspace_id, status, created_at) VALUES (20, 'w-a', 'reserved', ?)",
+    )
+      .bind(now)
+      .run();
+    await expect(
+      env.DB.prepare(
+        "INSERT INTO lifetime_allocations (slot, workspace_id, status, created_at) VALUES (20, 'w-b', 'reserved', ?)",
+      )
+        .bind(now)
+        .run(),
+    ).rejects.toThrow();
+    await expect(
+      env.DB.prepare(
+        "INSERT INTO lifetime_allocations (slot, workspace_id, status, created_at) VALUES (21, 'w-b', 'reserved', ?)",
+      )
+        .bind(now)
+        .run(),
+    ).rejects.toThrow();
+    await expect(
+      env.DB.prepare(
+        "INSERT INTO lifetime_allocations (slot, workspace_id, status, created_at) VALUES (19, 'w-a', 'reserved', ?)",
+      )
+        .bind(now)
+        .run(),
+    ).rejects.toThrow();
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) AS total FROM lifetime_allocations").first(),
+    ).toEqual({ total: 1 });
+  });
+
+  it("assegna l'ultimo posto lifetime una volta sola sotto concorrenza", async () => {
+    await seed();
+    const outcomes = await Promise.allSettled([
+      env.DB.prepare(
+        "INSERT INTO lifetime_allocations (slot, workspace_id, status, created_at) VALUES (20, 'w-a', 'reserved', ?)",
+      )
+        .bind(now)
+        .run(),
+      env.DB.prepare(
+        "INSERT INTO lifetime_allocations (slot, workspace_id, status, created_at) VALUES (20, 'w-b', 'reserved', ?)",
+      )
+        .bind(now)
+        .run(),
+    ]);
+    expect(outcomes.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
+    expect(outcomes.filter(({ status }) => status === "rejected")).toHaveLength(1);
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) AS total FROM lifetime_allocations").first(),
+    ).toEqual({ total: 1 });
   });
 });
 

@@ -81,6 +81,7 @@ export async function listVisibleOrders(
 
 export async function grantFreeOrder(
   db: D1Database,
+  userId: string,
   input: {
     id: string;
     workspaceId: string;
@@ -89,12 +90,21 @@ export async function grantFreeOrder(
     grantedAt: string;
   },
 ): Promise<void> {
-  await db
+  const result = await db
     .prepare(
       `INSERT INTO order_grants
          (id, workspace_id, order_id, cycle_id, source, granted_at)
-       VALUES (?, ?, ?, ?, 'free_cycle', ?)`,
+       SELECT ?, wm.workspace_id, o.id, c.id, 'free_cycle', ?
+         FROM workspace_members wm
+         JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
+         JOIN orders o ON o.store_id = s.id
+         JOIN free_cycles c ON c.workspace_id = wm.workspace_id
+        WHERE wm.user_id = ? AND wm.workspace_id = ?
+          AND o.id = ? AND c.id = ?
+          AND EXISTS (SELECT 1 FROM tax_identifiers WHERE order_id = o.id)
+       RETURNING id`,
     )
-    .bind(input.id, input.workspaceId, input.orderId, input.cycleId, input.grantedAt)
-    .run();
+    .bind(input.id, input.grantedAt, userId, input.workspaceId, input.orderId, input.cycleId)
+    .first<{ id: string }>();
+  if (!result) throw new Error("order_not_available");
 }
