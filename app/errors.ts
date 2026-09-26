@@ -13,6 +13,16 @@ export const errorCatalog = {
 export type ErrorCode = keyof typeof errorCatalog;
 export const correlationHeader = "x-correlation-id";
 
+export function correlateResponse(response: Response, id: string): Response {
+  const headers = new Headers(response.headers);
+  headers.set(correlationHeader, id);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export class ApplicationError extends Error {
   constructor(readonly code: ErrorCode) {
     super(code);

@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { ApplicationError, classifyFailure, errorResponse, logFailure } from "../app/errors";
+import {
+  ApplicationError,
+  classifyFailure,
+  correlateResponse,
+  errorResponse,
+  logFailure,
+} from "../app/errors";
 import {
   formatAmount,
   formatInstant,
@@ -11,6 +17,24 @@ import {
 import { loader as loadHome } from "../app/routes/home";
 
 describe("errors, locale and redacted logs", () => {
+  it("adds correlation to redirects with immutable headers", () => {
+    const response = correlateResponse(
+      Response.redirect("https://test.fiscalbay.it/en", 303),
+      "d19c4e5a-5547-4c91-aeaf-b2e7e83e7bd1",
+    );
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("https://test.fiscalbay.it/en");
+    expect(response.headers.get("x-correlation-id")).toBe("d19c4e5a-5547-4c91-aeaf-b2e7e83e7bd1");
+    const cookieHeaders = new Headers();
+    cookieHeaders.append("set-cookie", "a=one; HttpOnly");
+    cookieHeaders.append("set-cookie", "b=two; HttpOnly");
+    const signedIn = correlateResponse(
+      new Response(null, { status: 303, headers: cookieHeaders }),
+      "d19c4e5a-5547-4c91-aeaf-b2e7e83e7bd1",
+    );
+    expect(signedIn.headers.getSetCookie()).toEqual(cookieHeaders.getSetCookie());
+  });
+
   it("localizes notices from the actual home loader", async () => {
     const result = await loadHome({
       request: new Request("http://localhost:5173/en?accesso=errore"),
