@@ -44,6 +44,23 @@ Su indicazione owner (D141) il logo evolve dal Concept 4 senza esserne vincolato
 
 Prima si approva l'icona base; wordmark, logo orizzontale, chiaro/scuro, monocromo, favicon e avatar Telegram seguono dopo il via owner. Ogni proposta si presenta con prove a dimensioni piccole, su fondo scuro e in monocromo. Gli originali restano invariati; i nuovi asset sono file separati. Date, hex e tagline del board non sono fonti normative.
 
+### Asset approvati
+
+Sorgenti in `assets/brand/`, esportazioni PNG e `favicon.ico` in `assets/brand/exports/`.
+
+| File | Uso |
+|---|---|
+| `fiscalbay-icon.svg` / `fiscalbay-icon-dark.svg` | Icona da 48 px in su, su fondo chiaro / scuro |
+| `fiscalbay-icon-32.svg`, `fiscalbay-icon-16.svg` | Icona dritta su griglia dei pixel per 24–47 px e 16 px |
+| `favicon.svg` | Favicon su griglia 32, contorno chiaro con `prefers-color-scheme: dark` |
+| `fiscalbay-logo.svg` / `fiscalbay-logo-dark.svg` | Logo orizzontale su fondo chiaro / scuro |
+| `fiscalbay-icon-mono.svg`, `fiscalbay-logo-mono.svg` | Monocromo in `currentColor` |
+| `fiscalbay-avatar.svg` | Avatar Telegram, fondo pieno con margine per il ritaglio circolare |
+
+Colori: contorno `#1A4FA6` (scuro `#4F87E3`), card `#FFFFFF`, chip `#F6C12B`, righe `#1255D7`, `#1F9F9A`, `#DA353E`; wordmark `Fiscal` `#001431` e `Bay` `#1A4FA6` (scuro `#FFFFFF` e `#4F87E3`). Le righe e il contorno raggiungono 3:1 sulla card o sul fondo; il chip giallo e il contorno chiaro sul fondo scuro restano sotto per scelta motivata nel backlog.
+
+Wordmark: Inter ExtraBold 4.x (The Inter Project Authors, SIL Open Font License 1.1, pacchetto `@fontsource/inter` 5), convertito in tracciati con spaziatura −1,5%; il file del font non è distribuito. Maiuscole alte il 42% della tessera, distanza dall'icona pari a metà altezza maiuscole.
+
 ## Nove riferimenti frontend
 
 | Riferimento | Uso previsto nella fase frontend |
