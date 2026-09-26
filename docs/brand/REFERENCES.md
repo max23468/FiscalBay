@@ -46,7 +46,7 @@ Prima si approva l'icona base; wordmark, logo orizzontale, chiaro/scuro, monocro
 
 ### Asset approvati
 
-Sorgenti in `assets/brand/`, esportazioni PNG e `favicon.ico` in `assets/brand/exports/`.
+Sorgenti in [`logo/`](logo/), esportazioni PNG e `favicon.ico` in [`logo/exports/`](logo/exports/).
 
 | File | Uso |
 |---|---|
