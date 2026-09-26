@@ -59,6 +59,13 @@ Sorgenti in `assets/brand/`, esportazioni PNG e `favicon.ico` in `assets/brand/e
 
 Il contorno blu esiste solo nel logo e nell'icona su fondo chiaro; su fondo scuro la carta è tutta bianca e nelle icone per app il blu scuro diventa lo sfondo. Colori, tre blu in tutto: blu medio `#1A4FA6` per contorno, riga blu e `Bay` su chiaro; blu scuro `#0E3372` per `Fiscal` su chiaro e per lo sfondo delle icone per app; azzurro `#4F87E3` per `Bay` su scuro. Poi card e `Fiscal` su scuro `#FFFFFF`, chip `#F6C12B`, righe verde `#1F9F9A` e rossa `#DA353E`. Le righe raggiungono 3:1 sulla card; il chip giallo resta sotto per scelta motivata nel backlog.
 
+Regole d'uso:
+
+- **Area di rispetto:** attorno al logo orizzontale uno spazio libero pari a metà dell'altezza delle maiuscole, la stessa distanza fra tessera e scritta; attorno all'icona da sola un quarto dell'altezza della tessera. Testi, bordi e altri segni restano fuori da quest'area.
+- **Dimensione minima:** logo orizzontale almeno 100 px di larghezza, dove le maiuscole sono alte circa 11 px; sotto si usa la sola icona. Icona inclinata da 48 px, versioni su griglia per 24–47 px e 16 px.
+- **Fondi:** su fondi chiari la versione con contorno blu, su fondi scuri la versione con carta bianca, su fotografie o fondi colorati il monocromo nel colore che garantisce contrasto.
+- **Da non fare:** cambiare colori o proporzioni, deformare, aggiungere ombre o effetti, ruotare diversamente la tessera, racchiudere l'icona in una tile al di fuori delle icone per app.
+
 Wordmark: Inter ExtraBold 4.x (The Inter Project Authors, SIL Open Font License 1.1, pacchetto `@fontsource/inter` 5), convertito in tracciati con spaziatura −1,5%; il file del font non è distribuito. Nel logo orizzontale la tessera è alta 1,6 volte le maiuscole (maiuscole al 62% della tessera); distanza dall'icona pari a metà altezza delle maiuscole.
 
 ## Nove riferimenti frontend
