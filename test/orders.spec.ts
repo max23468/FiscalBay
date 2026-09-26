@@ -312,6 +312,13 @@ describe("percorso ordini", () => {
     await expect(grantFreeOrder(env.DB, "u-b", { id: "g-other", ...input })).rejects.toThrow();
     await env.DB.prepare("DELETE FROM tax_identifiers WHERE order_id = 'o-a'").run();
     await expect(grantFreeOrder(env.DB, "u-a", { id: "g-empty", ...input })).rejects.toThrow();
+    await expect(
+      env.DB.prepare(
+        "INSERT INTO order_grants (id, workspace_id, order_id, source, granted_at) VALUES ('g-premature', 'w-a', 'o-a', 'premium', ?)",
+      )
+        .bind(now)
+        .run(),
+    ).rejects.toThrow();
     await env.DB.prepare(
       "INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at) VALUES ('t-new', 'o-a', 'VAT_ID', '01234567890', 'synthetic_fixture', ?)",
     )
