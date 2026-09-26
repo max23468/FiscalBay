@@ -23,12 +23,12 @@ Questa sezione è un registro operativo iniziale, **non una prova di avvio già 
 | Campo                                                       | Stato corrente e prove storiche                                                                             |
 | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | Milestone / task in esecuzione                              | M1 aperta dopo il via di fine M0 del 2026-09-23; M1-03 e M1-04 chiuse |
-| Prossimo task eleggibile                                    | M1-08 indipendente; M1-05 attende il mandato di rifinitura del logo. M2-09 attende il riscontro eBay `260920-000007` |
+| Prossimo task eleggibile                                    | M1-08 indipendente; M1-05 in corso: scelta owner dell'icona base. M2-09 attende il riscontro eBay `260920-000007` |
 | Repository / branch / commit osservati nell’implementazione | `max23468/FiscalBay`; il 2026-09-26 `main` è `4df1961`, `develop` è `9216142` dopo M1-04; 1.x congelata in `legacy/1.x` (`508ded8`) |
 | Blocchi noti iniziali                                       | La lettura Production sull'account amministratore ha restituito zero ordini; sul secondo account controllato Fulfillment non esponeva l'identificativo fiscale, trovato invece nel primo ordine letto tramite Trading; diritto email Identity mancante, con Sign in with eBay rinviato a M2-09; notifiche account-deletion ancora servite dal callback 1.x condiviso. Il deploy dell'handler Stripe, il segreto ristretto remoto, la registrazione dell'endpoint e la riconciliazione dei diritti appartengono a M5, non bloccano la qualifica M0 |
 | Materiale privato                                           | Inventario fuori checkout: riferimento locale `FiscalBay/m0-inventory` nella custodia Codex privata       |
 | Operazioni remote parziali da riconciliare                  | Timer autodeploy 1.x riletto `disabled` / `inactive` il 2026-09-26; bot e callback 1.x attivi. Creato il progetto Google dedicato `fiscalbay-2-0-max23468`, senza billing; branding test e client web `FiscalBay Test` configurati con callback dedicato. Ripristinato il progetto Supabase Free FiscalBay dalla pausa automatica, senza costo, ed eliminato su richiesta owner il 2026-09-23 senza consumatori residui. Creata la D1 temporanea di test `fiscalbay-m0-test` con giurisdizione UE, applicate tre migration e completato un restore Time Travel con sola riga sintetica. La misura M0-07 ha creato e poi eliminato sette tabelle `m0_bench_*`; il readback finale conferma 15 tabelle, 221.184 byte e dati applicativi invariati. La delega autorevole di `fiscalbay.it` è attiva su Cloudflare dal 2026-09-20. Il Worker `fiscalbay-test` è distribuito sul solo Custom Domain `test.fiscalbay.it`, con `workers.dev` disattivato e sette segreti runtime custoditi da Cloudflare. Email Sending è attivo su `auth.fiscalbay.it`, con record SPF, DKIM e DMARC pubblicati; `supporto@fiscalbay.it` è stato aggiunto e riletto come destinatario Cloudflare verificato. L'owner dichiara completata la configurazione iCloud Custom Email Domain con `info@fiscalbay.it` e `supporto@fiscalbay.it`; non è stata ripetuta una verifica esterna. eBay ha salvato il RuName Production dedicato con display title definitivo `FiscalBay` sul keyset `botCF`, privacy e callback su `test.fiscalbay.it` e about su `fiscalbay.it`. Il readback finale mostra OAuth disattivato sul RuName legacy `FiscalBay 1.0`, attivo sul RuName dedicato e il messaggio `Settings successfully saved`. Better Auth Infrastructure ha creato e collegato il progetto `FiscalBay Test` sul piano Starter gratuito. Dopo il cleanup autorizzato della sola identità Google duplicata, il browser interno ha completato linking, nuovo login Google e revoca globale. Il Worker versione `72100c36-6073-4f58-82f4-ca0033d0b2cc` non include TOTP; la D1 è tornata alle tre migration canoniche senza tabella o colonna TOTP e conserva un utente, due account `credential`/`google`, una passkey e zero sessioni. Il 2026-09-23, su richiesta owner, la D1 di test è stata svuotata dell'utente di prova precedente (un utente, due account e una passkey) e sono state applicate le migration `0004` e `0005`; l'owner ha creato e verificato `info@fiscalbay.it`. Il Worker test esegue il commit `a93f839`, versione `b0495522-59b8-4dc8-8c3b-ed58837c1977`; i segreti Stripe non sono più richiesti al deploy M0. Le migration `0006`–`0008` sono applicate alla D1 di test senza migration pendenti; il Worker test aggiornato è verificato nei readback di M1-03. Sulla VPS è stato letto soltanto lo stato 1.x; nessun token è stato stampato, persistito fuori dalla 1.x o scritto nel repository. |
-| Prossima azione alla ripresa                                | Procedere con M1-08; M1-05 richiede il mandato sul logo. Al riscontro eBay eseguire la checklist di M2-09 |
+| Prossima azione alla ripresa                                | Procedere con M1-08; M1-05: scelta owner tra le proposte di icona base. Al riscontro eBay eseguire la checklist di M2-09 |
 
 ### Registro dei via e dei checkpoint
 
@@ -381,7 +381,7 @@ Confrontare costo/complessità/capacità/Auth/recovery/jobs/lock-in, scegliere u
 
 **Ingresso:** M0 qualificata e decisioni/costi autorizzati.
 
-**Autorizzazione:** Via owner al logo rifinito, brand foundation e design system.
+**Autorizzazione:** Via owner al logo 2.0, brand foundation e design system.
 
 <a id="m1-00"></a>
 
@@ -463,15 +463,17 @@ Condividere schemi runtime e casi d’uso; creare endpoint HTTP solo con consuma
 
 **Integrazione e readback test del 2026-09-26:** la PR [#177](https://github.com/max23468/FiscalBay/pull/177) è unita su `develop` nel commit `9216142`. Il [run CI 36251921320](https://github.com/max23468/FiscalBay/actions/runs/36251921320) è verde con `Node 26` e `Deploy test`. Cloudflare mostra `fiscalbay-test` versione `f2dfa4bf-50d8-479e-aea1-92ffe067681d` al 100%. Sul dominio `test.fiscalbay.it`, `/` e `/en` rispondono 200, `/en/missing` 404 in inglese; le risposte includono correlation ID. Un POST con origine non valida a `/en/accesso` restituisce 403 con codice `FORBIDDEN`, messaggio inglese e retryability falsa; il tentativo anonimo di collegare il negozio restituisce 303 verso `/en?negozio=accesso` con correlation ID. Nessuna migration o pubblicazione Production.
 
-### M1-05 — Rifinitura logo originale
+### M1-05 — Logo 2.0
 
-**Stato:** TODO · **Prerequisiti:** M0-01; mandato di rifinitura del concept approvato · **Contratto:** [§21](docs/MASTER_PLAN.md#s21)
+**Stato:** IN PROGRESS · **Prerequisiti:** M0-01; mandato owner · **Contratto:** [§21](docs/MASTER_PLAN.md#s21)
 
-Rifinire in vettoriale il Concept 4 originale: Bay blu e bordo esterno destro continuo. Preparare varianti per web, favicon, Telegram e sfondo scuro senza riprogettare il simbolo.
+Definire in vettoriale il logo 2.0 partendo dal Concept 4, con libertà di migliorarlo (D141): prima l'icona base generica, poi, dopo il via owner, wordmark con `Bay` blu, logo orizzontale, chiaro/scuro, monocromo, favicon e avatar Telegram.
 
-**Criterio di completamento:** Confronto con l’originale approvato dall’owner; nessuna rigenerazione respinta viene promossa a riferimento canonico. Fino all'approvazione, usare sempre gli asset 1.0 su tutte le superfici, incluso Stripe. Dopo l’approvazione, sostituire il logo 1.0 provvisorio nel branding Google Auth e Stripe e aggiornare il logo dei keyset eBay pertinenti.
+**Criterio di completamento:** Icona base e varianti approvate dall'owner con prove a dimensioni piccole, fondo scuro e monocromo. Fino all'approvazione, usare sempre gli asset 1.0 su tutte le superfici, incluso Stripe. Dopo l’approvazione, sostituire il logo 1.0 provvisorio nel branding Google Auth e Stripe e aggiornare il logo dei keyset eBay pertinenti.
 
-La rifinitura del logo non dipende dal bootstrap del monorepo. Usare gli originali e produrre nuovi asset separati, senza sovrascrivere i riferimenti.
+Il logo non dipende dal bootstrap del monorepo. Usare gli originali e produrre nuovi asset separati, senza sovrascrivere i riferimenti.
+
+**Avanzamento del 2026-09-26:** mandato owner ricevuto. Una prima vettorializzazione fedele al concept, con bordo destro continuo e icona generica senza tile iOS, è stata superata dall'indicazione owner di migliorare il logo senza vincolo di fedeltà (D141). Presentate quattro proposte di icona base (rifinita, pila di card, dritta con spunta, card con intestazione); in attesa della scelta owner prima del resto delle varianti.
 
 ### M1-06 — Design system e catalogo candidati
 

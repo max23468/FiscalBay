@@ -69,7 +69,7 @@ Codex decide i dettagli tecnici reversibili ed esegue le attività previste nel 
 | Checkpoint dell’owner | Decisione |
 |---|---|
 | Fine M0 | Assetto, piani/costi, database e Auth qualificati |
-| M1 | Logo rifinito, brand foundation e design system |
+| M1 | Logo 2.0, brand foundation e design system |
 | M5 | Configurazione commerciale e Stripe live |
 | M8 | Test con il merchant reale di fiducia |
 | M9 | Candidato e pubblicazione commerciale `Pubblica` |
@@ -482,7 +482,7 @@ Consultazione ridotta solo quando i dati e l'autorizzazione sono disponibili e s
 
 Direzione professionale, moderna e accessibile, senza tono eccessivamente rassicurante o promesse assolute. Simbolo+wordmark FiscalBay, differenza sottile Fiscal/Bay; blu/indaco, navy e richiami ai quattro colori del mondo eBay senza riproduzione 1:1 o impressione di affiliazione.
 
-**Logo: esclusivamente Concept 4 originale — Minimal Ledger Card**, file identificato in [REFERENCES](brand/REFERENCES.md). È un riferimento, non asset finale. In M0/M1 correggere `Bay` grigio al blu del riquadro e il bordo destro esterno del mark principale, continuo e regolare. Non modificare composizione, geometria generale, inclinazione o dettagli non richiesti. Tutte le rigenerazioni successive respinte sono escluse.
+**Logo: evoluzione del Concept 4 — Minimal Ledger Card**, file identificato in [REFERENCES](brand/REFERENCES.md). Il concept è il punto di partenza, non un vincolo: su indicazione owner (D141) forma, proporzioni, inclinazione e dettagli possono essere migliorati per chiarezza e resa piccola, mantenendo un segno autonomo che non richiami un prodotto ufficiale eBay. `Bay` resta blu come il simbolo. L'icona è generica, non una tile in stile piattaforma. Proposte e versione definitiva richiedono il via owner al checkpoint M1.
 
 Produrre dopo approvazione vettoriali puliti, versioni orizzontale/mark, chiaro/scuro, favicon, avatar Telegram e preparazione future icone; niente condivisione di file font. Logo/claim delle tavole non sono specifiche funzionali né copy definitivo. Eliminare dagli asset finali date fittizie, testi estranei e promesse di fatturazione/vendite non previste.
 
@@ -819,7 +819,7 @@ La profondità M0 deve bastare a scegliere senza nascondere blocker: quattro log
 | G-RECOVERY | Meccanismo nativo, dati/diritti/Auth/config, erasure e revoche dopo snapshot, finestre/costi, unico drill finale | Supabase Free critico non accettato senza recovery; nessuna deroga a erasure obbligatoria o recupero dichiarato senza prova |
 | G-STACK | Latest stable effettive, build/test/CLI, generatori SDK, lockfile e matrice runtime | Nessun beta generico o compiler API presunto compatibile |
 | G-LEGAL | Ruoli, termini/consumatori, MoR residuale, API eBay/marchi, dati reali Codex, licenze | Nessuna certificazione fiscale/GDPR dal solo consenso owner |
-| G-UX | Logo originale rifinito, sistema token, prototipo dei flussi core approvato | Non usare rigenerazioni respinte o mockup come nuove feature |
+| G-UX | Logo 2.0 approvato dall'owner, sistema token, prototipo dei flussi core approvato | Non usare mockup come nuove feature |
 | G-GOLIVE | RC, test merchant, prove finali, restore drill, checklist unica e via owner | Nessun P1/P2, nessuna beta pubblica involontaria |
 
 Gate M0: infrastruttura/Auth/database/strategie e stack selezionati, vertical slice `login→collega eBay→ordine→DB→pagina minimale`, prove costi/capacità e rischi bloccanti risolti o **esplicitamente accettati quando derogabili**. Non si può accettare un'assenza di legalità o sicurezza obbligatoria come default tecnico. Il gate Stripe M0 usa docs/sandbox e verifica eligibility reale; catalogo live configurato in M5 e qualifica commerciale finale prima di M9.
@@ -959,7 +959,7 @@ API pubblica non impegnata a una specifica 2.x: si valuta solo se domanda concre
 <a id="s40"></a>
 ## 40. Decisioni superate e coerenza trasversale
 
-Sono sostituiti: Telegram-first/Python/VPS come destinazione; Dynu/DuckDNS; Supabase obbligatorio o Better Auth obbligatorio; Node24/LTS come preferenza automatica; email-only; passkey/eBay login rinunciabili; database imposto prima M0; quota Free3 o sempre10 individuale; trial automatico; incasso differito Q155; addebito solo EUR Q551; diritto post-Premium solo per dati cliccati Q334; sidebar principale; Export voce primaria; cronologia ordini visibile; card in ogni pagina; paginazione numerata mockup; campagne senza opt-in; backup esterno/drill periodico obbligatori; GitHub Issues backlog; conferma per ogni comando Production; migrazione utenti 1.x obbligatoria.
+Sono sostituiti: Telegram-first/Python/VPS come destinazione; Dynu/DuckDNS; Supabase obbligatorio o Better Auth obbligatorio; Node24/LTS come preferenza automatica; email-only; passkey/eBay login rinunciabili; database imposto prima M0; quota Free3 o sempre10 individuale; trial automatico; incasso differito Q155; addebito solo EUR Q551; diritto post-Premium solo per dati cliccati Q334; sidebar principale; Export voce primaria; cronologia ordini visibile; card in ogni pagina; paginazione numerata mockup; campagne senza opt-in; backup esterno/drill periodico obbligatori; GitHub Issues backlog; conferma per ogni comando Production; migrazione utenti 1.x obbligatoria; fedeltà vincolante al Concept 4 originale del logo (D141).
 
 Correzioni già derivate dall'audit e non nuove scelte: sblocco per ordine copre tutti i tipi; snapshot versione distinto dalla vista corrente; omissione campo non rimozione; refund revoca grant correlato; promo globale vs quota congelata ciclo; attività KPI distinta dall'uso umano; piano workspace non negozio; cancellazione/chat nuova invalidano job vecchi; sicurezza non rinviata a M7; doc private non rendono segreto il codice pubblico.
 
@@ -981,7 +981,7 @@ La 2.0 è completa, visivamente curata, veloce, responsive, IT/EN, robusta e ope
 | Stripe | Managed Payments live eleggibile, checkout/portal/Link, categorie/Paesi coperti, casi Q567 e lifetime, nessun doppio addebito |
 | Commerciale | Catalogo/listino protetto, date promo approvate, quote/ciclo/waitlist e capacità per nuovi acquisti |
 | Telegram/email | Bot corretto, chat/token, preferenze/digest, dominio/iCloud/transazionali, recapiti/alert funzionanti |
-| UX/brand | Originale4 rifinito approvato, 2 card, app/sito dark/IT-EN, mobile/browser, baseline accessibilità |
+| UX/brand | Logo 2.0 approvato, 2 card, app/sito dark/IT-EN, mobile/browser, baseline accessibilità |
 | Pubblico | Domini/TLS/www, sito/SEO reali, prezzi/tasse chiari, noindex aree private, privacy/termini/supporto/disclaimer |
 | Recovery | Protezioni native qualificate, unico drill riuscito pre-go-live, revoche/diritti/config recuperabili |
 | Qualità | Nessun P1/P2, P3 accettati, RC congelata e merchant di fiducia superato |

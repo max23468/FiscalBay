@@ -21,7 +21,7 @@ Rispettare i cinque checkpoint: fine M0 (assetto/costi/Auth/database), M1 (brand
 - Quattro login richiesti e un solo sistema Auth: Better Auth con Cloudflare-only oppure Supabase Auth qualificato. Supabase non è obbligatorio.
 - Permessi server, quota e grant per **ordine**, isolamento e retention su ogni percorso dati/file; nessun aggiramento via ricerca, API, export o job.
 - Stripe Managed Payments; il suo comportamento predefinito non sostituisce trial, listino protetto, lifetime e waitlist approvati.
-- Solo Concept 4 originale come riferimento logo; nessuna rigenerazione sostitutiva. Rifiniture e design definitivo al checkpoint previsto.
+- Logo 2.0 evoluto dal Concept 4 originale con libertà di forma su indicazione owner (D141); definitivo solo con il suo via al checkpoint M1.
 - Sole protezioni native per recovery; un drill riuscito pre-go-live, non backup esterni o ripetizioni periodiche aggiunte d’ufficio.
 - Nessun offline 2.x. Expo 3.x: riuso ragionato, non UI universale o API aggiuntive senza consumatori.
 

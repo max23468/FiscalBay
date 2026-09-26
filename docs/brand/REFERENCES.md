@@ -6,11 +6,11 @@ Il Master Plan prevale per contenuti, piani, date, stati, funzioni e navigazione
 
 ## Riferimenti approvati
 
-### Logo: Concept 4 originale
+### Logo: Concept 4 originale (punto di partenza)
 
 ![Logo: Concept 4 originale](references/logo-concept-4-originale.png)
 
-Unico riferimento principale. Bay da grigio a blu del fondo; bordo destro esterno blu continuo/regolare, senza cambiare tessera, inclinazione, composizione e quattro accenti.
+Punto di partenza del logo 2.0, non vincolo di fedeltà (D141): card con righe colorate, cornice blu e `Bay` blu restano il riferimento, forma e dettagli possono migliorare.
 
 Origine: `concept_fiscalbay_identità_moderna_e_minimale.png`.
 
@@ -38,11 +38,11 @@ Categorie a sinistra e contenuto a destra, mobile elenco→dettaglio. Export è 
 
 Origine: `impostazioni_fiscalbay_desktop_e_mobile.png`.
 
-## Rifinitura del logo — M0/M1
+## Logo 2.0 — M1
 
-Partire dal **Concept 4 originale** incluso, non da una delle rigenerazioni successive respinte. Correggere soltanto le imperfezioni note e rifinire tecnicamente la geometria. La scritta `Bay` deve essere blu come il riquadro del simbolo, non grigia; il bordo destro del riquadro blu esterno deve essere continuo e regolare dal raccordo superiore a quello inferiore. Preservare il resto della direzione approvata; niente nuova reinterpretazione automatica.
+Su indicazione owner (D141) il logo evolve dal Concept 4 senza esserne vincolato: si possono migliorare forma, proporzioni, inclinazione e dettagli per chiarezza e resa piccola. L'icona è generica, cioè il simbolo su fondo trasparente, non una tile in stile iOS o di altre piattaforme. Il segno resta autonomo e non deve far credere a un prodotto ufficiale eBay; il marchio resta FiscalBay e `FB` è solo interno.
 
-Prima di dichiararlo definitivo, sottoporre all’owner la versione vettoriale a confronto con l’originale e prove a dimensioni piccole, scuro/chiaro e monocromo. Produrre SVG/PNG per sito, app bar, favicon, Telegram, con griglia/margini/varianti coerenti. Non copiare eventuali date/hex/tagline dimostrative del board come fonte normativa. Il marchio resta FiscalBay; `FB` è solo interno. Il logo deve rimanere autonomo e non far credere a un prodotto ufficiale eBay.
+Prima si approva l'icona base; wordmark, logo orizzontale, chiaro/scuro, monocromo, favicon e avatar Telegram seguono dopo il via owner. Ogni proposta si presenta con prove a dimensioni piccole, su fondo scuro e in monocromo. Gli originali restano invariati; i nuovi asset sono file separati. Date, hex e tagline del board non sono fonti normative.
 
 ## Nove riferimenti frontend
 
