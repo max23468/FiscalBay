@@ -49,4 +49,48 @@
     },
   },
   "upload_source_maps": true,
+  "env": {
+    "production": {
+      "name": "fiscalbay",
+      "routes": [{ "pattern": "fiscalbay.it", "custom_domain": true }],
+      "vars": {
+        "APP_ORIGIN": "https://fiscalbay.it",
+      },
+      "secrets": {
+        "required": [
+          "BETTER_AUTH_SECRET",
+          "GOOGLE_CLIENT_ID",
+          "GOOGLE_CLIENT_SECRET",
+          "EBAY_CLIENT_ID",
+          "EBAY_CLIENT_SECRET",
+          "EBAY_RUNAME",
+        ],
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "fiscalbay",
+          "database_id": "fa2a79ad-fe72-4882-9cbb-c4009ffd5d8f",
+          "migrations_dir": "migrations",
+        },
+      ],
+      "send_email": [
+        {
+          "name": "AUTH_EMAIL",
+          "allowed_sender_addresses": ["accesso@auth.fiscalbay.it"],
+        },
+      ],
+      "observability": {
+        "enabled": true,
+        "logs": {
+          "enabled": true,
+          "head_sampling_rate": 1,
+        },
+        "traces": {
+          "enabled": true,
+          "head_sampling_rate": 0.01,
+        },
+      },
+    },
+  },
 }
