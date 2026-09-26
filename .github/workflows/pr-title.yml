@@ -30,22 +30,11 @@ jobs:
         env:
           PR_TITLE: "${{ github.event.pull_request.title || 'chore: manual title check' }}"
         run: |
-          python - <<'PY'
-          import os
-          import re
-          import sys
-
-          title = os.environ["PR_TITLE"].strip()
-          pattern = re.compile(
-              r"^(feat|fix|perf|docs|test|chore|ci|refactor|build)"
-              r"(\([a-z0-9._-]+\))?!?: .+"
-          )
-          if not pattern.fullmatch(title):
-              print(f"Invalid PR title: {title!r}", file=sys.stderr)
-              print(
-                  "Use Conventional Commit format, for example "
-                  "'feat: add settings command' or 'fix(bot): handle retry'.",
-                  file=sys.stderr,
-              )
-              sys.exit(1)
-          PY
+          node -e '
+            const title = process.env.PR_TITLE.trim();
+            if (!/^(feat|fix|perf|docs|test|chore|ci|refactor|build)(\([a-z0-9._-]+\))?!?: .+$/.test(title)) {
+              console.error("Invalid PR title: " + title);
+              console.error("Use Conventional Commit format, for example feat: add settings command.");
+              process.exitCode = 1;
+            }
+          '

@@ -81,14 +81,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          pr_number="$(python3 - <<'PY'
-          import json
-          import os
-
-          prs = json.loads(os.environ["PULL_REQUESTS_JSON"])
-          print(prs[0]["number"] if prs else "")
-          PY
-          )"
+          pr_number="$(jq -r '.[0].number // empty' <<< "${PULL_REQUESTS_JSON}")"
 
           if [ -z "${pr_number}" ]; then
             echo "No pull request found for this CI run."
@@ -96,52 +89,19 @@ jobs:
           fi
 
           pr_json="$(gh pr view "${pr_number}" --json author,baseRefName,headRefOid,isDraft,labels,state,url)"
-          merge_allowed="$(python3 - <<'PY' "${pr_json}" "${VERIFIED_SHA}"
-          import json
-          import sys
+          merge_allowed="$(jq -r --arg sha "${VERIFIED_SHA}" '
+            .state == "OPEN" and .isDraft == false and .baseRefName == "develop"
+            and (.author.login | IN("app/dependabot", "dependabot", "dependabot[bot]"))
+            and any(.labels[]; .name == "dependabot-automerge")
+            and .headRefOid == $sha
+          ' <<< "${pr_json}")"
 
-          pr = json.loads(sys.argv[1])
-          verified_sha = sys.argv[2]
-          labels = {label["name"] for label in pr.get("labels", [])}
-          failures = []
-          if pr.get("state") != "OPEN":
-              failures.append("PR is not open")
-          if pr.get("isDraft"):
-              failures.append("PR is draft")
-          if pr.get("baseRefName") != "develop":
-              failures.append("base is not develop")
-          if pr.get("author", {}).get("login") not in {
-              "app/dependabot",
-              "dependabot",
-              "dependabot[bot]",
-          }:
-              failures.append("author is not Dependabot")
-          if "dependabot-automerge" not in labels:
-              failures.append("missing dependabot-automerge label")
-          if pr.get("headRefOid") != verified_sha:
-              failures.append("PR head SHA differs from verified CI SHA")
-
-          if failures:
-              for failure in failures:
-                  print(f"Skip auto-merge: {failure}")
-              print("no")
-              sys.exit(0)
-          print("yes")
-          PY
-          )"
-
-          if [ "${merge_allowed##*$'\n'}" != "yes" ]; then
-            printf '%s\n' "${merge_allowed}"
+          if [ "${merge_allowed}" != "true" ]; then
+            echo "Skip auto-merge: PR is not eligible or its head differs from verified CI SHA."
             exit 0
           fi
 
-          pr_url="$(python3 - <<'PY' "${pr_json}"
-          import json
-          import sys
-
-          print(json.loads(sys.argv[1])["url"])
-          PY
-          )"
+          pr_url="$(jq -r '.url' <<< "${pr_json}")"
 
           gh pr merge "${pr_url}" --squash --delete-branch
           echo "Dependabot PR merged after successful CI."
