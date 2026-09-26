@@ -34,6 +34,10 @@ export async function action({ request }: { request: Request }) {
   const parsed = checkoutSchema.safeParse(Object.fromEntries(await request.formData()));
   if (!parsed.success) return errorResponse(request, "INVALID_REQUEST");
 
+  // Senza prezzi configurati l'ambiente non vende: la Production li riceve con l'attivazione commerciale.
+  const priceId = env[priceByOffer[parsed.data.offer]];
+  if (!priceId) return errorResponse(request, "FORBIDDEN");
+
   const membership = await env.DB.prepare(
     "SELECT workspace_id FROM workspace_members WHERE user_id = ? ORDER BY workspace_id LIMIT 1",
   )
@@ -45,7 +49,7 @@ export async function action({ request }: { request: Request }) {
     createStripeClient((env as Env & StripeSecrets).STRIPE_SECRET_KEY),
     {
       offer: parsed.data.offer,
-      priceId: env[priceByOffer[parsed.data.offer]],
+      priceId,
       workspaceId: membership.workspace_id,
       email: session.user.email,
       appOrigin: new URL(env.APP_ORIGIN).origin,
