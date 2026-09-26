@@ -6,11 +6,11 @@ Il Master Plan prevale per contenuti, piani, date, stati, funzioni e navigazione
 
 ## Riferimenti approvati
 
-### Logo: Concept 4 originale
+### Logo: Concept 4 originale (punto di partenza)
 
 ![Logo: Concept 4 originale](references/logo-concept-4-originale.png)
 
-Unico riferimento principale. Bay da grigio a blu del fondo; bordo destro esterno blu continuo/regolare, senza cambiare tessera, inclinazione, composizione e quattro accenti.
+Punto di partenza del logo 2.0, non vincolo di fedeltà (D141): card con righe colorate, cornice blu e `Bay` blu restano il riferimento, forma e dettagli possono migliorare.
 
 Origine: `concept_fiscalbay_identità_moderna_e_minimale.png`.
 
@@ -38,11 +38,35 @@ Categorie a sinistra e contenuto a destra, mobile elenco→dettaglio. Export è 
 
 Origine: `impostazioni_fiscalbay_desktop_e_mobile.png`.
 
-## Rifinitura del logo — M0/M1
+## Logo 2.0 — M1
 
-Partire dal **Concept 4 originale** incluso, non da una delle rigenerazioni successive respinte. Correggere soltanto le imperfezioni note e rifinire tecnicamente la geometria. La scritta `Bay` deve essere blu come il riquadro del simbolo, non grigia; il bordo destro del riquadro blu esterno deve essere continuo e regolare dal raccordo superiore a quello inferiore. Preservare il resto della direzione approvata; niente nuova reinterpretazione automatica.
+Su indicazione owner (D141) il logo evolve dal Concept 4 senza esserne vincolato: si possono migliorare forma, proporzioni, inclinazione e dettagli per chiarezza e resa piccola. L'icona è generica, cioè il simbolo su fondo trasparente, non una tile in stile iOS o di altre piattaforme. Il segno resta autonomo e non deve far credere a un prodotto ufficiale eBay; il marchio resta FiscalBay e `FB` è solo interno.
 
-Prima di dichiararlo definitivo, sottoporre all’owner la versione vettoriale a confronto con l’originale e prove a dimensioni piccole, scuro/chiaro e monocromo. Produrre SVG/PNG per sito, app bar, favicon, Telegram, con griglia/margini/varianti coerenti. Non copiare eventuali date/hex/tagline dimostrative del board come fonte normativa. Il marchio resta FiscalBay; `FB` è solo interno. Il logo deve rimanere autonomo e non far credere a un prodotto ufficiale eBay.
+Prima si approva l'icona base; wordmark, logo orizzontale, chiaro/scuro, monocromo, favicon e avatar Telegram seguono dopo il via owner. Ogni proposta si presenta con prove a dimensioni piccole, su fondo scuro e in monocromo. Gli originali restano invariati; i nuovi asset sono file separati. Date, hex e tagline del board non sono fonti normative.
+
+### Asset approvati
+
+Sorgenti in [`logo/`](logo/), esportazioni PNG e `favicon.ico` in [`logo/exports/`](logo/exports/).
+
+| File | Uso |
+|---|---|
+| `fiscalbay-icon.svg` / `fiscalbay-icon-dark.svg` | Icona da 48 px in su: su chiaro con contorno blu, su scuro carta tutta bianca |
+| `fiscalbay-icon-32.svg`, `fiscalbay-icon-16.svg` | Icona dritta su griglia dei pixel per 24–47 px e 16 px |
+| `favicon.svg` | Favicon su griglia 32, carta tutta bianca con `prefers-color-scheme: dark` |
+| `fiscalbay-logo.svg` / `fiscalbay-logo-dark.svg` | Logo orizzontale su fondo chiaro / scuro |
+| `fiscalbay-icon-mono.svg`, `fiscalbay-logo-mono.svg` | Monocromo in `currentColor` |
+| `fiscalbay-app-icon.svg` | Icona per app, iOS, Android e Telegram: carta bianca su quadrato blu scuro pieno; maschera e cerchio li applica la piattaforma, la carta resta nella zona sicura dell'80% |
+
+Il contorno blu esiste solo nel logo e nell'icona su fondo chiaro; su fondo scuro la carta è tutta bianca e nelle icone per app il blu scuro diventa lo sfondo. Colori, tre blu in tutto: blu medio `#1A4FA6` per contorno, riga blu e `Bay` su chiaro; blu scuro `#0E3372` per `Fiscal` su chiaro e per lo sfondo delle icone per app; azzurro `#4F87E3` per `Bay` su scuro. Poi card e `Fiscal` su scuro `#FFFFFF`, chip `#F6C12B`, righe verde `#1F9F9A` e rossa `#DA353E`. Le righe raggiungono 3:1 sulla card; il chip giallo resta sotto per scelta motivata nel backlog.
+
+Regole d'uso:
+
+- **Area di rispetto:** attorno al logo orizzontale uno spazio libero pari a metà dell'altezza delle maiuscole, la stessa distanza fra tessera e scritta; attorno all'icona da sola un quarto dell'altezza della tessera. Testi, bordi e altri segni restano fuori da quest'area.
+- **Dimensione minima:** logo orizzontale almeno 100 px di larghezza, dove le maiuscole sono alte circa 11 px; sotto si usa la sola icona. Icona inclinata da 48 px, versioni su griglia per 24–47 px e 16 px.
+- **Fondi:** su fondi chiari la versione con contorno blu, su fondi scuri la versione con carta bianca, su fotografie o fondi colorati il monocromo nel colore che garantisce contrasto.
+- **Da non fare:** cambiare colori o proporzioni, deformare, aggiungere ombre o effetti, ruotare diversamente la tessera, racchiudere l'icona in una tile al di fuori delle icone per app.
+
+Wordmark: Inter ExtraBold 4.x (The Inter Project Authors, SIL Open Font License 1.1, pacchetto `@fontsource/inter` 5), convertito in tracciati con spaziatura −1,5%; il file del font non è distribuito. Nel logo orizzontale la tessera è alta 1,6 volte le maiuscole (maiuscole al 62% della tessera); distanza dall'icona pari a metà altezza delle maiuscole.
 
 ## Nove riferimenti frontend
 

@@ -28,11 +28,14 @@ export async function action({ request }: { request: Request }) {
     return errorResponse(request, "FORBIDDEN");
   }
 
-  const session = await createAuth(env).api.getSession({ headers: request.headers });
-  if (!session) return errorResponse(request, "AUTH_REQUIRED");
-
   const parsed = checkoutSchema.safeParse(Object.fromEntries(await request.formData()));
   if (!parsed.success) return errorResponse(request, "INVALID_REQUEST");
+
+  const priceId = env[priceByOffer[parsed.data.offer]];
+  if (!priceId) return errorResponse(request, "FORBIDDEN");
+
+  const session = await createAuth(env).api.getSession({ headers: request.headers });
+  if (!session) return errorResponse(request, "AUTH_REQUIRED");
 
   const membership = await env.DB.prepare(
     "SELECT workspace_id FROM workspace_members WHERE user_id = ? ORDER BY workspace_id LIMIT 1",
@@ -45,7 +48,7 @@ export async function action({ request }: { request: Request }) {
     createStripeClient((env as Env & StripeSecrets).STRIPE_SECRET_KEY),
     {
       offer: parsed.data.offer,
-      priceId: env[priceByOffer[parsed.data.offer]],
+      priceId,
       workspaceId: membership.workspace_id,
       email: session.user.email,
       appOrigin: new URL(env.APP_ORIGIN).origin,

@@ -1,0 +1,10 @@
+// Pagina provvisoria dell'apice fino alla prima pubblicazione della 2.0, che la sostituisce
+// sullo stesso Worker Production. Da rimuovere insieme alla cartella dopo la pubblicazione.
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "fiscalbay",
+  "compatibility_date": "2026-09-13",
+  "workers_dev": false,
+  "routes": [{ "pattern": "fiscalbay.it", "custom_domain": true }],
+  "assets": { "directory": "./public" },
+}
