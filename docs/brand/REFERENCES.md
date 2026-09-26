@@ -59,7 +59,7 @@ Sorgenti in `assets/brand/`, esportazioni PNG e `favicon.ico` in `assets/brand/e
 
 Il contorno blu esiste solo nel logo e nell'icona su fondo chiaro; su fondo scuro la carta è tutta bianca e nelle icone per app il blu diventa lo sfondo. Colori: contorno e sfondo app `#1A4FA6`, card `#FFFFFF`, chip `#F6C12B`, righe `#1255D7`, `#1F9F9A`, `#DA353E`; wordmark `Fiscal` `#001431` e `Bay` `#1A4FA6` (scuro `#FFFFFF` e `#4F87E3`). Le righe raggiungono 3:1 sulla card; il chip giallo resta sotto per scelta motivata nel backlog.
 
-Wordmark: Inter ExtraBold 4.x (The Inter Project Authors, SIL Open Font License 1.1, pacchetto `@fontsource/inter` 5), convertito in tracciati con spaziatura −1,5%; il file del font non è distribuito. Maiuscole alte il 42% della tessera, distanza dall'icona pari a metà altezza maiuscole.
+Wordmark: Inter ExtraBold 4.x (The Inter Project Authors, SIL Open Font License 1.1, pacchetto `@fontsource/inter` 5), convertito in tracciati con spaziatura −1,5%; il file del font non è distribuito. Nel logo orizzontale la tessera è alta 1,6 volte le maiuscole (maiuscole al 62% della tessera); distanza dall'icona pari a metà altezza delle maiuscole.
 
 ## Nove riferimenti frontend
 
