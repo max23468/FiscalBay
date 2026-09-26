@@ -2,6 +2,8 @@ import { env } from "cloudflare:workers";
 import { redirect } from "react-router";
 
 import { createAuth } from "../auth.server";
+import { errorResponse } from "../errors";
+import { languageFromPath, localizedPath } from "../i18n";
 import type { Route } from "./+types/sign-in";
 
 function withCookies(location: string, response: Response): Response {
@@ -11,13 +13,17 @@ function withCookies(location: string, response: Response): Response {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const base = localizedPath(languageFromPath(new URL(request.url).pathname));
   if (request.headers.get("origin") !== new URL(env.APP_ORIGIN).origin) {
-    return new Response(null, { status: 403 });
+    return errorResponse(request, "FORBIDDEN");
   }
   const auth = createAuth(env);
   const form = await request.formData();
   if (form.get("intent") === "esci") {
-    return withCookies("/", await auth.api.signOut({ headers: request.headers, asResponse: true }));
+    return withCookies(
+      base,
+      await auth.api.signOut({ headers: request.headers, asResponse: true }),
+    );
   }
 
   const credentials = {
@@ -31,7 +37,7 @@ export async function action({ request }: Route.ActionArgs) {
       headers: request.headers,
       asResponse: true,
     });
-    return redirect(`/?accesso=${response.ok ? "registrato" : "errore"}`, 303);
+    return redirect(`${base}?accesso=${response.ok ? "registrato" : "errore"}`, 303);
   }
 
   const response = await auth.api.signInEmail({
@@ -39,5 +45,5 @@ export async function action({ request }: Route.ActionArgs) {
     headers: request.headers,
     asResponse: true,
   });
-  return response.ok ? withCookies("/", response) : redirect("/?accesso=errore", 303);
+  return response.ok ? withCookies(base, response) : redirect(`${base}?accesso=errore`, 303);
 }

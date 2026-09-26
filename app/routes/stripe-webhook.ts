@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import type Stripe from "stripe";
+import { errorResponse, logFailure } from "../errors";
 
 import {
   recordStripeEvent,
@@ -9,7 +10,7 @@ import {
 
 export async function action({ request }: { request: Request }) {
   const signature = request.headers.get("stripe-signature");
-  if (!signature) return new Response("Firma mancante", { status: 400 });
+  if (!signature) return errorResponse(request, "INVALID_REQUEST");
 
   let event: Stripe.Event;
   try {
@@ -19,13 +20,14 @@ export async function action({ request }: { request: Request }) {
       (env as Env & StripeSecrets).STRIPE_WEBHOOK_SECRET,
     );
   } catch {
-    return new Response("Firma non valida", { status: 400 });
+    return errorResponse(request, "INVALID_REQUEST");
   }
 
   try {
     await recordStripeEvent(env.DB, event);
     return new Response(null, { status: 204 });
   } catch {
-    return new Response("Evento non registrato", { status: 500 });
+    logFailure({ request, code: "INTERNAL_ERROR", operation: "stripe_webhook" });
+    return errorResponse(request, "INTERNAL_ERROR");
   }
 }

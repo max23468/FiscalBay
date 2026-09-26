@@ -1,5 +1,7 @@
 import { createAuth } from "./auth.server";
 import { completeStoreLink, takeStoreLinkSession } from "./integrations/ebay/store-link.server";
+import { classifyFailure, logFailure } from "./errors";
+import { localizedPath } from "./i18n";
 
 const serverOnlyAuthPaths = new Set(["/api/auth/get-access-token", "/api/auth/refresh-token"]);
 const ebayCallbackPath = "/api/auth/callback/ebay";
@@ -27,6 +29,12 @@ function noStore(response: Response): Response {
   });
 }
 
+async function authResponse(request: Request, environment: Env): Promise<Response> {
+  const response = await createAuth(environment).handler(request);
+  if (response.status >= 500) logFailure({ request, code: "INTERNAL_ERROR", operation: "route" });
+  return response;
+}
+
 async function handleEbayCallback(
   request: Request,
   environment: Env,
@@ -38,7 +46,7 @@ async function handleEbayCallback(
   // Il RuName ha un solo callback: lo state distingue il collegamento negozio dal login eBay.
   const search = new URL(request.url).searchParams;
   const link = await takeStoreLinkSession(environment.DB, search.get("state")!);
-  if (!link) return noStore(await createAuth(environment).handler(request));
+  if (!link) return noStore(await authResponse(request, environment));
 
   const session = await createAuth(environment).api.getSession({ headers: request.headers });
   const outcome = await completeStoreLink({
@@ -48,10 +56,13 @@ async function handleEbayCallback(
     search,
     fetcher,
   }).catch((error: unknown) => {
-    console.error("ebay_store_link_failed", error instanceof Error ? error.message : "unknown");
+    logFailure({ request, code: classifyFailure(error), operation: "store_link" });
     return "errore" as const;
   });
-  return noStore(Response.redirect(new URL(`/?negozio=${outcome}`, environment.APP_ORIGIN), 303));
+  const home = localizedPath(search.get("state")!.startsWith("en_") ? "en" : "it");
+  return noStore(
+    Response.redirect(new URL(`${home}?negozio=${outcome}`, environment.APP_ORIGIN), 303),
+  );
 }
 
 export function handleAuthRequest(
@@ -61,6 +72,6 @@ export function handleAuthRequest(
 ): Promise<Response> | Response {
   const pathname = new URL(request.url).pathname.replace(/\/+$/u, "");
   if (serverOnlyAuthPaths.has(pathname)) return new Response(null, { status: 404 });
-  if (pathname !== ebayCallbackPath) return createAuth(environment).handler(request);
+  if (pathname !== ebayCallbackPath) return authResponse(request, environment);
   return handleEbayCallback(request, environment, fetcher);
 }
