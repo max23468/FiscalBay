@@ -27,7 +27,7 @@ Rispettare i cinque checkpoint: fine M0 (assetto/costi/Auth/database), M1 (brand
 
 ## Implementazione e Git
 
-Controllare stato, branch, diff, istruzioni vicine e automazioni legacy prima di scrivere. Preservare lavoro altrui; no reset distruttivi o riscritture della storia. Prima di push/merge verificare che non parta il vecchio autodeploy 1.x. Un blocco remoto non ferma le prove locali indipendenti.
+Controllare stato, branch, diff e istruzioni vicine prima di scrivere. Preservare lavoro altrui; no reset distruttivi o riscritture della storia. Un blocco remoto non ferma le prove locali indipendenti.
 
 Seguire feature branch → `develop`, test dai merge, `main` candidato e workflow `Pubblica` autorizzato; non usare release script VPS 1.x. La 1.x congelata vive soltanto nella branch `legacy/1.x`: correzioni residue e deploy manuali della 1.x partono da lì, mai da `main`. M0 procede per esclusione e prove circoscritte, poi implementa il candidato migliore. Non costruire adapter scartati, scheduler generalisti, package vuoti o copia HTTP di ogni loader/action.
 

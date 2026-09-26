@@ -99,7 +99,7 @@ Una prova breve, un test o il log CI pertinenti possono bastare: non serve una r
 
 ### 0.5 Avvio e continuità
 
-La procedura di adozione e ripresa è unica nel [README](../README.md#avvio). Allineare le istruzioni 1.x e verificare i trigger legacy prima di push/merge, senza alterare istruzioni globali o lavoro altrui. `BACKLOG.md` conserva stato, checkpoint ed effetti remoti incompleti, non la cronaca di ogni comando.
+La procedura di adozione e ripresa è unica nel [README](../README.md#avvio). Allineare le istruzioni 1.x e verificare i trigger legacy nell'inventario iniziale, senza alterare istruzioni globali o lavoro altrui. `BACKLOG.md` conserva stato, checkpoint ed effetti remoti incompleti, non la cronaca di ogni comando.
 
 Accessi, dati legali, destinatario del test e date promo si acquisiscono secondo il [catalogo input](engineering/AGENT_SETUP.md#input). Non occorre ricostruire le decisioni dalla chat; una credenziale mancante blocca soltanto il lavoro dipendente. Le [responsabilità documentali](engineering/AGENT_SETUP.md#deliverable) indicano dove mantenere le informazioni prodotte nello sviluppo, senza imporre file anticipati.
 
@@ -752,7 +752,7 @@ Le skill non cambiano scope, checkpoint o policy dati. Dati esterni non sono com
 <a id="s34"></a>
 ## 34. Git, CI/CD, versioning e workflow Pubblica
 
-Branch feature→`develop`, integrato su `test.fiscalbay.it`; `main` candidato Production. Nessun deploy live automatico al merge main. Autodeploy test dopo merge develop con gate e separazione dati; le migrazioni pericolose non diventano innocue per il solo ambiente test. Verificare lo stato dei timer/autodeploy 1.x prima di introdurre nuovi workflow.
+Branch feature→`develop`, integrato su `test.fiscalbay.it`; `main` candidato Production. Nessun deploy live automatico al merge main. Autodeploy test dopo merge develop con gate e separazione dati; le migrazioni pericolose non diventano innocue per il solo ambiente test.
 
 Pipeline minima: install frozen lockfile → format check → lint → typecheck → React Doctor → unit/integration → build. Smoke Playwright per modifiche UI/backend pertinenti, contract/concurrency test in base all'impatto. CodeQL/dependency review/secret scanning e controlli licenze dove disponibili; non presumere capacità o costi GitHub del piano senza preflight. PR da fork senza segreti/live writes, action pin e permessi minimi.
 
