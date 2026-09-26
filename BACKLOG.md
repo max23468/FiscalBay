@@ -1163,11 +1163,9 @@ Verificare che runtime e auto-update 1.x siano inattivi; rimuovere file obsoleti
 
 **Stato:** TODO · **Prerequisiti:** M9-04 · **Contratto:** [§31](docs/MASTER_PLAN.md#s31) · [§41](docs/MASTER_PLAN.md#s41)
 
-**Per chiudere:** M9-05; passaggio definitivo e rimozione della branch 1.x secondo [§37](docs/MASTER_PLAN.md#s37).
-
 Nei primi giorni sorvegliare registrazioni, sync, Stripe, code, quote, errori e supporto, usando interventi mirati secondo le procedure.
 
-**Criterio di completamento:** Esiti e anomalie registrati senza inventare una nuova beta pubblica o un SLA. Normale esercizio predisposto e nessuna chiusura fittizia delle verifiche. Dopo la prova che nessun percorso operativo dipende dalla 1.x, commit finale conservato tramite tag remoto e cancellazione di `legacy/1.x` verificata in locale e sul remoto; riferimenti registrati qui.
+**Criterio di completamento:** Esiti e anomalie registrati senza inventare una nuova beta pubblica o un SLA. Normale esercizio predisposto e nessuna chiusura fittizia delle verifiche.
 
 ## Attività rinviate — non prerequisiti della 2.0
 
