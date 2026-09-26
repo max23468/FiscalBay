@@ -5,6 +5,9 @@ on:
     branches:
       - develop
       - main
+  push:
+    branches:
+      - develop
   workflow_dispatch:
 
 concurrency:
@@ -76,3 +79,57 @@ jobs:
       - name: Run local CI gate
         if: steps.detect.outputs.docs_only != 'true'
         run: pnpm verify
+
+      - name: Check docs-only changes
+        if: steps.detect.outputs.docs_only == 'true'
+        run: node scripts/verify-docs.mjs
+
+  deploy-test:
+    name: Deploy test
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && vars.TEST_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: test
+    concurrency:
+      group: deploy-test
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout verified commit
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.6.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26.10.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build test artifact
+        run: pnpm build
+
+      - name: Check commit still on develop
+        env:
+          VERIFIED_SHA: ${{ github.sha }}
+        run: |
+          current_sha="$(git ls-remote https://github.com/${{ github.repository }}.git refs/heads/develop | cut -f1)"
+          test "${current_sha}" = "${VERIFIED_SHA}"
+
+      - name: Deploy verified artifact
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec wrangler deploy --config build/server/wrangler.json --strict
+
+      - name: Check test endpoint
+        run: curl --fail --silent --show-error --max-time 20 --output /dev/null https://test.fiscalbay.it/
