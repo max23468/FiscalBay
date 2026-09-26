@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { ApplicationError } from "../../errors";
+import type { Language } from "../../i18n";
 
 import {
   mapTradingTaxIdentifiers,
@@ -54,8 +56,9 @@ export async function startStoreLink(
   environment: Env,
   userId: string,
   now = new Date(),
+  language: Language = "it",
 ): Promise<string> {
-  const state = randomToken();
+  const state = `${language}_${randomToken()}`;
   const codeVerifier = randomToken();
   const challenge = base64Url(
     new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(codeVerifier))),
@@ -111,7 +114,14 @@ export async function takeStoreLinkSession(
 
 async function ebayJson(fetcher: typeof fetch, url: string, init: RequestInit): Promise<unknown> {
   const response = await fetcher(url, init);
-  if (!response.ok) throw new Error(`ebay_http_${response.status}`);
+  if (!response.ok)
+    throw new ApplicationError(
+      response.status === 401 || response.status === 403
+        ? "STORE_RECONNECT_REQUIRED"
+        : response.status === 429 || response.status >= 500
+          ? "UPSTREAM_UNAVAILABLE"
+          : "INVALID_REQUEST",
+    );
   return response.json();
 }
 
@@ -252,7 +262,14 @@ export async function importStoreOrders(input: {
         "</GetOrdersRequest>",
     }),
   ]);
-  if (!tradingResponse.ok) throw new Error(`ebay_http_${tradingResponse.status}`);
+  if (!tradingResponse.ok)
+    throw new ApplicationError(
+      tradingResponse.status === 401 || tradingResponse.status === 403
+        ? "STORE_RECONNECT_REQUIRED"
+        : tradingResponse.status === 429 || tradingResponse.status >= 500
+          ? "UPSTREAM_UNAVAILABLE"
+          : "INVALID_REQUEST",
+    );
   const observations = mapTradingTaxIdentifiers(
     parseTradingOrderTaxIdentifiers(await tradingResponse.text(), order.orderId),
   );

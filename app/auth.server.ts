@@ -67,6 +67,7 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
     onAPIError: {
       errorURL: "/auth/error",
     },
+    logger: { disabled: true },
     account: {
       encryptOAuthTokens: true,
       accountLinking: {

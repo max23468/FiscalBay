@@ -82,7 +82,12 @@ describe("percorso ordini", () => {
     const anonymous = await loadHome({
       request: new Request("http://localhost:5173/"),
     } as Parameters<typeof loadHome>[0]);
-    expect(anonymous).toEqual({ authenticated: false, signInNotice: null, orders: [] });
+    expect(anonymous).toEqual({
+      authenticated: false,
+      language: "it",
+      signInNotice: null,
+      orders: [],
+    });
 
     const auth = createAuth(env);
     await auth.handler(
