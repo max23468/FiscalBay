@@ -17,6 +17,12 @@ import { Badge } from "~/components/ui/badge";
  */
 export type StatusTone = "success" | "info" | "warning" | "danger" | "premium" | "neutral";
 
+/**
+ * `tinted` colora sempre la superficie; `sober` la colora solo per gli stati
+ * che chiedono un'azione e lascia agli altri il colore della sola icona.
+ */
+export type StatusEmphasis = "tinted" | "sober";
+
 const icons: Record<StatusTone, LucideIcon> = {
   success: CircleCheck,
   info: Info,
@@ -26,8 +32,45 @@ const icons: Record<StatusTone, LucideIcon> = {
   neutral: CircleDashed,
 };
 
-export function StatusBadge({ tone, children }: { tone: StatusTone; children: React.ReactNode }) {
+const iconColor: Record<StatusTone, string> = {
+  success: "text-success",
+  info: "text-info",
+  warning: "text-warning",
+  danger: "text-danger",
+  premium: "text-premium",
+  neutral: "text-neutral",
+};
+
+// Nell'avviso la classe base colora l'icona come il testo: serve la priorità.
+const alertIconColor: Record<StatusTone, string> = {
+  success: "text-success!",
+  info: "text-info!",
+  warning: "text-warning!",
+  danger: "text-danger!",
+  premium: "text-premium!",
+  neutral: "text-neutral!",
+};
+
+const actionable = new Set<StatusTone>(["warning", "danger", "premium"]);
+
+export function StatusBadge({
+  tone,
+  emphasis = "tinted",
+  children,
+}: {
+  tone: StatusTone;
+  emphasis?: StatusEmphasis;
+  children: React.ReactNode;
+}) {
   const Icon = icons[tone];
+  if (emphasis === "sober" && !actionable.has(tone)) {
+    return (
+      <Badge variant="outline" className="border-transparent px-0 text-muted-foreground">
+        <Icon aria-hidden="true" data-icon="inline-start" className={iconColor[tone]} />
+        {children}
+      </Badge>
+    );
+  }
   return (
     <Badge variant={tone}>
       <Icon aria-hidden="true" data-icon="inline-start" />
@@ -38,17 +81,20 @@ export function StatusBadge({ tone, children }: { tone: StatusTone; children: Re
 
 export function StatusAlert({
   tone,
+  emphasis = "tinted",
   title,
   children,
 }: {
   tone: StatusTone;
+  emphasis?: StatusEmphasis;
   title: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const Icon = icons[tone];
+  const quiet = emphasis === "sober" && tone !== "danger" && tone !== "warning";
   return (
-    <Alert variant={tone}>
-      <Icon aria-hidden="true" />
+    <Alert variant={quiet ? "default" : tone} role={tone === "danger" ? "alert" : "status"}>
+      <Icon aria-hidden="true" className={quiet ? alertIconColor[tone] : undefined} />
       <AlertTitle>{title}</AlertTitle>
       {children ? <AlertDescription>{children}</AlertDescription> : null}
     </Alert>
