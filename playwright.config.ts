@@ -12,10 +12,10 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "node node_modules/@react-router/dev/bin.cjs dev --host 127.0.0.1 --port 5186 --strictPort",
+      "pnpm build && node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 5186 --strictPort",
     gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
     url: "http://127.0.0.1:5186/design",
     reuseExistingServer: false,
-    timeout: 60_000,
+    timeout: 120_000,
   },
 });
