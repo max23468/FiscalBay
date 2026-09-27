@@ -50,11 +50,11 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
   },
   "quota-esaurita": {
     it: {
-      name: "Sblocchi esauriti",
+      name: "Ordini da sbloccare esauriti",
       focus: "Gli ordini restano consultabili; i nuovi dati fiscali attendono il prossimo ciclo.",
     },
     en: {
-      name: "No unlocks left",
+      name: "No orders left to unlock",
       focus: "Orders remain available; new tax details wait for the next cycle.",
     },
   },
@@ -81,11 +81,13 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
   "negozio-scaduto": {
     it: {
       name: "Problema su un negozio",
-      focus: "Premium con tre negozi: uno da ricollegare, uno con autorizzazione incompleta.",
+      focus:
+        "Premium con quattro negozi: uno da ricollegare, uno con autorizzazione incompleta, uno non verificabile.",
     },
     en: {
       name: "Problem with one store",
-      focus: "Premium with three stores: one to reconnect, one with incomplete authorisation.",
+      focus:
+        "Premium with four stores: one to reconnect, one with incomplete authorisation, one that cannot be verified.",
     },
   },
   "dati-discordanti": {
@@ -177,6 +179,12 @@ const stores = {
     name: "Retro Parts Europe",
     username: "retroparts_eu",
     marketplace: "EBAY_DE",
+  },
+  bottega: {
+    id: "neg-bottega",
+    name: "Bottega Retrò Sardegna",
+    username: "bottega_retro_ss",
+    marketplace: "EBAY_IT",
   },
 } as const;
 
@@ -648,7 +656,7 @@ function storeView(key: StoreKey, overrides: Partial<StoreView> = {}): StoreView
     syncing: false,
     lastSyncAt: minutesAgo(key === "vintage" ? 5 : 12),
     notifications: null,
-    importedOrders: key === "vintage" ? 128 : key === "outlet" ? 46 : 19,
+    importedOrders: key === "vintage" ? 128 : key === "outlet" ? 46 : key === "retro" ? 19 : 7,
     historyDays: 30,
     importing: false,
     connectedAt: "2026-06-14T09:20:00Z",
@@ -740,12 +748,12 @@ const text = {
   },
   quota: {
     it: {
-      title: "Sblocchi esauriti",
-      body: "Hai usato i 5 sblocchi di questo ciclo. Il prossimo inizia il 2 ottobre.",
+      title: "Ordini da sbloccare esauriti",
+      body: "Hai sbloccato i 5 ordini disponibili in questo ciclo. Il prossimo inizia il 2 ottobre.",
     },
     en: {
-      title: "No unlocks left",
-      body: "You have used the 5 unlocks for this cycle. The next one starts on 2 October.",
+      title: "No orders left to unlock",
+      body: "You have unlocked the 5 available orders this cycle. The next one starts on 2 October.",
     },
   },
   ebayDown: {
@@ -861,7 +869,7 @@ export function loadScenario(
     syncPhase:
       language === "it" ? "Aggiornamento riuscito, 5 minuti fa" : "Update succeeded, 5 minutes ago",
     errorCode: null,
-    rights: language === "it" ? "Free, 3 di 5 sblocchi usati" : "Free, 3 of 5 unlocks used",
+    rights: language === "it" ? "Free, 3 di 5 ordini sbloccati" : "Free, 3 of 5 orders unlocked",
     correlationId: "c0a8f3e1-5b2d-4e7a-9c11-7d2f0b6e4a90",
     ...overrides,
   });
@@ -923,7 +931,8 @@ export function loadScenario(
           ...common.notifications,
         ],
         diagnostics: diagnostics({
-          rights: language === "it" ? "Free, 5 di 5 sblocchi usati" : "Free, 5 of 5 unlocks used",
+          rights:
+            language === "it" ? "Free, 5 di 5 ordini sbloccati" : "Free, 5 of 5 orders unlocked",
         }),
       };
       break;
@@ -997,6 +1006,18 @@ export function loadScenario(
           lastSyncAt: null,
           importedOrders: 0,
           recent: [{ at: minutesAgo(20), ok: false, newOrders: 0 }],
+        }),
+        storeView("bottega", {
+          connection: "error",
+          issue: "unverifiable",
+          notifications: false,
+          historyDays: 365,
+          targetMinutes: 10,
+          lastSyncAt: minutesAgo(4_300),
+          recent: [
+            { at: minutesAgo(40), ok: false, newOrders: 0 },
+            { at: minutesAgo(4_300), ok: true, newOrders: 0 },
+          ],
         }),
       ];
       scenario = {

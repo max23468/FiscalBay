@@ -7,6 +7,7 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
+import { domMax, LazyMotion, m, MotionConfig } from "motion/react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Link, useFetcher, useLocation, useNavigate, useSearchParams } from "react-router";
 
@@ -320,7 +321,7 @@ function FiscalSlot({ tone, children }: { tone: "neutral" | "info" | "danger"; c
   return (
     <span
       className={cn(
-        "inline-flex min-h-10 w-56 max-w-full items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1 text-sm",
+        "inline-flex min-h-10 w-56 max-w-full min-w-fit items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1 text-sm whitespace-nowrap",
         tone === "danger" ? "text-danger" : "text-muted-foreground",
       )}
     >
@@ -332,6 +333,10 @@ function FiscalSlot({ tone, children }: { tone: "neutral" | "info" | "danger"; c
 
 const cardRow = "flex flex-wrap items-center gap-x-3 gap-y-2";
 
+/** Area di tocco invisibile di almeno 44 px per i collegamenti testuali, come per i pulsanti. */
+const coarseTarget =
+  "relative pointer-coarse:after:absolute pointer-coarse:after:-inset-x-2 pointer-coarse:after:-inset-y-3";
+
 function CardLabel({ children }: { children: string }) {
   return <p className="text-xs font-medium text-muted-foreground">{children}</p>;
 }
@@ -340,14 +345,9 @@ function CardLabel({ children }: { children: string }) {
  * Spiegazione completa del dato fiscale. Nella scheda occupa tutta la
  * larghezza sotto acquirente e codice, così non allunga la colonna del codice.
  */
-function CardNote({ tone, children }: { tone?: "warning" | "info"; children: React.ReactNode }) {
+function CardNote({ tone, children }: { tone?: "info"; children: React.ReactNode }) {
   return (
-    <p
-      className={cn(
-        "flex gap-1.5 text-sm leading-relaxed text-pretty sm:col-span-2",
-        tone === "warning" ? "text-foreground" : "text-muted-foreground",
-      )}
-    >
+    <p className="flex gap-1.5 text-sm leading-relaxed text-pretty text-muted-foreground sm:col-span-2">
       {tone ? <StatusIcon tone={tone} className="mt-1 size-3.5" /> : null}
       <span>{children}</span>
     </p>
@@ -366,10 +366,13 @@ function IdentifierNote({
   const { quality } = identifier;
   if (quality !== "valid" && quality !== "unchecked") {
     return (
-      <CardNote tone="warning">
-        {prefix}
-        {t.orders.toVerify}. {t.orders.quality[quality]}
-      </CardNote>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm leading-relaxed text-pretty sm:col-span-2">
+        <StatusBadge tone="warning">{t.orders.toVerify}</StatusBadge>
+        <span className="text-muted-foreground">
+          {prefix}
+          {t.orders.quality[quality]}
+        </span>
+      </div>
     );
   }
   if (quality === "unchecked") {
@@ -609,28 +612,34 @@ function OrderCard({
   const [first, second, ...rest] = order.items;
   const shown = [first, second].filter((item) => item !== undefined);
   return (
-    <article
+    // Un nuovo ordine entra con un breve ingresso; le schede esistenti si
+    // spostano con un riordino FLIP invece di saltare.
+    <m.article
+      layout="position"
+      initial={isNew ? { opacity: 0, y: -4 } : false}
+      animate={{ opacity: 1, y: 0 }}
       aria-labelledby={titleId}
       className={cn(
         // Da due colonne la scheda occupa tre righe condivise con quella accanto:
         // intestazione, articolo e acquirente iniziano alla stessa altezza.
         "flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4 transition-[border-color] duration-(--duration-quick) lg:row-span-3 lg:grid lg:grid-rows-subgrid",
         selected && "border-ring",
-        isNew &&
-          "animate-[notice-in_var(--duration-fast)_var(--ease-smooth-out)] motion-reduce:animate-none",
       )}
     >
       <header className="grid gap-0.5">
         <div className="flex items-center justify-between gap-3">
-          <h3 id={titleId} className="font-code text-[0.9375rem] leading-snug font-semibold">
+          <h2 id={titleId} className="font-code text-[0.9375rem] leading-snug font-semibold">
             <Link
               to={detailHref}
               preventScrollReset
-              className="rounded-sm outline-none hover:underline hover:underline-offset-4 focus-visible:ring-3 focus-visible:ring-ring"
+              className={cn(
+                "rounded-sm outline-none hover:underline hover:underline-offset-4 focus-visible:ring-3 focus-visible:ring-ring",
+                coarseTarget,
+              )}
             >
               {t.order.title(order.ebayOrderId)}
             </Link>
-          </h3>
+          </h2>
           <div className="-my-1 -mr-1.5 flex shrink-0 items-center gap-1">
             <span className="font-code mr-1 text-[0.9375rem] font-semibold whitespace-nowrap">
               {formatAmount(order.totalMinor, order.currency, language)}
@@ -684,7 +693,10 @@ function OrderCard({
           <Link
             to={detailHref}
             preventScrollReset
-            className="shrink-0 rounded-sm text-xs font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring pointer-coarse:py-1.5"
+            className={cn(
+              "shrink-0 rounded-sm text-xs font-medium text-foreground underline decoration-border underline-offset-4 outline-none hover:decoration-foreground focus-visible:ring-3 focus-visible:ring-ring",
+              coarseTarget,
+            )}
           >
             {t.orders.details}
           </Link>
@@ -738,7 +750,7 @@ function OrderCard({
         />
         <BuyerContacts order={order} t={t} language={language} />
       </div>
-    </article>
+    </m.article>
   );
 }
 
@@ -772,7 +784,88 @@ function OrderDetail({
         </TabsTrigger>
       </TabsList>
       <TabsContent value="details" className="grid gap-7">
-        <section aria-labelledby="order-fiscal" className="grid gap-3">
+        <section aria-labelledby="order-payment" className="grid gap-3">
+          <h3 id="order-payment" className="text-sm font-semibold">
+            {t.order.summary}
+          </h3>
+          <dl className="grid grid-cols-2 gap-3 text-sm">
+            <div className={row}>
+              <dt className="text-muted-foreground">{t.orders.paymentStatus}</dt>
+              <dd>{t.orders.payment[order.payment]}</dd>
+            </div>
+            <div className={row}>
+              <dt className="text-muted-foreground">{t.orders.shippingStatus}</dt>
+              <dd>{t.orders.shipping[order.shipping]}</dd>
+            </div>
+            <div className={row}>
+              <dt className="text-muted-foreground">{t.order.total}</dt>
+              <dd className="font-code font-medium">
+                {formatAmount(order.totalMinor, order.currency, language)}
+              </dd>
+            </div>
+            <div className={row}>
+              <dt className="text-muted-foreground">{t.order.created}</dt>
+              <dd>{formatDate(order.createdAt, language)}</dd>
+            </div>
+            <div className={row}>
+              <dt className="text-muted-foreground">{t.order.marketplace}</dt>
+              <dd>{marketplaceLabel(order.marketplace)}</dd>
+            </div>
+            <div className={cn(row, "col-span-2")}>
+              <dt className="text-muted-foreground">{t.order.store}</dt>
+              <dd className="text-pretty">{order.storeName}</dd>
+            </div>
+          </dl>
+        </section>
+        <section aria-labelledby="order-buyer" className="grid gap-3 border-t pt-5">
+          <h3 id="order-buyer" className="text-sm font-semibold">
+            {t.order.buyer}
+          </h3>
+          <dl className="grid gap-3 text-sm">
+            <div className={row}>
+              <dt className="text-muted-foreground">{t.order.buyer}</dt>
+              <dd className="text-pretty">{order.buyerName}</dd>
+            </div>
+            <div className={row}>
+              <dt className="text-muted-foreground">{t.order.username}</dt>
+              <dd className="font-code">{order.buyerUsername}</dd>
+            </div>
+            <div className={row}>
+              <dt className="text-muted-foreground">{t.orders.taxAddress}</dt>
+              <dd className="text-pretty">
+                {order.taxAddress ? (
+                  <AddressLines address={order.taxAddress} language={language} />
+                ) : (
+                  <span className="text-muted-foreground">{t.orders.notProvided}</span>
+                )}
+              </dd>
+            </div>
+            <div className={row}>
+              <dt className="text-muted-foreground">{t.orders.phone}</dt>
+              <dd className="font-code">
+                {order.phone ?? (
+                  <span className="font-sans text-muted-foreground">{t.orders.notProvided}</span>
+                )}
+              </dd>
+            </div>
+            <div className={row}>
+              <dt className="text-muted-foreground">{t.orders.email}</dt>
+              <dd className="break-all">
+                {order.email ?? (
+                  <span className="text-muted-foreground">{t.orders.notProvided}</span>
+                )}
+              </dd>
+            </div>
+            <div className={row}>
+              <dt className="text-muted-foreground">{t.order.recipient}</dt>
+              <dd className="text-pretty">
+                {order.shipTo.name}, {order.shipTo.locality},{" "}
+                {countryName(order.shipTo.country, language)}
+              </dd>
+            </div>
+          </dl>
+        </section>
+        <section aria-labelledby="order-fiscal" className="grid gap-3 border-t pt-5">
           <h3 id="order-fiscal" className="text-sm font-semibold">
             {t.order.fiscal}
           </h3>
@@ -829,87 +922,6 @@ function OrderDetail({
           <p className="text-xs text-muted-foreground">
             {t.order.source(formatDate(order.lastSyncedAt, language))}
           </p>
-        </section>
-        <section aria-labelledby="order-buyer" className="grid gap-3 border-t pt-5">
-          <h3 id="order-buyer" className="text-sm font-semibold">
-            {t.order.buyer}
-          </h3>
-          <dl className="grid gap-3 text-sm">
-            <div className={row}>
-              <dt className="text-muted-foreground">{t.order.buyer}</dt>
-              <dd className="text-pretty">{order.buyerName}</dd>
-            </div>
-            <div className={row}>
-              <dt className="text-muted-foreground">{t.order.username}</dt>
-              <dd className="font-code">{order.buyerUsername}</dd>
-            </div>
-            <div className={row}>
-              <dt className="text-muted-foreground">{t.orders.taxAddress}</dt>
-              <dd className="text-pretty">
-                {order.taxAddress ? (
-                  <AddressLines address={order.taxAddress} language={language} />
-                ) : (
-                  <span className="text-muted-foreground">{t.orders.notProvided}</span>
-                )}
-              </dd>
-            </div>
-            <div className={row}>
-              <dt className="text-muted-foreground">{t.orders.phone}</dt>
-              <dd className="font-code">
-                {order.phone ?? (
-                  <span className="font-sans text-muted-foreground">{t.orders.notProvided}</span>
-                )}
-              </dd>
-            </div>
-            <div className={row}>
-              <dt className="text-muted-foreground">{t.orders.email}</dt>
-              <dd className="break-all">
-                {order.email ?? (
-                  <span className="text-muted-foreground">{t.orders.notProvided}</span>
-                )}
-              </dd>
-            </div>
-            <div className={row}>
-              <dt className="text-muted-foreground">{t.order.recipient}</dt>
-              <dd className="text-pretty">
-                {order.shipTo.name}, {order.shipTo.locality},{" "}
-                {countryName(order.shipTo.country, language)}
-              </dd>
-            </div>
-          </dl>
-        </section>
-        <section aria-labelledby="order-payment" className="grid gap-3 border-t pt-5">
-          <h3 id="order-payment" className="text-sm font-semibold">
-            {t.order.payment}
-          </h3>
-          <dl className="grid grid-cols-2 gap-3 text-sm">
-            <div className={row}>
-              <dt className="text-muted-foreground">{t.orders.paymentStatus}</dt>
-              <dd>{t.orders.payment[order.payment]}</dd>
-            </div>
-            <div className={row}>
-              <dt className="text-muted-foreground">{t.orders.shippingStatus}</dt>
-              <dd>{t.orders.shipping[order.shipping]}</dd>
-            </div>
-            <div className={row}>
-              <dt className="text-muted-foreground">{t.order.total}</dt>
-              <dd className="font-code font-medium">
-                {formatAmount(order.totalMinor, order.currency, language)}
-              </dd>
-            </div>
-            <div className={row}>
-              <dt className="text-muted-foreground">{t.order.created}</dt>
-              <dd>{formatDate(order.createdAt, language)}</dd>
-            </div>
-            <div className={row}>
-              <dt className="text-muted-foreground">{t.order.marketplace}</dt>
-              <dd>{marketplaceLabel(order.marketplace)}</dd>
-            </div>
-            <div className={cn(row, "col-span-2")}>
-              <dt className="text-muted-foreground">{t.order.store}</dt>
-              <dd className="text-pretty">{order.storeName}</dd>
-            </div>
-          </dl>
         </section>
       </TabsContent>
       <TabsContent value="items">
@@ -1313,22 +1325,41 @@ function FirstUse({ data, t }: { data: OrdersPageData; t: AppCopy }) {
 
 function LoadingGrid({ t }: { t: AppCopy }) {
   return (
-    <div aria-busy="true" className="grid gap-4 lg:grid-cols-2">
+    <div aria-busy="true" className="grid gap-3 lg:grid-cols-2">
       <span className="sr-only" role="status">
         {t.orders.loading}
       </span>
       {[0, 1, 2, 3].map((index) => (
-        <div key={index} aria-hidden="true" className="grid gap-5 rounded-xl border bg-card p-5">
-          <div className="grid gap-2">
-            <Skeleton className="h-3 w-40" />
-            <Skeleton className="h-5 w-56" />
+        <div key={index} aria-hidden="true" className="grid gap-3 rounded-xl border bg-card p-4">
+          <div className="grid gap-1.5">
+            <div className="flex justify-between gap-3">
+              <Skeleton className="h-4 w-44" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+            <Skeleton className="h-3 w-64 max-w-full" />
           </div>
-          <Skeleton className="h-10 w-56" />
-          <div className="grid gap-2 border-t pt-4">
+          <div className="grid gap-1.5">
             <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="h-4 w-1/2" />
           </div>
-          <Skeleton className="h-3 w-48" />
+          <div className="grid gap-3 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_14rem]">
+            <div className="grid content-start gap-2">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-4 w-36" />
+            </div>
+            <div className="grid content-start gap-2">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-10 w-56 max-w-full" />
+            </div>
+            <div className="grid content-start gap-2">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-4 w-40" />
+            </div>
+            <div className="grid content-start gap-2">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-4 w-32" />
+            </div>
+          </div>
         </div>
       ))}
     </div>
@@ -1473,32 +1504,39 @@ function OrdersList({
         />
       ) : (
         <>
-          <section aria-label={t.orders.list} className="grid gap-3 lg:grid-cols-2">
-            {orders.map((order) => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                t={t}
-                language={language}
-                account={data.account}
-                detailHref={`${ordersHref}/${order.id}${location.search}`}
-                selecting={selecting}
-                selected={selected.has(order.id)}
-                onSelect={(value) =>
-                  setSelected((current) => {
-                    const next = new Set(current);
-                    if (value) next.add(order.id);
-                    else next.delete(order.id);
-                    return next;
-                  })
-                }
-                revealed={unlock.revealed.has(order.id)}
-                unlocking={unlock.pending.has(order.id)}
-                onUnlock={submit}
-                isNew={showIncoming && incomingIds.has(order.id)}
-              />
-            ))}
-          </section>
+          <LazyMotion features={domMax} strict>
+            <MotionConfig
+              reducedMotion="user"
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <section aria-label={t.orders.list} className="grid gap-3 lg:grid-cols-2">
+                {orders.map((order) => (
+                  <OrderCard
+                    key={order.id}
+                    order={order}
+                    t={t}
+                    language={language}
+                    account={data.account}
+                    detailHref={`${ordersHref}/${order.id}${location.search}`}
+                    selecting={selecting}
+                    selected={selected.has(order.id)}
+                    onSelect={(value) =>
+                      setSelected((current) => {
+                        const next = new Set(current);
+                        if (value) next.add(order.id);
+                        else next.delete(order.id);
+                        return next;
+                      })
+                    }
+                    revealed={unlock.revealed.has(order.id)}
+                    unlocking={unlock.pending.has(order.id)}
+                    onUnlock={submit}
+                    isNew={showIncoming && incomingIds.has(order.id)}
+                  />
+                ))}
+              </section>
+            </MotionConfig>
+          </LazyMotion>
           <LoadMore data={data} t={t} />
         </>
       )}

@@ -393,7 +393,7 @@ function NotificationsMenu({
         {unread > 0 ? (
           <span
             aria-hidden="true"
-            className="absolute top-1.5 right-1.5 size-2 rounded-full bg-danger ring-2 ring-background"
+            className="absolute top-1.5 right-1.5 size-2 rounded-full bg-primary ring-2 ring-background"
           />
         ) : null}
       </PopoverTrigger>

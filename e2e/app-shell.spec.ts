@@ -49,7 +49,7 @@ test("il dettaglio ha un URL, si chiude con Indietro e conserva i filtri", async
   await open(page, "/anteprima/ordini?fiscale=available");
   const list = page.getByRole("region", { name: "Elenco ordini" });
   const first = list.getByRole("article").first();
-  const buyer = (await first.getByRole("heading", { level: 3 }).textContent()) ?? "";
+  const buyer = (await first.getByRole("heading", { level: 2 }).textContent()) ?? "";
   await first.getByRole("link", { name: "Dettaglio" }).click();
   await expect(page).toHaveURL(/\/anteprima\/ordini\/ord-\d+\?fiscale=available$/u);
   const dialog = page.getByRole("dialog");
@@ -70,11 +70,11 @@ test("lo sblocco rivela il dato solo dopo l'azione e aggiorna la quota", async (
   await open(page);
   expect(await page.content()).not.toContain("BNCLCU75C12F205X");
   const card = page.getByRole("article", { name: "Ordine 05-55555-12121" });
-  await expect(card).toContainText("Ti restano 2 sblocchi");
+  await expect(card).toContainText("Hai ancora 2 ordini disponibili");
   await card.getByRole("button", { name: "Sblocca ordine" }).click();
   await expect(card.getByText("BNCLCU75C12F205X")).toBeVisible();
   await expect(page.getByRole("status").filter({ hasText: "Ordine sbloccato" })).toContainText(
-    "Ti resta 1 sblocco",
+    "Ti resta 1 ordine da sbloccare",
   );
   await page.reload();
   await expect(page.getByRole("article", { name: "Ordine 05-55555-12121" })).toContainText(
@@ -82,7 +82,7 @@ test("lo sblocco rivela il dato solo dopo l'azione e aggiorna la quota", async (
   );
   await page.getByRole("link", { name: "Carica altri" }).click();
   await expect(page.getByRole("article", { name: "Ordine 02-44519-70831" })).toContainText(
-    "Ti resta 1 sblocco",
+    "Hai ancora 1 ordine disponibile",
   );
 });
 
@@ -94,7 +94,7 @@ test("la selezione sblocca più ordini entro la quota", async ({ page }) => {
   await expect(page.getByText("2 ordini da sbloccare")).toBeVisible();
   await page.getByRole("button", { name: "Sblocca 2" }).click();
   const dialog = page.getByRole("alertdialog");
-  await expect(dialog).toContainText("te ne resteranno 0");
+  await expect(dialog).toContainText("ti resteranno 0 ordini da sbloccare");
   await dialog.getByRole("button", { name: "Sblocca" }).click();
   // Il filtro «Da sbloccare» esclude gli ordini appena sbloccati.
   await expect(page.getByRole("status").filter({ hasText: "2 ordini sbloccati." })).toBeVisible();
@@ -105,11 +105,13 @@ test("la selezione sblocca più ordini entro la quota", async ({ page }) => {
 
 test("con gli sblocchi esauriti gli ordini restano consultabili", async ({ page }) => {
   await open(page);
-  await chooseScenario(page, "Sblocchi esauriti");
-  await expect(page.getByRole("status").filter({ hasText: "Sblocchi esauriti" })).toBeVisible();
+  await chooseScenario(page, "Ordini da sbloccare esauriti");
+  await expect(
+    page.getByRole("status").filter({ hasText: "Nessun ordine da sbloccare rimasto" }),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: "Sblocca ordine" })).toHaveCount(0);
   await expect(page.getByRole("article", { name: "Ordine 05-55555-12121" })).toContainText(
-    "Hai usato tutti gli sblocchi",
+    "Hai sbloccato tutti gli ordini disponibili",
   );
   await expect(page.getByRole("article", { name: "Ordine 08-33110-45672" })).toContainText(
     "SPSNNA85T55F83",
@@ -139,6 +141,9 @@ test("negozi con problema e conferma forte dell'eliminazione", async ({ page }) 
       name: "Negozi eBay",
     })
     .click();
+  await expect(page.getByRole("table", { name: "Elenco negozi" })).toContainText(
+    "Negozio non verificabile",
+  );
   await page.getByRole("link", { name: /Retro Parts Europe/ }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Autorizzazione incompleta");

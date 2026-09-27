@@ -103,7 +103,7 @@ export interface StoreView {
   connection: ConnectionState;
   /** Pausa manuale o per piano: la seconda non lascia consultare i dati. */
   pauseReason?: "manual" | "plan";
-  issue?: "reconnect" | "permissions";
+  issue?: "reconnect" | "permissions" | "unverifiable";
   syncing: boolean;
   lastSyncAt: string | null;
   notifications: boolean | null;

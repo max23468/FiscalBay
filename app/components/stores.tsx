@@ -65,7 +65,12 @@ function connectionStatus(store: StoreView, t: AppCopy): { tone: StatusTone; lab
   if (store.connection === "reconnect_required") {
     return { tone: "warning", label: t.stores.state.reconnect_required };
   }
-  if (store.connection === "error") return { tone: "danger", label: t.stores.state.error };
+  if (store.connection === "error") {
+    return {
+      tone: "danger",
+      label: store.issue ? t.stores.issue[store.issue].title : t.stores.state.error,
+    };
+  }
   return { tone: "success", label: t.stores.state.active };
 }
 

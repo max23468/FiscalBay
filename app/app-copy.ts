@@ -35,7 +35,7 @@ const it = {
   preview: {
     label: "Anteprima con dati di esempio",
     scenario: "Scenario",
-    note: "Le azioni sono simulate: nessun negozio eBay viene letto o modificato e nessuno sblocco viene consumato.",
+    note: "Le azioni sono simulate: nessun negozio eBay viene letto o modificato e nessun ordine viene sbloccato davvero.",
     simulated: "Anteprima: l’azione è simulata.",
     signOut: "Anteprima: l’uscita è simulata.",
   },
@@ -71,9 +71,9 @@ const it = {
     fiscal: {
       available: "Disponibile",
       locked: "Da sbloccare",
-      missing: "Non presente su eBay",
+      missing: "Non disponibile su eBay",
       checking: "In verifica",
-      error: "Lettura non riuscita",
+      error: "Aggiornamento non riuscito",
     },
     select: "Seleziona",
     cancelSelection: "Annulla",
@@ -88,7 +88,7 @@ const it = {
     exportSelected: "Esporta",
     unlockTitle: (count: number) => `Sbloccare ${count} ${plural(count, "ordine", "ordini")}?`,
     unlockConfirmText: (count: number, remaining: number) =>
-      `Userai ${count} ${plural(count, "sblocco", "sblocchi")} di questo ciclo; ${plural(remaining - count, "te ne resterà", "te ne resteranno")} ${remaining - count}.`,
+      `Dopo lo sblocco ${plural(remaining - count, "ti resterà", "ti resteranno")} ${remaining - count} ${plural(remaining - count, "ordine", "ordini")} da sbloccare in questo ciclo.`,
     unlockExceeds: (count: number, remaining: number) =>
       `Hai selezionato ${count} ordini da sbloccare, ma in questo ciclo te ne ${plural(remaining, "resta", "restano")} ${remaining}. Riduci la selezione.`,
     unlockConfirm: "Sblocca",
@@ -96,7 +96,7 @@ const it = {
     unlocked: (remaining: number | null) =>
       remaining === null
         ? "Ordine sbloccato."
-        : `Ordine sbloccato. ${plural(remaining, "Ti resta", "Ti restano")} ${remaining} ${plural(remaining, "sblocco", "sblocchi")} in questo ciclo.`,
+        : `Ordine sbloccato. ${plural(remaining, "Ti resta", "Ti restano")} ${remaining} ${plural(remaining, "ordine", "ordini")} da sbloccare.`,
     unlockedMany: (count: number) => `${count} ordini sbloccati.`,
     loadMore: "Carica altri",
     allShown: "Hai visto tutti gli ordini del periodo.",
@@ -116,13 +116,12 @@ const it = {
     copyFailed: "Copia non riuscita. Riprova oppure seleziona e copia il codice.",
     lockedLabel: "Dati fiscali da sbloccare",
     lockedHint: (remaining: number) =>
-      `Sblocca per vedere e copiare i dati fiscali. ${plural(remaining, "Ti resta", "Ti restano")} ${remaining} ${plural(remaining, "sblocco", "sblocchi")} in questo ciclo.`,
+      `Sblocca tutti i dati fiscali di questo ordine. Hai ancora ${remaining} ${plural(remaining, "ordine disponibile", "ordini disponibili")}: dopo lo sblocco ${plural(remaining - 1, "ne resterà", "ne resteranno")} ${remaining - 1}.`,
     lockedExhausted: (date: string) =>
-      `Hai usato tutti gli sblocchi di questo ciclo. Il prossimo inizia il ${date}.`,
+      `Hai sbloccato tutti gli ordini disponibili in questo ciclo. Il prossimo inizia il ${date}.`,
     missingHint: "eBay non riporta dati fiscali per questo ordine.",
     checkingHint: "Verifica dei dati fiscali in corso.",
-    errorHint:
-      "Non siamo riusciti a leggere i dati fiscali da eBay. Riproveremo al prossimo aggiornamento.",
+    errorHint: "Non siamo riusciti a recuperare il Codice Fiscale da eBay. Riprova tra poco.",
     retry: "Riprova",
     retried: "Nuova lettura richiesta.",
     quality: {
@@ -147,7 +146,7 @@ const it = {
     ebayDownTitle: "eBay non risponde",
     ebayDownBody: (time: string) =>
       `Gli ordini sono aggiornati al ${time}. Sincronizzazione e ricollegamento tornano disponibili quando eBay risponde.`,
-    quotaTitle: "Sblocchi esauriti per questo ciclo",
+    quotaTitle: "Nessun ordine da sbloccare rimasto in questo ciclo",
     quotaBody: (date: string) =>
       `Puoi consultare e cercare tutti gli ordini. I dati fiscali dei nuovi ordini restano da sbloccare fino al ${date}.`,
     quotaAction: "Scopri Premium",
@@ -185,7 +184,7 @@ const it = {
     username: "Nome utente eBay",
     shipping: "Spedizione",
     recipient: "Destinatario",
-    payment: "Pagamento",
+    summary: "Ordine",
     total: "Totale",
     store: "Negozio",
     marketplace: "Marketplace",
@@ -273,6 +272,10 @@ const it = {
         title: "Autorizzazione incompleta",
         body: "eBay non ha concesso l’accesso agli ordini. Ricollega il negozio e accetta tutte le autorizzazioni richieste.",
       },
+      unverifiable: {
+        title: "Negozio non verificabile",
+        body: "eBay non conferma l’identità di questo negozio. La sincronizzazione è sospesa. Ricollega il negozio; se il problema continua, contatta l’assistenza.",
+      },
     },
     elsewhereTitle: "Negozio già collegato a un altro account",
     elsewhereBody:
@@ -284,7 +287,7 @@ const it = {
     title: "Impostazioni",
     categories: "Categorie",
     sections: {
-      piano: { title: "Piano e pagamenti", description: "Piano, sblocchi e pagamenti" },
+      piano: { title: "Piano e pagamenti", description: "Piano, ordini da sbloccare e pagamenti" },
       notifiche: { title: "Notifiche", description: "Telegram e comunicazioni" },
       esportazione: { title: "Esportazione", description: "File CSV e XLSX degli ordini" },
       sicurezza: { title: "Sicurezza", description: "Metodi di accesso e sessioni" },
@@ -309,8 +312,8 @@ const it = {
     free: "Free",
     premium: "Premium",
     freeSummary: "Un negozio attivo, ultimi 30 giorni di ordini, CSV.",
-    unlocksCycle: "Sblocchi in questo ciclo",
-    unlocksUsed: (used: number, limit: number) => `${used} di ${limit} usati`,
+    unlocksCycle: "Ordini sbloccati in questo ciclo",
+    unlocksUsed: (used: number, limit: number) => `${used} di ${limit}`,
     cycleEnds: (date: string) => `Il ciclo si rinnova il ${date}.`,
     trialTitle: "Prova Premium per 14 giorni",
     trialBody:
@@ -318,7 +321,7 @@ const it = {
     trialAction: "Attiva la prova",
     buyTitle: "Passa a Premium",
     buyBody:
-      "Sblocchi senza limite per ciclo, più negozi attivi, un anno di storico, XLSX e notifiche Telegram.",
+      "Ordini da sbloccare senza limite per ciclo, più negozi attivi, un anno di storico, XLSX e notifiche Telegram.",
     priceMonthly: "4,90 € al mese",
     priceAnnual: "49 € all’anno",
     priceLifetime: "149 € una tantum",
@@ -428,11 +431,11 @@ const it = {
     faqItems: [
       {
         q: "Perché un ordine non ha il Codice Fiscale?",
-        a: "eBay lo riporta soltanto quando l’acquirente lo ha indicato. Puoi chiederlo con il modello di messaggio.",
+        a: "eBay non lo riporta per tutti gli ordini. Quando manca, puoi chiederlo all’acquirente con il modello di messaggio.",
       },
       {
-        q: "Cosa consuma uno sblocco?",
-        a: "Solo un ordine con almeno un dato fiscale reso visibile. Dati assenti, errori, copie ed esportazioni non consumano sblocchi.",
+        q: "Quando un ordine conta come sbloccato?",
+        a: "Solo quando almeno un suo dato fiscale diventa visibile. Dati non disponibili, errori, copie ed esportazioni non contano.",
       },
       {
         q: "FiscalBay modifica gli ordini su eBay?",
@@ -513,7 +516,7 @@ const en: AppCopy = {
   preview: {
     label: "Preview with sample data",
     scenario: "Scenario",
-    note: "Actions are simulated: no eBay store is read or changed and no unlocks are used.",
+    note: "Actions are simulated: no eBay store is read or changed and no order is actually unlocked.",
     simulated: "Preview: this action is simulated.",
     signOut: "Preview: signing out is simulated.",
   },
@@ -549,9 +552,9 @@ const en: AppCopy = {
     fiscal: {
       available: "Available",
       locked: "To unlock",
-      missing: "Not on eBay",
+      missing: "Not available on eBay",
       checking: "Checking",
-      error: "Couldn’t read",
+      error: "Couldn’t update",
     },
     select: "Select",
     cancelSelection: "Cancel",
@@ -566,15 +569,15 @@ const en: AppCopy = {
     exportSelected: "Export",
     unlockTitle: (count) => `Unlock ${count} ${plural(count, "order", "orders")}?`,
     unlockConfirmText: (count, remaining) =>
-      `This uses ${count} ${plural(count, "unlock", "unlocks")} from this cycle; you will have ${remaining - count} left.`,
+      `After unlocking, you can unlock ${remaining - count} more ${plural(remaining - count, "order", "orders")} this cycle.`,
     unlockExceeds: (count, remaining) =>
-      `You selected ${count} orders to unlock, but you have ${remaining} ${plural(remaining, "unlock", "unlocks")} left this cycle. Reduce the selection.`,
+      `You selected ${count} orders to unlock, but you can unlock ${remaining} more ${plural(remaining, "order", "orders")} this cycle. Reduce the selection.`,
     unlockConfirm: "Unlock",
     cancel: "Cancel",
     unlocked: (remaining) =>
       remaining === null
         ? "Order unlocked."
-        : `Order unlocked. You have ${remaining} ${plural(remaining, "unlock", "unlocks")} left this cycle.`,
+        : `Order unlocked. You can unlock ${remaining} more ${plural(remaining, "order", "orders")}.`,
     unlockedMany: (count) => `${count} orders unlocked.`,
     loadMore: "Load more",
     allShown: "You have seen all orders in this period.",
@@ -594,12 +597,12 @@ const en: AppCopy = {
     copyFailed: "Copy failed. Try again, or select and copy the code.",
     lockedLabel: "Tax data to unlock",
     lockedHint: (remaining) =>
-      `Unlock to see and copy the tax details. You have ${remaining} ${plural(remaining, "unlock", "unlocks")} left this cycle.`,
+      `Unlock all tax details for this order. You have ${remaining} ${plural(remaining, "order", "orders")} left; after unlocking, you will have ${remaining - 1}.`,
     lockedExhausted: (date) =>
-      `You have used all unlocks for this cycle. The next one starts on ${date}.`,
+      `You have unlocked all available orders this cycle. The next one starts on ${date}.`,
     missingHint: "eBay does not provide tax details for this order.",
     checkingHint: "Checking the tax details.",
-    errorHint: "We could not read the tax details from eBay. We will try again at the next update.",
+    errorHint: "We could not get the tax code from eBay. Try again shortly.",
     retry: "Try again",
     retried: "New read requested.",
     quality: {
@@ -624,7 +627,7 @@ const en: AppCopy = {
     ebayDownTitle: "eBay is not responding",
     ebayDownBody: (time) =>
       `Orders are up to date as of ${time}. Syncing and reconnecting will be available again when eBay responds.`,
-    quotaTitle: "No unlocks left this cycle",
+    quotaTitle: "No orders left to unlock this cycle",
     quotaBody: (date) =>
       `You can still view and search all orders. Tax details of new orders stay locked until ${date}.`,
     quotaAction: "Discover Premium",
@@ -660,7 +663,7 @@ const en: AppCopy = {
     username: "eBay username",
     shipping: "Shipping",
     recipient: "Recipient",
-    payment: "Payment",
+    summary: "Order",
     total: "Total",
     store: "Store",
     marketplace: "Marketplace",
@@ -746,6 +749,10 @@ const en: AppCopy = {
         title: "Incomplete authorisation",
         body: "eBay did not grant access to orders. Reconnect the store and accept all requested permissions.",
       },
+      unverifiable: {
+        title: "Store cannot be verified",
+        body: "eBay does not confirm this store’s identity. Syncing is paused. Reconnect the store; if the problem continues, contact support.",
+      },
     },
     elsewhereTitle: "Store already connected to another account",
     elsewhereBody:
@@ -757,7 +764,7 @@ const en: AppCopy = {
     title: "Settings",
     categories: "Categories",
     sections: {
-      piano: { title: "Plan and billing", description: "Plan, unlocks and payments" },
+      piano: { title: "Plan and billing", description: "Plan, orders to unlock and payments" },
       notifiche: { title: "Notifications", description: "Telegram and communications" },
       esportazione: { title: "Export", description: "CSV and XLSX order files" },
       sicurezza: { title: "Security", description: "Sign-in methods and sessions" },
@@ -775,15 +782,15 @@ const en: AppCopy = {
     free: "Free",
     premium: "Premium",
     freeSummary: "One active store, the last 30 days of orders, CSV.",
-    unlocksCycle: "Unlocks this cycle",
-    unlocksUsed: (used, limit) => `${used} of ${limit} used`,
+    unlocksCycle: "Orders unlocked this cycle",
+    unlocksUsed: (used, limit) => `${used} of ${limit}`,
     cycleEnds: (date) => `The cycle renews on ${date}.`,
     trialTitle: "Try Premium for 14 days",
     trialBody: "No card and no automatic renewal: at the end you return to Free unless you buy.",
     trialAction: "Start trial",
     buyTitle: "Upgrade to Premium",
     buyBody:
-      "Unlimited unlocks per cycle, more active stores, one year of history, XLSX and Telegram notifications.",
+      "No limit on orders to unlock per cycle, more active stores, one year of history, XLSX and Telegram notifications.",
     priceMonthly: "€4.90 per month",
     priceAnnual: "€49 per year",
     priceLifetime: "€149 one-off",
@@ -885,11 +892,11 @@ const en: AppCopy = {
     faqItems: [
       {
         q: "Why does an order have no Codice Fiscale?",
-        a: "eBay provides it only when the buyer entered it. You can ask for it with the message template.",
+        a: "eBay does not provide it for every order. When it is missing, you can ask the buyer with the message template.",
       },
       {
-        q: "What uses an unlock?",
-        a: "Only an order with at least one tax detail made visible. Missing data, errors, copies and exports do not use unlocks.",
+        q: "When does an order count as unlocked?",
+        a: "Only when at least one of its tax details becomes visible. Unavailable data, errors, copies and exports do not count.",
       },
       {
         q: "Does FiscalBay change orders on eBay?",
