@@ -6,20 +6,22 @@
     <meta name="robots" content="noindex" />
     <title>FiscalBay</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <style>
       :root {
         color-scheme: light dark;
         --bg: #fffdf9;
-        --text: #16324f;
+        --text: #0e3372;
         --muted: #4a5d70;
-        --link: #1f6fa8;
+        --link: #1a4fa6;
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #0f2236;
+          --bg: #0b1220;
           --text: #fffdf9;
           --muted: #b8c4d0;
-          --link: #7cc4f0;
+          --link: #4f87e3;
         }
       }
       body {
@@ -38,9 +40,14 @@
         padding: 2rem 1rem;
         text-align: center;
       }
-      img {
-        width: 96px;
-        height: 96px;
+      h1 {
+        margin: 0 0 1.5rem;
+      }
+      h1 img {
+        display: block;
+        width: min(17.5rem, 100%);
+        height: auto;
+        margin: 0 auto;
       }
       p {
         color: var(--muted);
@@ -52,8 +59,12 @@
   </head>
   <body>
     <main>
-      <img src="/favicon.svg" alt="" />
-      <h1>FiscalBay</h1>
+      <h1>
+        <picture>
+          <source srcset="/fiscalbay-logo-dark.svg" media="(prefers-color-scheme: dark)" />
+          <img src="/fiscalbay-logo.svg" alt="FiscalBay" />
+        </picture>
+      </h1>
       <p>La nuova versione di FiscalBay è in preparazione.</p>
       <p lang="en">The new version of FiscalBay is being prepared.</p>
       <p>
