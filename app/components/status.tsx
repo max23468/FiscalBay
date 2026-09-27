@@ -9,6 +9,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { cn } from "cn";
+
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 
@@ -57,6 +59,12 @@ const alertIconColor: Record<StatusTone, string> = {
 };
 
 const actionable = new Set<StatusTone>(["warning", "danger", "locked"]);
+
+/** Icona decorativa del tono, per elenchi in cui il testo accanto porta il significato. */
+export function StatusIcon({ tone, className }: { tone: StatusTone; className?: string }) {
+  const Icon = icons[tone];
+  return <Icon aria-hidden="true" className={cn("size-4 shrink-0", iconColor[tone], className)} />;
+}
 
 /** Superficie colorata solo per gli stati che chiedono un'azione. */
 export function StatusBadge({ tone, children }: { tone: StatusTone; children: React.ReactNode }) {

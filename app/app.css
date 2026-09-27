@@ -103,6 +103,14 @@
   }
 }
 
+/* Avviso breve dopo un'azione: sale di poco dal basso, verso cui è ancorato. */
+@keyframes notice-in {
+  from {
+    opacity: 0;
+    translate: 0 0.5rem;
+  }
+}
+
 @utility fiscal-reveal {
   & [data-slot="button"] {
     animation: value-reveal var(--duration-quick) ease-out 100ms both;
