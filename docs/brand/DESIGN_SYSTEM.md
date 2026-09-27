@@ -15,7 +15,7 @@ Fondazione visiva di sito e app, circoscritta al prodotto ([§22](../MASTER_PLAN
 | Lucide (`lucide-react`) | 1.48.0 | ISC | Icone outline uniformi, confermate da D103 |
 | Inter Variable (`@fontsource-variable/inter`) | 5.3.0 | OFL-1.1 | Unico sans-serif, lo stesso del wordmark; servito dal nostro dominio |
 
-`shadcn` è una dipendenza di sviluppo: serve soltanto il suo CSS al build. Motion non è installato: bastano transizioni CSS e `tw-animate-css`.
+`shadcn` e `tw-animate-css` sono dipendenze di sviluppo: serve soltanto il loro CSS al build. Motion non è installato: bastano transizioni CSS e `tw-animate-css`.
 
 ## Token
 
@@ -50,10 +50,13 @@ Tre modalità: sistema (predefinita), chiaro, scuro. I token scuri valgono con `
 
 ## Accessibilità di base
 
-- **Focus:** anello pieno di 3 px nel colore `ring`, visibile su ogni controllo; il dialog porta il focus sull'azione sicura e lo restituisce al pulsante di apertura.
+- **Focus:** anello pieno di 3 px nel colore `ring`, visibile su ogni controllo; sui pulsanti è staccato di 2 px, così resta distinguibile anche sul pulsante primario dello stesso colore; il dialog porta il focus sull'azione sicura e lo restituisce al pulsante di apertura.
 - **Tocco:** con puntatore coarse pulsanti, campi, select, voci di menu, schede ed etichette di checkbox/switch/radio arrivano ad almeno 44 px; con il mouse restano compatti (36 px).
 - **Form:** etichetta visibile, descrizione e errore collegati con `aria-describedby`, `aria-invalid`, errori annunciati e focus sul primo campo errato.
 - **Testi:** i nomi accessibili che i sorgenti shadcn avevano fissi in inglese (`Close`, `Loading`) sono prop obbligatorie tradotte dal chiamante.
+- **Stati interattivi:** hover del pulsante primario e del pulsante distruttivo con token propri (`--primary-hover`, `--danger-surface-hover`) verificati a 4,5:1; l'opacità ridotta dei sorgenti shadcn scendeva fino a 3,8:1 nel tema scuro.
+- **Tooltip:** solo informazione accessoria, perché non viene annunciato dai lettori di schermo; il nome del controllo deve bastare da solo.
+- **Pannello laterale:** a tutta larghezza sotto 640 px, come chiede il dettaglio a schermo intero su mobile.
 - **Movimento:** con `prefers-reduced-motion: reduce` animazioni e transizioni sono azzerate.
 
 Controllo manuale del 2026-09-27 sul campione, in locale: tema cambiato da tastiera, form inviato vuoto, dialog e pannello aperti e chiusi con tastiera e tocco, IT/EN, 375 px con touch emulato senza scorrimento orizzontale della pagina e con tutti i target a 44 px. Non è una certificazione WCAG AA.
@@ -82,7 +85,7 @@ Componenti copiati nel repository, anche se non compaiono in `package.json`.
 
 | Percorso locale | Origine | Licenza | Modifiche sostanziali |
 |---|---|---|---|
-| `app/components/ui/*.tsx` (21 file) e `app/lib/utils.ts` | Registry shadcn/ui, stile `base-nova`, tramite `shadcn@4.21.0 add` il 2026-09-27 | MIT, © shadcn | Anello di focus pieno; altezze a 44 px con puntatore coarse; varianti di stato in `badge` e `alert` con ruolo ARIA per tono; `closeLabel` obbligatorio in `dialog` e `sheet`, pulsante `Close` rimosso da `DialogFooter`; `label` obbligatorio in `spinner`; stile selezionato di `FieldLabel` limitato alle schede di scelta; export delle varianti non usati rimossi; chiave per messaggio in `FieldError`; formattazione Oxfmt |
+| `app/components/ui/*.tsx` (21 file) | Registry shadcn/ui, stile `base-nova`, tramite `shadcn@4.21.0 add` il 2026-09-27 | MIT, © shadcn | Anello di focus pieno; altezze a 44 px con puntatore coarse; varianti di stato in `badge` e `alert` con ruolo ARIA per tono; `closeLabel` obbligatorio in `dialog` e `sheet`, pulsante `Close` rimosso da `DialogFooter`; `label` obbligatorio in `spinner`; stile selezionato di `FieldLabel` limitato alle schede di scelta; export delle varianti non usati rimossi; hover di pulsante primario e distruttivo su token dedicati, anello di focus staccato; menu largo almeno quanto il contenuto; pannello a tutta larghezza su mobile; `app/lib/utils.ts` generato ma inutilizzato rimosso; chiave per messaggio in `FieldError`; formattazione Oxfmt |
 | `app/app.css` | Scheletro generato da `shadcn init` | MIT, © shadcn | Token FiscalBay, tema sistema/chiaro/scuro, Inter, riduzione del movimento |
 
 Per aggiornare un componente usare la stessa CLI (`pnpm dlx shadcn@<versione> add <nome>`), poi riapplicare le modifiche elencate e aggiornare questa tabella. Notice e attribuzioni distributive restano nel gate licenze di M7.

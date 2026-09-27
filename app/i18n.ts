@@ -15,6 +15,7 @@ export function localizedPath(language: Language, path = "/"): string {
 const resources = {
   it: {
     translation: {
+      language: "Lingua",
       orders: "Ordini",
       ordersDescription: "Ordini eBay disponibili in FiscalBay",
       ordersIntro: "Gli ordini e i dati fiscali accessibili sono isolati per spazio.",
@@ -55,6 +56,7 @@ const resources = {
   },
   en: {
     translation: {
+      language: "Language",
       orders: "Orders",
       ordersDescription: "eBay orders available in FiscalBay",
       ordersIntro: "Accessible orders and tax data are isolated by workspace.",

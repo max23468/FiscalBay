@@ -79,7 +79,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         />
         <h1 className="text-4xl font-bold sm:text-5xl">{t("orders")}</h1>
         <p className="text-muted-foreground">{t("ordersIntro")}</p>
-        <nav aria-label="Language" className="flex gap-3 text-sm">
+        <nav aria-label={t("language")} className="flex gap-3 text-sm">
           <a
             href="/"
             lang="it"

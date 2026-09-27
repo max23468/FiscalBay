@@ -34,6 +34,7 @@
   --popover-foreground: #0f1b2d;
   --primary: #1a4fa6;
   --primary-foreground: #ffffff;
+  --primary-hover: #16438d;
   --secondary: #e9eef6;
   --secondary-foreground: #0e3372;
   --muted: #eef1f5;
@@ -53,6 +54,7 @@
   --warning-surface: #fdf3e1;
   --danger: #b42318;
   --danger-surface: #fdecea;
+  --danger-surface-hover: #fadcd8;
   --premium: #6327c9;
   --premium-surface: #f2edfd;
   --neutral: #556275;
@@ -82,6 +84,7 @@
   --popover-foreground: #e6ebf3;
   --primary: #4f87e3;
   --primary-foreground: #0b1220;
+  --primary-hover: #6f9deb;
   --secondary: #1b2740;
   --secondary-foreground: #dbe5f5;
   --muted: #182238;
@@ -101,6 +104,7 @@
   --warning-surface: #2b200c;
   --danger: #f4827b;
   --danger-surface: #2f1517;
+  --danger-surface-hover: #3d1b1e;
   --premium: #c3aefa;
   --premium-surface: #231a3d;
   --neutral: #9aa6b9;
@@ -121,6 +125,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -139,6 +144,7 @@
   --color-warning-surface: var(--warning-surface);
   --color-danger: var(--danger);
   --color-danger-surface: var(--danger-surface);
+  --color-danger-surface-hover: var(--danger-surface-hover);
   --color-premium: var(--premium);
   --color-premium-surface: var(--premium-surface);
   --color-neutral: var(--neutral);
