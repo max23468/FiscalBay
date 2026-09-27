@@ -33,6 +33,8 @@ Controllare stato, branch, diff e istruzioni vicine prima di scrivere. Preservar
 
 Seguire feature branch → `develop`, test dai merge, `main` candidato e workflow `Pubblica` autorizzato; non usare release script VPS 1.x. La 1.x congelata vive soltanto nella branch `legacy/1.x`: correzioni residue e deploy manuali della 1.x partono da lì, mai da `main`. M0 procede per esclusione e prove circoscritte, poi implementa il candidato migliore. Non costruire adapter scartati, scheduler generalisti, package vuoti o copia HTTP di ogni loader/action.
 
+Le PR verso `develop` richiedono il controllo `Node 26` e ammettono il merge automatico: con mandato di pubblicazione aprirle con merge automatico e monitoraggio attivi, poi completare senza nuovo sollecito readback del deploy test, pulizia e registrazione nel backlog.
+
 Chiudere ogni merge su `develop` e ogni `Pubblica` con la pulizia Git prevista dal [governo](docs/MASTER_PLAN.md#s34): riconciliare PR, commit e readback, poi rimuovere branch e worktree temporanei già assorbiti, anche se lasciati da cicli precedenti. Conservare riferimenti con lavoro non integrato o ancora in uso e registrare nel backlog ogni pulizia rimasta sospesa.
 
 pnpm, latest stable **qualificata**, pin nei manifest/lockfile. Dipendenze opzionali solo con un uso concreto. Primitive native per HTTP/crypto e servizi scelti per code/retry quando bastano; mantenere deduplica e invarianti applicativi. Entità logiche non impongono altrettante tabelle; nessuna versione dati senza cambiamento utile.
