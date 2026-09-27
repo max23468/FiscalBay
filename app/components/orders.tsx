@@ -62,7 +62,10 @@ import {
   marketplaceLabel,
   type AccountView,
   type FiscalState,
-  type OrderStatus,
+  type PaymentStatus,
+  type ShippingStatus,
+  type AddressView,
+  countryName,
   type OrderView,
   type TaxIdentifierView,
 } from "../view-models";
@@ -100,7 +103,8 @@ export interface UnlockResult {
 }
 
 const fiscalStates: FiscalState[] = ["available", "locked", "missing", "checking", "error"];
-const orderStatuses: OrderStatus[] = ["paid", "unpaid", "shipped", "cancelled", "refunded"];
+const paymentStatuses: PaymentStatus[] = ["paid", "unpaid", "refunded"];
+const shippingStatuses: ShippingStatus[] = ["to_ship", "shipped", "delivered", "cancelled"];
 
 function identifierLabel(identifier: TaxIdentifierView, t: AppCopy) {
   return identifier.type === "OTHER"
@@ -522,6 +526,57 @@ function CardFiscal({
   );
 }
 
+function AddressLines({ address, language }: { address: AddressView; language: Language }) {
+  const province = address.province ? ` (${address.province})` : "";
+  return (
+    <>
+      <span className="block">{address.line}</span>
+      <span className="block">
+        {address.postalCode} {address.city}
+        {province}, {countryName(address.countryCode, language)}
+      </span>
+    </>
+  );
+}
+
+/**
+ * Indirizzo fiscale e contatti dell'acquirente: dati non fiscali, visibili
+ * anche con il Codice Fiscale da sbloccare. Un dato assente resta indicato.
+ */
+function BuyerContacts({
+  order,
+  t,
+  language,
+}: {
+  order: OrderView;
+  t: AppCopy;
+  language: Language;
+}) {
+  const missing = <span className="text-muted-foreground">{t.orders.notProvided}</span>;
+  return (
+    <dl className="grid gap-x-4 gap-y-2 text-sm leading-snug sm:col-span-2 sm:grid-cols-subgrid">
+      <div className="grid content-start gap-0.5 sm:row-span-2">
+        <dt className="text-xs font-medium text-muted-foreground">{t.orders.taxAddress}</dt>
+        <dd className="text-pretty">
+          {order.taxAddress ? (
+            <AddressLines address={order.taxAddress} language={language} />
+          ) : (
+            missing
+          )}
+        </dd>
+      </div>
+      <div className="grid content-start gap-0.5">
+        <dt className="text-xs font-medium text-muted-foreground">{t.orders.phone}</dt>
+        <dd className="font-code">{order.phone ?? missing}</dd>
+      </div>
+      <div className="grid min-w-0 content-start gap-0.5">
+        <dt className="text-xs font-medium text-muted-foreground">{t.orders.email}</dt>
+        <dd className="break-all">{order.email ?? missing}</dd>
+      </div>
+    </dl>
+  );
+}
+
 function OrderCard({
   order,
   t,
@@ -618,7 +673,9 @@ function OrderCard({
               {formatDate(order.createdAt, language)}
             </time>
             <span aria-hidden="true">·</span>
-            <span className="whitespace-nowrap">{t.orders.status[order.status]}</span>
+            <span className="whitespace-nowrap">
+              {t.orders.payment[order.payment]} · {t.orders.shipping[order.shipping]}
+            </span>
             <span aria-hidden="true">·</span>
             <span className="text-pretty">
               {order.storeName}, {marketplaceLabel(order.marketplace)}
@@ -679,6 +736,7 @@ function OrderCard({
           unlocking={unlocking}
           onUnlock={onUnlock}
         />
+        <BuyerContacts order={order} t={t} language={language} />
       </div>
     </article>
   );
@@ -786,9 +844,36 @@ function OrderDetail({
               <dd className="font-code">{order.buyerUsername}</dd>
             </div>
             <div className={row}>
+              <dt className="text-muted-foreground">{t.orders.taxAddress}</dt>
+              <dd className="text-pretty">
+                {order.taxAddress ? (
+                  <AddressLines address={order.taxAddress} language={language} />
+                ) : (
+                  <span className="text-muted-foreground">{t.orders.notProvided}</span>
+                )}
+              </dd>
+            </div>
+            <div className={row}>
+              <dt className="text-muted-foreground">{t.orders.phone}</dt>
+              <dd className="font-code">
+                {order.phone ?? (
+                  <span className="font-sans text-muted-foreground">{t.orders.notProvided}</span>
+                )}
+              </dd>
+            </div>
+            <div className={row}>
+              <dt className="text-muted-foreground">{t.orders.email}</dt>
+              <dd className="break-all">
+                {order.email ?? (
+                  <span className="text-muted-foreground">{t.orders.notProvided}</span>
+                )}
+              </dd>
+            </div>
+            <div className={row}>
               <dt className="text-muted-foreground">{t.order.recipient}</dt>
               <dd className="text-pretty">
-                {order.shipTo.name}, {order.shipTo.locality}, {order.shipTo.country}
+                {order.shipTo.name}, {order.shipTo.locality},{" "}
+                {countryName(order.shipTo.country, language)}
               </dd>
             </div>
           </dl>
@@ -799,8 +884,12 @@ function OrderDetail({
           </h3>
           <dl className="grid grid-cols-2 gap-3 text-sm">
             <div className={row}>
-              <dt className="text-muted-foreground">{t.order.status}</dt>
-              <dd>{t.orders.status[order.status]}</dd>
+              <dt className="text-muted-foreground">{t.orders.paymentStatus}</dt>
+              <dd>{t.orders.payment[order.payment]}</dd>
+            </div>
+            <div className={row}>
+              <dt className="text-muted-foreground">{t.orders.shippingStatus}</dt>
+              <dd>{t.orders.shipping[order.shipping]}</dd>
             </div>
             <div className={row}>
               <dt className="text-muted-foreground">{t.order.total}</dt>
@@ -899,7 +988,7 @@ function OrdersToolbar({
 }) {
   const [params, setParams] = useSearchParams();
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const filterKeys = ["negozio", "marketplace", "periodo", "stato", "fiscale"];
+  const filterKeys = ["negozio", "marketplace", "periodo", "pagamento", "spedizione", "fiscale"];
   const active = filterKeys.filter((key) => params.get(key)).length;
   const change = (name: string, value: string) => {
     const next = new URLSearchParams(params);
@@ -934,7 +1023,7 @@ function OrdersToolbar({
       <div
         id="orders-filters"
         className={cn(
-          "grid gap-3 sm:grid-cols-2 md:flex-1 md:grid-cols-3 lg:grid-cols-5",
+          "grid gap-3 sm:grid-cols-2 md:flex-1 md:grid-cols-3 xl:grid-cols-6",
           !filtersOpen && "max-md:hidden",
         )}
       >
@@ -971,12 +1060,23 @@ function OrdersToolbar({
           onChange={change}
         />
         <FilterSelect
-          label={t.orders.orderStatus}
-          name="stato"
-          value={params.get("stato") ?? ""}
-          options={orderStatuses.map((status) => ({
+          label={t.orders.paymentStatus}
+          name="pagamento"
+          value={params.get("pagamento") ?? ""}
+          options={paymentStatuses.map((status) => ({
             value: status,
-            label: t.orders.status[status],
+            label: t.orders.payment[status],
+          }))}
+          allLabel={t.orders.all}
+          onChange={change}
+        />
+        <FilterSelect
+          label={t.orders.shippingStatus}
+          name="spedizione"
+          value={params.get("spedizione") ?? ""}
+          options={shippingStatuses.map((status) => ({
+            value: status,
+            label: t.orders.shipping[status],
           }))}
           allLabel={t.orders.all}
           onChange={change}

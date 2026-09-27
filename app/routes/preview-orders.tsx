@@ -36,8 +36,10 @@ function matches(order: OrderView, params: URLSearchParams, now: string) {
   if (store && order.storeId !== store) return false;
   const marketplace = params.get("marketplace");
   if (marketplace && order.marketplace !== marketplace) return false;
-  const status = params.get("stato");
-  if (status && order.status !== status) return false;
+  const payment = params.get("pagamento");
+  if (payment && order.payment !== payment) return false;
+  const shipping = params.get("spedizione");
+  if (shipping && order.shipping !== shipping) return false;
   const fiscal = params.get("fiscale");
   if (fiscal && order.fiscal.state !== fiscal) return false;
   const days = Number(params.get("periodo"));

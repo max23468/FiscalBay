@@ -33,7 +33,18 @@ export type FiscalView =
 
 export type FiscalState = FiscalView["state"];
 
-export type OrderStatus = "paid" | "unpaid" | "shipped" | "cancelled" | "refunded";
+export type PaymentStatus = "paid" | "unpaid" | "refunded";
+
+/** Stato di evasione; un ordine annullato non viene spedito. */
+export type ShippingStatus = "to_ship" | "shipped" | "delivered" | "cancelled";
+
+export interface AddressView {
+  line: string;
+  postalCode: string;
+  city: string;
+  province: string | null;
+  countryCode: string;
+}
 
 export interface OrderItemView {
   id: string;
@@ -64,7 +75,12 @@ export interface OrderView {
   items: OrderItemView[];
   totalMinor: number;
   currency: string;
-  status: OrderStatus;
+  payment: PaymentStatus;
+  shipping: ShippingStatus;
+  /** Indirizzo fiscale dell'acquirente; non è un dato fiscale da sbloccare. */
+  taxAddress: AddressView | null;
+  phone: string | null;
+  email: string | null;
   fiscal: FiscalView;
   suggestion?: SuggestionView;
   thumbnail?: string;
@@ -180,6 +196,11 @@ export function formatDate(
   return new Intl.DateTimeFormat(language, { ...options, timeZone: displayTimeZone }).format(
     new Date(value),
   );
+}
+
+/** Nome del Paese nella lingua dell'interfaccia, dal codice ISO. */
+export function countryName(code: string, language: Language): string {
+  return new Intl.DisplayNames(language, { type: "region" }).of(code) ?? code;
 }
 
 /** Tempo relativo rispetto a un istante fornito dal server, stabile fra server e browser. */
