@@ -13,7 +13,7 @@ import { Link, useFetcher, useLocation, useNavigate, useSearchParams } from "rea
 import { useNotice } from "~/components/app-shell";
 import { LedgerIndicator } from "~/components/brand";
 import { EmptyState } from "~/components/empty-state";
-import { StatusAlert, StatusBadge } from "~/components/status";
+import { StatusAlert, StatusBadge, StatusIcon } from "~/components/status";
 import { TaxCode } from "~/components/tax-code";
 import {
   AlertDialog,
@@ -125,13 +125,11 @@ function IdentifierEntry({
   identifier,
   order,
   t,
-  compact,
   revealed,
 }: {
   identifier: TaxIdentifierView;
   order: OrderView;
   t: AppCopy;
-  compact: boolean;
   revealed: boolean;
 }) {
   const label = identifierLabel(identifier, t);
@@ -154,14 +152,51 @@ function IdentifierEntry({
           </p>
         </div>
       ) : null}
-      {quality === "unchecked" && !compact ? (
+      {quality === "unchecked" ? (
         <p className="text-sm text-muted-foreground">{t.orders.quality.unchecked}</p>
       ) : null}
-      {updated ? <StatusBadge tone="info">{t.orders.updated}</StatusBadge> : null}
-      {updated && !compact ? (
-        <p className="text-sm text-muted-foreground">{t.orders.updatedHint}</p>
+      {updated ? (
+        <div className="grid gap-1.5">
+          <StatusBadge tone="info">{t.orders.updated}</StatusBadge>
+          <p className="text-sm text-muted-foreground">{t.orders.updatedHint}</p>
+        </div>
       ) : null}
     </div>
+  );
+}
+
+function UnlockButton({
+  order,
+  t,
+  unlocking,
+  onUnlock,
+  size,
+}: {
+  order: OrderView;
+  t: AppCopy;
+  unlocking: boolean;
+  onUnlock: (ids: string[]) => void;
+  size?: "sm";
+}) {
+  return (
+    <Button
+      size={size}
+      className="w-fit"
+      disabled={unlocking}
+      focusableWhenDisabled
+      aria-busy={unlocking || undefined}
+      onClick={() => onUnlock([order.id])}
+    >
+      {unlocking ? (
+        <Spinner
+          label={t.orders.unlock}
+          aria-hidden="true"
+          role={undefined}
+          data-icon="inline-start"
+        />
+      ) : null}
+      {t.orders.unlock}
+    </Button>
   );
 }
 
@@ -192,59 +227,29 @@ function LockedFiscal({
           : t.orders.lockedHint(remaining ?? 0)}
       </p>
       {exhausted ? null : (
-        <Button
-          className="mt-1 w-fit"
-          disabled={unlocking}
-          focusableWhenDisabled
-          aria-busy={unlocking || undefined}
-          onClick={() => onUnlock([order.id])}
-        >
-          {unlocking ? (
-            <Spinner
-              label={t.orders.unlock}
-              aria-hidden="true"
-              role={undefined}
-              data-icon="inline-start"
-            />
-          ) : null}
-          {t.orders.unlock}
-        </Button>
+        <UnlockButton order={order} t={t} unlocking={unlocking} onUnlock={onUnlock} />
       )}
     </div>
   );
 }
 
 /** Dato non disponibile: assente per natura, in verifica o non letto. */
-function UnavailableFiscal({
-  order,
-  t,
-  compact,
-}: {
-  order: OrderView;
-  t: AppCopy;
-  compact: boolean;
-}) {
+function UnavailableFiscal({ order, t }: { order: OrderView; t: AppCopy }) {
   const notify = useNotice();
   const state = order.fiscal.state as "missing" | "checking" | "error";
   const tone = state === "missing" ? "neutral" : state === "checking" ? "info" : "danger";
   const hint =
     state === "error"
       ? t.orders.errorHint
-      : compact
-        ? state === "missing" && order.suggestion
-          ? t.orders.suggestion
-          : null
-        : state === "missing"
-          ? t.orders.missingHint
-          : t.orders.checkingHint;
+      : state === "missing"
+        ? t.orders.missingHint
+        : t.orders.checkingHint;
   return (
     <div className="grid gap-2">
       <div className="flex min-h-10 items-center">
         <StatusBadge tone={tone}>{t.orders.fiscal[state]}</StatusBadge>
       </div>
-      {hint ? (
-        <p className="max-w-md text-sm leading-relaxed text-pretty text-muted-foreground">{hint}</p>
-      ) : null}
+      <p className="max-w-md text-sm leading-relaxed text-pretty text-muted-foreground">{hint}</p>
       {state === "error" ? (
         <Button variant="outline" className="mt-1 w-fit" onClick={() => notify(t.orders.retried)}>
           {t.orders.retry}
@@ -255,15 +260,14 @@ function UnavailableFiscal({
 }
 
 /**
- * Stato fiscale dell'ordine: dato copiabile, sblocco con quota, assenza,
- * verifica o errore. È l'unico accento colorato della scheda.
+ * Stato fiscale completo nel dettaglio: dato copiabile, sblocco con quota,
+ * assenza, verifica o errore, con le spiegazioni per esteso.
  */
 function FiscalBlock({
   order,
   t,
   language,
   account,
-  compact,
   revealed,
   unlocking,
   onUnlock,
@@ -272,7 +276,6 @@ function FiscalBlock({
   t: AppCopy;
   language: Language;
   account: AccountView;
-  compact: boolean;
   revealed: boolean;
   unlocking: boolean;
   onUnlock: (ids: string[]) => void;
@@ -287,7 +290,6 @@ function FiscalBlock({
             identifier={identifier}
             order={order}
             t={t}
-            compact={compact}
             revealed={revealed}
           />
         ))}
@@ -306,7 +308,218 @@ function FiscalBlock({
       />
     );
   }
-  return <UnavailableFiscal order={order} t={t} compact={compact} />;
+  return <UnavailableFiscal order={order} t={t} />;
+}
+
+/** Riquadro della misura del Codice Fiscale per gli stati senza valore. */
+function FiscalSlot({ tone, children }: { tone: "neutral" | "info" | "danger"; children: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex min-h-10 w-56 max-w-full items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1 text-sm",
+        tone === "danger" ? "text-danger" : "text-muted-foreground",
+      )}
+    >
+      <StatusIcon tone={tone} className="size-3.5" />
+      {children}
+    </span>
+  );
+}
+
+const cardRow = "flex flex-wrap items-center gap-x-3 gap-y-2";
+
+function CardLabel({ children }: { children: string }) {
+  return <p className="text-xs font-medium text-muted-foreground">{children}</p>;
+}
+
+/**
+ * Spiegazione completa del dato fiscale. Nella scheda occupa tutta la
+ * larghezza sotto acquirente e codice, così non allunga la colonna del codice.
+ */
+function CardNote({ tone, children }: { tone?: "warning" | "info"; children: React.ReactNode }) {
+  return (
+    <p
+      className={cn(
+        "flex gap-1.5 text-sm leading-relaxed text-pretty sm:col-span-2",
+        tone === "warning" ? "text-foreground" : "text-muted-foreground",
+      )}
+    >
+      {tone ? <StatusIcon tone={tone} className="mt-1 size-3.5" /> : null}
+      <span>{children}</span>
+    </p>
+  );
+}
+
+function IdentifierNote({
+  identifier,
+  t,
+  prefix,
+}: {
+  identifier: TaxIdentifierView;
+  t: AppCopy;
+  prefix: string;
+}) {
+  const { quality } = identifier;
+  if (quality !== "valid" && quality !== "unchecked") {
+    return (
+      <CardNote tone="warning">
+        {prefix}
+        {t.orders.toVerify}. {t.orders.quality[quality]}
+      </CardNote>
+    );
+  }
+  if (quality === "unchecked") {
+    return (
+      <CardNote>
+        {prefix}
+        {t.orders.quality.unchecked}
+      </CardNote>
+    );
+  }
+  if (!identifier.updated) return null;
+  return (
+    <CardNote tone="info">
+      {prefix}
+      {t.orders.updated}. {t.orders.updatedHint}
+    </CardNote>
+  );
+}
+
+function CardLocked({
+  order,
+  t,
+  language,
+  account,
+  unlocking,
+  onUnlock,
+}: {
+  order: OrderView;
+  t: AppCopy;
+  language: Language;
+  account: AccountView;
+  unlocking: boolean;
+  onUnlock: (ids: string[]) => void;
+}) {
+  const remaining = remainingUnlocks(account);
+  const exhausted = remaining === 0 && account.quota;
+  return (
+    <>
+      <div className="grid content-start gap-1.5">
+        <CardLabel>{t.orders.identifier.CF}</CardLabel>
+        <div className={cardRow}>
+          <TaxCode
+            value={null}
+            labels={taxCodeLabels(t.orders.identifier.CF, order.ebayOrderId, t)}
+          />
+          {exhausted ? null : (
+            <UnlockButton order={order} t={t} unlocking={unlocking} onUnlock={onUnlock} size="sm" />
+          )}
+        </div>
+      </div>
+      <CardNote>
+        {exhausted
+          ? t.orders.lockedExhausted(formatDate(exhausted.cycleEndsAt, language, "date"))
+          : t.orders.lockedHint(remaining ?? 0)}
+      </CardNote>
+    </>
+  );
+}
+
+function CardUnavailable({ order, t }: { order: OrderView; t: AppCopy }) {
+  const notify = useNotice();
+  const state = order.fiscal.state as "missing" | "checking" | "error";
+  const tone = state === "missing" ? "neutral" : state === "checking" ? "info" : "danger";
+  const hint =
+    state === "error"
+      ? t.orders.errorHint
+      : state === "missing"
+        ? t.orders.missingHint
+        : t.orders.checkingHint;
+  return (
+    <>
+      <div className="grid content-start gap-1.5">
+        <CardLabel>{t.orders.identifier.CF}</CardLabel>
+        <div className={cardRow}>
+          <FiscalSlot tone={tone}>{t.orders.fiscal[state]}</FiscalSlot>
+          {state === "error" ? (
+            <Button variant="outline" size="sm" onClick={() => notify(t.orders.retried)}>
+              {t.orders.retry}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      <CardNote>{hint}</CardNote>
+      {state === "missing" && order.suggestion ? (
+        <CardNote tone="info">{t.orders.suggestion}</CardNote>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * Stato fiscale nella scheda: etichetta e riquadro della stessa misura per
+ * ogni stato, con l'azione accanto, affiancati all'acquirente; sotto, la
+ * spiegazione completa a tutta larghezza.
+ */
+function CardFiscal({
+  order,
+  t,
+  language,
+  account,
+  revealed,
+  unlocking,
+  onUnlock,
+}: {
+  order: OrderView;
+  t: AppCopy;
+  language: Language;
+  account: AccountView;
+  revealed: boolean;
+  unlocking: boolean;
+  onUnlock: (ids: string[]) => void;
+}) {
+  const { fiscal } = order;
+  if (fiscal.state === "locked") {
+    return (
+      <CardLocked
+        order={order}
+        t={t}
+        language={language}
+        account={account}
+        unlocking={unlocking}
+        onUnlock={onUnlock}
+      />
+    );
+  }
+  if (fiscal.state !== "available") return <CardUnavailable order={order} t={t} />;
+  const several = fiscal.identifiers.length > 1;
+  return (
+    <>
+      <div className="grid content-start gap-3">
+        {fiscal.identifiers.map((identifier) => {
+          const name = identifierLabel(identifier, t);
+          return (
+            <div key={`${identifier.type}:${identifier.value}`} className="grid gap-1.5">
+              <CardLabel>{name}</CardLabel>
+              <TaxCode
+                value={identifier.value}
+                labels={taxCodeLabels(name, order.ebayOrderId, t)}
+                reveal={revealed}
+              />
+            </div>
+          );
+        })}
+      </div>
+      {fiscal.identifiers.map((identifier) => (
+        <IdentifierNote
+          key={`note:${identifier.type}:${identifier.value}`}
+          identifier={identifier}
+          t={t}
+          prefix={several ? `${identifierLabel(identifier, t)}: ` : ""}
+        />
+      ))}
+    </>
+  );
 }
 
 function OrderCard({
@@ -344,14 +557,16 @@ function OrderCard({
     <article
       aria-labelledby={titleId}
       className={cn(
-        "flex min-w-0 flex-col gap-4 rounded-xl border bg-card p-5 transition-[border-color] duration-(--duration-quick)",
+        // Da due colonne la scheda occupa tre righe condivise con quella accanto:
+        // intestazione, articolo e acquirente iniziano alla stessa altezza.
+        "flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4 transition-[border-color] duration-(--duration-quick) lg:row-span-3 lg:grid lg:grid-rows-subgrid",
         selected && "border-ring",
         isNew &&
           "animate-[notice-in_var(--duration-fast)_var(--ease-smooth-out)] motion-reduce:animate-none",
       )}
     >
-      <header className="grid gap-1">
-        <div className="flex items-start justify-between gap-3">
+      <header className="grid gap-0.5">
+        <div className="flex items-center justify-between gap-3">
           <h3 id={titleId} className="font-code text-[0.9375rem] leading-snug font-semibold">
             <Link
               to={detailHref}
@@ -361,8 +576,8 @@ function OrderCard({
               {t.order.title(order.ebayOrderId)}
             </Link>
           </h3>
-          <div className="flex shrink-0 items-center gap-3">
-            <span className="font-code text-[0.9375rem] font-semibold whitespace-nowrap">
+          <div className="-my-1 -mr-1.5 flex shrink-0 items-center gap-1">
+            <span className="font-code mr-1 text-[0.9375rem] font-semibold whitespace-nowrap">
               {formatAmount(order.totalMinor, order.currency, language)}
             </span>
             {selecting ? (
@@ -370,33 +585,65 @@ function OrderCard({
                 checked={selected}
                 onCheckedChange={(checked) => onSelect(checked === true)}
                 aria-label={t.orders.selectOrder(order.ebayOrderId)}
+                className="mx-1.5"
               />
-            ) : null}
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={t.orders.moreActions(order.ebayOrderId)}
+                    />
+                  }
+                >
+                  <EllipsisVertical aria-hidden="true" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => notify(t.preview.simulated)}>
+                    {t.orders.openOnEbay}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => notify(t.orders.exportNotice)}>
+                    {t.orders.exportOrder}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
-        <p className="flex flex-wrap gap-x-1.5 text-xs text-muted-foreground">
-          <time dateTime={order.createdAt} className="whitespace-nowrap">
-            {formatDate(order.createdAt, language)}
-          </time>
-          <span aria-hidden="true">·</span>
-          <span className="whitespace-nowrap">{t.orders.status[order.status]}</span>
-          <span aria-hidden="true">·</span>
-          <span className="text-pretty">
-            {order.storeName}, {marketplaceLabel(order.marketplace)}
-          </span>
-        </p>
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="flex flex-wrap gap-x-1.5 text-xs text-muted-foreground">
+            <time dateTime={order.createdAt} className="whitespace-nowrap">
+              {formatDate(order.createdAt, language)}
+            </time>
+            <span aria-hidden="true">·</span>
+            <span className="whitespace-nowrap">{t.orders.status[order.status]}</span>
+            <span aria-hidden="true">·</span>
+            <span className="text-pretty">
+              {order.storeName}, {marketplaceLabel(order.marketplace)}
+            </span>
+          </p>
+          <Link
+            to={detailHref}
+            preventScrollReset
+            className="shrink-0 rounded-sm text-xs font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring pointer-coarse:py-1.5"
+          >
+            {t.orders.details}
+          </Link>
+        </div>
       </header>
       <div className="flex gap-3">
         {order.thumbnail ? (
           <img
             src={order.thumbnail}
             alt=""
-            width="48"
-            height="48"
-            className="size-12 shrink-0 rounded-lg border bg-muted object-cover"
+            width="40"
+            height="40"
+            className="size-10 shrink-0 rounded-md border bg-muted object-cover"
           />
         ) : null}
-        <ul className="grid min-w-0 content-start gap-1 text-sm leading-relaxed">
+        <ul className="grid min-w-0 content-start gap-1 text-sm leading-snug">
           {shown.map((item, index) => (
             <li
               key={item.id}
@@ -416,52 +663,23 @@ function OrderCard({
           ) : null}
         </ul>
       </div>
-      <div className="grid gap-3 border-t pt-4">
-        <p className="grid gap-0.5">
+      <div className="grid content-start gap-x-4 gap-y-3 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <p className="grid content-start gap-1.5">
           <span className="text-xs font-medium text-muted-foreground">{t.order.buyer}</span>
-          <span className="text-sm leading-snug font-medium text-pretty">{order.buyerName}</span>
+          <span className="flex items-center text-sm leading-snug font-medium text-pretty sm:min-h-10">
+            {order.buyerName}
+          </span>
         </p>
-        <FiscalBlock
+        <CardFiscal
           order={order}
           t={t}
           language={language}
           account={account}
-          compact
           revealed={revealed}
           unlocking={unlocking}
           onUnlock={onUnlock}
         />
       </div>
-      <footer className="mt-auto flex items-center justify-end gap-1">
-        <Link
-          to={detailHref}
-          preventScrollReset
-          className={buttonVariants({ variant: "ghost", size: "sm" })}
-        >
-          {t.orders.details}
-        </Link>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t.orders.moreActions(order.ebayOrderId)}
-              />
-            }
-          >
-            <EllipsisVertical aria-hidden="true" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => notify(t.preview.simulated)}>
-              {t.orders.openOnEbay}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => notify(t.orders.exportNotice)}>
-              {t.orders.exportOrder}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </footer>
     </article>
   );
 }
@@ -505,7 +723,6 @@ function OrderDetail({
             t={t}
             language={language}
             account={account}
-            compact={false}
             revealed={revealed}
             unlocking={unlocking}
             onUnlock={onUnlock}
@@ -1156,7 +1373,7 @@ function OrdersList({
         />
       ) : (
         <>
-          <section aria-label={t.orders.list} className="grid gap-4 lg:grid-cols-2">
+          <section aria-label={t.orders.list} className="grid gap-3 lg:grid-cols-2">
             {orders.map((order) => (
               <OrderCard
                 key={order.id}
