@@ -732,7 +732,9 @@ function OrderCard({
           ) : null}
         </ul>
       </div>
-      <div className="grid content-start gap-x-4 gap-y-3 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+      {/* Colonna fiscale fissa, larga quanto il riquadro del codice: l'azione va
+          sotto il riquadro invece di schiacciare la colonna dell'acquirente. */}
+      <div className="grid content-start gap-x-4 gap-y-3 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_14.5rem]">
         <p className="grid content-start gap-1.5">
           <span className="text-xs font-medium text-muted-foreground">{t.order.buyer}</span>
           <span className="flex items-center text-sm leading-snug font-medium text-pretty sm:min-h-10">
