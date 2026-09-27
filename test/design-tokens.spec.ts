@@ -45,7 +45,7 @@ const pairs: Array<[string, string, number]> = [
   ]),
   ["primary-foreground", "primary", 4.5],
   ["primary-foreground", "primary-hover", 4.5],
-  ["danger", "danger-surface-hover", 4.5],
+  ["danger-foreground", "danger", 4.5],
   ["secondary-foreground", "secondary", 4.5],
   ["primary", "card", 4.5],
   ["destructive", "card", 4.5],

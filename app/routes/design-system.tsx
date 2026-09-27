@@ -15,12 +15,7 @@ import {
   SunMoon,
 } from "lucide-react";
 
-import {
-  StatusAlert,
-  StatusBadge,
-  type StatusEmphasis,
-  type StatusTone,
-} from "~/components/status";
+import { StatusAlert, StatusBadge, type StatusTone } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Checkbox } from "~/components/ui/checkbox";
@@ -194,14 +189,6 @@ const copy = {
     copyTaxCode: "Copia Codice Fiscale",
     download: "Scarica",
     refresh: "Aggiorna",
-    compare: "Confronto: colori pieni e sobri",
-    compareDescription:
-      "Stessi contenuti e stessa semantica. A sinistra la versione attuale, a destra la proposta con meno superfici colorate: il colore pieno resta agli stati che chiedono un’azione.",
-    tinted: "Attuale",
-    sober: "Proposta sobria",
-    stores: "Negozi",
-    unlock: "Sblocca",
-    reconnect: "Ricollega",
   },
   en: {
     title: "Design system",
@@ -292,14 +279,6 @@ const copy = {
     copyTaxCode: "Copy Codice Fiscale",
     download: "Download",
     refresh: "Refresh",
-    compare: "Comparison: tinted and sober colours",
-    compareDescription:
-      "Same content and semantics. On the left the current version, on the right the proposal with fewer coloured surfaces: full colour stays on states that need an action.",
-    tinted: "Current",
-    sober: "Sober proposal",
-    stores: "Stores",
-    unlock: "Unlock",
-    reconnect: "Reconnect",
   },
 } satisfies Record<Language, Record<string, string>>;
 
@@ -500,81 +479,6 @@ function SampleForm({ t }: { t: Copy }) {
   );
 }
 
-function Showcase({ t, emphasis }: { t: Copy; emphasis: StatusEmphasis }) {
-  const sober = emphasis === "sober";
-  return (
-    <div className="grid content-start gap-4">
-      <h3 className="text-sm font-semibold text-muted-foreground">{sober ? t.sober : t.tinted}</h3>
-      <ul className="grid gap-3">
-        {rows.slice(0, 3).map((row) => (
-          <li key={row.order}>
-            <Card size="sm">
-              <CardHeader>
-                <CardTitle className="flex justify-between gap-3">
-                  <span className="font-mono tabular-nums">{row.order}</span>
-                  <span className="tabular-nums">{row.total}</span>
-                </CardTitle>
-                <CardDescription className="truncate">{row.buyer}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-wrap items-center justify-between gap-2">
-                {row.taxCode ? (
-                  <span className="font-mono text-sm">{row.taxCode}</span>
-                ) : (
-                  <StatusBadge tone={row.tone} emphasis={emphasis}>
-                    {t[row.status]}
-                  </StatusBadge>
-                )}
-                {row.taxCode ? (
-                  <Button size="sm" variant={sober ? "outline" : "secondary"}>
-                    <Copy aria-hidden="true" data-icon="inline-start" />
-                    {t.outline}
-                  </Button>
-                ) : row.tone === "premium" ? (
-                  <Button size="sm">{t.unlock}</Button>
-                ) : null}
-              </CardContent>
-            </Card>
-          </li>
-        ))}
-      </ul>
-      <div className="grid divide-y rounded-xl border bg-card">
-        <p className="px-4 py-2 text-sm font-medium">{t.stores}</p>
-        <div className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
-          <span className="truncate">Vintage Garage Italia</span>
-          <StatusBadge tone="success" emphasis={emphasis}>
-            {t.connected}
-          </StatusBadge>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
-          <span className="truncate">Outlet ricambi d’epoca</span>
-          <span className="flex items-center gap-2">
-            <StatusBadge tone="warning" emphasis={emphasis}>
-              {t.verify}
-            </StatusBadge>
-            <Button size="sm" variant={sober ? "outline" : "secondary"}>
-              {t.reconnect}
-            </Button>
-          </span>
-        </div>
-      </div>
-      <StatusAlert tone="info" emphasis={emphasis} title={t.alertInfoTitle}>
-        {t.alertInfo}
-      </StatusAlert>
-      <StatusAlert tone="neutral" emphasis={emphasis} title={t.alertMissingTitle}>
-        {t.alertMissing}
-      </StatusAlert>
-      <StatusAlert tone="warning" emphasis={emphasis} title={t.alertWarningTitle}>
-        {t.alertWarning}
-      </StatusAlert>
-      <div className="flex flex-wrap gap-2">
-        <Button>{t.primary}</Button>
-        <Button variant={sober ? "neutral" : "secondary"}>{t.secondary}</Button>
-        <Button variant={sober ? "destructive-quiet" : "destructive"}>{t.destructive}</Button>
-      </div>
-    </div>
-  );
-}
-
 export default function DesignSystem({ loaderData }: Route.ComponentProps) {
   const { language } = loaderData;
   const t = copy[language];
@@ -634,13 +538,6 @@ export default function DesignSystem({ loaderData }: Route.ComponentProps) {
           </FieldSet>
         </div>
       </header>
-
-      <Section title={t.compare} description={t.compareDescription}>
-        <div className="grid gap-8 md:grid-cols-2">
-          <Showcase t={t} emphasis="tinted" />
-          <Showcase t={t} emphasis="sober" />
-        </div>
-      </Section>
 
       <Section title={t.colors} description={t.colorsDescription}>
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
@@ -754,7 +651,9 @@ export default function DesignSystem({ loaderData }: Route.ComponentProps) {
               </DialogHeader>
               <DialogFooter>
                 <DialogClose render={<Button variant="outline" />}>{t.cancel}</DialogClose>
-                <DialogClose render={<Button variant="destructive" />}>{t.confirm}</DialogClose>
+                <DialogClose render={<Button variant="destructive-solid" />}>
+                  {t.confirm}
+                </DialogClose>
               </DialogFooter>
             </DialogContent>
           </Dialog>

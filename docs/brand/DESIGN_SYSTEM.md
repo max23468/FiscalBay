@@ -34,6 +34,13 @@ Fondazione visiva di sito e app, circoscritta al prodotto ([§22](../MASTER_PLAN
 
 `StatusBadge` e `StatusAlert` mostrano sempre icona e testo insieme al colore. `StatusAlert` usa `role="alert"` solo per `danger`, altrimenti `role="status"`.
 
+**Uso sobrio del colore**, scelto dall'owner il 2026-09-27 dopo un confronto affiancato con la resa a superfici piene:
+
+- La superficie colorata spetta solo agli stati che chiedono un'azione. I badge `warning`, `danger` e `premium` sono tinti; `success`, `info` e `neutral` sono testo grigio con l'icona colorata. Gli avvisi hanno lo sfondo tinto solo per `danger` e `warning`; gli altri usano la superficie della card con l'icona colorata.
+- Il blu pieno è riservato all'azione principale. Il pulsante secondario è grigio.
+- Il pulsante distruttivo (`destructive`) è testo rosso su fondo trasparente; il rosso pieno (`destructive-solid`) compare solo nella conferma di un dialog.
+- Al massimo un accento colorato per riga o scheda.
+
 - **Contrasto:** testo almeno 4,5:1 su ogni superficie pertinente, bordo dei campi e anello di focus almeno 3:1, in entrambi i temi. Lo verifica [`test/design-tokens.spec.ts`](../../test/design-tokens.spec.ts) leggendo i valori da `app.css`. Il chip giallo del logo resta un'eccezione del solo marchio.
 - **Tipografia:** Inter Variable con `cv11`; scala Tailwind predefinita, titoli `font-semibold`/`font-bold` con `tracking-tight` e `text-balance`; cifre tabellari (`tabular-nums`) per importi e identificativi, monospace per Codice Fiscale e numeri d'ordine.
 - **Spaziature, radius, ombre:** scala Tailwind; `--radius` 10 px con derivati da `sm` a `4xl`; ombre leggere dei sorgenti shadcn, senza effetti aggiunti.
@@ -54,7 +61,7 @@ Tre modalità: sistema (predefinita), chiaro, scuro. I token scuri valgono con `
 - **Tocco:** con puntatore coarse pulsanti, campi, select, voci di menu, schede ed etichette di checkbox/switch/radio arrivano ad almeno 44 px; con il mouse restano compatti (36 px).
 - **Form:** etichetta visibile, descrizione e errore collegati con `aria-describedby`, `aria-invalid`, errori annunciati e focus sul primo campo errato.
 - **Testi:** i nomi accessibili che i sorgenti shadcn avevano fissi in inglese (`Close`, `Loading`) sono prop obbligatorie tradotte dal chiamante.
-- **Stati interattivi:** hover del pulsante primario e del pulsante distruttivo con token propri (`--primary-hover`, `--danger-surface-hover`) verificati a 4,5:1; l'opacità ridotta dei sorgenti shadcn scendeva fino a 3,8:1 nel tema scuro.
+- **Stati interattivi:** hover del pulsante primario su token proprio (`--primary-hover`) e testo della conferma distruttiva (`--danger-foreground`) verificati a 4,5:1; l'opacità ridotta dei sorgenti shadcn scendeva fino a 3,8:1 nel tema scuro.
 - **Tooltip:** solo informazione accessoria, perché non viene annunciato dai lettori di schermo; il nome del controllo deve bastare da solo.
 - **Pannello laterale:** a tutta larghezza sotto 640 px, come chiede il dettaglio a schermo intero su mobile.
 - **Movimento:** con `prefers-reduced-motion: reduce` animazioni e transizioni sono azzerate.
@@ -85,7 +92,7 @@ Componenti copiati nel repository, anche se non compaiono in `package.json`.
 
 | Percorso locale | Origine | Licenza | Modifiche sostanziali |
 |---|---|---|---|
-| `app/components/ui/*.tsx` (21 file) | Registry shadcn/ui, stile `base-nova`, tramite `shadcn@4.21.0 add` il 2026-09-27 | MIT, © shadcn | Anello di focus pieno; altezze a 44 px con puntatore coarse; varianti di stato in `badge` e `alert` con ruolo ARIA per tono; `closeLabel` obbligatorio in `dialog` e `sheet`, pulsante `Close` rimosso da `DialogFooter`; `label` obbligatorio in `spinner`; stile selezionato di `FieldLabel` limitato alle schede di scelta; export delle varianti non usati rimossi; hover di pulsante primario e distruttivo su token dedicati, anello di focus staccato; menu largo almeno quanto il contenuto; pannello a tutta larghezza su mobile; `app/lib/utils.ts` generato ma inutilizzato rimosso; chiave per messaggio in `FieldError`; formattazione Oxfmt |
+| `app/components/ui/*.tsx` (21 file) | Registry shadcn/ui, stile `base-nova`, tramite `shadcn@4.21.0 add` il 2026-09-27 | MIT, © shadcn | Anello di focus pieno; altezze a 44 px con puntatore coarse; varianti di stato in `badge` e `alert` con ruolo ARIA per tono; `closeLabel` obbligatorio in `dialog` e `sheet`, pulsante `Close` rimosso da `DialogFooter`; `label` obbligatorio in `spinner`; stile selezionato di `FieldLabel` limitato alle schede di scelta; export delle varianti non usati rimossi; hover del pulsante primario su token dedicato, pulsante secondario grigio, `destructive` a solo testo e `destructive-solid` per le conferme, badge e avvisi sobri, anello di focus staccato; menu largo almeno quanto il contenuto; pannello a tutta larghezza su mobile; `app/lib/utils.ts` generato ma inutilizzato rimosso; chiave per messaggio in `FieldError`; formattazione Oxfmt |
 | `app/app.css` | Scheletro generato da `shadcn init` | MIT, © shadcn | Token FiscalBay, tema sistema/chiaro/scuro, Inter, riduzione del movimento |
 
 Per aggiornare un componente usare la stessa CLI (`pnpm dlx shadcn@<versione> add <nome>`), poi riapplicare le modifiche elencate e aggiornare questa tabella. Notice e attribuzioni distributive restano nel gate licenze di M7.

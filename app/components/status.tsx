@@ -17,12 +17,6 @@ import { Badge } from "~/components/ui/badge";
  */
 export type StatusTone = "success" | "info" | "warning" | "danger" | "premium" | "neutral";
 
-/**
- * `tinted` colora sempre la superficie; `sober` la colora solo per gli stati
- * che chiedono un'azione e lascia agli altri il colore della sola icona.
- */
-export type StatusEmphasis = "tinted" | "sober";
-
 const icons: Record<StatusTone, LucideIcon> = {
   success: CircleCheck,
   info: Info,
@@ -53,17 +47,10 @@ const alertIconColor: Record<StatusTone, string> = {
 
 const actionable = new Set<StatusTone>(["warning", "danger", "premium"]);
 
-export function StatusBadge({
-  tone,
-  emphasis = "tinted",
-  children,
-}: {
-  tone: StatusTone;
-  emphasis?: StatusEmphasis;
-  children: React.ReactNode;
-}) {
+/** Superficie colorata solo per gli stati che chiedono un'azione. */
+export function StatusBadge({ tone, children }: { tone: StatusTone; children: React.ReactNode }) {
   const Icon = icons[tone];
-  if (emphasis === "sober" && !actionable.has(tone)) {
+  if (!actionable.has(tone)) {
     return (
       <Badge variant="outline" className="border-transparent px-0 text-muted-foreground">
         <Icon aria-hidden="true" data-icon="inline-start" className={iconColor[tone]} />
@@ -79,19 +66,18 @@ export function StatusBadge({
   );
 }
 
+/** Sfondo colorato solo per errore e attenzione; gli altri avvisi colorano l'icona. */
 export function StatusAlert({
   tone,
-  emphasis = "tinted",
   title,
   children,
 }: {
   tone: StatusTone;
-  emphasis?: StatusEmphasis;
   title: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const Icon = icons[tone];
-  const quiet = emphasis === "sober" && tone !== "danger" && tone !== "warning";
+  const quiet = tone !== "danger" && tone !== "warning";
   return (
     <Alert variant={quiet ? "default" : tone} role={tone === "danger" ? "alert" : "status"}>
       <Icon aria-hidden="true" className={quiet ? alertIconColor[tone] : undefined} />

@@ -54,7 +54,7 @@
   --warning-surface: #fdf3e1;
   --danger: #b42318;
   --danger-surface: #fdecea;
-  --danger-surface-hover: #fadcd8;
+  --danger-foreground: #ffffff;
   --premium: #6327c9;
   --premium-surface: #f2edfd;
   --neutral: #556275;
@@ -104,7 +104,7 @@
   --warning-surface: #2b200c;
   --danger: #f4827b;
   --danger-surface: #2f1517;
-  --danger-surface-hover: #3d1b1e;
+  --danger-foreground: #0b1220;
   --premium: #c3aefa;
   --premium-surface: #231a3d;
   --neutral: #9aa6b9;
@@ -144,7 +144,7 @@
   --color-warning-surface: var(--warning-surface);
   --color-danger: var(--danger);
   --color-danger-surface: var(--danger-surface);
-  --color-danger-surface-hover: var(--danger-surface-hover);
+  --color-danger-foreground: var(--danger-foreground);
   --color-premium: var(--premium);
   --color-premium-surface: var(--premium-surface);
   --color-neutral: var(--neutral);

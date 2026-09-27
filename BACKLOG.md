@@ -491,6 +491,8 @@ Esaminare i nove riferimenti nella fase frontend; scegliere componenti effettivi
 
 **Revisione del 2026-09-27:** controllati da tastiera anche menu, tooltip, select e schede. Corretti sette punti: hover del pulsante primario scuro a 3,8:1 e del distruttivo a 4,1:1, portati su token verificati; anello di focus indistinguibile sul pulsante primario, ora staccato di 2 px; menu stretto quanto il pulsante icona, con voci su tre righe; pannello laterale non a tutta larghezza su mobile; etichetta inglese fissa nella navigazione lingua della home; `app/lib/utils.ts` inutilizzato; `tw-animate-css` spostato tra le dipendenze di sviluppo. Testi del campione allineati al piano (niente digest email, filtro «solo ordini con dato fiscale», scollegamento con retention, dato assente senza causa attribuita) e regola owner sul Codice Fiscale in inglese. `pnpm verify` verde con 106 test.
 
+**Colore del 2026-09-27:** su osservazione owner di troppi colori, confronto affiancato sul campione fra superfici piene e resa sobria; l'owner ha preferito la sobria, ora unica: superficie colorata solo per gli stati che chiedono un'azione, pulsante secondario grigio, distruttivo a solo testo con rosso pieno nelle sole conferme. Regole in [design system](docs/brand/DESIGN_SYSTEM.md#token). Palette e semantica degli stati invariate.
+
 ### M1-07 — Shell e prototipo delle tre sezioni
 
 **Stato:** TODO · **Prerequisiti:** M1-06 · **Contratto:** [§16](docs/MASTER_PLAN.md#s16) · [§17](docs/MASTER_PLAN.md#s17) · [§18](docs/MASTER_PLAN.md#s18) · [§19](docs/MASTER_PLAN.md#s19)
