@@ -69,7 +69,7 @@ test("il dettaglio ha un URL, si chiude con Indietro e conserva i filtri", async
 test("lo sblocco rivela il dato solo dopo l'azione e aggiorna la quota", async ({ page }) => {
   await open(page);
   expect(await page.content()).not.toContain("BNCLCU75C12F205X");
-  const card = page.getByRole("article", { name: "Luca Bianchi" });
+  const card = page.getByRole("article", { name: "Ordine 05-55555-12121" });
   await expect(card).toContainText("Ti restano 2 sblocchi");
   await card.getByRole("button", { name: "Sblocca ordine" }).click();
   await expect(card.getByText("BNCLCU75C12F205X")).toBeVisible();
@@ -77,11 +77,11 @@ test("lo sblocco rivela il dato solo dopo l'azione e aggiorna la quota", async (
     "Ti resta 1 sblocco",
   );
   await page.reload();
-  await expect(page.getByRole("article", { name: "Luca Bianchi" })).toContainText(
+  await expect(page.getByRole("article", { name: "Ordine 05-55555-12121" })).toContainText(
     "BNCLCU75C12F205X",
   );
   await page.getByRole("link", { name: "Carica altri" }).click();
-  await expect(page.getByRole("article", { name: "Paolo Conti" })).toContainText(
+  await expect(page.getByRole("article", { name: "Ordine 02-44519-70831" })).toContainText(
     "Ti resta 1 sblocco",
   );
 });
@@ -108,10 +108,10 @@ test("con gli sblocchi esauriti gli ordini restano consultabili", async ({ page 
   await chooseScenario(page, "Sblocchi esauriti");
   await expect(page.getByRole("status").filter({ hasText: "Sblocchi esauriti" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sblocca ordine" })).toHaveCount(0);
-  await expect(page.getByRole("article", { name: "Luca Bianchi" })).toContainText(
+  await expect(page.getByRole("article", { name: "Ordine 05-55555-12121" })).toContainText(
     "Hai usato tutti gli sblocchi",
   );
-  await expect(page.getByRole("article", { name: "Anna Esposito" })).toContainText(
+  await expect(page.getByRole("article", { name: "Ordine 08-33110-45672" })).toContainText(
     "SPSNNA85T55F83",
   );
 });

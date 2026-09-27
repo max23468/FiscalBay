@@ -344,50 +344,49 @@ function OrderCard({
     <article
       aria-labelledby={titleId}
       className={cn(
-        "grid min-w-0 content-start gap-5 rounded-xl border bg-card p-5 transition-[border-color] duration-(--duration-quick)",
+        "flex min-w-0 flex-col gap-4 rounded-xl border bg-card p-5 transition-[border-color] duration-(--duration-quick)",
         selected && "border-ring",
         isNew &&
           "animate-[notice-in_var(--duration-fast)_var(--ease-smooth-out)] motion-reduce:animate-none",
       )}
     >
-      <header className="flex items-start justify-between gap-3">
-        <div className="grid min-w-0 gap-1.5">
-          <p className="font-code flex flex-wrap gap-x-3 text-xs text-muted-foreground">
-            <span className="whitespace-nowrap">{order.ebayOrderId}</span>
-            <time dateTime={order.createdAt} className="whitespace-nowrap">
-              {formatDate(order.createdAt, language)}
-            </time>
-          </p>
-          <h3 id={titleId} className="text-base leading-snug font-semibold text-pretty">
+      <header className="grid gap-1">
+        <div className="flex items-start justify-between gap-3">
+          <h3 id={titleId} className="font-code text-[0.9375rem] leading-snug font-semibold">
             <Link
               to={detailHref}
               preventScrollReset
               className="rounded-sm outline-none hover:underline hover:underline-offset-4 focus-visible:ring-3 focus-visible:ring-ring"
             >
-              {order.buyerName}
+              {t.order.title(order.ebayOrderId)}
             </Link>
           </h3>
+          <div className="flex shrink-0 items-center gap-3">
+            <span className="font-code text-[0.9375rem] font-semibold whitespace-nowrap">
+              {formatAmount(order.totalMinor, order.currency, language)}
+            </span>
+            {selecting ? (
+              <Checkbox
+                checked={selected}
+                onCheckedChange={(checked) => onSelect(checked === true)}
+                aria-label={t.orders.selectOrder(order.ebayOrderId)}
+              />
+            ) : null}
+          </div>
         </div>
-        {selecting ? (
-          <Checkbox
-            checked={selected}
-            onCheckedChange={(checked) => onSelect(checked === true)}
-            aria-label={t.orders.selectOrder(order.ebayOrderId)}
-            className="mt-1"
-          />
-        ) : null}
+        <p className="flex flex-wrap gap-x-1.5 text-xs text-muted-foreground">
+          <time dateTime={order.createdAt} className="whitespace-nowrap">
+            {formatDate(order.createdAt, language)}
+          </time>
+          <span aria-hidden="true">·</span>
+          <span className="whitespace-nowrap">{t.orders.status[order.status]}</span>
+          <span aria-hidden="true">·</span>
+          <span className="text-pretty">
+            {order.storeName}, {marketplaceLabel(order.marketplace)}
+          </span>
+        </p>
       </header>
-      <FiscalBlock
-        order={order}
-        t={t}
-        language={language}
-        account={account}
-        compact
-        revealed={revealed}
-        unlocking={unlocking}
-        onUnlock={onUnlock}
-      />
-      <div className="flex gap-3 border-t pt-4">
+      <div className="flex gap-3">
         {order.thumbnail ? (
           <img
             src={order.thumbnail}
@@ -397,61 +396,71 @@ function OrderCard({
             className="size-12 shrink-0 rounded-lg border bg-muted object-cover"
           />
         ) : null}
-        <ul className="grid min-w-0 gap-1.5 text-sm leading-relaxed text-muted-foreground">
-          {shown.map((item) => (
-            <li key={item.id} className="line-clamp-2 text-pretty">
+        <ul className="grid min-w-0 content-start gap-1 text-sm leading-relaxed">
+          {shown.map((item, index) => (
+            <li
+              key={item.id}
+              className={cn("line-clamp-2 text-pretty", index > 0 && "text-muted-foreground")}
+            >
               {item.title}
               {item.quantity > 1 ? (
-                <span className="whitespace-nowrap">
+                <span className="whitespace-nowrap text-muted-foreground">
                   {" "}
                   · {t.orders.quantity}: {item.quantity}
                 </span>
               ) : null}
             </li>
           ))}
-          {rest.length > 0 ? <li className="text-xs">{t.orders.itemsMore(rest.length)}</li> : null}
+          {rest.length > 0 ? (
+            <li className="text-xs text-muted-foreground">{t.orders.itemsMore(rest.length)}</li>
+          ) : null}
         </ul>
       </div>
-      <footer className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <p className="grid gap-0.5 text-xs text-muted-foreground">
-          <span className="text-pretty">
-            {order.storeName} · {marketplaceLabel(order.marketplace)}
-          </span>
-          <span className="font-code whitespace-nowrap">
-            {t.orders.status[order.status]} ·{" "}
-            {formatAmount(order.totalMinor, order.currency, language)}
-          </span>
+      <div className="grid gap-3 border-t pt-4">
+        <p className="grid gap-0.5">
+          <span className="text-xs font-medium text-muted-foreground">{t.order.buyer}</span>
+          <span className="text-sm leading-snug font-medium text-pretty">{order.buyerName}</span>
         </p>
-        <div className="flex items-center gap-1">
-          <Link
-            to={detailHref}
-            preventScrollReset
-            className={buttonVariants({ variant: "ghost", size: "sm" })}
+        <FiscalBlock
+          order={order}
+          t={t}
+          language={language}
+          account={account}
+          compact
+          revealed={revealed}
+          unlocking={unlocking}
+          onUnlock={onUnlock}
+        />
+      </div>
+      <footer className="mt-auto flex items-center justify-end gap-1">
+        <Link
+          to={detailHref}
+          preventScrollReset
+          className={buttonVariants({ variant: "ghost", size: "sm" })}
+        >
+          {t.orders.details}
+        </Link>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t.orders.moreActions(order.ebayOrderId)}
+              />
+            }
           >
-            {t.orders.details}
-          </Link>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={t.orders.moreActions(order.ebayOrderId)}
-                />
-              }
-            >
-              <EllipsisVertical aria-hidden="true" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => notify(t.preview.simulated)}>
-                {t.orders.openOnEbay}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => notify(t.orders.exportNotice)}>
-                {t.orders.exportOrder}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+            <EllipsisVertical aria-hidden="true" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => notify(t.preview.simulated)}>
+              {t.orders.openOnEbay}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => notify(t.orders.exportNotice)}>
+              {t.orders.exportOrder}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </footer>
     </article>
   );
@@ -1147,7 +1156,7 @@ function OrdersList({
         />
       ) : (
         <>
-          <section aria-label={t.orders.list} className="grid items-start gap-4 lg:grid-cols-2">
+          <section aria-label={t.orders.list} className="grid gap-4 lg:grid-cols-2">
             {orders.map((order) => (
               <OrderCard
                 key={order.id}
