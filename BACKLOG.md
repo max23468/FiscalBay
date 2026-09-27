@@ -23,9 +23,9 @@ Questa sezione è un registro operativo iniziale, **non una prova di avvio già 
 | Campo                                                       | Stato corrente e prove storiche                                                                             |
 | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | Milestone / task in esecuzione                              | M1 aperta dopo il via di fine M0 del 2026-09-23; M1-03, M1-04, M1-05 e M1-08 chiuse |
-| Prossimo task eleggibile                                    | M1-06, poi M1-07; M2-09 attende il riscontro eBay `260920-000007` |
+| Prossimo task eleggibile                                    | M1-06, poi M1-07; M1-09 e M1-10 avviabili in parallelo (M1-10 chiude dopo M1-06); M2-09 attende il riscontro eBay `260920-000007` |
 | Repository / branch / commit osservati nell’implementazione | `max23468/FiscalBay`; il 2026-09-27 `main` è `4df1961`, `develop` è `70804e1` dopo la PR #183; 1.x congelata in `legacy/1.x` (`508ded8`) |
-| Blocchi noti iniziali                                       | La lettura Production sull'account amministratore ha restituito zero ordini; sul secondo account controllato Fulfillment non esponeva l'identificativo fiscale, trovato invece nel primo ordine letto tramite Trading; diritto email Identity mancante, con Sign in with eBay rinviato a M2-09; notifiche account-deletion ancora servite dal callback 1.x condiviso. Il deploy dell'handler Stripe, il segreto ristretto remoto, la registrazione dell'endpoint e la riconciliazione dei diritti appartengono a M5, non bloccano la qualifica M0 |
+| Blocchi noti iniziali                                       | La lettura Production sull'account amministratore ha restituito zero ordini; sul secondo account controllato Fulfillment non esponeva l'identificativo fiscale, trovato invece nel primo ordine letto tramite Trading (la prova non usava l'header marketplace: riqualifica in M3-10); diritto email Identity mancante, con Sign in with eBay rinviato a M2-09; notifiche account-deletion ancora servite dal callback 1.x condiviso. Il deploy dell'handler Stripe, il segreto ristretto remoto, la registrazione dell'endpoint e la riconciliazione dei diritti appartengono a M5, non bloccano la qualifica M0 |
 | Materiale privato                                           | Inventario fuori checkout: riferimento locale `FiscalBay/m0-inventory` nella custodia Codex privata       |
 | Operazioni remote parziali da riconciliare                  | Timer autodeploy 1.x riletto `disabled` / `inactive` il 2026-09-26; bot e callback 1.x attivi. Creato il progetto Google dedicato `fiscalbay-2-0-max23468`, senza billing; branding test e client web `FiscalBay Test` configurati con callback dedicato. Ripristinato il progetto Supabase Free FiscalBay dalla pausa automatica, senza costo, ed eliminato su richiesta owner il 2026-09-23 senza consumatori residui. Creata la D1 temporanea di test `fiscalbay-m0-test` con giurisdizione UE, applicate tre migration e completato un restore Time Travel con sola riga sintetica. La misura M0-07 ha creato e poi eliminato sette tabelle `m0_bench_*`; il readback finale conferma 15 tabelle, 221.184 byte e dati applicativi invariati. La delega autorevole di `fiscalbay.it` è attiva su Cloudflare dal 2026-09-20. Il Worker `fiscalbay-test` è distribuito sul solo Custom Domain `test.fiscalbay.it`, con `workers.dev` disattivato e sette segreti runtime custoditi da Cloudflare. Email Sending è attivo su `auth.fiscalbay.it`, con record SPF, DKIM e DMARC pubblicati; `supporto@fiscalbay.it` è stato aggiunto e riletto come destinatario Cloudflare verificato. L'owner dichiara completata la configurazione iCloud Custom Email Domain con `info@fiscalbay.it` e `supporto@fiscalbay.it`; non è stata ripetuta una verifica esterna. eBay ha salvato il RuName Production dedicato con display title definitivo `FiscalBay` sul keyset `botCF`, privacy e callback su `test.fiscalbay.it` e about su `fiscalbay.it`. Il readback finale mostra OAuth disattivato sul RuName legacy `FiscalBay 1.0`, attivo sul RuName dedicato e il messaggio `Settings successfully saved`. Better Auth Infrastructure ha creato e collegato il progetto `FiscalBay Test` sul piano Starter gratuito. Dopo il cleanup autorizzato della sola identità Google duplicata, il browser interno ha completato linking, nuovo login Google e revoca globale. Il Worker versione `72100c36-6073-4f58-82f4-ca0033d0b2cc` non include TOTP; la D1 è tornata alle tre migration canoniche senza tabella o colonna TOTP e conserva un utente, due account `credential`/`google`, una passkey e zero sessioni. Il 2026-09-23, su richiesta owner, la D1 di test è stata svuotata dell'utente di prova precedente (un utente, due account e una passkey) e sono state applicate le migration `0004` e `0005`; l'owner ha creato e verificato `info@fiscalbay.it`. Il Worker test esegue il commit `a93f839`, versione `b0495522-59b8-4dc8-8c3b-ed58837c1977`; i segreti Stripe non sono più richiesti al deploy M0. Le migration `0006`–`0008` sono applicate alla D1 di test senza migration pendenti; il Worker test aggiornato è verificato nei readback di M1-03. Sulla VPS è stato letto soltanto lo stato 1.x; nessun token è stato stampato, persistito fuori dalla 1.x o scritto nel repository. |
 | Prossima azione alla ripresa                                | Avviare M1-06: scegliere i componenti reali e definire il design system. L'invio Auth Production si prova con l'app al gate di pubblicazione. Al riscontro eBay eseguire la checklist di M2-09 |
@@ -521,6 +521,32 @@ Consolidare il bootstrap test predisposto in M0-02: DNS/TLS/redirect, configuraz
 
 **Gate successivi:** l'invio Auth Production verso un destinatario non verificato si prova con l'app effettivamente pubblicata al gate `Pubblica`, perché la pagina provvisoria non espone Auth. Il RuName eBay Production resta inattivo fino al cutover; la continuità del test sullo stesso keyset richiede la scelta prevista a quel gate.
 
+<a id="m1-09"></a>
+
+### M1-09 — Guardrail della pipeline e del repository
+
+**Stato:** TODO · **Prerequisiti:** M1-02 · **Contratto:** [§34](docs/MASTER_PLAN.md#s34) · [§37.1](docs/MASTER_PLAN.md#s37)
+
+Estende M1-02, già chiusa, con i guardrail ricavati da CF Ready e Hub Fatture: Action di terze parti pinnate a SHA completo con versione in commento e Dependabot allineato; guardia che accetta su `main` soltanto PR da `develop` dello stesso repository; classificazione dei file modificati (documentazione, test, runtime, tooling) che esegue il gate completo per ogni file non classificato e sostituisce l'attuale rilevamento docs-only; test di repository su sigle di milestone/task fuori dalla documentazione di piano, fixture solo con host `.invalid`, import applicativi aciclici, moduli server con almeno un consumatore e pin di Node/pnpm coincidenti fra `mise.toml`, `package.json` e workflow.
+
+**Criterio di completamento:** Una PR verso `main` da una branch diversa da `develop` fallisce; un file fuori classificazione esegue il gate completo; ogni test di repository ha un caso negativo che fallisce davvero; nessun `uses:` di terze parti senza SHA. CI verde sul commit integrato.
+
+Il perimetro dei mutation test non nasce qui: arriva con i domini in M3-06, M3-11 e M5-05.
+
+<a id="m1-10"></a>
+
+### M1-10 — Budget di prestazioni e capacità al deploy
+
+**Stato:** TODO · **Prerequisiti:** M1-02 · **Contratto:** [§22](docs/MASTER_PLAN.md#s22) · [§31](docs/MASTER_PLAN.md#s31) · [§37.1](docs/MASTER_PLAN.md#s37)
+
+**Per chiudere:** M1-06; il budget del bundle si misura sul design system effettivo.
+
+Aggiungere alla build il controllo del JavaScript client entro il budget gzip dichiarato nel repository (valore iniziale 350 KiB) e al deploy test il controllo CPU: traffico sintetico marcato, raccolta via tail delle sole invocazioni marcate, fallimento sopra il p95 ammesso o con errori, rollback del deploy test. Nessun traffico verso eBay, Stripe o Telegram.
+
+**Criterio di completamento:** Un bundle oltre budget fa fallire la build; un deploy test con p95 oltre soglia o con errori fallisce e ripristina la versione precedente, provato almeno una volta con soglia forzata. Ricevuta con p95, numero di eventi e versione.
+
+Le soglie di quota e gli stop point del runbook restano in M7-03.
+
 <a id="m2"></a>
 
 ## M2 — Account, Auth e Negozi eBay
@@ -590,6 +616,8 @@ Separare stato della connessione e della sincronizzazione. Implementare pausa, r
 **Criterio di completamento:** Nessun reset di quota o diritti; scollegare non cancella l’abbonamento. Le eccezioni assistite al vincolo di sostituzione Free sono motivate e auditate, non un nuovo trial. Token e lavori pendenti incompatibili vengono invalidati.
 
 Distinguere manual pause da pausa imposta dal piano; nessuna sospensione ferma la retention temporale. Ricollegare non resuscita dati cancellati né azzera il vincolo di sostituzione.
+
+Da [§37.1](docs/MASTER_PLAN.md#s37): registrare la scadenza nota del consenso seller, avvisare il merchant prima che scada con la CTA di reconnect e rinnovare i token di accesso in background, non nel percorso di una pagina.
 
 ### M2-07 — Schermata negozi e profilo
 
@@ -661,6 +689,8 @@ Integrare client generati o adapter REST e Trading mirato, errori tipizzati, pro
 
 Da M0: immagini articolo da Trading `GetItem` tramite `legacyItemId`, con domini e formati qualificati contro SSRF; nessun generatore OAS finché TypeScript 7 non espone un'API compatibile (M0-11).
 
+Da [§37.1](docs/MASTER_PLAN.md#s37): XML Trading rifiutato oltre limite, con byte NUL o con `DOCTYPE`/`ENTITY` prima del parsing; `next` e URL del provider accettati solo HTTPS sulla stessa origine API eBay dell'ambiente, altrimenti la pagina fallisce chiusa senza inviare il token. Contract test negativi per entrambi. La lettura Fulfillment conserva il marketplace dell'inserzione per [M3-10](#m3-10).
+
 ### M3-03 — Import recenti e backfill
 
 **Stato:** TODO · **Prerequisiti:** M3-02 · **Contratto:** [§11](docs/MASTER_PLAN.md#s11)
@@ -679,6 +709,8 @@ Implementare target 10/30 minuti, eventi qualificati con riconciliazione, priori
 
 Usare consegna/retry/ritardi/DLQ del servizio scelto. Stato applicativo solo per checkpoint, deduplica e recupero di effetti di business; outbox/lease soltanto se necessari, non un secondo orchestratore.
 
+**Per chiudere:** M3-11; `ORDER_CONFIRMATION` entra dall'ingresso Worker condiviso.
+
 ### M3-05 — Controllo fiscale e aggiornamenti
 
 **Stato:** TODO · **Prerequisiti:** M3-02 · **Contratto:** [§9](docs/MASTER_PLAN.md#s09)
@@ -686,6 +718,8 @@ Usare consegna/retry/ritardi/DLQ del servizio scelto. Stato applicativo solo per
 Mostrare subito l’ordine e verificare i dati fiscali con un lavoro separato. Gestire più identificativi, controlli formali e distinzione fra assenza, errore, mascheramento e rimozione.
 
 **Criterio di completamento:** Un errore fiscale non blocca l’ordine; rimozione solo su evidenza autorevole, prima disponibilità e variazioni elaborate senza duplicati.
+
+Da [§37.1](docs/MASTER_PLAN.md#s37): qualità formale del CF (formato, carattere di controllo, coerenza con nome e cognome nelle due orientazioni e con il nome di registrazione, `c/o` separato solo per il confronto) come indicazione che non corregge, non blocca e non cambia la quota; omocodie e nomi ambigui danno `non verificabile`. Osservazioni con `lastModifiedDate` più vecchia scartate prima di ogni scrittura e contate; confronto normalizzato (omesso uguale a `null`, stessi formati e precisione) che non crea versioni, notifiche o consumi per riletture invariate.
 
 ### M3-06 — Sblocco per ordine e diritti acquisiti
 
@@ -696,6 +730,10 @@ Implementare diritto per ordine, ciclo e quota con controllo atomico. Preservare
 **Criterio di completamento:** Test su ultimo credito, concorrenza, sblocco multiplo, downgrade e valori tardivi. Un ordine copre tutti gli identificativi e la ricerca non permette di indovinare valori bloccati.
 
 M3 realizza il contratto dominio/transaction con cicli e grant testabili; M5 integra provider e calendario commerciale. Non dichiarare funzionante l’intero billing solo perché il grant di una fixture passa.
+
+**Per chiudere:** M3-09; lo sblocco resta coerente quando un ordine combinato cambia ID.
+
+Da [§37.1](docs/MASTER_PLAN.md#s37): mutation test mirati su sblocco, quota e grant, eseguiti dalla CI quando la PR tocca quei file.
 
 ### M3-07 — Suggerimenti e template mancanti
 
@@ -717,6 +755,36 @@ Implementare cancellazioni periodiche deterministiche, raw a 24 ore e conservazi
 
 Inventariare body degli eventi, outbox, code, snapshot e suggerimenti: riferimenti minimi persistenti, dati grezzi soggetti a TTL anche dopo retry. Accesso negato alla scadenza; pulizia fisica nel margine dichiarato.
 
+<a id="m3-09"></a>
+
+### M3-09 — Ordini combinati e identità di riga
+
+**Stato:** TODO · **Prerequisiti:** M3-02 · **Contratto:** [§9](docs/MASTER_PLAN.md#s09) · [§35](docs/MASTER_PLAN.md#s35)
+
+Il punto tocca insieme modello (M3-01), client (M3-02) e sblocco (M3-06), quindi ha un task proprio. Leggere gli acquisti prima del checkout da Trading, collegarli all'ordine definitivo tramite l'identità stabile di riga e consolidare solo quando tutte le righe di ogni provvisorio appartengono allo stesso ordine definitivo. Sovrapposizioni parziali, righe senza identità o più candidati restano anomalie visibili. Quota, grant e sblocchi seguono il consolidamento.
+
+**Criterio di completamento:** Test su ordine combinato con ID nuovo e righe rinominate al pagamento: nessuna seconda quota, nessun diritto perso, nessun duplicato; provvisorio annullato o assorbito fuori dalle viste correnti; casi ambigui bloccati senza indovinare. Prova su un ordine combinato reale dell'account controllato, se disponibile nella finestra; altrimenti fixture sanitizzata e limite dichiarato.
+
+<a id="m3-10"></a>
+
+### M3-10 — Riqualifica della lettura fiscale Fulfillment
+
+**Stato:** TODO · **Prerequisiti:** M3-02 · **Contratto:** [§9](docs/MASTER_PLAN.md#s09) · [§11](docs/MASTER_PLAN.md#s11)
+
+Riapre in modo circoscritto l'esito di M0-05, senza modificarlo retroattivamente: con l'header `X-EBAY-C-MARKETPLACE-ID` ricavato dal marketplace dell'inserzione e `fieldGroups=TAX_BREAKDOWN`, leggere sugli stessi ordini controllati `buyer.taxIdentifier` da Fulfillment e `BuyerTaxIdentifier` da Trading, senza persistere né stampare valori.
+
+**Criterio di completamento:** Matrice di presenza e coincidenza per ordine (solo conteggi ed esiti), limiti di età e marketplace osservati, impatto sul budget quote. Se Fulfillment con header è equivalente, proposta all'owner di rivedere D135; fino al suo via Trading resta primario e il client M3-02 conserva la seconda osservazione con provenienza.
+
+<a id="m3-11"></a>
+
+### M3-11 — Ingresso Worker per webhook e callback
+
+**Stato:** TODO · **Prerequisiti:** M3-03 · **Contratto:** [§25](docs/MASTER_PLAN.md#s25) · [§11](docs/MASTER_PLAN.md#s11)
+
+Realizzare una volta sola l'ingresso prima di React Router: metodo, dimensione e firma sul corpo grezzo, claim idempotente in D1, messaggio in coda con soli identificativi, risposta positiva solo dopo l'accettazione della coda, consumer con retry e dead-letter nativi. Il primo consumatore è `ORDER_CONFIRMATION` per M3-04; M5-05 (Stripe), M5-09 (Telegram) e M7-02 (cancellazione account eBay) lo riusano invece di creare percorsi propri.
+
+**Criterio di completamento:** Consegna duplicata senza effetti ripetuti; coda non disponibile senza ACK al provider; firma errata o corpo oltre limite rifiutati prima di caricare l'app; CPU misurata con il controllo di M1-10 sotto soglia; mutation test mirati sull'ingresso eseguiti dalla CI quando la PR lo tocca. Le callback OAuth aperte dal browser restano fuori da questo ingresso.
+
 <a id="m4"></a>
 
 ## M4 — UX completa
@@ -732,6 +800,8 @@ Inventariare body degli eventi, outbox, code, snapshot e suggerimenti: riferimen
 Realizzare la griglia a due schede o una secondo viewport, dettagli intermedi, area fiscale e azioni primarie/secondarie. Usare segnaposto che non rivelino dati bloccati.
 
 **Criterio di completamento:** Nessuna personalizzazione delle schede nella 2.0; titoli lunghi, importi e Partite IVA non rompono il layout. Sono visibili soltanto dati autorizzati.
+
+Da [§37.1](docs/MASTER_PLAN.md#s37): mostrare la qualità formale calcolata in M3-05 come indicazione, non come errore. Dove una verifica remota è lenta, HTML subito con l'ultimo stato salvato, «Verifica in corso» e azioni sensibili disabilitate, poi stato confermato in streaming; se fallisce, avviso e «Riprova». La schermata Negozi di M2-07 si allinea allo stesso comportamento in questo task.
 
 ### M4-02 — Ricerca e filtri
 
@@ -811,6 +881,8 @@ Implementare cicli di 7×24 ore dal collegamento, quota congelata nel ciclo e pr
 
 **Criterio di completamento:** Test su confini UTC, ora legale, fine promo e accessi concorrenti; sito pubblico e quota personale spiegano correttamente eventuali differenze temporanee.
 
+Da [§37.1](docs/MASTER_PLAN.md#s37): i confini si confrontano sull'istante UTC e sul fuso del ciclo, mai sulla data locale ricavata da un timestamp UTC; test con evento nella prima notte del ciclo e fuso a est e a ovest di UTC.
+
 ### M5-02 — Trial e grant accesso
 
 **Stato:** TODO · **Prerequisiti:** M5-01 · **Contratto:** [§6](docs/MASTER_PLAN.md#s06)
@@ -850,6 +922,10 @@ Verificare firme sul corpo originale, persistenza, idempotenza ed eventi fuori o
 **Criterio di completamento:** Un redirect falso non attiva Premium e un evento duplicato non raddoppia i diritti. Un outage Stripe non blocca l’uso già autorizzato né concede proroghe indefinite.
 
 Eventi out-of-order o dati Stripe non più disponibili non significano automaticamente acquisto inesistente o refund. I corpi grezzi dei webhook non diventano archivio fiscale permanente.
+
+**Per chiudere:** M3-11; il webhook Stripe entra dall'ingresso Worker condiviso.
+
+Da [§37.1](docs/MASTER_PLAN.md#s37): ciclo periodico che riconcilia i diritti attivi con Stripe come rete di sicurezza, senza inventare diritti in caso di errore; ogni passo periodico registra il proprio errore senza fermare gli altri; priorità di recupero una sola volta per gli elementi mai tentati. Mutation test mirati sui diritti Stripe.
 
 ### M5-06 — Cambi piano e Portal/Link
 
@@ -892,6 +968,8 @@ Integrare bot privato e bot test separato, token monouso, cambio chat, preferenz
 **Criterio di completamento:** Nessuna notifica alla vecchia chat o ad altri spazi; default rispettati e login web indipendente da Telegram.
 
 I job rileggono il diritto Premium e le preferenze al momento dell’invio. Collegamento, cambio chat e disattivazione invalidano le consegne incompatibili già accodate.
+
+Da [§37.1](docs/MASTER_PLAN.md#s37): il webhook Telegram entra dall'ingresso Worker di M3-11, già compreso nel prerequisito M3.
 
 ### M5-10 — Telegram invii e arretrati
 
@@ -1005,6 +1083,16 @@ Implementare eventi business e operativi tipizzati, funnel aggregato, separazion
 
 Successi ordinari aggregati, senza record dettagliato di ogni polling nei log a novanta giorni. Testare formule KPI e consumo del volume realmente conservato.
 
+<a id="m6-09"></a>
+
+### M6-09 — Control Center Telegram dell'owner
+
+**Stato:** TODO · **Prerequisiti:** M6-04, M6-08, M5-09 · **Contratto:** [§15](docs/MASTER_PLAN.md#s15) · [§31](docs/MASTER_PLAN.md#s31)
+
+Il punto si sovrappone a console admin (M6-04), KPI (M6-08), bot Telegram (M5-09) e alert (M7-04), quindi ha un task proprio. Bot privato dell'owner con comandi di sola lettura sulle stesse query aggregate della console, navigazione inline e aggiornamento dello stesso messaggio; webhook tramite l'ingresso di M3-11 con verifica di secret, chat privata e identità owner; notifiche incidenti deduplicate all'apertura e alla risoluzione. Nessun CF o dato buyer.
+
+**Criterio di completamento:** Chat o utente diversi ignorati senza risposta informativa; stesso update ripetuto senza doppio effetto; ogni comando coerente con la vista console corrispondente; eventuale azione di scrittura prevista da §15 con conferma e audit. Readback del webhook e del menu comandi nell'ambiente test, bot test separato.
+
 <a id="m7"></a>
 
 ## M7 — Hardening e readiness operativa
@@ -1031,6 +1119,8 @@ Verificare eliminazioni di account, negozio e buyer, comprese richieste eBay, su
 
 Coprire anche outbox/event payload/file/indici e segnalazioni Stripe/Link. Il test di logica erasure usa fixture e non sostituisce il drill nativo finale; qualifica delle condizioni di irreversibilità eBay esplicita.
 
+Da [§37.1](docs/MASTER_PLAN.md#s37): il callback 2.0 di cancellazione account eBay entra dall'ingresso Worker di M3-11, con limite di richieste per origine a memoria limitata e budget per il recupero delle chiavi pubbliche, riusate dalla cache; il superamento risponde 429 senza perdere notifiche valide.
+
 ### M7-03 — Stress capacità e costi residui
 
 **Stato:** TODO · **Prerequisiti:** M0, M3, M5, M6 · **Contratto:** [§36](docs/MASTER_PLAN.md#s36)
@@ -1038,6 +1128,8 @@ Coprire anche outbox/event payload/file/indici e segnalazioni Stripe/Link. Il te
 Misurare il runtime reale con almeno 70.000 ordini, più negozi, picchi, code, export, log e traffico. Considerare capacità residua degli account condivisi.
 
 **Criterio di completamento:** Soglie misurate e configurazione approvata sufficiente; nessuna stima di clienti basata sui soli MAU Auth o sulla media degli ordini.
+
+Da [§37.1](docs/MASTER_PLAN.md#s37): runbook con quote di riferimento e stop point per Worker, D1 e Queue, e con la procedura al raggiungimento (fermare nuovi ingressi, attribuire il consumo al progetto giusto dell'account, scegliere con l'owner fra ottimizzazione e cambio piano). Il controllo CPU al deploy resta quello di M1-10.
 
 ### M7-04 — Monitoraggio e incidenti
 
@@ -1048,6 +1140,10 @@ Configurare log ordinari a 90 giorni e audit a un anno, alert azionabili e busin
 **Criterio di completamento:** Allarme, deduplicazione e rientro provati senza PII; soglie reali nella documentazione privata. Nessun indicatore di salute puramente decorativo.
 
 Runbook dati personali separa risposta operativa, obblighi di notifica ai soggetti pertinenti e finestre del supporto MoR; l’assenza di SLA pubblico non li annulla.
+
+**Per chiudere:** M6-09; gli alert owner usano le notifiche incidenti del Control Center.
+
+Da [§37.1](docs/MASTER_PLAN.md#s37): i log redatti con correlation ID sono già attivi da M1-04; qui si aggiungono campionamento degli eventi ordinari riusciti, query di diagnosi documentate (errori per codice, webhook, correlation ID, scritture di eventi fallite) e soglie iniziali P1/P2. Registro delle scadenze delle credenziali nell'inventario privato, con controllo periodico che avvisa l'owner almeno 45 giorni prima e segnala le voci senza data.
 
 ### M7-05 — Kill switch e modalità degrade
 
@@ -1066,6 +1162,8 @@ Qualificare pubblicazione e readback, migrazioni, scelta rollback/forward-fix, r
 **Criterio di completamento:** Percorso eseguibile documentato e RC preparabile; nessun drill periodico aggiunto né ripristino dichiarato prima della prova effettiva.
 
 Provare la ripresa idempotente di Pubblica dopo deploy riuscito/tag fallito e blocco di deploy concorrenti. Preparare riconciliazione post-snapshot di cancellazioni e diritti senza inventare un backup esterno.
+
+Da [§37.1](docs/MASTER_PLAN.md#s37): la promozione `develop`→`main` riusa i controlli già verdi sullo stesso tree, salvo modifiche ai file che governano la pubblicazione; dopo la promozione `develop` viene riallineato automaticamente. M9-04 usa questo percorso.
 
 ### M7-07 — Qualifica legale e commerciale finale
 
