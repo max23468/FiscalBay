@@ -17,7 +17,8 @@ const resources = {
     translation: {
       orders: "Ordini",
       ordersDescription: "Ordini eBay disponibili in FiscalBay",
-      ordersIntro: "Gli ordini e i dati fiscali accessibili sono isolati per spazio.",
+      ordersIntro:
+        "Nel tuo spazio trovi gli ordini e, quando disponibile su eBay, il Codice Fiscale.",
       storeConnected: "Negozio eBay collegato.",
       storeDenied: "Collegamento annullato su eBay.",
       storeOtherWorkspace: "Questo negozio eBay è già collegato a un altro spazio.",
@@ -57,7 +58,8 @@ const resources = {
     translation: {
       orders: "Orders",
       ordersDescription: "eBay orders available in FiscalBay",
-      ordersIntro: "Accessible orders and tax data are isolated by workspace.",
+      ordersIntro:
+        "Your workspace shows orders and, when available on eBay, the buyer's Italian tax code.",
       storeConnected: "eBay store connected.",
       storeDenied: "Connection cancelled on eBay.",
       storeOtherWorkspace: "This eBay store is already connected to another workspace.",
