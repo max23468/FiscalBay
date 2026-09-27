@@ -12,4 +12,20 @@ export default [
   route("design", "routes/design-system.tsx"),
   route("en/design", "routes/design-system.tsx", { id: "design-system-en" }),
   route("api/auth/*", "routes/auth.ts"),
+  ...preview("anteprima", ""),
+  ...preview("en/anteprima", "-en"),
 ] satisfies RouteConfig;
+
+/** Anteprima con scenari sintetici delle schermate dell'app, assente in Production. */
+function preview(path: string, suffix: string) {
+  return [
+    route(path, "routes/preview.tsx", { id: `preview${suffix}` }, [
+      route("ordini/:ordine?", "routes/preview-orders.tsx", { id: `preview-orders${suffix}` }),
+      route("negozi/:negozio?", "routes/preview-stores.tsx", { id: `preview-stores${suffix}` }),
+      route("impostazioni/:sezione?", "routes/preview-settings.tsx", {
+        id: `preview-settings${suffix}`,
+      }),
+      route("profilo", "routes/preview-profile.tsx", { id: `preview-profile${suffix}` }),
+    ]),
+  ];
+}
