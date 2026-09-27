@@ -4,35 +4,48 @@ import { cn } from "cn";
 
 import { Button } from "~/components/ui/button";
 
+/**
+ * Testi già tradotti. `copy` è il nome accessibile del pulsante e deve
+ * distinguere la riga (per esempio «Copia Codice Fiscale: Maria Rossi»),
+ * perché in un elenco più pulsanti con lo stesso nome non si distinguono.
+ */
 type Labels = { copy: string; copied: string; copyFailed: string; locked: string };
+
+const sizes = {
+  default: "min-h-10 w-56 text-[0.9375rem]",
+  compact: "min-h-8 w-48 text-sm",
+};
 
 /**
  * Identificativo fiscale mostrato sempre intero, leggibile e copiabile.
  * Da bloccato non riceve il valore: mostra segnaposto generici, perché il
  * dato non deve arrivare al browser prima dello sblocco. `reveal` anima la
- * comparsa dopo uno sblocco.
+ * comparsa dopo uno sblocco; `compact` serve alle righe dense delle tabelle.
  */
 export function TaxCode({
   value,
   labels,
   reveal = false,
+  size = "default",
   className,
 }: {
   value: string | null;
   labels: Labels;
   reveal?: boolean;
+  size?: keyof typeof sizes;
   className?: string;
 }) {
   if (value === null) {
     return (
       <span
         className={cn(
-          "inline-flex min-h-10 w-56 max-w-full items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1 text-muted-foreground",
+          "inline-flex max-w-full items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1 text-muted-foreground",
+          sizes[size],
           className,
         )}
       >
         <Lock aria-hidden="true" className="size-3.5 text-premium" />
-        <span aria-hidden="true" className="font-code text-[0.9375rem]">
+        <span aria-hidden="true" className="font-code">
           ••••••••••••••••
         </span>
         <span className="sr-only">{labels.locked}</span>
@@ -42,14 +55,15 @@ export function TaxCode({
   return (
     <span
       className={cn(
-        "inline-flex min-h-10 w-56 max-w-full flex-wrap items-center justify-between gap-x-1 rounded-lg border border-border bg-muted/40 pl-3 pr-1 py-1",
+        "inline-flex max-w-full flex-wrap items-center justify-between gap-x-1 rounded-lg border border-border bg-muted/40 pl-3 pr-1 py-1",
+        sizes[size],
         reveal && "fiscal-reveal",
         className,
       )}
     >
       <span
         className={cn(
-          "font-code whitespace-nowrap text-[0.9375rem] font-medium text-foreground",
+          "font-code whitespace-nowrap font-medium text-foreground",
           reveal &&
             "inline-block animate-[value-reveal_var(--duration-quick)_ease-out_both] motion-reduce:animate-none",
         )}

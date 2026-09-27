@@ -207,10 +207,12 @@ const copy = {
     syncIdle: "Sincronizzato 5 minuti fa",
     unlock: "Sblocca",
     resetDemo: "Ripristina",
-    copyLabel: "Copia Codice Fiscale",
-    copiedLabel: "Codice Fiscale copiato",
+    copyFor: "Copia {{label}}: {{context}}",
+    copiedLabel: "Copiato negli appunti",
+    vatLabel: "Partita IVA",
+    fiscalData: "Dati fiscali",
     copyFailedLabel: "Copia non riuscita. Riprova oppure seleziona e copia il codice.",
-    lockedLabel: "Codice Fiscale da sbloccare",
+    lockedLabel: "Dati fiscali da sbloccare",
     motion: "Movimento",
     motionDescription: "Quando arrivano nuovi ordini, un avviso permette di aggiornare l’elenco.",
     addOrder: "Simula nuovo ordine",
@@ -233,7 +235,6 @@ const copy = {
     sampleState: "Stato del campione",
     available: "Da copiare",
     sampleDate: "27 settembre 2026, 09:42",
-    sampleBuyer: "Società Cooperativa Agricola Val di Non e Valle di Sole Soc. Coop.",
     sampleItem:
       "Set di ricambi originali per macchina da scrivere meccanica, edizione da collezione",
     sampleItemOther: "Custodia protettiva e accessori",
@@ -241,7 +242,7 @@ const copy = {
     sampleOrderStatus: "Pagato",
     sampleLocked:
       "Sblocca tutti i dati fiscali di questo ordine. Hai ancora 2 ordini disponibili: dopo lo sblocco ne resterà 1.",
-    sampleMissing: "eBay non riporta il Codice Fiscale per questo ordine.",
+    sampleMissing: "eBay non riporta dati fiscali per questo ordine.",
     sampleVerify: "Controlla che il Codice Fiscale corrisponda all’acquirente prima di usarlo.",
     sampleFailed: "Non siamo riusciti a recuperare il Codice Fiscale da eBay. Riprova tra poco.",
     simulateUnlock: "Sblocca ordine",
@@ -350,10 +351,12 @@ const copy = {
     syncIdle: "Synced 5 minutes ago",
     unlock: "Unlock",
     resetDemo: "Reset",
-    copyLabel: "Copy Codice Fiscale",
-    copiedLabel: "Codice Fiscale copied",
+    copyFor: "Copy {{label}}: {{context}}",
+    copiedLabel: "Copied to clipboard",
+    vatLabel: "Partita IVA",
+    fiscalData: "Tax data",
     copyFailedLabel: "Copy failed. Try again, or select and copy the code.",
-    lockedLabel: "Codice Fiscale to unlock",
+    lockedLabel: "Tax data to unlock",
     motion: "Motion",
     motionDescription: "When new orders arrive, a notice lets you update the list.",
     addOrder: "Simulate new order",
@@ -375,14 +378,13 @@ const copy = {
     sampleState: "Sample state",
     available: "Ready to copy",
     sampleDate: "27 September 2026, 09:42",
-    sampleBuyer: "Società Cooperativa Agricola Val di Non e Valle di Sole Soc. Coop.",
     sampleItem: "Original spare parts set for a mechanical typewriter, collector’s edition",
     sampleItemOther: "Protective case and accessories",
     sampleQuantity: "Quantity",
     sampleOrderStatus: "Paid",
     sampleLocked:
       "Unlock all tax details for this order. You have 2 orders left; after unlocking, you will have 1.",
-    sampleMissing: "eBay does not provide a tax code for this order.",
+    sampleMissing: "eBay does not provide tax data for this order.",
     sampleVerify: "Check that the tax code matches the buyer before using it.",
     sampleFailed: "We could not get the tax code from eBay. Try again shortly.",
     simulateUnlock: "Unlock order",
@@ -418,10 +420,16 @@ const colorTokens = [
   "neutral",
 ];
 
+type Identifier = { type: "CODICE_FISCALE" | "VAT_ID"; value: string };
+
+/**
+ * Unico insieme di ordini fittizi per tutte le sezioni del campione: lo
+ * stesso numero d'ordine ha sempre acquirente, dato fiscale e importo uguali.
+ */
 const rows: Array<{
   order: string;
   buyer: string;
-  taxCode: string | null;
+  identifier: Identifier | null;
   tone: StatusTone;
   status: keyof Copy;
   total: string;
@@ -429,23 +437,23 @@ const rows: Array<{
   {
     order: "12-34567-89012",
     buyer: "Maria Rossi",
-    taxCode: "RSSMRA80A41H501U",
+    identifier: { type: "CODICE_FISCALE", value: "RSSMRA80A41H501U" },
     tone: "success",
-    status: "found",
+    status: "available",
     total: "€ 49,90",
   },
   {
     order: "27-10293-84756",
     buyer: "Società Cooperativa Agricola Val di Non e Valle di Sole Soc. Coop.",
-    taxCode: null,
-    tone: "neutral",
-    status: "missing",
+    identifier: { type: "VAT_ID", value: "01234567890" },
+    tone: "success",
+    status: "available",
     total: "€ 1.249,00",
   },
   {
     order: "05-55555-12121",
     buyer: "Luca Bianchi",
-    taxCode: null,
+    identifier: null,
     tone: "locked",
     status: "locked",
     total: "€ 12,00",
@@ -453,12 +461,22 @@ const rows: Array<{
   {
     order: "19-00001-99999",
     buyer: "Giulia Verdi",
-    taxCode: null,
+    identifier: null,
     tone: "danger",
     status: "failed",
     total: "€ 7,50",
   },
+  {
+    order: "44-20981-33017",
+    buyer: "Anna Ferri",
+    identifier: null,
+    tone: "neutral",
+    status: "missing",
+    total: "€ 64,00",
+  },
 ];
+
+const [mariaRossi, cooperative] = rows as [(typeof rows)[number], (typeof rows)[number]];
 
 type Theme = "system" | "light" | "dark";
 
@@ -596,9 +614,14 @@ function SampleForm({ t }: { t: Copy }) {
   );
 }
 
-function taxCodeLabels(t: Copy) {
+function identifierLabel(t: Copy, type: Identifier["type"] | undefined) {
+  return type === "VAT_ID" ? t.vatLabel : type === "CODICE_FISCALE" ? t.taxCode : t.fiscalData;
+}
+
+/** Testi di `TaxCode` con il nome della copia legato alla riga. */
+function taxCodeLabels(t: Copy, type: Identifier["type"] | undefined, context: string) {
   return {
-    copy: t.copyLabel,
+    copy: t.copyFor.replace("{{label}}", identifierLabel(t, type)).replace("{{context}}", context),
     copied: t.copiedLabel,
     copyFailed: t.copyFailedLabel,
     locked: t.lockedLabel,
@@ -623,25 +646,12 @@ function OrderCardSample({ t }: { t: Copy }) {
   ] satisfies Array<{ value: string; label: string; tone: StatusTone; description: string }>;
   const current = cases.find((item) => item.value === state)!;
   const hasCode = state === "available" || state === "verify";
-  const compactOrders = [
-    {
-      order: "12-34567-89012",
-      buyer: t.sampleBuyer,
-      taxCode: hasCode ? "01234567890" : null,
-      total: "€ 1.249,00",
-      tone: current.tone,
-      label: current.label,
-    },
-    ...rows.slice(1).map((row) => ({ ...row, label: t[row.status] })),
-    {
-      order: "31-77421-10058",
-      buyer: "Giorgio Neri",
-      taxCode: "NREGGR80A01H501A",
-      total: "€ 18,40",
-      tone: "success" as const,
-      label: t.available,
-    },
-  ];
+  const cardIdentifier = hasCode ? cooperative.identifier : null;
+  const compactOrders = rows.map((row) =>
+    row === cooperative
+      ? { ...row, identifier: cardIdentifier, tone: current.tone, label: current.label }
+      : { ...row, label: t[row.status] },
+  );
   return (
     <Section title={t.orderSample} description={t.orderSampleDescription}>
       <Field className="max-w-sm">
@@ -671,19 +681,27 @@ function OrderCardSample({ t }: { t: Copy }) {
           <h3 className="text-xs font-medium text-muted-foreground">{t.readOrder}</h3>
           <Card className="min-w-0 gap-0 py-0" role="article" aria-label={t.orderSample}>
             <CardHeader className="gap-2 p-5 pb-0 sm:p-6 sm:pb-0">
-              <p className="font-code text-xs text-muted-foreground">{t.order} 12-34567-89012</p>
+              <p className="font-code text-xs text-muted-foreground">
+                {t.order} {cooperative.order}
+              </p>
               <CardTitle className="text-base leading-relaxed font-semibold text-pretty">
-                {t.sampleBuyer}
+                {cooperative.buyer}
               </CardTitle>
             </CardHeader>
             <CardContent className="grid gap-5 p-5 sm:p-6">
               <div className="grid gap-2">
-                <h4 className="text-xs font-medium text-muted-foreground">{t.taxCode}</h4>
+                <h4 className="text-xs font-medium text-muted-foreground">
+                  {identifierLabel(t, cardIdentifier?.type)}
+                </h4>
                 <div className="flex min-h-10 items-center">
                   {hasCode ? (
-                    <TaxCode value="01234567890" labels={taxCodeLabels(t)} reveal={notice !== ""} />
+                    <TaxCode
+                      value={cooperative.identifier!.value}
+                      labels={taxCodeLabels(t, cooperative.identifier!.type, cooperative.buyer)}
+                      reveal={notice !== ""}
+                    />
                   ) : state === "locked" ? (
-                    <TaxCode value={null} labels={taxCodeLabels(t)} />
+                    <TaxCode value={null} labels={taxCodeLabels(t, undefined, cooperative.buyer)} />
                   ) : (
                     <StatusBadge tone={current.tone}>{current.label}</StatusBadge>
                   )}
@@ -718,7 +736,7 @@ function OrderCardSample({ t }: { t: Copy }) {
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-xs">
                   <time dateTime="2026-09-27T09:42:00+02:00">{t.sampleDate}</time>
                   <span className="font-code whitespace-nowrap">
-                    {t.sampleOrderStatus} · € 1.249,00
+                    {t.sampleOrderStatus} · {cooperative.total}
                   </span>
                 </div>
               </div>
@@ -756,8 +774,11 @@ function OrderCardSample({ t }: { t: Copy }) {
                   </p>
                 </div>
                 <div className="min-w-0">
-                  {row.taxCode ? (
-                    <TaxCode value={row.taxCode} labels={taxCodeLabels(t)} />
+                  {row.identifier ? (
+                    <TaxCode
+                      value={row.identifier.value}
+                      labels={taxCodeLabels(t, row.identifier.type, row.buyer)}
+                    />
                   ) : (
                     <StatusBadge tone={row.tone}>{row.label}</StatusBadge>
                   )}
@@ -773,7 +794,6 @@ function OrderCardSample({ t }: { t: Copy }) {
 
 function IdentityDemo({ t }: { t: Copy }) {
   const [unlocked, setUnlocked] = useState(false);
-  const labels = taxCodeLabels(t);
   return (
     <div className="grid gap-6 md:grid-cols-[1fr_auto] md:items-center">
       <div className="grid gap-4">
@@ -788,13 +808,20 @@ function IdentityDemo({ t }: { t: Copy }) {
           </span>
         </div>
         <dl className="grid gap-3 text-sm sm:grid-cols-[10rem_1fr] sm:items-center">
-          <dt className="text-muted-foreground">Maria Rossi</dt>
+          <dt className="text-muted-foreground">{mariaRossi.buyer}</dt>
           <dd>
-            <TaxCode value="RSSMRA80A41H501U" labels={labels} />
+            <TaxCode
+              value={mariaRossi.identifier!.value}
+              labels={taxCodeLabels(t, "CODICE_FISCALE", mariaRossi.buyer)}
+            />
           </dd>
           <dt className="text-muted-foreground">Luca Bianchi</dt>
           <dd className="flex flex-wrap items-center gap-3">
-            <TaxCode value={unlocked ? "BNCLCU75C12F205X" : null} labels={labels} reveal />
+            <TaxCode
+              value={unlocked ? "BNCLCU75C12F205X" : null}
+              labels={taxCodeLabels(t, unlocked ? "CODICE_FISCALE" : undefined, "Luca Bianchi")}
+              reveal
+            />
             <Button
               size="sm"
               variant={unlocked ? "ghost" : "default"}
@@ -803,9 +830,12 @@ function IdentityDemo({ t }: { t: Copy }) {
               {unlocked ? t.resetDemo : t.unlock}
             </Button>
           </dd>
-          <dt className="text-muted-foreground">Tecnoufficio S.r.l.</dt>
+          <dt className="text-muted-foreground">{cooperative.buyer}</dt>
           <dd>
-            <TaxCode value="01234567890" labels={labels} />
+            <TaxCode
+              value={cooperative.identifier!.value}
+              labels={taxCodeLabels(t, "VAT_ID", cooperative.buyer)}
+            />
           </dd>
         </dl>
       </div>
@@ -965,7 +995,9 @@ function Foundations({ t }: { t: Copy }) {
             </div>
             <div>
               <dt className="text-xs text-muted-foreground">{t.total}</dt>
-              <dd className="font-code text-lg font-semibold whitespace-nowrap">€ 1.249,00</dd>
+              <dd className="font-code text-lg font-semibold whitespace-nowrap">
+                {mariaRossi.total}
+              </dd>
             </div>
           </dl>
         </div>
@@ -1141,7 +1173,10 @@ function OverlaysSection({ t }: { t: Copy }) {
                 <div className="grid gap-0.5">
                   <dt className="text-muted-foreground">{t.taxCode}</dt>
                   <dd>
-                    <TaxCode value="RSSMRA80A41H501U" labels={taxCodeLabels(t)} />
+                    <TaxCode
+                      value={mariaRossi.identifier!.value}
+                      labels={taxCodeLabels(t, "CODICE_FISCALE", mariaRossi.buyer)}
+                    />
                   </dd>
                 </div>
                 <div className="grid gap-0.5">
@@ -1180,8 +1215,12 @@ function TableSection({ t }: { t: Copy }) {
                   </TableCell>
                   <TableCell className="max-w-64 whitespace-normal">{row.buyer}</TableCell>
                   <TableCell>
-                    {row.taxCode ? (
-                      <TaxCode value={row.taxCode} labels={taxCodeLabels(t)} />
+                    {row.identifier ? (
+                      <TaxCode
+                        size="compact"
+                        value={row.identifier.value}
+                        labels={taxCodeLabels(t, row.identifier.type, row.buyer)}
+                      />
                     ) : (
                       <StatusBadge tone={row.tone}>{t[row.status]}</StatusBadge>
                     )}

@@ -16,10 +16,12 @@ const resources = {
   it: {
     translation: {
       language: "Lingua",
-      copyTaxCode: "Copia Codice Fiscale",
-      taxCodeCopied: "Codice Fiscale copiato",
+      identifierTaxCode: "Codice Fiscale",
+      identifierVat: "Partita IVA",
+      copyIdentifier: "Copia {{label}}: ordine {{order}}",
+      copied: "Copiato negli appunti",
       copyFailed: "Copia non riuscita",
-      taxCodeLocked: "Codice Fiscale da sbloccare",
+      taxCodeLocked: "Dati fiscali da sbloccare",
       orders: "Ordini",
       ordersDescription: "Ordini eBay disponibili in FiscalBay",
       ordersIntro: "Trova e gestisci il Codice Fiscale dei tuoi ordini eBay.",
@@ -61,10 +63,12 @@ const resources = {
   en: {
     translation: {
       language: "Language",
-      copyTaxCode: "Copy Codice Fiscale",
-      taxCodeCopied: "Codice Fiscale copied",
+      identifierTaxCode: "Codice Fiscale",
+      identifierVat: "Partita IVA",
+      copyIdentifier: "Copy {{label}}: order {{order}}",
+      copied: "Copied to clipboard",
       copyFailed: "Copy failed",
-      taxCodeLocked: "Codice Fiscale to unlock",
+      taxCodeLocked: "Tax data to unlock",
       orders: "Orders",
       ordersDescription: "eBay orders available in FiscalBay",
       ordersIntro: "Find and manage the Italian tax code in your eBay orders.",

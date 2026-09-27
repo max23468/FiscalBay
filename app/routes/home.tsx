@@ -29,6 +29,12 @@ const storeNotices: Record<string, string> = {
   errore: "storeError",
 };
 
+// Tipi restituiti da eBay; un tipo sconosciuto resta com'è, mai chiamato Codice Fiscale.
+const identifierLabels: Record<string, string> = {
+  CODICE_FISCALE: "identifierTaxCode",
+  VAT_ID: "identifierVat",
+};
+
 const signInNotices: Record<string, string> = {
   errore: "signInError",
   registrato: "registered",
@@ -178,25 +184,33 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </CardHeader>
               <CardContent>
                 <dl className="grid gap-2 text-sm">
-                  {order.taxIdentifiers.map((identifier) => (
-                    <div
-                      key={`${identifier.type}:${identifier.value}`}
-                      className="grid grid-cols-[1fr_2fr] items-center gap-3"
-                    >
-                      <dt className="text-muted-foreground">{identifier.type}</dt>
-                      <dd>
-                        <TaxCode
-                          value={identifier.value}
-                          labels={{
-                            copy: t("copyTaxCode"),
-                            copied: t("taxCodeCopied"),
-                            copyFailed: t("copyFailed"),
-                            locked: t("taxCodeLocked"),
-                          }}
-                        />
-                      </dd>
-                    </div>
-                  ))}
+                  {order.taxIdentifiers.map((identifier) => {
+                    const label = identifierLabels[identifier.type]
+                      ? t(identifierLabels[identifier.type]!)
+                      : identifier.type;
+                    return (
+                      <div
+                        key={`${identifier.type}:${identifier.value}`}
+                        className="grid grid-cols-[1fr_2fr] items-center gap-3"
+                      >
+                        <dt className="text-muted-foreground">{label}</dt>
+                        <dd>
+                          <TaxCode
+                            value={identifier.value}
+                            labels={{
+                              copy: translate(language, "copyIdentifier", {
+                                label,
+                                order: order.ebayOrderId,
+                              }),
+                              copied: t("copied"),
+                              copyFailed: t("copyFailed"),
+                              locked: t("taxCodeLocked"),
+                            }}
+                          />
+                        </dd>
+                      </div>
+                    );
+                  })}
                 </dl>
               </CardContent>
             </Card>
