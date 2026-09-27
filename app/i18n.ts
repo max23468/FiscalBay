@@ -15,6 +15,11 @@ export function localizedPath(language: Language, path = "/"): string {
 const resources = {
   it: {
     translation: {
+      language: "Lingua",
+      copyTaxCode: "Copia Codice Fiscale",
+      taxCodeCopied: "Codice Fiscale copiato",
+      copyFailed: "Copia non riuscita",
+      taxCodeLocked: "Codice Fiscale da sbloccare",
       orders: "Ordini",
       ordersDescription: "Ordini eBay disponibili in FiscalBay",
       ordersIntro: "Trova e gestisci il Codice Fiscale dei tuoi ordini eBay.",
@@ -55,6 +60,11 @@ const resources = {
   },
   en: {
     translation: {
+      language: "Language",
+      copyTaxCode: "Copy Codice Fiscale",
+      taxCodeCopied: "Codice Fiscale copied",
+      copyFailed: "Copy failed",
+      taxCodeLocked: "Codice Fiscale to unlock",
       orders: "Orders",
       ordersDescription: "eBay orders available in FiscalBay",
       ordersIntro: "Find and manage the Italian tax code in your eBay orders.",

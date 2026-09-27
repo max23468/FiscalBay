@@ -9,5 +9,7 @@ export default [
   route("en/accesso", "routes/sign-in.ts", { id: "sign-in-en" }),
   route("negozi/collega", "routes/store-link.ts"),
   route("en/negozi/collega", "routes/store-link.ts", { id: "store-link-en" }),
+  route("design", "routes/design-system.tsx"),
+  route("en/design", "routes/design-system.tsx", { id: "design-system-en" }),
   route("api/auth/*", "routes/auth.ts"),
 ] satisfies RouteConfig;

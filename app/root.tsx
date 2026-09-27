@@ -11,6 +11,7 @@ import {
 import { I18nextProvider } from "react-i18next";
 
 import type { Route } from "./+types/root";
+import { TooltipProvider } from "./components/ui/tooltip";
 import { correlationId } from "./errors";
 import { i18n, languageFromPath, translate } from "./i18n";
 import "./app.css";
@@ -41,7 +42,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        <I18nextProvider i18n={i18n}>{children}</I18nextProvider>
+        <I18nextProvider i18n={i18n}>
+          <TooltipProvider>{children}</TooltipProvider>
+        </I18nextProvider>
         <ScrollRestoration />
         <Scripts />
       </body>
@@ -61,11 +64,13 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const notFound = isRouteErrorResponse(error) && error.status === 404;
 
   return (
-    <main className="error">
-      <h1>{notFound ? "404" : translate(language, "errorTitle")}</h1>
+    <main className="mx-auto grid w-[min(36rem,calc(100%-2rem))] gap-3 py-16">
+      <h1 className="text-3xl font-bold">{notFound ? "404" : translate(language, "errorTitle")}</h1>
       <p>{translate(language, notFound ? "notFound" : "unexpected")}</p>
       {!notFound && reference ? (
-        <p>{translate(language, "errorReference", { id: reference })}</p>
+        <p className="text-sm text-muted-foreground">
+          {translate(language, "errorReference", { id: reference })}
+        </p>
       ) : null}
     </main>
   );

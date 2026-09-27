@@ -38,7 +38,7 @@ Categorie a sinistra e contenuto a destra, mobile elenco→dettaglio. Export è 
 
 Origine: `impostazioni_fiscalbay_desktop_e_mobile.png`.
 
-## Logo 2.0 — M1
+## Logo 2.0 · M1
 
 Su indicazione owner (D141) il logo evolve dal Concept 4 senza esserne vincolato: si possono migliorare forma, proporzioni, inclinazione e dettagli per chiarezza e resa piccola. L'icona è generica, cioè il simbolo su fondo trasparente, non una tile in stile iOS o di altre piattaforme. Il segno resta autonomo e non deve far credere a un prodotto ufficiale eBay; il marchio resta FiscalBay e `FB` è solo interno.
 
@@ -82,7 +82,7 @@ Wordmark: Inter ExtraBold 4.x (The Inter Project Authors, SIL Open Font License 
 | `designsystemchecklist.com` | Checklist di coerenza del design system. |
 | `reui.io/components` | Componenti applicativi candidati; distinguere gratuito e materiale Pro incompatibile col Git pubblico. |
 
-**Non è stato compilato adesso il catalogo dei componenti da installare.** Tale lavoro appartiene alla milestone frontend, come richiesto. shadcn non deve monopolizzare la direzione estetica; gli altri riferimenti sono parte del brief, non decorazione bibliografica.
+Il catalogo con licenze ed esiti e il registro dei componenti integrati sono nel [design system](DESIGN_SYSTEM.md#catalogo-dei-nove-riferimenti). shadcn non deve monopolizzare la direzione estetica; gli altri riferimenti sono parte del brief, non decorazione bibliografica.
 
 ## Procedura di selezione
 

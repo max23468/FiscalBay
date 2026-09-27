@@ -33,7 +33,17 @@ const inside = (p) => {
   const s = path.relative(root, p);
   return s !== ".." && !s.startsWith(`..${path.sep}`) && !path.isAbsolute(s);
 };
-const skipped = new Set([".git", "node_modules", "dist", "build", ".cache", ".next", ".wrangler"]);
+const skipped = new Set([
+  ".git",
+  "node_modules",
+  "dist",
+  "build",
+  ".cache",
+  ".next",
+  ".wrangler",
+  "test-results",
+  "playwright-report",
+]);
 function walk(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((item) => {
     const p = path.join(dir, item.name);
@@ -190,7 +200,7 @@ function main() {
     return;
   }
   const backlog = documents.get(backlogFile),
-    matches = [...backlog.matchAll(/^### (M\d+-\d+) — .+$/gm)];
+    matches = [...backlog.matchAll(/^### (M\d+-\d+) · .+$/gm)];
   const tasks = duplicateIds(
     matches.map((m) => m[1]),
     "TASK_DUPLICATE",

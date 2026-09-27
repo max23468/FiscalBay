@@ -1,4 +1,4 @@
-# FiscalBay 2.0 — Avvio, ripresa e documenti
+# FiscalBay 2.0 · Avvio, ripresa e documenti
 
 La baseline contiene la specifica approvata del prodotto, il backlog, gli strumenti documentali e i riferimenti grafici. M0 aggiunge il candidato locale Workers/D1/Better Auth e le prove mirate; non contiene credenziali o configurazioni provider già qualificate. Lo stato eseguibile e i blocchi correnti sono nel solo [BACKLOG.md](BACKLOG.md#stato).
 
@@ -92,6 +92,7 @@ Aggiornare nello stesso backlog attività, blocchi, prossimo passo, checkpoint e
 | [Agent Setup](docs/engineering/AGENT_SETUP.md) | Tool per fase, input, ambienti, custodia e responsabilità documentali    |
 | [Fonti](docs/SOURCES.md)                       | Documentazione esterna da verificare quando pertinente                   |
 | [Riferimenti brand](docs/brand/REFERENCES.md)  | Concept e immagini originali, non asset finali già approvati             |
+| [Design system](docs/brand/DESIGN_SYSTEM.md)  | Token, componenti, catalogo dei riferimenti e provenienza                |
 
 Questo README è l’unico ingresso/indice generale. `CLAUDE.md`, se usato, rinvia ad AGENTS senza una seconda policy. Audit della consegna e copertura Q1–Q569 sono snapshot storici in `docs/archive/`, **non fonti correnti da aggiornare o letture ordinarie**. Non serve consegnare la trascrizione del grill: le regole utili sono nel piano e nel registro.
 

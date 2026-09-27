@@ -1,64 +1,311 @@
+@import "tailwindcss";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/inter";
+
+/* Tema: segue il sistema; `data-theme` su <html> impone chiaro o scuro. */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+  &:where([data-theme="dark"] *) {
+    @slot;
+  }
+}
+
+/*
+ * Token semantici. I colori del marchio sono i tre blu del logo 2.0
+ * (docs/brand/REFERENCES.md); gli stati usano testo con contrasto almeno
+ * 4,5:1 sulla propria superficie, verificato da test/design-tokens.spec.ts.
+ */
 :root {
-  color: #162033;
-  background: #f4f7fb;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  color-scheme: light;
+  --brand-blue: #1a4fa6;
+  --brand-navy: #0e3372;
+  --brand-sky: #4f87e3;
+  --brand-green: #1f9f9a;
+  --brand-red: #da353e;
+
+  --background: #f5f7fa;
+  --foreground: #0f1b2d;
+  --card: #ffffff;
+  --card-foreground: #0f1b2d;
+  --popover: #ffffff;
+  --popover-foreground: #0f1b2d;
+  --primary: #1a4fa6;
+  --primary-foreground: #ffffff;
+  --primary-hover: #16438d;
+  --secondary: #e9eef6;
+  --secondary-foreground: #0e3372;
+  --muted: #eef1f5;
+  --muted-foreground: #556275;
+  --accent: #e9eef6;
+  --accent-foreground: #0e3372;
+  --destructive: #b42318;
+  --border: #d9dfe8;
+  --input: #848fa1;
+  --ring: #1a4fa6;
+
+  --success: #15703b;
+  --success-surface: #e8f6ee;
+  --info: #1a4fa6;
+  --info-surface: #eaf1fc;
+  --warning: #955104;
+  --warning-surface: #fdf3e1;
+  --danger: #b42318;
+  --danger-surface: #fdecea;
+  --danger-foreground: #ffffff;
+  --premium: #6327c9;
+  --premium-surface: #f2edfd;
+  --neutral: #556275;
+  --neutral-surface: #eef1f5;
+
+  --radius: 0.625rem;
+
+  /*
+   * Movimento: scala di durate, curve e scale ricavata da transitions.dev.
+   * Le aperture usano la durata piena, le chiusure la più breve.
+   */
+  --duration-micro: 80ms;
+  --duration-quick: 150ms;
+  --duration-fast: 250ms;
+  --duration-medium: 350ms;
+  --duration-slow: 400ms;
+  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --scale-modal: 0.96;
+  --scale-popover: 0.97;
+  --scale-tooltip: 0.98;
+  --scale-popover-close: 0.99;
 }
 
-body {
-  margin: 0;
-}
-main {
-  width: min(72rem, calc(100% - 2rem));
-  margin: 0 auto;
-  padding: 4rem 0;
-}
-header {
-  max-width: 42rem;
-  margin-bottom: 2rem;
-}
-h1 {
-  margin: 0.25rem 0 0.75rem;
-  font-size: clamp(2.25rem, 6vw, 4rem);
-}
-.eyebrow {
-  color: #3558b8;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.empty,
-article {
-  border: 1px solid #d9e1ee;
-  border-radius: 1rem;
-  background: white;
-  padding: 1.5rem;
-  box-shadow: 0 0.75rem 2.5rem rgb(33 52 85 / 8%);
-}
-.orders {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
-  gap: 1rem;
-}
-article > div:first-child {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-}
-dl div {
-  display: grid;
-  grid-template-columns: 1fr 2fr;
-  gap: 0.75rem;
-}
-dt {
-  color: #59677d;
-}
-dd {
-  margin: 0;
-  overflow-wrap: anywhere;
+/* Codici e numeri: cifre tabellari, zero barrato, I maiuscola con grazie. */
+@utility font-code {
+  font-feature-settings: "tnum", "zero", "cv08";
+  font-variant-numeric: tabular-nums slashed-zero;
 }
 
-.error pre {
-  max-width: 100%;
-  overflow-x: auto;
-  padding: 1rem;
+/* Righe della tessera in sincronizzazione: si allungano in sequenza. */
+@keyframes ledger-sync {
+  0%,
+  100% {
+    scale: 0.55 1;
+  }
+  45% {
+    scale: 1 1;
+  }
+}
+
+/* Il valore resta subito leggibile: sola dissolvenza, senza spostamento. */
+@keyframes value-reveal {
+  from {
+    opacity: 0;
+  }
+}
+
+@utility fiscal-reveal {
+  & [data-slot="button"] {
+    animation: value-reveal var(--duration-quick) ease-out 100ms both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    & [data-slot="button"] {
+      animation: none;
+    }
+  }
+}
+
+/* Il tema scuro vale con il sistema scuro o con `data-theme="dark"`. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    @apply dark-tokens;
+  }
+}
+
+:root[data-theme="dark"] {
+  @apply dark-tokens;
+}
+
+@utility dark-tokens {
+  color-scheme: dark;
+  --background: #121418;
+  --foreground: #eceef2;
+  --card: #1c1f25;
+  --card-foreground: #eceef2;
+  --popover: #242830;
+  --popover-foreground: #eceef2;
+  --primary: #4f87e3;
+  --primary-foreground: #0b1220;
+  --primary-hover: #6f9deb;
+  --secondary: #292e37;
+  --secondary-foreground: #e1e5ec;
+  --muted: #242830;
+  --muted-foreground: #adb4c0;
+  --accent: #292e37;
+  --accent-foreground: #e1e5ec;
+  --destructive: #f4827b;
+  --border: #3b424e;
+  --input: #768194;
+  --ring: #6f9deb;
+
+  --success: #5fd08c;
+  --success-surface: #10291d;
+  --info: #8fb4f2;
+  --info-surface: #13223d;
+  --warning: #f2b54a;
+  --warning-surface: #2b200c;
+  --danger: #f4827b;
+  --danger-surface: #2f1517;
+  --danger-foreground: #0b1220;
+  --premium: #c3aefa;
+  --premium-surface: #231a3d;
+  --neutral: #adb4c0;
+  --neutral-surface: #242830;
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-sans);
+  --color-brand-blue: var(--brand-blue);
+  --color-brand-navy: var(--brand-navy);
+  --color-brand-sky: var(--brand-sky);
+  --color-brand-green: var(--brand-green);
+  --color-brand-red: var(--brand-red);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-success-surface: var(--success-surface);
+  --color-info: var(--info);
+  --color-info-surface: var(--info-surface);
+  --color-warning: var(--warning);
+  --color-warning-surface: var(--warning-surface);
+  --color-danger: var(--danger);
+  --color-danger-surface: var(--danger-surface);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-premium: var(--premium);
+  --color-premium-surface: var(--premium-surface);
+  --color-neutral: var(--neutral);
+  --color-neutral-surface: var(--neutral-surface);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/*
+ * Ruoli di movimento per i popup Base UI, che espongono
+ * `data-starting-style` e `data-ending-style` per le transizioni CSS.
+ * Si usano `scale` e `translate` come proprietà separate, così il
+ * centraggio con `translate` dei dialog non entra in conflitto.
+ */
+@utility motion-backdrop {
+  transition: opacity var(--duration-fast) var(--ease-smooth-out);
+  &[data-starting-style],
+  &[data-ending-style] {
+    opacity: 0;
+  }
+  &[data-ending-style] {
+    transition-duration: var(--duration-quick);
+  }
+}
+
+@utility motion-modal {
+  transition:
+    opacity var(--duration-fast) var(--ease-smooth-out),
+    scale var(--duration-fast) var(--ease-smooth-out);
+  &[data-starting-style],
+  &[data-ending-style] {
+    opacity: 0;
+    scale: var(--scale-modal);
+  }
+  &[data-ending-style] {
+    transition-duration: var(--duration-quick);
+  }
+}
+
+@utility motion-popover {
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity var(--duration-fast) var(--ease-smooth-out),
+    scale var(--duration-fast) var(--ease-smooth-out);
+  &[data-starting-style] {
+    opacity: 0;
+    scale: var(--scale-popover);
+  }
+  &[data-ending-style] {
+    opacity: 0;
+    scale: var(--scale-popover-close);
+    transition-duration: var(--duration-quick);
+  }
+}
+
+@utility motion-tooltip {
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity var(--duration-quick) ease-out,
+    scale var(--duration-quick) ease-out;
+  &[data-starting-style] {
+    opacity: 0;
+    scale: var(--scale-tooltip);
+  }
+  &[data-ending-style] {
+    opacity: 0;
+    transition-duration: 0ms;
+  }
+}
+
+@utility motion-panel {
+  transition:
+    opacity var(--duration-fast) var(--ease-smooth-out),
+    translate var(--duration-fast) var(--ease-smooth-out);
+  &[data-ending-style] {
+    transition-duration: var(--duration-quick);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring;
+  }
+  html {
+    @apply font-sans antialiased;
+    font-feature-settings: "cv11";
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-heading tracking-tight text-balance;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
