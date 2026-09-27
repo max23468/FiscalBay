@@ -1,4 +1,4 @@
-# FiscalBay 2.0 — Master Plan
+# FiscalBay 2.0 · Master Plan
 
 **Prodotto:** FiscalBay · **Operatore/brand:** Temisfera · **Owner:** Matteo
 **Obiettivo:** prima release web completa `2.0.0` · **Repository:** `max23468/FiscalBay`
@@ -482,7 +482,7 @@ Consultazione ridotta solo quando i dati e l'autorizzazione sono disponibili e s
 
 Direzione professionale, moderna e accessibile, senza tono eccessivamente rassicurante o promesse assolute. Simbolo+wordmark FiscalBay, differenza sottile Fiscal/Bay; blu/indaco, navy e richiami ai quattro colori del mondo eBay senza riproduzione 1:1 o impressione di affiliazione.
 
-**Logo: evoluzione del Concept 4 — Minimal Ledger Card**, file identificato in [REFERENCES](brand/REFERENCES.md). Il concept è il punto di partenza, non un vincolo: su indicazione owner (D141) forma, proporzioni, inclinazione e dettagli possono essere migliorati per chiarezza e resa piccola, mantenendo un segno autonomo che non richiami un prodotto ufficiale eBay. `Bay` resta blu come il simbolo. L'icona è generica, non una tile in stile piattaforma. Proposte e versione definitiva richiedono il via owner al checkpoint M1.
+**Logo: evoluzione del Concept 4 · Minimal Ledger Card**, file identificato in [REFERENCES](brand/REFERENCES.md). Il concept è il punto di partenza, non un vincolo: su indicazione owner (D141) forma, proporzioni, inclinazione e dettagli possono essere migliorati per chiarezza e resa piccola, mantenendo un segno autonomo che non richiami un prodotto ufficiale eBay. `Bay` resta blu come il simbolo. L'icona è generica, non una tile in stile piattaforma. Proposte e versione definitiva richiedono il via owner al checkpoint M1.
 
 Produrre dopo approvazione vettoriali puliti, versioni orizzontale/mark, chiaro/scuro, favicon, avatar Telegram e preparazione future icone; niente condivisione di file font. Logo/claim delle tavole non sono specifiche funzionali né copy definitivo. Eliminare dagli asset finali date fittizie, testi estranei e promesse di fatturazione/vendite non previste.
 
@@ -854,61 +854,61 @@ G-LEGAL e G-RECOVERY hanno analogamente una qualifica preliminare M0 e una chius
 
 Ogni milestone aggiorna `BACKLOG.md`, contratti coinvolti e prove. Dipendenze rigide sui gate, parallelismo per attività indipendenti. La numerazione non impone che ogni dettaglio sia una consegna sequenziale né autorizza a rinviare sicurezza/test all'ultima fase.
 
-### M0 — Qualificazione tecnica e transizione delle fondamenta
+### M0 · Qualificazione tecnica e transizione delle fondamenta
 
 **Prerequisiti:** approvazione del piano e avvio esplicito; accessi necessari, inventario 1.x e risorse condivise. **Attività:** disinnescare workflow/assunti legacy incompatibili senza danni; preparare tooling, autorizzazioni preliminari, endpoint/email minimi di test; censire fonti; qualificare G-INFRA/AUTH/EBAY/STRIPE/DATA/EXPORT/RECOVERY/STACK e vincoli legali preliminari; setup agenti; vertical slice minimale; misure e scenario sostenibilità. Nessuna transazione live indiscriminata o modifica ai progetti vicini.
 
 **Output:** memo decisionale del candidato selezionato con alternative scartate, costi/quote residue, responsabilità, ADR solo se necessari, matrice API, versioni congelate, slice riproducibile e gate evidenziati. Nessun adapter completo delle alternative scartate. **DoD:** ogni requisito critico ha esito/prova/limite; nessun impedimento nascosto; via owner a scelta/costi. Fonti insufficienti non diventano «PASS».
 
-### M1 — Fondazioni applicative e design
+### M1 · Fondazioni applicative e design
 
 **Prerequisiti:** M0 e scelte approvate per l’implementazione dipendente; preparazione grafica/copy indipendente può anticipare. **Attività:** cutover controllato che rende canonico l’albero 2.0 e congela la 1.x in un riferimento Git separato, senza confonderlo con la dismissione remota; monorepo minimo, CI/local dev/test, migration iniziale, confini tenant/AuthZ, logging redatto, errore/i18n, top nav/shell, tema/tokens; rifinitura manuale/vettoriale Concept 4 e asset; completamento di DNS/TLS/test e posta già avviati limitatamente ai prerequisiti M0; prototipo approvabile dei tre schermi e stati.
 
 **Output:** repository con una sola implementazione e documentazione canonica 2.0, foundation eseguibile, brand foundation e inventario componenti scelti realmente, pipeline test, struttura dati iniziale. **DoD:** riferimento 1.x recuperabile, merge incapace di avviare il deploy legacy, componenti 1.x ancora live censiti fino al loro cutover operativo; approvazione owner logo/design system; test authz/shell/IT-EN/theme verdi; asset non inventano funzioni; ambiente test separato. No UI provvisoria massiva da rifare in M4.
 
-### M2 — Account, Auth e Negozi eBay
+### M2 · Account, Auth e Negozi eBay
 
 **Prerequisiti:** foundation/Auth gate. **Attività:** quattro login, compresa la qualifica di Sign in with eBay rinviata da M0, verifica email/linking, sessioni/reauth/MFA admin, profilo, OAuth login vs seller, connessioni/reconnect, pausa/scollega/elimina, unicità negozio/spazio, stati UI e reminder; instradamento utente autenticato/sito pubblico.
 
 **Output:** flusso utente e account completo e testabile. **DoD:** i percorsi positivi e negativi dei quattro accessi passano; nessun trasferimento/merge improprio; segreti isolati; cronologie e azioni non approvate assenti.
 
-### M3 — Sincronizzazione, ordini e modello fiscale
+### M3 · Sincronizzazione, ordini e modello fiscale
 
 **Prerequisiti:** M2, G-EBAY/DATA. **Attività:** modelli/versioni, adapters, elenco/dettaglio, import recenti/storico, scheduler/eventi, priorità/coalescing/checkpoint/retry, classificazione dato, controlli formali, suggerimenti e conflitti, contratto sblocco atomico e grant iniziali.
 
 **Output:** ordini consistenti, ricerca di base e pipeline riprendibile con fixture/live controllato. **DoD:** fonte/campo provati, nessun consumo su assenza, nessun leak o doppio ordine, cancellazione/retention rispettata dai job; nuovi ordini non bloccati dal backfill. Test sicurezza/contratti presenti prima della UI completa. Il calcolo diritti/cicli di base deve già essere testabile con fixture tipizzate e transazioni; M5 integra il motore con billing, calendario commerciale e provider reali. Non dichiarare «Free/Premium completo» soltanto per uno sblocco simulato.
 
-### M4 — UX completa Ordini, Negozi e Impostazioni
+### M4 · UX completa Ordini, Negozi e Impostazioni
 
 **Prerequisiti:** contratti M2/M3 stabili. **Attività:** card 2×riga, drawer URL/Articoli, query completa, filtri/sorting, Carica altri, selezione/barra, contesto export, profilo/impostazioni/inbox, onboarding progressivo, loading/error/degraded, light/dark/IT-EN/mobile e microcopy.
 
 **Output:** esperienza completa su dati rappresentativi, senza funzionalità future nascoste nel concept. **DoD:** flow browser/touch/back/refresh/scroll coerente, nessun dato bloccato dal client bypassabile, inventario opzioni concordate coperto; integrazioni M5/M6 ancora assenti indicate come tali nel backlog, non dichiarate Production-ready. M4 chiude struttura e comportamento UI sui contratti stabili, non fatturazione, Telegram o export funzionanti se ancora simulati. M6/M7 chiudono gli stessi flussi end-to-end prima della RC.
 
-### M5 — Free/Premium, Stripe e Telegram
+### M5 · Free/Premium, Stripe e Telegram
 
 **Prerequisiti:** gate Stripe e modello diritti/sblocchi. **Attività:** cicli/promo/inattività, trial, checkout/portal/link, catalogo generazioni, prepagamento+residuo trial, upgrade/lifetime/prorata residua qualificata, webhook/reconciliation, grant admin base, Telegram linking/messaggi/riepiloghi/retry/preferences, comunicazioni pagamento vs prodotto.
 
 **Output:** matrice commerciale osservabile funzionante in test, casi solo-live esplicitamente assegnati al gate finale; configurazione live dopo checkpoint owner senza incassi non autorizzati. **DoD:** nessun doppio incasso/sblocco; diritti post-downgrade Q568, concessioni, rimborsi e lifetime ultimo posto testati; Telegram non è accesso obbligatorio; acquisto eleggibile coperto dal MoR; Paddle inattivo salvo via.
 
-### M6 — Export, admin e supporto
+### M6 · Export, admin e supporto
 
 **Prerequisiti:** modelli/diritti/UX e G-EXPORT per la chiusura end-to-end; generazione formati e test puri possono iniziare prima su contratti stabili. **Attività:** CSV/XLSX e template colonne, granularità ordine/articolo, file lifecycle e portabilità ZIP, admin operativo/retry/pause/flag, concessioni/config commerciale, supporto IT/EN/form, email e consensi, sito pubblico completo e KPI aggregati.
 
 **Output:** percorsi self-service e controllo operativo senza accesso diretto ordinario al DB. **DoD:** tutte le opzioni Free/Premium effettive, export sicuri e test grandi, admin MFA minimizzato, notifiche/supporto/consensi verificati; niente copie pagamento inutili.
 
-### M7 — Hardening, privacy, performance e recovery readiness
+### M7 · Hardening, privacy, performance e recovery readiness
 
 **Prerequisiti:** funzionalità complete. **Attività:** audit contratti/sicurezza/dipendenze/licenze, retention/deletion/supply chain, carico/margine/costi residui, incidenti/kill switch/forward-fix, monitoraggio e runbook; revisione legale e marchi; preparazione restore, **non aggiunta di drill periodici**.
 
 **Output:** candidato senza P1/P2, rischi residui espliciti, runbook e capacità misurata. **DoD:** test isolamento/concorrenza/pagamenti/erasure/limiti verdi; nessun segreto/PII pubblici; provider produzione conformi al progetto; G-LEGAL chiuso per go-live.
 
-### M8 — Release Candidate e merchant di fiducia
+### M8 · Release Candidate e merchant di fiducia
 
 **Prerequisiti:** M7 e via owner al test reale. **Attività:** freeze feature, RC tracciata su test; un merchant, scenari guidati e dati autorizzati, quattro login e percorsi reali pertinenti, mobile/IT-EN/dark; correction-only. Test senza durata arbitraria ma con criteri osservabili. Manifest di ambiente/risorse/dati del merchant esplicito: credenziali e passkey test non diventano Production, oggetti Stripe sandbox non attestano diritti live, bot e messaggi di test rimangono separati. Nessuna migrazione test→Production o riuso di dati personali per default.
 
 **Output:** evidenza test e RC approvabile. **DoD:** scenari core riusciti, nessun P1/P2, P3 accettati; test non generalizzato come prova statistica; reali effetti e condizioni registrati. Restore unico svolto sul candidato finale a fine M8 o nel preflight M9, immediatamente prima del live.
 
-### M9 — Go-live
+### M9 · Go-live
 
 **Prerequisiti:** M0–M8 chiuse, RC, controlli commerciali live e via owner. **Attività:** fissare date promo globale, validare checklist unica §41, restore drill unico, Pubblica, readback, tag/release/changelog; aprire iscrizioni con ammissione corretta, sorveglianza rafforzata iniziale senza beta pubblica. Conclusa la sorveglianza e dismessa la 1.x, chiudere il passaggio definitivo alla 2.x eliminando `legacy/1.x` secondo il criterio sotto.
 

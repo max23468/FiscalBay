@@ -3,7 +3,7 @@ import { languageFromPath, localizedPath, translate } from "../i18n";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const language = languageFromPath(location.pathname);
-  return [{ title: `${translate(language, "authIncomplete")} — FiscalBay` }];
+  return [{ title: `${translate(language, "authIncomplete")} | FiscalBay` }];
 }
 
 export default function AuthError({ matches }: Route.ComponentProps) {

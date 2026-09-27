@@ -3,6 +3,7 @@ import {
   CircleCheck,
   CircleDashed,
   Info,
+  Lock,
   Sparkles,
   TriangleAlert,
   type LucideIcon,
@@ -15,7 +16,14 @@ import { Badge } from "~/components/ui/badge";
  * Semantica degli stati: il colore accompagna sempre icona e testo.
  * `neutral` indica un dato assente per natura, da non confondere con `danger`.
  */
-export type StatusTone = "success" | "info" | "warning" | "danger" | "premium" | "neutral";
+export type StatusTone =
+  | "success"
+  | "info"
+  | "warning"
+  | "danger"
+  | "premium"
+  | "locked"
+  | "neutral";
 
 const icons: Record<StatusTone, LucideIcon> = {
   success: CircleCheck,
@@ -23,6 +31,7 @@ const icons: Record<StatusTone, LucideIcon> = {
   warning: TriangleAlert,
   danger: CircleAlert,
   premium: Sparkles,
+  locked: Lock,
   neutral: CircleDashed,
 };
 
@@ -32,6 +41,7 @@ const iconColor: Record<StatusTone, string> = {
   warning: "text-warning",
   danger: "text-danger",
   premium: "text-premium",
+  locked: "text-premium",
   neutral: "text-neutral",
 };
 
@@ -42,10 +52,11 @@ const alertIconColor: Record<StatusTone, string> = {
   warning: "text-warning!",
   danger: "text-danger!",
   premium: "text-premium!",
+  locked: "text-premium!",
   neutral: "text-neutral!",
 };
 
-const actionable = new Set<StatusTone>(["warning", "danger", "premium"]);
+const actionable = new Set<StatusTone>(["warning", "danger", "locked"]);
 
 /** Superficie colorata solo per gli stati che chiedono un'azione. */
 export function StatusBadge({ tone, children }: { tone: StatusTone; children: React.ReactNode }) {
@@ -59,7 +70,7 @@ export function StatusBadge({ tone, children }: { tone: StatusTone; children: Re
     );
   }
   return (
-    <Badge variant={tone}>
+    <Badge variant={tone === "locked" ? "premium" : tone}>
       <Icon aria-hidden="true" data-icon="inline-start" />
       {children}
     </Badge>

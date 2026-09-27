@@ -6,6 +6,8 @@
 # React Router
 /.react-router/
 /build/
+/test-results/
+/playwright-report/
 
 # Cloudflare
 .mf

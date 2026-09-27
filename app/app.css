@@ -96,12 +96,21 @@
   }
 }
 
-/* Rivelazione di un valore: sale leggermente e si mette a fuoco. */
+/* Il valore resta subito leggibile: sola dissolvenza, senza spostamento. */
 @keyframes value-reveal {
   from {
     opacity: 0;
-    translate: 0 4px;
-    filter: blur(2px);
+  }
+}
+
+@utility fiscal-reveal {
+  & [data-slot="button"] {
+    animation: value-reveal var(--duration-quick) ease-out 100ms both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    & [data-slot="button"] {
+      animation: none;
+    }
   }
 }
 
@@ -118,24 +127,24 @@
 
 @utility dark-tokens {
   color-scheme: dark;
-  --background: #0b1220;
-  --foreground: #e6ebf3;
-  --card: #111a2b;
-  --card-foreground: #e6ebf3;
-  --popover: #152036;
-  --popover-foreground: #e6ebf3;
+  --background: #121418;
+  --foreground: #eceef2;
+  --card: #1c1f25;
+  --card-foreground: #eceef2;
+  --popover: #242830;
+  --popover-foreground: #eceef2;
   --primary: #4f87e3;
   --primary-foreground: #0b1220;
   --primary-hover: #6f9deb;
-  --secondary: #1b2740;
-  --secondary-foreground: #dbe5f5;
-  --muted: #182238;
-  --muted-foreground: #9aa6b9;
-  --accent: #1b2740;
-  --accent-foreground: #dbe5f5;
+  --secondary: #292e37;
+  --secondary-foreground: #e1e5ec;
+  --muted: #242830;
+  --muted-foreground: #adb4c0;
+  --accent: #292e37;
+  --accent-foreground: #e1e5ec;
   --destructive: #f4827b;
-  --border: #243149;
-  --input: #607090;
+  --border: #3b424e;
+  --input: #768194;
   --ring: #6f9deb;
 
   --success: #5fd08c;
@@ -149,8 +158,8 @@
   --danger-foreground: #0b1220;
   --premium: #c3aefa;
   --premium-surface: #231a3d;
-  --neutral: #9aa6b9;
-  --neutral-surface: #182238;
+  --neutral: #adb4c0;
+  --neutral-surface: #242830;
 }
 
 @theme inline {
@@ -266,10 +275,10 @@
 
 @utility motion-panel {
   transition:
-    opacity var(--duration-slow) var(--ease-smooth-out),
-    translate var(--duration-slow) var(--ease-smooth-out);
+    opacity var(--duration-fast) var(--ease-smooth-out),
+    translate var(--duration-fast) var(--ease-smooth-out);
   &[data-ending-style] {
-    transition-duration: var(--duration-medium);
+    transition-duration: var(--duration-quick);
   }
 }
 

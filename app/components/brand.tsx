@@ -45,7 +45,13 @@ export function LedgerIndicator({
  * Illustrazione geometrica degli stati vuoti: la tessera inclinata di 8°,
  * con contorno e chip neutri e la sola riga blu come accento.
  */
-export function TesseraArt({ className }: { className?: string }) {
+export function TesseraArt({
+  className,
+  variant = "first-use",
+}: {
+  className?: string;
+  variant?: "first-use" | "search" | "connection";
+}) {
   return (
     <svg
       viewBox="0 0 160 120"
@@ -53,21 +59,57 @@ export function TesseraArt({ className }: { className?: string }) {
       className={cn("h-24 w-32 text-border", className)}
       fill="none"
     >
-      <g transform="rotate(-8 80 60)">
-        <rect x="26" y="24" width="108" height="76" rx="12" className="fill-card" />
-        <rect x="26" y="24" width="108" height="76" rx="12" stroke="currentColor" strokeWidth="3" />
-        <rect x="38" y="44" width="16" height="22" rx="3" className="fill-muted-foreground/25" />
-        <rect
-          x="62"
-          y="44"
-          width="56"
-          height="7"
-          rx="3.5"
-          className="fill-brand-blue dark:fill-brand-sky"
-        />
-        <rect x="62" y="56" width="39" height="7" rx="3.5" className="fill-muted-foreground/25" />
-        <rect x="62" y="68" width="18" height="7" rx="3.5" className="fill-muted-foreground/25" />
-      </g>
+      {variant === "first-use" ? (
+        <g transform="rotate(-8 80 60)">
+          <rect x="26" y="24" width="108" height="76" rx="12" className="fill-card" />
+          <rect
+            x="26"
+            y="24"
+            width="108"
+            height="76"
+            rx="12"
+            stroke="currentColor"
+            strokeWidth="3"
+          />
+          <rect x="38" y="44" width="16" height="22" rx="3" className="fill-muted-foreground/25" />
+          <rect
+            x="62"
+            y="44"
+            width="56"
+            height="7"
+            rx="3.5"
+            className="fill-brand-blue dark:fill-brand-sky"
+          />
+          <rect x="62" y="56" width="39" height="7" rx="3.5" className="fill-muted-foreground/25" />
+          <rect x="62" y="68" width="18" height="7" rx="3.5" className="fill-muted-foreground/25" />
+        </g>
+      ) : (
+        <g strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <rect
+            x="26"
+            y="24"
+            width="108"
+            height="76"
+            rx="12"
+            className="fill-card"
+            stroke="currentColor"
+          />
+          <path d="M40 44h24M40 56h17M40 68h8" className="stroke-muted-foreground/25" />
+          <g className="stroke-brand-blue dark:stroke-brand-sky">
+            {variant === "search" ? (
+              <>
+                <circle cx="94" cy="56" r="15" />
+                <path d="m105 67 13 13" />
+              </>
+            ) : (
+              <>
+                <path d="m86 60-4 4a10 10 0 0 0 14 14l6-6M104 60l4-4a10 10 0 0 0-14-14l-6 6M89 65l12-12" />
+                <path d="M78 42v-6M114 78v6" />
+              </>
+            )}
+          </g>
+        </g>
+      )}
     </svg>
   );
 }

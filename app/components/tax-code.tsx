@@ -25,7 +25,12 @@ export function TaxCode({
 }) {
   if (value === null) {
     return (
-      <span className={cn("inline-flex items-center gap-2 text-muted-foreground", className)}>
+      <span
+        className={cn(
+          "inline-flex min-h-10 w-56 max-w-full items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1 text-muted-foreground",
+          className,
+        )}
+      >
         <Lock aria-hidden="true" className="size-3.5 text-premium" />
         <span aria-hidden="true" className="font-code text-[0.9375rem]">
           ••••••••••••••••
@@ -35,12 +40,18 @@ export function TaxCode({
     );
   }
   return (
-    <span className={cn("inline-flex items-center gap-1", className)}>
+    <span
+      className={cn(
+        "inline-flex min-h-10 w-56 max-w-full flex-wrap items-center justify-between gap-x-1 rounded-lg border border-border bg-muted/40 pl-3 pr-1 py-1",
+        reveal && "fiscal-reveal",
+        className,
+      )}
+    >
       <span
         className={cn(
-          "font-code text-[0.9375rem] font-medium text-foreground",
+          "font-code whitespace-nowrap text-[0.9375rem] font-medium text-foreground",
           reveal &&
-            "inline-block animate-[value-reveal_var(--duration-slow)_var(--ease-smooth-out)_both] motion-reduce:animate-none",
+            "inline-block animate-[value-reveal_var(--duration-quick)_ease-out_both] motion-reduce:animate-none",
         )}
       >
         {value}
@@ -60,10 +71,10 @@ function CopyButton({ value, labels }: { value: string; labels: Labels }) {
     try {
       await navigator.clipboard.writeText(value);
       setState("copied");
+      timer.current = setTimeout(() => setState("idle"), 1600);
     } catch {
       setState("failed");
     }
-    timer.current = setTimeout(() => setState("idle"), 1600);
   }
 
   const label =
@@ -90,7 +101,10 @@ function CopyButton({ value, labels }: { value: string; labels: Labels }) {
           />
         </span>
       </Button>
-      <span role="status" className="sr-only">
+      <span
+        role="status"
+        className={state === "failed" ? "basis-full text-sm text-danger" : "sr-only"}
+      >
         {state === "idle" ? "" : label}
       </span>
     </>

@@ -1,4 +1,4 @@
-# FiscalBay 2.0 — Istruzioni operative
+# FiscalBay 2.0 · Istruzioni operative
 
 ## Ingresso e fonti
 
@@ -26,6 +26,8 @@ Rispettare i cinque checkpoint: fine M0 (assetto/costi/Auth/database), M1 (brand
 - Nessun offline 2.x. Expo 3.x: riuso ragionato, non UI universale o API aggiuntive senza consumatori.
 
 ## Implementazione e Git
+
+Nei titoli delle pagine del sito usare ` | ` come separatore. Gli em dash (U+2014), anche codificati come entità HTML o escape Unicode, sono vietati in tutti i file della repository, inclusi documenti, commenti e test. `pnpm verify:copy`, incluso in `pnpm verify`, controlla i file versionati e quelli nuovi non ignorati da Git.
 
 Controllare stato, branch, diff e istruzioni vicine prima di scrivere. Preservare lavoro altrui; no reset distruttivi o riscritture della storia. Un blocco remoto non ferma le prove locali indipendenti.
 

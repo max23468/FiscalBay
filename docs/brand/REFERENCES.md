@@ -38,7 +38,7 @@ Categorie a sinistra e contenuto a destra, mobile elenco→dettaglio. Export è 
 
 Origine: `impostazioni_fiscalbay_desktop_e_mobile.png`.
 
-## Logo 2.0 — M1
+## Logo 2.0 · M1
 
 Su indicazione owner (D141) il logo evolve dal Concept 4 senza esserne vincolato: si possono migliorare forma, proporzioni, inclinazione e dettagli per chiarezza e resa piccola. L'icona è generica, cioè il simbolo su fondo trasparente, non una tile in stile iOS o di altre piattaforme. Il segno resta autonomo e non deve far credere a un prodotto ufficiale eBay; il marchio resta FiscalBay e `FB` è solo interno.
 

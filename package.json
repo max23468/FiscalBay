@@ -13,8 +13,10 @@
     "lint": "oxlint .",
     "postinstall": "wrangler types",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "typecheck": "wrangler types && react-router typegen && tsc -b",
-    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm doctor:react && pnpm test && pnpm build && pnpm verify:docs",
+    "verify": "pnpm verify:copy && pnpm format:check && pnpm lint && pnpm typecheck && pnpm doctor:react && pnpm test && pnpm build && pnpm verify:docs",
+    "verify:copy": "node scripts/verify-copy.mjs",
     "verify:docs": "node scripts/verify-docs.mjs"
   },
   "dependencies": {
@@ -41,6 +43,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.60.0",
     "@cloudflare/vitest-plugin": "1.2.6",
+    "@playwright/test": "1.63.0",
     "@react-router/dev": "8.4.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "26.6.2",

@@ -1,4 +1,4 @@
-# FiscalBay — Setup degli strumenti e contesto operativo
+# FiscalBay · Setup degli strumenti e contesto operativo
 
 L’avvio e la ripresa sono nel [README](../../README.md); autonomia e checkpoint nel [governo](../MASTER_PLAN.md#s00). Qui si documentano strumenti necessari, input e custodia. Non è una certificazione che gli accessi siano già configurati. Le [fonti](../SOURCES.md) vanno verificate sul client/versione effettivi.
 
@@ -6,13 +6,13 @@ L’avvio e la ripresa sono nel [README](../../README.md); autonomia e checkpoin
 
 | Fase / ecosistema | Configurazione necessaria |
 |---|---|
-| M0 — locale e GitHub | Git/CLI o connettore già autorizzato, Node e pnpm qualificati, repository/branch verificati; accesso a readback di CI e automazioni quando necessario. |
-| M0 — Cloudflare/Supabase | Iniziare da lettura piani, risorse e quote. CLI/MCP per le prove realmente richieste; dopo la scelta conservare soltanto strumenti e adapter utili all’assetto. |
-| M0/M2 — Auth/eBay | Console e callback pertinenti, account controllati, API/spec ufficiali; quattro accessi qualificati e consenso seller distinto. SDK/MCP aggiuntivi solo se risparmiano lavoro concreto. |
-| M0/M5 — Stripe | SDK ufficiale, CLI webhook, MCP/strumenti disponibili, contesti test/live espliciti. Managed Payments e regole commerciali qualificati, non dedotti dalla disponibilità generica di Billing. |
-| M1/M4 — frontend | CLI shadcn e MCP se utile, registry dichiarati, skill frontend/React/test e nove riferimenti approvati; licenze verificate prima dell’integrazione. |
-| M5 — Telegram | API ufficiale, bot test separato e chat controllata, token sicuro, controllo webhook/poller; framework opzionale. |
-| M6/M7 — comunicazioni e operazioni | Email transazionale scelta, iCloud per posta umana, metriche/alert nativi; tool esterni solo se necessari e con costo autorizzato. |
+| M0 · locale e GitHub | Git/CLI o connettore già autorizzato, Node e pnpm qualificati, repository/branch verificati; accesso a readback di CI e automazioni quando necessario. |
+| M0 · Cloudflare/Supabase | Iniziare da lettura piani, risorse e quote. CLI/MCP per le prove realmente richieste; dopo la scelta conservare soltanto strumenti e adapter utili all’assetto. |
+| M0/M2 · Auth/eBay | Console e callback pertinenti, account controllati, API/spec ufficiali; quattro accessi qualificati e consenso seller distinto. SDK/MCP aggiuntivi solo se risparmiano lavoro concreto. |
+| M0/M5 · Stripe | SDK ufficiale, CLI webhook, MCP/strumenti disponibili, contesti test/live espliciti. Managed Payments e regole commerciali qualificati, non dedotti dalla disponibilità generica di Billing. |
+| M1/M4 · frontend | CLI shadcn e MCP se utile, registry dichiarati, skill frontend/React/test e nove riferimenti approvati; licenze verificate prima dell’integrazione. |
+| M5 · Telegram | API ufficiale, bot test separato e chat controllata, token sicuro, controllo webhook/poller; framework opzionale. |
+| M6/M7 · comunicazioni e operazioni | Email transazionale scelta, iCloud per posta umana, metriche/alert nativi; tool esterni solo se necessari e con costo autorizzato. |
 | Solo su decisione owner | Paddle e relativo tooling; non predisporre un secondo billing operativo mentre Stripe è primario. |
 
 Codex desktop può usare file/CLI locali e le connessioni effettivamente autorizzate. Non assumere che un MCP presente in un’altra applicazione o una skill citata nella chat sia già disponibile qui. Configurare secondo documentazione corrente, senza URL, plugin o nomi di tool inventati. Le skill guidano l’implementazione, non prevalgono su scope e checkpoint. `/grill-me` e `/grill-with-docs` non sono dipendenze dell’app.

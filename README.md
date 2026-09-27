@@ -1,4 +1,4 @@
-# FiscalBay 2.0 — Avvio, ripresa e documenti
+# FiscalBay 2.0 · Avvio, ripresa e documenti
 
 La baseline contiene la specifica approvata del prodotto, il backlog, gli strumenti documentali e i riferimenti grafici. M0 aggiunge il candidato locale Workers/D1/Better Auth e le prove mirate; non contiene credenziali o configurazioni provider già qualificate. Lo stato eseguibile e i blocchi correnti sono nel solo [BACKLOG.md](BACKLOG.md#stato).
 

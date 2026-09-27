@@ -80,9 +80,19 @@ jobs:
         if: steps.detect.outputs.docs_only != 'true'
         run: pnpm verify
 
+      - name: Install browser for interaction tests
+        if: steps.detect.outputs.docs_only != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Check design system interactions
+        if: steps.detect.outputs.docs_only != 'true'
+        run: pnpm test:e2e
+
       - name: Check docs-only changes
         if: steps.detect.outputs.docs_only == 'true'
-        run: node scripts/verify-docs.mjs
+        run: |
+          node scripts/verify-copy.mjs
+          node scripts/verify-docs.mjs
 
   deploy-test:
     name: Deploy test

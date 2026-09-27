@@ -1,4 +1,4 @@
-# FiscalBay — Decisioni e motivazioni
+# FiscalBay · Decisioni e motivazioni
 
 Questo registro sintetizza le scelte utili. Il [Master Plan](MASTER_PLAN.md) è l’unica specifica completa di regole ed eccezioni; il [backlog](../BACKLOG.md) registra esecuzione e prove. I riferimenti Q sono soltanto provenienza storica: non serve recuperare la chat. Gli ID rimangono stabili, ma non devono essere consecutivi.
 

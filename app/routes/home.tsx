@@ -16,7 +16,7 @@ import type { Route } from "./+types/home";
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const language = languageFromPath(location.pathname);
   return [
-    { title: `FiscalBay — ${translate(language, "orders")}` },
+    { title: `FiscalBay | ${translate(language, "orders")}` },
     { name: "description", content: translate(language, "ordersDescription") },
   ];
 }

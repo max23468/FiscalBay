@@ -29,5 +29,9 @@ export default defineConfig({
   ],
   resolve: { tsconfigPaths: true },
   // Il test dei token legge `app.css` come testo: Vitest altrimenti lo svuota.
-  test: { setupFiles: ["./test/apply-migrations.ts"], css: { include: [/app\.css/u] } },
+  test: {
+    include: ["test/**/*.spec.ts"],
+    setupFiles: ["./test/apply-migrations.ts"],
+    css: { include: [/app\.css/u] },
+  },
 });
