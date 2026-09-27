@@ -77,8 +77,8 @@ export interface OrderView {
   currency: string;
   payment: PaymentStatus;
   shipping: ShippingStatus;
-  /** Indirizzo fiscale dell'acquirente; non è un dato fiscale da sbloccare. */
-  taxAddress: AddressView | null;
+  /** Indirizzo di fatturazione dell'acquirente; non è un dato fiscale da sbloccare. */
+  billingAddress: AddressView | null;
   phone: string | null;
   email: string | null;
   fiscal: FiscalView;

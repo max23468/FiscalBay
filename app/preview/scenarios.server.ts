@@ -247,7 +247,7 @@ const seeds: OrderSeed[] = [
     currency: "EUR",
     payment: "paid",
     shipping: "to_ship",
-    taxAddress: {
+    billingAddress: {
       line: "Via Trento 1",
       postalCode: "38023",
       city: "Cles",
@@ -274,7 +274,7 @@ const seeds: OrderSeed[] = [
     currency: "EUR",
     payment: "paid",
     shipping: "delivered",
-    taxAddress: {
+    billingAddress: {
       line: "Via Appia Nuova 120",
       postalCode: "00183",
       city: "Roma",
@@ -299,7 +299,7 @@ const seeds: OrderSeed[] = [
     currency: "EUR",
     payment: "paid",
     shipping: "to_ship",
-    taxAddress: {
+    billingAddress: {
       line: "Corso Buenos Aires 40",
       postalCode: "20124",
       city: "Milano",
@@ -325,7 +325,7 @@ const seeds: OrderSeed[] = [
     currency: "EUR",
     payment: "paid",
     shipping: "to_ship",
-    taxAddress: {
+    billingAddress: {
       line: "Via Po 18",
       postalCode: "10123",
       city: "Torino",
@@ -353,7 +353,7 @@ const seeds: OrderSeed[] = [
     currency: "EUR",
     payment: "paid",
     shipping: "to_ship",
-    taxAddress: {
+    billingAddress: {
       line: "Via Sparano da Bari 55",
       postalCode: "70121",
       city: "Bari",
@@ -377,7 +377,7 @@ const seeds: OrderSeed[] = [
     currency: "EUR",
     payment: "paid",
     shipping: "shipped",
-    taxAddress: {
+    billingAddress: {
       line: "Via Toledo 210",
       postalCode: "80134",
       city: "Napoli",
@@ -401,7 +401,7 @@ const seeds: OrderSeed[] = [
     currency: "EUR",
     payment: "paid",
     shipping: "to_ship",
-    taxAddress: {
+    billingAddress: {
       line: "Via Emilia Est 300",
       postalCode: "41121",
       city: "Modena",
@@ -426,7 +426,7 @@ const seeds: OrderSeed[] = [
     currency: "EUR",
     payment: "unpaid",
     shipping: "to_ship",
-    taxAddress: null,
+    billingAddress: null,
     phone: null,
     email: "chiara.r@esempio.invalid",
     fiscal: { state: "checking" },
@@ -444,7 +444,7 @@ const seeds: OrderSeed[] = [
     currency: "EUR",
     payment: "paid",
     shipping: "to_ship",
-    taxAddress: {
+    billingAddress: {
       line: "Via Mazzini 7",
       postalCode: "37121",
       city: "Verona",
@@ -469,7 +469,7 @@ const seeds: OrderSeed[] = [
     currency: "EUR",
     payment: "paid",
     shipping: "shipped",
-    taxAddress: {
+    billingAddress: {
       line: "Via XX Settembre 14",
       postalCode: "24122",
       city: "Bergamo",
@@ -499,7 +499,7 @@ const seeds: OrderSeed[] = [
     currency: "EUR",
     payment: "unpaid",
     shipping: "cancelled",
-    taxAddress: {
+    billingAddress: {
       line: "Via Vittorio Emanuele II 5",
       postalCode: "22100",
       city: "Como",
@@ -523,7 +523,7 @@ const seeds: OrderSeed[] = [
     currency: "EUR",
     payment: "refunded",
     shipping: "delivered",
-    taxAddress: {
+    billingAddress: {
       line: "Lungarno Pacinotti 3",
       postalCode: "56126",
       city: "Pisa",
@@ -547,7 +547,7 @@ const seeds: OrderSeed[] = [
     currency: "EUR",
     payment: "paid",
     shipping: "shipped",
-    taxAddress: {
+    billingAddress: {
       line: "Leopoldstraße 20",
       postalCode: "80802",
       city: "München",
@@ -581,7 +581,7 @@ const seeds: OrderSeed[] = [
     currency: "EUR",
     payment: "paid",
     shipping: "to_ship",
-    taxAddress: {
+    billingAddress: {
       line: "Via Venezia 60",
       postalCode: "35131",
       city: "Padova",
@@ -611,7 +611,7 @@ const incomingSeeds: OrderSeed[] = [
     currency: "EUR",
     payment: "paid",
     shipping: "to_ship",
-    taxAddress: {
+    billingAddress: {
       line: "Strada Farini 9",
       postalCode: "43121",
       city: "Parma",
@@ -635,7 +635,7 @@ const incomingSeeds: OrderSeed[] = [
     currency: "EUR",
     payment: "paid",
     shipping: "to_ship",
-    taxAddress: {
+    billingAddress: {
       line: "Via Trinchese 30",
       postalCode: "73100",
       city: "Lecce",

@@ -543,7 +543,7 @@ function AddressLines({ address, language }: { address: AddressView; language: L
 }
 
 /**
- * Indirizzo fiscale e contatti dell'acquirente: dati non fiscali, visibili
+ * Indirizzo di fatturazione e contatti dell'acquirente: dati non fiscali, visibili
  * anche con il Codice Fiscale da sbloccare. Un dato assente resta indicato.
  */
 function BuyerContacts({
@@ -559,10 +559,10 @@ function BuyerContacts({
   return (
     <dl className="grid gap-x-4 gap-y-2 text-sm leading-snug sm:col-span-2 sm:grid-cols-subgrid">
       <div className="grid content-start gap-0.5 sm:row-span-2">
-        <dt className="text-xs font-medium text-muted-foreground">{t.orders.taxAddress}</dt>
+        <dt className="text-xs font-medium text-muted-foreground">{t.orders.billingAddress}</dt>
         <dd className="text-pretty">
-          {order.taxAddress ? (
-            <AddressLines address={order.taxAddress} language={language} />
+          {order.billingAddress ? (
+            <AddressLines address={order.billingAddress} language={language} />
           ) : (
             missing
           )}
@@ -831,10 +831,10 @@ function OrderDetail({
               <dd className="font-code">{order.buyerUsername}</dd>
             </div>
             <div className={row}>
-              <dt className="text-muted-foreground">{t.orders.taxAddress}</dt>
+              <dt className="text-muted-foreground">{t.orders.billingAddress}</dt>
               <dd className="text-pretty">
-                {order.taxAddress ? (
-                  <AddressLines address={order.taxAddress} language={language} />
+                {order.billingAddress ? (
+                  <AddressLines address={order.billingAddress} language={language} />
                 ) : (
                   <span className="text-muted-foreground">{t.orders.notProvided}</span>
                 )}
