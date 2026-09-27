@@ -8,7 +8,7 @@ import {
   X,
 } from "lucide-react";
 import { domMax, LazyMotion, m, MotionConfig } from "motion/react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import { Link, useFetcher, useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { useNotice } from "~/components/app-shell";
@@ -974,7 +974,7 @@ function FilterSelect({
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <Select items={items} value={value} onValueChange={(next) => onChange(name, next ?? "")}>
-        <SelectTrigger id={id} className="w-full">
+        <SelectTrigger id={id} className="w-full min-w-0">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -1037,7 +1037,7 @@ function OrdersToolbar({
       <div
         id="orders-filters"
         className={cn(
-          "grid gap-3 sm:grid-cols-2 md:flex-1 md:grid-cols-3 xl:grid-cols-6",
+          "grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 md:flex-1 md:grid-cols-3 xl:grid-cols-6",
           !filtersOpen && "max-md:hidden",
         )}
       >
@@ -1285,7 +1285,7 @@ function OrdersNotices({
 function FirstUse({ data, t }: { data: OrdersPageData; t: AppCopy }) {
   const notify = useNotice();
   return (
-    <div className="grid gap-6">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <EmptyState
         title={t.orders.firstUseTitle}
         description={t.orders.firstUseBody}
@@ -1438,6 +1438,9 @@ function LoadMore({ data, t }: { data: OrdersPageData; t: AppCopy }) {
   );
 }
 
+/** Distanza dall'inizio della pagina entro cui l'utente è considerato in cima alla lista. */
+const topThreshold = 120;
+
 function OrdersList({
   data,
   t,
@@ -1454,6 +1457,18 @@ function OrdersList({
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [showIncoming, setShowIncoming] = useState(false);
+  // Nuovi ordini: inseriti subito se l'utente è in cima alla lista e non sta
+  // selezionando; altrimenti resta l'indicatore, così nulla si sposta mentre legge.
+  const hasIncoming = data.incoming.length > 0;
+  const insertAtTop = useEffectEvent(() => {
+    if (window.scrollY < topThreshold && !selecting) setShowIncoming(true);
+  });
+  useEffect(() => {
+    if (!hasIncoming) return;
+    insertAtTop();
+    window.addEventListener("scroll", insertAtTop, { passive: true });
+    return () => window.removeEventListener("scroll", insertAtTop);
+  }, [hasIncoming]);
   const stopSelecting = () => {
     setSelecting(false);
     setSelected(new Set());
@@ -1633,7 +1648,7 @@ export function OrdersPage({
   const { language } = links;
   const unlock = useUnlock(unlockAction, t);
   return (
-    <div className="grid gap-6">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <OrdersHeader data={data} t={t} language={language} />
       <OrdersNotices data={data} t={t} language={language} links={links} />
       {data.view === "no-store" ? (

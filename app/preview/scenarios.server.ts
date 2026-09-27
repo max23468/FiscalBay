@@ -61,11 +61,12 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
   aggiornamento: {
     it: {
       name: "Aggiornamento in corso",
-      focus: "Indicatore locale, ordini consultabili e nuovi ordini mostrati su richiesta.",
+      focus:
+        "Indicatore locale, ordini consultabili e nuovi ordini inseriti subito in cima alla lista.",
     },
     en: {
       name: "Update in progress",
-      focus: "Local indicator, orders still available, new orders shown on request.",
+      focus: "Local indicator, orders still available, new orders added at the top of the list.",
     },
   },
   "ebay-non-disponibile": {

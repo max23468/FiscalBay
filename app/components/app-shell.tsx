@@ -134,7 +134,7 @@ export function AppShell({
               t={t}
               links={links}
               suggest={suggest}
-              className="mr-2 hidden w-72 md:block lg:w-80"
+              className="mr-2 hidden w-72 lg:block xl:w-80"
             />
             <MobileSearch t={t} links={links} suggest={suggest} />
             <NotificationsMenu t={t} links={links} notifications={notifications} now={now} />
@@ -337,7 +337,7 @@ function MobileSearch({
       <Button
         variant="ghost"
         size="icon"
-        className="md:hidden"
+        className="lg:hidden"
         aria-label={t.shell.search}
         onClick={() => setOpen(true)}
       >

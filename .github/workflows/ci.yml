@@ -84,7 +84,7 @@ jobs:
         if: steps.detect.outputs.docs_only != 'true'
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Check design system interactions
+      - name: Check browser interactions
         if: steps.detect.outputs.docs_only != 'true'
         run: pnpm test:e2e --update-snapshots=missing
 
