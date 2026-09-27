@@ -481,11 +481,13 @@ Il logo non dipende dal bootstrap del monorepo. Usare gli originali e produrre n
 
 ### M1-06 — Design system e catalogo candidati
 
-**Stato:** TODO · **Prerequisiti:** M0, M1-05 · **Contratto:** [§22](docs/MASTER_PLAN.md#s22)
+**Stato:** IN PROGRESS · **Prerequisiti:** M0, M1-05 · **Contratto:** [§22](docs/MASTER_PLAN.md#s22)
 
 Esaminare i nove riferimenti nella fase frontend; scegliere componenti effettivi in base a funzione, licenza e qualità. Definire token, stati, form, icone e tipografia.
 
 **Criterio di completamento:** Registro della provenienza e campione chiaro/scuro, IT/EN, tastiera e touch coerenti con il brief, senza kit sovrapposti.
+
+**Evidenza locale del 2026-09-27:** valutati i nove riferimenti con origine e licenza lette dai repository: adottato shadcn/ui (MIT) nello stile `base-nova` su Base UI 1.8.0 come unico kit di primitive; coss.com/ui ha il registry `apps/ui` MIT ma `packages/ui` AGPL-3.0, rareui.com è MIT con Commons Clause e link di attribuzione obbligatorio, nessun file copiato da loro né da ReUI, beUI, beautifului.dev e transitions.dev; ui-skills e designsystemchecklist restano metodo. Installati Tailwind 4.3.3, Lucide 1.48.0 e Inter Variable 5.3.0 (OFL, stesso font del wordmark) con versioni fissate. Token in `app/app.css` dai tre blu del logo, sei stati semantici con icona e testo (`neutral` per il dato assente, distinto dall'errore), tema sistema/chiaro/scuro, focus pieno, target a 44 px con puntatore coarse, riduzione del movimento. Etichette `Close`/`Loading` dei sorgenti shadcn rese prop tradotte. Catalogo, registro della provenienza e modifiche ai sorgenti in [design system](docs/brand/DESIGN_SYSTEM.md). Campione su `/design` e `/en/design`, 404 in Production e `noindex`; home, errore Auth ed ErrorBoundary portati sui componenti senza cambiare comportamento. `test/design-tokens.spec.ts` verifica 66 coppie di contrasto nei due temi (testo 4,5:1, bordo campi e focus 3:1): il primo calcolo ha corretto il bordo dei campi, fermo a 1,5:1. Prova manuale nel browser interno: cambio tema da tastiera, form vuoto con errori annunciati e focus sul primo campo, dialog con focus su «Annulla» e ritorno del focus, pannello laterale al tocco, 375 px in inglese e tema scuro senza scorrimento orizzontale e con tutti i target ≥44 px dopo la correzione di etichette e schede. `pnpm verify` verde con 102 test.
 
 ### M1-07 — Shell e prototipo delle tre sezioni
 

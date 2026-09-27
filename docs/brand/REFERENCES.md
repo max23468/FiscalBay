@@ -82,7 +82,7 @@ Wordmark: Inter ExtraBold 4.x (The Inter Project Authors, SIL Open Font License 
 | `designsystemchecklist.com` | Checklist di coerenza del design system. |
 | `reui.io/components` | Componenti applicativi candidati; distinguere gratuito e materiale Pro incompatibile col Git pubblico. |
 
-**Non è stato compilato adesso il catalogo dei componenti da installare.** Tale lavoro appartiene alla milestone frontend, come richiesto. shadcn non deve monopolizzare la direzione estetica; gli altri riferimenti sono parte del brief, non decorazione bibliografica.
+Il catalogo con licenze ed esiti e il registro dei componenti integrati sono nel [design system](DESIGN_SYSTEM.md#catalogo-dei-nove-riferimenti). shadcn non deve monopolizzare la direzione estetica; gli altri riferimenti sono parte del brief, non decorazione bibliografica.
 
 ## Procedura di selezione
 

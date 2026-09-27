@@ -1,5 +1,12 @@
 import { env } from "cloudflare:workers";
 
+import logoDarkUrl from "../../docs/brand/logo/fiscalbay-logo-dark.svg?url";
+import logoUrl from "../../docs/brand/logo/fiscalbay-logo.svg?url";
+import { StatusAlert } from "~/components/status";
+import { Button } from "~/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { Field, FieldGroup, FieldLabel } from "~/components/ui/field";
+import { Input } from "~/components/ui/input";
 import { createAuth } from "../auth.server";
 import { listVisibleOrders } from "../domain/orders.server";
 import { formatAmount, formatInstant, languageFromPath, localizedPath, translate } from "../i18n";
@@ -54,78 +61,122 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   const { language } = loaderData;
   const t = (key: string) => translate(language, key);
   return (
-    <main>
-      <header>
-        <p className="eyebrow">FiscalBay 2.0</p>
-        <h1>{t("orders")}</h1>
-        <p>{t("ordersIntro")}</p>
-        <nav aria-label="Language">
-          <a href="/" lang="it" aria-current={language === "it" ? "page" : undefined}>
+    <main className="mx-auto grid w-[min(72rem,calc(100%-2rem))] gap-8 py-12">
+      <header className="grid max-w-2xl gap-3">
+        <img src={logoUrl} alt="FiscalBay" className="h-8 w-fit dark:hidden" />
+        <img src={logoDarkUrl} alt="FiscalBay" className="hidden h-8 w-fit dark:block" />
+        <h1 className="text-4xl font-bold sm:text-5xl">{t("orders")}</h1>
+        <p className="text-muted-foreground">{t("ordersIntro")}</p>
+        <nav aria-label="Language" className="flex gap-3 text-sm">
+          <a
+            href="/"
+            lang="it"
+            aria-current={language === "it" ? "page" : undefined}
+            className="underline-offset-4 hover:underline aria-[current=page]:font-semibold"
+          >
             Italiano
           </a>
-          {" · "}
-          <a href="/en" lang="en" aria-current={language === "en" ? "page" : undefined}>
+          <a
+            href="/en"
+            lang="en"
+            aria-current={language === "en" ? "page" : undefined}
+            className="underline-offset-4 hover:underline aria-[current=page]:font-semibold"
+          >
             English
           </a>
         </nav>
       </header>
 
-      {loaderData.storeNotice ? <p role="status">{loaderData.storeNotice}</p> : null}
+      {loaderData.storeNotice ? <StatusAlert tone="info" title={loaderData.storeNotice} /> : null}
       {loaderData.authenticated ? (
-        <form method="post" action={localizedPath(language, "/accesso")}>
-          <button type="submit" name="intent" value="esci">
-            {t("signOut")}
-          </button>
-        </form>
-      ) : null}
-      {loaderData.canLinkStore ? (
-        <form method="post" action={localizedPath(language, "/negozi/collega")}>
-          <button type="submit">{t("linkStore")}</button>
-        </form>
+        <div className="flex flex-wrap gap-3">
+          {loaderData.canLinkStore ? (
+            <form method="post" action={localizedPath(language, "/negozi/collega")}>
+              <Button type="submit">{t("linkStore")}</Button>
+            </form>
+          ) : null}
+          <form method="post" action={localizedPath(language, "/accesso")}>
+            <Button type="submit" variant="outline" name="intent" value="esci">
+              {t("signOut")}
+            </Button>
+          </form>
+        </div>
       ) : null}
 
       {!loaderData.authenticated ? (
-        <section className="empty">
-          <h2>{t("authRequired")}</h2>
-          <p>{t("authRequiredDescription")}</p>
-          {loaderData.signInNotice ? <p role="status">{loaderData.signInNotice}</p> : null}
-          <form method="post" action={localizedPath(language, "/accesso")}>
-            <label>
-              {t("email")} <input name="email" type="email" autoComplete="username" required />
-            </label>
-            <label>
-              {t("password")}{" "}
-              <input name="password" type="password" autoComplete="current-password" required />
-            </label>
-            <button type="submit">{t("signIn")}</button>
-            <button type="submit" name="intent" value="registrati">
-              {t("signUp")}
-            </button>
-          </form>
-        </section>
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>
+              <h2>{t("authRequired")}</h2>
+            </CardTitle>
+            <CardDescription>{t("authRequiredDescription")}</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            {loaderData.signInNotice ? (
+              <StatusAlert tone="info" title={loaderData.signInNotice} />
+            ) : null}
+            <form method="post" action={localizedPath(language, "/accesso")}>
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="email">{t("email")}</FieldLabel>
+                  <Input id="email" name="email" type="email" autoComplete="username" required />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="password">{t("password")}</FieldLabel>
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                  />
+                </Field>
+                <div className="flex flex-wrap gap-3">
+                  <Button type="submit">{t("signIn")}</Button>
+                  <Button type="submit" variant="outline" name="intent" value="registrati">
+                    {t("signUp")}
+                  </Button>
+                </div>
+              </FieldGroup>
+            </form>
+          </CardContent>
+        </Card>
       ) : loaderData.orders.length === 0 ? (
-        <section className="empty">
-          <h2>{t("noOrders")}</h2>
-          <p>{t("noOrdersDescription")}</p>
-        </section>
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>
+              <h2>{t("noOrders")}</h2>
+            </CardTitle>
+            <CardDescription>{t("noOrdersDescription")}</CardDescription>
+          </CardHeader>
+        </Card>
       ) : (
-        <section className="orders" aria-label={t("qualifiedOrders")}>
+        <section className="grid gap-4 sm:grid-cols-2" aria-label={t("qualifiedOrders")}>
           {loaderData.orders.map((order) => (
-            <article key={order.id}>
-              <div>
-                <h2>{order.ebayOrderId}</h2>
-                <strong>{formatAmount(order.totalMinor, order.currency, language)}</strong>
-              </div>
-              <p>{formatInstant(order.creationTime, language)}</p>
-              <dl>
-                {order.taxIdentifiers.map((identifier) => (
-                  <div key={`${identifier.type}:${identifier.value}`}>
-                    <dt>{identifier.type}</dt>
-                    <dd>{identifier.value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </article>
+            <Card key={order.id}>
+              <CardHeader>
+                <CardTitle className="flex justify-between gap-4">
+                  <h2 className="font-mono tabular-nums">{order.ebayOrderId}</h2>
+                  <strong className="tabular-nums">
+                    {formatAmount(order.totalMinor, order.currency, language)}
+                  </strong>
+                </CardTitle>
+                <CardDescription>{formatInstant(order.creationTime, language)}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid gap-2 text-sm">
+                  {order.taxIdentifiers.map((identifier) => (
+                    <div
+                      key={`${identifier.type}:${identifier.value}`}
+                      className="grid grid-cols-[1fr_2fr] gap-3"
+                    >
+                      <dt className="text-muted-foreground">{identifier.type}</dt>
+                      <dd className="font-mono break-all">{identifier.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </CardContent>
+            </Card>
           ))}
         </section>
       )}
