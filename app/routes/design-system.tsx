@@ -139,7 +139,7 @@ const copy = {
     alertDangerTitle: "Lettura non riuscita",
     alertDanger: "eBay non ha risposto. Riprova più tardi.",
     alertMissingTitle: "Codice Fiscale non presente",
-    alertMissing: "L’acquirente non lo ha indicato: non è un errore.",
+    alertMissing: "eBay non lo riporta per questo ordine: non è un errore.",
     form: "Form",
     formDescription:
       "Errori associati ai campi e annunciati; il primo campo errato riceve il focus.",
@@ -153,18 +153,17 @@ const copy = {
     note: "Nota",
     noteHint: "Massimo 200 caratteri.",
     notifications: "Notifiche",
-    telegram: "Avvisi Telegram",
-    emailDigest: "Riepilogo email settimanale",
-    terms: "Ho letto le condizioni",
-    termsRequired: "Conferma di aver letto le condizioni.",
+    telegram: "Notifiche Telegram",
+    dailyDigest: "Riepilogo giornaliero",
+    fiscalOnly: "Solo ordini con dato fiscale",
     submit: "Salva",
-    formErrors: "Correggi {{count}} campi evidenziati.",
+    formErrors: "Correggi i campi evidenziati.",
     formSaved: "Impostazioni salvate.",
     overlays: "Dialog e pannello",
     openDialog: "Scollega negozio",
     dialogTitle: "Scollegare il negozio?",
     dialogDescription:
-      "Gli ordini già importati restano consultabili secondo il piano. Puoi ricollegare il negozio in seguito.",
+      "FiscalBay smette di leggere il negozio su eBay. Lo storico resta secondo i tempi di conservazione e puoi ricollegare lo stesso negozio in seguito.",
     cancel: "Annulla",
     confirm: "Scollega",
     openSheet: "Dettaglio ordine",
@@ -204,7 +203,7 @@ const copy = {
     colorsDescription: "Semantic tokens for surfaces, text and states.",
     typography: "Typography",
     typographyDescription: "Inter Variable, a single sans-serif.",
-    typeSample: "Find and manage the tax code of your eBay orders.",
+    typeSample: "Find and manage the Codice Fiscale of your eBay orders.",
     buttons: "Buttons",
     primary: "Export",
     secondary: "Sync",
@@ -230,8 +229,8 @@ const copy = {
     alertWarning: "Reconnect the store to keep reading orders.",
     alertDangerTitle: "Read failed",
     alertDanger: "eBay did not respond. Try again later.",
-    alertMissingTitle: "Tax code not present",
-    alertMissing: "The buyer did not provide it: this is not an error.",
+    alertMissingTitle: "Codice Fiscale not present",
+    alertMissing: "eBay does not report it for this order: this is not an error.",
     form: "Form",
     formDescription: "Errors are tied to fields and announced; the first invalid field gets focus.",
     email: "Email",
@@ -244,18 +243,17 @@ const copy = {
     note: "Note",
     noteHint: "Up to 200 characters.",
     notifications: "Notifications",
-    telegram: "Telegram alerts",
-    emailDigest: "Weekly email summary",
-    terms: "I have read the terms",
-    termsRequired: "Confirm that you have read the terms.",
+    telegram: "Telegram notifications",
+    dailyDigest: "Daily summary",
+    fiscalOnly: "Only orders with tax data",
     submit: "Save",
-    formErrors: "Fix {{count}} highlighted fields.",
+    formErrors: "Fix the highlighted fields.",
     formSaved: "Settings saved.",
     overlays: "Dialog and panel",
     openDialog: "Disconnect store",
     dialogTitle: "Disconnect the store?",
     dialogDescription:
-      "Orders already imported stay available according to the plan. You can reconnect the store later.",
+      "FiscalBay stops reading the store on eBay. History is kept according to the retention periods, and you can reconnect the same store later.",
     cancel: "Cancel",
     confirm: "Disconnect",
     openSheet: "Order details",
@@ -264,7 +262,7 @@ const copy = {
     list: "Table",
     order: "Order",
     buyer: "Buyer",
-    taxCode: "Tax code",
+    taxCode: "Codice Fiscale",
     total: "Total",
     caption: "Illustrative rows with long text and missing data.",
     tabs: "Tabs",
@@ -278,7 +276,7 @@ const copy = {
     icons: "Icons",
     iconsDescription: "Lucide, uniform outline at 16 and 20 px.",
     actions: "Actions",
-    copyTaxCode: "Copy tax code",
+    copyTaxCode: "Copy Codice Fiscale",
     download: "Download",
     refresh: "Refresh",
   },
@@ -395,7 +393,6 @@ function SampleForm({ t }: { t: Copy }) {
     if (!email) next.email = t.emailRequired;
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email)) next.email = t.emailInvalid;
     if (!store) next.store = t.storeRequired;
-    if (!form.get("terms")) next.terms = t.termsRequired;
     setErrors(next);
     setSaved(Object.keys(next).length === 0);
     const first = Object.keys(next)[0];
@@ -406,7 +403,7 @@ function SampleForm({ t }: { t: Copy }) {
   return (
     <form ref={formRef} noValidate onSubmit={submit} className="grid max-w-xl gap-6">
       {count > 0 ? (
-        <StatusAlert tone="danger" title={t.formErrors.replace("{{count}}", String(count))} />
+        <StatusAlert tone="danger" title={t.formErrors} />
       ) : saved ? (
         <StatusAlert tone="success" title={t.formSaved} />
       ) : null}
@@ -464,22 +461,16 @@ function SampleForm({ t }: { t: Copy }) {
           <Field orientation="horizontal">
             <FieldLabel className="font-normal">
               <Switch name="digest" />
-              {t.emailDigest}
+              {t.dailyDigest}
+            </FieldLabel>
+          </Field>
+          <Field orientation="horizontal">
+            <FieldLabel className="font-normal">
+              <Checkbox name="fiscalOnly" defaultChecked />
+              {t.fiscalOnly}
             </FieldLabel>
           </Field>
         </FieldSet>
-        <Field data-invalid={errors.terms ? true : undefined}>
-          <FieldLabel className="font-normal">
-            <Checkbox
-              name="terms"
-              data-field="terms"
-              aria-invalid={errors.terms ? true : undefined}
-              aria-describedby={errors.terms ? "ds-terms-error" : undefined}
-            />
-            {t.terms}
-          </FieldLabel>
-          {errors.terms ? <FieldError id="ds-terms-error">{errors.terms}</FieldError> : null}
-        </Field>
       </FieldGroup>
       <div>
         <Button type="submit">{t.submit}</Button>

@@ -38,6 +38,12 @@ Fondazione visiva di sito e app, circoscritta al prodotto ([§22](../MASTER_PLAN
 - **Tipografia:** Inter Variable con `cv11`; scala Tailwind predefinita, titoli `font-semibold`/`font-bold` con `tracking-tight` e `text-balance`; cifre tabellari (`tabular-nums`) per importi e identificativi, monospace per Codice Fiscale e numeri d'ordine.
 - **Spaziature, radius, ombre:** scala Tailwind; `--radius` 10 px con derivati da `sm` a `4xl`; ombre leggere dei sorgenti shadcn, senza effetti aggiunti.
 
+## Testi
+
+- **Codice Fiscale in inglese:** su indicazione owner del 2026-09-27, titoli, etichette, intestazioni e azioni usano «Codice Fiscale»; le frasi descrittive usano «tax code». Esempio: colonna `Codice Fiscale`, tooltip «Copy the tax code».
+- **Dato assente:** non attribuirne la causa all'acquirente; dire che eBay non lo riporta per l'ordine, oppure «quando disponibile su eBay».
+- I testi del campione sono dimostrativi e non introducono funzioni: niente digest email degli ordini, nessuna accettazione di condizioni fuori dai flussi previsti.
+
 ## Tema
 
 Tre modalità: sistema (predefinita), chiaro, scuro. I token scuri valgono con `prefers-color-scheme: dark` salvo `data-theme="light"` su `<html>`, oppure con `data-theme="dark"`. La variante Tailwind `dark:` segue la stessa regola. La persistenza della scelta appartiene alle Impostazioni.
