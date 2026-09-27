@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import logoDarkUrl from "../../docs/brand/logo/fiscalbay-logo-dark.svg?url";
 import logoUrl from "../../docs/brand/logo/fiscalbay-logo.svg?url";
 import { StatusAlert } from "~/components/status";
+import { TaxCode } from "~/components/tax-code";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "~/components/ui/field";
@@ -168,8 +169,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <Card key={order.id}>
               <CardHeader>
                 <CardTitle className="flex justify-between gap-4">
-                  <h2 className="font-mono tabular-nums">{order.ebayOrderId}</h2>
-                  <strong className="tabular-nums">
+                  <h2 className="font-code">{order.ebayOrderId}</h2>
+                  <strong className="font-code">
                     {formatAmount(order.totalMinor, order.currency, language)}
                   </strong>
                 </CardTitle>
@@ -180,10 +181,20 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                   {order.taxIdentifiers.map((identifier) => (
                     <div
                       key={`${identifier.type}:${identifier.value}`}
-                      className="grid grid-cols-[1fr_2fr] gap-3"
+                      className="grid grid-cols-[1fr_2fr] items-center gap-3"
                     >
                       <dt className="text-muted-foreground">{identifier.type}</dt>
-                      <dd className="font-mono break-all">{identifier.value}</dd>
+                      <dd>
+                        <TaxCode
+                          value={identifier.value}
+                          labels={{
+                            copy: t("copyTaxCode"),
+                            copied: t("taxCodeCopied"),
+                            copyFailed: t("copyFailed"),
+                            locked: t("taxCodeLocked"),
+                          }}
+                        />
+                      </dd>
                     </div>
                   ))}
                 </dl>

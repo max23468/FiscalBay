@@ -16,6 +16,10 @@ const resources = {
   it: {
     translation: {
       language: "Lingua",
+      copyTaxCode: "Copia Codice Fiscale",
+      taxCodeCopied: "Codice Fiscale copiato",
+      copyFailed: "Copia non riuscita",
+      taxCodeLocked: "Codice Fiscale da sbloccare",
       orders: "Ordini",
       ordersDescription: "Ordini eBay disponibili in FiscalBay",
       ordersIntro: "Gli ordini e i dati fiscali accessibili sono isolati per spazio.",
@@ -57,6 +61,10 @@ const resources = {
   en: {
     translation: {
       language: "Language",
+      copyTaxCode: "Copy Codice Fiscale",
+      taxCodeCopied: "Codice Fiscale copied",
+      copyFailed: "Copy failed",
+      taxCodeLocked: "Codice Fiscale to unlock",
       orders: "Orders",
       ordersDescription: "eBay orders available in FiscalBay",
       ordersIntro: "Accessible orders and tax data are isolated by workspace.",

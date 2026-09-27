@@ -15,20 +15,26 @@ import {
   SunMoon,
 } from "lucide-react";
 
+import { AnimatePresence, domMax, LazyMotion, m, MotionConfig } from "motion/react";
+
+import { LedgerIndicator, TesseraArt } from "~/components/brand";
+import { EmptyState } from "~/components/empty-state";
 import { StatusAlert, StatusBadge, type StatusTone } from "~/components/status";
+import { TaxCode } from "~/components/tax-code";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Checkbox } from "~/components/ui/checkbox";
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "~/components/ui/dialog";
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogClose,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "~/components/ui/alert-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -189,6 +195,24 @@ const copy = {
     copyTaxCode: "Copia Codice Fiscale",
     download: "Scarica",
     refresh: "Aggiorna",
+    identity: "Identità",
+    identityDescription:
+      "La tessera del logo entra nell’interfaccia: le sue tre righe segnano la sincronizzazione, la sua forma gli stati vuoti.",
+    syncIdle: "Sincronizzato 5 minuti fa",
+    unlock: "Sblocca",
+    resetDemo: "Ripristina",
+    copyLabel: "Copia Codice Fiscale",
+    copiedLabel: "Codice Fiscale copiato",
+    copyFailedLabel: "Copia non riuscita",
+    lockedLabel: "Codice Fiscale da sbloccare",
+    motion: "Movimento",
+    motionDescription:
+      "Aperture in 250 ms e chiusure in 150 ms con un’unica curva. Un nuovo ordine entra in cima e la lista scorre senza salti.",
+    addOrder: "Simula nuovo ordine",
+    emptyTitle: "Ancora nessun ordine",
+    emptyDescription:
+      "Collega un negozio eBay: gli ordini compaiono qui appena eBay li rende disponibili.",
+    connectStore: "Collega negozio eBay",
   },
   en: {
     title: "Design system",
@@ -279,6 +303,24 @@ const copy = {
     copyTaxCode: "Copy Codice Fiscale",
     download: "Download",
     refresh: "Refresh",
+    identity: "Identity",
+    identityDescription:
+      "The logo card enters the interface: its three lines mark syncing, its shape the empty states.",
+    syncIdle: "Synced 5 minutes ago",
+    unlock: "Unlock",
+    resetDemo: "Reset",
+    copyLabel: "Copy Codice Fiscale",
+    copiedLabel: "Codice Fiscale copied",
+    copyFailedLabel: "Copy failed",
+    lockedLabel: "Codice Fiscale to unlock",
+    motion: "Motion",
+    motionDescription:
+      "Openings take 250 ms and closings 150 ms on a single curve. A new order enters at the top and the list shifts without jumps.",
+    addOrder: "Simulate new order",
+    emptyTitle: "No orders yet",
+    emptyDescription:
+      "Connect an eBay store: orders appear here as soon as eBay makes them available.",
+    connectStore: "Connect eBay store",
   },
 } satisfies Record<Language, Record<string, string>>;
 
@@ -363,7 +405,7 @@ function Section({
   const id = `ds-${title.toLowerCase().replace(/[^a-z]+/gu, "-")}`;
   return (
     <section aria-labelledby={id} className="grid gap-4">
-      <div>
+      <div className="grid gap-1">
         <h2 id={id} className="text-xl font-semibold">
           {title}
         </h2>
@@ -479,66 +521,168 @@ function SampleForm({ t }: { t: Copy }) {
   );
 }
 
-export default function DesignSystem({ loaderData }: Route.ComponentProps) {
-  const { language } = loaderData;
-  const t = copy[language];
-  const [theme, setTheme] = useState<Theme>("system");
+function taxCodeLabels(t: Copy) {
+  return {
+    copy: t.copyLabel,
+    copied: t.copiedLabel,
+    copyFailed: t.copyFailedLabel,
+    locked: t.lockedLabel,
+  };
+}
 
+function IdentityDemo({ t }: { t: Copy }) {
+  const [unlocked, setUnlocked] = useState(false);
+  const labels = taxCodeLabels(t);
   return (
-    <main className="mx-auto grid w-[min(72rem,calc(100%-2rem))] gap-12 py-10">
-      <header className="grid gap-4">
-        <img src={logoUrl} alt="FiscalBay" className="h-8 w-fit dark:hidden" />
-        <img src={logoDarkUrl} alt="FiscalBay" className="hidden h-8 w-fit dark:block" />
-        <h1 className="text-3xl font-bold sm:text-4xl">{t.title}</h1>
-        <p className="max-w-2xl text-muted-foreground">{t.intro}</p>
-        <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
-          <nav aria-label={t.language} className="flex items-center gap-1">
-            <Languages aria-hidden="true" className="size-4 text-muted-foreground" />
+    <div className="grid gap-6 md:grid-cols-[1fr_auto] md:items-center">
+      <div className="grid gap-4">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
+          <span className="inline-flex items-center gap-2">
+            <LedgerIndicator />
+            {t.syncIdle}
+          </span>
+          <span className="inline-flex items-center gap-2">
+            <LedgerIndicator active />
+            {t.alertInfoTitle}
+          </span>
+        </div>
+        <dl className="grid gap-3 text-sm sm:grid-cols-[10rem_1fr] sm:items-center">
+          <dt className="text-muted-foreground">Maria Rossi</dt>
+          <dd>
+            <TaxCode value="RSSMRA80A41H501U" labels={labels} />
+          </dd>
+          <dt className="text-muted-foreground">Luca Bianchi</dt>
+          <dd className="flex flex-wrap items-center gap-3">
+            <TaxCode value={unlocked ? "BNCLCU75C12F205X" : null} labels={labels} reveal />
+            <Button
+              size="sm"
+              variant={unlocked ? "ghost" : "default"}
+              onClick={() => setUnlocked((value) => !value)}
+            >
+              {unlocked ? t.resetDemo : t.unlock}
+            </Button>
+          </dd>
+          <dt className="text-muted-foreground">Tecnoufficio S.r.l.</dt>
+          <dd>
+            <TaxCode value="01234567890" labels={labels} />
+          </dd>
+        </dl>
+      </div>
+      <TesseraArt className="hidden md:block" />
+    </div>
+  );
+}
+
+const incoming = [
+  { order: "31-77421-10058", buyer: "Giorgio Neri", total: "€ 18,40" },
+  { order: "08-33110-45672", buyer: "Elena Galli", total: "€ 212,00" },
+  { order: "22-90807-66341", buyer: "Paolo Conti", total: "€ 9,99" },
+];
+
+function MotionDemo({ t }: { t: Copy }) {
+  const [items, setItems] = useState(() =>
+    rows.slice(0, 2).map(({ order, buyer, total }) => ({ order, buyer, total })),
+  );
+  const next = incoming.find((item) => !items.some((row) => row.order === item.order));
+  return (
+    <LazyMotion features={domMax} strict>
+      <MotionConfig reducedMotion="user" transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}>
+        <div className="grid max-w-xl gap-3">
+          <div>
+            <Button
+              variant="outline"
+              disabled={!next}
+              onClick={() => next && setItems((list) => [next, ...list])}
+            >
+              {t.addOrder}
+            </Button>
+          </div>
+          <ul className="grid gap-2">
+            <AnimatePresence initial={false}>
+              {items.map((item) => (
+                <m.li
+                  key={item.order}
+                  layout
+                  initial={{ opacity: 0, y: -8, filter: "blur(2px)" }}
+                  animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                  className="flex items-center justify-between gap-4 rounded-xl border bg-card px-4 py-3 text-sm shadow-xs shadow-brand-navy/5"
+                >
+                  <span className="grid">
+                    <span className="font-code font-medium">{item.order}</span>
+                    <span className="truncate text-muted-foreground">{item.buyer}</span>
+                  </span>
+                  <span className="font-code">{item.total}</span>
+                </m.li>
+              ))}
+            </AnimatePresence>
+          </ul>
+        </div>
+      </MotionConfig>
+    </LazyMotion>
+  );
+}
+
+function PageHeader({ language, t }: { language: Language; t: Copy }) {
+  const [theme, setTheme] = useState<Theme>("system");
+  return (
+    <header className="grid gap-4">
+      <img src={logoUrl} alt="FiscalBay" className="h-8 w-fit dark:hidden" />
+      <img src={logoDarkUrl} alt="FiscalBay" className="hidden h-8 w-fit dark:block" />
+      <h1 className="text-3xl font-bold sm:text-4xl">{t.title}</h1>
+      <p className="max-w-2xl text-muted-foreground">{t.intro}</p>
+      <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
+        <nav aria-label={t.language} className="flex items-center gap-1">
+          <Languages aria-hidden="true" className="size-4 text-muted-foreground" />
+          {(
+            [
+              ["it", "/design", "Italiano"],
+              ["en", "/en/design", "English"],
+            ] as const
+          ).map(([code, href, label]) => (
+            <a
+              key={code}
+              href={href}
+              lang={code}
+              aria-current={language === code ? "page" : undefined}
+              className="inline-flex h-8 items-center rounded-md px-2.5 text-sm font-medium outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:bg-secondary aria-[current=page]:text-secondary-foreground pointer-coarse:h-11"
+            >
+              {label}
+            </a>
+          ))}
+        </nav>
+        <FieldSet className="w-fit">
+          <FieldLegend variant="label">{t.theme}</FieldLegend>
+          <RadioGroup
+            value={theme}
+            onValueChange={(value) => {
+              setTheme(value as Theme);
+              applyTheme(value as Theme);
+            }}
+            className="flex flex-wrap gap-4"
+          >
             {(
               [
-                ["it", "/design", "Italiano"],
-                ["en", "/en/design", "English"],
+                ["system", t.themeSystem, SunMoon],
+                ["light", t.themeLight, Sun],
+                ["dark", t.themeDark, Moon],
               ] as const
-            ).map(([code, href, label]) => (
-              <a
-                key={code}
-                href={href}
-                lang={code}
-                aria-current={language === code ? "page" : undefined}
-                className="inline-flex h-8 items-center rounded-md px-2.5 text-sm font-medium outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:bg-secondary aria-[current=page]:text-secondary-foreground pointer-coarse:h-11"
-              >
+            ).map(([value, label, Icon]) => (
+              <FieldLabel key={value} className="font-normal">
+                <RadioGroupItem value={value} />
+                <Icon aria-hidden="true" className="size-4" />
                 {label}
-              </a>
+              </FieldLabel>
             ))}
-          </nav>
-          <FieldSet className="w-fit">
-            <FieldLegend variant="label">{t.theme}</FieldLegend>
-            <RadioGroup
-              value={theme}
-              onValueChange={(value) => {
-                setTheme(value as Theme);
-                applyTheme(value as Theme);
-              }}
-              className="flex flex-wrap gap-4"
-            >
-              {(
-                [
-                  ["system", t.themeSystem, SunMoon],
-                  ["light", t.themeLight, Sun],
-                  ["dark", t.themeDark, Moon],
-                ] as const
-              ).map(([value, label, Icon]) => (
-                <FieldLabel key={value} className="font-normal">
-                  <RadioGroupItem value={value} />
-                  <Icon aria-hidden="true" className="size-4" />
-                  {label}
-                </FieldLabel>
-              ))}
-            </RadioGroup>
-          </FieldSet>
-        </div>
-      </header>
+          </RadioGroup>
+        </FieldSet>
+      </div>
+    </header>
+  );
+}
 
+function Foundations({ t }: { t: Copy }) {
+  return (
+    <>
       <Section title={t.colors} description={t.colorsDescription}>
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
           {colorTokens.map((token) => (
@@ -557,12 +701,16 @@ export default function DesignSystem({ loaderData }: Route.ComponentProps) {
           <p className="text-lg font-medium">{t.typeSample}</p>
           <p className="text-base">{t.typeSample}</p>
           <p className="text-sm text-muted-foreground">{t.typeSample}</p>
-          <p className="font-mono text-sm tabular-nums">
-            RSSMRA80A41H501U · 12-34567-89012 · € 1.249,00
-          </p>
+          <p className="font-code text-sm">RSSMRA80A41H501U · 12-34567-89012 · € 1.249,00</p>
         </div>
       </Section>
+    </>
+  );
+}
 
+function ButtonsSection({ t }: { t: Copy }) {
+  return (
+    <>
       <Section title={t.buttons}>
         <div className="flex flex-wrap items-center gap-3">
           <Button>
@@ -582,7 +730,7 @@ export default function DesignSystem({ loaderData }: Route.ComponentProps) {
           </Tooltip>
           <Button variant="ghost">{t.ghost}</Button>
           <Button variant="destructive">{t.destructive}</Button>
-          <Button disabled aria-busy="true">
+          <Button disabled focusableWhenDisabled aria-busy="true">
             <Spinner label={t.loading} data-icon="inline-start" />
             {t.loading}
           </Button>
@@ -610,7 +758,13 @@ export default function DesignSystem({ loaderData }: Route.ComponentProps) {
           </DropdownMenu>
         </div>
       </Section>
+    </>
+  );
+}
 
+function StatesSection({ t }: { t: Copy }) {
+  return (
+    <>
       <Section title={t.states} description={t.statesDescription}>
         <div className="flex flex-wrap gap-2">
           <StatusBadge tone="success">{t.connected}</StatusBadge>
@@ -635,28 +789,32 @@ export default function DesignSystem({ loaderData }: Route.ComponentProps) {
           </StatusAlert>
         </div>
       </Section>
+    </>
+  );
+}
 
-      <Section title={t.form} description={t.formDescription}>
-        <SampleForm t={t} />
-      </Section>
-
+function OverlaysSection({ t }: { t: Copy }) {
+  return (
+    <>
       <Section title={t.overlays}>
         <div className="flex flex-wrap gap-3">
-          <Dialog>
-            <DialogTrigger render={<Button variant="destructive" />}>{t.openDialog}</DialogTrigger>
-            <DialogContent closeLabel={t.close}>
-              <DialogHeader>
-                <DialogTitle>{t.dialogTitle}</DialogTitle>
-                <DialogDescription>{t.dialogDescription}</DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <DialogClose render={<Button variant="outline" />}>{t.cancel}</DialogClose>
-                <DialogClose render={<Button variant="destructive-solid" />}>
+          <AlertDialog>
+            <AlertDialogTrigger render={<Button variant="destructive" />}>
+              {t.openDialog}
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{t.dialogTitle}</AlertDialogTitle>
+                <AlertDialogDescription>{t.dialogDescription}</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t.cancel}</AlertDialogCancel>
+                <AlertDialogClose render={<Button variant="destructive-solid" />}>
                   {t.confirm}
-                </DialogClose>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+                </AlertDialogClose>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <Sheet>
             <SheetTrigger render={<Button variant="outline" />}>
               <PanelRight aria-hidden="true" data-icon="inline-start" />
@@ -674,7 +832,9 @@ export default function DesignSystem({ loaderData }: Route.ComponentProps) {
                 </div>
                 <div className="grid gap-0.5">
                   <dt className="text-muted-foreground">{t.taxCode}</dt>
-                  <dd className="font-mono">RSSMRA80A41H501U</dd>
+                  <dd>
+                    <TaxCode value="RSSMRA80A41H501U" labels={taxCodeLabels(t)} />
+                  </dd>
                 </div>
                 <div className="grid gap-0.5">
                   <dt className="text-muted-foreground">{t.total}</dt>
@@ -685,7 +845,13 @@ export default function DesignSystem({ loaderData }: Route.ComponentProps) {
           </Sheet>
         </div>
       </Section>
+    </>
+  );
+}
 
+function TableSection({ t }: { t: Copy }) {
+  return (
+    <>
       <Section title={t.list}>
         <div className="overflow-hidden rounded-xl border bg-card">
           <Table>
@@ -701,11 +867,11 @@ export default function DesignSystem({ loaderData }: Route.ComponentProps) {
             <TableBody>
               {rows.map((row) => (
                 <TableRow key={row.order}>
-                  <TableCell className="font-mono tabular-nums">{row.order}</TableCell>
+                  <TableCell className="font-code">{row.order}</TableCell>
                   <TableCell className="max-w-64 whitespace-normal">{row.buyer}</TableCell>
                   <TableCell>
                     {row.taxCode ? (
-                      <span className="font-mono">{row.taxCode}</span>
+                      <TaxCode value={row.taxCode} labels={taxCodeLabels(t)} />
                     ) : (
                       <StatusBadge tone={row.tone}>{t[row.status]}</StatusBadge>
                     )}
@@ -732,8 +898,21 @@ export default function DesignSystem({ loaderData }: Route.ComponentProps) {
           </Table>
         </div>
       </Section>
+    </>
+  );
+}
 
+function TabsSection({ t }: { t: Copy }) {
+  return (
+    <>
       <Section title={t.tabs}>
+        <Tabs defaultValue="orders" className="max-w-xl">
+          <TabsList variant="line">
+            <TabsTrigger value="orders">{t.tabOrders}</TabsTrigger>
+            <TabsTrigger value="stores">{t.tabStores}</TabsTrigger>
+            <TabsTrigger value="settings">{t.tabSettings}</TabsTrigger>
+          </TabsList>
+        </Tabs>
         <Tabs defaultValue="orders" className="max-w-xl">
           <TabsList>
             <TabsTrigger value="orders">{t.tabOrders}</TabsTrigger>
@@ -761,7 +940,38 @@ export default function DesignSystem({ loaderData }: Route.ComponentProps) {
           ))}
         </Tabs>
       </Section>
+    </>
+  );
+}
 
+export default function DesignSystem({ loaderData }: Route.ComponentProps) {
+  const { language } = loaderData;
+  const t = copy[language];
+  return (
+    <main className="mx-auto grid w-[min(72rem,calc(100%-2rem))] gap-12 py-10">
+      <PageHeader language={language} t={t} />
+      <Section title={t.identity} description={t.identityDescription}>
+        <IdentityDemo t={t} />
+      </Section>
+      <Section title={t.motion} description={t.motionDescription}>
+        <MotionDemo t={t} />
+      </Section>
+      <Foundations t={t} />
+      <ButtonsSection t={t} />
+      <StatesSection t={t} />
+      <Section title={t.form} description={t.formDescription}>
+        <SampleForm t={t} />
+      </Section>
+      <OverlaysSection t={t} />
+      <TableSection t={t} />
+      <TabsSection t={t} />
+      <Section title={t.emptyTitle}>
+        <EmptyState
+          title={t.emptyTitle}
+          description={t.emptyDescription}
+          action={<Button>{t.connectStore}</Button>}
+        />
+      </Section>
       <Section title={t.icons} description={t.iconsDescription}>
         <div className="flex flex-wrap items-center gap-4 text-muted-foreground" aria-hidden="true">
           {[Search, Store, Copy, Download, RefreshCw, PanelRight, Languages, SunMoon].map(

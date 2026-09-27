@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
 
@@ -25,6 +24,8 @@
   --brand-blue: #1a4fa6;
   --brand-navy: #0e3372;
   --brand-sky: #4f87e3;
+  --brand-green: #1f9f9a;
+  --brand-red: #da353e;
 
   --background: #f5f7fa;
   --foreground: #0f1b2d;
@@ -61,6 +62,47 @@
   --neutral-surface: #eef1f5;
 
   --radius: 0.625rem;
+
+  /*
+   * Movimento: scala di durate, curve e scale ricavata da transitions.dev.
+   * Le aperture usano la durata piena, le chiusure la più breve.
+   */
+  --duration-micro: 80ms;
+  --duration-quick: 150ms;
+  --duration-fast: 250ms;
+  --duration-medium: 350ms;
+  --duration-slow: 400ms;
+  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --scale-modal: 0.96;
+  --scale-popover: 0.97;
+  --scale-tooltip: 0.98;
+  --scale-popover-close: 0.99;
+}
+
+/* Codici e numeri: cifre tabellari, zero barrato, I maiuscola con grazie. */
+@utility font-code {
+  font-feature-settings: "tnum", "zero", "cv08";
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+/* Righe della tessera in sincronizzazione: si allungano in sequenza. */
+@keyframes ledger-sync {
+  0%,
+  100% {
+    scale: 0.55 1;
+  }
+  45% {
+    scale: 1 1;
+  }
+}
+
+/* Rivelazione di un valore: sale leggermente e si mette a fuoco. */
+@keyframes value-reveal {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+    filter: blur(2px);
+  }
 }
 
 /* Il tema scuro vale con il sistema scuro o con `data-theme="dark"`. */
@@ -117,6 +159,8 @@
   --color-brand-blue: var(--brand-blue);
   --color-brand-navy: var(--brand-navy);
   --color-brand-sky: var(--brand-sky);
+  --color-brand-green: var(--brand-green);
+  --color-brand-red: var(--brand-red);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -156,6 +200,77 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/*
+ * Ruoli di movimento per i popup Base UI, che espongono
+ * `data-starting-style` e `data-ending-style` per le transizioni CSS.
+ * Si usano `scale` e `translate` come proprietà separate, così il
+ * centraggio con `translate` dei dialog non entra in conflitto.
+ */
+@utility motion-backdrop {
+  transition: opacity var(--duration-fast) var(--ease-smooth-out);
+  &[data-starting-style],
+  &[data-ending-style] {
+    opacity: 0;
+  }
+  &[data-ending-style] {
+    transition-duration: var(--duration-quick);
+  }
+}
+
+@utility motion-modal {
+  transition:
+    opacity var(--duration-fast) var(--ease-smooth-out),
+    scale var(--duration-fast) var(--ease-smooth-out);
+  &[data-starting-style],
+  &[data-ending-style] {
+    opacity: 0;
+    scale: var(--scale-modal);
+  }
+  &[data-ending-style] {
+    transition-duration: var(--duration-quick);
+  }
+}
+
+@utility motion-popover {
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity var(--duration-fast) var(--ease-smooth-out),
+    scale var(--duration-fast) var(--ease-smooth-out);
+  &[data-starting-style] {
+    opacity: 0;
+    scale: var(--scale-popover);
+  }
+  &[data-ending-style] {
+    opacity: 0;
+    scale: var(--scale-popover-close);
+    transition-duration: var(--duration-quick);
+  }
+}
+
+@utility motion-tooltip {
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity var(--duration-quick) ease-out,
+    scale var(--duration-quick) ease-out;
+  &[data-starting-style] {
+    opacity: 0;
+    scale: var(--scale-tooltip);
+  }
+  &[data-ending-style] {
+    opacity: 0;
+    transition-duration: 0ms;
+  }
+}
+
+@utility motion-panel {
+  transition:
+    opacity var(--duration-slow) var(--ease-smooth-out),
+    translate var(--duration-slow) var(--ease-smooth-out);
+  &[data-ending-style] {
+    transition-duration: var(--duration-medium);
+  }
 }
 
 @layer base {
