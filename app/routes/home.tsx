@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 
+import logoUrl from "../../docs/brand/logo/fiscalbay-logo.svg?url";
 import { createAuth } from "../auth.server";
 import { listVisibleOrders } from "../domain/orders.server";
 import { formatAmount, formatInstant, languageFromPath, localizedPath, translate } from "../i18n";
@@ -56,7 +57,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   return (
     <main>
       <header>
-        <p className="eyebrow">FiscalBay 2.0</p>
+        <img src={logoUrl} alt="FiscalBay" width="224" height="45" />
         <h1>{t("orders")}</h1>
         <p>{t("ordersIntro")}</p>
         <nav aria-label="Language">
