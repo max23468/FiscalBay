@@ -39,7 +39,10 @@ test("copia fallita visibile e recupero con un nuovo tentativo", async ({ page }
     });
   });
   const sample = page.getByRole("region", { name: "Identità", exact: true });
-  const copy = sample.getByRole("button", { name: "Copia Codice Fiscale", exact: true }).first();
+  const copy = sample.getByRole("button", {
+    name: "Copia Codice Fiscale: Maria Rossi",
+    exact: true,
+  });
   await copy.click();
   await expect(sample.getByText(/^Copia non riuscita\./)).toBeVisible();
   await copy.click();
@@ -153,10 +156,7 @@ for (const locale of ["it", "en"] as const) {
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
         .toBe(true);
       const fields = list
-        .getByRole("button", {
-          name: locale === "it" ? "Copia Codice Fiscale" : "Copy Codice Fiscale",
-          exact: true,
-        })
+        .getByRole("button", { name: locale === "it" ? /^Copia / : /^Copy / })
         .locator("..");
       const bounds = await fields.evaluateAll((elements) =>
         elements.map((element) => {
@@ -227,9 +227,7 @@ test("stati fiscali e azioni simulate senza copia su dato assente", async ({ pag
   for (const state of ["Non disponibile su eBay", "Aggiornamento non riuscito", "Da sbloccare"]) {
     await select.click();
     await page.getByRole("option", { name: state, exact: true }).click();
-    await expect(
-      card.getByRole("button", { name: "Copia Codice Fiscale", exact: true }),
-    ).toHaveCount(0);
+    await expect(card.getByRole("button", { name: /^Copia / })).toHaveCount(0);
   }
   await expect(card).toContainText("2 ordini disponibili");
   await expect(card.locator(".lucide-lock")).toHaveCount(1);
@@ -237,8 +235,12 @@ test("stati fiscali e azioni simulate senza copia su dato assente", async ({ pag
   await card.getByRole("button", { name: "Sblocca ordine", exact: true }).click();
   await expect(card.getByRole("status").filter({ hasText: "Ti resta 1 ordine" })).toBeVisible();
   await expect(
-    card.getByRole("button", { name: "Copia Codice Fiscale", exact: true }),
+    card.getByRole("button", {
+      name: "Copia Partita IVA: Società Cooperativa Agricola Val di Non e Valle di Sole Soc. Coop.",
+      exact: true,
+    }),
   ).toBeVisible();
+  await expect(card.getByRole("heading", { name: "Partita IVA", exact: true })).toBeVisible();
 });
 
 test("identità: Premium distinto dallo sblocco e superfici nei due temi", async ({ page }) => {
@@ -291,4 +293,25 @@ test("movimento ridotto: dato intero e nuovo ordine senza animazione", async ({ 
       row.evaluate((e) => e.getAnimations().filter((a) => a.playState === "running").length),
     )
     .toBe(0);
+});
+
+test("copie con nomi distinti nelle righe e dato etichettato per tipo", async ({ page }) => {
+  const containers = [
+    page.getByRole("list", { name: "Elenco ordini", exact: true }),
+    page.getByRole("region", { name: "Tabella", exact: true }),
+  ];
+  for (const container of containers) {
+    const names = await container
+      .getByRole("button", { name: /^Copia / })
+      .evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label")));
+    expect(names.length).toBeGreaterThan(1);
+    expect(new Set(names).size).toBe(names.length);
+  }
+  const table = page.getByRole("region", { name: "Tabella", exact: true });
+  await expect(
+    table.getByRole("button", {
+      name: "Copia Partita IVA: Società Cooperativa Agricola Val di Non e Valle di Sole Soc. Coop.",
+      exact: true,
+    }),
+  ).toBeVisible();
 });

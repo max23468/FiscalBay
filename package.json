@@ -17,6 +17,7 @@
     "typecheck": "wrangler types && react-router typegen && tsc -b",
     "verify": "pnpm verify:copy && pnpm format:check && pnpm lint && pnpm typecheck && pnpm doctor:react && pnpm test && pnpm build && pnpm verify:docs",
     "verify:copy": "node scripts/verify-copy.mjs",
+    "verify:full": "pnpm verify && pnpm test:e2e",
     "verify:docs": "node scripts/verify-docs.mjs"
   },
   "dependencies": {

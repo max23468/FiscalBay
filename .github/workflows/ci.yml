@@ -86,7 +86,16 @@ jobs:
 
       - name: Check design system interactions
         if: steps.detect.outputs.docs_only != 'true'
-        run: pnpm test:e2e
+        run: pnpm test:e2e --update-snapshots=missing
+
+      - name: Upload visual references
+        if: always() && steps.detect.outputs.docs_only != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-references
+          path: e2e/*-snapshots/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Check docs-only changes
         if: steps.detect.outputs.docs_only == 'true'
