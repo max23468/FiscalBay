@@ -31,7 +31,7 @@ Personalità scelta dall'owner il 2026-09-27: **precisa e sobria**, uno strument
 
 - **Righe della tessera (`LedgerIndicator`):** blu, verde e rossa nelle proporzioni del logo (224:156:72). Ferme accompagnano l'ultima sincronizzazione; animate in sequenza indicano una sincronizzazione in corso, al posto di uno spinner generico. Con la riduzione del movimento restano ferme e intere. Lo spinner resta per il solo caricamento dentro un pulsante.
 - **Tessera illustrata (`TesseraArt`):** la tessera inclinata di 8°, con contorno e chip neutri e la sola riga blu come accento, negli stati vuoti (`EmptyState`). È l'unico punto dell'app in cui compare l'inclinazione.
-- **Codice Fiscale (`TaxCode`):** diviso in gruppi di lettura (3-3-5-4-1 per la persona fisica, 7-3-1 per la Partita IVA) solo visivamente, così selezione e copia restituiscono il valore intero. Copia con feedback immediato (icona che diventa conferma, annuncio per i lettori di schermo). Da bloccato non riceve il valore, come impone il piano: mostra segnaposto con gli stessi gruppi e un lucchetto viola; allo sblocco i gruppi compaiono in sequenza.
+- **Codice Fiscale (`TaxCode`):** mostrato sempre intero, senza separazioni, per scelta owner del 2026-09-27; `font-code` evita di confondere 0/O e I/1/l. Copia con feedback immediato (icona che diventa conferma, annuncio per i lettori di schermo). Da bloccato non riceve il valore, come impone il piano: mostra sedici punti e un lucchetto viola; allo sblocco il valore compare con una breve messa a fuoco.
 - **Velatura dei dialog:** blu scuro del marchio al 24% su chiaro, nero al 60% su scuro, senza sfocatura dello sfondo.
 
 ## Token

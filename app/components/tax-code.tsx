@@ -4,31 +4,13 @@ import { cn } from "cn";
 
 import { Button } from "~/components/ui/button";
 
-/**
- * Gruppi di lettura: Codice Fiscale persona fisica 3-3-5-4-1
- * (cognome, nome, data e sesso, comune, controllo), Partita IVA 7-3-1.
- * Sono solo visivi: selezione e copia restituiscono il valore intero.
- */
-function groups(value: string): Array<{ offset: number; text: string }> {
-  const sizes = /^[A-Z0-9]{16}$/u.test(value)
-    ? [3, 3, 5, 4, 1]
-    : /^\d{11}$/u.test(value)
-      ? [7, 3, 1]
-      : [value.length];
-  let offset = 0;
-  return sizes.map((size) => {
-    const group = { offset, text: value.slice(offset, offset + size) };
-    offset += size;
-    return group;
-  });
-}
-
 type Labels = { copy: string; copied: string; copyFailed: string; locked: string };
 
 /**
- * Identificativo fiscale leggibile e copiabile. Da bloccato non riceve il
- * valore: mostra segnaposto generici, perché il dato non deve arrivare al
- * browser prima dello sblocco. `reveal` anima la comparsa dopo uno sblocco.
+ * Identificativo fiscale mostrato sempre intero, leggibile e copiabile.
+ * Da bloccato non riceve il valore: mostra segnaposto generici, perché il
+ * dato non deve arrivare al browser prima dello sblocco. `reveal` anima la
+ * comparsa dopo uno sblocco.
  */
 export function TaxCode({
   value,
@@ -45,13 +27,8 @@ export function TaxCode({
     return (
       <span className={cn("inline-flex items-center gap-2 text-muted-foreground", className)}>
         <Lock aria-hidden="true" className="size-3.5 text-premium" />
-        <span aria-hidden="true" className="font-code text-[0.9375rem] tracking-tight">
-          {["•••", "•••", "•••••", "••••", "•"].map((dots, position) => (
-            // Segnaposto fissi: la posizione è l'identità del gruppo.
-            <span key={`${position}-${dots.length}`} className="not-last:mr-[0.3em]">
-              {dots}
-            </span>
-          ))}
+        <span aria-hidden="true" className="font-code text-[0.9375rem]">
+          ••••••••••••••••
         </span>
         <span className="sr-only">{labels.locked}</span>
       </span>
@@ -59,20 +36,14 @@ export function TaxCode({
   }
   return (
     <span className={cn("inline-flex items-center gap-1", className)}>
-      <span className="font-code text-[0.9375rem] font-medium text-foreground">
-        {groups(value).map((group, position) => (
-          <span
-            key={group.offset}
-            className={cn(
-              "inline-block not-last:mr-[0.3em]",
-              reveal &&
-                "animate-[value-reveal_var(--duration-slow)_var(--ease-smooth-out)_both] motion-reduce:animate-none",
-            )}
-            style={reveal ? { animationDelay: `${position * 40}ms` } : undefined}
-          >
-            {group.text}
-          </span>
-        ))}
+      <span
+        className={cn(
+          "font-code text-[0.9375rem] font-medium text-foreground",
+          reveal &&
+            "inline-block animate-[value-reveal_var(--duration-slow)_var(--ease-smooth-out)_both] motion-reduce:animate-none",
+        )}
+      >
+        {value}
       </span>
       <CopyButton value={value} labels={labels} />
     </span>
