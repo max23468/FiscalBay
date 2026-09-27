@@ -497,6 +497,8 @@ Realizzare top navigation desktop e bottom navigation mobile con tre destinazion
 
 **Criterio di completamento:** Approvazione dell’owner; mostrare anche testi lunghi, errori, quote e campi mancanti. I testi dei mockup non introducono nuove funzioni.
 
+Dopo l’approvazione owner rimuovere la pagina campione del design system (`app/routes/design-system.tsx`, route `/design` e `/en/design`) e il relativo riferimento in [design system](docs/brand/DESIGN_SYSTEM.md): le schermate reali sostituiscono il campione.
+
 ### M1-08 — Completamento DNS, ambienti e posta
 
 **Stato:** DONE · **Prerequisiti:** M0 · **Contratto:** [§24](docs/MASTER_PLAN.md#s24)
