@@ -16,7 +16,11 @@ import { correlationId } from "./errors";
 import { i18n, languageFromPath, translate } from "./i18n";
 import "./app.css";
 
-export const links: Route.LinksFunction = () => [];
+export const links: Route.LinksFunction = () => [
+  { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+  { rel: "icon", href: "/favicon.ico", sizes: "any" },
+  { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+];
 
 export function loader({ request }: Route.LoaderArgs) {
   return {

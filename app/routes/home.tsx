@@ -63,8 +63,20 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   return (
     <main className="mx-auto grid w-[min(72rem,calc(100%-2rem))] gap-8 py-12">
       <header className="grid max-w-2xl gap-3">
-        <img src={logoUrl} alt="FiscalBay" className="h-8 w-fit dark:hidden" />
-        <img src={logoDarkUrl} alt="FiscalBay" className="hidden h-8 w-fit dark:block" />
+        <img
+          src={logoUrl}
+          alt="FiscalBay"
+          width="224"
+          height="45"
+          className="h-8 w-auto dark:hidden"
+        />
+        <img
+          src={logoDarkUrl}
+          alt="FiscalBay"
+          width="224"
+          height="45"
+          className="hidden h-8 w-auto dark:block"
+        />
         <h1 className="text-4xl font-bold sm:text-5xl">{t("orders")}</h1>
         <p className="text-muted-foreground">{t("ordersIntro")}</p>
         <nav aria-label="Language" className="flex gap-3 text-sm">
