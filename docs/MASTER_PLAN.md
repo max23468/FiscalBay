@@ -232,6 +232,8 @@ La configurabilità dei metodi deve essere verificata **nel prodotto Managed Pay
 
 ### 6.6 Eventi esterni e cancellazione dei dati di pagamento
 
+La riconciliazione commerciale prosegue senza browser aperto: recupera pagamenti confermati, rinnovi ed errori rimasti pendenti usando la stessa logica di grant dei webhook. Scegliere cadenza e priorità in base a scadenze, tentativi ed effettivi limiti Stripe; non copiare le cadenze Shopify. Provare chiusura del browser dopo pagamento, evento mancante/tardivo e ripresa dopo errore, senza doppio incasso o doppio diritto.
+
 I webhook verificati alimentano lo stato locale; la riconciliazione server corregge eventi mancanti, duplicati o fuori ordine. Separare pagamento confermato, autorizzazione non ancora incassata, pagamento pendente e fallimento. Un importo, un `customer_id` o la pagina di successo forniti dal client non dimostrano un acquisto. Le comunicazioni finanziarie restano al provider; le richieste di supporto con termine arrivano al contatto configurato e agli alert prioritari.
 
 **Cancellazione richiesta al provider diversa dalla cancellazione dell’account FiscalBay.** Stripe documenta che una richiesta tramite Link può cancellare oggetti finanziari e annullare abbonamenti anche nell’account Stripe del fornitore. Il contratto d’integrazione deve quindi gestire la perdita autorevole di quegli oggetti e l’eventuale segnalazione fuori webhook. Non considerare automaticamente un oggetto non più reperibile come «mai acquistato», «rimborsato» o ordine di eliminare tutto lo spazio FiscalBay. [S18](SOURCES.md#s18)
@@ -291,6 +293,10 @@ Ordine identificato da UUID interno e unicità `(ebay_account_id, external_order
 
 **Ordini combinati e identità della riga.** Quando l'acquirente paga insieme più acquisti, eBay può creare un ordine definitivo con un ID nuovo e, al pagamento, cambiare anche gli identificativi delle righe; gli acquisti prima del checkout compaiono soltanto in Trading. L'identità stabile di riga (`OrderLineItemID`/`lineItemId` con `legacyItemId`) collega provvisori e ordine definitivo. Il consolidamento avviene solo quando tutte le righe di ogni provvisorio appartengono allo stesso ordine definitivo; sovrapposizioni parziali, righe senza identità stabile o più candidati bloccano il consolidamento e restano visibili come anomalia, senza indovinare. Grant, quota e sblocchi seguono il consolidamento: un ordine riemesso con ID nuovo non consuma una seconda quota e non perde un diritto già acquisito sui dati fiscali delle stesse righe. Un provvisorio assorbito o annullato esce dalle viste correnti senza cancellare lo storico dovuto.
 
+La riconciliazione resta circoscritta allo stesso negozio, conserva l'UUID interno e la deduplica delle notifiche e viene provata anche con arrivo invertito delle fonti. Nessuna unione per nome, importo o sola somiglianza.
+
+Il mapping distingue acquirente registrato, destinatario e indicazioni `c/o`; estrae i valori dai campi strutturati, incluso il telefono, senza conversioni generiche di oggetti in testo. Fixture sintetiche coprono nomi discordanti, campi assenti e forme inattese. Conservare provenienza e originale entro la retention applicabile; nessuna correzione automatica dell'intestatario fiscale o riscrittura dei dati eBay.
+
 Dati eBay in sola lettura. Normalizzazione tecnica, formattazione e validazione derivate non alterano il valore originale. Vista corrente aggiornata dalla fonte e snapshot buyer/articoli legati all’ordine, non all’anagrafica corrente del buyer/prodotto. Una sync senza cambiamenti non crea una nuova versione. Lo storico delle variazioni fiscali resta obbligatorio; copie complete dell’intero ordine servono solo a un caso concreto di riconciliazione, non a ogni polling. Niente cronologia modifiche esposta al merchant.
 
 Ogni identificativo registra tipo, Paese quando noto, fonte, valore e qualità formale. Trading `GetOrders` è la fonte primaria degli identificativi fiscali dell'acquirente; Fulfillment resta la fonte primaria per acquisizione, stato e dettaglio generale dell'ordine. Un eventuale identificativo osservato anche in Fulfillment conserva la propria provenienza e viene confrontato, senza sostituire implicitamente la precedenza Trading. Distinguere identificativo dell'acquirente da quello del venditore o di eBay. Deduplicare lo stesso valore, preservandone provenienza. Validazione CF/P.IVA italiana formale non bloccante; nessun collegamento all'Anagrafe tributaria o certificazione di esistenza. Tipi esteri sconosciuti mostrati correttamente senza falsa validazione.
@@ -332,6 +338,10 @@ Priorità: refresh singolo ordine; sync corrente Premium; sync corrente Free; no
 Usare la coda scelta per consegna, ritardi, tentativi e dead-letter quando supportati; non mantenere un secondo sistema equivalente nel database. Persistono soltanto checkpoint, chiavi di deduplica e stato di business necessari a riprendere il lavoro. Lease/fencing o outbox solo dove colmano un rischio dimostrato non coperto dalle primitive native. Retry limitati con backoff/jitter, rispetto Retry-After e budget. Deduplica/idempotenza restano applicative: una consegna ripetuta non deve ripetere sblocchi o effetti. Un commit che richiede un invio deve poter essere recuperato anche se la pubblicazione in coda fallisce. Ricalcolare permessi, negozio, retention e destinatari all’esecuzione; vecchi job/webhook non ricreano dati eliminati.
 
 Client REST tipizzati generati da specifiche ufficiali dove affidabili; scegliere in M0 il generatore. API eBay complete come contratto, ma incorporare solo quanto serve. Trading è il client fiscale primario ma resta circoscritto a `GetOrders` e ai campi necessari; niente SDK legacy generale per abitudine. OAuth e Notification SDK opzionali; i client sono dietro adapter testabili, mai sparsi nelle route.
+
+Le scritture da sync automatica, refresh manuale e riconnessione verificano la revisione attesa o un equivalente controllo atomico. Una risposta tardiva non sovrascrive dati, connessione o errori già aggiornati; in conflitto rilegge lo stato utile. Il controllo di concorrenza non sostituisce la precedenza e l'autorevolezza delle fonti fiscali.
+
+Provare esplicitamente le interruzioni fra acquisizione evento, accodamento, commit ed effetto successivo. L'ACK segue la presa in carico recuperabile; un errore di accodamento non rende l'evento definitivamente completato. Consegne duplicate e riprese dopo crash non ripetono quota, grant o notifiche. Usare le primitive native e il minimo stato applicativo necessario, senza introdurre un secondo orchestratore.
 
 <a id="s12"></a>
 ## 12. Export ordini e portabilità dell'account
@@ -382,6 +392,8 @@ La preferenza «solo ordini con dato fiscale» filtra i **nuovi ordini privi del
 <a id="s14"></a>
 ## 14. Email, supporto e consenso marketing
 
+Il form di supporto include un riepilogo diagnostico minimo visibile al merchant: versione applicativa, riferimento interno del negozio interessato, fase e ultimo esito della sync, codice errore, stato dei diritti e correlation ID pertinente. Campi allowlistati, nessun token, CF, payload o anagrafica buyer, né altro spazio. La diagnostica assente o non leggibile non impedisce la richiesta; trasmissione al solo canale di supporto previsto e conservazione secondo la matrice privacy, senza un nuovo archivio di payload.
+
 Email operative per Auth, sicurezza e problemi importanti a tutti i piani; niente digest ordini via email nella 2.0. Stripe gestisce comunicazioni di pagamento/rinnovo/carte/rimborso; evitare doppioni FiscalBay. Avviso prodotto solo se aggiunge informazione utile.
 
 Indirizzi umani iCloud+: **info@fiscalbay.it**, **supporto@fiscalbay.it**; terzo indirizzo libero, nessuna casella privacy/sicurezza obbligatoria. **supporto@** serve soltanto all’assistenza clienti; ogni altro contatto (privacy, sicurezza, contatti sviluppatore e di provider, comunicazioni amministrative) usa **info@**. **noreply@fiscalbay.it** è un mittente transazionale separato, non SMTP iCloud per invii automatici massivi. Configurare Reply-To appropriato e gestione risposte involontarie. Provider transazionale scelto nel perimetro economico approvato; nessun nuovo abbonamento implicito.
@@ -392,6 +404,8 @@ Opt-in **facoltativo non preselezionato** in registrazione e proposta separata d
 
 <a id="s15"></a>
 ## 15. Console amministrativa
+
+I problemi operativi mostrano gravità, causa comprensibile, conseguenza, stato osservato e azione pertinente con collegamento al contesto. Raggruppare occorrenze della stessa anomalia; rileggere stato e permessi prima dell'azione, registrare esito e rientro senza chiusure apparenti. Un errore circoscritto a un negozio non blocca quelli estranei. Nessun payload fiscale nei riepiloghi ordinari.
 
 Stesso prodotto/dominio, area `/admin` con accesso esplicito e MFA; stessa Auth, nessuna impersonazione. Navigazione admin distinta da quella merchant. Viste di utenti/spazi, negozi, stato sync/job, piano e diritti, trial, ricavi operativi pertinenti, lifetime venduti/omaggio/residui, promo, errori e segnalazioni antiabuso.
 
@@ -468,6 +482,8 @@ Campanella: problemi e comunicazioni rilevanti di sicurezza/billing/servizio/man
 
 <a id="s20"></a>
 ## 20. Onboarding, stati vuoti e modalità degradate
+
+La pagina Ordini mostra i dati persistiti autorizzati senza attendere una nuova lettura eBay. Gli aggiornamenti remoti proseguono separatamente, con timestamp e stato locale di avanzamento; non sostituiscono l'intera vista con uno skeleton. Verificare sessione, diritti e retention lato server prima della risposta: uno stato memorizzato non autorizza da solo un'azione o l'esposizione di un dato fiscale.
 
 Onboarding dentro Ordini, contestuale, riprendibile e non bloccante. Account creato→email verificata→negozio collegato→prima sync→ordini disponibili. Senza prerequisito la funzione dipendente non è usabile, ma Profilo/Impostazioni lo sono. Nessuna demo mescolata ai dati reali. Breve preparazione OAuth, poi eBay, ritorno in Ordini con conferma e import progressivo.
 
@@ -659,6 +675,8 @@ Risposte asincrone con job ID/stato, polling limitato o push qualificato; nessun
 
 Per le integrazioni realmente usate definire timeout, permessi, mapping errori, idempotenza e fixture nei moduli/test o in un contratto breve se serve spiegazione. Non duplicare manualmente schemi generati e tipi eseguibili in cataloghi API paralleli. OpenAPI eBay protegge i tipi, non sostituisce validazione runtime o l'analisi della semantica fiscale. Nuovi campi ignoti non devono abbattere tutta l'importazione né essere pubblicati indiscriminatamente.
 
+Condividere negli adapter un punto minimo per timeout dell'intera lettura, limite di byte anche su risposte in streaming, parsing e classificazione degli errori. Distinguere credenziali scadute, rate limit, indisponibilità e payload invalido; propagare Retry-After quando presente, evitando retry sovrapposti fra client e coda. Coprire anche body senza Content-Length e interruzioni durante la lettura. Non costruire un framework HTTP generale.
+
 <a id="s29"></a>
 ## 29. Sicurezza e segreti
 
@@ -710,6 +728,8 @@ Cancellazione account: riautenticazione e conferma forte, stop immediato accesso
 
 Scollega vs Scollega ed elimina dati separati. Eliminazioni richieste eBay/buyer autorevoli prevalgono sullo storico commerciale. L’accesso cessa quando scade il diritto/la finestra; la pulizia fisica segue il job deterministico, normalmente entro 24 ore dalla scadenza prevista, salvo termini prevalenti; nessun clone in suggerimenti/versioni/export già invalidati. Backup non equivale a diritto di restaurare dati cancellati: tombstone/replay delle revoche prima di riaprire servizio, oppure riconciliazione conservativa.
 
+Le letture applicano scadenza e revoca anche se il job di pulizia non è ancora passato: dettaglio, ricerca, suggerimenti, generazione e download export non estendono la visibilità dei dati ancora fisicamente presenti. Provare i confini temporali con pulizia sospesa e le revoche durante richieste concorrenti.
+
 Privacy e Termini IT/EN, italiano prevalente se appropriato; informativa cookie separata solo quando necessaria, comunque inventario delle tecnologie reali. Trasparenza fornitori e cosa leggiamo/non facciamo; diritto di recesso e tutela consumatori da qualificare, senza confondere assenza di garanzia commerciale con assenza di diritti obbligatori. Dati legali reali di Temisfera raccolti privatamente, non inventati.
 
 Nuovo codice originale proprietario/all rights reserved, repo pubblico senza promessa community. Riuso legacy già MIT e componenti terzi conserva condizioni/notices pertinenti; non revocare licenze già concesse. Registro provenienza dei componenti, licenze miste/Pro valutate file per file. Nome/logo eBay e FiscalBay passano gate marchi/licenza API prima del lancio, nessun cambio nome automatico.
@@ -732,6 +752,10 @@ Ogni log strutturato contiene soltanto campi in allowlist: evento, classe, istan
 **Capacità misurata al deploy.** Dopo ogni deploy sull'ambiente test un controllo invia traffico sintetico marcato, raccoglie via tail la CPU delle sole invocazioni marcate e fallisce se il p95 supera 5 ms, metà del limite per richiesta di Workers Free, o se compaiono errori; la soglia resta riferita a Free anche mentre è attivo un piano Paid, perché Free è l'assetto scelto; il fallimento attiva il rollback del deploy test. Non genera traffico verso eBay, Stripe o Telegram. Il runbook elenca per Worker, D1 e Queue le quote di riferimento e gli stop point operativi; al raggiungimento si fermano nuovi ingressi, si verifica a quale progetto dell'account appartiene il consumo e si sceglie fra ottimizzazione e cambio piano con l'owner.
 
 Metriche prodotto aggregate iniziali: signup, email verificata, primo negozio, prima sync, primo CF trovato, primo sblocco, trial, Free→Premium, trial→acquisto, cancellazioni, attivi, error rate, ritardo sync, uso quota. Nessun session replay o funnel UI dettagliato nella 2.0; eventuale ampliamento approvato dopo.
+
+Distinguere anche il primo ordine disponibile dalla prima sync riuscita a zero ordini. Misurare il passaggio fra account verificato, negozio collegato, prima sync e primo ordine con eventi business deduplicati per spazio, resistenti a retry, schede concorrenti e reconnect. Esporre conteggi aggregati e tempi fra passaggi con denominatore e finestra espliciti; nessun tracciamento di ogni clic o nuova raccolta di dati buyer.
+
+Misurare separatamente Auth, D1, chiamate eBay e rendering/browser, con nomi e campi allowlistati e campionamento proporzionato. Le metriche distinguono latenza remota, tempo server e resa client; i report client hanno validazione, limite di dimensione e protezione da duplicazioni/abusi. Non includere query, URL con dati personali o identificativi fiscali. Usare questi dati per verificare i budget di prestazione, senza aggiungere un provider di monitoraggio per default.
 
 Definizioni: merchant operativo = spazio con negozio collegato e sync riuscita negli ultimi 30 giorni; **non è l'attività umana** usata per sospendere Free. Metriche di conversione per coorte/denominatore/periodo, distinguendo trial ancora aperti. Error rate = tentativi falliti / tentativi definiti, senza mescolare retry e ordini; lag = tempo dalla disponibilità fonte quando noto, altrimenti misurare esplicitamente la proxy osservabile. Paganti distinti da omaggi; ricavo ricorrente normalizza annuale ma esclude lifetime; mostrare cassa, tasse e fee separatamente senza presentare il payout come utile.
 
@@ -791,6 +815,8 @@ Pipeline minima: install frozen lockfile → format check → lint → typecheck
 - Mutation test mirati sui domini critici toccati dalla PR: sblocco, quota e grant, diritti Stripe, ingresso webhook. Il perimetro dei file per dominio vive nel repository.
 - Test di repository fanno rispettare le regole di AGENTS: nessuna sigla di milestone, task o fase nel codice, nei test, nelle fixture, nei log e nel copy runtime; fixture solo con host sintetici `.invalid` e senza dati reali; grafo degli import applicativi aciclico; ogni modulo server ha almeno un consumatore runtime; versioni di Node e pnpm coincidenti fra `mise.toml`, `package.json` e workflow.
 
+Il classificatore è condiviso fra locale e CI; documenti che governano operazioni e gate non ottengono automaticamente la corsia ridotta. Provare casi rappresentativi senza eliminare gate di pubblicazione o prove dovute. Per la pubblicazione considerare il diff cumulativo dal commit distribuito al candidato.
+
 Versioni interne `2.0.0-alpha.N`→`2.0.0-rc.N`→`2.0.0`. Non significano beta pubblica. `CHANGELOG.md` unica storia delle modifiche rilevanti; GitHub Release derivata per ogni versione Production, non ogni deploy test. Nessuna riscrittura tag pubblicati per correggere un errore.
 
 **Pubblica** è un atto esplicito che autorizza l'intero ciclo tecnico applicabile nel perimetro: commit atteso, gate, preflight provider, migration controllate, deploy, smoke/readback, ricevuta, tag/release solo dopo successo. Non fermarsi dopo push o prima del readback; non estendere il comando a provider/scopi non approvati. Cinque checkpoint owner restano separati dalle normali attività.
@@ -804,6 +830,8 @@ Backlog stati TODO, IN PROGRESS, BLOCKED, DONE, DEFERRED: BLOCKED è una condizi
 **Pubblicazione riprendibile e provenienza dell’artefatto.** Legare il via a commit e release manifest attesi. Serializzare le pubblicazioni per ambiente; un workflow più vecchio non deve sovrascrivere uno successivo. Promuovere lo stesso artefatto verificato quando il provider lo consente; se serve una ricostruzione specifica Production, registrare gli input immutabili e verificarne l’artefatto, non chiamarlo automaticamente «lo stesso build testato».
 
 Migration, deploy e tag sono passi con ricevuta e readback separati. Se il deploy riesce ma la creazione della GitHub Release fallisce, la ripresa completa quel passo senza riapplicare ciecamente migrazioni o cambiare versione live. Non pubblicare il tag di successo se smoke/readback non passano. Prima di rollback verificare compatibilità tra versione codice, schema e configurazione, senza recuperare un vecchio DB soltanto per tornare al codice precedente.
+
+Il readback del candidato confronta commit/artefatto, schema e configurazione attesi e verifica gli invarianti applicativi pertinenti alla modifica, inclusi diritti e lavori pendenti bloccanti. Un deploy riuscito o un HTTP 200 non bastano. Provare ripresa dopo interruzione e rifiuto di un candidato superato senza ripetere effetti già confermati.
 
 <a id="s35"></a>
 ## 35. Strategia di test e criteri osservabili
@@ -827,6 +855,10 @@ Vitest dominio/integrazione; Testing Library e user-event componenti; Playwright
 | UI | Due card/una, drawer URL/back/scroll, filtri/persistenza, form errori, light/dark/IT-EN, ridotta motion, tastiera/touch, safe public navigation |
 
 Coverage come segnale, non obiettivo arbitrario 90%. Ogni bug rilevante riceve regression test. Non abbassare validazioni per far passare fixture. Dataset M0 da almeno 70.000 ordini più relazioni e scenari multi-negozio; test non inviato integralmente alle API reali. Rate budget calcolato e prove live contenute.
+
+Mantenere scenari sintetici riusati da test di dominio e prove UI: CF assente, bloccato, formalmente invalido o con omocodia, quota esaurita, fonte in errore, dato modificato e suggerimenti discordanti. Le prove formali non certificano l'identità. Gli scenari vivono nei test o in superfici di sviluppo/test non disponibili in Production; nessuna demo mischiata agli ordini reali, nessun simulatore pubblico aggiunto allo scope.
+
+Mutation test mirati verificano che i test intercettino errori su ultimo credito, isolamento degli spazi, scadenza dei grant e revoca del grant rimborsato. Qualificare e fissare il tool di sviluppo compatibile con la toolchain scelta quando viene introdotto; nessuna nuova dipendenza runtime. Eseguire i domini interessati dal diff e quelli dipendenti; mutanti non equivalenti sopravvissuti sulle invarianti critiche richiedono correzione, timeout/errori non valgono come esito verde. Motivare eventuali equivalenze, senza percentuali arbitrarie o campagne sull'intera applicazione a ogni modifica.
 
 P1/P2 aperti bloccano il rilascio. P3 richiede accettazione esplicita, scope circoscritto e prova che non comprometta dati, sicurezza, billing o core. DoD task = codice, test, documentazione necessaria e comportamento coerenti.
 
@@ -888,6 +920,28 @@ G-LEGAL e G-RECOVERY hanno analogamente una qualifica preliminare M0 e una chius
 ## 37. Milestone M0–M9
 
 Ogni milestone aggiorna `BACKLOG.md`, contratti coinvolti e prove. Dipendenze rigide sui gate, parallelismo per attività indipendenti. La numerazione non impone che ogni dettaglio sia una consegna sequenziale né autorizza a rinviare sicurezza/test all'ultima fase.
+
+### Integrazioni complementari da CF Ready e Hub Fatture
+
+Le quindici integrazioni approvate il 2026-09-27 sono assegnate esclusivamente a M1 e successive. Non riaprono M0 né aggiungono criteri retroattivi ai task DONE. I requisiti sono nelle sezioni funzionali indicate; stato, dipendenze e prove restano soltanto nel backlog. Le repository di origine sono riferimenti progettuali: nessuna copia automatica di codice, dati, dipendenze o infrastruttura.
+
+| N. | Integrazione | Requisito | Task di implementazione e verifica |
+|---|---|---|---|
+| 1 | Identità eBay provvisoria e definitiva | [§9](#s09) | [M3](../BACKLOG.md#m3): M3-01, M3-02, M3-09; diritti M3-06 |
+| 2 | Protezione dalle risposte tardive | [§11](#s11) | [M3](../BACKLOG.md#m3): M3-04, M3-05; reconnect M2-06 |
+| 3 | Problemi con conseguenza e azione utile | [§15](#s15) | [M6](../BACKLOG.md#m6): M6-04; prototipo M1-07 |
+| 4 | Diagnostica minima nel supporto | [§14](#s14) | [M6](../BACKLOG.md#m6): M6-06; prototipo M1-07 |
+| 5 | Ordini disponibili durante aggiornamento remoto | [§20](#s20) | [M4](../BACKLOG.md#m4): M4-01, M4-07 |
+| 6 | Recupero eventi fra accodamento e commit | [§11](#s11) | [M3](../BACKLOG.md#m3): M3-04; M5-05, M5-10 per gli effetti integrati |
+| 7 | Casi limite del mapping eBay | [§9](#s09) | [M3](../BACKLOG.md#m3): M3-02 |
+| 8 | Limiti HTTP ed errori provider condivisi | [§28](#s28) | [M2](../BACKLOG.md#m2): M2-05; completamento eBay M3-02, Stripe M5-05 |
+| 9 | Riconciliazione commerciale senza browser | [§6.6](#s06) | [M5](../BACKLOG.md#m5): M5-05, M5-08 |
+| 10 | Scadenza applicata prima della pulizia | [§30](#s30) | [M3](../BACKLOG.md#m3): M3-08; export M6-03, prova trasversale M7-02 |
+| 11 | Passaggi di attivazione deduplicati | [§31](#s31) | [M6](../BACKLOG.md#m6): M6-08 |
+| 12 | Misure separate server, provider e browser | [§31](#s31) | [M4](../BACKLOG.md#m4): M4-01; M6-08, verifica sotto carico M7-03 |
+| 13 | Scenari sintetici condivisi fra dominio e UI | [§35](#s35) | [M1](../BACKLOG.md#m1): M1-07; completamento M3-05, M4-07 |
+| 14 | Mutation test delle invarianti critiche | [§35](#s35) | [M1-09](../BACKLOG.md#m1-09): tooling; casi M3-06, M3-08, M5-08 |
+| 15 | Controlli per diff e pubblicazione riprendibile | [§34](#s34) | [M1-09](../BACKLOG.md#m1-09): selezione; M7-06, esecuzione M9-04 |
 
 ### M0 — Qualificazione tecnica e transizione delle fondamenta
 
