@@ -205,7 +205,7 @@ function SimpleSelect({
       <Select items={items} value={value} onValueChange={(next) => onChange(String(next))}>
         <SelectTrigger
           id={id}
-          className="w-full sm:max-w-sm"
+          className="w-full min-w-0 sm:max-w-sm"
           aria-describedby={hint ? `${id}-hint` : undefined}
         >
           <SelectValue />
@@ -980,11 +980,11 @@ export function SettingsPage({
     supporto: <SupportSection data={data} t={t} />,
   } satisfies Record<SettingsSection, React.ReactNode>;
   return (
-    <div className="grid gap-6">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <h1 className={cn("text-2xl font-bold sm:text-3xl", data.section && "max-md:sr-only")}>
         {t.settings.title}
       </h1>
-      <div className="grid gap-8 md:grid-cols-[15rem_minmax(0,1fr)] md:gap-10">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-8 md:grid-cols-[15rem_minmax(0,1fr)] md:gap-10">
         <nav aria-label={t.settings.categories} className={cn(data.section && "max-md:hidden")}>
           <ul className="grid divide-y border-y md:gap-1 md:divide-y-0 md:border-y-0">
             {settingsSections.map((id) => (

@@ -321,7 +321,7 @@ export function StoresPage({
     </Button>
   );
   return (
-    <div className="grid gap-6">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <h1 className="text-2xl font-bold sm:text-3xl">{t.stores.title}</h1>
         {data.stores.length > 0 ? connect : null}
