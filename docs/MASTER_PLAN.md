@@ -610,7 +610,7 @@ Pin esatti dei pacchetti diretti dove appropriato, lockfile unico e install ripr
 | Componenti | shadcn/ui e primitive necessarie (Base UI candidato), selezione dagli altri riferimenti |
 | Icone | Lucide |
 | Schemi runtime | Zod, usato ai confini dati/contratti |
-| Localizzazione | i18next + react-i18next, dizionari condivisi dove possibile |
+| Localizzazione | Dizionari IT/EN tipizzati nel codice (`app/app-copy.ts`) e formatter `Intl` nativi, senza libreria di localizzazione (D149) |
 | Stripe | SDK ufficiale server-side, Hosted Checkout; niente Elements per il solo redirect |
 | HTTP, UUID, crittografia | fetch, crypto.randomUUID, Web Crypto del runtime ove qualificato |
 | Test | Vitest, Testing Library/user-event, Playwright, axe/Playwright |
@@ -1095,7 +1095,7 @@ API pubblica non impegnata a una specifica 2.x: si valuta solo se domanda concre
 <a id="s40"></a>
 ## 40. Decisioni superate e coerenza trasversale
 
-Sono sostituiti: Telegram-first/Python/VPS come destinazione; Dynu/DuckDNS; Supabase obbligatorio o Better Auth obbligatorio; Node24/LTS come preferenza automatica; email-only; passkey/eBay login rinunciabili; database imposto prima M0; quota Free3 o sempre10 individuale; trial automatico; incasso differito Q155; addebito solo EUR Q551; diritto post-Premium solo per dati cliccati Q334; sidebar principale; Export voce primaria; cronologia ordini visibile; card in ogni pagina; paginazione numerata mockup; campagne senza opt-in; backup esterno/drill periodico obbligatori; GitHub Issues backlog; conferma per ogni comando Production; migrazione utenti 1.x obbligatoria; fedeltà vincolante al Concept 4 originale del logo (D141).
+Sono sostituiti: Telegram-first/Python/VPS come destinazione; Dynu/DuckDNS; Supabase obbligatorio o Better Auth obbligatorio; Node24/LTS come preferenza automatica; email-only; passkey/eBay login rinunciabili; database imposto prima M0; quota Free3 o sempre10 individuale; trial automatico; incasso differito Q155; addebito solo EUR Q551; diritto post-Premium solo per dati cliccati Q334; sidebar principale; Export voce primaria; cronologia ordini visibile; card in ogni pagina; paginazione numerata mockup; campagne senza opt-in; backup esterno/drill periodico obbligatori; GitHub Issues backlog; conferma per ogni comando Production; migrazione utenti 1.x obbligatoria; fedeltà vincolante al Concept 4 originale del logo (D141); i18next come libreria di localizzazione (D149).
 
 Correzioni già derivate dall'audit e non nuove scelte: sblocco per ordine copre tutti i tipi; snapshot versione distinto dalla vista corrente; omissione campo non rimozione; refund revoca grant correlato; promo globale vs quota congelata ciclo; attività KPI distinta dall'uso umano; piano workspace non negozio; cancellazione/chat nuova invalidano job vecchi; sicurezza non rinviata a M7; doc private non rendono segreto il codice pubblico.
 
