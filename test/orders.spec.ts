@@ -781,19 +781,44 @@ describe("registrazione e verifica del contatto", () => {
     for (let index = 0; index < 4; index += 1) statuses.push(await attempt("203.0.113.7"));
     expect(statuses).toEqual([401, 401, 401, 429]);
     expect(await attempt("203.0.113.8")).toBe(401);
-    // La lettura della sessione non consuma tentativi né scrive contatori.
+    // La route diretta condivide il contatore; la lettura della sessione non ne scrive.
+    const direct = await handleAuthRequest(
+      new Request("https://test.fiscalbay.it/api/auth/sign-in/email", {
+        method: "POST",
+        headers: {
+          origin: "https://test.fiscalbay.it",
+          "content-type": "application/json",
+          "cf-connecting-ip": "203.0.113.7",
+        },
+        body: JSON.stringify({ email: "tentativi@example.invalid", password: "altra-password" }),
+      }),
+      deployed,
+    );
+    expect(direct.status).toBe(429);
+    expect(direct.headers.get("retry-after")).toMatch(/^\d+$/u);
     for (let index = 0; index < 3; index += 1) {
-      const session = await createAuth(deployed).handler(
+      const session = await handleAuthRequest(
         new Request("https://test.fiscalbay.it/api/auth/get-session", {
           headers: { "cf-connecting-ip": "203.0.113.7" },
         }),
+        deployed,
       );
       expect(session.status).toBe(200);
     }
+    // Gli indirizzi della stessa rete IPv6 /64 condividono il contatore.
+    const ipv6 = [
+      "2001:db8:1:2::1",
+      "2001:db8:1:2:aa:bb:cc:dd",
+      "2001:db8:1:2::9",
+      "2001:db8:1:2::ff",
+    ];
+    const ipv6Statuses = [];
+    for (const ip of ipv6) ipv6Statuses.push(await attempt(ip));
+    expect(ipv6Statuses).toEqual([401, 401, 401, 429]);
     const counters = await env.DB.prepare('SELECT COUNT(*) AS total FROM "rateLimit"').first<{
       total: number;
     }>();
-    expect(counters!.total).toBe(2);
+    expect(counters!.total).toBe(3);
 
     // Una finestra scaduta riparte da uno invece di restare bloccata.
     await env.DB.prepare('UPDATE "rateLimit" SET "lastRequest" = "lastRequest" - 60000').run();
