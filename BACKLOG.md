@@ -30,6 +30,8 @@ Questa sezione è un registro operativo iniziale, **non una prova di avvio già 
 | Operazioni remote parziali da riconciliare                  | Nessuna operazione remota lasciata a metà. Stato remoto di riferimento: 1.x con timer autodeploy `disabled`/`inactive` e bot, callback e timer operativi attivi ([M1-00](#m1-00)); Workers `fiscalbay-test` e `fiscalbay`, D1 `fiscalbay-test` e `fiscalbay`, Email Service su `auth.fiscalbay.it` ([M1-08](#m1-08)); progetto Google `fiscalbay-2-0-max23468` senza billing con client `FiscalBay Test` e `FiscalBay Production`; sul keyset `botCF` RuName di test attivo, RuName legacy `FiscalBay 1.0` disattivato e RuName Production salvato con OAuth disattivato; Better Auth Infrastructure `FiscalBay Test` sul piano Starter, solo test; progetto Supabase eliminato il 2026-09-23. La D1 di test conserva l'utente `info@fiscalbay.it` e un ordine reale del secondo seller controllato con il relativo identificativo fiscale, ratificati dall'owner: vanno eliminati entro il go-live insieme alla copia recuperabile via Time Travel ([M0-02](#m0-02)). Nessun token è stato stampato, persistito fuori dalla 1.x o scritto nel repository. |
 | Prossima azione alla ripresa                                | Con un nuovo mandato avviare M2 da M2-01. L'invio Auth Production si prova con l'app al gate di pubblicazione. Al riscontro eBay eseguire la checklist di M2-09 |
 
+**Manutenzione del codice del 2026-09-28:** revisione chiesta dall'owner dopo il checkpoint M1, fuori dai task. PR [#212](https://github.com/max23468/FiscalBay/pull/212) snellisce le evidenze di questo backlog e rimuove `dialog.tsx` senza consumatori (Worker test `99ba03a2`). PR [#213](https://github.com/max23468/FiscalBay/pull/213) porta tutti i testi e gli errori in `app/app-copy.ts` e rimuove i18next (D149): JavaScript client da 298,6 a 284,3 KiB gzip, Worker test `38075348`, CPU p95 5 ms. PR [#214](https://github.com/max23468/FiscalBay/pull/214) toglie la simulazione dai componenti: i pulsanti inviano un intento all'azione della route con `useAction` e il salvataggio automatico dipende dalla risposta del server; nell'anteprima risponde `simulateAction`, nelle route reali di M2 l'azione vera. `ActionResult`, `OrdersNotice` e `StatusTone` stanno in `app/view-models.ts`.
+
 ### Registro dei via e dei checkpoint
 
 **Integrazione documentale del 2026-09-27:** autorizzate le quindici proposte complementari derivate da CF Ready e Hub Fatture (D143), assegnate a M1 e successive nella [mappa del piano](docs/MASTER_PLAN.md#s37); M0 e i task DONE non vengono riaperti.
@@ -439,7 +441,7 @@ Includere policy su viste/RPC/snapshot/indici se esposti; client impossibilitato
 
 **Stato:** DONE · **Prerequisiti:** M1-01 · **Contratto:** [§26](docs/MASTER_PLAN.md#s26) · [§28](docs/MASTER_PLAN.md#s28) · [§31](docs/MASTER_PLAN.md#s31)
 
-Registro errori tipizzato, correlationID, redazione, i18next IT/EN e formatter UTC/locale.
+Registro errori tipizzato, correlationID, redazione, testi IT/EN e formatter UTC/locale (dizionari tipizzati da D149).
 
 **Criterio di completamento:** Nessun CF/token nei log di errore; errori comprensibili in entrambe le lingue e retryability coerente.
 

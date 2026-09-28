@@ -14,7 +14,7 @@ import { domMax, LazyMotion, m, MotionConfig } from "motion/react";
 import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import { Link, useFetcher, useLocation, useNavigate, useSearchParams } from "react-router";
 
-import { useNotice } from "~/components/app-shell";
+import { useAction, useNotice } from "~/components/app-shell";
 import { LedgerIndicator } from "~/components/brand";
 import { EmptyState } from "~/components/empty-state";
 import { UnlockIcon } from "~/components/icons";
@@ -67,6 +67,7 @@ import {
   marketplaceLabel,
   type AccountView,
   type AddressView,
+  type OrdersNotice,
   fiscalStates,
   paymentStatuses,
   shippingStatuses,
@@ -74,12 +75,6 @@ import {
   type OrderView,
   type TaxIdentifierView,
 } from "../view-models";
-
-export type OrdersNotice =
-  | { kind: "ebay-down"; at: string }
-  | { kind: "quota"; until: string }
-  | { kind: "store-issue"; storeId: string; storeName: string }
-  | { kind: "importing"; count: number };
 
 export interface OrdersPageData {
   view: "list" | "no-store" | "loading" | "empty";
@@ -272,7 +267,7 @@ function unavailableTone(state: "missing" | "checking" | "error") {
  * nella scheda accanto all'acquirente e nel dettaglio in cima al pannello.
  */
 function FiscalCodes({ order, t, account, ebayDown, revealed, unlocking, onUnlock }: FiscalProps) {
-  const notify = useNotice();
+  const action = useAction();
   const { fiscal } = order;
   if (fiscal.state === "available") {
     return (
@@ -319,7 +314,7 @@ function FiscalCodes({ order, t, account, ebayDown, revealed, unlocking, onUnloc
                 size="sm"
                 disabled={ebayDown}
                 focusableWhenDisabled
-                onClick={() => notify(t.orders.retried)}
+                onClick={() => action.run("retry", { order: order.id })}
               >
                 {t.orders.retry}
               </Button>
@@ -470,7 +465,7 @@ function OrderCard({
   onSelect: (selected: boolean) => void;
   isNew: boolean;
 }) {
-  const notify = useNotice();
+  const action = useAction();
   const titleId = useId();
   const [first, second, ...rest] = order.items;
   const shown = [first, second].filter((item) => item !== undefined);
@@ -528,10 +523,10 @@ function OrderCard({
                   <EllipsisVertical aria-hidden="true" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => notify(t.preview.simulated)}>
+                  <DropdownMenuItem onClick={() => action.run("open-on-ebay", { order: order.id })}>
                     {t.orders.openOnEbay}
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => notify(t.orders.exportNotice)}>
+                  <DropdownMenuItem onClick={() => action.run("export", { ids: order.id })}>
                     {t.orders.exportOrder}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -1018,20 +1013,20 @@ function SelectionBar({
   onCancel,
 }: {
   t: AppCopy;
-  selected: number;
+  selected: string[];
   lockedSelected: string[];
   remaining: number | null;
   onUnlock: (ids: string[]) => void;
   onCancel: () => void;
 }) {
-  const notify = useNotice();
+  const action = useAction();
   const count = lockedSelected.length;
   const exceeds = remaining !== null && count > remaining;
   return (
     <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 mt-6 md:bottom-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-popover px-4 py-3 shadow-md">
         <p className="grid text-sm" aria-live="polite">
-          <span className="font-medium">{t.orders.selected(selected)}</span>
+          <span className="font-medium">{t.orders.selected(selected.length)}</span>
           <span className="text-xs text-muted-foreground">{t.orders.selectedLocked(count)}</span>
         </p>
         <div className="flex flex-wrap items-center gap-2">
@@ -1065,8 +1060,8 @@ function SelectionBar({
           </AlertDialog>
           <Button
             variant="outline"
-            disabled={selected === 0}
-            onClick={() => notify(t.orders.exportNotice)}
+            disabled={selected.length === 0}
+            onClick={() => action.run("export", { ids: selected.join(",") })}
           >
             {t.orders.exportSelected}
           </Button>
@@ -1201,14 +1196,14 @@ function OrdersNotices({
 }
 
 function FirstUse({ data, t }: { data: OrdersPageData; t: AppCopy }) {
-  const notify = useNotice();
+  const action = useAction();
   const current = data.onboarding.findIndex((step) => !step.done);
   return (
     <EmptyState
       title={t.orders.firstUseTitle}
       description={t.orders.firstUseBody}
       action={
-        <Button onClick={() => notify(t.preview.simulated)}>
+        <Button onClick={() => action.run("store-connect")}>
           <Plus aria-hidden="true" data-icon="inline-start" />
           {t.orders.connectStore}
         </Button>
@@ -1329,7 +1324,10 @@ function useUnlock(unlockAction: string, t: AppCopy) {
   }, [fetcher.state, fetcher.data, notify, t]);
   return {
     submit: (ids: string[]) =>
-      void fetcher.submit({ ids: ids.join(",") }, { method: "post", action: unlockAction }),
+      void fetcher.submit(
+        { intent: "unlock", ids: ids.join(",") },
+        { method: "post", action: unlockAction },
+      ),
     pending: new Set(
       fetcher.state === "idle" ? [] : String(fetcher.formData?.get("ids") ?? "").split(","),
     ),
@@ -1509,7 +1507,7 @@ function OrdersList({
       {selecting ? (
         <SelectionBar
           t={t}
-          selected={selected.size}
+          selected={[...selected]}
           lockedSelected={lockedSelected}
           remaining={remainingUnlocks(data.account)}
           onUnlock={submit}

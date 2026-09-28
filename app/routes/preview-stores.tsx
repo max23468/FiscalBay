@@ -4,7 +4,7 @@ import { StoresPage, type StoresPageData } from "~/components/stores";
 import { NotFoundState } from "~/components/not-found";
 import { appCopy } from "../app-copy";
 import { languageFromPath } from "../i18n";
-import { currentScenario } from "../preview/state.server";
+import { currentScenario, simulateAction } from "../preview/state.server";
 import type { PreviewContext } from "./preview";
 import type { Route } from "./+types/preview-stores";
 
@@ -31,6 +31,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     elsewhere: scenario.elsewhere,
   };
   return page;
+}
+
+/** Azioni dei componenti: nell'anteprima nessun effetto, solo la risposta simulata. */
+export async function action({ request }: Route.ActionArgs) {
+  return simulateAction(request, await request.formData());
 }
 
 export default function PreviewStores({ loaderData }: Route.ComponentProps) {

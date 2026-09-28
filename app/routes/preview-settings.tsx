@@ -4,7 +4,7 @@ import { SettingsPage, type SettingsPageData } from "~/components/settings";
 import { NotFoundState } from "~/components/not-found";
 import { appCopy } from "../app-copy";
 import { languageFromPath } from "../i18n";
-import { currentScenario } from "../preview/state.server";
+import { currentScenario, simulateAction } from "../preview/state.server";
 import { settingsSections, type SettingsSection } from "../view-models";
 import type { PreviewContext } from "./preview";
 import type { Route } from "./+types/preview-settings";
@@ -37,22 +37,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       orders: scenario.orders.length,
       locked: scenario.orders.filter((order) => order.fiscal.state === "locked").length,
     },
-    saveFailsOnce: scenario.saveFailsOnce,
     now: scenario.now,
   };
   return page;
 }
 
+/** Azioni dei componenti: nell'anteprima nessun effetto, solo la risposta simulata. */
+export async function action({ request }: Route.ActionArgs) {
+  return simulateAction(request, await request.formData());
+}
+
 export default function PreviewSettings({ loaderData }: Route.ComponentProps) {
   const { t, links } = useOutletContext<PreviewContext>();
-  return (
-    <SettingsPage
-      key={loaderData.saveFailsOnce ? "fail" : "ok"}
-      data={loaderData}
-      t={t}
-      links={links}
-    />
-  );
+  return <SettingsPage data={loaderData} t={t} links={links} />;
 }
 
 /** Un indirizzo inesistente resta dentro l'app, con la strada per tornare all'elenco. */

@@ -10,7 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link, NavLink, useLocation, useNavigate } from "react-router";
+import { Link, NavLink, useFetcher, useLocation, useNavigate } from "react-router";
 
 import { StatusIcon } from "~/components/status";
 import { Button } from "~/components/ui/button";
@@ -30,7 +30,12 @@ import logoUrl from "../../docs/brand/logo/fiscalbay-logo.svg?url";
 import type { AppCopy } from "../app-copy";
 import { appHref, type AppLinks } from "../app-links";
 import { localizedPath } from "../i18n";
-import { formatRelative, type AccountView, type NotificationView } from "../view-models";
+import {
+  formatRelative,
+  type AccountView,
+  type ActionResult,
+  type NotificationView,
+} from "../view-models";
 
 export interface SearchSuggestion {
   id: string;
@@ -44,6 +49,29 @@ const NoticeContext = createContext<(message: string) => void>(() => {});
 /** Conferma breve di un'azione, annunciata anche ai lettori di schermo. */
 export function useNotice() {
   return useContext(NoticeContext);
+}
+
+/**
+ * Azione sulla route corrente, distinta da `intent`: esito e avviso li decide il
+ * server. L'anteprima risponde con una simulazione, le route reali eseguono.
+ */
+export function useAction() {
+  const notify = useNotice();
+  const fetcher = useFetcher<ActionResult>();
+  const handled = useRef<ActionResult | undefined>(undefined);
+  useEffect(() => {
+    const result = fetcher.data;
+    if (fetcher.state !== "idle" || !result || handled.current === result) return;
+    handled.current = result;
+    if (result.notice) notify(result.notice);
+  }, [fetcher.state, fetcher.data, notify]);
+  return {
+    run: (intent: string, fields: Record<string, string> = {}) =>
+      void fetcher.submit({ ...fields, intent }, { method: "post" }),
+    pending: fetcher.state !== "idle",
+    /** Ultimo esito, disponibile a richiesta conclusa. */
+    result: fetcher.state === "idle" ? fetcher.data : undefined,
+  };
 }
 
 export function AppShell({

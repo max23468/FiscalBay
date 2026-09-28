@@ -7,18 +7,7 @@ import { UnlockIcon } from "~/components/icons";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 
-/**
- * Semantica degli stati: il colore accompagna sempre icona e testo.
- * `neutral` indica un dato assente per natura, da non confondere con `danger`.
- */
-export type StatusTone =
-  | "success"
-  | "info"
-  | "warning"
-  | "danger"
-  | "premium"
-  | "locked"
-  | "neutral";
+import type { StatusTone } from "../view-models";
 
 const icons: Record<StatusTone, ComponentType<SVGProps<SVGSVGElement>>> = {
   success: CircleCheck,

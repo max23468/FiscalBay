@@ -1,4 +1,3 @@
-import type { StatusTone } from "~/components/status";
 import type { Language } from "./i18n";
 
 /**
@@ -6,6 +5,31 @@ import type { Language } from "./i18n";
  * sbloccare non arriva mai al browser: la vista conosce soltanto quanti
  * identificativi attendono lo sblocco.
  */
+
+/**
+ * Semantica degli stati: il colore accompagna sempre icona e testo.
+ * `neutral` indica un dato assente per natura, da non confondere con `danger`.
+ */
+export type StatusTone =
+  | "success"
+  | "info"
+  | "warning"
+  | "danger"
+  | "premium"
+  | "locked"
+  | "neutral";
+
+/** Esito di un'azione inviata al server; l'avviso, se presente, è già nella lingua dell'utente. */
+export interface ActionResult {
+  ok: boolean;
+  notice?: string;
+}
+
+export type OrdersNotice =
+  | { kind: "ebay-down"; at: string }
+  | { kind: "quota"; until: string }
+  | { kind: "store-issue"; storeId: string; storeName: string }
+  | { kind: "importing"; count: number };
 
 export type Plan = "free" | "premium";
 
