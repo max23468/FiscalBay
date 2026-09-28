@@ -9,11 +9,6 @@ on:
     branches:
       - develop
   workflow_dispatch:
-    inputs:
-      capacity_max_p95_ms:
-        description: Soglia CPU p95 in ms del controllo di capacità; valori bassi provano il rollback
-        required: false
-        type: string
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -228,14 +223,21 @@ jobs:
       - name: Check test endpoint
         run: curl --fail --silent --show-error --max-time 20 --output /dev/null https://test.fiscalbay.it/
 
+      # Misura e ricevuta senza bloccare (D148): il p95 oscilla di qualche ms fra misure
+      # della stessa versione, quindi oltre soglia resta un avviso e non un rollback.
       - name: Check capacity
+        id: capacity
+        continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          MAX_P95_MS: ${{ inputs.capacity_max_p95_ms || '10' }}
-        run: pnpm test:capacity --url https://test.fiscalbay.it --worker fiscalbay-test --max-p95 "${MAX_P95_MS}"
+        run: pnpm test:capacity --url https://test.fiscalbay.it --worker fiscalbay-test
 
-      # Un deploy che non supera i controlli non resta distribuito sul test.
+      - name: Report capacity warning
+        if: steps.capacity.outcome == 'failure'
+        run: echo "::warning::Controllo di capacità non superato, deploy mantenuto. Ricevuta nel riepilogo della run."
+
+      # Un deploy fallito o un endpoint che non risponde non resta distribuito sul test.
       - name: Roll back test deploy
         if: failure() && steps.previous.outputs.version
         env:

@@ -2,7 +2,7 @@
 /**
  * Capacità misurata al deploy test: traffico sintetico marcato, CPU delle sole
  * invocazioni marcate raccolta via `wrangler tail`, fallimento oltre il p95
- * ammesso, con errori o con eventi mancanti. Il rollback è compito della pipeline.
+ * ammesso, con errori o con eventi mancanti. In CI l'esito è un avviso, non un blocco (D148).
  * Le route interrogate non chiamano eBay, Stripe o Telegram.
  * Uso: node scripts/check-capacity.mjs --url URL --worker NOME [--max-p95 MS] [--requests GIRI_PER_ROUTE]
  */
