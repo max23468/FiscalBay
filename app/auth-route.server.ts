@@ -1,3 +1,5 @@
+import { waitUntil } from "cloudflare:workers";
+
 import { createAuth } from "./auth.server";
 import { completeStoreLink, takeStoreLinkSession } from "./integrations/ebay/store-link.server";
 import { classifyFailure, logFailure } from "./errors";
@@ -29,7 +31,69 @@ function noStore(response: Response): Response {
   });
 }
 
+// Soglie per IP e percorso sui soli invii sensibili, come le regole predefinite di Better Auth.
+const attemptLimits = [
+  { paths: /^\/(sign-in|sign-up|change-password|change-email)(\/|$)/u, window: 10, max: 3 },
+  {
+    paths: /^\/(send-verification-email|request-password-reset|forget-password)(\/|$)/u,
+    window: 60,
+    max: 3,
+  },
+];
+
+/** Un indirizzo IPv6 conta per la sua rete /64, che un singolo client controlla per intero. */
+function clientKey(ip: string): string {
+  if (!ip.includes(":")) return ip;
+  const [head = "", tail = ""] = ip.split("::");
+  const left = head ? head.split(":") : [];
+  const right = tail ? tail.split(":") : [];
+  const groups = [...left, ...Array(8 - left.length - right.length).fill("0"), ...right];
+  return `${groups.slice(0, 4).join(":")}::/64`;
+}
+
+/**
+ * Conta il tentativo su D1 con una sola istruzione, che apre o incrementa la finestra, e
+ * restituisce i secondi di attesa oltre il limite. Attivo sui domini HTTPS, dove Cloudflare
+ * fornisce l'IP del client; il limite interno di Better Auth resta spento (vedi auth.server.ts).
+ */
+async function attemptWait(request: Request, environment: Env): Promise<number | null> {
+  if (request.method !== "POST" || !environment.APP_ORIGIN.startsWith("https:")) return null;
+  const path = new URL(request.url).pathname.replace(/^\/api\/auth/u, "");
+  const rule = attemptLimits.find(({ paths }) => paths.test(path));
+  const ip = request.headers.get("cf-connecting-ip");
+  if (!rule || !ip) return null;
+
+  const now = Date.now();
+  const windowMs = rule.window * 1000;
+  const row = await environment.DB.prepare(
+    `INSERT INTO "rateLimit" ("id", "key", "count", "lastRequest") VALUES (?1, ?2, 1, ?3)
+     ON CONFLICT ("key") DO UPDATE SET
+       "count" = CASE WHEN ?3 - "lastRequest" >= ?4 THEN 1 ELSE "count" + 1 END,
+       "lastRequest" = CASE WHEN ?3 - "lastRequest" >= ?4 THEN ?3 ELSE "lastRequest" END
+     RETURNING "count", "lastRequest"`,
+  )
+    .bind(crypto.randomUUID(), `${clientKey(ip)}|${path}`, now, windowMs)
+    .first<{ count: number; lastRequest: number }>();
+  // Pulizia occasionale delle finestre chiuse da oltre un'ora, fuori dal percorso della risposta.
+  if (Math.random() < 0.02) {
+    waitUntil(
+      environment.DB.prepare('DELETE FROM "rateLimit" WHERE "lastRequest" < ?')
+        .bind(now - 3_600_000)
+        .run(),
+    );
+  }
+  if (!row || row.count <= rule.max) return null;
+  return Math.max(1, Math.ceil((row.lastRequest + windowMs - now) / 1000));
+}
+
 async function authResponse(request: Request, environment: Env): Promise<Response> {
+  const wait = await attemptWait(request, environment);
+  if (wait !== null) {
+    return Response.json(
+      { code: "TOO_MANY_REQUESTS", message: "Too many requests. Try again later." },
+      { status: 429, headers: { "retry-after": String(wait), "cache-control": "no-store" } },
+    );
+  }
   const response = await createAuth(environment).handler(request);
   if (response.status >= 500) logFailure({ request, code: "INTERNAL_ERROR", operation: "route" });
   return response;
@@ -79,8 +143,8 @@ export function handleAuthRequest(
 const forwardedHeaders = ["cookie", "origin", "user-agent", "accept-language", "cf-connecting-ip"];
 
 /**
- * Invia al router di Better Auth un'azione dei moduli dell'app. Le chiamate dirette alla API
- * server saltano il limite dei tentativi, che il router applica per IP e percorso.
+ * Invia al router di Better Auth un'azione dei moduli dell'app, con lo stesso limite dei
+ * tentativi delle chiamate dirette alle route Auth.
  */
 export function forwardToAuth(
   environment: Env,
@@ -93,11 +157,12 @@ export function forwardToAuth(
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
-  return createAuth(environment).handler(
+  return authResponse(
     new Request(new URL(`/api/auth${path}`, environment.APP_ORIGIN), {
       method: "POST",
       headers,
       body: JSON.stringify(body),
     }),
+    environment,
   );
 }

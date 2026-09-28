@@ -47,46 +47,6 @@ async function sendAuthEmail(
   });
 }
 
-/**
- * Contatori del limite dei tentativi su D1 con una sola istruzione atomica: apre la finestra
- * o incrementa il conteggio. Lo storage "database" di Better Auth usa più passaggi e, su D1
- * remoto, ripeteva all'infinito l'apertura di una finestra scaduta.
- */
-function rateLimitStorage(
-  db: D1Database,
-): NonNullable<BetterAuthOptions["rateLimit"]>["customStorage"] {
-  return {
-    async consume(key, { window, max }) {
-      const now = Date.now();
-      const windowMs = window * 1000;
-      const row = await db
-        .prepare(
-          `INSERT INTO "rateLimit" ("id", "key", "count", "lastRequest") VALUES (?1, ?2, 1, ?3)
-           ON CONFLICT ("key") DO UPDATE SET
-             "count" = CASE WHEN ?3 - "lastRequest" >= ?4 THEN 1 ELSE "count" + 1 END,
-             "lastRequest" = CASE WHEN ?3 - "lastRequest" >= ?4 THEN ?3 ELSE "lastRequest" END
-           RETURNING "count", "lastRequest"`,
-        )
-        .bind(crypto.randomUUID(), key, now, windowMs)
-        .first<{ count: number; lastRequest: number }>();
-      // Pulizia occasionale delle finestre chiuse da oltre un'ora, fuori dal percorso della risposta.
-      if (Math.random() < 0.02) {
-        waitUntil(
-          db
-            .prepare('DELETE FROM "rateLimit" WHERE "lastRequest" < ?')
-            .bind(now - 3_600_000)
-            .run(),
-        );
-      }
-      if (!row || row.count <= max) return { allowed: true, retryAfter: null };
-      return {
-        allowed: false,
-        retryAfter: Math.max(1, Math.ceil((row.lastRequest + windowMs - now) / 1000)),
-      };
-    },
-  };
-}
-
 export function createAuthOptions(environment: Env): BetterAuthOptions {
   const appOrigin = new URL(environment.APP_ORIGIN);
 
@@ -107,14 +67,9 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
         ipAddressHeaders: ["cf-connecting-ip"],
       },
     },
-    // Limite dei tentativi su D1, condiviso fra gli isolate. Attivo sui domini distribuiti;
-    // sviluppo locale e test, in HTTP, non hanno un IP client affidabile da cui contare.
-    rateLimit: {
-      enabled: appOrigin.protocol === "https:",
-      // La lettura della sessione non ha effetti: contarla scriverebbe su D1 a ogni pagina.
-      customRules: { "/get-session": false },
-      customStorage: rateLimitStorage(environment.DB),
-    },
+    // Il limite dei tentativi si applica prima del router, in auth-route.server.ts: quello interno,
+    // insieme al plugin Infrastructure, lasciava appese le richieste di accesso su Workers.
+    rateLimit: { enabled: false },
     onAPIError: {
       errorURL: "/auth/error",
     },
