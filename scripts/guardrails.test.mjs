@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, it } from "node:test";
+import { randomBytes } from "node:crypto";
+import { budgetKiB } from "./check-bundle-size.mjs";
+import { evaluate as evaluateCapacity, jsonObjects, percentile95 } from "./check-capacity.mjs";
 import { classifyFile, plan } from "./classify-changes.mjs";
 import { evaluate } from "./mutation.mjs";
 import {
@@ -210,5 +217,53 @@ describe("esito dei mutation test", () => {
 
   it("fallisce se non viene generato alcun mutante", () => {
     assert.deepEqual(evaluate({ files: {} }), ["nessun mutante generato"]);
+  });
+});
+
+describe("budget del JavaScript client", () => {
+  const run = (bytes) => {
+    const directory = mkdtempSync(path.join(tmpdir(), "bundle-"));
+    // Byte casuali: gzip non li comprime, quindi la dimensione misurata è nota.
+    writeFileSync(path.join(directory, "entry.js"), randomBytes(bytes));
+    return spawnSync(process.execPath, ["scripts/check-bundle-size.mjs", directory]).status;
+  };
+
+  it("accetta un bundle entro budget", () => assert.equal(run(100 * 1024), 0));
+  it("fa fallire la build oltre budget", () => assert.equal(run((budgetKiB + 10) * 1024), 1));
+});
+
+describe("capacità al deploy", () => {
+  const event = (cpuTime, overrides = {}) => ({
+    cpuTime,
+    outcome: "ok",
+    exceptions: [],
+    event: { response: { status: 200 } },
+    ...overrides,
+  });
+
+  it("separa gli oggetti JSON anche spezzati fra più blocchi", () => {
+    const parse = jsonObjects();
+    assert.deepEqual(parse('{"a":"}{"}\n{"b":'), [{ a: "}{" }]);
+    assert.deepEqual(parse("{}}\n"), [{ b: {} }]);
+  });
+
+  it("calcola il p95 con rango più vicino", () => {
+    assert.equal(percentile95([...Array.from({ length: 19 }, () => 1), 50]), 1);
+    assert.equal(percentile95([...Array.from({ length: 18 }, () => 1), 50, 60]), 50);
+  });
+
+  it("supera la soglia con eventi completi e senza errori", () => {
+    assert.deepEqual(evaluateCapacity([event(2), event(4)], { sent: 2, maxP95: 5 }).failures, []);
+  });
+
+  it("fallisce oltre soglia, con errori o con eventi mancanti", () => {
+    const failures = (events, sent = events.length) =>
+      evaluateCapacity(events, { sent, maxP95: 5 }).failures.length;
+    assert.equal(failures([event(6)]), 1);
+    assert.equal(failures([event(1, { outcome: "exception" })]), 1);
+    assert.equal(failures([event(1, { exceptions: [{ name: "Error" }] })]), 1);
+    assert.equal(failures([event(1, { event: { response: { status: 503 } } })]), 1);
+    assert.equal(failures([event(1)], 2), 1);
+    assert.equal(failures([]), 1);
   });
 });

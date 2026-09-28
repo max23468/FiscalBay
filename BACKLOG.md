@@ -23,7 +23,7 @@ Questa sezione è un registro operativo iniziale, **non una prova di avvio già 
 | Campo                                                       | Stato corrente e prove storiche                                                                             |
 | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | Milestone / task in esecuzione                              | M1 aperta dopo il via di fine M0 del 2026-09-23; M1-03, M1-04, M1-05, M1-06, M1-07 e M1-08 chiuse; via owner al checkpoint M1 del 2026-09-28; M1-09 chiusa il 2026-09-28 |
-| Prossimo task eleggibile                                    | M1-10 avviabile, non avviato: è l'ultimo task di M1. M2-09 attende il riscontro eBay `260920-000007` |
+| Prossimo task eleggibile                                    | M1-10 IN PROGRESS sul branch locale `feat/deploy-budgets`: è l'ultimo task di M1. M2-09 attende il riscontro eBay `260920-000007` |
 | Repository / branch / commit osservati nell’implementazione | `max23468/FiscalBay`; il 2026-09-27 `main` è `4df1961`, design system integrato su `develop` con `caa46dd` (PR #184) e riletto su test. 1.x congelata in `legacy/1.x` (`508ded8`) |
 | Blocchi noti iniziali                                       | La lettura Production sull'account amministratore ha restituito zero ordini; sul secondo account controllato Fulfillment non esponeva l'identificativo fiscale, trovato invece nel primo ordine letto tramite Trading (la prova non usava l'header marketplace: riqualifica in M3-10); diritto email Identity mancante, con Sign in with eBay rinviato a M2-09; notifiche account-deletion ancora servite dal callback 1.x condiviso. Il deploy dell'handler Stripe, il segreto ristretto remoto, la registrazione dell'endpoint e la riconciliazione dei diritti appartengono a M5, non bloccano la qualifica M0 |
 | Materiale privato                                           | Inventario fuori checkout: riferimento locale `FiscalBay/m0-inventory` nella custodia Codex privata       |
@@ -585,7 +585,7 @@ Qualificare e fissare qui il tooling dei mutation test compatibile con la toolch
 
 ### M1-10 · Budget di prestazioni e capacità al deploy
 
-**Stato:** TODO · **Prerequisiti:** M1-02 · **Contratto:** [§22](docs/MASTER_PLAN.md#s22) · [§31](docs/MASTER_PLAN.md#s31) · [§37.1](docs/MASTER_PLAN.md#s37)
+**Stato:** IN PROGRESS · **Prerequisiti:** M1-02 · **Contratto:** [§22](docs/MASTER_PLAN.md#s22) · [§31](docs/MASTER_PLAN.md#s31) · [§37.1](docs/MASTER_PLAN.md#s37)
 
 **Per chiudere:** M1-06; il budget del bundle si misura sul design system effettivo.
 
@@ -594,6 +594,8 @@ Aggiungere alla build il controllo del JavaScript client entro il budget gzip di
 **Criterio di completamento:** Un bundle oltre budget fa fallire la build; un deploy test con p95 oltre soglia o con errori fallisce e ripristina la versione precedente, provato almeno una volta con soglia forzata. Ricevuta con p95, numero di eventi e versione.
 
 Le soglie di quota e gli stop point del runbook restano in M7-03.
+
+**Avanzamento del 2026-09-28 (branch locale `feat/deploy-budgets`, non pubblicato):** `scripts/check-bundle-size.mjs` è agganciato a `pnpm build` (budget 350 KiB, misurati 298,7 KiB gzip su 32 file). `scripts/check-capacity.mjs` invia traffico marcato con `x-capacity-probe` a `/`, `/en`, `/auth/error` e `/api/auth/get-session`, legge via `wrangler tail` le sole invocazioni marcate della versione al 100%, dopo un riscaldamento, e fallisce per p95 oltre soglia, errori o eventi mancanti. Il job `Deploy test` legge la versione precedente, esegue il controllo e fa `wrangler rollback` su qualunque fallimento; l'input manuale `capacity_max_p95_ms` serve alla prova a soglia forzata. 24 test degli script e `pnpm verify` verdi; actionlint pulito. Better Auth ora è istanziato una volta per ambiente e isolate. Misure: versione test `bc99f100` p95 21 ms su 80 eventi; versione ottimizzata, caricata allo 0% e interrogata con override, p95 13 ms su 97 eventi, mediana 5 ms, zero errori; home 10-15 ms a regime, avvii a freddo 54-63 ms per il bundle server da 4,4 MB caricato alla prima richiesta. Deployment test ripristinato sulla sola `bc99f100`. **Decisione owner del 2026-09-28:** soglia p95 portata a 10 ms (limite Free per invocazione) al posto di 5 ms; da registrare in §31 e nel registro decisioni e da applicare in `maxP95Ms` e nel default del workflow. **Prossimo passo:** ridurre la CPU della home e l'avvio a freddo sotto 10 ms p95 (profilo locale con l'inspector di `wrangler dev`; in locale `/` e `get-session` rispondono 500 senza `BETTER_AUTH_API_KEY`, causa da chiarire), poi PR, prova a soglia forzata con rollback e ricevuta.
 
 <a id="m2"></a>
 

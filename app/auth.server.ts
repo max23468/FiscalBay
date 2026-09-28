@@ -162,6 +162,11 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
   };
 }
 
+// Costruire Better Auth costa più CPU del resto della richiesta: una istanza per ambiente e isolate.
+const instances = new WeakMap<Env, Auth>();
+
 export function createAuth(environment: Env): Auth {
-  return betterAuth(createAuthOptions(environment));
+  let auth = instances.get(environment);
+  if (!auth) instances.set(environment, (auth = betterAuth(createAuthOptions(environment))));
+  return auth;
 }

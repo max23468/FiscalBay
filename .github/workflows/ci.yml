@@ -9,6 +9,11 @@ on:
     branches:
       - develop
   workflow_dispatch:
+    inputs:
+      capacity_max_p95_ms:
+        description: Soglia CPU p95 in ms del controllo di capacità; valori bassi provano il rollback
+        required: false
+        type: string
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -204,6 +209,16 @@ jobs:
           current_sha="$(git ls-remote https://github.com/${{ github.repository }}.git refs/heads/develop | cut -f1)"
           test "${current_sha}" = "${VERIFIED_SHA}"
 
+      - name: Read deployed version
+        id: previous
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          version="$(pnpm exec wrangler deployments status --name fiscalbay-test --json | jq -r '.versions[] | select(.percentage == 100) | .version_id')"
+          test -n "${version}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
       - name: Deploy verified artifact
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -212,3 +227,21 @@ jobs:
 
       - name: Check test endpoint
         run: curl --fail --silent --show-error --max-time 20 --output /dev/null https://test.fiscalbay.it/
+
+      - name: Check capacity
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          MAX_P95_MS: ${{ inputs.capacity_max_p95_ms || '5' }}
+        run: pnpm test:capacity --url https://test.fiscalbay.it --worker fiscalbay-test --max-p95 "${MAX_P95_MS}"
+
+      # Un deploy che non supera i controlli non resta distribuito sul test.
+      - name: Roll back test deploy
+        if: failure() && steps.previous.outputs.version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          PREVIOUS_VERSION: ${{ steps.previous.outputs.version }}
+        run: |
+          pnpm exec wrangler rollback "${PREVIOUS_VERSION}" --name fiscalbay-test --message "Controlli del deploy test non superati" --yes
+          echo "Ripristinata la versione ${PREVIOUS_VERSION}." >> "${GITHUB_STEP_SUMMARY}"
