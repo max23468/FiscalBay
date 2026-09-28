@@ -25,72 +25,62 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - name: Detect docs-only diff
+      # `main` riceve soltanto la promozione di `develop` dallo stesso repository.
+      - name: Check promotion source
+        if: github.base_ref == 'main'
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_REF: ${{ github.head_ref }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          if [ "${HEAD_REPO}" != "${REPOSITORY}" ] || [ "${HEAD_REF}" != "develop" ]; then
+            echo "::error::Le PR verso main partono soltanto da develop di ${REPOSITORY}, non da ${HEAD_REPO}:${HEAD_REF}."
+            exit 1
+          fi
+
+      - name: Classify changes
         id: detect
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          docs_only=false
-          if [ -n "${BASE_SHA}" ] && [ -n "${HEAD_SHA}" ]; then
-            changed="$(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")"
-            echo "File modificati:"
-            echo "${changed}"
-            if [ -n "${changed}" ]; then
-              docs_only=true
-              while IFS= read -r file; do
-                case "${file}" in
-                  *.md | docs/* | .github/CODEOWNERS | .github/ISSUE_TEMPLATE/*) ;;
-                  *)
-                    docs_only=false
-                    break
-                    ;;
-                esac
-              done <<< "${changed}"
-            fi
-          fi
-          echo "docs_only=${docs_only}" >> "${GITHUB_OUTPUT}"
-          if [ "${docs_only}" = "true" ]; then
-            echo "Diff docs-only: il gate applicativo viene saltato."
-          fi
+        run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --github-output
 
       - name: Set up pnpm
-        if: steps.detect.outputs.docs_only != 'true'
-        uses: pnpm/action-setup@v6
+        if: steps.detect.outputs.gate == 'full'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 12.6.0
 
       - name: Set up Node
-        if: steps.detect.outputs.docs_only != 'true'
-        uses: actions/setup-node@v7
+        if: steps.detect.outputs.gate == 'full'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 26.10.0
           cache: pnpm
 
       - name: Install dependencies
-        if: steps.detect.outputs.docs_only != 'true'
+        if: steps.detect.outputs.gate == 'full'
         run: pnpm install --frozen-lockfile
 
       - name: Run local CI gate
-        if: steps.detect.outputs.docs_only != 'true'
+        if: steps.detect.outputs.gate == 'full'
         run: pnpm verify
 
       - name: Install browser for interaction tests
-        if: steps.detect.outputs.docs_only != 'true'
+        if: steps.detect.outputs.e2e == 'true'
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Check browser interactions
-        if: steps.detect.outputs.docs_only != 'true'
+        if: steps.detect.outputs.e2e == 'true'
         run: pnpm test:e2e --update-snapshots=missing
 
       - name: Upload visual references
-        if: always() && steps.detect.outputs.docs_only != 'true'
-        uses: actions/upload-artifact@v7
+        if: always() && steps.detect.outputs.e2e == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: visual-references
           path: e2e/*-snapshots/
@@ -98,7 +88,7 @@ jobs:
           retention-days: 7
 
       - name: Check docs-only changes
-        if: steps.detect.outputs.docs_only == 'true'
+        if: steps.detect.outputs.gate == 'docs'
         run: |
           node scripts/verify-copy.mjs
           node scripts/verify-docs.mjs
@@ -116,17 +106,17 @@ jobs:
 
     steps:
       - name: Checkout verified commit
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 12.6.0
 
       - name: Set up Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 26.10.0
           cache: pnpm

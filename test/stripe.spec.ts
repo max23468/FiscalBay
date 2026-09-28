@@ -52,7 +52,7 @@ describe("Stripe Managed Payments", () => {
       offer: "monthly",
       priceId: "price_test_monthly",
       workspaceId: "workspace-test",
-      email: "merchant@example.com",
+      email: "merchant@example.invalid",
       appOrigin: "https://test.fiscalbay.it",
     });
 
@@ -69,7 +69,7 @@ describe("Stripe Managed Payments", () => {
         offer: "lifetime",
         priceId: "price_test_lifetime",
         workspaceId: "workspace-test",
-        email: "merchant@example.com",
+        email: "merchant@example.invalid",
         appOrigin: "https://test.fiscalbay.it",
       }).mode,
     ).toBe("payment");

@@ -17,3 +17,7 @@ worker-configuration.d.ts
 
 !.dev.vars.example
 !.env.example
+
+# Mutation test
+/.stryker-tmp/
+/reports/

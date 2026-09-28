@@ -1,0 +1,11 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "vitest",
+  "plugins_comment": "pnpm isola i pacchetti: il runner non si trova con la ricerca predefinita di Stryker.",
+  "plugins": ["./node_modules/@stryker-mutator/vitest-runner/dist/src/index.js"],
+  "vitest": { "configFile": "vitest.config.ts" },
+  "tsconfigFile_comment": "TypeScript 7 non espone l'API usata per riscrivere il tsconfig nella sandbox; i percorsi del progetto restano interni.",
+  "tsconfigFile": "tsconfig.none.json",
+  "reporters": ["clear-text", "progress", "json"],
+  "concurrency": 2
+}
