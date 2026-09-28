@@ -682,6 +682,22 @@ Condividere negli adapter un punto minimo per timeout dell'intera lettura, limit
 
 Sicurezza da M0/M1, non rinviata a M7. Threat model minimo: accesso fra tenant, CF non sbloccati, takeover/linking, furto token eBay, replay OAuth/webhook, injection da titoli/CSV, privilege escalation admin, ripristino di revoche obsolete, supply chain e prompt injection nei tool.
 
+Il threat model minimo è la tabella seguente (D147): ogni task che introduce un percorso esposto aggiunge qui la prova negativa pertinente, e M7-01 verifica la tabella intera sul candidato, non un documento separato.
+
+| Minaccia | Controllo richiesto | Prova già presente | Da completare |
+|---|---|---|---|
+| Accesso fra tenant | Spazio e diritto all'ordine verificati nel servizio su ogni percorso ([§29.1](#s29)) | Test D1: utente di altro spazio, ordine altrui, grant altrui rifiutati | Ricerca, conteggi ed export (M4-02, M6-03); tutti i percorsi esposti in M7-01 |
+| CF non sbloccati | Valore inviato solo dopo un grant valido; mai in log, URL o export non autorizzati | Grant atomico e quota concorrente; log con soli metadati ammessi; anteprima senza valore prima dello sblocco | Sblocco reale (M3-06), ricerca fiscale (M4-02), export (M6-01..03) |
+| Takeover e linking | Collegamento automatico solo con email verificata e provider affidabile; ultimo accesso non rimovibile | Callback eBay ambigui o senza stato rifiutati senza creare account | M2-03, M2-09 |
+| Furto token eBay | Scope minimi, token cifrati, nessuna route che li esponga, rotazione | Token OAuth cifrati; `get-access-token` e `refresh-token` non esposti; collegamento negozio senza scope email | Rinnovo e revoca (M2-05, M2-06) |
+| Replay OAuth e webhook | State/PKCE legati all'utente; firma sul corpo grezzo e claim idempotente | State di un altro utente rifiutato; firma Stripe verificata ed evento registrato una volta | Ingresso Worker (M3-11), webhook e riconciliazione (M5-05) |
+| Injection da titoli e CSV | Escaping in pagina, formule neutralizzate negli export, CSP | CSV con formule neutralizzate; rendering React con escaping | CSP assente: da introdurre e provare entro M7-01 |
+| Privilege escalation admin | Ruolo admin esplicito, MFA e nuova verifica per azioni sensibili | Nessuna superficie admin esposta | M2-04, M6-04 |
+| Ripristino di revoche obsolete | Marker di erasure e revoca riapplicati dopo un restore ([§32.1](#s32)) | Nessuna | M3-08, M7-02, drill M9-02 |
+| Supply chain | Lockfile e versioni fissate, età minima dei pacchetti, Action a SHA, analisi statica | `minimumReleaseAge` e `trustPolicy`, Action a SHA, Dependabot, dependency review e CodeQL | Licenze e codice copiato (M7-01) |
+| Prompt injection nei tool | Dati esterni trattati come contenuto, permessi MCP minimi, separazione test/Production | Regola in AGENTS e in questo capitolo | Verifica in M7-01 |
+| Perdita o esposizione di segreti | Custodia fuori repository, segreti elencati in `secrets.required` di ogni configurazione di deploy, nessun segreto nel client | Deploy test e Production che rifiutano un segreto mancante; pagina provvisoria che li conserva | Scadenze (M7-04), readback alla pubblicazione (M9-04) |
+
 Misure: scope minimi effettivamente necessari; state/nonce/PKCE dove supportati e corretti per il provider; redirect allowlist; cookie/sessioni sicure e CSRF/origin check sulle mutation; rate limit di login e operazioni costose; token cifrati e rotazione; firme webhook su corpo originale e replay protection; validazione input/output; CSP e escaping; download autorizzati; nessun segreto build-time esportato al browser.
 
 Dati fiscali non presenti in analytics, log automatici, URL pubblici, issue o Git. Error tracing elimina payload/request body sensibili. Fetch immagini/URL esterni solo su domini/formati qualificati, evitando SSRF e contenuti attivi. XML Trading con parser sicuro senza entità esterne. Non includere l'intera risposta provider in un messaggio di errore.
