@@ -1,10 +1,9 @@
+// Valutata all'avvio dell'isolate, fuori dalla CPU della richiesta; handler creato una volta.
+import * as build from "virtual:react-router/server-build";
 import { createRequestHandler } from "react-router";
 import { correlateResponse, correlationHeader, logFailure } from "../app/errors";
 
-const requestHandler = createRequestHandler(
-  () => import("virtual:react-router/server-build"),
-  import.meta.env.MODE,
-);
+const requestHandler = createRequestHandler(build, import.meta.env.MODE);
 
 export default {
   async fetch(request) {

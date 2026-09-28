@@ -59,6 +59,9 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
     advanced: {
       database: {
         joins: true,
+        // Lo schema è provato in CI contro le migration, applicate prima del deploy. Il
+        // controllo a runtime, con l'istanza riusata, bloccherebbe l'isolate anche dopo la migration.
+        validateSchema: false,
       },
       ipAddress: {
         ipAddressHeaders: ["cf-connecting-ip"],

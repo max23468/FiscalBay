@@ -29,6 +29,7 @@ describe("Better Auth su Workers e D1", () => {
     expect(options.account?.accountLinking?.allowDifferentEmails).toBe(true);
     expect(options.advanced?.ipAddress?.ipAddressHeaders).toEqual(["cf-connecting-ip"]);
     expect(options.advanced?.database?.joins).toBe(true);
+    expect(options.advanced?.database?.validateSchema).toBe(false);
     expect(options.onAPIError?.errorURL).toBe("/auth/error");
 
     for (const path of ["get-access-token", "refresh-token"]) {

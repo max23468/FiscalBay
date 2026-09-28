@@ -27,7 +27,10 @@ export default defineConfig({
       },
     })),
   ],
-  resolve: { tsconfigPaths: true },
+  resolve: {
+    tsconfigPaths: true,
+    alias: { "virtual:react-router/server-build": "./test/server-build.ts" },
+  },
   // Il test dei token legge `app.css` come testo: Vitest altrimenti lo svuota.
   test: {
     include: ["test/**/*.spec.ts"],

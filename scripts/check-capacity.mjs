@@ -4,16 +4,17 @@
  * invocazioni marcate raccolta via `wrangler tail`, fallimento oltre il p95
  * ammesso, con errori o con eventi mancanti. Il rollback è compito della pipeline.
  * Le route interrogate non chiamano eBay, Stripe o Telegram.
- * Uso: node scripts/check-capacity.mjs --url URL --worker NOME [--max-p95 MS] [--requests N]
+ * Uso: node scripts/check-capacity.mjs --url URL --worker NOME [--max-p95 MS] [--requests GIRI_PER_ROUTE]
  */
 import { execFileSync, spawn } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 
-// Metà del limite CPU per richiesta di Workers Free, l'assetto scelto.
-export const maxP95Ms = 5;
+// Limite CPU per richiesta di Workers Free, l'assetto scelto (decisione owner D146).
+export const maxP95Ms = 10;
 export const probeHeader = "x-capacity-probe";
+const warmupRounds = 10;
 // Pagine pubbliche, sessione assente e Auth senza cookie: nessun provider esterno.
 export const probePaths = ["/", "/en", "/auth/error", "/api/auth/get-session"];
 
@@ -84,7 +85,7 @@ async function main() {
       url: { type: "string" },
       worker: { type: "string" },
       "max-p95": { type: "string", default: String(maxP95Ms) },
-      requests: { type: "string", default: "20" },
+      requests: { type: "string", default: "50" },
     },
   });
   if (!values.url || !values.worker) throw new Error("Servono --url e --worker.");
@@ -138,9 +139,10 @@ async function main() {
 
   try {
     // Il tail non segnala la connessione: le richieste di riscaldamento la provano
-    // e scaldano gli isolate, senza entrare nella misura.
-    const deadline = Date.now() + 60_000;
-    while (events.warmup.length < probePaths.length * 3 && Date.now() < deadline) {
+    // e scaldano gli isolate appena distribuiti, senza entrare nella misura. Con
+    // meno giri gli avvii a freddo spostano il p95 da una misura all'altra.
+    const deadline = Date.now() + 90_000;
+    while (events.warmup.length < probePaths.length * warmupRounds && Date.now() < deadline) {
       for (const path of probePaths) await request(path, `${token}:warmup`);
       await sleep(500);
     }
