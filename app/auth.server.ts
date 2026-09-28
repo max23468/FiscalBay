@@ -1,5 +1,4 @@
 import { passkey } from "@better-auth/passkey";
-import { dash } from "@better-auth/infra";
 import { betterAuth, type Auth, type BetterAuthOptions } from "better-auth";
 import { genericOAuth } from "better-auth/plugins";
 import { waitUntil } from "cloudflare:workers";
@@ -67,8 +66,7 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
         ipAddressHeaders: ["cf-connecting-ip"],
       },
     },
-    // Il limite dei tentativi si applica prima del router, in auth-route.server.ts: quello interno,
-    // insieme al plugin Infrastructure, lasciava appese le richieste di accesso su Workers.
+    // Il limite dei tentativi si applica prima del router, in auth-route.server.ts, anche ai moduli.
     rateLimit: { enabled: false },
     onAPIError: {
       errorURL: "/auth/error",
@@ -164,9 +162,6 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
           },
         ],
       }),
-      ...(environment.BETTER_AUTH_API_KEY
-        ? [dash({ apiKey: environment.BETTER_AUTH_API_KEY })]
-        : []),
     ],
   };
 }
