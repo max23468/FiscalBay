@@ -33,7 +33,7 @@
   "send_email": [
     {
       "name": "AUTH_EMAIL",
-      "allowed_sender_addresses": ["accesso@auth.fiscalbay.it"],
+      "allowed_sender_addresses": ["noreply@fiscalbay.it"],
     },
   ],
   "observability": {
@@ -79,7 +79,7 @@
       "send_email": [
         {
           "name": "AUTH_EMAIL",
-          "allowed_sender_addresses": ["accesso@auth.fiscalbay.it"],
+          "allowed_sender_addresses": ["noreply@fiscalbay.it"],
         },
       ],
       "observability": {
