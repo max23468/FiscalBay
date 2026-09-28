@@ -781,10 +781,27 @@ describe("registrazione e verifica del contatto", () => {
     for (let index = 0; index < 4; index += 1) statuses.push(await attempt("203.0.113.7"));
     expect(statuses).toEqual([401, 401, 401, 429]);
     expect(await attempt("203.0.113.8")).toBe(401);
+    // La lettura della sessione non consuma tentativi né scrive contatori.
+    for (let index = 0; index < 3; index += 1) {
+      const session = await createAuth(deployed).handler(
+        new Request("https://test.fiscalbay.it/api/auth/get-session", {
+          headers: { "cf-connecting-ip": "203.0.113.7" },
+        }),
+      );
+      expect(session.status).toBe(200);
+    }
     const counters = await env.DB.prepare('SELECT COUNT(*) AS total FROM "rateLimit"').first<{
       total: number;
     }>();
     expect(counters!.total).toBe(2);
+
+    // Una finestra scaduta riparte da uno invece di restare bloccata.
+    await env.DB.prepare('UPDATE "rateLimit" SET "lastRequest" = "lastRequest" - 60000').run();
+    expect(await attempt("203.0.113.7")).toBe(401);
+    const reset = await env.DB.prepare('SELECT "count" FROM "rateLimit" WHERE "key" LIKE ?')
+      .bind("203.0.113.7%")
+      .first<{ count: number }>();
+    expect(reset!.count).toBe(1);
   });
 
   it("avvia l'accesso Google dal modulo con il callback dell'ambiente", async () => {
