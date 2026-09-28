@@ -8,12 +8,12 @@ import {
   useLocation,
   useRouteLoaderData,
 } from "react-router";
-import { I18nextProvider } from "react-i18next";
 
 import type { Route } from "./+types/root";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { correlationId } from "./errors";
-import { i18n, languageFromPath, translate } from "./i18n";
+import { appCopy } from "./app-copy";
+import { languageFromPath } from "./i18n";
 import "./app.css";
 
 export const links: Route.LinksFunction = () => [
@@ -42,9 +42,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        <I18nextProvider i18n={i18n}>
-          <TooltipProvider>{children}</TooltipProvider>
-        </I18nextProvider>
+        <TooltipProvider>{children}</TooltipProvider>
         <ScrollRestoration />
         <Scripts />
       </body>
@@ -62,15 +60,14 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     useRouteLoaderData<typeof loader>("root")?.language ?? languageFromPath(location.pathname);
   const reference = useRouteLoaderData<typeof loader>("root")?.correlationId;
   const notFound = isRouteErrorResponse(error) && error.status === 404;
+  const t = appCopy[language].errors;
 
   return (
     <main className="mx-auto grid w-[min(36rem,calc(100%-2rem))] gap-3 py-16">
-      <h1 className="text-3xl font-bold">{notFound ? "404" : translate(language, "errorTitle")}</h1>
-      <p>{translate(language, notFound ? "notFound" : "unexpected")}</p>
+      <h1 className="text-3xl font-bold">{notFound ? "404" : t.title}</h1>
+      <p>{notFound ? t.notFound : t.unexpected}</p>
       {!notFound && reference ? (
-        <p className="text-sm text-muted-foreground">
-          {translate(language, "errorReference", { id: reference })}
-        </p>
+        <p className="text-sm text-muted-foreground">{t.reference(reference)}</p>
       ) : null}
     </main>
   );

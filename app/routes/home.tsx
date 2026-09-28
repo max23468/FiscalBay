@@ -10,63 +10,51 @@ import { Field, FieldGroup, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import { createAuth } from "../auth.server";
 import { listVisibleOrders } from "../domain/orders.server";
-import { formatAmount, formatInstant, languageFromPath, localizedPath, translate } from "../i18n";
+import { appCopy } from "../app-copy";
+import { formatAmount, languageFromPath, localizedPath } from "../i18n";
+import { formatDate } from "../view-models";
 import type { Route } from "./+types/home";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const language = languageFromPath(location.pathname);
   return [
-    { title: `FiscalBay | ${translate(language, "orders")}` },
-    { name: "description", content: translate(language, "ordersDescription") },
+    { title: `FiscalBay | ${appCopy[language].access.title}` },
+    { name: "description", content: appCopy[language].access.description },
   ];
 }
 
-const storeNotices: Record<string, string> = {
-  collegato: "storeConnected",
-  negato: "storeDenied",
-  "altro-spazio": "storeOtherWorkspace",
-  accesso: "storeAccess",
-  errore: "storeError",
-};
-
 // Tipi restituiti da eBay; un tipo sconosciuto resta com'è, mai chiamato Codice Fiscale.
-const identifierLabels: Record<string, string> = {
-  CODICE_FISCALE: "identifierTaxCode",
-  VAT_ID: "identifierVat",
-};
-
-const signInNotices: Record<string, string> = {
-  errore: "signInError",
-  registrato: "registered",
+const identifierLabels: Record<string, "CF" | "PIVA"> = {
+  CODICE_FISCALE: "CF",
+  VAT_ID: "PIVA",
 };
 
 export async function loader({ request }: Route.LoaderArgs) {
   const language = languageFromPath(new URL(request.url).pathname);
   const session = await createAuth(env).api.getSession({ headers: request.headers });
   const search = new URL(request.url).searchParams;
+  const { access } = appCopy[language];
   if (!session) {
     return {
       authenticated: false,
       language,
-      signInNotice: signInNotices[search.get("accesso") ?? ""]
-        ? translate(language, signInNotices[search.get("accesso") ?? ""]!)
-        : null,
+      signInNotice: access.signInNotices[search.get("accesso") ?? ""] ?? null,
       orders: [],
     };
   }
-  const notice = search.get("negozio");
   return {
     authenticated: true,
     language,
     canLinkStore: session.user.emailVerified,
-    storeNotice: notice && storeNotices[notice] ? translate(language, storeNotices[notice]) : null,
+    storeNotice: access.storeNotices[search.get("negozio") ?? ""] ?? null,
     orders: await listVisibleOrders(env.DB, session.user.id),
   };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
   const { language } = loaderData;
-  const t = (key: string) => translate(language, key);
+  const t = appCopy[language].access;
+  const { orders } = appCopy[language];
   return (
     <main className="mx-auto grid w-[min(72rem,calc(100%-2rem))] gap-8 py-12">
       <header className="grid max-w-2xl gap-3">
@@ -84,9 +72,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           height="45"
           className="hidden h-8 w-auto dark:block"
         />
-        <h1 className="text-4xl font-bold sm:text-5xl">{t("orders")}</h1>
-        <p className="text-muted-foreground">{t("ordersIntro")}</p>
-        <nav aria-label={t("language")} className="flex gap-3 text-sm">
+        <h1 className="text-4xl font-bold sm:text-5xl">{t.title}</h1>
+        <p className="text-muted-foreground">{t.intro}</p>
+        <nav aria-label={t.language} className="flex gap-3 text-sm">
           <a
             href="/"
             lang="it"
@@ -111,12 +99,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <div className="flex flex-wrap gap-3">
           {loaderData.canLinkStore ? (
             <form method="post" action={localizedPath(language, "/negozi/collega")}>
-              <Button type="submit">{t("linkStore")}</Button>
+              <Button type="submit">{t.linkStore}</Button>
             </form>
           ) : null}
           <form method="post" action={localizedPath(language, "/accesso")}>
             <Button type="submit" variant="outline" name="intent" value="esci">
-              {t("signOut")}
+              {t.signOut}
             </Button>
           </form>
         </div>
@@ -126,9 +114,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle>
-              <h2>{t("authRequired")}</h2>
+              <h2>{t.authRequired}</h2>
             </CardTitle>
-            <CardDescription>{t("authRequiredDescription")}</CardDescription>
+            <CardDescription>{t.authRequiredBody}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             {loaderData.signInNotice ? (
@@ -137,11 +125,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <form method="post" action={localizedPath(language, "/accesso")}>
               <FieldGroup>
                 <Field>
-                  <FieldLabel htmlFor="email">{t("email")}</FieldLabel>
+                  <FieldLabel htmlFor="email">{t.email}</FieldLabel>
                   <Input id="email" name="email" type="email" autoComplete="username" required />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="password">{t("password")}</FieldLabel>
+                  <FieldLabel htmlFor="password">{t.password}</FieldLabel>
                   <Input
                     id="password"
                     name="password"
@@ -151,9 +139,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                   />
                 </Field>
                 <div className="flex flex-wrap gap-3">
-                  <Button type="submit">{t("signIn")}</Button>
+                  <Button type="submit">{t.signIn}</Button>
                   <Button type="submit" variant="outline" name="intent" value="registrati">
-                    {t("signUp")}
+                    {t.signUp}
                   </Button>
                 </div>
               </FieldGroup>
@@ -164,13 +152,13 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle>
-              <h2>{t("noOrders")}</h2>
+              <h2>{t.noOrders}</h2>
             </CardTitle>
-            <CardDescription>{t("noOrdersDescription")}</CardDescription>
+            <CardDescription>{t.noOrdersBody}</CardDescription>
           </CardHeader>
         </Card>
       ) : (
-        <section className="grid gap-4 sm:grid-cols-2" aria-label={t("qualifiedOrders")}>
+        <section className="grid gap-4 sm:grid-cols-2" aria-label={t.list}>
           {loaderData.orders.map((order) => (
             <Card key={order.id}>
               <CardHeader>
@@ -180,14 +168,13 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                     {formatAmount(order.totalMinor, order.currency, language)}
                   </strong>
                 </CardTitle>
-                <CardDescription>{formatInstant(order.creationTime, language)}</CardDescription>
+                <CardDescription>{formatDate(order.creationTime, language)}</CardDescription>
               </CardHeader>
               <CardContent>
                 <dl className="grid gap-2 text-sm">
                   {order.taxIdentifiers.map((identifier) => {
-                    const label = identifierLabels[identifier.type]
-                      ? t(identifierLabels[identifier.type]!)
-                      : identifier.type;
+                    const known = identifierLabels[identifier.type];
+                    const label = known ? orders.identifier[known] : identifier.type;
                     return (
                       <div
                         key={`${identifier.type}:${identifier.value}`}
@@ -198,13 +185,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                           <TaxCode
                             value={identifier.value}
                             labels={{
-                              copy: translate(language, "copyIdentifier", {
-                                label,
-                                order: order.ebayOrderId,
-                              }),
-                              copied: t("copied"),
-                              copyFailed: t("copyFailed"),
-                              locked: t("taxCodeLocked"),
+                              copy: orders.copy(label, order.ebayOrderId),
+                              copied: orders.copied,
+                              copyFailed: orders.copyFailed,
+                              locked: orders.lockedLabel,
                             }}
                           />
                         </dd>

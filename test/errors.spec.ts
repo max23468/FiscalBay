@@ -7,13 +7,9 @@ import {
   errorResponse,
   logFailure,
 } from "../app/errors";
-import {
-  formatAmount,
-  formatInstant,
-  languageFromPath,
-  localizedPath,
-  translate,
-} from "../app/i18n";
+import { appCopy } from "../app/app-copy";
+import { formatAmount, languageFromPath, localizedPath } from "../app/i18n";
+import { formatDate } from "../app/view-models";
 import { loader as loadHome } from "../app/routes/home";
 
 describe("errors, locale and redacted logs", () => {
@@ -91,16 +87,16 @@ describe("errors, locale and redacted logs", () => {
     }
   });
 
-  it("formats the same UTC instant and amount for both locales", () => {
+  it("formats the same instant and amount for both locales", () => {
     expect(languageFromPath("/en/orders")).toBe("en");
     expect(localizedPath("en", "/accesso")).toBe("/en/accesso");
-    expect(translate("it", "noOrders")).toBe("Nessun ordine");
-    expect(translate("en", "noOrders")).toBe("No orders");
-    expect(formatInstant("2026-09-26T12:30:00.000Z", "it")).not.toBe(
-      formatInstant("2026-09-26T12:30:00.000Z", "en"),
+    expect(appCopy.it.access.noOrders).toBe("Nessun ordine");
+    expect(appCopy.en.access.noOrders).toBe("No orders");
+    expect(formatDate("2026-09-26T12:30:00.000Z", "it")).not.toBe(
+      formatDate("2026-09-26T12:30:00.000Z", "en"),
     );
     expect(formatAmount(12345, "EUR", "it")).toContain("123,45");
     expect(formatAmount(12345, "EUR", "en")).toContain("123.45");
-    expect(() => formatInstant("bad", "it")).toThrow();
+    expect(() => formatDate("bad", "it")).toThrow();
   });
 });

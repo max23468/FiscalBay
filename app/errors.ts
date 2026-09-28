@@ -1,4 +1,5 @@
-import { languageFromPath, translate, type Language } from "./i18n";
+import { appCopy } from "./app-copy";
+import { languageFromPath, type Language } from "./i18n";
 
 export const errorCatalog = {
   AUTH_REQUIRED: { status: 401, retryable: false },
@@ -40,7 +41,7 @@ export function correlationId(request: Request): string {
 }
 
 export function errorMessage(code: ErrorCode, language: Language): string {
-  return translate(language, `error_${code}`);
+  return appCopy[language].errors.codes[code];
 }
 
 export function errorResponse(request: Request, code: ErrorCode): Response {
