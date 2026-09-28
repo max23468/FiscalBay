@@ -3,8 +3,21 @@
 {
   "$schema": "../node_modules/wrangler/config-schema.json",
   "name": "fiscalbay",
+  "main": "./worker.js",
   "compatibility_date": "2026-09-13",
   "workers_dev": false,
   "routes": [{ "pattern": "fiscalbay.it", "custom_domain": true }],
   "assets": { "directory": "./public" },
+  // Wrangler conserva al deploy solo i segreti elencati qui, e solo per un Worker con
+  // script: senza, un deploy della pagina scarta quelli dell'app. Stesso elenco di `env.production`.
+  "secrets": {
+    "required": [
+      "BETTER_AUTH_SECRET",
+      "GOOGLE_CLIENT_ID",
+      "GOOGLE_CLIENT_SECRET",
+      "EBAY_CLIENT_ID",
+      "EBAY_CLIENT_SECRET",
+      "EBAY_RUNAME",
+    ],
+  },
 }
