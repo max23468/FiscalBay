@@ -1,16 +1,9 @@
-import {
-  CircleAlert,
-  CircleCheck,
-  CircleDashed,
-  Info,
-  Lock,
-  Sparkles,
-  TriangleAlert,
-  type LucideIcon,
-} from "lucide-react";
+import { CircleAlert, CircleCheck, CircleDashed, Crown, Info, TriangleAlert } from "lucide-react";
+import type { ComponentType, SVGProps } from "react";
 
 import { cn } from "cn";
 
+import { UnlockIcon } from "~/components/icons";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 
@@ -27,13 +20,13 @@ export type StatusTone =
   | "locked"
   | "neutral";
 
-const icons: Record<StatusTone, LucideIcon> = {
+const icons: Record<StatusTone, ComponentType<SVGProps<SVGSVGElement>>> = {
   success: CircleCheck,
   info: Info,
   warning: TriangleAlert,
   danger: CircleAlert,
-  premium: Sparkles,
-  locked: Lock,
+  premium: Crown,
+  locked: UnlockIcon,
   neutral: CircleDashed,
 };
 
@@ -103,5 +96,18 @@ export function StatusAlert({
       <AlertTitle>{title}</AlertTitle>
       {children ? <AlertDescription>{children}</AlertDescription> : null}
     </Alert>
+  );
+}
+
+/**
+ * Funzione del piano Premium non inclusa nel piano attuale: la corona la
+ * segnala una volta, accanto alla spiegazione, invece che su ogni riga.
+ */
+export function PremiumNote({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="flex max-w-2xl gap-2 text-sm leading-relaxed text-pretty text-muted-foreground">
+      <StatusIcon tone="premium" className="mt-0.5" />
+      <span>{children}</span>
+    </p>
   );
 }

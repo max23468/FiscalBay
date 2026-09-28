@@ -33,10 +33,16 @@ export type FiscalView =
 
 export type FiscalState = FiscalView["state"];
 
+export const fiscalStates: FiscalState[] = ["available", "locked", "missing", "checking", "error"];
+
 export type PaymentStatus = "paid" | "unpaid" | "refunded";
+
+export const paymentStatuses: PaymentStatus[] = ["paid", "unpaid", "refunded"];
 
 /** Stato di evasione; un ordine annullato non viene spedito. */
 export type ShippingStatus = "to_ship" | "shipped" | "delivered" | "cancelled";
+
+export const shippingStatuses: ShippingStatus[] = ["to_ship", "shipped", "delivered", "cancelled"];
 
 export interface AddressView {
   line: string;

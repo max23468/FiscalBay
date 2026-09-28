@@ -1,11 +1,12 @@
-import { data, useOutletContext } from "react-router";
+import { data, isRouteErrorResponse, useOutletContext } from "react-router";
 
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders";
+import { NotFoundState } from "~/components/not-found";
 import { appHref } from "../app-links";
 import { appCopy } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
 import { currentScenario, writePreviewState } from "../preview/state.server";
-import type { OrderView } from "../view-models";
+import { fiscalStates, paymentStatuses, shippingStatuses, type OrderView } from "../view-models";
 import type { PreviewContext } from "./preview";
 import type { Route } from "./+types/preview-orders";
 
@@ -17,6 +18,12 @@ export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
     { title: `FiscalBay | ${t.orders.title}` },
     { name: "robots", content: "noindex, nofollow" },
   ];
+}
+
+/** Valore di un filtro dell'URL, ignorato se non è tra quelli previsti. */
+function known(params: URLSearchParams, name: string, values: readonly string[]) {
+  const value = params.get(name);
+  return value && values.includes(value) ? value : null;
 }
 
 function matches(order: OrderView, params: URLSearchParams, now: string) {
@@ -36,13 +43,13 @@ function matches(order: OrderView, params: URLSearchParams, now: string) {
   if (store && order.storeId !== store) return false;
   const marketplace = params.get("marketplace");
   if (marketplace && order.marketplace !== marketplace) return false;
-  const payment = params.get("pagamento");
+  const payment = known(params, "pagamento", paymentStatuses);
   if (payment && order.payment !== payment) return false;
-  const shipping = params.get("spedizione");
+  const shipping = known(params, "spedizione", shippingStatuses);
   if (shipping && order.shipping !== shipping) return false;
-  const fiscal = params.get("fiscale");
+  const fiscal = known(params, "fiscale", fiscalStates);
   if (fiscal && order.fiscal.state !== fiscal) return false;
-  const days = Number(params.get("periodo"));
+  const days = Number(known(params, "periodo", ["7", "30", "90"]));
   if (
     days > 0 &&
     new Date(now).getTime() - new Date(order.createdAt).getTime() > days * 86_400_000
@@ -87,6 +94,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     sync: {
       running: scenario.syncRunning,
       lastAt: vintage?.lastSyncAt ?? null,
+      storeId: vintage?.id ?? null,
       storeName: vintage?.name ?? null,
     },
     onboarding: scenario.onboarding,
@@ -132,4 +140,11 @@ export default function PreviewOrders({ loaderData }: Route.ComponentProps) {
   return (
     <OrdersPage data={loaderData} t={t} links={links} unlockAction={appHref(links, "ordini")} />
   );
+}
+
+/** Un indirizzo inesistente resta dentro l'app, con la strada per tornare all'elenco. */
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  const { t, links } = useOutletContext<PreviewContext>();
+  if (!isRouteErrorResponse(error) || error.status !== 404) throw error;
+  return <NotFoundState kind="order" t={t} links={links} />;
 }

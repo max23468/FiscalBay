@@ -1,7 +1,8 @@
-import { Check, Copy, Lock } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "cn";
 
+import { UnlockIcon } from "~/components/icons";
 import { Button } from "~/components/ui/button";
 
 /**
@@ -44,7 +45,7 @@ export function TaxCode({
           className,
         )}
       >
-        <Lock aria-hidden="true" className="size-3.5 text-premium" />
+        <UnlockIcon aria-hidden="true" className="size-4 text-premium" />
         <span aria-hidden="true" className="font-code">
           ••••••••••••••••
         </span>

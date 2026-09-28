@@ -210,7 +210,17 @@ function GlobalSearch({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [query, setQuery] = useState("");
+  const ordersHref = appHref(links, "ordini");
+  // Su Ordini il campo mostra la ricerca attiva nell'URL, anche dopo Indietro o ricarica.
+  const urlQuery = location.pathname.startsWith(ordersHref)
+    ? (new URLSearchParams(location.search).get("q") ?? "")
+    : null;
+  const [query, setQuery] = useState(urlQuery ?? "");
+  const [syncedQuery, setSyncedQuery] = useState(urlQuery);
+  if (urlQuery !== syncedQuery) {
+    setSyncedQuery(urlQuery);
+    if (urlQuery !== null) setQuery(urlQuery);
+  }
   const [open, setOpen] = useState(false);
   const id = useId();
   const trimmed = query.trim();
@@ -218,7 +228,6 @@ function GlobalSearch({
     () => (trimmed.length >= 2 ? suggest(trimmed) : { items: [], total: 0 }),
     [suggest, trimmed],
   );
-  const ordersHref = appHref(links, "ordini");
   const allHref = `${ordersHref}?q=${encodeURIComponent(trimmed)}`;
 
   // Una nuova pagina chiude i suggerimenti rimasti aperti.

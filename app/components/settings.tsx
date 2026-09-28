@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router";
 
 import { useNotice } from "~/components/app-shell";
-import { StatusAlert, StatusBadge } from "~/components/status";
+import { PremiumNote, StatusAlert, StatusBadge, StatusIcon } from "~/components/status";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -190,12 +190,15 @@ function SimpleSelect({
   hint,
   items,
   value,
+  premiumLabel,
   onChange,
 }: {
   label: string;
   hint?: string;
-  items: Array<{ value: string; label: string }>;
+  /** `premium`: opzione del piano Premium, visibile con la corona ma non selezionabile. */
+  items: Array<{ value: string; label: string; premium?: boolean }>;
   value: string;
+  premiumLabel?: string;
   onChange: (value: string) => void;
 }) {
   const id = useId();
@@ -212,8 +215,14 @@ function SimpleSelect({
         </SelectTrigger>
         <SelectContent>
           {items.map((item) => (
-            <SelectItem key={item.value} value={item.value}>
+            <SelectItem key={item.value} value={item.value} disabled={item.premium}>
               {item.label}
+              {item.premium ? (
+                <>
+                  <StatusIcon tone="premium" className="ml-auto" />
+                  <span className="sr-only">{premiumLabel}</span>
+                </>
+              ) : null}
             </SelectItem>
           ))}
         </SelectContent>
@@ -300,8 +309,8 @@ function PlanSection({
   if (account.plan === "premium") {
     return (
       <>
-        <PremiumPlan account={account} t={t} language={language} />{" "}
-        {data.stores.length > 1 ? (
+        <PremiumPlan account={account} t={t} language={language} />
+        {data.stores.length > 1 && account.premium?.period !== "lifetime" ? (
           <Group title={t.settings.downgradeStore}>
             <SimpleSelect
               label={t.settings.downgradeStore}
@@ -356,25 +365,28 @@ function PlanSection({
         </Group>
       ) : null}
       <Group title={t.settings.buyTitle}>
-        <p className="max-w-xl text-sm leading-relaxed text-pretty text-muted-foreground">
-          {t.settings.buyBody}
-        </p>
+        <PremiumNote>{t.settings.buyBody}</PremiumNote>
         <ul className="grid gap-3 sm:grid-cols-3">
-          {[t.settings.priceMonthly, t.settings.priceAnnual, t.settings.priceLifetime].map(
-            (price) => (
-              <li key={price} className="grid gap-3 rounded-xl border bg-card p-4">
+          {[
+            { price: t.settings.priceMonthly, note: t.settings.priceMonthlyNote },
+            { price: t.settings.priceAnnual, note: t.settings.priceAnnualNote },
+            { price: t.settings.priceLifetime, note: t.settings.priceLifetimeNote },
+          ].map(({ price, note }) => (
+            <li key={price} className="grid content-start gap-3 rounded-xl border bg-card p-4">
+              <span className="grid gap-1">
                 <span className="font-code text-base font-semibold">{price}</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-fit"
-                  onClick={() => notify(t.preview.simulated)}
-                >
-                  {t.settings.buy}
-                </Button>
-              </li>
-            ),
-          )}
+                <span className="text-sm text-muted-foreground">{note}</span>
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-fit"
+                onClick={() => notify(t.preview.simulated)}
+              >
+                {t.settings.buy}
+              </Button>
+            </li>
+          ))}
         </ul>
         <p className="text-xs text-muted-foreground">{t.settings.pricesNote}</p>
       </Group>
@@ -504,9 +516,10 @@ function ExportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
             items={[
               { value: "7", label: t.orders.last7 },
               { value: "30", label: t.orders.last30 },
-              ...(premium ? [{ value: "90", label: t.orders.last90 }] : []),
+              { value: "90", label: t.orders.last90, premium: !premium },
             ]}
             value={period}
+            premiumLabel={t.orders.premiumOption}
             onChange={setPeriod}
           />
           <FieldSet>
@@ -558,7 +571,7 @@ function ExportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">{t.settings.exportColumnsPremium}</p>
+              <PremiumNote>{t.settings.exportColumnsPremium}</PremiumNote>
             )}
           </FieldSet>
         </FieldGroup>
@@ -1087,31 +1100,32 @@ export function ProfilePage({
             />
             <FieldDescription id="profile-name-hint">{t.profile.nameHint}</FieldDescription>
           </Field>
-          <Field>
-            <FieldLabel htmlFor="profile-email">{t.profile.email}</FieldLabel>
-            <Input
-              id="profile-email"
-              type="email"
-              value={account.email}
-              readOnly
-              aria-describedby="profile-email-hint"
-            />
-            <FieldDescription id="profile-email-hint">{t.profile.emailHint}</FieldDescription>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="w-fit"
-              onClick={() => notify(t.preview.simulated)}
-            >
-              {t.profile.changeEmail}
-            </Button>
-          </Field>
         </FieldGroup>
         <Button type="submit" className="w-fit">
           {t.settings.save}
         </Button>
       </form>
+      {/* L'email non si modifica nel campo: il cambio passa dalla verifica del nuovo indirizzo. */}
+      <section aria-labelledby="profile-email" className="grid gap-2 border-t pt-6">
+        <h2 id="profile-email" className="text-sm font-medium">
+          {t.profile.email}
+        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5 text-sm">
+          <span className="font-medium break-all">{account.email}</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-describedby="profile-email-hint"
+            onClick={() => notify(t.preview.simulated)}
+          >
+            {t.profile.changeEmail}
+          </Button>
+        </div>
+        <p id="profile-email-hint" className="text-sm text-muted-foreground">
+          {t.profile.emailHint}
+        </p>
+      </section>
       <p className="text-sm text-muted-foreground">
         {t.profile.security}{" "}
         <Link

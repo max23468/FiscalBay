@@ -105,11 +105,13 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
   "primo-accesso": {
     it: {
       name: "Primo accesso",
-      focus: "Nessun negozio, primi passi e negozio già collegato a un altro account.",
+      focus:
+        "Nessun negozio e primi passi; in Negozi il collegamento simulato risulta già usato da un altro account.",
     },
     en: {
       name: "First sign-in",
-      focus: "No store, getting started and a store already linked to another account.",
+      focus:
+        "No store and getting started; in Stores the simulated connection is already used by another account.",
     },
   },
   importazione: {
@@ -1151,7 +1153,7 @@ export function loadScenario(
         seeds: freeSeeds.slice(0, 4),
         premium: false,
         syncRunning: false,
-        notices: [{ kind: "importing", count: 4, days: 30 }],
+        notices: [{ kind: "importing", count: 4 }],
         diagnostics: diagnostics({
           syncPhase: language === "it" ? "Importazione dello storico" : "History import",
         }),

@@ -4,6 +4,23 @@ const plural = (count: number, one: string, other: string) => (count === 1 ? one
 
 const it = {
   shell: {
+    notFound: {
+      order: {
+        title: "Ordine non trovato",
+        body: "L’ordine non esiste in questo account o non è più consultabile.",
+        back: "Torna agli ordini",
+      },
+      store: {
+        title: "Negozio non trovato",
+        body: "Il negozio non è collegato a questo account.",
+        back: "Torna ai negozi",
+      },
+      page: {
+        title: "Pagina non trovata",
+        body: "L’indirizzo non corrisponde a una pagina di FiscalBay.",
+        back: "Torna agli ordini",
+      },
+    },
     skipToContent: "Vai al contenuto",
     mainNav: "Navigazione principale",
     orders: "Ordini",
@@ -57,6 +74,7 @@ const it = {
     searchActive: (query: string) => `Ricerca: ${query}`,
     clearSearch: "Cancella ricerca",
     resetFilters: "Reimposta filtri",
+    premiumOption: "Disponibile con Premium",
     payment: { paid: "Pagato", unpaid: "Non pagato", refunded: "Rimborsato" },
     shipping: {
       to_ship: "Da spedire",
@@ -100,6 +118,7 @@ const it = {
     unlockedMany: (count: number) => `${count} ordini sbloccati.`,
     loadMore: "Carica altri",
     allShown: "Hai visto tutti gli ordini del periodo.",
+    importMore: "Importazione in corso: gli altri ordini compaiono qui man mano.",
     details: "Dettaglio",
     moreActions: (id: string) => `Altre azioni per l’ordine ${id}`,
     openOnEbay: "Apri su eBay",
@@ -119,9 +138,12 @@ const it = {
       `Sblocca tutti i dati fiscali di questo ordine. Hai ancora ${remaining} ${plural(remaining, "ordine disponibile", "ordini disponibili")}: dopo lo sblocco ${plural(remaining - 1, "ne resterà", "ne resteranno")} ${remaining - 1}.`,
     lockedExhausted: (date: string) =>
       `Hai sbloccato tutti gli ordini disponibili in questo ciclo. Il prossimo inizia il ${date}.`,
+    lockedUntil: (date: string) => `Sblocco disponibile dal ${date}.`,
     missingHint: "eBay non riporta dati fiscali per questo ordine.",
     checkingHint: "Verifica dei dati fiscali in corso.",
     errorHint: "Non siamo riusciti a recuperare il Codice Fiscale da eBay. Riprova tra poco.",
+    errorHintEbayDown:
+      "Non siamo riusciti a recuperare il Codice Fiscale da eBay. Potrai riprovare quando eBay torna a rispondere.",
     retry: "Riprova",
     retried: "Nuova lettura richiesta.",
     quality: {
@@ -135,6 +157,8 @@ const it = {
     updated: "Aggiornato da eBay",
     updatedHint: "eBay ha modificato questo dato dopo la prima lettura.",
     suggestion: "Suggerimento da un ordine precedente",
+    suggestionFrom: "Da un ordine precedente:",
+    suggestionCheck: "Verificalo nel dettaglio prima di usarlo.",
     suggestionHint: (order: string, date: string) =>
       `Dall’ordine ${order} del ${date}. Non sostituisce il dato di questo ordine.`,
     suggestionConflict: "Gli ordini precedenti riportano codici diversi: questo è il più recente.",
@@ -142,7 +166,6 @@ const it = {
     requestCopied: "Messaggio copiato. Invialo all’acquirente dai tuoi canali.",
     syncedAgo: (time: string) => `Aggiornato ${time}`,
     refreshingTitle: "Aggiornamento in corso",
-    refreshingBody: "Gli ordini restano consultabili; i nuovi compaiono in cima alla lista.",
     ebayDownTitle: "eBay non risponde",
     ebayDownBody: (time: string) =>
       `Gli ordini sono aggiornati al ${time}. Sincronizzazione e ricollegamento tornano disponibili quando eBay risponde.`,
@@ -154,9 +177,8 @@ const it = {
     storeIssueBody:
       "La sincronizzazione di questo negozio è sospesa; gli altri negozi continuano. Ricollega il negozio.",
     storeIssueAction: "Apri il negozio",
-    importingTitle: "Importazione degli ordini in corso",
-    importingBody: (count: number, days: number) =>
-      `${count} ordini importati finora dagli ultimi ${days} giorni. Puoi già consultarli.`,
+    importingStatus: (count: number) =>
+      `Importazione in corso: ${count} ${plural(count, "ordine", "ordini")} finora`,
     firstUseTitle: "Nessun negozio collegato",
     firstUseBody:
       "Collega il tuo negozio eBay per consultare gli ordini e i Codici Fiscali disponibili.",
@@ -169,8 +191,11 @@ const it = {
     noOrdersTitle: "Nessun ordine negli ultimi 30 giorni",
     noOrdersBody: (store: string, time: string) =>
       `${store} è collegato e aggiornato al ${time}. I nuovi ordini compariranno qui.`,
+    openStore: "Apri il negozio",
     noResultsTitle: "Nessun risultato",
     noResultsBody: "Nessun ordine corrisponde ai filtri. Modifica i criteri di ricerca.",
+    noSearchResultsBody:
+      "Nessun ordine corrisponde alla ricerca. Controlla il testo o cerca per numero d’ordine, acquirente, articolo o SKU.",
     loading: "Caricamento degli ordini",
     list: "Elenco ordini",
   },
@@ -194,7 +219,6 @@ const it = {
     sku: "SKU",
     noSku: "Senza SKU",
     price: "Prezzo",
-    notFound: "Ordine non trovato nell’elenco corrente.",
   },
   stores: {
     title: "Negozi eBay",
@@ -204,7 +228,7 @@ const it = {
     marketplace: "Marketplace",
     connection: "Collegamento",
     lastSync: "Ultima sincronizzazione",
-    plan: "Piano",
+    openDetail: "Apri",
     notifications: "Notifiche",
     orders: "Ordini importati",
     state: {
@@ -215,11 +239,10 @@ const it = {
     },
     syncing: "In sincronizzazione",
     never: "Mai",
-    included: "Attivo",
     pausedByPlan: "In pausa per il piano Free",
     notificationsOn: "Attive",
     notificationsOff: "Disattivate",
-    notificationsPremium: "Con Premium",
+    notificationsFree: "Le notifiche Telegram dei nuovi ordini sono disponibili con Premium.",
     freeLimit:
       "Con il piano Free hai un negozio attivo e puoi sostituirlo ogni 90 giorni. Gli altri restano in pausa e i loro ordini non sono consultabili.",
     open: (name: string) => `Apri ${name}`,
@@ -232,6 +255,7 @@ const it = {
     connectedSince: "Collegato dal",
     consentUntil: "Autorizzazione valida fino al",
     consentHint: "Prima della scadenza ti chiederemo di ricollegare il negozio.",
+    consentExpired: "Scaduta",
     target: (minutes: number) => `Aggiornamento previsto circa ogni ${minutes} minuti`,
     history: (days: number) => `Storico degli ultimi ${days} giorni`,
     importDone: "Importazione dello storico completata",
@@ -281,7 +305,6 @@ const it = {
     elsewhereBody:
       "Questo negozio eBay è collegato a un altro account FiscalBay. Accedi con quell’account oppure contatta l’assistenza.",
     ebayDown: "eBay non risponde: sincronizzazione e ricollegamento sono sospesi.",
-    notFound: "Negozio non trovato.",
   },
   settings: {
     title: "Impostazioni",
@@ -325,6 +348,9 @@ const it = {
     priceMonthly: "4,90 € al mese",
     priceAnnual: "49 € all’anno",
     priceLifetime: "149 € una tantum",
+    priceMonthlyNote: "Si rinnova ogni mese.",
+    priceAnnualNote: "Equivale a 4,08 € al mese.",
+    priceLifetimeNote: "Pagamento unico, senza rinnovi.",
     pricesNote: "Prezzi IVA esclusa. Il pagamento avviene su Stripe.",
     buy: "Scegli",
     premiumPeriod: {
@@ -492,6 +518,23 @@ export type AppCopy = typeof it;
 
 const en: AppCopy = {
   shell: {
+    notFound: {
+      order: {
+        title: "Order not found",
+        body: "The order does not exist in this account or is no longer available.",
+        back: "Back to orders",
+      },
+      store: {
+        title: "Store not found",
+        body: "The store is not connected to this account.",
+        back: "Back to stores",
+      },
+      page: {
+        title: "Page not found",
+        body: "The address does not match a FiscalBay page.",
+        back: "Back to orders",
+      },
+    },
     skipToContent: "Skip to content",
     mainNav: "Main navigation",
     orders: "Orders",
@@ -543,6 +586,7 @@ const en: AppCopy = {
     searchActive: (query) => `Search: ${query}`,
     clearSearch: "Clear search",
     resetFilters: "Reset filters",
+    premiumOption: "Available with Premium",
     payment: { paid: "Paid", unpaid: "Unpaid", refunded: "Refunded" },
     shipping: {
       to_ship: "To ship",
@@ -586,6 +630,7 @@ const en: AppCopy = {
     unlockedMany: (count) => `${count} orders unlocked.`,
     loadMore: "Load more",
     allShown: "You have seen all orders in this period.",
+    importMore: "Import in progress: the remaining orders will appear here as they arrive.",
     details: "Details",
     moreActions: (id) => `More actions for order ${id}`,
     openOnEbay: "Open on eBay",
@@ -605,9 +650,12 @@ const en: AppCopy = {
       `Unlock all tax details for this order. You have ${remaining} ${plural(remaining, "order", "orders")} left; after unlocking, you will have ${remaining - 1}.`,
     lockedExhausted: (date) =>
       `You have unlocked all available orders this cycle. The next one starts on ${date}.`,
+    lockedUntil: (date) => `Unlocking available from ${date}.`,
     missingHint: "eBay does not provide tax details for this order.",
     checkingHint: "Checking the tax details.",
     errorHint: "We could not get the tax code from eBay. Try again shortly.",
+    errorHintEbayDown:
+      "We could not get the tax code from eBay. You can try again once eBay responds.",
     retry: "Try again",
     retried: "New read requested.",
     quality: {
@@ -621,6 +669,8 @@ const en: AppCopy = {
     updated: "Updated by eBay",
     updatedHint: "eBay changed this value after it was first read.",
     suggestion: "Suggestion from a previous order",
+    suggestionFrom: "From a previous order:",
+    suggestionCheck: "Check it in the details before using it.",
     suggestionHint: (order, date) =>
       `From order ${order} on ${date}. It does not replace the value for this order.`,
     suggestionConflict: "Previous orders show different codes: this is the most recent.",
@@ -628,7 +678,6 @@ const en: AppCopy = {
     requestCopied: "Message copied. Send it to the buyer through your own channels.",
     syncedAgo: (time) => `Updated ${time}`,
     refreshingTitle: "Updating",
-    refreshingBody: "Orders remain available; new ones appear at the top of the list.",
     ebayDownTitle: "eBay is not responding",
     ebayDownBody: (time) =>
       `Orders are up to date as of ${time}. Syncing and reconnecting will be available again when eBay responds.`,
@@ -639,9 +688,7 @@ const en: AppCopy = {
     storeIssueTitle: (store) => `${store}: connection expired`,
     storeIssueBody: "Syncing is paused for this store; other stores continue. Reconnect the store.",
     storeIssueAction: "Open store",
-    importingTitle: "Importing orders",
-    importingBody: (count, days) =>
-      `${count} orders imported so far from the last ${days} days. You can already view them.`,
+    importingStatus: (count) => `Importing: ${count} ${plural(count, "order", "orders")} so far`,
     firstUseTitle: "No store connected",
     firstUseBody: "Connect your eBay store to view orders and available tax codes.",
     connectStore: "Connect eBay store",
@@ -653,8 +700,11 @@ const en: AppCopy = {
     noOrdersTitle: "No orders in the last 30 days",
     noOrdersBody: (store, time) =>
       `${store} is connected and up to date as of ${time}. New orders will appear here.`,
+    openStore: "Open store",
     noResultsTitle: "No results",
     noResultsBody: "No orders match the filters. Change your search criteria.",
+    noSearchResultsBody:
+      "No orders match the search. Check the text or search by order number, buyer, item or SKU.",
     loading: "Loading orders",
     list: "Order list",
   },
@@ -678,7 +728,6 @@ const en: AppCopy = {
     sku: "SKU",
     noSku: "No SKU",
     price: "Price",
-    notFound: "Order not found in the current list.",
   },
   stores: {
     title: "eBay stores",
@@ -688,7 +737,7 @@ const en: AppCopy = {
     marketplace: "Marketplace",
     connection: "Connection",
     lastSync: "Last sync",
-    plan: "Plan",
+    openDetail: "Open",
     notifications: "Notifications",
     orders: "Imported orders",
     state: {
@@ -699,11 +748,10 @@ const en: AppCopy = {
     },
     syncing: "Syncing",
     never: "Never",
-    included: "Active",
     pausedByPlan: "Paused on the Free plan",
     notificationsOn: "On",
     notificationsOff: "Off",
-    notificationsPremium: "With Premium",
+    notificationsFree: "Telegram notifications for new orders are available with Premium.",
     freeLimit:
       "On the Free plan you have one active store, which you can replace every 90 days. Other stores stay paused and their orders are not available.",
     open: (name) => `Open ${name}`,
@@ -716,6 +764,7 @@ const en: AppCopy = {
     connectedSince: "Connected since",
     consentUntil: "Authorisation valid until",
     consentHint: "Before it expires we will ask you to reconnect the store.",
+    consentExpired: "Expired",
     target: (minutes) => `Expected update about every ${minutes} minutes`,
     history: (days) => `History of the last ${days} days`,
     importDone: "History import complete",
@@ -763,7 +812,6 @@ const en: AppCopy = {
     elsewhereBody:
       "This eBay store is connected to another FiscalBay account. Sign in with that account or contact support.",
     ebayDown: "eBay is not responding: syncing and reconnecting are paused.",
-    notFound: "Store not found.",
   },
   settings: {
     title: "Settings",
@@ -799,6 +847,9 @@ const en: AppCopy = {
     priceMonthly: "€4.90 per month",
     priceAnnual: "€49 per year",
     priceLifetime: "€149 one-off",
+    priceMonthlyNote: "Renews every month.",
+    priceAnnualNote: "Works out at €4.08 per month.",
+    priceLifetimeNote: "One-off payment, no renewals.",
     pricesNote: "Prices exclude VAT. Payment takes place on Stripe.",
     buy: "Choose",
     premiumPeriod: {
