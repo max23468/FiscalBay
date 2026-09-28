@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Moon, Sun, SunMoon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router";
 
-import { useNotice } from "~/components/app-shell";
+import { useAction } from "~/components/app-shell";
 import { PremiumNote, StatusAlert, StatusBadge, StatusIcon } from "~/components/status";
 import {
   AlertDialog,
@@ -47,6 +47,7 @@ import {
   formatRelative,
   settingsSections,
   type AccountView,
+  type ActionResult,
   type DiagnosticsView,
   type SessionView,
   type SettingsSection,
@@ -61,37 +62,42 @@ export interface SettingsPageData {
   diagnostics: DiagnosticsView;
   telegramChat: string | null;
   exportEstimate: { orders: number; locked: number };
-  /** Il primo salvataggio automatico fallisce, per mostrare il ripristino. */
-  saveFailsOnce: boolean;
   now: string;
 }
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
 /**
- * Salvataggio automatico delle scelte semplici: stato in corso ed esito
- * espliciti, ripristino del valore precedente se il salvataggio fallisce.
+ * Salvataggio automatico delle scelte semplici tramite l'azione `save`: stato in
+ * corso ed esito espliciti, ripristino dell'ultimo valore salvato se il server rifiuta.
  */
-function useAutoSave<T>(initial: T, shouldFail: () => boolean) {
+function useAutoSave<T extends string | boolean>(name: string, initial: T) {
+  const action = useAction();
   const [value, setValue] = useState(initial);
-  const [state, setState] = useState<SaveState>("idle");
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
+  const [saved, setSaved] = useState(initial);
+  const [outcome, setOutcome] = useState<"idle" | "saved" | "error">("idle");
+  const [handled, setHandled] = useState<ActionResult>();
+  if (action.result && action.result !== handled) {
+    setHandled(action.result);
+    if (action.result.ok) {
+      setSaved(value);
+      setOutcome("saved");
+    } else {
+      setValue(saved);
+      setOutcome("error");
+    }
+  }
+  useEffect(() => {
+    if (outcome !== "saved") return;
+    const timer = setTimeout(() => setOutcome("idle"), 2000);
+    return () => clearTimeout(timer);
+  }, [outcome]);
   const change = (next: T) => {
-    const previous = value;
     setValue(next);
-    setState("saving");
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      if (shouldFail()) {
-        setValue(previous);
-        setState("error");
-        return;
-      }
-      setState("saved");
-      timer.current = setTimeout(() => setState("idle"), 2000);
-    }, 600);
+    setOutcome("idle");
+    action.run("save", { name, value: String(next) });
   };
+  const state: SaveState = action.pending ? "saving" : outcome;
   return [value, change, state] as const;
 }
 
@@ -117,22 +123,22 @@ function SaveStatus({ state, t }: { state: SaveState; t: AppCopy }) {
 }
 
 function AutoSwitch({
+  name,
   label,
   description,
   initial,
-  shouldFail,
   t,
   disabled,
 }: {
+  name: string;
   label: string;
   description?: string;
   initial: boolean;
-  shouldFail: () => boolean;
   t: AppCopy;
   disabled?: boolean;
 }) {
   const id = useId();
-  const [checked, setChecked, state] = useAutoSave(initial, shouldFail);
+  const [checked, setChecked, state] = useAutoSave(name, initial);
   return (
     <Field orientation="horizontal" className="flex-wrap items-start">
       <Switch
@@ -156,19 +162,19 @@ function AutoSwitch({
 }
 
 function AutoRadio({
+  name,
   legend,
   options,
   initial,
-  shouldFail,
   t,
 }: {
+  name: string;
   legend: string;
   options: Array<{ value: string; label: string }>;
   initial: string;
-  shouldFail: () => boolean;
   t: AppCopy;
 }) {
-  const [value, setValue, state] = useAutoSave(initial, shouldFail);
+  const [value, setValue, state] = useAutoSave(name, initial);
   return (
     <FieldSet>
       <FieldLegend variant="label">{legend}</FieldLegend>
@@ -265,7 +271,7 @@ function PremiumPlan({
   t: AppCopy;
   language: Language;
 }) {
-  const notify = useNotice();
+  const action = useAction();
   const lifetime = account.premium?.period === "lifetime";
   return (
     <Group title={t.settings.currentPlan}>
@@ -284,7 +290,7 @@ function PremiumPlan({
       </div>
       {lifetime ? null : (
         <div className="flex flex-wrap items-center gap-3">
-          <Button variant="outline" onClick={() => notify(t.preview.simulated)}>
+          <Button variant="outline" onClick={() => action.run("manage-billing")}>
             {t.settings.manageBilling}
           </Button>
         </div>
@@ -303,7 +309,7 @@ function PlanSection({
   t: AppCopy;
   language: Language;
 }) {
-  const notify = useNotice();
+  const action = useAction();
   const { account } = data;
   const [downgradeStore, setDowngradeStore] = useState(data.stores[0]?.id ?? "");
   if (account.plan === "premium") {
@@ -359,7 +365,7 @@ function PlanSection({
           <p className="max-w-xl text-sm leading-relaxed text-pretty text-muted-foreground">
             {t.settings.trialBody}
           </p>
-          <Button className="w-fit" onClick={() => notify(t.preview.simulated)}>
+          <Button className="w-fit" onClick={() => action.run("start-trial")}>
             {t.settings.trialAction}
           </Button>
         </Group>
@@ -368,10 +374,14 @@ function PlanSection({
         <PremiumNote>{t.settings.buyBody}</PremiumNote>
         <ul className="grid gap-3 sm:grid-cols-3">
           {[
-            { price: t.settings.priceMonthly, note: t.settings.priceMonthlyNote },
-            { price: t.settings.priceAnnual, note: t.settings.priceAnnualNote },
-            { price: t.settings.priceLifetime, note: t.settings.priceLifetimeNote },
-          ].map(({ price, note }) => (
+            { plan: "monthly", price: t.settings.priceMonthly, note: t.settings.priceMonthlyNote },
+            { plan: "annual", price: t.settings.priceAnnual, note: t.settings.priceAnnualNote },
+            {
+              plan: "lifetime",
+              price: t.settings.priceLifetime,
+              note: t.settings.priceLifetimeNote,
+            },
+          ].map(({ plan, price, note }) => (
             <li key={price} className="grid content-start gap-3 rounded-xl border bg-card p-4">
               <span className="grid gap-1">
                 <span className="font-code text-base font-semibold">{price}</span>
@@ -381,7 +391,7 @@ function PlanSection({
                 variant="outline"
                 size="sm"
                 className="w-fit"
-                onClick={() => notify(t.preview.simulated)}
+                onClick={() => action.run("buy", { plan })}
               >
                 {t.settings.buy}
               </Button>
@@ -398,16 +408,14 @@ function NotificationsSection({
   data,
   t,
   links,
-  shouldFail,
 }: {
   data: SettingsPageData;
   t: AppCopy;
   links: AppLinks;
-  shouldFail: () => boolean;
 }) {
-  const notify = useNotice();
+  const action = useAction();
   const premium = data.account.plan === "premium";
-  const [mode, setMode, modeState] = useAutoSave("each", shouldFail);
+  const [mode, setMode, modeState] = useAutoSave<string>("telegram-mode", "each");
   const [digestTime, setDigestTime] = useState("18:00");
   return (
     <>
@@ -428,15 +436,15 @@ function NotificationsSection({
                 <span className="text-muted-foreground">{t.settings.telegramChat}</span>
                 <span className="font-medium">{data.telegramChat}</span>
               </span>
-              <Button variant="outline" size="sm" onClick={() => notify(t.preview.simulated)}>
+              <Button variant="outline" size="sm" onClick={() => action.run("telegram-change")}>
                 {t.settings.telegramChange}
               </Button>
             </div>
-            <AutoSwitch label={t.settings.telegramEnabled} initial shouldFail={shouldFail} t={t} />
+            <AutoSwitch name="telegram" label={t.settings.telegramEnabled} initial t={t} />
             <AutoRadio
+              name="telegram-filter"
               legend={t.settings.telegramFilter}
               initial="fiscal"
-              shouldFail={shouldFail}
               t={t}
               options={[
                 { value: "fiscal", label: t.settings.telegramFilterFiscal },
@@ -477,9 +485,9 @@ function NotificationsSection({
               {data.stores.map((store) => (
                 <AutoSwitch
                   key={store.id}
+                  name={`store-notifications:${store.id}`}
                   label={store.name}
                   initial={store.notifications === true}
-                  shouldFail={shouldFail}
                   t={t}
                 />
               ))}
@@ -489,10 +497,10 @@ function NotificationsSection({
       </Group>
       <Group title={t.settings.marketingTitle}>
         <AutoSwitch
+          name="marketing"
           label={t.settings.marketingConsent}
           description={t.settings.marketingHint}
           initial={false}
-          shouldFail={shouldFail}
           t={t}
         />
       </Group>
@@ -501,7 +509,7 @@ function NotificationsSection({
 }
 
 function ExportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
-  const notify = useNotice();
+  const action = useAction();
   const premium = data.account.plan === "premium";
   const [period, setPeriod] = useState("30");
   const [format, setFormat] = useState("csv");
@@ -579,11 +587,11 @@ function ExportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
           {t.settings.exportPreview(data.exportEstimate.orders, data.exportEstimate.locked)}
         </p>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => notify(t.settings.exportCreated)}>
+          <Button onClick={() => action.run("export-create", { period, format, rows })}>
             {t.settings.exportCreate}
           </Button>
           {premium ? (
-            <Button variant="outline" onClick={() => notify(t.preview.simulated)}>
+            <Button variant="outline" onClick={() => action.run("export-save")}>
               {t.settings.exportSaveConfig}
             </Button>
           ) : null}
@@ -602,7 +610,7 @@ function SecuritySection({
   t: AppCopy;
   language: Language;
 }) {
-  const notify = useNotice();
+  const action = useAction();
   const methods = [
     {
       id: "password",
@@ -625,7 +633,11 @@ function SecuritySection({
                   {method.connected ? t.settings.methodConnected : t.settings.methodNotConnected}
                 </span>
               </span>
-              <Button variant="outline" size="sm" onClick={() => notify(t.preview.simulated)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => action.run("sign-in-method", { method: method.id })}
+              >
                 {method.action}
               </Button>
             </li>
@@ -641,10 +653,10 @@ function SecuritySection({
               </span>
             </span>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={() => notify(t.preview.simulated)}>
+              <Button variant="outline" size="sm" onClick={() => action.run("passkey-add")}>
                 {t.settings.addPasskey}
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => notify(t.preview.simulated)}>
+              <Button variant="ghost" size="sm" onClick={() => action.run("passkey-remove")}>
                 {t.settings.remove}
               </Button>
             </div>
@@ -668,14 +680,18 @@ function SecuritySection({
                 </span>
               </span>
               {session.current ? null : (
-                <Button variant="outline" size="sm" onClick={() => notify(t.preview.simulated)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => action.run("session-sign-out", { session: session.id })}
+                >
                   {t.settings.signOutSession}
                 </Button>
               )}
             </li>
           ))}
         </ul>
-        <Button variant="destructive" className="w-fit" onClick={() => notify(t.preview.simulated)}>
+        <Button variant="destructive" className="w-fit" onClick={() => action.run("sign-out-all")}>
           {t.settings.signOutAll}
         </Button>
       </Group>
@@ -685,22 +701,14 @@ function SecuritySection({
 
 type Theme = "system" | "light" | "dark";
 
-function AppearanceSection({
-  t,
-  links,
-  shouldFail,
-}: {
-  t: AppCopy;
-  links: AppLinks;
-  shouldFail: () => boolean;
-}) {
+function AppearanceSection({ t, links }: { t: AppCopy; links: AppLinks }) {
   const location = useLocation();
   const [theme, setTheme] = useState<Theme>(() =>
     typeof document === "undefined"
       ? "system"
       : ((document.documentElement.dataset.theme as Theme | undefined) ?? "system"),
   );
-  const [timeZone, setTimeZone, zoneState] = useAutoSave("Europe/Rome", shouldFail);
+  const [timeZone, setTimeZone, zoneState] = useAutoSave<string>("time-zone", "Europe/Rome");
   const barePath = location.pathname.replace(/^\/en(?=\/|$)/u, "") || "/";
   return (
     <>
@@ -774,9 +782,15 @@ function AppearanceSection({
 }
 
 function TemplateSection({ t }: { t: AppCopy }) {
-  const [state, setState] = useState<SaveState>("idle");
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
+  const action = useAction();
+  const [dirty, setDirty] = useState(false);
+  const state: SaveState = action.pending
+    ? "saving"
+    : dirty || !action.result
+      ? "idle"
+      : action.result.ok
+        ? "saved"
+        : "error";
   return (
     <Group title={t.settings.sections.messaggio.title} className="border-t-0 pt-0">
       <p className="max-w-2xl text-sm leading-relaxed text-pretty text-muted-foreground">
@@ -786,9 +800,9 @@ function TemplateSection({ t }: { t: AppCopy }) {
         className="grid gap-4"
         onSubmit={(event) => {
           event.preventDefault();
-          setState("saving");
-          clearTimeout(timer.current);
-          timer.current = setTimeout(() => setState("saved"), 600);
+          const form = new FormData(event.currentTarget);
+          setDirty(false);
+          action.run("template", { it: String(form.get("it")), en: String(form.get("en")) });
         }}
       >
         <Tabs defaultValue="it">
@@ -812,7 +826,7 @@ function TemplateSection({ t }: { t: AppCopy }) {
                   name={code}
                   rows={5}
                   defaultValue={value}
-                  onChange={() => setState("idle")}
+                  onChange={() => setDirty(true)}
                   aria-describedby="template-hint"
                 />
               </Field>
@@ -832,14 +846,16 @@ function TemplateSection({ t }: { t: AppCopy }) {
 }
 
 function PrivacySection({ t }: { t: AppCopy }) {
-  const notify = useNotice();
+  const action = useAction();
   const rows = [
     {
+      intent: "privacy-policy",
       title: t.settings.privacyPolicy,
       body: t.settings.privacyPolicyBody,
       action: t.settings.privacyPolicy,
     },
     {
+      intent: "account-export",
       title: t.settings.accountExport,
       body: t.settings.accountExportBody,
       action: t.settings.accountExportAction,
@@ -854,7 +870,7 @@ function PrivacySection({ t }: { t: AppCopy }) {
               <span className="font-medium">{row.title}</span>
               <span className="text-sm text-pretty text-muted-foreground">{row.body}</span>
             </span>
-            <Button variant="outline" size="sm" onClick={() => notify(t.preview.simulated)}>
+            <Button variant="outline" size="sm" onClick={() => action.run(row.intent)}>
               {row.action}
             </Button>
           </li>
@@ -879,7 +895,7 @@ function PrivacySection({ t }: { t: AppCopy }) {
                 <AlertDialogCancel>{t.orders.cancel}</AlertDialogCancel>
                 <AlertDialogClose
                   render={<Button variant="destructive-solid" />}
-                  onClick={() => notify(t.preview.simulated)}
+                  onClick={() => action.run("account-delete")}
                 >
                   {t.settings.deleteAccountConfirm}
                 </AlertDialogClose>
@@ -893,9 +909,10 @@ function PrivacySection({ t }: { t: AppCopy }) {
 }
 
 function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
+  const action = useAction();
   const [topic, setTopic] = useState("orders");
   const [error, setError] = useState(false);
-  const [sent, setSent] = useState(false);
+  const sent = !error && action.result?.ok === true;
   const messageRef = useRef<HTMLTextAreaElement>(null);
   const { diagnostics } = data;
   const diag = t.settings.diag;
@@ -929,10 +946,18 @@ function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
           className="grid max-w-2xl gap-5"
           onSubmit={(event) => {
             event.preventDefault();
-            const message = String(new FormData(event.currentTarget).get("message") ?? "").trim();
+            const form = new FormData(event.currentTarget);
+            const message = String(form.get("message") ?? "").trim();
             setError(!message);
-            setSent(Boolean(message));
-            if (!message) messageRef.current?.focus();
+            if (!message) {
+              messageRef.current?.focus();
+              return;
+            }
+            action.run("support", {
+              topic,
+              message,
+              diagnostics: String(form.get("diagnostics") === "on"),
+            });
           }}
         >
           {error ? <StatusAlert tone="danger" title={t.settings.formErrors} /> : null}
@@ -996,19 +1021,13 @@ export function SettingsPage({
   links: AppLinks;
 }) {
   const { language } = links;
-  const failPending = useRef(data.saveFailsOnce);
-  const shouldFail = () => {
-    if (!failPending.current) return false;
-    failPending.current = false;
-    return true;
-  };
   const current = data.section ?? "piano";
   const content = {
     piano: <PlanSection data={data} t={t} language={language} />,
-    notifiche: <NotificationsSection data={data} t={t} links={links} shouldFail={shouldFail} />,
+    notifiche: <NotificationsSection data={data} t={t} links={links} />,
     esportazione: <ExportSection data={data} t={t} />,
     sicurezza: <SecuritySection data={data} t={t} language={language} />,
-    aspetto: <AppearanceSection t={t} links={links} shouldFail={shouldFail} />,
+    aspetto: <AppearanceSection t={t} links={links} />,
     messaggio: <TemplateSection t={t} />,
     privacy: <PrivacySection t={t} />,
     supporto: <SupportSection data={data} t={t} />,
@@ -1077,7 +1096,7 @@ export function ProfilePage({
   t: AppCopy;
   links: AppLinks;
 }) {
-  const notify = useNotice();
+  const action = useAction();
   return (
     <div className="grid max-w-xl gap-6">
       <h1 className="text-2xl font-bold sm:text-3xl">{t.profile.title}</h1>
@@ -1085,7 +1104,7 @@ export function ProfilePage({
         className="grid gap-6"
         onSubmit={(event) => {
           event.preventDefault();
-          notify(t.profile.saved);
+          action.run("profile", { name: String(new FormData(event.currentTarget).get("name")) });
         }}
       >
         <FieldGroup>
@@ -1117,7 +1136,7 @@ export function ProfilePage({
             variant="outline"
             size="sm"
             aria-describedby="profile-email-hint"
-            onClick={() => notify(t.preview.simulated)}
+            onClick={() => action.run("change-email")}
           >
             {t.profile.changeEmail}
           </Button>

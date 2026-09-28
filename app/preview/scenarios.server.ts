@@ -1,6 +1,6 @@
-import type { OrdersNotice } from "~/components/orders";
 import type { Language } from "../i18n";
 import type {
+  OrdersNotice,
   AccountView,
   DiagnosticsView,
   NotificationView,

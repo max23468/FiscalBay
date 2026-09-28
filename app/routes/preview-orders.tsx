@@ -5,7 +5,7 @@ import { NotFoundState } from "~/components/not-found";
 import { appHref } from "../app-links";
 import { appCopy } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
-import { currentScenario, writePreviewState } from "../preview/state.server";
+import { currentScenario, simulateAction, writePreviewState } from "../preview/state.server";
 import { fiscalStates, paymentStatuses, shippingStatuses, type OrderView } from "../view-models";
 import type { PreviewContext } from "./preview";
 import type { Route } from "./+types/preview-orders";
@@ -105,12 +105,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return page;
 }
 
-/** Sblocco simulato: stessi controlli del server reale su appartenenza e quota. */
+/**
+ * Sblocco simulato con gli stessi controlli del server reale su appartenenza e
+ * quota; le altre azioni rispondono con la simulazione comune.
+ */
 export async function action({ request }: Route.ActionArgs) {
-  const [{ state, scenario }, form] = await Promise.all([
-    currentScenario(request),
-    request.formData(),
-  ]);
+  const form = await request.formData();
+  if (form.get("intent") !== "unlock") return simulateAction(request, form);
+  const { state, scenario } = await currentScenario(request);
   const ids = [
     ...new Set(
       String(form.get("ids") ?? "")

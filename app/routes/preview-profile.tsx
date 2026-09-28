@@ -3,7 +3,7 @@ import { useOutletContext } from "react-router";
 import { ProfilePage } from "~/components/settings";
 import { appCopy } from "../app-copy";
 import { languageFromPath } from "../i18n";
-import { currentScenario } from "../preview/state.server";
+import { currentScenario, simulateAction } from "../preview/state.server";
 import type { PreviewContext } from "./preview";
 import type { Route } from "./+types/preview-profile";
 
@@ -18,6 +18,11 @@ export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
 export async function loader({ request }: Route.LoaderArgs) {
   const { scenario } = await currentScenario(request);
   return { account: scenario.account };
+}
+
+/** Azioni dei componenti: nell'anteprima nessun effetto, solo la risposta simulata. */
+export async function action({ request }: Route.ActionArgs) {
+  return simulateAction(request, await request.formData());
 }
 
 export default function PreviewProfile({ loaderData }: Route.ComponentProps) {

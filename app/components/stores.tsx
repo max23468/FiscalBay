@@ -2,10 +2,10 @@ import { ChevronRight, Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
-import { useNotice } from "~/components/app-shell";
+import { useAction } from "~/components/app-shell";
 import { LedgerIndicator } from "~/components/brand";
 import { EmptyState } from "~/components/empty-state";
-import { PremiumNote, StatusAlert, StatusBadge, type StatusTone } from "~/components/status";
+import { PremiumNote, StatusAlert, StatusBadge } from "~/components/status";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -43,6 +43,7 @@ import {
   formatRelative,
   marketplaceLabel,
   type AccountView,
+  type StatusTone,
   type StoreView,
 } from "../view-models";
 
@@ -120,7 +121,8 @@ function StoreDetail({
   t: AppCopy;
   links: AppLinks;
 }) {
-  const notify = useNotice();
+  const action = useAction();
+  const run = (intent: string) => action.run(intent, { store: store.id });
   const [confirmName, setConfirmName] = useState("");
   const { language } = links;
   const status = connectionStatus(store, t);
@@ -138,7 +140,7 @@ function StoreDetail({
               size="sm"
               disabled={data.ebayDown}
               focusableWhenDisabled
-              onClick={() => notify(t.preview.simulated)}
+              onClick={() => run("store-fix")}
             >
               {t.stores.reconnect}
             </Button>
@@ -243,7 +245,7 @@ function StoreDetail({
               <Button
                 variant="secondary"
                 disabled={data.ebayDown || store.connection !== "active"}
-                onClick={() => notify(t.preview.simulated)}
+                onClick={() => run("store-sync")}
               >
                 {t.stores.syncNow}
               </Button>
@@ -251,11 +253,14 @@ function StoreDetail({
             <Button
               variant="outline"
               disabled={data.ebayDown || needsReconnect}
-              onClick={() => notify(t.preview.simulated)}
+              onClick={() => run("store-reimport")}
             >
               {t.stores.reimport}
             </Button>
-            <Button variant="outline" onClick={() => notify(t.preview.simulated)}>
+            <Button
+              variant="outline"
+              onClick={() => run(store.connection === "paused" ? "store-resume" : "store-pause")}
+            >
               {store.connection === "paused" ? t.stores.resume : t.stores.pause}
             </Button>
           </div>
@@ -277,7 +282,7 @@ function StoreDetail({
                 <AlertDialogCancel>{t.stores.cancel}</AlertDialogCancel>
                 <AlertDialogClose
                   render={<Button variant="destructive-solid" />}
-                  onClick={() => notify(t.preview.simulated)}
+                  onClick={() => run("store-disconnect")}
                 >
                   {t.stores.disconnect}
                 </AlertDialogClose>
@@ -307,7 +312,7 @@ function StoreDetail({
                 <AlertDialogClose
                   disabled={confirmName.trim() !== store.name}
                   render={<Button variant="destructive-solid" />}
-                  onClick={() => notify(t.preview.simulated)}
+                  onClick={() => run("store-delete")}
                 >
                   {t.stores.deleteConfirm}
                 </AlertDialogClose>
@@ -330,7 +335,7 @@ export function StoresPage({
   t: AppCopy;
   links: AppLinks;
 }) {
-  const notify = useNotice();
+  const action = useAction();
   const navigate = useNavigate();
   const { language } = links;
   const storesHref = appHref(links, "negozi");
@@ -342,7 +347,7 @@ export function StoresPage({
   const [attempted, setAttempted] = useState(false);
   const premium = data.account.plan === "premium";
   const connect = (
-    <Button onClick={() => (data.elsewhere ? setAttempted(true) : notify(t.preview.simulated))}>
+    <Button onClick={() => (data.elsewhere ? setAttempted(true) : action.run("store-connect"))}>
       <Plus aria-hidden="true" data-icon="inline-start" />
       {t.stores.connect}
     </Button>

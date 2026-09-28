@@ -72,7 +72,9 @@ export async function action({ request }: Route.ActionArgs) {
     : localizedPath(language, `${base}/ordini`);
   if (!isScenarioId(scenario)) throw redirect(safeTarget);
   throw redirect(safeTarget, {
-    headers: { "Set-Cookie": await writePreviewState({ scenario, unlocked: [] }) },
+    headers: {
+      "Set-Cookie": await writePreviewState({ scenario, unlocked: [], saveFailed: false }),
+    },
   });
 }
 
