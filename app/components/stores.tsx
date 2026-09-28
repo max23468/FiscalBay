@@ -331,30 +331,33 @@ function StoreDetail({
           </li>
         </ul>
       </section>
-      <section aria-labelledby="store-recent" className="grid gap-3 border-t pt-5">
-        <h3 id="store-recent" className="flex items-center gap-2.5 text-sm font-semibold">
-          <IconTile icon={History} tone="violet" size="sm" />
-          {t.stores.sectionRecent}
-        </h3>
-        <ul className="grid gap-2 text-sm">
-          {store.recent.map((sync) => (
-            <li key={sync.at} className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
-              <span
-                className={cn(
-                  "inline-flex items-center gap-2",
-                  sync.ok ? "text-foreground" : "text-danger",
-                )}
-              >
-                <StatusIcon tone={sync.ok ? "success" : "danger"} className="size-3.5" />
-                {sync.ok ? t.stores.recentOk(sync.newOrders) : t.stores.recentFailed}
-              </span>
-              <time dateTime={sync.at} className="whitespace-nowrap text-muted-foreground">
-                {formatDate(sync.at, language)}
-              </time>
-            </li>
-          ))}
-        </ul>
-      </section>
+      {/* Un negozio mai sincronizzato non ha aggiornamenti: niente titolo vuoto. */}
+      {store.recent.length > 0 ? (
+        <section aria-labelledby="store-recent" className="grid gap-3 border-t pt-5">
+          <h3 id="store-recent" className="flex items-center gap-2.5 text-sm font-semibold">
+            <IconTile icon={History} tone="violet" size="sm" />
+            {t.stores.sectionRecent}
+          </h3>
+          <ul className="grid gap-2 text-sm">
+            {store.recent.map((sync) => (
+              <li key={sync.at} className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-2",
+                    sync.ok ? "text-foreground" : "text-danger",
+                  )}
+                >
+                  <StatusIcon tone={sync.ok ? "success" : "danger"} className="size-3.5" />
+                  {sync.ok ? t.stores.recentOk(sync.newOrders) : t.stores.recentFailed}
+                </span>
+                <time dateTime={sync.at} className="whitespace-nowrap text-muted-foreground">
+                  {formatDate(sync.at, language)}
+                </time>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       <section aria-labelledby="store-notifications" className="grid gap-2 border-t pt-5">
         <h3 id="store-notifications" className="flex items-center gap-2.5 text-sm font-semibold">
           <IconTile icon={Bell} tone="amber" size="sm" />

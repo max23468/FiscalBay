@@ -513,7 +513,9 @@ const it = {
   },
   errors: {
     title: "Errore",
+    notFoundTitle: "Pagina non trovata",
     notFound: "La pagina richiesta non è stata trovata.",
+    home: "Torna a FiscalBay",
     unexpected: "Si è verificato un errore inatteso. Riprova più tardi.",
     reference: (id: string) => `Riferimento: ${id}`,
     codes: {
@@ -1109,7 +1111,9 @@ const en: AppCopy = {
   },
   errors: {
     title: "Error",
+    notFoundTitle: "Page not found",
     notFound: "The requested page was not found.",
+    home: "Back to FiscalBay",
     unexpected: "An unexpected error occurred. Try again later.",
     reference: (id) => `Reference: ${id}`,
     codes: {

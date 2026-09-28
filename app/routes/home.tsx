@@ -3,9 +3,8 @@ import { cn } from "cn";
 import { ClipboardList, Copy, LogOut, Plus, ShieldCheck, Store } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import logoDarkUrl from "../../docs/brand/logo/fiscalbay-logo-dark.svg?url";
-import logoUrl from "../../docs/brand/logo/fiscalbay-logo.svg?url";
 import { IconTile } from "~/components/icon-tile";
+import { Logo } from "~/components/standalone-page";
 import { StatusAlert } from "~/components/status";
 import { TaxCode } from "~/components/tax-code";
 import { Button } from "~/components/ui/button";
@@ -32,10 +31,13 @@ import { formatAmount, languageFromPath, localizedPath, type Language } from "..
 import { formatDate } from "../view-models";
 import type { Route } from "./+types/home";
 
-export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
+export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   const language = languageFromPath(location.pathname);
+  const { access } = appCopy[language];
+  // Senza sessione la pagina è l'accesso, non ancora l'elenco degli ordini.
+  const title = loaderData?.authenticated ? access.title : access.signIn;
   return [
-    { title: `FiscalBay | ${appCopy[language].access.title}` },
+    { title: `FiscalBay | ${title}` },
     { name: "description", content: appCopy[language].access.description },
   ];
 }
@@ -531,30 +533,6 @@ function LanguageNav({ t, language }: { t: AccessCopy; language: Language }) {
   );
 }
 
-function Logo({ className, onDark = false }: { className?: string; onDark?: boolean }) {
-  if (onDark) {
-    return <img src={logoDarkUrl} alt="FiscalBay" width="224" height="45" className={className} />;
-  }
-  return (
-    <>
-      <img
-        src={logoUrl}
-        alt="FiscalBay"
-        width="224"
-        height="45"
-        className={cn(className, "dark:hidden")}
-      />
-      <img
-        src={logoDarkUrl}
-        alt="FiscalBay"
-        width="224"
-        height="45"
-        className={cn(className, "hidden dark:block")}
-      />
-    </>
-  );
-}
-
 const featureIcons = [
   { Icon: ShieldCheck, className: "text-brand-sky" },
   { Icon: Copy, className: "text-[#f5c451]" },
@@ -627,7 +605,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <div className="grid gap-2 lg:hidden">
               <p className="text-2xl font-semibold text-balance">{t.headline}</p>
             </div>
-            <h1 className="sr-only">{t.title}</h1>
+            <h1 className="sr-only">{loaderData.authenticated ? t.agreementTitle : t.choose}</h1>
             {noticeAlert}
             {loaderData.authenticated ? (
               <AccountBar
