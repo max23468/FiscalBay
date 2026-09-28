@@ -1478,7 +1478,10 @@ function OrdersList({
     unlock.submit(ids);
   };
   const ordersHref = appHref(links, "ordini");
-  const orders = showIncoming ? [...data.incoming, ...data.orders] : data.orders;
+  // La lista resta dal più recente anche quando i nuovi ordini arrivano in un ordine diverso.
+  const orders = showIncoming
+    ? [...[...data.incoming].sort((a, b) => b.createdAt.localeCompare(a.createdAt)), ...data.orders]
+    : data.orders;
   const incomingIds = new Set(data.incoming.map((order) => order.id));
   const lockedSelected = orders
     .filter((order) => selected.has(order.id) && order.fiscal.state === "locked")

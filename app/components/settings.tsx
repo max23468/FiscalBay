@@ -246,6 +246,45 @@ function Group({
   );
 }
 
+/** Piano Premium in corso: il piano a vita non ha rinnovo né abbonamento da gestire. */
+function PremiumPlan({
+  account,
+  t,
+  language,
+}: {
+  account: AccountView;
+  t: AppCopy;
+  language: Language;
+}) {
+  const notify = useNotice();
+  const lifetime = account.premium?.period === "lifetime";
+  return (
+    <Group title={t.settings.currentPlan}>
+      <div className="grid gap-1">
+        <p className="flex items-center gap-2 text-lg font-semibold">
+          {t.settings.premiumPeriod[account.premium?.period ?? "annual"]}
+          <StatusBadge tone="premium">{t.settings.premium}</StatusBadge>
+        </p>
+        {lifetime ? (
+          <p className="text-sm text-muted-foreground">{t.settings.premiumLifetime}</p>
+        ) : account.premium?.renewsAt ? (
+          <p className="text-sm text-muted-foreground">
+            {t.settings.premiumRenews(formatDate(account.premium.renewsAt, language, "date"))}
+          </p>
+        ) : null}
+      </div>
+      {lifetime ? null : (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" onClick={() => notify(t.preview.simulated)}>
+            {t.settings.manageBilling}
+          </Button>
+        </div>
+      )}
+      <p className="text-sm text-muted-foreground">{t.settings.billingDocs}</p>
+    </Group>
+  );
+}
+
 function PlanSection({
   data,
   t,
@@ -261,25 +300,7 @@ function PlanSection({
   if (account.plan === "premium") {
     return (
       <>
-        <Group title={t.settings.currentPlan}>
-          <div className="grid gap-1">
-            <p className="flex items-center gap-2 text-lg font-semibold">
-              {t.settings.premiumAnnual}
-              <StatusBadge tone="premium">{t.settings.premium}</StatusBadge>
-            </p>
-            {account.premium?.renewsAt ? (
-              <p className="text-sm text-muted-foreground">
-                {t.settings.premiumRenews(formatDate(account.premium.renewsAt, language, "date"))}
-              </p>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button variant="outline" onClick={() => notify(t.preview.simulated)}>
-              {t.settings.manageBilling}
-            </Button>
-          </div>
-          <p className="text-sm text-muted-foreground">{t.settings.billingDocs}</p>
-        </Group>
+        <PremiumPlan account={account} t={t} language={language} />{" "}
         {data.stores.length > 1 ? (
           <Group title={t.settings.downgradeStore}>
             <SimpleSelect

@@ -214,3 +214,19 @@ for (const locale of ["it", "en"] as const) {
     }
   });
 }
+
+test("con Premium nessun ordine resta da sbloccare e il piano a vita non si rinnova", async ({
+  page,
+}) => {
+  await open(page);
+  await chooseScenario(page, "Problema su un negozio");
+  await expect(page.getByRole("button", { name: "Sblocca ordine" })).toHaveCount(0);
+  await expect(page.getByText("BNCLCU75C12F205X")).toBeVisible();
+
+  await chooseScenario(page, "Premium a vita");
+  await expect(page.getByText("Il carattere di controllo non corrisponde.")).toBeVisible();
+  await page.goto("/anteprima/impostazioni/piano");
+  await expect(page.getByText("Premium a vita", { exact: true })).toBeVisible();
+  await expect(page.getByText("Acquisto una tantum, senza rinnovi.")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Gestisci abbonamento/u })).toHaveCount(0);
+});
