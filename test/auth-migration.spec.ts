@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { getMigrations } from "better-auth/db/migration";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { handleAuthRequest } from "../app/auth-route.server";
 import { createAuth, createAuthOptions } from "../app/auth.server";
@@ -15,6 +15,28 @@ it("mantiene lo schema D1 allineato ai quattro metodi Auth", async () => {
 });
 
 describe("Better Auth su Workers e D1", () => {
+  it("usa mittente e Reply-To previsti per verifica e reset", async () => {
+    const send = vi.fn(async () => ({ messageId: "synthetic" }));
+    const options = createAuthOptions({ ...env, AUTH_EMAIL: { send } } as Env);
+    const user = { email: "auth@example.invalid" };
+    const url = "https://test.fiscalbay.it/verifica";
+
+    await options.emailVerification?.sendVerificationEmail?.(
+      { user, url } as never,
+      new Request(url),
+    );
+    await options.emailAndPassword?.sendResetPassword?.({ user, url } as never, new Request(url));
+
+    expect(send).toHaveBeenCalledTimes(2);
+    for (const [message] of send.mock.calls) {
+      expect(message).toMatchObject({
+        from: { email: ["noreply", "fiscalbay.it"].join("@"), name: "FiscalBay" },
+        replyTo: ["supporto", "fiscalbay.it"].join("@"),
+        to: user.email,
+      });
+    }
+  });
+
   it("cifra i token OAuth e non li espone tramite le route HTTP", async () => {
     const options = createAuthOptions(env);
     expect(options.account?.encryptOAuthTokens).toBe(true);

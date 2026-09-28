@@ -19,7 +19,7 @@ const ebayIdentitySchema = z.object({
     .optional(),
 });
 
-const authEmailFrom = "accesso@auth.fiscalbay.it";
+const authEmailFrom = "noreply@fiscalbay.it";
 
 function escapeHtml(value: string): string {
   return value
@@ -39,6 +39,7 @@ async function sendAuthEmail(
   const safeUrl = escapeHtml(url);
   await environment.AUTH_EMAIL.send({
     from: { email: authEmailFrom, name: "FiscalBay" },
+    replyTo: "supporto@fiscalbay.it",
     to: email,
     subject,
     text: `${message}\n\n${url}`,
