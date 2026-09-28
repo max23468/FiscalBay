@@ -6,12 +6,21 @@ import { StatusAlert } from "~/components/status";
 import { TaxCode } from "~/components/tax-code";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
-import { Field, FieldGroup, FieldLabel } from "~/components/ui/field";
+import { Checkbox } from "~/components/ui/checkbox";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldSeparator,
+} from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import { createAuth } from "../auth.server";
+import { hasAcceptedTerms } from "../domain/agreements.server";
 import { listVisibleOrders } from "../domain/orders.server";
 import { appCopy } from "../app-copy";
-import { formatAmount, languageFromPath, localizedPath } from "../i18n";
+import { formatAmount, languageFromPath, localizedPath, type Language } from "../i18n";
 import { formatDate } from "../view-models";
 import type { Route } from "./+types/home";
 
@@ -34,21 +43,72 @@ export async function loader({ request }: Route.LoaderArgs) {
   const session = await createAuth(env).api.getSession({ headers: request.headers });
   const search = new URL(request.url).searchParams;
   const { access } = appCopy[language];
+  const notice =
+    access.signInNotices[search.get("accesso") ?? ""] ??
+    access.storeNotices[search.get("negozio") ?? ""] ??
+    null;
   if (!session) {
-    return {
-      authenticated: false,
-      language,
-      signInNotice: access.signInNotices[search.get("accesso") ?? ""] ?? null,
-      orders: [],
-    };
+    return { authenticated: false, language, notice, orders: [] };
   }
+  // Senza i Termini correnti accettati l'utente vede solo il passaggio per accettarli.
+  const accepted = await hasAcceptedTerms(env.DB, session.user.id);
   return {
     authenticated: true,
     language,
-    canLinkStore: session.user.emailVerified,
-    storeNotice: access.storeNotices[search.get("negozio") ?? ""] ?? null,
-    orders: await listVisibleOrders(env.DB, session.user.id),
+    notice,
+    email: session.user.email,
+    emailVerified: session.user.emailVerified,
+    needsAgreement: !accepted,
+    orders: accepted ? await listVisibleOrders(env.DB, session.user.id) : [],
   };
+}
+
+type AccessCopy = (typeof appCopy)[Language]["access"];
+
+/** Termini obbligatori e marketing facoltativo, entrambi mai preselezionati. */
+function AgreementFields({ t, language }: { t: AccessCopy; language: Language }) {
+  return (
+    <>
+      <FieldLabel className="font-normal">
+        <Checkbox name="termini" required aria-labelledby="terms-label" />
+        <span id="terms-label">
+          {t.terms.before}
+          <a href={localizedPath(language, "/termini")} className="underline underline-offset-4">
+            {t.terms.terms}
+          </a>
+          {t.terms.middle}
+          <a href={localizedPath(language, "/privacy")} className="underline underline-offset-4">
+            {t.terms.privacy}
+          </a>
+          {t.terms.after}
+        </span>
+      </FieldLabel>
+      <Field orientation="horizontal">
+        <Checkbox
+          id="marketing"
+          name="marketing"
+          aria-labelledby="marketing-label"
+          aria-describedby="marketing-hint"
+        />
+        <FieldContent>
+          <FieldLabel id="marketing-label" htmlFor="marketing" className="font-normal">
+            {t.marketing}
+          </FieldLabel>
+          <FieldDescription id="marketing-hint">{t.marketingHint}</FieldDescription>
+        </FieldContent>
+      </Field>
+    </>
+  );
+}
+
+function GoogleForm({ t, language }: { t: AccessCopy; language: Language }) {
+  return (
+    <form method="post" action={localizedPath(language, "/accesso")}>
+      <Button type="submit" variant="outline" name="intent" value="google" className="w-full">
+        {t.google}
+      </Button>
+    </form>
+  );
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
@@ -94,10 +154,20 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </nav>
       </header>
 
-      {loaderData.storeNotice ? <StatusAlert tone="info" title={loaderData.storeNotice} /> : null}
+      {loaderData.notice ? <StatusAlert tone="info" title={loaderData.notice} /> : null}
+      {loaderData.email && !loaderData.emailVerified ? (
+        <StatusAlert tone="warning" title={t.verifyTitle}>
+          <p>{t.verifyBody(loaderData.email)}</p>
+          <form method="post" action={localizedPath(language, "/accesso")} className="mt-2">
+            <Button type="submit" variant="outline" size="sm" name="intent" value="verifica">
+              {t.verifyResend}
+            </Button>
+          </form>
+        </StatusAlert>
+      ) : null}
       {loaderData.authenticated ? (
         <div className="flex flex-wrap gap-3">
-          {loaderData.canLinkStore ? (
+          {loaderData.emailVerified && !loaderData.needsAgreement ? (
             <form method="post" action={localizedPath(language, "/negozi/collega")}>
               <Button type="submit">{t.linkStore}</Button>
             </form>
@@ -111,39 +181,106 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       ) : null}
 
       {!loaderData.authenticated ? (
+        <div className="grid items-start gap-6 md:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <h2>{t.signIn}</h2>
+              </CardTitle>
+              <CardDescription>{t.signInBody}</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <form method="post" action={localizedPath(language, "/accesso")}>
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel htmlFor="email">{t.email}</FieldLabel>
+                    <Input id="email" name="email" type="email" autoComplete="username" required />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="password">{t.password}</FieldLabel>
+                    <Input
+                      id="password"
+                      name="password"
+                      type="password"
+                      autoComplete="current-password"
+                      required
+                    />
+                  </Field>
+                  <Button type="submit" className="w-fit">
+                    {t.signIn}
+                  </Button>
+                </FieldGroup>
+              </form>
+              <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
+                {t.or}
+              </FieldSeparator>
+              <GoogleForm t={t} language={language} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <h2>{t.signUp}</h2>
+              </CardTitle>
+              <CardDescription>{t.signUpBody}</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <form method="post" action={localizedPath(language, "/accesso")}>
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel htmlFor="signup-name">{t.name}</FieldLabel>
+                    <Input id="signup-name" name="nome" autoComplete="name" maxLength={100} />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="signup-email">{t.email}</FieldLabel>
+                    <Input
+                      id="signup-email"
+                      name="email"
+                      type="email"
+                      autoComplete="email"
+                      required
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="signup-password">{t.newPassword}</FieldLabel>
+                    <Input
+                      id="signup-password"
+                      name="password"
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={8}
+                      maxLength={128}
+                      required
+                    />
+                  </Field>
+                  <AgreementFields t={t} language={language} />
+                  <Button type="submit" name="intent" value="registrati" className="w-fit">
+                    {t.signUp}
+                  </Button>
+                </FieldGroup>
+              </form>
+              <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
+                {t.or}
+              </FieldSeparator>
+              <GoogleForm t={t} language={language} />
+            </CardContent>
+          </Card>
+        </div>
+      ) : loaderData.needsAgreement ? (
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle>
-              <h2>{t.authRequired}</h2>
+              <h2>{t.agreementTitle}</h2>
             </CardTitle>
-            <CardDescription>{t.authRequiredBody}</CardDescription>
+            <CardDescription>{t.agreementBody}</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4">
-            {loaderData.signInNotice ? (
-              <StatusAlert tone="info" title={loaderData.signInNotice} />
-            ) : null}
+          <CardContent>
             <form method="post" action={localizedPath(language, "/accesso")}>
               <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="email">{t.email}</FieldLabel>
-                  <Input id="email" name="email" type="email" autoComplete="username" required />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="password">{t.password}</FieldLabel>
-                  <Input
-                    id="password"
-                    name="password"
-                    type="password"
-                    autoComplete="current-password"
-                    required
-                  />
-                </Field>
-                <div className="flex flex-wrap gap-3">
-                  <Button type="submit">{t.signIn}</Button>
-                  <Button type="submit" variant="outline" name="intent" value="registrati">
-                    {t.signUp}
-                  </Button>
-                </div>
+                <AgreementFields t={t} language={language} />
+                <Button type="submit" name="intent" value="accetta" className="w-fit">
+                  {t.agreementSubmit}
+                </Button>
               </FieldGroup>
             </form>
           </CardContent>

@@ -12,10 +12,12 @@ import {
   parseTradingOrderTaxIdentifiers,
 } from "../app/integrations/ebay/tax-identifiers.server";
 import { grantFreeOrder, listVisibleOrders } from "../app/domain/orders.server";
+import { legalVersions, recordAgreement } from "../app/domain/agreements.server";
 import { createAuth } from "../app/auth.server";
 import { handleAuthRequest } from "../app/auth-route.server";
 import { loader as loadHome } from "../app/routes/home";
 import { action as signIn } from "../app/routes/sign-in";
+import { loader as loadLegal } from "../app/routes/legal";
 import { action as startStoreLink } from "../app/routes/store-link";
 
 const now = "2026-09-13T20:00:00.000Z";
@@ -85,7 +87,7 @@ describe("percorso ordini", () => {
     expect(anonymous).toEqual({
       authenticated: false,
       language: "it",
-      signInNotice: null,
+      notice: null,
       orders: [],
     });
 
@@ -111,6 +113,12 @@ describe("percorso ordini", () => {
         user!.id,
       ),
     ]);
+    await recordAgreement(env.DB, {
+      userId: user!.id,
+      language: "it",
+      marketing: false,
+      now: new Date(now),
+    });
 
     const signIn = await auth.handler(
       new Request("http://localhost:5173/api/auth/sign-in/email", {
@@ -479,6 +487,12 @@ async function verifiedSession(email: string): Promise<{ userId: string; cookie:
     .bind(email)
     .first<{ id: string }>();
   await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?').bind(user!.id).run();
+  await recordAgreement(env.DB, {
+    userId: user!.id,
+    language: "it",
+    marketing: false,
+    now: new Date(now),
+  });
   const signIn = await auth.handler(
     new Request("http://localhost:5173/api/auth/sign-in/email", {
       method: "POST",
@@ -506,6 +520,198 @@ function storeCallback(query: string, cookie: string): Request {
   });
 }
 
+function accessForm(path: string, fields: Record<string, string>, cookie?: string) {
+  return signIn({
+    request: new Request(`http://localhost:5173${path}`, {
+      method: "POST",
+      headers: { origin: "http://localhost:5173", ...(cookie ? { cookie } : {}) },
+      body: new URLSearchParams(fields),
+    }),
+  } as Parameters<typeof signIn>[0]) as Promise<Response>;
+}
+
+function sessionCookie(response: Response): string {
+  return response.headers
+    .getSetCookie()
+    .map((cookie) => cookie.split(";")[0])
+    .join("; ");
+}
+
+async function homeFor(cookie: string) {
+  return loadHome({
+    request: new Request("http://localhost:5173/", { headers: { cookie } }),
+  } as Parameters<typeof loadHome>[0]);
+}
+
+async function agreements(userId: string) {
+  const terms = await env.DB.prepare(
+    "SELECT terms_version, privacy_version, language FROM terms_acceptances WHERE user_id = ?",
+  )
+    .bind(userId)
+    .all();
+  const marketing = await env.DB.prepare(
+    "SELECT granted, text_version, language FROM marketing_consents WHERE user_id = ? ORDER BY recorded_at",
+  )
+    .bind(userId)
+    .all();
+  return { terms: terms.results, marketing: marketing.results };
+}
+
+async function storeLinkSessions(): Promise<number> {
+  const row = await env.DB.prepare("SELECT COUNT(*) AS total FROM ebay_store_link_sessions").first<{
+    total: number;
+  }>();
+  return row!.total;
+}
+
+describe("registrazione e verifica del contatto", () => {
+  const password = "Una-password-registrazione-lunga";
+
+  it("registra senza consensi preselezionati e apre una sessione non verificata che esplora ma non collega negozi", async () => {
+    const withoutTerms = await accessForm("/accesso", {
+      intent: "registrati",
+      email: "registrazione@example.invalid",
+      password,
+    });
+    expect(withoutTerms.headers.get("location")).toBe("/?accesso=termini");
+    expect(withoutTerms.headers.getSetCookie()).toEqual([]);
+    const none = await env.DB.prepare('SELECT id FROM "user" WHERE email = ?')
+      .bind("registrazione@example.invalid")
+      .first();
+    expect(none).toBeNull();
+
+    const created = await accessForm("/en/accesso", {
+      intent: "registrati",
+      nome: "",
+      email: "registrazione@example.invalid",
+      password,
+      termini: "on",
+    });
+    expect(created.status).toBe(303);
+    expect(created.headers.get("location")).toBe("/en?accesso=registrato");
+    const cookie = sessionCookie(created);
+    expect(cookie).toContain("session_token");
+    const user = await env.DB.prepare(
+      'SELECT id, name, "emailVerified" FROM "user" WHERE email = ?',
+    )
+      .bind("registrazione@example.invalid")
+      .first<{ id: string; name: string; emailVerified: number }>();
+    expect(user).toMatchObject({ name: "", emailVerified: 0 });
+    expect(await agreements(user!.id)).toEqual({
+      terms: [
+        {
+          terms_version: legalVersions.terms,
+          privacy_version: legalVersions.privacy,
+          language: "en",
+        },
+      ],
+      marketing: [{ granted: 0, text_version: legalVersions.marketing, language: "en" }],
+    });
+
+    expect(await homeFor(cookie)).toMatchObject({
+      authenticated: true,
+      email: "registrazione@example.invalid",
+      emailVerified: false,
+      needsAgreement: false,
+      orders: [],
+    });
+    const link = (await startStoreLink({
+      request: new Request("http://localhost:5173/negozi/collega", {
+        method: "POST",
+        headers: { cookie, origin: "http://localhost:5173" },
+      }),
+    } as Parameters<typeof startStoreLink>[0])) as Response;
+    expect(link.headers.get("location")).toBe("/?negozio=accesso");
+    expect(await storeLinkSessions()).toBe(0);
+
+    const resent = await accessForm("/accesso", { intent: "verifica" }, cookie);
+    expect(resent.headers.get("location")).toBe("/?accesso=verifica-inviata");
+
+    const duplicate = await accessForm("/accesso", {
+      intent: "registrati",
+      email: "registrazione@example.invalid",
+      password,
+      termini: "on",
+    });
+    expect(duplicate.headers.get("location")).toBe("/?accesso=registrazione");
+    expect(duplicate.headers.getSetCookie()).toEqual([]);
+  });
+
+  it("chiede i Termini a chi entra senza averli accettati prima di mostrare ordini o collegare negozi", async () => {
+    const auth = createAuth(env);
+    const email = "senza-termini@example.invalid";
+    await auth.handler(
+      new Request("http://localhost:5173/api/auth/sign-up/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "", email, password }),
+      }),
+    );
+    const user = await env.DB.prepare('SELECT id FROM "user" WHERE email = ?')
+      .bind(email)
+      .first<{ id: string }>();
+    await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?').bind(user!.id).run();
+    const cookie = sessionCookie(await accessForm("/accesso", { email, password }));
+
+    expect(await homeFor(cookie)).toMatchObject({ needsAgreement: true, orders: [] });
+    const blocked = (await startStoreLink({
+      request: new Request("http://localhost:5173/negozi/collega", {
+        method: "POST",
+        headers: { cookie, origin: "http://localhost:5173" },
+      }),
+    } as Parameters<typeof startStoreLink>[0])) as Response;
+    expect(blocked.headers.get("location")).toBe("/");
+    expect(await storeLinkSessions()).toBe(0);
+
+    expect(
+      (await accessForm("/accesso", { intent: "accetta", marketing: "on" }, cookie)).headers.get(
+        "location",
+      ),
+    ).toBe("/?accesso=termini");
+    expect(
+      (
+        await accessForm("/accesso", { intent: "accetta", termini: "on", marketing: "on" }, cookie)
+      ).headers.get("location"),
+    ).toBe("/");
+    expect(await agreements(user!.id)).toEqual({
+      terms: [
+        {
+          terms_version: legalVersions.terms,
+          privacy_version: legalVersions.privacy,
+          language: "it",
+        },
+      ],
+      marketing: [{ granted: 1, text_version: legalVersions.marketing, language: "it" }],
+    });
+    expect(await homeFor(cookie)).toMatchObject({ needsAgreement: false, emailVerified: true });
+    expect((await beginStoreLink(cookie)).hostname).toBe("auth.ebay.com");
+  });
+
+  it("avvia l'accesso Google dal modulo con il callback dell'ambiente", async () => {
+    const response = await accessForm("/accesso", { intent: "google" });
+    expect(response.status).toBe(303);
+    const location = new URL(response.headers.get("location")!);
+    expect(location.hostname).toBe("accounts.google.com");
+    expect(location.searchParams.get("redirect_uri")).toBe(
+      "http://localhost:5173/api/auth/callback/google",
+    );
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("pubblica la versione dei Termini e dell'informativa accettate", async () => {
+    expect(
+      await loadLegal({
+        request: new Request("http://localhost:5173/en/privacy"),
+      } as Parameters<typeof loadLegal>[0]),
+    ).toEqual({ language: "en", document: "privacy", version: legalVersions.privacy });
+    expect(
+      await loadLegal({
+        request: new Request("http://localhost:5173/termini"),
+      } as Parameters<typeof loadLegal>[0]),
+    ).toEqual({ language: "it", document: "termini", version: legalVersions.terms });
+  });
+});
+
 describe("collegamento negozio eBay", () => {
   it("registra e apre la sessione dal modulo di accesso solo dalla propria origine", async () => {
     await verifiedSession("accesso@example.invalid");
@@ -526,24 +732,6 @@ describe("collegamento negozio eBay", () => {
     const rejected = await submit("password-sbagliata-ma-lunga");
     expect(rejected.headers.get("location")).toBe("/?accesso=errore");
     expect(rejected.headers.getSetCookie()).toEqual([]);
-
-    const signUp = (await signIn({
-      request: new Request("http://localhost:5173/accesso", {
-        method: "POST",
-        headers: { origin: "http://localhost:5173" },
-        body: new URLSearchParams({
-          intent: "registrati",
-          email: "nuovo@example.invalid",
-          password: "Una-password-nuova-molto-lunga",
-        }),
-      }),
-    } as Parameters<typeof signIn>[0])) as Response;
-    expect(signUp.headers.get("location")).toBe("/?accesso=registrato");
-    expect(signUp.headers.getSetCookie()).toEqual([]);
-    const created = await env.DB.prepare('SELECT "emailVerified" FROM "user" WHERE email = ?')
-      .bind("nuovo@example.invalid")
-      .first();
-    expect(created).toEqual({ emailVerified: 0 });
 
     expect(
       (await submit("Una-password-negozio-molto-lunga", "https://esempio.invalid")).status,
@@ -606,7 +794,7 @@ describe("collegamento negozio eBay", () => {
     const home = await loadHome({
       request: new Request("http://localhost:5173/?negozio=collegato", { headers: { cookie } }),
     } as Parameters<typeof loadHome>[0]);
-    expect(home.storeNotice).toBe("Negozio eBay collegato.");
+    expect(home.notice).toBe("Negozio eBay collegato.");
     expect(
       home.orders.map(({ ebayOrderId, taxIdentifiers }) => [ebayOrderId, taxIdentifiers]),
     ).toEqual([[syntheticOrderId, []]]);

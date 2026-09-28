@@ -79,7 +79,8 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
     },
     emailAndPassword: {
       enabled: true,
-      requireEmailVerification: true,
+      // La sessione nasce subito: chi non ha verificato l'email esplora, ma non collega negozi.
+      requireEmailVerification: false,
       sendResetPassword: async ({ user, url }) => {
         waitUntil(
           sendAuthEmail(
@@ -93,6 +94,8 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
       },
     },
     emailVerification: {
+      sendOnSignUp: true,
+      autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, url }) => {
         waitUntil(
           sendAuthEmail(
