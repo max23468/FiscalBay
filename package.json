@@ -14,11 +14,15 @@
     "postinstall": "wrangler types",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:mutation": "node scripts/mutation.mjs",
+    "test:scripts": "node --test scripts/",
     "typecheck": "wrangler types && react-router typegen && tsc -b",
-    "verify": "pnpm verify:copy && pnpm format:check && pnpm lint && pnpm typecheck && pnpm doctor:react && pnpm test && pnpm build && pnpm verify:docs",
+    "verify": "pnpm verify:copy && pnpm verify:repo && pnpm test:scripts && pnpm format:check && pnpm lint && pnpm typecheck && pnpm doctor:react && pnpm test && pnpm build && pnpm verify:docs",
+    "verify:changed": "node scripts/classify-changes.mjs --run",
     "verify:copy": "node scripts/verify-copy.mjs",
+    "verify:docs": "node scripts/verify-docs.mjs",
     "verify:full": "pnpm verify && pnpm test:e2e",
-    "verify:docs": "node scripts/verify-docs.mjs"
+    "verify:repo": "node scripts/verify-repo.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.8.0",
@@ -46,6 +50,8 @@
     "@cloudflare/vitest-plugin": "1.2.6",
     "@playwright/test": "1.63.0",
     "@react-router/dev": "8.4.0",
+    "@stryker-mutator/core": "10.0.0",
+    "@stryker-mutator/vitest-runner": "10.0.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "26.6.2",
     "@types/react": "19.3.0",
