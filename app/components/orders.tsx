@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import {
   Check,
+  ChevronRight,
   EllipsisVertical,
   ListChecks,
   MessageSquareText,
@@ -482,9 +483,9 @@ function OrderCard({
       animate={{ opacity: 1, y: 0 }}
       aria-labelledby={titleId}
       className={cn(
-        // Da due colonne la scheda occupa tre righe condivise con quella accanto:
-        // intestazione, articolo e acquirente iniziano alla stessa altezza.
-        "flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4 transition-[border-color] duration-(--duration-quick) lg:row-span-3 lg:grid lg:grid-rows-subgrid",
+        // Da due colonne la scheda occupa quattro righe condivise con quella accanto:
+        // intestazione, articolo, acquirente e «Dettaglio» iniziano alla stessa altezza.
+        "flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4 transition-[border-color] duration-(--duration-quick) lg:row-span-4 lg:grid lg:grid-rows-subgrid",
         selected && "border-ring",
       )}
     >
@@ -538,31 +539,19 @@ function OrderCard({
             )}
           </div>
         </div>
-        <div className="flex items-baseline justify-between gap-3">
-          <p className="flex flex-wrap gap-x-1.5 text-xs text-muted-foreground">
-            <time dateTime={order.createdAt} className="whitespace-nowrap">
-              {formatDate(order.createdAt, language)}
-            </time>
-            <span aria-hidden="true">·</span>
-            <span className="whitespace-nowrap">
-              {t.orders.payment[order.payment]} · {t.orders.shipping[order.shipping]}
-            </span>
-            <span aria-hidden="true">·</span>
-            <span className="text-pretty">
-              {order.storeName}, {marketplaceLabel(order.marketplace)}
-            </span>
-          </p>
-          <Link
-            to={detailHref}
-            preventScrollReset
-            className={cn(
-              "shrink-0 rounded-sm text-xs font-medium text-foreground underline decoration-border underline-offset-4 outline-none hover:decoration-foreground focus-visible:ring-3 focus-visible:ring-ring",
-              coarseTarget,
-            )}
-          >
-            {t.orders.details}
-          </Link>
-        </div>
+        <p className="flex flex-wrap gap-x-1.5 text-xs text-muted-foreground">
+          <time dateTime={order.createdAt} className="whitespace-nowrap">
+            {formatDate(order.createdAt, language)}
+          </time>
+          <span aria-hidden="true">·</span>
+          <span className="whitespace-nowrap">
+            {t.orders.payment[order.payment]} · {t.orders.shipping[order.shipping]}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span className="text-pretty">
+            {order.storeName}, {marketplaceLabel(order.marketplace)}
+          </span>
+        </p>
       </header>
       <div className="flex gap-3">
         {/* Miniatura sempre presente, così gli articoli partono allo stesso punto. */}
@@ -631,6 +620,20 @@ function OrderCard({
         />
         <BuyerContacts order={order} t={t} language={language} />
       </div>
+      {/* In fondo alla scheda, lontano dal menu delle azioni accanto all'importo. */}
+      <footer className="flex justify-end">
+        <Link
+          to={detailHref}
+          preventScrollReset
+          className={cn(
+            "inline-flex items-center gap-0.5 rounded-sm text-xs font-medium text-foreground underline decoration-border underline-offset-4 outline-none hover:decoration-foreground focus-visible:ring-3 focus-visible:ring-ring",
+            coarseTarget,
+          )}
+        >
+          {t.orders.details}
+          <ChevronRight aria-hidden="true" className="size-3.5" />
+        </Link>
+      </footer>
     </m.article>
   );
 }
@@ -1299,6 +1302,7 @@ function LoadingGrid({ t }: { t: AppCopy }) {
                 <Skeleton className="h-4 w-32" />
               </div>
             </div>
+            <Skeleton className="h-3 w-16 justify-self-end" />
           </div>
         ))}
       </div>

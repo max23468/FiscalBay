@@ -200,6 +200,8 @@ test("movimento ridotto: dato intero e nuovi ordini senza animazione", async ({ 
 
   // In cima alla lista i nuovi ordini entrano subito, senza pulsante.
   await open(page, "/anteprima/ordini", "aggiornamento");
+  // La riapertura ripristina lo scorrimento dello sblocco: tornando in cima i nuovi ordini entrano.
+  await page.evaluate(() => scrollTo(0, 0));
   const incoming = page.getByRole("article", { name: "Ordine 40-10001-20002" });
   await expect(incoming).toBeVisible();
   await expect(page.getByRole("button", { name: /nuovi ordini/ })).toHaveCount(0);
