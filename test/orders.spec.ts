@@ -762,6 +762,22 @@ describe("registrazione e verifica del contatto", () => {
       emailVerified: true,
     });
     expect((await beginStoreLink(cookie)).hostname).toBe("auth.ebay.com");
+
+    // Le registrazioni precedenti usavano l'email come nome: non va proposta come nome.
+    const legacyEmail = "nome-email@example.invalid";
+    await auth.handler(
+      new Request("http://localhost:5173/api/auth/sign-up/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: legacyEmail, email: legacyEmail, password }),
+      }),
+    );
+    const legacy = sessionCookie(await accessForm("/accesso", { email: legacyEmail, password }));
+    expect(await homeFor(legacy)).toMatchObject({
+      needsProfile: true,
+      canLinkStore: false,
+      suggestedName: { firstName: "", lastName: "" },
+    });
   });
 
   it("limita per IP i tentativi dei moduli su un ambiente distribuito, contando su D1", async () => {

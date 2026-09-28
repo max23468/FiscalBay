@@ -596,6 +596,8 @@ const it = {
     verifyResend: "Invia di nuovo il link",
     noOrders: "Nessun ordine",
     noOrdersBody: "Collega un negozio eBay per importare gli ordini disponibili.",
+    noOrdersVerifyBody:
+      "Dopo la conferma dell’indirizzo email potrai collegare un negozio eBay e importare gli ordini.",
     list: "Ordini qualificati",
     storeNotices: {
       collegato: "Negozio eBay collegato.",
@@ -1189,6 +1191,8 @@ const en: AppCopy = {
     verifyResend: "Send the link again",
     noOrders: "No orders",
     noOrdersBody: "Connect an eBay store to import available orders.",
+    noOrdersVerifyBody:
+      "Once your email address is confirmed, you can connect an eBay store and import orders.",
     list: "Qualified orders",
     storeNotices: {
       collegato: "eBay store connected.",
