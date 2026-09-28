@@ -1,5 +1,16 @@
 import { cn } from "cn";
-import { Bell, ClipboardList, LogOut, Search, Settings, Store, User } from "lucide-react";
+import {
+  Bell,
+  ClipboardList,
+  CreditCard,
+  Globe,
+  LogOut,
+  Search,
+  Settings,
+  ShieldCheck,
+  Store,
+  User,
+} from "lucide-react";
 import {
   createContext,
   useCallback,
@@ -12,6 +23,7 @@ import {
 } from "react";
 import { Link, NavLink, useFetcher, useLocation, useNavigate } from "react-router";
 
+import { InitialsTile } from "~/components/icon-tile";
 import { StatusIcon } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import {
@@ -508,15 +520,6 @@ function NotificationsMenu({
   );
 }
 
-function initials(name: string, email: string) {
-  const words = name.trim().split(/\s+/u).filter(Boolean);
-  if (words.length === 0) return email.slice(0, 1).toUpperCase();
-  return words
-    .slice(0, 2)
-    .map((word) => word.slice(0, 1).toUpperCase())
-    .join("");
-}
-
 function AccountMenu({
   t,
   links,
@@ -531,8 +534,8 @@ function AccountMenu({
   const navigate = useNavigate();
   const items = [
     { path: "profilo", label: t.shell.profile, Icon: User },
-    { path: "impostazioni/sicurezza", label: t.shell.security },
-    { path: "impostazioni/piano", label: t.shell.planBilling },
+    { path: "impostazioni/sicurezza", label: t.shell.security, Icon: ShieldCheck },
+    { path: "impostazioni/piano", label: t.shell.planBilling, Icon: CreditCard },
     { path: "impostazioni", label: t.shell.settings, Icon: Settings },
   ];
   return (
@@ -540,30 +543,33 @@ function AccountMenu({
       <DropdownMenuTrigger
         render={<Button variant="ghost" size="icon" aria-label={t.shell.account} />}
       >
-        <span
-          aria-hidden="true"
-          className="grid size-7 place-items-center rounded-full bg-muted text-xs font-semibold text-foreground"
-        >
-          {initials(account.name, account.email)}
-        </span>
+        <InitialsTile
+          name={account.name}
+          fallback={account.email}
+          size="sm"
+          className="rounded-full"
+        />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-60">
         <DropdownMenuGroup>
-          <DropdownMenuLabel className="grid gap-0.5 px-1.5 py-1.5">
-            <span className="truncate text-sm text-foreground">{account.name}</span>
-            <span className="truncate font-normal">{account.email}</span>
+          <DropdownMenuLabel className="flex items-center gap-3 px-1.5 py-1.5">
+            <InitialsTile name={account.name} fallback={account.email} className="rounded-full" />
+            <span className="grid min-w-0 gap-0.5">
+              <span className="truncate text-sm text-foreground">{account.name}</span>
+              <span className="truncate font-normal">{account.email}</span>
+            </span>
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         {items.map(({ path, label, Icon }) => (
           <DropdownMenuItem key={path} onClick={() => void navigate(appHref(links, path))}>
-            {Icon ? <Icon aria-hidden="true" /> : <span aria-hidden="true" className="size-4" />}
+            <Icon aria-hidden="true" />
             {label}
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => void navigate(localizedPath(links.language, "/"))}>
-          <span aria-hidden="true" className="size-4" />
+          <Globe aria-hidden="true" />
           {t.shell.visitSite}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={onSignOut}>

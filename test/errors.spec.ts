@@ -37,7 +37,10 @@ describe("errors, locale and redacted logs", () => {
     } as Parameters<typeof loadHome>[0]);
     expect(result).toMatchObject({
       language: "en",
-      notice: "Could not complete the operation. Check your email and password.",
+      notice: {
+        text: "Could not complete the operation. Check your email and password.",
+        tone: "danger",
+      },
     });
   });
 

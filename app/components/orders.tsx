@@ -2,6 +2,7 @@ import { cn } from "cn";
 import {
   Check,
   ChevronRight,
+  ClipboardList,
   EllipsisVertical,
   ListChecks,
   MessageSquareText,
@@ -17,6 +18,8 @@ import { Link, useFetcher, useLocation, useNavigate, useSearchParams } from "rea
 import { useAction, useNotice } from "~/components/app-shell";
 import { LedgerIndicator } from "~/components/brand";
 import { EmptyState } from "~/components/empty-state";
+import { PageTitle } from "~/components/icon-tile";
+import { dotTones, tileTones, toneFor } from "~/components/tile-tone";
 import { UnlockIcon } from "~/components/icons";
 import { StatusAlert, StatusBadge, StatusIcon } from "~/components/status";
 import { TaxCode } from "~/components/tax-code";
@@ -31,6 +34,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "~/components/ui/alert-dialog";
+import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { buttonVariants } from "~/components/ui/button-variants";
 import { Checkbox } from "~/components/ui/checkbox";
@@ -73,6 +77,8 @@ import {
   shippingStatuses,
   countryName,
   type OrderView,
+  type PaymentStatus,
+  type ShippingStatus,
   type TaxIdentifierView,
 } from "../view-models";
 
@@ -118,7 +124,7 @@ function taxCodeLabels(label: string, order: string, t: AppCopy) {
     copy: t.orders.copy(label, order),
     copied: t.orders.copied,
     copyFailed: t.orders.copyFailed,
-    locked: t.orders.lockedLabel,
+    locked: t.orders.lockedLabel(label),
   };
 }
 
@@ -185,6 +191,26 @@ function FiscalSlot({ tone, children }: { tone: "neutral" | "info" | "danger"; c
 }
 
 const cardRow = "flex flex-wrap items-center gap-x-3 gap-y-2";
+
+type PillTone = "success" | "warning" | "info" | "neutral";
+
+const paymentTone: Record<PaymentStatus, PillTone> = {
+  paid: "success",
+  unpaid: "warning",
+  refunded: "neutral",
+};
+
+const shippingTone: Record<ShippingStatus, PillTone> = {
+  to_ship: "warning",
+  shipped: "info",
+  delivered: "success",
+  cancelled: "neutral",
+};
+
+/** Stato di pagamento o spedizione: etichetta tinta, il testo resta la fonte. */
+function StatePill({ tone, children }: { tone: PillTone; children: string }) {
+  return <Badge variant={tone}>{children}</Badge>;
+}
 
 /** Area di tocco invisibile di almeno 44 px per i collegamenti testuali, come per i pulsanti. */
 const coarseTarget =
@@ -289,16 +315,15 @@ function FiscalCodes({ order, t, account, ebayDown, revealed, unlocking, onUnloc
     );
   }
   const exhausted = fiscal.state === "locked" && remainingUnlocks(account) === 0;
+  // Prima dello sblocco il nome è Codice Fiscale, o Partita IVA se l'ordine ha solo quella.
+  const label = t.orders.identifier[fiscal.state === "locked" ? fiscal.shownAs : "CF"];
   return (
     <div className="grid content-start gap-1.5">
-      <CardLabel>{t.orders.identifier.CF}</CardLabel>
+      <CardLabel>{label}</CardLabel>
       <div className={cardRow}>
         {fiscal.state === "locked" ? (
           <>
-            <TaxCode
-              value={null}
-              labels={taxCodeLabels(t.orders.identifier.CF, order.ebayOrderId, t)}
-            />
+            <TaxCode value={null} labels={taxCodeLabels(label, order.ebayOrderId, t)} />
             {exhausted ? null : (
               <UnlockButton order={order} t={t} unlocking={unlocking} onUnlock={onUnlock} />
             )}
@@ -534,18 +559,25 @@ function OrderCard({
             )}
           </div>
         </div>
-        <p className="flex flex-wrap gap-x-1.5 text-xs text-muted-foreground">
+        <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
           <time dateTime={order.createdAt} className="whitespace-nowrap">
             {formatDate(order.createdAt, language)}
           </time>
           <span aria-hidden="true">·</span>
-          <span className="whitespace-nowrap">
-            {t.orders.payment[order.payment]} · {t.orders.shipping[order.shipping]}
-          </span>
-          <span aria-hidden="true">·</span>
+          {/* Il punto ha la tinta del negozio, la stessa del suo avatar in Negozi. */}
+          <span
+            aria-hidden="true"
+            className={cn("size-2 shrink-0 rounded-full", dotTones[toneFor(order.storeName)])}
+          />
           <span className="text-pretty">
             {order.storeName}, {marketplaceLabel(order.marketplace)}
           </span>
+        </p>
+        <p className="mt-1.5 flex flex-wrap gap-1.5">
+          <StatePill tone={paymentTone[order.payment]}>{t.orders.payment[order.payment]}</StatePill>
+          <StatePill tone={shippingTone[order.shipping]}>
+            {t.orders.shipping[order.shipping]}
+          </StatePill>
         </p>
       </header>
       <div className="flex gap-3">
@@ -561,7 +593,10 @@ function OrderCard({
         ) : (
           <span
             aria-hidden="true"
-            className="grid size-10 shrink-0 place-items-center rounded-md border bg-muted/60 text-muted-foreground"
+            className={cn(
+              "grid size-10 shrink-0 place-items-center rounded-md",
+              tileTones[toneFor(order.storeName)],
+            )}
           >
             <Package className="size-4" />
           </span>
@@ -633,7 +668,11 @@ function OrderCard({
   );
 }
 
-function OrderDetail({
+/**
+ * Spiegazioni complete del dato, suggerimento e richiesta all'acquirente,
+ * nel riquadro in cima al pannello insieme al codice.
+ */
+function FiscalDetail({
   order,
   t,
   language,
@@ -644,6 +683,65 @@ function OrderDetail({
   template: string;
 }) {
   const notify = useNotice();
+  return (
+    <>
+      <FiscalNotes
+        order={order}
+        t={t}
+        language={language}
+        account={account}
+        ebayDown={ebayDown}
+        compact={false}
+      />
+      {order.fiscal.state === "missing" ? (
+        <div className="grid gap-3">
+          {order.suggestion ? (
+            <div className="grid gap-2 rounded-lg border bg-card p-3">
+              <p className="text-xs font-medium text-muted-foreground">{t.orders.suggestion}</p>
+              <TaxCode
+                value={order.suggestion.value}
+                labels={taxCodeLabels(t.orders.identifier.CF, order.ebayOrderId, t)}
+              />
+              <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
+                {t.orders.suggestionHint(
+                  order.suggestion.sourceOrder,
+                  formatDate(order.suggestion.sourceDate, language, "date"),
+                )}
+              </p>
+              {order.suggestion.conflict ? (
+                <StatusAlert tone="warning" title={t.orders.toVerify}>
+                  {t.orders.suggestionConflict}
+                </StatusAlert>
+              ) : null}
+            </div>
+          ) : null}
+          <Button
+            variant="outline"
+            className="w-fit"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(
+                  template.replaceAll("{ordine}", order.ebayOrderId),
+                );
+                notify(t.orders.requestCopied);
+              } catch {
+                notify(t.orders.copyFailed);
+              }
+            }}
+          >
+            <MessageSquareText aria-hidden="true" data-icon="inline-start" />
+            {t.orders.requestMessage}
+          </Button>
+        </div>
+      ) : null}
+      <p className="text-xs text-muted-foreground">
+        {t.order.source(formatDate(order.lastSyncedAt, language))}
+      </p>
+    </>
+  );
+}
+
+function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; language: Language }) {
   const row = "grid gap-0.5";
   return (
     <Tabs defaultValue="details" className="gap-0 px-4 pb-6">
@@ -734,66 +832,6 @@ function OrderDetail({
               </dd>
             </div>
           </dl>
-        </section>
-        <section aria-labelledby="order-fiscal" className="grid gap-3 border-t pt-5">
-          <h3 id="order-fiscal" className="text-sm font-semibold">
-            {t.order.fiscal}
-          </h3>
-          {/* Il codice è in cima al pannello; qui restano le spiegazioni complete. */}
-          <div className="grid gap-3">
-            <FiscalNotes
-              order={order}
-              t={t}
-              language={language}
-              account={account}
-              ebayDown={ebayDown}
-              compact={false}
-            />
-          </div>
-          {order.fiscal.state === "missing" ? (
-            <div className="grid gap-3">
-              {order.suggestion ? (
-                <div className="grid gap-2 rounded-lg border p-3">
-                  <p className="text-xs font-medium text-muted-foreground">{t.orders.suggestion}</p>
-                  <TaxCode
-                    value={order.suggestion.value}
-                    labels={taxCodeLabels(t.orders.identifier.CF, order.ebayOrderId, t)}
-                  />
-                  <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
-                    {t.orders.suggestionHint(
-                      order.suggestion.sourceOrder,
-                      formatDate(order.suggestion.sourceDate, language, "date"),
-                    )}
-                  </p>
-                  {order.suggestion.conflict ? (
-                    <StatusAlert tone="warning" title={t.orders.toVerify}>
-                      {t.orders.suggestionConflict}
-                    </StatusAlert>
-                  ) : null}
-                </div>
-              ) : null}
-              <Button
-                variant="outline"
-                className="w-fit"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(
-                      template.replaceAll("{ordine}", order.ebayOrderId),
-                    );
-                    notify(t.orders.requestCopied);
-                  } catch {
-                    notify(t.orders.copyFailed);
-                  }
-                }}
-              >
-                <MessageSquareText aria-hidden="true" data-icon="inline-start" />
-                {t.orders.requestMessage}
-              </Button>
-            </div>
-          ) : null}
-          <p className="text-xs text-muted-foreground">
-            {t.order.source(formatDate(order.lastSyncedAt, language))}
-          </p>
         </section>
       </TabsContent>
       <TabsContent value="items">
@@ -1087,17 +1125,22 @@ function OrdersHeader({
   const loading = data.view === "loading";
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
-      <div className="grid gap-1">
-        <h1 className="text-2xl font-bold sm:text-3xl">{t.orders.title}</h1>
-        {data.view === "list" ? (
-          <p className="text-sm text-muted-foreground">
-            {t.orders.count(data.total)}
-            {data.total > 0 ? ` · ${t.orders.sortedBy}` : null}
-          </p>
-        ) : loading ? (
-          <Skeleton aria-hidden="true" className="h-4 w-36" />
-        ) : null}
-      </div>
+      <PageTitle
+        icon={ClipboardList}
+        tone="blue"
+        description={
+          data.view === "list" ? (
+            <p className="text-sm text-muted-foreground">
+              {t.orders.count(data.total)}
+              {data.total > 0 ? ` · ${t.orders.sortedBy}` : null}
+            </p>
+          ) : loading ? (
+            <Skeleton aria-hidden="true" className="h-4 w-36" />
+          ) : null
+        }
+      >
+        {t.orders.title}
+      </PageTitle>
       {loading ? null : <SyncStatus data={data} t={t} language={language} />}
     </header>
   );
@@ -1563,7 +1606,7 @@ function OrderSheet({
             </SheetDescription>
           </SheetHeader>
           {/* Il dato fiscale, protagonista, resta visibile sopra le schede Dettagli e Articoli. */}
-          <div className="mx-4 mb-5 rounded-xl border bg-muted/30 p-3">
+          <div className="mx-4 mb-5 grid gap-3 rounded-xl border bg-muted/30 p-3">
             <FiscalCodes
               order={shown}
               t={t}
@@ -1574,15 +1617,16 @@ function OrderSheet({
               unlocking={unlock.pending.has(shown.id)}
               onUnlock={unlock.submit}
             />
+            <FiscalDetail
+              order={shown}
+              t={t}
+              language={language}
+              account={data.account}
+              ebayDown={ebayDown}
+              template={data.messageTemplate}
+            />
           </div>
-          <OrderDetail
-            order={shown}
-            t={t}
-            language={language}
-            account={data.account}
-            ebayDown={ebayDown}
-            template={data.messageTemplate}
-          />
+          <OrderDetail order={shown} t={t} language={language} />
         </SheetContent>
       ) : null}
     </Sheet>

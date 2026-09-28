@@ -103,6 +103,14 @@
   }
 }
 
+/* Pannello o campo che compare: sale di poco e si rivela. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    translate: 0 0.375rem;
+  }
+}
+
 /* Avviso breve dopo un'azione: sale di poco dal basso, verso cui è ancorato. */
 @keyframes notice-in {
   from {

@@ -1,8 +1,10 @@
 import { env } from "cloudflare:workers";
-import { useState } from "react";
+import { cn } from "cn";
+import { ClipboardList, Copy, LogOut, Plus, ShieldCheck, Store } from "lucide-react";
+import { useEffect, useState } from "react";
 
-import logoDarkUrl from "../../docs/brand/logo/fiscalbay-logo-dark.svg?url";
-import logoUrl from "../../docs/brand/logo/fiscalbay-logo.svg?url";
+import { IconTile } from "~/components/icon-tile";
+import { Logo } from "~/components/standalone-page";
 import { StatusAlert } from "~/components/status";
 import { TaxCode } from "~/components/tax-code";
 import { Button } from "~/components/ui/button";
@@ -20,6 +22,7 @@ import {
 } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { createAuth } from "../auth.server";
 import { registrationStatus } from "../domain/registration.server";
 import { listVisibleOrders } from "../domain/orders.server";
@@ -28,10 +31,13 @@ import { formatAmount, languageFromPath, localizedPath, type Language } from "..
 import { formatDate } from "../view-models";
 import type { Route } from "./+types/home";
 
-export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
+export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   const language = languageFromPath(location.pathname);
+  const { access } = appCopy[language];
+  // Senza sessione la pagina è l'accesso, non ancora l'elenco degli ordini.
+  const title = loaderData?.authenticated ? access.title : access.signIn;
   return [
-    { title: `FiscalBay | ${appCopy[language].access.title}` },
+    { title: `FiscalBay | ${title}` },
     { name: "description", content: appCopy[language].access.description },
   ];
 }
@@ -42,15 +48,31 @@ const identifierLabels: Record<string, "CF" | "PIVA"> = {
   VAT_ID: "PIVA",
 };
 
+/** Tono degli avvisi: gli errori chiedono un'azione, le conferme no. */
+const noticeTones: Record<string, "success" | "info" | "warning" | "danger"> = {
+  errore: "danger",
+  registrazione: "danger",
+  termini: "warning",
+  dati: "warning",
+  "troppi-tentativi": "warning",
+  accesso: "warning",
+  "altro-spazio": "warning",
+  registrato: "success",
+  "verifica-inviata": "success",
+  collegato: "success",
+};
+
 export async function loader({ request }: Route.LoaderArgs) {
   const language = languageFromPath(new URL(request.url).pathname);
   const session = await createAuth(env).api.getSession({ headers: request.headers });
   const search = new URL(request.url).searchParams;
   const { access } = appCopy[language];
-  const notice =
+  const key = search.get("accesso") ?? search.get("negozio") ?? "";
+  const text =
     access.signInNotices[search.get("accesso") ?? ""] ??
     access.storeNotices[search.get("negozio") ?? ""] ??
     null;
+  const notice = text ? { text, tone: noticeTones[key] ?? "info" } : null;
   if (!session) {
     return { authenticated: false as const, language, notice, orders: [] };
   }
@@ -77,15 +99,54 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 type AccessCopy = (typeof appCopy)[Language]["access"];
 
-/** Persona sempre obbligatoria; l'azienda aggiunge la ragione sociale, senza dati fiscali. */
+/** Campi da ricompilare dopo un errore; la password non viene mai conservata. */
+type Remembered = { tab: string; values: Record<string, string> };
+
+const rememberKey = "fiscalbay:accesso";
+
+/** Salva i campi del form inviato, per ricompilarli se il server segnala un errore. */
+function remember(tab: string) {
+  return (event: React.FormEvent<HTMLFormElement>) => {
+    const values: Record<string, string> = {};
+    for (const [name, value] of new FormData(event.currentTarget)) {
+      if (name !== "password" && typeof value === "string") values[name] = value;
+    }
+    try {
+      sessionStorage.setItem(rememberKey, JSON.stringify({ tab, values }));
+    } catch {
+      // Senza memoria di sessione il form resta vuoto dopo l'errore.
+    }
+  };
+}
+
+/** Dopo un avviso di errore ripropone i valori inviati; in ogni caso li dimentica. */
+function useRemembered(error: boolean) {
+  const [remembered, setRemembered] = useState<Remembered | null>(null);
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(rememberKey);
+      sessionStorage.removeItem(rememberKey);
+      if (error && saved) setRemembered(JSON.parse(saved) as Remembered);
+    } catch {
+      // Valori non leggibili: il form resta vuoto.
+    }
+  }, [error]);
+  return remembered;
+}
+
+const rise = "animate-[rise-in_var(--duration-fast)_var(--ease-smooth-out)_both]";
+
+/** Persona sempre obbligatoria; l'azienda aggiunge la ragione sociale, senza CF né Partita IVA. */
 function ProfileFields({
   t,
+  values,
   suggested,
 }: {
   t: AccessCopy;
+  values?: Record<string, string>;
   suggested?: { firstName: string; lastName: string };
 }) {
-  const [type, setType] = useState("privato");
+  const [type, setType] = useState(values?.tipo === "azienda" ? "azienda" : "privato");
   return (
     <>
       <FieldSet>
@@ -98,10 +159,13 @@ function ProfileFields({
           onValueChange={(next) => setType(String(next))}
           aria-labelledby="account-type-label"
           aria-describedby="account-type-hint"
-          className="flex flex-wrap gap-6"
+          className="grid grid-cols-2 gap-2"
         >
           {(["privato", "azienda"] as const).map((value) => (
-            <FieldLabel key={value} className="font-normal">
+            <FieldLabel
+              key={value}
+              className="w-full rounded-lg border border-input/40 px-3 py-2.5 font-normal transition-colors duration-(--duration-quick) has-data-checked:border-primary has-data-checked:bg-info-surface"
+            >
               <RadioGroupItem value={value} aria-labelledby={`account-type-${value}`} />
               <span id={`account-type-${value}`}>
                 {value === "privato" ? t.private : t.business}
@@ -112,13 +176,14 @@ function ProfileFields({
         <FieldDescription id="account-type-hint">{t.accountTypeHint}</FieldDescription>
       </FieldSet>
       {type === "azienda" ? (
-        <Field>
+        <Field className={rise}>
           <FieldLabel htmlFor="company-name">{t.companyName}</FieldLabel>
           <Input
             id="company-name"
             name="ragione_sociale"
             autoComplete="organization"
             maxLength={200}
+            defaultValue={values?.ragione_sociale}
             required
           />
         </Field>
@@ -131,7 +196,7 @@ function ProfileFields({
             name="nome"
             autoComplete="given-name"
             maxLength={100}
-            defaultValue={suggested?.firstName}
+            defaultValue={values?.nome ?? suggested?.firstName}
             required
           />
         </Field>
@@ -142,7 +207,7 @@ function ProfileFields({
             name="cognome"
             autoComplete="family-name"
             maxLength={100}
-            defaultValue={suggested?.lastName}
+            defaultValue={values?.cognome ?? suggested?.lastName}
             required
           />
         </Field>
@@ -152,11 +217,24 @@ function ProfileFields({
 }
 
 /** Termini obbligatori e marketing facoltativo, entrambi mai preselezionati. */
-function AgreementFields({ t, language }: { t: AccessCopy; language: Language }) {
+function AgreementFields({
+  t,
+  language,
+  values,
+}: {
+  t: AccessCopy;
+  language: Language;
+  values?: Record<string, string>;
+}) {
   return (
-    <>
+    <div className="grid gap-4 rounded-lg bg-muted/50 p-3">
       <FieldLabel className="font-normal">
-        <Checkbox name="termini" required aria-labelledby="terms-label" />
+        <Checkbox
+          name="termini"
+          required
+          defaultChecked={values?.termini === "on"}
+          aria-labelledby="terms-label"
+        />
         <span id="terms-label">
           {t.terms.before}
           <a href={localizedPath(language, "/termini")} className="underline underline-offset-4">
@@ -173,6 +251,7 @@ function AgreementFields({ t, language }: { t: AccessCopy; language: Language })
         <Checkbox
           id="marketing"
           name="marketing"
+          defaultChecked={values?.marketing === "on"}
           aria-labelledby="marketing-label"
           aria-describedby="marketing-hint"
         />
@@ -183,7 +262,7 @@ function AgreementFields({ t, language }: { t: AccessCopy; language: Language })
           <FieldDescription id="marketing-hint">{t.marketingHint}</FieldDescription>
         </FieldContent>
       </Field>
-    </>
+    </div>
   );
 }
 
@@ -191,91 +270,153 @@ function GoogleForm({ t, language }: { t: AccessCopy; language: Language }) {
   return (
     <form method="post" action={localizedPath(language, "/accesso")}>
       <Button type="submit" variant="outline" name="intent" value="google" className="w-full">
+        <GoogleMark />
         {t.google}
       </Button>
     </form>
   );
 }
 
-/** Accesso e registrazione per chi non ha una sessione. */
-function AccessForms({ t, language }: { t: AccessCopy; language: Language }) {
+/** Marchio Google nei colori ufficiali, come richiesto dalle linee guida del pulsante. */
+function GoogleMark() {
   return (
-    <div className="grid items-start gap-6 md:grid-cols-2">
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <h2>{t.signIn}</h2>
-          </CardTitle>
-          <CardDescription>{t.signInBody}</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          <form method="post" action={localizedPath(language, "/accesso")}>
-            <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="email">{t.email}</FieldLabel>
-                <Input id="email" name="email" type="email" autoComplete="username" required />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="password">{t.password}</FieldLabel>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                />
-              </Field>
-              <Button type="submit" className="w-fit">
-                {t.signIn}
-              </Button>
-            </FieldGroup>
-          </form>
-          <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
-            {t.or}
-          </FieldSeparator>
-          <GoogleForm t={t} language={language} />
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <h2>{t.signUp}</h2>
-          </CardTitle>
-          <CardDescription>{t.signUpBody}</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          <form method="post" action={localizedPath(language, "/accesso")}>
-            <FieldGroup>
-              <ProfileFields t={t} />
-              <Field>
-                <FieldLabel htmlFor="signup-email">{t.email}</FieldLabel>
-                <Input id="signup-email" name="email" type="email" autoComplete="email" required />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="signup-password">{t.newPassword}</FieldLabel>
-                <Input
-                  id="signup-password"
-                  name="password"
-                  type="password"
-                  autoComplete="new-password"
-                  minLength={8}
-                  maxLength={128}
-                  required
-                />
-              </Field>
-              <AgreementFields t={t} language={language} />
-              <Button type="submit" name="intent" value="registrati" className="w-fit">
-                {t.signUp}
-              </Button>
-            </FieldGroup>
-          </form>
-          <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
-            {t.or}
-          </FieldSeparator>
-          <GoogleForm t={t} language={language} />
-        </CardContent>
-      </Card>
-    </div>
+    <svg aria-hidden="true" viewBox="0 0 24 24" data-icon="inline-start" className="size-4">
+      <path
+        fill="#4285F4"
+        d="m23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.2-2.1 3.5-5.1 3.5-8.8Z"
+      />
+      <path
+        fill="#34A853"
+        d="m12 24c3.2 0 6-1.1 7.9-2.9l-3.9-3c-1 .7-2.4 1.2-4 1.2-3.1 0-5.7-2.1-6.6-4.9H1.4v3.1A12 12 0 0 0 12 24Z"
+      />
+      <path fill="#FBBC05" d="m5.4 14.4a7.2 7.2 0 0 1 0-4.7V6.6H1.4a12 12 0 0 0 0 10.9l4-3.1Z" />
+      <path
+        fill="#EA4335"
+        d="m12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.4 6.6l4 3.1C6.3 6.9 8.9 4.8 12 4.8Z"
+      />
+    </svg>
+  );
+}
+
+function OrSeparator({ t }: { t: AccessCopy }) {
+  return (
+    <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
+      {t.or}
+    </FieldSeparator>
+  );
+}
+
+/**
+ * Accesso e registrazione in una sola scheda con due schede interne: un solo
+ * form visibile evita che il browser compili i campi dell'altro.
+ */
+function AccessForms({
+  t,
+  language,
+  remembered,
+}: {
+  t: AccessCopy;
+  language: Language;
+  remembered: Remembered | null;
+}) {
+  const [tab, setTab] = useState("accedi");
+  const [restored, setRestored] = useState<Remembered | null>(null);
+  if (remembered && remembered !== restored) {
+    setRestored(remembered);
+    setTab(remembered.tab);
+  }
+  const values = restored?.values;
+  return (
+    <Tabs value={tab} onValueChange={(next) => setTab(String(next))} className="gap-6">
+      <TabsList aria-label={t.choose} className="w-full">
+        <TabsTrigger value="accedi">{t.signIn}</TabsTrigger>
+        <TabsTrigger value="registrati">{t.signUp}</TabsTrigger>
+      </TabsList>
+      <TabsContent value="accedi" keepMounted className={cn("grid gap-5", rise)}>
+        <p className="text-muted-foreground">{t.signInBody}</p>
+        <form
+          key={restored ? "restored" : "empty"}
+          method="post"
+          action={localizedPath(language, "/accesso")}
+          onSubmit={remember("accedi")}
+        >
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="email">{t.email}</FieldLabel>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="username"
+                defaultValue={restored?.tab === "accedi" ? values?.email : undefined}
+                required
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="password">{t.password}</FieldLabel>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+              />
+            </Field>
+            <Button type="submit" className="w-full">
+              {t.signIn}
+            </Button>
+          </FieldGroup>
+        </form>
+        <OrSeparator t={t} />
+        <GoogleForm t={t} language={language} />
+      </TabsContent>
+      <TabsContent value="registrati" keepMounted className={cn("grid gap-5", rise)}>
+        <p className="text-muted-foreground">{t.signUpBody}</p>
+        <form
+          key={restored ? "restored" : "empty"}
+          method="post"
+          action={localizedPath(language, "/accesso")}
+          onSubmit={remember("registrati")}
+        >
+          <FieldGroup>
+            <ProfileFields t={t} values={restored?.tab === "registrati" ? values : undefined} />
+            <Field>
+              <FieldLabel htmlFor="signup-email">{t.email}</FieldLabel>
+              <Input
+                id="signup-email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                defaultValue={restored?.tab === "registrati" ? values?.email : undefined}
+                required
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="signup-password">{t.newPassword}</FieldLabel>
+              <Input
+                id="signup-password"
+                name="password"
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                maxLength={128}
+                required
+              />
+            </Field>
+            <AgreementFields
+              t={t}
+              language={language}
+              values={restored?.tab === "registrati" ? values : undefined}
+            />
+            <Button type="submit" name="intent" value="registrati" className="w-full">
+              {t.signUp}
+            </Button>
+          </FieldGroup>
+        </form>
+        <OrSeparator t={t} />
+        <GoogleForm t={t} language={language} />
+      </TabsContent>
+    </Tabs>
   );
 }
 
@@ -286,37 +427,52 @@ function CompleteRegistration({
   needsProfile,
   needsAgreement,
   suggestedName,
+  remembered,
 }: {
   t: AccessCopy;
   language: Language;
   needsProfile: boolean;
   needsAgreement: boolean;
   suggestedName: { firstName: string; lastName: string };
+  remembered: Remembered | null;
 }) {
+  const values = remembered?.tab === "completa" ? remembered.values : undefined;
   return (
-    <Card className="max-w-md">
-      <CardHeader>
-        <CardTitle>
-          <h2>{t.agreementTitle}</h2>
-        </CardTitle>
-        <CardDescription>{t.agreementBody}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form method="post" action={localizedPath(language, "/accesso")}>
-          <FieldGroup>
-            {needsProfile ? <ProfileFields t={t} suggested={suggestedName} /> : null}
-            {needsAgreement ? <AgreementFields t={t} language={language} /> : null}
-            <Button type="submit" name="intent" value="completa" className="w-fit">
-              {t.agreementSubmit}
-            </Button>
-          </FieldGroup>
-        </form>
-      </CardContent>
-    </Card>
+    <div className="grid gap-5">
+      <div className="grid gap-1">
+        <h2 className="text-xl font-semibold">{t.agreementTitle}</h2>
+        <p className="text-sm text-muted-foreground">{t.agreementBody}</p>
+      </div>
+      <form
+        key={values ? "restored" : "empty"}
+        method="post"
+        action={localizedPath(language, "/accesso")}
+        onSubmit={remember("completa")}
+      >
+        <FieldGroup>
+          {needsProfile ? <ProfileFields t={t} values={values} suggested={suggestedName} /> : null}
+          {needsAgreement ? <AgreementFields t={t} language={language} values={values} /> : null}
+          <Button type="submit" name="intent" value="completa" className="w-full">
+            {t.agreementSubmit}
+          </Button>
+        </FieldGroup>
+      </form>
+    </div>
   );
 }
 
-/** Avviso di verifica dell'email e azioni della sessione. */
+function SignOutForm({ t, language }: { t: AccessCopy; language: Language }) {
+  return (
+    <form method="post" action={localizedPath(language, "/accesso")}>
+      <Button type="submit" variant="outline" name="intent" value="esci">
+        <LogOut aria-hidden="true" data-icon="inline-start" />
+        {t.signOut}
+      </Button>
+    </form>
+  );
+}
+
+/** Avviso di verifica dell'email e collegamento del negozio. */
 function AccountBar({
   t,
   language,
@@ -342,67 +498,165 @@ function AccountBar({
           </form>
         </StatusAlert>
       )}
-      <div className="flex flex-wrap gap-3">
-        {canLinkStore ? (
-          <form method="post" action={localizedPath(language, "/negozi/collega")}>
-            <Button type="submit">{t.linkStore}</Button>
-          </form>
-        ) : null}
-        <form method="post" action={localizedPath(language, "/accesso")}>
-          <Button type="submit" variant="outline" name="intent" value="esci">
-            {t.signOut}
+      {canLinkStore ? (
+        <form method="post" action={localizedPath(language, "/negozi/collega")}>
+          <Button type="submit">
+            <Plus aria-hidden="true" data-icon="inline-start" />
+            {t.linkStore}
           </Button>
         </form>
-      </div>
+      ) : null}
     </>
   );
 }
 
+function LanguageNav({ t, language }: { t: AccessCopy; language: Language }) {
+  return (
+    <nav aria-label={t.language} className="flex gap-1 text-sm">
+      {(
+        [
+          ["it", "/", "Italiano"],
+          ["en", "/en", "English"],
+        ] as const
+      ).map(([code, href, label]) => (
+        <a
+          key={code}
+          href={href}
+          lang={code}
+          aria-current={language === code ? "page" : undefined}
+          className="rounded-md px-2.5 py-1.5 text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:bg-secondary aria-[current=page]:font-medium aria-[current=page]:text-foreground"
+        >
+          {label}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+const featureIcons = [
+  { Icon: ShieldCheck, className: "text-brand-sky" },
+  { Icon: Copy, className: "text-[#f5c451]" },
+  { Icon: Store, className: "text-[#5fd0c9]" },
+];
+
+/** Colonna del marchio: cosa fa FiscalBay, con i colori del logo. */
+function BrandPanel({ t }: { t: AccessCopy }) {
+  return (
+    <aside className="relative hidden overflow-hidden bg-brand-navy text-white lg:flex lg:flex-col lg:justify-between lg:gap-12 lg:p-12 xl:p-16">
+      {/* Righe della tessera del logo, grandi e sfumate, come fondo. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-24 -bottom-16 grid rotate-[-8deg] gap-6 opacity-25"
+      >
+        <span className="h-8 w-[28rem] rounded-full bg-brand-sky" />
+        <span className="h-8 w-80 rounded-full bg-brand-green" />
+        <span className="h-8 w-40 rounded-full bg-brand-red" />
+      </div>
+      <Logo onDark className="relative h-8 w-fit" />
+      <div className={cn("relative grid max-w-md gap-8", rise)}>
+        <p className="text-3xl leading-tight font-semibold text-balance xl:text-4xl">
+          {t.headline}
+        </p>
+        <ul className="grid gap-5">
+          {t.features.map((feature, index) => {
+            const { Icon, className } = featureIcons[index]!;
+            return (
+              <li key={feature.title} className="flex gap-4">
+                <span
+                  aria-hidden="true"
+                  className="grid size-10 shrink-0 place-items-center rounded-lg bg-white/10"
+                >
+                  <Icon className={cn("size-5", className)} />
+                </span>
+                <span className="grid gap-0.5">
+                  <span className="font-medium">{feature.title}</span>
+                  <span className="text-sm leading-relaxed text-white/75">{feature.body}</span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+      <span aria-hidden="true" />
+    </aside>
+  );
+}
+
+const errorTones = new Set(["danger", "warning"]);
+
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { language } = loaderData;
+  const { language, notice } = loaderData;
   const t = appCopy[language].access;
   const { orders } = appCopy[language];
-  return (
-    <main className="mx-auto grid w-[min(72rem,calc(100%-2rem))] gap-8 py-12">
-      <header className="grid max-w-2xl gap-3">
-        <img
-          src={logoUrl}
-          alt="FiscalBay"
-          width="224"
-          height="45"
-          className="h-8 w-auto dark:hidden"
-        />
-        <img
-          src={logoDarkUrl}
-          alt="FiscalBay"
-          width="224"
-          height="45"
-          className="hidden h-8 w-auto dark:block"
-        />
-        <h1 className="text-4xl font-bold sm:text-5xl">{t.title}</h1>
-        <p className="text-muted-foreground">{t.intro}</p>
-        <nav aria-label={t.language} className="flex gap-3 text-sm">
-          <a
-            href="/"
-            lang="it"
-            aria-current={language === "it" ? "page" : undefined}
-            className="underline-offset-4 hover:underline aria-[current=page]:font-semibold"
-          >
-            Italiano
-          </a>
-          <a
-            href="/en"
-            lang="en"
-            aria-current={language === "en" ? "page" : undefined}
-            className="underline-offset-4 hover:underline aria-[current=page]:font-semibold"
-          >
-            English
-          </a>
-        </nav>
-      </header>
+  const remembered = useRemembered(notice !== null && errorTones.has(notice.tone));
+  const noticeAlert = notice ? <StatusAlert tone={notice.tone} title={notice.text} /> : null;
 
-      {loaderData.notice ? <StatusAlert tone="info" title={loaderData.notice} /> : null}
-      {loaderData.authenticated ? (
+  // Accesso, registrazione e completamento: marchio a sinistra, form a destra.
+  if (!loaderData.authenticated || loaderData.needsProfile || loaderData.needsAgreement) {
+    return (
+      <div className="grid min-h-dvh lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+        <BrandPanel t={t} />
+        <main className="flex flex-col px-4 py-6 sm:px-8 lg:px-12">
+          <header className="flex items-center justify-between gap-4">
+            <Logo className="h-7 w-auto lg:invisible" />
+            <LanguageNav t={t} language={language} />
+          </header>
+          <div className="mx-auto grid w-full max-w-md flex-1 content-center gap-6 py-10">
+            <div className="grid gap-2 lg:hidden">
+              <p className="text-2xl font-semibold text-balance">{t.headline}</p>
+            </div>
+            <h1 className="sr-only">{loaderData.authenticated ? t.agreementTitle : t.choose}</h1>
+            {noticeAlert}
+            {loaderData.authenticated ? (
+              <AccountBar
+                t={t}
+                language={language}
+                email={loaderData.email}
+                emailVerified={loaderData.emailVerified}
+                canLinkStore={loaderData.canLinkStore}
+              />
+            ) : null}
+            <div className={cn("rounded-2xl border bg-card p-5 shadow-sm sm:p-7", rise)}>
+              {loaderData.authenticated ? (
+                <CompleteRegistration
+                  t={t}
+                  language={language}
+                  needsProfile={loaderData.needsProfile}
+                  needsAgreement={loaderData.needsAgreement}
+                  suggestedName={loaderData.suggestedName}
+                  remembered={remembered}
+                />
+              ) : (
+                <AccessForms t={t} language={language} remembered={remembered} />
+              )}
+            </div>
+            {loaderData.authenticated ? <SignOutForm t={t} language={language} /> : null}
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-dvh">
+      <header className="border-b">
+        <div className="mx-auto flex h-14 w-[min(72rem,calc(100%-2rem))] items-center justify-between gap-4">
+          <Logo className="h-6 w-auto" />
+          <div className="flex items-center gap-2">
+            <LanguageNav t={t} language={language} />
+            <SignOutForm t={t} language={language} />
+          </div>
+        </div>
+      </header>
+      <main className="mx-auto grid w-[min(72rem,calc(100%-2rem))] gap-6 py-8">
+        <div className="flex items-center gap-3">
+          <IconTile icon={ClipboardList} tone="blue" size="lg" />
+          <div className="grid gap-0.5">
+            <h1 className="text-2xl font-bold sm:text-3xl">{t.title}</h1>
+            <p className="text-sm text-muted-foreground">{t.intro}</p>
+          </div>
+        </div>
+        {noticeAlert}
         <AccountBar
           t={t}
           language={language}
@@ -410,73 +664,62 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           emailVerified={loaderData.emailVerified}
           canLinkStore={loaderData.canLinkStore}
         />
-      ) : null}
-
-      {!loaderData.authenticated ? (
-        <AccessForms t={t} language={language} />
-      ) : loaderData.needsProfile || loaderData.needsAgreement ? (
-        <CompleteRegistration
-          t={t}
-          language={language}
-          needsProfile={loaderData.needsProfile}
-          needsAgreement={loaderData.needsAgreement}
-          suggestedName={loaderData.suggestedName}
-        />
-      ) : loaderData.orders.length === 0 ? (
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle>
-              <h2>{t.noOrders}</h2>
-            </CardTitle>
-            <CardDescription>
-              {loaderData.canLinkStore ? t.noOrdersBody : t.noOrdersVerifyBody}
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      ) : (
-        <section className="grid gap-4 sm:grid-cols-2" aria-label={t.list}>
-          {loaderData.orders.map((order) => (
-            <Card key={order.id}>
-              <CardHeader>
-                <CardTitle className="flex justify-between gap-4">
-                  <h2 className="font-code">{order.ebayOrderId}</h2>
-                  <strong className="font-code">
-                    {formatAmount(order.totalMinor, order.currency, language)}
-                  </strong>
-                </CardTitle>
-                <CardDescription>{formatDate(order.creationTime, language)}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <dl className="grid gap-2 text-sm">
-                  {order.taxIdentifiers.map((identifier) => {
-                    const known = identifierLabels[identifier.type];
-                    const label = known ? orders.identifier[known] : identifier.type;
-                    return (
-                      <div
-                        key={`${identifier.type}:${identifier.value}`}
-                        className="grid grid-cols-[1fr_2fr] items-center gap-3"
-                      >
-                        <dt className="text-muted-foreground">{label}</dt>
-                        <dd>
-                          <TaxCode
-                            value={identifier.value}
-                            labels={{
-                              copy: orders.copy(label, order.ebayOrderId),
-                              copied: orders.copied,
-                              copyFailed: orders.copyFailed,
-                              locked: orders.lockedLabel,
-                            }}
-                          />
-                        </dd>
-                      </div>
-                    );
-                  })}
-                </dl>
-              </CardContent>
-            </Card>
-          ))}
-        </section>
-      )}
-    </main>
+        {loaderData.orders.length === 0 ? (
+          <Card className="max-w-md">
+            <CardHeader>
+              <CardTitle>
+                <h2>{t.noOrders}</h2>
+              </CardTitle>
+              <CardDescription>
+                {loaderData.canLinkStore ? t.noOrdersBody : t.noOrdersVerifyBody}
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        ) : (
+          <section className="grid gap-4 sm:grid-cols-2" aria-label={t.list}>
+            {loaderData.orders.map((order) => (
+              <Card key={order.id} className={rise}>
+                <CardHeader>
+                  <CardTitle className="flex justify-between gap-4">
+                    <h2 className="font-code">{order.ebayOrderId}</h2>
+                    <strong className="font-code">
+                      {formatAmount(order.totalMinor, order.currency, language)}
+                    </strong>
+                  </CardTitle>
+                  <CardDescription>{formatDate(order.creationTime, language)}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <dl className="grid gap-2 text-sm">
+                    {order.taxIdentifiers.map((identifier) => {
+                      const known = identifierLabels[identifier.type];
+                      const label = known ? orders.identifier[known] : identifier.type;
+                      return (
+                        <div
+                          key={`${identifier.type}:${identifier.value}`}
+                          className="grid grid-cols-[1fr_2fr] items-center gap-3"
+                        >
+                          <dt className="text-muted-foreground">{label}</dt>
+                          <dd>
+                            <TaxCode
+                              value={identifier.value}
+                              labels={{
+                                copy: orders.copy(label, order.ebayOrderId),
+                                copied: orders.copied,
+                                copyFailed: orders.copyFailed,
+                                locked: orders.lockedLabel(label),
+                              }}
+                            />
+                          </dd>
+                        </div>
+                      );
+                    })}
+                  </dl>
+                </CardContent>
+              </Card>
+            ))}
+          </section>
+        )}
+      </main>
+    </div>
   );
 }

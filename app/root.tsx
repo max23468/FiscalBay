@@ -9,11 +9,16 @@ import {
   useRouteLoaderData,
 } from "react-router";
 
+import { cn } from "cn";
+import { CircleAlert, FileQuestion } from "lucide-react";
+
 import type { Route } from "./+types/root";
+import { StandalonePage } from "./components/standalone-page";
+import { buttonVariants } from "./components/ui/button-variants";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { correlationId } from "./errors";
 import { appCopy } from "./app-copy";
-import { languageFromPath } from "./i18n";
+import { languageFromPath, localizedPath } from "./i18n";
 import "./app.css";
 
 export const links: Route.LinksFunction = () => [
@@ -62,13 +67,27 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const notFound = isRouteErrorResponse(error) && error.status === 404;
   const t = appCopy[language].errors;
 
+  const title = notFound ? t.notFoundTitle : t.title;
   return (
-    <main className="mx-auto grid w-[min(36rem,calc(100%-2rem))] gap-3 py-16">
-      <h1 className="text-3xl font-bold">{notFound ? "404" : t.title}</h1>
-      <p>{notFound ? t.notFound : t.unexpected}</p>
+    <StandalonePage
+      icon={notFound ? FileQuestion : CircleAlert}
+      tone={notFound ? "neutral" : "rose"}
+      title={title}
+      homeHref={localizedPath(language)}
+    >
+      <title>{`FiscalBay | ${title}`}</title>
+      <p className="leading-relaxed text-pretty text-muted-foreground">
+        {notFound ? t.notFound : t.unexpected}
+      </p>
       {!notFound && reference ? (
-        <p className="text-sm text-muted-foreground">{t.reference(reference)}</p>
+        <p className="font-code text-xs text-muted-foreground">{t.reference(reference)}</p>
       ) : null}
-    </main>
+      <a
+        href={localizedPath(language)}
+        className={cn(buttonVariants({ variant: "outline" }), "w-fit")}
+      >
+        {t.home}
+      </a>
+    </StandalonePage>
   );
 }

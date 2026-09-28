@@ -40,7 +40,7 @@ export function TaxCode({
     return (
       <span
         className={cn(
-          "inline-flex max-w-full items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1 text-muted-foreground",
+          "inline-flex max-w-full items-center gap-2 rounded-lg border border-premium/30 bg-premium-surface px-3 py-1 text-muted-foreground dark:bg-premium/10",
           sizes[size],
           className,
         )}
@@ -56,7 +56,7 @@ export function TaxCode({
   return (
     <span
       className={cn(
-        "inline-flex max-w-full flex-wrap items-center justify-between gap-x-1 rounded-lg border border-border bg-muted/40 pl-3 pr-1 py-1",
+        "inline-flex max-w-full flex-wrap items-center justify-between gap-x-1 rounded-lg border border-info/50 bg-info-surface pl-3 pr-1 py-1 shadow-xs shadow-info/15 dark:bg-info/15",
         sizes[size],
         reveal && "fiscal-reveal",
         className,
@@ -64,7 +64,7 @@ export function TaxCode({
     >
       <span
         className={cn(
-          "font-code whitespace-nowrap font-medium text-foreground",
+          "font-code whitespace-nowrap font-semibold text-info",
           reveal &&
             "inline-block animate-[value-reveal_var(--duration-quick)_ease-out_both] motion-reduce:animate-none",
         )}
@@ -103,7 +103,7 @@ function CopyButton({ value, labels }: { value: string; labels: Labels }) {
         aria-label={labels.copy}
         data-state={state}
         onClick={copy}
-        className="group/copy"
+        className="group/copy text-info hover:bg-info/10 hover:text-info"
       >
         <span className="relative size-4">
           <Copy
