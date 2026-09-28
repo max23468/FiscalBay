@@ -60,6 +60,16 @@ export function plan(files) {
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" });
 const lines = (text) => text.split("\n").filter(Boolean);
 
+function committedChanges(base, head) {
+  if (!base || !head || /^0+$/u.test(base)) return [];
+  try {
+    return lines(git("diff", "--name-only", `${base}...${head}`));
+  } catch {
+    console.log(`Confronto ${base}...${head} non disponibile: gate completo.`);
+    return [];
+  }
+}
+
 function localChanges() {
   const mergeBase = git("merge-base", "origin/develop", "HEAD").trim();
   return [
@@ -83,12 +93,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   };
   const base = option("--base");
   const head = option("--head");
-  // Con --base vuoto (push o avvio manuale in CI) il diff è vuoto e il gate resta completo.
-  const files = !args.includes("--base")
-    ? localChanges()
-    : base && head
-      ? lines(git("diff", "--name-only", `${base}...${head}`))
-      : [];
+  // Base vuota, a zeri o non raggiungibile (avvio manuale, nuovo branch, storia riscritta):
+  // il diff resta vuoto e il gate completo.
+  const files = !args.includes("--base") ? localChanges() : committedChanges(base, head);
   const result = plan(files);
 
   for (const file of files) console.log(`${classifyFile(file) ?? "non classificato"}: ${file}`);
