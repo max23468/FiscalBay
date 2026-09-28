@@ -1,6 +1,7 @@
-import { data, useOutletContext } from "react-router";
+import { data, isRouteErrorResponse, useOutletContext } from "react-router";
 
 import { SettingsPage, type SettingsPageData } from "~/components/settings";
+import { NotFoundState } from "~/components/not-found";
 import { appCopy } from "../app-copy";
 import { languageFromPath } from "../i18n";
 import { currentScenario } from "../preview/state.server";
@@ -52,4 +53,11 @@ export default function PreviewSettings({ loaderData }: Route.ComponentProps) {
       links={links}
     />
   );
+}
+
+/** Un indirizzo inesistente resta dentro l'app, con la strada per tornare all'elenco. */
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  const { t, links } = useOutletContext<PreviewContext>();
+  if (!isRouteErrorResponse(error) || error.status !== 404) throw error;
+  return <NotFoundState kind="page" t={t} links={links} />;
 }

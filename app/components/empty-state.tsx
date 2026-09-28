@@ -1,62 +1,78 @@
 import { cn } from "cn";
-import { Search, Unplug } from "lucide-react";
+import { Unplug } from "lucide-react";
 
-import { TesseraArt } from "~/components/brand";
+import { EmptyArt, type EmptyArtKind } from "~/components/brand";
 
-/** Stato vuoto: illustrazione contestuale, titolo, conseguenza e una sola azione. */
+type Variant = Exclude<EmptyArtKind, "no-results"> | "search" | "connection";
+
+/**
+ * Stato vuoto: illustrazione contestuale, titolo, conseguenza e azioni.
+ * Le varianti ampie (primo utilizzo, tutto aggiornato, pagina inesistente)
+ * occupano il posto dell'elenco; ricerca e collegamento restano compatti
+ * accanto al proprio contesto.
+ */
 export function EmptyState({
   title,
   description,
   action,
+  secondaryAction,
+  children,
   className,
   variant = "first-use",
+  headingLevel = 2,
 }: {
   title: string;
   description: string;
   action?: React.ReactNode;
+  secondaryAction?: React.ReactNode;
+  /** Contenuto aggiuntivo sotto le azioni, per esempio i primi passi. */
+  children?: React.ReactNode;
   className?: string;
-  variant?: "first-use" | "search" | "connection";
+  variant?: Variant;
+  /** 1 quando lo stato vuoto è l'intera pagina, per esempio un indirizzo inesistente. */
+  headingLevel?: 1 | 2;
 }) {
-  const firstUse = variant === "first-use";
-  const Icon = variant === "search" ? Search : Unplug;
+  const Heading = headingLevel === 1 ? "h1" : "h2";
+  if (variant === "search" || variant === "connection") {
+    return (
+      <div
+        className={cn(
+          "grid grid-cols-[3rem_minmax(0,1fr)] items-start gap-x-4 gap-y-4 border-y py-5 sm:grid-cols-[3rem_minmax(0,1fr)_auto] sm:items-center",
+          className,
+        )}
+      >
+        {variant === "search" ? (
+          <EmptyArt kind="no-results" className="h-10 w-12" />
+        ) : (
+          <Unplug aria-hidden="true" className="mt-0.5 size-5 justify-self-center text-warning" />
+        )}
+        <div className="grid min-w-0 gap-1">
+          <h2 className="text-sm font-medium">{title}</h2>
+          <p className="text-sm leading-relaxed text-pretty text-muted-foreground">{description}</p>
+        </div>
+        {action ? <div className="col-start-2 sm:col-start-3 sm:row-start-1">{action}</div> : null}
+      </div>
+    );
+  }
   return (
     <div
       className={cn(
-        firstUse
-          ? "grid gap-6 rounded-xl border bg-card p-6 md:grid-cols-[12rem_1fr] md:items-center md:p-8"
-          : "grid grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-3 gap-y-4 border-y py-5 sm:grid-cols-[1.25rem_minmax(0,1fr)_auto] sm:items-center",
+        "grid gap-6 rounded-xl border bg-card p-6 md:grid-cols-[12rem_1fr] md:items-center md:gap-8 md:p-8",
         className,
       )}
     >
-      {firstUse ? (
-        <div aria-hidden="true" className="relative mx-auto h-32 w-48">
-          <TesseraArt className="absolute left-0 top-0 h-24 w-32 -rotate-6 opacity-35" />
-          <TesseraArt className="absolute left-5 top-3 h-24 w-32 opacity-60" />
-          <TesseraArt className="absolute left-12 top-6 h-24 w-32 rotate-8" />
-        </div>
-      ) : (
-        <Icon
-          aria-hidden="true"
-          className={cn(
-            "mt-0.5 size-5 shrink-0 sm:mt-0",
-            variant === "connection" ? "text-warning" : "text-muted-foreground",
-          )}
-        />
-      )}
-      <div className={cn("grid min-w-0 gap-2", firstUse && "max-w-md")}>
-        <h3
-          className={
-            firstUse ? "text-xl leading-snug font-semibold text-pretty" : "text-sm font-medium"
-          }
-        >
-          {title}
-        </h3>
+      <EmptyArt kind={variant} className="mx-auto" />
+      <div className="grid max-w-lg min-w-0 gap-2">
+        <Heading className="text-xl leading-snug font-semibold text-balance">{title}</Heading>
         <p className="text-sm leading-relaxed text-pretty text-muted-foreground">{description}</p>
-        {firstUse && action ? <div className="pt-2">{action}</div> : null}
+        {action || secondaryAction ? (
+          <div className="flex flex-wrap items-center gap-2 pt-2">
+            {action}
+            {secondaryAction}
+          </div>
+        ) : null}
+        {children ? <div className="pt-4">{children}</div> : null}
       </div>
-      {!firstUse && action ? (
-        <div className="col-start-2 sm:col-start-3 sm:row-start-1">{action}</div>
-      ) : null}
     </div>
   );
 }

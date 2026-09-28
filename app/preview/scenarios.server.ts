@@ -29,6 +29,7 @@ export const scenarioIds = [
   "nessun-ordine",
   "caricamento",
   "premium",
+  "premium-a-vita",
 ] as const;
 
 export type ScenarioId = (typeof scenarioIds)[number];
@@ -104,11 +105,13 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
   "primo-accesso": {
     it: {
       name: "Primo accesso",
-      focus: "Nessun negozio, primi passi e negozio già collegato a un altro account.",
+      focus:
+        "Nessun negozio e primi passi; in Negozi il collegamento simulato risulta già usato da un altro account.",
     },
     en: {
       name: "First sign-in",
-      focus: "No store, getting started and a store already linked to another account.",
+      focus:
+        "No store and getting started; in Stores the simulated connection is already used by another account.",
     },
   },
   importazione: {
@@ -143,6 +146,18 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
     en: {
       name: "Premium, several stores",
       focus: "Three stores, Telegram notifications, XLSX. The first autosave fails.",
+    },
+  },
+  "premium-a-vita": {
+    it: {
+      name: "Premium a vita",
+      focus:
+        "Acquisto una tantum senza rinnovi, negozio messo in pausa dall'utente, Codice Fiscale con carattere di controllo errato.",
+    },
+    en: {
+      name: "Premium, lifetime",
+      focus:
+        "One-off purchase with no renewals, a store paused by the user, a tax code with a wrong check character.",
     },
   },
 };
@@ -1074,11 +1089,6 @@ export function loadScenario(
                 identifiers: [{ ...cf("RSSMRA80A41H501U"), updated: true }],
               },
             };
-          if (seed.id === "ord-03")
-            return {
-              ...seed,
-              fiscal: { state: "available", identifiers: [cf("BNCLCU75C12F205X")] },
-            };
           if (seed.id === "ord-09")
             return {
               ...seed,
@@ -1143,7 +1153,7 @@ export function loadScenario(
         seeds: freeSeeds.slice(0, 4),
         premium: false,
         syncRunning: false,
-        notices: [{ kind: "importing", count: 4, days: 30 }],
+        notices: [{ kind: "importing", count: 4 }],
         diagnostics: diagnostics({
           syncPhase: language === "it" ? "Importazione dello storico" : "History import",
         }),
@@ -1176,11 +1186,7 @@ export function loadScenario(
         ...common,
         account: premiumAccount(),
         stores: premiumStores,
-        seeds: seeds.map((seed) =>
-          seed.fiscal.state === "locked"
-            ? { ...seed, fiscal: { state: "available", identifiers: seed.lockable ?? [] } }
-            : seed,
-        ),
+        seeds,
         premium: true,
         telegramChat: "Magazzino Vintage",
         saveFailsOnce: true,
@@ -1199,12 +1205,59 @@ export function loadScenario(
         }),
       };
       break;
+    case "premium-a-vita":
+      scenario = {
+        ...common,
+        account: account({
+          plan: "premium",
+          trialAvailable: false,
+          quota: undefined,
+          premium: { period: "lifetime", renewsAt: null },
+        }),
+        stores: [
+          premiumStores[0]!,
+          storeView("outlet", {
+            connection: "paused",
+            pauseReason: "manual",
+            notifications: false,
+            historyDays: 365,
+            targetMinutes: 10,
+            lastSyncAt: minutesAgo(2_880),
+            recent: [{ at: minutesAgo(2_880), ok: true, newOrders: 0 }],
+          }),
+        ],
+        seeds: seeds
+          .filter((seed) => seed.store !== "retro")
+          .map((seed) =>
+            seed.id === "ord-02"
+              ? {
+                  ...seed,
+                  fiscal: {
+                    state: "available",
+                    identifiers: [cf("RSSMRA80A41H501X", "checksum")],
+                  },
+                }
+              : seed,
+          ),
+        premium: true,
+        diagnostics: diagnostics({
+          rights: language === "it" ? "Premium a vita" : "Premium, lifetime",
+        }),
+      };
+      break;
   }
 
-  const { seeds: scenarioSeeds, premium: _premium, ...rest } = scenario;
+  const { seeds: scenarioSeeds, premium, ...rest } = scenario;
   const lockedValues: Record<string, TaxIdentifierView[]> = {};
   let unlockedCount = 0;
   const orders = scenarioSeeds.map((seed) => {
+    // Con Premium non ci sono ordini da sbloccare: il valore è subito accessibile.
+    if (premium && seed.fiscal.state === "locked") {
+      return toOrder(
+        { ...seed, fiscal: { state: "available", identifiers: seed.lockable ?? [] } },
+        rest.stores,
+      );
+    }
     if (seed.fiscal.state === "locked" && seed.lockable) {
       if (unlocked.has(seed.id)) {
         unlockedCount++;

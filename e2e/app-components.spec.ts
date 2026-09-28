@@ -148,18 +148,18 @@ test("geometria dei codici e delle colonne fiscali da 320 a 1280 px", async ({ p
   }
 });
 
-test("stati senza valore senza Copia, lucchetto e Premium distinti", async ({ page }) => {
+test("stati senza valore senza Copia, sblocco e Premium distinti", async ({ page }) => {
   await open(page, "/anteprima/ordini");
   for (const id of ["19-00001-99999", "31-77421-10058", "05-55555-12121"]) {
     const card = page.getByRole("article", { name: `Ordine ${id}` });
     await expect(card.getByRole("button", { name: /^Copia / })).toHaveCount(0);
   }
   const locked = page.getByRole("article", { name: "Ordine 05-55555-12121" });
-  await expect(locked.locator(".lucide-lock")).toHaveCount(1);
-  await expect(locked.locator(".lucide-sparkles")).toHaveCount(0);
+  await expect(locked.locator(".icon-unlock")).toHaveCount(2);
+  await expect(locked.locator(".lucide-crown")).toHaveCount(0);
   await open(page, "/anteprima/impostazioni/esportazione");
   await expect(page.getByText("Premium", { exact: true }).locator("svg")).toHaveClass(
-    /lucide-sparkles/,
+    /lucide-crown/,
   );
 });
 

@@ -111,7 +111,7 @@ test("con gli sblocchi esauriti gli ordini restano consultabili", async ({ page 
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Sblocca ordine" })).toHaveCount(0);
   await expect(page.getByRole("article", { name: "Ordine 05-55555-12121" })).toContainText(
-    "Hai sbloccato tutti gli ordini disponibili",
+    "Sblocco disponibile dal 2 ott 2026.",
   );
   await expect(page.getByRole("article", { name: "Ordine 08-33110-45672" })).toContainText(
     "SPSNNA85T55F83",
@@ -214,3 +214,75 @@ for (const locale of ["it", "en"] as const) {
     }
   });
 }
+
+test("con Premium nessun ordine resta da sbloccare e il piano a vita non si rinnova", async ({
+  page,
+}) => {
+  await open(page);
+  await chooseScenario(page, "Problema su un negozio");
+  await expect(page.getByRole("button", { name: "Sblocca ordine" })).toHaveCount(0);
+  await expect(page.getByText("BNCLCU75C12F205X")).toBeVisible();
+
+  await chooseScenario(page, "Premium a vita");
+  await expect(page.getByText("Il carattere di controllo non corrisponde.")).toBeVisible();
+  await page.goto("/anteprima/impostazioni/piano");
+  await expect(page.getByText("Premium a vita", { exact: true })).toBeVisible();
+  await expect(page.getByText("Acquisto una tantum, senza rinnovi.")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Gestisci abbonamento/u })).toHaveCount(0);
+});
+
+test("stati vuoti, ricerca e indirizzi inesistenti restano dentro l'app", async ({ page }) => {
+  const response = await page.goto("/anteprima/ordini/ord-999");
+  expect(response?.status()).toBe(404);
+  await expect(page.getByRole("heading", { level: 1, name: "Ordine non trovato" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Navigazione principale" })).toBeVisible();
+  await page.getByRole("link", { name: "Torna agli ordini" }).click();
+  await expect(page).toHaveURL(/\/anteprima\/ordini$/u);
+
+  await open(page, "/anteprima/ordini?pagamento=sconosciuto");
+  await expect(page.getByRole("combobox", { name: "Pagamento" })).toContainText("Tutti");
+  await expect(page.getByText("12 ordini")).toBeVisible();
+
+  await open(page, "/anteprima/ordini?q=zzzz");
+  await expect(page.getByRole("searchbox").first()).toHaveValue("zzzz");
+  await expect(page.getByText("Nessun ordine corrisponde alla ricerca.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Cancella ricerca" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Seleziona" })).toBeDisabled();
+
+  await page.getByRole("combobox", { name: "Periodo" }).click();
+  await expect(page.getByRole("option", { name: /Ultimi 90 giorni/u })).toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
+  await page.keyboard.press("Escape");
+
+  await chooseScenario(page, "Nessun ordine");
+  await expect(
+    page.getByRole("heading", { name: "Nessun ordine negli ultimi 30 giorni" }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Apri il negozio" })).toBeVisible();
+});
+
+test("stati coerenti: aggiornamento, eBay fermo e collegamento già usato", async ({ page }) => {
+  await open(page);
+  await chooseScenario(page, "Aggiornamento in corso");
+  await expect(
+    page.getByRole("main").getByText("Aggiornamento in corso", { exact: true }),
+  ).toHaveCount(1);
+
+  await chooseScenario(page, "eBay non risponde");
+  await expect(
+    page.getByRole("article", { name: "Ordine 19-00001-99999" }).getByRole("button", {
+      name: "Riprova",
+    }),
+  ).toBeDisabled();
+
+  await chooseScenario(page, "Primo accesso");
+  await page
+    .getByRole("navigation", { name: "Navigazione principale" })
+    .getByRole("link", { name: "Negozi eBay" })
+    .click();
+  await expect(page.getByText("Negozio già collegato a un altro account")).toHaveCount(0);
+  await page.getByRole("button", { name: "Collega negozio eBay" }).click();
+  await expect(page.getByText("Negozio già collegato a un altro account")).toBeVisible();
+});

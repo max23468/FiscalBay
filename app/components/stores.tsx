@@ -5,7 +5,7 @@ import { Link, useNavigate } from "react-router";
 import { useNotice } from "~/components/app-shell";
 import { LedgerIndicator } from "~/components/brand";
 import { EmptyState } from "~/components/empty-state";
-import { StatusAlert, StatusBadge, type StatusTone } from "~/components/status";
+import { PremiumNote, StatusAlert, StatusBadge, type StatusTone } from "~/components/status";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -85,9 +85,16 @@ function LastSync({
   now: string;
   language: Language;
 }) {
+  // Le righe della tessera indicano una sincronizzazione che procede: un negozio
+  // sospeso o mai sincronizzato mostra solo il testo, allineato agli altri.
+  const live = store.connection === "active" && store.lastSyncAt !== null;
   return (
     <span className="inline-flex items-center gap-2 whitespace-nowrap text-muted-foreground">
-      <LedgerIndicator active={store.syncing} />
+      {live || store.syncing ? (
+        <LedgerIndicator active={store.syncing} />
+      ) : (
+        <span aria-hidden="true" className="w-4 shrink-0" />
+      )}
       {store.syncing
         ? t.stores.syncing
         : store.lastSyncAt
@@ -98,7 +105,7 @@ function LastSync({
 }
 
 function notificationsLabel(store: StoreView, t: AppCopy) {
-  if (store.notifications === null) return t.stores.notificationsPremium;
+  if (store.notifications === null) return t.stores.notificationsFree;
   return store.notifications ? t.stores.notificationsOn : t.stores.notificationsOff;
 }
 
@@ -118,13 +125,24 @@ function StoreDetail({
   const { language } = links;
   const status = connectionStatus(store, t);
   const needsReconnect = store.issue !== undefined;
+  const expired = store.connection === "reconnect_required";
   const planPaused = store.pauseReason === "plan";
   const row = "grid gap-0.5";
   return (
     <div className="grid gap-7 px-4 pb-6">
       {store.issue ? (
         <StatusAlert tone="warning" title={t.stores.issue[store.issue].title}>
-          {t.stores.issue[store.issue].body}
+          <span className="grid justify-items-start gap-3">
+            {t.stores.issue[store.issue].body}
+            <Button
+              size="sm"
+              disabled={data.ebayDown}
+              focusableWhenDisabled
+              onClick={() => notify(t.preview.simulated)}
+            >
+              {t.stores.reconnect}
+            </Button>
+          </span>
         </StatusAlert>
       ) : null}
       {data.ebayDown ? <StatusAlert tone="warning" title={t.stores.ebayDown} /> : null}
@@ -148,10 +166,16 @@ function StoreDetail({
           </div>
           <div className={row}>
             <dt className="text-muted-foreground">{t.stores.consentUntil}</dt>
-            <dd>{formatDate(store.consentExpiresAt, language, "date")}</dd>
+            <dd className={expired ? "text-warning" : undefined}>
+              {expired
+                ? t.stores.consentExpired
+                : formatDate(store.consentExpiresAt, language, "date")}
+            </dd>
           </div>
         </dl>
-        <p className="text-xs text-muted-foreground">{t.stores.consentHint}</p>
+        {needsReconnect ? null : (
+          <p className="text-xs text-muted-foreground">{t.stores.consentHint}</p>
+        )}
       </section>
       <section aria-labelledby="store-sync" className="grid gap-3 border-t pt-5">
         <h3 id="store-sync" className="text-sm font-semibold">
@@ -192,7 +216,11 @@ function StoreDetail({
         <h3 id="store-notifications" className="text-sm font-semibold">
           {t.stores.sectionNotifications}
         </h3>
-        <p className="text-sm">{notificationsLabel(store, t)}</p>
+        {store.notifications === null ? (
+          <PremiumNote>{t.stores.notificationsFree}</PremiumNote>
+        ) : (
+          <p className="text-sm">{notificationsLabel(store, t)}</p>
+        )}
         <p className="text-sm text-muted-foreground">
           {t.stores.notificationsShortcut}{" "}
           <Link
@@ -211,11 +239,7 @@ function StoreDetail({
           <p className="text-sm text-muted-foreground">{t.stores.planPauseHint}</p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {needsReconnect ? (
-              <Button disabled={data.ebayDown} onClick={() => notify(t.preview.simulated)}>
-                {t.stores.reconnect}
-              </Button>
-            ) : (
+            {needsReconnect ? null : (
               <Button
                 variant="secondary"
                 disabled={data.ebayDown || store.connection !== "active"}
@@ -314,8 +338,11 @@ export function StoresPage({
   if (data.detail && data.detail !== shownDetail) setShownDetail(data.detail);
   // Il focus va sul pannello: la lettura parte dal titolo e la vista resta in cima.
   const panel = useRef<HTMLDivElement>(null);
+  // «Già collegato a un altro account» è l'esito di un tentativo, non uno stato della pagina.
+  const [attempted, setAttempted] = useState(false);
+  const premium = data.account.plan === "premium";
   const connect = (
-    <Button onClick={() => notify(t.preview.simulated)}>
+    <Button onClick={() => (data.elsewhere ? setAttempted(true) : notify(t.preview.simulated))}>
       <Plus aria-hidden="true" data-icon="inline-start" />
       {t.stores.connect}
     </Button>
@@ -326,7 +353,7 @@ export function StoresPage({
         <h1 className="text-2xl font-bold sm:text-3xl">{t.stores.title}</h1>
         {data.stores.length > 0 ? connect : null}
       </header>
-      {data.elsewhere ? (
+      {data.elsewhere && attempted ? (
         <StatusAlert tone="warning" title={t.stores.elsewhereTitle}>
           {t.stores.elsewhereBody}
         </StatusAlert>
@@ -340,11 +367,16 @@ export function StoresPage({
         />
       ) : (
         <>
-          {data.account.plan === "free" && data.stores.length > 1 ? (
-            <p className="max-w-2xl text-sm leading-relaxed text-pretty text-muted-foreground">
-              {t.stores.freeLimit}
-            </p>
-          ) : null}
+          {premium ? null : (
+            <div className="grid gap-2">
+              {data.stores.length > 1 ? (
+                <p className="max-w-2xl text-sm leading-relaxed text-pretty text-muted-foreground">
+                  {t.stores.freeLimit}
+                </p>
+              ) : null}
+              <PremiumNote>{t.stores.notificationsFree}</PremiumNote>
+            </div>
+          )}
           <div className="hidden overflow-hidden rounded-xl border bg-card md:block">
             <Table aria-label={t.stores.list}>
               <TableHeader>
@@ -352,21 +384,27 @@ export function StoresPage({
                   <TableHead className="pl-4">{t.stores.store}</TableHead>
                   <TableHead>{t.stores.connection}</TableHead>
                   <TableHead>{t.stores.lastSync}</TableHead>
-                  <TableHead>{t.stores.plan}</TableHead>
-                  <TableHead>{t.stores.notifications}</TableHead>
-                  <TableHead className="pr-4 text-right">{t.stores.orders}</TableHead>
+                  {premium ? <TableHead>{t.stores.notifications}</TableHead> : null}
+                  <TableHead className="text-right">{t.stores.orders}</TableHead>
+                  <TableHead className="w-10 pr-4">
+                    <span className="sr-only">{t.stores.openDetail}</span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data.stores.map((store) => {
                   const status = connectionStatus(store, t);
                   return (
-                    <TableRow key={store.id} className="has-[a:focus-visible]:bg-muted/50">
+                    // Tutta la riga apre il negozio: il collegamento si estende sulla riga.
+                    <TableRow
+                      key={store.id}
+                      className="relative hover:bg-muted/50 has-[a:focus-visible]:bg-muted/50"
+                    >
                       <TableCell className="max-w-72 py-4 pl-4 whitespace-normal">
                         <Link
                           to={`${storesHref}/${store.id}`}
                           preventScrollReset
-                          className="grid gap-0.5 rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring"
+                          className="grid gap-0.5 rounded-sm outline-none after:absolute after:inset-0 focus-visible:ring-3 focus-visible:ring-ring"
                         >
                           <span className="font-medium text-pretty hover:underline hover:underline-offset-4">
                             {store.name}
@@ -383,14 +421,14 @@ export function StoresPage({
                       <TableCell>
                         <LastSync store={store} t={t} now={data.now} language={language} />
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {store.pauseReason === "plan" ? t.stores.pausedByPlan : t.stores.included}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {notificationsLabel(store, t)}
-                      </TableCell>
-                      <TableCell className="font-code pr-4 text-right">
-                        {store.importedOrders}
+                      {premium ? (
+                        <TableCell className="text-muted-foreground">
+                          {notificationsLabel(store, t)}
+                        </TableCell>
+                      ) : null}
+                      <TableCell className="font-code text-right">{store.importedOrders}</TableCell>
+                      <TableCell className="pr-4">
+                        <ChevronRight aria-hidden="true" className="size-4 text-muted-foreground" />
                       </TableCell>
                     </TableRow>
                   );

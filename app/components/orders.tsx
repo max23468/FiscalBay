@@ -4,6 +4,8 @@ import {
   EllipsisVertical,
   ListChecks,
   MessageSquareText,
+  Package,
+  Plus,
   SlidersHorizontal,
   X,
 } from "lucide-react";
@@ -14,6 +16,7 @@ import { Link, useFetcher, useLocation, useNavigate, useSearchParams } from "rea
 import { useNotice } from "~/components/app-shell";
 import { LedgerIndicator } from "~/components/brand";
 import { EmptyState } from "~/components/empty-state";
+import { UnlockIcon } from "~/components/icons";
 import { StatusAlert, StatusBadge, StatusIcon } from "~/components/status";
 import { TaxCode } from "~/components/tax-code";
 import {
@@ -62,10 +65,10 @@ import {
   formatRelative,
   marketplaceLabel,
   type AccountView,
-  type FiscalState,
-  type PaymentStatus,
-  type ShippingStatus,
   type AddressView,
+  fiscalStates,
+  paymentStatuses,
+  shippingStatuses,
   countryName,
   type OrderView,
   type TaxIdentifierView,
@@ -75,7 +78,7 @@ export type OrdersNotice =
   | { kind: "ebay-down"; at: string }
   | { kind: "quota"; until: string }
   | { kind: "store-issue"; storeId: string; storeName: string }
-  | { kind: "importing"; count: number; days: number };
+  | { kind: "importing"; count: number };
 
 export interface OrdersPageData {
   view: "list" | "no-store" | "loading" | "empty";
@@ -89,7 +92,12 @@ export interface OrdersPageData {
   marketplaces: string[];
   account: AccountView;
   notices: OrdersNotice[];
-  sync: { running: boolean; lastAt: string | null; storeName: string | null };
+  sync: {
+    running: boolean;
+    lastAt: string | null;
+    storeId: string | null;
+    storeName: string | null;
+  };
   onboarding: Array<{
     label: "stepAccount" | "stepEmail" | "stepStore" | "stepSync";
     done: boolean;
@@ -102,10 +110,6 @@ export interface UnlockResult {
   unlocked: string[];
   remaining: number | null;
 }
-
-const fiscalStates: FiscalState[] = ["available", "locked", "missing", "checking", "error"];
-const paymentStatuses: PaymentStatus[] = ["paid", "unpaid", "refunded"];
-const shippingStatuses: ShippingStatus[] = ["to_ship", "shipped", "delivered", "cancelled"];
 
 function identifierLabel(identifier: TaxIdentifierView, t: AppCopy) {
   return identifier.type === "OTHER"
@@ -122,52 +126,16 @@ function taxCodeLabels(label: string, order: string, t: AppCopy) {
   };
 }
 
-function remainingUnlocks(account: AccountView) {
-  return account.quota ? Math.max(account.quota.limit - account.quota.used, 0) : null;
+function isEbayDown(data: OrdersPageData) {
+  return data.notices.some((notice) => notice.kind === "ebay-down");
 }
 
-function IdentifierEntry({
-  identifier,
-  order,
-  t,
-  revealed,
-}: {
-  identifier: TaxIdentifierView;
-  order: OrderView;
-  t: AppCopy;
-  revealed: boolean;
-}) {
-  const label = identifierLabel(identifier, t);
-  const { quality } = identifier;
-  const review = quality !== "valid" && quality !== "unchecked";
-  const updated = identifier.updated === true && !review;
-  return (
-    <div className="grid gap-2">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <TaxCode
-        value={identifier.value}
-        labels={taxCodeLabels(label, order.ebayOrderId, t)}
-        reveal={revealed}
-      />
-      {review ? (
-        <div className="grid gap-1.5">
-          <StatusBadge tone="warning">{t.orders.toVerify}</StatusBadge>
-          <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
-            {t.orders.quality[quality]}
-          </p>
-        </div>
-      ) : null}
-      {quality === "unchecked" ? (
-        <p className="text-sm text-muted-foreground">{t.orders.quality.unchecked}</p>
-      ) : null}
-      {updated ? (
-        <div className="grid gap-1.5">
-          <StatusBadge tone="info">{t.orders.updated}</StatusBadge>
-          <p className="text-sm text-muted-foreground">{t.orders.updatedHint}</p>
-        </div>
-      ) : null}
-    </div>
-  );
+function importingNotice(data: OrdersPageData) {
+  return data.notices.find((notice) => notice.kind === "importing");
+}
+
+function remainingUnlocks(account: AccountView) {
+  return account.quota ? Math.max(account.quota.limit - account.quota.used, 0) : null;
 }
 
 function UnlockButton({
@@ -175,17 +143,15 @@ function UnlockButton({
   t,
   unlocking,
   onUnlock,
-  size,
 }: {
   order: OrderView;
   t: AppCopy;
   unlocking: boolean;
   onUnlock: (ids: string[]) => void;
-  size?: "sm";
 }) {
   return (
     <Button
-      size={size}
+      size="sm"
       className="w-fit"
       disabled={unlocking}
       focusableWhenDisabled
@@ -199,121 +165,12 @@ function UnlockButton({
           role={undefined}
           data-icon="inline-start"
         />
-      ) : null}
+      ) : (
+        <UnlockIcon aria-hidden="true" data-icon="inline-start" />
+      )}
       {t.orders.unlock}
     </Button>
   );
-}
-
-function LockedFiscal({
-  order,
-  t,
-  language,
-  account,
-  unlocking,
-  onUnlock,
-}: {
-  order: OrderView;
-  t: AppCopy;
-  language: Language;
-  account: AccountView;
-  unlocking: boolean;
-  onUnlock: (ids: string[]) => void;
-}) {
-  const remaining = remainingUnlocks(account);
-  const exhausted = remaining === 0 && account.quota;
-  return (
-    <div className="grid gap-2">
-      <p className="text-xs font-medium text-muted-foreground">{t.orders.identifier.CF}</p>
-      <TaxCode value={null} labels={taxCodeLabels(t.orders.identifier.CF, order.ebayOrderId, t)} />
-      <p className="max-w-md text-sm leading-relaxed text-pretty text-muted-foreground">
-        {exhausted
-          ? t.orders.lockedExhausted(formatDate(exhausted.cycleEndsAt, language, "date"))
-          : t.orders.lockedHint(remaining ?? 0)}
-      </p>
-      {exhausted ? null : (
-        <UnlockButton order={order} t={t} unlocking={unlocking} onUnlock={onUnlock} />
-      )}
-    </div>
-  );
-}
-
-/** Dato non disponibile: assente per natura, in verifica o non letto. */
-function UnavailableFiscal({ order, t }: { order: OrderView; t: AppCopy }) {
-  const notify = useNotice();
-  const state = order.fiscal.state as "missing" | "checking" | "error";
-  const tone = state === "missing" ? "neutral" : state === "checking" ? "info" : "danger";
-  const hint =
-    state === "error"
-      ? t.orders.errorHint
-      : state === "missing"
-        ? t.orders.missingHint
-        : t.orders.checkingHint;
-  return (
-    <div className="grid gap-2">
-      <div className="flex min-h-10 items-center">
-        <StatusBadge tone={tone}>{t.orders.fiscal[state]}</StatusBadge>
-      </div>
-      <p className="max-w-md text-sm leading-relaxed text-pretty text-muted-foreground">{hint}</p>
-      {state === "error" ? (
-        <Button variant="outline" className="mt-1 w-fit" onClick={() => notify(t.orders.retried)}>
-          {t.orders.retry}
-        </Button>
-      ) : null}
-    </div>
-  );
-}
-
-/**
- * Stato fiscale completo nel dettaglio: dato copiabile, sblocco con quota,
- * assenza, verifica o errore, con le spiegazioni per esteso.
- */
-function FiscalBlock({
-  order,
-  t,
-  language,
-  account,
-  revealed,
-  unlocking,
-  onUnlock,
-}: {
-  order: OrderView;
-  t: AppCopy;
-  language: Language;
-  account: AccountView;
-  revealed: boolean;
-  unlocking: boolean;
-  onUnlock: (ids: string[]) => void;
-}) {
-  const { fiscal } = order;
-  if (fiscal.state === "available") {
-    return (
-      <div className="grid gap-4">
-        {fiscal.identifiers.map((identifier) => (
-          <IdentifierEntry
-            key={`${identifier.type}:${identifier.value}`}
-            identifier={identifier}
-            order={order}
-            t={t}
-            revealed={revealed}
-          />
-        ))}
-      </div>
-    );
-  }
-  if (fiscal.state === "locked") {
-    return (
-      <LockedFiscal
-        order={order}
-        t={t}
-        language={language}
-        account={account}
-        unlocking={unlocking}
-        onUnlock={onUnlock}
-      />
-    );
-  }
-  return <UnavailableFiscal order={order} t={t} />;
 }
 
 /** Riquadro della misura del Codice Fiscale per gli stati senza valore. */
@@ -342,8 +199,8 @@ function CardLabel({ children }: { children: string }) {
 }
 
 /**
- * Spiegazione completa del dato fiscale. Nella scheda occupa tutta la
- * larghezza sotto acquirente e codice, così non allunga la colonna del codice.
+ * Spiegazione del dato fiscale. Nella scheda occupa tutta la larghezza sotto
+ * acquirente e codice, così non allunga la colonna del codice.
  */
 function CardNote({ tone, children }: { tone?: "info"; children: React.ReactNode }) {
   return (
@@ -392,116 +249,32 @@ function IdentifierNote({
   );
 }
 
-function CardLocked({
-  order,
-  t,
-  language,
-  account,
-  unlocking,
-  onUnlock,
-}: {
+/** Contesto comune al dato fiscale di una scheda o del dettaglio. */
+interface FiscalProps {
   order: OrderView;
   t: AppCopy;
   language: Language;
   account: AccountView;
-  unlocking: boolean;
-  onUnlock: (ids: string[]) => void;
-}) {
-  const remaining = remainingUnlocks(account);
-  const exhausted = remaining === 0 && account.quota;
-  return (
-    <>
-      <div className="grid content-start gap-1.5">
-        <CardLabel>{t.orders.identifier.CF}</CardLabel>
-        <div className={cardRow}>
-          <TaxCode
-            value={null}
-            labels={taxCodeLabels(t.orders.identifier.CF, order.ebayOrderId, t)}
-          />
-          {exhausted ? null : (
-            <UnlockButton order={order} t={t} unlocking={unlocking} onUnlock={onUnlock} size="sm" />
-          )}
-        </div>
-      </div>
-      <CardNote>
-        {exhausted
-          ? t.orders.lockedExhausted(formatDate(exhausted.cycleEndsAt, language, "date"))
-          : t.orders.lockedHint(remaining ?? 0)}
-      </CardNote>
-    </>
-  );
-}
-
-function CardUnavailable({ order, t }: { order: OrderView; t: AppCopy }) {
-  const notify = useNotice();
-  const state = order.fiscal.state as "missing" | "checking" | "error";
-  const tone = state === "missing" ? "neutral" : state === "checking" ? "info" : "danger";
-  const hint =
-    state === "error"
-      ? t.orders.errorHint
-      : state === "missing"
-        ? t.orders.missingHint
-        : t.orders.checkingHint;
-  return (
-    <>
-      <div className="grid content-start gap-1.5">
-        <CardLabel>{t.orders.identifier.CF}</CardLabel>
-        <div className={cardRow}>
-          <FiscalSlot tone={tone}>{t.orders.fiscal[state]}</FiscalSlot>
-          {state === "error" ? (
-            <Button variant="outline" size="sm" onClick={() => notify(t.orders.retried)}>
-              {t.orders.retry}
-            </Button>
-          ) : null}
-        </div>
-      </div>
-      <CardNote>{hint}</CardNote>
-      {state === "missing" && order.suggestion ? (
-        <CardNote tone="info">{t.orders.suggestion}</CardNote>
-      ) : null}
-    </>
-  );
-}
-
-/**
- * Stato fiscale nella scheda: etichetta e riquadro della stessa misura per
- * ogni stato, con l'azione accanto, affiancati all'acquirente; sotto, la
- * spiegazione completa a tutta larghezza.
- */
-function CardFiscal({
-  order,
-  t,
-  language,
-  account,
-  revealed,
-  unlocking,
-  onUnlock,
-}: {
-  order: OrderView;
-  t: AppCopy;
-  language: Language;
-  account: AccountView;
+  /** eBay non risponde: le azioni che lo richiedono restano sospese. */
+  ebayDown: boolean;
   revealed: boolean;
   unlocking: boolean;
   onUnlock: (ids: string[]) => void;
-}) {
+}
+
+function unavailableTone(state: "missing" | "checking" | "error") {
+  return state === "missing" ? "neutral" : state === "checking" ? "info" : "danger";
+}
+
+/**
+ * Riquadro del dato fiscale con la sua azione: stessa forma per ogni stato,
+ * nella scheda accanto all'acquirente e nel dettaglio in cima al pannello.
+ */
+function FiscalCodes({ order, t, account, ebayDown, revealed, unlocking, onUnlock }: FiscalProps) {
+  const notify = useNotice();
   const { fiscal } = order;
-  if (fiscal.state === "locked") {
+  if (fiscal.state === "available") {
     return (
-      <CardLocked
-        order={order}
-        t={t}
-        language={language}
-        account={account}
-        unlocking={unlocking}
-        onUnlock={onUnlock}
-      />
-    );
-  }
-  if (fiscal.state !== "available") return <CardUnavailable order={order} t={t} />;
-  const several = fiscal.identifiers.length > 1;
-  return (
-    <>
       <div className="grid content-start gap-3">
         {fiscal.identifiers.map((identifier) => {
           const name = identifierLabel(identifier, t);
@@ -517,14 +290,109 @@ function CardFiscal({
           );
         })}
       </div>
-      {fiscal.identifiers.map((identifier) => (
-        <IdentifierNote
-          key={`note:${identifier.type}:${identifier.value}`}
-          identifier={identifier}
-          t={t}
-          prefix={several ? `${identifierLabel(identifier, t)}: ` : ""}
-        />
-      ))}
+    );
+  }
+  const exhausted = fiscal.state === "locked" && remainingUnlocks(account) === 0;
+  return (
+    <div className="grid content-start gap-1.5">
+      <CardLabel>{t.orders.identifier.CF}</CardLabel>
+      <div className={cardRow}>
+        {fiscal.state === "locked" ? (
+          <>
+            <TaxCode
+              value={null}
+              labels={taxCodeLabels(t.orders.identifier.CF, order.ebayOrderId, t)}
+            />
+            {exhausted ? null : (
+              <UnlockButton order={order} t={t} unlocking={unlocking} onUnlock={onUnlock} />
+            )}
+          </>
+        ) : (
+          <>
+            <FiscalSlot tone={unavailableTone(fiscal.state)}>
+              {t.orders.fiscal[fiscal.state]}
+            </FiscalSlot>
+            {fiscal.state === "error" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={ebayDown}
+                focusableWhenDisabled
+                onClick={() => notify(t.orders.retried)}
+              >
+                {t.orders.retry}
+              </Button>
+            ) : null}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function unavailableHint(state: "missing" | "checking" | "error", ebayDown: boolean, t: AppCopy) {
+  if (state === "missing") return t.orders.missingHint;
+  if (state === "checking") return t.orders.checkingHint;
+  return ebayDown ? t.orders.errorHintEbayDown : t.orders.errorHint;
+}
+
+/** Ordini rimasti prima dello sblocco; a sblocchi esauriti, quando riprendono. */
+function LockedNote({
+  t,
+  language,
+  account,
+  compact,
+}: Pick<FiscalProps, "t" | "language" | "account"> & { compact: boolean }) {
+  const remaining = remainingUnlocks(account);
+  if (remaining === null || !account.quota) return null;
+  const cycleEnd = formatDate(account.quota.cycleEndsAt, language, "date");
+  if (remaining > 0) return <CardNote>{t.orders.lockedHint(remaining)}</CardNote>;
+  return (
+    <CardNote>
+      {compact ? t.orders.lockedUntil(cycleEnd) : t.orders.lockedExhausted(cycleEnd)}
+    </CardNote>
+  );
+}
+
+/**
+ * Spiegazioni del dato fiscale. Nella scheda restano brevi, perché l'avviso
+ * in cima alla pagina spiega già le condizioni comuni; nel dettaglio sono complete.
+ */
+function FiscalNotes({
+  order,
+  t,
+  language,
+  account,
+  ebayDown,
+  compact,
+}: Pick<FiscalProps, "order" | "t" | "language" | "account" | "ebayDown"> & {
+  compact: boolean;
+}) {
+  const { fiscal } = order;
+  if (fiscal.state === "available") {
+    const several = fiscal.identifiers.length > 1;
+    return fiscal.identifiers.map((identifier) => (
+      <IdentifierNote
+        key={`note:${identifier.type}:${identifier.value}`}
+        identifier={identifier}
+        t={t}
+        prefix={several ? `${identifierLabel(identifier, t)}: ` : ""}
+      />
+    ));
+  }
+  if (fiscal.state === "locked") {
+    return <LockedNote t={t} language={language} account={account} compact={compact} />;
+  }
+  return (
+    <>
+      <CardNote>{unavailableHint(fiscal.state, ebayDown, t)}</CardNote>
+      {compact && fiscal.state === "missing" && order.suggestion ? (
+        <CardNote tone="info">
+          {t.orders.suggestionFrom}{" "}
+          <span className="font-code text-foreground">{order.suggestion.value}</span>.{" "}
+          {t.orders.suggestionCheck}
+        </CardNote>
+      ) : null}
     </>
   );
 }
@@ -589,22 +457,16 @@ function OrderCard({
   selecting,
   selected,
   onSelect,
+  ebayDown,
   revealed,
   unlocking,
   onUnlock,
   isNew,
-}: {
-  order: OrderView;
-  t: AppCopy;
-  language: Language;
-  account: AccountView;
+}: FiscalProps & {
   detailHref: string;
   selecting: boolean;
   selected: boolean;
   onSelect: (selected: boolean) => void;
-  revealed: boolean;
-  unlocking: boolean;
-  onUnlock: (ids: string[]) => void;
   isNew: boolean;
 }) {
   const notify = useNotice();
@@ -703,6 +565,7 @@ function OrderCard({
         </div>
       </header>
       <div className="flex gap-3">
+        {/* Miniatura sempre presente, così gli articoli partono allo stesso punto. */}
         {order.thumbnail ? (
           <img
             src={order.thumbnail}
@@ -711,7 +574,14 @@ function OrderCard({
             height="40"
             className="size-10 shrink-0 rounded-md border bg-muted object-cover"
           />
-        ) : null}
+        ) : (
+          <span
+            aria-hidden="true"
+            className="grid size-10 shrink-0 place-items-center rounded-md border bg-muted/60 text-muted-foreground"
+          >
+            <Package className="size-4" />
+          </span>
+        )}
         <ul className="grid min-w-0 content-start gap-1 text-sm leading-snug">
           {shown.map((item, index) => (
             <li
@@ -741,14 +611,23 @@ function OrderCard({
             {order.buyerName}
           </span>
         </p>
-        <CardFiscal
+        <FiscalCodes
           order={order}
           t={t}
           language={language}
           account={account}
+          ebayDown={ebayDown}
           revealed={revealed}
           unlocking={unlocking}
           onUnlock={onUnlock}
+        />
+        <FiscalNotes
+          order={order}
+          t={t}
+          language={language}
+          account={account}
+          ebayDown={ebayDown}
+          compact
         />
         <BuyerContacts order={order} t={t} language={language} />
       </div>
@@ -761,19 +640,10 @@ function OrderDetail({
   t,
   language,
   account,
+  ebayDown,
   template,
-  revealed,
-  unlocking,
-  onUnlock,
-}: {
-  order: OrderView;
-  t: AppCopy;
-  language: Language;
-  account: AccountView;
+}: Pick<FiscalProps, "order" | "t" | "language" | "account" | "ebayDown"> & {
   template: string;
-  revealed: boolean;
-  unlocking: boolean;
-  onUnlock: (ids: string[]) => void;
 }) {
   const notify = useNotice();
   const row = "grid gap-0.5";
@@ -871,15 +741,17 @@ function OrderDetail({
           <h3 id="order-fiscal" className="text-sm font-semibold">
             {t.order.fiscal}
           </h3>
-          <FiscalBlock
-            order={order}
-            t={t}
-            language={language}
-            account={account}
-            revealed={revealed}
-            unlocking={unlocking}
-            onUnlock={onUnlock}
-          />
+          {/* Il codice è in cima al pannello; qui restano le spiegazioni complete. */}
+          <div className="grid gap-3">
+            <FiscalNotes
+              order={order}
+              t={t}
+              language={language}
+              account={account}
+              ebayDown={ebayDown}
+              compact={false}
+            />
+          </div>
           {order.fiscal.state === "missing" ? (
             <div className="grid gap-3">
               {order.suggestion ? (
@@ -953,34 +825,51 @@ function OrderDetail({
   );
 }
 
+interface FilterOption {
+  value: string;
+  label: string;
+  /** Opzione del piano Premium: visibile con la corona ma non selezionabile. */
+  premium?: boolean;
+}
+
 function FilterSelect({
   label,
   name,
   value,
   options,
   allLabel,
+  premiumLabel,
   onChange,
 }: {
   label: string;
   name: string;
   value: string;
-  options: Array<{ value: string; label: string }>;
+  options: FilterOption[];
   allLabel: string;
+  premiumLabel: string;
   onChange: (name: string, value: string) => void;
 }) {
   const id = useId();
-  const items = [{ value: "", label: allLabel }, ...options];
+  const items: FilterOption[] = [{ value: "", label: allLabel }, ...options];
+  // Un valore sconosciuto nell'URL vale come «Tutti», come fa il server.
+  const current = items.some((item) => item.value === value && !item.premium) ? value : "";
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <Select items={items} value={value} onValueChange={(next) => onChange(name, next ?? "")}>
+      <Select items={items} value={current} onValueChange={(next) => onChange(name, next ?? "")}>
         <SelectTrigger id={id} className="w-full min-w-0">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="min-w-48">
           {items.map((item) => (
-            <SelectItem key={item.value} value={item.value}>
+            <SelectItem key={item.value} value={item.value} disabled={item.premium}>
               {item.label}
+              {item.premium ? (
+                <>
+                  <StatusIcon tone="premium" className="ml-auto" />
+                  <span className="sr-only">{premiumLabel}</span>
+                </>
+              ) : null}
             </SelectItem>
           ))}
         </SelectContent>
@@ -1000,6 +889,7 @@ function OrdersToolbar({
   selecting: boolean;
   onToggleSelect: () => void;
 }) {
+  const empty = data.total === 0;
   const [params, setParams] = useSearchParams();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filterKeys = ["negozio", "marketplace", "periodo", "pagamento", "spedizione", "fiscale"];
@@ -1028,6 +918,8 @@ function OrdersToolbar({
         <Button
           variant={selecting ? "secondary" : "outline"}
           aria-pressed={selecting}
+          disabled={empty && !selecting}
+          focusableWhenDisabled
           onClick={onToggleSelect}
         >
           <ListChecks aria-hidden="true" data-icon="inline-start" />
@@ -1048,6 +940,7 @@ function OrdersToolbar({
             value={params.get("negozio") ?? ""}
             options={data.stores.map((store) => ({ value: store.id, label: store.name }))}
             allLabel={t.orders.all}
+            premiumLabel={t.orders.premiumOption}
             onChange={change}
           />
         ) : null}
@@ -1058,6 +951,7 @@ function OrdersToolbar({
             value={params.get("marketplace") ?? ""}
             options={data.marketplaces.map((id) => ({ value: id, label: marketplaceLabel(id) }))}
             allLabel={t.orders.all}
+            premiumLabel={t.orders.premiumOption}
             onChange={change}
           />
         ) : null}
@@ -1068,9 +962,10 @@ function OrdersToolbar({
           options={[
             { value: "7", label: t.orders.last7 },
             { value: "30", label: t.orders.last30 },
-            ...(data.account.plan === "premium" ? [{ value: "90", label: t.orders.last90 }] : []),
+            { value: "90", label: t.orders.last90, premium: data.account.plan !== "premium" },
           ]}
           allLabel={t.orders.all}
+          premiumLabel={t.orders.premiumOption}
           onChange={change}
         />
         <FilterSelect
@@ -1082,6 +977,7 @@ function OrdersToolbar({
             label: t.orders.payment[status],
           }))}
           allLabel={t.orders.all}
+          premiumLabel={t.orders.premiumOption}
           onChange={change}
         />
         <FilterSelect
@@ -1093,6 +989,7 @@ function OrdersToolbar({
             label: t.orders.shipping[status],
           }))}
           allLabel={t.orders.all}
+          premiumLabel={t.orders.premiumOption}
           onChange={change}
         />
         <FilterSelect
@@ -1101,6 +998,7 @@ function OrdersToolbar({
           value={params.get("fiscale") ?? ""}
           options={fiscalStates.map((state) => ({ value: state, label: t.orders.fiscal[state] }))}
           allLabel={t.orders.all}
+          premiumLabel={t.orders.premiumOption}
           onChange={change}
         />
       </div>
@@ -1136,6 +1034,7 @@ function SelectionBar({
         <div className="flex flex-wrap items-center gap-2">
           <AlertDialog>
             <AlertDialogTrigger render={<Button disabled={count === 0} />}>
+              <UnlockIcon aria-hidden="true" data-icon="inline-start" />
               {t.orders.unlockSelected(count)}
             </AlertDialogTrigger>
             <AlertDialogContent>
@@ -1186,27 +1085,51 @@ function OrdersHeader({
   t: AppCopy;
   language: Language;
 }) {
+  // Durante il caricamento lo stato dell'aggiornamento non è ancora noto.
+  const loading = data.view === "loading";
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
       <div className="grid gap-1">
         <h1 className="text-2xl font-bold sm:text-3xl">{t.orders.title}</h1>
         {data.view === "list" ? (
           <p className="text-sm text-muted-foreground">
-            {t.orders.count(data.total)} · {t.orders.sortedBy}
+            {t.orders.count(data.total)}
+            {data.total > 0 ? ` · ${t.orders.sortedBy}` : null}
           </p>
+        ) : loading ? (
+          <Skeleton aria-hidden="true" className="h-4 w-36" />
         ) : null}
       </div>
-      {data.sync.lastAt || data.sync.running ? (
-        <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
-          <LedgerIndicator active={data.sync.running} />
-          {data.sync.running
-            ? t.orders.refreshingTitle
-            : data.sync.lastAt
-              ? t.orders.syncedAgo(formatRelative(data.sync.lastAt, data.now, language))
-              : null}
-        </p>
-      ) : null}
+      {loading ? null : <SyncStatus data={data} t={t} language={language} />}
     </header>
+  );
+}
+
+/** Importazione, aggiornamento o ultimo aggiornamento: un solo indicatore per la pagina. */
+function SyncStatus({
+  data,
+  t,
+  language,
+}: {
+  data: OrdersPageData;
+  t: AppCopy;
+  language: Language;
+}) {
+  const importing = importingNotice(data);
+  const { running, lastAt } = data.sync;
+  const label = importing
+    ? t.orders.importingStatus(importing.count)
+    : running
+      ? t.orders.refreshingTitle
+      : lastAt
+        ? t.orders.syncedAgo(formatRelative(lastAt, data.now, language))
+        : null;
+  if (!label) return null;
+  return (
+    <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
+      <LedgerIndicator active={running || importing !== undefined} />
+      {label}
+    </p>
   );
 }
 
@@ -1221,14 +1144,9 @@ function OrdersNotices({
   language: Language;
   links: AppLinks;
 }) {
-  if (data.notices.length === 0 && !data.sync.running) return null;
+  if (data.notices.every((notice) => notice.kind === "importing")) return null;
   return (
     <div className="grid gap-3">
-      {data.sync.running && data.view === "list" ? (
-        <StatusAlert tone="info" title={t.orders.refreshingTitle}>
-          {t.orders.refreshingBody}
-        </StatusAlert>
-      ) : null}
       {data.notices.map((notice) => {
         switch (notice.kind) {
           case "ebay-down":
@@ -1269,12 +1187,9 @@ function OrdersNotices({
                 </span>
               </StatusAlert>
             );
+          // L'importazione compare nell'indicatore dell'intestazione e in fondo all'elenco.
           case "importing":
-            return (
-              <StatusAlert key={notice.kind} tone="info" title={t.orders.importingTitle}>
-                {t.orders.importingBody(notice.count, notice.days)}
-              </StatusAlert>
-            );
+            return null;
         }
         return null;
       })}
@@ -1284,26 +1199,31 @@ function OrdersNotices({
 
 function FirstUse({ data, t }: { data: OrdersPageData; t: AppCopy }) {
   const notify = useNotice();
+  const current = data.onboarding.findIndex((step) => !step.done);
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-      <EmptyState
-        title={t.orders.firstUseTitle}
-        description={t.orders.firstUseBody}
-        action={
-          <Button onClick={() => notify(t.preview.simulated)}>{t.orders.connectStore}</Button>
-        }
-      />
-      <section aria-labelledby="onboarding" className="grid gap-3">
-        <h2 id="onboarding" className="text-sm font-semibold">
+    <EmptyState
+      title={t.orders.firstUseTitle}
+      description={t.orders.firstUseBody}
+      action={
+        <Button onClick={() => notify(t.preview.simulated)}>
+          <Plus aria-hidden="true" data-icon="inline-start" />
+          {t.orders.connectStore}
+        </Button>
+      }
+    >
+      <section aria-labelledby="onboarding" className="grid gap-2 border-t pt-4">
+        <h3 id="onboarding" className="text-xs font-medium text-muted-foreground">
           {t.orders.steps}
-        </h2>
-        <ol className="grid gap-2 text-sm sm:grid-cols-4">
+        </h3>
+        <ol className="grid gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
           {data.onboarding.map((step, index) => (
             <li
               key={step.label}
+              aria-current={index === current ? "step" : undefined}
               className={cn(
-                "flex items-center gap-2 rounded-lg border px-3 py-2.5",
-                !step.done && "text-muted-foreground",
+                "flex items-center gap-2",
+                !step.done && index !== current && "text-muted-foreground",
+                index === current && "font-medium",
               )}
             >
               {step.done ? (
@@ -1311,7 +1231,10 @@ function FirstUse({ data, t }: { data: OrdersPageData; t: AppCopy }) {
               ) : (
                 <span
                   aria-hidden="true"
-                  className="font-code grid size-4 place-items-center text-xs"
+                  className={cn(
+                    "font-code grid size-4 place-items-center rounded-full text-[0.625rem]",
+                    index === current ? "bg-primary text-primary-foreground" : "border",
+                  )}
                 >
                   {index + 1}
                 </span>
@@ -1321,49 +1244,64 @@ function FirstUse({ data, t }: { data: OrdersPageData; t: AppCopy }) {
           ))}
         </ol>
       </section>
-    </div>
+    </EmptyState>
   );
 }
 
 function LoadingGrid({ t }: { t: AppCopy }) {
   return (
-    <div aria-busy="true" className="grid gap-3 lg:grid-cols-2">
+    <div aria-busy="true" className="grid gap-6">
       <span className="sr-only" role="status">
         {t.orders.loading}
       </span>
-      {[0, 1, 2, 3].map((index) => (
-        <div key={index} aria-hidden="true" className="grid gap-3 rounded-xl border bg-card p-4">
-          <div className="grid gap-1.5">
-            <div className="flex justify-between gap-3">
-              <Skeleton className="h-4 w-44" />
-              <Skeleton className="h-4 w-16" />
-            </div>
-            <Skeleton className="h-3 w-64 max-w-full" />
+      {/* Stessa riga dei filtri dell'elenco, così i dati non spostano la pagina. */}
+      <div aria-hidden="true" className="hidden gap-3 md:grid md:grid-cols-[repeat(4,10rem)_1fr]">
+        {[0, 1, 2, 3].map((index) => (
+          <div key={index} className="grid gap-2">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-9 w-full" />
           </div>
-          <div className="grid gap-1.5">
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-1/2" />
+        ))}
+        <Skeleton className="h-9 w-28 self-end justify-self-end" />
+      </div>
+      <div className="grid gap-3 lg:grid-cols-2">
+        {[0, 1, 2, 3].map((index) => (
+          <div key={index} aria-hidden="true" className="grid gap-3 rounded-xl border bg-card p-4">
+            <div className="grid gap-1.5">
+              <div className="flex justify-between gap-3">
+                <Skeleton className="h-4 w-44" />
+                <Skeleton className="h-4 w-16" />
+              </div>
+              <Skeleton className="h-3 w-64 max-w-full" />
+            </div>
+            <div className="flex gap-3">
+              <Skeleton className="size-10 shrink-0" />
+              <div className="grid flex-1 content-start gap-1.5">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-1/2" />
+              </div>
+            </div>
+            <div className="grid gap-3 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_14rem]">
+              <div className="grid content-start gap-2">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-4 w-36" />
+              </div>
+              <div className="grid content-start gap-2">
+                <Skeleton className="h-3 w-24" />
+                <Skeleton className="h-10 w-56 max-w-full" />
+              </div>
+              <div className="grid content-start gap-2">
+                <Skeleton className="h-3 w-24" />
+                <Skeleton className="h-4 w-40" />
+              </div>
+              <div className="grid content-start gap-2">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-4 w-32" />
+              </div>
+            </div>
           </div>
-          <div className="grid gap-3 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_14rem]">
-            <div className="grid content-start gap-2">
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="h-4 w-36" />
-            </div>
-            <div className="grid content-start gap-2">
-              <Skeleton className="h-3 w-24" />
-              <Skeleton className="h-10 w-56 max-w-full" />
-            </div>
-            <div className="grid content-start gap-2">
-              <Skeleton className="h-3 w-24" />
-              <Skeleton className="h-4 w-40" />
-            </div>
-            <div className="grid content-start gap-2">
-              <Skeleton className="h-3 w-16" />
-              <Skeleton className="h-4 w-32" />
-            </div>
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -1432,7 +1370,9 @@ function LoadMore({ data, t }: { data: OrdersPageData; t: AppCopy }) {
           {t.orders.loadMore}
         </Link>
       ) : (
-        <p className="text-sm text-muted-foreground">{t.orders.allShown}</p>
+        <p className="text-sm text-muted-foreground">
+          {importingNotice(data) ? t.orders.importMore : t.orders.allShown}
+        </p>
       )}
     </div>
   );
@@ -1454,6 +1394,7 @@ function OrdersList({
 }) {
   const { language } = links;
   const location = useLocation();
+  const ebayDown = isEbayDown(data);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [showIncoming, setShowIncoming] = useState(false);
@@ -1478,14 +1419,17 @@ function OrdersList({
     unlock.submit(ids);
   };
   const ordersHref = appHref(links, "ordini");
-  const orders = showIncoming ? [...data.incoming, ...data.orders] : data.orders;
+  // La lista resta dal più recente anche quando i nuovi ordini arrivano in un ordine diverso.
+  const orders = showIncoming
+    ? [...[...data.incoming].sort((a, b) => b.createdAt.localeCompare(a.createdAt)), ...data.orders]
+    : data.orders;
   const incomingIds = new Set(data.incoming.map((order) => order.id));
   const lockedSelected = orders
     .filter((order) => selected.has(order.id) && order.fiscal.state === "locked")
     .map((order) => order.id);
-  const hasFilters = [...new URLSearchParams(location.search).keys()].some(
-    (key) => key !== "mostra",
-  );
+  const criteria = new URLSearchParams(location.search);
+  criteria.delete("mostra");
+  const onlySearch = criteria.has("q") && [...criteria.keys()].every((key) => key === "q");
   return (
     <>
       <OrdersToolbar
@@ -1506,15 +1450,15 @@ function OrdersList({
         <EmptyState
           variant="search"
           title={t.orders.noResultsTitle}
-          description={t.orders.noResultsBody}
+          description={onlySearch ? t.orders.noSearchResultsBody : t.orders.noResultsBody}
           action={
-            hasFilters ? (
+            criteria.size > 0 ? (
               <Link
                 to={ordersHref}
                 preventScrollReset
                 className={buttonVariants({ variant: "outline" })}
               >
-                {t.orders.resetFilters}
+                {onlySearch ? t.orders.clearSearch : t.orders.resetFilters}
               </Link>
             ) : undefined
           }
@@ -1534,6 +1478,7 @@ function OrdersList({
                     t={t}
                     language={language}
                     account={data.account}
+                    ebayDown={ebayDown}
                     detailHref={`${ordersHref}/${order.id}${location.search}`}
                     selecting={selecting}
                     selected={selected.has(order.id)}
@@ -1585,6 +1530,7 @@ function OrderSheet({
   const { language } = links;
   const location = useLocation();
   const navigate = useNavigate();
+  const ebayDown = isEbayDown(data);
   // Il pannello conserva l'ultimo ordine durante l'animazione di chiusura.
   const [shown, setShown] = useState(data.detail);
   if (data.detail && data.detail !== shown) setShown(data.detail);
@@ -1614,15 +1560,26 @@ function OrderSheet({
               {formatDate(shown.createdAt, language)} · {shown.buyerName}
             </SheetDescription>
           </SheetHeader>
+          {/* Il dato fiscale, protagonista, resta visibile sopra le schede Dettagli e Articoli. */}
+          <div className="mx-4 mb-5 rounded-xl border bg-muted/30 p-3">
+            <FiscalCodes
+              order={shown}
+              t={t}
+              language={language}
+              account={data.account}
+              ebayDown={ebayDown}
+              revealed={unlock.revealed.has(shown.id)}
+              unlocking={unlock.pending.has(shown.id)}
+              onUnlock={unlock.submit}
+            />
+          </div>
           <OrderDetail
             order={shown}
             t={t}
             language={language}
             account={data.account}
+            ebayDown={ebayDown}
             template={data.messageTemplate}
-            revealed={unlock.revealed.has(shown.id)}
-            unlocking={unlock.pending.has(shown.id)}
-            onUnlock={unlock.submit}
           />
         </SheetContent>
       ) : null}
@@ -1657,12 +1614,22 @@ export function OrdersPage({
         <LoadingGrid t={t} />
       ) : data.view === "empty" ? (
         <EmptyState
-          variant="search"
+          variant="all-clear"
           title={t.orders.noOrdersTitle}
           description={t.orders.noOrdersBody(
             data.sync.storeName ?? "",
             data.sync.lastAt ? formatDate(data.sync.lastAt, language) : "",
           )}
+          action={
+            data.sync.storeId ? (
+              <Link
+                to={appHref(links, `negozi/${data.sync.storeId}`)}
+                className={buttonVariants({ variant: "outline" })}
+              >
+                {t.orders.openStore}
+              </Link>
+            ) : undefined
+          }
         />
       ) : (
         <OrdersList data={data} t={t} links={links} unlock={unlock} />
