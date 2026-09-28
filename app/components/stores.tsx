@@ -1,10 +1,21 @@
-import { ChevronRight, Plus } from "lucide-react";
+import {
+  ChevronRight,
+  History,
+  Pause,
+  Play,
+  Plus,
+  RefreshCw,
+  Store,
+  Trash2,
+  Unplug,
+} from "lucide-react";
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { useAction } from "~/components/app-shell";
 import { LedgerIndicator } from "~/components/brand";
 import { EmptyState } from "~/components/empty-state";
+import { InitialsTile, PageTitle } from "~/components/icon-tile";
 import { PremiumNote, StatusAlert, StatusBadge } from "~/components/status";
 import {
   AlertDialog,
@@ -110,6 +121,122 @@ function notificationsLabel(store: StoreView, t: AppCopy) {
   return store.notifications ? t.stores.notificationsOn : t.stores.notificationsOff;
 }
 
+/** Azioni del negozio: una colonna di pulsanti uguali, poi le due disconnessioni. */
+function StoreActions({ store, ebayDown, t }: { store: StoreView; ebayDown: boolean; t: AppCopy }) {
+  const action = useAction();
+  const run = (intent: string) => action.run(intent, { store: store.id });
+  const [confirmName, setConfirmName] = useState("");
+  const needsReconnect = store.issue !== undefined;
+  const planPaused = store.pauseReason === "plan";
+  return (
+    <section aria-labelledby="store-actions" className="grid gap-3 border-t pt-5">
+      <h3 id="store-actions" className="text-sm font-semibold">
+        {t.stores.sectionActions}
+      </h3>
+      {planPaused ? (
+        <p className="text-sm text-muted-foreground">{t.stores.planPauseHint}</p>
+      ) : (
+        // Stessa forma per ogni azione: una colonna di pulsanti larghi con icona.
+        <div className="grid gap-2">
+          {needsReconnect ? null : (
+            <Button
+              variant="outline"
+              className="justify-start"
+              disabled={ebayDown || store.connection !== "active"}
+              onClick={() => run("store-sync")}
+            >
+              <RefreshCw aria-hidden="true" data-icon="inline-start" />
+              {t.stores.syncNow}
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            className="justify-start"
+            disabled={ebayDown || needsReconnect}
+            onClick={() => run("store-reimport")}
+          >
+            <History aria-hidden="true" data-icon="inline-start" />
+            {t.stores.reimport}
+          </Button>
+          <Button
+            variant="outline"
+            className="justify-start"
+            onClick={() => run(store.connection === "paused" ? "store-resume" : "store-pause")}
+          >
+            {store.connection === "paused" ? (
+              <Play aria-hidden="true" data-icon="inline-start" />
+            ) : (
+              <Pause aria-hidden="true" data-icon="inline-start" />
+            )}
+            {store.connection === "paused" ? t.stores.resume : t.stores.pause}
+          </Button>
+        </div>
+      )}
+      {store.connection === "active" ? (
+        <p className="text-xs text-muted-foreground">{t.stores.pauseHint}</p>
+      ) : null}
+      <div className="grid gap-2 border-t pt-3 sm:grid-cols-2">
+        <AlertDialog>
+          <AlertDialogTrigger
+            render={<Button variant="destructive" className="justify-start sm:justify-center" />}
+          >
+            <Unplug aria-hidden="true" data-icon="inline-start" />
+            {t.stores.disconnect}
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t.stores.disconnectTitle(store.name)}</AlertDialogTitle>
+              <AlertDialogDescription>{t.stores.disconnectBody}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t.stores.cancel}</AlertDialogCancel>
+              <AlertDialogClose
+                render={<Button variant="destructive-solid" />}
+                onClick={() => run("store-disconnect")}
+              >
+                {t.stores.disconnect}
+              </AlertDialogClose>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        <AlertDialog onOpenChange={() => setConfirmName("")}>
+          <AlertDialogTrigger
+            render={<Button variant="destructive" className="justify-start sm:justify-center" />}
+          >
+            <Trash2 aria-hidden="true" data-icon="inline-start" />
+            {t.stores.disconnectDelete}
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t.stores.deleteTitle(store.name)}</AlertDialogTitle>
+              <AlertDialogDescription>{t.stores.deleteBody}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <Field>
+              <FieldLabel htmlFor="store-delete-confirm">{t.stores.deleteLabel}</FieldLabel>
+              <Input
+                id="store-delete-confirm"
+                autoComplete="off"
+                value={confirmName}
+                onChange={(event) => setConfirmName(event.target.value)}
+              />
+            </Field>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t.stores.cancel}</AlertDialogCancel>
+              <AlertDialogClose
+                disabled={confirmName.trim() !== store.name}
+                render={<Button variant="destructive-solid" />}
+                onClick={() => run("store-delete")}
+              >
+                {t.stores.deleteConfirm}
+              </AlertDialogClose>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </section>
+  );
+}
+
 function StoreDetail({
   store,
   data,
@@ -123,12 +250,10 @@ function StoreDetail({
 }) {
   const action = useAction();
   const run = (intent: string) => action.run(intent, { store: store.id });
-  const [confirmName, setConfirmName] = useState("");
   const { language } = links;
   const status = connectionStatus(store, t);
   const needsReconnect = store.issue !== undefined;
   const expired = store.connection === "reconnect_required";
-  const planPaused = store.pauseReason === "plan";
   const row = "grid gap-0.5";
   return (
     <div className="grid gap-7 px-4 pb-6">
@@ -233,94 +358,7 @@ function StoreDetail({
           </Link>
         </p>
       </section>
-      <section aria-labelledby="store-actions" className="grid gap-3 border-t pt-5">
-        <h3 id="store-actions" className="text-sm font-semibold">
-          {t.stores.sectionActions}
-        </h3>
-        {planPaused ? (
-          <p className="text-sm text-muted-foreground">{t.stores.planPauseHint}</p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {needsReconnect ? null : (
-              <Button
-                variant="secondary"
-                disabled={data.ebayDown || store.connection !== "active"}
-                onClick={() => run("store-sync")}
-              >
-                {t.stores.syncNow}
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              disabled={data.ebayDown || needsReconnect}
-              onClick={() => run("store-reimport")}
-            >
-              {t.stores.reimport}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => run(store.connection === "paused" ? "store-resume" : "store-pause")}
-            >
-              {store.connection === "paused" ? t.stores.resume : t.stores.pause}
-            </Button>
-          </div>
-        )}
-        {store.connection === "active" ? (
-          <p className="text-xs text-muted-foreground">{t.stores.pauseHint}</p>
-        ) : null}
-        <div className="flex flex-wrap gap-2 border-t pt-3">
-          <AlertDialog>
-            <AlertDialogTrigger render={<Button variant="destructive" />}>
-              {t.stores.disconnect}
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>{t.stores.disconnectTitle(store.name)}</AlertDialogTitle>
-                <AlertDialogDescription>{t.stores.disconnectBody}</AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>{t.stores.cancel}</AlertDialogCancel>
-                <AlertDialogClose
-                  render={<Button variant="destructive-solid" />}
-                  onClick={() => run("store-disconnect")}
-                >
-                  {t.stores.disconnect}
-                </AlertDialogClose>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-          <AlertDialog onOpenChange={() => setConfirmName("")}>
-            <AlertDialogTrigger render={<Button variant="destructive" />}>
-              {t.stores.disconnectDelete}
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>{t.stores.deleteTitle(store.name)}</AlertDialogTitle>
-                <AlertDialogDescription>{t.stores.deleteBody}</AlertDialogDescription>
-              </AlertDialogHeader>
-              <Field>
-                <FieldLabel htmlFor="store-delete-confirm">{t.stores.deleteLabel}</FieldLabel>
-                <Input
-                  id="store-delete-confirm"
-                  autoComplete="off"
-                  value={confirmName}
-                  onChange={(event) => setConfirmName(event.target.value)}
-                />
-              </Field>
-              <AlertDialogFooter>
-                <AlertDialogCancel>{t.stores.cancel}</AlertDialogCancel>
-                <AlertDialogClose
-                  disabled={confirmName.trim() !== store.name}
-                  render={<Button variant="destructive-solid" />}
-                  onClick={() => run("store-delete")}
-                >
-                  {t.stores.deleteConfirm}
-                </AlertDialogClose>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      </section>
+      <StoreActions store={store} ebayDown={data.ebayDown} t={t} />
     </div>
   );
 }
@@ -355,7 +393,9 @@ export function StoresPage({
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
-        <h1 className="text-2xl font-bold sm:text-3xl">{t.stores.title}</h1>
+        <PageTitle icon={Store} tone="teal">
+          {t.stores.title}
+        </PageTitle>
         {data.stores.length > 0 ? connect : null}
       </header>
       {data.elsewhere && attempted ? (
@@ -375,7 +415,7 @@ export function StoresPage({
           {premium ? null : (
             <div className="grid gap-2">
               {data.stores.length > 1 ? (
-                <p className="max-w-2xl text-sm leading-relaxed text-pretty text-muted-foreground">
+                <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
                   {t.stores.freeLimit}
                 </p>
               ) : null}
@@ -409,14 +449,17 @@ export function StoresPage({
                         <Link
                           to={`${storesHref}/${store.id}`}
                           preventScrollReset
-                          className="grid gap-0.5 rounded-sm outline-none after:absolute after:inset-0 focus-visible:ring-3 focus-visible:ring-ring"
+                          className="flex items-center gap-3 rounded-sm outline-none after:absolute after:inset-0 focus-visible:ring-3 focus-visible:ring-ring"
                         >
-                          <span className="font-medium text-pretty hover:underline hover:underline-offset-4">
-                            {store.name}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            <span className="font-code">{store.username}</span> ·{" "}
-                            {marketplaceLabel(store.marketplace)}
+                          <InitialsTile name={store.name} />
+                          <span className="grid min-w-0 gap-0.5">
+                            <span className="font-medium text-pretty hover:underline hover:underline-offset-4">
+                              {store.name}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              <span className="font-code">{store.username}</span> ·{" "}
+                              {marketplaceLabel(store.marketplace)}
+                            </span>
                           </span>
                         </Link>
                       </TableCell>
@@ -449,8 +492,9 @@ export function StoresPage({
                   <Link
                     to={`${storesHref}/${store.id}`}
                     preventScrollReset
-                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 py-4 outline-none focus-visible:ring-3 focus-visible:ring-ring"
+                    className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 py-4 outline-none focus-visible:ring-3 focus-visible:ring-ring"
                   >
+                    <InitialsTile name={store.name} />
                     <span className="grid min-w-0 gap-1">
                       <span className="font-medium text-pretty">{store.name}</span>
                       <span className="text-xs text-muted-foreground">
@@ -459,7 +503,7 @@ export function StoresPage({
                       </span>
                     </span>
                     <ChevronRight aria-hidden="true" className="size-4 text-muted-foreground" />
-                    <span className="col-span-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                    <span className="col-span-2 col-start-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
                       <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
                       <LastSync store={store} t={t} now={data.now} language={language} />
                     </span>
@@ -483,12 +527,15 @@ export function StoresPage({
             closeLabel={t.shell.close}
             className="sm:max-w-lg"
           >
-            <SheetHeader>
-              <SheetTitle className="text-pretty">{shownDetail.name}</SheetTitle>
-              <SheetDescription>
-                <span className="font-code">{shownDetail.username}</span> ·{" "}
-                {marketplaceLabel(shownDetail.marketplace)}
-              </SheetDescription>
+            <SheetHeader className="flex-row items-center gap-3">
+              <InitialsTile name={shownDetail.name} size="lg" />
+              <span className="grid min-w-0 gap-1">
+                <SheetTitle className="text-pretty">{shownDetail.name}</SheetTitle>
+                <SheetDescription>
+                  <span className="font-code">{shownDetail.username}</span> ·{" "}
+                  {marketplaceLabel(shownDetail.marketplace)}
+                </SheetDescription>
+              </span>
             </SheetHeader>
             <StoreDetail store={shownDetail} data={data} t={t} links={links} />
           </SheetContent>

@@ -936,7 +936,7 @@ describe("collegamento negozio eBay", () => {
     const home = await loadHome({
       request: new Request("http://localhost:5173/?negozio=collegato", { headers: { cookie } }),
     } as Parameters<typeof loadHome>[0]);
-    expect(home.notice).toBe("Negozio eBay collegato.");
+    expect(home.notice).toEqual({ text: "Negozio eBay collegato.", tone: "success" });
     expect(
       home.orders.map(({ ebayOrderId, taxIdentifiers }) => [ebayOrderId, taxIdentifiers]),
     ).toEqual([[syntheticOrderId, []]]);

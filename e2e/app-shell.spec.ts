@@ -100,7 +100,7 @@ test("la selezione sblocca più ordini entro la quota", async ({ page }) => {
   await expect(page.getByRole("status").filter({ hasText: "2 ordini sbloccati." })).toBeVisible();
   await expect(page.getByRole("article")).toHaveCount(0);
   await page.goto("/anteprima/ordini?q=Conti");
-  await expect(page.getByText("CNTPLA68M01L781T")).toBeVisible();
+  await expect(page.getByText("04567890123")).toBeVisible();
 });
 
 test("con gli sblocchi esauriti gli ordini restano consultabili", async ({ page }) => {
@@ -226,8 +226,10 @@ test("con Premium nessun ordine resta da sbloccare e il piano a vita non si rinn
   await chooseScenario(page, "Premium a vita");
   await expect(page.getByText("Il carattere di controllo non corrisponde.")).toBeVisible();
   await page.goto("/anteprima/impostazioni/piano");
-  await expect(page.getByText("Premium a vita", { exact: true })).toBeVisible();
-  await expect(page.getByText("Acquisto una tantum, senza rinnovi.")).toBeVisible();
+  // Su desktop tutte le categorie stanno nella stessa pagina: la prova resta sulla sezione del piano.
+  const plan = page.getByRole("region", { name: "Piano e pagamenti" });
+  await expect(plan.getByText("Premium a vita")).toBeVisible();
+  await expect(plan.getByText("Acquisto una tantum, senza rinnovi.")).toBeVisible();
   await expect(page.getByRole("button", { name: /Gestisci abbonamento/u })).toHaveCount(0);
 });
 

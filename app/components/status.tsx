@@ -94,7 +94,7 @@ export function StatusAlert({
  */
 export function PremiumNote({ children }: { children: React.ReactNode }) {
   return (
-    <p className="flex max-w-2xl gap-2 text-sm leading-relaxed text-pretty text-muted-foreground">
+    <p className="flex gap-2 text-sm leading-relaxed text-pretty text-muted-foreground">
       <StatusIcon tone="premium" className="mt-0.5" />
       <span>{children}</span>
     </p>

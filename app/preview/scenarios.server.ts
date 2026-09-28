@@ -52,11 +52,12 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
   "quota-esaurita": {
     it: {
       name: "Ordini da sbloccare esauriti",
-      focus: "Gli ordini restano consultabili; i nuovi dati fiscali attendono il prossimo ciclo.",
+      focus:
+        "Gli ordini restano consultabili. Il Codice Fiscale dei nuovi ordini attende il prossimo ciclo.",
     },
     en: {
       name: "No orders left to unlock",
-      focus: "Orders remain available; new tax details wait for the next cycle.",
+      focus: "Orders remain available. The tax code of new orders waits for the next cycle.",
     },
   },
   aggiornamento: {
@@ -106,12 +107,12 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
     it: {
       name: "Primo accesso",
       focus:
-        "Nessun negozio e primi passi; in Negozi il collegamento simulato risulta già usato da un altro account.",
+        "Nessun negozio e primi passi. In Negozi il collegamento simulato risulta già usato da un altro account.",
     },
     en: {
       name: "First sign-in",
       focus:
-        "No store and getting started; in Stores the simulated connection is already used by another account.",
+        "No store and getting started. In Stores the simulated connection is already used by another account.",
     },
   },
   importazione: {
@@ -324,7 +325,7 @@ const seeds: OrderSeed[] = [
     },
     phone: null,
     email: "lucab75@esempio.invalid",
-    fiscal: { state: "locked", identifierCount: 1 },
+    fiscal: { state: "locked", shownAs: "CF" },
     lockable: [cf("BNCLCU75C12F205X")],
     thumbnail: thumbnail(30),
   },
@@ -469,8 +470,8 @@ const seeds: OrderSeed[] = [
     },
     phone: "+39 000 1000 009",
     email: "pconti@esempio.invalid",
-    fiscal: { state: "locked", identifierCount: 1 },
-    lockable: [cf("CNTPLA68M01L781T")],
+    fiscal: { state: "locked", shownAs: "PIVA" },
+    lockable: [{ type: "PIVA", value: "04567890123", quality: "valid" }],
   },
   {
     id: "ord-10",
@@ -929,7 +930,7 @@ export function loadScenario(
           seed.id === "ord-02"
             ? {
                 ...seed,
-                fiscal: { state: "locked", identifierCount: 1 },
+                fiscal: { state: "locked", shownAs: "CF" },
                 lockable: [cf("RSSMRA80A41H501U")],
               }
             : seed,

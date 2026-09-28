@@ -66,7 +66,7 @@ const it = {
     period: "Periodo",
     paymentStatus: "Pagamento",
     shippingStatus: "Spedizione",
-    fiscalStatus: "Dato fiscale",
+    fiscalStatus: "Codice Fiscale",
     all: "Tutti",
     last7: "Ultimi 7 giorni",
     last30: "Ultimi 30 giorni",
@@ -133,14 +133,14 @@ const it = {
     copy: (label: string, order: string) => `Copia ${label}: ordine ${order}`,
     copied: "Copiato negli appunti",
     copyFailed: "Copia non riuscita. Riprova oppure seleziona e copia il codice.",
-    lockedLabel: "Dati fiscali da sbloccare",
+    lockedLabel: (label: string) => `${label} da sbloccare`,
     lockedHint: (remaining: number) =>
-      `Sblocca tutti i dati fiscali di questo ordine. Hai ancora ${remaining} ${plural(remaining, "ordine disponibile", "ordini disponibili")}: dopo lo sblocco ${plural(remaining - 1, "ne resterà", "ne resteranno")} ${remaining - 1}.`,
+      `Hai ancora ${remaining} ${plural(remaining, "ordine disponibile", "ordini disponibili")}: dopo lo sblocco ${plural(remaining - 1, "ne resterà", "ne resteranno")} ${remaining - 1}.`,
     lockedExhausted: (date: string) =>
       `Hai sbloccato tutti gli ordini disponibili in questo ciclo. Il prossimo inizia il ${date}.`,
     lockedUntil: (date: string) => `Sblocco disponibile dal ${date}.`,
-    missingHint: "eBay non riporta dati fiscali per questo ordine.",
-    checkingHint: "Verifica dei dati fiscali in corso.",
+    missingHint: "eBay non riporta il Codice Fiscale per questo ordine.",
+    checkingHint: "Verifica del Codice Fiscale in corso.",
     errorHint: "Non siamo riusciti a recuperare il Codice Fiscale da eBay. Riprova tra poco.",
     errorHintEbayDown:
       "Non siamo riusciti a recuperare il Codice Fiscale da eBay. Potrai riprovare quando eBay torna a rispondere.",
@@ -171,11 +171,11 @@ const it = {
       `Gli ordini sono aggiornati al ${time}. Sincronizzazione e ricollegamento tornano disponibili quando eBay risponde.`,
     quotaTitle: "Nessun ordine da sbloccare rimasto in questo ciclo",
     quotaBody: (date: string) =>
-      `Puoi consultare e cercare tutti gli ordini. I dati fiscali dei nuovi ordini restano da sbloccare fino al ${date}.`,
+      `Puoi consultare e cercare tutti gli ordini. Il Codice Fiscale dei nuovi ordini resta da sbloccare fino al ${date}.`,
     quotaAction: "Scopri Premium",
     storeIssueTitle: (store: string) => `${store}: collegamento scaduto`,
     storeIssueBody:
-      "La sincronizzazione di questo negozio è sospesa; gli altri negozi continuano. Ricollega il negozio.",
+      "La sincronizzazione di questo negozio è sospesa. Gli altri negozi continuano. Ricollega il negozio.",
     storeIssueAction: "Apri il negozio",
     importingStatus: (count: number) =>
       `Importazione in corso: ${count} ${plural(count, "ordine", "ordini")} finora`,
@@ -203,7 +203,6 @@ const it = {
     title: (id: string) => `Ordine ${id}`,
     tabDetails: "Dettagli",
     tabItems: "Articoli",
-    fiscal: "Dati fiscali",
     source: (time: string) => `Fonte: eBay, letto il ${time}`,
     buyer: "Acquirente",
     username: "Nome utente eBay",
@@ -272,7 +271,7 @@ const it = {
     pause: "Metti in pausa",
     resume: "Riprendi",
     pauseHint:
-      "In pausa FiscalBay non legge nuovi ordini; quelli già importati restano consultabili.",
+      "In pausa, FiscalBay non legge nuovi ordini. Quelli già importati restano consultabili.",
     planPauseHint:
       "Il piano Free include un solo negozio attivo. Scegli quale in Piano e pagamenti.",
     reconnect: "Ricollega negozio",
@@ -298,7 +297,7 @@ const it = {
       },
       unverifiable: {
         title: "Negozio non verificabile",
-        body: "eBay non conferma l’identità di questo negozio. La sincronizzazione è sospesa. Ricollega il negozio; se il problema continua, contatta l’assistenza.",
+        body: "eBay non conferma l’identità di questo negozio. La sincronizzazione è sospesa. Ricollega il negozio. Se il problema continua, contatta l’assistenza.",
       },
     },
     elsewhereTitle: "Negozio già collegato a un altro account",
@@ -317,7 +316,7 @@ const it = {
       aspetto: { title: "Aspetto e lingua", description: "Tema, lingua e fuso orario" },
       messaggio: {
         title: "Modello di messaggio",
-        description: "Richiesta dei dati fiscali all’acquirente",
+        description: "Richiesta del Codice Fiscale all’acquirente",
       },
       privacy: {
         title: "Dati e privacy",
@@ -373,7 +372,7 @@ const it = {
     telegramEnabled: "Invia notifiche degli ordini",
     telegramFilter: "Quali ordini",
     telegramFilterAll: "Tutti i nuovi ordini",
-    telegramFilterFiscal: "Solo ordini con dati fiscali",
+    telegramFilterFiscal: "Solo ordini con Codice Fiscale",
     telegramMode: "Frequenza",
     telegramModeEach: "Un messaggio per ordine",
     telegramModeDigest: "Riepilogo giornaliero",
@@ -395,7 +394,7 @@ const it = {
     exportPreview: (orders: number, locked: number) =>
       locked === 0
         ? `Circa ${orders} ordini.`
-        : `Circa ${orders} ordini. I dati fiscali di ${locked} ${plural(locked, "ordine da sbloccare restano vuoti", "ordini da sbloccare restano vuoti")}.`,
+        : `Circa ${orders} ordini. Per ${locked} ${plural(locked, "ordine da sbloccare", "ordini da sbloccare")} il Codice Fiscale resta vuoto.`,
     exportCreate: "Crea file",
     exportCreated: "Anteprima: nessun file creato. Il file reale resta scaricabile per 24 ore.",
     exportSaveConfig: "Salva configurazione",
@@ -438,7 +437,7 @@ const it = {
     timeZoneHint: "Usato per date, cicli e orari delle notifiche.",
     // Modello di messaggio
     templateIntro:
-      "Quando eBay non riporta un dato fiscale, puoi copiare questo messaggio dall’ordine e inviarlo all’acquirente dai tuoi canali. FiscalBay non lo invia.",
+      "Quando eBay non riporta il Codice Fiscale, puoi copiare questo messaggio dall’ordine e inviarlo all’acquirente dai tuoi canali. FiscalBay non lo invia.",
     templateIt: "Italiano",
     templateEn: "Inglese",
     templateHint: "{ordine} viene sostituito con il numero dell’ordine.",
@@ -466,7 +465,7 @@ const it = {
       },
       {
         q: "Quando un ordine conta come sbloccato?",
-        a: "Solo quando almeno un suo dato fiscale diventa visibile. Dati non disponibili, errori, copie ed esportazioni non contano.",
+        a: "Solo quando il suo Codice Fiscale diventa visibile. Dati non disponibili, errori, copie ed esportazioni non contano.",
       },
       {
         q: "FiscalBay modifica gli ordini su eBay?",
@@ -476,7 +475,7 @@ const it = {
     contact: "Scrivi all’assistenza",
     topic: "Argomento",
     topics: {
-      orders: "Ordini e dati fiscali",
+      orders: "Ordini e Codice Fiscale",
       stores: "Collegamento negozi",
       billing: "Piano e pagamenti",
       other: "Altro",
@@ -544,13 +543,29 @@ const it = {
     title: "Ordini",
     description: "Ordini eBay disponibili in FiscalBay",
     intro: "Trova e gestisci il Codice Fiscale dei tuoi ordini eBay.",
+    headline: "Il Codice Fiscale dei tuoi ordini eBay, in un posto solo.",
+    features: [
+      {
+        title: "Sola lettura",
+        body: "FiscalBay legge gli ordini dei tuoi negozi eBay e non li modifica.",
+      },
+      {
+        title: "Pronto da copiare",
+        body: "Quando eBay lo riporta, trovi il Codice Fiscale dell’ordine, o la Partita IVA se c’è solo quella.",
+      },
+      {
+        title: "Negozi collegati",
+        body: "Colleghi il negozio con l’accesso eBay, senza condividere la password.",
+      },
+    ],
+    choose: "Accedi o crea un account",
     language: "Lingua",
     email: "Email",
     password: "Password",
     signIn: "Accedi",
     signInBody: "Entra con email e password o con Google.",
     signUp: "Crea account",
-    signUpBody: "Nessun dato fiscale richiesto, nemmeno alle aziende.",
+    signUpBody: "Non chiediamo Codice Fiscale né Partita IVA, nemmeno alle aziende.",
     firstName: "Nome",
     lastName: "Cognome",
     accountType: "Ti registri come",
@@ -577,7 +592,7 @@ const it = {
     agreementSubmit: "Continua",
     verifyTitle: "Conferma l’indirizzo email",
     verifyBody: (email: string) =>
-      `Abbiamo inviato un link a ${email}. Serve per collegare un negozio eBay; intanto puoi esplorare FiscalBay.`,
+      `Abbiamo inviato un link a ${email}. Serve per collegare un negozio eBay. Intanto puoi esplorare FiscalBay.`,
     verifyResend: "Invia di nuovo il link",
     noOrders: "Nessun ordine",
     noOrdersBody: "Collega un negozio eBay per importare gli ordini disponibili.",
@@ -593,7 +608,7 @@ const it = {
       errore: "Operazione non riuscita. Controlla email e password.",
       registrato: "Account creato. Ti abbiamo inviato un link per confermare l’indirizzo email.",
       registrazione:
-        "Account non creato. Controlla email e password; se sei già registrato, accedi.",
+        "Account non creato. Controlla email e password. Se sei già registrato, accedi.",
       termini: "Per continuare accetta i Termini di servizio.",
       dati: "Indica nome, cognome e, per un’azienda, la ragione sociale.",
       "troppi-tentativi": "Troppi tentativi. Riprova tra qualche minuto.",
@@ -666,7 +681,7 @@ const en: AppCopy = {
     period: "Period",
     paymentStatus: "Payment",
     shippingStatus: "Shipping",
-    fiscalStatus: "Tax data",
+    fiscalStatus: "Codice Fiscale",
     all: "All",
     last7: "Last 7 days",
     last30: "Last 30 days",
@@ -733,14 +748,14 @@ const en: AppCopy = {
     copy: (label, order) => `Copy ${label}: order ${order}`,
     copied: "Copied to clipboard",
     copyFailed: "Copy failed. Try again, or select and copy the code.",
-    lockedLabel: "Tax data to unlock",
+    lockedLabel: (label) => `${label} to unlock`,
     lockedHint: (remaining) =>
-      `Unlock all tax details for this order. You have ${remaining} ${plural(remaining, "order", "orders")} left; after unlocking, you will have ${remaining - 1}.`,
+      `You have ${remaining} ${plural(remaining, "order", "orders")} left to unlock. After this one, you will have ${remaining - 1}.`,
     lockedExhausted: (date) =>
       `You have unlocked all available orders this cycle. The next one starts on ${date}.`,
     lockedUntil: (date) => `Unlocking available from ${date}.`,
-    missingHint: "eBay does not provide tax details for this order.",
-    checkingHint: "Checking the tax details.",
+    missingHint: "eBay does not provide the tax code for this order.",
+    checkingHint: "Checking the tax code.",
     errorHint: "We could not get the tax code from eBay. Try again shortly.",
     errorHintEbayDown:
       "We could not get the tax code from eBay. You can try again once eBay responds.",
@@ -771,10 +786,10 @@ const en: AppCopy = {
       `Orders are up to date as of ${time}. Syncing and reconnecting will be available again when eBay responds.`,
     quotaTitle: "No orders left to unlock this cycle",
     quotaBody: (date) =>
-      `You can still view and search all orders. Tax details of new orders stay locked until ${date}.`,
+      `You can still view and search all orders. The tax code of new orders stays locked until ${date}.`,
     quotaAction: "Discover Premium",
     storeIssueTitle: (store) => `${store}: connection expired`,
-    storeIssueBody: "Syncing is paused for this store; other stores continue. Reconnect the store.",
+    storeIssueBody: "Syncing is paused for this store. Other stores continue. Reconnect the store.",
     storeIssueAction: "Open store",
     importingStatus: (count) => `Importing: ${count} ${plural(count, "order", "orders")} so far`,
     firstUseTitle: "No store connected",
@@ -800,7 +815,6 @@ const en: AppCopy = {
     title: (id) => `Order ${id}`,
     tabDetails: "Details",
     tabItems: "Items",
-    fiscal: "Tax details",
     source: (time) => `Source: eBay, read on ${time}`,
     buyer: "Buyer",
     username: "eBay username",
@@ -868,7 +882,7 @@ const en: AppCopy = {
     reimport: "Re-import history",
     pause: "Pause",
     resume: "Resume",
-    pauseHint: "While paused, FiscalBay reads no new orders; imported orders remain available.",
+    pauseHint: "While paused, FiscalBay reads no new orders. Imported orders remain available.",
     planPauseHint: "The Free plan includes one active store. Choose it in Plan and billing.",
     reconnect: "Reconnect store",
     disconnect: "Disconnect",
@@ -893,7 +907,7 @@ const en: AppCopy = {
       },
       unverifiable: {
         title: "Store cannot be verified",
-        body: "eBay does not confirm this store’s identity. Syncing is paused. Reconnect the store; if the problem continues, contact support.",
+        body: "eBay does not confirm this store’s identity. Syncing is paused. Reconnect the store. If the problem continues, contact support.",
       },
     },
     elsewhereTitle: "Store already connected to another account",
@@ -910,7 +924,7 @@ const en: AppCopy = {
       esportazione: { title: "Export", description: "CSV and XLSX order files" },
       sicurezza: { title: "Security", description: "Sign-in methods and sessions" },
       aspetto: { title: "Appearance and language", description: "Theme, language and time zone" },
-      messaggio: { title: "Message template", description: "Asking the buyer for tax details" },
+      messaggio: { title: "Message template", description: "Asking the buyer for the tax code" },
       privacy: { title: "Data and privacy", description: "Policy, export and deletion" },
       supporto: { title: "Support", description: "FAQ and help" },
     },
@@ -958,7 +972,7 @@ const en: AppCopy = {
     telegramEnabled: "Send order notifications",
     telegramFilter: "Which orders",
     telegramFilterAll: "All new orders",
-    telegramFilterFiscal: "Only orders with tax details",
+    telegramFilterFiscal: "Only orders with a tax code",
     telegramMode: "Frequency",
     telegramModeEach: "One message per order",
     telegramModeDigest: "Daily summary",
@@ -979,7 +993,7 @@ const en: AppCopy = {
     exportPreview: (orders, locked) =>
       locked === 0
         ? `About ${orders} orders.`
-        : `About ${orders} orders. Tax details of ${locked} ${plural(locked, "order to unlock stay", "orders to unlock stay")} empty.`,
+        : `About ${orders} orders. For ${locked} ${plural(locked, "order", "orders")} to unlock, the tax code stays empty.`,
     exportCreate: "Create file",
     exportCreated: "Preview: no file created. A real file stays available for 24 hours.",
     exportSaveConfig: "Save configuration",
@@ -1019,7 +1033,7 @@ const en: AppCopy = {
     timeZone: "Time zone",
     timeZoneHint: "Used for dates, cycles and notification times.",
     templateIntro:
-      "When eBay does not provide tax details, you can copy this message from the order and send it to the buyer through your own channels. FiscalBay does not send it.",
+      "When eBay does not provide the tax code, you can copy this message from the order and send it to the buyer through your own channels. FiscalBay does not send it.",
     templateIt: "Italian",
     templateEn: "English",
     templateHint: "{ordine} is replaced with the order number.",
@@ -1045,7 +1059,7 @@ const en: AppCopy = {
       },
       {
         q: "When does an order count as unlocked?",
-        a: "Only when at least one of its tax details becomes visible. Unavailable data, errors, copies and exports do not count.",
+        a: "Only when its tax code becomes visible. Unavailable data, errors, copies and exports do not count.",
       },
       {
         q: "Does FiscalBay change orders on eBay?",
@@ -1055,7 +1069,7 @@ const en: AppCopy = {
     contact: "Contact support",
     topic: "Topic",
     topics: {
-      orders: "Orders and tax details",
+      orders: "Orders and tax codes",
       stores: "Store connection",
       billing: "Plan and billing",
       other: "Other",
@@ -1122,13 +1136,29 @@ const en: AppCopy = {
     title: "Orders",
     description: "eBay orders available in FiscalBay",
     intro: "Find and manage the Italian tax code in your eBay orders.",
+    headline: "The Codice Fiscale of your eBay orders, in one place.",
+    features: [
+      {
+        title: "Read-only",
+        body: "FiscalBay reads the orders of your eBay stores and never changes them.",
+      },
+      {
+        title: "Ready to copy",
+        body: "When eBay provides it, you find the order’s tax code, or the VAT number if that is all it has.",
+      },
+      {
+        title: "Connected stores",
+        body: "You connect a store through eBay sign-in, without sharing your password.",
+      },
+    ],
+    choose: "Sign in or create an account",
     language: "Language",
     email: "Email",
     password: "Password",
     signIn: "Sign in",
     signInBody: "Use your email and password or Google.",
     signUp: "Create account",
-    signUpBody: "No tax details required, not even from businesses.",
+    signUpBody: "We do not ask for a tax code or VAT number, not even from businesses.",
     firstName: "First name",
     lastName: "Last name",
     accountType: "You are registering as",
@@ -1155,7 +1185,7 @@ const en: AppCopy = {
     agreementSubmit: "Continue",
     verifyTitle: "Confirm your email address",
     verifyBody: (email: string) =>
-      `We sent a link to ${email}. You need it to connect an eBay store; meanwhile you can explore FiscalBay.`,
+      `We sent a link to ${email}. You need it to connect an eBay store. Meanwhile, you can explore FiscalBay.`,
     verifyResend: "Send the link again",
     noOrders: "No orders",
     noOrdersBody: "Connect an eBay store to import available orders.",
@@ -1171,7 +1201,7 @@ const en: AppCopy = {
       errore: "Could not complete the operation. Check your email and password.",
       registrato: "Account created. We sent you a link to confirm your email address.",
       registrazione:
-        "Account not created. Check your email and password; if you already have an account, sign in.",
+        "Account not created. Check your email and password. If you already have an account, sign in.",
       termini: "To continue, accept the Terms of service.",
       dati: "Enter your first and last name and, for a business, the company name.",
       "troppi-tentativi": "Too many attempts. Try again in a few minutes.",

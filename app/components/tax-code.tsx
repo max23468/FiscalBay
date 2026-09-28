@@ -56,7 +56,7 @@ export function TaxCode({
   return (
     <span
       className={cn(
-        "inline-flex max-w-full flex-wrap items-center justify-between gap-x-1 rounded-lg border border-border bg-muted/40 pl-3 pr-1 py-1",
+        "inline-flex max-w-full flex-wrap items-center justify-between gap-x-1 rounded-lg border border-info/25 bg-info-surface pl-3 pr-1 py-1 dark:bg-info/10",
         sizes[size],
         reveal && "fiscal-reveal",
         className,

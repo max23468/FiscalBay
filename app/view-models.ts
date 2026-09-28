@@ -50,7 +50,11 @@ export interface TaxIdentifierView {
 
 export type FiscalView =
   | { state: "available"; identifiers: TaxIdentifierView[] }
-  | { state: "locked"; identifierCount: number }
+  /**
+   * Prima dello sblocco arriva solo il nome del dato: Codice Fiscale, oppure
+   * Partita IVA quando l'ordine riporta soltanto quella.
+   */
+  | { state: "locked"; shownAs: "CF" | "PIVA" }
   | { state: "missing" }
   | { state: "checking" }
   | { state: "error" };

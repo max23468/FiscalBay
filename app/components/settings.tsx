@@ -1,9 +1,27 @@
 import { cn } from "cn";
-import { ChevronLeft, ChevronRight, Moon, Sun, SunMoon } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
-import { Link, NavLink, useLocation } from "react-router";
+import {
+  Bell,
+  ChevronLeft,
+  ChevronRight,
+  CreditCard,
+  Database,
+  FileSpreadsheet,
+  LifeBuoy,
+  Mail,
+  MessageSquareText,
+  Moon,
+  Palette,
+  Settings,
+  ShieldCheck,
+  Sun,
+  SunMoon,
+  User,
+} from "lucide-react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { Link, useLocation } from "react-router";
 
 import { useAction } from "~/components/app-shell";
+import { IconTile, InitialsTile, PageTitle, type TileTone } from "~/components/icon-tile";
 import { PremiumNote, StatusAlert, StatusBadge, StatusIcon } from "~/components/status";
 import {
   AlertDialog,
@@ -17,6 +35,7 @@ import {
   AlertDialogTrigger,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
+import { buttonVariants } from "~/components/ui/button-variants";
 import { Checkbox } from "~/components/ui/checkbox";
 import {
   Field,
@@ -362,7 +381,7 @@ function PlanSection({
       </Group>
       {account.trialAvailable ? (
         <Group title={t.settings.trialTitle}>
-          <p className="max-w-xl text-sm leading-relaxed text-pretty text-muted-foreground">
+          <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
             {t.settings.trialBody}
           </p>
           <Button className="w-fit" onClick={() => action.run("start-trial")}>
@@ -642,7 +661,7 @@ function SecuritySection({
               </Button>
             </li>
           ))}
-          <li className="grid gap-3 py-3">
+          <li className="flex flex-wrap items-center justify-between gap-3 py-3">
             <span className="grid">
               <span className="font-medium">{t.settings.methodPasskey}</span>
               <span className="text-sm text-muted-foreground">
@@ -653,11 +672,11 @@ function SecuritySection({
               </span>
             </span>
             <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => action.run("passkey-remove")}>
+                {t.settings.remove}
+              </Button>
               <Button variant="outline" size="sm" onClick={() => action.run("passkey-add")}>
                 {t.settings.addPasskey}
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => action.run("passkey-remove")}>
-                {t.settings.remove}
               </Button>
             </div>
           </li>
@@ -792,8 +811,8 @@ function TemplateSection({ t }: { t: AppCopy }) {
         ? "saved"
         : "error";
   return (
-    <Group title={t.settings.sections.messaggio.title} className="border-t-0 pt-0">
-      <p className="max-w-2xl text-sm leading-relaxed text-pretty text-muted-foreground">
+    <div className="grid gap-4">
+      <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
         {t.settings.templateIntro}
       </p>
       <form
@@ -841,7 +860,7 @@ function TemplateSection({ t }: { t: AppCopy }) {
           <SaveStatus state={state} t={t} />
         </div>
       </form>
-    </Group>
+    </div>
   );
 }
 
@@ -862,11 +881,11 @@ function PrivacySection({ t }: { t: AppCopy }) {
     },
   ];
   return (
-    <Group title={t.settings.sections.privacy.title} className="border-t-0 pt-0">
+    <div className="grid gap-4">
       <ul className="grid divide-y border-y">
         {rows.map((row) => (
           <li key={row.title} className="flex flex-wrap items-center justify-between gap-3 py-4">
-            <span className="grid max-w-md gap-0.5">
+            <span className="grid min-w-0 flex-1 gap-0.5">
               <span className="font-medium">{row.title}</span>
               <span className="text-sm text-pretty text-muted-foreground">{row.body}</span>
             </span>
@@ -876,7 +895,7 @@ function PrivacySection({ t }: { t: AppCopy }) {
           </li>
         ))}
         <li className="flex flex-wrap items-center justify-between gap-3 py-4">
-          <span className="grid max-w-md gap-0.5">
+          <span className="grid min-w-0 flex-1 gap-0.5">
             <span className="font-medium">{t.settings.deleteAccount}</span>
             <span className="text-sm text-pretty text-muted-foreground">
               {t.settings.deleteAccountBody}
@@ -904,7 +923,7 @@ function PrivacySection({ t }: { t: AppCopy }) {
           </AlertDialog>
         </li>
       </ul>
-    </Group>
+    </div>
   );
 }
 
@@ -933,9 +952,7 @@ function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
               <summary className="w-fit cursor-pointer rounded-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring">
                 {item.q}
               </summary>
-              <p className="mt-2 max-w-2xl leading-relaxed text-pretty text-muted-foreground">
-                {item.a}
-              </p>
+              <p className="mt-2 leading-relaxed text-pretty text-muted-foreground">{item.a}</p>
             </details>
           ))}
         </div>
@@ -943,7 +960,7 @@ function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
       <Group title={t.settings.contact}>
         <form
           noValidate
-          className="grid max-w-2xl gap-5"
+          className="grid gap-5"
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
@@ -1010,7 +1027,31 @@ function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
   );
 }
 
-/** Impostazioni: categorie a sinistra su desktop, elenco e poi pagina su mobile. */
+const sectionIcons: Record<
+  SettingsSection,
+  { icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; tone: TileTone }
+> = {
+  piano: { icon: CreditCard, tone: "violet" },
+  notifiche: { icon: Bell, tone: "amber" },
+  esportazione: { icon: FileSpreadsheet, tone: "green" },
+  sicurezza: { icon: ShieldCheck, tone: "blue" },
+  aspetto: { icon: Palette, tone: "teal" },
+  messaggio: { icon: MessageSquareText, tone: "blue" },
+  privacy: { icon: Database, tone: "rose" },
+  supporto: { icon: LifeBuoy, tone: "amber" },
+};
+
+/** Da 768 px tutte le categorie stanno in una pagina che scorre. */
+const wideQuery = "(min-width: 48rem)";
+
+/** Distanza dal bordo superiore oltre la quale una sezione diventa quella attiva. */
+const spyOffset = 140;
+
+/**
+ * Impostazioni. Su desktop le categorie formano una sola pagina che scorre:
+ * il menu resta fisso e l'indicatore segue la sezione visibile. Su mobile
+ * restano elenco e poi pagina della singola categoria.
+ */
 export function SettingsPage({
   data,
   t,
@@ -1032,43 +1073,124 @@ export function SettingsPage({
     privacy: <PrivacySection t={t} />,
     supporto: <SupportSection data={data} t={t} />,
   } satisfies Record<SettingsSection, React.ReactNode>;
+  const sections = useRef<Partial<Record<SettingsSection, HTMLElement | null>>>({});
+  const items = useRef<Partial<Record<SettingsSection, HTMLElement | null>>>({});
+  const [active, setActive] = useState<SettingsSection>(current);
+  const [indicator, setIndicator] = useState<{ top: number; height: number } | null>(null);
+  // Durante lo scorrimento avviato dal menu l'indicatore resta sulla voce scelta.
+  const following = useRef(false);
+  const release = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Usa solo riferimenti e setter stabili: vale anche nell'effetto di apertura.
+  const goTo = (id: SettingsSection, behavior: ScrollBehavior) => {
+    if (!window.matchMedia(wideQuery).matches) return;
+    setActive(id);
+    following.current = true;
+    clearTimeout(release.current);
+    const done = () => {
+      following.current = false;
+      window.removeEventListener("scrollend", done);
+    };
+    window.addEventListener("scrollend", done);
+    release.current = setTimeout(done, 1000);
+    sections.current[id]?.scrollIntoView({ behavior, block: "start" });
+  };
+
+  const spy = () => {
+    if (following.current || !window.matchMedia(wideQuery).matches) return;
+    let next: SettingsSection = settingsSections[0];
+    for (const id of settingsSections) {
+      const top = sections.current[id]?.getBoundingClientRect().top ?? Infinity;
+      if (top <= spyOffset) next = id;
+    }
+    const atBottom =
+      window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+    setActive(atBottom ? settingsSections[settingsSections.length - 1] : next);
+  };
+
+  useEffect(() => {
+    // Un indirizzo con la categoria porta subito alla sua sezione.
+    if (data.section) goTo(data.section, "instant");
+    else spy();
+    window.addEventListener("scroll", spy, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", spy);
+      clearTimeout(release.current);
+    };
+    // Solo all'apertura: i clic successivi scorrono dal menu.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useLayoutEffect(() => {
+    const item = items.current[active];
+    if (item) setIndicator({ top: item.offsetTop, height: item.offsetHeight });
+  }, [active]);
+
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-      <h1 className={cn("text-2xl font-bold sm:text-3xl", data.section && "max-md:sr-only")}>
+      <PageTitle icon={Settings} tone="violet" className={cn(data.section && "max-md:sr-only")}>
         {t.settings.title}
-      </h1>
+      </PageTitle>
       <div className="grid grid-cols-[minmax(0,1fr)] gap-8 md:grid-cols-[15rem_minmax(0,1fr)] md:gap-10">
-        <nav aria-label={t.settings.categories} className={cn(data.section && "max-md:hidden")}>
-          <ul className="grid divide-y border-y md:gap-1 md:divide-y-0 md:border-y-0">
-            {settingsSections.map((id) => (
-              <li key={id}>
-                <NavLink
-                  to={appHref(links, `impostazioni/${id}`)}
-                  className={cn(
-                    "flex items-center justify-between gap-3 py-3.5 outline-none focus-visible:ring-3 focus-visible:ring-ring md:rounded-lg md:px-3 md:py-2 md:text-sm md:text-muted-foreground md:hover:bg-muted md:hover:text-foreground md:aria-[current=page]:bg-secondary md:aria-[current=page]:font-medium md:aria-[current=page]:text-foreground",
-                    !data.section &&
-                      id === "piano" &&
-                      "md:bg-secondary md:font-medium md:text-foreground",
-                  )}
+        <nav
+          aria-label={t.settings.categories}
+          className={cn("md:sticky md:top-20 md:self-start", data.section && "max-md:hidden")}
+        >
+          <ul className="relative grid divide-y border-y md:gap-1 md:divide-y-0 md:border-y-0">
+            {/* Indicatore che scorre fra le voci insieme alla sezione visibile. */}
+            {indicator ? (
+              <li
+                aria-hidden="true"
+                className="absolute inset-x-0 top-0 hidden rounded-lg bg-secondary transition-[translate,height] duration-(--duration-fast) ease-(--ease-smooth-out) md:block"
+                style={{ translate: `0 ${indicator.top}px`, height: indicator.height }}
+              />
+            ) : null}
+            {settingsSections.map((id) => {
+              const { icon, tone } = sectionIcons[id];
+              return (
+                <li
+                  key={id}
+                  ref={(node) => {
+                    items.current[id] = node;
+                  }}
+                  className="relative"
                 >
-                  <span className="grid gap-0.5">
-                    <span className="font-medium md:font-[inherit]">
-                      {t.settings.sections[id].title}
+                  <Link
+                    to={appHref(links, `impostazioni/${id}`)}
+                    preventScrollReset
+                    aria-current={active === id ? "true" : undefined}
+                    onClick={() => goTo(id, "smooth")}
+                    className={cn(
+                      "flex items-center gap-3 py-3.5 outline-none focus-visible:ring-3 focus-visible:ring-ring md:rounded-lg md:px-2 md:py-1.5 md:text-sm md:text-muted-foreground md:transition-colors md:duration-(--duration-quick) md:hover:text-foreground md:aria-[current=true]:font-medium md:aria-[current=true]:text-foreground",
+                      // Prima della misura l'indicatore non c'è: la voce attiva ha il suo fondo.
+                      !indicator && "md:aria-[current=true]:bg-secondary",
+                    )}
+                  >
+                    <IconTile icon={icon} tone={tone} size="sm" />
+                    <span className="grid min-w-0 flex-1 gap-0.5">
+                      <span className="font-medium md:font-[inherit]">
+                        {t.settings.sections[id].title}
+                      </span>
+                      <span className="text-sm text-muted-foreground md:hidden">
+                        {t.settings.sections[id].description}
+                      </span>
                     </span>
-                    <span className="text-sm text-muted-foreground md:hidden">
-                      {t.settings.sections[id].description}
-                    </span>
-                  </span>
-                  <ChevronRight
-                    aria-hidden="true"
-                    className="size-4 text-muted-foreground md:hidden"
-                  />
-                </NavLink>
-              </li>
-            ))}
+                    <ChevronRight
+                      aria-hidden="true"
+                      className="size-4 text-muted-foreground md:hidden"
+                    />
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </nav>
-        <div className={cn("grid min-w-0 content-start gap-6", !data.section && "max-md:hidden")}>
+        <div
+          className={cn(
+            "grid max-w-3xl min-w-0 content-start gap-6",
+            !data.section && "max-md:hidden",
+          )}
+        >
           <Link
             to={appHref(links, "impostazioni")}
             className="-ml-1 inline-flex w-fit items-center gap-1 rounded-md py-1 pr-2 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring md:hidden"
@@ -1076,13 +1198,56 @@ export function SettingsPage({
             <ChevronLeft aria-hidden="true" className="size-4" />
             {t.settings.title}
           </Link>
-          <h2 className="text-xl font-semibold">{t.settings.sections[current].title}</h2>
-          <div key={current} className="grid gap-6">
-            {content[current]}
-          </div>
+          {settingsSections.map((id) => {
+            const { icon, tone } = sectionIcons[id];
+            return (
+              <section
+                key={id}
+                ref={(node) => {
+                  sections.current[id] = node;
+                }}
+                aria-labelledby={`settings-${id}`}
+                className={cn(
+                  "grid scroll-mt-20 gap-6 md:rounded-xl md:border md:bg-card md:p-6",
+                  id !== current && "max-md:hidden",
+                )}
+              >
+                <h2 id={`settings-${id}`} className="flex items-center gap-3 text-xl font-semibold">
+                  <IconTile icon={icon} tone={tone} />
+                  {t.settings.sections[id].title}
+                </h2>
+                <div className="grid gap-6">{content[id]}</div>
+              </section>
+            );
+          })}
         </div>
       </div>
     </div>
+  );
+}
+
+/** Riquadro del profilo con tessera colorata, titolo e contenuto. */
+function ProfileCard({
+  icon,
+  tone,
+  title,
+  id,
+  children,
+}: {
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  tone: TileTone;
+  title: string;
+  id: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section aria-labelledby={id} className="grid gap-4 rounded-xl border bg-card p-5">
+      <h2 id={id} className="flex items-center gap-3 text-base font-semibold">
+        <IconTile icon={icon} tone={tone} />
+        {title}
+      </h2>
+      {children}
+    </section>
   );
 }
 
@@ -1098,18 +1263,31 @@ export function ProfilePage({
 }) {
   const action = useAction();
   return (
-    <div className="grid max-w-xl gap-6">
-      <h1 className="text-2xl font-bold sm:text-3xl">{t.profile.title}</h1>
-      <form
-        className="grid gap-6"
-        onSubmit={(event) => {
-          event.preventDefault();
-          action.run("profile", { name: String(new FormData(event.currentTarget).get("name")) });
-        }}
-      >
-        <FieldGroup>
+    <div className="grid max-w-2xl gap-6">
+      <div className="flex items-center gap-4">
+        <InitialsTile
+          name={account.name}
+          fallback={account.email}
+          size="lg"
+          className="size-14 rounded-full text-lg"
+        />
+        <div className="grid min-w-0 gap-0.5">
+          <h1 className="text-2xl font-bold sm:text-3xl">{t.profile.title}</h1>
+          <p className="truncate text-sm text-muted-foreground">{account.email}</p>
+        </div>
+      </div>
+      <ProfileCard icon={User} tone="blue" title={t.profile.name} id="profile-name-title">
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            action.run("profile", { name: String(new FormData(event.currentTarget).get("name")) });
+          }}
+        >
           <Field>
-            <FieldLabel htmlFor="profile-name">{t.profile.name}</FieldLabel>
+            <FieldLabel htmlFor="profile-name" className="sr-only">
+              {t.profile.name}
+            </FieldLabel>
             <Input
               id="profile-name"
               name="name"
@@ -1119,18 +1297,15 @@ export function ProfilePage({
             />
             <FieldDescription id="profile-name-hint">{t.profile.nameHint}</FieldDescription>
           </Field>
-        </FieldGroup>
-        <Button type="submit" className="w-fit">
-          {t.settings.save}
-        </Button>
-      </form>
+          <Button type="submit" className="w-fit">
+            {t.settings.save}
+          </Button>
+        </form>
+      </ProfileCard>
       {/* L'email non si modifica nel campo: il cambio passa dalla verifica del nuovo indirizzo. */}
-      <section aria-labelledby="profile-email" className="grid gap-2 border-t pt-6">
-        <h2 id="profile-email" className="text-sm font-medium">
-          {t.profile.email}
-        </h2>
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5 text-sm">
-          <span className="font-medium break-all">{account.email}</span>
+      <ProfileCard icon={Mail} tone="teal" title={t.profile.email} id="profile-email">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="min-w-0 font-medium break-all">{account.email}</span>
           <Button
             type="button"
             variant="outline"
@@ -1144,16 +1319,23 @@ export function ProfilePage({
         <p id="profile-email-hint" className="text-sm text-muted-foreground">
           {t.profile.emailHint}
         </p>
-      </section>
-      <p className="text-sm text-muted-foreground">
-        {t.profile.security}{" "}
-        <Link
-          to={appHref(links, "impostazioni/sicurezza")}
-          className="font-medium text-primary underline-offset-4 hover:underline"
-        >
-          {t.profile.securityLink}
-        </Link>
-      </p>
+      </ProfileCard>
+      <ProfileCard
+        icon={ShieldCheck}
+        tone="violet"
+        title={t.settings.sections.sicurezza.title}
+        id="profile-security"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">{t.profile.security}</p>
+          <Link
+            to={appHref(links, "impostazioni/sicurezza")}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            {t.profile.securityLink}
+          </Link>
+        </div>
+      </ProfileCard>
     </div>
   );
 }
