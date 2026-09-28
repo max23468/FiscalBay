@@ -118,12 +118,15 @@ void i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 
+// Una funzione per lingua, creata una volta: `getFixedT` a ogni chiamata pesa sul rendering.
+const fixedT = { it: i18n.getFixedT("it"), en: i18n.getFixedT("en") };
+
 export function translate(
   language: Language,
   key: string,
   options?: Record<string, string>,
 ): string {
-  return i18n.getFixedT(language)(key, options);
+  return fixedT[language](key, options);
 }
 
 export function formatInstant(value: string | Date, language: Language): string {

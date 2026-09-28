@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "react-router build",
+    "build": "react-router build && node scripts/check-bundle-size.mjs",
     "cf:typegen": "wrangler types",
     "dev": "react-router dev",
     "doctor:react": "react-doctor --scope full --blocking warning .",
@@ -22,7 +22,8 @@
     "verify:copy": "node scripts/verify-copy.mjs",
     "verify:docs": "node scripts/verify-docs.mjs",
     "verify:full": "pnpm verify && pnpm test:e2e",
-    "verify:repo": "node scripts/verify-repo.mjs"
+    "verify:repo": "node scripts/verify-repo.mjs",
+    "test:capacity": "node scripts/check-capacity.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.8.0",
