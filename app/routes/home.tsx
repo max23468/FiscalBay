@@ -57,10 +57,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   // Finché mancano profilo o Termini correnti l'utente vede solo il passaggio per completarli.
   const status = await registrationStatus(env.DB, session.user.id);
   const complete = status.termsAccepted && status.profile !== null;
-  // Il nome del provider, per esempio Google, precompila il profilo mancante.
-  const [firstName = "", ...lastName] = status.profile
-    ? []
-    : session.user.name.trim().split(/\s+/u);
+  // Il nome del provider, per esempio Google, precompila il profilo mancante; un nome che è
+  // l'indirizzo email, lasciato dalle registrazioni precedenti, non è un nome.
+  const providerName = status.profile || session.user.name.includes("@") ? "" : session.user.name;
+  const [firstName = "", ...lastName] = providerName.trim().split(/\s+/u).filter(Boolean);
   return {
     authenticated: true as const,
     language,
@@ -428,7 +428,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <CardTitle>
               <h2>{t.noOrders}</h2>
             </CardTitle>
-            <CardDescription>{t.noOrdersBody}</CardDescription>
+            <CardDescription>
+              {loaderData.canLinkStore ? t.noOrdersBody : t.noOrdersVerifyBody}
+            </CardDescription>
           </CardHeader>
         </Card>
       ) : (
