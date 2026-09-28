@@ -67,6 +67,12 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
         ipAddressHeaders: ["cf-connecting-ip"],
       },
     },
+    // Limite dei tentativi su D1, condiviso fra gli isolate. Attivo sui domini distribuiti;
+    // sviluppo locale e test, in HTTP, non hanno un IP client affidabile da cui contare.
+    rateLimit: {
+      enabled: appOrigin.protocol === "https:",
+      storage: "database",
+    },
     onAPIError: {
       errorURL: "/auth/error",
     },

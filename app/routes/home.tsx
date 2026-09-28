@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { useState } from "react";
 
 import logoDarkUrl from "../../docs/brand/logo/fiscalbay-logo-dark.svg?url";
 import logoUrl from "../../docs/brand/logo/fiscalbay-logo.svg?url";
@@ -13,11 +14,14 @@ import {
   FieldDescription,
   FieldGroup,
   FieldLabel,
+  FieldLegend,
   FieldSeparator,
+  FieldSet,
 } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
+import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { createAuth } from "../auth.server";
-import { hasAcceptedTerms } from "../domain/agreements.server";
+import { registrationStatus } from "../domain/registration.server";
 import { listVisibleOrders } from "../domain/orders.server";
 import { appCopy } from "../app-copy";
 import { formatAmount, languageFromPath, localizedPath, type Language } from "../i18n";
@@ -48,22 +52,104 @@ export async function loader({ request }: Route.LoaderArgs) {
     access.storeNotices[search.get("negozio") ?? ""] ??
     null;
   if (!session) {
-    return { authenticated: false, language, notice, orders: [] };
+    return { authenticated: false as const, language, notice, orders: [] };
   }
-  // Senza i Termini correnti accettati l'utente vede solo il passaggio per accettarli.
-  const accepted = await hasAcceptedTerms(env.DB, session.user.id);
+  // Finché mancano profilo o Termini correnti l'utente vede solo il passaggio per completarli.
+  const status = await registrationStatus(env.DB, session.user.id);
+  const complete = status.termsAccepted && status.profile !== null;
+  // Il nome del provider, per esempio Google, precompila il profilo mancante.
+  const [firstName = "", ...lastName] = status.profile
+    ? []
+    : session.user.name.trim().split(/\s+/u);
   return {
-    authenticated: true,
+    authenticated: true as const,
     language,
     notice,
     email: session.user.email,
     emailVerified: session.user.emailVerified,
-    needsAgreement: !accepted,
-    orders: accepted ? await listVisibleOrders(env.DB, session.user.id) : [],
+    needsProfile: !status.profile,
+    needsAgreement: !status.termsAccepted,
+    canLinkStore: session.user.emailVerified && complete,
+    suggestedName: { firstName, lastName: lastName.join(" ") },
+    orders: complete ? await listVisibleOrders(env.DB, session.user.id) : [],
   };
 }
 
 type AccessCopy = (typeof appCopy)[Language]["access"];
+
+/** Persona sempre obbligatoria; l'azienda aggiunge la ragione sociale, senza dati fiscali. */
+function ProfileFields({
+  t,
+  suggested,
+}: {
+  t: AccessCopy;
+  suggested?: { firstName: string; lastName: string };
+}) {
+  const [type, setType] = useState("privato");
+  return (
+    <>
+      <FieldSet>
+        <FieldLegend variant="label" id="account-type-label">
+          {t.accountType}
+        </FieldLegend>
+        <RadioGroup
+          name="tipo"
+          value={type}
+          onValueChange={(next) => setType(String(next))}
+          aria-labelledby="account-type-label"
+          aria-describedby="account-type-hint"
+          className="flex flex-wrap gap-6"
+        >
+          {(["privato", "azienda"] as const).map((value) => (
+            <FieldLabel key={value} className="font-normal">
+              <RadioGroupItem value={value} aria-labelledby={`account-type-${value}`} />
+              <span id={`account-type-${value}`}>
+                {value === "privato" ? t.private : t.business}
+              </span>
+            </FieldLabel>
+          ))}
+        </RadioGroup>
+        <FieldDescription id="account-type-hint">{t.accountTypeHint}</FieldDescription>
+      </FieldSet>
+      {type === "azienda" ? (
+        <Field>
+          <FieldLabel htmlFor="company-name">{t.companyName}</FieldLabel>
+          <Input
+            id="company-name"
+            name="ragione_sociale"
+            autoComplete="organization"
+            maxLength={200}
+            required
+          />
+        </Field>
+      ) : null}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field>
+          <FieldLabel htmlFor="first-name">{t.firstName}</FieldLabel>
+          <Input
+            id="first-name"
+            name="nome"
+            autoComplete="given-name"
+            maxLength={100}
+            defaultValue={suggested?.firstName}
+            required
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="last-name">{t.lastName}</FieldLabel>
+          <Input
+            id="last-name"
+            name="cognome"
+            autoComplete="family-name"
+            maxLength={100}
+            defaultValue={suggested?.lastName}
+            required
+          />
+        </Field>
+      </div>
+    </>
+  );
+}
 
 /** Termini obbligatori e marketing facoltativo, entrambi mai preselezionati. */
 function AgreementFields({ t, language }: { t: AccessCopy; language: Language }) {
@@ -111,6 +197,167 @@ function GoogleForm({ t, language }: { t: AccessCopy; language: Language }) {
   );
 }
 
+/** Accesso e registrazione per chi non ha una sessione. */
+function AccessForms({ t, language }: { t: AccessCopy; language: Language }) {
+  return (
+    <div className="grid items-start gap-6 md:grid-cols-2">
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2>{t.signIn}</h2>
+          </CardTitle>
+          <CardDescription>{t.signInBody}</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <form method="post" action={localizedPath(language, "/accesso")}>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="email">{t.email}</FieldLabel>
+                <Input id="email" name="email" type="email" autoComplete="username" required />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="password">{t.password}</FieldLabel>
+                <Input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                />
+              </Field>
+              <Button type="submit" className="w-fit">
+                {t.signIn}
+              </Button>
+            </FieldGroup>
+          </form>
+          <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
+            {t.or}
+          </FieldSeparator>
+          <GoogleForm t={t} language={language} />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2>{t.signUp}</h2>
+          </CardTitle>
+          <CardDescription>{t.signUpBody}</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <form method="post" action={localizedPath(language, "/accesso")}>
+            <FieldGroup>
+              <ProfileFields t={t} />
+              <Field>
+                <FieldLabel htmlFor="signup-email">{t.email}</FieldLabel>
+                <Input id="signup-email" name="email" type="email" autoComplete="email" required />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="signup-password">{t.newPassword}</FieldLabel>
+                <Input
+                  id="signup-password"
+                  name="password"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  maxLength={128}
+                  required
+                />
+              </Field>
+              <AgreementFields t={t} language={language} />
+              <Button type="submit" name="intent" value="registrati" className="w-fit">
+                {t.signUp}
+              </Button>
+            </FieldGroup>
+          </form>
+          <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
+            {t.or}
+          </FieldSeparator>
+          <GoogleForm t={t} language={language} />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/** Passaggio per chi ha una sessione ma non ha ancora profilo o Termini correnti. */
+function CompleteRegistration({
+  t,
+  language,
+  needsProfile,
+  needsAgreement,
+  suggestedName,
+}: {
+  t: AccessCopy;
+  language: Language;
+  needsProfile: boolean;
+  needsAgreement: boolean;
+  suggestedName: { firstName: string; lastName: string };
+}) {
+  return (
+    <Card className="max-w-md">
+      <CardHeader>
+        <CardTitle>
+          <h2>{t.agreementTitle}</h2>
+        </CardTitle>
+        <CardDescription>{t.agreementBody}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form method="post" action={localizedPath(language, "/accesso")}>
+          <FieldGroup>
+            {needsProfile ? <ProfileFields t={t} suggested={suggestedName} /> : null}
+            {needsAgreement ? <AgreementFields t={t} language={language} /> : null}
+            <Button type="submit" name="intent" value="completa" className="w-fit">
+              {t.agreementSubmit}
+            </Button>
+          </FieldGroup>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Avviso di verifica dell'email e azioni della sessione. */
+function AccountBar({
+  t,
+  language,
+  email,
+  emailVerified,
+  canLinkStore,
+}: {
+  t: AccessCopy;
+  language: Language;
+  email: string;
+  emailVerified: boolean;
+  canLinkStore: boolean;
+}) {
+  return (
+    <>
+      {emailVerified ? null : (
+        <StatusAlert tone="warning" title={t.verifyTitle}>
+          <p>{t.verifyBody(email)}</p>
+          <form method="post" action={localizedPath(language, "/accesso")} className="mt-2">
+            <Button type="submit" variant="outline" size="sm" name="intent" value="verifica">
+              {t.verifyResend}
+            </Button>
+          </form>
+        </StatusAlert>
+      )}
+      <div className="flex flex-wrap gap-3">
+        {canLinkStore ? (
+          <form method="post" action={localizedPath(language, "/negozi/collega")}>
+            <Button type="submit">{t.linkStore}</Button>
+          </form>
+        ) : null}
+        <form method="post" action={localizedPath(language, "/accesso")}>
+          <Button type="submit" variant="outline" name="intent" value="esci">
+            {t.signOut}
+          </Button>
+        </form>
+      </div>
+    </>
+  );
+}
+
 export default function Home({ loaderData }: Route.ComponentProps) {
   const { language } = loaderData;
   const t = appCopy[language].access;
@@ -155,136 +402,26 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       </header>
 
       {loaderData.notice ? <StatusAlert tone="info" title={loaderData.notice} /> : null}
-      {loaderData.email && !loaderData.emailVerified ? (
-        <StatusAlert tone="warning" title={t.verifyTitle}>
-          <p>{t.verifyBody(loaderData.email)}</p>
-          <form method="post" action={localizedPath(language, "/accesso")} className="mt-2">
-            <Button type="submit" variant="outline" size="sm" name="intent" value="verifica">
-              {t.verifyResend}
-            </Button>
-          </form>
-        </StatusAlert>
-      ) : null}
       {loaderData.authenticated ? (
-        <div className="flex flex-wrap gap-3">
-          {loaderData.emailVerified && !loaderData.needsAgreement ? (
-            <form method="post" action={localizedPath(language, "/negozi/collega")}>
-              <Button type="submit">{t.linkStore}</Button>
-            </form>
-          ) : null}
-          <form method="post" action={localizedPath(language, "/accesso")}>
-            <Button type="submit" variant="outline" name="intent" value="esci">
-              {t.signOut}
-            </Button>
-          </form>
-        </div>
+        <AccountBar
+          t={t}
+          language={language}
+          email={loaderData.email}
+          emailVerified={loaderData.emailVerified}
+          canLinkStore={loaderData.canLinkStore}
+        />
       ) : null}
 
       {!loaderData.authenticated ? (
-        <div className="grid items-start gap-6 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                <h2>{t.signIn}</h2>
-              </CardTitle>
-              <CardDescription>{t.signInBody}</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <form method="post" action={localizedPath(language, "/accesso")}>
-                <FieldGroup>
-                  <Field>
-                    <FieldLabel htmlFor="email">{t.email}</FieldLabel>
-                    <Input id="email" name="email" type="email" autoComplete="username" required />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="password">{t.password}</FieldLabel>
-                    <Input
-                      id="password"
-                      name="password"
-                      type="password"
-                      autoComplete="current-password"
-                      required
-                    />
-                  </Field>
-                  <Button type="submit" className="w-fit">
-                    {t.signIn}
-                  </Button>
-                </FieldGroup>
-              </form>
-              <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
-                {t.or}
-              </FieldSeparator>
-              <GoogleForm t={t} language={language} />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                <h2>{t.signUp}</h2>
-              </CardTitle>
-              <CardDescription>{t.signUpBody}</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <form method="post" action={localizedPath(language, "/accesso")}>
-                <FieldGroup>
-                  <Field>
-                    <FieldLabel htmlFor="signup-name">{t.name}</FieldLabel>
-                    <Input id="signup-name" name="nome" autoComplete="name" maxLength={100} />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="signup-email">{t.email}</FieldLabel>
-                    <Input
-                      id="signup-email"
-                      name="email"
-                      type="email"
-                      autoComplete="email"
-                      required
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="signup-password">{t.newPassword}</FieldLabel>
-                    <Input
-                      id="signup-password"
-                      name="password"
-                      type="password"
-                      autoComplete="new-password"
-                      minLength={8}
-                      maxLength={128}
-                      required
-                    />
-                  </Field>
-                  <AgreementFields t={t} language={language} />
-                  <Button type="submit" name="intent" value="registrati" className="w-fit">
-                    {t.signUp}
-                  </Button>
-                </FieldGroup>
-              </form>
-              <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
-                {t.or}
-              </FieldSeparator>
-              <GoogleForm t={t} language={language} />
-            </CardContent>
-          </Card>
-        </div>
-      ) : loaderData.needsAgreement ? (
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle>
-              <h2>{t.agreementTitle}</h2>
-            </CardTitle>
-            <CardDescription>{t.agreementBody}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form method="post" action={localizedPath(language, "/accesso")}>
-              <FieldGroup>
-                <AgreementFields t={t} language={language} />
-                <Button type="submit" name="intent" value="accetta" className="w-fit">
-                  {t.agreementSubmit}
-                </Button>
-              </FieldGroup>
-            </form>
-          </CardContent>
-        </Card>
+        <AccessForms t={t} language={language} />
+      ) : loaderData.needsProfile || loaderData.needsAgreement ? (
+        <CompleteRegistration
+          t={t}
+          language={language}
+          needsProfile={loaderData.needsProfile}
+          needsAgreement={loaderData.needsAgreement}
+          suggestedName={loaderData.suggestedName}
+        />
       ) : loaderData.orders.length === 0 ? (
         <Card className="max-w-md">
           <CardHeader>

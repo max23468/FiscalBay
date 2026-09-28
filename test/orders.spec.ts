@@ -12,7 +12,8 @@ import {
   parseTradingOrderTaxIdentifiers,
 } from "../app/integrations/ebay/tax-identifiers.server";
 import { grantFreeOrder, listVisibleOrders } from "../app/domain/orders.server";
-import { legalVersions, recordAgreement } from "../app/domain/agreements.server";
+import { forwardToAuth } from "../app/auth-route.server";
+import { completeRegistration, legalVersions } from "../app/domain/registration.server";
 import { createAuth } from "../app/auth.server";
 import { handleAuthRequest } from "../app/auth-route.server";
 import { loader as loadHome } from "../app/routes/home";
@@ -21,6 +22,12 @@ import { loader as loadLegal } from "../app/routes/legal";
 import { action as startStoreLink } from "../app/routes/store-link";
 
 const now = "2026-09-13T20:00:00.000Z";
+const syntheticProfile = {
+  firstName: "Utente",
+  lastName: "Sintetico",
+  accountType: "private",
+  companyName: null,
+} as const;
 
 beforeEach(async () => {
   await env.DB.batch([
@@ -113,11 +120,12 @@ describe("percorso ordini", () => {
         user!.id,
       ),
     ]);
-    await recordAgreement(env.DB, {
+    await completeRegistration(env.DB, {
       userId: user!.id,
       language: "it",
-      marketing: false,
       now: new Date(now),
+      profile: syntheticProfile,
+      agreement: { marketing: false },
     });
 
     const signIn = await auth.handler(
@@ -487,11 +495,12 @@ async function verifiedSession(email: string): Promise<{ userId: string; cookie:
     .bind(email)
     .first<{ id: string }>();
   await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?').bind(user!.id).run();
-  await recordAgreement(env.DB, {
+  await completeRegistration(env.DB, {
     userId: user!.id,
     language: "it",
-    marketing: false,
     now: new Date(now),
+    profile: syntheticProfile,
+    agreement: { marketing: false },
   });
   const signIn = await auth.handler(
     new Request("http://localhost:5173/api/auth/sign-in/email", {
@@ -564,26 +573,38 @@ async function storeLinkSessions(): Promise<number> {
   return row!.total;
 }
 
+async function profileOf(userId: string) {
+  return env.DB.prepare(
+    "SELECT first_name, last_name, account_type, company_name FROM user_profiles WHERE user_id = ?",
+  )
+    .bind(userId)
+    .first();
+}
+
 describe("registrazione e verifica del contatto", () => {
   const password = "Una-password-registrazione-lunga";
+  const person = { tipo: "privato", nome: "Mario", cognome: "Rossi" };
 
   it("registra senza consensi preselezionati e apre una sessione non verificata che esplora ma non collega negozi", async () => {
-    const withoutTerms = await accessForm("/accesso", {
-      intent: "registrati",
-      email: "registrazione@example.invalid",
-      password,
-    });
-    expect(withoutTerms.headers.get("location")).toBe("/?accesso=termini");
-    expect(withoutTerms.headers.getSetCookie()).toEqual([]);
-    const none = await env.DB.prepare('SELECT id FROM "user" WHERE email = ?')
-      .bind("registrazione@example.invalid")
-      .first();
-    expect(none).toBeNull();
+    const email = "registrazione@example.invalid";
+    const rejected = [
+      [{ intent: "registrati", email, password, termini: "on" }, "dati"],
+      [{ intent: "registrati", ...person, cognome: " ", email, password, termini: "on" }, "dati"],
+      [{ intent: "registrati", ...person, email, password }, "termini"],
+    ] as const;
+    for (const [fields, outcome] of rejected) {
+      const response = await accessForm("/accesso", fields);
+      expect(response.headers.get("location")).toBe(`/?accesso=${outcome}`);
+      expect(response.headers.getSetCookie()).toEqual([]);
+    }
+    expect(
+      await env.DB.prepare('SELECT id FROM "user" WHERE email = ?').bind(email).first(),
+    ).toBeNull();
 
     const created = await accessForm("/en/accesso", {
       intent: "registrati",
-      nome: "",
-      email: "registrazione@example.invalid",
+      ...person,
+      email,
       password,
       termini: "on",
     });
@@ -594,9 +615,15 @@ describe("registrazione e verifica del contatto", () => {
     const user = await env.DB.prepare(
       'SELECT id, name, "emailVerified" FROM "user" WHERE email = ?',
     )
-      .bind("registrazione@example.invalid")
+      .bind(email)
       .first<{ id: string; name: string; emailVerified: number }>();
-    expect(user).toMatchObject({ name: "", emailVerified: 0 });
+    expect(user).toMatchObject({ name: "Mario Rossi", emailVerified: 0 });
+    expect(await profileOf(user!.id)).toEqual({
+      first_name: "Mario",
+      last_name: "Rossi",
+      account_type: "private",
+      company_name: null,
+    });
     expect(await agreements(user!.id)).toEqual({
       terms: [
         {
@@ -610,8 +637,9 @@ describe("registrazione e verifica del contatto", () => {
 
     expect(await homeFor(cookie)).toMatchObject({
       authenticated: true,
-      email: "registrazione@example.invalid",
+      email,
       emailVerified: false,
+      needsProfile: false,
       needsAgreement: false,
       orders: [],
     });
@@ -629,7 +657,8 @@ describe("registrazione e verifica del contatto", () => {
 
     const duplicate = await accessForm("/accesso", {
       intent: "registrati",
-      email: "registrazione@example.invalid",
+      ...person,
+      email,
       password,
       termini: "on",
     });
@@ -637,14 +666,54 @@ describe("registrazione e verifica del contatto", () => {
     expect(duplicate.headers.getSetCookie()).toEqual([]);
   });
 
-  it("chiede i Termini a chi entra senza averli accettati prima di mostrare ordini o collegare negozi", async () => {
+  it("registra un'azienda solo con la ragione sociale, senza dati fiscali", async () => {
+    const email = "azienda@example.invalid";
+    const business = { intent: "registrati", tipo: "azienda", nome: "Anna", cognome: "Bianchi" };
+    const missing = await accessForm("/accesso", { ...business, email, password, termini: "on" });
+    expect(missing.headers.get("location")).toBe("/?accesso=dati");
+
+    const created = await accessForm("/accesso", {
+      ...business,
+      ragione_sociale: "  Bianchi Ricambi S.r.l. ",
+      email,
+      password,
+      termini: "on",
+    });
+    expect(created.headers.get("location")).toBe("/?accesso=registrato");
+    const user = await env.DB.prepare('SELECT id FROM "user" WHERE email = ?')
+      .bind(email)
+      .first<{ id: string }>();
+    expect(await profileOf(user!.id)).toEqual({
+      first_name: "Anna",
+      last_name: "Bianchi",
+      account_type: "business",
+      company_name: "Bianchi Ricambi S.r.l.",
+    });
+
+    // La ragione sociale di un privato non viene conservata.
+    const privateUser = await accessForm("/accesso", {
+      intent: "registrati",
+      ...person,
+      ragione_sociale: "Ignorata",
+      email: "privato@example.invalid",
+      password,
+      termini: "on",
+    });
+    const privateId = await env.DB.prepare('SELECT id FROM "user" WHERE email = ?')
+      .bind("privato@example.invalid")
+      .first<{ id: string }>();
+    expect(privateUser.headers.get("location")).toBe("/?accesso=registrato");
+    expect(await profileOf(privateId!.id)).toMatchObject({ company_name: null });
+  });
+
+  it("chiede profilo e Termini a chi entra senza averli completati prima di mostrare ordini o collegare negozi", async () => {
     const auth = createAuth(env);
     const email = "senza-termini@example.invalid";
     await auth.handler(
       new Request("http://localhost:5173/api/auth/sign-up/email", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: "", email, password }),
+        body: JSON.stringify({ name: "Luca De Santis", email, password }),
       }),
     );
     const user = await env.DB.prepare('SELECT id FROM "user" WHERE email = ?')
@@ -653,7 +722,12 @@ describe("registrazione e verifica del contatto", () => {
     await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?').bind(user!.id).run();
     const cookie = sessionCookie(await accessForm("/accesso", { email, password }));
 
-    expect(await homeFor(cookie)).toMatchObject({ needsAgreement: true, orders: [] });
+    expect(await homeFor(cookie)).toMatchObject({
+      needsProfile: true,
+      needsAgreement: true,
+      suggestedName: { firstName: "Luca", lastName: "De Santis" },
+      orders: [],
+    });
     const blocked = (await startStoreLink({
       request: new Request("http://localhost:5173/negozi/collega", {
         method: "POST",
@@ -663,16 +737,15 @@ describe("registrazione e verifica del contatto", () => {
     expect(blocked.headers.get("location")).toBe("/");
     expect(await storeLinkSessions()).toBe(0);
 
-    expect(
-      (await accessForm("/accesso", { intent: "accetta", marketing: "on" }, cookie)).headers.get(
-        "location",
-      ),
-    ).toBe("/?accesso=termini");
-    expect(
-      (
-        await accessForm("/accesso", { intent: "accetta", termini: "on", marketing: "on" }, cookie)
-      ).headers.get("location"),
-    ).toBe("/");
+    const complete = (fields: Record<string, string>) =>
+      accessForm("/accesso", { intent: "completa", ...fields }, cookie).then((response) =>
+        response.headers.get("location"),
+      );
+    expect(await complete({ termini: "on" })).toBe("/?accesso=dati");
+    expect(await complete({ ...person, marketing: "on" })).toBe("/?accesso=termini");
+    expect(await agreements(user!.id)).toEqual({ terms: [], marketing: [] });
+    expect(await complete({ ...person, termini: "on", marketing: "on" })).toBe("/");
+    expect(await profileOf(user!.id)).toMatchObject({ first_name: "Mario", last_name: "Rossi" });
     expect(await agreements(user!.id)).toEqual({
       terms: [
         {
@@ -683,8 +756,35 @@ describe("registrazione e verifica del contatto", () => {
       ],
       marketing: [{ granted: 1, text_version: legalVersions.marketing, language: "it" }],
     });
-    expect(await homeFor(cookie)).toMatchObject({ needsAgreement: false, emailVerified: true });
+    expect(await homeFor(cookie)).toMatchObject({
+      needsProfile: false,
+      needsAgreement: false,
+      emailVerified: true,
+    });
     expect((await beginStoreLink(cookie)).hostname).toBe("auth.ebay.com");
+  });
+
+  it("limita per IP i tentativi dei moduli su un ambiente distribuito, contando su D1", async () => {
+    const deployed = { ...env, APP_ORIGIN: "https://test.fiscalbay.it" };
+    const attempt = (ip: string) =>
+      forwardToAuth(
+        deployed,
+        new Request("https://test.fiscalbay.it/accesso", {
+          method: "POST",
+          headers: { origin: "https://test.fiscalbay.it", "cf-connecting-ip": ip },
+        }),
+        "/sign-in/email",
+        { email: "tentativi@example.invalid", password: "password-sbagliata-lunga" },
+      ).then((response) => response.status);
+
+    const statuses = [];
+    for (let index = 0; index < 4; index += 1) statuses.push(await attempt("203.0.113.7"));
+    expect(statuses).toEqual([401, 401, 401, 429]);
+    expect(await attempt("203.0.113.8")).toBe(401);
+    const counters = await env.DB.prepare('SELECT COUNT(*) AS total FROM "rateLimit"').first<{
+      total: number;
+    }>();
+    expect(counters!.total).toBe(2);
   });
 
   it("avvia l'accesso Google dal modulo con il callback dell'ambiente", async () => {

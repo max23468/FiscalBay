@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { redirect } from "react-router";
 
 import { createAuth } from "../auth.server";
-import { hasAcceptedTerms } from "../domain/agreements.server";
+import { registrationComplete, registrationStatus } from "../domain/registration.server";
 import { errorResponse } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
 import { startStoreLink } from "../integrations/ebay/store-link.server";
@@ -15,7 +15,9 @@ export async function action({ request }: Route.ActionArgs) {
   }
   const session = await createAuth(env).api.getSession({ headers: request.headers });
   if (!session?.user.emailVerified) return redirect(`${base}?negozio=accesso`, 303);
-  if (!(await hasAcceptedTerms(env.DB, session.user.id))) return redirect(base, 303);
+  if (!registrationComplete(await registrationStatus(env.DB, session.user.id))) {
+    return redirect(base, 303);
+  }
   return redirect(
     await startStoreLink(
       env,

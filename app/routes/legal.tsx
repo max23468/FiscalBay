@@ -1,6 +1,6 @@
 import type { Route } from "./+types/legal";
 import { appCopy } from "../app-copy";
-import { legalVersions } from "../domain/agreements.server";
+import { legalVersions } from "../domain/registration.server";
 import { languageFromPath, localizedPath } from "../i18n";
 
 const documents = { termini: "terms", privacy: "privacy" } as const;

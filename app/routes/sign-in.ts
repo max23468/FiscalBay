@@ -2,7 +2,12 @@ import { env } from "cloudflare:workers";
 import { redirect } from "react-router";
 
 import { createAuth } from "../auth.server";
-import { recordAgreement } from "../domain/agreements.server";
+import { forwardToAuth } from "../auth-route.server";
+import {
+  completeRegistration,
+  parseProfile,
+  registrationStatus,
+} from "../domain/registration.server";
 import { errorResponse } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
 import type { Route } from "./+types/sign-in";
@@ -19,79 +24,78 @@ export async function action({ request }: Route.ActionArgs) {
   if (request.headers.get("origin") !== new URL(env.APP_ORIGIN).origin) {
     return errorResponse(request, "FORBIDDEN");
   }
-  const auth = createAuth(env);
   const form = await request.formData();
   const field = (name: string) => String(form.get(name) ?? "");
   const notice = (value: string) => redirect(`${base}?accesso=${value}`, 303);
+  const forward = (path: string, body?: Record<string, unknown>) =>
+    forwardToAuth(env, request, path, body);
   const intent = field("intent");
 
-  if (intent === "esci") {
-    return withCookies(
-      base,
-      await auth.api.signOut({ headers: request.headers, asResponse: true }),
-    );
-  }
+  if (intent === "esci") return withCookies(base, await forward("/sign-out"));
 
   if (intent === "google") {
-    const response = await auth.api.signInSocial({
-      body: { provider: "google", callbackURL: base },
-      headers: request.headers,
-      asResponse: true,
-    });
-    if (!response.ok) return notice("errore");
+    const response = await forward("/sign-in/social", { provider: "google", callbackURL: base });
+    if (!response.ok) return notice(response.status === 429 ? "troppi-tentativi" : "errore");
     const { url } = await response.clone().json<{ url: string }>();
     return withCookies(url, response);
   }
 
   if (intent === "registrati") {
-    // Termini obbligatori, marketing facoltativo: nessuna scelta vale se non inviata.
+    // Profilo e Termini obbligatori, marketing facoltativo: nessuna scelta vale se non inviata.
+    const profile = parseProfile(form);
+    if (!profile) return notice("dati");
     if (field("termini") !== "on") return notice("termini");
-    const response = await auth.api.signUpEmail({
-      body: {
-        email: field("email"),
-        password: field("password"),
-        name: field("nome").trim().slice(0, 100),
-        callbackURL: base,
-      },
-      headers: request.headers,
-      asResponse: true,
+    const response = await forward("/sign-up/email", {
+      email: field("email"),
+      password: field("password"),
+      name: `${profile.firstName} ${profile.lastName}`,
+      callbackURL: base,
     });
-    if (!response.ok) return notice("registrazione");
+    if (!response.ok) {
+      return notice(response.status === 429 ? "troppi-tentativi" : "registrazione");
+    }
     const { user } = await response.clone().json<{ user: { id: string } }>();
-    await recordAgreement(env.DB, {
+    await completeRegistration(env.DB, {
       userId: user.id,
       language,
-      marketing: field("marketing") === "on",
       now: new Date(),
+      profile,
+      agreement: { marketing: field("marketing") === "on" },
     });
     return withCookies(`${base}?accesso=registrato`, response);
   }
 
-  if (intent === "verifica" || intent === "accetta") {
-    const session = await auth.api.getSession({ headers: request.headers });
+  if (intent === "verifica" || intent === "completa") {
+    const session = await createAuth(env).api.getSession({ headers: request.headers });
     if (!session) return notice("errore");
     if (intent === "verifica") {
       if (session.user.emailVerified) return redirect(base, 303);
-      await auth.api.sendVerificationEmail({
-        body: { email: session.user.email, callbackURL: base },
-        headers: request.headers,
+      const response = await forward("/send-verification-email", {
+        email: session.user.email,
+        callbackURL: base,
       });
-      return notice("verifica-inviata");
+      if (response.status === 429) return notice("troppi-tentativi");
+      return notice(response.ok ? "verifica-inviata" : "errore");
     }
-    if (field("termini") !== "on") return notice("termini");
-    await recordAgreement(env.DB, {
+    // Chi è entrato con Google o prima di una nuova versione dei Termini completa qui ciò che manca.
+    const status = await registrationStatus(env.DB, session.user.id);
+    const profile = status.profile ? undefined : parseProfile(form);
+    if (profile === null) return notice("dati");
+    if (!status.termsAccepted && field("termini") !== "on") return notice("termini");
+    await completeRegistration(env.DB, {
       userId: session.user.id,
       language,
-      marketing: field("marketing") === "on",
       now: new Date(),
+      profile,
+      agreement: status.termsAccepted ? undefined : { marketing: field("marketing") === "on" },
     });
     return redirect(base, 303);
   }
 
-  const response = await auth.api.signInEmail({
-    body: { email: field("email"), password: field("password") },
-    headers: request.headers,
-    asResponse: true,
+  const response = await forward("/sign-in/email", {
+    email: field("email"),
+    password: field("password"),
   });
-  return response.ok ? withCookies(base, response) : notice("errore");
+  if (response.ok) return withCookies(base, response);
+  return notice(response.status === 429 ? "troppi-tentativi" : "errore");
 }

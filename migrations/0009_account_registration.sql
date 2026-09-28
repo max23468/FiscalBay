@@ -21,3 +21,23 @@ CREATE TABLE marketing_consents (
 );
 
 CREATE INDEX marketing_consents_user_idx ON marketing_consents(user_id, recorded_at);
+
+-- Profilo di registrazione: nome e cognome della persona sempre obbligatori;
+-- l'azienda aggiunge la ragione sociale. Il tipo non cambia piano né limiti.
+CREATE TABLE user_profiles (
+  user_id TEXT PRIMARY KEY REFERENCES "user"("id") ON DELETE CASCADE,
+  first_name TEXT NOT NULL CHECK (length(first_name) BETWEEN 1 AND 100),
+  last_name TEXT NOT NULL CHECK (length(last_name) BETWEEN 1 AND 100),
+  account_type TEXT NOT NULL CHECK (account_type IN ('private', 'business')),
+  company_name TEXT CHECK (length(company_name) BETWEEN 1 AND 200),
+  updated_at TEXT NOT NULL,
+  CHECK ((account_type = 'business') = (company_name IS NOT NULL))
+);
+
+-- Contatori del limite di tentativi di Better Auth, condivisi fra gli isolate.
+CREATE TABLE "rateLimit" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "key" TEXT NOT NULL UNIQUE,
+  "count" INTEGER NOT NULL,
+  "lastRequest" BIGINT NOT NULL
+);
