@@ -1,10 +1,14 @@
+import { cn } from "cn";
 import {
+  Bell,
   ChevronRight,
   History,
+  Link2,
   Pause,
   Play,
   Plus,
   RefreshCw,
+  SlidersHorizontal,
   Store,
   Trash2,
   Unplug,
@@ -15,8 +19,8 @@ import { Link, useNavigate } from "react-router";
 import { useAction } from "~/components/app-shell";
 import { LedgerIndicator } from "~/components/brand";
 import { EmptyState } from "~/components/empty-state";
-import { InitialsTile, PageTitle } from "~/components/icon-tile";
-import { PremiumNote, StatusAlert, StatusBadge } from "~/components/status";
+import { IconTile, InitialsTile, PageTitle } from "~/components/icon-tile";
+import { PremiumNote, StatusAlert, StatusBadge, StatusIcon } from "~/components/status";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -130,7 +134,8 @@ function StoreActions({ store, ebayDown, t }: { store: StoreView; ebayDown: bool
   const planPaused = store.pauseReason === "plan";
   return (
     <section aria-labelledby="store-actions" className="grid gap-3 border-t pt-5">
-      <h3 id="store-actions" className="text-sm font-semibold">
+      <h3 id="store-actions" className="flex items-center gap-2.5 text-sm font-semibold">
+        <IconTile icon={SlidersHorizontal} tone="teal" size="sm" />
         {t.stores.sectionActions}
       </h3>
       {planPaused ? (
@@ -274,10 +279,13 @@ function StoreDetail({
       ) : null}
       {data.ebayDown ? <StatusAlert tone="warning" title={t.stores.ebayDown} /> : null}
       <section aria-labelledby="store-connection" className="grid gap-3">
-        <h3 id="store-connection" className="text-sm font-semibold">
+        <h3 id="store-connection" className="flex items-center gap-2.5 text-sm font-semibold">
+          <IconTile icon={Link2} tone="blue" size="sm" />
           {t.stores.sectionConnection}
         </h3>
-        <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+        <StatusBadge tone={status.tone} filled>
+          {status.label}
+        </StatusBadge>
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
           <div className={row}>
             <dt className="text-muted-foreground">{t.stores.account}</dt>
@@ -305,7 +313,8 @@ function StoreDetail({
         )}
       </section>
       <section aria-labelledby="store-sync" className="grid gap-3 border-t pt-5">
-        <h3 id="store-sync" className="text-sm font-semibold">
+        <h3 id="store-sync" className="flex items-center gap-2.5 text-sm font-semibold">
+          <IconTile icon={RefreshCw} tone="green" size="sm" />
           {t.stores.sectionSync}
         </h3>
         <ul className="grid gap-2 text-sm">
@@ -323,16 +332,23 @@ function StoreDetail({
         </ul>
       </section>
       <section aria-labelledby="store-recent" className="grid gap-3 border-t pt-5">
-        <h3 id="store-recent" className="text-sm font-semibold">
+        <h3 id="store-recent" className="flex items-center gap-2.5 text-sm font-semibold">
+          <IconTile icon={History} tone="violet" size="sm" />
           {t.stores.sectionRecent}
         </h3>
         <ul className="grid gap-2 text-sm">
           {store.recent.map((sync) => (
             <li key={sync.at} className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
-              <span className={sync.ok ? "text-foreground" : "text-danger"}>
+              <span
+                className={cn(
+                  "inline-flex items-center gap-2",
+                  sync.ok ? "text-foreground" : "text-danger",
+                )}
+              >
+                <StatusIcon tone={sync.ok ? "success" : "danger"} className="size-3.5" />
                 {sync.ok ? t.stores.recentOk(sync.newOrders) : t.stores.recentFailed}
               </span>
-              <time dateTime={sync.at} className="text-muted-foreground">
+              <time dateTime={sync.at} className="whitespace-nowrap text-muted-foreground">
                 {formatDate(sync.at, language)}
               </time>
             </li>
@@ -340,7 +356,8 @@ function StoreDetail({
         </ul>
       </section>
       <section aria-labelledby="store-notifications" className="grid gap-2 border-t pt-5">
-        <h3 id="store-notifications" className="text-sm font-semibold">
+        <h3 id="store-notifications" className="flex items-center gap-2.5 text-sm font-semibold">
+          <IconTile icon={Bell} tone="amber" size="sm" />
           {t.stores.sectionNotifications}
         </h3>
         {store.notifications === null ? (
@@ -464,7 +481,9 @@ export function StoresPage({
                         </Link>
                       </TableCell>
                       <TableCell>
-                        <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+                        <StatusBadge tone={status.tone} filled>
+                          {status.label}
+                        </StatusBadge>
                       </TableCell>
                       <TableCell>
                         <LastSync store={store} t={t} now={data.now} language={language} />
@@ -504,7 +523,9 @@ export function StoresPage({
                     </span>
                     <ChevronRight aria-hidden="true" className="size-4 text-muted-foreground" />
                     <span className="col-span-2 col-start-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                      <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+                      <StatusBadge tone={status.tone} filled>
+                        {status.label}
+                      </StatusBadge>
                       <LastSync store={store} t={t} now={data.now} language={language} />
                     </span>
                   </Link>

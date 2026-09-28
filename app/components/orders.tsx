@@ -19,6 +19,7 @@ import { useAction, useNotice } from "~/components/app-shell";
 import { LedgerIndicator } from "~/components/brand";
 import { EmptyState } from "~/components/empty-state";
 import { PageTitle } from "~/components/icon-tile";
+import { dotTones, tileTones, toneFor } from "~/components/tile-tone";
 import { UnlockIcon } from "~/components/icons";
 import { StatusAlert, StatusBadge, StatusIcon } from "~/components/status";
 import { TaxCode } from "~/components/tax-code";
@@ -33,6 +34,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "~/components/ui/alert-dialog";
+import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { buttonVariants } from "~/components/ui/button-variants";
 import { Checkbox } from "~/components/ui/checkbox";
@@ -190,36 +192,24 @@ function FiscalSlot({ tone, children }: { tone: "neutral" | "info" | "danger"; c
 
 const cardRow = "flex flex-wrap items-center gap-x-3 gap-y-2";
 
-type DotTone = "success" | "warning" | "info" | "neutral";
+type PillTone = "success" | "warning" | "info" | "neutral";
 
-const paymentTone: Record<PaymentStatus, DotTone> = {
+const paymentTone: Record<PaymentStatus, PillTone> = {
   paid: "success",
   unpaid: "warning",
   refunded: "neutral",
 };
 
-const shippingTone: Record<ShippingStatus, DotTone> = {
+const shippingTone: Record<ShippingStatus, PillTone> = {
   to_ship: "warning",
   shipped: "info",
   delivered: "success",
   cancelled: "neutral",
 };
 
-const dotColor: Record<DotTone, string> = {
-  success: "bg-success",
-  warning: "bg-warning",
-  info: "bg-info",
-  neutral: "bg-neutral",
-};
-
-/** Stato di pagamento o spedizione: il punto colorato accompagna il testo, che resta la fonte. */
-function StateDot({ tone, children }: { tone: DotTone; children: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-      <span aria-hidden="true" className={cn("size-1.5 rounded-full", dotColor[tone])} />
-      {children}
-    </span>
-  );
+/** Stato di pagamento o spedizione: etichetta tinta, il testo resta la fonte. */
+function StatePill({ tone, children }: { tone: PillTone; children: string }) {
+  return <Badge variant={tone}>{children}</Badge>;
 }
 
 /** Area di tocco invisibile di almeno 44 px per i collegamenti testuali, come per i pulsanti. */
@@ -569,20 +559,25 @@ function OrderCard({
             )}
           </div>
         </div>
-        <p className="flex flex-wrap gap-x-1.5 text-xs text-muted-foreground">
+        <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
           <time dateTime={order.createdAt} className="whitespace-nowrap">
             {formatDate(order.createdAt, language)}
           </time>
           <span aria-hidden="true">·</span>
-          <StateDot tone={paymentTone[order.payment]}>{t.orders.payment[order.payment]}</StateDot>
-          <span aria-hidden="true">·</span>
-          <StateDot tone={shippingTone[order.shipping]}>
-            {t.orders.shipping[order.shipping]}
-          </StateDot>
-          <span aria-hidden="true">·</span>
+          {/* Il punto ha la tinta del negozio, la stessa del suo avatar in Negozi. */}
+          <span
+            aria-hidden="true"
+            className={cn("size-2 shrink-0 rounded-full", dotTones[toneFor(order.storeName)])}
+          />
           <span className="text-pretty">
             {order.storeName}, {marketplaceLabel(order.marketplace)}
           </span>
+        </p>
+        <p className="mt-1.5 flex flex-wrap gap-1.5">
+          <StatePill tone={paymentTone[order.payment]}>{t.orders.payment[order.payment]}</StatePill>
+          <StatePill tone={shippingTone[order.shipping]}>
+            {t.orders.shipping[order.shipping]}
+          </StatePill>
         </p>
       </header>
       <div className="flex gap-3">
@@ -598,7 +593,10 @@ function OrderCard({
         ) : (
           <span
             aria-hidden="true"
-            className="grid size-10 shrink-0 place-items-center rounded-md border bg-muted/60 text-muted-foreground"
+            className={cn(
+              "grid size-10 shrink-0 place-items-center rounded-md",
+              tileTones[toneFor(order.storeName)],
+            )}
           >
             <Package className="size-4" />
           </span>

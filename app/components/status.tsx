@@ -48,10 +48,21 @@ export function StatusIcon({ tone, className }: { tone: StatusTone; className?: 
   return <Icon aria-hidden="true" className={cn("size-4 shrink-0", iconColor[tone], className)} />;
 }
 
-/** Superficie colorata solo per gli stati che chiedono un'azione. */
-export function StatusBadge({ tone, children }: { tone: StatusTone; children: React.ReactNode }) {
+/**
+ * Superficie colorata per gli stati che chiedono un'azione; con `filled` anche
+ * per gli altri, negli elenchi in cui lo stato va letto a colpo d'occhio.
+ */
+export function StatusBadge({
+  tone,
+  filled = false,
+  children,
+}: {
+  tone: StatusTone;
+  filled?: boolean;
+  children: React.ReactNode;
+}) {
   const Icon = icons[tone];
-  if (!actionable.has(tone)) {
+  if (!filled && !actionable.has(tone)) {
     return (
       <Badge variant="outline" className="border-transparent px-0 text-muted-foreground">
         <Icon aria-hidden="true" data-icon="inline-start" className={iconColor[tone]} />

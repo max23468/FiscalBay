@@ -21,7 +21,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 
 import { useAction } from "~/components/app-shell";
-import { IconTile, InitialsTile, PageTitle, type TileTone } from "~/components/icon-tile";
+import { IconTile, InitialsTile, PageTitle } from "~/components/icon-tile";
 import { PremiumNote, StatusAlert, StatusBadge, StatusIcon } from "~/components/status";
 import {
   AlertDialog,
@@ -1027,18 +1027,16 @@ function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
   );
 }
 
-const sectionIcons: Record<
-  SettingsSection,
-  { icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; tone: TileTone }
-> = {
-  piano: { icon: CreditCard, tone: "violet" },
-  notifiche: { icon: Bell, tone: "amber" },
-  esportazione: { icon: FileSpreadsheet, tone: "green" },
-  sicurezza: { icon: ShieldCheck, tone: "blue" },
-  aspetto: { icon: Palette, tone: "teal" },
-  messaggio: { icon: MessageSquareText, tone: "blue" },
-  privacy: { icon: Database, tone: "rose" },
-  supporto: { icon: LifeBuoy, tone: "amber" },
+/** Icone neutre: le Impostazioni restano sobrie, il colore sta in Ordini e Negozi. */
+const sectionIcons: Record<SettingsSection, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
+  piano: CreditCard,
+  notifiche: Bell,
+  esportazione: FileSpreadsheet,
+  sicurezza: ShieldCheck,
+  aspetto: Palette,
+  messaggio: MessageSquareText,
+  privacy: Database,
+  supporto: LifeBuoy,
 };
 
 /** Da 768 px tutte le categorie stanno in una pagina che scorre. */
@@ -1128,7 +1126,7 @@ export function SettingsPage({
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-      <PageTitle icon={Settings} tone="violet" className={cn(data.section && "max-md:sr-only")}>
+      <PageTitle icon={Settings} tone="neutral" className={cn(data.section && "max-md:sr-only")}>
         {t.settings.title}
       </PageTitle>
       <div className="grid grid-cols-[minmax(0,1fr)] gap-8 md:grid-cols-[15rem_minmax(0,1fr)] md:gap-10">
@@ -1146,7 +1144,7 @@ export function SettingsPage({
               />
             ) : null}
             {settingsSections.map((id) => {
-              const { icon, tone } = sectionIcons[id];
+              const icon = sectionIcons[id];
               return (
                 <li
                   key={id}
@@ -1166,7 +1164,7 @@ export function SettingsPage({
                       !indicator && "md:aria-[current=true]:bg-secondary",
                     )}
                   >
-                    <IconTile icon={icon} tone={tone} size="sm" />
+                    <IconTile icon={icon} tone="neutral" size="sm" />
                     <span className="grid min-w-0 flex-1 gap-0.5">
                       <span className="font-medium md:font-[inherit]">
                         {t.settings.sections[id].title}
@@ -1199,7 +1197,7 @@ export function SettingsPage({
             {t.settings.title}
           </Link>
           {settingsSections.map((id) => {
-            const { icon, tone } = sectionIcons[id];
+            const icon = sectionIcons[id];
             return (
               <section
                 key={id}
@@ -1213,7 +1211,7 @@ export function SettingsPage({
                 )}
               >
                 <h2 id={`settings-${id}`} className="flex items-center gap-3 text-xl font-semibold">
-                  <IconTile icon={icon} tone={tone} />
+                  <IconTile icon={icon} tone="neutral" />
                   {t.settings.sections[id].title}
                 </h2>
                 <div className="grid gap-6">{content[id]}</div>
@@ -1226,16 +1224,14 @@ export function SettingsPage({
   );
 }
 
-/** Riquadro del profilo con tessera colorata, titolo e contenuto. */
+/** Riquadro del profilo con icona neutra, titolo e contenuto. */
 function ProfileCard({
   icon,
-  tone,
   title,
   id,
   children,
 }: {
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  tone: TileTone;
   title: string;
   id: string;
   children: React.ReactNode;
@@ -1243,7 +1239,7 @@ function ProfileCard({
   return (
     <section aria-labelledby={id} className="grid gap-4 rounded-xl border bg-card p-5">
       <h2 id={id} className="flex items-center gap-3 text-base font-semibold">
-        <IconTile icon={icon} tone={tone} />
+        <IconTile icon={icon} tone="neutral" />
         {title}
       </h2>
       {children}
@@ -1276,7 +1272,7 @@ export function ProfilePage({
           <p className="truncate text-sm text-muted-foreground">{account.email}</p>
         </div>
       </div>
-      <ProfileCard icon={User} tone="blue" title={t.profile.name} id="profile-name-title">
+      <ProfileCard icon={User} title={t.profile.name} id="profile-name-title">
         <form
           className="grid gap-4"
           onSubmit={(event) => {
@@ -1303,7 +1299,7 @@ export function ProfilePage({
         </form>
       </ProfileCard>
       {/* L'email non si modifica nel campo: il cambio passa dalla verifica del nuovo indirizzo. */}
-      <ProfileCard icon={Mail} tone="teal" title={t.profile.email} id="profile-email">
+      <ProfileCard icon={Mail} title={t.profile.email} id="profile-email">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="min-w-0 font-medium break-all">{account.email}</span>
           <Button
@@ -1322,7 +1318,6 @@ export function ProfilePage({
       </ProfileCard>
       <ProfileCard
         icon={ShieldCheck}
-        tone="violet"
         title={t.settings.sections.sicurezza.title}
         id="profile-security"
       >
