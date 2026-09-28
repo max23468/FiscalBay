@@ -67,6 +67,12 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
         ipAddressHeaders: ["cf-connecting-ip"],
       },
     },
+    // Limite dei tentativi su D1, condiviso fra gli isolate. Attivo sui domini distribuiti;
+    // sviluppo locale e test, in HTTP, non hanno un IP client affidabile da cui contare.
+    rateLimit: {
+      enabled: appOrigin.protocol === "https:",
+      storage: "database",
+    },
     onAPIError: {
       errorURL: "/auth/error",
     },
@@ -79,7 +85,8 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
     },
     emailAndPassword: {
       enabled: true,
-      requireEmailVerification: true,
+      // La sessione nasce subito: chi non ha verificato l'email esplora, ma non collega negozi.
+      requireEmailVerification: false,
       sendResetPassword: async ({ user, url }) => {
         waitUntil(
           sendAuthEmail(
@@ -93,6 +100,8 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
       },
     },
     emailVerification: {
+      sendOnSignUp: true,
+      autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, url }) => {
         waitUntil(
           sendAuthEmail(

@@ -2,6 +2,12 @@ import { env } from "cloudflare:workers";
 import { redirect } from "react-router";
 
 import { createAuth } from "../auth.server";
+import { forwardToAuth } from "../auth-route.server";
+import {
+  completeRegistration,
+  parseProfile,
+  registrationStatus,
+} from "../domain/registration.server";
 import { errorResponse } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
 import type { Route } from "./+types/sign-in";
@@ -13,37 +19,83 @@ function withCookies(location: string, response: Response): Response {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const base = localizedPath(languageFromPath(new URL(request.url).pathname));
+  const language = languageFromPath(new URL(request.url).pathname);
+  const base = localizedPath(language);
   if (request.headers.get("origin") !== new URL(env.APP_ORIGIN).origin) {
     return errorResponse(request, "FORBIDDEN");
   }
-  const auth = createAuth(env);
   const form = await request.formData();
-  if (form.get("intent") === "esci") {
-    return withCookies(
-      base,
-      await auth.api.signOut({ headers: request.headers, asResponse: true }),
-    );
+  const field = (name: string) => String(form.get(name) ?? "");
+  const notice = (value: string) => redirect(`${base}?accesso=${value}`, 303);
+  const forward = (path: string, body?: Record<string, unknown>) =>
+    forwardToAuth(env, request, path, body);
+  const intent = field("intent");
+
+  if (intent === "esci") return withCookies(base, await forward("/sign-out"));
+
+  if (intent === "google") {
+    const response = await forward("/sign-in/social", { provider: "google", callbackURL: base });
+    if (!response.ok) return notice(response.status === 429 ? "troppi-tentativi" : "errore");
+    const { url } = await response.clone().json<{ url: string }>();
+    return withCookies(url, response);
   }
 
-  const credentials = {
-    email: String(form.get("email") ?? ""),
-    password: String(form.get("password") ?? ""),
-  };
-  if (form.get("intent") === "registrati") {
-    // La registrazione non apre la sessione: l'accesso richiede l'email verificata.
-    const response = await auth.api.signUpEmail({
-      body: { ...credentials, name: credentials.email },
-      headers: request.headers,
-      asResponse: true,
+  if (intent === "registrati") {
+    // Profilo e Termini obbligatori, marketing facoltativo: nessuna scelta vale se non inviata.
+    const profile = parseProfile(form);
+    if (!profile) return notice("dati");
+    if (field("termini") !== "on") return notice("termini");
+    const response = await forward("/sign-up/email", {
+      email: field("email"),
+      password: field("password"),
+      name: `${profile.firstName} ${profile.lastName}`,
+      callbackURL: base,
     });
-    return redirect(`${base}?accesso=${response.ok ? "registrato" : "errore"}`, 303);
+    if (!response.ok) {
+      return notice(response.status === 429 ? "troppi-tentativi" : "registrazione");
+    }
+    const { user } = await response.clone().json<{ user: { id: string } }>();
+    await completeRegistration(env.DB, {
+      userId: user.id,
+      language,
+      now: new Date(),
+      profile,
+      agreement: { marketing: field("marketing") === "on" },
+    });
+    return withCookies(`${base}?accesso=registrato`, response);
   }
 
-  const response = await auth.api.signInEmail({
-    body: credentials,
-    headers: request.headers,
-    asResponse: true,
+  if (intent === "verifica" || intent === "completa") {
+    const session = await createAuth(env).api.getSession({ headers: request.headers });
+    if (!session) return notice("errore");
+    if (intent === "verifica") {
+      if (session.user.emailVerified) return redirect(base, 303);
+      const response = await forward("/send-verification-email", {
+        email: session.user.email,
+        callbackURL: base,
+      });
+      if (response.status === 429) return notice("troppi-tentativi");
+      return notice(response.ok ? "verifica-inviata" : "errore");
+    }
+    // Chi è entrato con Google o prima di una nuova versione dei Termini completa qui ciò che manca.
+    const status = await registrationStatus(env.DB, session.user.id);
+    const profile = status.profile ? undefined : parseProfile(form);
+    if (profile === null) return notice("dati");
+    if (!status.termsAccepted && field("termini") !== "on") return notice("termini");
+    await completeRegistration(env.DB, {
+      userId: session.user.id,
+      language,
+      now: new Date(),
+      profile,
+      agreement: status.termsAccepted ? undefined : { marketing: field("marketing") === "on" },
+    });
+    return redirect(base, 303);
+  }
+
+  const response = await forward("/sign-in/email", {
+    email: field("email"),
+    password: field("password"),
   });
-  return response.ok ? withCookies(base, response) : redirect(`${base}?accesso=errore`, 303);
+  if (response.ok) return withCookies(base, response);
+  return notice(response.status === 429 ? "troppi-tentativi" : "errore");
 }

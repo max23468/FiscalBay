@@ -75,3 +75,29 @@ export function handleAuthRequest(
   if (pathname !== ebayCallbackPath) return authResponse(request, environment);
   return handleEbayCallback(request, environment, fetcher);
 }
+
+const forwardedHeaders = ["cookie", "origin", "user-agent", "accept-language", "cf-connecting-ip"];
+
+/**
+ * Invia al router di Better Auth un'azione dei moduli dell'app. Le chiamate dirette alla API
+ * server saltano il limite dei tentativi, che il router applica per IP e percorso.
+ */
+export function forwardToAuth(
+  environment: Env,
+  request: Request,
+  path: string,
+  body: Record<string, unknown> = {},
+): Promise<Response> {
+  const headers = new Headers({ "content-type": "application/json" });
+  for (const name of forwardedHeaders) {
+    const value = request.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+  return createAuth(environment).handler(
+    new Request(new URL(`/api/auth${path}`, environment.APP_ORIGIN), {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    }),
+  );
+}
