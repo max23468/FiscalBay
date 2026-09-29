@@ -729,6 +729,17 @@ describe("registrazione e verifica del contatto", () => {
       suggestedName: { firstName: "Luca", lastName: "De Santis" },
       orders: [],
     });
+    // Anche uno username eBay con spazi non prova nome e cognome della persona.
+    await env.DB.prepare(
+      'INSERT INTO "account" (id, "accountId", "providerId", "userId", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?)',
+    )
+      .bind("ebay-profilo", "ebay-profilo", "ebay", user!.id, now, now)
+      .run();
+    expect(await homeFor(cookie)).toMatchObject({
+      needsProfile: true,
+      ebayLinked: true,
+      suggestedName: { firstName: "", lastName: "" },
+    });
     const blocked = (await startStoreLink({
       request: new Request("http://localhost:5173/negozi/collega", {
         method: "POST",
