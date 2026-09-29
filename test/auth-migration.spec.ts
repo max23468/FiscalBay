@@ -30,7 +30,10 @@ describe("Better Auth su Workers e D1", () => {
     expect(send).toHaveBeenCalledTimes(2);
     for (const [message] of send.mock.calls) {
       expect(message).toMatchObject({
-        from: { email: ["noreply", "fiscalbay.it"].join("@"), name: "FiscalBay" },
+        from: {
+          email: ["noreply", "fiscalbay.it"].join("@"),
+          name: "FiscalBay",
+        },
         replyTo: ["supporto", "fiscalbay.it"].join("@"),
         to: user.email,
       });
@@ -135,10 +138,84 @@ describe("Better Auth su Workers e D1", () => {
         new Set([
           "https://api.ebay.com/oauth/api_scope",
           "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
-          "https://api.ebay.com/oauth/api_scope/commerce.identity.email.readonly",
-          "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
         ]),
       );
     }
   });
+
+  it.each([
+    ["individuale", {}, "email_not_found"],
+    [
+      "business con l'email di un utente esistente",
+      { businessAccount: { email: "esistente@example.invalid" } },
+      "account_not_linked",
+    ],
+  ])(
+    "rifiuta il login eBay di un account %s senza creare o collegare account",
+    async (_account, identity, error) => {
+      await env.DB.prepare(
+        'INSERT OR IGNORE INTO "user" ("id", "name", "email", "emailVerified", "createdAt", "updatedAt") VALUES (?, ?, ?, 1, ?, ?)',
+      )
+        .bind(
+          "utente-esistente",
+          "Utente esistente",
+          "esistente@example.invalid",
+          Date.now(),
+          Date.now(),
+        )
+        .run();
+      const start = await createAuth(env).handler(
+        new Request("http://localhost:5173/api/auth/sign-in/social", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ provider: "ebay", callbackURL: "/" }),
+        }),
+      );
+      const state = new URL((await start.json<{ url: string }>()).url).searchParams.get("state");
+      const cookie = start.headers
+        .getSetCookie()
+        .map((value) => value.split(";")[0])
+        .join("; ");
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url.endsWith("/identity/v1/oauth2/token")) {
+          return Response.json({
+            access_token: "sintetico",
+            token_type: "Bearer",
+            expires_in: 7200,
+          });
+        }
+        return Response.json({
+          userId: "ebay-utente-sintetico",
+          username: "venditore",
+          ...identity,
+        });
+      });
+
+      const response = await handleAuthRequest(
+        new Request(`http://localhost:5173/api/auth/callback/ebay?code=synthetic&state=${state}`, {
+          headers: { cookie },
+        }),
+        env,
+      );
+      fetchMock.mockRestore();
+
+      expect(response.status).toBe(302);
+      expect(
+        new URL(response.headers.get("location")!, "http://localhost:5173").searchParams.get(
+          "error",
+        ),
+      ).toBe(error);
+      const accounts = await env.DB.prepare(
+        'SELECT COUNT(*) AS total FROM "account" WHERE "providerId" = ?',
+      )
+        .bind("ebay")
+        .first<{ total: number }>();
+      expect(accounts?.total).toBe(0);
+      const created = await env.DB.prepare('SELECT COUNT(*) AS total FROM "user" WHERE "name" = ?')
+        .bind("venditore")
+        .first<{ total: number }>();
+      expect(created?.total).toBe(0);
+    },
+  );
 });
