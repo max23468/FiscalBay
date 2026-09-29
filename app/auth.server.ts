@@ -1,5 +1,6 @@
 import { passkey } from "@better-auth/passkey";
 import { betterAuth, type Auth, type BetterAuthOptions } from "better-auth";
+import { getAuthoritativeSessionFromCtx, getOAuthState } from "better-auth/api";
 import { genericOAuth } from "better-auth/plugins";
 import { waitUntil } from "cloudflare:workers";
 import { z } from "zod";
@@ -73,6 +74,27 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
       encryptOAuthTokens: true,
       accountLinking: {
         allowDifferentEmails: true,
+        // La fiducia permette il linking esplicito; validateUserInfo vieta quello per email.
+        trustedProviders: ["ebay"],
+      },
+    },
+    user: {
+      validateUserInfo: async ({ user, source }, context) => {
+        if (source.oauth?.providerId !== "ebay") return;
+        if (!user.email) return { error: "email_not_found" };
+        if (source.action !== "link-account") return;
+        // Lo state è già validato da Better Auth. Non basta essere autenticati: deve
+        // contenere un linking esplicito per la stessa sessione, ancora valida e verificata.
+        const state = await getOAuthState();
+        if (!state?.link) return { error: "account_not_linked" };
+        const session = await getAuthoritativeSessionFromCtx(context);
+        if (
+          !session?.user.emailVerified ||
+          state.link.userId !== session.user.id ||
+          user.id !== session.user.id
+        ) {
+          return { error: "unable_to_link_account" };
+        }
       },
     },
     emailAndPassword: {

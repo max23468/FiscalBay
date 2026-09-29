@@ -65,6 +65,11 @@ const noticeTones: Record<string, "success" | "info" | "warning" | "danger"> = {
   "password-reimpostata": "success",
   "recupero-scaduto": "warning",
   collegato: "success",
+  "ebay-collegato": "success",
+  "ebay-rimosso": "success",
+  "ultimo-metodo": "warning",
+  "nuovo-accesso": "warning",
+  "accesso-non-verificato": "warning",
 };
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -106,6 +111,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     needsProfile: !status.profile,
     needsAgreement: !status.termsAccepted,
     canLinkStore: session.user.emailVerified && complete,
+    ebayLinked: (await createAuth(env).api.listUserAccounts({ headers: request.headers })).some(
+      (account) => account.providerId === "ebay",
+    ),
     passkeys:
       session.user.emailVerified && complete
         ? (
@@ -290,12 +298,15 @@ function AgreementFields({
   );
 }
 
-function GoogleForm({ t, language }: { t: AccessCopy; language: Language }) {
+function SocialForms({ t, language }: { t: AccessCopy; language: Language }) {
   return (
-    <form method="post" action={localizedPath(language, "/accesso")}>
+    <form method="post" action={localizedPath(language, "/accesso")} className="grid gap-2">
       <Button type="submit" variant="outline" name="intent" value="google" className="w-full">
         <GoogleMark />
         {t.google}
+      </Button>
+      <Button type="submit" variant="outline" name="intent" value="ebay" className="w-full">
+        {t.ebay}
       </Button>
     </form>
   );
@@ -446,7 +457,7 @@ function AccessForms({
           {recovering ? t.signIn : t.passwordRecovery}
         </Button>
         <OrSeparator t={t} />
-        <GoogleForm t={t} language={language} />
+        <SocialForms t={t} language={language} />
         <PasskeyButton t={t} language={language} />
       </TabsContent>
       <TabsContent value="registrati" keepMounted className={cn("grid gap-5", rise)}>
@@ -493,7 +504,7 @@ function AccessForms({
           </FieldGroup>
         </form>
         <OrSeparator t={t} />
-        <GoogleForm t={t} language={language} />
+        <SocialForms t={t} language={language} />
       </TabsContent>
     </Tabs>
   );
@@ -583,14 +594,16 @@ function SignOutForm({ t, language }: { t: AccessCopy; language: Language }) {
   );
 }
 
-function PasskeySecurity({
+function AccountSecurity({
   t,
   language,
   passkeys,
+  ebayLinked,
 }: {
   t: AccessCopy;
   language: Language;
   passkeys: Array<{ id: string; name: string | null; createdAt: string | null }>;
+  ebayLinked: boolean;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
@@ -603,6 +616,7 @@ function PasskeySecurity({
         <CardDescription>{t.passkeyRecovery}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
+        <EbayAccess t={t} language={language} linked={ebayLinked} />
         {passkeys.length ? (
           <ul className="grid divide-y border-y">
             {passkeys.map((passkey) => (
@@ -773,6 +787,37 @@ function BrandPanel({ t }: { t: AccessCopy }) {
 
 const errorTones = new Set(["danger", "warning"]);
 
+function EbayAccess({
+  t,
+  language,
+  linked,
+}: {
+  t: AccessCopy;
+  language: Language;
+  linked: boolean;
+}) {
+  return (
+    <section aria-labelledby="ebay-access-title" className="grid gap-2 rounded-lg border p-4">
+      <h3 id="ebay-access-title" className="font-semibold">
+        {t.ebayAccessTitle}
+      </h3>
+      <p className="text-sm text-muted-foreground">
+        {linked ? t.ebayAccessConnected : t.ebayAccessBody}
+      </p>
+      <form method="post" action={localizedPath(language, "/accesso")}>
+        <Button
+          type="submit"
+          variant="outline"
+          name="intent"
+          value={linked ? "rimuovi-accesso-ebay" : "collega-accesso-ebay"}
+        >
+          {linked ? t.ebayAccessRemove : t.ebayAccessLink}
+        </Button>
+      </form>
+    </section>
+  );
+}
+
 function AccessPanel({
   loaderData,
   t,
@@ -937,7 +982,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </section>
         )}
         {loaderData.emailVerified ? (
-          <PasskeySecurity t={t} language={language} passkeys={loaderData.passkeys} />
+          <AccountSecurity
+            t={t}
+            language={language}
+            passkeys={loaderData.passkeys}
+            ebayLinked={loaderData.ebayLinked}
+          />
         ) : null}
       </main>
     </div>
