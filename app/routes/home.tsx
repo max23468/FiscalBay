@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { cn } from "cn";
-import { ClipboardList, Copy, LogOut, Plus, ShieldCheck, Store } from "lucide-react";
+import { ClipboardList, Copy, KeyRound, LogOut, Plus, ShieldCheck, Store } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { IconTile } from "~/components/icon-tile";
@@ -59,6 +59,11 @@ const noticeTones: Record<string, "success" | "info" | "warning" | "danger"> = {
   "altro-spazio": "warning",
   registrato: "success",
   "verifica-inviata": "success",
+  "passkey-rimossa": "success",
+  "ultimo-accesso": "warning",
+  "recupero-inviato": "info",
+  "password-reimpostata": "success",
+  "recupero-scaduto": "warning",
   collegato: "success",
 };
 
@@ -71,10 +76,19 @@ export async function loader({ request }: Route.LoaderArgs) {
   const text =
     access.signInNotices[search.get("accesso") ?? ""] ??
     access.storeNotices[search.get("negozio") ?? ""] ??
+    (search.has("error") ? access.signInNotices["recupero-scaduto"] : null) ??
     null;
-  const notice = text ? { text, tone: noticeTones[key] ?? "info" } : null;
-  if (!session) {
-    return { authenticated: false as const, language, notice, orders: [] };
+  const notice = text
+    ? { text, tone: noticeTones[search.has("error") ? "recupero-scaduto" : key] ?? "info" }
+    : null;
+  if (!session || search.has("token")) {
+    return {
+      authenticated: false as const,
+      language,
+      notice,
+      orders: [],
+      resetToken: search.get("token") || null,
+    };
   }
   // Finché mancano profilo o Termini correnti l'utente vede solo il passaggio per completarli.
   const status = await registrationStatus(env.DB, session.user.id);
@@ -92,6 +106,16 @@ export async function loader({ request }: Route.LoaderArgs) {
     needsProfile: !status.profile,
     needsAgreement: !status.termsAccepted,
     canLinkStore: session.user.emailVerified && complete,
+    passkeys:
+      session.user.emailVerified && complete
+        ? (
+            await env.DB.prepare(
+              'SELECT "id", "name", "createdAt" FROM "passkey" WHERE "userId" = ? ORDER BY "createdAt" DESC',
+            )
+              .bind(session.user.id)
+              .all<{ id: string; name: string | null; createdAt: string | null }>()
+          ).results
+        : [],
     suggestedName: { firstName, lastName: lastName.join(" ") },
     orders: complete ? await listVisibleOrders(env.DB, session.user.id) : [],
   };
@@ -277,6 +301,42 @@ function GoogleForm({ t, language }: { t: AccessCopy; language: Language }) {
   );
 }
 
+function PasskeyButton({ t, language }: { t: AccessCopy; language: Language }) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState(false);
+  return (
+    <div className="grid gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        disabled={pending}
+        onClick={async () => {
+          setPending(true);
+          setError(false);
+          try {
+            const { authClient } = await import("../passkey-client");
+            const result = await authClient.signIn.passkey();
+            if (result.error) setError(true);
+            else window.location.assign(localizedPath(language));
+          } catch {
+            setError(true);
+          } finally {
+            setPending(false);
+          }
+        }}
+      >
+        <KeyRound aria-hidden="true" data-icon="inline-start" />
+        {t.passkeySignIn}
+      </Button>
+      {error ? (
+        <p role="alert" className="text-sm text-danger">
+          {t.passkeyFailed}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 /** Marchio Google nei colori ufficiali, come richiesto dalle linee guida del pulsante. */
 function GoogleMark() {
   return (
@@ -320,6 +380,7 @@ function AccessForms({
   remembered: Remembered | null;
 }) {
   const [tab, setTab] = useState("accedi");
+  const [recovering, setRecovering] = useState(false);
   const [restored, setRestored] = useState<Remembered | null>(null);
   if (remembered && remembered !== restored) {
     setRestored(remembered);
@@ -333,7 +394,9 @@ function AccessForms({
         <TabsTrigger value="registrati">{t.signUp}</TabsTrigger>
       </TabsList>
       <TabsContent value="accedi" keepMounted className={cn("grid gap-5", rise)}>
-        <p className="text-muted-foreground">{t.signInBody}</p>
+        <p className="text-muted-foreground">
+          {recovering ? t.passwordRecoveryBody : t.signInBody}
+        </p>
         <form
           key={restored ? "restored" : "empty"}
           method="post"
@@ -352,23 +415,39 @@ function AccessForms({
                 required
               />
             </Field>
-            <Field>
-              <FieldLabel htmlFor="password">{t.password}</FieldLabel>
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-              />
-            </Field>
-            <Button type="submit" className="w-full">
-              {t.signIn}
+            {recovering ? null : (
+              <Field>
+                <FieldLabel htmlFor="password">{t.password}</FieldLabel>
+                <Input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                />
+              </Field>
+            )}
+            <Button
+              type="submit"
+              className="w-full"
+              name={recovering ? "intent" : undefined}
+              value={recovering ? "recupera-password" : undefined}
+            >
+              {recovering ? t.passwordRecoverySend : t.signIn}
             </Button>
           </FieldGroup>
         </form>
+        <Button
+          type="button"
+          variant="link"
+          className="w-fit px-0"
+          onClick={() => setRecovering(!recovering)}
+        >
+          {recovering ? t.signIn : t.passwordRecovery}
+        </Button>
         <OrSeparator t={t} />
         <GoogleForm t={t} language={language} />
+        <PasskeyButton t={t} language={language} />
       </TabsContent>
       <TabsContent value="registrati" keepMounted className={cn("grid gap-5", rise)}>
         <p className="text-muted-foreground">{t.signUpBody}</p>
@@ -417,6 +496,38 @@ function AccessForms({
         <GoogleForm t={t} language={language} />
       </TabsContent>
     </Tabs>
+  );
+}
+
+function ResetPassword({
+  t,
+  language,
+  token,
+}: {
+  t: AccessCopy;
+  language: Language;
+  token: string;
+}) {
+  return (
+    <form method="post" action={localizedPath(language, "/accesso")} className="grid gap-4">
+      <h2 className="text-xl font-semibold">{t.passwordRecovery}</h2>
+      <input type="hidden" name="token" value={token} />
+      <Field>
+        <FieldLabel htmlFor="reset-password">{t.newPassword}</FieldLabel>
+        <Input
+          id="reset-password"
+          name="password"
+          type="password"
+          autoComplete="new-password"
+          minLength={8}
+          maxLength={128}
+          required
+        />
+      </Field>
+      <Button type="submit" name="intent" value="reimposta-password">
+        {t.passwordRecoveryConfirm}
+      </Button>
+    </form>
   );
 }
 
@@ -469,6 +580,84 @@ function SignOutForm({ t, language }: { t: AccessCopy; language: Language }) {
         {t.signOut}
       </Button>
     </form>
+  );
+}
+
+function PasskeySecurity({
+  t,
+  language,
+  passkeys,
+}: {
+  t: AccessCopy;
+  language: Language;
+  passkeys: Array<{ id: string; name: string | null; createdAt: string | null }>;
+}) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState(false);
+  return (
+    <Card id="sicurezza" className="max-w-xl">
+      <CardHeader>
+        <CardTitle>
+          <h2>{t.passkeySecurity}</h2>
+        </CardTitle>
+        <CardDescription>{t.passkeyRecovery}</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {passkeys.length ? (
+          <ul className="grid divide-y border-y">
+            {passkeys.map((passkey) => (
+              <li key={passkey.id} className="flex items-center justify-between gap-3 py-3">
+                <span className="text-sm">
+                  {passkey.name || t.passkeyLabel}
+                  {passkey.createdAt ? ` · ${formatDate(passkey.createdAt, language)}` : ""}
+                </span>
+                <form method="post" action={localizedPath(language, "/accesso")}>
+                  <input type="hidden" name="id" value={passkey.id} />
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    size="sm"
+                    name="intent"
+                    value="passkey-remove"
+                  >
+                    {t.passkeyRemove}
+                  </Button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">{t.passkeyEmpty}</p>
+        )}
+        <Button
+          type="button"
+          className="w-fit"
+          disabled={pending}
+          onClick={async () => {
+            setPending(true);
+            setError(false);
+            try {
+              const { authClient } = await import("../passkey-client");
+              const result = await authClient.passkey.addPasskey();
+              if (result.error) setError(true);
+              else window.location.reload();
+            } catch {
+              setError(true);
+            } finally {
+              setPending(false);
+            }
+          }}
+        >
+          <KeyRound aria-hidden="true" data-icon="inline-start" />
+          {t.passkeyAdd}
+        </Button>
+        {error ? (
+          <p role="alert" className="text-sm text-danger">
+            {t.passkeyFailed}
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -584,6 +773,35 @@ function BrandPanel({ t }: { t: AccessCopy }) {
 
 const errorTones = new Set(["danger", "warning"]);
 
+function AccessPanel({
+  loaderData,
+  t,
+  language,
+  remembered,
+}: {
+  loaderData: Awaited<ReturnType<typeof loader>>;
+  t: AccessCopy;
+  language: Language;
+  remembered: Remembered | null;
+}) {
+  if (loaderData.authenticated) {
+    return (
+      <CompleteRegistration
+        t={t}
+        language={language}
+        needsProfile={loaderData.needsProfile}
+        needsAgreement={loaderData.needsAgreement}
+        suggestedName={loaderData.suggestedName}
+        remembered={remembered}
+      />
+    );
+  }
+  if (loaderData.resetToken) {
+    return <ResetPassword t={t} language={language} token={loaderData.resetToken} />;
+  }
+  return <AccessForms t={t} language={language} remembered={remembered} />;
+}
+
 export default function Home({ loaderData }: Route.ComponentProps) {
   const { language, notice } = loaderData;
   const t = appCopy[language].access;
@@ -617,18 +835,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               />
             ) : null}
             <div className={cn("rounded-2xl border bg-card p-5 shadow-sm sm:p-7", rise)}>
-              {loaderData.authenticated ? (
-                <CompleteRegistration
-                  t={t}
-                  language={language}
-                  needsProfile={loaderData.needsProfile}
-                  needsAgreement={loaderData.needsAgreement}
-                  suggestedName={loaderData.suggestedName}
-                  remembered={remembered}
-                />
-              ) : (
-                <AccessForms t={t} language={language} remembered={remembered} />
-              )}
+              <AccessPanel
+                loaderData={loaderData}
+                t={t}
+                language={language}
+                remembered={remembered}
+              />
             </div>
             {loaderData.authenticated ? <SignOutForm t={t} language={language} /> : null}
           </div>
@@ -644,6 +856,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           <Logo className="h-6 w-auto" />
           <div className="flex items-center gap-2">
             <LanguageNav t={t} language={language} />
+            {loaderData.emailVerified ? (
+              <a href="#sicurezza" className="text-sm underline underline-offset-4">
+                {t.passkeySecurity}
+              </a>
+            ) : null}
             <SignOutForm t={t} language={language} />
           </div>
         </div>
@@ -719,6 +936,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             ))}
           </section>
         )}
+        {loaderData.emailVerified ? (
+          <PasskeySecurity t={t} language={language} passkeys={loaderData.passkeys} />
+        ) : null}
       </main>
     </div>
   );

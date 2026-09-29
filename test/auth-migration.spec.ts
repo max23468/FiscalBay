@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { handleAuthRequest } from "../app/auth-route.server";
 import { createAuth, createAuthOptions } from "../app/auth.server";
+import { completeRegistration } from "../app/domain/registration.server";
+import { action as signInAction } from "../app/routes/sign-in";
 
 it("mantiene lo schema D1 allineato ai quattro metodi Auth", async () => {
   const migration = await getMigrations(createAuthOptions(env));
@@ -110,6 +112,193 @@ describe("Better Auth su Workers e D1", () => {
       new Request("http://localhost:5173/api/auth/passkey/generate-register-options"),
     );
     expect(response.status).toBe(401);
+  });
+
+  it("registra passkey solo dopo verifica e protegge l'ultimo accesso", async () => {
+    const origin = "http://localhost:5173";
+    const signup = await createAuth(env).handler(
+      new Request(`${origin}/api/auth/sign-up/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Utente passkey",
+          email: "passkey@example.invalid",
+          password: "password-di-prova-lunga",
+        }),
+      }),
+    );
+    expect(signup.status).toBe(200);
+    const cookie = signup.headers
+      .getSetCookie()
+      .map((value) => value.split(";")[0])
+      .join("; ");
+    const user = await env.DB.prepare('SELECT "id" FROM "user" WHERE "email" = ?')
+      .bind("passkey@example.invalid")
+      .first<{ id: string }>();
+    expect(user).not.toBeNull();
+    const id = user!.id;
+    const options = () =>
+      handleAuthRequest(
+        new Request(`${origin}/api/auth/passkey/generate-register-options`, {
+          headers: { cookie },
+        }),
+        env,
+      );
+    expect((await options()).status).toBe(403);
+    const trailing = await handleAuthRequest(
+      new Request(`${origin}/api/auth/passkey/generate-register-options/`, {
+        headers: { cookie },
+      }),
+      env,
+    );
+    expect(trailing.status).toBe(404);
+    await completeRegistration(env.DB, {
+      userId: id,
+      language: "it",
+      now: new Date(),
+      profile: {
+        firstName: "Utente",
+        lastName: "Passkey",
+        accountType: "private",
+        companyName: null,
+      },
+      agreement: { marketing: false },
+    });
+    expect((await options()).status).toBe(403);
+    await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE "id" = ?').bind(id).run();
+    const response = await options();
+    expect(response.status).toBe(200);
+    expect((await response.json<{ rp: { id: string } }>()).rp.id).toBe("localhost");
+
+    await env.DB.prepare('DELETE FROM "account" WHERE "userId" = ?').bind(id).run();
+    for (const passkeyId of ["first", "second"]) {
+      await env.DB.prepare(
+        `INSERT INTO "passkey" ("id", "publicKey", "userId", "credentialID", "counter", "deviceType", "backedUp")
+         VALUES (?, 'synthetic', ?, ?, 0, 'singleDevice', 0)`,
+      )
+        .bind(passkeyId, id, passkeyId)
+        .run();
+    }
+    const remove = (passkeyId: string) =>
+      signInAction({
+        request: new Request(`${origin}/accesso`, {
+          method: "POST",
+          headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ intent: "passkey-remove", id: passkeyId }),
+        }),
+      } as never);
+    expect((await remove("first")).headers.get("location")).toContain("passkey-rimossa");
+    expect((await remove("second")).headers.get("location")).toContain("ultimo-accesso");
+    await env.DB.prepare(
+      `INSERT INTO "account" ("id", "accountId", "providerId", "userId", "password", "createdAt", "updatedAt")
+       VALUES ('empty-credential', ?, 'credential', ?, '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+    )
+      .bind(id, id)
+      .run();
+    expect((await remove("second")).headers.get("location")).toContain("ultimo-accesso");
+    expect((await remove("foreign-passkey")).headers.get("location")).toContain("ultimo-accesso");
+    const remaining = await env.DB.prepare('SELECT "id" FROM "passkey" WHERE "userId" = ?')
+      .bind(id)
+      .all<{ id: string }>();
+    expect(remaining.results.map((row) => row.id)).toEqual(["second"]);
+    expect(
+      (
+        await handleAuthRequest(
+          new Request(`${origin}/api/auth/passkey/delete-passkey`, { method: "POST" }),
+          env,
+        )
+      ).status,
+    ).toBe(404);
+  });
+
+  it("recupera l'accesso con una password nuova e revoca le sessioni precedenti", async () => {
+    const origin = "http://localhost:5173";
+    const auth = createAuth(env);
+    const signup = await auth.handler(
+      new Request(`${origin}/api/auth/sign-up/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Utente recupero",
+          email: "recovery@example.invalid",
+          password: "password-precedente-lunga",
+        }),
+      }),
+    );
+    expect(signup.ok).toBe(true);
+    const { user } = await signup.json<{ user: { id: string } }>();
+    const cookie = signup.headers
+      .getSetCookie()
+      .map((value) => value.split(";")[0])
+      .join("; ");
+    const context = await auth.$context;
+    await context.internalAdapter.createVerificationValue({
+      identifier: "reset-password:synthetic-recovery-token",
+      value: user.id,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    const reset = () =>
+      signInAction({
+        request: new Request(`${origin}/accesso`, {
+          method: "POST",
+          headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            intent: "reimposta-password",
+            token: "synthetic-recovery-token",
+            password: "password-recuperata-lunga",
+          }),
+        }),
+      } as never);
+    expect((await reset()).headers.get("location")).toContain("password-reimpostata");
+    expect(await auth.api.getSession({ headers: new Headers({ cookie }) })).toBeNull();
+    expect((await reset()).headers.get("location")).toContain("recupero-scaduto");
+    const signIn = (password: string) =>
+      auth.handler(
+        new Request(`${origin}/api/auth/sign-in/email`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email: "recovery@example.invalid", password }),
+        }),
+      );
+    expect((await signIn("password-precedente-lunga")).status).toBe(401);
+    expect((await signIn("password-recuperata-lunga")).ok).toBe(true);
+  });
+
+  it("limita le verifiche WebAuthn e rifiuta origini estranee senza creare identità", async () => {
+    const before = await env.DB.prepare('SELECT COUNT(*) AS count FROM "passkey"').first();
+    const origin = "https://test.fiscalbay.it";
+    const deployed = { ...env, APP_ORIGIN: origin };
+    const attempt = (requestOrigin: string) =>
+      handleAuthRequest(
+        new Request(`${origin}/api/auth/passkey/verify-authentication`, {
+          method: "POST",
+          headers: {
+            origin: requestOrigin,
+            "content-type": "application/json",
+            "cf-connecting-ip": "203.0.113.45",
+            cookie: "origin-probe=synthetic",
+          },
+          body: JSON.stringify({ response: {} }),
+        }),
+        deployed,
+      );
+    expect((await attempt("https://foreign.invalid")).status).toBe(403);
+    expect((await attempt(origin)).ok).toBe(false);
+    expect((await attempt(origin)).ok).toBe(false);
+    const limited = await attempt(origin);
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toMatch(/^\d+$/u);
+    expect(await env.DB.prepare('SELECT COUNT(*) AS count FROM "passkey"').first()).toEqual(before);
+    const options = await handleAuthRequest(
+      new Request(`${origin}/api/auth/passkey/generate-authenticate-options`),
+      deployed,
+    );
+    expect((await options.json<{ rpId: string }>()).rpId).toBe("test.fiscalbay.it");
+    const production = await handleAuthRequest(
+      new Request("https://fiscalbay.it/api/auth/passkey/generate-authenticate-options"),
+      { ...env, APP_ORIGIN: "https://fiscalbay.it" },
+    );
+    expect((await production.json<{ rpId: string }>()).rpId).toBe("fiscalbay.it");
   });
 
   it.each([

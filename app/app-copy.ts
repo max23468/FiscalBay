@@ -586,6 +586,20 @@ const it = {
     newPassword: "Password (almeno 8 caratteri)",
     or: "oppure",
     google: "Continua con Google",
+    passkeySignIn: "Accedi con passkey",
+    passkeySecurity: "Sicurezza",
+    passkeyRecovery:
+      "Se perdi una passkey, accedi con email e password o Google, aggiungine un’altra e rimuovi quella persa.",
+    passkeyLabel: "Passkey",
+    passkeyAdd: "Aggiungi passkey",
+    passkeyRemove: "Rimuovi",
+    passkeyEmpty: "Nessuna passkey aggiunta.",
+    passkeyFailed: "Operazione passkey non riuscita. Riprova sul tuo dispositivo.",
+    passwordRecovery: "Hai dimenticato la password?",
+    passwordRecoveryBody:
+      "Inserisci l’email del tuo account. Se esiste, riceverai un link per scegliere una nuova password.",
+    passwordRecoverySend: "Invia il link",
+    passwordRecoveryConfirm: "Salva nuova password",
     signOut: "Esci",
     linkStore: "Collega negozio eBay",
     terms: {
@@ -625,6 +639,12 @@ const it = {
       dati: "Indica nome, cognome e, per un’azienda, la ragione sociale.",
       "troppi-tentativi": "Troppi tentativi. Riprova tra qualche minuto.",
       "verifica-inviata": "Link di conferma inviato. Controlla la posta.",
+      "passkey-rimossa": "Passkey rimossa.",
+      "ultimo-accesso":
+        "Serve almeno un metodo di accesso. Aggiungine un altro prima di rimuovere questa passkey.",
+      "recupero-inviato": "Se l’account esiste, riceverai un link per reimpostare la password.",
+      "password-reimpostata": "Password aggiornata. Accedi con la nuova password.",
+      "recupero-scaduto": "Link non valido o scaduto. Richiedine uno nuovo.",
     } as Record<string, string>,
   },
 };
@@ -1191,6 +1211,20 @@ const en: AppCopy = {
     newPassword: "Password (at least 8 characters)",
     or: "or",
     google: "Continue with Google",
+    passkeySignIn: "Sign in with a passkey",
+    passkeySecurity: "Security",
+    passkeyRecovery:
+      "If you lose a passkey, sign in with email and password or Google, add another, then remove the lost passkey.",
+    passkeyLabel: "Passkey",
+    passkeyAdd: "Add passkey",
+    passkeyRemove: "Remove",
+    passkeyEmpty: "No passkeys added.",
+    passkeyFailed: "Passkey operation failed. Try again on your device.",
+    passwordRecovery: "Forgot your password?",
+    passwordRecoveryBody:
+      "Enter your account email. If it exists, we will send a link to set a new password.",
+    passwordRecoverySend: "Send link",
+    passwordRecoveryConfirm: "Save new password",
     signOut: "Sign out",
     linkStore: "Connect eBay store",
     terms: {
@@ -1230,6 +1264,12 @@ const en: AppCopy = {
       dati: "Enter your first and last name and, for a business, the company name.",
       "troppi-tentativi": "Too many attempts. Try again in a few minutes.",
       "verifica-inviata": "Confirmation link sent. Check your inbox.",
+      "passkey-rimossa": "Passkey removed.",
+      "ultimo-accesso":
+        "At least one sign-in method is required. Add another before removing this passkey.",
+      "recupero-inviato": "If the account exists, you will receive a password reset link.",
+      "password-reimpostata": "Password updated. Sign in with your new password.",
+      "recupero-scaduto": "This link is invalid or expired. Request a new one.",
     },
   },
 };
