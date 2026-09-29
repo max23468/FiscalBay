@@ -606,8 +606,8 @@ function MethodRow({
   children: React.ReactNode;
 }) {
   return (
-    <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
-      <span className="grid min-w-0 flex-1 basis-48">
+    <li className="flex flex-col items-start gap-x-4 gap-y-2 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+      <span className="grid min-w-0 sm:flex-1 sm:basis-48">
         <span className="font-medium">{label}</span>
         <span className="text-sm text-muted-foreground">{status}</span>
         {hint ? <span className="text-sm text-muted-foreground">{hint}</span> : null}
@@ -666,8 +666,8 @@ function EmailChange({ language, email }: { language: Language; email: string })
   const opener = useRef<HTMLButtonElement>(null);
   return (
     <SecurityGroup id="security-email" title={profile.email}>
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <span className="min-w-0 flex-1 basis-48 break-all">{email}</span>
+      <div className="flex flex-col items-start gap-x-4 gap-y-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <span className="min-w-0 break-all sm:flex-1 sm:basis-48">{email}</span>
         {open ? null : (
           <Button
             ref={opener}
