@@ -102,4 +102,21 @@ describe("errors, locale and redacted logs", () => {
     expect(formatAmount(12345, "EUR", "en")).toContain("123.45");
     expect(() => formatDate("bad", "it")).toThrow();
   });
+
+  it("keeps the date-time separator stable when browser ICU uses a different combined pattern", () => {
+    const original = Intl.DateTimeFormat;
+    const spy = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function (locales, options) {
+      const formatter = new original(locales, options);
+      if (options?.dateStyle && options.timeStyle) {
+        return { ...formatter, format: () => "Sep 26, 2026 at 2:30 PM" } as Intl.DateTimeFormat;
+      }
+      return formatter;
+    });
+    try {
+      expect(formatDate("2026-09-26T12:30:00.000Z", "en")).toBe("Sep 26, 2026, 2:30 PM");
+      expect(formatDate("2026-09-26T12:30:00.000Z", "it")).toBe("26 set 2026, 14:30");
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });

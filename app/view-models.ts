@@ -221,12 +221,13 @@ export function formatDate(
   language: Language,
   style: "date" | "dateTime" | "time" = "dateTime",
 ): string {
+  // Il pattern combinato varia fra versioni ICU (virgola oppure "at" in inglese).
+  // Un separatore esplicito conserva lo stesso testo fra server e browser.
+  if (style === "dateTime") {
+    return `${formatDate(value, language, "date")}, ${formatDate(value, language, "time")}`;
+  }
   const options: Intl.DateTimeFormatOptions =
-    style === "date"
-      ? { dateStyle: "medium" }
-      : style === "time"
-        ? { timeStyle: "short" }
-        : { dateStyle: "medium", timeStyle: "short" };
+    style === "date" ? { dateStyle: "medium" } : { timeStyle: "short" };
   return new Intl.DateTimeFormat(language, { ...options, timeZone: displayTimeZone }).format(
     new Date(value),
   );
