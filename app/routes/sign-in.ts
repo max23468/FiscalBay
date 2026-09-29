@@ -33,6 +33,39 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (intent === "esci") return withCookies(base, await forward("/sign-out"));
 
+  if (intent === "rimuovi-accesso-ebay") {
+    const auth = createAuth(env);
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (!session?.user.emailVerified) return notice("accesso-non-verificato");
+    const accounts = await auth.api.listUserAccounts({ headers: request.headers });
+    const account = accounts.find((item) => item.providerId === "ebay");
+    if (!account) return notice("errore");
+    const response = await forward("/unlink-account", { accountId: account.id });
+    if (!response.ok) {
+      const error = await response.json<{ code?: string }>();
+      return notice(
+        error.code === "FAILED_TO_UNLINK_LAST_ACCOUNT" ? "ultimo-metodo" : "nuovo-accesso",
+      );
+    }
+    return notice("ebay-rimosso");
+  }
+
+  if (intent === "google" || intent === "ebay" || intent === "collega-accesso-ebay") {
+    const linking = intent === "collega-accesso-ebay";
+    if (linking) {
+      const session = await createAuth(env).api.getSession({ headers: request.headers });
+      if (!session?.user.emailVerified) return notice("accesso-non-verificato");
+    }
+    const response = await forward(linking ? "/link-social" : "/sign-in/social", {
+      provider: intent === "google" ? "google" : "ebay",
+      callbackURL: linking ? `${base}?accesso=ebay-collegato` : base,
+      errorCallbackURL: localizedPath(language, "/auth/error"),
+    });
+    if (!response.ok) return notice(response.status === 429 ? "troppi-tentativi" : "errore");
+    const { url } = await response.clone().json<{ url: string }>();
+    return withCookies(url, response);
+  }
+
   if (intent === "recupera-password") {
     const response = await forward("/request-password-reset", {
       email: field("email"),
@@ -68,13 +101,6 @@ export async function action({ request }: Route.ActionArgs) {
       .bind(id, session.user.id)
       .first<{ id: string }>();
     return redirect(`${base}?accesso=${removed ? "passkey-rimossa" : "ultimo-accesso"}`, 303);
-  }
-
-  if (intent === "google") {
-    const response = await forward("/sign-in/social", { provider: "google", callbackURL: base });
-    if (!response.ok) return notice(response.status === 429 ? "troppi-tentativi" : "errore");
-    const { url } = await response.clone().json<{ url: string }>();
-    return withCookies(url, response);
   }
 
   if (intent === "registrati") {
