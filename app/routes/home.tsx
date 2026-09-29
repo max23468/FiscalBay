@@ -852,9 +852,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   return (
     <div className="min-h-dvh">
       <header className="border-b">
-        <div className="mx-auto flex h-14 w-[min(72rem,calc(100%-2rem))] items-center justify-between gap-4">
+        <div className="mx-auto flex min-h-14 w-[min(72rem,calc(100%-2rem))] flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2">
           <Logo className="h-6 w-auto" />
-          <div className="flex items-center gap-2">
+          <div className="flex max-w-full flex-wrap items-center gap-2">
             <LanguageNav t={t} language={language} />
             {loaderData.emailVerified ? (
               <a href="#sicurezza" className="text-sm underline underline-offset-4">
