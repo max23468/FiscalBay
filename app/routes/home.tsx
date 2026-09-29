@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { cn } from "cn";
-import { ClipboardList, Copy, KeyRound, LogOut, Plus, ShieldCheck, Store } from "lucide-react";
+import { ClipboardList, Copy, KeyRound, LogOut, Plus, Store } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { IconTile } from "~/components/icon-tile";
@@ -737,7 +737,7 @@ function LanguageNav({ t, language }: { t: AccessCopy; language: Language }) {
 }
 
 const featureIcons = [
-  { Icon: ShieldCheck, className: "text-brand-sky" },
+  { Icon: ClipboardList, className: "text-brand-sky" },
   { Icon: Copy, className: "text-[#f5c451]" },
   { Icon: Store, className: "text-[#5fd0c9]" },
 ];
