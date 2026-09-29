@@ -401,7 +401,10 @@ function PlanSection({
               note: t.settings.priceLifetimeNote,
             },
           ].map(({ plan, price, note }) => (
-            <li key={price} className="grid content-start gap-3 rounded-xl border bg-card p-4">
+            <li
+              key={price}
+              className="grid grid-rows-[1fr_auto] gap-3 rounded-xl border bg-card p-4"
+            >
               <span className="grid gap-1">
                 <span className="font-code text-base font-semibold">{price}</span>
                 <span className="text-sm text-muted-foreground">{note}</span>
