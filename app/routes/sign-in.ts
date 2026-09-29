@@ -8,6 +8,12 @@ import {
   parseProfile,
   registrationStatus,
 } from "../domain/registration.server";
+import {
+  accountMethods,
+  removeAccountMethod,
+  removePasskey,
+  type AccountMethod,
+} from "../domain/sign-in-methods.server";
 import { errorResponse } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
 import type { Route } from "./+types/sign-in";
@@ -33,37 +39,70 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (intent === "esci") return withCookies(base, await forward("/sign-out"));
 
-  if (intent === "rimuovi-accesso-ebay") {
-    const auth = createAuth(env);
-    const session = await auth.api.getSession({ headers: request.headers });
-    if (!session?.user.emailVerified) return notice("accesso-non-verificato");
-    const accounts = await auth.api.listUserAccounts({ headers: request.headers });
-    const account = accounts.find((item) => item.providerId === "ebay");
-    if (!account) return notice("errore");
-    const response = await forward("/unlink-account", { accountId: account.id });
-    if (!response.ok) {
-      const error = await response.json<{ code?: string }>();
-      return notice(
-        error.code === "FAILED_TO_UNLINK_LAST_ACCOUNT" ? "ultimo-metodo" : "nuovo-accesso",
-      );
-    }
-    return notice("ebay-rimosso");
-  }
-
-  if (intent === "google" || intent === "ebay" || intent === "collega-accesso-ebay") {
-    const linking = intent === "collega-accesso-ebay";
-    if (linking) {
-      const session = await createAuth(env).api.getSession({ headers: request.headers });
-      if (!session?.user.emailVerified) return notice("accesso-non-verificato");
-    }
-    const response = await forward(linking ? "/link-social" : "/sign-in/social", {
-      provider: intent === "google" ? "google" : "ebay",
-      callbackURL: linking ? `${base}?accesso=ebay-collegato` : base,
+  if (intent === "google" || intent === "ebay") {
+    const response = await forward("/sign-in/social", {
+      provider: intent,
+      callbackURL: base,
       errorCallbackURL: localizedPath(language, "/auth/error"),
     });
     if (!response.ok) return notice(response.status === 429 ? "troppi-tentativi" : "errore");
     const { url } = await response.clone().json<{ url: string }>();
     return withCookies(url, response);
+  }
+
+  if (
+    intent === "collega-metodo" ||
+    intent === "rimuovi-metodo" ||
+    intent === "password" ||
+    intent === "cambia-email"
+  ) {
+    const session = await createAuth(env).api.getSession({ headers: request.headers });
+    if (!session?.user.emailVerified) return notice("accesso-non-verificato");
+    const method = field("metodo");
+
+    if (intent === "collega-metodo") {
+      if (method !== "google" && method !== "ebay") return notice("errore");
+      const response = await forward("/link-social", {
+        provider: method,
+        callbackURL: `${base}?accesso=metodo-collegato`,
+        errorCallbackURL: localizedPath(language, "/auth/error"),
+      });
+      if (!response.ok) return notice(response.status === 429 ? "troppi-tentativi" : "errore");
+      const { url } = await response.clone().json<{ url: string }>();
+      return withCookies(url, response);
+    }
+
+    if (intent === "rimuovi-metodo") {
+      if (!Object.hasOwn(accountMethods, method)) return notice("errore");
+      // Come la route di Better Auth che sostituisce: serve un accesso delle ultime 24 ore.
+      if (Date.now() - new Date(session.session.createdAt).getTime() >= 86_400_000) {
+        return notice("nuovo-accesso");
+      }
+      const removed = await removeAccountMethod(env.DB, session.user.id, method as AccountMethod);
+      if (!removed) return notice("ultimo-metodo");
+      return notice(method === "ebay" ? "ebay-rimosso" : "metodo-rimosso");
+    }
+
+    if (intent === "password") {
+      // Il link al proprio indirizzo imposta o cambia la password; al reset crea l'account
+      // credential che manca a chi è entrato con Google, eBay o passkey.
+      const response = await forward("/request-password-reset", {
+        email: session.user.email,
+        redirectTo: `${new URL(env.APP_ORIGIN).origin}${base}`,
+      });
+      if (response.status === 429) return notice("troppi-tentativi");
+      return notice(response.ok ? "password-link" : "errore");
+    }
+
+    const email = field("email").trim();
+    if (!email || email.length > 254) return notice("email-non-valida");
+    const response = await forward("/change-email", {
+      newEmail: email,
+      callbackURL: `${base}?accesso=email-confermata`,
+    });
+    if (response.status === 429) return notice("troppi-tentativi");
+    // La risposta non distingue un indirizzo già registrato: non rivela chi usa FiscalBay.
+    return notice(response.ok ? "email-richiesta" : "email-non-valida");
   }
 
   if (intent === "recupera-password") {
@@ -91,16 +130,8 @@ export async function action({ request }: Route.ActionArgs) {
     if (!session?.user.emailVerified) return notice("errore");
     const id = field("id");
     if (!id || id.length > 128) return notice("errore");
-    const removed = await env.DB.prepare(
-      `DELETE FROM "passkey" WHERE "id" = ?1 AND "userId" = ?2
-       AND (EXISTS (SELECT 1 FROM "account" WHERE "userId" = ?2
-         AND ("providerId" IN ('google', 'ebay') OR ("providerId" = 'credential' AND LENGTH("password") > 0)))
-         OR (SELECT COUNT(*) FROM "passkey" WHERE "userId" = ?2) > 1)
-       RETURNING "id"`,
-    )
-      .bind(id, session.user.id)
-      .first<{ id: string }>();
-    return redirect(`${base}?accesso=${removed ? "passkey-rimossa" : "ultimo-accesso"}`, 303);
+    const removed = await removePasskey(env.DB, session.user.id, id);
+    return notice(removed ? "passkey-rimossa" : "ultimo-accesso");
   }
 
   if (intent === "registrati") {

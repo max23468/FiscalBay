@@ -6,7 +6,14 @@ import { completeStoreLink, takeStoreLinkSession } from "./integrations/ebay/sto
 import { classifyFailure, logFailure } from "./errors";
 import { localizedPath } from "./i18n";
 
-const serverOnlyAuthPaths = new Set(["/api/auth/get-access-token", "/api/auth/refresh-token"]);
+// I token OAuth restano al codice server; metodi e passkey si rimuovono dalle azioni dell'app,
+// che conservano sempre un accesso valido.
+const closedAuthPaths = new Set([
+  "/api/auth/get-access-token",
+  "/api/auth/refresh-token",
+  "/api/auth/passkey/delete-passkey",
+  "/api/auth/unlink-account",
+]);
 const passkeyEnrollmentPaths = new Set([
   "/api/auth/passkey/generate-register-options",
   "/api/auth/passkey/verify-registration",
@@ -150,8 +157,7 @@ export function handleAuthRequest(
   fetcher: typeof fetch = fetch,
 ): Promise<Response> | Response {
   const pathname = new URL(request.url).pathname.replace(/\/+$/u, "");
-  if (pathname === "/api/auth/passkey/delete-passkey") return new Response(null, { status: 404 });
-  if (serverOnlyAuthPaths.has(pathname)) return new Response(null, { status: 404 });
+  if (closedAuthPaths.has(pathname)) return new Response(null, { status: 404 });
   if (pathname !== ebayCallbackPath) return authResponse(request, environment);
   return handleEbayCallback(request, environment, fetcher);
 }

@@ -737,7 +737,6 @@ describe("registrazione e verifica del contatto", () => {
       .run();
     expect(await homeFor(cookie)).toMatchObject({
       needsProfile: true,
-      ebayLinked: true,
       suggestedName: { firstName: "", lastName: "" },
     });
     const blocked = (await startStoreLink({
@@ -877,12 +876,12 @@ describe("registrazione e verifica del contatto", () => {
       "https://api.ebay.com/oauth/api_scope",
       "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
     ]);
-    const refused = await accessForm("/en/accesso", { intent: "collega-accesso-ebay" });
+    const refused = await accessForm("/en/accesso", { intent: "collega-metodo", metodo: "ebay" });
     expect(refused.headers.get("location")).toBe("/en?accesso=accesso-non-verificato");
     const session = await verifiedSession("link-modulo@example.invalid");
     const allowed = await accessForm(
       "/accesso",
-      { intent: "collega-accesso-ebay" },
+      { intent: "collega-metodo", metodo: "ebay" },
       session.cookie,
     );
     expect(allowed.status).toBe(303);

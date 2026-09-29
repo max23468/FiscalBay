@@ -3,7 +3,7 @@ import { getMigrations } from "better-auth/db/migration";
 import { describe, expect, it, vi } from "vitest";
 
 import { handleAuthRequest } from "../app/auth-route.server";
-import { createAuth, createAuthOptions } from "../app/auth.server";
+import { createAuth, createAuthOptions, gmailDomain } from "../app/auth.server";
 import { completeRegistration } from "../app/domain/registration.server";
 import { action as signInAction } from "../app/routes/sign-in";
 
@@ -679,4 +679,310 @@ describe("Better Auth su Workers e D1", () => {
       }
     },
   );
+});
+
+describe("Collegamento e modifica dell'identità", () => {
+  const origin = "http://localhost:5173";
+  const cookies = (response: Response) =>
+    response.headers
+      .getSetCookie()
+      .map((value) => value.split(";")[0])
+      .join("; ");
+  const withEmail = (send = vi.fn(async () => ({}))) =>
+    ({ ...env, AUTH_EMAIL: { send } }) as unknown as Env;
+  const post = (environment: Env, path: string, body: Record<string, unknown>, cookie = "") =>
+    createAuth(environment).handler(
+      new Request(`${origin}/api/auth/${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin, cookie },
+        body: JSON.stringify(body),
+      }),
+    );
+  const appAction = (cookie: string, fields: Record<string, string>) =>
+    signInAction({
+      request: new Request(`${origin}/accesso`, {
+        method: "POST",
+        headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(fields),
+      }),
+    } as never);
+  const signUp = async (environment: Env, email: string, verified: boolean) => {
+    const response = await post(environment, "sign-up/email", {
+      name: "Identità sintetica",
+      email,
+      password: "Password-sintetica-123!",
+    });
+    const { user } = await response.clone().json<{ user: { id: string } }>();
+    if (verified) {
+      await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?')
+        .bind(user.id)
+        .run();
+    }
+    return { id: user.id, cookie: cookies(response) };
+  };
+  const googleAccounts = (userId: string) =>
+    env.DB.prepare('SELECT "accountId" FROM "account" WHERE "providerId" = ? AND "userId" = ?')
+      .bind("google", userId)
+      .all<{ accountId: string }>()
+      .then((rows) => rows.results.map((row) => row.accountId));
+
+  /** Completa un consenso Google con il profilo indicato, come lo firmerebbe Google. */
+  async function googleCallback(
+    environment: Env,
+    start: Response,
+    profile: { sub: string; email: string; email_verified: boolean; hd?: string },
+    cookie = "",
+  ) {
+    const state = new URL((await start.json<{ url: string }>()).url).searchParams.get("state");
+    const segment = (value: object) => btoa(JSON.stringify(value)).replace(/=+$/u, "");
+    const idToken = `${segment({ alg: "none" })}.${segment({
+      aud: "google-test-client",
+      name: "Titolare sintetico",
+      ...profile,
+    })}.`;
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () =>
+        Response.json({ access_token: "sintetico", id_token: idToken, token_type: "Bearer" }),
+      );
+    try {
+      return await handleAuthRequest(
+        new Request(`${origin}/api/auth/callback/google?code=synthetic&state=${state}`, {
+          headers: { cookie: [cookie, cookies(start)].filter(Boolean).join("; ") },
+        }),
+        environment,
+      );
+    } finally {
+      fetchMock.mockRestore();
+    }
+  }
+
+  it("non lascia un metodo proprio a chi registra in anticipo l'email di un altro", async () => {
+    const environment = withEmail();
+    const email = `titolare.anticipato@${gmailDomain}`;
+    const squatter = await signUp(environment, email, false);
+
+    // Il titolare entra con Google: l'utente locale non verificato non viene collegato.
+    const owner = await googleCallback(
+      environment,
+      await post(environment, "sign-in/social", { provider: "google", callbackURL: "/" }),
+      { sub: "google-titolare", email, email_verified: true },
+    );
+    expect(owner.headers.get("location")).toContain("account_not_linked");
+
+    // Chi ha creato l'account non può collegare un proprio Google né dall'app né dalla route.
+    const fromApp = await appAction(squatter.cookie, {
+      intent: "collega-metodo",
+      metodo: "google",
+    });
+    expect(fromApp.headers.get("location")).toContain("accesso-non-verificato");
+    const direct = await googleCallback(
+      environment,
+      await post(
+        environment,
+        "link-social",
+        { provider: "google", callbackURL: "/" },
+        squatter.cookie,
+      ),
+      { sub: "google-anticipato", email: `altro.anticipato@${gmailDomain}`, email_verified: true },
+      squatter.cookie,
+    );
+    expect(direct.headers.get("location")).toContain("unable_to_link_account");
+    expect(await googleAccounts(squatter.id)).toEqual([]);
+    expect(
+      await env.DB.prepare('SELECT COUNT(*) AS total FROM "user" WHERE email = ?')
+        .bind(email)
+        .first(),
+    ).toEqual({ total: 1 });
+  });
+
+  it.each([
+    ["Gmail", `gmail@${gmailDomain}`, true, undefined, true],
+    ["Workspace", "persona@azienda.invalid", true, "azienda.invalid", true],
+    ["dominio senza hd", "persona@dominio.invalid", true, undefined, false],
+    ["email non verificata", `nonverificata@${gmailDomain}`, false, undefined, false],
+  ] as const)(
+    "collega Google per email solo se è autorevole: %s",
+    async (_case, email, emailVerified, hd, linked) => {
+      const environment = withEmail();
+      const user = await signUp(environment, email, true);
+      const result = await googleCallback(
+        environment,
+        await post(environment, "sign-in/social", { provider: "google", callbackURL: "/" }),
+        { sub: `google-${email}`, email, email_verified: emailVerified, hd },
+      );
+      if (linked) {
+        expect(result.headers.get("location")).toBe("/");
+        expect(await googleAccounts(user.id)).toEqual([`google-${email}`]);
+      } else {
+        expect(result.headers.get("location")).toContain("account_not_linked");
+        expect(await googleAccounts(user.id)).toEqual([]);
+      }
+    },
+  );
+
+  it("chiede la propria conferma a un nuovo utente Google non autorevole", async () => {
+    const send = vi.fn(async () => ({}));
+    const environment = withEmail(send);
+    const email = "nuovo@dominio-personale.invalid";
+    await googleCallback(
+      environment,
+      await post(environment, "sign-in/social", { provider: "google", callbackURL: "/" }),
+      { sub: "google-nuovo-personale", email, email_verified: true },
+    );
+    expect(
+      await env.DB.prepare('SELECT "emailVerified" FROM "user" WHERE email = ?')
+        .bind(email)
+        .first(),
+    ).toEqual({ emailVerified: 0 });
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    expect(send.mock.calls[0]?.[0]).toMatchObject({ to: email });
+  });
+
+  it("riconosce Google dal subject anche con email cambiata, senza fondere utenti", async () => {
+    const environment = withEmail();
+    const first = await signUp(environment, `prima.identita@${gmailDomain}`, true);
+    const second = await signUp(environment, `seconda.identita@${gmailDomain}`, true);
+    // Collegamento esplicito da Sicurezza, anche con un'email diversa da quella dell'account.
+    const linked = await googleCallback(
+      environment,
+      await post(
+        environment,
+        "link-social",
+        { provider: "google", callbackURL: "/" },
+        first.cookie,
+      ),
+      { sub: "google-stabile", email: "google.personale@dominio.invalid", email_verified: true },
+      first.cookie,
+    );
+    expect(linked.headers.get("location")).toBe("/");
+    expect(await googleAccounts(first.id)).toEqual(["google-stabile"]);
+
+    // Su Google l'indirizzo diventa quello del secondo utente: conta il subject.
+    const signedIn = await googleCallback(
+      environment,
+      await post(environment, "sign-in/social", { provider: "google", callbackURL: "/" }),
+      { sub: "google-stabile", email: `seconda.identita@${gmailDomain}`, email_verified: true },
+    );
+    const session = await createAuth(environment).api.getSession({
+      headers: new Headers({ cookie: cookies(signedIn) }),
+    });
+    expect(session?.user.id).toBe(first.id);
+    expect(session?.user.email).toBe(`prima.identita@${gmailDomain}`);
+    expect(await googleAccounts(second.id)).toEqual([]);
+
+    // Lo stesso Google non si collega a un secondo utente.
+    const taken = await googleCallback(
+      environment,
+      await post(
+        environment,
+        "link-social",
+        { provider: "google", callbackURL: "/" },
+        second.cookie,
+      ),
+      { sub: "google-stabile", email: `seconda.identita@${gmailDomain}`, email_verified: true },
+      second.cookie,
+    );
+    expect(taken.headers.get("location")).toContain("account_already_linked_to_different_user");
+    expect(await googleAccounts(first.id)).toEqual(["google-stabile"]);
+  });
+
+  it("rimuove un metodo solo se ne resta un altro, anche con richieste concorrenti", async () => {
+    const environment = withEmail();
+    const user = await signUp(environment, "metodi.concorrenti@example.invalid", true);
+    const now = Date.now();
+    await env.DB.batch(
+      ["google", "ebay"].map((provider) =>
+        env.DB.prepare(
+          'INSERT INTO "account" (id, "accountId", "providerId", "userId", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?)',
+        ).bind(`metodo-${provider}`, `soggetto-${provider}`, provider, user.id, now, now),
+      ),
+    );
+    const remove = (metodo: string) =>
+      appAction(user.cookie, { intent: "rimuovi-metodo", metodo }).then((response) =>
+        new URL(response.headers.get("location")!, origin).searchParams.get("accesso"),
+      );
+    expect(await remove("password")).toBe("metodo-rimosso");
+    expect(await remove("sconosciuto")).toBe("errore");
+
+    const outcomes = await Promise.all([remove("google"), remove("ebay")]);
+    expect(outcomes.filter((outcome) => outcome === "ultimo-metodo")).toHaveLength(1);
+    const remaining = await env.DB.prepare('SELECT "providerId" FROM "account" WHERE "userId" = ?')
+      .bind(user.id)
+      .all();
+    expect(remaining.results).toHaveLength(1);
+
+    // Una passkey è un accesso valido: dopo averla aggiunta l'ultimo account si può rimuovere.
+    await env.DB.prepare(
+      `INSERT INTO "passkey" ("id", "publicKey", "userId", "credentialID", "counter", "deviceType", "backedUp")
+       VALUES ('passkey-metodi', 'synthetic', ?, 'passkey-metodi', 0, 'singleDevice', 0)`,
+    )
+      .bind(user.id)
+      .run();
+    const [{ providerId }] = remaining.results as Array<{ providerId: "google" | "ebay" }>;
+    expect(await remove(providerId)).toBe(
+      providerId === "ebay" ? "ebay-rimosso" : "metodo-rimosso",
+    );
+    expect(
+      (
+        await appAction(user.cookie, { intent: "passkey-remove", id: "passkey-metodi" })
+      ).headers.get("location"),
+    ).toContain("ultimo-accesso");
+
+    // Una sessione vecchia deve accedere di nuovo; la route diretta di Better Auth è chiusa.
+    await env.DB.prepare('UPDATE "session" SET "createdAt" = ? WHERE "userId" = ?')
+      .bind(now - 2 * 86_400_000, user.id)
+      .run();
+    expect(await remove("google")).toBe("nuovo-accesso");
+    const direct = await handleAuthRequest(
+      new Request(`${origin}/api/auth/unlink-account`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin, cookie: user.cookie },
+        body: JSON.stringify({ accountId: "metodo-google" }),
+      }),
+      environment,
+    );
+    expect(direct.status).toBe(404);
+  });
+
+  it("cambia l'email con la conferma del vecchio e del nuovo indirizzo", async () => {
+    // Le azioni dell'app usano il binding email dell'ambiente del Worker.
+    const send = vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });
+    const environment = env;
+    const user = await signUp(environment, "email.precedente@example.invalid", true);
+    await signUp(environment, "email.occupata@example.invalid", true);
+    send.mockClear();
+    const request = (email: string) =>
+      appAction(user.cookie, { intent: "cambia-email", email }).then((response) =>
+        response.headers.get("location"),
+      );
+    const link = (index: number) =>
+      (send.mock.calls[index]![0] as { text: string }).text.split("\n").at(-1)!;
+    const follow = (url: string) =>
+      handleAuthRequest(new Request(url, { headers: { cookie: user.cookie } }), environment);
+    const stored = () =>
+      env.DB.prepare('SELECT email, "emailVerified" FROM "user" WHERE id = ?')
+        .bind(user.id)
+        .first();
+
+    // Un indirizzo già registrato ha la stessa risposta ma nessuna email e nessun cambio.
+    expect(await request("email.occupata@example.invalid")).toContain("email-richiesta");
+    expect(await request("non-valida")).toContain("email-non-valida");
+    expect(send).not.toHaveBeenCalled();
+
+    expect(await request("email.nuova@example.invalid")).toContain("email-richiesta");
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    expect(send.mock.calls[0]![0]).toMatchObject({ to: "email.precedente@example.invalid" });
+    expect(await stored()).toEqual({ email: "email.precedente@example.invalid", emailVerified: 1 });
+
+    expect((await follow(link(0))).headers.get("location")).toContain("email-confermata");
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+    expect(send.mock.calls[1]![0]).toMatchObject({ to: "email.nuova@example.invalid" });
+    expect(await stored()).toEqual({ email: "email.precedente@example.invalid", emailVerified: 1 });
+
+    await follow(link(1));
+    // Stesso utente, quindi stessi spazi, negozi e piani: cambia soltanto l'indirizzo.
+    expect(await stored()).toEqual({ email: "email.nuova@example.invalid", emailVerified: 1 });
+    send.mockRestore();
+  });
 });

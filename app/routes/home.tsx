@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
 import { cn } from "cn";
-import { ClipboardList, Copy, KeyRound, LogOut, Plus, Store } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ClipboardList, Copy, KeyRound, LogOut, Plus, ShieldCheck, Store } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 import { IconTile } from "~/components/icon-tile";
 import { Logo } from "~/components/standalone-page";
@@ -10,6 +11,7 @@ import { TaxCode } from "~/components/tax-code";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Checkbox } from "~/components/ui/checkbox";
+import { Spinner } from "~/components/ui/spinner";
 import {
   Field,
   FieldContent,
@@ -25,6 +27,7 @@ import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { createAuth } from "../auth.server";
 import { registrationStatus } from "../domain/registration.server";
+import { listSignInMethods, type SignInMethods } from "../domain/sign-in-methods.server";
 import { listVisibleOrders } from "../domain/orders.server";
 import { appCopy } from "../app-copy";
 import { formatAmount, languageFromPath, localizedPath, type Language } from "../i18n";
@@ -65,9 +68,14 @@ const noticeTones: Record<string, "success" | "info" | "warning" | "danger"> = {
   "password-reimpostata": "success",
   "recupero-scaduto": "warning",
   collegato: "success",
-  "ebay-collegato": "success",
+  "metodo-collegato": "success",
+  "metodo-rimosso": "success",
   "ebay-rimosso": "success",
   "ultimo-metodo": "warning",
+  "password-link": "info",
+  "email-richiesta": "info",
+  "email-confermata": "success",
+  "email-non-valida": "warning",
   "nuovo-accesso": "warning",
   "accesso-non-verificato": "warning",
 };
@@ -98,8 +106,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   // Finché mancano profilo o Termini correnti l'utente vede solo il passaggio per completarli.
   const status = await registrationStatus(env.DB, session.user.id);
   const complete = status.termsAccepted && status.profile !== null;
-  const accounts = await createAuth(env).api.listUserAccounts({ headers: request.headers });
-  const ebayLinked = accounts.some((account) => account.providerId === "ebay");
+  const methods = await listSignInMethods(env.DB, session.user.id);
+  const ebayLinked = methods.accounts.ebay;
   // eBay fornisce uno username, non il nome della persona. Vale anche per gli utenti
   // già registrati: né lo username né un indirizzo email devono precompilare il profilo.
   const providerName =
@@ -114,17 +122,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     needsProfile: !status.profile,
     needsAgreement: !status.termsAccepted,
     canLinkStore: session.user.emailVerified && complete,
-    ebayLinked,
-    passkeys:
-      session.user.emailVerified && complete
-        ? (
-            await env.DB.prepare(
-              'SELECT "id", "name", "createdAt" FROM "passkey" WHERE "userId" = ? ORDER BY "createdAt" DESC',
-            )
-              .bind(session.user.id)
-              .all<{ id: string; name: string | null; createdAt: string | null }>()
-          ).results
-        : [],
+    methods: session.user.emailVerified && complete ? methods : null,
     suggestedName: { firstName, lastName: lastName.join(" ") },
     orders: complete ? await listVisibleOrders(env.DB, session.user.id) : [],
   };
@@ -595,82 +593,276 @@ function SignOutForm({ t, language }: { t: AccessCopy; language: Language }) {
   );
 }
 
-function AccountSecurity({
-  t,
-  language,
-  passkeys,
-  ebayLinked,
+/** Riga di un metodo di accesso: nome, stato e azioni, come nelle Impostazioni. */
+function MethodRow({
+  label,
+  status,
+  hint,
+  children,
 }: {
-  t: AccessCopy;
-  language: Language;
-  passkeys: Array<{ id: string; name: string | null; createdAt: string | null }>;
-  ebayLinked: boolean;
+  label: string;
+  status: string;
+  hint?: string;
+  children: React.ReactNode;
 }) {
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
+      <span className="grid min-w-0 flex-1 basis-48">
+        <span className="font-medium">{label}</span>
+        <span className="text-sm text-muted-foreground">{status}</span>
+        {hint ? <span className="text-sm text-muted-foreground">{hint}</span> : null}
+      </span>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </li>
+  );
+}
+
+/** Pulsante che invia un'azione di Sicurezza, con il metodo interessato. */
+function MethodAction({
+  language,
+  intent,
+  method,
+  children,
+}: {
+  language: Language;
+  intent: string;
+  method?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <form method="post" action={localizedPath(language, "/accesso")}>
+      {method ? <input type="hidden" name="metodo" value={method} /> : null}
+      <Button type="submit" variant="outline" size="sm" name="intent" value={intent}>
+        {children}
+      </Button>
+    </form>
+  );
+}
+
+/** Gruppo della card Sicurezza, separato dal precedente come nelle Impostazioni. */
+function SecurityGroup({
+  id,
+  title,
+  children,
+}: {
+  id: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section aria-labelledby={id} className="grid gap-3 border-t pt-4 first:border-t-0 first:pt-0">
+      <h3 id={id} className="font-semibold">
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+/** Email attuale; il nuovo indirizzo si inserisce solo quando serve. */
+function EmailChange({ language, email }: { language: Language; email: string }) {
+  const { access: t, profile, orders } = appCopy[language];
+  const [open, setOpen] = useState(false);
+  const opener = useRef<HTMLButtonElement>(null);
+  return (
+    <SecurityGroup id="security-email" title={profile.email}>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <span className="min-w-0 flex-1 basis-48 break-all">{email}</span>
+        {open ? null : (
+          <Button
+            ref={opener}
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-describedby="new-email-hint"
+            onClick={() => setOpen(true)}
+          >
+            {profile.changeEmail}
+          </Button>
+        )}
+      </div>
+      {open ? (
+        <form method="post" action={localizedPath(language, "/accesso")} className="grid gap-3">
+          <Field>
+            <FieldLabel htmlFor="new-email">{t.newEmail}</FieldLabel>
+            <Input
+              id="new-email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              required
+              autoFocus
+              aria-describedby="new-email-hint"
+            />
+            <FieldDescription id="new-email-hint">{profile.emailHint}</FieldDescription>
+          </Field>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" size="sm" name="intent" value="cambia-email">
+              {t.sendEmailLink}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                // Chiudendo il campo il focus torna al pulsante che l'ha aperto.
+                flushSync(() => setOpen(false));
+                opener.current?.focus();
+              }}
+            >
+              {orders.cancel}
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <p id="new-email-hint" className="text-sm text-muted-foreground">
+          {profile.emailHint}
+        </p>
+      )}
+    </SecurityGroup>
+  );
+}
+
+function AccountSecurity({
+  language,
+  email,
+  methods,
+}: {
+  language: Language;
+  email: string;
+  methods: SignInMethods;
+}) {
+  const { access: t, settings } = appCopy[language];
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
+  const status = (connected: boolean) =>
+    connected ? settings.methodConnected : settings.methodNotConnected;
+  const oauth = (method: "google" | "ebay") =>
+    methods.accounts[method] ? (
+      <MethodAction language={language} intent="rimuovi-metodo" method={method}>
+        {settings.remove}
+      </MethodAction>
+    ) : (
+      <MethodAction language={language} intent="collega-metodo" method={method}>
+        {settings.connect}
+      </MethodAction>
+    );
+  const addPasskey = (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      disabled={pending}
+      focusableWhenDisabled
+      aria-busy={pending || undefined}
+      onClick={async () => {
+        setPending(true);
+        setError(false);
+        try {
+          const { authClient } = await import("../passkey-client");
+          const result = await authClient.passkey.addPasskey();
+          if (result.error) setError(true);
+          else window.location.reload();
+        } catch {
+          setError(true);
+        } finally {
+          setPending(false);
+        }
+      }}
+    >
+      {pending ? (
+        <Spinner
+          label={settings.addPasskey}
+          aria-hidden="true"
+          role={undefined}
+          data-icon="inline-start"
+        />
+      ) : (
+        <KeyRound aria-hidden="true" data-icon="inline-start" />
+      )}
+      {settings.addPasskey}
+    </Button>
+  );
+  const passkeys = methods.passkeys;
   return (
-    <Card id="sicurezza" className="max-w-xl">
+    <Card id="sicurezza" className="max-w-xl scroll-mt-4">
       <CardHeader>
-        <CardTitle>
+        <CardTitle className="flex items-center gap-3">
+          <IconTile icon={ShieldCheck} tone="neutral" />
           <h2>{t.passkeySecurity}</h2>
         </CardTitle>
-        <CardDescription>{t.passkeyRecovery}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <EbayAccess t={t} language={language} linked={ebayLinked} />
-        {passkeys.length ? (
+        <EmailChange language={language} email={email} />
+        <SecurityGroup id="security-methods" title={settings.methods}>
           <ul className="grid divide-y border-y">
-            {passkeys.map((passkey) => (
-              <li key={passkey.id} className="flex items-center justify-between gap-3 py-3">
-                <span className="text-sm">
-                  {passkey.name || t.passkeyLabel}
-                  {passkey.createdAt ? ` · ${formatDate(passkey.createdAt, language)}` : ""}
-                </span>
-                <form method="post" action={localizedPath(language, "/accesso")}>
-                  <input type="hidden" name="id" value={passkey.id} />
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    size="sm"
-                    name="intent"
-                    value="passkey-remove"
-                  >
-                    {t.passkeyRemove}
-                  </Button>
-                </form>
-              </li>
-            ))}
+            <MethodRow label={settings.methodPassword} status={status(methods.accounts.password)}>
+              <MethodAction language={language} intent="password">
+                {methods.accounts.password ? settings.changePassword : t.setPassword}
+              </MethodAction>
+              {methods.accounts.password ? (
+                <MethodAction language={language} intent="rimuovi-metodo" method="password">
+                  {settings.remove}
+                </MethodAction>
+              ) : null}
+            </MethodRow>
+            <MethodRow label={settings.methodGoogle} status={status(methods.accounts.google)}>
+              {oauth("google")}
+            </MethodRow>
+            {/* Accedere con eBay non collega un negozio, e viceversa. */}
+            <MethodRow
+              label={settings.methodEbay}
+              status={status(methods.accounts.ebay)}
+              hint={methods.accounts.ebay ? undefined : t.ebayAccessBody}
+            >
+              {oauth("ebay")}
+            </MethodRow>
+            {passkeys.length === 0 ? (
+              <MethodRow
+                label={settings.methodPasskey}
+                status={t.passkeyEmpty}
+                hint={t.passkeyRecovery}
+              >
+                {addPasskey}
+              </MethodRow>
+            ) : (
+              passkeys.map((passkey, index) => (
+                <MethodRow
+                  key={passkey.id}
+                  label={settings.methodPasskey}
+                  status={
+                    passkey.createdAt
+                      ? settings.passkeyItem(
+                          passkey.name || settings.methodPasskey,
+                          formatDate(passkey.createdAt, language),
+                        )
+                      : passkey.name || settings.methodConnected
+                  }
+                >
+                  <form method="post" action={localizedPath(language, "/accesso")}>
+                    <input type="hidden" name="id" value={passkey.id} />
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      size="sm"
+                      name="intent"
+                      value="passkey-remove"
+                    >
+                      {settings.remove}
+                    </Button>
+                  </form>
+                  {index === passkeys.length - 1 ? addPasskey : null}
+                </MethodRow>
+              ))
+            )}
           </ul>
-        ) : (
-          <p className="text-sm text-muted-foreground">{t.passkeyEmpty}</p>
-        )}
-        <Button
-          type="button"
-          className="w-fit"
-          disabled={pending}
-          onClick={async () => {
-            setPending(true);
-            setError(false);
-            try {
-              const { authClient } = await import("../passkey-client");
-              const result = await authClient.passkey.addPasskey();
-              if (result.error) setError(true);
-              else window.location.reload();
-            } catch {
-              setError(true);
-            } finally {
-              setPending(false);
-            }
-          }}
-        >
-          <KeyRound aria-hidden="true" data-icon="inline-start" />
-          {t.passkeyAdd}
-        </Button>
-        {error ? (
-          <p role="alert" className="text-sm text-danger">
-            {t.passkeyFailed}
-          </p>
-        ) : null}
+          {error ? (
+            <p role="alert" className="text-sm text-danger">
+              {t.passkeyFailed}
+            </p>
+          ) : null}
+          <p className="text-xs text-muted-foreground">{settings.lastMethod}</p>
+        </SecurityGroup>
       </CardContent>
     </Card>
   );
@@ -787,37 +979,6 @@ function BrandPanel({ t }: { t: AccessCopy }) {
 }
 
 const errorTones = new Set(["danger", "warning"]);
-
-function EbayAccess({
-  t,
-  language,
-  linked,
-}: {
-  t: AccessCopy;
-  language: Language;
-  linked: boolean;
-}) {
-  return (
-    <section aria-labelledby="ebay-access-title" className="grid gap-2 rounded-lg border p-4">
-      <h3 id="ebay-access-title" className="font-semibold">
-        {t.ebayAccessTitle}
-      </h3>
-      <p className="text-sm text-muted-foreground">
-        {linked ? t.ebayAccessConnected : t.ebayAccessBody}
-      </p>
-      <form method="post" action={localizedPath(language, "/accesso")}>
-        <Button
-          type="submit"
-          variant="outline"
-          name="intent"
-          value={linked ? "rimuovi-accesso-ebay" : "collega-accesso-ebay"}
-        >
-          {linked ? t.ebayAccessRemove : t.ebayAccessLink}
-        </Button>
-      </form>
-    </section>
-  );
-}
 
 function AccessPanel({
   loaderData,
@@ -982,12 +1143,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             ))}
           </section>
         )}
-        {loaderData.emailVerified ? (
+        {loaderData.methods ? (
           <AccountSecurity
-            t={t}
             language={language}
-            passkeys={loaderData.passkeys}
-            ebayLinked={loaderData.ebayLinked}
+            email={loaderData.email}
+            methods={loaderData.methods}
           />
         ) : null}
       </main>

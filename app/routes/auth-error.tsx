@@ -14,6 +14,7 @@ type AuthErrorCopy = (typeof appCopy)["it"]["authError"];
 function messageFor(t: AuthErrorCopy, error: string | null): { title: string; body: string } {
   if (error === "email_not_found") return t.ebayWithoutEmail;
   if (error === "account_not_linked") return t.accountNotLinked;
+  if (error === "account_already_linked_to_different_user") return t.alreadyLinked;
   return t;
 }
 
