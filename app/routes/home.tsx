@@ -98,9 +98,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   // Finché mancano profilo o Termini correnti l'utente vede solo il passaggio per completarli.
   const status = await registrationStatus(env.DB, session.user.id);
   const complete = status.termsAccepted && status.profile !== null;
-  // Il nome del provider, per esempio Google, precompila il profilo mancante; un nome che è
-  // l'indirizzo email, lasciato dalle registrazioni precedenti, non è un nome.
-  const providerName = status.profile || session.user.name.includes("@") ? "" : session.user.name;
+  const accounts = await createAuth(env).api.listUserAccounts({ headers: request.headers });
+  const ebayLinked = accounts.some((account) => account.providerId === "ebay");
+  // eBay fornisce uno username, non il nome della persona. Vale anche per gli utenti
+  // già registrati: né lo username né un indirizzo email devono precompilare il profilo.
+  const providerName =
+    status.profile || ebayLinked || session.user.name.includes("@") ? "" : session.user.name;
   const [firstName = "", ...lastName] = providerName.trim().split(/\s+/u).filter(Boolean);
   return {
     authenticated: true as const,
@@ -111,9 +114,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     needsProfile: !status.profile,
     needsAgreement: !status.termsAccepted,
     canLinkStore: session.user.emailVerified && complete,
-    ebayLinked: (await createAuth(env).api.listUserAccounts({ headers: request.headers })).some(
-      (account) => account.providerId === "ebay",
-    ),
+    ebayLinked,
     passkeys:
       session.user.emailVerified && complete
         ? (
