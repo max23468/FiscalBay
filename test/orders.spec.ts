@@ -96,6 +96,7 @@ describe("percorso ordini", () => {
       language: "it",
       notice: null,
       orders: [],
+      resetToken: null,
     });
 
     const auth = createAuth(env);
