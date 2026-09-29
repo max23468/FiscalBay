@@ -4,14 +4,10 @@ import { genericOAuth } from "better-auth/plugins";
 import { waitUntil } from "cloudflare:workers";
 import { z } from "zod";
 
+// Con `commerce.identity.readonly` eBay restituisce l'email soltanto per gli account business.
 const ebayIdentitySchema = z.object({
   userId: z.string().min(1),
   username: z.string().min(1),
-  individualAccount: z
-    .object({
-      email: z.string().email().optional(),
-    })
-    .optional(),
   businessAccount: z
     .object({
       email: z.string().email().optional(),
@@ -139,8 +135,6 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
             scopes: [
               "https://api.ebay.com/oauth/api_scope",
               "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
-              "https://api.ebay.com/oauth/api_scope/commerce.identity.email.readonly",
-              "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
             ],
             accountSubject: ({ profile }) => ebayIdentitySchema.shape.userId.parse(profile.userId),
             getUserInfo: async (tokens) => {
@@ -150,14 +144,14 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
               if (!response.ok) return null;
 
               const profile = ebayIdentitySchema.parse(await response.json());
-              const email = profile.individualAccount?.email ?? profile.businessAccount?.email;
-              if (!email) return null;
-
+              // Senza email Better Auth rifiuta il login con `email_not_found` e la pagina di
+              // errore indirizza agli altri metodi. L'email business non è verificata da eBay:
+              // FiscalBay invia la propria conferma e non la collega da sola a un utente esistente.
               return {
                 id: profile.userId,
                 userId: profile.userId,
                 name: profile.username,
-                email,
+                email: profile.businessAccount?.email,
                 emailVerified: false,
               };
             },
