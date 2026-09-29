@@ -788,6 +788,28 @@ describe("Collegamento e modifica dell'identità", () => {
       squatter.cookie,
     );
     expect(direct.headers.get("location")).toContain("unable_to_link_account");
+    // Il router chiude anche l'avvio del collegamento e il ramo con idToken, che salterebbe i
+    // controlli del callback, e rifiuta un corpo non valido senza errore del server.
+    const linkRoute = (cookie: string, body: string) =>
+      handleAuthRequest(
+        new Request(`${origin}/api/auth/link-social`, {
+          method: "POST",
+          headers: { "content-type": "application/json", origin, cookie },
+          body,
+        }),
+        environment,
+      );
+    const idToken = JSON.stringify({ provider: "google", idToken: { token: "sintetico" } });
+    expect((await linkRoute("", idToken)).status).toBe(401);
+    expect((await linkRoute(squatter.cookie, idToken)).status).toBe(403);
+    await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?')
+      .bind(squatter.id)
+      .run();
+    expect((await linkRoute(squatter.cookie, idToken)).status).toBe(400);
+    expect((await linkRoute(squatter.cookie, "1")).status).toBe(400);
+    expect((await linkRoute(squatter.cookie, JSON.stringify({ provider: "google" }))).status).toBe(
+      200,
+    );
     expect(await googleAccounts(squatter.id)).toEqual([]);
     expect(
       await env.DB.prepare('SELECT COUNT(*) AS total FROM "user" WHERE email = ?')
@@ -943,6 +965,41 @@ describe("Collegamento e modifica dell'identità", () => {
       environment,
     );
     expect(direct.status).toBe(404);
+  });
+
+  it("imposta di nuovo la password con un link al proprio indirizzo", async () => {
+    const send = vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });
+    try {
+      const email = "password.nuova@example.invalid";
+      const user = await signUp(env, email, true);
+      await env.DB.prepare(
+        `INSERT INTO "passkey" ("id", "publicKey", "userId", "credentialID", "counter", "deviceType", "backedUp")
+         VALUES ('passkey-password', 'synthetic', ?, 'passkey-password', 0, 'singleDevice', 0)`,
+      )
+        .bind(user.id)
+        .run();
+      const outcome = (fields: Record<string, string>) =>
+        appAction(user.cookie, fields).then((response) => response.headers.get("location"));
+      expect(await outcome({ intent: "rimuovi-metodo", metodo: "password" })).toContain(
+        "metodo-rimosso",
+      );
+      send.mockClear();
+      expect(await outcome({ intent: "password" })).toContain("password-link");
+      await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+      const message = send.mock.calls[0]![0] as { to: string; text: string };
+      expect(message.to).toBe(email);
+      const token = new URL(message.text.split("\n").at(-1)!).pathname.split("/").at(-1)!;
+      expect(
+        await outcome({ intent: "reimposta-password", token, password: "Password-reimpostata-1" }),
+      ).toContain("password-reimpostata");
+      const signIn = await post(env, "sign-in/email", {
+        email,
+        password: "Password-reimpostata-1",
+      });
+      expect(signIn.ok).toBe(true);
+    } finally {
+      send.mockRestore();
+    }
   });
 
   it("cambia l'email con la conferma del vecchio e del nuovo indirizzo", async () => {
