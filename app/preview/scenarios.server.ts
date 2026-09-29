@@ -756,11 +756,11 @@ const text = {
   newSignIn: {
     it: {
       title: "Nuovo accesso",
-      body: "Accesso da Chrome su Windows, Milano. Se non eri tu, esci da tutti i dispositivi.",
+      body: "Accesso da Chrome su Windows, Milano. Se non eri tu, controlla le sessioni in Sicurezza.",
     },
     en: {
       title: "New sign-in",
-      body: "Sign-in from Chrome on Windows, Milan. If this wasn’t you, sign out of all devices.",
+      body: "Sign-in from Chrome on Windows, Milan. If it wasn’t you, check your sessions in Security.",
     },
   },
   quota: {

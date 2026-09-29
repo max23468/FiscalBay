@@ -123,7 +123,7 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
             environment,
             user.email,
             "Conferma l’indirizzo email di FiscalBay",
-            "Conferma il tuo indirizzo email per accedere a FiscalBay.",
+            "Conferma il tuo indirizzo email per collegare i tuoi negozi eBay a FiscalBay.",
             url,
           ),
         );

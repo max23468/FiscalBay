@@ -52,7 +52,7 @@ const it = {
   preview: {
     label: "Anteprima con dati di esempio",
     scenario: "Scenario",
-    note: "Le azioni sono simulate: nessun negozio eBay viene letto o modificato e nessun ordine viene sbloccato davvero.",
+    note: "Qui le azioni sono simulate e usano dati di esempio.",
     simulated: "Anteprima: l’azione è simulata.",
     signOut: "Anteprima: l’uscita è simulata.",
   },
@@ -158,9 +158,8 @@ const it = {
     updatedHint: "eBay ha modificato questo dato dopo la prima lettura.",
     suggestion: "Suggerimento da un ordine precedente",
     suggestionFrom: "Da un ordine precedente:",
-    suggestionCheck: "Verificalo nel dettaglio prima di usarlo.",
-    suggestionHint: (order: string, date: string) =>
-      `Dall’ordine ${order} del ${date}. Non sostituisce il dato di questo ordine.`,
+    suggestionCheck: "Controlla che valga anche per questo ordine.",
+    suggestionHint: (order: string, date: string) => `Dall’ordine ${order} del ${date}.`,
     suggestionConflict: "Gli ordini precedenti riportano codici diversi: questo è il più recente.",
     requestMessage: "Copia messaggio per l’acquirente",
     requestCopied: "Messaggio copiato. Invialo all’acquirente dai tuoi canali.",
@@ -339,7 +338,7 @@ const it = {
     cycleEnds: (date: string) => `Il ciclo si rinnova il ${date}.`,
     trialTitle: "Prova Premium per 14 giorni",
     trialBody:
-      "Senza carta e senza rinnovo automatico: alla fine torni al piano Free, a meno che tu non acquisti.",
+      "Senza carta e senza rinnovo automatico. Alla fine della prova scegli tu se continuare con Premium.",
     trialAction: "Attiva la prova",
     buyTitle: "Passa a Premium",
     buyBody:
@@ -380,7 +379,7 @@ const it = {
     telegramStores: "Negozi",
     marketingTitle: "Comunicazioni",
     marketingConsent: "Ricevi via email novità e offerte su FiscalBay",
-    marketingHint: "Facoltativo. Le email di servizio e di sicurezza arrivano comunque.",
+    marketingHint: "Le email sul tuo account arrivano in ogni caso.",
     // Esportazione
     exportScope: "Ordini da esportare",
     exportPeriod: "Periodo",
@@ -437,7 +436,7 @@ const it = {
     timeZoneHint: "Usato per date, cicli e orari delle notifiche.",
     // Modello di messaggio
     templateIntro:
-      "Quando eBay non riporta il Codice Fiscale, puoi copiare questo messaggio dall’ordine e inviarlo all’acquirente dai tuoi canali. FiscalBay non lo invia.",
+      "Quando eBay non riporta il Codice Fiscale, puoi copiare questo messaggio dall’ordine e inviarlo all’acquirente dai tuoi canali.",
     templateIt: "Italiano",
     templateEn: "Inglese",
     templateHint: "{ordine} viene sostituito con il numero dell’ordine.",
@@ -465,11 +464,11 @@ const it = {
       },
       {
         q: "Quando un ordine conta come sbloccato?",
-        a: "Solo quando il suo Codice Fiscale diventa visibile. Dati non disponibili, errori, copie ed esportazioni non contano.",
+        a: "Quando il suo Codice Fiscale diventa visibile. Ordini senza dato o con un errore non contano, e puoi copiare ed esportare quanto vuoi.",
       },
       {
         q: "FiscalBay modifica gli ordini su eBay?",
-        a: "No. FiscalBay legge gli ordini e non scrive nulla sul tuo negozio.",
+        a: "No. FiscalBay legge gli ordini per mostrarti i dati fiscali: sul tuo negozio eBay resta tutto com’è.",
       },
     ],
     contact: "Scrivi all’assistenza",
@@ -484,7 +483,7 @@ const it = {
     messageRequired: "Scrivi il messaggio.",
     diagnostics: "Riepilogo diagnostico",
     diagnosticsHint:
-      "Aiuta l’assistenza a capire il problema. Non contiene Codici Fiscali, dati degli acquirenti o credenziali.",
+      "Aiuta l’assistenza a capire il problema. Contiene solo informazioni tecniche, come versione, stato della sincronizzazione e codice errore.",
     includeDiagnostics: "Allega il riepilogo diagnostico",
     diag: {
       version: "Versione",
@@ -556,16 +555,16 @@ const it = {
     headline: "Il Codice Fiscale dei tuoi ordini eBay, in un posto solo.",
     features: [
       {
-        title: "Sola lettura",
-        body: "FiscalBay legge gli ordini dei tuoi negozi eBay e non li modifica.",
+        title: "Tutti gli ordini insieme",
+        body: "Gli ordini dei tuoi negozi eBay in un unico elenco, aggiornato e facile da cercare.",
       },
       {
         title: "Pronto da copiare",
-        body: "Quando eBay lo riporta, trovi il Codice Fiscale dell’ordine, o la Partita IVA se c’è solo quella.",
+        body: "Trovi il Codice Fiscale riportato da eBay, o la Partita IVA se c’è solo quella, pronto da incollare dove ti serve.",
       },
       {
-        title: "Negozi collegati",
-        body: "Colleghi il negozio con l’accesso eBay, senza condividere la password.",
+        title: "Collegamento in pochi passaggi",
+        body: "Colleghi il negozio accedendo a eBay e gli ordini iniziano ad arrivare.",
       },
     ],
     choose: "Accedi o crea un account",
@@ -575,14 +574,14 @@ const it = {
     signIn: "Accedi",
     signInBody: "Entra con email e password, Google, eBay o passkey.",
     signUp: "Crea account",
-    signUpBody: "Non chiediamo Codice Fiscale né Partita IVA, nemmeno alle aziende.",
+    signUpBody: "Bastano pochi dati per iniziare.",
     firstName: "Nome",
     lastName: "Cognome",
     accountType: "Ti registri come",
     private: "Privato",
     business: "Azienda",
     companyName: "Ragione sociale",
-    accountTypeHint: "Il tipo di account non cambia piano né limiti di utilizzo.",
+    accountTypeHint: "Piani e funzioni sono gli stessi per privati e aziende.",
     newPassword: "Password (almeno 8 caratteri)",
     or: "oppure",
     google: "Continua con Google",
@@ -595,7 +594,7 @@ const it = {
     passkeySignIn: "Accedi con passkey",
     passkeySecurity: "Sicurezza",
     passkeyRecovery:
-      "Se perdi una passkey, accedi con email e password o Google, aggiungine un’altra e rimuovi quella persa.",
+      "Accedi con impronta, volto o blocco schermo del dispositivo. Se cambi dispositivo, aggiungi qui una nuova passkey.",
     passkeyLabel: "Passkey",
     passkeyAdd: "Aggiungi passkey",
     passkeyRemove: "Rimuovi",
@@ -603,7 +602,7 @@ const it = {
     passkeyFailed: "Operazione passkey non riuscita. Riprova sul tuo dispositivo.",
     passwordRecovery: "Hai dimenticato la password?",
     passwordRecoveryBody:
-      "Inserisci l’email del tuo account. Se esiste, riceverai un link per scegliere una nuova password.",
+      "Inserisci l’email del tuo account: ti invieremo un link per scegliere una nuova password.",
     passwordRecoverySend: "Invia il link",
     passwordRecoveryConfirm: "Salva nuova password",
     signOut: "Esci",
@@ -616,7 +615,7 @@ const it = {
       after: ".",
     },
     marketing: "Ricevi via email novità e offerte su FiscalBay",
-    marketingHint: "Facoltativo. Le email di servizio e di sicurezza arrivano comunque.",
+    marketingHint: "Facoltativo. Puoi cambiare scelta in Impostazioni.",
     agreementTitle: "Completa la registrazione",
     agreementBody: "Completa i dati mancanti per usare FiscalBay.",
     agreementSubmit: "Continua",
@@ -632,17 +631,16 @@ const it = {
     storeNotices: {
       collegato: "Negozio eBay collegato.",
       negato: "Collegamento annullato su eBay.",
-      "altro-spazio": "Questo negozio eBay è già collegato a un altro spazio.",
-      accesso: "Verifica l’indirizzo email prima di collegare un negozio.",
+      "altro-spazio": "Questo negozio eBay è già collegato a un altro account FiscalBay.",
+      accesso: "Conferma l’indirizzo email per collegare un negozio.",
       errore: "Collegamento non riuscito. Riprova.",
     } as Record<string, string>,
     signInNotices: {
       "ebay-collegato": "Accesso eBay collegato al tuo account FiscalBay.",
       "ebay-rimosso": "Accesso eBay rimosso. I negozi collegati restano invariati.",
       "ultimo-metodo": "Aggiungi un altro metodo di accesso prima di rimuovere eBay.",
-      "nuovo-accesso": "Accedi di nuovo a FiscalBay prima di modificare i metodi di accesso.",
-      "accesso-non-verificato":
-        "Conferma l’indirizzo email prima di aggiungere un metodo di accesso.",
+      "nuovo-accesso": "Per modificare i metodi di accesso, accedi di nuovo a FiscalBay.",
+      "accesso-non-verificato": "Conferma l’indirizzo email per aggiungere un metodo di accesso.",
       errore: "Operazione non riuscita. Controlla email e password.",
       registrato: "Account creato. Ti abbiamo inviato un link per confermare l’indirizzo email.",
       registrazione:
@@ -652,9 +650,9 @@ const it = {
       "troppi-tentativi": "Troppi tentativi. Riprova tra qualche minuto.",
       "verifica-inviata": "Link di conferma inviato. Controlla la posta.",
       "passkey-rimossa": "Passkey rimossa.",
-      "ultimo-accesso":
-        "Serve almeno un metodo di accesso. Aggiungine un altro prima di rimuovere questa passkey.",
-      "recupero-inviato": "Se l’account esiste, riceverai un link per reimpostare la password.",
+      "ultimo-accesso": "Aggiungi un altro metodo di accesso prima di rimuovere questa passkey.",
+      "recupero-inviato":
+        "Controlla la posta: se l’indirizzo è registrato, trovi il link per scegliere una nuova password.",
       "password-reimpostata": "Password aggiornata. Accedi con la nuova password.",
       "recupero-scaduto": "Link non valido o scaduto. Richiedine uno nuovo.",
     } as Record<string, string>,
@@ -711,7 +709,7 @@ const en: AppCopy = {
   preview: {
     label: "Preview with sample data",
     scenario: "Scenario",
-    note: "Actions are simulated: no eBay store is read or changed and no order is actually unlocked.",
+    note: "Actions here are simulated and use sample data.",
     simulated: "Preview: this action is simulated.",
     signOut: "Preview: signing out is simulated.",
   },
@@ -817,9 +815,8 @@ const en: AppCopy = {
     updatedHint: "eBay changed this value after it was first read.",
     suggestion: "Suggestion from a previous order",
     suggestionFrom: "From a previous order:",
-    suggestionCheck: "Check it in the details before using it.",
-    suggestionHint: (order, date) =>
-      `From order ${order} on ${date}. It does not replace the value for this order.`,
+    suggestionCheck: "Check that it also applies to this order.",
+    suggestionHint: (order, date) => `From order ${order} on ${date}.`,
     suggestionConflict: "Previous orders show different codes: this is the most recent.",
     requestMessage: "Copy message for the buyer",
     requestCopied: "Message copied. Send it to the buyer through your own channels.",
@@ -985,7 +982,8 @@ const en: AppCopy = {
     unlocksUsed: (used, limit) => `${used} of ${limit}`,
     cycleEnds: (date) => `The cycle renews on ${date}.`,
     trialTitle: "Try Premium for 14 days",
-    trialBody: "No card and no automatic renewal: at the end you return to Free unless you buy.",
+    trialBody:
+      "No card and no automatic renewal. When the trial ends, you choose whether to keep Premium.",
     trialAction: "Start trial",
     buyTitle: "Upgrade to Premium",
     buyBody:
@@ -1024,7 +1022,7 @@ const en: AppCopy = {
     telegramStores: "Stores",
     marketingTitle: "Communications",
     marketingConsent: "Receive FiscalBay news and offers by email",
-    marketingHint: "Optional. Service and security emails are always sent.",
+    marketingHint: "Emails about your account are always sent.",
     exportScope: "Orders to export",
     exportPeriod: "Period",
     exportStores: "Stores",
@@ -1077,7 +1075,7 @@ const en: AppCopy = {
     timeZone: "Time zone",
     timeZoneHint: "Used for dates, cycles and notification times.",
     templateIntro:
-      "When eBay does not provide the tax code, you can copy this message from the order and send it to the buyer through your own channels. FiscalBay does not send it.",
+      "When eBay does not provide the tax code, you can copy this message from the order and send it to the buyer through your own channels.",
     templateIt: "Italian",
     templateEn: "English",
     templateHint: "{ordine} is replaced with the order number.",
@@ -1103,11 +1101,11 @@ const en: AppCopy = {
       },
       {
         q: "When does an order count as unlocked?",
-        a: "Only when its tax code becomes visible. Unavailable data, errors, copies and exports do not count.",
+        a: "When its tax code becomes visible. Orders without data or with an error do not count, and you can copy and export as often as you like.",
       },
       {
         q: "Does FiscalBay change orders on eBay?",
-        a: "No. FiscalBay reads orders and writes nothing to your store.",
+        a: "No. FiscalBay reads your orders to show you the tax details: everything on your eBay store stays as it is.",
       },
     ],
     contact: "Contact support",
@@ -1122,7 +1120,7 @@ const en: AppCopy = {
     messageRequired: "Write your message.",
     diagnostics: "Diagnostic summary",
     diagnosticsHint:
-      "Helps support understand the problem. It contains no tax codes, buyer data or credentials.",
+      "Helps support understand the problem. It contains only technical details, such as version, sync status and error code.",
     includeDiagnostics: "Attach the diagnostic summary",
     diag: {
       version: "Version",
@@ -1193,16 +1191,16 @@ const en: AppCopy = {
     headline: "The Codice Fiscale of your eBay orders, in one place.",
     features: [
       {
-        title: "Read-only",
-        body: "FiscalBay reads the orders of your eBay stores and never changes them.",
+        title: "All your orders together",
+        body: "Orders from your eBay stores in one list, up to date and easy to search.",
       },
       {
         title: "Ready to copy",
-        body: "When eBay provides it, you find the order’s tax code, or the VAT number if that is all it has.",
+        body: "You find the tax code provided by eBay, or the VAT number if that is all it has, ready to paste wherever you need it.",
       },
       {
-        title: "Connected stores",
-        body: "You connect a store through eBay sign-in, without sharing your password.",
+        title: "Connect in a few steps",
+        body: "You connect a store by signing in to eBay, and orders start coming in.",
       },
     ],
     choose: "Sign in or create an account",
@@ -1212,14 +1210,14 @@ const en: AppCopy = {
     signIn: "Sign in",
     signInBody: "Use your email and password, Google, eBay or a passkey.",
     signUp: "Create account",
-    signUpBody: "We do not ask for a tax code or VAT number, not even from businesses.",
+    signUpBody: "It only takes a few details to get started.",
     firstName: "First name",
     lastName: "Last name",
     accountType: "You are registering as",
     private: "Individual",
     business: "Business",
     companyName: "Company name",
-    accountTypeHint: "The account type does not change your plan or usage limits.",
+    accountTypeHint: "Plans and features are the same for individuals and businesses.",
     newPassword: "Password (at least 8 characters)",
     or: "or",
     google: "Continue with Google",
@@ -1232,7 +1230,7 @@ const en: AppCopy = {
     passkeySignIn: "Sign in with a passkey",
     passkeySecurity: "Security",
     passkeyRecovery:
-      "If you lose a passkey, sign in with email and password or Google, add another, then remove the lost passkey.",
+      "Sign in with your fingerprint, face or device screen lock. If you change device, add a new passkey here.",
     passkeyLabel: "Passkey",
     passkeyAdd: "Add passkey",
     passkeyRemove: "Remove",
@@ -1240,7 +1238,7 @@ const en: AppCopy = {
     passkeyFailed: "Passkey operation failed. Try again on your device.",
     passwordRecovery: "Forgot your password?",
     passwordRecoveryBody:
-      "Enter your account email. If it exists, we will send a link to set a new password.",
+      "Enter your account email and we will send you a link to set a new password.",
     passwordRecoverySend: "Send link",
     passwordRecoveryConfirm: "Save new password",
     signOut: "Sign out",
@@ -1253,7 +1251,7 @@ const en: AppCopy = {
       after: ".",
     },
     marketing: "Receive FiscalBay news and offers by email",
-    marketingHint: "Optional. Service and security emails are always sent.",
+    marketingHint: "Optional. You can change this in Settings.",
     agreementTitle: "Complete your registration",
     agreementBody: "Complete the missing details to use FiscalBay.",
     agreementSubmit: "Continue",
@@ -1269,16 +1267,16 @@ const en: AppCopy = {
     storeNotices: {
       collegato: "eBay store connected.",
       negato: "Connection cancelled on eBay.",
-      "altro-spazio": "This eBay store is already connected to another workspace.",
-      accesso: "Verify your email address before connecting a store.",
+      "altro-spazio": "This eBay store is already connected to another FiscalBay account.",
+      accesso: "Confirm your email address to connect a store.",
       errore: "Could not connect the store. Try again.",
     },
     signInNotices: {
       "ebay-collegato": "eBay sign-in linked to your FiscalBay account.",
       "ebay-rimosso": "eBay sign-in removed. Your connected stores are unchanged.",
       "ultimo-metodo": "Add another sign-in method before removing eBay.",
-      "nuovo-accesso": "Sign in to FiscalBay again before changing your sign-in methods.",
-      "accesso-non-verificato": "Verify your email address before adding a sign-in method.",
+      "nuovo-accesso": "To change your sign-in methods, sign in to FiscalBay again.",
+      "accesso-non-verificato": "Confirm your email address to add a sign-in method.",
       errore: "Could not complete the operation. Check your email and password.",
       registrato: "Account created. We sent you a link to confirm your email address.",
       registrazione:
@@ -1288,9 +1286,9 @@ const en: AppCopy = {
       "troppi-tentativi": "Too many attempts. Try again in a few minutes.",
       "verifica-inviata": "Confirmation link sent. Check your inbox.",
       "passkey-rimossa": "Passkey removed.",
-      "ultimo-accesso":
-        "At least one sign-in method is required. Add another before removing this passkey.",
-      "recupero-inviato": "If the account exists, you will receive a password reset link.",
+      "ultimo-accesso": "Add another sign-in method before removing this passkey.",
+      "recupero-inviato":
+        "Check your inbox: if the address is registered, you will find a link to set a new password.",
       "password-reimpostata": "Password updated. Sign in with your new password.",
       "recupero-scaduto": "This link is invalid or expired. Request a new one.",
     },

@@ -10,7 +10,7 @@ Personalità scelta dall'owner il 2026-09-27: **precisa e sobria**, uno strument
 2. **Colore misurato e con un significato.** Il blu pieno indica l'azione principale; la superficie colorata piena segnala solo uno stato che chiede un'azione. Su indicazione owner del 2026-09-28 Ordini e Negozi hanno più colore (etichette di stato tinte, tinta per negozio, tessere colorate nel pannello del negozio), mentre Impostazioni e Profilo restano sobri con icone monocromatiche; nessuna superficie piena decorativa.
 3. **Identità nei dettagli, non nelle decorazioni.** La tessera del logo entra nell'interfaccia dove comunica qualcosa: sincronizzazione, stati vuoti.
 4. **Movimento che spiega.** Ogni animazione mostra da dove arriva o dove va qualcosa, entro 250 ms per le aperture; niente movimento decorativo nell'app.
-5. **Tono del prodotto** ([§21](../MASTER_PLAN.md#s21)): diretto, senza toni rassicuranti o promesse assolute; dire cosa FiscalBay legge e cosa non fa.
+5. **Tono del prodotto** ([§21](../MASTER_PLAN.md#s21)): diretto, senza toni rassicuranti o promesse assolute; dire cosa FiscalBay fa per chi vende, non cosa evita di fare. Criteri in [Cosa fa e cosa non fa](#cosa-fa-e-cosa-non-fa).
 
 ## Base tecnica
 
@@ -98,6 +98,16 @@ Curva unica `cubic-bezier(0.22, 1, 0.36, 1)`; `ease-out` per i tooltip. Si anima
 - I testi dell'anteprima sono dimostrativi e non introducono funzioni: niente digest email degli ordini, nessuna accettazione di condizioni fuori dai flussi previsti.
 
 Il copy si rivolge a chi gestisce gli ordini: «Sblocca ordine», «Riprova», «Ordine sbloccato. Ti resta 1 ordine da sbloccare». Evitare gergo tecnico come dato accessibile, quota residua, lettura e retention nei messaggi di prodotto. Nei casi ordinari bastano il codice e Copia; spiegare soprattutto eccezioni e conseguenze.
+
+### Cosa fa e cosa non fa
+
+Su indicazione owner del 2026-09-29 (D154) il copy presenta FiscalBay per ciò che fa: importa gli ordini, mostra e rende copiabile il Codice Fiscale, esporta, notifica. I vincoli del prodotto (sola lettura su eBay, nessun contatto con l'acquirente, dati minimi in registrazione, protezione dei dati) restano requisiti del [Master Plan](../MASTER_PLAN.md#s02), non argomenti da ripetere nell'interfaccia.
+
+- **Forma affermativa.** Si scrive il risultato o il passo successivo: «Conferma l'indirizzo email per collegare un negozio», non «Verifica l'email prima di collegare»; «Piani e funzioni sono gli stessi per privati e aziende», non «Il tipo di account non cambia piano né limiti».
+- **Una negazione serve solo se cambia ciò che la persona fa.** Ammessa quando c'è una conseguenza da conoscere prima di agire (un'eliminazione che non si annulla, un piano che mette in pausa i negozi), un'eccezione da spiegare (eBay non riporta il dato), o la risposta a una domanda reale, per esempio nelle domande frequenti. Si dice una volta, nel punto in cui serve.
+- **Niente sicurezza come premessa.** Password non condivise, credenziali, dati non raccolti o non contenuti non compaiono come argomento di vendita, nota a margine o chiusura di un messaggio. Le garanzie stanno nell'informativa privacy, nei Termini e nella sezione Sicurezza. Un messaggio di sicurezza compare quando chiede un'azione: conferma dell'email, nuovo accesso, ultimo metodo di accesso.
+- **Condizionali solo dove il sistema li impone.** La formula «se l'indirizzo è registrato» vale solo per l'esito del recupero password, che non deve rivelare gli account esistenti; il testo prima dell'invio descrive semplicemente cosa succede.
+- **Prova rapida.** Togliendo la frase negativa o rassicurante, la persona perde un'informazione che le serve per decidere? Se no, la frase si toglie o si riscrive dicendo cosa ottiene.
 
 Titoli descrittivi e ordinari: «Dettaglio ordine», «Elenco ordini», «Nessun negozio collegato». Evitare slogan, giochi di parole e attribuzioni umane agli ordini. Negli stati vuoti compatti, l'azione si allinea alla colonna del testo su mobile e al margine destro su schermi ampi.
 

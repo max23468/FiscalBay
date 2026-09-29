@@ -510,7 +510,7 @@ Consultazione ridotta solo quando i dati e l'autorizzazione sono disponibili e s
 <a id="s21"></a>
 ## 21. Brand, logo e riferimenti
 
-Direzione professionale, moderna e accessibile, senza tono eccessivamente rassicurante o promesse assolute. Simbolo+wordmark FiscalBay, differenza sottile Fiscal/Bay; blu/indaco, navy e richiami ai quattro colori del mondo eBay senza riproduzione 1:1 o impressione di affiliazione.
+Direzione professionale, moderna e accessibile, senza tono eccessivamente rassicurante o promesse assolute. Il copy dice cosa FiscalBay fa per chi vende; limiti, esclusioni e garanzie di sicurezza compaiono solo dove servono a una decisione o spiegano un'eccezione (D154). Simbolo+wordmark FiscalBay, differenza sottile Fiscal/Bay; blu/indaco, navy e richiami ai quattro colori del mondo eBay senza riproduzione 1:1 o impressione di affiliazione.
 
 **Logo: evoluzione del Concept 4 · Minimal Ledger Card**, file identificato in [REFERENCES](brand/REFERENCES.md). Il concept è il punto di partenza, non un vincolo: su indicazione owner (D141) forma, proporzioni, inclinazione e dettagli possono essere migliorati per chiarezza e resa piccola, mantenendo un segno autonomo che non richiami un prodotto ufficiale eBay. `Bay` resta blu come il simbolo. L'icona è generica, non una tile in stile piattaforma. Proposte e versione definitiva richiedono il via owner al checkpoint M1.
 
