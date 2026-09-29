@@ -33,6 +33,43 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (intent === "esci") return withCookies(base, await forward("/sign-out"));
 
+  if (intent === "recupera-password") {
+    const response = await forward("/request-password-reset", {
+      email: field("email"),
+      redirectTo: `${new URL(env.APP_ORIGIN).origin}${base}`,
+    });
+    return notice(
+      response.status === 429 ? "troppi-tentativi" : response.ok ? "recupero-inviato" : "errore",
+    );
+  }
+
+  if (intent === "reimposta-password") {
+    const token = field("token");
+    if (!token || token.length > 512) return notice("recupero-scaduto");
+    const response = await forward("/reset-password", {
+      token,
+      newPassword: field("password"),
+    });
+    return notice(response.ok ? "password-reimpostata" : "recupero-scaduto");
+  }
+
+  if (intent === "passkey-remove") {
+    const session = await createAuth(env).api.getSession({ headers: request.headers });
+    if (!session?.user.emailVerified) return notice("errore");
+    const id = field("id");
+    if (!id || id.length > 128) return notice("errore");
+    const removed = await env.DB.prepare(
+      `DELETE FROM "passkey" WHERE "id" = ?1 AND "userId" = ?2
+       AND (EXISTS (SELECT 1 FROM "account" WHERE "userId" = ?2
+         AND ("providerId" = 'google' OR ("providerId" = 'credential' AND LENGTH("password") > 0)))
+         OR (SELECT COUNT(*) FROM "passkey" WHERE "userId" = ?2) > 1)
+       RETURNING "id"`,
+    )
+      .bind(id, session.user.id)
+      .first<{ id: string }>();
+    return redirect(`${base}?accesso=${removed ? "passkey-rimossa" : "ultimo-accesso"}`, 303);
+  }
+
   if (intent === "google") {
     const response = await forward("/sign-in/social", { provider: "google", callbackURL: base });
     if (!response.ok) return notice(response.status === 429 ? "troppi-tentativi" : "errore");

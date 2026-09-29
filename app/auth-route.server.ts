@@ -1,11 +1,16 @@
 import { waitUntil } from "cloudflare:workers";
 
 import { createAuth } from "./auth.server";
+import { registrationStatus } from "./domain/registration.server";
 import { completeStoreLink, takeStoreLinkSession } from "./integrations/ebay/store-link.server";
 import { classifyFailure, logFailure } from "./errors";
 import { localizedPath } from "./i18n";
 
 const serverOnlyAuthPaths = new Set(["/api/auth/get-access-token", "/api/auth/refresh-token"]);
+const passkeyEnrollmentPaths = new Set([
+  "/api/auth/passkey/generate-register-options",
+  "/api/auth/passkey/verify-registration",
+]);
 const ebayCallbackPath = "/api/auth/callback/ebay";
 
 function validEbayCallback(request: Request): boolean {
@@ -34,6 +39,7 @@ function noStore(response: Response): Response {
 // Soglie per IP e percorso sui soli invii sensibili, come le regole predefinite di Better Auth.
 const attemptLimits = [
   { paths: /^\/(sign-in|sign-up|change-password|change-email)(\/|$)/u, window: 10, max: 3 },
+  { paths: /^\/passkey\/verify-(authentication|registration)(\/|$)/u, window: 10, max: 3 },
   {
     paths: /^\/(send-verification-email|request-password-reset|forget-password)(\/|$)/u,
     window: 60,
@@ -87,6 +93,15 @@ async function attemptWait(request: Request, environment: Env): Promise<number |
 }
 
 async function authResponse(request: Request, environment: Env): Promise<Response> {
+  const pathname = new URL(request.url).pathname;
+  if (passkeyEnrollmentPaths.has(pathname)) {
+    const session = await createAuth(environment).api.getSession({ headers: request.headers });
+    if (!session) return new Response(null, { status: 401 });
+    const status = await registrationStatus(environment.DB, session.user.id);
+    if (!session.user.emailVerified || !status.profile || !status.termsAccepted) {
+      return new Response(null, { status: 403 });
+    }
+  }
   const wait = await attemptWait(request, environment);
   if (wait !== null) {
     return Response.json(
@@ -135,6 +150,7 @@ export function handleAuthRequest(
   fetcher: typeof fetch = fetch,
 ): Promise<Response> | Response {
   const pathname = new URL(request.url).pathname.replace(/\/+$/u, "");
+  if (pathname === "/api/auth/passkey/delete-passkey") return new Response(null, { status: 404 });
   if (serverOnlyAuthPaths.has(pathname)) return new Response(null, { status: 404 });
   if (pathname !== ebayCallbackPath) return authResponse(request, environment);
   return handleEbayCallback(request, environment, fetcher);

@@ -81,6 +81,7 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
     },
     emailAndPassword: {
       enabled: true,
+      revokeSessionsOnPasswordReset: true,
       // La sessione nasce subito: chi non ha verificato l'email esplora, ma non collega negozi.
       requireEmailVerification: false,
       sendResetPassword: async ({ user, url }) => {
