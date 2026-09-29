@@ -8,22 +8,25 @@ import type { Route } from "./+types/auth-error";
 import { appCopy } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
 
+type AuthErrorCopy = (typeof appCopy)["it"]["authError"];
+
+// Better Auth indica la causa nel parametro `error`; i codici non previsti usano il testo generico.
+function messageFor(t: AuthErrorCopy, error: string | null): { title: string; body: string } {
+  if (error === "email_not_found") return t.ebayWithoutEmail;
+  if (error === "account_not_linked") return t.accountNotLinked;
+  return t;
+}
+
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const language = languageFromPath(location.pathname);
-  return [{ title: `FiscalBay | ${appCopy[language].authError.title}` }];
+  const error = new URLSearchParams(location.search).get("error");
+  return [{ title: `FiscalBay | ${messageFor(appCopy[language].authError, error).title}` }];
 }
 
 export default function AuthError({ matches }: Route.ComponentProps) {
   const language = matches[0]?.loaderData?.language ?? "it";
   const t = appCopy[language].authError;
-  // Better Auth indica la causa nel parametro `error`; i codici non previsti usano il testo generico.
-  const error = useSearchParams()[0].get("error");
-  const message =
-    error === "email_not_found"
-      ? t.ebayWithoutEmail
-      : error === "account_not_linked"
-        ? t.accountNotLinked
-        : t;
+  const message = messageFor(t, useSearchParams()[0].get("error"));
   return (
     <StandalonePage
       icon={LogIn}

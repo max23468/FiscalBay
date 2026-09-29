@@ -218,4 +218,55 @@ describe("Better Auth su Workers e D1", () => {
       expect(created?.total).toBe(0);
     },
   );
+
+  it("registra un account eBay business nuovo con email non verificata e invia la conferma", async () => {
+    const send = vi.fn(async () => ({ messageId: "synthetic" }));
+    const environment = { ...env, AUTH_EMAIL: { send } } as Env;
+    const start = await createAuth(environment).handler(
+      new Request("http://localhost:5173/api/auth/sign-in/social", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider: "ebay", callbackURL: "/" }),
+      }),
+    );
+    const state = new URL((await start.json<{ url: string }>()).url).searchParams.get("state");
+    const cookie = start.headers
+      .getSetCookie()
+      .map((value) => value.split(";")[0])
+      .join("; ");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.endsWith("/identity/v1/oauth2/token")) {
+        return Response.json({ access_token: "sintetico", token_type: "Bearer", expires_in: 7200 });
+      }
+      return Response.json({
+        userId: "ebay-business-sintetico",
+        username: "venditore-business",
+        businessAccount: { email: "business@example.invalid" },
+      });
+    });
+
+    const response = await handleAuthRequest(
+      new Request(`http://localhost:5173/api/auth/callback/ebay?code=synthetic&state=${state}`, {
+        headers: { cookie },
+      }),
+      environment,
+    );
+    fetchMock.mockRestore();
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/");
+    const user = await env.DB.prepare(
+      'SELECT u.email, u."emailVerified", a."accountId" FROM "user" u JOIN "account" a ON a."userId" = u.id WHERE a."providerId" = ?',
+    )
+      .bind("ebay")
+      .first<{ email: string; emailVerified: number; accountId: string }>();
+    expect(user).toEqual({
+      email: "business@example.invalid",
+      emailVerified: 0,
+      accountId: "ebay-business-sintetico",
+    });
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    expect(send.mock.calls[0]?.[0]).toMatchObject({ to: "business@example.invalid" });
+  });
 });
