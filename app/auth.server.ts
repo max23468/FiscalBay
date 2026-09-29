@@ -18,6 +18,9 @@ const ebayIdentitySchema = z.object({
 
 const authEmailFrom = "noreply@fiscalbay.it";
 
+/** Dominio delle email di cui Google è autorevole oltre ai domini Workspace. */
+export const gmailDomain = "gmail.com";
+
 function escapeHtml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -40,7 +43,7 @@ async function sendAuthEmail(
     to: email,
     subject,
     text: `${message}\n\n${url}`,
-    html: `<p>${message}</p><p><a href="${safeUrl}">Continua su FiscalBay</a></p>`,
+    html: `<p>${escapeHtml(message)}</p><p><a href="${safeUrl}">Continua su FiscalBay</a></p>`,
   });
 }
 
@@ -74,19 +77,38 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
       encryptOAuthTokens: true,
       accountLinking: {
         allowDifferentEmails: true,
-        // La fiducia permette il linking esplicito; validateUserInfo vieta quello per email.
-        trustedProviders: ["ebay"],
+        // La fiducia permette il linking esplicito; validateUserInfo limita quello per email.
+        trustedProviders: ["ebay", "google"],
       },
     },
     user: {
+      // L'email si cambia con la conferma del vecchio indirizzo, se verificato, e poi del nuovo.
+      changeEmail: {
+        enabled: true,
+        sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
+          waitUntil(
+            sendAuthEmail(
+              environment,
+              user.email,
+              "Conferma il cambio email di FiscalBay",
+              `Hai chiesto di usare ${newEmail} per accedere a FiscalBay. Se non sei stato tu, ignora questa email.`,
+              url,
+            ),
+          );
+        },
+      },
       validateUserInfo: async ({ user, source }, context) => {
-        if (source.oauth?.providerId !== "ebay") return;
-        if (!user.email) return { error: "email_not_found" };
+        const provider = source.oauth?.providerId;
+        if (provider === "ebay" && !user.email) return { error: "email_not_found" };
         if (source.action !== "link-account") return;
-        // Lo state è già validato da Better Auth. Non basta essere autenticati: deve
-        // contenere un linking esplicito per la stessa sessione, ancora valida e verificata.
+        // Lo state è già validato da Better Auth. Senza linking esplicito il collegamento avviene
+        // per email: Better Auth richiede l'utente locale verificato, qui serve anche l'email
+        // verificata e autorevole del provider, che eBay non fornisce.
         const state = await getOAuthState();
-        if (!state?.link) return { error: "account_not_linked" };
+        if (!state?.link) return user.emailVerified ? undefined : { error: "account_not_linked" };
+        // Non basta essere autenticati: il linking esplicito vale solo per la stessa sessione,
+        // ancora valida e verificata. Così un account creato in anticipo con l'email di un altro
+        // non può conservare un metodo proprio quando il vero titolare recupera l'indirizzo.
         const session = await getAuthoritativeSessionFromCtx(context);
         if (
           !session?.user.emailVerified ||
@@ -133,6 +155,13 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
       google: {
         clientId: environment.GOOGLE_CLIENT_ID,
         clientSecret: environment.GOOGLE_CLIENT_SECRET,
+        // Google è autorevole solo per Gmail e per i domini Workspace (`hd`): per gli altri
+        // indirizzi chiediamo la nostra conferma e non colleghiamo per email.
+        mapProfileToUser: (profile) => ({
+          emailVerified:
+            profile.email_verified &&
+            (profile.email.toLowerCase().endsWith(`@${gmailDomain}`) || Boolean(profile.hd)),
+        }),
       },
     },
     plugins: [

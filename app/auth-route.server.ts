@@ -6,11 +6,19 @@ import { completeStoreLink, takeStoreLinkSession } from "./integrations/ebay/sto
 import { classifyFailure, logFailure } from "./errors";
 import { localizedPath } from "./i18n";
 
-const serverOnlyAuthPaths = new Set(["/api/auth/get-access-token", "/api/auth/refresh-token"]);
+// I token OAuth restano al codice server; metodi e passkey si rimuovono dalle azioni dell'app,
+// che conservano sempre un accesso valido.
+const closedAuthPaths = new Set([
+  "/api/auth/get-access-token",
+  "/api/auth/refresh-token",
+  "/api/auth/passkey/delete-passkey",
+  "/api/auth/unlink-account",
+]);
 const passkeyEnrollmentPaths = new Set([
   "/api/auth/passkey/generate-register-options",
   "/api/auth/passkey/verify-registration",
 ]);
+const linkSocialPath = "/api/auth/link-social";
 const ebayCallbackPath = "/api/auth/callback/ebay";
 
 function validEbayCallback(request: Request): boolean {
@@ -94,6 +102,20 @@ async function attemptWait(request: Request, environment: Env): Promise<number |
 
 async function authResponse(request: Request, environment: Env): Promise<Response> {
   const pathname = new URL(request.url).pathname;
+  if (pathname === linkSocialPath) {
+    // Un nuovo metodo si collega solo da una sessione verificata e sempre con il consenso del
+    // provider: il ramo `idToken` di Better Auth creerebbe l'account senza validateUserInfo.
+    const session = await createAuth(environment).api.getSession({ headers: request.headers });
+    if (!session) return new Response(null, { status: 401 });
+    if (!session.user.emailVerified) return new Response(null, { status: 403 });
+    const body = await request
+      .clone()
+      .json()
+      .catch(() => null);
+    if (typeof body !== "object" || body === null || "idToken" in body) {
+      return new Response(null, { status: 400 });
+    }
+  }
   if (passkeyEnrollmentPaths.has(pathname)) {
     const session = await createAuth(environment).api.getSession({ headers: request.headers });
     if (!session) return new Response(null, { status: 401 });
@@ -150,8 +172,7 @@ export function handleAuthRequest(
   fetcher: typeof fetch = fetch,
 ): Promise<Response> | Response {
   const pathname = new URL(request.url).pathname.replace(/\/+$/u, "");
-  if (pathname === "/api/auth/passkey/delete-passkey") return new Response(null, { status: 404 });
-  if (serverOnlyAuthPaths.has(pathname)) return new Response(null, { status: 404 });
+  if (closedAuthPaths.has(pathname)) return new Response(null, { status: 404 });
   if (pathname !== ebayCallbackPath) return authResponse(request, environment);
   return handleEbayCallback(request, environment, fetcher);
 }
