@@ -211,7 +211,61 @@ describe("Better Auth su Workers e D1", () => {
     ).toBe(404);
   });
 
+  it("recupera l'accesso con una password nuova e revoca le sessioni precedenti", async () => {
+    const origin = "http://localhost:5173";
+    const auth = createAuth(env);
+    const signup = await auth.handler(
+      new Request(`${origin}/api/auth/sign-up/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Utente recupero",
+          email: "recovery@example.invalid",
+          password: "password-precedente-lunga",
+        }),
+      }),
+    );
+    expect(signup.ok).toBe(true);
+    const { user } = await signup.json<{ user: { id: string } }>();
+    const cookie = signup.headers
+      .getSetCookie()
+      .map((value) => value.split(";")[0])
+      .join("; ");
+    const context = await auth.$context;
+    await context.internalAdapter.createVerificationValue({
+      identifier: "reset-password:synthetic-recovery-token",
+      value: user.id,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    const reset = () =>
+      signInAction({
+        request: new Request(`${origin}/accesso`, {
+          method: "POST",
+          headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            intent: "reimposta-password",
+            token: "synthetic-recovery-token",
+            password: "password-recuperata-lunga",
+          }),
+        }),
+      } as never);
+    expect((await reset()).headers.get("location")).toContain("password-reimpostata");
+    expect(await auth.api.getSession({ headers: new Headers({ cookie }) })).toBeNull();
+    expect((await reset()).headers.get("location")).toContain("recupero-scaduto");
+    const signIn = (password: string) =>
+      auth.handler(
+        new Request(`${origin}/api/auth/sign-in/email`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email: "recovery@example.invalid", password }),
+        }),
+      );
+    expect((await signIn("password-precedente-lunga")).status).toBe(401);
+    expect((await signIn("password-recuperata-lunga")).ok).toBe(true);
+  });
+
   it("limita le verifiche WebAuthn e rifiuta origini estranee senza creare identità", async () => {
+    const before = await env.DB.prepare('SELECT COUNT(*) AS count FROM "passkey"').first();
     const origin = "https://test.fiscalbay.it";
     const deployed = { ...env, APP_ORIGIN: origin };
     const attempt = (requestOrigin: string) =>
@@ -234,9 +288,7 @@ describe("Better Auth su Workers e D1", () => {
     const limited = await attempt(origin);
     expect(limited.status).toBe(429);
     expect(limited.headers.get("retry-after")).toMatch(/^\d+$/u);
-    expect(await env.DB.prepare('SELECT COUNT(*) AS count FROM "passkey"').first()).toEqual({
-      count: 0,
-    });
+    expect(await env.DB.prepare('SELECT COUNT(*) AS count FROM "passkey"').first()).toEqual(before);
     const options = await handleAuthRequest(
       new Request(`${origin}/api/auth/passkey/generate-authenticate-options`),
       deployed,
