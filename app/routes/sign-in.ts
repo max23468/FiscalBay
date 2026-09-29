@@ -94,7 +94,7 @@ export async function action({ request }: Route.ActionArgs) {
     const removed = await env.DB.prepare(
       `DELETE FROM "passkey" WHERE "id" = ?1 AND "userId" = ?2
        AND (EXISTS (SELECT 1 FROM "account" WHERE "userId" = ?2
-         AND ("providerId" = 'google' OR ("providerId" = 'credential' AND LENGTH("password") > 0)))
+         AND ("providerId" IN ('google', 'ebay') OR ("providerId" = 'credential' AND LENGTH("password") > 0)))
          OR (SELECT COUNT(*) FROM "passkey" WHERE "userId" = ?2) > 1)
        RETURNING "id"`,
     )

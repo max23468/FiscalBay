@@ -201,6 +201,18 @@ describe("Better Auth su Workers e D1", () => {
       .bind(id)
       .all<{ id: string }>();
     expect(remaining.results.map((row) => row.id)).toEqual(["second"]);
+    await env.DB.prepare(
+      `INSERT INTO "account" ("id", "accountId", "providerId", "userId", "createdAt", "updatedAt")
+       VALUES ('linked-ebay-access', 'synthetic-business-subject', 'ebay', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+    )
+      .bind(id)
+      .run();
+    expect((await remove("second")).headers.get("location")).toContain("passkey-rimossa");
+    expect(
+      await env.DB.prepare('SELECT COUNT(*) AS count FROM "passkey" WHERE "userId" = ?')
+        .bind(id)
+        .first(),
+    ).toEqual({ count: 0 });
     expect(
       (
         await handleAuthRequest(
