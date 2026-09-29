@@ -573,7 +573,7 @@ const it = {
     email: "Email",
     password: "Password",
     signIn: "Accedi",
-    signInBody: "Entra con email e password o con Google.",
+    signInBody: "Entra con email e password, Google o eBay.",
     signUp: "Crea account",
     signUpBody: "Non chiediamo Codice Fiscale né Partita IVA, nemmeno alle aziende.",
     firstName: "Nome",
@@ -586,6 +586,12 @@ const it = {
     newPassword: "Password (almeno 8 caratteri)",
     or: "oppure",
     google: "Continua con Google",
+    ebay: "Continua con eBay",
+    ebayAccessTitle: "Accesso con eBay",
+    ebayAccessBody: "Collega il tuo account eBay per usarlo come metodo di accesso a FiscalBay.",
+    ebayAccessLink: "Collega accesso eBay",
+    ebayAccessRemove: "Rimuovi accesso eBay",
+    ebayAccessConnected: "Account eBay collegato come metodo di accesso.",
     signOut: "Esci",
     linkStore: "Collega negozio eBay",
     terms: {
@@ -617,6 +623,12 @@ const it = {
       errore: "Collegamento non riuscito. Riprova.",
     } as Record<string, string>,
     signInNotices: {
+      "ebay-collegato": "Accesso eBay collegato al tuo account FiscalBay.",
+      "ebay-rimosso": "Accesso eBay rimosso. I negozi collegati restano invariati.",
+      "ultimo-metodo": "Aggiungi un altro metodo di accesso prima di rimuovere eBay.",
+      "nuovo-accesso": "Accedi di nuovo a FiscalBay prima di modificare i metodi di accesso.",
+      "accesso-non-verificato":
+        "Conferma l’indirizzo email prima di aggiungere un metodo di accesso.",
       errore: "Operazione non riuscita. Controlla email e password.",
       registrato: "Account creato. Ti abbiamo inviato un link per confermare l’indirizzo email.",
       registrazione:
@@ -1178,7 +1190,7 @@ const en: AppCopy = {
     email: "Email",
     password: "Password",
     signIn: "Sign in",
-    signInBody: "Use your email and password or Google.",
+    signInBody: "Use your email and password, Google or eBay.",
     signUp: "Create account",
     signUpBody: "We do not ask for a tax code or VAT number, not even from businesses.",
     firstName: "First name",
@@ -1191,6 +1203,12 @@ const en: AppCopy = {
     newPassword: "Password (at least 8 characters)",
     or: "or",
     google: "Continue with Google",
+    ebay: "Continue with eBay",
+    ebayAccessTitle: "Sign in with eBay",
+    ebayAccessBody: "Link your eBay account to use it to sign in to FiscalBay.",
+    ebayAccessLink: "Link eBay sign-in",
+    ebayAccessRemove: "Remove eBay sign-in",
+    ebayAccessConnected: "eBay account linked as a sign-in method.",
     signOut: "Sign out",
     linkStore: "Connect eBay store",
     terms: {
@@ -1222,6 +1240,11 @@ const en: AppCopy = {
       errore: "Could not connect the store. Try again.",
     },
     signInNotices: {
+      "ebay-collegato": "eBay sign-in linked to your FiscalBay account.",
+      "ebay-rimosso": "eBay sign-in removed. Your connected stores are unchanged.",
+      "ultimo-metodo": "Add another sign-in method before removing eBay.",
+      "nuovo-accesso": "Sign in to FiscalBay again before changing your sign-in methods.",
+      "accesso-non-verificato": "Verify your email address before adding a sign-in method.",
       errore: "Could not complete the operation. Check your email and password.",
       registrato: "Account created. We sent you a link to confirm your email address.",
       registrazione:

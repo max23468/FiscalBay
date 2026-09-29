@@ -60,6 +60,11 @@ const noticeTones: Record<string, "success" | "info" | "warning" | "danger"> = {
   registrato: "success",
   "verifica-inviata": "success",
   collegato: "success",
+  "ebay-collegato": "success",
+  "ebay-rimosso": "success",
+  "ultimo-metodo": "warning",
+  "nuovo-accesso": "warning",
+  "accesso-non-verificato": "warning",
 };
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -92,6 +97,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     needsProfile: !status.profile,
     needsAgreement: !status.termsAccepted,
     canLinkStore: session.user.emailVerified && complete,
+    ebayLinked: (await createAuth(env).api.listUserAccounts({ headers: request.headers })).some(
+      (account) => account.providerId === "ebay",
+    ),
     suggestedName: { firstName, lastName: lastName.join(" ") },
     orders: complete ? await listVisibleOrders(env.DB, session.user.id) : [],
   };
@@ -266,12 +274,15 @@ function AgreementFields({
   );
 }
 
-function GoogleForm({ t, language }: { t: AccessCopy; language: Language }) {
+function SocialForms({ t, language }: { t: AccessCopy; language: Language }) {
   return (
-    <form method="post" action={localizedPath(language, "/accesso")}>
+    <form method="post" action={localizedPath(language, "/accesso")} className="grid gap-2">
       <Button type="submit" variant="outline" name="intent" value="google" className="w-full">
         <GoogleMark />
         {t.google}
+      </Button>
+      <Button type="submit" variant="outline" name="intent" value="ebay" className="w-full">
+        {t.ebay}
       </Button>
     </form>
   );
@@ -368,7 +379,7 @@ function AccessForms({
           </FieldGroup>
         </form>
         <OrSeparator t={t} />
-        <GoogleForm t={t} language={language} />
+        <SocialForms t={t} language={language} />
       </TabsContent>
       <TabsContent value="registrati" keepMounted className={cn("grid gap-5", rise)}>
         <p className="text-muted-foreground">{t.signUpBody}</p>
@@ -414,7 +425,7 @@ function AccessForms({
           </FieldGroup>
         </form>
         <OrSeparator t={t} />
-        <GoogleForm t={t} language={language} />
+        <SocialForms t={t} language={language} />
       </TabsContent>
     </Tabs>
   );
@@ -584,6 +595,40 @@ function BrandPanel({ t }: { t: AccessCopy }) {
 
 const errorTones = new Set(["danger", "warning"]);
 
+function EbayAccess({
+  t,
+  language,
+  verified,
+  linked,
+}: {
+  t: AccessCopy;
+  language: Language;
+  verified: boolean;
+  linked: boolean;
+}) {
+  if (!verified) return null;
+  return (
+    <section aria-labelledby="ebay-access-title" className="grid gap-2 rounded-lg border p-4">
+      <h2 id="ebay-access-title" className="font-semibold">
+        {t.ebayAccessTitle}
+      </h2>
+      <p className="text-sm text-muted-foreground">
+        {linked ? t.ebayAccessConnected : t.ebayAccessBody}
+      </p>
+      <form method="post" action={localizedPath(language, "/accesso")}>
+        <Button
+          type="submit"
+          variant="outline"
+          name="intent"
+          value={linked ? "rimuovi-accesso-ebay" : "collega-accesso-ebay"}
+        >
+          {linked ? t.ebayAccessRemove : t.ebayAccessLink}
+        </Button>
+      </form>
+    </section>
+  );
+}
+
 export default function Home({ loaderData }: Route.ComponentProps) {
   const { language, notice } = loaderData;
   const t = appCopy[language].access;
@@ -657,6 +702,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </div>
         </div>
         {noticeAlert}
+        <EbayAccess
+          t={t}
+          language={language}
+          verified={loaderData.emailVerified}
+          linked={loaderData.ebayLinked}
+        />
         <AccountBar
           t={t}
           language={language}

@@ -856,6 +856,27 @@ describe("registrazione e verifica del contatto", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
+  it("avvia eBay dal modulo e richiede una sessione verificata per collegarlo", async () => {
+    const response = await accessForm("/en/accesso", { intent: "ebay" });
+    expect(response.status).toBe(303);
+    const location = new URL(response.headers.get("location")!);
+    expect(location.hostname).toBe("auth.ebay.com");
+    expect(location.searchParams.get("scope")!.split(" ")).toEqual([
+      "https://api.ebay.com/oauth/api_scope",
+      "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
+    ]);
+    const refused = await accessForm("/en/accesso", { intent: "collega-accesso-ebay" });
+    expect(refused.headers.get("location")).toBe("/en?accesso=accesso-non-verificato");
+    const session = await verifiedSession("link-modulo@example.invalid");
+    const allowed = await accessForm(
+      "/accesso",
+      { intent: "collega-accesso-ebay" },
+      session.cookie,
+    );
+    expect(allowed.status).toBe(303);
+    expect(new URL(allowed.headers.get("location")!).hostname).toBe("auth.ebay.com");
+  });
+
   it("pubblica la versione dei Termini e dell'informativa accettate", async () => {
     expect(
       await loadLegal({
