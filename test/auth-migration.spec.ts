@@ -221,6 +221,7 @@ describe("Better Auth su Workers e D1", () => {
         )
       ).status,
     ).toBe(404);
+    await env.DB.prepare('DELETE FROM "user" WHERE "id" = ?').bind(id).run();
   });
 
   it("recupera l'accesso con una password nuova e revoca le sessioni precedenti", async () => {
