@@ -532,6 +532,14 @@ const it = {
     title: "Accesso non completato",
     body: "Riprova ad accedere. Se il problema continua, contatta il supporto.",
     back: "Torna a FiscalBay",
+    ebayWithoutEmail: {
+      title: "Accesso con eBay non disponibile",
+      body: "eBay non ci fornisce l’indirizzo email del tuo account, come succede per gli account individuali. Accedi con email, Google o passkey: dopo potrai collegare il tuo negozio eBay.",
+    },
+    accountNotLinked: {
+      title: "Email già registrata",
+      body: "Esiste già un account FiscalBay con questo indirizzo email. Accedi con il metodo che usi di solito.",
+    },
   },
   legal: {
     termini: "Termini di servizio",
@@ -1130,6 +1138,14 @@ const en: AppCopy = {
     title: "Sign in incomplete",
     body: "Try signing in again. If the problem continues, contact support.",
     back: "Back to FiscalBay",
+    ebayWithoutEmail: {
+      title: "Sign in with eBay unavailable",
+      body: "eBay does not share the email address of your account, as happens with individual accounts. Sign in with email, Google or a passkey: you can then connect your eBay store.",
+    },
+    accountNotLinked: {
+      title: "Email already registered",
+      body: "A FiscalBay account already uses this email address. Sign in with the method you usually use.",
+    },
   },
   legal: {
     termini: "Terms of service",
