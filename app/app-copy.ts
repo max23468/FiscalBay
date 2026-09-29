@@ -441,9 +441,9 @@ const it = {
     templateEn: "Inglese",
     templateHint: "{ordine} viene sostituito con il numero dell’ordine.",
     templateDefaultIt:
-      "Buongiorno, per completare la documentazione dell’ordine {ordine} ci serve il tuo Codice Fiscale. Puoi rispondere a questo messaggio indicandolo? Grazie.",
+      "Buongiorno e grazie per l’acquisto. Per emettere la fattura elettronica dell’ordine {ordine} ci serve il tuo Codice Fiscale. Se acquisti con Partita IVA, indicaci quella e la ragione sociale. Grazie.",
     templateDefaultEn:
-      "Hello, to complete the paperwork for order {ordine} we need your Italian tax code (Codice Fiscale). Could you reply to this message with it? Thank you.",
+      "Hello and thank you for your purchase. To issue the electronic invoice for order {ordine} we need your Italian tax code (Codice Fiscale). If you are buying with a VAT number, please send that and your company name instead. Thank you.",
     // Dati e privacy
     privacyPolicy: "Informativa privacy",
     privacyPolicyBody: "Quali dati trattiamo, per quanto tempo e con quali fornitori.",
@@ -1080,9 +1080,9 @@ const en: AppCopy = {
     templateEn: "English",
     templateHint: "{ordine} is replaced with the order number.",
     templateDefaultIt:
-      "Buongiorno, per completare la documentazione dell’ordine {ordine} ci serve il tuo Codice Fiscale. Puoi rispondere a questo messaggio indicandolo? Grazie.",
+      "Buongiorno e grazie per l’acquisto. Per emettere la fattura elettronica dell’ordine {ordine} ci serve il tuo Codice Fiscale. Se acquisti con Partita IVA, indicaci quella e la ragione sociale. Grazie.",
     templateDefaultEn:
-      "Hello, to complete the paperwork for order {ordine} we need your Italian tax code (Codice Fiscale). Could you reply to this message with it? Thank you.",
+      "Hello and thank you for your purchase. To issue the electronic invoice for order {ordine} we need your Italian tax code (Codice Fiscale). If you are buying with a VAT number, please send that and your company name instead. Thank you.",
     privacyPolicy: "Privacy policy",
     privacyPolicyBody: "What data we process, for how long and with which providers.",
     accountExport: "Export account data",

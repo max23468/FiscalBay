@@ -483,12 +483,15 @@ function OrderCard({
   unlocking,
   onUnlock,
   isNew,
+  enterIndex,
 }: FiscalProps & {
   detailHref: string;
   selecting: boolean;
   selected: boolean;
   onSelect: (selected: boolean) => void;
   isNew: boolean;
+  /** Posizione tra le schede comparse insieme, per l’ingresso scalato; assente per i nuovi ordini in cima. */
+  enterIndex?: number;
 }) {
   const action = useAction();
   const titleId = useId();
@@ -502,7 +505,14 @@ function OrderCard({
       initial={isNew ? { opacity: 0, y: -4 } : false}
       animate={{ opacity: 1, y: 0 }}
       aria-labelledby={titleId}
+      style={
+        enterIndex === undefined
+          ? undefined
+          : { animationDelay: `${Math.min(enterIndex, maxEnterSteps) * enterStep}ms` }
+      }
       className={cn(
+        enterIndex !== undefined &&
+          "animate-[rise-in_var(--duration-fast)_var(--ease-smooth-out)_both] motion-reduce:animate-none",
         // Da due colonne la scheda occupa quattro righe condivise con quella accanto:
         // intestazione, articolo, acquirente e «Dettaglio» iniziano alla stessa altezza.
         "flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4 transition-[border-color] duration-(--duration-quick) lg:row-span-4 lg:grid lg:grid-rows-subgrid",
@@ -1423,6 +1433,10 @@ function LoadMore({ data, t }: { data: OrdersPageData; t: AppCopy }) {
   );
 }
 
+/** Ritardo tra una scheda e la successiva quando compaiono insieme, fino a un massimo di passi. */
+const enterStep = 40;
+const maxEnterSteps = 6;
+
 /** Distanza dall'inizio della pagina entro cui l'utente è considerato in cima alla lista. */
 const topThreshold = 120;
 
@@ -1469,6 +1483,13 @@ function OrdersList({
     ? [...[...data.incoming].sort((a, b) => b.createdAt.localeCompare(a.createdAt)), ...data.orders]
     : data.orders;
   const incomingIds = new Set(data.incoming.map((order) => order.id));
+  // Ogni scheda riceve la sua posizione d'ingresso la prima volta che compare e la
+  // conserva: con «Carica altri» entrano soltanto le nuove, dalla prima in giù.
+  const enterIndexes = useRef(new Map<string, number>()).current;
+  const entering = orders.filter(
+    (order) => !enterIndexes.has(order.id) && !incomingIds.has(order.id),
+  );
+  entering.forEach((order, index) => enterIndexes.set(order.id, index));
   const lockedSelected = orders
     .filter((order) => selected.has(order.id) && order.fiscal.state === "locked")
     .map((order) => order.id);
@@ -1539,6 +1560,7 @@ function OrdersList({
                     unlocking={unlock.pending.has(order.id)}
                     onUnlock={submit}
                     isNew={showIncoming && incomingIds.has(order.id)}
+                    enterIndex={enterIndexes.get(order.id)}
                   />
                 ))}
               </section>
