@@ -527,6 +527,17 @@ const it = {
       INTERNAL_ERROR: "Operazione non riuscita. Riprova più tardi.",
     },
   },
+  admin: {
+    title: "Area amministrativa",
+    verifyTitle: "Conferma con passkey",
+    verifyBody:
+      "L’area amministrativa richiede l’accesso con una passkey di questo account e la verifica sul dispositivo: impronta, volto o PIN. Password, Google ed eBay non bastano.",
+    verifyFailed:
+      "Conferma non riuscita. Usa una passkey di questo account con la verifica del dispositivo.",
+    granted: (when: string) =>
+      `Accesso confermato con passkey: ${when}. Dopo 12 ore serve una nuova conferma.`,
+    back: "Torna a FiscalBay",
+  },
   authError: {
     title: "Accesso non completato",
     body: "Riprova ad accedere. Se il problema continua, contatta il supporto.",
@@ -645,7 +656,10 @@ const it = {
       "email-confermata":
         "Conferma registrata. Se l’indirizzo non è ancora cambiato, apri il link inviato alla nuova email.",
       "email-non-valida": "Indica un indirizzo email valido e diverso da quello attuale.",
-      "nuovo-accesso": "Per modificare i metodi di accesso, accedi di nuovo a FiscalBay.",
+      "nuovo-accesso":
+        "Per questa modifica serve un accesso recente: esci e accedi di nuovo a FiscalBay.",
+      "sessione-chiusa": "Sessione chiusa su quel dispositivo.",
+      "sessioni-chiuse": "Sessioni chiuse su tutti gli altri dispositivi.",
       "accesso-non-verificato": "Conferma l’indirizzo email per aggiungere un metodo di accesso.",
       errore: "Operazione non riuscita. Controlla email e password.",
       registrato: "Account creato. Ti abbiamo inviato un link per confermare l’indirizzo email.",
@@ -1171,6 +1185,16 @@ const en: AppCopy = {
       INTERNAL_ERROR: "The operation failed. Try again later.",
     },
   },
+  admin: {
+    title: "Admin area",
+    verifyTitle: "Confirm with a passkey",
+    verifyBody:
+      "The admin area requires signing in with a passkey of this account and verification on the device: fingerprint, face or PIN. Password, Google and eBay are not enough.",
+    verifyFailed: "Confirmation failed. Use a passkey of this account with device verification.",
+    granted: (when: string) =>
+      `Passkey sign-in confirmed: ${when}. A new confirmation is required after 12 hours.`,
+    back: "Back to FiscalBay",
+  },
   authError: {
     title: "Sign in incomplete",
     body: "Try signing in again. If the problem continues, contact support.",
@@ -1288,7 +1312,10 @@ const en: AppCopy = {
       "email-confermata":
         "Confirmation received. If your address has not changed yet, open the link sent to the new email.",
       "email-non-valida": "Enter a valid email address that differs from the current one.",
-      "nuovo-accesso": "To change your sign-in methods, sign in to FiscalBay again.",
+      "nuovo-accesso":
+        "This change requires a recent sign-in: sign out and sign in to FiscalBay again.",
+      "sessione-chiusa": "Session closed on that device.",
+      "sessioni-chiuse": "Sessions closed on all other devices.",
       "accesso-non-verificato": "Confirm your email address to add a sign-in method.",
       errore: "Could not complete the operation. Check your email and password.",
       registrato: "Account created. We sent you a link to confirm your email address.",

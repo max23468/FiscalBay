@@ -47,6 +47,18 @@ async function sendAuthEmail(
   });
 }
 
+/** Durata delle sessioni in secondi: scadenza, rinnovo con l'uso e accesso recente. */
+export const sessionPolicy = {
+  expiresIn: 7 * 86_400,
+  updateAge: 86_400,
+  freshAge: 86_400,
+} as const;
+
+// Richieste in cui una passkey ha superato la verifica dell'utente sul dispositivo: la
+// sessione creata dalla stessa richiesta lo registra. La richiesta resta in memoria solo
+// finché è in corso.
+const userVerifiedRequests = new WeakSet<Request>();
+
 export function createAuthOptions(environment: Env): BetterAuthOptions {
   const appOrigin = new URL(environment.APP_ORIGIN);
 
@@ -73,6 +85,28 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
       errorURL: "/auth/error",
     },
     logger: { disabled: true },
+    session: {
+      ...sessionPolicy,
+      // Ogni richiesta rilegge la sessione da D1: logout e revoche valgono subito.
+      cookieCache: { enabled: false },
+      additionalFields: {
+        passkeyVerified: { type: "boolean", required: true, defaultValue: false, input: false },
+      },
+    },
+    databaseHooks: {
+      session: {
+        create: {
+          before: async (session, context) => ({
+            data: {
+              ...session,
+              passkeyVerified: Boolean(
+                context?.request && userVerifiedRequests.has(context.request),
+              ),
+            },
+          }),
+        },
+      },
+    },
     account: {
       encryptOAuthTokens: true,
       accountLinking: {
@@ -82,6 +116,10 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
       },
     },
     user: {
+      additionalFields: {
+        // Si concede solo dal database: `input: false` lo esclude da registrazione e modifiche.
+        admin: { type: "boolean", required: true, defaultValue: false, input: false },
+      },
       // L'email si cambia con la conferma del vecchio indirizzo, se verificato, e poi del nuovo.
       changeEmail: {
         enabled: true,
@@ -169,6 +207,15 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
         origin: appOrigin.origin,
         rpID: appOrigin.hostname,
         rpName: "FiscalBay",
+        authentication: {
+          // Il plugin accetta anche una passkey senza verifica dell'utente: qui vale come
+          // un solo fattore, quindi la sessione non è marcata.
+          afterVerification: ({ ctx, verification }) => {
+            if (verification.authenticationInfo.userVerified && ctx.request) {
+              userVerifiedRequests.add(ctx.request);
+            }
+          },
+        },
       }),
       genericOAuth({
         config: [

@@ -27,11 +27,12 @@ import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { createAuth } from "../auth.server";
 import { registrationStatus } from "../domain/registration.server";
+import { listActiveSessions, type ActiveSession } from "../domain/sessions.server";
 import { listSignInMethods, type SignInMethods } from "../domain/sign-in-methods.server";
 import { listVisibleOrders } from "../domain/orders.server";
 import { appCopy } from "../app-copy";
 import { formatAmount, languageFromPath, localizedPath, type Language } from "../i18n";
-import { formatDate } from "../view-models";
+import { formatDate, formatRelative } from "../view-models";
 import type { Route } from "./+types/home";
 
 export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescriptors {
@@ -77,6 +78,8 @@ const noticeTones: Record<string, "success" | "info" | "warning" | "danger"> = {
   "email-confermata": "success",
   "email-non-valida": "warning",
   "nuovo-accesso": "warning",
+  "sessione-chiusa": "success",
+  "sessioni-chiuse": "success",
   "accesso-non-verificato": "warning",
 };
 
@@ -107,6 +110,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const status = await registrationStatus(env.DB, session.user.id);
   const complete = status.termsAccepted && status.profile !== null;
   const methods = await listSignInMethods(env.DB, session.user.id);
+  const now = new Date();
   const ebayLinked = methods.accounts.ebay;
   // eBay fornisce uno username, non il nome della persona. Vale anche per gli utenti
   // già registrati: né lo username né un indirizzo email devono precompilare il profilo.
@@ -123,6 +127,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     needsAgreement: !status.termsAccepted,
     canLinkStore: session.user.emailVerified && complete,
     methods: session.user.emailVerified && complete ? methods : null,
+    sessions:
+      session.user.emailVerified && complete
+        ? await listActiveSessions(env.DB, session.user.id, session.session.id, language, now)
+        : [],
+    now: now.toISOString(),
     suggestedName: { firstName, lastName: lastName.join(" ") },
     orders: complete ? await listVisibleOrders(env.DB, session.user.id) : [],
   };
@@ -723,14 +732,60 @@ function EmailChange({ language, email }: { language: Language; email: string })
   );
 }
 
+/** Sessioni aperte: si chiudono una alla volta o tutte tranne quella in uso. */
+function SessionList({
+  language,
+  sessions,
+  now,
+}: {
+  language: Language;
+  sessions: ActiveSession[];
+  now: string;
+}) {
+  const { settings } = appCopy[language];
+  return (
+    <SecurityGroup id="security-sessions" title={settings.sessions}>
+      <ul className="grid divide-y border-y">
+        {sessions.map((session) => (
+          <MethodRow
+            key={session.id}
+            label={session.device}
+            status={
+              session.current
+                ? settings.thisDevice
+                : settings.lastActive(formatRelative(session.lastActiveAt, now, language))
+            }
+          >
+            <form method="post" action={localizedPath(language, "/accesso")}>
+              <input type="hidden" name="id" value={session.id} />
+              <Button type="submit" variant="outline" size="sm" name="intent" value="esci-sessione">
+                {settings.signOutSession}
+              </Button>
+            </form>
+          </MethodRow>
+        ))}
+      </ul>
+      {sessions.some((session) => !session.current) ? (
+        <MethodAction language={language} intent="esci-altri">
+          {settings.signOutAll}
+        </MethodAction>
+      ) : null}
+    </SecurityGroup>
+  );
+}
+
 function AccountSecurity({
   language,
   email,
   methods,
+  sessions,
+  now,
 }: {
   language: Language;
   email: string;
   methods: SignInMethods;
+  sessions: ActiveSession[];
+  now: string;
 }) {
   const { access: t, settings } = appCopy[language];
   const [pending, setPending] = useState(false);
@@ -761,7 +816,9 @@ function AccountSecurity({
         try {
           const { authClient } = await import("../passkey-client");
           const result = await authClient.passkey.addPasskey();
-          if (result.error) setError(true);
+          if (result.error?.status === 403) {
+            window.location.assign(`${localizedPath(language)}?accesso=nuovo-accesso`);
+          } else if (result.error) setError(true);
           else window.location.reload();
         } catch {
           setError(true);
@@ -863,6 +920,7 @@ function AccountSecurity({
           ) : null}
           <p className="text-xs text-muted-foreground">{settings.lastMethod}</p>
         </SecurityGroup>
+        <SessionList language={language} sessions={sessions} now={now} />
       </CardContent>
     </Card>
   );
@@ -1148,6 +1206,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             language={language}
             email={loaderData.email}
             methods={loaderData.methods}
+            sessions={loaderData.sessions}
+            now={loaderData.now}
           />
         ) : null}
       </main>
