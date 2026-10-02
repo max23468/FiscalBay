@@ -5,7 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 import { handleAuthRequest } from "../app/auth-route.server";
 import { createAuth, createAuthOptions, gmailDomain } from "../app/auth.server";
 import { completeRegistration } from "../app/domain/registration.server";
+import { loader as adminLoader } from "../app/routes/admin";
+import { loader as homeLoader } from "../app/routes/home";
 import { action as signInAction } from "../app/routes/sign-in";
+import { action as storeLinkAction } from "../app/routes/store-link";
 
 it("mantiene lo schema D1 allineato ai quattro metodi Auth", async () => {
   const migration = await getMigrations(createAuthOptions(env));
@@ -1041,5 +1044,351 @@ describe("Collegamento e modifica dell'identità", () => {
     // Stesso utente, quindi stessi spazi, negozi e piani: cambia soltanto l'indirizzo.
     expect(await stored()).toEqual({ email: "email.nuova@example.invalid", emailVerified: 1 });
     send.mockRestore();
+  });
+});
+
+describe("Sessioni, revoche e area admin", () => {
+  const origin = "http://localhost:5173";
+  const cookies = (response: Response) =>
+    response.headers
+      .getSetCookie()
+      .map((value) => value.split(";")[0])
+      .join("; ");
+  const jsonRequest = (path: string, cookie: string, body?: unknown) =>
+    handleAuthRequest(
+      new Request(`${origin}/api/auth/${path}`, {
+        method: body === undefined ? "GET" : "POST",
+        headers: { "content-type": "application/json", origin, cookie, "user-agent": userAgent },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      }),
+      env,
+    );
+  const userAgent =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Safari/605.1.15";
+  const form = (path: string, cookie: string, fields: Record<string, string>) =>
+    new Request(`${origin}${path}`, {
+      method: "POST",
+      headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(fields),
+    });
+  const appAction = (cookie: string, fields: Record<string, string>) =>
+    signInAction({ request: form("/accesso", cookie, fields) } as never).then((response) =>
+      response.headers.get("location"),
+    );
+  const home = (cookie: string) =>
+    homeLoader({ request: new Request(`${origin}/`, { headers: { cookie } }) } as never);
+  /** Esito del loader admin: 404 per chi non è admin, altrimenti il livello di accesso. */
+  const admin = async (cookie: string) => {
+    try {
+      const result = await adminLoader({
+        request: new Request(`${origin}/admin`, { headers: { cookie } }),
+      } as never);
+      return result.access;
+    } catch (error) {
+      return (error as { init?: { status?: number } }).init?.status;
+    }
+  };
+  const signIn = async (email: string) =>
+    cookies(await jsonRequest("sign-in/email", "", { email, password: "Password-sintetica-123!" }));
+  const createUser = async (email: string) => {
+    const response = await jsonRequest("sign-up/email", "", {
+      name: "Sessioni sintetiche",
+      email,
+      password: "Password-sintetica-123!",
+    });
+    const { user } = await response.json<{ user: { id: string } }>();
+    await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?').bind(user.id).run();
+    await completeRegistration(env.DB, {
+      userId: user.id,
+      language: "it",
+      now: new Date(),
+      profile: {
+        firstName: "Utente",
+        lastName: "Sessioni",
+        accountType: "private",
+        companyName: null,
+      },
+      agreement: { marketing: false },
+    });
+    return { id: user.id, cookie: cookies(response) };
+  };
+  const sessionId = async (cookie: string) =>
+    (
+      await jsonRequest("get-session", cookie).then((response) =>
+        response.json<{ session: { id: string } } | null>(),
+      )
+    )?.session.id;
+  /** Sposta indietro la creazione della sessione, come se l'accesso fosse più vecchio. */
+  const age = async (cookie: string, hours: number) => {
+    const id = await sessionId(cookie);
+    const row = await env.DB.prepare('SELECT "createdAt" FROM "session" WHERE id = ?')
+      .bind(id)
+      .first<{ createdAt: string | number }>();
+    const past = new Date(new Date(row!.createdAt).getTime() - hours * 3_600_000);
+    await env.DB.prepare('UPDATE "session" SET "createdAt" = ? WHERE id = ?')
+      .bind(typeof row!.createdAt === "number" ? past.getTime() : past.toISOString(), id)
+      .run();
+  };
+
+  /** Prove con un cookie già revocato: nessuna operazione protetta deve riuscire. */
+  async function expectRevoked(cookie: string) {
+    expect(await jsonRequest("get-session", cookie).then((response) => response.json())).toBeNull();
+    expect((await home(cookie)).authenticated).toBe(false);
+    expect(
+      await appAction(cookie, { intent: "cambia-email", email: "x@example.invalid" }),
+    ).toContain("accesso-non-verificato");
+    expect(await appAction(cookie, { intent: "esci-altri" })).toContain("accesso=errore");
+    const link = await storeLinkAction({ request: form("/negozi/collega", cookie, {}) } as never);
+    expect(link.headers.get("location")).toContain("negozio=accesso");
+    expect((await jsonRequest("passkey/generate-register-options", cookie)).status).toBe(401);
+    expect(await admin(cookie)).toBe(404);
+  }
+
+  it("elenca le sessioni senza token e chiude una sessione o tutte le altre", async () => {
+    const user = await createUser("sessioni@example.invalid");
+    const second = await signIn("sessioni@example.invalid");
+    const third = await signIn("sessioni@example.invalid");
+    const other = await createUser("sessioni.altro@example.invalid");
+
+    const loaded = await home(user.cookie);
+    if (!loaded.authenticated) throw new Error("sessione attesa");
+    expect(loaded.sessions).toHaveLength(3);
+    expect(loaded.sessions.filter((session) => session.current)).toEqual([
+      expect.objectContaining({ id: await sessionId(user.cookie), device: "Safari su macOS" }),
+    ]);
+    expect(JSON.stringify(loaded)).not.toMatch(/token/iu);
+    // L'elenco di Better Auth restituirebbe i token delle altre sessioni: non è esposto.
+    expect((await jsonRequest("list-sessions", user.cookie)).status).toBe(404);
+    expect(
+      (await jsonRequest("update-session", user.cookie, { passkeyVerified: true })).status,
+    ).toBe(404);
+
+    // Un id di un altro utente non chiude nulla.
+    expect(
+      await appAction(other.cookie, { intent: "esci-sessione", id: (await sessionId(second))! }),
+    ).toContain("sessione-chiusa");
+    expect(await sessionId(second)).toBeDefined();
+
+    expect(
+      await appAction(user.cookie, { intent: "esci-sessione", id: (await sessionId(second))! }),
+    ).toContain("sessione-chiusa");
+    await expectRevoked(second);
+    expect(await sessionId(third)).toBeDefined();
+
+    expect(await appAction(user.cookie, { intent: "esci-altri" })).toContain("sessioni-chiuse");
+    await expectRevoked(third);
+    expect(await sessionId(user.cookie)).toBeDefined();
+    expect(await sessionId(other.cookie)).toBeDefined();
+
+    // Chiudere la sessione corrente dall'elenco equivale al logout.
+    const response = await signInAction({
+      request: form("/accesso", user.cookie, {
+        intent: "esci-sessione",
+        id: (await sessionId(user.cookie))!,
+      }),
+    } as never);
+    expect(response.headers.get("location")).toBe("/");
+    await expectRevoked(user.cookie);
+  });
+
+  it("chiede un accesso recente per le modifiche critiche", async () => {
+    const user = await createUser("recente@example.invalid");
+    await age(user.cookie, 25);
+    for (const fields of [
+      { intent: "cambia-email", email: "recente.nuova@example.invalid" },
+      { intent: "collega-metodo", metodo: "google" },
+      { intent: "rimuovi-metodo", metodo: "password" },
+      { intent: "passkey-remove", id: "qualsiasi" },
+    ]) {
+      expect(await appAction(user.cookie, fields)).toContain("nuovo-accesso");
+    }
+    expect((await jsonRequest("passkey/generate-register-options", user.cookie)).status).toBe(403);
+    // Chiudere le sessioni resta possibile anche con un accesso non recente.
+    expect(await appAction(user.cookie, { intent: "esci-altri" })).toContain("sessioni-chiuse");
+    expect(
+      await env.DB.prepare('SELECT email FROM "user" WHERE id = ?').bind(user.id).first(),
+    ).toEqual({ email: "recente@example.invalid" });
+  });
+
+  it("concede l'admin solo dal database e lo revoca subito", async () => {
+    const user = await createUser("admin.db@example.invalid");
+    expect(await admin(user.cookie)).toBe(404);
+    // Il campo non si imposta da registrazione o modifica del profilo.
+    await jsonRequest("update-user", user.cookie, { admin: true });
+    const created = await jsonRequest("sign-up/email", "", {
+      name: "Admin sintetico",
+      email: "admin.registrato@example.invalid",
+      password: "Password-sintetica-123!",
+      admin: true,
+    });
+    expect(
+      await env.DB.prepare('SELECT email, "admin" FROM "user" WHERE email IN (?, ?) ORDER BY email')
+        .bind("admin.db@example.invalid", "admin.registrato@example.invalid")
+        .all()
+        .then((rows) => rows.results),
+    ).toEqual(
+      created.ok
+        ? [
+            { email: "admin.db@example.invalid", admin: 0 },
+            { email: "admin.registrato@example.invalid", admin: 0 },
+          ]
+        : [{ email: "admin.db@example.invalid", admin: 0 }],
+    );
+    expect(await admin(user.cookie)).toBe(404);
+
+    await env.DB.prepare('UPDATE "user" SET "admin" = 1 WHERE id = ?').bind(user.id).run();
+    // Password, anche appena inserita, non basta: serve la conferma con passkey.
+    expect(await admin(user.cookie)).toBe("verify");
+    expect((await jsonRequest("passkey/generate-register-options", user.cookie)).status).toBe(403);
+    await env.DB.prepare('UPDATE "user" SET "admin" = 0 WHERE id = ?').bind(user.id).run();
+    expect(await admin(user.cookie)).toBe(404);
+  });
+
+  /** Autenticatore sintetico P-256 che firma asserzioni WebAuthn come un dispositivo reale. */
+  async function syntheticPasskey(userId: string) {
+    const keys = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+      "sign",
+      "verify",
+    ]);
+    const jwk = await crypto.subtle.exportKey("jwk", keys.publicKey);
+    const fromB64url = (value: string) =>
+      Uint8Array.from(atob(value.replaceAll("-", "+").replaceAll("_", "/")), (c) =>
+        c.charCodeAt(0),
+      );
+    const b64url = (bytes: Uint8Array) =>
+      btoa(String.fromCharCode(...bytes))
+        .replaceAll("+", "-")
+        .replaceAll("/", "_")
+        .replace(/=+$/u, "");
+    // Chiave COSE EC2: {1: 2, 3: -7, -1: 1, -2: x, -3: y} in CBOR.
+    const cose = new Uint8Array([
+      0xa5,
+      0x01,
+      0x02,
+      0x03,
+      0x26,
+      0x20,
+      0x01,
+      0x21,
+      0x58,
+      0x20,
+      ...fromB64url(jwk.x!),
+      0x22,
+      0x58,
+      0x20,
+      ...fromB64url(jwk.y!),
+    ]);
+    const credentialId = b64url(crypto.getRandomValues(new Uint8Array(16)));
+    await env.DB.prepare(
+      `INSERT INTO "passkey" ("id", "publicKey", "userId", "credentialID", "counter", "deviceType", "backedUp")
+       VALUES (?, ?, ?, ?, 0, 'multiDevice', 1)`,
+    )
+      .bind(crypto.randomUUID(), btoa(String.fromCharCode(...cose)), userId, credentialId)
+      .run();
+
+    /** Accede con la passkey; `userVerified` indica se il dispositivo ha verificato l'utente. */
+    return async (userVerified: boolean, cookie = "") => {
+      const options = await jsonRequest("passkey/generate-authenticate-options", cookie);
+      const { challenge } = await options.clone().json<{ challenge: string }>();
+      const encoder = new TextEncoder();
+      const clientData = encoder.encode(
+        JSON.stringify({ type: "webauthn.get", challenge, origin, crossOrigin: false }),
+      );
+      const rpIdHash = new Uint8Array(
+        await crypto.subtle.digest("SHA-256", encoder.encode("localhost")),
+      );
+      const authenticatorData = new Uint8Array([
+        ...rpIdHash,
+        userVerified ? 0x05 : 0x01,
+        0,
+        0,
+        0,
+        0,
+      ]);
+      const signed = new Uint8Array([
+        ...authenticatorData,
+        ...new Uint8Array(await crypto.subtle.digest("SHA-256", clientData)),
+      ]);
+      const raw = new Uint8Array(
+        await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, keys.privateKey, signed),
+      );
+      // WebAuthn usa la firma DER, WebCrypto quella r||s.
+      const integer = (bytes: Uint8Array) => {
+        let start = 0;
+        while (start < bytes.length - 1 && bytes[start] === 0) start++;
+        const trimmed = bytes.slice(start);
+        const value = trimmed[0]! & 0x80 ? [0, ...trimmed] : [...trimmed];
+        return [0x02, value.length, ...value];
+      };
+      const body = [...integer(raw.slice(0, 32)), ...integer(raw.slice(32))];
+      const signature = new Uint8Array([0x30, body.length, ...body]);
+      const response = await jsonRequest(
+        "passkey/verify-authentication",
+        [cookie, cookies(options)].filter(Boolean).join("; "),
+        {
+          response: {
+            id: credentialId,
+            rawId: credentialId,
+            type: "public-key",
+            response: {
+              authenticatorData: b64url(authenticatorData),
+              clientDataJSON: b64url(clientData),
+              signature: b64url(signature),
+            },
+            clientExtensionResults: {},
+          },
+        },
+      );
+      expect(response.ok).toBe(true);
+      return cookies(response);
+    };
+  }
+
+  it("apre l'area admin solo con passkey verificata sul dispositivo, per 12 ore", async () => {
+    const user = await createUser("admin.passkey@example.invalid");
+    const signInWithPasskey = await syntheticPasskey(user.id);
+    const passkeyVerified = async (cookie: string) =>
+      (
+        await env.DB.prepare('SELECT "passkeyVerified" FROM "session" WHERE id = ?')
+          .bind(await sessionId(cookie))
+          .first<{ passkeyVerified: number }>()
+      )?.passkeyVerified;
+
+    // Per un utente normale la passkey è un accesso come gli altri: nessuna area admin.
+    const merchant = await signInWithPasskey(true);
+    expect(await passkeyVerified(merchant)).toBe(1);
+    expect(await admin(merchant)).toBe(404);
+
+    await env.DB.prepare('UPDATE "user" SET "admin" = 1 WHERE id = ?').bind(user.id).run();
+    // Passkey senza verifica dell'utente: un solo fattore, la sessione non vale per l'admin.
+    const presenceOnly = await signInWithPasskey(false);
+    expect(await passkeyVerified(presenceOnly)).toBe(0);
+    expect(await admin(presenceOnly)).toBe("verify");
+    expect(await admin(user.cookie)).toBe("verify");
+
+    // Conferma dalla sessione con password: nasce una nuova sessione verificata.
+    const verified = await signInWithPasskey(true, user.cookie);
+    expect(await admin(verified)).toBe("granted");
+    expect((await jsonRequest("passkey/generate-register-options", verified)).status).toBe(200);
+    // Le passkey dell'admin non si rimuovono da una sessione senza conferma.
+    expect(await appAction(user.cookie, { intent: "passkey-remove", id: "qualsiasi" })).toContain(
+      "nuovo-accesso",
+    );
+
+    await age(verified, 13);
+    expect(await admin(verified)).toBe("verify");
+    const renewed = await signInWithPasskey(true);
+    expect(await admin(renewed)).toBe("granted");
+
+    // Logout, revoca globale e perdita del ruolo chiudono subito l'area admin.
+    await jsonRequest("sign-out", renewed, {});
+    await expectRevoked(renewed);
+    const again = await signInWithPasskey(true);
+    expect(await appAction(user.cookie, { intent: "esci-altri" })).toContain("sessioni-chiuse");
+    await expectRevoked(again);
+    const last = await signInWithPasskey(true);
+    expect(await admin(last)).toBe("granted");
+    await env.DB.prepare('UPDATE "user" SET "admin" = 0 WHERE id = ?').bind(user.id).run();
+    expect(await admin(last)).toBe(404);
   });
 });

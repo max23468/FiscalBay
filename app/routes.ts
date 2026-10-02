@@ -13,6 +13,8 @@ export default [
   route("en/privacy", "routes/legal.tsx", { id: "privacy-en" }),
   route("negozi/collega", "routes/store-link.ts"),
   route("en/negozi/collega", "routes/store-link.ts", { id: "store-link-en" }),
+  route("admin", "routes/admin.tsx"),
+  route("en/admin", "routes/admin.tsx", { id: "admin-en" }),
   route("api/auth/*", "routes/auth.ts"),
   ...preview("anteprima", ""),
   ...preview("en/anteprima", "-en"),

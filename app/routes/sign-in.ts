@@ -14,6 +14,13 @@ import {
   removePasskey,
   type AccountMethod,
 } from "../domain/sign-in-methods.server";
+import {
+  adminAccess,
+  recentSignIn,
+  revokeOtherSessions,
+  revokeSession,
+  type AuthSession,
+} from "../domain/sessions.server";
 import { errorResponse } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
 import type { Route } from "./+types/sign-in";
@@ -39,6 +46,21 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (intent === "esci") return withCookies(base, await forward("/sign-out"));
 
+  if (intent === "esci-sessione" || intent === "esci-altri") {
+    // Chiudere sessioni protegge l'account: basta la sessione corrente, anche non recente.
+    const session = await createAuth(env).api.getSession({ headers: request.headers });
+    if (!session) return notice("errore");
+    if (intent === "esci-altri") {
+      await revokeOtherSessions(env.DB, session.user.id, session.session.id);
+      return notice("sessioni-chiuse");
+    }
+    const id = field("id");
+    if (!id || id.length > 128) return notice("errore");
+    if (id === session.session.id) return withCookies(base, await forward("/sign-out"));
+    await revokeSession(env.DB, session.user.id, id);
+    return notice("sessione-chiusa");
+  }
+
   if (intent === "google" || intent === "ebay") {
     const response = await forward("/sign-in/social", {
       provider: intent,
@@ -58,6 +80,11 @@ export async function action({ request }: Route.ActionArgs) {
   ) {
     const session = await createAuth(env).api.getSession({ headers: request.headers });
     if (!session?.user.emailVerified) return notice("accesso-non-verificato");
+    // Collegare, rimuovere e cambiare email richiedono un accesso delle ultime 24 ore; il link
+    // per la password va comunque al proprio indirizzo.
+    if (intent !== "password" && !recentSignIn(session as AuthSession)) {
+      return notice("nuovo-accesso");
+    }
     const method = field("metodo");
 
     if (intent === "collega-metodo") {
@@ -74,10 +101,6 @@ export async function action({ request }: Route.ActionArgs) {
 
     if (intent === "rimuovi-metodo") {
       if (!Object.hasOwn(accountMethods, method)) return notice("errore");
-      // Come la route di Better Auth che sostituisce: serve un accesso delle ultime 24 ore.
-      if (Date.now() - new Date(session.session.createdAt).getTime() >= 86_400_000) {
-        return notice("nuovo-accesso");
-      }
       const removed = await removeAccountMethod(env.DB, session.user.id, method as AccountMethod);
       if (!removed) return notice("ultimo-metodo");
       return notice(method === "ebay" ? "ebay-rimosso" : "metodo-rimosso");
@@ -128,6 +151,11 @@ export async function action({ request }: Route.ActionArgs) {
   if (intent === "passkey-remove") {
     const session = await createAuth(env).api.getSession({ headers: request.headers });
     if (!session?.user.emailVerified) return notice("errore");
+    // Le passkey di un admin cambiano solo da una sessione confermata con passkey.
+    const current = session as AuthSession;
+    if (!recentSignIn(current) || (current.user.admin && adminAccess(current) !== "granted")) {
+      return notice("nuovo-accesso");
+    }
     const id = field("id");
     if (!id || id.length > 128) return notice("errore");
     const removed = await removePasskey(env.DB, session.user.id, id);

@@ -2,17 +2,21 @@ import { waitUntil } from "cloudflare:workers";
 
 import { createAuth } from "./auth.server";
 import { registrationStatus } from "./domain/registration.server";
+import { adminAccess, recentSignIn, type AuthSession } from "./domain/sessions.server";
 import { completeStoreLink, takeStoreLinkSession } from "./integrations/ebay/store-link.server";
 import { classifyFailure, logFailure } from "./errors";
 import { localizedPath } from "./i18n";
 
 // I token OAuth restano al codice server; metodi e passkey si rimuovono dalle azioni dell'app,
-// che conservano sempre un accesso valido.
+// che conservano sempre un accesso valido. L'elenco delle sessioni restituirebbe i token delle
+// altre sessioni: l'app le mostra e le chiude dal server senza esporli.
 const closedAuthPaths = new Set([
   "/api/auth/get-access-token",
   "/api/auth/refresh-token",
   "/api/auth/passkey/delete-passkey",
   "/api/auth/unlink-account",
+  "/api/auth/list-sessions",
+  "/api/auth/update-session",
 ]);
 const passkeyEnrollmentPaths = new Set([
   "/api/auth/passkey/generate-register-options",
@@ -121,6 +125,16 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
     if (!session) return new Response(null, { status: 401 });
     const status = await registrationStatus(environment.DB, session.user.id);
     if (!session.user.emailVerified || !status.profile || !status.termsAccepted) {
+      return new Response(null, { status: 403 });
+    }
+    // Una nuova passkey richiede un accesso recente. Per un admin, che con la passkey supera
+    // il secondo fattore, serve una sessione già confermata da passkey: password o email
+    // compromesse non bastano ad aggiungerne una.
+    const current = session as AuthSession;
+    if (
+      !recentSignIn(current) ||
+      (current.user.admin === true && adminAccess(current) !== "granted")
+    ) {
       return new Response(null, { status: 403 });
     }
   }
