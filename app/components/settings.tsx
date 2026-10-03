@@ -262,25 +262,27 @@ function Group({
   children,
   className,
 }: {
-  title: string;
+  title?: string;
   children: React.ReactNode;
   className?: string;
 }) {
   const id = useId();
   return (
     <section
-      aria-labelledby={id}
+      aria-labelledby={title ? id : undefined}
       className={cn("grid gap-4 border-t pt-6 first:border-t-0 first:pt-0", className)}
     >
-      <h3 id={id} className="text-base font-semibold">
-        {title}
-      </h3>
+      {title ? (
+        <h3 id={id} className="text-base font-semibold">
+          {title}
+        </h3>
+      ) : null}
       {children}
     </section>
   );
 }
 
-/** Piano Premium in corso: il piano a vita non ha rinnovo né abbonamento da gestire. */
+/** Il lifetime conserva l'accesso ai documenti senza presentare un rinnovo. */
 function PremiumPlan({
   account,
   t,
@@ -307,13 +309,11 @@ function PremiumPlan({
           </p>
         ) : null}
       </div>
-      {lifetime ? null : (
-        <div className="flex flex-wrap items-center gap-3">
-          <Button variant="outline" onClick={() => action.run("manage-billing")}>
-            {t.settings.manageBilling}
-          </Button>
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="outline" onClick={() => action.run("manage-billing")}>
+          {lifetime ? t.settings.billingDocuments : t.settings.manageBilling}
+        </Button>
+      </div>
       <p className="text-sm text-muted-foreground">{t.settings.billingDocs}</p>
     </Group>
   );
@@ -336,7 +336,7 @@ function PlanSection({
       <>
         <PremiumPlan account={account} t={t} language={language} />
         {data.stores.length > 1 && account.premium?.period !== "lifetime" ? (
-          <Group title={t.settings.downgradeStore}>
+          <Group>
             <SimpleSelect
               label={t.settings.downgradeStore}
               hint={t.settings.downgradeStoreHint}
@@ -774,6 +774,7 @@ function AppearanceSection({ t, links }: { t: AppCopy; links: AppLinks }) {
             <Link
               key={code}
               to={localizedPath(code, barePath)}
+              preventScrollReset
               lang={code}
               aria-current={links.language === code ? "page" : undefined}
               className="inline-flex h-9 items-center rounded-lg border px-3 text-sm font-medium outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:border-transparent aria-[current=page]:bg-secondary pointer-coarse:h-11"
@@ -783,7 +784,7 @@ function AppearanceSection({ t, links }: { t: AppCopy; links: AppLinks }) {
           ))}
         </nav>
       </Group>
-      <Group title={t.settings.timeZone}>
+      <Group>
         <SimpleSelect
           label={t.settings.timeZone}
           hint={t.settings.timeZoneHint}
@@ -960,7 +961,7 @@ function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
           ))}
         </div>
       </Group>
-      <Group title={t.settings.contact}>
+      <Group title={t.settings.contact} className="scroll-mt-20">
         <form
           noValidate
           className="grid gap-5"
@@ -970,7 +971,8 @@ function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
             const message = String(form.get("message") ?? "").trim();
             setError(!message);
             if (!message) {
-              messageRef.current?.focus();
+              messageRef.current?.focus({ preventScroll: true });
+              event.currentTarget.parentElement?.scrollIntoView({ block: "start" });
               return;
             }
             action.run("support", {
@@ -1110,22 +1112,25 @@ export function SettingsPage({
   };
 
   useEffect(() => {
-    // Un indirizzo con la categoria porta subito alla sua sezione.
-    if (data.section) goTo(data.section, "instant");
-    else spy();
+    // Dopo il ripristino dello scroll della route, riallinea anche il cambio lingua.
+    const frame = requestAnimationFrame(() => {
+      if (data.section) goTo(data.section, "instant");
+      else spy();
+    });
     window.addEventListener("scroll", spy, { passive: true });
     return () => {
       window.removeEventListener("scroll", spy);
+      cancelAnimationFrame(frame);
       clearTimeout(release.current);
     };
-    // Solo all'apertura: i clic successivi scorrono dal menu.
+    // Apertura e cambio lingua; i clic fra categorie scorrono dal menu.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [language]);
 
   useLayoutEffect(() => {
     const item = items.current[active];
     if (item) setIndicator({ top: item.offsetTop, height: item.offsetHeight });
-  }, [active]);
+  }, [active, language]);
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
@@ -1262,7 +1267,7 @@ export function ProfilePage({
 }) {
   const action = useAction();
   return (
-    <div className="grid max-w-2xl gap-6">
+    <div className="mx-auto grid w-full max-w-2xl gap-6">
       <div className="flex items-center gap-4">
         <InitialsTile
           name={account.name}

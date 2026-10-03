@@ -359,6 +359,7 @@ const it = {
     premiumLifetime: "Acquisto una tantum, senza rinnovi.",
     premiumRenews: (date: string) => `Si rinnova il ${date}.`,
     manageBilling: "Gestisci abbonamento su Stripe",
+    billingDocuments: "Consulta ricevute e fatture su Stripe",
     billingDocs: "Ricevute e fatture sono disponibili su Stripe.",
     downgradeStore: "Negozio attivo se torni al piano Free",
     downgradeStoreHint:
@@ -1030,6 +1031,7 @@ const en: AppCopy = {
     premiumLifetime: "One-off purchase, no renewals.",
     premiumRenews: (date) => `Renews on ${date}.`,
     manageBilling: "Manage subscription on Stripe",
+    billingDocuments: "View receipts and invoices on Stripe",
     billingDocs: "Receipts and invoices are available on Stripe.",
     downgradeStore: "Active store if you return to Free",
     downgradeStoreHint: "Other stores will be paused. You can change this at any time.",
