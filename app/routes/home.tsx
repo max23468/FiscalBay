@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { cn } from "cn";
 import { ClipboardList, Copy, KeyRound, LogOut, Plus, ShieldCheck, Store } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import { IconTile } from "~/components/icon-tile";
@@ -27,7 +27,12 @@ import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { createAuth } from "../auth.server";
 import { registrationStatus } from "../domain/registration.server";
-import { listActiveSessions, type ActiveSession } from "../domain/sessions.server";
+import {
+  listActiveSessions,
+  passkeyChangeBlock,
+  type ActiveSession,
+  type AuthSession,
+} from "../domain/sessions.server";
 import { listSignInMethods, type SignInMethods } from "../domain/sign-in-methods.server";
 import { listVisibleOrders } from "../domain/orders.server";
 import { appCopy } from "../app-copy";
@@ -78,6 +83,7 @@ const noticeTones: Record<string, "success" | "info" | "warning" | "danger"> = {
   "email-confermata": "success",
   "email-non-valida": "warning",
   "nuovo-accesso": "warning",
+  "conferma-passkey": "warning",
   "sessione-chiusa": "success",
   "sessioni-chiuse": "success",
   "accesso-non-verificato": "warning",
@@ -132,6 +138,8 @@ export async function loader({ request }: Route.LoaderArgs) {
         ? await listActiveSessions(env.DB, session.user.id, session.session.id, language, now)
         : [],
     now: now.toISOString(),
+    // Avviso da mostrare se la registrazione di una passkey viene rifiutata.
+    passkeyBlock: passkeyChangeBlock(session as AuthSession, now) ?? "nuovo-accesso",
     suggestedName: { firstName, lastName: lastName.join(" ") },
     orders: complete ? await listVisibleOrders(env.DB, session.user.id) : [],
   };
@@ -614,14 +622,28 @@ function MethodRow({
   hint?: string;
   children: React.ReactNode;
 }) {
+  // Il gruppo dà ai pulsanti ripetuti in ogni riga («Rimuovi», «Esci») il nome della riga.
+  const id = useId();
   return (
     <li className="flex flex-col items-start gap-x-4 gap-y-2 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
       <span className="grid min-w-0 sm:flex-1 sm:basis-48">
-        <span className="font-medium">{label}</span>
-        <span className="text-sm text-muted-foreground">{status}</span>
+        <span id={`${id}-label`} className="font-medium">
+          {label}
+        </span>
+        <span id={`${id}-status`} className="text-sm text-muted-foreground">
+          {status}
+        </span>
         {hint ? <span className="text-sm text-muted-foreground">{hint}</span> : null}
       </span>
-      <div className="flex flex-wrap gap-2">{children}</div>
+      {children ? (
+        <div
+          role="group"
+          aria-labelledby={`${id}-label ${id}-status`}
+          className="flex flex-wrap gap-2"
+        >
+          {children}
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -790,12 +812,14 @@ function AccountSecurity({
   methods,
   sessions,
   now,
+  passkeyBlock,
 }: {
   language: Language;
   email: string;
   methods: SignInMethods;
   sessions: ActiveSession[];
   now: string;
+  passkeyBlock: string;
 }) {
   const { access: t, settings } = appCopy[language];
   const [pending, setPending] = useState(false);
@@ -827,7 +851,7 @@ function AccountSecurity({
           const { authClient } = await import("../passkey-client");
           const result = await authClient.passkey.addPasskey();
           if (result.error?.status === 403) {
-            window.location.assign(`${localizedPath(language)}?accesso=nuovo-accesso`);
+            window.location.assign(`${localizedPath(language)}?accesso=${passkeyBlock}`);
           } else if (result.error) setError(true);
           else window.location.reload();
         } catch {
@@ -1218,6 +1242,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             methods={loaderData.methods}
             sessions={loaderData.sessions}
             now={loaderData.now}
+            passkeyBlock={loaderData.passkeyBlock}
           />
         ) : null}
       </main>

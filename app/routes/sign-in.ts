@@ -15,7 +15,7 @@ import {
   type AccountMethod,
 } from "../domain/sign-in-methods.server";
 import {
-  adminAccess,
+  passkeyChangeBlock,
   recentSignIn,
   revokeOtherSessions,
   revokeSession,
@@ -151,11 +151,8 @@ export async function action({ request }: Route.ActionArgs) {
   if (intent === "passkey-remove") {
     const session = await createAuth(env).api.getSession({ headers: request.headers });
     if (!session?.user.emailVerified) return notice("errore");
-    // Le passkey di un admin cambiano solo da una sessione confermata con passkey.
-    const current = session as AuthSession;
-    if (!recentSignIn(current) || (current.user.admin && adminAccess(current) !== "granted")) {
-      return notice("nuovo-accesso");
-    }
+    const block = passkeyChangeBlock(session as AuthSession);
+    if (block) return notice(block);
     const id = field("id");
     if (!id || id.length > 128) return notice("errore");
     const removed = await removePasskey(env.DB, session.user.id, id);

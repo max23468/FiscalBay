@@ -658,6 +658,8 @@ const it = {
       "email-non-valida": "Indica un indirizzo email valido e diverso da quello attuale.",
       "nuovo-accesso":
         "Per questa modifica serve un accesso recente: esci e accedi di nuovo a FiscalBay.",
+      "conferma-passkey":
+        "Le passkey di un account amministratore si modificano dopo l’accesso con una passkey.",
       "sessione-chiusa": "Sessione chiusa su quel dispositivo.",
       "sessioni-chiuse": "Sessioni chiuse su tutti gli altri dispositivi.",
       "accesso-non-verificato": "Conferma l’indirizzo email per aggiungere un metodo di accesso.",
@@ -1314,6 +1316,8 @@ const en: AppCopy = {
       "email-non-valida": "Enter a valid email address that differs from the current one.",
       "nuovo-accesso":
         "This change requires a recent sign-in: sign out and sign in to FiscalBay again.",
+      "conferma-passkey":
+        "Passkeys of an admin account can be changed after signing in with a passkey.",
       "sessione-chiusa": "Session closed on that device.",
       "sessioni-chiuse": "Sessions closed on all other devices.",
       "accesso-non-verificato": "Confirm your email address to add a sign-in method.",
