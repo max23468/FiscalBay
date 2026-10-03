@@ -29,6 +29,7 @@ export function NotFoundState({
         action={
           <Link
             to={appHref(links, kind === "store" ? "negozi" : "ordini")}
+            data-slot="button"
             className={buttonVariants({ variant: "outline" })}
           >
             {copy.back}

@@ -438,8 +438,6 @@ const it = {
     // Modello di messaggio
     templateIntro:
       "Quando eBay non riporta il Codice Fiscale, puoi copiare questo messaggio dall’ordine e inviarlo all’acquirente dai tuoi canali.",
-    templateIt: "Italiano",
-    templateEn: "Inglese",
     templateHint: "{ordine} viene sostituito con il numero dell’ordine.",
     templateDefaultIt:
       "Buongiorno e grazie per l’acquisto. Per emettere la fattura elettronica dell’ordine {ordine} ci serve il tuo Codice Fiscale. Se acquisti con Partita IVA, indicaci quella e la ragione sociale. Grazie.",
@@ -616,6 +614,12 @@ const it = {
     passwordRecovery: "Hai dimenticato la password?",
     passwordResetTitle: "Scegli una nuova password",
     backToSignIn: "Torna ad accedere",
+    validation: {
+      required: "Compila questo campo.",
+      email: "Inserisci un indirizzo email valido, per esempio nome@dominio.it.",
+      tooShort: (min: number) => `Usa almeno ${min} caratteri.`,
+      checkbox: "Accetta i Termini di servizio per continuare.",
+    },
     passwordRecoveryBody:
       "Inserisci l’email del tuo account: ti invieremo un link per scegliere una nuova password.",
     passwordRecoverySend: "Invia il link",
@@ -1104,8 +1108,6 @@ const en: AppCopy = {
     timeZoneHint: "Used for dates, cycles and notification times.",
     templateIntro:
       "When eBay does not provide the tax code, you can copy this message from the order and send it to the buyer through your own channels.",
-    templateIt: "Italian",
-    templateEn: "English",
     templateHint: "{ordine} is replaced with the order number.",
     templateDefaultIt:
       "Buongiorno e grazie per l’acquisto. Per emettere la fattura elettronica dell’ordine {ordine} ci serve il tuo Codice Fiscale. Se acquisti con Partita IVA, indicaci quella e la ragione sociale. Grazie.",
@@ -1279,6 +1281,12 @@ const en: AppCopy = {
     passwordRecovery: "Forgot your password?",
     passwordResetTitle: "Choose a new password",
     backToSignIn: "Back to sign in",
+    validation: {
+      required: "Fill in this field.",
+      email: "Enter a valid email address, for example name@example.com.",
+      tooShort: (min: number) => `Use at least ${min} characters.`,
+      checkbox: "Accept the Terms of Service to continue.",
+    },
     passwordRecoveryBody:
       "Enter your account email and we will send you a link to set a new password.",
     passwordRecoverySend: "Send link",

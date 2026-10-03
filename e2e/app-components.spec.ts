@@ -620,3 +620,144 @@ test("movimento ridotto: dato intero e nuovi ordini senza animazione", async ({ 
     )
     .toBe(0);
 });
+
+const notice = (page: Page) => page.locator('[role="status"][aria-live="polite"] > p');
+
+for (const width of [390, 1280]) {
+  test(`avviso breve sopra il pannello e sopra la barra di selezione a ${width} px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await open(page, "/anteprima/negozi/neg-vintage");
+    await page.getByRole("dialog").getByRole("button", { name: "Metti in pausa" }).click();
+    await expect(notice(page)).toBeVisible();
+    // Il punto centrale dell'avviso appartiene all'avviso, non alla velatura del pannello.
+    expect(
+      await notice(page).evaluate((node) => {
+        // L'avviso non intercetta i clic: per la prova si rende colpibile.
+        (node as HTMLElement).style.pointerEvents = "auto";
+        const box = node.getBoundingClientRect();
+        return node.contains(
+          document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2),
+        );
+      }),
+    ).toBe(true);
+
+    await open(page, "/anteprima/ordini", "ordinario");
+    await page.getByRole("button", { name: "Seleziona", exact: true }).click();
+    await page.getByRole("checkbox", { name: "Seleziona l’ordine 05-55555-12121" }).click();
+    await page.getByRole("button", { name: "Esporta", exact: true }).click();
+    await expect(notice(page)).toBeVisible();
+    const bar = page
+      .getByRole("button", { name: "Esporta", exact: true })
+      .locator("xpath=../../..");
+    const toast = (await notice(page).boundingBox())!;
+    expect(toast.y + toast.height).toBeLessThanOrEqual((await bar.boundingBox())!.y);
+  });
+}
+
+test("azioni distruttive con lo stesso aspetto e senza rientro", async ({ page }) => {
+  await open(page, "/anteprima/impostazioni/sicurezza");
+  const style = (name: string) =>
+    page
+      .getByRole("button", { name, exact: true })
+      .first()
+      .evaluate((node) => {
+        const css = getComputedStyle(node);
+        return { color: css.color, border: css.borderTopWidth, background: css.backgroundColor };
+      });
+  const remove = await style("Rimuovi");
+  expect(remove).toEqual(await style("Esci da tutti gli altri dispositivi"));
+  expect(remove.border).toBe("1px");
+  expect(remove.color).not.toBe((await style("Cambia password")).color);
+});
+
+for (const language of ["it", "en"] as const) {
+  test(`errori dei campi di accesso e registrazione accanto al campo, ${language}`, async ({
+    page,
+  }) => {
+    const it = language === "it";
+    await page.goto(it ? "/" : "/en");
+    await page.waitForLoadState("networkidle");
+    const signIn = page.getByRole("tabpanel");
+    await signIn.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }).click();
+    const email = signIn.getByRole("textbox", { name: "Email" });
+    await expect(email).toBeFocused();
+    await expect(email).toHaveAttribute("aria-invalid", "true");
+    await expect(email).toHaveAccessibleDescription(
+      it ? "Compila questo campo." : "Fill in this field.",
+    );
+    await email.fill("nome");
+    await signIn.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }).click();
+    await expect(email).toHaveAccessibleDescription(/nome@dominio\.it|name@example\.com/);
+    await email.fill("nome@example.invalid");
+    await expect(email).not.toHaveAttribute("aria-invalid");
+
+    await page.getByRole("tab", { name: it ? "Crea account" : "Create account" }).click();
+    const signUp = page.getByRole("tabpanel");
+    const submit = signUp.getByRole("button", {
+      name: it ? "Crea account" : "Create account",
+      exact: true,
+    });
+    await submit.click();
+    await expect(
+      signUp.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true }),
+    ).toBeFocused();
+    await signUp
+      .getByRole("textbox", { name: it ? "Nome" : "First name", exact: true })
+      .fill("Maria");
+    await signUp.getByRole("textbox", { name: it ? "Cognome" : "Last name" }).fill("Rossi");
+    await signUp.getByRole("textbox", { name: "Email" }).fill("maria@example.invalid");
+    const password = signUp.getByLabel(/Password/);
+    await password.fill("corta");
+    await submit.click();
+    await expect(password).toBeFocused();
+    await expect(password).toHaveAccessibleDescription(
+      it ? "Usa almeno 8 caratteri." : "Use at least 8 characters.",
+    );
+    await password.fill("una-password-lunga");
+    await submit.click();
+    const terms = signUp.getByRole("checkbox").first();
+    await expect(terms).toBeFocused();
+    await expect(terms).toHaveAttribute("aria-invalid", "true");
+    await expect(
+      signUp.getByText(
+        it
+          ? "Accetta i Termini di servizio per continuare."
+          : "Accept the Terms of Service to continue.",
+      ),
+    ).toBeVisible();
+  });
+}
+
+test("l'esito dell'accesso esce dall'indirizzo e non torna alla ricarica", async ({ page }) => {
+  const text = "Questo negozio eBay è già collegato a un altro account FiscalBay.";
+  await page.goto("/?negozio=altro-spazio");
+  await expect(page.getByText(text, { exact: true })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).search).toBe("");
+  await page.reload();
+  await expect(page.getByText(text, { exact: true })).toHaveCount(0);
+});
+
+test("domande frequenti con il segno del prodotto e tastiera", async ({ page }) => {
+  await open(page, "/anteprima/impostazioni/supporto");
+  const summary = page.locator("details summary").first();
+  expect(await summary.evaluate((node) => getComputedStyle(node).display)).toBe("flex");
+  await summary.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("details").first()).toHaveAttribute("open", "");
+});
+
+test("lingue con il proprio nome nelle Impostazioni inglesi", async ({ page }) => {
+  await open(page, "/en/anteprima/impostazioni/aspetto");
+  const language = page.getByRole("navigation", { name: "Language" });
+  await expect(language.getByRole("link", { name: "Italiano", exact: true })).toHaveAttribute(
+    "lang",
+    "it",
+  );
+  await open(page, "/en/anteprima/impostazioni/messaggio");
+  await expect(page.getByRole("tab", { name: "Italiano", exact: true })).toHaveAttribute(
+    "lang",
+    "it",
+  );
+});

@@ -41,6 +41,7 @@ export default function AuthError({ matches }: Route.ComponentProps) {
       </a>
       <a
         href={localizedPath(language)}
+        data-slot="button"
         className={cn(buttonVariants({ variant: "outline" }), "w-fit")}
       >
         {t.back}
