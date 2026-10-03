@@ -170,7 +170,7 @@ const it = {
       `Gli ordini sono aggiornati al ${time}. Sincronizzazione e ricollegamento tornano disponibili quando eBay risponde.`,
     quotaTitle: "Nessun ordine da sbloccare rimasto in questo ciclo",
     quotaBody: (date: string) =>
-      `Puoi consultare e cercare tutti gli ordini. Il Codice Fiscale dei nuovi ordini resta da sbloccare fino al ${date}.`,
+      `Puoi consultare e cercare tutti gli ordini. Codice Fiscale e Partita IVA dei nuovi ordini restano da sbloccare fino al ${date}.`,
     quotaAction: "Scopri Premium",
     storeIssueTitle: (store: string) => `${store}: collegamento scaduto`,
     storeIssueBody:
@@ -464,7 +464,7 @@ const it = {
       },
       {
         q: "Quando un ordine conta come sbloccato?",
-        a: "Quando il suo Codice Fiscale diventa visibile. Ordini senza dato o con un errore non contano, e puoi copiare ed esportare quanto vuoi.",
+        a: "Quando almeno un suo dato fiscale, Codice Fiscale o Partita IVA, diventa visibile. Ogni ordine conta una sola volta, anche se contiene entrambi. Ordini senza dato o con un errore non contano, e puoi copiare ed esportare quanto vuoi.",
       },
       {
         q: "FiscalBay modifica gli ordini su eBay?",
@@ -558,7 +558,8 @@ const it = {
   legal: {
     termini: "Termini di servizio",
     privacy: "Informativa privacy",
-    version: (version: string) => `Versione ${version}`,
+    version: (version: string) =>
+      `${version.startsWith("bozza-") ? "Bozza · " : ""}Versione ${version}`,
     draft:
       "Il testo definitivo sarà pubblicato prima dell’apertura del servizio. Se cambia, ti chiederemo di accettare la nuova versione.",
   },
@@ -849,7 +850,7 @@ const en: AppCopy = {
       `Orders are up to date as of ${time}. Syncing and reconnecting will be available again when eBay responds.`,
     quotaTitle: "No orders left to unlock this cycle",
     quotaBody: (date) =>
-      `You can still view and search all orders. The tax code of new orders stays locked until ${date}.`,
+      `You can still view and search all orders. Codice Fiscale and Partita IVA of new orders stay locked until ${date}.`,
     quotaAction: "Discover Premium",
     storeIssueTitle: (store) => `${store}: connection expired`,
     storeIssueBody: "Syncing is paused for this store. Other stores continue. Reconnect the store.",
@@ -1123,7 +1124,7 @@ const en: AppCopy = {
       },
       {
         q: "When does an order count as unlocked?",
-        a: "When its tax code becomes visible. Orders without data or with an error do not count, and you can copy and export as often as you like.",
+        a: "When at least one of its tax identifiers, Codice Fiscale or Partita IVA, becomes visible. Each order counts only once, even if it contains both. Orders without data or with an error do not count, and you can copy and export as often as you like.",
       },
       {
         q: "Does FiscalBay change orders on eBay?",
@@ -1217,7 +1218,8 @@ const en: AppCopy = {
   legal: {
     termini: "Terms of service",
     privacy: "Privacy policy",
-    version: (version: string) => `Version ${version}`,
+    version: (version: string) =>
+      `${version.startsWith("bozza-") ? "Draft · " : ""}Version ${version}`,
     draft:
       "The final text will be published before the service opens. If it changes, we will ask you to accept the new version.",
   },

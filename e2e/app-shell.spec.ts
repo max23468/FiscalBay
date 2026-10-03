@@ -103,6 +103,140 @@ test("la selezione sblocca più ordini entro la quota", async ({ page }) => {
   await expect(page.getByText("04567890123")).toBeVisible();
 });
 
+for (const language of ["it", "en"] as const) {
+  for (const colorScheme of ["light", "dark"] as const) {
+    for (const width of [390, 768, 1280]) {
+      test(`quota, descrittori e skeleton ${language} ${colorScheme} ${width}`, async ({
+        browser,
+        baseURL,
+      }) => {
+        test.setTimeout(120_000);
+        const context = await browser.newContext({
+          baseURL,
+          colorScheme,
+          viewport: { width, height: 900 },
+          reducedMotion: "reduce",
+        });
+        const page = await context.newPage();
+        const base = language === "it" ? "/anteprima" : "/en/anteprima";
+        const reset = async (scenario: string) => {
+          await page.request.post(base, {
+            form: { scenario, redirectTo: `${base}/ordini` },
+            maxRedirects: 0,
+          });
+        };
+        try {
+          await reset("ordinario");
+          await open(page, `${base}/ordini?fiscale=locked`);
+          await expect(page.getByText(/Europe\/Rome/)).toContainText(
+            language === "it"
+              ? "Simulazione fissata al 27 set 2026, 15:00"
+              : "Simulation fixed at Sep 27, 2026, 3:00 PM",
+          );
+          const card = page.getByRole("article", {
+            name: language === "it" ? "Ordine 02-44519-70831" : "Order 02-44519-70831",
+          });
+          await expect(card).toContainText("Partita IVA");
+          const unlocked = page.waitForResponse(
+            (response) =>
+              response.url().endsWith("/ordini.data") && response.request().method() === "POST",
+          );
+          await card
+            .getByRole("button", {
+              name: language === "it" ? "Sblocca ordine" : "Unlock order",
+              exact: true,
+            })
+            .click();
+          expect((await unlocked).status()).toBe(200);
+          await page.goto(`${base}/ordini?q=Conti`);
+          await expect(page.getByText("04567890123")).toBeVisible();
+          await open(page, `${base}/impostazioni/piano`);
+          await expect(
+            page.getByText(language === "it" ? "4 di 5" : "4 of 5", { exact: true }),
+          ).toBeVisible();
+          await open(page, `${base}/impostazioni/supporto`);
+          const diagnostic = page.getByText(
+            language === "it" ? "Free, 4 di 5 ordini sbloccati" : "Free, 4 of 5 orders unlocked",
+            { exact: true },
+          );
+          await diagnostic.scrollIntoViewIfNeeded();
+          await expect(diagnostic).toBeVisible();
+          await expect(
+            page.getByText(language === "it" ? "2.0.0 (anteprima)" : "2.0.0 (preview)", {
+              exact: true,
+            }),
+          ).toBeVisible();
+          const faq = page.locator("details").filter({
+            hasText:
+              language === "it"
+                ? "Quando un ordine conta come sbloccato?"
+                : "When does an order count as unlocked?",
+          });
+          await faq.locator("summary").click();
+          await expect(faq).toContainText("Partita IVA");
+          await expect(faq).toContainText(
+            language === "it" ? "Ogni ordine conta una sola volta" : "Each order counts only once",
+          );
+          await open(page, `${base}/impostazioni/sicurezza`);
+          for (const device of language === "it"
+            ? ["Safari su macOS", "Safari su iPhone", "Chrome su Windows"]
+            : ["Safari on macOS", "Safari on iPhone", "Chrome on Windows"]) {
+            const session = page.getByText(device, { exact: true });
+            await session.scrollIntoViewIfNeeded();
+            await expect(session).toBeVisible();
+          }
+          await reset("quota-esaurita");
+          await open(page, `${base}/ordini`);
+          await expect(
+            page.getByRole("button", {
+              name: language === "it" ? "Sblocca ordine" : "Unlock order",
+              exact: true,
+            }),
+          ).toHaveCount(0);
+          await expect(
+            page.getByText(
+              language === "it"
+                ? /^Puoi consultare e cercare tutti gli ordini\./
+                : /^You can still view and search all orders\./,
+            ),
+          ).toContainText("Partita IVA");
+          await reset("caricamento");
+          await open(page, `${base}/ordini`);
+          const grid = page.locator('[aria-busy="true"]');
+          await expect(grid).toBeVisible();
+          expect(
+            await grid
+              .locator('[data-slot="skeleton"]')
+              .first()
+              .evaluate((element) => getComputedStyle(element).backgroundColor),
+          ).toBe(colorScheme === "light" ? "rgb(217, 223, 232)" : "rgb(36, 40, 48)");
+          expect(
+            await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          ).toBe(true);
+          await test.info().attach("loading", {
+            body: await page.screenshot({
+              fullPage: true,
+              path: test.info().outputPath("loading.png"),
+            }),
+            contentType: "image/png",
+          });
+          await page.goto(language === "it" ? "/termini" : "/en/termini");
+          await expect(
+            page.getByText(
+              language === "it"
+                ? "Bozza · Versione bozza-2026-09-28"
+                : "Draft · Version bozza-2026-09-28",
+              { exact: true },
+            ),
+          ).toBeVisible();
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+}
+
 test("con gli sblocchi esauriti gli ordini restano consultabili", async ({ page }) => {
   await open(page);
   await chooseScenario(page, "Ordini da sbloccare esauriti");
