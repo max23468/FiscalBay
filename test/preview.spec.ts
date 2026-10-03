@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { appCopy } from "../app/app-copy";
 import {
@@ -7,9 +7,34 @@ import {
   scenarioIds,
   scenarioOptions,
 } from "../app/preview/scenarios.server";
-import { formatDate } from "../app/view-models";
+import { formatDate, formatRelative } from "../app/view-models";
 
 describe("stato sintetico dell'anteprima", () => {
+  it("conserva i tempi relativi e normalizza gli apostrofi delle implementazioni ICU", () => {
+    const now = "2026-09-27T13:00:00.000Z";
+    for (const [minutes, itText, enText] of [
+      [0, "questo minuto", "this minute"],
+      [-5, "5 minuti fa", "5 minutes ago"],
+      [-60, "1 ora fa", "1 hour ago"],
+      [-1440, "ieri", "yesterday"],
+      [-2900, "l’altro ieri", "2 days ago"],
+      [1440, "domani", "tomorrow"],
+      [2880, "dopodomani", "in 2 days"],
+    ] as const) {
+      const value = new Date(Date.parse(now) + minutes * 60_000).toISOString();
+      expect(formatRelative(value, now, "it")).toBe(itText);
+      expect(formatRelative(value, now, "en")).toBe(enText);
+    }
+    for (const text of ["l'altro ieri", "l’altro ieri"]) {
+      const format = vi.spyOn(Intl.RelativeTimeFormat.prototype, "format").mockReturnValue(text);
+      try {
+        expect(formatRelative("2026-09-25T12:40:00.000Z", now, "it")).toBe("l’altro ieri");
+      } finally {
+        format.mockRestore();
+      }
+    }
+  });
+
   for (const language of ["it", "en"] as const) {
     it(`deriva la diagnostica dalla quota aggiornata, ${language}`, () => {
       const before = loadScenario("ordinario", language, new Set());

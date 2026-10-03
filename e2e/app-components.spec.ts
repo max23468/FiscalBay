@@ -22,6 +22,51 @@ async function open(page: Page, path: string, scenario?: string) {
 const noPageOverflow = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
 
+for (const language of ["it", "en"] as const) {
+  for (const colorScheme of ["light", "dark"] as const) {
+    test(`idratazione dei tempi relativi ${language} ${colorScheme}`, async ({
+      browser,
+      baseURL,
+    }) => {
+      const prefix = language === "it" ? "/anteprima" : "/en/anteprima";
+      for (const route of ["impostazioni/aspetto", "impostazioni/supporto", "negozi", "ordini"]) {
+        // Ogni caricamento diretto parte da una sessione nuova, senza richieste della pagina precedente.
+        const context = await browser.newContext({
+          baseURL,
+          colorScheme,
+          viewport: { width: 1440, height: 900 },
+        });
+        const page = await context.newPage();
+        const errors: string[] = [];
+        page.on("pageerror", (error) => errors.push(error.message));
+        try {
+          await open(page, `${prefix}/${route}`, "ordinario");
+          expect(errors, route).toEqual([]);
+          if (route.startsWith("impostazioni/")) {
+            await expect(
+              page.getByText(
+                language === "it"
+                  ? "Milano · Ultima attività l’altro ieri"
+                  : "Milano · Last active 2 days ago",
+                { exact: true },
+              ),
+            ).toBeVisible();
+          }
+          await page
+            .getByRole("button", { name: language === "it" ? /Notifiche/ : /Notifications/ })
+            .click();
+          await expect(
+            page.getByRole("dialog", { name: language === "it" ? "Notifiche" : "Notifications" }),
+          ).toBeVisible();
+          expect(errors, `${route}, notifiche`).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      }
+    });
+  }
+}
+
 for (const locale of ["it", "en"] as const) {
   for (const colorScheme of ["light", "dark"] as const) {
     for (const width of [390, 768, 1280]) {
