@@ -180,10 +180,15 @@ function StoreActions({ store, ebayDown, t }: { store: StoreView; ebayDown: bool
       {store.connection === "active" ? (
         <p className="text-xs text-muted-foreground">{t.stores.pauseHint}</p>
       ) : null}
-      <div className="grid gap-2 border-t pt-3 sm:grid-cols-2">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-2 border-t pt-3">
         <AlertDialog>
           <AlertDialogTrigger
-            render={<Button variant="destructive" className="justify-start sm:justify-center" />}
+            render={
+              <Button
+                variant="destructive"
+                className="h-auto min-h-9 justify-start py-2 whitespace-normal text-left"
+              />
+            }
           >
             <Unplug aria-hidden="true" data-icon="inline-start" />
             {t.stores.disconnect}
@@ -206,7 +211,12 @@ function StoreActions({ store, ebayDown, t }: { store: StoreView; ebayDown: bool
         </AlertDialog>
         <AlertDialog onOpenChange={() => setConfirmName("")}>
           <AlertDialogTrigger
-            render={<Button variant="destructive" className="justify-start sm:justify-center" />}
+            render={
+              <Button
+                variant="destructive"
+                className="h-auto min-h-9 justify-start py-2 whitespace-normal text-left"
+              />
+            }
           >
             <Trash2 aria-hidden="true" data-icon="inline-start" />
             {t.stores.disconnectDelete}
@@ -340,7 +350,7 @@ function StoreDetail({
           </h3>
           <ul className="grid gap-2 text-sm">
             {store.recent.map((sync) => (
-              <li key={sync.at} className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
+              <li key={sync.at} className="grid gap-0.5">
                 <span
                   className={cn(
                     "inline-flex items-center gap-2",
@@ -350,7 +360,7 @@ function StoreDetail({
                   <StatusIcon tone={sync.ok ? "success" : "danger"} className="size-3.5" />
                   {sync.ok ? t.stores.recentOk(sync.newOrders) : t.stores.recentFailed}
                 </span>
-                <time dateTime={sync.at} className="whitespace-nowrap text-muted-foreground">
+                <time dateTime={sync.at} className="pl-5.5 text-muted-foreground">
                   {formatDate(sync.at, language)}
                 </time>
               </li>
@@ -442,7 +452,7 @@ export function StoresPage({
               <PremiumNote>{t.stores.notificationsFree}</PremiumNote>
             </div>
           )}
-          <div className="hidden overflow-hidden rounded-xl border bg-card md:block">
+          <div className="hidden overflow-hidden rounded-xl border bg-card lg:block">
             <Table aria-label={t.stores.list}>
               <TableHeader>
                 <TableRow>
@@ -506,7 +516,7 @@ export function StoresPage({
               </TableBody>
             </Table>
           </div>
-          <ul aria-label={t.stores.list} className="grid divide-y border-y md:hidden">
+          <ul aria-label={t.stores.list} className="grid divide-y border-y lg:hidden">
             {data.stores.map((store) => {
               const status = connectionStatus(store, t);
               return (
@@ -519,6 +529,9 @@ export function StoresPage({
                     <InitialsTile name={store.name} />
                     <span className="grid min-w-0 gap-1">
                       <span className="font-medium text-pretty">{store.name}</span>
+                      <span className="font-code text-xs text-muted-foreground">
+                        {store.username}
+                      </span>
                       <span className="text-xs text-muted-foreground">
                         {marketplaceLabel(store.marketplace)} · {t.stores.orders}:{" "}
                         <span className="font-code">{store.importedOrders}</span>
@@ -530,6 +543,11 @@ export function StoresPage({
                         {status.label}
                       </StatusBadge>
                       <LastSync store={store} t={t} now={data.now} language={language} />
+                      {premium ? (
+                        <span className="text-muted-foreground">
+                          {t.stores.notifications}: {notificationsLabel(store, t)}
+                        </span>
+                      ) : null}
                     </span>
                   </Link>
                 </li>
