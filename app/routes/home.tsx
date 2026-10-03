@@ -732,7 +732,7 @@ function EmailChange({ language, email }: { language: Language; email: string })
   );
 }
 
-/** Sessioni aperte: si chiudono una alla volta o tutte tranne quella in uso. */
+/** Sessioni aperte: si chiudono una alla volta o tutte tranne quella in uso, che esce dal menu. */
 function SessionList({
   language,
   sessions,
@@ -756,19 +756,29 @@ function SessionList({
                 : settings.lastActive(formatRelative(session.lastActiveAt, now, language))
             }
           >
-            <form method="post" action={localizedPath(language, "/accesso")}>
-              <input type="hidden" name="id" value={session.id} />
-              <Button type="submit" variant="outline" size="sm" name="intent" value="esci-sessione">
-                {settings.signOutSession}
-              </Button>
-            </form>
+            {session.current ? null : (
+              <form method="post" action={localizedPath(language, "/accesso")}>
+                <input type="hidden" name="id" value={session.id} />
+                <Button
+                  type="submit"
+                  variant="outline"
+                  size="sm"
+                  name="intent"
+                  value="esci-sessione"
+                >
+                  {settings.signOutSession}
+                </Button>
+              </form>
+            )}
           </MethodRow>
         ))}
       </ul>
       {sessions.some((session) => !session.current) ? (
-        <MethodAction language={language} intent="esci-altri">
-          {settings.signOutAll}
-        </MethodAction>
+        <form method="post" action={localizedPath(language, "/accesso")}>
+          <Button type="submit" variant="destructive" name="intent" value="esci-altri">
+            {settings.signOutAll}
+          </Button>
+        </form>
       ) : null}
     </SecurityGroup>
   );

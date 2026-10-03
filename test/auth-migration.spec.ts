@@ -1203,6 +1203,18 @@ describe("Sessioni, revoche e area admin", () => {
       expect(await appAction(user.cookie, fields)).toContain("nuovo-accesso");
     }
     expect((await jsonRequest("passkey/generate-register-options", user.cookie)).status).toBe(403);
+    // Le stesse modifiche chiamate direttamente sulle route Auth seguono la stessa regola.
+    expect(
+      (
+        await jsonRequest("change-email", user.cookie, {
+          newEmail: "recente.diretta@example.invalid",
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (await jsonRequest("link-social", user.cookie, { provider: "google", callbackURL: "/" }))
+        .status,
+    ).toBe(403);
     // Chiudere le sessioni resta possibile anche con un accesso non recente.
     expect(await appAction(user.cookie, { intent: "esci-altri" })).toContain("sessioni-chiuse");
     expect(
@@ -1364,6 +1376,11 @@ describe("Sessioni, revoche e area admin", () => {
     const presenceOnly = await signInWithPasskey(false);
     expect(await passkeyVerified(presenceOnly)).toBe(0);
     expect(await admin(presenceOnly)).toBe("verify");
+    // Dopo l'accesso la pagina spiega che manca la verifica, invece di ricaricarsi uguale.
+    const retried = await adminLoader({
+      request: new Request(`${origin}/admin?conferma`, { headers: { cookie: presenceOnly } }),
+    } as never);
+    expect(retried).toMatchObject({ access: "verify", unverified: true });
     expect(await admin(user.cookie)).toBe("verify");
 
     // Conferma dalla sessione con password: nasce una nuova sessione verificata.
