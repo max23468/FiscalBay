@@ -28,7 +28,7 @@ export default function Legal({ loaderData }: Route.ComponentProps) {
   return (
     <StandalonePage
       icon={document === "privacy" ? ShieldCheck : FileText}
-      tone="blue"
+      tone="neutral"
       title={t[document]}
       homeHref={localizedPath(language)}
     >

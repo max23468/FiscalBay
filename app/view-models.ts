@@ -1,4 +1,4 @@
-import type { Language } from "./i18n";
+import { locales, type Language } from "./i18n";
 
 /**
  * Dati che le schermate dell'app ricevono dal server. Un Codice Fiscale da
@@ -228,20 +228,21 @@ export function formatDate(
   }
   const options: Intl.DateTimeFormatOptions =
     style === "date" ? { dateStyle: "medium" } : { timeStyle: "short" };
-  return new Intl.DateTimeFormat(language, { ...options, timeZone: displayTimeZone }).format(
-    new Date(value),
-  );
+  // ICU recenti abbreviano settembre in «Sept», quelli precedenti in «Sep».
+  return new Intl.DateTimeFormat(locales[language], { ...options, timeZone: displayTimeZone })
+    .format(new Date(value))
+    .replace("Sept", "Sep");
 }
 
 /** Nome del Paese nella lingua dell'interfaccia, dal codice ISO. */
 export function countryName(code: string, language: Language): string {
-  return new Intl.DisplayNames(language, { type: "region" }).of(code) ?? code;
+  return new Intl.DisplayNames(locales[language], { type: "region" }).of(code) ?? code;
 }
 
 /** Tempo relativo rispetto a un istante fornito dal server, stabile fra server e browser. */
 export function formatRelative(value: string, now: string, language: Language): string {
   const minutes = Math.round((new Date(value).getTime() - new Date(now).getTime()) / 60_000);
-  const format = new Intl.RelativeTimeFormat(language, { numeric: "auto" });
+  const format = new Intl.RelativeTimeFormat(locales[language], { numeric: "auto" });
   if (Math.abs(minutes) < 60) return format.format(minutes, "minute");
   const hours = Math.round(minutes / 60);
   if (Math.abs(hours) < 24) return format.format(hours, "hour");

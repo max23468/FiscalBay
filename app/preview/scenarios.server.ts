@@ -884,7 +884,7 @@ export function loadScenario(
       note("maintenance", { id: "n-maint", tone: "info", at: minutesAgo(300), read: false }),
       note("newSignIn", {
         id: "n-signin",
-        tone: "neutral",
+        tone: "info",
         at: minutesAgo(2_900),
         read: true,
         href: "impostazioni/sicurezza",

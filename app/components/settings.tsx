@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import {
   Bell,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CreditCard,
@@ -22,6 +23,7 @@ import { Link, useLocation } from "react-router";
 
 import { useAction } from "~/components/app-shell";
 import { IconTile, InitialsTile, PageTitle } from "~/components/icon-tile";
+import { LanguageSwitch } from "~/components/language-switch";
 import { PremiumNote, StatusAlert, StatusBadge, StatusIcon } from "~/components/status";
 import {
   AlertDialog,
@@ -60,7 +62,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Textarea } from "~/components/ui/textarea";
 import type { AppCopy } from "../app-copy";
 import { appHref, type AppLinks } from "../app-links";
-import { localizedPath, type Language } from "../i18n";
+import { languageNames, localizedPath, type Language } from "../i18n";
 import {
   formatDate,
   formatRelative,
@@ -420,7 +422,7 @@ function PlanSection({
             </li>
           ))}
         </ul>
-        <p className="text-xs text-muted-foreground">{t.settings.pricesNote}</p>
+        <p className="text-sm text-muted-foreground">{t.settings.pricesNote}</p>
       </Group>
     </>
   );
@@ -446,7 +448,8 @@ function NotificationsSection({
           <StatusAlert tone="premium" title={t.settings.telegramPremium}>
             <Link
               to={appHref(links, "impostazioni/piano")}
-              className="font-medium text-primary underline-offset-4 hover:underline"
+              data-slot="button"
+              className={buttonVariants({ variant: "outline", size: "sm", className: "mt-2" })}
             >
               {t.settings.buyTitle}
             </Link>
@@ -656,7 +659,7 @@ function SecuritySection({
                 </span>
               </span>
               <Button
-                variant="outline"
+                variant={method.action === t.settings.remove ? "destructive" : "outline"}
                 size="sm"
                 onClick={() => action.run("sign-in-method", { method: method.id })}
               >
@@ -675,7 +678,7 @@ function SecuritySection({
               </span>
             </span>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={() => action.run("passkey-remove")}>
+              <Button variant="destructive" size="sm" onClick={() => action.run("passkey-remove")}>
                 {t.settings.remove}
               </Button>
               <Button variant="outline" size="sm" onClick={() => action.run("passkey-add")}>
@@ -684,7 +687,7 @@ function SecuritySection({
             </div>
           </li>
         </ul>
-        <p className="text-xs text-muted-foreground">{t.settings.lastMethod}</p>
+        <p className="text-sm text-muted-foreground">{t.settings.lastMethod}</p>
       </Group>
       <Group title={t.settings.sessions}>
         <ul className="grid divide-y border-y">
@@ -761,28 +764,14 @@ function AppearanceSection({ t, links }: { t: AppCopy; links: AppLinks }) {
             </FieldLabel>
           ))}
         </RadioGroup>
-        <p className="text-xs text-muted-foreground">{t.settings.themeNote}</p>
+        <p className="text-sm text-muted-foreground">{t.settings.themeNote}</p>
       </Group>
       <Group title={t.settings.language}>
-        <nav aria-label={t.settings.language} className="flex gap-1">
-          {(
-            [
-              ["it", "Italiano"],
-              ["en", "English"],
-            ] as const
-          ).map(([code, label]) => (
-            <Link
-              key={code}
-              to={localizedPath(code, barePath)}
-              preventScrollReset
-              lang={code}
-              aria-current={links.language === code ? "page" : undefined}
-              className="inline-flex h-9 items-center rounded-lg border px-3 text-sm font-medium outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:border-transparent aria-[current=page]:bg-secondary pointer-coarse:h-11"
-            >
-              {label}
-            </Link>
-          ))}
-        </nav>
+        <LanguageSwitch
+          label={t.settings.language}
+          current={links.language}
+          hrefFor={(code) => localizedPath(code, barePath)}
+        />
       </Group>
       <Group>
         <SimpleSelect
@@ -830,13 +819,17 @@ function TemplateSection({ t }: { t: AppCopy }) {
       >
         <Tabs defaultValue="it">
           <TabsList variant="line">
-            <TabsTrigger value="it">{t.settings.templateIt}</TabsTrigger>
-            <TabsTrigger value="en">{t.settings.templateEn}</TabsTrigger>
+            <TabsTrigger value="it" lang="it">
+              {languageNames.it}
+            </TabsTrigger>
+            <TabsTrigger value="en" lang="en">
+              {languageNames.en}
+            </TabsTrigger>
           </TabsList>
           {(
             [
-              ["it", t.settings.templateIt, t.settings.templateDefaultIt],
-              ["en", t.settings.templateEn, t.settings.templateDefaultEn],
+              ["it", languageNames.it, t.settings.templateDefaultIt],
+              ["en", languageNames.en, t.settings.templateDefaultEn],
             ] as const
           ).map(([code, label, value]) => (
             <TabsContent key={code} value={code} className="pt-3">
@@ -952,11 +945,17 @@ function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
       <Group title={t.settings.faq}>
         <div className="grid divide-y border-t">
           {t.settings.faqItems.map((item) => (
-            <details key={item.q} className="group py-3 text-sm">
-              <summary className="w-fit cursor-pointer rounded-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring">
+            <details key={item.q} className="group py-1 text-sm">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-sm py-2 font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
                 {item.q}
+                <ChevronDown
+                  aria-hidden="true"
+                  className="size-4 shrink-0 text-muted-foreground transition-[rotate] duration-(--duration-quick) group-open:rotate-180"
+                />
               </summary>
-              <p className="mt-2 leading-relaxed text-pretty text-muted-foreground">{item.a}</p>
+              <p className="pr-7 pb-2 leading-relaxed text-pretty text-muted-foreground">
+                {item.a}
+              </p>
             </details>
           ))}
         </div>
@@ -1191,12 +1190,7 @@ export function SettingsPage({
             })}
           </ul>
         </nav>
-        <div
-          className={cn(
-            "grid max-w-3xl min-w-0 content-start gap-6",
-            !data.section && "max-md:hidden",
-          )}
-        >
+        <div className={cn("grid min-w-0 content-start gap-6", !data.section && "max-md:hidden")}>
           <Link
             to={appHref(links, "impostazioni")}
             className="-ml-1 inline-flex w-fit items-center gap-1 rounded-md py-1 pr-2 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring md:hidden"
@@ -1218,7 +1212,7 @@ export function SettingsPage({
                   id !== current && "max-md:hidden",
                 )}
               >
-                <h2 id={`settings-${id}`} className="flex items-center gap-3 text-xl font-semibold">
+                <h2 id={`settings-${id}`} className="flex items-center gap-3 text-lg font-semibold">
                   <IconTile icon={icon} tone="neutral" />
                   {t.settings.sections[id].title}
                 </h2>
@@ -1246,7 +1240,7 @@ function ProfileCard({
 }) {
   return (
     <section aria-labelledby={id} className="grid gap-4 rounded-xl border bg-card p-5">
-      <h2 id={id} className="flex items-center gap-3 text-base font-semibold">
+      <h2 id={id} className="flex items-center gap-3 text-lg font-semibold">
         <IconTile icon={icon} tone="neutral" />
         {title}
       </h2>
@@ -1333,6 +1327,7 @@ export function ProfilePage({
           <p className="text-sm text-muted-foreground">{t.profile.security}</p>
           <Link
             to={appHref(links, "impostazioni/sicurezza")}
+            data-slot="button"
             className={buttonVariants({ variant: "outline", size: "sm" })}
           >
             {t.profile.securityLink}

@@ -1095,8 +1095,24 @@ function SelectionBar({
   const action = useAction();
   const count = lockedSelected.length;
   const exceeds = remaining !== null && count > remaining;
+  const bar = useRef<HTMLDivElement>(null);
+  // L'altezza della barra solleva gli avvisi brevi della shell, che altrimenti la coprirebbero.
+  useEffect(() => {
+    const root = document.documentElement.style;
+    const observer = new ResizeObserver(([entry]) =>
+      root.setProperty("--selection-bar", `${entry!.borderBoxSize[0]!.blockSize}px`),
+    );
+    observer.observe(bar.current!);
+    return () => {
+      observer.disconnect();
+      root.removeProperty("--selection-bar");
+    };
+  }, []);
   return (
-    <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 mt-6 md:bottom-4">
+    <div
+      ref={bar}
+      className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 mt-6 md:bottom-4"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-popover px-4 py-3 shadow-md">
         <p className="grid text-sm" aria-live="polite">
           <span className="font-medium">{t.orders.selected(selected.length)}</span>
@@ -1238,6 +1254,7 @@ function OrdersNotices({
                   {t.orders.quotaBody(formatDate(notice.until, language))}
                   <Link
                     to={appHref(links, "impostazioni/piano")}
+                    data-slot="button"
                     className={buttonVariants({ variant: "outline", size: "sm" })}
                   >
                     {t.orders.quotaAction}
@@ -1256,6 +1273,7 @@ function OrdersNotices({
                   {t.orders.storeIssueBody}
                   <Link
                     to={appHref(links, `negozi/${notice.storeId}`)}
+                    data-slot="button"
                     className={buttonVariants({ variant: "outline", size: "sm" })}
                   >
                     {t.orders.storeIssueAction}
@@ -1451,6 +1469,7 @@ function LoadMore({ data, t }: { data: OrdersPageData; t: AppCopy }) {
         <Link
           to={data.nextHref}
           preventScrollReset
+          data-slot="button"
           className={buttonVariants({ variant: "outline" })}
         >
           {t.orders.loadMore}
@@ -1553,6 +1572,7 @@ function OrdersList({
               <Link
                 to={ordersHref}
                 preventScrollReset
+                data-slot="button"
                 className={buttonVariants({ variant: "outline" })}
               >
                 {onlySearch ? t.orders.clearSearch : t.orders.resetFilters}
@@ -1723,6 +1743,7 @@ export function OrdersPage({
             data.sync.storeId ? (
               <Link
                 to={appHref(links, `negozi/${data.sync.storeId}`)}
+                data-slot="button"
                 className={buttonVariants({ variant: "outline" })}
               >
                 {t.orders.openStore}

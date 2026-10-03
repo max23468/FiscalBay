@@ -113,8 +113,24 @@ describe("errors, locale and redacted logs", () => {
       return formatter;
     });
     try {
-      expect(formatDate("2026-09-26T12:30:00.000Z", "en")).toBe("Sep 26, 2026, 2:30 PM");
+      expect(formatDate("2026-09-26T12:30:00.000Z", "en")).toBe("26 Sep 2026, 14:30");
       expect(formatDate("2026-09-26T12:30:00.000Z", "it")).toBe("26 set 2026, 14:30");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("writes British dates with the same month abbreviation whatever the ICU version", () => {
+    const original = Intl.DateTimeFormat;
+    const spy = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function (locales, options) {
+      const formatter = new original(locales, options);
+      if (options?.dateStyle) {
+        return { ...formatter, format: () => "26 Sept 2026" } as Intl.DateTimeFormat;
+      }
+      return formatter;
+    });
+    try {
+      expect(formatDate("2026-09-26T12:30:00.000Z", "en", "date")).toBe("26 Sep 2026");
     } finally {
       spy.mockRestore();
     }

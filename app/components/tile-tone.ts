@@ -14,8 +14,8 @@ export const tileTones: Record<TileTone, string> = {
   neutral: "bg-muted text-muted-foreground",
 };
 
-// Senza il verde acqua: sul tema scuro testi e iniziali in quel colore restano poco leggibili.
-const keyTones: TileTone[] = ["blue", "violet", "amber", "green", "rose"];
+// Senza il verde acqua, poco leggibile sul tema scuro, e senza il rosso, che sembrerebbe un errore.
+const keyTones: TileTone[] = ["blue", "violet", "amber", "green"];
 
 /** Tinta stabile per un nome, così negozi e persone restano riconoscibili fra le pagine. */
 export function toneFor(key: string): TileTone {

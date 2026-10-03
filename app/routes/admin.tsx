@@ -120,6 +120,7 @@ export default function Admin({ loaderData }: Route.ComponentProps) {
       )}
       <a
         href={localizedPath(language)}
+        data-slot="button"
         className={cn(buttonVariants({ variant: "outline" }), "w-fit")}
       >
         {t.back}

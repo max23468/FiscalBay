@@ -131,7 +131,7 @@ for (const language of ["it", "en"] as const) {
           await expect(page.getByText(/Europe\/Rome/)).toContainText(
             language === "it"
               ? "Simulazione fissata al 27 set 2026, 15:00"
-              : "Simulation fixed at Sep 27, 2026, 3:00 PM",
+              : "Simulation fixed at 27 Sep 2026, 15:00",
           );
           const card = page.getByRole("article", {
             name: language === "it" ? "Ordine 02-44519-70831" : "Order 02-44519-70831",

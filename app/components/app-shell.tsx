@@ -212,9 +212,15 @@ export function AppShell({
           ))}
         </ul>
       </nav>
+      {/*
+        Sopra velature e pannelli; `aria-live` esplicito lo tiene annunciato anche quando
+        un pannello modale nasconde il resto della pagina. Sale sopra la barra di selezione.
+      */}
       <div
         role="status"
-        className="pointer-events-none fixed inset-x-0 bottom-20 z-50 flex justify-center px-4 md:bottom-6"
+        aria-live="polite"
+        aria-atomic="true"
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom)+var(--selection-bar,0px))] z-[60] flex justify-center px-4 md:bottom-[calc(1.5rem+var(--selection-bar,0px))]"
       >
         {notice ? (
           <p

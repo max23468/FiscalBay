@@ -1,4 +1,4 @@
-import { CircleAlert, CircleCheck, CircleDashed, Crown, Info, TriangleAlert } from "lucide-react";
+import { CircleAlert, CircleCheck, CircleMinus, Crown, Info, TriangleAlert } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 
 import { cn } from "cn";
@@ -9,14 +9,16 @@ import { Badge } from "~/components/ui/badge";
 
 import type { StatusTone } from "../view-models";
 
-const icons: Record<StatusTone, ComponentType<SVGProps<SVGSVGElement>>> = {
+export type StatusIconType = ComponentType<SVGProps<SVGSVGElement>>;
+
+const icons: Record<StatusTone, StatusIconType> = {
   success: CircleCheck,
   info: Info,
   warning: TriangleAlert,
   danger: CircleAlert,
   premium: Crown,
   locked: UnlockIcon,
-  neutral: CircleDashed,
+  neutral: CircleMinus,
 };
 
 const iconColor: Record<StatusTone, string> = {
@@ -54,14 +56,17 @@ export function StatusIcon({ tone, className }: { tone: StatusTone; className?: 
  */
 export function StatusBadge({
   tone,
+  icon,
   filled = false,
   children,
 }: {
   tone: StatusTone;
+  /** Icona più precisa di quella del tono, per esempio la pausa. */
+  icon?: StatusIconType;
   filled?: boolean;
   children: React.ReactNode;
 }) {
-  const Icon = icons[tone];
+  const Icon = icon ?? icons[tone];
   if (!filled && !actionable.has(tone)) {
     return (
       <Badge variant="outline" className="border-transparent px-0 text-muted-foreground">

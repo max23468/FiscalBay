@@ -2,6 +2,7 @@ import { cn } from "cn";
 import {
   Bell,
   ChevronRight,
+  CirclePause,
   History,
   Link2,
   Pause,
@@ -20,7 +21,13 @@ import { useAction } from "~/components/app-shell";
 import { LedgerIndicator } from "~/components/brand";
 import { EmptyState } from "~/components/empty-state";
 import { IconTile, InitialsTile, PageTitle } from "~/components/icon-tile";
-import { PremiumNote, StatusAlert, StatusBadge, StatusIcon } from "~/components/status";
+import {
+  PremiumNote,
+  StatusAlert,
+  StatusBadge,
+  StatusIcon,
+  type StatusIconType,
+} from "~/components/status";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -71,10 +78,14 @@ export interface StoresPageData {
   elsewhere: boolean;
 }
 
-function connectionStatus(store: StoreView, t: AppCopy): { tone: StatusTone; label: string } {
+function connectionStatus(
+  store: StoreView,
+  t: AppCopy,
+): { tone: StatusTone; label: string; icon?: StatusIconType } {
   if (store.connection === "paused") {
     return {
       tone: "neutral",
+      icon: CirclePause,
       label: store.pauseReason === "plan" ? t.stores.pausedByPlan : t.stores.state.paused,
     };
   }
@@ -178,7 +189,7 @@ function StoreActions({ store, ebayDown, t }: { store: StoreView; ebayDown: bool
         </div>
       )}
       {store.connection === "active" ? (
-        <p className="text-xs text-muted-foreground">{t.stores.pauseHint}</p>
+        <p className="text-sm text-muted-foreground">{t.stores.pauseHint}</p>
       ) : null}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-2 border-t pt-3">
         <AlertDialog>
@@ -290,10 +301,10 @@ function StoreDetail({
       {data.ebayDown ? <StatusAlert tone="warning" title={t.stores.ebayDown} /> : null}
       <section aria-labelledby="store-connection" className="grid gap-3">
         <h3 id="store-connection" className="flex items-center gap-2.5 text-sm font-semibold">
-          <IconTile icon={Link2} tone="blue" size="sm" />
+          <IconTile icon={Link2} tone="teal" size="sm" />
           {t.stores.sectionConnection}
         </h3>
-        <StatusBadge tone={status.tone} filled>
+        <StatusBadge tone={status.tone} icon={status.icon} filled>
           {status.label}
         </StatusBadge>
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
@@ -319,12 +330,12 @@ function StoreDetail({
           </div>
         </dl>
         {needsReconnect ? null : (
-          <p className="text-xs text-muted-foreground">{t.stores.consentHint}</p>
+          <p className="text-sm text-muted-foreground">{t.stores.consentHint}</p>
         )}
       </section>
       <section aria-labelledby="store-sync" className="grid gap-3 border-t pt-5">
         <h3 id="store-sync" className="flex items-center gap-2.5 text-sm font-semibold">
-          <IconTile icon={RefreshCw} tone="green" size="sm" />
+          <IconTile icon={RefreshCw} tone="teal" size="sm" />
           {t.stores.sectionSync}
         </h3>
         <ul className="grid gap-2 text-sm">
@@ -345,7 +356,7 @@ function StoreDetail({
       {store.recent.length > 0 ? (
         <section aria-labelledby="store-recent" className="grid gap-3 border-t pt-5">
           <h3 id="store-recent" className="flex items-center gap-2.5 text-sm font-semibold">
-            <IconTile icon={History} tone="violet" size="sm" />
+            <IconTile icon={History} tone="teal" size="sm" />
             {t.stores.sectionRecent}
           </h3>
           <ul className="grid gap-2 text-sm">
@@ -370,7 +381,7 @@ function StoreDetail({
       ) : null}
       <section aria-labelledby="store-notifications" className="grid gap-2 border-t pt-5">
         <h3 id="store-notifications" className="flex items-center gap-2.5 text-sm font-semibold">
-          <IconTile icon={Bell} tone="amber" size="sm" />
+          <IconTile icon={Bell} tone="teal" size="sm" />
           {t.stores.sectionNotifications}
         </h3>
         {store.notifications === null ? (
@@ -494,7 +505,7 @@ export function StoresPage({
                         </Link>
                       </TableCell>
                       <TableCell>
-                        <StatusBadge tone={status.tone} filled>
+                        <StatusBadge tone={status.tone} icon={status.icon} filled>
                           {status.label}
                         </StatusBadge>
                       </TableCell>
@@ -539,7 +550,7 @@ export function StoresPage({
                     </span>
                     <ChevronRight aria-hidden="true" className="size-4 text-muted-foreground" />
                     <span className="col-span-2 col-start-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                      <StatusBadge tone={status.tone} filled>
+                      <StatusBadge tone={status.tone} icon={status.icon} filled>
                         {status.label}
                       </StatusBadge>
                       <LastSync store={store} t={t} now={data.now} language={language} />

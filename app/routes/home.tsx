@@ -6,6 +6,8 @@ import { flushSync } from "react-dom";
 
 import { IconTile } from "~/components/icon-tile";
 import { Logo } from "~/components/standalone-page";
+import { useFieldErrors, type FieldErrors } from "~/components/form-validation";
+import { LanguageSwitch } from "~/components/language-switch";
 import { StatusAlert } from "~/components/status";
 import { TaxCode } from "~/components/tax-code";
 import { Button } from "~/components/ui/button";
@@ -192,10 +194,12 @@ const rise = "animate-[rise-in_var(--duration-fast)_var(--ease-smooth-out)_both]
 /** Persona sempre obbligatoria; l'azienda aggiunge la ragione sociale, senza CF né Partita IVA. */
 function ProfileFields({
   t,
+  v,
   values,
   suggested,
 }: {
   t: AccessCopy;
+  v: FieldErrors;
   values?: Record<string, string>;
   suggested?: { firstName: string; lastName: string };
 }) {
@@ -238,7 +242,9 @@ function ProfileFields({
             maxLength={200}
             defaultValue={values?.ragione_sociale}
             required
+            {...v.control("ragione_sociale")}
           />
+          {v.error("ragione_sociale")}
         </Field>
       ) : null}
       <div className="grid gap-4 sm:grid-cols-2">
@@ -251,7 +257,9 @@ function ProfileFields({
             maxLength={100}
             defaultValue={values?.nome ?? suggested?.firstName}
             required
+            {...v.control("nome")}
           />
+          {v.error("nome")}
         </Field>
         <Field>
           <FieldLabel htmlFor="last-name">{t.lastName}</FieldLabel>
@@ -262,7 +270,9 @@ function ProfileFields({
             maxLength={100}
             defaultValue={values?.cognome ?? suggested?.lastName}
             required
+            {...v.control("cognome")}
           />
+          {v.error("cognome")}
         </Field>
       </div>
     </>
@@ -272,10 +282,12 @@ function ProfileFields({
 /** Termini obbligatori e marketing facoltativo, entrambi mai preselezionati. */
 function AgreementFields({
   t,
+  v,
   language,
   values,
 }: {
   t: AccessCopy;
+  v: FieldErrors;
   language: Language;
   values?: Record<string, string>;
 }) {
@@ -287,6 +299,7 @@ function AgreementFields({
           required
           defaultChecked={values?.termini === "on"}
           aria-labelledby="terms-label"
+          {...v.control("termini")}
         />
         <span id="terms-label">
           {t.terms.before}
@@ -300,6 +313,7 @@ function AgreementFields({
           {t.terms.after}
         </span>
       </FieldLabel>
+      {v.error("termini")}
       <Field orientation="horizontal">
         <Checkbox
           id="marketing"
@@ -419,6 +433,8 @@ function AccessForms({
     setTab(remembered.tab);
   }
   const values = restored?.values;
+  const signIn = useFieldErrors(t.validation);
+  const signUp = useFieldErrors(t.validation);
   return (
     <Tabs value={tab} onValueChange={(next) => setTab(String(next))} className="gap-6">
       <TabsList aria-label={t.choose} className="w-full">
@@ -433,7 +449,10 @@ function AccessForms({
           key={restored ? "restored" : "empty"}
           method="post"
           action={localizedPath(language, "/accesso")}
-          onSubmit={remember("accedi")}
+          {...signIn.form}
+          onSubmit={(event) => {
+            if (signIn.check(event)) remember("accedi")(event);
+          }}
         >
           <FieldGroup>
             <Field>
@@ -445,7 +464,9 @@ function AccessForms({
                 autoComplete="username"
                 defaultValue={restored?.tab === "accedi" ? values?.email : undefined}
                 required
+                {...signIn.control("email")}
               />
+              {signIn.error("email")}
             </Field>
             {recovering ? null : (
               <Field>
@@ -456,7 +477,9 @@ function AccessForms({
                   type="password"
                   autoComplete="current-password"
                   required
+                  {...signIn.control("password")}
                 />
+                {signIn.error("password")}
               </Field>
             )}
             <Button
@@ -487,10 +510,17 @@ function AccessForms({
           key={restored ? "restored" : "empty"}
           method="post"
           action={localizedPath(language, "/accesso")}
-          onSubmit={remember("registrati")}
+          {...signUp.form}
+          onSubmit={(event) => {
+            if (signUp.check(event)) remember("registrati")(event);
+          }}
         >
           <FieldGroup>
-            <ProfileFields t={t} values={restored?.tab === "registrati" ? values : undefined} />
+            <ProfileFields
+              t={t}
+              v={signUp}
+              values={restored?.tab === "registrati" ? values : undefined}
+            />
             <Field>
               <FieldLabel htmlFor="signup-email">{t.email}</FieldLabel>
               <Input
@@ -500,7 +530,9 @@ function AccessForms({
                 autoComplete="email"
                 defaultValue={restored?.tab === "registrati" ? values?.email : undefined}
                 required
+                {...signUp.control("email")}
               />
+              {signUp.error("email")}
             </Field>
             <Field>
               <FieldLabel htmlFor="signup-password">{t.newPassword}</FieldLabel>
@@ -512,10 +544,13 @@ function AccessForms({
                 minLength={8}
                 maxLength={128}
                 required
+                {...signUp.control("password")}
               />
+              {signUp.error("password")}
             </Field>
             <AgreementFields
               t={t}
+              v={signUp}
               language={language}
               values={restored?.tab === "registrati" ? values : undefined}
             />
@@ -540,8 +575,15 @@ function ResetPassword({
   language: Language;
   token: string;
 }) {
+  const v = useFieldErrors(t.validation);
   return (
-    <form method="post" action={localizedPath(language, "/accesso")} className="grid gap-4">
+    <form
+      method="post"
+      action={localizedPath(language, "/accesso")}
+      className="grid gap-4"
+      {...v.form}
+      onSubmit={(event) => void v.check(event)}
+    >
       <h2 className="text-xl font-semibold">{t.passwordResetTitle}</h2>
       <input type="hidden" name="token" value={token} />
       <Field>
@@ -554,7 +596,9 @@ function ResetPassword({
           minLength={8}
           maxLength={128}
           required
+          {...v.control("password")}
         />
+        {v.error("password")}
       </Field>
       <Button type="submit" name="intent" value="reimposta-password">
         {t.passwordRecoveryConfirm}
@@ -586,6 +630,7 @@ function CompleteRegistration({
   remembered: Remembered | null;
 }) {
   const values = remembered?.tab === "completa" ? remembered.values : undefined;
+  const v = useFieldErrors(t.validation);
   return (
     <div className="grid gap-5">
       <div className="grid gap-1">
@@ -596,11 +641,18 @@ function CompleteRegistration({
         key={values ? "restored" : "empty"}
         method="post"
         action={localizedPath(language, "/accesso")}
-        onSubmit={remember("completa")}
+        {...v.form}
+        onSubmit={(event) => {
+          if (v.check(event)) remember("completa")(event);
+        }}
       >
         <FieldGroup>
-          {needsProfile ? <ProfileFields t={t} values={values} suggested={suggestedName} /> : null}
-          {needsAgreement ? <AgreementFields t={t} language={language} values={values} /> : null}
+          {needsProfile ? (
+            <ProfileFields t={t} v={v} values={values} suggested={suggestedName} />
+          ) : null}
+          {needsAgreement ? (
+            <AgreementFields t={t} v={v} language={language} values={values} />
+          ) : null}
           <Button type="submit" name="intent" value="completa" className="w-full">
             {t.agreementSubmit}
           </Button>
@@ -706,6 +758,7 @@ function EmailChange({ language, email }: { language: Language; email: string })
   const { access: t, profile, orders } = appCopy[language];
   const [open, setOpen] = useState(false);
   const opener = useRef<HTMLButtonElement>(null);
+  const v = useFieldErrors(t.validation);
   return (
     <SecurityGroup id="security-email" title={profile.email}>
       <div className="flex flex-col items-start gap-x-4 gap-y-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -724,7 +777,13 @@ function EmailChange({ language, email }: { language: Language; email: string })
         )}
       </div>
       {open ? (
-        <form method="post" action={localizedPath(language, "/accesso")} className="grid gap-3">
+        <form
+          method="post"
+          action={localizedPath(language, "/accesso")}
+          className="grid gap-3"
+          {...v.form}
+          onSubmit={(event) => void v.check(event)}
+        >
           <Field>
             <FieldLabel htmlFor="new-email">{t.newEmail}</FieldLabel>
             <Input
@@ -734,8 +793,9 @@ function EmailChange({ language, email }: { language: Language; email: string })
               autoComplete="email"
               required
               autoFocus
-              aria-describedby="new-email-hint"
+              {...v.control("email", "new-email-hint")}
             />
+            {v.error("email")}
             <FieldDescription id="new-email-hint">{profile.emailHint}</FieldDescription>
           </Field>
           <div className="flex flex-wrap gap-2">
@@ -889,7 +949,7 @@ function AccountSecurity({
   return (
     <Card id="sicurezza" className="max-w-xl scroll-mt-4">
       <CardHeader>
-        <CardTitle className="flex items-center gap-3">
+        <CardTitle className="flex items-center gap-3 text-lg font-semibold">
           <IconTile icon={ShieldCheck} tone="neutral" />
           <h2>{t.passkeySecurity}</h2>
         </CardTitle>
@@ -963,7 +1023,7 @@ function AccountSecurity({
               {t.passkeyFailed}
             </p>
           ) : null}
-          <p className="text-xs text-muted-foreground">{settings.lastMethod}</p>
+          <p className="text-sm text-muted-foreground">{settings.lastMethod}</p>
         </SecurityGroup>
         <SessionList language={language} sessions={sessions} now={now} />
       </CardContent>
@@ -1006,29 +1066,6 @@ function AccountBar({
         </form>
       ) : null}
     </>
-  );
-}
-
-function LanguageNav({ t, language }: { t: AccessCopy; language: Language }) {
-  return (
-    <nav aria-label={t.language} className="flex gap-1 text-sm">
-      {(
-        [
-          ["it", "/", "Italiano"],
-          ["en", "/en", "English"],
-        ] as const
-      ).map(([code, href, label]) => (
-        <a
-          key={code}
-          href={href}
-          lang={code}
-          aria-current={language === code ? "page" : undefined}
-          className="rounded-md px-2.5 py-1.5 text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:bg-secondary aria-[current=page]:font-medium aria-[current=page]:text-foreground"
-        >
-          {label}
-        </a>
-      ))}
-    </nav>
   );
 }
 
@@ -1136,6 +1173,16 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   const t = appCopy[language].access;
   const { orders } = appCopy[language];
   const remembered = useRemembered(notice !== null && errorTones.has(notice.tone));
+  // L'esito resta visibile ma esce dall'indirizzo, così una ricarica non lo ripropone.
+  // Un link di recupero conserva il token e il proprio errore.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const before = url.search;
+    url.searchParams.delete("accesso");
+    url.searchParams.delete("negozio");
+    if (!url.searchParams.has("token")) url.searchParams.delete("error");
+    if (url.search !== before) window.history.replaceState(window.history.state, "", url);
+  }, []);
   const noticeAlert = <AccessNotice loaderData={loaderData} />;
 
   // Accesso, registrazione e completamento: marchio a sinistra, form a destra.
@@ -1146,7 +1193,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <main className="flex flex-col px-4 py-6 sm:px-8 lg:px-12">
           <header className="flex items-center justify-between gap-4">
             <Logo className="h-7 w-auto lg:invisible" />
-            <LanguageNav t={t} language={language} />
+            <LanguageSwitch
+              label={t.language}
+              current={language}
+              hrefFor={(code) => localizedPath(code)}
+              reloadDocument
+            />
           </header>
           <div
             className={cn(
@@ -1191,7 +1243,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <div className="mx-auto flex min-h-14 w-[min(72rem,calc(100%-2rem))] flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2">
           <Logo className="h-6 w-auto" />
           <div className="flex max-w-full flex-wrap items-center gap-2">
-            <LanguageNav t={t} language={language} />
+            <LanguageSwitch
+              label={t.language}
+              current={language}
+              hrefFor={(code) => localizedPath(code)}
+              reloadDocument
+            />
             {loaderData.emailVerified ? (
               <a href="#sicurezza" className="text-sm underline underline-offset-4">
                 {t.passkeySecurity}
