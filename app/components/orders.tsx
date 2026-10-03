@@ -431,6 +431,23 @@ function AddressLines({ address, language }: { address: AddressView; language: L
   );
 }
 
+function EmailAddress({ email }: { email: string }) {
+  const separator = email.lastIndexOf("@");
+  const local = separator < 0 ? email : email.slice(0, separator);
+  const domain = separator < 0 ? null : email.slice(separator);
+  return (
+    <>
+      <span className="inline-block max-w-full [overflow-wrap:anywhere]">{local}</span>
+      {domain === null ? null : (
+        <>
+          <wbr />
+          <span className="inline-block max-w-full [overflow-wrap:anywhere]">{domain}</span>
+        </>
+      )}
+    </>
+  );
+}
+
 /**
  * Indirizzo di fatturazione e contatti dell'acquirente: dati non fiscali, visibili
  * anche con il Codice Fiscale da sbloccare. Un dato assente resta indicato.
@@ -447,7 +464,7 @@ function BuyerContacts({
   const missing = <span className="text-muted-foreground">{t.orders.notProvided}</span>;
   return (
     <dl className="grid gap-x-4 gap-y-2 text-sm leading-snug sm:col-span-2 sm:grid-cols-subgrid">
-      <div className="grid content-start gap-0.5 sm:row-span-2">
+      <div className="grid content-start gap-0.5">
         <dt className="text-xs font-medium text-muted-foreground">{t.orders.billingAddress}</dt>
         <dd className="text-pretty">
           {order.billingAddress ? (
@@ -461,9 +478,9 @@ function BuyerContacts({
         <dt className="text-xs font-medium text-muted-foreground">{t.orders.phone}</dt>
         <dd className="font-code">{order.phone ?? missing}</dd>
       </div>
-      <div className="grid min-w-0 content-start gap-0.5">
+      <div className="grid min-w-0 content-start gap-0.5 sm:col-span-2">
         <dt className="text-xs font-medium text-muted-foreground">{t.orders.email}</dt>
-        <dd className="break-all">{order.email ?? missing}</dd>
+        <dd>{order.email ? <EmailAddress email={order.email} /> : missing}</dd>
       </div>
     </dl>
   );
@@ -828,8 +845,10 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
             </div>
             <div className={row}>
               <dt className="text-muted-foreground">{t.orders.email}</dt>
-              <dd className="break-all">
-                {order.email ?? (
+              <dd>
+                {order.email ? (
+                  <EmailAddress email={order.email} />
+                ) : (
                   <span className="text-muted-foreground">{t.orders.notProvided}</span>
                 )}
               </dd>
@@ -851,7 +870,13 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
               <p className="leading-relaxed text-pretty font-medium">{item.title}</p>
               <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span>
-                  {t.order.sku}: <span className="font-code">{item.sku ?? t.order.noSku}</span>
+                  {item.sku ? (
+                    <>
+                      {t.order.sku}: <span className="font-code">{item.sku}</span>
+                    </>
+                  ) : (
+                    t.order.noSku
+                  )}
                 </span>
                 <span>
                   {t.orders.quantity}: <span className="font-code">{item.quantity}</span>

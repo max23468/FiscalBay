@@ -22,6 +22,129 @@ async function open(page: Page, path: string, scenario?: string) {
 const noPageOverflow = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
 
+for (const locale of ["it", "en"] as const) {
+  for (const colorScheme of ["light", "dark"] as const) {
+    for (const width of [390, 768, 1280]) {
+      test(`negozi e contatti completi, ${locale}, ${colorScheme}, ${width} px`, async ({
+        page,
+      }, testInfo) => {
+        test.setTimeout(90_000);
+        await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+        const prefix = locale === "it" ? "/anteprima" : "/en/anteprima";
+        await page.setViewportSize({ width, height: 900 });
+        await open(page, `${prefix}/negozi`, "premium-a-vita");
+        const list =
+          width < 1024
+            ? page.getByRole("list", { name: locale === "it" ? "Elenco negozi" : "Store list" })
+            : page.getByRole("table");
+        await expect(list).toBeVisible();
+        await expect(list).toContainText(
+          "Outlet ricambi auto e moto d’epoca - magazzino secondario",
+        );
+        await expect(list).toContainText("outlet_ricambi_epoca");
+        await expect(list).toContainText(locale === "it" ? "Disattivate" : "Off");
+        await expect.poll(() => noPageOverflow(page)).toBe(true);
+        await page.screenshot({ path: testInfo.outputPath(`stores-${width}.png`), fullPage: true });
+
+        await open(page, `${prefix}/negozi/neg-vintage`);
+        const dialog = page.getByRole("dialog");
+        const disconnect = dialog.getByRole("button", {
+          name: locale === "it" ? "Scollega" : "Disconnect",
+          exact: true,
+        });
+        const remove = dialog.getByRole("button", {
+          name: locale === "it" ? "Scollega ed elimina dati" : "Disconnect and delete data",
+          exact: true,
+        });
+        await remove.scrollIntoViewIfNeeded();
+        for (const button of [disconnect, remove]) {
+          await expect(button).toBeInViewport({ ratio: 1 });
+          expect(
+            await button.evaluate((e) => {
+              const panel = e.closest('[role="dialog"]')!.getBoundingClientRect();
+              const bounds = e.getBoundingClientRect();
+              return (
+                e.scrollWidth <= e.clientWidth &&
+                bounds.left >= panel.left &&
+                bounds.right <= panel.right
+              );
+            }),
+          ).toBe(true);
+        }
+        const updates = dialog.locator("section[aria-labelledby='store-recent'] li");
+        expect(await updates.count()).toBeGreaterThan(1);
+        for (const update of await updates.all()) {
+          expect(
+            await update.evaluate((e) => {
+              const outcome = e.querySelector("span")!.getBoundingClientRect();
+              const time = e.querySelector("time")!.getBoundingClientRect();
+              return time.top >= outcome.bottom;
+            }),
+          ).toBe(true);
+        }
+        await page.screenshot({ path: testInfo.outputPath(`store-actions-${width}.png`) });
+        await remove.click();
+        const confirm = page.getByRole("alertdialog");
+        const deletion = confirm.getByRole("button", {
+          name: locale === "it" ? "Scollega ed elimina" : "Disconnect and delete",
+          exact: true,
+        });
+        await expect(deletion).toBeDisabled();
+        await confirm.getByRole("textbox").fill("Vintage Garage Italia");
+        await expect(deletion).toBeEnabled();
+        await page.keyboard.press("Escape");
+        await expect(remove).toBeFocused();
+        await disconnect.click();
+        await expect(page.getByRole("alertdialog").getByRole("textbox")).toHaveCount(0);
+        await page.keyboard.press("Escape");
+        await expect(disconnect).toBeFocused();
+
+        await open(page, `${prefix}/ordini?mostra=2`, "ordinario");
+        const email = page
+          .getByRole("article")
+          .getByText("amministrazione@galli-restauri.invalid", { exact: true });
+        await expect(email).toBeVisible();
+        expect(
+          await email.evaluate((e) => {
+            const domain = e.querySelector("span:last-child")!;
+            const range = document.createRange();
+            range.selectNodeContents(domain);
+            return range.getClientRects().length === 1 && e.scrollWidth <= e.clientWidth;
+          }),
+        ).toBe(true);
+        await expect(
+          page
+            .getByRole("article")
+            .filter({ hasText: "amministrazione@galli-restauri.invalid" })
+            .getByRole("link", { name: locale === "it" ? "Dettaglio" : "Details", exact: true }),
+        ).toBeVisible();
+        await expect.poll(() => noPageOverflow(page)).toBe(true);
+        await email.scrollIntoViewIfNeeded();
+        await page.screenshot({ path: testInfo.outputPath(`contacts-${width}.png`) });
+
+        await open(page, `${prefix}/ordini/ord-10`);
+        await expect(
+          page
+            .getByRole("dialog")
+            .getByText("amministrazione@galli-restauri.invalid", { exact: true }),
+        ).toBeVisible();
+        await open(page, `${prefix}/ordini/ord-01`);
+        await page
+          .getByRole("tab", { name: locale === "it" ? "Articoli (3)" : "Items (3)", exact: true })
+          .click();
+        const items = page.getByRole("tabpanel");
+        await expect(
+          items.getByText(locale === "it" ? "Senza SKU" : "No SKU", { exact: true }),
+        ).toBeVisible();
+        await expect(items).not.toContainText(locale === "it" ? "SKU: Senza SKU" : "SKU: No SKU");
+        await expect(items).toContainText("MSC-OL-44");
+        await expect(items).toContainText("CUS-12");
+        await expect.poll(() => noPageOverflow(page)).toBe(true);
+      });
+    }
+  }
+}
+
 const supportAddress = ["supporto", "fiscalbay.it"].join("@");
 
 test("GET delle azioni pubbliche torna all'accesso nella lingua richiesta", async ({ request }) => {
