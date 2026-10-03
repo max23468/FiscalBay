@@ -254,6 +254,137 @@ for (const language of ["it", "en"] as const) {
   }
 }
 
+for (const width of [390, 768, 1440]) {
+  for (const colorScheme of ["light", "dark"] as const) {
+    test(`impostazioni e profilo: contesto, documenti e validazione a ${width}px ${colorScheme}`, async ({
+      page,
+    }, testInfo) => {
+      test.setTimeout(90_000);
+      await page.setViewportSize({ width, height: width === 1440 ? 720 : 844 });
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+      await open(page, "/anteprima/impostazioni/aspetto");
+      for (const locale of ["en", "it"] as const) {
+        const it = locale === "it";
+        const prefix = it ? "" : "/en";
+        await page.getByRole("link", { name: it ? "Italiano" : "English", exact: true }).click();
+        await expect(page).toHaveURL(
+          `${testInfo.project.use.baseURL}${prefix}/anteprima/impostazioni/aspetto`,
+        );
+        const appearance = page.locator("#settings-aspetto");
+        await expect(appearance).toHaveText(it ? "Aspetto e lingua" : "Appearance and language");
+        await expect(appearance).toBeInViewport({ ratio: 1 });
+        if (width >= 768) {
+          await expect(
+            page.locator('a[aria-current="true"][href$="/impostazioni/aspetto"]'),
+          ).toBeVisible();
+          await expect
+            .poll(async () => {
+              const heading = await appearance.boundingBox();
+              const header = await page.locator("header").boundingBox();
+              return heading!.y >= header!.y + header!.height && heading!.y < 180;
+            })
+            .toBe(true);
+          await expect
+            .poll(() =>
+              page
+                .locator('a[aria-current="true"][href$="/impostazioni/aspetto"]')
+                .evaluate((link) => {
+                  const item = link.parentElement!.getBoundingClientRect();
+                  const indicator = link
+                    .closest("ul")!
+                    .querySelector('[aria-hidden="true"]')!
+                    .getBoundingClientRect();
+                  return (
+                    Math.abs(item.y - indicator.y) < 1 &&
+                    Math.abs(item.height - indicator.height) < 1
+                  );
+                }),
+            )
+            .toBe(true);
+        }
+        const timezone = it ? "Fuso orario" : "Time zone";
+        await expect(page.getByRole("combobox", { name: timezone, exact: true })).toBeVisible();
+        await expect(page.getByRole("heading", { name: timezone, exact: true })).toHaveCount(0);
+        await page.screenshot({ path: testInfo.outputPath(`appearance-${locale}.png`) });
+      }
+
+      for (const locale of ["it", "en"] as const) {
+        const it = locale === "it";
+        const prefix = it ? "" : "/en";
+        await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium");
+        const downgrade = it
+          ? "Negozio attivo se torni al piano Free"
+          : "Active store if you return to Free";
+        await expect(page.getByRole("combobox", { name: downgrade, exact: true })).toBeVisible();
+        await expect(page.getByRole("heading", { name: downgrade, exact: true })).toHaveCount(0);
+        await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium-a-vita");
+        const documents = page.getByRole("button", {
+          name: it
+            ? "Consulta ricevute e fatture su Stripe"
+            : "View receipts and invoices on Stripe",
+        });
+        await expect(documents).toBeVisible();
+        await expect(
+          page.getByRole("button", { name: /Gestisci abbonamento|Manage subscription/ }),
+        ).toHaveCount(0);
+        await documents.click();
+        await expect(page.getByRole("status").filter({ hasText: "simulat" }).first()).toBeVisible({
+          timeout: 20_000,
+        });
+        await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/piano$`));
+        await page.screenshot({ path: testInfo.outputPath(`lifetime-${locale}.png`) });
+
+        await open(page, `${prefix}/anteprima/impostazioni/supporto`);
+        await page.getByRole("button", { name: it ? "Invia" : "Send", exact: true }).click();
+        const message = page.getByRole("textbox", {
+          name: it ? "Messaggio" : "Message",
+          exact: true,
+        });
+        await expect(message).toBeFocused();
+        await expect(page.locator('[role="alert"][data-slot="alert"]')).toBeInViewport({
+          ratio: 1,
+        });
+        await expect(message).toHaveAttribute("aria-invalid", "true");
+        await expect(message).toHaveAccessibleDescription(
+          it ? "Scrivi il messaggio." : "Write your message.",
+        );
+        await expect(message).toBeInViewport({ ratio: 1 });
+        const contact = page.getByRole("heading", {
+          name: it ? "Scrivi all’assistenza" : "Contact support",
+          exact: true,
+        });
+        await expect
+          .poll(async () => {
+            const heading = await contact.boundingBox();
+            const header = await page.locator("header").boundingBox();
+            return heading!.y >= header!.y + header!.height;
+          })
+          .toBe(true);
+        await page.screenshot({ path: testInfo.outputPath(`support-${locale}.png`) });
+
+        await open(page, `${prefix}/anteprima/profilo`);
+        await expect(
+          page.getByRole("textbox", { name: it ? "Nome" : "Name", exact: true }),
+        ).toBeVisible();
+        await expect
+          .poll(() =>
+            page.locator("main > div").evaluate((element) => {
+              const own = element.getBoundingClientRect();
+              const parent = element.parentElement!.getBoundingClientRect();
+              return Math.abs(own.left + own.width / 2 - parent.left - parent.width / 2);
+            }),
+          )
+          .toBeLessThan(1);
+        await expect.poll(() => noPageOverflow(page)).toBe(true);
+        await page.screenshot({
+          path: testInfo.outputPath(`profile-${locale}.png`),
+          fullPage: true,
+        });
+      }
+    });
+  }
+}
+
 test("errori del form associati al campo e focus restituito dalla conferma", async ({ page }) => {
   await open(page, "/anteprima/impostazioni/supporto");
   await page.getByRole("button", { name: "Invia", exact: true }).click();
