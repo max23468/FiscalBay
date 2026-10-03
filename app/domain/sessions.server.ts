@@ -35,6 +35,18 @@ export function adminAccess(
   return "granted";
 }
 
+/**
+ * Motivo per cui la sessione non può aggiungere o rimuovere passkey, oppure null. Un admin
+ * deve prima accedere con passkey; gli altri utenti, con un accesso recente qualsiasi.
+ */
+export function passkeyChangeBlock(
+  session: AuthSession,
+  now = new Date(),
+): "conferma-passkey" | "nuovo-accesso" | null {
+  if (session.user.admin && adminAccess(session, now) !== "granted") return "conferma-passkey";
+  return recentSignIn(session, now) ? null : "nuovo-accesso";
+}
+
 export interface ActiveSession {
   id: string;
   device: string;

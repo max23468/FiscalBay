@@ -2,7 +2,7 @@ import { waitUntil } from "cloudflare:workers";
 
 import { createAuth } from "./auth.server";
 import { registrationStatus } from "./domain/registration.server";
-import { adminAccess, recentSignIn, type AuthSession } from "./domain/sessions.server";
+import { passkeyChangeBlock, recentSignIn, type AuthSession } from "./domain/sessions.server";
 import { completeStoreLink, takeStoreLinkSession } from "./integrations/ebay/store-link.server";
 import { classifyFailure, logFailure } from "./errors";
 import { localizedPath } from "./i18n";
@@ -140,13 +140,7 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
     // Una nuova passkey richiede un accesso recente. Per un admin, che con la passkey supera
     // il secondo fattore, serve una sessione già confermata da passkey: password o email
     // compromesse non bastano ad aggiungerne una.
-    const current = session as AuthSession;
-    if (
-      !recentSignIn(current) ||
-      (current.user.admin === true && adminAccess(current) !== "granted")
-    ) {
-      return new Response(null, { status: 403 });
-    }
+    if (passkeyChangeBlock(session as AuthSession)) return new Response(null, { status: 403 });
   }
   const wait = await attemptWait(request, environment);
   if (wait !== null) {
