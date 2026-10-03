@@ -280,6 +280,8 @@ test("stati coerenti: aggiornamento, eBay fermo e collegamento già usato", asyn
   ).toBeDisabled();
 
   await chooseScenario(page, "Primo accesso");
+  // Il selettore cambia subito: attendere anche i dati dello scenario prima del collegamento.
+  await page.waitForLoadState("networkidle");
   await page
     .getByRole("navigation", { name: "Navigazione principale" })
     .getByRole("link", { name: "Negozi eBay" })
