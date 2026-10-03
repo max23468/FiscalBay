@@ -245,5 +245,6 @@ export function formatRelative(value: string, now: string, language: Language): 
   if (Math.abs(minutes) < 60) return format.format(minutes, "minute");
   const hours = Math.round(minutes / 60);
   if (Math.abs(hours) < 24) return format.format(hours, "hour");
-  return format.format(Math.round(hours / 24), "day");
+  // ICU usa U+0027 in Safari e U+2019 in Workerd per «l’altro ieri».
+  return format.format(Math.round(hours / 24), "day").replaceAll("'", "’");
 }
