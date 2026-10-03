@@ -1326,12 +1326,18 @@ function FirstUse({ data, t }: { data: OrdersPageData; t: AppCopy }) {
 
 function LoadingGrid({ t }: { t: AppCopy }) {
   return (
-    <div aria-busy="true" className="grid gap-6">
+    <div
+      aria-busy="true"
+      className="grid gap-6 [&_[data-slot=skeleton]]:bg-border dark:[&_[data-slot=skeleton]]:bg-muted"
+    >
       <span className="sr-only" role="status">
         {t.orders.loading}
       </span>
       {/* Stessa riga dei filtri dell'elenco, così i dati non spostano la pagina. */}
-      <div aria-hidden="true" className="hidden gap-3 md:grid md:grid-cols-[repeat(4,10rem)_1fr]">
+      <div
+        aria-hidden="true"
+        className="hidden gap-3 md:grid md:grid-cols-[repeat(4,minmax(0,1fr))_auto]"
+      >
         {[0, 1, 2, 3].map((index) => (
           <div key={index} className="grid gap-2">
             <Skeleton className="h-4 w-20" />
