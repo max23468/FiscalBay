@@ -36,6 +36,9 @@ export default function AuthError({ matches }: Route.ComponentProps) {
       homeHref={localizedPath(language)}
     >
       <p className="leading-relaxed text-pretty text-muted-foreground">{message.body}</p>
+      <a href="mailto:supporto@fiscalbay.it" className="w-fit underline underline-offset-4">
+        {t.support}: supporto@fiscalbay.it
+      </a>
       <a
         href={localizedPath(language)}
         className={cn(buttonVariants({ variant: "outline" }), "w-fit")}

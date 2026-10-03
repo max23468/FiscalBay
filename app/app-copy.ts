@@ -542,6 +542,7 @@ const it = {
     title: "Accesso non completato",
     body: "Riprova ad accedere. Se il problema continua, contatta il supporto.",
     back: "Torna a FiscalBay",
+    support: "Contatta il supporto",
     ebayWithoutEmail: {
       title: "Accesso con eBay non disponibile",
       body: "eBay non ci fornisce l’indirizzo email del tuo account, come succede per gli account individuali. Accedi con email, Google o passkey: dopo potrai collegare il tuo negozio eBay.",
@@ -611,6 +612,8 @@ const it = {
     passkeyEmpty: "Nessuna passkey aggiunta.",
     passkeyFailed: "Operazione passkey non riuscita. Riprova sul tuo dispositivo.",
     passwordRecovery: "Hai dimenticato la password?",
+    passwordResetTitle: "Scegli una nuova password",
+    backToSignIn: "Torna ad accedere",
     passwordRecoveryBody:
       "Inserisci l’email del tuo account: ti invieremo un link per scegliere una nuova password.",
     passwordRecoverySend: "Invia il link",
@@ -1201,6 +1204,7 @@ const en: AppCopy = {
     title: "Sign in incomplete",
     body: "Try signing in again. If the problem continues, contact support.",
     back: "Back to FiscalBay",
+    support: "Contact support",
     ebayWithoutEmail: {
       title: "Sign in with eBay unavailable",
       body: "eBay does not share the email address of your account, as happens with individual accounts. Sign in with email, Google or a passkey: you can then connect your eBay store.",
@@ -1269,6 +1273,8 @@ const en: AppCopy = {
     passkeyEmpty: "No passkeys added.",
     passkeyFailed: "Passkey operation failed. Try again on your device.",
     passwordRecovery: "Forgot your password?",
+    passwordResetTitle: "Choose a new password",
+    backToSignIn: "Back to sign in",
     passwordRecoveryBody:
       "Enter your account email and we will send you a link to set a new password.",
     passwordRecoverySend: "Send link",

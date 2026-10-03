@@ -8,6 +8,12 @@ import { languageFromPath, localizedPath } from "../i18n";
 import { startStoreLink } from "../integrations/ebay/store-link.server";
 import type { Route } from "./+types/store-link";
 
+export function loader({ request }: Route.LoaderArgs) {
+  return redirect(localizedPath(languageFromPath(new URL(request.url).pathname)), {
+    headers: { "cache-control": "no-store" },
+  });
+}
+
 export async function action({ request }: Route.ActionArgs) {
   const base = localizedPath(languageFromPath(new URL(request.url).pathname));
   if (request.headers.get("origin") !== new URL(env.APP_ORIGIN).origin) {

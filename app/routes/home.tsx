@@ -44,7 +44,12 @@ export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescri
   const language = languageFromPath(location.pathname);
   const { access } = appCopy[language];
   // Senza sessione la pagina è l'accesso, non ancora l'elenco degli ordini.
-  const title = loaderData?.authenticated ? access.title : access.signIn;
+  const title =
+    loaderData && "resetToken" in loaderData && loaderData.resetToken
+      ? access.passwordResetTitle
+      : loaderData?.authenticated
+        ? access.title
+        : access.signIn;
   return [
     { title: `FiscalBay | ${title}` },
     { name: "description", content: appCopy[language].access.description },
@@ -537,7 +542,7 @@ function ResetPassword({
 }) {
   return (
     <form method="post" action={localizedPath(language, "/accesso")} className="grid gap-4">
-      <h2 className="text-xl font-semibold">{t.passwordRecovery}</h2>
+      <h2 className="text-xl font-semibold">{t.passwordResetTitle}</h2>
       <input type="hidden" name="token" value={token} />
       <Field>
         <FieldLabel htmlFor="reset-password">{t.newPassword}</FieldLabel>
@@ -554,6 +559,12 @@ function ResetPassword({
       <Button type="submit" name="intent" value="reimposta-password">
         {t.passwordRecoveryConfirm}
       </Button>
+      <a
+        href={localizedPath(language)}
+        className="w-fit text-sm text-primary underline underline-offset-4"
+      >
+        {t.backToSignIn}
+      </a>
     </form>
   );
 }
@@ -1101,12 +1112,31 @@ function AccessPanel({
   return <AccessForms t={t} language={language} remembered={remembered} />;
 }
 
+function AccessNotice({ loaderData }: { loaderData: Awaited<ReturnType<typeof loader>> }) {
+  const { language, notice } = loaderData;
+  const t = appCopy[language].access;
+  return notice ? (
+    <StatusAlert tone={notice.tone} title={notice.text}>
+      {notice.text === t.storeNotices["altro-spazio"] ? (
+        <a href="mailto:supporto@fiscalbay.it" className="underline underline-offset-4">
+          {appCopy[language].authError.support}: supporto@fiscalbay.it
+        </a>
+      ) : null}
+    </StatusAlert>
+  ) : null;
+}
+
+function accessHeading(loaderData: Awaited<ReturnType<typeof loader>>, t: AccessCopy) {
+  if (loaderData.authenticated) return t.agreementTitle;
+  return loaderData.resetToken ? t.passwordResetTitle : t.choose;
+}
+
 export default function Home({ loaderData }: Route.ComponentProps) {
   const { language, notice } = loaderData;
   const t = appCopy[language].access;
   const { orders } = appCopy[language];
   const remembered = useRemembered(notice !== null && errorTones.has(notice.tone));
-  const noticeAlert = notice ? <StatusAlert tone={notice.tone} title={notice.text} /> : null;
+  const noticeAlert = <AccessNotice loaderData={loaderData} />;
 
   // Accesso, registrazione e completamento: marchio a sinistra, form a destra.
   if (!loaderData.authenticated || loaderData.needsProfile || loaderData.needsAgreement) {
@@ -1118,11 +1148,18 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <Logo className="h-7 w-auto lg:invisible" />
             <LanguageNav t={t} language={language} />
           </header>
-          <div className="mx-auto grid w-full max-w-md flex-1 content-center gap-6 py-10">
+          <div
+            className={cn(
+              "mx-auto grid w-full max-w-md flex-1 gap-6 py-10",
+              !loaderData.authenticated && loaderData.resetToken
+                ? "content-start lg:content-center"
+                : "content-center",
+            )}
+          >
             <div className="grid gap-2 lg:hidden">
               <p className="text-2xl font-semibold text-balance">{t.headline}</p>
             </div>
-            <h1 className="sr-only">{loaderData.authenticated ? t.agreementTitle : t.choose}</h1>
+            <h1 className="sr-only">{accessHeading(loaderData, t)}</h1>
             {noticeAlert}
             {loaderData.authenticated ? (
               <AccountBar
