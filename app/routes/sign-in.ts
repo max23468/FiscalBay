@@ -31,6 +31,12 @@ function withCookies(location: string, response: Response): Response {
   return redirect(location, { status: 303, headers });
 }
 
+export function loader({ request }: Route.LoaderArgs) {
+  return redirect(localizedPath(languageFromPath(new URL(request.url).pathname)), {
+    headers: { "cache-control": "no-store" },
+  });
+}
+
 export async function action({ request }: Route.ActionArgs) {
   const language = languageFromPath(new URL(request.url).pathname);
   const base = localizedPath(language);

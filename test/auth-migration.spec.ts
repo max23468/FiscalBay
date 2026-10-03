@@ -7,8 +7,52 @@ import { createAuth, createAuthOptions, gmailDomain } from "../app/auth.server";
 import { completeRegistration } from "../app/domain/registration.server";
 import { loader as adminLoader } from "../app/routes/admin";
 import { loader as homeLoader } from "../app/routes/home";
-import { action as signInAction } from "../app/routes/sign-in";
-import { action as storeLinkAction } from "../app/routes/store-link";
+import { action as signInAction, loader as signInLoader } from "../app/routes/sign-in";
+import { action as storeLinkAction, loader as storeLinkLoader } from "../app/routes/store-link";
+
+it("riporta i GET delle azioni alla radice localizzata senza accettare redirect esterni", () => {
+  for (const base of ["", "/en"]) {
+    for (const [path, loader] of [
+      ["/accesso", signInLoader],
+      ["/negozi/collega", storeLinkLoader],
+    ] as const) {
+      const response = loader({
+        request: new Request(
+          `http://localhost:5173${base}${path}?token=synthetic&redirectTo=https://example.invalid`,
+        ),
+      } as never);
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe(base || "/");
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.getSetCookie()).toEqual([]);
+    }
+  }
+});
+
+it("conserva il rifiuto POST da origine estranea e del collegamento senza sessione in entrambe le lingue", async () => {
+  for (const base of ["", "/en"]) {
+    for (const [path, action] of [
+      ["/accesso", signInAction],
+      ["/negozi/collega", storeLinkAction],
+    ] as const) {
+      const response = await action({
+        request: new Request(`http://localhost:5173${base}${path}`, {
+          method: "POST",
+          headers: { origin: "https://example.invalid" },
+        }),
+      } as never);
+      expect(response.status).toBe(403);
+    }
+    const response = await storeLinkAction({
+      request: new Request(`http://localhost:5173${base}/negozi/collega`, {
+        method: "POST",
+        headers: { origin: "http://localhost:5173" },
+      }),
+    } as never);
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe(`${base || "/"}?negozio=accesso`);
+  }
+});
 
 it("mantiene lo schema D1 allineato ai quattro metodi Auth", async () => {
   const migration = await getMigrations(createAuthOptions(env));

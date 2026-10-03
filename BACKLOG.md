@@ -18,6 +18,8 @@ Il piano contiene i requisiti completi: qui si descrivono il lavoro e la prova, 
 
 ## Stato corrente e ripresa
 
+- **2026-10-03 · Audit UI/UX, accesso e recupero · DONE implementazione:** F07, F08, F09, F10 e V03 su `codex/accesso-recupero-audit`, worktree `6dd2`, base `develop` `de1fcab`. Supporto pubblico via `supporto@fiscalbay.it` negli errori Auth e nello stato di negozio già collegato; GET delle azioni verso la radice localizzata con `no-store`, POST invariati; titolo distinto, ritorno all'accesso e modulo di nuova password in alto sotto 1024 px. `pnpm verify:changed` finale verde: 143 test, 36 E2E; quattro snapshot Linux saltati su macOS. Verdi anche 37 test Auth mirati e 13 casi WebKit isolati IT/EN, light/dark, 390/768/1280 px; 24 PNG e log locali in `test-results/public-access-webkit/`. Configurazione E2E con valori Auth sintetici; corretta l'attesa dei dati dello scenario nel test di collegamento già usato, emersa nella prima esecuzione. Owner autorizza ora la pubblicazione su `develop` e il deploy test; restano CI remota, merge, readback pubblico e pulizia, da riferire in chat. Nessuna credenziale reale modificata o milestone estranea chiusa; Production esclusa da questo intervento.
+
 Questa sezione è un registro operativo iniziale, **non una prova di avvio già autorizzato**. Aggiornarla nello stesso intervento dei task pertinenti; non creare `STATUS.md`, `NEXT_STEPS.md` o un secondo backlog con informazioni concorrenti.
 
 | Campo                                                       | Stato corrente e prove storiche                                                                             |

@@ -145,6 +145,115 @@ for (const locale of ["it", "en"] as const) {
   }
 }
 
+const supportAddress = ["supporto", "fiscalbay.it"].join("@");
+
+test("GET delle azioni pubbliche torna all'accesso nella lingua richiesta", async ({ request }) => {
+  for (const prefix of ["", "/en"]) {
+    for (const path of ["/accesso", "/negozi/collega"]) {
+      const response = await request.get(`${prefix}${path}?redirectTo=https://example.invalid`, {
+        maxRedirects: 0,
+      });
+      expect(response.status()).toBe(302);
+      expect(response.headers().location).toBe(prefix || "/");
+      expect(response.headers()["cache-control"]).toBe("no-store");
+    }
+  }
+});
+
+for (const language of ["it", "en"] as const) {
+  for (const colorScheme of ["light", "dark"] as const) {
+    for (const width of [390, 768, 1280]) {
+      test(`accesso pubblico e nuova password ${language} ${colorScheme} a ${width} px`, async ({
+        browser,
+        baseURL,
+      }, testInfo) => {
+        // Il caso percorre errore, collegamento, reset e recupero con più navigazioni.
+        test.setTimeout(60_000);
+        const context = await browser.newContext({
+          baseURL,
+          colorScheme,
+          viewport: { width, height: 844 },
+          reducedMotion: "reduce",
+        });
+        const page = await context.newPage();
+        const prefix = language === "it" ? "" : "/en";
+        const title = language === "it" ? "Scegli una nuova password" : "Choose a new password";
+        const back = language === "it" ? "Torna ad accedere" : "Back to sign in";
+        try {
+          for (const error of ["", "account_already_linked_to_different_user"]) {
+            await page.goto(`${prefix}/auth/error?error=${error}`);
+            await expect(
+              page.getByRole("link", { name: new RegExp(supportAddress) }),
+            ).toHaveAttribute("href", `mailto:${supportAddress}`);
+          }
+          await testInfo.attach("errore-pubblico", {
+            body: await page.screenshot({
+              path: testInfo.outputPath("errore-pubblico.png"),
+              fullPage: true,
+            }),
+            contentType: "image/png",
+          });
+          await page.goto(`${prefix || "/"}?negozio=altro-spazio`);
+          await expect(page.getByRole("link", { name: new RegExp(supportAddress) })).toBeVisible();
+          await page.goto(`${prefix || "/"}?token=synthetic-invalid-token`);
+          await expect(page).toHaveTitle(`FiscalBay | ${title}`);
+          await expect(page.getByRole("heading", { name: title, level: 2 })).toBeVisible();
+          const form = page.locator("form");
+          await expect(form).toHaveAttribute("action", `${prefix}/accesso`);
+          await expect(form.locator('input[name="token"]')).toHaveValue("synthetic-invalid-token");
+          await expect(form.locator('input[name="password"]')).toHaveAttribute(
+            "autocomplete",
+            "new-password",
+          );
+          const backLink = page.getByRole("link", { name: back, exact: true });
+          await expect(backLink).toBeInViewport();
+          await expect.poll(() => noPageOverflow(page)).toBe(true);
+          if (width < 1024) {
+            const heading = page.getByRole("heading", { name: title, level: 2 });
+            expect((await heading.boundingBox())!.y).toBeLessThan(320);
+          }
+          await page.evaluate(() => document.fonts.ready);
+          await testInfo.attach("nuova-password", {
+            body: await page.screenshot({
+              path: testInfo.outputPath("nuova-password.png"),
+              fullPage: true,
+            }),
+            contentType: "image/png",
+          });
+          await backLink.click();
+          await page.waitForLoadState("networkidle");
+          await expect(page).toHaveURL(new RegExp(`${prefix || "/"}$`));
+          await expect(
+            page.getByRole("tab", { name: language === "it" ? "Accedi" : "Sign in", exact: true }),
+          ).toBeVisible();
+          await page
+            .getByRole("button", {
+              name: language === "it" ? "Hai dimenticato la password?" : "Forgot your password?",
+              exact: true,
+            })
+            .click();
+          await expect(
+            page.getByRole("button", {
+              name: language === "it" ? "Invia il link" : "Send link",
+              exact: true,
+            }),
+          ).toBeVisible();
+          await expect(
+            page
+              .getByRole("tabpanel", {
+                name: language === "it" ? "Accedi" : "Sign in",
+                exact: true,
+              })
+              .locator('input[name="email"]'),
+          ).toBeVisible();
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+}
+
 test("errori del form associati al campo e focus restituito dalla conferma", async ({ page }) => {
   await open(page, "/anteprima/impostazioni/supporto");
   await page.getByRole("button", { name: "Invia", exact: true }).click();
