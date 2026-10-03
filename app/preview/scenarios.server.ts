@@ -1,4 +1,5 @@
 import type { Language } from "../i18n";
+import { formatDate } from "../view-models";
 import type {
   OrdersNotice,
   AccountView,
@@ -53,11 +54,12 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
     it: {
       name: "Ordini da sbloccare esauriti",
       focus:
-        "Gli ordini restano consultabili. Il Codice Fiscale dei nuovi ordini attende il prossimo ciclo.",
+        "Gli ordini restano consultabili. Codice Fiscale e Partita IVA dei nuovi ordini attendono il prossimo ciclo.",
     },
     en: {
       name: "No orders left to unlock",
-      focus: "Orders remain available. The tax code of new orders waits for the next cycle.",
+      focus:
+        "Orders remain available. Codice Fiscale and Partita IVA of new orders wait for the next cycle.",
     },
   },
   aggiornamento: {
@@ -164,7 +166,16 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
 };
 
 export function scenarioOptions(language: Language) {
-  return scenarioIds.map((id) => ({ id, ...scenarioText[id][language] }));
+  const reference = formatDate(previewNow, language);
+  const clock =
+    language === "it"
+      ? `Simulazione fissata al ${reference} (Europe/Rome).`
+      : `Simulation fixed at ${reference} (Europe/Rome).`;
+  return scenarioIds.map((id) => ({
+    id,
+    ...scenarioText[id][language],
+    focus: `${scenarioText[id][language].focus} ${clock}`,
+  }));
 }
 
 /** Istante di riferimento fisso: date e tempi relativi restano stabili. */
@@ -815,24 +826,24 @@ const text = {
   },
 };
 
-const sessions: SessionView[] = [
+const sessions = (language: Language): SessionView[] => [
   {
     id: "ses-1",
-    device: "Safari su macOS",
+    device: language === "it" ? "Safari su macOS" : "Safari on macOS",
     location: "Trento",
     lastActiveAt: previewNow,
     current: true,
   },
   {
     id: "ses-2",
-    device: "Safari su iPhone",
+    device: language === "it" ? "Safari su iPhone" : "Safari on iPhone",
     location: "Trento",
     lastActiveAt: minutesAgo(180),
     current: false,
   },
   {
     id: "ses-3",
-    device: "Chrome su Windows",
+    device: language === "it" ? "Chrome su Windows" : "Chrome on Windows",
     location: "Milano",
     lastActiveAt: minutesAgo(2_900),
     current: false,
@@ -860,7 +871,7 @@ export function loadScenario(
     syncRunning: false,
     ebayDown: false,
     elsewhere: false,
-    sessions,
+    sessions: sessions(language),
     telegramChat: null,
     saveFailsOnce: false,
     onboarding: [
@@ -881,12 +892,12 @@ export function loadScenario(
     ],
   };
   const diagnostics = (overrides: Partial<DiagnosticsView> = {}): DiagnosticsView => ({
-    version: "2.0.0 (anteprima)",
+    version: language === "it" ? "2.0.0 (anteprima)" : "2.0.0 (preview)",
     storeRef: "neg_7f3a91c2",
     syncPhase:
       language === "it" ? "Aggiornamento riuscito, 5 minuti fa" : "Update succeeded, 5 minutes ago",
     errorCode: null,
-    rights: language === "it" ? "Free, 3 di 5 ordini sbloccati" : "Free, 3 of 5 orders unlocked",
+    rights: "",
     correlationId: "c0a8f3e1-5b2d-4e7a-9c11-7d2f0b6e4a90",
     ...overrides,
   });
@@ -947,10 +958,7 @@ export function loadScenario(
           }),
           ...common.notifications,
         ],
-        diagnostics: diagnostics({
-          rights:
-            language === "it" ? "Free, 5 di 5 ordini sbloccati" : "Free, 5 of 5 orders unlocked",
-        }),
+        diagnostics: diagnostics(),
       };
       break;
     case "aggiornamento":
@@ -1071,7 +1079,6 @@ export function loadScenario(
               ? "Collegamento scaduto, 1 giorno fa"
               : "Connection expired, 1 day ago",
           errorCode: "STORE_RECONNECT_REQUIRED",
-          rights: language === "it" ? "Premium annuale" : "Premium, annual",
         }),
       };
       break;
@@ -1110,9 +1117,7 @@ export function loadScenario(
         }),
         premium: true,
         telegramChat: "Magazzino Vintage",
-        diagnostics: diagnostics({
-          rights: language === "it" ? "Premium annuale" : "Premium, annual",
-        }),
+        diagnostics: diagnostics(),
       };
       break;
     case "primo-accesso":
@@ -1134,7 +1139,6 @@ export function loadScenario(
         diagnostics: diagnostics({
           storeRef: null,
           syncPhase: language === "it" ? "Nessun negozio" : "No store",
-          rights: "Free",
         }),
       };
       break;
@@ -1201,9 +1205,7 @@ export function loadScenario(
           }),
           ...common.notifications,
         ],
-        diagnostics: diagnostics({
-          rights: language === "it" ? "Premium annuale" : "Premium, annual",
-        }),
+        diagnostics: diagnostics(),
       };
       break;
     case "premium-a-vita":
@@ -1241,9 +1243,7 @@ export function loadScenario(
               : seed,
           ),
         premium: true,
-        diagnostics: diagnostics({
-          rights: language === "it" ? "Premium a vita" : "Premium, lifetime",
-        }),
+        diagnostics: diagnostics(),
       };
       break;
   }
@@ -1272,14 +1272,29 @@ export function loadScenario(
     return toOrder(seed, rest.stores);
   });
   const quota = rest.account.quota;
+  const currentAccount = quota
+    ? {
+        ...rest.account,
+        quota: { ...quota, used: Math.min(quota.used + unlockedCount, quota.limit) },
+      }
+    : rest.account;
+  const rights = currentAccount.quota
+    ? language === "it"
+      ? `Free, ${currentAccount.quota.used} di ${currentAccount.quota.limit} ordini sbloccati`
+      : `Free, ${currentAccount.quota.used} of ${currentAccount.quota.limit} orders unlocked`
+    : currentAccount.plan === "free"
+      ? "Free"
+      : currentAccount.premium?.period === "lifetime"
+        ? language === "it"
+          ? "Premium a vita"
+          : "Premium, lifetime"
+        : language === "it"
+          ? "Premium annuale"
+          : "Premium, annual";
   return {
     ...rest,
-    account: quota
-      ? {
-          ...rest.account,
-          quota: { ...quota, used: Math.min(quota.used + unlockedCount, quota.limit) },
-        }
-      : rest.account,
+    account: currentAccount,
+    diagnostics: { ...rest.diagnostics, rights },
     orders,
     lockedValues,
   };
