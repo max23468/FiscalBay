@@ -57,12 +57,13 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "grid gap-6 rounded-xl border bg-card p-6 md:grid-cols-[12rem_1fr] md:items-center md:gap-8 md:p-8",
+        // Illustrazione e testo centrati insieme: nessuno spazio vuoto solo a destra.
+        "grid gap-6 rounded-xl border bg-card p-6 md:grid-cols-[12rem_minmax(0,32rem)] md:items-center md:justify-center md:gap-8 md:p-8",
         className,
       )}
     >
       <EmptyArt kind={variant} className="mx-auto" />
-      <div className="grid max-w-lg min-w-0 gap-2">
+      <div className="grid min-w-0 gap-2">
         <Heading className="text-xl leading-snug font-semibold text-balance">{title}</Heading>
         <p className="text-sm leading-relaxed text-pretty text-muted-foreground">{description}</p>
         {action || secondaryAction ? (

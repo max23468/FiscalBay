@@ -320,6 +320,14 @@ for (const locale of ["it", "en"] as const) {
     try {
       await open(page, `${prefix}/anteprima/ordini`);
       await expect(page.locator("html")).toHaveAttribute("lang", locale);
+      // Anche su mobile l'anteprima dichiara che le azioni sono simulate.
+      await expect(
+        page.getByText(
+          locale === "it"
+            ? "Qui le azioni sono simulate e usano dati di esempio."
+            : "Actions here are simulated and use sample data.",
+        ),
+      ).toBeVisible();
       const bottom = page.getByRole("navigation", { name: labels.nav });
       await expect(bottom).toHaveCount(1);
       await expect(bottom).toBeInViewport();

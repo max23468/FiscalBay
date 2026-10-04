@@ -21,6 +21,7 @@ import {
   revokeSession,
   type AuthSession,
 } from "../domain/sessions.server";
+import { securityPath } from "../app-links";
 import { errorResponse } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
 import type { Route } from "./+types/sign-in";
@@ -30,6 +31,16 @@ function withCookies(location: string, response: Response): Response {
   for (const cookie of response.headers.getSetCookie()) headers.append("set-cookie", cookie);
   return redirect(location, { status: 303, headers });
 }
+
+const securityIntents = new Set([
+  "esci-sessione",
+  "esci-altri",
+  "collega-metodo",
+  "rimuovi-metodo",
+  "password",
+  "cambia-email",
+  "passkey-remove",
+]);
 
 export function loader({ request }: Route.LoaderArgs) {
   return redirect(localizedPath(languageFromPath(new URL(request.url).pathname)), {
@@ -45,10 +56,13 @@ export async function action({ request }: Route.ActionArgs) {
   }
   const form = await request.formData();
   const field = (name: string) => String(form.get(name) ?? "");
-  const notice = (value: string) => redirect(`${base}?accesso=${value}`, 303);
+  const intent = field("intent");
+  // Le azioni di Sicurezza riportano alla sua pagina, le altre alla radice.
+  const security = localizedPath(language, securityPath);
+  const back = securityIntents.has(intent) ? security : base;
+  const notice = (value: string, page = back) => redirect(`${page}?accesso=${value}`, 303);
   const forward = (path: string, body?: Record<string, unknown>) =>
     forwardToAuth(env, request, path, body);
-  const intent = field("intent");
 
   if (intent === "esci") return withCookies(base, await forward("/sign-out"));
 
@@ -85,7 +99,7 @@ export async function action({ request }: Route.ActionArgs) {
     intent === "cambia-email"
   ) {
     const session = await createAuth(env).api.getSession({ headers: request.headers });
-    if (!session?.user.emailVerified) return notice("accesso-non-verificato");
+    if (!session?.user.emailVerified) return notice("accesso-non-verificato", base);
     // Collegare, rimuovere e cambiare email richiedono un accesso delle ultime 24 ore; il link
     // per la password va comunque al proprio indirizzo.
     if (intent !== "password" && !recentSignIn(session as AuthSession)) {
@@ -97,7 +111,7 @@ export async function action({ request }: Route.ActionArgs) {
       if (method !== "google" && method !== "ebay") return notice("errore");
       const response = await forward("/link-social", {
         provider: method,
-        callbackURL: `${base}?accesso=metodo-collegato`,
+        callbackURL: `${security}?accesso=metodo-collegato`,
         errorCallbackURL: localizedPath(language, "/auth/error"),
       });
       if (!response.ok) return notice(response.status === 429 ? "troppi-tentativi" : "errore");
@@ -127,7 +141,7 @@ export async function action({ request }: Route.ActionArgs) {
     if (!email || email.length > 254) return notice("email-non-valida");
     const response = await forward("/change-email", {
       newEmail: email,
-      callbackURL: `${base}?accesso=email-confermata`,
+      callbackURL: `${security}?accesso=email-confermata`,
     });
     if (response.status === 429) return notice("troppi-tentativi");
     // La risposta non distingue un indirizzo già registrato: non rivela chi usa FiscalBay.

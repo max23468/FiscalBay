@@ -92,6 +92,9 @@ describe("errors, locale and redacted logs", () => {
 
   it("formats the same instant and amount for both locales", () => {
     expect(languageFromPath("/en/orders")).toBe("en");
+    expect(languageFromPath("/en.data")).toBe("en");
+    expect(languageFromPath("/_root.data")).toBe("it");
+    expect(languageFromPath("/english")).toBe("it");
     expect(localizedPath("en", "/accesso")).toBe("/en/accesso");
     expect(appCopy.it.access.noOrders).toBe("Nessun ordine");
     expect(appCopy.en.access.noOrders).toBe("No orders");

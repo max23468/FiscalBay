@@ -7,6 +7,7 @@ import { createAuth, createAuthOptions, gmailDomain } from "../app/auth.server";
 import { completeRegistration } from "../app/domain/registration.server";
 import { loader as adminLoader } from "../app/routes/admin";
 import { loader as homeLoader } from "../app/routes/home";
+import { loader as securityLoader } from "../app/routes/security";
 import { action as signInAction, loader as signInLoader } from "../app/routes/sign-in";
 import { action as storeLinkAction, loader as storeLinkLoader } from "../app/routes/store-link";
 
@@ -1121,6 +1122,17 @@ describe("Sessioni, revoche e area admin", () => {
     );
   const home = (cookie: string) =>
     homeLoader({ request: new Request(`${origin}/`, { headers: { cookie } }) } as never);
+  /** Pagina Sicurezza; chi non può vederla torna alla radice con l'esito ricevuto. */
+  const security = async (cookie: string, path = "/impostazioni/sicurezza") => {
+    try {
+      return await securityLoader({
+        request: new Request(`${origin}${path}`, { headers: { cookie } }),
+      } as never);
+    } catch (thrown) {
+      if (thrown instanceof Response) return thrown.headers.get("location");
+      throw thrown;
+    }
+  };
   /** Esito del loader admin: 404 per chi non è admin, altrimenti il livello di accesso. */
   const admin = async (cookie: string) => {
     try {
@@ -1178,6 +1190,9 @@ describe("Sessioni, revoche e area admin", () => {
   async function expectRevoked(cookie: string) {
     expect(await jsonRequest("get-session", cookie).then((response) => response.json())).toBeNull();
     expect((await home(cookie)).authenticated).toBe(false);
+    expect(await security(cookie, "/en/impostazioni/sicurezza?accesso=sessione-chiusa")).toBe(
+      "/en?accesso=sessione-chiusa",
+    );
     expect(
       await appAction(cookie, { intent: "cambia-email", email: "x@example.invalid" }),
     ).toContain("accesso-non-verificato");
@@ -1194,8 +1209,8 @@ describe("Sessioni, revoche e area admin", () => {
     const third = await signIn("sessioni@example.invalid");
     const other = await createUser("sessioni.altro@example.invalid");
 
-    const loaded = await home(user.cookie);
-    if (!loaded.authenticated) throw new Error("sessione attesa");
+    const loaded = await security(user.cookie);
+    if (typeof loaded === "string" || !loaded) throw new Error("sessione attesa");
     expect(loaded.sessions).toHaveLength(3);
     expect(loaded.sessions.filter((session) => session.current)).toEqual([
       expect.objectContaining({ id: await sessionId(user.cookie), device: "Safari su macOS" }),
@@ -1219,7 +1234,10 @@ describe("Sessioni, revoche e area admin", () => {
     await expectRevoked(second);
     expect(await sessionId(third)).toBeDefined();
 
-    expect(await appAction(user.cookie, { intent: "esci-altri" })).toContain("sessioni-chiuse");
+    // Le azioni di Sicurezza tornano alla sua pagina.
+    expect(await appAction(user.cookie, { intent: "esci-altri" })).toBe(
+      "/impostazioni/sicurezza?accesso=sessioni-chiuse",
+    );
     await expectRevoked(third);
     expect(await sessionId(user.cookie)).toBeDefined();
     expect(await sessionId(other.cookie)).toBeDefined();
@@ -1247,7 +1265,7 @@ describe("Sessioni, revoche e area admin", () => {
       expect(await appAction(user.cookie, fields)).toContain("nuovo-accesso");
     }
     expect((await jsonRequest("passkey/generate-register-options", user.cookie)).status).toBe(403);
-    expect(await home(user.cookie)).toMatchObject({ passkeyBlock: "nuovo-accesso" });
+    expect(await security(user.cookie)).toMatchObject({ passkeyBlock: "nuovo-accesso" });
     // Le stesse modifiche chiamate direttamente sulle route Auth seguono la stessa regola.
     expect(
       (
@@ -1298,7 +1316,7 @@ describe("Sessioni, revoche e area admin", () => {
     expect(await admin(user.cookie)).toBe("verify");
     expect((await jsonRequest("passkey/generate-register-options", user.cookie)).status).toBe(403);
     // La home indica il passaggio giusto: accedere con passkey, non un accesso qualsiasi.
-    expect(await home(user.cookie)).toMatchObject({ passkeyBlock: "conferma-passkey" });
+    expect(await security(user.cookie)).toMatchObject({ passkeyBlock: "conferma-passkey" });
     await env.DB.prepare('UPDATE "user" SET "admin" = 0 WHERE id = ?').bind(user.id).run();
     expect(await admin(user.cookie)).toBe(404);
   });

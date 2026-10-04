@@ -8,7 +8,8 @@ export const locales: Record<Language, string> = { it: "it-IT", en: "en-GB" };
 export const languageNames: Record<Language, string> = { it: "Italiano", en: "English" };
 
 export function languageFromPath(path: string): Language {
-  return path === "/en" || path.startsWith("/en/") ? "en" : "it";
+  // `/en.data` è la richiesta dei dati di `/en` durante una navigazione nel browser.
+  return /^\/en(?:\/|\.data$|$)/u.test(path) ? "en" : "it";
 }
 
 export function localizedPath(language: Language, path = "/"): string {

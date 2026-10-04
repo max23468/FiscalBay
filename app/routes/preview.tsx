@@ -128,8 +128,10 @@ function ScenarioBar({
             </SelectContent>
           </Select>
         </div>
+        {/* Su mobile resta la nota sulle azioni simulate; la select nomina già lo scenario. */}
         <p className="text-pretty text-muted-foreground">
-          {current?.focus} <span className="max-md:hidden">{t.preview.note}</span>
+          <span className="max-md:hidden">{current?.focus} </span>
+          {t.preview.note}
         </p>
       </div>
     </div>

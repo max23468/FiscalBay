@@ -10,3 +10,6 @@ export interface AppLinks {
 export function appHref({ language, base }: AppLinks, path = "") {
   return localizedPath(language, `${base}${path ? `/${path}` : ""}`);
 }
+
+/** Pagina reale di Sicurezza; le Impostazioni complete la ospiteranno fra le categorie. */
+export const securityPath = "/impostazioni/sicurezza";

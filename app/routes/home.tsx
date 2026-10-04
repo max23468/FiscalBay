@@ -1,10 +1,11 @@
 import { env } from "cloudflare:workers";
 import { cn } from "cn";
-import { ClipboardList, Copy, KeyRound, LogOut, Plus, ShieldCheck, Store } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
-import { flushSync } from "react-dom";
+import { ClipboardList, Copy, KeyRound, LogOut, Plus, Store } from "lucide-react";
+import { useEffect, useState } from "react";
 
-import { IconTile } from "~/components/icon-tile";
+import { AccessNotice, AccountShell } from "~/components/account";
+import { EmptyState } from "~/components/empty-state";
+import { PageTitle } from "~/components/icon-tile";
 import { Logo } from "~/components/standalone-page";
 import { useFieldErrors, type FieldErrors } from "~/components/form-validation";
 import { LanguageSwitch } from "~/components/language-switch";
@@ -13,7 +14,6 @@ import { TaxCode } from "~/components/tax-code";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Checkbox } from "~/components/ui/checkbox";
-import { Spinner } from "~/components/ui/spinner";
 import {
   Field,
   FieldContent,
@@ -29,17 +29,12 @@ import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { createAuth } from "../auth.server";
 import { registrationStatus } from "../domain/registration.server";
-import {
-  listActiveSessions,
-  passkeyChangeBlock,
-  type ActiveSession,
-  type AuthSession,
-} from "../domain/sessions.server";
-import { listSignInMethods, type SignInMethods } from "../domain/sign-in-methods.server";
+import { listSignInMethods } from "../domain/sign-in-methods.server";
 import { listVisibleOrders } from "../domain/orders.server";
+import { accessNotice } from "../access-notice";
 import { appCopy } from "../app-copy";
 import { formatAmount, languageFromPath, localizedPath, type Language } from "../i18n";
-import { formatDate, formatRelative } from "../view-models";
+import { formatDate } from "../view-models";
 import type { Route } from "./+types/home";
 
 export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescriptors {
@@ -64,52 +59,11 @@ const identifierLabels: Record<string, "CF" | "PIVA"> = {
   VAT_ID: "PIVA",
 };
 
-/** Tono degli avvisi: gli errori chiedono un'azione, le conferme no. */
-const noticeTones: Record<string, "success" | "info" | "warning" | "danger"> = {
-  errore: "danger",
-  registrazione: "danger",
-  termini: "warning",
-  dati: "warning",
-  "troppi-tentativi": "warning",
-  accesso: "warning",
-  "altro-spazio": "warning",
-  registrato: "success",
-  "verifica-inviata": "success",
-  "passkey-rimossa": "success",
-  "ultimo-accesso": "warning",
-  "recupero-inviato": "info",
-  "password-reimpostata": "success",
-  "recupero-scaduto": "warning",
-  collegato: "success",
-  "metodo-collegato": "success",
-  "metodo-rimosso": "success",
-  "ebay-rimosso": "success",
-  "ultimo-metodo": "warning",
-  "password-link": "info",
-  "email-richiesta": "info",
-  "email-confermata": "success",
-  "email-non-valida": "warning",
-  "nuovo-accesso": "warning",
-  "conferma-passkey": "warning",
-  "sessione-chiusa": "success",
-  "sessioni-chiuse": "success",
-  "accesso-non-verificato": "warning",
-};
-
 export async function loader({ request }: Route.LoaderArgs) {
   const language = languageFromPath(new URL(request.url).pathname);
   const session = await createAuth(env).api.getSession({ headers: request.headers });
   const search = new URL(request.url).searchParams;
-  const { access } = appCopy[language];
-  const key = search.get("accesso") ?? search.get("negozio") ?? "";
-  const text =
-    access.signInNotices[search.get("accesso") ?? ""] ??
-    access.storeNotices[search.get("negozio") ?? ""] ??
-    (search.has("error") ? access.signInNotices["recupero-scaduto"] : null) ??
-    null;
-  const notice = text
-    ? { text, tone: noticeTones[search.has("error") ? "recupero-scaduto" : key] ?? "info" }
-    : null;
+  const notice = accessNotice(search, language);
   if (!session || search.has("token")) {
     return {
       authenticated: false as const,
@@ -122,9 +76,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   // Finché mancano profilo o Termini correnti l'utente vede solo il passaggio per completarli.
   const status = await registrationStatus(env.DB, session.user.id);
   const complete = status.termsAccepted && status.profile !== null;
-  const methods = await listSignInMethods(env.DB, session.user.id);
-  const now = new Date();
-  const ebayLinked = methods.accounts.ebay;
+  const ebayLinked = (await listSignInMethods(env.DB, session.user.id)).accounts.ebay;
   // eBay fornisce uno username, non il nome della persona. Vale anche per gli utenti
   // già registrati: né lo username né un indirizzo email devono precompilare il profilo.
   const providerName =
@@ -135,18 +87,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     language,
     notice,
     email: session.user.email,
+    name: status.profile ? `${status.profile.firstName} ${status.profile.lastName}` : "",
     emailVerified: session.user.emailVerified,
     needsProfile: !status.profile,
     needsAgreement: !status.termsAccepted,
     canLinkStore: session.user.emailVerified && complete,
-    methods: session.user.emailVerified && complete ? methods : null,
-    sessions:
-      session.user.emailVerified && complete
-        ? await listActiveSessions(env.DB, session.user.id, session.session.id, language, now)
-        : [],
-    now: now.toISOString(),
-    // Avviso da mostrare se la registrazione di una passkey viene rifiutata.
-    passkeyBlock: passkeyChangeBlock(session as AuthSession, now) ?? "nuovo-accesso",
     suggestedName: { firstName, lastName: lastName.join(" ") },
     orders: complete ? await listVisibleOrders(env.DB, session.user.id) : [],
   };
@@ -673,399 +618,38 @@ function SignOutForm({ t, language }: { t: AccessCopy; language: Language }) {
   );
 }
 
-/** Riga di un metodo di accesso: nome, stato e azioni, come nelle Impostazioni. */
-function MethodRow({
-  label,
-  status,
-  hint,
-  children,
-}: {
-  label: string;
-  status: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  // Il gruppo dà ai pulsanti ripetuti in ogni riga («Rimuovi», «Esci») il nome della riga.
-  const id = useId();
-  return (
-    <li className="flex flex-col items-start gap-x-4 gap-y-2 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-      <span className="grid min-w-0 sm:flex-1 sm:basis-48">
-        <span id={`${id}-label`} className="font-medium">
-          {label}
-        </span>
-        <span id={`${id}-status`} className="text-sm text-muted-foreground">
-          {status}
-        </span>
-        {hint ? <span className="text-sm text-muted-foreground">{hint}</span> : null}
-      </span>
-      {children ? (
-        <div
-          role="group"
-          aria-labelledby={`${id}-label ${id}-status`}
-          className="flex flex-wrap gap-2"
-        >
-          {children}
-        </div>
-      ) : null}
-    </li>
-  );
-}
-
-/** Pulsante che invia un'azione di Sicurezza, con il metodo interessato. */
-function MethodAction({
-  language,
-  intent,
-  method,
-  children,
-}: {
-  language: Language;
-  intent: string;
-  method?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <form method="post" action={localizedPath(language, "/accesso")}>
-      {method ? <input type="hidden" name="metodo" value={method} /> : null}
-      <Button type="submit" variant="outline" size="sm" name="intent" value={intent}>
-        {children}
-      </Button>
-    </form>
-  );
-}
-
-/** Gruppo della card Sicurezza, separato dal precedente come nelle Impostazioni. */
-function SecurityGroup({
-  id,
-  title,
-  children,
-}: {
-  id: string;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section aria-labelledby={id} className="grid gap-3 border-t pt-4 first:border-t-0 first:pt-0">
-      <h3 id={id} className="font-semibold">
-        {title}
-      </h3>
-      {children}
-    </section>
-  );
-}
-
-/** Email attuale; il nuovo indirizzo si inserisce solo quando serve. */
-function EmailChange({ language, email }: { language: Language; email: string }) {
-  const { access: t, profile, orders } = appCopy[language];
-  const [open, setOpen] = useState(false);
-  const opener = useRef<HTMLButtonElement>(null);
-  const v = useFieldErrors(t.validation);
-  return (
-    <SecurityGroup id="security-email" title={profile.email}>
-      <div className="flex flex-col items-start gap-x-4 gap-y-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-        <span className="min-w-0 break-all sm:flex-1 sm:basis-48">{email}</span>
-        {open ? null : (
-          <Button
-            ref={opener}
-            type="button"
-            variant="outline"
-            size="sm"
-            aria-describedby="new-email-hint"
-            onClick={() => setOpen(true)}
-          >
-            {profile.changeEmail}
-          </Button>
-        )}
-      </div>
-      {open ? (
-        <form
-          method="post"
-          action={localizedPath(language, "/accesso")}
-          className="grid gap-3"
-          {...v.form}
-          onSubmit={(event) => void v.check(event)}
-        >
-          <Field>
-            <FieldLabel htmlFor="new-email">{t.newEmail}</FieldLabel>
-            <Input
-              id="new-email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              autoFocus
-              {...v.control("email", "new-email-hint")}
-            />
-            {v.error("email")}
-            <FieldDescription id="new-email-hint">{profile.emailHint}</FieldDescription>
-          </Field>
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" size="sm" name="intent" value="cambia-email">
-              {t.sendEmailLink}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                // Chiudendo il campo il focus torna al pulsante che l'ha aperto.
-                flushSync(() => setOpen(false));
-                opener.current?.focus();
-              }}
-            >
-              {orders.cancel}
-            </Button>
-          </div>
-        </form>
-      ) : (
-        <p id="new-email-hint" className="text-sm text-muted-foreground">
-          {profile.emailHint}
-        </p>
-      )}
-    </SecurityGroup>
-  );
-}
-
-/** Sessioni aperte: si chiudono una alla volta o tutte tranne quella in uso, che esce dal menu. */
-function SessionList({
-  language,
-  sessions,
-  now,
-}: {
-  language: Language;
-  sessions: ActiveSession[];
-  now: string;
-}) {
-  const { settings } = appCopy[language];
-  return (
-    <SecurityGroup id="security-sessions" title={settings.sessions}>
-      <ul className="grid divide-y border-y">
-        {sessions.map((session) => (
-          <MethodRow
-            key={session.id}
-            label={session.device}
-            status={
-              session.current
-                ? settings.thisDevice
-                : settings.lastActive(formatRelative(session.lastActiveAt, now, language))
-            }
-          >
-            {session.current ? null : (
-              <form method="post" action={localizedPath(language, "/accesso")}>
-                <input type="hidden" name="id" value={session.id} />
-                <Button
-                  type="submit"
-                  variant="outline"
-                  size="sm"
-                  name="intent"
-                  value="esci-sessione"
-                >
-                  {settings.signOutSession}
-                </Button>
-              </form>
-            )}
-          </MethodRow>
-        ))}
-      </ul>
-      {sessions.some((session) => !session.current) ? (
-        <form method="post" action={localizedPath(language, "/accesso")}>
-          <Button type="submit" variant="destructive" name="intent" value="esci-altri">
-            {settings.signOutAll}
-          </Button>
-        </form>
-      ) : null}
-    </SecurityGroup>
-  );
-}
-
-function AccountSecurity({
-  language,
-  email,
-  methods,
-  sessions,
-  now,
-  passkeyBlock,
-}: {
-  language: Language;
-  email: string;
-  methods: SignInMethods;
-  sessions: ActiveSession[];
-  now: string;
-  passkeyBlock: string;
-}) {
-  const { access: t, settings } = appCopy[language];
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState(false);
-  const status = (connected: boolean) =>
-    connected ? settings.methodConnected : settings.methodNotConnected;
-  const oauth = (method: "google" | "ebay") =>
-    methods.accounts[method] ? (
-      <MethodAction language={language} intent="rimuovi-metodo" method={method}>
-        {settings.remove}
-      </MethodAction>
-    ) : (
-      <MethodAction language={language} intent="collega-metodo" method={method}>
-        {settings.connect}
-      </MethodAction>
-    );
-  const addPasskey = (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      disabled={pending}
-      focusableWhenDisabled
-      aria-busy={pending || undefined}
-      onClick={async () => {
-        setPending(true);
-        setError(false);
-        try {
-          const { authClient } = await import("../passkey-client");
-          const result = await authClient.passkey.addPasskey();
-          if (result.error?.status === 403) {
-            window.location.assign(`${localizedPath(language)}?accesso=${passkeyBlock}`);
-          } else if (result.error) setError(true);
-          else window.location.reload();
-        } catch {
-          setError(true);
-        } finally {
-          setPending(false);
-        }
-      }}
-    >
-      {pending ? (
-        <Spinner
-          label={settings.addPasskey}
-          aria-hidden="true"
-          role={undefined}
-          data-icon="inline-start"
-        />
-      ) : (
-        <KeyRound aria-hidden="true" data-icon="inline-start" />
-      )}
-      {settings.addPasskey}
-    </Button>
-  );
-  const passkeys = methods.passkeys;
-  return (
-    <Card id="sicurezza" className="max-w-xl scroll-mt-4">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-3 text-lg font-semibold">
-          <IconTile icon={ShieldCheck} tone="neutral" />
-          <h2>{t.passkeySecurity}</h2>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        <EmailChange language={language} email={email} />
-        <SecurityGroup id="security-methods" title={settings.methods}>
-          <ul className="grid divide-y border-y">
-            <MethodRow label={settings.methodPassword} status={status(methods.accounts.password)}>
-              <MethodAction language={language} intent="password">
-                {methods.accounts.password ? settings.changePassword : t.setPassword}
-              </MethodAction>
-              {methods.accounts.password ? (
-                <MethodAction language={language} intent="rimuovi-metodo" method="password">
-                  {settings.remove}
-                </MethodAction>
-              ) : null}
-            </MethodRow>
-            <MethodRow label={settings.methodGoogle} status={status(methods.accounts.google)}>
-              {oauth("google")}
-            </MethodRow>
-            {/* Accedere con eBay non collega un negozio, e viceversa. */}
-            <MethodRow
-              label={settings.methodEbay}
-              status={status(methods.accounts.ebay)}
-              hint={methods.accounts.ebay ? undefined : t.ebayAccessBody}
-            >
-              {oauth("ebay")}
-            </MethodRow>
-            {passkeys.length === 0 ? (
-              <MethodRow
-                label={settings.methodPasskey}
-                status={t.passkeyEmpty}
-                hint={t.passkeyRecovery}
-              >
-                {addPasskey}
-              </MethodRow>
-            ) : (
-              passkeys.map((passkey, index) => (
-                <MethodRow
-                  key={passkey.id}
-                  label={settings.methodPasskey}
-                  status={
-                    passkey.createdAt
-                      ? settings.passkeyItem(
-                          passkey.name || settings.methodPasskey,
-                          formatDate(passkey.createdAt, language),
-                        )
-                      : passkey.name || settings.methodConnected
-                  }
-                >
-                  <form method="post" action={localizedPath(language, "/accesso")}>
-                    <input type="hidden" name="id" value={passkey.id} />
-                    <Button
-                      type="submit"
-                      variant="outline"
-                      size="sm"
-                      name="intent"
-                      value="passkey-remove"
-                    >
-                      {settings.remove}
-                    </Button>
-                  </form>
-                  {index === passkeys.length - 1 ? addPasskey : null}
-                </MethodRow>
-              ))
-            )}
-          </ul>
-          {error ? (
-            <p role="alert" className="text-sm text-danger">
-              {t.passkeyFailed}
-            </p>
-          ) : null}
-          <p className="text-sm text-muted-foreground">{settings.lastMethod}</p>
-        </SecurityGroup>
-        <SessionList language={language} sessions={sessions} now={now} />
-      </CardContent>
-    </Card>
-  );
-}
-
-/** Avviso di verifica dell'email e collegamento del negozio. */
-function AccountBar({
+/** Avviso di verifica dell'email, finché l'indirizzo non è confermato. */
+function VerifyEmail({
   t,
   language,
   email,
   emailVerified,
-  canLinkStore,
 }: {
   t: AccessCopy;
   language: Language;
   email: string;
   emailVerified: boolean;
-  canLinkStore: boolean;
 }) {
+  return emailVerified ? null : (
+    <StatusAlert tone="warning" title={t.verifyTitle}>
+      <p>{t.verifyBody(email)}</p>
+      <form method="post" action={localizedPath(language, "/accesso")} className="mt-2">
+        <Button type="submit" variant="outline" size="sm" name="intent" value="verifica">
+          {t.verifyResend}
+        </Button>
+      </form>
+    </StatusAlert>
+  );
+}
+
+function LinkStore({ t, language }: { t: AccessCopy; language: Language }) {
   return (
-    <>
-      {emailVerified ? null : (
-        <StatusAlert tone="warning" title={t.verifyTitle}>
-          <p>{t.verifyBody(email)}</p>
-          <form method="post" action={localizedPath(language, "/accesso")} className="mt-2">
-            <Button type="submit" variant="outline" size="sm" name="intent" value="verifica">
-              {t.verifyResend}
-            </Button>
-          </form>
-        </StatusAlert>
-      )}
-      {canLinkStore ? (
-        <form method="post" action={localizedPath(language, "/negozi/collega")}>
-          <Button type="submit">
-            <Plus aria-hidden="true" data-icon="inline-start" />
-            {t.linkStore}
-          </Button>
-        </form>
-      ) : null}
-    </>
+    <form method="post" action={localizedPath(language, "/negozi/collega")}>
+      <Button type="submit">
+        <Plus aria-hidden="true" data-icon="inline-start" />
+        {t.linkStore}
+      </Button>
+    </form>
   );
 }
 
@@ -1149,20 +733,6 @@ function AccessPanel({
   return <AccessForms t={t} language={language} remembered={remembered} />;
 }
 
-function AccessNotice({ loaderData }: { loaderData: Awaited<ReturnType<typeof loader>> }) {
-  const { language, notice } = loaderData;
-  const t = appCopy[language].access;
-  return notice ? (
-    <StatusAlert tone={notice.tone} title={notice.text}>
-      {notice.text === t.storeNotices["altro-spazio"] ? (
-        <a href="mailto:supporto@fiscalbay.it" className="underline underline-offset-4">
-          {appCopy[language].authError.support}: supporto@fiscalbay.it
-        </a>
-      ) : null}
-    </StatusAlert>
-  ) : null;
-}
-
 function accessHeading(loaderData: Awaited<ReturnType<typeof loader>>, t: AccessCopy) {
   if (loaderData.authenticated) return t.agreementTitle;
   return loaderData.resetToken ? t.passwordResetTitle : t.choose;
@@ -1171,19 +741,8 @@ function accessHeading(loaderData: Awaited<ReturnType<typeof loader>>, t: Access
 export default function Home({ loaderData }: Route.ComponentProps) {
   const { language, notice } = loaderData;
   const t = appCopy[language].access;
-  const { orders } = appCopy[language];
   const remembered = useRemembered(notice !== null && errorTones.has(notice.tone));
-  // L'esito resta visibile ma esce dall'indirizzo, così una ricarica non lo ripropone.
-  // Un link di recupero conserva il token e il proprio errore.
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    const before = url.search;
-    url.searchParams.delete("accesso");
-    url.searchParams.delete("negozio");
-    if (!url.searchParams.has("token")) url.searchParams.delete("error");
-    if (url.search !== before) window.history.replaceState(window.history.state, "", url);
-  }, []);
-  const noticeAlert = <AccessNotice loaderData={loaderData} />;
+  const noticeAlert = <AccessNotice language={language} notice={notice} />;
 
   // Accesso, registrazione e completamento: marchio a sinistra, form a destra.
   if (!loaderData.authenticated || loaderData.needsProfile || loaderData.needsAgreement) {
@@ -1214,12 +773,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <h1 className="sr-only">{accessHeading(loaderData, t)}</h1>
             {noticeAlert}
             {loaderData.authenticated ? (
-              <AccountBar
+              <VerifyEmail
                 t={t}
                 language={language}
                 email={loaderData.email}
                 emailVerified={loaderData.emailVerified}
-                canLinkStore={loaderData.canLinkStore}
               />
             ) : null}
             <div className={cn("rounded-2xl border bg-card p-5 shadow-sm sm:p-7", rise)}>
@@ -1237,54 +795,54 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     );
   }
 
+  return <OrdersPage loaderData={loaderData} noticeAlert={noticeAlert} />;
+}
+
+type SignedIn = Extract<Awaited<ReturnType<typeof loader>>, { authenticated: true }>;
+
+/** Pagina Ordini dell'area reale, dentro la shell condivisa. */
+function OrdersPage({
+  loaderData,
+  noticeAlert,
+}: {
+  loaderData: SignedIn;
+  noticeAlert: React.ReactNode;
+}) {
+  const { language } = loaderData;
+  const t = appCopy[language].access;
+  const { orders } = appCopy[language];
   return (
-    <div className="min-h-dvh">
-      <header className="border-b">
-        <div className="mx-auto flex min-h-14 w-[min(72rem,calc(100%-2rem))] flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2">
-          <Logo className="h-6 w-auto" />
-          <div className="flex max-w-full flex-wrap items-center gap-2">
-            <LanguageSwitch
-              label={t.language}
-              current={language}
-              hrefFor={(code) => localizedPath(code)}
-              reloadDocument
-            />
-            {loaderData.emailVerified ? (
-              <a href="#sicurezza" className="text-sm underline underline-offset-4">
-                {t.passkeySecurity}
-              </a>
-            ) : null}
-            <SignOutForm t={t} language={language} />
-          </div>
-        </div>
-      </header>
-      <main className="mx-auto grid w-[min(72rem,calc(100%-2rem))] gap-6 py-8">
-        <div className="flex items-center gap-3">
-          <IconTile icon={ClipboardList} tone="blue" size="lg" />
-          <div className="grid gap-0.5">
-            <h1 className="text-2xl font-bold sm:text-3xl">{t.title}</h1>
-            <p className="text-sm text-muted-foreground">{t.intro}</p>
-          </div>
-        </div>
+    <AccountShell
+      language={language}
+      account={{ name: loaderData.name, email: loaderData.email }}
+      security={loaderData.emailVerified}
+    >
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
+        <header className="flex flex-wrap items-end justify-between gap-4">
+          <PageTitle
+            icon={ClipboardList}
+            tone="blue"
+            description={<p className="text-sm text-muted-foreground">{t.intro}</p>}
+          >
+            {t.title}
+          </PageTitle>
+          {loaderData.canLinkStore && loaderData.orders.length > 0 ? (
+            <LinkStore t={t} language={language} />
+          ) : null}
+        </header>
         {noticeAlert}
-        <AccountBar
+        <VerifyEmail
           t={t}
           language={language}
           email={loaderData.email}
           emailVerified={loaderData.emailVerified}
-          canLinkStore={loaderData.canLinkStore}
         />
         {loaderData.orders.length === 0 ? (
-          <Card className="max-w-md">
-            <CardHeader>
-              <CardTitle>
-                <h2>{t.noOrders}</h2>
-              </CardTitle>
-              <CardDescription>
-                {loaderData.canLinkStore ? t.noOrdersBody : t.noOrdersVerifyBody}
-              </CardDescription>
-            </CardHeader>
-          </Card>
+          <EmptyState
+            title={t.noOrders}
+            description={loaderData.canLinkStore ? t.noOrdersBody : t.noOrdersVerifyBody}
+            action={loaderData.canLinkStore ? <LinkStore t={t} language={language} /> : undefined}
+          />
         ) : (
           <section className="grid gap-4 sm:grid-cols-2" aria-label={t.list}>
             {loaderData.orders.map((order) => (
@@ -1329,17 +887,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             ))}
           </section>
         )}
-        {loaderData.methods ? (
-          <AccountSecurity
-            language={language}
-            email={loaderData.email}
-            methods={loaderData.methods}
-            sessions={loaderData.sessions}
-            now={loaderData.now}
-            passkeyBlock={loaderData.passkeyBlock}
-          />
-        ) : null}
-      </main>
-    </div>
+      </div>
+    </AccountShell>
   );
 }
