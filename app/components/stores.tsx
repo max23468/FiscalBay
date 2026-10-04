@@ -440,8 +440,11 @@ export function StoresPage({
         {data.stores.length > 0 ? connect : null}
       </header>
       {data.elsewhere && attempted ? (
-        <StatusAlert tone="warning" title={t.stores.elsewhereTitle}>
+        <StatusAlert tone="warning" title={t.access.storeNotices["altro-spazio"]}>
           {t.stores.elsewhereBody}
+          <a href="mailto:supporto@fiscalbay.it" className="block underline underline-offset-4">
+            {t.authError.support}: supporto@fiscalbay.it
+          </a>
         </StatusAlert>
       ) : null}
       {data.ebayDown ? <StatusAlert tone="warning" title={t.stores.ebayDown} /> : null}

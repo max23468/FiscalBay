@@ -8,7 +8,6 @@ import {
   Database,
   FileSpreadsheet,
   LifeBuoy,
-  Mail,
   MessageSquareText,
   Moon,
   Palette,
@@ -22,6 +21,8 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 
 import { useAction } from "~/components/app-shell";
+import { AccountSecurity } from "~/components/account";
+import { useFieldErrors } from "~/components/form-validation";
 import { IconTile, InitialsTile, PageTitle } from "~/components/icon-tile";
 import { LanguageSwitch } from "~/components/language-switch";
 import { PremiumNote, StatusAlert, StatusBadge, StatusIcon } from "~/components/status";
@@ -65,7 +66,6 @@ import { appHref, type AppLinks } from "../app-links";
 import { languageNames, localizedPath, type Language } from "../i18n";
 import {
   formatDate,
-  formatRelative,
   settingsSections,
   type AccountView,
   type ActionResult,
@@ -628,7 +628,6 @@ function ExportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
 
 function SecuritySection({
   data,
-  t,
   language,
 }: {
   data: SettingsPageData;
@@ -636,91 +635,22 @@ function SecuritySection({
   language: Language;
 }) {
   const action = useAction();
-  const methods = [
-    {
-      id: "password",
-      label: t.settings.methodPassword,
-      connected: true,
-      action: t.settings.changePassword,
-    },
-    { id: "google", label: t.settings.methodGoogle, connected: true, action: t.settings.remove },
-    { id: "ebay", label: t.settings.methodEbay, connected: false, action: t.settings.connect },
-  ];
   return (
-    <>
-      <Group title={t.settings.methods}>
-        <ul className="grid divide-y border-y">
-          {methods.map((method) => (
-            <li key={method.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-              <span className="grid">
-                <span className="font-medium">{method.label}</span>
-                <span className="text-sm text-muted-foreground">
-                  {method.connected ? t.settings.methodConnected : t.settings.methodNotConnected}
-                </span>
-              </span>
-              <Button
-                variant={method.action === t.settings.remove ? "destructive" : "outline"}
-                size="sm"
-                onClick={() => action.run("sign-in-method", { method: method.id })}
-              >
-                {method.action}
-              </Button>
-            </li>
-          ))}
-          <li className="flex flex-wrap items-center justify-between gap-3 py-3">
-            <span className="grid">
-              <span className="font-medium">{t.settings.methodPasskey}</span>
-              <span className="text-sm text-muted-foreground">
-                {t.settings.passkeyItem(
-                  "MacBook Air",
-                  formatDate("2026-09-21T10:12:00Z", language, "date"),
-                )}
-              </span>
-            </span>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="destructive" size="sm" onClick={() => action.run("passkey-remove")}>
-                {t.settings.remove}
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => action.run("passkey-add")}>
-                {t.settings.addPasskey}
-              </Button>
-            </div>
-          </li>
-        </ul>
-        <p className="text-sm text-muted-foreground">{t.settings.lastMethod}</p>
-      </Group>
-      <Group title={t.settings.sessions}>
-        <ul className="grid divide-y border-y">
-          {data.sessions.map((session) => (
-            <li key={session.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-              <span className="grid">
-                <span className="font-medium">{session.device}</span>
-                <span className="text-sm text-muted-foreground">
-                  {session.location} ·{" "}
-                  {session.current
-                    ? t.settings.thisDevice
-                    : t.settings.lastActive(
-                        formatRelative(session.lastActiveAt, data.now, language),
-                      )}
-                </span>
-              </span>
-              {session.current ? null : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => action.run("session-sign-out", { session: session.id })}
-                >
-                  {t.settings.signOutSession}
-                </Button>
-              )}
-            </li>
-          ))}
-        </ul>
-        <Button variant="destructive" className="w-fit" onClick={() => action.run("sign-out-all")}>
-          {t.settings.signOutAll}
-        </Button>
-      </Group>
-    </>
+    <AccountSecurity
+      className="grid gap-4"
+      language={language}
+      email={data.account.email}
+      methods={{
+        accounts: { password: true, google: true, ebay: false },
+        passkeys: [
+          { id: "preview-passkey", name: "MacBook Air", createdAt: "2026-09-21T10:12:00Z" },
+        ],
+      }}
+      sessions={data.sessions}
+      now={data.now}
+      passkeyBlock="nuovo-accesso"
+      onAction={(intent, fields) => action.run(intent, fields)}
+    />
   );
 }
 
@@ -981,6 +911,7 @@ function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
             });
           }}
         >
+          <p className="text-sm text-muted-foreground">{t.access.requiredFields}</p>
           {error ? <StatusAlert tone="danger" title={t.settings.formErrors} /> : null}
           {sent ? <StatusAlert tone="success" title={t.settings.sent(data.account.email)} /> : null}
           <FieldGroup>
@@ -991,11 +922,14 @@ function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
               onChange={setTopic}
             />
             <Field data-invalid={error || undefined}>
-              <FieldLabel htmlFor="support-message">{t.settings.message}</FieldLabel>
+              <FieldLabel htmlFor="support-message" required>
+                {t.settings.message}
+              </FieldLabel>
               <Textarea
                 ref={messageRef}
                 id="support-message"
                 name="message"
+                required
                 rows={5}
                 aria-invalid={error || undefined}
                 aria-describedby={error ? "support-message-error" : undefined}
@@ -1260,6 +1194,8 @@ export function ProfilePage({
   links: AppLinks;
 }) {
   const action = useAction();
+  const v = useFieldErrors(t.access.validation);
+  const profile = account.profile;
   return (
     <div className="mx-auto grid w-full max-w-2xl gap-6">
       <div className="flex items-center gap-4">
@@ -1274,49 +1210,81 @@ export function ProfilePage({
           <p className="truncate text-sm text-muted-foreground">{account.email}</p>
         </div>
       </div>
-      <ProfileCard icon={User} title={t.profile.name} id="profile-name-title">
+      <ProfileCard icon={User} title={t.profile.details} id="profile-name-title">
         <form
           className="grid gap-4"
+          {...v.form}
           onSubmit={(event) => {
             event.preventDefault();
-            action.run("profile", { name: String(new FormData(event.currentTarget).get("name")) });
+            if (!v.check(event)) return;
+            const form = new FormData(event.currentTarget);
+            action.run("profile", {
+              nome: String(form.get("nome")),
+              cognome: String(form.get("cognome")),
+              tipo: profile.accountType === "business" ? "azienda" : "privato",
+              ...(profile.accountType === "business"
+                ? { ragione_sociale: String(form.get("ragione_sociale")) }
+                : {}),
+            });
           }}
         >
+          <p className="text-sm text-muted-foreground">{t.access.requiredFields}</p>
+          <p className="text-sm text-muted-foreground">
+            {t.profile.accountType}:{" "}
+            {profile.accountType === "business" ? t.access.business : t.access.private}
+          </p>
           <Field>
-            <FieldLabel htmlFor="profile-name" className="sr-only">
-              {t.profile.name}
+            <FieldLabel htmlFor="profile-name" required>
+              {t.access.firstName}
             </FieldLabel>
             <Input
               id="profile-name"
-              name="name"
-              autoComplete="name"
-              defaultValue={account.name}
-              aria-describedby="profile-name-hint"
+              name="nome"
+              autoComplete="given-name"
+              defaultValue={profile.firstName}
+              maxLength={100}
+              required
+              {...v.control("nome", "profile-name-hint")}
             />
+            {v.error("nome")}
             <FieldDescription id="profile-name-hint">{t.profile.nameHint}</FieldDescription>
           </Field>
+          <Field>
+            <FieldLabel htmlFor="profile-last-name" required>
+              {t.access.lastName}
+            </FieldLabel>
+            <Input
+              id="profile-last-name"
+              name="cognome"
+              autoComplete="family-name"
+              maxLength={100}
+              required
+              defaultValue={profile.lastName}
+              {...v.control("cognome")}
+            />
+            {v.error("cognome")}
+          </Field>
+          {profile.accountType === "business" ? (
+            <Field>
+              <FieldLabel htmlFor="profile-company" required>
+                {t.access.companyName}
+              </FieldLabel>
+              <Input
+                id="profile-company"
+                name="ragione_sociale"
+                autoComplete="organization"
+                maxLength={200}
+                required
+                defaultValue={profile.companyName ?? ""}
+                {...v.control("ragione_sociale")}
+              />
+              {v.error("ragione_sociale")}
+            </Field>
+          ) : null}
           <Button type="submit" className="w-fit">
             {t.settings.save}
           </Button>
         </form>
-      </ProfileCard>
-      {/* L'email non si modifica nel campo: il cambio passa dalla verifica del nuovo indirizzo. */}
-      <ProfileCard icon={Mail} title={t.profile.email} id="profile-email">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="min-w-0 font-medium break-all">{account.email}</span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            aria-describedby="profile-email-hint"
-            onClick={() => action.run("change-email")}
-          >
-            {t.profile.changeEmail}
-          </Button>
-        </div>
-        <p id="profile-email-hint" className="text-sm text-muted-foreground">
-          {t.profile.emailHint}
-        </p>
       </ProfileCard>
       <ProfileCard
         icon={ShieldCheck}

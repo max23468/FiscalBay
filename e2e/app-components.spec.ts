@@ -22,6 +22,146 @@ async function open(page: Page, path: string, scenario?: string) {
 const noPageOverflow = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
 
+test("sicurezza nell'anteprima senza JavaScript resta simulata", async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ baseURL, javaScriptEnabled: false });
+  const page = await context.newPage();
+  const posts: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST") posts.push(new URL(request.url()).pathname);
+  });
+  try {
+    await page.goto("/anteprima/impostazioni/sicurezza");
+    await expect(page.getByRole("button", { name: "Cambia password", exact: true })).toBeVisible();
+    await expect(page.locator('form[action="/accesso"]')).toHaveCount(0);
+    await page.getByRole("button", { name: "Cambia password", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Cambia password", exact: true })).toBeVisible();
+    expect(posts).toEqual(["/anteprima/impostazioni/sicurezza"]);
+    await expect(page).toHaveURL(/\/anteprima\/impostazioni\/sicurezza$/);
+  } finally {
+    await context.close();
+  }
+});
+
+for (const language of ["it", "en"] as const) {
+  for (const width of [390, 1280]) {
+    test(`sicurezza condivisa e profilo coerente ${language} ${width}px`, async ({
+      page,
+    }, testInfo) => {
+      const it = language === "it";
+      const prefix = it ? "" : "/en";
+      await page.setViewportSize({ width, height: 844 });
+      const errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      const posts: Array<{ path: string; fields: URLSearchParams }> = [];
+      page.on("request", (request) => {
+        if (request.method() === "POST")
+          posts.push({
+            path: new URL(request.url()).pathname,
+            fields: new URLSearchParams(request.postData() ?? ""),
+          });
+      });
+      await open(page, `${prefix}/anteprima/impostazioni/sicurezza`, "ordinario");
+      const removeText = it ? "Rimuovi" : "Remove";
+      const cancelText = it ? "Annulla" : "Cancel";
+      const methods = page.locator('section[aria-labelledby="security-methods"]');
+      await expect(methods.getByRole("button", { name: removeText, exact: true })).toHaveCount(3);
+      for (const [label, intent, field, value] of [
+        [it ? "Email e password" : "Email and password", "rimuovi-metodo", "metodo", "password"],
+        ["Google", "rimuovi-metodo", "metodo", "google"],
+        ["Passkey", "passkey-remove", "id", "preview-passkey"],
+      ]) {
+        const row = methods.getByRole("group", { name: new RegExp(`^${label}`) });
+        const trigger = row.getByRole("button", { name: removeText, exact: true });
+        const before = posts.length;
+        await trigger.click();
+        const dialog = page.getByRole("alertdialog");
+        await expect(dialog).toBeVisible();
+        await expect(dialog.getByRole("button", { name: cancelText, exact: true })).toBeFocused();
+        expect(posts).toHaveLength(before);
+        await dialog.getByRole("button", { name: cancelText, exact: true }).click();
+        await expect(trigger).toBeFocused();
+        expect(posts).toHaveLength(before);
+        await trigger.click();
+        await dialog.getByRole("button", { name: removeText, exact: true }).click();
+        await expect.poll(() => posts.length).toBe(before + 1);
+        expect(posts.at(-1)!.path).toBe(`${prefix}/anteprima/impostazioni/sicurezza.data`);
+        expect(posts.at(-1)!.fields.get("intent")).toBe(intent);
+        expect(posts.at(-1)!.fields.get(field)).toBe(value);
+        await expect(dialog).toHaveCount(0);
+        await expect(
+          page.getByText(
+            it ? "Anteprima: l’azione è simulata." : "Preview: this action is simulated.",
+            { exact: true },
+          ),
+        ).toBeVisible();
+      }
+      const before = posts.length;
+      await page
+        .getByRole("button", { name: it ? "Cambia email" : "Change email", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: it ? "Invia il link" : "Send the link", exact: true })
+        .click();
+      const email = page.getByRole("textbox", {
+        name: it ? "Nuova email" : "New email",
+        exact: true,
+      });
+      await expect(email).toHaveAttribute("aria-invalid", "true");
+      await expect(email).toBeFocused();
+      expect(posts).toHaveLength(before);
+      await email.fill("new@example.invalid");
+      await page
+        .getByRole("button", { name: it ? "Invia il link" : "Send the link", exact: true })
+        .click();
+      await expect.poll(() => posts.length).toBe(before + 1);
+      expect(posts.at(-1)!.fields.get("intent")).toBe("cambia-email");
+      await page
+        .getByRole("button", { name: it ? "Aggiungi passkey" : "Add passkey", exact: true })
+        .click();
+      await expect.poll(() => posts.length).toBe(before + 2);
+      expect(posts.at(-1)!.fields.get("intent")).toBe("passkey-add");
+      expect(
+        posts.some((post) => post.path.includes("/api/auth") || post.path.endsWith("/accesso")),
+      ).toBe(false);
+      await expect.poll(() => noPageOverflow(page)).toBe(true);
+      await page.screenshot({
+        path: testInfo.outputPath(`security-${language}-${width}.png`),
+        fullPage: true,
+      });
+
+      await open(page, `${prefix}/anteprima/profilo`);
+      const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
+      await expect(first).toHaveValue("Laura");
+      await expect(
+        page.getByRole("textbox", { name: it ? "Cognome" : "Last name", exact: true }),
+      ).toHaveValue("Martini");
+      await expect(
+        page.getByRole("textbox", { name: it ? "Ragione sociale" : "Company name", exact: true }),
+      ).toHaveValue("Martini ricambi");
+      await expect(
+        page.getByText(
+          it
+            ? "Facoltativo. Compare nelle email di servizio."
+            : "Optional. Shown in service emails.",
+        ),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: it ? "Cambia email" : "Change email", exact: true }),
+      ).toHaveCount(0);
+      await first.fill("");
+      await page.getByRole("button", { name: it ? "Salva" : "Save", exact: true }).click();
+      await expect(first).toBeFocused();
+      await expect(first).toHaveAttribute("aria-invalid", "true");
+      await expect.poll(() => noPageOverflow(page)).toBe(true);
+      await page.screenshot({
+        path: testInfo.outputPath(`profile-${language}-${width}.png`),
+        fullPage: true,
+      });
+      expect(errors).toEqual([]);
+    });
+  }
+}
+
 for (const language of ["it", "en"] as const) {
   for (const colorScheme of ["light", "dark"] as const) {
     test(`idratazione dei tempi relativi ${language} ${colorScheme}`, async ({
@@ -45,9 +185,7 @@ for (const language of ["it", "en"] as const) {
           if (route.startsWith("impostazioni/")) {
             await expect(
               page.getByText(
-                language === "it"
-                  ? "Milano · Ultima attività l’altro ieri"
-                  : "Milano · Last active 2 days ago",
+                language === "it" ? "Ultima attività l’altro ieri" : "Last active 2 days ago",
                 { exact: true },
               ),
             ).toBeVisible();
@@ -409,7 +547,7 @@ for (const width of [390, 768, 1440]) {
 
         await open(page, `${prefix}/anteprima/profilo`);
         await expect(
-          page.getByRole("textbox", { name: it ? "Nome" : "Name", exact: true }),
+          page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true }),
         ).toBeVisible();
         await expect
           .poll(() =>
@@ -682,6 +820,8 @@ for (const language of ["it", "en"] as const) {
     const signIn = page.getByRole("tabpanel");
     await signIn.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }).click();
     const email = signIn.getByRole("textbox", { name: "Email" });
+    await expect(signIn.locator('label[for="email"] [aria-hidden="true"]')).toHaveText("*");
+    await expect(email).toHaveAttribute("required", "");
     await expect(email).toBeFocused();
     await expect(email).toHaveAttribute("aria-invalid", "true");
     await expect(email).toHaveAccessibleDescription(
@@ -699,6 +839,7 @@ for (const language of ["it", "en"] as const) {
       name: it ? "Crea account" : "Create account",
       exact: true,
     });
+    await expect(signUp.locator('label[for="first-name"] [aria-hidden="true"]')).toHaveText("*");
     await submit.click();
     await expect(
       signUp.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true }),

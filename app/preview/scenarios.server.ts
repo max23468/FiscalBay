@@ -52,12 +52,12 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
   },
   "quota-esaurita": {
     it: {
-      name: "Ordini da sbloccare esauriti",
+      name: "Sblocchi esauriti",
       focus:
         "Gli ordini restano consultabili. Codice Fiscale e Partita IVA dei nuovi ordini attendono il prossimo ciclo.",
     },
     en: {
-      name: "No orders left to unlock",
+      name: "No unlocks left",
       focus:
         "Orders remain available. Codice Fiscale and Partita IVA of new orders wait for the next cycle.",
     },
@@ -738,6 +738,12 @@ export interface Scenario {
 
 const account = (overrides: Partial<AccountView> = {}): AccountView => ({
   name: "Laura Martini",
+  profile: {
+    firstName: "Laura",
+    lastName: "Martini",
+    accountType: "business",
+    companyName: "Martini ricambi",
+  },
   email: "laura.martini@esempio.invalid",
   plan: "free",
   trialAvailable: true,
@@ -776,12 +782,12 @@ const text = {
   },
   quota: {
     it: {
-      title: "Ordini da sbloccare esauriti",
-      body: "Hai sbloccato i 5 ordini disponibili in questo ciclo. Il prossimo inizia il 2 ottobre.",
+      title: "Sblocchi esauriti",
+      body: "Hai usato i 5 sblocchi di questo ciclo. Il prossimo inizia il 2 ottobre.",
     },
     en: {
-      title: "No orders left to unlock",
-      body: "You have unlocked the 5 available orders this cycle. The next one starts on 2 October.",
+      title: "No unlocks left",
+      body: "You have used the 5 unlocks for this cycle. The next one starts on 2 October.",
     },
   },
   ebayDown: {

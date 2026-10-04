@@ -183,7 +183,7 @@ describe("classificazione dei file modificati", () => {
 
   it("salta le prove browser soltanto per i test unitari", () => {
     assert.deepEqual(plan(["test/orders.spec.ts"]), { gate: "full", e2e: false, unclassified: [] });
-    assert.equal(plan(["e2e/visual.spec.ts"]).e2e, true);
+    assert.equal(plan(["e2e/app-components.spec.ts"]).e2e, true);
     assert.equal(plan(["app/root.tsx"]).e2e, true);
   });
 });

@@ -106,15 +106,15 @@ const it = {
     exportSelected: "Esporta",
     unlockTitle: (count: number) => `Sbloccare ${count} ${plural(count, "ordine", "ordini")}?`,
     unlockConfirmText: (count: number, remaining: number) =>
-      `Dopo lo sblocco ${plural(remaining - count, "ti resterà", "ti resteranno")} ${remaining - count} ${plural(remaining - count, "ordine", "ordini")} da sbloccare in questo ciclo.`,
+      `Dopo lo sblocco ${plural(remaining - count, "ti resterà", "ti resteranno")} ${remaining - count} ${plural(remaining - count, "sblocco", "sblocchi")} in questo ciclo.`,
     unlockExceeds: (count: number, remaining: number) =>
-      `Hai selezionato ${count} ordini da sbloccare, ma in questo ciclo te ne ${plural(remaining, "resta", "restano")} ${remaining}. Riduci la selezione.`,
+      `Hai selezionato ${count} ordini da sbloccare, ma hai ${remaining} ${plural(remaining, "sblocco disponibile", "sblocchi disponibili")} in questo ciclo. Riduci la selezione.`,
     unlockConfirm: "Sblocca",
     cancel: "Annulla",
     unlocked: (remaining: number | null) =>
       remaining === null
         ? "Ordine sbloccato."
-        : `Ordine sbloccato. ${plural(remaining, "Ti resta", "Ti restano")} ${remaining} ${plural(remaining, "ordine", "ordini")} da sbloccare.`,
+        : `Ordine sbloccato. ${plural(remaining, "Ti resta", "Ti restano")} ${remaining} ${plural(remaining, "sblocco", "sblocchi")} in questo ciclo.`,
     unlockedMany: (count: number) => `${count} ordini sbloccati.`,
     loadMore: "Carica altri",
     allShown: "Hai visto tutti gli ordini del periodo.",
@@ -135,9 +135,9 @@ const it = {
     copyFailed: "Copia non riuscita. Riprova oppure seleziona e copia il codice.",
     lockedLabel: (label: string) => `${label} da sbloccare`,
     lockedHint: (remaining: number) =>
-      `Hai ancora ${remaining} ${plural(remaining, "ordine disponibile", "ordini disponibili")}: dopo lo sblocco ${plural(remaining - 1, "ne resterà", "ne resteranno")} ${remaining - 1}.`,
+      `Hai ${remaining} ${plural(remaining, "sblocco disponibile", "sblocchi disponibili")} in questo ciclo. Questo ordine ne usa uno.`,
     lockedExhausted: (date: string) =>
-      `Hai sbloccato tutti gli ordini disponibili in questo ciclo. Il prossimo inizia il ${date}.`,
+      `Hai usato tutti gli sblocchi di questo ciclo. Il prossimo inizia il ${date}.`,
     lockedUntil: (date: string) => `Sblocco disponibile dal ${date}.`,
     missingHint: "eBay non riporta il Codice Fiscale per questo ordine.",
     checkingHint: "Verifica del Codice Fiscale in corso.",
@@ -168,7 +168,7 @@ const it = {
     ebayDownTitle: "eBay non risponde",
     ebayDownBody: (time: string) =>
       `Gli ordini sono aggiornati al ${time}. Sincronizzazione e ricollegamento tornano disponibili quando eBay risponde.`,
-    quotaTitle: "Nessun ordine da sbloccare rimasto in questo ciclo",
+    quotaTitle: "Sblocchi esauriti per questo ciclo",
     quotaBody: (date: string) =>
       `Puoi consultare e cercare tutti gli ordini. Codice Fiscale e Partita IVA dei nuovi ordini restano da sbloccare fino al ${date}.`,
     quotaAction: "Scopri Premium",
@@ -308,7 +308,7 @@ const it = {
     title: "Impostazioni",
     categories: "Categorie",
     sections: {
-      piano: { title: "Piano e pagamenti", description: "Piano, ordini da sbloccare e pagamenti" },
+      piano: { title: "Piano e pagamenti", description: "Piano, sblocchi e pagamenti" },
       notifiche: { title: "Notifiche", description: "Telegram e comunicazioni" },
       esportazione: { title: "Esportazione", description: "File CSV e XLSX degli ordini" },
       sicurezza: { title: "Sicurezza", description: "Metodi di accesso e sessioni" },
@@ -418,6 +418,9 @@ const it = {
     changePassword: "Cambia password",
     connect: "Collega",
     remove: "Rimuovi",
+    removeMethodTitle: "Rimuovere questo metodo di accesso?",
+    removeMethodBody: (method: string) =>
+      `Non potrai più accedere con ${method}. Gli altri metodi restano disponibili.`,
     addPasskey: "Aggiungi passkey",
     passkeyItem: (device: string, date: string) => `${device}, aggiunta il ${date}`,
     lastMethod: "Serve almeno un metodo di accesso.",
@@ -501,7 +504,9 @@ const it = {
   profile: {
     title: "Profilo",
     name: "Nome",
-    nameHint: "Facoltativo. Compare nelle email di servizio.",
+    nameHint: "Nome e cognome sono obbligatori e compaiono nelle email di servizio.",
+    details: "Dati dell’account",
+    accountType: "Tipo di account",
     email: "Email",
     emailHint: "Per cambiarla confermi con un link all’indirizzo attuale, poi con uno al nuovo.",
     changeEmail: "Cambia email",
@@ -592,6 +597,7 @@ const it = {
     signUp: "Crea account",
     signUpBody: "Bastano pochi dati per iniziare.",
     firstName: "Nome",
+    requiredFields: "* Campo obbligatorio.",
     lastName: "Cognome",
     accountType: "Ti registri come",
     private: "Privato",
@@ -794,15 +800,15 @@ const en: AppCopy = {
     exportSelected: "Export",
     unlockTitle: (count) => `Unlock ${count} ${plural(count, "order", "orders")}?`,
     unlockConfirmText: (count, remaining) =>
-      `After unlocking, you can unlock ${remaining - count} more ${plural(remaining - count, "order", "orders")} this cycle.`,
+      `After unlocking, you will have ${remaining - count} ${plural(remaining - count, "unlock", "unlocks")} left this cycle.`,
     unlockExceeds: (count, remaining) =>
-      `You selected ${count} orders to unlock, but you can unlock ${remaining} more ${plural(remaining, "order", "orders")} this cycle. Reduce the selection.`,
+      `You selected ${count} orders to unlock, but you have ${remaining} ${plural(remaining, "unlock", "unlocks")} left this cycle. Reduce the selection.`,
     unlockConfirm: "Unlock",
     cancel: "Cancel",
     unlocked: (remaining) =>
       remaining === null
         ? "Order unlocked."
-        : `Order unlocked. You can unlock ${remaining} more ${plural(remaining, "order", "orders")}.`,
+        : `Order unlocked. You have ${remaining} ${plural(remaining, "unlock", "unlocks")} left this cycle.`,
     unlockedMany: (count) => `${count} orders unlocked.`,
     loadMore: "Load more",
     allShown: "You have seen all orders in this period.",
@@ -823,9 +829,9 @@ const en: AppCopy = {
     copyFailed: "Copy failed. Try again, or select and copy the code.",
     lockedLabel: (label) => `${label} to unlock`,
     lockedHint: (remaining) =>
-      `You have ${remaining} ${plural(remaining, "order", "orders")} left to unlock. After this one, you will have ${remaining - 1}.`,
+      `You have ${remaining} ${plural(remaining, "unlock", "unlocks")} left this cycle. This order uses one.`,
     lockedExhausted: (date) =>
-      `You have unlocked all available orders this cycle. The next one starts on ${date}.`,
+      `You have used all the unlocks for this cycle. The next one starts on ${date}.`,
     lockedUntil: (date) => `Unlocking available from ${date}.`,
     missingHint: "eBay does not provide the tax code for this order.",
     checkingHint: "Checking the tax code.",
@@ -856,7 +862,7 @@ const en: AppCopy = {
     ebayDownTitle: "eBay is not responding",
     ebayDownBody: (time) =>
       `Orders are up to date as of ${time}. Syncing and reconnecting will be available again when eBay responds.`,
-    quotaTitle: "No orders left to unlock this cycle",
+    quotaTitle: "No unlocks left this cycle",
     quotaBody: (date) =>
       `You can still view and search all orders. Codice Fiscale and Partita IVA of new orders stay locked until ${date}.`,
     quotaAction: "Discover Premium",
@@ -991,7 +997,7 @@ const en: AppCopy = {
     title: "Settings",
     categories: "Categories",
     sections: {
-      piano: { title: "Plan and billing", description: "Plan, orders to unlock and payments" },
+      piano: { title: "Plan and billing", description: "Plan, unlocks and payments" },
       notifiche: { title: "Notifications", description: "Telegram and communications" },
       esportazione: { title: "Export", description: "CSV and XLSX order files" },
       sicurezza: { title: "Security", description: "Sign-in methods and sessions" },
@@ -1090,6 +1096,9 @@ const en: AppCopy = {
     changePassword: "Change password",
     connect: "Connect",
     remove: "Remove",
+    removeMethodTitle: "Remove this sign-in method?",
+    removeMethodBody: (method: string) =>
+      `You will no longer be able to sign in with ${method}. Your other methods remain available.`,
     addPasskey: "Add passkey",
     passkeyItem: (device, date) => `${device}, added on ${date}`,
     lastMethod: "At least one sign-in method is required.",
@@ -1169,7 +1178,9 @@ const en: AppCopy = {
   profile: {
     title: "Profile",
     name: "Name",
-    nameHint: "Optional. Shown in service emails.",
+    nameHint: "First and last name are required and shown in service emails.",
+    details: "Account details",
+    accountType: "Account type",
     email: "Email",
     emailHint:
       "To change it, confirm with a link sent to your current address, then with one sent to the new one.",
@@ -1259,6 +1270,7 @@ const en: AppCopy = {
     signUp: "Create account",
     signUpBody: "It only takes a few details to get started.",
     firstName: "First name",
+    requiredFields: "* Required field.",
     lastName: "Last name",
     accountType: "You are registering as",
     private: "Individual",

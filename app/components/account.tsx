@@ -6,6 +6,16 @@ import { useLocation, useSubmit } from "react-router";
 import { AppShell } from "~/components/app-shell";
 import { useFieldErrors } from "~/components/form-validation";
 import { StatusAlert } from "~/components/status";
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+} from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
@@ -61,20 +71,62 @@ function MethodAction({
   language,
   intent,
   method,
+  id,
+  label,
+  simulated = false,
+  actionPath,
   children,
 }: {
   language: Language;
   intent: string;
   method?: string;
+  id?: string;
+  label?: string;
+  simulated?: boolean;
+  actionPath?: string;
   children: React.ReactNode;
 }) {
-  return (
-    <form method="post" action={localizedPath(language, "/accesso")}>
+  const destructive = intent === "rimuovi-metodo" || intent === "passkey-remove";
+  const [open, setOpen] = useState(false);
+  const t = appCopy[language];
+  const form = (
+    <form
+      method="post"
+      action={actionPath ?? localizedPath(language, "/accesso")}
+      onSubmit={simulated ? () => setOpen(false) : undefined}
+    >
       {method ? <input type="hidden" name="metodo" value={method} /> : null}
-      <Button type="submit" variant="outline" size="sm" name="intent" value={intent}>
+      {id ? <input type="hidden" name="id" value={id} /> : null}
+      <Button
+        type="submit"
+        variant={destructive ? "destructive-solid" : "outline"}
+        size="sm"
+        name="intent"
+        value={intent}
+      >
         {children}
       </Button>
     </form>
+  );
+  if (!destructive) return form;
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger render={<Button type="button" variant="destructive" size="sm" />}>
+        {children}
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t.settings.removeMethodTitle}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t.settings.removeMethodBody(label ?? t.settings.methodPasskey)}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t.orders.cancel}</AlertDialogCancel>
+          {form}
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -99,7 +151,15 @@ function SecurityGroup({
 }
 
 /** Email attuale; il nuovo indirizzo si inserisce solo quando serve. */
-function EmailChange({ language, email }: { language: Language; email: string }) {
+function EmailChange({
+  language,
+  email,
+  actionPath,
+}: {
+  language: Language;
+  email: string;
+  actionPath: string;
+}) {
   const { access: t, profile, orders } = appCopy[language];
   const [open, setOpen] = useState(false);
   const opener = useRef<HTMLButtonElement>(null);
@@ -124,13 +184,15 @@ function EmailChange({ language, email }: { language: Language; email: string })
       {open ? (
         <form
           method="post"
-          action={localizedPath(language, "/accesso")}
+          action={actionPath}
           className="grid gap-3"
           {...v.form}
           onSubmit={(event) => void v.check(event)}
         >
           <Field>
-            <FieldLabel htmlFor="new-email">{t.newEmail}</FieldLabel>
+            <FieldLabel htmlFor="new-email" required>
+              {t.newEmail}
+            </FieldLabel>
             <Input
               id="new-email"
               name="email"
@@ -143,6 +205,7 @@ function EmailChange({ language, email }: { language: Language; email: string })
             {v.error("email")}
             <FieldDescription id="new-email-hint">{profile.emailHint}</FieldDescription>
           </Field>
+          <p className="text-sm text-muted-foreground">{t.requiredFields}</p>
           <div className="flex flex-wrap gap-2">
             <Button type="submit" size="sm" name="intent" value="cambia-email">
               {t.sendEmailLink}
@@ -175,10 +238,12 @@ function SessionList({
   language,
   sessions,
   now,
+  actionPath,
 }: {
   language: Language;
   sessions: ActiveSession[];
   now: string;
+  actionPath: string;
 }) {
   const { settings } = appCopy[language];
   return (
@@ -195,7 +260,7 @@ function SessionList({
             }
           >
             {session.current ? null : (
-              <form method="post" action={localizedPath(language, "/accesso")}>
+              <form method="post" action={actionPath}>
                 <input type="hidden" name="id" value={session.id} />
                 <Button
                   type="submit"
@@ -212,7 +277,7 @@ function SessionList({
         ))}
       </ul>
       {sessions.some((session) => !session.current) ? (
-        <form method="post" action={localizedPath(language, "/accesso")}>
+        <form method="post" action={actionPath}>
           <Button type="submit" variant="destructive" name="intent" value="esci-altri">
             {settings.signOutAll}
           </Button>
@@ -229,6 +294,8 @@ export function AccountSecurity({
   sessions,
   now,
   passkeyBlock,
+  onAction,
+  className = "grid gap-4 rounded-xl border bg-card p-5 md:p-6",
 }: {
   language: Language;
   email: string;
@@ -236,19 +303,37 @@ export function AccountSecurity({
   sessions: ActiveSession[];
   now: string;
   passkeyBlock: string;
+  /** L'anteprima risponde con la propria azione simulata, senza chiamare Auth. */
+  onAction?: (intent: string, fields: Record<string, string>) => void;
+  className?: string;
 }) {
   const { access: t, settings } = appCopy[language];
+  const { pathname } = useLocation();
+  // Anche senza JavaScript i form dell'anteprima restano nella route simulata.
+  const actionPath = onAction ? pathname : localizedPath(language, "/accesso");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
   const status = (connected: boolean) =>
     connected ? settings.methodConnected : settings.methodNotConnected;
   const oauth = (method: "google" | "ebay") =>
     methods.accounts[method] ? (
-      <MethodAction language={language} intent="rimuovi-metodo" method={method}>
+      <MethodAction
+        language={language}
+        intent="rimuovi-metodo"
+        method={method}
+        label={method === "google" ? settings.methodGoogle : settings.methodEbay}
+        simulated={!!onAction}
+        actionPath={actionPath}
+      >
         {settings.remove}
       </MethodAction>
     ) : (
-      <MethodAction language={language} intent="collega-metodo" method={method}>
+      <MethodAction
+        language={language}
+        intent="collega-metodo"
+        method={method}
+        actionPath={actionPath}
+      >
         {settings.connect}
       </MethodAction>
     );
@@ -261,6 +346,10 @@ export function AccountSecurity({
       focusableWhenDisabled
       aria-busy={pending || undefined}
       onClick={async () => {
+        if (onAction) {
+          onAction("passkey-add", {});
+          return;
+        }
         setPending(true);
         setError(false);
         try {
@@ -294,16 +383,38 @@ export function AccountSecurity({
   );
   const passkeys = methods.passkeys;
   return (
-    <div className="grid gap-4 rounded-xl border bg-card p-5 md:p-6">
-      <EmailChange language={language} email={email} />
+    <div
+      className={className}
+      onSubmit={
+        onAction
+          ? (event) => {
+              if (event.defaultPrevented) return;
+              event.preventDefault();
+              const form = event.target as HTMLFormElement;
+              const fields = new FormData(form, (event.nativeEvent as SubmitEvent).submitter);
+              const values: Record<string, string> = {};
+              for (const [key, value] of fields) if (typeof value === "string") values[key] = value;
+              onAction(values.intent ?? "", values);
+            }
+          : undefined
+      }
+    >
+      <EmailChange language={language} email={email} actionPath={actionPath} />
       <SecurityGroup id="security-methods" title={settings.methods}>
         <ul className="grid divide-y border-y">
           <MethodRow label={settings.methodPassword} status={status(methods.accounts.password)}>
-            <MethodAction language={language} intent="password">
+            <MethodAction language={language} intent="password" actionPath={actionPath}>
               {methods.accounts.password ? settings.changePassword : t.setPassword}
             </MethodAction>
             {methods.accounts.password ? (
-              <MethodAction language={language} intent="rimuovi-metodo" method="password">
+              <MethodAction
+                language={language}
+                intent="rimuovi-metodo"
+                method="password"
+                label={settings.methodPassword}
+                simulated={!!onAction}
+                actionPath={actionPath}
+              >
                 {settings.remove}
               </MethodAction>
             ) : null}
@@ -341,18 +452,16 @@ export function AccountSecurity({
                     : passkey.name || settings.methodConnected
                 }
               >
-                <form method="post" action={localizedPath(language, "/accesso")}>
-                  <input type="hidden" name="id" value={passkey.id} />
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    size="sm"
-                    name="intent"
-                    value="passkey-remove"
-                  >
-                    {settings.remove}
-                  </Button>
-                </form>
+                <MethodAction
+                  language={language}
+                  intent="passkey-remove"
+                  id={passkey.id}
+                  label={passkey.name || settings.methodPasskey}
+                  simulated={!!onAction}
+                  actionPath={actionPath}
+                >
+                  {settings.remove}
+                </MethodAction>
                 {index === passkeys.length - 1 ? addPasskey : null}
               </MethodRow>
             ))
@@ -365,7 +474,7 @@ export function AccountSecurity({
         ) : null}
         <p className="text-sm text-muted-foreground">{settings.lastMethod}</p>
       </SecurityGroup>
-      <SessionList language={language} sessions={sessions} now={now} />
+      <SessionList language={language} sessions={sessions} now={now} actionPath={actionPath} />
     </div>
   );
 }
@@ -391,9 +500,12 @@ export function AccessNotice({
   return notice ? (
     <StatusAlert tone={notice.tone} title={notice.text}>
       {notice.text === t.storeNotices["altro-spazio"] ? (
-        <a href="mailto:supporto@fiscalbay.it" className="underline underline-offset-4">
-          {appCopy[language].authError.support}: supporto@fiscalbay.it
-        </a>
+        <span className="grid gap-2">
+          <span>{appCopy[language].stores.elsewhereBody}</span>
+          <a href="mailto:supporto@fiscalbay.it" className="underline underline-offset-4">
+            {appCopy[language].authError.support}: supporto@fiscalbay.it
+          </a>
+        </span>
       ) : null}
     </StatusAlert>
   ) : null;
