@@ -40,6 +40,18 @@ for (const language of ["it", "en"] as const) {
         await expect(panel.locator("#store-sync + ul")).not.toContainText(
           t("Aggiornamento previsto", "Expected update"),
         );
+        // La causa della pausa compare una volta e il testo resta allineato all'elenco.
+        await expect(
+          panel.getByText(t("In pausa per il piano Free:", "Paused by the Free plan:")),
+        ).toHaveCount(1);
+        const syncLeft = await panel.locator("#store-sync + ul > li").evaluateAll((items) =>
+          items.slice(0, 2).map((item) => {
+            const range = document.createRange();
+            range.selectNodeContents(item);
+            return [...range.getClientRects()].find((rect) => rect.width > 0)?.left ?? 0;
+          }),
+        );
+        expect(Math.abs(syncLeft[0]! - syncLeft[1]!)).toBeLessThan(1);
         const choose = panel.getByRole("link", {
           name: t("Scegli il negozio attivo", "Choose the active store"),
         });
@@ -74,6 +86,10 @@ for (const language of ["it", "en"] as const) {
           t("Importazione dello storico completata", "History import complete"),
         );
         await expect(panel.locator("[data-slot=badge]").first()).toHaveClass(/warning/);
+        // Senza autorizzazione non arrivano ordini: la preferenza attiva resta sospesa.
+        await expect(panel.locator("section[aria-labelledby=store-notifications]")).toContainText(
+          t("Sospese finché la sincronizzazione non riprende", "Paused until sync resumes"),
+        );
         await open(page, `${prefix}/anteprima/negozi/neg-bottega`);
         await expect(
           panel.getByRole("link", {
@@ -1055,6 +1071,13 @@ for (const width of [390, 768, 1440]) {
           : "Active store if you return to Free";
         await expect(page.getByRole("combobox", { name: downgrade, exact: true })).toBeVisible();
         await expect(page.getByRole("heading", { name: downgrade, exact: true })).toHaveCount(0);
+        await expect(
+          page.getByText(
+            it
+              ? "nel Free potrai sostituirlo ogni 90 giorni"
+              : "on Free you can replace it every 90 days",
+          ),
+        ).toBeVisible();
         await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium-a-vita");
         const documents = page.getByRole("button", {
           name: it

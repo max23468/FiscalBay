@@ -107,22 +107,25 @@ function LastSync({
   t,
   now,
   language,
+  slot = true,
 }: {
   store: StoreView;
   t: AppCopy;
   now: string;
   language: Language;
+  /** In tabella lo slot vuoto allinea il testo alle righe con l'indicatore. */
+  slot?: boolean;
 }) {
   // Le righe della tessera indicano una sincronizzazione che procede: un negozio
-  // sospeso o mai sincronizzato mostra solo il testo, allineato agli altri.
+  // sospeso o mai sincronizzato mostra solo il testo.
   const live = store.connection === "active" && store.lastSyncAt !== null;
   return (
     <span className="inline-flex items-center gap-2 whitespace-nowrap text-muted-foreground">
       {live || store.syncing ? (
         <LedgerIndicator active={store.syncing} />
-      ) : (
+      ) : slot ? (
         <span aria-hidden="true" className="w-4 shrink-0" />
-      )}
+      ) : null}
       {store.syncing
         ? t.stores.syncing
         : store.lastSyncAt
@@ -134,7 +137,10 @@ function LastSync({
 
 function notificationsLabel(store: StoreView, t: AppCopy) {
   if (store.notifications === null) return t.stores.notificationsFree;
-  return store.notifications ? t.stores.notificationsOn : t.stores.notificationsOff;
+  if (!store.notifications) return t.stores.notificationsOff;
+  // Senza sincronizzazione non arrivano ordini da notificare.
+  const syncing = store.connection === "active" && store.issue === undefined;
+  return syncing ? t.stores.notificationsOn : t.stores.notificationsHeld;
 }
 
 /** Azioni del negozio: una colonna di pulsanti uguali, poi le due disconnessioni. */
@@ -164,8 +170,8 @@ function StoreActions({
         {t.stores.sectionActions}
       </h3>
       {planPaused ? (
-        <div className="grid justify-items-start gap-2 text-sm text-muted-foreground">
-          <p>{t.stores.planPauseHint}</p>
+        // La causa della pausa è già spiegata in Sincronizzazione.
+        <div className="grid justify-items-start">
           <Link
             to={appHref(links, "impostazioni/piano")}
             className={buttonVariants({ variant: "outline", size: "sm" })}
@@ -382,7 +388,7 @@ function StoreDetail({
         </h3>
         <ul className="grid gap-2 text-sm">
           <li>
-            <LastSync store={store} t={t} now={data.now} language={language} />
+            <LastSync store={store} t={t} now={data.now} language={language} slot={false} />
           </li>
           <li className="text-muted-foreground">{syncDescription(store, data.ebayDown, t)}</li>
           <li className="text-muted-foreground">{t.stores.history(store.historyDays)}</li>
@@ -610,7 +616,13 @@ export function StoresPage({
                       <StatusBadge tone={status.tone} icon={status.icon} filled>
                         {status.label}
                       </StatusBadge>
-                      <LastSync store={store} t={t} now={data.now} language={language} />
+                      <LastSync
+                        store={store}
+                        t={t}
+                        now={data.now}
+                        language={language}
+                        slot={false}
+                      />
                       {premium ? (
                         <span className="text-muted-foreground">
                           {t.stores.notifications}: {notificationsLabel(store, t)}
