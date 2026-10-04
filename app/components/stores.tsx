@@ -135,12 +135,14 @@ function LastSync({
   );
 }
 
-function notificationsLabel(store: StoreView, t: AppCopy) {
+/** In tabella e nella lista l'etichetta resta breve; il dettaglio spiega la sospensione. */
+function notificationsLabel(store: StoreView, t: AppCopy, detail = false) {
   if (store.notifications === null) return t.stores.notificationsFree;
   if (!store.notifications) return t.stores.notificationsOff;
   // Senza sincronizzazione non arrivano ordini da notificare.
   const syncing = store.connection === "active" && store.issue === undefined;
-  return syncing ? t.stores.notificationsOn : t.stores.notificationsHeld;
+  if (syncing) return t.stores.notificationsOn;
+  return detail ? t.stores.notificationsHeldHint : t.stores.notificationsHeld;
 }
 
 /** Azioni del negozio: una colonna di pulsanti uguali, poi le due disconnessioni. */
@@ -440,7 +442,7 @@ function StoreDetail({
         {store.notifications === null ? (
           <PremiumNote>{t.stores.notificationsFree}</PremiumNote>
         ) : (
-          <p className="text-sm">{notificationsLabel(store, t)}</p>
+          <p className="text-sm">{notificationsLabel(store, t, true)}</p>
         )}
         <p className="text-sm text-muted-foreground">
           {t.stores.notificationsShortcut}{" "}
