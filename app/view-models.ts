@@ -163,6 +163,12 @@ export interface NotificationView {
 
 export interface AccountView {
   name: string;
+  profile: {
+    firstName: string;
+    lastName: string;
+    accountType: "private" | "business";
+    companyName: string | null;
+  };
   email: string;
   plan: Plan;
   trialAvailable: boolean;

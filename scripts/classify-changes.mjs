@@ -80,9 +80,9 @@ function localChanges() {
   ];
 }
 
-function run(command, args) {
+function run(command, args, env = {}) {
   console.log(`\n$ ${command} ${args.join(" ")}`);
-  execFileSync(command, args, { stdio: "inherit" });
+  execFileSync(command, args, { stdio: "inherit", env: { ...process.env, ...env } });
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
@@ -110,6 +110,6 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       run("node", ["scripts/verify-copy.mjs"]);
       run("node", ["scripts/verify-docs.mjs"]);
     } else run("pnpm", ["verify"]);
-    if (result.e2e) run("pnpm", ["test:e2e"]);
+    if (result.e2e) run("pnpm", ["test:e2e"], { E2E_PREBUILT: "1" });
   }
 }

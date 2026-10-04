@@ -179,7 +179,9 @@ function ProfileFields({
       </FieldSet>
       {type === "azienda" ? (
         <Field className={rise}>
-          <FieldLabel htmlFor="company-name">{t.companyName}</FieldLabel>
+          <FieldLabel htmlFor="company-name" required>
+            {t.companyName}
+          </FieldLabel>
           <Input
             id="company-name"
             name="ragione_sociale"
@@ -194,7 +196,9 @@ function ProfileFields({
       ) : null}
       <div className="grid gap-4 sm:grid-cols-2">
         <Field>
-          <FieldLabel htmlFor="first-name">{t.firstName}</FieldLabel>
+          <FieldLabel htmlFor="first-name" required>
+            {t.firstName}
+          </FieldLabel>
           <Input
             id="first-name"
             name="nome"
@@ -207,7 +211,9 @@ function ProfileFields({
           {v.error("nome")}
         </Field>
         <Field>
-          <FieldLabel htmlFor="last-name">{t.lastName}</FieldLabel>
+          <FieldLabel htmlFor="last-name" required>
+            {t.lastName}
+          </FieldLabel>
           <Input
             id="last-name"
             name="cognome"
@@ -238,7 +244,7 @@ function AgreementFields({
 }) {
   return (
     <div className="grid gap-4 rounded-lg bg-muted/50 p-3">
-      <FieldLabel className="font-normal">
+      <FieldLabel className="font-normal" required>
         <Checkbox
           name="termini"
           required
@@ -401,7 +407,9 @@ function AccessForms({
         >
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="email">{t.email}</FieldLabel>
+              <FieldLabel htmlFor="email" required>
+                {t.email}
+              </FieldLabel>
               <Input
                 id="email"
                 name="email"
@@ -415,7 +423,9 @@ function AccessForms({
             </Field>
             {recovering ? null : (
               <Field>
-                <FieldLabel htmlFor="password">{t.password}</FieldLabel>
+                <FieldLabel htmlFor="password" required>
+                  {t.password}
+                </FieldLabel>
                 <Input
                   id="password"
                   name="password"
@@ -467,7 +477,9 @@ function AccessForms({
               values={restored?.tab === "registrati" ? values : undefined}
             />
             <Field>
-              <FieldLabel htmlFor="signup-email">{t.email}</FieldLabel>
+              <FieldLabel htmlFor="signup-email" required>
+                {t.email}
+              </FieldLabel>
               <Input
                 id="signup-email"
                 name="email"
@@ -480,7 +492,9 @@ function AccessForms({
               {signUp.error("email")}
             </Field>
             <Field>
-              <FieldLabel htmlFor="signup-password">{t.newPassword}</FieldLabel>
+              <FieldLabel htmlFor="signup-password" required>
+                {t.newPassword}
+              </FieldLabel>
               <Input
                 id="signup-password"
                 name="password"
@@ -532,7 +546,9 @@ function ResetPassword({
       <h2 className="text-xl font-semibold">{t.passwordResetTitle}</h2>
       <input type="hidden" name="token" value={token} />
       <Field>
-        <FieldLabel htmlFor="reset-password">{t.newPassword}</FieldLabel>
+        <FieldLabel htmlFor="reset-password" required>
+          {t.newPassword}
+        </FieldLabel>
         <Input
           id="reset-password"
           name="password"
@@ -781,6 +797,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               />
             ) : null}
             <div className={cn("rounded-2xl border bg-card p-5 shadow-sm sm:p-7", rise)}>
+              <p className="mb-4 text-sm text-muted-foreground">{t.requiredFields}</p>
               <AccessPanel
                 loaderData={loaderData}
                 t={t}

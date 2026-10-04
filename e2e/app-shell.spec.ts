@@ -18,32 +18,36 @@ async function chooseScenario(page: Page, name: string) {
   await expect(page.getByRole("combobox", { name: /Scenario/ })).toContainText(name);
 }
 
-test("la radice apre Ordini con navigazione, campanella e menu account", async ({ page }) => {
-  await open(page, "/anteprima");
-  await expect(page).toHaveURL(/\/anteprima\/ordini$/u);
-  await expect(page).toHaveTitle("FiscalBay | Ordini");
-  const nav = page.getByRole("navigation", { name: "Navigazione principale" });
-  await expect(nav.getByRole("link")).toHaveText(["Ordini", "Negozi eBay", "Impostazioni"]);
-  await expect(nav.getByRole("link", { name: "Ordini" })).toHaveAttribute("aria-current", "page");
-  await page.getByRole("button", { name: "Notifiche, 1 da leggere" }).click();
-  await expect(page.getByText("Manutenzione programmata")).toBeVisible();
-  await page.getByRole("button", { name: "Segna tutte come lette" }).click();
-  await expect(page.getByRole("button", { name: "Notifiche", exact: true })).toBeVisible();
-  await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Account" }).click();
-  const menu = page.getByRole("menu");
-  await expect(menu.getByRole("menuitem")).toHaveText([
-    "Profilo",
-    "Sicurezza",
-    "Piano e pagamenti",
-    "Impostazioni",
-    "Visita fiscalbay.it",
-    "Esci",
-  ]);
-  await menu.getByRole("menuitem", { name: "Sicurezza" }).click();
-  await expect(page).toHaveURL(/\/anteprima\/impostazioni\/sicurezza$/u);
-  await expect(page.getByRole("heading", { name: "Sicurezza", level: 2 })).toBeVisible();
-});
+test(
+  "la radice apre Ordini con navigazione, campanella e menu account",
+  { tag: "@smoke" },
+  async ({ page }) => {
+    await open(page, "/anteprima");
+    await expect(page).toHaveURL(/\/anteprima\/ordini$/u);
+    await expect(page).toHaveTitle("FiscalBay | Ordini");
+    const nav = page.getByRole("navigation", { name: "Navigazione principale" });
+    await expect(nav.getByRole("link")).toHaveText(["Ordini", "Negozi eBay", "Impostazioni"]);
+    await expect(nav.getByRole("link", { name: "Ordini" })).toHaveAttribute("aria-current", "page");
+    await page.getByRole("button", { name: "Notifiche, 1 da leggere" }).click();
+    await expect(page.getByText("Manutenzione programmata")).toBeVisible();
+    await page.getByRole("button", { name: "Segna tutte come lette" }).click();
+    await expect(page.getByRole("button", { name: "Notifiche", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Account" }).click();
+    const menu = page.getByRole("menu");
+    await expect(menu.getByRole("menuitem")).toHaveText([
+      "Profilo",
+      "Sicurezza",
+      "Piano e pagamenti",
+      "Impostazioni",
+      "Visita fiscalbay.it",
+      "Esci",
+    ]);
+    await menu.getByRole("menuitem", { name: "Sicurezza" }).click();
+    await expect(page).toHaveURL(/\/anteprima\/impostazioni\/sicurezza$/u);
+    await expect(page.getByRole("heading", { name: "Sicurezza", level: 2 })).toBeVisible();
+  },
+);
 
 test("il dettaglio ha un URL, si chiude con Indietro e conserva i filtri", async ({ page }) => {
   await open(page, "/anteprima/ordini?fiscale=available");
@@ -70,11 +74,11 @@ test("lo sblocco rivela il dato solo dopo l'azione e aggiorna la quota", async (
   await open(page);
   expect(await page.content()).not.toContain("BNCLCU75C12F205X");
   const card = page.getByRole("article", { name: "Ordine 05-55555-12121" });
-  await expect(card).toContainText("Hai ancora 2 ordini disponibili");
+  await expect(card).toContainText("Hai 2 sblocchi disponibili");
   await card.getByRole("button", { name: "Sblocca ordine" }).click();
   await expect(card.getByText("BNCLCU75C12F205X")).toBeVisible();
   await expect(page.getByRole("status").filter({ hasText: "Ordine sbloccato" })).toContainText(
-    "Ti resta 1 ordine da sbloccare",
+    "Ti resta 1 sblocco in questo ciclo",
   );
   await page.reload();
   await expect(page.getByRole("article", { name: "Ordine 05-55555-12121" })).toContainText(
@@ -82,7 +86,7 @@ test("lo sblocco rivela il dato solo dopo l'azione e aggiorna la quota", async (
   );
   await page.getByRole("link", { name: "Carica altri" }).click();
   await expect(page.getByRole("article", { name: "Ordine 02-44519-70831" })).toContainText(
-    "Hai ancora 1 ordine disponibile",
+    "Hai 1 sblocco disponibile",
   );
 });
 
@@ -94,7 +98,7 @@ test("la selezione sblocca più ordini entro la quota", async ({ page }) => {
   await expect(page.getByText("2 ordini da sbloccare")).toBeVisible();
   await page.getByRole("button", { name: "Sblocca 2" }).click();
   const dialog = page.getByRole("alertdialog");
-  await expect(dialog).toContainText("ti resteranno 0 ordini da sbloccare");
+  await expect(dialog).toContainText("ti resteranno 0 sblocchi in questo ciclo");
   await dialog.getByRole("button", { name: "Sblocca" }).click();
   // Il filtro «Da sbloccare» esclude gli ordini appena sbloccati.
   await expect(page.getByRole("status").filter({ hasText: "2 ordini sbloccati." })).toBeVisible();
@@ -239,9 +243,9 @@ for (const language of ["it", "en"] as const) {
 
 test("con gli sblocchi esauriti gli ordini restano consultabili", async ({ page }) => {
   await open(page);
-  await chooseScenario(page, "Ordini da sbloccare esauriti");
+  await chooseScenario(page, "Sblocchi esauriti");
   await expect(
-    page.getByRole("status").filter({ hasText: "Nessun ordine da sbloccare rimasto" }),
+    page.getByRole("status").filter({ hasText: "Sblocchi esauriti per questo ciclo" }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Sblocca ordine" })).toHaveCount(0);
   await expect(page.getByRole("article", { name: "Ordine 05-55555-12121" })).toContainText(
@@ -428,7 +432,11 @@ test("stati coerenti: aggiornamento, eBay fermo e collegamento già usato", asyn
     .getByRole("navigation", { name: "Navigazione principale" })
     .getByRole("link", { name: "Negozi eBay" })
     .click();
-  await expect(page.getByText("Negozio già collegato a un altro account")).toHaveCount(0);
+  await expect(
+    page.getByText("Questo negozio eBay è già collegato a un altro account FiscalBay."),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "Collega negozio eBay" }).click();
-  await expect(page.getByText("Negozio già collegato a un altro account")).toBeVisible();
+  await expect(
+    page.getByText("Questo negozio eBay è già collegato a un altro account FiscalBay."),
+  ).toBeVisible();
 });
