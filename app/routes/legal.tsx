@@ -1,4 +1,6 @@
 import { FileText, ShieldCheck } from "lucide-react";
+import { cn } from "cn";
+import { buttonVariants } from "~/components/ui/button-variants";
 
 import { StandalonePage } from "~/components/standalone-page";
 import type { Route } from "./+types/legal";
@@ -32,8 +34,14 @@ export default function Legal({ loaderData }: Route.ComponentProps) {
       title={t[document]}
       homeHref={localizedPath(language)}
     >
-      <p className="font-code text-sm text-muted-foreground">{t.version(version)}</p>
+      <p className="text-sm text-muted-foreground">{t.version(version)}</p>
       <p className="leading-relaxed text-pretty text-muted-foreground">{t.draft}</p>
+      <a
+        href={localizedPath(language)}
+        className={cn(buttonVariants({ variant: "outline" }), "w-fit")}
+      >
+        {appCopy[language].errors.home}
+      </a>
     </StandalonePage>
   );
 }

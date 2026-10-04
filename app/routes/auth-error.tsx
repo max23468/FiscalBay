@@ -11,23 +11,39 @@ import { languageFromPath, localizedPath } from "../i18n";
 type AuthErrorCopy = (typeof appCopy)["it"]["authError"];
 
 // Better Auth indica la causa nel parametro `error`; i codici non previsti usano il testo generico.
-function messageFor(t: AuthErrorCopy, error: string | null): { title: string; body: string } {
+function messageFor(
+  t: AuthErrorCopy,
+  error: string | null,
+  provider: string | null,
+): { title: string; body: string } {
   if (error === "email_not_found") return t.ebayWithoutEmail;
   if (error === "account_not_linked") return t.accountNotLinked;
-  if (error === "account_already_linked_to_different_user") return t.alreadyLinked;
+  if (error === "account_already_linked_to_different_user")
+    return {
+      title: t.alreadyLinked.title,
+      body:
+        provider === "google" || provider === "ebay"
+          ? t.alreadyLinked.body(provider === "google" ? "Google" : "eBay")
+          : t.alreadyLinked.generic,
+    };
   return t;
 }
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const language = languageFromPath(location.pathname);
-  const error = new URLSearchParams(location.search).get("error");
-  return [{ title: `FiscalBay | ${messageFor(appCopy[language].authError, error).title}` }];
+  const search = new URLSearchParams(location.search);
+  return [
+    {
+      title: `FiscalBay | ${messageFor(appCopy[language].authError, search.get("error"), search.get("provider")).title}`,
+    },
+  ];
 }
 
 export default function AuthError({ matches }: Route.ComponentProps) {
   const language = matches[0]?.loaderData?.language ?? "it";
   const t = appCopy[language].authError;
-  const message = messageFor(t, useSearchParams()[0].get("error"));
+  const [search] = useSearchParams();
+  const message = messageFor(t, search.get("error"), search.get("provider"));
   return (
     <StandalonePage
       icon={LogIn}

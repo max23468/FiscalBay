@@ -276,6 +276,20 @@ function AgreementFields({
   );
 }
 
+/** Marchio dal kit ufficiale dei pulsanti di accesso eBay, con proporzioni conservate. */
+function EbayMark() {
+  return (
+    <img
+      src="/ebay-logo.svg"
+      alt=""
+      aria-hidden="true"
+      width="32"
+      height="13"
+      className="h-auto w-8 shrink-0"
+    />
+  );
+}
+
 function SocialForms({ t, language }: { t: AccessCopy; language: Language }) {
   return (
     <form method="post" action={localizedPath(language, "/accesso")} className="grid gap-2">
@@ -284,6 +298,7 @@ function SocialForms({ t, language }: { t: AccessCopy; language: Language }) {
         {t.google}
       </Button>
       <Button type="submit" variant="outline" name="intent" value="ebay" className="w-full">
+        <EbayMark />
         {t.ebay}
       </Button>
     </form>
@@ -355,10 +370,28 @@ function OrSeparator({ t }: { t: AccessCopy }) {
   );
 }
 
-/**
- * Accesso e registrazione in una sola scheda con due schede interne: un solo
- * form visibile evita che il browser compili i campi dell'altro.
- */
+function SignInAlternatives({
+  t,
+  language,
+  recovering,
+}: {
+  t: AccessCopy;
+  language: Language;
+  recovering: boolean;
+}) {
+  if (recovering) return null;
+  return (
+    <>
+      <OrSeparator t={t} />
+      <div className="grid gap-2">
+        <SocialForms t={t} language={language} />
+        <PasskeyButton t={t} language={language} />
+      </div>
+    </>
+  );
+}
+
+/** Un solo form visibile evita che il browser compili i campi dell'altra scheda. */
 function AccessForms({
   t,
   language,
@@ -379,12 +412,19 @@ function AccessForms({
   const signIn = useFieldErrors(t.validation);
   const signUp = useFieldErrors(t.validation);
   return (
-    <Tabs value={tab} onValueChange={(next) => setTab(String(next))} className="gap-6">
+    <Tabs
+      value={tab}
+      onValueChange={(next) => {
+        setTab(String(next));
+        setRecovering(false);
+      }}
+      className="gap-4"
+    >
       <TabsList aria-label={t.choose} className="w-full">
         <TabsTrigger value="accedi">{t.signIn}</TabsTrigger>
         <TabsTrigger value="registrati">{t.signUp}</TabsTrigger>
       </TabsList>
-      <TabsContent value="accedi" keepMounted className={cn("grid gap-5", rise)}>
+      <TabsContent value="accedi" keepMounted className={cn("grid gap-3", rise)}>
         <p className="text-muted-foreground">
           {recovering ? t.passwordRecoveryBody : t.signInBody}
         </p>
@@ -397,7 +437,7 @@ function AccessForms({
             if (signIn.check(event)) remember("accedi")(event);
           }}
         >
-          <FieldGroup>
+          <FieldGroup className="gap-3">
             <Field>
               <FieldLabel htmlFor="email" required>
                 {t.email}
@@ -442,14 +482,12 @@ function AccessForms({
         <Button
           type="button"
           variant="link"
-          className="w-fit px-0"
+          className="h-auto w-fit px-0 py-1"
           onClick={() => setRecovering(!recovering)}
         >
-          {recovering ? t.signIn : t.passwordRecovery}
+          {recovering ? t.backToSignIn : t.passwordRecovery}
         </Button>
-        <OrSeparator t={t} />
-        <SocialForms t={t} language={language} />
-        <PasskeyButton t={t} language={language} />
+        <SignInAlternatives t={t} language={language} recovering={recovering} />
       </TabsContent>
       <TabsContent value="registrati" keepMounted className={cn("grid gap-5", rise)}>
         <p className="text-muted-foreground">{t.signUpBody}</p>
@@ -670,7 +708,7 @@ const featureIcons = [
 /** Colonna del marchio: cosa fa FiscalBay, con i colori del logo. */
 function BrandPanel({ t }: { t: AccessCopy }) {
   return (
-    <aside className="relative hidden overflow-hidden bg-brand-navy text-white lg:flex lg:flex-col lg:justify-between lg:gap-12 lg:p-12 xl:p-16">
+    <aside className="relative hidden overflow-hidden bg-brand-navy text-white lg:flex lg:flex-col lg:gap-12 lg:p-12 xl:p-16">
       {/* Righe della tessera del logo, grandi e sfumate, come fondo. */}
       <div
         aria-hidden="true"
@@ -705,7 +743,6 @@ function BrandPanel({ t }: { t: AccessCopy }) {
           })}
         </ul>
       </div>
-      <span aria-hidden="true" />
     </aside>
   );
 }
@@ -757,7 +794,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     return (
       <div className="grid min-h-dvh lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
         <BrandPanel t={t} />
-        <main className="flex flex-col px-4 py-6 sm:px-8 lg:px-12">
+        <main className="flex flex-col px-4 py-4 sm:px-8 lg:px-12">
           <header className="flex items-center justify-between gap-4">
             <Logo className="h-7 w-auto lg:invisible" />
             <LanguageSwitch
@@ -769,7 +806,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </header>
           <div
             className={cn(
-              "mx-auto grid w-full max-w-md flex-1 gap-6 py-10",
+              "mx-auto grid w-full flex-1 gap-4 py-4 sm:max-w-md",
               !loaderData.authenticated && loaderData.resetToken
                 ? "content-start lg:content-center"
                 : "content-center",
@@ -788,8 +825,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 emailVerified={loaderData.emailVerified}
               />
             ) : null}
-            <div className={cn("rounded-2xl border bg-card p-5 shadow-sm sm:p-7", rise)}>
-              <p className="mb-4 text-sm text-muted-foreground">{t.requiredFields}</p>
+            <div className={cn("rounded-2xl border bg-card p-4 shadow-sm sm:p-5", rise)}>
+              <p className="mb-3 text-sm text-muted-foreground">{t.requiredFields}</p>
               <AccessPanel
                 loaderData={loaderData}
                 t={t}
@@ -797,6 +834,23 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 remembered={remembered}
               />
             </div>
+            <nav
+              aria-label={appCopy[language].legal.navigation}
+              className="flex justify-center gap-4 text-sm text-muted-foreground"
+            >
+              <a
+                href={localizedPath(language, "/termini")}
+                className="underline underline-offset-4"
+              >
+                {t.terms.terms}
+              </a>
+              <a
+                href={localizedPath(language, "/privacy")}
+                className="underline underline-offset-4"
+              >
+                {t.terms.privacy}
+              </a>
+            </nav>
             {loaderData.authenticated ? <SignOutForm t={t} language={language} /> : null}
           </div>
         </main>
