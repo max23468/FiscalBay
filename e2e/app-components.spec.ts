@@ -90,6 +90,11 @@ for (const language of ["it", "en"] as const) {
         await expect(panel.locator("section[aria-labelledby=store-notifications]")).toContainText(
           t("Sospese finché la sincronizzazione non riprende", "Paused until sync resumes"),
         );
+        // L'elenco usa l'etichetta breve per non stringere la colonna dei nomi.
+        await expect(page.locator("main")).toContainText(t("Sospese", "Paused"));
+        await expect(page.locator("main")).not.toContainText(
+          t("finché la sincronizzazione", "until sync resumes"),
+        );
         await open(page, `${prefix}/anteprima/negozi/neg-bottega`);
         await expect(
           panel.getByRole("link", {
@@ -1066,18 +1071,10 @@ for (const width of [390, 768, 1440]) {
         const it = locale === "it";
         const prefix = it ? "" : "/en";
         await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium");
-        const downgrade = it
-          ? "Negozio attivo se torni al piano Free"
-          : "Active store if you return to Free";
-        await expect(page.getByRole("combobox", { name: downgrade, exact: true })).toBeVisible();
-        await expect(page.getByRole("heading", { name: downgrade, exact: true })).toHaveCount(0);
-        await expect(
-          page.getByText(
-            it
-              ? "nel Free potrai sostituirlo ogni 90 giorni"
-              : "on Free you can replace it every 90 days",
-          ),
-        ).toBeVisible();
+        // Premium non anticipa il downgrade: la scelta del negozio attivo è solo nel Free.
+        await expect(page.locator("main")).not.toContainText(
+          it ? "Negozio attivo se torni al piano Free" : "Active store if you return to Free",
+        );
         await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium-a-vita");
         const documents = page.getByRole("button", {
           name: it

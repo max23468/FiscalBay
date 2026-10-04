@@ -348,23 +348,9 @@ function PlanSection({
   const [downgradeStore, setDowngradeStore] = useState(
     () => data.stores.find((store) => store.pauseReason !== "plan")?.id ?? "",
   );
+  // La scelta del negozio attivo compare solo nel Free: in Premium non anticipa il downgrade.
   if (account.plan === "premium") {
-    return (
-      <>
-        <PremiumPlan account={account} t={t} language={language} />
-        {data.stores.length > 1 && account.premium?.period !== "lifetime" ? (
-          <Group>
-            <SimpleSelect
-              label={t.settings.downgradeStore}
-              hint={t.settings.downgradeStoreHint}
-              items={data.stores.map((store) => ({ value: store.id, label: store.name }))}
-              value={downgradeStore}
-              onChange={setDowngradeStore}
-            />
-          </Group>
-        ) : null}
-      </>
-    );
+    return <PremiumPlan account={account} t={t} language={language} />;
   }
   const quota = account.quota;
   return (

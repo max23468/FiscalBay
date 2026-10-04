@@ -217,7 +217,8 @@ del 4 ottobre sulla branch `codex/negozi-impostazioni-profilo`, con dati
 sintetici, Chromium, IT/EN, chiaro/scuro e 390/1280 px. Non attestano una
 pubblicazione né operazioni su negozi, preferenze o account reali. Dopo la
 PR #262 le correzioni sono state riverificate su Chrome live: esiti in §15.
-N10, N11, N12 e I9 sono emersi in quel collaudo.
+N10, N11, N12 e I9 sono emersi in quel collaudo; N13 nel collaudo della
+PR #263.
 
 | ID | Problema | Severità | Confidenza | Verifica implementazione · 4 ottobre 2026 |
 | --- | --- | --- | --- | --- |
@@ -235,6 +236,7 @@ N10, N11, N12 e I9 sono emersi in quel collaudo.
 | N10 | Nel dettaglio e nella lista mobile "6 giorni fa" è rientrato di 24 px: lo slot icona vuoto che allinea la tabella resta anche dove non allinea nulla | Bassa | Alta | Implementato localmente: slot vuoto soltanto in tabella; nel dettaglio il testo è allineato alle altre righe di Sincronizzazione, scarto misurato inferiore a 1 px. |
 | N11 | Negozio in pausa per il piano Free: la stessa frase sulla causa compare in Sincronizzazione e di nuovo in Azioni | Bassa | Alta | Implementato localmente: la causa resta in Sincronizzazione, Azioni mostra soltanto Scegli il negozio attivo. |
 | N12 | Negozio con autorizzazione incompleta, mai sincronizzato, con notifiche "Attive" | Bassa | Media | Implementato localmente: preferenza attiva mostrata come Sospese finché la sincronizzazione non riprende per negozi non attivi o con problemi di autorizzazione; Disattivate invariato. |
+| N13 | In Premium con un negozio da ricollegare l'etichetta "Sospese finché la sincronizzazione non riprende" allarga la colonna Notifiche e manda su tre righe il nome del negozio | Bassa | Alta | Implementato localmente: Sospese in tabella e nella lista, frase completa soltanto nel dettaglio del negozio. |
 
 ## 7. Anteprima: Impostazioni
 
@@ -249,7 +251,7 @@ N10, N11, N12 e I9 sono emersi in quel collaudo.
 | I6 | Tema: "Nell'anteprima la scelta vale fino alla chiusura della pagina." In pratica si perde a ogni ricarica completa | Bassa | Alta | Implementato e verificato localmente: il testo dichiara il reset alla ricarica completa, provato dopo la scelta del tema scuro. Persistenza reale resta al task competente. |
 | I7 | Ridondanze: "Premium annuale" più badge "Premium"; "Consulta ricevute e fatture su Stripe" più "Ricevute e fatture sono disponibili su Stripe." | Bassa | Alta | Implementato localmente: rimosso il badge Premium ridondante; nessuna seconda nota sui documenti quando il pulsante lifetime li nomina già. La nota resta per Gestisci abbonamento. |
 | I8 | Errore di salvataggio in linea chiaro: "Modifica non salvata. L'impostazione è tornata com'era: riprova." Il salvataggio riuscito è silenzioso | Positivo | Alta | Positivo conservato e riconfermato localmente: fallimento simulato con ripristino e messaggio in linea, retry riuscito; nessun nuovo toast per i salvataggi semplici. |
-| I9 | Premium: "Puoi cambiare scelta in qualsiasi momento" per il negozio da mantenere nel Free, mentre nel Free la sostituzione vale ogni 90 giorni | Media | Media | Implementato localmente: in Premium la preferenza resta modificabile e il testo dichiara che nel Free la sostituzione torna ogni 90 giorni, come da Master Plan. Nessun cambio di regole. |
+| I9 | Premium: "Puoi cambiare scelta in qualsiasi momento" per il negozio da mantenere nel Free, mentre nel Free la sostituzione vale ogni 90 giorni | Media | Media | Superato da D155: dopo la correzione verificata live con la PR #263, l'owner ha deciso che Premium non mostra più la scelta del negozio da mantenere. La scelta resta soltanto nel Free, con il vincolo dei 90 giorni. |
 
 ## 8. Anteprima: Profilo
 
@@ -394,3 +396,22 @@ titoli a 210 px dal bordo con scorrimento istantaneo.
 
 Nessun errore in console. Emersi durante il collaudo e corretti nella PR
 successiva: N10, N11, N12 e I9, da riverificare live dopo il relativo deploy.
+
+### Rifiniture di Negozi e Piano
+
+Correzioni della PR #263 (`fbf0a5d` su `develop`), distribuita sul test il
+4 ottobre 2026 con CI e deploy riusciti. Verificate su Chrome live, su
+`test.fiscalbay.it/anteprima`, a 1440 px nel tema scuro, negli scenari Free,
+Problema su un negozio e Premium; I9 anche in inglese. Scenario finale Free,
+uso ordinario.
+
+| ID | Esito | Verifica su Chrome live | Verifica implementazione · 4 ottobre 2026 |
+| --- | --- | --- | --- |
+| N10 | Corretto | Nel dettaglio del negozio in pausa le quattro righe di Sincronizzazione iniziano allo stesso x; in tabella intestazione e valori restano allineati | Implementato. PR #263. |
+| N11 | Corretto | Causa della pausa Free una sola volta; Azioni con Scegli il negozio attivo, Scollega e Scollega ed elimina dati | Implementato. PR #263. |
+| N12 | Corretto, con N13 | Retro Parts mostra le notifiche sospese nel dettaglio e in tabella | Implementato. PR #263; etichetta della tabella accorciata per N13. |
+| I9 | Corretto, poi superato | Testo IT ed EN con preferenza modificabile in Premium e vincolo Free di 90 giorni | Implementato con la PR #263; selettore poi rimosso da Premium per D155. |
+
+Nessun errore in console. Al primo caricamento della scheda in background il
+pannello del negozio non si è aperto; ricaricando e riaprendolo più volte si
+è sempre aperto, quindi il caso non è stato registrato come finding.

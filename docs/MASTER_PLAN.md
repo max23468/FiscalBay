@@ -458,7 +458,7 @@ Lista/tabella leggera con righe spaziose, non replica delle card Ordini. Colonne
 
 Pannello laterale con URL e full-screen mobile: dettagli, sincronizzazione, notifiche; finestra storico, stato import, frequenza target e ultimi aggiornamenti. Include informazioni più ricche escluse dalla lista, non countdown prossimo aggiornamento smentibile dallo scheduler. Pulsanti collegamento, reconnect, sync recenti, re-import distinto, pausa/riprendi, scollega, elimina dati secondo autorizzazioni.
 
-Preferenza del negozio da mantenere in downgrade visibile nel percorso commerciale e richiamabile; riconnessione stesso negozio non sposta il vincolo 90 giorni. Messaggi chiari per account già associato, permessi mancanti e sorgente non verificabile. Nessun pannello «Log» tecnico rivolto al merchant.
+Scelta del negozio attivo mostrata soltanto nel Free, quindi dopo il downgrade: Premium non la anticipa (D155); senza scelta resta attivo il primo negozio ancora collegato. Riconnessione stesso negozio non sposta il vincolo 90 giorni. Messaggi chiari per account già associato, permessi mancanti e sorgente non verificabile. Nessun pannello «Log» tecnico rivolto al merchant.
 
 <a id="s19"></a>
 ## 19. Impostazioni, Profilo e campanella
@@ -467,7 +467,7 @@ Impostazioni desktop: categorie a sinistra e contenuto a destra; navigazione loc
 
 | Sezione | Contenuto |
 |---|---|
-| Piano e pagamenti | Stato effettivo, trial, quote/date, upgrade, periodicità, lifetime, disdetta, concessioni, negozio post-downgrade, storico pagamenti e link documenti provider |
+| Piano e pagamenti | Stato effettivo, trial, quote/date, upgrade, periodicità, lifetime, disdetta, concessioni, negozio attivo nel Free, storico pagamenti e link documenti provider |
 | Notifiche | Chat Telegram, stato, filtro tutti/solo fiscali, singolo/riepilogo giornaliero, orario/fuso, negozi; consenso marketing separato |
 | Export | Ambito/anteprima, CSV/XLSX secondo piano, righe/colonne, configurazioni; non archivio permanente |
 | Sicurezza | Metodi login, passkey, password, sessioni, logout globale, verifiche pertinenti |
