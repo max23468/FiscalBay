@@ -36,6 +36,18 @@ describe("stato sintetico dell'anteprima", () => {
   });
 
   for (const language of ["it", "en"] as const) {
+    it(`i negozi sintetici conservano scadenza e ultima lettura coerenti, ${language}`, () => {
+      const expired = loadScenario("negozio-scaduto", language, new Set());
+      const store = expired.stores.find((entry) => entry.connection === "reconnect_required")!;
+      expect(Date.parse(store.consentExpiresAt)).toBeLessThan(Date.parse(expired.now));
+      for (const scenario of scenarioIds.map((id) => loadScenario(id, language, new Set()))) {
+        for (const paused of scenario.stores.filter((entry) => entry.connection === "paused")) {
+          for (const update of paused.recent.filter((entry) => entry.ok)) {
+            expect(Date.parse(update.at)).toBeLessThanOrEqual(Date.parse(paused.lastSyncAt!));
+          }
+        }
+      }
+    });
     it(`il prezzo unitario e le quantità dell'ordine con più articoli compongono il totale, ${language}`, () => {
       const order = loadScenario("ordinario", language, new Set()).orders.find(
         (order) => order.id === "ord-01",

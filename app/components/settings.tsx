@@ -165,7 +165,7 @@ function AutoSwitch({
       <Switch
         id={id}
         checked={checked}
-        disabled={disabled}
+        disabled={disabled || state === "saving"}
         onCheckedChange={(next) => setChecked(next)}
         aria-describedby={description ? `${id}-description` : undefined}
       />
@@ -188,18 +188,25 @@ function AutoRadio({
   options,
   initial,
   t,
+  disabled,
 }: {
   name: string;
   legend: string;
   options: Array<{ value: string; label: string }>;
   initial: string;
   t: AppCopy;
+  disabled?: boolean;
 }) {
   const [value, setValue, state] = useAutoSave(name, initial);
   return (
     <FieldSet>
       <FieldLegend variant="label">{legend}</FieldLegend>
-      <RadioGroup value={value} onValueChange={(next) => setValue(String(next))} className="gap-3">
+      <RadioGroup
+        disabled={disabled || state === "saving"}
+        value={value}
+        onValueChange={(next) => setValue(String(next))}
+        className="gap-3"
+      >
         {options.map((option) => (
           <FieldLabel key={option.value} className="font-normal">
             <RadioGroupItem value={option.value} />
@@ -219,6 +226,7 @@ function SimpleSelect({
   value,
   premiumLabel,
   onChange,
+  disabled,
 }: {
   label: string;
   hint?: string;
@@ -227,12 +235,18 @@ function SimpleSelect({
   value: string;
   premiumLabel?: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   const id = useId();
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <Select items={items} value={value} onValueChange={(next) => onChange(String(next))}>
+      <Select
+        disabled={disabled}
+        items={items}
+        value={value}
+        onValueChange={(next) => onChange(String(next))}
+      >
         <SelectTrigger
           id={id}
           className="w-full min-w-0 sm:max-w-sm"
@@ -301,7 +315,6 @@ function PremiumPlan({
       <div className="grid gap-1">
         <p className="flex items-center gap-2 text-lg font-semibold">
           {t.settings.premiumPeriod[account.premium?.period ?? "annual"]}
-          <StatusBadge tone="premium">{t.settings.premium}</StatusBadge>
         </p>
         {lifetime ? (
           <p className="text-sm text-muted-foreground">{t.settings.premiumLifetime}</p>
@@ -316,7 +329,7 @@ function PremiumPlan({
           {lifetime ? t.settings.billingDocuments : t.settings.manageBilling}
         </Button>
       </div>
-      <p className="text-sm text-muted-foreground">{t.settings.billingDocs}</p>
+      {lifetime ? null : <p className="text-sm text-muted-foreground">{t.settings.billingDocs}</p>}
     </Group>
   );
 }
@@ -332,7 +345,9 @@ function PlanSection({
 }) {
   const action = useAction();
   const { account } = data;
-  const [downgradeStore, setDowngradeStore] = useState(data.stores[0]?.id ?? "");
+  const [downgradeStore, setDowngradeStore] = useState(
+    () => data.stores.find((store) => store.pauseReason !== "plan")?.id ?? "",
+  );
   if (account.plan === "premium") {
     return (
       <>
@@ -381,6 +396,20 @@ function PlanSection({
           </div>
         ) : null}
       </Group>
+      {data.stores.length > 1 ? (
+        <Group>
+          <SimpleSelect
+            label={t.stores.chooseFreeStore}
+            hint={t.settings.freeStoreHint}
+            items={data.stores.map((store) => ({ value: store.id, label: store.name }))}
+            value={downgradeStore}
+            onChange={(value) => {
+              setDowngradeStore(value);
+              action.run("free-store", { store: value });
+            }}
+          />
+        </Group>
+      ) : null}
       {account.trialAvailable ? (
         <Group title={t.settings.trialTitle}>
           <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
@@ -405,7 +434,10 @@ function PlanSection({
           ].map(({ plan, price, note }) => (
             <li
               key={price}
-              className="grid grid-rows-[1fr_auto] gap-3 rounded-xl border bg-card p-4"
+              className={cn(
+                "grid grid-rows-[1fr_auto] gap-3 rounded-xl border bg-card p-4",
+                plan === "annual" && "border-primary bg-primary/5",
+              )}
             >
               <span className="grid gap-1">
                 <span className="font-code text-base font-semibold">{price}</span>
@@ -417,7 +449,7 @@ function PlanSection({
                 className="w-fit"
                 onClick={() => action.run("buy", { plan })}
               >
-                {t.settings.buy}
+                {t.settings.buyPeriod[plan as keyof typeof t.settings.buyPeriod]}
               </Button>
             </li>
           ))}
@@ -441,6 +473,7 @@ function NotificationsSection({
   const premium = data.account.plan === "premium";
   const [mode, setMode, modeState] = useAutoSave<string>("telegram-mode", "each");
   const [digestTime, setDigestTime] = useState("18:00");
+  const [enabled, setEnabled, enabledState] = useAutoSave<boolean>("telegram", true);
   return (
     <>
       <Group title={t.settings.telegramTitle}>
@@ -465,58 +498,75 @@ function NotificationsSection({
                 {t.settings.telegramChange}
               </Button>
             </div>
-            <AutoSwitch name="telegram" label={t.settings.telegramEnabled} initial t={t} />
-            <AutoRadio
-              name="telegram-filter"
-              legend={t.settings.telegramFilter}
-              initial="fiscal"
-              t={t}
-              options={[
-                { value: "fiscal", label: t.settings.telegramFilterFiscal },
-                { value: "all", label: t.settings.telegramFilterAll },
-              ]}
-            />
-            <FieldSet>
-              <FieldLegend variant="label">{t.settings.telegramMode}</FieldLegend>
-              <RadioGroup
-                value={mode}
-                onValueChange={(next) => setMode(String(next))}
-                className="gap-3"
-              >
-                <FieldLabel className="font-normal">
-                  <RadioGroupItem value="each" />
-                  {t.settings.telegramModeEach}
-                </FieldLabel>
-                <FieldLabel className="font-normal">
-                  <RadioGroupItem value="digest" />
-                  {t.settings.telegramModeDigest}
-                </FieldLabel>
-              </RadioGroup>
-              <SaveStatus state={modeState} t={t} />
-            </FieldSet>
-            {mode === "digest" ? (
-              <SimpleSelect
-                label={t.settings.telegramDigestTime}
-                items={["08:00", "12:00", "18:00", "21:00"].map((time) => ({
-                  value: time,
-                  label: time,
-                }))}
-                value={digestTime}
-                onChange={setDigestTime}
+            <Field orientation="horizontal" className="flex-wrap items-start">
+              <Switch
+                id="telegram-enabled"
+                checked={enabled}
+                onCheckedChange={setEnabled}
+                disabled={enabledState === "saving"}
               />
-            ) : null}
-            <FieldSet>
-              <FieldLegend variant="label">{t.settings.telegramStores}</FieldLegend>
-              {data.stores.map((store) => (
-                <AutoSwitch
-                  key={store.id}
-                  name={`store-notifications:${store.id}`}
-                  label={store.name}
-                  initial={store.notifications === true}
-                  t={t}
+              <FieldLabel htmlFor="telegram-enabled" className="flex-1 font-normal">
+                {t.settings.telegramEnabled}
+              </FieldLabel>
+              <SaveStatus state={enabledState} t={t} />
+            </Field>
+            <fieldset disabled={!enabled} className="grid gap-5 disabled:opacity-60">
+              <AutoRadio
+                name="telegram-filter"
+                legend={t.settings.telegramFilter}
+                disabled={!enabled}
+                initial="fiscal"
+                t={t}
+                options={[
+                  { value: "fiscal", label: t.settings.telegramFilterFiscal },
+                  { value: "all", label: t.settings.telegramFilterAll },
+                ]}
+              />
+              <FieldSet>
+                <FieldLegend variant="label">{t.settings.telegramMode}</FieldLegend>
+                <RadioGroup
+                  value={mode}
+                  disabled={!enabled || modeState === "saving"}
+                  onValueChange={(next) => setMode(String(next))}
+                  className="gap-3"
+                >
+                  <FieldLabel className="font-normal">
+                    <RadioGroupItem value="each" />
+                    {t.settings.telegramModeEach}
+                  </FieldLabel>
+                  <FieldLabel className="font-normal">
+                    <RadioGroupItem value="digest" />
+                    {t.settings.telegramModeDigest}
+                  </FieldLabel>
+                </RadioGroup>
+                <SaveStatus state={modeState} t={t} />
+              </FieldSet>
+              {mode === "digest" ? (
+                <SimpleSelect
+                  label={t.settings.telegramDigestTime}
+                  disabled={!enabled}
+                  items={["08:00", "12:00", "18:00", "21:00"].map((time) => ({
+                    value: time,
+                    label: time,
+                  }))}
+                  value={digestTime}
+                  onChange={setDigestTime}
                 />
-              ))}
-            </FieldSet>
+              ) : null}
+              <FieldSet>
+                <FieldLegend variant="label">{t.settings.telegramStores}</FieldLegend>
+                {data.stores.map((store) => (
+                  <AutoSwitch
+                    key={store.id}
+                    name={`store-notifications:${store.id}`}
+                    label={store.name}
+                    initial={store.notifications === true}
+                    t={t}
+                    disabled={!enabled || store.pauseReason === "plan"}
+                  />
+                ))}
+              </FieldSet>
+            </fieldset>
           </FieldGroup>
         )}
       </Group>
@@ -713,7 +763,10 @@ function AppearanceSection({ t, links }: { t: AppCopy; links: AppLinks }) {
             "Europe/Berlin",
             "Europe/Madrid",
             "America/New_York",
-          ].map((zone) => ({ value: zone, label: zone.replace("_", " ") }))}
+          ].map((zone) => ({
+            value: zone,
+            label: t.settings.timeZones[zone as keyof typeof t.settings.timeZones],
+          }))}
           value={timeZone}
           onChange={setTimeZone}
         />
@@ -798,7 +851,7 @@ function PrivacySection({ t }: { t: AppCopy }) {
       intent: "privacy-policy",
       title: t.settings.privacyPolicy,
       body: t.settings.privacyPolicyBody,
-      action: t.settings.privacyPolicy,
+      action: t.settings.readPolicy,
     },
     {
       intent: "account-export",
@@ -835,7 +888,9 @@ function PrivacySection({ t }: { t: AppCopy }) {
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>{t.settings.deleteAccountTitle}</AlertDialogTitle>
-                <AlertDialogDescription>{t.settings.deleteAccountBody}</AlertDialogDescription>
+                <AlertDialogDescription>
+                  {t.settings.deleteAccountConfirmation}
+                </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>{t.orders.cancel}</AlertDialogCancel>
@@ -931,6 +986,7 @@ function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
                 name="message"
                 required
                 rows={5}
+                placeholder={t.settings.messagePlaceholder}
                 aria-invalid={error || undefined}
                 aria-describedby={error ? "support-message-error" : undefined}
               />
@@ -958,7 +1014,13 @@ function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
           <Button type="submit" className="w-fit">
             {t.settings.send}
           </Button>
-          <p className="text-sm text-muted-foreground">{t.settings.supportEmail}</p>
+          <p className="text-sm text-muted-foreground">
+            {t.settings.supportEmail}{" "}
+            <a href="mailto:supporto@fiscalbay.it" className="underline underline-offset-4">
+              supporto@fiscalbay.it
+            </a>
+            .
+          </p>
         </form>
       </Group>
     </>
@@ -1026,6 +1088,7 @@ export function SettingsPage({
     const done = () => {
       following.current = false;
       window.removeEventListener("scrollend", done);
+      spy();
     };
     window.addEventListener("scrollend", done);
     release.current = setTimeout(done, 1000);
@@ -1037,7 +1100,7 @@ export function SettingsPage({
     let next: SettingsSection = settingsSections[0];
     for (const id of settingsSections) {
       const top = sections.current[id]?.getBoundingClientRect().top ?? Infinity;
-      if (top <= spyOffset) next = id;
+      if (top <= Math.max(spyOffset, window.innerHeight * 0.35)) next = id;
     }
     const atBottom =
       window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
@@ -1051,8 +1114,10 @@ export function SettingsPage({
       else spy();
     });
     window.addEventListener("scroll", spy, { passive: true });
+    window.addEventListener("resize", spy);
     return () => {
       window.removeEventListener("scroll", spy);
+      window.removeEventListener("resize", spy);
       cancelAnimationFrame(frame);
       clearTimeout(release.current);
     };
@@ -1207,7 +1272,7 @@ export function ProfilePage({
         />
         <div className="grid min-w-0 gap-0.5">
           <h1 className="text-2xl font-bold sm:text-3xl">{t.profile.title}</h1>
-          <p className="truncate text-sm text-muted-foreground">{account.email}</p>
+          <p className="truncate text-sm text-muted-foreground">{account.name}</p>
         </div>
       </div>
       <ProfileCard icon={User} title={t.profile.details} id="profile-name-title">
@@ -1291,6 +1356,10 @@ export function ProfilePage({
         title={t.settings.sections.sicurezza.title}
         id="profile-security"
       >
+        <p className="grid gap-1 text-sm">
+          <span className="text-muted-foreground">{t.profile.email}</span>
+          <span className="break-all">{account.email}</span>
+        </p>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">{t.profile.security}</p>
           <Link

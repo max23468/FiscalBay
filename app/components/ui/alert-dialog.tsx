@@ -24,8 +24,9 @@ function AlertDialogOverlay({ className, ...props }: AlertDialogPrimitive.Backdr
   return (
     <AlertDialogPrimitive.Backdrop
       data-slot="alert-dialog-overlay"
+      forceRender
       className={cn(
-        "fixed inset-0 isolate z-50 motion-backdrop bg-brand-navy/24 dark:bg-black/60",
+        "fixed inset-0 isolate z-60 motion-backdrop bg-brand-navy/24 dark:bg-black/60",
         className,
       )}
       {...props}
@@ -47,7 +48,7 @@ function AlertDialogContent({
         data-slot="alert-dialog-content"
         data-size={size}
         className={cn(
-          "group/alert-dialog-content fixed motion-modal top-1/2 left-1/2 z-50 grid w-full -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl shadow-md bg-popover p-4 text-popover-foreground ring-1 ring-foreground/10 outline-none data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-sm",
+          "group/alert-dialog-content fixed motion-modal top-1/2 left-1/2 z-60 grid w-full -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl shadow-md bg-popover p-4 text-popover-foreground ring-1 ring-foreground/10 outline-none data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-sm",
           className,
         )}
         {...props}

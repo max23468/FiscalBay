@@ -914,6 +914,7 @@ export function loadScenario(
       connection: "paused",
       pauseReason: "plan",
       lastSyncAt: minutesAgo(8_640),
+      recent: [{ at: minutesAgo(8_640), ok: true, newOrders: 0 }],
     }),
   ];
   const freeSeeds = seeds.filter((seed) => seed.store === "vintage");
@@ -1019,6 +1020,7 @@ export function loadScenario(
         storeView("outlet", {
           connection: "reconnect_required",
           issue: "reconnect",
+          consentExpiresAt: minutesAgo(1_500),
           notifications: false,
           historyDays: 365,
           targetMinutes: 10,

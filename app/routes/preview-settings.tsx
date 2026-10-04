@@ -29,7 +29,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const page: SettingsPageData = {
     section: params.sezione ?? null,
     account: scenario.account,
-    stores: scenario.stores.filter((store) => store.pauseReason !== "plan"),
+    stores: scenario.stores,
     sessions: scenario.sessions,
     diagnostics: scenario.diagnostics,
     telegramChat: scenario.telegramChat,
