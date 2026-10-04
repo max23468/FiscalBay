@@ -23,6 +23,128 @@ const noPageOverflow = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
 
 for (const language of ["it", "en"] as const) {
+  for (const colorScheme of ["light", "dark"] as const) {
+    for (const width of [500, 1440]) {
+      test(`accesso e pagine standalone ${language} ${colorScheme} a ${width} px`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({ width, height: 666 });
+        await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+        const prefix = language === "it" ? "" : "/en";
+        const errors: string[] = [];
+        page.on("pageerror", (error) => errors.push(error.message));
+        page.on("console", (message) => {
+          if (message.type() === "error") errors.push(message.text());
+        });
+        await page.goto(prefix || "/");
+        await page.waitForLoadState("networkidle");
+        await expect(page).toHaveTitle(
+          language === "it" ? "FiscalBay | Accedi" : "FiscalBay | Sign in",
+        );
+        const legal = page.getByRole("navigation", {
+          name: language === "it" ? "Documenti legali" : "Legal documents",
+        });
+        await expect(legal.getByRole("link")).toHaveCount(2);
+        if (width === 500) {
+          const card = page.locator("main .rounded-2xl");
+          expect((await card.boundingBox())!.x).toBe(16);
+          expect((await page.locator("main header img:visible").boundingBox())!.x).toBe(16);
+        }
+        const passkey = page.getByRole("button", {
+          name: language === "it" ? "Accedi con passkey" : "Sign in with a passkey",
+          exact: true,
+        });
+        await expect(passkey).toBeVisible();
+        if (width === 1440) await expect(passkey).toBeInViewport();
+        const ebay = page.locator('button[value="ebay"]:visible img');
+        await expect(ebay).toBeVisible();
+        expect(await ebay.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+        const headline = page.locator("aside p").first();
+        const top = width === 1440 ? (await headline.boundingBox())!.y : 0;
+        await page
+          .getByRole("tab", {
+            name: language === "it" ? "Crea account" : "Create account",
+            exact: true,
+          })
+          .click();
+        await page
+          .getByRole("radio", { name: language === "it" ? "Azienda" : "Business", exact: true })
+          .click();
+        if (width === 1440) expect((await headline.boundingBox())!.y).toBeCloseTo(top, 0);
+        await page
+          .getByRole("tab", { name: language === "it" ? "Accedi" : "Sign in", exact: true })
+          .click();
+        await page
+          .getByRole("button", {
+            name: language === "it" ? "Hai dimenticato la password?" : "Forgot your password?",
+            exact: true,
+          })
+          .click();
+        await expect(passkey).toHaveCount(0);
+        await expect(
+          page.locator('button[value="google"]:visible,button[value="ebay"]:visible'),
+        ).toHaveCount(0);
+        await page
+          .getByRole("button", {
+            name: language === "it" ? "Torna ad accedere" : "Back to sign in",
+            exact: true,
+          })
+          .click();
+        await expect(passkey).toBeVisible();
+        await expect.poll(() => noPageOverflow(page)).toBe(true);
+        await page.screenshot({
+          path: `/tmp/fiscalbay-accesso-${language}-${colorScheme}-${width}.png`,
+          fullPage: true,
+        });
+        for (const path of ["/termini", "/privacy", "/auth/error"]) {
+          await page.goto(`${prefix}${path}`);
+          await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+          await expect(
+            page.getByRole("link", {
+              name: language === "it" ? "Torna a FiscalBay" : "Back to FiscalBay",
+              exact: true,
+            }),
+          ).toBeVisible();
+          const logo = page.locator("header img:visible");
+          const card = page.locator("main > div");
+          expect(
+            (await card.boundingBox())!.y -
+              ((await logo.boundingBox())!.y + (await logo.boundingBox())!.height),
+          ).toBeLessThan(40);
+          await expect.poll(() => noPageOverflow(page)).toBe(true);
+          if (path !== "/auth/error") {
+            await expect(page.locator("main")).not.toContainText("bozza-2026");
+            await expect(page.locator("main")).toContainText(
+              language === "it" ? "28 settembre 2026" : "28 September 2026",
+            );
+          }
+        }
+        for (const provider of ["google", "ebay", "unknown"]) {
+          await page.goto(
+            `${prefix}/auth/error?error=account_already_linked_to_different_user&provider=${provider}`,
+          );
+          const body = page.locator("main p");
+          await expect(body).toContainText(
+            provider === "google"
+              ? "Google"
+              : provider === "ebay"
+                ? "eBay"
+                : language === "it"
+                  ? "L’account che hai appena usato"
+                  : "The account you just used",
+          );
+        }
+        await page.screenshot({
+          path: `/tmp/fiscalbay-standalone-${language}-${colorScheme}-${width}.png`,
+          fullPage: true,
+        });
+        expect(errors).toEqual([]);
+      });
+    }
+  }
+}
+
+for (const language of ["it", "en"] as const) {
   test(`esito di sicurezza con focus e nuovo accesso ${language}`, async ({ page }) => {
     const prefix = language === "it" ? "/" : "/en";
     await page.goto(`${prefix}?accesso=nuovo-accesso`);

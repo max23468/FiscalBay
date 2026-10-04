@@ -944,6 +944,28 @@ describe("registrazione e verifica del contatto", () => {
       } as Parameters<typeof loadLegal>[0]),
     ).toEqual({ language: "it", document: "termini", version: legalVersions.terms });
   });
+
+  it("conserva provider e lingua nel ritorno di un accesso OAuth rifiutato", async () => {
+    for (const provider of ["google", "ebay"]) {
+      const start = await accessForm("/en/accesso", { intent: provider });
+      const state = new URL(start.headers.get("location")!).searchParams.get("state")!;
+      const cookie = start.headers
+        .getSetCookie()
+        .map((value) => value.split(";")[0])
+        .join("; ");
+      const result = await handleAuthRequest(
+        new Request(
+          `http://localhost:5173/api/auth/callback/${provider}?error=access_denied&state=${encodeURIComponent(state)}`,
+          { headers: { cookie } },
+        ),
+        env,
+      );
+      const destination = new URL(result.headers.get("location")!, "http://localhost:5173");
+      expect(destination.pathname).toBe("/en/auth/error");
+      expect(destination.searchParams.get("provider")).toBe(provider);
+      expect(destination.searchParams.get("error")).toBe("access_denied");
+    }
+  });
 });
 
 describe("collegamento negozio eBay", () => {

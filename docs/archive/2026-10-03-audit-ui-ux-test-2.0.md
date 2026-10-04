@@ -134,6 +134,16 @@ Stato aggiornato dopo l'implementazione `0b8a47c` e il mandato di pubblicazione 
 
 ### 4.2 Pagina di accesso
 
+Aggiornamento locale del 4 ottobre 2026: A1–A7 implementati sul branch
+`codex/accesso-standalone`. Marchio ancorato in alto, logo eBay dal kit
+ufficiale, scheda attiva più chiara in scuro, accesso compatto con passkey
+visibile a 1440 × 666, recupero senza social/passkey e con «Torna ad accedere»,
+margine mobile di 16 px e collegamenti legali disponibili anche in Accedi.
+Prove Chromium sulla build locale: IT/EN, chiaro/scuro, 500 e 1440 px;
+cambio scheda e tipo di account, recupero e ritorno, asset caricato,
+assenza di overflow e di errori console. Le colonne seguenti conservano
+il riscontro precedente sul dominio test; queste correzioni non sono pubblicate.
+
 | ID | Problema | Severità | Confidenza | Verifica implementazione · 4 ottobre 2026 |
 | --- | --- | --- | --- | --- |
 | A1 | La colonna del marchio si ricentra in verticale a ogni cambio di scheda o di tipo: il titolo passa da y 206 (Accedi) a 322 (Crea account, Privato) e 364 (Azienda) | Media | Alta | Non verificato su Chrome: sessione autenticata conservata. Layout del BrandPanel ancora centrato nel codice. |
@@ -145,6 +155,20 @@ Stato aggiornato dopo l'implementazione `0b8a47c` e il mandato di pubblicazione 
 | A7 | Nessun collegamento a Termini e Privacy nella scheda Accedi; compaiono solo nella casella della registrazione | Bassa | Media | Non verificato su Chrome: collegamenti legali nella scheda Accedi non riprovati. |
 
 ### 4.3 Pagine standalone
+
+Aggiornamento locale del 4 ottobre 2026: S2–S4 implementati. Logo e card
+formano un gruppo centrato; errore 404 con indicazione utile e richiamo
+all'assistenza presente soltanto nel link dell'errore Auth. Il ritorno OAuth
+conserva Google/eBay e lingua; il messaggio di account già collegato nomina
+il provider appena usato, con testo generico per provider assente o sconosciuto.
+S1 parziale: data della bozza leggibile e localizzata, senza slug o ripetizioni,
+e pulsante «Torna a FiscalBay». I testi legali definitivi restano ai task
+legali aperti; versioni registrate e accettazioni non cambiano. S5 resta
+un riscontro positivo, con comportamento admin invariato.
+Prove Chromium locali sulla stessa matrice di §4.2, inclusi ritorni e
+messaggi Google/eBay/generici; test Workerd del callback OAuth rifiutato,
+senza chiamate ai provider. Le colonne seguenti conservano il precedente
+riscontro sul dominio test; nessuna nuova prova live.
 
 | ID | Problema | Severità | Confidenza | Verifica implementazione · 4 ottobre 2026 |
 | --- | --- | --- | --- | --- |

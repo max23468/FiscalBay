@@ -85,7 +85,7 @@ export async function action({ request }: Route.ActionArgs) {
     const response = await forward("/sign-in/social", {
       provider: intent,
       callbackURL: base,
-      errorCallbackURL: localizedPath(language, "/auth/error"),
+      errorCallbackURL: `${localizedPath(language, "/auth/error")}?provider=${intent}`,
     });
     if (!response.ok) return notice(response.status === 429 ? "troppi-tentativi" : "errore");
     const { url } = await response.clone().json<{ url: string }>();
@@ -112,7 +112,7 @@ export async function action({ request }: Route.ActionArgs) {
       const response = await forward("/link-social", {
         provider: method,
         callbackURL: `${security}?accesso=metodo-collegato`,
-        errorCallbackURL: localizedPath(language, "/auth/error"),
+        errorCallbackURL: `${localizedPath(language, "/auth/error")}?provider=${method}`,
       });
       if (!response.ok) return notice(response.status === 429 ? "troppi-tentativi" : "errore");
       const { url } = await response.clone().json<{ url: string }>();

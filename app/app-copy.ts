@@ -2,6 +2,21 @@ import type { Language } from "./i18n";
 
 const plural = (count: number, one: string, other: string) => (count === 1 ? one : other);
 
+const legalDateFormats = {
+  it: new Intl.DateTimeFormat("it-IT", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }),
+  en: new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }),
+};
+
 const it = {
   shell: {
     notFound: {
@@ -522,7 +537,7 @@ const it = {
   errors: {
     title: "Errore",
     notFoundTitle: "Pagina non trovata",
-    notFound: "La pagina richiesta non è stata trovata.",
+    notFound: "Controlla l’indirizzo oppure torna a FiscalBay per continuare.",
     home: "Torna a FiscalBay",
     unexpected: "Si è verificato un errore inatteso. Riprova più tardi.",
     reference: (id: string) => `Riferimento: ${id}`,
@@ -549,7 +564,7 @@ const it = {
   },
   authError: {
     title: "Accesso non completato",
-    body: "Riprova ad accedere. Se il problema continua, contatta il supporto.",
+    body: "Riprova con il metodo di accesso che usi di solito.",
     back: "Torna a FiscalBay",
     support: "Contatta il supporto",
     ebayWithoutEmail: {
@@ -562,14 +577,20 @@ const it = {
     },
     alreadyLinked: {
       title: "Account già collegato",
-      body: "Questo account è già collegato a un altro utente FiscalBay. Accedi con quello oppure scegli un altro account.",
+      body: (provider: string) =>
+        `L’account ${provider} che hai appena usato è già collegato a un altro utente FiscalBay. Accedi all’utente FiscalBay associato oppure scegli un altro account ${provider}.`,
+      generic:
+        "L’account che hai appena usato è già collegato a un altro utente FiscalBay. Accedi all’utente FiscalBay associato oppure scegli un altro account.",
     },
   },
   legal: {
+    navigation: "Documenti legali",
     termini: "Termini di servizio",
     privacy: "Informativa privacy",
     version: (version: string) =>
-      `${version.startsWith("bozza-") ? "Bozza · " : ""}Versione ${version}`,
+      version.startsWith("bozza-")
+        ? `Bozza del ${legalDateFormats.it.format(new Date(version.slice(6)))}`
+        : `Versione ${version}`,
     draft:
       "Il testo definitivo sarà pubblicato prima dell’apertura del servizio. Se cambia, ti chiederemo di accettare la nuova versione.",
   },
@@ -1203,7 +1224,7 @@ const en: AppCopy = {
   errors: {
     title: "Error",
     notFoundTitle: "Page not found",
-    notFound: "The requested page was not found.",
+    notFound: "Check the address or return to FiscalBay to continue.",
     home: "Back to FiscalBay",
     unexpected: "An unexpected error occurred. Try again later.",
     reference: (id) => `Reference: ${id}`,
@@ -1229,7 +1250,7 @@ const en: AppCopy = {
   },
   authError: {
     title: "Sign in incomplete",
-    body: "Try signing in again. If the problem continues, contact support.",
+    body: "Try again with the sign-in method you usually use.",
     back: "Back to FiscalBay",
     support: "Contact support",
     ebayWithoutEmail: {
@@ -1242,14 +1263,20 @@ const en: AppCopy = {
     },
     alreadyLinked: {
       title: "Account already linked",
-      body: "This account is already linked to another FiscalBay user. Sign in with it or choose a different account.",
+      body: (provider: string) =>
+        `The ${provider} account you just used is already linked to another FiscalBay user. Sign in to the associated FiscalBay user or choose a different ${provider} account.`,
+      generic:
+        "The account you just used is already linked to another FiscalBay user. Sign in to the associated FiscalBay user or choose a different account.",
     },
   },
   legal: {
+    navigation: "Legal documents",
     termini: "Terms of service",
     privacy: "Privacy policy",
     version: (version: string) =>
-      `${version.startsWith("bozza-") ? "Draft · " : ""}Version ${version}`,
+      version.startsWith("bozza-")
+        ? `Draft dated ${legalDateFormats.en.format(new Date(version.slice(6)))}`
+        : `Version ${version}`,
     draft:
       "The final text will be published before the service opens. If it changes, we will ask you to accept the new version.",
   },
