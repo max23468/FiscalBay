@@ -36,6 +36,14 @@ describe("stato sintetico dell'anteprima", () => {
   });
 
   for (const language of ["it", "en"] as const) {
+    it(`il prezzo unitario e le quantità dell'ordine con più articoli compongono il totale, ${language}`, () => {
+      const order = loadScenario("ordinario", language, new Set()).orders.find(
+        (order) => order.id === "ord-01",
+      )!;
+      expect(order.items.reduce((sum, item) => sum + item.priceMinor * item.quantity, 0)).toBe(
+        order.totalMinor,
+      );
+    });
     it(`deriva la diagnostica dalla quota aggiornata, ${language}`, () => {
       const before = loadScenario("ordinario", language, new Set());
       const after = loadScenario("ordinario", language, new Set(["ord-09"]));

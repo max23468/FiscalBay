@@ -76,6 +76,7 @@ test("lo sblocco rivela il dato solo dopo l'azione e aggiorna la quota", async (
   const card = page.getByRole("article", { name: "Ordine 05-55555-12121" });
   await expect(card).toContainText("Hai 2 sblocchi disponibili");
   await card.getByRole("button", { name: "Sblocca ordine" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Sblocca", exact: true }).click();
   await expect(card.getByText("BNCLCU75C12F205X")).toBeVisible();
   await expect(page.getByRole("status").filter({ hasText: "Ordine sbloccato" })).toContainText(
     "Ti resta 1 sblocco in questo ciclo",
@@ -150,6 +151,10 @@ for (const language of ["it", "en"] as const) {
               name: language === "it" ? "Sblocca ordine" : "Unlock order",
               exact: true,
             })
+            .click();
+          await page
+            .getByRole("alertdialog")
+            .getByRole("button", { name: language === "it" ? "Sblocca" : "Unlock", exact: true })
             .click();
           expect((await unlocked).status()).toBe(200);
           await page.goto(`${base}/ordini?q=Conti`);

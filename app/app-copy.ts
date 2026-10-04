@@ -130,6 +130,8 @@ const it = {
     unlockExceeds: (count: number, remaining: number) =>
       `Hai selezionato ${count} ordini da sbloccare, ma hai ${remaining} ${plural(remaining, "sblocco disponibile", "sblocchi disponibili")} in questo ciclo. Riduci la selezione.`,
     unlockConfirm: "Sblocca",
+    dontAskUnlock: "Non chiedermelo più",
+    restoreUnlockConfirmation: "Riattiva conferma sblocco",
     cancel: "Annulla",
     unlocked: (remaining: number | null) =>
       remaining === null
@@ -138,6 +140,7 @@ const it = {
     unlockedMany: (count: number) => `${count} ordini sbloccati.`,
     loadMore: "Carica altri",
     allShown: "Hai visto tutti gli ordini del periodo.",
+    allShownAll: "Hai visto tutti gli ordini disponibili.",
     importMore: "Importazione in corso: gli altri ordini compaiono qui man mano.",
     details: "Dettaglio",
     moreActions: (id: string) => `Altre azioni per l’ordine ${id}`,
@@ -236,7 +239,7 @@ const it = {
     lastSynced: (time: string) => `Ultima lettura da eBay: ${time}`,
     sku: "SKU",
     noSku: "Senza SKU",
-    price: "Prezzo",
+    price: "Prezzo unitario",
   },
   stores: {
     title: "Negozi eBay",
@@ -836,6 +839,8 @@ const en: AppCopy = {
     unlockExceeds: (count, remaining) =>
       `You selected ${count} orders to unlock, but you have ${remaining} ${plural(remaining, "unlock", "unlocks")} left this cycle. Reduce the selection.`,
     unlockConfirm: "Unlock",
+    dontAskUnlock: "Don’t ask again",
+    restoreUnlockConfirmation: "Restore unlock confirmation",
     cancel: "Cancel",
     unlocked: (remaining) =>
       remaining === null
@@ -844,6 +849,7 @@ const en: AppCopy = {
     unlockedMany: (count) => `${count} orders unlocked.`,
     loadMore: "Load more",
     allShown: "You have seen all orders in this period.",
+    allShownAll: "You have seen all available orders.",
     importMore: "Import in progress: the remaining orders will appear here as they arrive.",
     details: "Details",
     moreActions: (id) => `More actions for order ${id}`,
@@ -939,7 +945,7 @@ const en: AppCopy = {
     lastSynced: (time) => `Last read from eBay: ${time}`,
     sku: "SKU",
     noSku: "No SKU",
-    price: "Price",
+    price: "Unit price",
   },
   stores: {
     title: "eBay stores",

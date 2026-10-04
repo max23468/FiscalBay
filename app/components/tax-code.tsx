@@ -29,12 +29,14 @@ export function TaxCode({
   reveal = false,
   size = "default",
   className,
+  warning,
 }: {
   value: string | null;
   labels: Labels;
   reveal?: boolean;
   size?: keyof typeof sizes;
   className?: string;
+  warning?: string;
 }) {
   if (value === null) {
     return (
@@ -56,27 +58,42 @@ export function TaxCode({
   return (
     <span
       className={cn(
-        "inline-flex max-w-full flex-wrap items-center justify-between gap-x-1 rounded-lg border border-info/50 bg-info-surface pl-3 pr-1 py-1 shadow-xs shadow-info/15 dark:bg-info/15",
+        "inline-flex max-w-full flex-wrap items-center justify-between gap-x-1 rounded-lg border pl-3 pr-1 py-1",
         sizes[size],
         reveal && "fiscal-reveal",
+        warning
+          ? "border-warning/50 bg-warning-surface dark:bg-warning/15"
+          : "border-info/50 bg-info-surface shadow-xs shadow-info/15 dark:bg-info/15",
         className,
       )}
     >
       <span
         className={cn(
-          "font-code whitespace-nowrap font-semibold text-info",
+          "font-code whitespace-nowrap font-semibold",
+          warning ? "text-warning" : "text-info",
           reveal &&
             "inline-block animate-[value-reveal_var(--duration-quick)_ease-out_both] motion-reduce:animate-none",
         )}
       >
         {value}
       </span>
-      <CopyButton value={value} labels={labels} />
+      <CopyButton value={value} labels={labels} warning={!!warning} />
+      {warning ? (
+        <span className="basis-full text-xs font-medium text-warning">{warning}</span>
+      ) : null}
     </span>
   );
 }
 
-function CopyButton({ value, labels }: { value: string; labels: Labels }) {
+function CopyButton({
+  value,
+  labels,
+  warning,
+}: {
+  value: string;
+  labels: Labels;
+  warning: boolean;
+}) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -103,7 +120,12 @@ function CopyButton({ value, labels }: { value: string; labels: Labels }) {
         aria-label={labels.copy}
         data-state={state}
         onClick={copy}
-        className="group/copy text-info hover:bg-info/10 hover:text-info"
+        className={cn(
+          "group/copy",
+          warning
+            ? "text-warning hover:bg-warning/10 hover:text-warning"
+            : "text-info hover:bg-info/10 hover:text-info",
+        )}
       >
         <span className="relative size-4">
           <Copy

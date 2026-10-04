@@ -186,7 +186,7 @@ const minutesAgo = (minutes: number) =>
 
 const thumbnail = (hue: number) =>
   `data:image/svg+xml,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" fill="hsl(${hue} 30% 88%)"/><rect x="12" y="14" width="24" height="20" rx="3" fill="hsl(${hue} 30% 62%)"/></svg>`,
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" fill="hsl(${hue} 15% 25%)"/><path d="M 12 17 24 11 36 17v15L 24 38 12 32Zm0 0 12 6 12-6M 24 23v15" fill="none" stroke="hsl(${hue} 20% 75%)" stroke-width="2"/></svg>`,
   )}`;
 
 const stores = {
@@ -264,7 +264,7 @@ const seeds: OrderSeed[] = [
       item(
         "it-01a",
         "Set di ricambi originali per macchina da scrivere meccanica, edizione da collezione",
-        52_450,
+        50_300,
         2,
         "MSC-OL-44",
       ),

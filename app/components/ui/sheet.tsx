@@ -42,12 +42,14 @@ function SheetContent({
   side = "right",
   showCloseButton = true,
   closeLabel,
+  header,
   ...props
 }: SheetPrimitive.Popup.Props & {
   side?: "top" | "right" | "bottom" | "left";
   showCloseButton?: boolean;
   /** Nome accessibile del pulsante di chiusura, nella lingua della pagina. */
   closeLabel: string;
+  header?: React.ReactNode;
 }) {
   return (
     <SheetPortal>
@@ -61,6 +63,7 @@ function SheetContent({
         )}
         {...props}
       >
+        {header}
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain">
           {children}
         </div>
