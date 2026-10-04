@@ -215,7 +215,9 @@ Prove finali: `pnpm verify` verde, 156 test applicativi e 24 test degli script; 
 Le verifiche locali delle categorie 6, 7 e 8 si riferiscono alle correzioni
 del 4 ottobre sulla branch `codex/negozi-impostazioni-profilo`, con dati
 sintetici, Chromium, IT/EN, chiaro/scuro e 390/1280 px. Non attestano una
-pubblicazione né operazioni su negozi, preferenze o account reali.
+pubblicazione né operazioni su negozi, preferenze o account reali. Dopo la
+PR #262 le correzioni sono state riverificate su Chrome live: esiti in §15.
+N10, N11, N12 e I9 sono emersi in quel collaudo.
 
 | ID | Problema | Severità | Confidenza | Verifica implementazione · 4 ottobre 2026 |
 | --- | --- | --- | --- | --- |
@@ -230,6 +232,9 @@ pubblicazione né operazioni su negozi, preferenze o account reali.
 | N7 | Dialog "Scollega ed elimina": il titolo va a capo dopo "i"; il pannello laterale resta illuminato sotto la modale | Bassa | Alta | Implementato e verificato localmente: titolo breve Scollega ed elimina dati, nome del negozio nella descrizione; backdrop reso esplicitamente anche per conferme annidate e sopra il pannello. Screenshot e verifica degli strati, annullamento e ritorno del focus. |
 | N8 | "contatta l'assistenza" nei banner dei negozi non è un link | Bassa | Alta | Implementato e verificato localmente: collegamento al Supporto nel banner Negozio non verificabile; il banner di negozio già collegato altrove conserva il contatto mailto già presente. Nessun OAuth reale eseguito. |
 | N9 | Conferma di "Scollega ed elimina dati" digitando il nome del negozio, con bottone disabilitato finché non coincide | Positivo | Alta | Positivo conservato e riconfermato localmente: pulsante disabilitato senza nome corretto, abilitato dopo corrispondenza; annullamento senza eliminazione e focus al pulsante di apertura. |
+| N10 | Nel dettaglio e nella lista mobile "6 giorni fa" è rientrato di 24 px: lo slot icona vuoto che allinea la tabella resta anche dove non allinea nulla | Bassa | Alta | Implementato localmente: slot vuoto soltanto in tabella; nel dettaglio il testo è allineato alle altre righe di Sincronizzazione, scarto misurato inferiore a 1 px. |
+| N11 | Negozio in pausa per il piano Free: la stessa frase sulla causa compare in Sincronizzazione e di nuovo in Azioni | Bassa | Alta | Implementato localmente: la causa resta in Sincronizzazione, Azioni mostra soltanto Scegli il negozio attivo. |
+| N12 | Negozio con autorizzazione incompleta, mai sincronizzato, con notifiche "Attive" | Bassa | Media | Implementato localmente: preferenza attiva mostrata come Sospese finché la sincronizzazione non riprende per negozi non attivi o con problemi di autorizzazione; Disattivate invariato. |
 
 ## 7. Anteprima: Impostazioni
 
@@ -244,6 +249,7 @@ pubblicazione né operazioni su negozi, preferenze o account reali.
 | I6 | Tema: "Nell'anteprima la scelta vale fino alla chiusura della pagina." In pratica si perde a ogni ricarica completa | Bassa | Alta | Implementato e verificato localmente: il testo dichiara il reset alla ricarica completa, provato dopo la scelta del tema scuro. Persistenza reale resta al task competente. |
 | I7 | Ridondanze: "Premium annuale" più badge "Premium"; "Consulta ricevute e fatture su Stripe" più "Ricevute e fatture sono disponibili su Stripe." | Bassa | Alta | Implementato localmente: rimosso il badge Premium ridondante; nessuna seconda nota sui documenti quando il pulsante lifetime li nomina già. La nota resta per Gestisci abbonamento. |
 | I8 | Errore di salvataggio in linea chiaro: "Modifica non salvata. L'impostazione è tornata com'era: riprova." Il salvataggio riuscito è silenzioso | Positivo | Alta | Positivo conservato e riconfermato localmente: fallimento simulato con ripristino e messaggio in linea, retry riuscito; nessun nuovo toast per i salvataggi semplici. |
+| I9 | Premium: "Puoi cambiare scelta in qualsiasi momento" per il negozio da mantenere nel Free, mentre nel Free la sostituzione vale ogni 90 giorni | Media | Media | Implementato localmente: in Premium la preferenza resta modificabile e il testo dichiara che nel Free la sostituzione torna ogni 90 giorni, come da Master Plan. Nessun cambio di regole. |
 
 ## 8. Anteprima: Profilo
 
@@ -362,3 +368,29 @@ compariva in italiano con titolo inglese, perché la richiesta dei dati
 `/en.data` era letta come italiano. Verificato su Chrome live: da
 `/en/impostazioni/sicurezza` il logo porta a `/en` con `lang="en"`, «Orders»
 e sottotitolo inglese.
+
+### Negozi eBay, Impostazioni e Profilo
+
+Correzioni della PR #262 (`b2a02ed` su `develop`), distribuita sul test il
+4 ottobre 2026 con CI e deploy riusciti. Verificate su Chrome live, su
+`test.fiscalbay.it/anteprima`, negli scenari Free, Premium, Premium a vita,
+Problema su un negozio ed eBay non disponibile, a 1440 px; IT nel tema scuro,
+EN nel tema chiaro. Azioni simulate annullate o ripristinate; scenario finale
+Free, uso ordinario. Il viewport a 390 px non è stato applicato dalla finestra
+Chrome e resta coperto dai soli test Chromium. Nella scheda in background lo
+scorrimento animato del menu restava sospeso: I1 è stato provato portando i
+titoli a 210 px dal bordo con scorrimento istantaneo.
+
+| ID | Esito | Verifica su Chrome live | Verifica implementazione · 4 ottobre 2026 |
+| --- | --- | --- | --- |
+| N-H1, N1 | Corretto | Copy della pausa manuale e della pausa per il piano distinti; Scegli il negozio attivo apre Piano e pagamenti del Free con la scelta simulata | Implementato. PR #262. |
+| N-H2 | Corretto | Negozio in pausa senza frequenza, ultimo aggiornamento del 21 settembre; Retro Parts con storico non iniziato; Scadenza autorizzazione Scaduta per il collegamento scaduto | Implementato. PR #262. |
+| N2, N3, N6, N8 | Corretto | Reimporta storico disabilitato per negozi da ricollegare e durante l'outage, con Collega negozio eBay e Sincronizza ordini recenti; badge ambra; Collegamento scaduto; Contatta il supporto verso il Supporto | Implementato. PR #262. |
+| N4 | Corretto | Intestazione Ultima sincronizzazione e valori allo stesso x | Implementato. PR #262. |
+| N7, N9 | Corretto | Titolo breve; pannello oscurato sotto la conferma a fine animazione; pulsante abilitato solo col nome esatto; Annulla senza eliminazione e focus restituito | Implementato. PR #262. |
+| I-H1, I8 | Corretto | Primo salvataggio fallito con ripristino; con notifiche spente filtro, frequenza e negozi disabilitati; riattivazione con valori conservati | Implementato. PR #262. |
+| I1–I7 | Corretto | Voce attiva corretta per Aspetto e Dati e privacy; tre pulsanti distinti e card annuale evidenziata; Roma (Italia); Conferma con un nuovo accesso; mailto e segnaposto; reset alla ricarica dichiarato; nessuna ridondanza in Premium annuale e a vita | Implementato. PR #262. |
+| P1, P3 | Corretto | Nome, Cognome e Ragione sociale obbligatori con asterisco vicino; email una sola volta e Apri Sicurezza | Implementato. PR #262. |
+
+Nessun errore in console. Emersi durante il collaudo e corretti nella PR
+successiva: N10, N11, N12 e I9, da riverificare live dopo il relativo deploy.

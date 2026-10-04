@@ -263,6 +263,7 @@ const it = {
     pausedByPlan: "In pausa per il piano Free",
     notificationsOn: "Attive",
     notificationsOff: "Disattivate",
+    notificationsHeld: "Sospese finché la sincronizzazione non riprende",
     notificationsFree: "Le notifiche Telegram dei nuovi ordini sono disponibili con Premium.",
     freeLimit:
       "Con il piano Free hai un negozio attivo e puoi sostituirlo ogni 90 giorni. Gli altri sono in pausa per il piano: i loro ordini non sono consultabili. La pausa manuale del negozio scelto conserva invece l’accesso agli ordini già importati.",
@@ -391,7 +392,7 @@ const it = {
     billingDocs: "Ricevute e fatture sono disponibili su Stripe.",
     downgradeStore: "Negozio attivo se torni al piano Free",
     downgradeStoreHint:
-      "Gli altri negozi andranno in pausa. Puoi cambiare scelta in qualsiasi momento.",
+      "Gli altri negozi andranno in pausa. Finché sei in Premium puoi cambiare scelta; nel Free potrai sostituirlo ogni 90 giorni.",
     // Notifiche
     telegramTitle: "Notifiche Telegram",
     telegramPremium: "Le notifiche degli ordini su Telegram sono incluse in Premium.",
@@ -985,6 +986,7 @@ const en: AppCopy = {
     pausedByPlan: "Paused on the Free plan",
     notificationsOn: "On",
     notificationsOff: "Off",
+    notificationsHeld: "Paused until sync resumes",
     notificationsFree: "Telegram notifications for new orders are available with Premium.",
     freeLimit:
       "On the Free plan you have one active store, which you can replace every 90 days. Other stores are paused by the plan and their orders are unavailable. Manually pausing the chosen store keeps imported orders available.",
@@ -1105,7 +1107,8 @@ const en: AppCopy = {
     billingDocuments: "View receipts and invoices on Stripe",
     billingDocs: "Receipts and invoices are available on Stripe.",
     downgradeStore: "Active store if you return to Free",
-    downgradeStoreHint: "Other stores will be paused. You can change this at any time.",
+    downgradeStoreHint:
+      "Other stores will be paused. You can change this while on Premium; on Free you can replace it every 90 days.",
     telegramTitle: "Telegram notifications",
     telegramPremium: "Order notifications on Telegram are included in Premium.",
     telegramChat: "Connected chat",
