@@ -25,6 +25,239 @@ const noPageOverflow = (page: Page) =>
 for (const language of ["it", "en"] as const) {
   for (const colorScheme of ["light", "dark"] as const) {
     for (const width of [390, 1280]) {
+      test(`negozi, preferenze e identità coerenti ${language} ${colorScheme} ${width}px`, async ({
+        page,
+      }, testInfo) => {
+        test.setTimeout(120_000);
+        const t = (it: string, en: string) => (language === "it" ? it : en);
+        const prefix = language === "it" ? "" : "/en";
+        const errors: string[] = [];
+        page.on("pageerror", (error) => errors.push(error.message));
+        await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+        await page.setViewportSize({ width, height: 844 });
+        await open(page, `${prefix}/anteprima/negozi/neg-outlet`, "ordinario");
+        const panel = page.getByRole("dialog");
+        await expect(panel.locator("#store-sync + ul")).not.toContainText(
+          t("Aggiornamento previsto", "Expected update"),
+        );
+        const choose = panel.getByRole("link", {
+          name: t("Scegli il negozio attivo", "Choose the active store"),
+        });
+        await choose.click();
+        const selection = page.getByRole("combobox", {
+          name: t("Scegli il negozio attivo", "Choose the active store"),
+        });
+        await expect(selection).toContainText("Vintage Garage Italia");
+        await selection.click();
+        await expect(page.getByRole("option")).toHaveCount(2);
+        await page.getByRole("option").filter({ hasText: "Outlet" }).click();
+        await expect(selection).toContainText("Outlet");
+        await expect(
+          page.getByRole("button", { name: t("Scegli annuale", "Choose annual") }).locator(".."),
+        ).toHaveClass(/border-primary/);
+
+        await open(page, `${prefix}/anteprima/negozi/neg-outlet`, "negozio-scaduto");
+        await expect(
+          panel.getByRole("button", { name: t("Reimporta storico", "Re-import history") }),
+        ).toBeDisabled();
+        await expect(panel.locator("#store-sync + ul")).toContainText(
+          t("Sincronizzazione sospesa", "Sync is suspended"),
+        );
+        await expect(panel.locator("section[aria-labelledby=store-connection]")).toContainText(
+          t("Scaduta", "Expired"),
+        );
+        await open(page, `${prefix}/anteprima/negozi/neg-retro`);
+        await expect(panel).toContainText(
+          t("Importazione dello storico non iniziata", "History import not started"),
+        );
+        await expect(panel).not.toContainText(
+          t("Importazione dello storico completata", "History import complete"),
+        );
+        await expect(panel.locator("[data-slot=badge]").first()).toHaveClass(/warning/);
+        await open(page, `${prefix}/anteprima/negozi/neg-bottega`);
+        await expect(
+          panel.getByRole("link", {
+            name: t("Contatta il supporto", "Contact support"),
+            exact: true,
+          }),
+        ).toHaveAttribute("href", `${prefix}/anteprima/impostazioni/supporto`);
+        await open(page, `${prefix}/anteprima/negozi/neg-vintage`, "ebay-non-disponibile");
+        await expect(
+          page.getByRole("button", {
+            name: t("Collega negozio eBay", "Connect eBay store"),
+            includeHidden: true,
+          }),
+        ).toBeDisabled();
+        await expect(
+          panel.getByRole("button", { name: t("Reimporta storico", "Re-import history") }),
+        ).toBeDisabled();
+        const remove = panel.getByRole("button", {
+          name: t("Scollega ed elimina dati", "Disconnect and delete data"),
+          exact: true,
+        });
+        await remove.click();
+        const confirm = page.getByRole("alertdialog");
+        await expect(confirm.getByRole("heading")).toHaveText(
+          t("Scollega ed elimina dati", "Disconnect and delete data"),
+        );
+        const overlay = page.locator("[data-slot=alert-dialog-overlay]");
+        expect(await overlay.evaluate((el) => Number(getComputedStyle(el).zIndex))).toBeGreaterThan(
+          await page
+            .locator("[data-slot=sheet-content]")
+            .evaluate((el) => Number(getComputedStyle(el).zIndex)),
+        );
+        const deleteButton = confirm.getByRole("button", {
+          name: t("Scollega ed elimina", "Disconnect and delete"),
+          exact: true,
+        });
+        await expect(deleteButton).toBeDisabled();
+        await confirm.getByRole("textbox").fill("Vintage Garage Italia");
+        await expect(deleteButton).toBeEnabled();
+        await page.screenshot({ path: testInfo.outputPath("store-confirmation.png") });
+        await page.keyboard.press("Escape");
+        await expect(remove).toBeFocused();
+
+        await open(page, `${prefix}/anteprima/negozi/neg-outlet`, "premium-a-vita");
+        await expect(panel.locator("#store-sync + ul")).toContainText(
+          t("La pausa manuale", "A manual pause"),
+        );
+        await expect(panel.locator("#store-sync + ul")).not.toContainText(
+          t("Aggiornamento previsto", "Expected update"),
+        );
+        await expect(
+          panel.getByRole("button", { name: t("Riprendi", "Resume"), exact: true }),
+        ).toBeEnabled();
+        await open(page, `${prefix}/anteprima/negozi`, "premium");
+        if (width >= 1024) {
+          const geometry = await page.getByRole("table").evaluate((table) => {
+            const heads = table.querySelectorAll("th");
+            const cells = table.querySelectorAll("tbody tr:first-child td");
+            const sync = cells[2]!.querySelector("span")!.getBoundingClientRect();
+            const badge = cells[1]!.querySelector("[data-slot=badge]")!.getBoundingClientRect();
+            const head = heads[2]!.getBoundingClientRect();
+            return {
+              label: Math.abs(
+                head.left + parseFloat(getComputedStyle(heads[2]!).paddingLeft) - sync.left - 24,
+              ),
+              center: Math.abs(badge.top + badge.height / 2 - sync.top - sync.height / 2),
+            };
+          });
+          expect(geometry.label).toBeLessThan(1);
+          expect(geometry.center).toBeLessThan(1);
+        }
+
+        await open(page, `${prefix}/anteprima/impostazioni/notifiche`, "premium");
+        const enabled = page.getByRole("switch", {
+          name: t("Invia notifiche degli ordini", "Send order notifications"),
+        });
+        const allOrders = page.getByRole("radio", {
+          name: t("Tutti i nuovi ordini", "All new orders"),
+        });
+        await enabled.uncheck();
+        await expect(enabled).toBeChecked();
+        await expect(allOrders).toBeEnabled();
+        await expect(
+          page
+            .getByRole("status")
+            .filter({ hasText: t("Modifica non salvata", "Change not saved") }),
+        ).toBeVisible();
+        await allOrders.check();
+        await expect(allOrders).toBeChecked();
+        const digest = page.getByRole("radio", {
+          name: t("Riepilogo giornaliero", "Daily summary"),
+        });
+        await digest.check();
+        const time = page.getByRole("combobox", {
+          name: t("Orario del riepilogo", "Summary time"),
+        });
+        await enabled.uncheck();
+        await expect(enabled).not.toBeChecked();
+        await expect(allOrders).toBeDisabled();
+        await expect(digest).toBeDisabled();
+        await expect(time).toBeDisabled();
+        const storeSwitch = page.getByRole("switch", {
+          name: "Vintage Garage Italia",
+          exact: true,
+        });
+        await expect(storeSwitch).toBeDisabled();
+        await enabled.check();
+        await expect(allOrders).toBeEnabled();
+        await expect(allOrders).toBeChecked();
+        await expect(digest).toBeChecked();
+        await expect(time).toBeEnabled();
+
+        await open(page, `${prefix}/anteprima/impostazioni/aspetto`);
+        await expect(
+          page.getByRole("combobox", { name: t("Fuso orario", "Time zone") }),
+        ).toContainText(t("Roma (Italia)", "Rome (Italy)"));
+        await page.getByRole("radio", { name: t("Scuro", "Dark"), exact: true }).check();
+        await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+        await page.reload();
+        await expect(page.locator("html")).not.toHaveAttribute("data-theme", "dark");
+        if (width >= 768) {
+          await page
+            .locator("#settings-privacy")
+            .evaluate((el) => window.scrollBy(0, el.getBoundingClientRect().top - 210));
+          await expect(
+            page.locator('nav a[aria-current=true][href$="/impostazioni/privacy"]'),
+          ).toBeVisible();
+          await page
+            .locator("#settings-aspetto")
+            .evaluate((el) => window.scrollBy(0, el.getBoundingClientRect().top - 210));
+          await expect(
+            page.locator('nav a[aria-current=true][href$="/impostazioni/aspetto"]'),
+          ).toBeVisible();
+        }
+        await open(page, `${prefix}/anteprima/impostazioni/privacy`);
+        await page
+          .getByRole("button", { name: t("Elimina account", "Delete account"), exact: true })
+          .click();
+        await expect(
+          confirm.getByRole("button", {
+            name: t("Conferma con un nuovo accesso", "Confirm by signing in again"),
+          }),
+        ).toBeVisible();
+        await page.keyboard.press("Escape");
+        await open(page, `${prefix}/anteprima/impostazioni/supporto`);
+        await expect(
+          page.getByRole("textbox", { name: t("Messaggio", "Message"), exact: true }),
+        ).toHaveAttribute("placeholder", /.+/);
+        await expect(page.locator('main a[href^="mailto:"]')).toHaveAttribute(
+          "href",
+          /^mailto:.+$/,
+        );
+        await open(page, `${prefix}/anteprima/profilo`);
+        await expect(
+          page.locator("main").getByText("laura.martini@esempio.invalid", { exact: true }),
+        ).toHaveCount(1);
+        await expect(
+          page.getByRole("textbox", { name: t("Nome", "First name"), exact: true }),
+        ).toHaveAttribute("required", "");
+        await expect(
+          page.getByRole("textbox", { name: t("Cognome", "Last name"), exact: true }),
+        ).toHaveAttribute("required", "");
+        const requiredLabels = page
+          .locator("main label[data-slot=field-label]")
+          .filter({ has: page.locator("span[aria-hidden=true]") });
+        for (const label of await requiredLabels.all()) {
+          expect(
+            await label.evaluate((element) => parseFloat(getComputedStyle(element).columnGap)),
+          ).toBe(2);
+        }
+        await expect(
+          page.getByRole("link", { name: t("Apri Sicurezza", "Open Security"), exact: true }),
+        ).toHaveAttribute("href", `${prefix}/anteprima/impostazioni/sicurezza`);
+        await expect.poll(() => noPageOverflow(page)).toBe(true);
+        expect(errors).toEqual([]);
+        await page.screenshot({ path: testInfo.outputPath("profile.png"), fullPage: true });
+      });
+    }
+  }
+}
+
+for (const language of ["it", "en"] as const) {
+  for (const colorScheme of ["light", "dark"] as const) {
+    for (const width of [390, 1280]) {
       test(`ordini: conferme, stati e dettaglio ${language} ${colorScheme} a ${width} px`, async ({
         page,
       }) => {

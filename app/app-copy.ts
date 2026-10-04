@@ -194,7 +194,7 @@ const it = {
     quotaTitle: "Sblocchi esauriti per questo ciclo",
     quotaBody: (date: string) =>
       `Puoi consultare e cercare tutti gli ordini. Codice Fiscale e Partita IVA dei nuovi ordini restano da sbloccare fino al ${date}.`,
-    quotaAction: "Scopri Premium",
+    quotaAction: "Passa a Premium",
     storeIssueTitle: (store: string) => `${store}: collegamento scaduto`,
     storeIssueBody:
       "La sincronizzazione di questo negozio è sospesa. Gli altri negozi continuano. Ricollega il negozio.",
@@ -255,7 +255,7 @@ const it = {
     state: {
       active: "Collegato",
       paused: "In pausa",
-      reconnect_required: "Da ricollegare",
+      reconnect_required: "Collegamento scaduto",
       error: "Autorizzazione incompleta",
     },
     syncing: "In sincronizzazione",
@@ -265,7 +265,7 @@ const it = {
     notificationsOff: "Disattivate",
     notificationsFree: "Le notifiche Telegram dei nuovi ordini sono disponibili con Premium.",
     freeLimit:
-      "Con il piano Free hai un negozio attivo e puoi sostituirlo ogni 90 giorni. Gli altri restano in pausa e i loro ordini non sono consultabili.",
+      "Con il piano Free hai un negozio attivo e puoi sostituirlo ogni 90 giorni. Gli altri sono in pausa per il piano: i loro ordini non sono consultabili. La pausa manuale del negozio scelto conserva invece l’accesso agli ordini già importati.",
     open: (name: string) => `Apri ${name}`,
     sectionConnection: "Collegamento",
     sectionSync: "Sincronizzazione",
@@ -274,13 +274,15 @@ const it = {
     sectionActions: "Azioni",
     account: "Account eBay",
     connectedSince: "Collegato dal",
-    consentUntil: "Autorizzazione valida fino al",
+    consentUntil: "Scadenza autorizzazione",
     consentHint: "Prima della scadenza ti chiederemo di ricollegare il negozio.",
     consentExpired: "Scaduta",
     target: (minutes: number) => `Aggiornamento previsto circa ogni ${minutes} minuti`,
     history: (days: number) => `Storico degli ultimi ${days} giorni`,
     importDone: "Importazione dello storico completata",
     importRunning: "Importazione dello storico in corso",
+    importNotStarted: "Importazione dello storico non iniziata",
+    syncSuspended: "Sincronizzazione sospesa fino al ricollegamento.",
     recentOk: (count: number) =>
       count === 0
         ? "Riuscito, nessun nuovo ordine"
@@ -293,9 +295,10 @@ const it = {
     pause: "Metti in pausa",
     resume: "Riprendi",
     pauseHint:
-      "In pausa, FiscalBay non legge nuovi ordini. Quelli già importati restano consultabili.",
+      "La pausa manuale ferma le nuove letture. Gli ordini già importati restano consultabili secondo il piano.",
     planPauseHint:
-      "Il piano Free include un solo negozio attivo. Scegli quale in Piano e pagamenti.",
+      "In pausa per il piano Free: nessuna nuova lettura e ordini non consultabili. Il piano include un solo negozio attivo.",
+    chooseFreeStore: "Scegli il negozio attivo",
     reconnect: "Ricollega negozio",
     disconnect: "Scollega",
     disconnectDelete: "Scollega ed elimina dati",
@@ -373,7 +376,9 @@ const it = {
     priceAnnualNote: "Equivale a 4,08 € al mese.",
     priceLifetimeNote: "Pagamento unico, senza rinnovi.",
     pricesNote: "Prezzi IVA esclusa. Il pagamento avviene su Stripe.",
-    buy: "Scegli",
+    buyPeriod: { monthly: "Scegli mensile", annual: "Scegli annuale", lifetime: "Scegli a vita" },
+    freeStoreHint:
+      "Puoi sostituire il negozio attivo ogni 90 giorni. Nell’anteprima la scelta è simulata e non modifica i negozi.",
     premiumPeriod: {
       monthly: "Premium mensile",
       annual: "Premium annuale",
@@ -457,10 +462,17 @@ const it = {
     themeSystem: "Sistema",
     themeLight: "Chiaro",
     themeDark: "Scuro",
-    themeNote: "Nell’anteprima la scelta vale fino alla chiusura della pagina.",
+    themeNote: "Nell’anteprima la scelta si azzera alla ricarica completa della pagina.",
     language: "Lingua",
     timeZone: "Fuso orario",
     timeZoneHint: "Usato per date, cicli e orari delle notifiche.",
+    timeZones: {
+      "Europe/Rome": "Roma (Italia)",
+      "Europe/London": "Londra (Regno Unito)",
+      "Europe/Berlin": "Berlino (Germania)",
+      "Europe/Madrid": "Madrid (Spagna)",
+      "America/New_York": "New York (Stati Uniti)",
+    },
     // Modello di messaggio
     templateIntro:
       "Quando eBay non riporta il Codice Fiscale, puoi copiare questo messaggio dall’ordine e inviarlo all’acquirente dai tuoi canali.",
@@ -472,6 +484,7 @@ const it = {
     // Dati e privacy
     privacyPolicy: "Informativa privacy",
     privacyPolicyBody: "Quali dati trattiamo, per quanto tempo e con quali fornitori.",
+    readPolicy: "Leggi l’informativa",
     accountExport: "Esporta i dati dell’account",
     accountExportBody: "Profilo, negozi e impostazioni in un file scaricabile.",
     accountExportAction: "Richiedi esportazione",
@@ -479,7 +492,9 @@ const it = {
     deleteAccountBody:
       "Elimina l’account, scollega i negozi e cancella gli ordini importati. Per confermare ti chiederemo di accedere di nuovo.",
     deleteAccountTitle: "Eliminare l’account?",
-    deleteAccountConfirm: "Continua",
+    deleteAccountConfirmation:
+      "Per proseguire con l’eliminazione devi confermare la tua identità con un nuovo accesso. Nell’anteprima nessun dato viene eliminato.",
+    deleteAccountConfirm: "Conferma con un nuovo accesso",
     // Supporto
     faq: "Domande frequenti",
     faqItems: [
@@ -505,6 +520,7 @@ const it = {
       other: "Altro",
     },
     message: "Messaggio",
+    messagePlaceholder: "Descrivi il problema e cosa stavi facendo quando si è verificato.",
     messageRequired: "Scrivi il messaggio.",
     diagnostics: "Riepilogo diagnostico",
     diagnosticsHint:
@@ -522,7 +538,7 @@ const it = {
     send: "Invia",
     sent: (email: string) => `Anteprima: richiesta non inviata. Ti risponderemmo a ${email}.`,
     formErrors: "Correggi i campi evidenziati.",
-    supportEmail: "Puoi scrivere anche a supporto@fiscalbay.it.",
+    supportEmail: "Puoi scrivere anche a",
   },
   profile: {
     title: "Profilo",
@@ -903,7 +919,7 @@ const en: AppCopy = {
     quotaTitle: "No unlocks left this cycle",
     quotaBody: (date) =>
       `You can still view and search all orders. Codice Fiscale and Partita IVA of new orders stay locked until ${date}.`,
-    quotaAction: "Discover Premium",
+    quotaAction: "Upgrade to Premium",
     storeIssueTitle: (store) => `${store}: connection expired`,
     storeIssueBody: "Syncing is paused for this store. Other stores continue. Reconnect the store.",
     storeIssueAction: "Open store",
@@ -961,7 +977,7 @@ const en: AppCopy = {
     state: {
       active: "Connected",
       paused: "Paused",
-      reconnect_required: "Reconnect needed",
+      reconnect_required: "Connection expired",
       error: "Incomplete authorisation",
     },
     syncing: "Syncing",
@@ -971,7 +987,7 @@ const en: AppCopy = {
     notificationsOff: "Off",
     notificationsFree: "Telegram notifications for new orders are available with Premium.",
     freeLimit:
-      "On the Free plan you have one active store, which you can replace every 90 days. Other stores stay paused and their orders are not available.",
+      "On the Free plan you have one active store, which you can replace every 90 days. Other stores are paused by the plan and their orders are unavailable. Manually pausing the chosen store keeps imported orders available.",
     open: (name) => `Open ${name}`,
     sectionConnection: "Connection",
     sectionSync: "Sync",
@@ -980,13 +996,15 @@ const en: AppCopy = {
     sectionActions: "Actions",
     account: "eBay account",
     connectedSince: "Connected since",
-    consentUntil: "Authorisation valid until",
+    consentUntil: "Authorisation expires",
     consentHint: "Before it expires we will ask you to reconnect the store.",
     consentExpired: "Expired",
     target: (minutes) => `Expected update about every ${minutes} minutes`,
     history: (days) => `History of the last ${days} days`,
     importDone: "History import complete",
     importRunning: "History import in progress",
+    importNotStarted: "History import not started",
+    syncSuspended: "Sync is suspended until the store is reconnected.",
     recentOk: (count) =>
       count === 0
         ? "Succeeded, no new orders"
@@ -998,8 +1016,11 @@ const en: AppCopy = {
     reimport: "Re-import history",
     pause: "Pause",
     resume: "Resume",
-    pauseHint: "While paused, FiscalBay reads no new orders. Imported orders remain available.",
-    planPauseHint: "The Free plan includes one active store. Choose it in Plan and billing.",
+    pauseHint:
+      "A manual pause stops new reads. Imported orders remain available according to your plan.",
+    planPauseHint:
+      "Paused by the Free plan: no new reads and orders are unavailable. The plan includes one active store.",
+    chooseFreeStore: "Choose the active store",
     reconnect: "Reconnect store",
     disconnect: "Disconnect",
     disconnectDelete: "Disconnect and delete data",
@@ -1070,7 +1091,9 @@ const en: AppCopy = {
     priceAnnualNote: "Works out at €4.08 per month.",
     priceLifetimeNote: "One-off payment, no renewals.",
     pricesNote: "Prices exclude VAT. Payment takes place on Stripe.",
-    buy: "Choose",
+    buyPeriod: { monthly: "Choose monthly", annual: "Choose annual", lifetime: "Choose lifetime" },
+    freeStoreHint:
+      "You can replace the active store every 90 days. In the preview, the choice is simulated and does not change stores.",
     premiumPeriod: {
       monthly: "Premium, monthly",
       annual: "Premium, annual",
@@ -1149,10 +1172,17 @@ const en: AppCopy = {
     themeSystem: "System",
     themeLight: "Light",
     themeDark: "Dark",
-    themeNote: "In the preview, the choice lasts until you close the page.",
+    themeNote: "In the preview, the choice resets on a full page reload.",
     language: "Language",
     timeZone: "Time zone",
     timeZoneHint: "Used for dates, cycles and notification times.",
+    timeZones: {
+      "Europe/Rome": "Rome (Italy)",
+      "Europe/London": "London (United Kingdom)",
+      "Europe/Berlin": "Berlin (Germany)",
+      "Europe/Madrid": "Madrid (Spain)",
+      "America/New_York": "New York (United States)",
+    },
     templateIntro:
       "When eBay does not provide the tax code, you can copy this message from the order and send it to the buyer through your own channels.",
     templateHint: "{ordine} is replaced with the order number.",
@@ -1162,6 +1192,7 @@ const en: AppCopy = {
       "Hello and thank you for your purchase. To issue the electronic invoice for order {ordine} we need your Italian tax code (Codice Fiscale). If you are buying with a VAT number, please send that and your company name instead. Thank you.",
     privacyPolicy: "Privacy policy",
     privacyPolicyBody: "What data we process, for how long and with which providers.",
+    readPolicy: "Read the policy",
     accountExport: "Export account data",
     accountExportBody: "Profile, stores and settings in a downloadable file.",
     accountExportAction: "Request export",
@@ -1169,7 +1200,9 @@ const en: AppCopy = {
     deleteAccountBody:
       "Deletes the account, disconnects your stores and erases imported orders. To confirm, we will ask you to sign in again.",
     deleteAccountTitle: "Delete your account?",
-    deleteAccountConfirm: "Continue",
+    deleteAccountConfirmation:
+      "To continue with deletion, confirm your identity by signing in again. In the preview, no data is deleted.",
+    deleteAccountConfirm: "Confirm by signing in again",
     faq: "Frequently asked questions",
     faqItems: [
       {
@@ -1194,6 +1227,7 @@ const en: AppCopy = {
       other: "Other",
     },
     message: "Message",
+    messagePlaceholder: "Describe the problem and what you were doing when it happened.",
     messageRequired: "Write your message.",
     diagnostics: "Diagnostic summary",
     diagnosticsHint:
@@ -1211,7 +1245,7 @@ const en: AppCopy = {
     send: "Send",
     sent: (email) => `Preview: request not sent. We would reply to ${email}.`,
     formErrors: "Fix the highlighted fields.",
-    supportEmail: "You can also write to supporto@fiscalbay.it.",
+    supportEmail: "You can also write to",
   },
   profile: {
     title: "Profile",

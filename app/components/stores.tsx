@@ -40,6 +40,7 @@ import {
   AlertDialogTrigger,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
+import { buttonVariants } from "~/components/ui/button-variants";
 import { Field, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import {
@@ -94,7 +95,7 @@ function connectionStatus(
   }
   if (store.connection === "error") {
     return {
-      tone: "danger",
+      tone: "warning",
       label: store.issue ? t.stores.issue[store.issue].title : t.stores.state.error,
     };
   }
@@ -137,11 +138,24 @@ function notificationsLabel(store: StoreView, t: AppCopy) {
 }
 
 /** Azioni del negozio: una colonna di pulsanti uguali, poi le due disconnessioni. */
-function StoreActions({ store, ebayDown, t }: { store: StoreView; ebayDown: boolean; t: AppCopy }) {
+function StoreActions({
+  store,
+  ebayDown,
+  t,
+  links,
+}: {
+  store: StoreView;
+  ebayDown: boolean;
+  t: AppCopy;
+  links: AppLinks;
+}) {
   const action = useAction();
   const run = (intent: string) => action.run(intent, { store: store.id });
   const [confirmName, setConfirmName] = useState("");
-  const needsReconnect = store.issue !== undefined;
+  const needsReconnect =
+    store.issue !== undefined ||
+    store.connection === "reconnect_required" ||
+    store.connection === "error";
   const planPaused = store.pauseReason === "plan";
   return (
     <section aria-labelledby="store-actions" className="grid gap-3 border-t pt-5">
@@ -150,7 +164,15 @@ function StoreActions({ store, ebayDown, t }: { store: StoreView; ebayDown: bool
         {t.stores.sectionActions}
       </h3>
       {planPaused ? (
-        <p className="text-sm text-muted-foreground">{t.stores.planPauseHint}</p>
+        <div className="grid justify-items-start gap-2 text-sm text-muted-foreground">
+          <p>{t.stores.planPauseHint}</p>
+          <Link
+            to={appHref(links, "impostazioni/piano")}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            {t.stores.chooseFreeStore}
+          </Link>
+        </div>
       ) : (
         // Stessa forma per ogni azione: una colonna di pulsanti larghi con icona.
         <div className="grid gap-2">
@@ -168,7 +190,7 @@ function StoreActions({ store, ebayDown, t }: { store: StoreView; ebayDown: bool
           <Button
             variant="outline"
             className="justify-start"
-            disabled={ebayDown || needsReconnect}
+            disabled={ebayDown || needsReconnect || store.connection !== "active"}
             onClick={() => run("store-reimport")}
           >
             <History aria-hidden="true" data-icon="inline-start" />
@@ -234,8 +256,12 @@ function StoreActions({ store, ebayDown, t }: { store: StoreView; ebayDown: bool
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>{t.stores.deleteTitle(store.name)}</AlertDialogTitle>
-              <AlertDialogDescription>{t.stores.deleteBody}</AlertDialogDescription>
+              <AlertDialogTitle className="text-balance">
+                {t.stores.disconnectDelete}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                <strong>{store.name}</strong>. {t.stores.deleteBody}
+              </AlertDialogDescription>
             </AlertDialogHeader>
             <Field>
               <FieldLabel htmlFor="store-delete-confirm">{t.stores.deleteLabel}</FieldLabel>
@@ -263,6 +289,14 @@ function StoreActions({ store, ebayDown, t }: { store: StoreView; ebayDown: bool
   );
 }
 
+function syncDescription(store: StoreView, ebayDown: boolean, t: AppCopy) {
+  if (ebayDown) return t.stores.ebayDown;
+  if (store.connection === "active") return t.stores.target(store.targetMinutes);
+  if (store.pauseReason === "plan") return t.stores.planPauseHint;
+  if (store.connection === "paused") return t.stores.pauseHint;
+  return t.stores.syncSuspended;
+}
+
 function StoreDetail({
   store,
   data,
@@ -279,7 +313,7 @@ function StoreDetail({
   const { language } = links;
   const status = connectionStatus(store, t);
   const needsReconnect = store.issue !== undefined;
-  const expired = store.connection === "reconnect_required";
+  const expired = store.connection === "reconnect_required" || store.consentExpiresAt <= data.now;
   const row = "grid gap-0.5";
   return (
     <div className="grid gap-7 px-4 pb-6">
@@ -287,6 +321,14 @@ function StoreDetail({
         <StatusAlert tone="warning" title={t.stores.issue[store.issue].title}>
           <span className="grid justify-items-start gap-3">
             {t.stores.issue[store.issue].body}
+            {store.issue === "unverifiable" ? (
+              <Link
+                to={appHref(links, "impostazioni/supporto")}
+                className="underline underline-offset-4"
+              >
+                {t.authError.support}
+              </Link>
+            ) : null}
             <Button
               size="sm"
               disabled={data.ebayDown}
@@ -329,7 +371,7 @@ function StoreDetail({
             </dd>
           </div>
         </dl>
-        {needsReconnect ? null : (
+        {needsReconnect || expired ? null : (
           <p className="text-sm text-muted-foreground">{t.stores.consentHint}</p>
         )}
       </section>
@@ -342,15 +384,20 @@ function StoreDetail({
           <li>
             <LastSync store={store} t={t} now={data.now} language={language} />
           </li>
-          <li className="text-muted-foreground">{t.stores.target(store.targetMinutes)}</li>
+          <li className="text-muted-foreground">{syncDescription(store, data.ebayDown, t)}</li>
           <li className="text-muted-foreground">{t.stores.history(store.historyDays)}</li>
           <li className="text-muted-foreground">
-            {store.importing ? t.stores.importRunning : t.stores.importDone}
-          </li>
-          <li className="text-muted-foreground">
-            {t.stores.orders}: <span className="font-code">{store.importedOrders}</span>
+            {store.importing
+              ? t.stores.importRunning
+              : store.lastSyncAt
+                ? t.stores.importDone
+                : t.stores.importNotStarted}
           </li>
         </ul>
+        <dl className="grid gap-0.5 text-sm">
+          <dt className="text-muted-foreground">{t.stores.orders}</dt>
+          <dd className="font-code">{store.importedOrders}</dd>
+        </dl>
       </section>
       {/* Un negozio mai sincronizzato non ha aggiornamenti: niente titolo vuoto. */}
       {store.recent.length > 0 ? (
@@ -399,7 +446,7 @@ function StoreDetail({
           </Link>
         </p>
       </section>
-      <StoreActions store={store} ebayDown={data.ebayDown} t={t} />
+      <StoreActions store={store} ebayDown={data.ebayDown} t={t} links={links} />
     </div>
   );
 }
@@ -426,7 +473,10 @@ export function StoresPage({
   const [attempted, setAttempted] = useState(false);
   const premium = data.account.plan === "premium";
   const connect = (
-    <Button onClick={() => (data.elsewhere ? setAttempted(true) : action.run("store-connect"))}>
+    <Button
+      disabled={data.ebayDown}
+      onClick={() => (data.elsewhere ? setAttempted(true) : action.run("store-connect"))}
+    >
       <Plus aria-hidden="true" data-icon="inline-start" />
       {t.stores.connect}
     </Button>
@@ -472,7 +522,7 @@ export function StoresPage({
                 <TableRow>
                   <TableHead className="pl-4">{t.stores.store}</TableHead>
                   <TableHead>{t.stores.connection}</TableHead>
-                  <TableHead>{t.stores.lastSync}</TableHead>
+                  <TableHead className="pl-8">{t.stores.lastSync}</TableHead>
                   {premium ? <TableHead>{t.stores.notifications}</TableHead> : null}
                   <TableHead className="text-right">{t.stores.orders}</TableHead>
                   <TableHead className="w-10 pr-4">
@@ -508,12 +558,16 @@ export function StoresPage({
                         </Link>
                       </TableCell>
                       <TableCell>
-                        <StatusBadge tone={status.tone} icon={status.icon} filled>
-                          {status.label}
-                        </StatusBadge>
+                        <span className="flex items-center">
+                          <StatusBadge tone={status.tone} icon={status.icon} filled>
+                            {status.label}
+                          </StatusBadge>
+                        </span>
                       </TableCell>
                       <TableCell>
-                        <LastSync store={store} t={t} now={data.now} language={language} />
+                        <span className="flex items-center">
+                          <LastSync store={store} t={t} now={data.now} language={language} />
+                        </span>
                       </TableCell>
                       {premium ? (
                         <TableCell className="text-muted-foreground">

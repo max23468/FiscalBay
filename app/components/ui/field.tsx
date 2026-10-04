@@ -102,6 +102,7 @@ function FieldLabel({
       className={cn(
         "group/field-label peer/field-label flex w-fit gap-2 leading-snug pointer-coarse:has-[[role=radio],[role=switch],[role=checkbox]]:min-h-11 pointer-coarse:has-[[role=radio],[role=switch],[role=checkbox]]:items-center group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:has-data-checked:border-primary/30 has-[>[data-slot=field]]:has-data-checked:bg-primary/5 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border has-[>[data-slot=field]]:not-has-[:disabled,[data-disabled]]:hover:bg-muted/50 has-[>[data-slot=field]]:has-[:focus-visible]:border-ring has-[>[data-slot=field]]:has-[:focus-visible]:ring-3 has-[>[data-slot=field]]:has-[:focus-visible]:ring-ring *:data-[slot=field]:p-2.5 dark:has-[>[data-slot=field]]:has-data-checked:border-primary/20 dark:has-[>[data-slot=field]]:has-data-checked:bg-primary/10",
         "has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col",
+        required && "gap-0.5",
         className,
       )}
       {...props}
