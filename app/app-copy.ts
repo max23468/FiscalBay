@@ -180,7 +180,7 @@ const it = {
       `Importazione in corso: ${count} ${plural(count, "ordine", "ordini")} finora`,
     firstUseTitle: "Nessun negozio collegato",
     firstUseBody:
-      "Collega il tuo negozio eBay per consultare gli ordini e i Codici Fiscali disponibili.",
+      "Collega il tuo negozio eBay per consultare gli ordini e i Codici\u00a0Fiscali disponibili.",
     connectStore: "Collega negozio eBay",
     steps: "Primi passi",
     stepAccount: "Account creato",

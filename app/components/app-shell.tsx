@@ -41,7 +41,7 @@ import logoDarkUrl from "../../docs/brand/logo/fiscalbay-logo-dark.svg?url";
 import logoUrl from "../../docs/brand/logo/fiscalbay-logo.svg?url";
 import type { AppCopy } from "../app-copy";
 import { appHref, type AppLinks } from "../app-links";
-import { localizedPath } from "../i18n";
+import { localizedPath, type Language } from "../i18n";
 import {
   formatRelative,
   type AccountView,
@@ -86,6 +86,19 @@ export function useAction() {
   };
 }
 
+/** Voce del menu dell'avatar; `reloadDocument` per le pagine fuori dalle route dell'app. */
+export interface AccountMenuItem {
+  href: string;
+  label: string;
+  Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  lang?: Language;
+  reloadDocument?: boolean;
+}
+
+/**
+ * Shell dell'app. Navigazione, ricerca e campanella compaiono quando le loro
+ * destinazioni esistono: l'area reale le riceve insieme alle funzioni relative.
+ */
 export function AppShell({
   links,
   t,
@@ -93,16 +106,23 @@ export function AppShell({
   notifications,
   now,
   suggest,
+  navigation = true,
+  menu,
+  home = appHref(links, "ordini"),
   onSignOut,
   before,
   children,
 }: {
   links: AppLinks;
   t: AppCopy;
-  account: AccountView;
-  notifications: NotificationView[];
-  now: string;
-  suggest: (query: string) => { items: SearchSuggestion[]; total: number };
+  account: Pick<AccountView, "name" | "email">;
+  notifications?: NotificationView[];
+  now?: string;
+  suggest?: (query: string) => { items: SearchSuggestion[]; total: number };
+  navigation?: boolean;
+  /** Gruppi di voci separati; «Esci» chiude l'ultimo. */
+  menu?: AccountMenuItem[][];
+  home?: string;
   /** Riceve la funzione degli avvisi, per confermare l'esito. */
   onSignOut: (notify: (message: string) => void) => void;
   before?: React.ReactNode;
@@ -137,7 +157,7 @@ export function AppShell({
       <header className="sticky top-0 z-40 border-b bg-background">
         <div className="mx-auto flex h-14 w-[min(72rem,calc(100%-2rem))] items-center gap-2 md:gap-6">
           <Link
-            to={appHref(links, "ordini")}
+            to={home}
             className="shrink-0 rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring"
           >
             <img
@@ -155,33 +175,69 @@ export function AppShell({
               className="hidden h-6 w-auto dark:block"
             />
           </Link>
-          <nav aria-label={t.shell.mainNav} className="hidden h-full md:flex">
-            <ul className="flex h-full items-stretch gap-1">
-              {destinations.map(({ path, label }) => (
-                <li key={path} className="flex">
-                  <NavLink
-                    to={appHref(links, path)}
-                    className="relative flex items-center rounded-md px-3 text-sm font-medium text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:text-foreground aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-3 aria-[current=page]:after:bottom-0 aria-[current=page]:after:h-0.5 aria-[current=page]:after:rounded-full aria-[current=page]:after:bg-primary"
-                  >
-                    {label}
-                  </NavLink>
-                </li>
-              ))}
-            </ul>
-          </nav>
+          {navigation ? (
+            <nav aria-label={t.shell.mainNav} className="hidden h-full md:flex">
+              <ul className="flex h-full items-stretch gap-1">
+                {destinations.map(({ path, label }) => (
+                  <li key={path} className="flex">
+                    <NavLink
+                      to={appHref(links, path)}
+                      className="relative flex items-center rounded-md px-3 text-sm font-medium text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:text-foreground aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-3 aria-[current=page]:after:bottom-0 aria-[current=page]:after:h-0.5 aria-[current=page]:after:rounded-full aria-[current=page]:after:bg-primary"
+                    >
+                      {label}
+                    </NavLink>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          ) : null}
           <div className="ml-auto flex items-center gap-1">
-            <GlobalSearch
-              t={t}
-              links={links}
-              suggest={suggest}
-              className="mr-2 hidden w-72 lg:block xl:w-80"
-            />
-            <MobileSearch t={t} links={links} suggest={suggest} />
-            <NotificationsMenu t={t} links={links} notifications={notifications} now={now} />
+            {suggest ? (
+              <>
+                <GlobalSearch
+                  t={t}
+                  links={links}
+                  suggest={suggest}
+                  className="mr-2 hidden w-72 lg:block xl:w-80"
+                />
+                <MobileSearch t={t} links={links} suggest={suggest} />
+              </>
+            ) : null}
+            {notifications && now ? (
+              <NotificationsMenu t={t} links={links} notifications={notifications} now={now} />
+            ) : null}
             <AccountMenu
               t={t}
-              links={links}
               account={account}
+              menu={
+                menu ?? [
+                  [
+                    { href: appHref(links, "profilo"), label: t.shell.profile, Icon: User },
+                    {
+                      href: appHref(links, "impostazioni/sicurezza"),
+                      label: t.shell.security,
+                      Icon: ShieldCheck,
+                    },
+                    {
+                      href: appHref(links, "impostazioni/piano"),
+                      label: t.shell.planBilling,
+                      Icon: CreditCard,
+                    },
+                    {
+                      href: appHref(links, "impostazioni"),
+                      label: t.shell.settings,
+                      Icon: Settings,
+                    },
+                  ],
+                  [
+                    {
+                      href: localizedPath(links.language, "/"),
+                      label: t.shell.visitSite,
+                      Icon: Globe,
+                    },
+                  ],
+                ]
+              }
               onSignOut={() => onSignOut(notify)}
             />
           </div>
@@ -190,28 +246,33 @@ export function AppShell({
       <main
         id="contenuto"
         tabIndex={-1}
-        className="mx-auto w-[min(72rem,calc(100%-2rem))] pt-6 pb-28 outline-none md:pb-12"
+        className={cn(
+          "mx-auto w-[min(72rem,calc(100%-2rem))] pt-6 pb-12 outline-none",
+          navigation && "max-md:pb-28",
+        )}
       >
         {children}
       </main>
-      <nav
-        aria-label={t.shell.mainNav}
-        className="fixed inset-x-0 bottom-0 z-40 border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden"
-      >
-        <ul className="grid grid-cols-3">
-          {destinations.map(({ path, label, Icon }) => (
-            <li key={path}>
-              <NavLink
-                to={appHref(links, path)}
-                className="flex min-h-14 flex-col items-center justify-center gap-1 px-1 text-xs font-medium text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset aria-[current=page]:text-primary"
-              >
-                <Icon aria-hidden="true" className="size-5" />
-                <span className="text-center leading-tight">{label}</span>
-              </NavLink>
-            </li>
-          ))}
-        </ul>
-      </nav>
+      {navigation ? (
+        <nav
+          aria-label={t.shell.mainNav}
+          className="fixed inset-x-0 bottom-0 z-40 border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden"
+        >
+          <ul className="grid grid-cols-3">
+            {destinations.map(({ path, label, Icon }) => (
+              <li key={path}>
+                <NavLink
+                  to={appHref(links, path)}
+                  className="flex min-h-14 flex-col items-center justify-center gap-1 px-1 text-xs font-medium text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset aria-[current=page]:text-primary"
+                >
+                  <Icon aria-hidden="true" className="size-5" />
+                  <span className="text-center leading-tight">{label}</span>
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      ) : null}
       {/*
         Sopra velature e pannelli; `aria-live` esplicito lo tiene annunciato anche quando
         un pannello modale nasconde il resto della pagina. Sale sopra la barra di selezione.
@@ -220,7 +281,12 @@ export function AppShell({
         role="status"
         aria-live="polite"
         aria-atomic="true"
-        className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom)+var(--selection-bar,0px))] z-[60] flex justify-center px-4 md:bottom-[calc(1.5rem+var(--selection-bar,0px))]"
+        className={cn(
+          "pointer-events-none fixed inset-x-0 bottom-[calc(1.5rem+env(safe-area-inset-bottom)+var(--selection-bar,0px))] z-[60] flex justify-center px-4",
+          // Sopra la bottom navigation, quando c'è.
+          navigation &&
+            "max-md:bottom-[calc(5rem+env(safe-area-inset-bottom)+var(--selection-bar,0px))]",
+        )}
       >
         {notice ? (
           <p
@@ -528,22 +594,16 @@ function NotificationsMenu({
 
 function AccountMenu({
   t,
-  links,
   account,
+  menu,
   onSignOut,
 }: {
   t: AppCopy;
-  links: AppLinks;
-  account: AccountView;
+  account: Pick<AccountView, "name" | "email">;
+  menu: AccountMenuItem[][];
   onSignOut: () => void;
 }) {
   const navigate = useNavigate();
-  const items = [
-    { path: "profilo", label: t.shell.profile, Icon: User },
-    { path: "impostazioni/sicurezza", label: t.shell.security, Icon: ShieldCheck },
-    { path: "impostazioni/piano", label: t.shell.planBilling, Icon: CreditCard },
-    { path: "impostazioni", label: t.shell.settings, Icon: Settings },
-  ];
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -566,18 +626,23 @@ function AccountMenu({
             </span>
           </DropdownMenuLabel>
         </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        {items.map(({ path, label, Icon }) => (
-          <DropdownMenuItem key={path} onClick={() => void navigate(appHref(links, path))}>
-            <Icon aria-hidden="true" />
-            {label}
-          </DropdownMenuItem>
+        {menu.map((group) => (
+          <DropdownMenuGroup key={group.map((item) => item.href).join(" ")}>
+            <DropdownMenuSeparator />
+            {group.map(({ href, label, Icon, lang, reloadDocument }) => (
+              <DropdownMenuItem
+                key={href}
+                lang={lang}
+                onClick={() =>
+                  reloadDocument ? window.location.assign(href) : void navigate(href)
+                }
+              >
+                <Icon aria-hidden="true" />
+                {label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
         ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => void navigate(localizedPath(links.language, "/"))}>
-          <Globe aria-hidden="true" />
-          {t.shell.visitSite}
-        </DropdownMenuItem>
         <DropdownMenuItem onClick={onSignOut}>
           <LogOut aria-hidden="true" />
           {t.shell.signOut}
