@@ -1,5 +1,22 @@
 import { z } from "zod";
 
+/** Proiezione per card e dettaglio: i campi estranei, inclusi i dati fiscali, sono esclusi. */
+export const orderSummarySchema = z.object({
+  buyer: z.object({ username: z.string().optional() }).nullish(),
+  orderPaymentStatus: z.string().nullish(),
+  orderFulfillmentStatus: z.string().nullish(),
+  lineItems: z
+    .array(
+      z.object({
+        lineItemId: z.string(),
+        title: z.string(),
+        quantity: z.number().int().positive(),
+        sku: z.string().optional(),
+      }),
+    )
+    .optional(),
+});
+
 const fulfillmentOrderSchema = z.looseObject({ orderId: z.string().min(1) });
 const fulfillmentPageSchema = z.looseObject({
   orders: z.array(fulfillmentOrderSchema).default([]),

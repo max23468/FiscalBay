@@ -22,6 +22,31 @@ async function open(page: Page, path: string, scenario?: string) {
 const noPageOverflow = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
 
+for (const language of ["it", "en"] as const) {
+  test(`esito di sicurezza con focus e nuovo accesso ${language}`, async ({ page }) => {
+    const prefix = language === "it" ? "/" : "/en";
+    await page.goto(`${prefix}?accesso=nuovo-accesso`);
+    const status = page
+      .getByRole("status")
+      .filter({ hasText: language === "it" ? "accesso recente" : "recent sign-in" });
+    await expect(status.locator("..")).toBeFocused();
+    await expect(page).toHaveURL(new RegExp(`${prefix === "/" ? "/" : "/en"}$`));
+    const button = page.getByRole("button", {
+      name: language === "it" ? "Esci e accedi di nuovo" : "Sign out and sign in again",
+    });
+    await expect(button).toBeVisible();
+    await expect(button.locator("..")).toHaveAttribute(
+      "action",
+      language === "it" ? "/accesso" : "/en/accesso",
+    );
+    await page.goto(`${prefix}?accesso=password-link`);
+    const notice = page.getByRole("status").filter({
+      hasText: language === "it" ? "impostare una nuova password" : "set a new password",
+    });
+    await expect(notice.locator("..")).toBeFocused();
+  });
+}
+
 test("sicurezza nell'anteprima senza JavaScript resta simulata", async ({ browser, baseURL }) => {
   const context = await browser.newContext({ baseURL, javaScriptEnabled: false });
   const page = await context.newPage();

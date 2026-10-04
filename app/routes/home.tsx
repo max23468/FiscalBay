@@ -10,9 +10,8 @@ import { Logo } from "~/components/standalone-page";
 import { useFieldErrors, type FieldErrors } from "~/components/form-validation";
 import { LanguageSwitch } from "~/components/language-switch";
 import { StatusAlert } from "~/components/status";
-import { TaxCode } from "~/components/tax-code";
+import { ImportedOrders } from "~/components/orders";
 import { Button } from "~/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Checkbox } from "~/components/ui/checkbox";
 import {
   Field,
@@ -33,8 +32,7 @@ import { listSignInMethods } from "../domain/sign-in-methods.server";
 import { listVisibleOrders } from "../domain/orders.server";
 import { accessNotice } from "../access-notice";
 import { appCopy } from "../app-copy";
-import { formatAmount, languageFromPath, localizedPath, type Language } from "../i18n";
-import { formatDate } from "../view-models";
+import { languageFromPath, localizedPath, type Language } from "../i18n";
 import type { Route } from "./+types/home";
 
 export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescriptors {
@@ -52,12 +50,6 @@ export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescri
     { name: "description", content: appCopy[language].access.description },
   ];
 }
-
-// Tipi restituiti da eBay; un tipo sconosciuto resta com'è, mai chiamato Codice Fiscale.
-const identifierLabels: Record<string, "CF" | "PIVA"> = {
-  CODICE_FISCALE: "CF",
-  VAT_ID: "PIVA",
-};
 
 export async function loader({ request }: Route.LoaderArgs) {
   const language = languageFromPath(new URL(request.url).pathname);
@@ -827,7 +819,6 @@ function OrdersPage({
 }) {
   const { language } = loaderData;
   const t = appCopy[language].access;
-  const { orders } = appCopy[language];
   return (
     <AccountShell
       language={language}
@@ -861,48 +852,7 @@ function OrdersPage({
             action={loaderData.canLinkStore ? <LinkStore t={t} language={language} /> : undefined}
           />
         ) : (
-          <section className="grid gap-4 sm:grid-cols-2" aria-label={t.list}>
-            {loaderData.orders.map((order) => (
-              <Card key={order.id} className={rise}>
-                <CardHeader>
-                  <CardTitle className="flex justify-between gap-4">
-                    <h2 className="font-code">{order.ebayOrderId}</h2>
-                    <strong className="font-code">
-                      {formatAmount(order.totalMinor, order.currency, language)}
-                    </strong>
-                  </CardTitle>
-                  <CardDescription>{formatDate(order.creationTime, language)}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <dl className="grid gap-2 text-sm">
-                    {order.taxIdentifiers.map((identifier) => {
-                      const known = identifierLabels[identifier.type];
-                      const label = known ? orders.identifier[known] : identifier.type;
-                      return (
-                        <div
-                          key={`${identifier.type}:${identifier.value}`}
-                          className="grid grid-cols-[1fr_2fr] items-center gap-3"
-                        >
-                          <dt className="text-muted-foreground">{label}</dt>
-                          <dd>
-                            <TaxCode
-                              value={identifier.value}
-                              labels={{
-                                copy: orders.copy(label, order.ebayOrderId),
-                                copied: orders.copied,
-                                copyFailed: orders.copyFailed,
-                                locked: orders.lockedLabel(label),
-                              }}
-                            />
-                          </dd>
-                        </div>
-                      );
-                    })}
-                  </dl>
-                </CardContent>
-              </Card>
-            ))}
-          </section>
+          <ImportedOrders orders={loaderData.orders} language={language} t={appCopy[language]} />
         )}
       </div>
     </AccountShell>

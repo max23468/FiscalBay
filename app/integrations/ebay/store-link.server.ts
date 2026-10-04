@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ApplicationError } from "../../errors";
 import type { Language } from "../../i18n";
+import { orderSummarySchema } from "./fulfillment.server";
 
 import {
   mapTradingTaxIdentifiers,
@@ -19,7 +20,10 @@ const tradingApiVersion = "1455";
 const tradingSiteId = "101";
 
 const tokenSchema = z.looseObject({ access_token: z.string().min(1) });
-const identitySchema = z.looseObject({ userId: z.string().min(1) });
+const identitySchema = z.looseObject({
+  userId: z.string().min(1),
+  username: z.string().optional(),
+});
 const orderSchema = z.looseObject({
   orderId: z.string().min(1),
   creationDate: z.string().datetime(),
@@ -202,16 +206,22 @@ export async function importStoreOrders(input: {
   const workspaceId = await workspaceFor(db, input.userId, now);
   await db
     .prepare(
-      `INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at)
-       VALUES (?, ?, ?, ?) ON CONFLICT(ebay_user_id) DO NOTHING`,
+      `INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
+       VALUES (?, ?, ?, ?, ?) ON CONFLICT(ebay_user_id) DO NOTHING`,
     )
-    .bind(crypto.randomUUID(), workspaceId, identity.userId, now)
+    .bind(crypto.randomUUID(), workspaceId, identity.userId, now, identity.username ?? null)
     .run();
   const store = await db
     .prepare("SELECT id, workspace_id FROM ebay_stores WHERE ebay_user_id = ?")
     .bind(identity.userId)
     .first<{ id: string; workspace_id: string }>();
   if (!store || store.workspace_id !== workspaceId) return "altro-spazio";
+  if (identity.username) {
+    await db
+      .prepare("UPDATE ebay_stores SET display_name = ? WHERE id = ?")
+      .bind(identity.username, store.id)
+      .run();
+  }
 
   const page = ordersPageSchema.parse(
     await ebayJson(fetcher, "https://api.ebay.com/sell/fulfillment/v1/order?limit=1", {
@@ -226,12 +236,13 @@ export async function importStoreOrders(input: {
     db
       .prepare(
         `INSERT INTO orders
-         (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+         (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor, summary_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(store_id, ebay_order_id) DO UPDATE SET
          last_modified_time = excluded.last_modified_time,
          currency = excluded.currency,
-         total_minor = excluded.total_minor
+         total_minor = excluded.total_minor,
+         summary_json = excluded.summary_json
        RETURNING id`,
       )
       .bind(
@@ -242,6 +253,7 @@ export async function importStoreOrders(input: {
         order.lastModifiedDate,
         order.pricingSummary.total.currency,
         toMinor(order.pricingSummary.total.value),
+        JSON.stringify(orderSummarySchema.parse(order)),
       )
       .first<{ id: string }>(),
     fetcher("https://api.ebay.com/ws/api.dll", {

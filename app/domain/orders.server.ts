@@ -1,3 +1,6 @@
+import { orderSummarySchema } from "../integrations/ebay/fulfillment.server";
+import type { z } from "zod";
+
 export type VisibleOrder = {
   id: string;
   ebayOrderId: string;
@@ -5,6 +8,9 @@ export type VisibleOrder = {
   lastModifiedTime: string;
   currency: string;
   totalMinor: number;
+  storeName: string;
+  summary: z.infer<typeof orderSummarySchema> | null;
+  fiscalState: "available" | "locked" | "unchecked";
   taxIdentifiers: Array<{
     type: string;
     issuingCountry: string | null;
@@ -31,10 +37,14 @@ export async function listVisibleOrders(
           LIMIT ?
        )
        SELECT o.id, o.ebay_order_id, o.creation_time, o.last_modified_time,
-              o.currency, o.total_minor, ti.identifier_type,
+              o.currency, o.total_minor, o.summary_json,
+              COALESCE(s.display_name, s.ebay_user_id) AS store_name,
+              EXISTS (SELECT 1 FROM tax_identifiers WHERE order_id = o.id) AS has_identifiers,
+              g.id AS grant_id, ti.identifier_type,
               ti.issuing_country, ti.value, ti.source
          FROM visible_orders vo
          JOIN orders o ON o.id = vo.id
+         JOIN ebay_stores s ON s.id = o.store_id
          LEFT JOIN order_grants g
            ON g.workspace_id = vo.workspace_id AND g.order_id = o.id
          LEFT JOIN tax_identifiers ti
@@ -49,6 +59,10 @@ export async function listVisibleOrders(
       last_modified_time: string;
       currency: string;
       total_minor: number;
+      summary_json: string | null;
+      store_name: string;
+      has_identifiers: number;
+      grant_id: string | null;
       identifier_type: string | null;
       issuing_country: string | null;
       value: string | null;
@@ -64,6 +78,9 @@ export async function listVisibleOrders(
       lastModifiedTime: row.last_modified_time,
       currency: row.currency,
       totalMinor: row.total_minor,
+      storeName: row.store_name,
+      summary: row.summary_json ? orderSummarySchema.parse(JSON.parse(row.summary_json)) : null,
+      fiscalState: row.has_identifiers ? (row.grant_id ? "available" : "locked") : "unchecked",
       taxIdentifiers: [],
     };
     if (row.identifier_type && row.value && row.source) {
