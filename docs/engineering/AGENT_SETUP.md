@@ -106,6 +106,8 @@ Per sostenibilità misurare ordini, negozi multipli, storico, retry, export, log
 
 Questa è una mappa di **contenuti e responsabilità**, non un elenco di file obbligatori. Prima usare codice, schema, configurazione e test come contratti eseguibili. Creare un documento separato quando spiega un comportamento sostanziale condiviso, una scelta costosa da invertire o una procedura operativa reale. Accorpare elementi brevi; nessuno scaffolding documentale vuoto.
 
+Per creare o aggiornare una PR, passare la descrizione direttamente alla CLI tramite input standard (`gh pr create --body-file -` o `gh pr edit --body-file -`), senza creare file `.md` temporanei per il testo della PR.
+
 | Quando / responsabile | Informazione che deve risultare verificabile | Collocazione più semplice |
 |---|---|---|
 | M0-01/11/02 | Mandato, istruzioni applicabili, trigger legacy; toolchain e accessi minimi verificati | Stato backlog, manifest/lockfile/config; nota operativa solo se necessaria |
