@@ -23,6 +23,8 @@ import { dotTones, tileTones, toneFor } from "~/components/tile-tone";
 import { UnlockIcon } from "~/components/icons";
 import { StatusAlert, StatusBadge, StatusIcon } from "~/components/status";
 import { TaxCode } from "~/components/tax-code";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "~/components/ui/card";
+import type { VisibleOrder } from "../domain/orders.server";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -111,6 +113,195 @@ export interface OrdersPageData {
 export interface UnlockResult {
   unlocked: string[];
   remaining: number | null;
+}
+
+/** Ordini importati: solo valori persistenti e identificativi già autorizzati dal server. */
+export function ImportedOrders({
+  orders,
+  language,
+  t,
+}: {
+  orders: VisibleOrder[];
+  language: Language;
+  t: AppCopy;
+}) {
+  const [params, setParams] = useSearchParams();
+  const detail = orders.find((order) => order.id === params.get("ordine"));
+  const href = (id: string) => {
+    const next = new URLSearchParams(params);
+    next.set("ordine", id);
+    return `?${next}`;
+  };
+  const close = () => {
+    const next = new URLSearchParams(params);
+    next.delete("ordine");
+    setParams(next, { preventScrollReset: true });
+  };
+  const payment: Record<string, string> = {
+    PAID: t.orders.payment.paid,
+    PENDING: t.orders.paymentPending,
+    FULLY_REFUNDED: t.orders.payment.refunded,
+  };
+  const shipping: Record<string, string> = {
+    NOT_STARTED: t.orders.shipping.to_ship,
+    IN_PROGRESS: language === "it" ? "Spedizione in corso" : "Fulfillment in progress",
+    FULFILLED: t.orders.shipping.shipped,
+  };
+  const fields = (order: VisibleOrder, expanded = false) => (
+    <div className="grid min-w-0 gap-4">
+      <dl className="grid gap-2 text-sm">
+        {[
+          [t.orders.store, order.storeName],
+          [t.order.buyer, order.summary?.buyer?.username ?? t.orders.notImported],
+          [
+            t.orders.paymentStatus,
+            order.summary?.orderPaymentStatus
+              ? (payment[order.summary.orderPaymentStatus] ?? order.summary.orderPaymentStatus)
+              : t.orders.notImported,
+          ],
+          [
+            t.orders.shippingStatus,
+            order.summary?.orderFulfillmentStatus
+              ? (shipping[order.summary.orderFulfillmentStatus] ??
+                order.summary.orderFulfillmentStatus)
+              : t.orders.notImported,
+          ],
+        ].map(([label, value]) => (
+          <div key={label} className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-3">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="break-words">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="grid gap-2">
+        <p className="text-sm font-medium">{t.order.tabItems}</p>
+        {order.summary?.lineItems?.length ? (
+          <ul className="grid gap-2 text-sm">
+            {order.summary.lineItems.slice(0, expanded ? undefined : 2).map((item) => (
+              <li key={item.lineItemId} className="break-words">
+                {item.title}{" "}
+                <span className="text-muted-foreground">
+                  ({t.orders.quantity}: {item.quantity})
+                </span>
+                {expanded && item.sku ? <p className="font-code">SKU: {item.sku}</p> : null}
+              </li>
+            ))}
+            {!expanded && order.summary.lineItems.length > 2 ? (
+              <li>{t.orders.itemsMore(order.summary.lineItems.length - 2)}</li>
+            ) : null}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">{t.orders.notImported}</p>
+        )}
+      </div>
+      <div className="grid gap-2">
+        <p className="text-sm font-medium">{t.orders.taxData}</p>
+        <StatusBadge
+          tone={
+            order.fiscalState === "available"
+              ? "success"
+              : order.fiscalState === "locked"
+                ? "locked"
+                : "neutral"
+          }
+        >
+          {order.fiscalState === "unchecked"
+            ? t.orders.fiscalUnchecked
+            : t.orders.fiscal[order.fiscalState]}
+        </StatusBadge>
+        {order.taxIdentifiers.map((identifier) => {
+          const label =
+            identifier.type === "CODICE_FISCALE"
+              ? t.orders.identifier.CF
+              : identifier.type === "VAT_ID"
+                ? t.orders.identifier.PIVA
+                : identifier.type;
+          return (
+            <div key={`${identifier.type}:${identifier.value}`} className="grid gap-1">
+              <span className="text-sm text-muted-foreground">{label}</span>
+              <TaxCode
+                value={identifier.value}
+                labels={{
+                  copy: t.orders.copy(label, order.ebayOrderId),
+                  copied: t.orders.copied,
+                  copyFailed: t.orders.copyFailed,
+                  locked: t.orders.lockedLabel(label),
+                }}
+              />
+              {expanded ? (
+                <p className="text-sm text-muted-foreground">{identifier.source}</p>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+  return (
+    <>
+      <section className="grid gap-4 sm:grid-cols-2" aria-label={t.access.list}>
+        {orders.map((order) => (
+          <Card key={order.id}>
+            <CardHeader>
+              <CardTitle className="flex flex-wrap justify-between gap-3">
+                <h2 className="min-w-0 break-words">
+                  <Link
+                    to={href(order.id)}
+                    preventScrollReset
+                    className="underline-offset-4 hover:underline"
+                  >
+                    {t.orders.orderLabel(order.ebayOrderId)}
+                  </Link>
+                </h2>
+                <strong className="font-code">
+                  {formatAmount(order.totalMinor, order.currency, language)}
+                </strong>
+              </CardTitle>
+              <CardDescription>{formatDate(order.creationTime, language)}</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              {fields(order)}
+              <Link
+                to={href(order.id)}
+                preventScrollReset
+                className="w-fit text-sm underline underline-offset-4"
+                aria-label={`${t.orders.details}: ${t.orders.orderLabel(order.ebayOrderId)}`}
+              >
+                {t.orders.details}
+              </Link>
+            </CardContent>
+          </Card>
+        ))}
+      </section>
+      <Sheet
+        open={!!detail}
+        onOpenChange={(open) => {
+          if (!open) close();
+        }}
+      >
+        <SheetContent closeLabel={t.shell.close} className="sm:max-w-xl">
+          <SheetHeader>
+            <SheetTitle>
+              {detail ? t.orders.orderLabel(detail.ebayOrderId) : t.orders.details}
+            </SheetTitle>
+            <SheetDescription>
+              {detail
+                ? `${formatDate(detail.creationTime, language)} · ${formatAmount(detail.totalMinor, detail.currency, language)}`
+                : ""}
+            </SheetDescription>
+          </SheetHeader>
+          {detail ? (
+            <div className="grid gap-4 px-4 pb-6">
+              {fields(detail, true)}
+              <p className="text-sm text-muted-foreground">
+                {t.orders.updated}: {formatDate(detail.lastModifiedTime, language)}
+              </p>
+            </div>
+          ) : null}
+        </SheetContent>
+      </Sheet>
+    </>
+  );
 }
 
 function identifierLabel(identifier: TaxIdentifierView, t: AppCopy) {

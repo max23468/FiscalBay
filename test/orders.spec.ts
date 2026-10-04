@@ -6,6 +6,7 @@ import {
   classifyEbayRetry,
   mergeFulfillmentOrders,
   parseFulfillmentPage,
+  orderSummarySchema,
 } from "../app/integrations/ebay/fulfillment.server";
 import {
   mapTradingTaxIdentifiers,
@@ -241,6 +242,38 @@ describe("percorso ordini", () => {
       },
     ]);
     expect(otherTenantOrders[0]?.taxIdentifiers).toEqual([]);
+    expect(ownerOrders[0]).toMatchObject({
+      storeName: "e-a",
+      fiscalState: "available",
+      summary: null,
+    });
+    expect(otherTenantOrders[0]).toMatchObject({ storeName: "e-b", fiscalState: "locked" });
+  });
+
+  it("distingue dati bloccati e disponibilità non verificata senza esporre identificativi", async () => {
+    await seed();
+    const before = await listVisibleOrders(env.DB, "u-a");
+    expect(before[0]?.fiscalState).toBe("locked");
+    expect(JSON.stringify(before)).not.toContain("RSSMRA80A01H501U");
+    await env.DB.prepare("DELETE FROM tax_identifiers WHERE order_id = 'o-a'").run();
+    expect((await listVisibleOrders(env.DB, "u-a"))[0]?.fiscalState).toBe("unchecked");
+  });
+
+  it("il riepilogo conserva solo campi validati e scarta dati fiscali anche annidati", () => {
+    const summary = orderSummarySchema.parse({
+      buyer: { username: "acquirente-sintetico", taxIdentifier: { value: "NON-ESPORRE" } },
+      orderPaymentStatus: "PAID",
+      orderFulfillmentStatus: "FULFILLED",
+      lineItems: [
+        { lineItemId: "riga", title: "Articolo", quantity: 2, taxIdentifier: "NON-ESPORRE" },
+      ],
+      taxIdentifier: "NON-ESPORRE",
+    });
+    expect(summary.lineItems?.[0]?.quantity).toBe(2);
+    expect(JSON.stringify(summary)).not.toContain("NON-ESPORRE");
+    expect(() =>
+      orderSummarySchema.parse({ lineItems: [{ lineItemId: "riga", title: {}, quantity: 0 }] }),
+    ).toThrow();
   });
 
   it("mappa la fonte fiscale Trading senza inventare il Paese emittente", () => {
@@ -472,6 +505,17 @@ function syntheticEbay() {
             creationDate: "2026-09-20T10:00:00.000Z",
             lastModifiedDate: "2026-09-20T11:00:00.000Z",
             pricingSummary: { total: { value: "12.5", currency: "EUR" } },
+            buyer: { username: "acquirente-sintetico", taxIdentifier: { value: "NON-ESPORRE" } },
+            orderPaymentStatus: "PAID",
+            orderFulfillmentStatus: "NOT_STARTED",
+            lineItems: [
+              {
+                lineItemId: "riga-sintetica",
+                title: "Articolo sintetico",
+                quantity: 2,
+                sku: "SKU-SINTETICO",
+              },
+            ],
           },
         ],
         total: 1,
@@ -985,6 +1029,16 @@ describe("collegamento negozio eBay", () => {
       request: new Request("http://localhost:5173/?negozio=collegato", { headers: { cookie } }),
     } as Parameters<typeof loadHome>[0]);
     expect(home.notice).toEqual({ text: "Negozio eBay collegato.", tone: "success" });
+    expect(home.orders[0]).toMatchObject({
+      storeName: "venditore",
+      fiscalState: "locked",
+      summary: {
+        buyer: { username: "acquirente-sintetico" },
+        orderPaymentStatus: "PAID",
+        lineItems: [{ title: "Articolo sintetico", quantity: 2 }],
+      },
+    });
+    expect(JSON.stringify(home.orders)).not.toContain("NON-ESPORRE");
     expect(
       home.orders.map(({ ebayOrderId, taxIdentifiers }) => [ebayOrderId, taxIdentifiers]),
     ).toEqual([[syntheticOrderId, []]]);

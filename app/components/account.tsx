@@ -43,8 +43,8 @@ function MethodRow({
   // Il gruppo dà ai pulsanti ripetuti in ogni riga («Rimuovi», «Esci») il nome della riga.
   const id = useId();
   return (
-    <li className="flex flex-col items-start gap-x-4 gap-y-2 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-      <span className="grid min-w-0 sm:flex-1 sm:basis-48">
+    <li className="flex flex-col items-start gap-x-4 gap-y-2 py-3 md:flex-row md:flex-wrap md:items-center md:justify-between">
+      <span className="grid min-w-0 md:flex-1 md:basis-48">
         <span id={`${id}-label`} className="font-medium">
           {label}
         </span>
@@ -75,6 +75,7 @@ function MethodAction({
   label,
   simulated = false,
   actionPath,
+  disabled = false,
   children,
 }: {
   language: Language;
@@ -84,6 +85,7 @@ function MethodAction({
   label?: string;
   simulated?: boolean;
   actionPath?: string;
+  disabled?: boolean;
   children: React.ReactNode;
 }) {
   const destructive = intent === "rimuovi-metodo" || intent === "passkey-remove";
@@ -103,6 +105,7 @@ function MethodAction({
         size="sm"
         name="intent"
         value={intent}
+        disabled={disabled}
       >
         {children}
       </Button>
@@ -111,7 +114,9 @@ function MethodAction({
   if (!destructive) return form;
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
-      <AlertDialogTrigger render={<Button type="button" variant="destructive" size="sm" />}>
+      <AlertDialogTrigger
+        render={<Button type="button" variant="destructive" size="sm" disabled={disabled} />}
+      >
         {children}
       </AlertDialogTrigger>
       <AlertDialogContent>
@@ -155,10 +160,12 @@ function EmailChange({
   language,
   email,
   actionPath,
+  disabled,
 }: {
   language: Language;
   email: string;
   actionPath: string;
+  disabled: boolean;
 }) {
   const { access: t, profile, orders } = appCopy[language];
   const [open, setOpen] = useState(false);
@@ -174,6 +181,7 @@ function EmailChange({
             type="button"
             variant="outline"
             size="sm"
+            disabled={disabled}
             aria-describedby="new-email-hint"
             onClick={() => setOpen(true)}
           >
@@ -248,7 +256,7 @@ function SessionList({
   const { settings } = appCopy[language];
   return (
     <SecurityGroup id="security-sessions" title={settings.sessions}>
-      <ul className="grid divide-y border-y">
+      <ul className="grid divide-y border-t">
         {sessions.map((session) => (
           <MethodRow
             key={session.id}
@@ -294,6 +302,8 @@ export function AccountSecurity({
   sessions,
   now,
   passkeyBlock,
+  recent = true,
+  passkeyRestriction = null,
   onAction,
   className = "grid gap-4 rounded-xl border bg-card p-5 md:p-6",
 }: {
@@ -303,6 +313,8 @@ export function AccountSecurity({
   sessions: ActiveSession[];
   now: string;
   passkeyBlock: string;
+  recent?: boolean;
+  passkeyRestriction?: "conferma-passkey" | "nuovo-accesso" | null;
   /** L'anteprima risponde con la propria azione simulata, senza chiamare Auth. */
   onAction?: (intent: string, fields: Record<string, string>) => void;
   className?: string;
@@ -324,6 +336,7 @@ export function AccountSecurity({
         label={method === "google" ? settings.methodGoogle : settings.methodEbay}
         simulated={!!onAction}
         actionPath={actionPath}
+        disabled={!recent}
       >
         {settings.remove}
       </MethodAction>
@@ -331,6 +344,7 @@ export function AccountSecurity({
       <MethodAction
         language={language}
         intent="collega-metodo"
+        disabled={!recent}
         method={method}
         actionPath={actionPath}
       >
@@ -342,7 +356,7 @@ export function AccountSecurity({
       type="button"
       variant="outline"
       size="sm"
-      disabled={pending}
+      disabled={pending || passkeyRestriction !== null}
       focusableWhenDisabled
       aria-busy={pending || undefined}
       onClick={async () => {
@@ -399,7 +413,16 @@ export function AccountSecurity({
           : undefined
       }
     >
-      <EmailChange language={language} email={email} actionPath={actionPath} />
+      {!recent || passkeyRestriction ? (
+        <StatusAlert tone="warning" title={t.signInNotices[passkeyRestriction ?? "nuovo-accesso"]}>
+          <form method="post" action={actionPath}>
+            <Button type="submit" variant="outline" size="sm" name="intent" value="esci">
+              {t.signOutSignIn}
+            </Button>
+          </form>
+        </StatusAlert>
+      ) : null}
+      <EmailChange language={language} email={email} actionPath={actionPath} disabled={!recent} />
       <SecurityGroup id="security-methods" title={settings.methods}>
         <ul className="grid divide-y border-y">
           <MethodRow label={settings.methodPassword} status={status(methods.accounts.password)}>
@@ -414,6 +437,7 @@ export function AccountSecurity({
                 label={settings.methodPassword}
                 simulated={!!onAction}
                 actionPath={actionPath}
+                disabled={!recent}
               >
                 {settings.remove}
               </MethodAction>
@@ -459,6 +483,7 @@ export function AccountSecurity({
                   label={passkey.name || settings.methodPasskey}
                   simulated={!!onAction}
                   actionPath={actionPath}
+                  disabled={passkeyRestriction !== null}
                 >
                   {settings.remove}
                 </MethodAction>
@@ -487,6 +512,10 @@ export function AccessNotice({
   notice: AccessNoticeView | null;
 }) {
   const t = appCopy[language].access;
+  const banner = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (notice) banner.current?.focus();
+  }, [notice]);
   // L'esito resta visibile ma esce dall'indirizzo, così una ricarica non lo ripropone.
   // Un link di recupero conserva il token e il proprio errore.
   useEffect(() => {
@@ -498,16 +527,26 @@ export function AccessNotice({
     if (url.search !== before) window.history.replaceState(window.history.state, "", url);
   }, []);
   return notice ? (
-    <StatusAlert tone={notice.tone} title={notice.text}>
-      {notice.text === t.storeNotices["altro-spazio"] ? (
-        <span className="grid gap-2">
-          <span>{appCopy[language].stores.elsewhereBody}</span>
-          <a href="mailto:supporto@fiscalbay.it" className="underline underline-offset-4">
-            {appCopy[language].authError.support}: supporto@fiscalbay.it
-          </a>
-        </span>
-      ) : null}
-    </StatusAlert>
+    <div ref={banner} tabIndex={-1} className="outline-none">
+      <StatusAlert tone={notice.tone} title={notice.text}>
+        {notice.text === t.signInNotices["nuovo-accesso"] ||
+        notice.text === t.signInNotices["conferma-passkey"] ? (
+          <form method="post" action={localizedPath(language, "/accesso")}>
+            <Button type="submit" variant="outline" size="sm" name="intent" value="esci">
+              {t.signOutSignIn}
+            </Button>
+          </form>
+        ) : null}
+        {notice.text === t.storeNotices["altro-spazio"] ? (
+          <span className="grid gap-2">
+            <span>{appCopy[language].stores.elsewhereBody}</span>
+            <a href="mailto:supporto@fiscalbay.it" className="underline underline-offset-4">
+              {appCopy[language].authError.support}: supporto@fiscalbay.it
+            </a>
+          </span>
+        ) : null}
+      </StatusAlert>
+    </div>
   ) : null;
 }
 

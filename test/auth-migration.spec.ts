@@ -1265,7 +1265,11 @@ describe("Sessioni, revoche e area admin", () => {
       expect(await appAction(user.cookie, fields)).toContain("nuovo-accesso");
     }
     expect((await jsonRequest("passkey/generate-register-options", user.cookie)).status).toBe(403);
-    expect(await security(user.cookie)).toMatchObject({ passkeyBlock: "nuovo-accesso" });
+    expect(await security(user.cookie)).toMatchObject({
+      recent: false,
+      passkeyRestriction: "nuovo-accesso",
+      passkeyBlock: "nuovo-accesso",
+    });
     // Le stesse modifiche chiamate direttamente sulle route Auth seguono la stessa regola.
     expect(
       (
@@ -1316,7 +1320,11 @@ describe("Sessioni, revoche e area admin", () => {
     expect(await admin(user.cookie)).toBe("verify");
     expect((await jsonRequest("passkey/generate-register-options", user.cookie)).status).toBe(403);
     // La home indica il passaggio giusto: accedere con passkey, non un accesso qualsiasi.
-    expect(await security(user.cookie)).toMatchObject({ passkeyBlock: "conferma-passkey" });
+    expect(await security(user.cookie)).toMatchObject({
+      recent: true,
+      passkeyRestriction: "conferma-passkey",
+      passkeyBlock: "conferma-passkey",
+    });
     await env.DB.prepare('UPDATE "user" SET "admin" = 0 WHERE id = ?').bind(user.id).run();
     expect(await admin(user.cookie)).toBe(404);
   });

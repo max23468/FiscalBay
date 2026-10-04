@@ -9,6 +9,7 @@ import { registrationStatus } from "../domain/registration.server";
 import {
   listActiveSessions,
   passkeyChangeBlock,
+  recentSignIn,
   type AuthSession,
 } from "../domain/sessions.server";
 import { listSignInMethods } from "../domain/sign-in-methods.server";
@@ -44,6 +45,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     methods: await listSignInMethods(env.DB, session.user.id),
     sessions: await listActiveSessions(env.DB, session.user.id, session.session.id, language, now),
     now: now.toISOString(),
+    recent: recentSignIn(session as AuthSession, now),
+    passkeyRestriction: passkeyChangeBlock(session as AuthSession, now),
     // Avviso da mostrare se la registrazione di una passkey viene rifiutata.
     passkeyBlock: passkeyChangeBlock(session as AuthSession, now) ?? "nuovo-accesso",
   };
@@ -66,6 +69,8 @@ export default function Security({ loaderData }: Route.ComponentProps) {
           sessions={loaderData.sessions}
           now={loaderData.now}
           passkeyBlock={loaderData.passkeyBlock}
+          recent={loaderData.recent}
+          passkeyRestriction={loaderData.passkeyRestriction}
         />
       </div>
     </AccountShell>

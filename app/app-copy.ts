@@ -86,6 +86,11 @@ const it = {
     phone: "Telefono",
     email: "Email",
     notProvided: "Non riportato da eBay",
+    notImported: "Dato non ancora acquisito",
+    fiscalUnchecked: "Disponibilità fiscale da verificare",
+    taxData: "Dati fiscali",
+    paymentPending: "Pagamento in attesa",
+    orderLabel: (id: string) => `Ordine ${id}`,
     fiscal: {
       available: "Disponibile",
       locked: "Da sbloccare",
@@ -632,6 +637,7 @@ const it = {
     passwordRecoveryConfirm: "Salva nuova password",
     signOut: "Esci",
     linkStore: "Collega negozio eBay",
+    signOutSignIn: "Esci e accedi di nuovo",
     terms: {
       before: "Accetto i ",
       terms: "Termini di servizio",
@@ -666,7 +672,7 @@ const it = {
       "ebay-rimosso": "Accesso eBay rimosso. I negozi collegati restano invariati.",
       "ultimo-metodo": "Aggiungi un altro metodo di accesso prima di rimuovere questo.",
       "password-link":
-        "Ti abbiamo inviato un link per scegliere la password. Dopo il salvataggio accedi di nuovo.",
+        "Ti abbiamo inviato un link per impostare una nuova password. Dopo il salvataggio accedi di nuovo.",
       "email-richiesta": "Controlla la posta e apri il link per confermare il nuovo indirizzo.",
       "email-confermata":
         "Conferma registrata. Se l’indirizzo non è ancora cambiato, apri il link inviato alla nuova email.",
@@ -780,6 +786,11 @@ const en: AppCopy = {
     phone: "Phone",
     email: "Email",
     notProvided: "Not provided by eBay",
+    notImported: "Data not yet imported",
+    fiscalUnchecked: "Tax identifier availability not yet checked",
+    taxData: "Tax identifiers",
+    paymentPending: "Payment pending",
+    orderLabel: (id) => `Order ${id}`,
     fiscal: {
       available: "Available",
       locked: "To unlock",
@@ -1305,6 +1316,7 @@ const en: AppCopy = {
     passwordRecoveryConfirm: "Save new password",
     signOut: "Sign out",
     linkStore: "Connect eBay store",
+    signOutSignIn: "Sign out and sign in again",
     terms: {
       before: "I accept the ",
       terms: "Terms of service",
@@ -1338,8 +1350,7 @@ const en: AppCopy = {
       "metodo-rimosso": "Sign-in method removed.",
       "ebay-rimosso": "eBay sign-in removed. Your connected stores are unchanged.",
       "ultimo-metodo": "Add another sign-in method before removing this one.",
-      "password-link":
-        "We sent you a link to choose your password. After saving it, sign in again.",
+      "password-link": "We sent you a link to set a new password. After saving it, sign in again.",
       "email-richiesta": "Check your inbox and open the link to confirm the new address.",
       "email-confermata":
         "Confirmation received. If your address has not changed yet, open the link sent to the new email.",
