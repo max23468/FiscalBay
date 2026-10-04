@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import {
   Check,
+  Clock,
   ChevronRight,
   ClipboardList,
   EllipsisVertical,
@@ -16,10 +17,9 @@ import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import { Link, useFetcher, useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { useAction, useNotice } from "~/components/app-shell";
-import { LedgerIndicator } from "~/components/brand";
 import { EmptyState } from "~/components/empty-state";
 import { PageTitle } from "~/components/icon-tile";
-import { dotTones, tileTones, toneFor } from "~/components/tile-tone";
+import { dotTones, toneFor } from "~/components/tile-tone";
 import { UnlockIcon } from "~/components/icons";
 import { StatusAlert, StatusBadge, StatusIcon } from "~/components/status";
 import { TaxCode } from "~/components/tax-code";
@@ -108,6 +108,7 @@ export interface OrdersPageData {
   }>;
   messageTemplate: string;
   now: string;
+  confirmUnlock?: boolean;
 }
 
 export interface UnlockResult {
@@ -336,33 +337,85 @@ function UnlockButton({
   t,
   unlocking,
   onUnlock,
+  remaining,
+  confirmUnlock = true,
 }: {
   order: OrderView;
   t: AppCopy;
   unlocking: boolean;
-  onUnlock: (ids: string[]) => void;
+  onUnlock: (ids: string[], skipConfirmation?: boolean) => void;
+  remaining: number | null;
+  confirmUnlock?: boolean;
 }) {
-  return (
-    <Button
-      size="sm"
-      className="w-fit"
-      disabled={unlocking}
-      focusableWhenDisabled
-      aria-busy={unlocking || undefined}
-      onClick={() => onUnlock([order.id])}
-    >
-      {unlocking ? (
-        <Spinner
-          label={t.orders.unlock}
-          aria-hidden="true"
-          role={undefined}
-          data-icon="inline-start"
-        />
-      ) : (
+  const [dontAsk, setDontAsk] = useState(false);
+  const cancel = useRef<HTMLButtonElement>(null);
+  if (!confirmUnlock)
+    return (
+      <Button
+        size="sm"
+        className="w-fit"
+        disabled={unlocking}
+        focusableWhenDisabled
+        aria-busy={unlocking || undefined}
+        onClick={() => onUnlock([order.id])}
+      >
         <UnlockIcon aria-hidden="true" data-icon="inline-start" />
-      )}
-      {t.orders.unlock}
-    </Button>
+        {t.orders.unlock}
+      </Button>
+    );
+  return (
+    <AlertDialog
+      onOpenChange={(open) => {
+        if (!open) setDontAsk(false);
+      }}
+    >
+      <AlertDialogTrigger
+        render={
+          <Button
+            size="sm"
+            className="w-fit"
+            disabled={unlocking}
+            focusableWhenDisabled
+            aria-busy={unlocking || undefined}
+          />
+        }
+      >
+        {unlocking ? (
+          <Spinner
+            label={t.orders.unlock}
+            aria-hidden="true"
+            role={undefined}
+            data-icon="inline-start"
+          />
+        ) : (
+          <UnlockIcon aria-hidden="true" data-icon="inline-start" />
+        )}
+        {t.orders.unlock}
+      </AlertDialogTrigger>
+      <AlertDialogContent initialFocus={cancel}>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t.orders.unlockTitle(1)}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t.orders.orderLabel(order.ebayOrderId)}
+            {remaining === null ? null : ` · ${t.orders.unlockConfirmText(1, remaining)}`}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <label className="flex items-start gap-2 text-sm">
+          <Checkbox
+            aria-label={t.orders.dontAskUnlock}
+            checked={dontAsk}
+            onCheckedChange={(checked) => setDontAsk(checked === true)}
+          />
+          {t.orders.dontAskUnlock}
+        </label>
+        <AlertDialogFooter>
+          <AlertDialogCancel ref={cancel}>{t.orders.cancel}</AlertDialogCancel>
+          <AlertDialogClose render={<Button />} onClick={() => onUnlock([order.id], dontAsk)}>
+            {t.orders.unlockConfirm}
+          </AlertDialogClose>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -472,7 +525,8 @@ interface FiscalProps {
   ebayDown: boolean;
   revealed: boolean;
   unlocking: boolean;
-  onUnlock: (ids: string[]) => void;
+  onUnlock: (ids: string[], skipConfirmation?: boolean) => void;
+  confirmUnlock?: boolean;
 }
 
 function unavailableTone(state: "missing" | "checking" | "error") {
@@ -483,7 +537,16 @@ function unavailableTone(state: "missing" | "checking" | "error") {
  * Riquadro del dato fiscale con la sua azione: stessa forma per ogni stato,
  * nella scheda accanto all'acquirente e nel dettaglio in cima al pannello.
  */
-function FiscalCodes({ order, t, account, ebayDown, revealed, unlocking, onUnlock }: FiscalProps) {
+function FiscalCodes({
+  order,
+  t,
+  account,
+  ebayDown,
+  revealed,
+  unlocking,
+  onUnlock,
+  confirmUnlock,
+}: FiscalProps) {
   const action = useAction();
   const { fiscal } = order;
   if (fiscal.state === "available") {
@@ -498,6 +561,11 @@ function FiscalCodes({ order, t, account, ebayDown, revealed, unlocking, onUnloc
                 value={identifier.value}
                 labels={taxCodeLabels(name, order.ebayOrderId, t)}
                 reveal={revealed}
+                warning={
+                  identifier.quality !== "valid" && identifier.quality !== "unchecked"
+                    ? t.orders.toVerify
+                    : undefined
+                }
               />
             </div>
           );
@@ -516,19 +584,26 @@ function FiscalCodes({ order, t, account, ebayDown, revealed, unlocking, onUnloc
           <>
             <TaxCode value={null} labels={taxCodeLabels(label, order.ebayOrderId, t)} />
             {exhausted ? null : (
-              <UnlockButton order={order} t={t} unlocking={unlocking} onUnlock={onUnlock} />
+              <UnlockButton
+                order={order}
+                t={t}
+                unlocking={unlocking}
+                onUnlock={onUnlock}
+                remaining={remainingUnlocks(account)}
+                confirmUnlock={confirmUnlock}
+              />
             )}
           </>
         ) : (
           <>
-            <FiscalSlot tone={unavailableTone(fiscal.state)}>
-              {t.orders.fiscal[fiscal.state]}
+            <FiscalSlot tone={action.pending ? "info" : unavailableTone(fiscal.state)}>
+              {t.orders.fiscal[action.pending ? "checking" : fiscal.state]}
             </FiscalSlot>
             {fiscal.state === "error" ? (
               <Button
                 variant="outline"
                 size="sm"
-                disabled={ebayDown}
+                disabled={ebayDown || action.pending}
                 focusableWhenDisabled
                 onClick={() => action.run("retry", { order: order.id })}
               >
@@ -691,6 +766,7 @@ function OrderCard({
   unlocking,
   onUnlock,
   isNew,
+  confirmUnlock,
   enterIndex,
 }: FiscalProps & {
   detailHref: string;
@@ -729,7 +805,7 @@ function OrderCard({
     >
       <header className="grid gap-0.5">
         <div className="flex items-center justify-between gap-3">
-          <h2 id={titleId} className="font-code text-[0.9375rem] leading-snug font-semibold">
+          <h2 id={titleId} className="text-[0.9375rem] leading-snug font-semibold">
             <Link
               to={detailHref}
               preventScrollReset
@@ -811,10 +887,7 @@ function OrderCard({
         ) : (
           <span
             aria-hidden="true"
-            className={cn(
-              "grid size-10 shrink-0 place-items-center rounded-md",
-              tileTones[toneFor(order.storeName)],
-            )}
+            className="grid size-10 shrink-0 place-items-center rounded-md border bg-muted text-muted-foreground"
           >
             <Package className="size-4" />
           </span>
@@ -844,7 +917,7 @@ function OrderCard({
       <div className="grid content-start gap-x-4 gap-y-3 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_14.5rem]">
         <p className="grid content-start gap-1.5">
           <span className="text-xs font-medium text-muted-foreground">{t.order.buyer}</span>
-          <span className="flex items-center text-sm leading-snug font-medium text-pretty sm:min-h-10">
+          <span className="text-sm leading-snug font-medium text-pretty sm:min-h-10">
             {order.buyerName}
           </span>
         </p>
@@ -857,6 +930,7 @@ function OrderCard({
           revealed={revealed}
           unlocking={unlocking}
           onUnlock={onUnlock}
+          confirmUnlock={confirmUnlock}
         />
         <FiscalNotes
           order={order}
@@ -963,7 +1037,7 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
   const row = "grid gap-0.5";
   return (
     <Tabs defaultValue="details" className="gap-0 px-4 pb-6">
-      <TabsList variant="line" className="mb-5">
+      <TabsList variant="line" className="sticky top-0 z-10 mb-5 bg-popover">
         <TabsTrigger value="details">{t.order.tabDetails}</TabsTrigger>
         <TabsTrigger value="items">
           {t.order.tabItems} ({order.items.length})
@@ -1009,7 +1083,7 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
           </h3>
           <dl className="grid gap-3 text-sm">
             <div className={row}>
-              <dt className="text-muted-foreground">{t.order.buyer}</dt>
+              <dt className="text-muted-foreground">{t.profile.name}</dt>
               <dd className="text-pretty">{order.buyerName}</dd>
             </div>
             <div className={row}>
@@ -1047,8 +1121,10 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
             <div className={row}>
               <dt className="text-muted-foreground">{t.order.recipient}</dt>
               <dd className="text-pretty">
-                {order.shipTo.name}, {order.shipTo.locality},{" "}
-                {countryName(order.shipTo.country, language)}
+                <span className="block">{order.shipTo.name}</span>
+                <span className="block">
+                  {order.shipTo.locality}, {countryName(order.shipTo.country, language)}
+                </span>
               </dd>
             </div>
           </dl>
@@ -1058,7 +1134,25 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
         <ul className="grid divide-y border-y">
           {order.items.map((item) => (
             <li key={item.id} className="grid gap-1.5 py-4 text-sm">
-              <p className="leading-relaxed text-pretty font-medium">{item.title}</p>
+              <div className="flex items-start gap-3">
+                {order.items.length === 1 && order.thumbnail ? (
+                  <img
+                    src={order.thumbnail}
+                    alt=""
+                    width="40"
+                    height="40"
+                    className="size-10 shrink-0 rounded-md border bg-muted object-cover"
+                  />
+                ) : (
+                  <span
+                    aria-hidden="true"
+                    className="grid size-10 shrink-0 place-items-center rounded-md border bg-muted text-muted-foreground"
+                  >
+                    <Package className="size-4" />
+                  </span>
+                )}
+                <p className="leading-relaxed text-pretty font-medium">{item.title}</p>
+              </div>
               <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span>
                   {item.sku ? (
@@ -1122,14 +1216,14 @@ function FilterSelect({
         <SelectTrigger id={id} className="w-full min-w-0">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent className="min-w-48">
+        <SelectContent alignItemWithTrigger={false} align="start" className="min-w-0">
           {items.map((item) => (
             <SelectItem key={item.value} value={item.value} disabled={item.premium}>
               {item.label}
               {item.premium ? (
                 <>
                   <StatusIcon tone="premium" className="ml-auto" />
-                  <span className="sr-only">{premiumLabel}</span>
+                  <span className="text-xs">{premiumLabel}</span>
                 </>
               ) : null}
             </SelectItem>
@@ -1145,13 +1239,16 @@ function OrdersToolbar({
   t,
   selecting,
   onToggleSelect,
+  selectRef,
 }: {
   data: OrdersPageData;
   t: AppCopy;
   selecting: boolean;
   onToggleSelect: () => void;
+  selectRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   const empty = data.total === 0;
+  const action = useAction();
   const [params, setParams] = useSearchParams();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filterKeys = ["negozio", "marketplace", "periodo", "pagamento", "spedizione", "fiscale"];
@@ -1166,6 +1263,16 @@ function OrdersToolbar({
   return (
     <div className="flex flex-col gap-4 md:flex-row md:items-end">
       <div className="flex flex-wrap items-center justify-end gap-2 md:order-last md:shrink-0">
+        {data.confirmUnlock === false ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={action.pending}
+            onClick={() => action.run("unlock-confirmation")}
+          >
+            {t.orders.restoreUnlockConfirmation}
+          </Button>
+        ) : null}
         <Button
           variant="outline"
           className="mr-auto md:hidden"
@@ -1179,6 +1286,7 @@ function OrdersToolbar({
         </Button>
         <Button
           variant={selecting ? "secondary" : "outline"}
+          ref={selectRef}
           aria-pressed={selecting}
           disabled={empty && !selecting}
           focusableWhenDisabled
@@ -1311,7 +1419,11 @@ function SelectionBar({
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <AlertDialog>
-            <AlertDialogTrigger render={<Button disabled={count === 0} />}>
+            <AlertDialogTrigger
+              render={
+                <Button variant={count === 0 ? "secondary" : "default"} disabled={count === 0} />
+              }
+            >
               <UnlockIcon aria-hidden="true" data-icon="inline-start" />
               {t.orders.unlockSelected(count)}
             </AlertDialogTrigger>
@@ -1388,6 +1500,16 @@ function OrdersHeader({
   );
 }
 
+function syncLabel(data: OrdersPageData, t: AppCopy, language: Language) {
+  if (isEbayDown(data)) return t.orders.ebayDownTitle;
+  const importing = importingNotice(data);
+  if (importing) return t.orders.importingStatus(importing.count);
+  if (data.sync.running) return t.orders.refreshingTitle;
+  return data.sync.lastAt
+    ? t.orders.syncedAgo(formatRelative(data.sync.lastAt, data.now, language))
+    : null;
+}
+
 /** Importazione, aggiornamento o ultimo aggiornamento: un solo indicatore per la pagina. */
 function SyncStatus({
   data,
@@ -1399,18 +1521,25 @@ function SyncStatus({
   language: Language;
 }) {
   const importing = importingNotice(data);
-  const { running, lastAt } = data.sync;
-  const label = importing
-    ? t.orders.importingStatus(importing.count)
-    : running
-      ? t.orders.refreshingTitle
-      : lastAt
-        ? t.orders.syncedAgo(formatRelative(lastAt, data.now, language))
-        : null;
+  const { running } = data.sync;
+  const down = isEbayDown(data);
+  const label = syncLabel(data, t, language);
   if (!label) return null;
   return (
-    <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
-      <LedgerIndicator active={running || importing !== undefined} />
+    <p
+      className={cn(
+        "flex items-center gap-2 text-sm",
+        down ? "text-warning" : "text-muted-foreground",
+      )}
+      role="status"
+    >
+      {down ? (
+        <StatusIcon tone="warning" />
+      ) : running || importing ? (
+        <Spinner label={label} aria-hidden="true" role={undefined} />
+      ) : (
+        <Clock aria-hidden="true" className="size-4" />
+      )}
       {label}
     </p>
   );
@@ -1616,9 +1745,9 @@ function useUnlock(unlockAction: string, t: AppCopy) {
     );
   }, [fetcher.state, fetcher.data, notify, t]);
   return {
-    submit: (ids: string[]) =>
+    submit: (ids: string[], skipConfirmation = false) =>
       void fetcher.submit(
-        { intent: "unlock", ids: ids.join(",") },
+        { intent: "unlock", ids: ids.join(","), skipConfirmation: String(skipConfirmation) },
         { method: "post", action: unlockAction },
       ),
     pending: new Set(
@@ -1629,7 +1758,7 @@ function useUnlock(unlockAction: string, t: AppCopy) {
   };
 }
 
-function SearchChip({ t }: { t: AppCopy }) {
+function SearchChip({ t, clearable = true }: { t: AppCopy; clearable?: boolean }) {
   const location = useLocation();
   const navigate = useNavigate();
   const query = new URLSearchParams(location.search).get("q");
@@ -1637,23 +1766,26 @@ function SearchChip({ t }: { t: AppCopy }) {
   return (
     <p className="-mt-2 flex items-center gap-2 text-sm">
       <span className="text-pretty">{t.orders.searchActive(query)}</span>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label={t.orders.clearSearch}
-        onClick={() => {
-          const next = new URLSearchParams(location.search);
-          next.delete("q");
-          void navigate({ search: next.toString() }, { preventScrollReset: true });
-        }}
-      >
-        <X aria-hidden="true" />
-      </Button>
+      {clearable ? (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={t.orders.clearSearch}
+          onClick={() => {
+            const next = new URLSearchParams(location.search);
+            next.delete("q");
+            void navigate({ search: next.toString() }, { preventScrollReset: true });
+          }}
+        >
+          <X aria-hidden="true" />
+        </Button>
+      ) : null}
     </p>
   );
 }
 
 function LoadMore({ data, t }: { data: OrdersPageData; t: AppCopy }) {
+  const [params] = useSearchParams();
   return (
     <div className="flex justify-center">
       {data.nextHref ? (
@@ -1667,7 +1799,11 @@ function LoadMore({ data, t }: { data: OrdersPageData; t: AppCopy }) {
         </Link>
       ) : (
         <p className="text-sm text-muted-foreground">
-          {importingNotice(data) ? t.orders.importMore : t.orders.allShown}
+          {importingNotice(data)
+            ? t.orders.importMore
+            : ["7", "30", "90"].includes(params.get("periodo") ?? "")
+              ? t.orders.allShown
+              : t.orders.allShownAll}
         </p>
       )}
     </div>
@@ -1697,6 +1833,7 @@ function OrdersList({
   const ebayDown = isEbayDown(data);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  const selectRef = useRef<HTMLButtonElement>(null);
   const [showIncoming, setShowIncoming] = useState(false);
   // Nuovi ordini: inseriti subito se l'utente è in cima alla lista e non sta
   // selezionando; altrimenti resta l'indicatore, così nulla si sposta mentre legge.
@@ -1713,10 +1850,11 @@ function OrdersList({
   const stopSelecting = () => {
     setSelecting(false);
     setSelected(new Set());
+    selectRef.current?.focus();
   };
-  const submit = (ids: string[]) => {
+  const submit = (ids: string[], skipConfirmation = false) => {
     stopSelecting();
-    unlock.submit(ids);
+    unlock.submit(ids, skipConfirmation);
   };
   const ordersHref = appHref(links, "ordini");
   // La lista resta dal più recente anche quando i nuovi ordini arrivano in un ordine diverso.
@@ -1743,9 +1881,10 @@ function OrdersList({
         data={data}
         t={t}
         selecting={selecting}
+        selectRef={selectRef}
         onToggleSelect={() => (selecting ? stopSelecting() : setSelecting(true))}
       />
-      <SearchChip t={t} />
+      <SearchChip t={t} clearable={orders.length > 0 || !onlySearch} />
       {data.incoming.length > 0 && !showIncoming ? (
         <div className="flex justify-center">
           <Button variant="secondary" onClick={() => setShowIncoming(true)}>
@@ -1756,6 +1895,7 @@ function OrdersList({
       {orders.length === 0 ? (
         <EmptyState
           variant="search"
+          className="rounded-xl border bg-card px-5"
           title={t.orders.noResultsTitle}
           description={onlySearch ? t.orders.noSearchResultsBody : t.orders.noResultsBody}
           action={
@@ -1801,6 +1941,7 @@ function OrdersList({
                     revealed={unlock.revealed.has(order.id)}
                     unlocking={unlock.pending.has(order.id)}
                     onUnlock={submit}
+                    confirmUnlock={data.confirmUnlock}
                     isNew={showIncoming && incomingIds.has(order.id)}
                     enterIndex={enterIndexes.get(order.id)}
                   />
@@ -1839,6 +1980,7 @@ function OrderSheet({
   const { language } = links;
   const location = useLocation();
   const navigate = useNavigate();
+  const action = useAction();
   const ebayDown = isEbayDown(data);
   // Il pannello conserva l'ultimo ordine durante l'animazione di chiusura.
   const [shown, setShown] = useState(data.detail);
@@ -1861,14 +2003,32 @@ function OrderSheet({
           ref={panel}
           initialFocus={panel}
           closeLabel={t.shell.close}
-          className="sm:max-w-lg"
+          className="sm:max-w-lg outline-none"
+          header={
+            <SheetHeader>
+              <SheetTitle>{t.order.title(shown.ebayOrderId)}</SheetTitle>
+              <SheetDescription className="text-pretty">
+                {formatDate(shown.createdAt, language)} · {shown.buyerName}
+              </SheetDescription>
+            </SheetHeader>
+          }
         >
-          <SheetHeader>
-            <SheetTitle className="font-code">{t.order.title(shown.ebayOrderId)}</SheetTitle>
-            <SheetDescription className="text-pretty">
-              {formatDate(shown.createdAt, language)} · {shown.buyerName}
-            </SheetDescription>
-          </SheetHeader>
+          <div className="flex flex-wrap gap-2 px-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => action.run("open-on-ebay", { order: shown.id })}
+            >
+              {t.orders.openOnEbay}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => action.run("export", { ids: shown.id })}
+            >
+              {t.orders.exportOrder}
+            </Button>
+          </div>
           {/* Il dato fiscale, protagonista, resta visibile sopra le schede Dettagli e Articoli. */}
           <div className="mx-4 mb-5 grid gap-3 rounded-xl border bg-muted/30 p-3">
             <FiscalCodes
@@ -1880,6 +2040,7 @@ function OrderSheet({
               revealed={unlock.revealed.has(shown.id)}
               unlocking={unlock.pending.has(shown.id)}
               onUnlock={unlock.submit}
+              confirmUnlock={data.confirmUnlock}
             />
             <FiscalDetail
               order={shown}

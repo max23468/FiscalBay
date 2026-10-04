@@ -60,7 +60,7 @@ function matches(order: OrderView, params: URLSearchParams, now: string) {
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const { language, scenario } = await currentScenario(request);
+  const { language, scenario, state } = await currentScenario(request);
   const url = new URL(request.url);
   const search = url.searchParams;
   const filtered = scenario.orders
@@ -101,6 +101,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     messageTemplate:
       appCopy[language].settings[language === "it" ? "templateDefaultIt" : "templateDefaultEn"],
     now: scenario.now,
+    confirmUnlock: state.confirmUnlock !== false,
   };
   return page;
 }
@@ -132,7 +133,11 @@ export async function action({ request }: Route.ActionArgs) {
   };
   return data(result, {
     headers: {
-      "Set-Cookie": await writePreviewState({ ...state, unlocked: [...state.unlocked, ...ids] }),
+      "Set-Cookie": await writePreviewState({
+        ...state,
+        unlocked: [...state.unlocked, ...ids],
+        confirmUnlock: form.get("skipConfirmation") === "true" ? false : state.confirmUnlock,
+      }),
     },
   });
 }

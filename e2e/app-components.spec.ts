@@ -24,6 +24,177 @@ const noPageOverflow = (page: Page) =>
 
 for (const language of ["it", "en"] as const) {
   for (const colorScheme of ["light", "dark"] as const) {
+    for (const width of [390, 1280]) {
+      test(`ordini: conferme, stati e dettaglio ${language} ${colorScheme} a ${width} px`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({ width, height: 844 });
+        await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+        const prefix = language === "it" ? "" : "/en";
+        const t = (it: string, en: string) => (language === "it" ? it : en);
+        const errors: string[] = [];
+        page.on("pageerror", (error) => errors.push(error.message));
+        page.on("console", (message) => {
+          if (message.type() === "error") errors.push(message.text());
+        });
+        await open(page, `${prefix}/anteprima/ordini`, "ordinario");
+        const locked = page.getByRole("article", {
+          name: t("Ordine", "Order") + " 05-55555-12121",
+        });
+        const unlock = locked.getByRole("button", { name: t("Sblocca ordine", "Unlock order") });
+        await unlock.click();
+        const confirm = page.getByRole("alertdialog");
+        await expect(confirm).toContainText(t("1 sblocco", "1 unlock"));
+        const cancel = confirm.getByRole("button", { name: t("Annulla", "Cancel"), exact: true });
+        await expect(cancel).toBeFocused();
+        await confirm
+          .getByRole("checkbox", { name: t("Non chiedermelo più", "Don’t ask again") })
+          .check();
+        await cancel.click();
+        await expect(unlock).toBeFocused();
+        await expect(locked.getByText("BNCLCU75C12F205X")).toHaveCount(0);
+        await unlock.click();
+        await expect(confirm.getByRole("checkbox")).not.toBeChecked();
+        await confirm
+          .getByRole("checkbox", {
+            name: t("Non chiedermelo più", "Don’t ask again"),
+          })
+          .check();
+        await confirm.getByRole("button", { name: t("Sblocca", "Unlock"), exact: true }).click();
+        await expect(locked.getByText("BNCLCU75C12F205X")).toBeVisible();
+        await page.reload();
+        const restore = page.getByRole("button", {
+          name: t("Riattiva conferma sblocco", "Restore unlock confirmation"),
+        });
+        await expect(restore).toBeVisible();
+        await open(page, `${prefix}/anteprima/ordini/ord-09`);
+        await page
+          .getByRole("dialog")
+          .getByRole("button", { name: t("Sblocca ordine", "Unlock order") })
+          .click();
+        await expect(page.getByRole("alertdialog")).toHaveCount(0);
+        await expect(
+          page.getByRole("dialog").getByText("04567890123", { exact: true }),
+        ).toBeVisible();
+        await page
+          .getByRole("dialog")
+          .getByRole("button", { name: t("Chiudi", "Close"), exact: true })
+          .click();
+        await restore.click();
+        await expect(restore).toHaveCount(0);
+        await open(page, `${prefix}/anteprima/ordini`, "ordinario");
+        const select = page.getByRole("button", { name: t("Seleziona", "Select"), exact: true });
+        await select.click();
+        const zero = page.getByRole("button", { name: t("Sblocca 0", "Unlock 0"), exact: true });
+        await expect(zero).toBeDisabled();
+        await expect(zero).toHaveClass(/bg-muted/);
+        await page.getByRole("button", { name: t("Annulla", "Cancel"), exact: true }).click();
+        await expect(select).toBeFocused();
+        const failed = page.getByRole("article", {
+          name: t("Ordine", "Order") + " 19-00001-99999",
+        });
+        const retried = page.waitForResponse(
+          (response) =>
+            response.url().includes("/ordini.data") && response.request().method() === "POST",
+        );
+        await failed.getByRole("button", { name: t("Riprova", "Try again"), exact: true }).click();
+        await expect(failed).toContainText(t("In verifica", "Checking"));
+        expect((await retried).status()).toBe(200);
+        await expect(
+          failed.getByRole("button", { name: t("Riprova", "Try again"), exact: true }),
+        ).toHaveCount(0);
+        await page.reload();
+        await expect(failed).toContainText(t("In verifica", "Checking"));
+        if (width === 390)
+          await page.getByRole("button", { name: t("Filtri", "Filters"), exact: true }).click();
+        const period = page.getByRole("combobox", { name: t("Periodo", "Period"), exact: true });
+        await period.click();
+        const menu = page.locator('[data-slot="select-content"]');
+        await expect(
+          menu.getByText(t("Disponibile con Premium", "Available with Premium")),
+        ).toBeVisible();
+        await expect
+          .poll(async () =>
+            Math.abs((await menu.boundingBox())!.width - (await period.boundingBox())!.width),
+          )
+          .toBeLessThan(2);
+        expect((await menu.boundingBox())!.y).toBeGreaterThanOrEqual(
+          (await period.boundingBox())!.y + (await period.boundingBox())!.height,
+        );
+        await page.keyboard.press("Escape");
+        await page.setViewportSize({ width, height: 600 });
+        await open(page, `${prefix}/anteprima/ordini/ord-01`, "ordinario");
+        const dialog = page.getByRole("dialog");
+        await expect(dialog).toHaveCSS("outline-style", "none");
+        await expect(
+          dialog.getByRole("button", { name: t("Apri su eBay", "Open on eBay") }),
+        ).toBeVisible();
+        await expect(
+          dialog.getByRole("button", { name: t("Esporta ordine", "Export order") }),
+        ).toBeVisible();
+        const header = dialog.locator('[data-slot="sheet-header"]');
+        const headerY = (await header.boundingBox())!.y;
+        await dialog.getByRole("tab", { name: /Articoli|Items/ }).click();
+        await expect(dialog).toContainText(t("Prezzo unitario", "Unit price"));
+        await expect(dialog.locator("li .lucide-package")).toHaveCount(3);
+        await dialog
+          .locator("[data-slot=sheet-header] + div")
+          .evaluate((el) => (el.scrollTop = el.scrollHeight));
+        expect(
+          await dialog.locator("[data-slot=sheet-header] + div").evaluate((el) => el.scrollTop),
+        ).toBeGreaterThan(0);
+        expect((await header.boundingBox())!.y).toBe(headerY);
+        await expect(dialog.getByRole("tablist")).toBeInViewport();
+        await expect(
+          dialog.getByRole("tab", { name: t("Dettagli", "Details"), exact: true }),
+        ).toBeInViewport();
+        await page.screenshot({ path: test.info().outputPath("dettaglio.png") });
+        expect(await noPageOverflow(page)).toBe(true);
+        await page.setViewportSize({ width, height: 844 });
+        await open(page, `${prefix}/anteprima/ordini`, "ordinario");
+        const warning = page.getByText("SPSNNA85T55F83", { exact: true }).locator("..");
+        await expect(warning).toContainText(t("Da verificare", "Needs review"));
+        await expect(warning).toHaveClass(/bg-warning-surface/);
+        await expect(warning.getByRole("button", { name: /^Copia |^Copy / })).toBeVisible();
+        await page.screenshot({ path: test.info().outputPath("elenco.png"), fullPage: true });
+        await open(page, `${prefix}/anteprima/ordini?q=zzzz`, "ordinario");
+        const clear = page.getByRole("link", {
+          name: t("Cancella ricerca", "Clear search"),
+          exact: true,
+        });
+        await expect(clear).toBeVisible();
+        await expect(
+          page.getByRole("button", { name: t("Cancella ricerca", "Clear search"), exact: true }),
+        ).toHaveCount(0);
+        await expect(clear.locator("../..")).toHaveClass(/rounded-xl/);
+        await open(page, `${prefix}/anteprima/ordini?mostra=10`, "ordinario");
+        await expect(
+          page.getByText(
+            t("Hai visto tutti gli ordini disponibili.", "You have seen all available orders."),
+          ),
+        ).toBeVisible();
+        await open(page, `${prefix}/anteprima/ordini?periodo=7&mostra=10`, "ordinario");
+        await expect(
+          page.getByText(
+            t(
+              "Hai visto tutti gli ordini del periodo.",
+              "You have seen all orders in this period.",
+            ),
+          ),
+        ).toBeVisible();
+        await open(page, `${prefix}/anteprima/ordini`, "ebay-non-disponibile");
+        await expect(page.locator("main > div > header [role=status]")).toHaveClass(/text-warning/);
+        await expect(
+          page.getByRole("button", { name: t("Riprova", "Try again"), exact: true }).first(),
+        ).toBeDisabled();
+        expect(errors).toEqual([]);
+      });
+    }
+  }
+}
+
+for (const language of ["it", "en"] as const) {
+  for (const colorScheme of ["light", "dark"] as const) {
     for (const width of [500, 1440]) {
       test(`accesso e pagine standalone ${language} ${colorScheme} a ${width} px`, async ({
         page,
@@ -891,6 +1062,7 @@ test("movimento ridotto: dato intero e nuovi ordini senza animazione", async ({ 
     .getByRole("button", { name: "Sblocca ordine" })
     .click();
   const value = page.getByText("BNCLCU75C12F205X", { exact: true });
+  await page.getByRole("alertdialog").getByRole("button", { name: "Sblocca", exact: true }).click();
   await expect(value).toBeVisible();
   await expect(value).toHaveCSS("animation-name", "none");
   await expect(value).toHaveCSS("filter", "none");
