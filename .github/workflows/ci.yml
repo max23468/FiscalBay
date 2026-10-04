@@ -22,9 +22,10 @@ jobs:
   verify:
     name: Node 26
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     outputs:
       deploy: ${{ steps.detect.outputs.gate == 'full' }}
+      e2e: ${{ steps.detect.outputs.e2e }}
       artifact: build-${{ steps.tree.outputs.tree }}
       artifact-run: ${{ steps.reuse.outputs.run-id || github.run_id }}
 
@@ -125,8 +126,7 @@ jobs:
         if: steps.detect.outputs.e2e == 'true' && !steps.reuse.outputs.run-id && steps.browsers.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
 
-      # Riusa la build appena prodotta da `pnpm verify`: è la stessa che viene distribuita.
-      - name: Check browser interactions
+      - name: Check browser interactions before deploy
         if: steps.detect.outputs.e2e == 'true' && !steps.reuse.outputs.run-id
         env:
           E2E_PREBUILT: "1"
@@ -176,7 +176,7 @@ jobs:
           node-version: 26.10.0
           cache: pnpm
 
-      # Serve soltanto Wrangler: l'applicazione non viene ricompilata.
+      # L'applicazione non viene ricompilata; Wrangler distribuisce la build verificata.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -214,6 +214,31 @@ jobs:
       - name: Check test endpoint
         run: curl --fail --silent --show-error --max-time 20 --output /dev/null https://test.fiscalbay.it/
 
+      - name: Read Playwright version
+        id: playwright
+        if: needs.verify.outputs.e2e == 'true'
+        run: echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
+
+      - name: Restore browser cache
+        id: browsers
+        if: needs.verify.outputs.e2e == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install browser for interaction tests
+        if: needs.verify.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install browser system dependencies
+        if: needs.verify.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+
+      - name: Check deployed browser interactions
+        if: needs.verify.outputs.e2e == 'true'
+        run: pnpm test:e2e:smoke
+
       # Misura e ricevuta senza bloccare (D148): il p95 oscilla di qualche ms fra misure
       # della stessa versione, quindi oltre soglia resta un avviso e non un rollback.
       - name: Check capacity
@@ -228,7 +253,7 @@ jobs:
         if: steps.capacity.outcome == 'failure'
         run: echo "::warning::Controllo di capacità non superato, deploy mantenuto. Ricevuta nel riepilogo della run."
 
-      # Un deploy fallito o un endpoint che non risponde non resta distribuito sul test.
+      # Un deploy con endpoint o interazioni falliti non resta distribuito sul test.
       - name: Roll back test deploy
         if: failure() && steps.previous.outputs.version
         env:

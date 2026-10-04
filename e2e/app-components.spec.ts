@@ -330,18 +330,22 @@ for (const locale of ["it", "en"] as const) {
 
 const supportAddress = ["supporto", "fiscalbay.it"].join("@");
 
-test("GET delle azioni pubbliche torna all'accesso nella lingua richiesta", async ({ request }) => {
-  for (const prefix of ["", "/en"]) {
-    for (const path of ["/accesso", "/negozi/collega"]) {
-      const response = await request.get(`${prefix}${path}?redirectTo=https://example.invalid`, {
-        maxRedirects: 0,
-      });
-      expect(response.status()).toBe(302);
-      expect(response.headers().location).toBe(prefix || "/");
-      expect(response.headers()["cache-control"]).toBe("no-store");
+test(
+  "GET delle azioni pubbliche torna all'accesso nella lingua richiesta",
+  { tag: "@smoke" },
+  async ({ request }) => {
+    for (const prefix of ["", "/en"]) {
+      for (const path of ["/accesso", "/negozi/collega"]) {
+        const response = await request.get(`${prefix}${path}?redirectTo=https://example.invalid`, {
+          maxRedirects: 0,
+        });
+        expect(response.status()).toBe(302);
+        expect(response.headers().location).toBe(prefix || "/");
+        expect(response.headers()["cache-control"]).toBe("no-store");
+      }
     }
-  }
-});
+  },
+);
 
 for (const language of ["it", "en"] as const) {
   for (const colorScheme of ["light", "dark"] as const) {
@@ -719,7 +723,7 @@ test("nomi distinti dei pulsanti Copia nell'elenco", async ({ page }) => {
   expect(new Set(names).size).toBe(names.length);
 });
 
-test("superfici nei due temi", async ({ page }) => {
+test("superfici nei due temi", { tag: "@smoke" }, async ({ page }) => {
   for (const [scheme, background, card, panel] of [
     ["light", "rgb(245, 247, 250)", "rgb(255, 255, 255)", "rgb(255, 255, 255)"],
     ["dark", "rgb(18, 20, 24)", "rgb(28, 31, 37)", "rgb(36, 40, 48)"],

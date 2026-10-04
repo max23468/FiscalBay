@@ -18,32 +18,36 @@ async function chooseScenario(page: Page, name: string) {
   await expect(page.getByRole("combobox", { name: /Scenario/ })).toContainText(name);
 }
 
-test("la radice apre Ordini con navigazione, campanella e menu account", async ({ page }) => {
-  await open(page, "/anteprima");
-  await expect(page).toHaveURL(/\/anteprima\/ordini$/u);
-  await expect(page).toHaveTitle("FiscalBay | Ordini");
-  const nav = page.getByRole("navigation", { name: "Navigazione principale" });
-  await expect(nav.getByRole("link")).toHaveText(["Ordini", "Negozi eBay", "Impostazioni"]);
-  await expect(nav.getByRole("link", { name: "Ordini" })).toHaveAttribute("aria-current", "page");
-  await page.getByRole("button", { name: "Notifiche, 1 da leggere" }).click();
-  await expect(page.getByText("Manutenzione programmata")).toBeVisible();
-  await page.getByRole("button", { name: "Segna tutte come lette" }).click();
-  await expect(page.getByRole("button", { name: "Notifiche", exact: true })).toBeVisible();
-  await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Account" }).click();
-  const menu = page.getByRole("menu");
-  await expect(menu.getByRole("menuitem")).toHaveText([
-    "Profilo",
-    "Sicurezza",
-    "Piano e pagamenti",
-    "Impostazioni",
-    "Visita fiscalbay.it",
-    "Esci",
-  ]);
-  await menu.getByRole("menuitem", { name: "Sicurezza" }).click();
-  await expect(page).toHaveURL(/\/anteprima\/impostazioni\/sicurezza$/u);
-  await expect(page.getByRole("heading", { name: "Sicurezza", level: 2 })).toBeVisible();
-});
+test(
+  "la radice apre Ordini con navigazione, campanella e menu account",
+  { tag: "@smoke" },
+  async ({ page }) => {
+    await open(page, "/anteprima");
+    await expect(page).toHaveURL(/\/anteprima\/ordini$/u);
+    await expect(page).toHaveTitle("FiscalBay | Ordini");
+    const nav = page.getByRole("navigation", { name: "Navigazione principale" });
+    await expect(nav.getByRole("link")).toHaveText(["Ordini", "Negozi eBay", "Impostazioni"]);
+    await expect(nav.getByRole("link", { name: "Ordini" })).toHaveAttribute("aria-current", "page");
+    await page.getByRole("button", { name: "Notifiche, 1 da leggere" }).click();
+    await expect(page.getByText("Manutenzione programmata")).toBeVisible();
+    await page.getByRole("button", { name: "Segna tutte come lette" }).click();
+    await expect(page.getByRole("button", { name: "Notifiche", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Account" }).click();
+    const menu = page.getByRole("menu");
+    await expect(menu.getByRole("menuitem")).toHaveText([
+      "Profilo",
+      "Sicurezza",
+      "Piano e pagamenti",
+      "Impostazioni",
+      "Visita fiscalbay.it",
+      "Esci",
+    ]);
+    await menu.getByRole("menuitem", { name: "Sicurezza" }).click();
+    await expect(page).toHaveURL(/\/anteprima\/impostazioni\/sicurezza$/u);
+    await expect(page.getByRole("heading", { name: "Sicurezza", level: 2 })).toBeVisible();
+  },
+);
 
 test("il dettaglio ha un URL, si chiude con Indietro e conserva i filtri", async ({ page }) => {
   await open(page, "/anteprima/ordini?fiscale=available");

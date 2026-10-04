@@ -22,11 +22,12 @@ Codex desktop può usare file/CLI locali e le connessioni effettivamente autoriz
 | Comando previsto | Responsabilità |
 |---|---|
 | `pnpm format:check`, `pnpm lint`, `pnpm typecheck` | Oxfmt, Oxlint e compilatore; versione esatta nel lockfile/config, non copiata in più documenti. |
-| `pnpm test`, `pnpm test:e2e` | Vitest/Testing Library e Playwright, fixture controllate; accessibilità smoke dove pertinente. |
+| `pnpm test`, `pnpm test:e2e` | Vitest/Testing Library e Playwright sulla build locale prima del deploy, fixture controllate; accessibilità smoke dove pertinente. |
+| `pnpm test:e2e:smoke` | Controllo Playwright breve sul dominio test dopo il deploy, senza avviare un server locale. |
 | `pnpm build` | Artefatto del runtime selezionato, nessun deploy implicito. |
 | `pnpm verify` | Composizione dei gate applicabili; comandi e risultati realmente verificati. |
 | `pnpm verify:repo`, `pnpm test:scripts` | Regole di repository (sigle di piano, fixture `.invalid`, import aciclici, moduli server con consumatore, versioni di Node/pnpm, Action fissate a SHA) e test dei guardrail con casi negativi; entrambi in `pnpm verify`. |
-| `pnpm verify:changed` | Classificatore dei file modificati condiviso con la CI: gate documentale soltanto per documenti ordinari, gate completo per il resto e per ogni file non classificato, E2E salvo modifiche ai soli test unitari. |
+| `pnpm verify:changed` | Classificatore dei file modificati condiviso con la CI: gate documentale soltanto per documenti ordinari, gate completo per il resto e per ogni file non classificato, E2E prima del deploy salvo modifiche ai soli test unitari. |
 | `pnpm test:mutation <file[:righe]>` | Stryker con runner Vitest sui soli file indicati; fallisce per sopravvissuti, timeout ed errori, ammette equivalenze motivate con `Stryker disable`. |
 | Workflow `Pubblica` | Contratto [§34](../MASTER_PLAN.md#s34), readback e ripresa degli esiti parziali. |
 
