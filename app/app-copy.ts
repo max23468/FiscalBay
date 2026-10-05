@@ -624,8 +624,8 @@ const it = {
   storeLink: {
     title: "Collega un negozio eBay",
     environment: "Ambiente eBay",
-    production: "eBay | Account reali",
-    sandbox: "eBay Sandbox | Account di prova",
+    production: { name: "eBay", detail: "Account reali" },
+    sandbox: { name: "eBay Sandbox", detail: "Account di prova" },
     reconnectTitle: "Ricollega un negozio eBay",
     reconnectIntro:
       "Ti portiamo su eBay per rinnovare l’autorizzazione. Accedi con l’account venditore del negozio da ricollegare: FiscalBay lo riconosce e conserva gli ordini già importati.",
@@ -1376,8 +1376,8 @@ const en: AppCopy = {
   storeLink: {
     title: "Connect an eBay store",
     environment: "eBay environment",
-    production: "eBay | Real accounts",
-    sandbox: "eBay Sandbox | Test accounts",
+    production: { name: "eBay", detail: "Real accounts" },
+    sandbox: { name: "eBay Sandbox", detail: "Test accounts" },
     reconnectTitle: "Reconnect an eBay store",
     reconnectIntro:
       "We’ll take you to eBay to renew the authorisation. Sign in with the seller account of the store you want to reconnect: FiscalBay recognises it and keeps the orders already imported.",
