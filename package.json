@@ -39,18 +39,18 @@
     "exceljs": "4.4.0",
     "fflate": "0.8.3",
     "isbot": "5.2.2",
-    "lucide-react": "1.49.0",
-    "motion": "13.5.0",
+    "lucide-react": "1.52.0",
+    "motion": "14.0.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-router": "8.4.0",
-    "stripe": "22.6.2",
+    "stripe": "23.0.0",
     "zod": "4.6.5"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
-    "@cloudflare/vite-plugin": "1.62.4",
-    "@cloudflare/vitest-plugin": "1.3.5",
+    "@cloudflare/vite-plugin": "1.62.5",
+    "@cloudflare/vitest-plugin": "1.3.6",
     "@playwright/test": "1.63.0",
     "@react-router/dev": "8.4.0",
     "@stryker-mutator/core": "10.0.0",
@@ -61,16 +61,16 @@
     "@types/react-dom": "19.3.0",
     "oxfmt": "0.71.0",
     "oxlint": "1.86.0",
-    "react-doctor": "0.9.14",
+    "react-doctor": "0.9.16",
     "shadcn": "4.21.1",
     "tailwindcss": "4.3.3",
     "typescript": "7.0.2",
     "vite": "8.3.2",
     "vitest": "4.1.11",
-    "wrangler": "4.146.0"
+    "wrangler": "4.147.0"
   },
   "engines": {
     "node": "26.10.0"
   },
-  "packageManager": "pnpm@12.6.0"
+  "packageManager": "pnpm@12.9.1"
 }
