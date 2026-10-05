@@ -309,6 +309,18 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Tailwind 4 lascia la freccia sui pulsanti: sul web ciò che si clicca mostra la mano. */
+  :is(
+    button,
+    [role="button"],
+    [role="combobox"],
+    [role="checkbox"],
+    [role="radio"],
+    [role="switch"],
+    summary
+  ):not(:disabled, [aria-disabled="true"]) {
+    cursor: pointer;
+  }
   h1,
   h2,
   h3 {
