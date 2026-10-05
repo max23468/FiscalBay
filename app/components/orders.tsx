@@ -1547,6 +1547,34 @@ function SyncStatus({
   );
 }
 
+/** Negozio da ricollegare: l'avviso porta al suo pannello, dove si ricollega. */
+export function StoreIssueAlert({
+  storeId,
+  storeName,
+  t,
+  links,
+}: {
+  storeId: string;
+  storeName: string;
+  t: AppCopy;
+  links: AppLinks;
+}) {
+  return (
+    <StatusAlert tone="warning" title={t.orders.storeIssueTitle(storeName)}>
+      <span className="grid justify-items-start gap-3">
+        {t.orders.storeIssueBody}
+        <Link
+          to={appHref(links, `negozi/${storeId}`)}
+          data-slot="button"
+          className={buttonVariants({ variant: "outline", size: "sm" })}
+        >
+          {t.orders.storeIssueAction}
+        </Link>
+      </span>
+    </StatusAlert>
+  );
+}
+
 function OrdersNotices({
   data,
   t,
@@ -1586,22 +1614,13 @@ function OrdersNotices({
             );
           case "store-issue":
             return (
-              <StatusAlert
+              <StoreIssueAlert
                 key={`${notice.kind}:${notice.storeId}`}
-                tone="warning"
-                title={t.orders.storeIssueTitle(notice.storeName)}
-              >
-                <span className="grid justify-items-start gap-3">
-                  {t.orders.storeIssueBody}
-                  <Link
-                    to={appHref(links, `negozi/${notice.storeId}`)}
-                    data-slot="button"
-                    className={buttonVariants({ variant: "outline", size: "sm" })}
-                  >
-                    {t.orders.storeIssueAction}
-                  </Link>
-                </span>
-              </StatusAlert>
+                storeId={notice.storeId}
+                storeName={notice.storeName}
+                t={t}
+                links={links}
+              />
             );
           // L'importazione compare nell'indicatore dell'intestazione e in fondo all'elenco.
           case "importing":

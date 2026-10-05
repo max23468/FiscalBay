@@ -13,7 +13,13 @@ export type StoreStatus = {
   name: string;
   connection: StoreConnection;
   pauseReasons: PauseReason[];
+  /** Inizio del consenso corrente; null per un negozio scollegato. */
+  consentGrantedAt: string | null;
   consentExpiresAt: string | null;
+  /** Ultima lettura riuscita degli ordini su eBay. */
+  lastSyncAt: string | null;
+  importedOrders: number;
+  dataDeleted: boolean;
   /**
    * Invito a ricollegare: prima che il consenso scada e, dopo, per al massimo trenta giorni.
    * Mai per i negozi in pausa, che non leggono eBay.
@@ -53,12 +59,15 @@ export async function listStores(
   const { results } = await db
     .prepare(
       `SELECT s.id, s.ebay_environment, COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id) AS name, s.disconnected_at,
-              c.store_id AS credentials, c.refresh_expires_at, c.rejected_at,
+              s.data_deleted_at, c.store_id AS credentials, c.granted_at, c.refresh_expires_at,
+              c.rejected_at, ss.last_success_at,
               (SELECT group_concat(reason) FROM ebay_store_pauses p WHERE p.store_id = s.id)
-                AS pauses
+                AS pauses,
+              (SELECT COUNT(*) FROM orders o WHERE o.store_id = s.id) AS orders
          FROM workspace_members wm
          JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
          LEFT JOIN ebay_store_credentials c ON c.store_id = s.id
+         LEFT JOIN sync_state ss ON ss.store_id = s.id
         WHERE wm.user_id = ?
         ORDER BY s.linked_at, s.id`,
     )
@@ -68,10 +77,14 @@ export async function listStores(
       ebay_environment: "production" | "sandbox";
       name: string;
       disconnected_at: string | null;
+      data_deleted_at: string | null;
       credentials: string | null;
+      granted_at: string | null;
       refresh_expires_at: string | null;
       rejected_at: string | null;
+      last_success_at: string | null;
       pauses: string | null;
+      orders: number;
     }>();
   const at = now.getTime();
   return results.map((row) => {
@@ -105,7 +118,11 @@ export async function listStores(
       name: row.name,
       connection,
       pauseReasons,
+      consentGrantedAt: row.disconnected_at ? null : row.granted_at,
       consentExpiresAt: row.disconnected_at ? null : expiresAt,
+      lastSyncAt: row.last_success_at,
+      importedOrders: row.orders,
+      dataDeleted: row.data_deleted_at !== null,
       reminder,
     };
   });

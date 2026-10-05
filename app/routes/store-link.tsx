@@ -6,6 +6,13 @@ import { redirect } from "react-router";
 import { StandalonePage } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
 import { Field, FieldLabel } from "~/components/ui/field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
 import { buttonVariants } from "~/components/ui/button-variants";
 import { appCopy } from "../app-copy";
 import { createAuth } from "../auth.server";
@@ -15,6 +22,8 @@ import { languageFromPath, localizedPath } from "../i18n";
 import { startStoreLink } from "../integrations/ebay/store-link.server";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import type { Route } from "./+types/store-link";
+
+const environments = ["production", "sandbox"] as const;
 
 const noStore = { headers: { "cache-control": "no-store" } };
 
@@ -62,6 +71,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     language,
     reconnect: search.has(reconnectParam),
+    // Arrivando da Negozi, «Annulla» torna lì.
+    fromStores: search.get("da") === "negozi",
     sandbox: sandboxAvailable(env),
     ebayEnvironment: search.get("environment") === "sandbox" ? "sandbox" : "production",
   };
@@ -95,6 +106,7 @@ export default function StoreLink({ loaderData }: Route.ComponentProps) {
   const { language, reconnect, sandbox, ebayEnvironment } = loaderData;
   const t = appCopy[language].storeLink;
   const home = localizedPath(language);
+  const back = loaderData.fromStores ? localizedPath(language, "/negozi") : home;
   return (
     <StandalonePage
       icon={Store}
@@ -121,21 +133,27 @@ export default function StoreLink({ loaderData }: Route.ComponentProps) {
         {sandbox && (
           <Field className="w-full">
             <FieldLabel htmlFor="ebay-environment">{t.environment}</FieldLabel>
-            <select
-              id="ebay-environment"
-              aria-label={t.environment}
+            <Select
               name="environment"
               defaultValue={ebayEnvironment}
-              className="rounded-md border border-input bg-background px-3 py-2"
+              items={environments.map((value) => ({ value, label: t[value] }))}
             >
-              <option value="production">{t.production}</option>
-              <option value="sandbox">{t.sandbox}</option>
-            </select>
+              <SelectTrigger id="ebay-environment" className="w-full min-w-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {environments.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {t[value]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Field>
         )}
         <Button type="submit">{t.continue}</Button>
         <a
-          href={home}
+          href={back}
           data-slot="button"
           className={cn(buttonVariants({ variant: "outline" }), "w-fit")}
         >

@@ -1,11 +1,9 @@
 import { env } from "cloudflare:workers";
 import { ShieldCheck } from "lucide-react";
-import { redirect } from "react-router";
 
 import { AccessNotice, AccountSecurity, AccountShell } from "~/components/account";
 import { PageTitle } from "~/components/icon-tile";
-import { createAuth } from "../auth.server";
-import { registrationStatus } from "../domain/registration.server";
+import { requireAccountArea } from "../account-area.server";
 import {
   listActiveSessions,
   passkeyChangeBlock,
@@ -15,7 +13,7 @@ import {
 import { listSignInMethods } from "../domain/sign-in-methods.server";
 import { accessNotice } from "../access-notice";
 import { appCopy } from "../app-copy";
-import { languageFromPath, localizedPath } from "../i18n";
+import { languageFromPath } from "../i18n";
 import type { Route } from "./+types/security";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
@@ -25,23 +23,13 @@ export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
 
 /** Sicurezza dell'account: metodi di accesso, email e sessioni, per chi ha confermato l'email. */
 export async function loader({ request }: Route.LoaderArgs) {
+  const { language, session, account } = await requireAccountArea(request);
   const url = new URL(request.url);
-  const language = languageFromPath(url.pathname);
-  const session = await createAuth(env).api.getSession({ headers: request.headers });
-  const status = session ? await registrationStatus(env.DB, session.user.id) : null;
-  // Senza sessione, email confermata o registrazione completa la radice mostra il passo che
-  // manca; l'esito eventualmente arrivato resta nell'indirizzo.
-  if (!session?.user.emailVerified || !status?.profile || !status.termsAccepted) {
-    throw redirect(`${localizedPath(language)}${url.search}`, {
-      headers: { "cache-control": "no-store" },
-    });
-  }
   const now = new Date();
   return {
     language,
     notice: accessNotice(url.searchParams, language),
-    name: `${status.profile.firstName} ${status.profile.lastName}`,
-    email: session.user.email,
+    ...account,
     methods: await listSignInMethods(env.DB, session.user.id),
     sessions: await listActiveSessions(env.DB, session.user.id, session.session.id, language, now),
     now: now.toISOString(),

@@ -27,13 +27,20 @@ test(
     await expect(page).toHaveTitle("FiscalBay | Ordini");
 
     // Il collegamento scaduto precede quello in scadenza; il negozio in pausa non avvisa.
-    const alerts = page.getByRole("status").filter({ hasText: "Ricollega negozio" });
+    const alerts = page
+      .getByRole("status")
+      .filter({ hasText: /collegamento scaduto|autorizzazione in scadenza/u });
     await expect(alerts).toHaveCount(2);
     await expect(alerts.nth(0)).toContainText(`${stores.expired}: collegamento scaduto`);
+    await expect(alerts.nth(0).getByRole("link", { name: "Apri il negozio" })).toHaveAttribute(
+      "href",
+      `/negozi/${stores.expired}`,
+    );
     await expect(alerts.nth(1)).toContainText(`${stores.expiring}: autorizzazione in scadenza`);
-    for (const link of await alerts.getByRole("link", { name: "Ricollega negozio" }).all()) {
-      await expect(link).toHaveAttribute("href", "/negozi/collega?ricollega");
-    }
+    await expect(alerts.nth(1).getByRole("link", { name: "Ricollega negozio" })).toHaveAttribute(
+      "href",
+      "/negozi/collega?ricollega&environment=production",
+    );
     await expect(page.getByText(stores.paused)).toHaveCount(0);
 
     // Il codice dell'ordine sbloccato è visibile, quello bloccato non arriva al browser.
@@ -41,6 +48,22 @@ test(
     await expect(page.getByText(orders.locked).first()).toBeVisible();
     await expect(page.getByText(taxCodes.unlocked).first()).toBeVisible();
     expect(await page.content()).not.toContain(taxCodes.locked);
+
+    // Negozi: elenco con il piano dello spazio e pannello aperto da link diretto, senza azioni.
+    await page.getByRole("link", { name: "Negozi eBay" }).first().click();
+    await expect(page).toHaveTitle("FiscalBay | Negozi eBay");
+    await expect(page.getByText("Il piano Free è del tuo spazio FiscalBay")).toBeVisible();
+    for (const name of Object.values(stores)) {
+      await expect(page.getByRole("table").getByText(name, { exact: true })).toBeVisible();
+    }
+    await page.goto(`/negozi/${stores.paused}`);
+    const panel = page.getByRole("dialog", { name: stores.paused });
+    await expect(panel.getByRole("button", { name: "Riprendi" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page).toHaveURL(/\/negozi$/u);
+
+    await page.goto("/profilo");
+    await expect(page).toHaveTitle("FiscalBay | Profilo");
 
     await page.goto("/en");
     await expect(page).toHaveTitle("FiscalBay | Orders");

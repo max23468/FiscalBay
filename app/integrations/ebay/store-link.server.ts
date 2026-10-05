@@ -330,8 +330,23 @@ async function importLatestOrder(input: {
   const page = await upstreamJson(fetcher, input.configuration.ordersUrl, ordersPageSchema, {
     headers: { authorization: `Bearer ${input.accessToken}` },
   });
+  // Lettura riuscita: l'ultima sincronizzazione del negozio, senza toccare il cursore.
+  const recordSync = () =>
+    db
+      .prepare(
+        `INSERT INTO sync_state (store_id, last_success_at, updated_at)
+         SELECT ?1, ?3, ?3 WHERE ${sameConsent}
+         ON CONFLICT(store_id) DO UPDATE SET
+           last_success_at = excluded.last_success_at,
+           updated_at = excluded.updated_at`,
+      )
+      .bind(input.storeId, input.grantedAt, now)
+      .run();
   const order = page.orders[0];
-  if (!order) return;
+  if (!order) {
+    await recordSync();
+    return;
+  }
 
   // L'upsert dell'ordine e la lettura Trading sono indipendenti: partono insieme.
   const [saved, tradingXml] = await Promise.all([
@@ -403,4 +418,5 @@ async function importLatestOrder(input: {
       ),
     );
   }
+  await recordSync();
 }

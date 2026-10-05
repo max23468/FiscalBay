@@ -29,6 +29,8 @@ import { loader as loadHome } from "../app/routes/home";
 import { action as signIn } from "../app/routes/sign-in";
 import { loader as loadLegal } from "../app/routes/legal";
 import { action as startStoreLink, loader as loadStoreLink } from "../app/routes/store-link";
+import { action as storesAction, loader as loadStores } from "../app/routes/stores";
+import { action as profileAction, loader as loadProfile } from "../app/routes/profile";
 import {
   openToken,
   refreshExpiringTokens,
@@ -1251,18 +1253,21 @@ describe("collegamento negozio eBay", () => {
       expect(page).toEqual({
         language: base ? "en" : "it",
         reconnect: false,
+        fromStores: false,
         sandbox: false,
         ebayEnvironment: "production",
       });
     }
+    // Da Negozi la schermata riporta lì con «Annulla».
     const reconnect = await loadStoreLink({
-      request: new Request("http://localhost:5173/negozi/collega?ricollega", {
+      request: new Request("http://localhost:5173/negozi/collega?ricollega&da=negozi", {
         headers: { cookie },
       }),
     } as Parameters<typeof loadStoreLink>[0]);
     expect(reconnect).toEqual({
       language: "it",
       reconnect: true,
+      fromStores: true,
       sandbox: false,
       ebayEnvironment: "production",
     });
@@ -1608,7 +1613,11 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         ebayEnvironment: "production",
         connection: "active",
         pauseReasons: [],
+        consentGrantedAt: expect.any(String),
         consentExpiresAt: "2027-02-01T00:00:00.000Z",
+        lastSyncAt: expect.any(String),
+        importedOrders: 1,
+        dataDeleted: false,
         reminder: null,
       },
     ]);
@@ -1761,11 +1770,13 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
   it("elimina i dati solo con il nome del negozio, senza restituire quota né resuscitarli", async () => {
     const seller = await linkedSeller("elimina@example.invalid");
     await grantImportedOrder(seller);
+    // Il collegamento ha già registrato la lettura riuscita; si aggiunge un cursore.
     await env.DB.prepare(
-      "INSERT INTO sync_state (store_id, cursor, updated_at) VALUES (?, 'cursore', ?)",
+      "UPDATE sync_state SET cursor = 'cursore', updated_at = ? WHERE store_id = ?",
     )
-      .bind(seller.storeId, now)
+      .bind(now, seller.storeId)
       .run();
+    expect(await count("sync_state")).toBe(1);
     const before = await env.DB.prepare("SELECT id FROM orders").first<{ id: string }>();
 
     expect(await deleteStoreData(env.DB, seller.userId, seller.storeId, "altro nome")).toBe(
@@ -1853,6 +1864,183 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     await linkThroughEbay(seller.cookie, ebay);
     expect(await count("orders")).toBe(0);
     expect(await count("tax_identifiers")).toBe(0);
+    expect(await count("sync_state")).toBe(0);
+  });
+
+  function storesPage(path: string, cookie: string) {
+    return loadStores({
+      request: new Request(`http://localhost:5173${path}`, { headers: { cookie } }),
+      params: { negozio: path.split("/negozi/")[1] },
+    } as Parameters<typeof loadStores>[0]);
+  }
+
+  function storeForm(
+    cookie: string,
+    fields: Record<string, string>,
+    origin = "http://localhost:5173",
+  ) {
+    return storesAction({
+      request: new Request("http://localhost:5173/negozi", {
+        method: "POST",
+        headers: { cookie, origin },
+        body: new URLSearchParams(fields),
+      }),
+    } as Parameters<typeof storesAction>[0]);
+  }
+
+  it("mostra elenco e pannello del negozio con i soli dati posseduti e il piano dello spazio", async () => {
+    const seller = await linkedSeller("schermata@example.invalid");
+    const list = await storesPage("/negozi", seller.cookie);
+    expect(list.init?.status).toBe(200);
+    expect(list.data.page).toMatchObject({
+      detail: null,
+      account: { plan: "free" },
+      connectHref: "/negozi/collega",
+      stores: [
+        {
+          id: seller.storeId,
+          name: "venditore",
+          connection: "active",
+          importedOrders: 1,
+          // Senza sincronizzazione continua niente frequenza, storico né aggiornamenti inventati.
+          targetMinutes: null,
+          historyDays: null,
+          recent: [],
+          notifications: null,
+        },
+      ],
+    });
+    expect(list.data.page.stores[0]!.lastSyncAt).not.toBeNull();
+
+    // Link diretto e refresh del pannello, anche in inglese.
+    const detail = await storesPage(`/en/negozi/${seller.storeId}`, seller.cookie);
+    expect(detail.data).toMatchObject({
+      language: "en",
+      notFound: false,
+      page: { detail: { id: seller.storeId }, connectHref: "/en/negozi/collega" },
+    });
+
+    // Un negozio di un altro spazio risponde come uno inesistente, dentro la shell.
+    const other = await verifiedSession("altro-spazio-schermata@example.invalid");
+    const foreign = await storesPage(`/negozi/${seller.storeId}`, other.cookie);
+    expect(foreign.init?.status).toBe(404);
+    expect(foreign.data).toMatchObject({ notFound: true, page: { stores: [], detail: null } });
+
+    // Senza sessione si torna alla radice.
+    const anonymous = await loadStores({
+      request: new Request("http://localhost:5173/negozi"),
+      params: {},
+    } as Parameters<typeof loadStores>[0]).catch((response: Response) => response);
+    expect((anonymous as Response).status).toBe(302);
+    expect((anonymous as Response).headers.get("location")).toBe("/");
+  });
+
+  it("esegue pausa, ripresa, scollegamento ed eliminazione dalla schermata con origine e sessione", async () => {
+    const seller = await linkedSeller("azioni-schermata@example.invalid");
+    const foreignOrigin = await storeForm(
+      seller.cookie,
+      { intent: "store-pause", store: seller.storeId },
+      "https://esempio.invalid",
+    ).catch((response: Response) => response);
+    expect((foreignOrigin as Response).status).toBe(403);
+    expect(await count("ebay_store_pauses")).toBe(0);
+
+    expect(
+      await storeForm(seller.cookie, { intent: "store-pause", store: seller.storeId }),
+    ).toEqual({ ok: true, notice: "Negozio in pausa." });
+    let [store] = (await storesPage("/negozi", seller.cookie)).data.page.stores;
+    expect(store).toMatchObject({ connection: "paused", pauseReason: "manual" });
+
+    await storeForm(seller.cookie, { intent: "store-resume", store: seller.storeId });
+    await storeForm(seller.cookie, { intent: "store-disconnect", store: seller.storeId });
+    [store] = (await storesPage("/negozi", seller.cookie)).data.page.stores;
+    expect(store).toMatchObject({
+      connection: "disconnected",
+      connectedAt: null,
+      consentExpiresAt: null,
+      importedOrders: 1,
+    });
+
+    const other = await verifiedSession("estraneo-schermata@example.invalid");
+    const foreign = await storeForm(other.cookie, {
+      intent: "store-delete",
+      store: seller.storeId,
+      conferma: "venditore",
+    });
+    expect((foreign as { init: ResponseInit }).init.status).toBe(404);
+
+    const mismatch = await storeForm(seller.cookie, {
+      intent: "store-delete",
+      store: seller.storeId,
+      conferma: "altro",
+    });
+    expect((mismatch as { init: ResponseInit }).init.status).toBe(409);
+    expect(await count("orders")).toBe(1);
+
+    expect(
+      await storeForm(seller.cookie, {
+        intent: "store-delete",
+        store: seller.storeId,
+        conferma: "venditore",
+      }),
+    ).toMatchObject({ ok: true });
+    // Il negozio resta nello spazio, scollegato e senza dati: ricollegarlo non crea doppioni.
+    [store] = (await storesPage("/negozi", seller.cookie)).data.page.stores;
+    expect(store).toMatchObject({
+      connection: "disconnected",
+      dataDeleted: true,
+      importedOrders: 0,
+    });
+
+    const unknown = await storeForm(seller.cookie, { intent: "store-sync", store: seller.storeId });
+    expect((unknown as { init: ResponseInit }).init.status).toBe(400);
+  });
+
+  it("aggiorna il profilo minimo senza cambiare il tipo di account", async () => {
+    const seller = await verifiedSession("profilo@example.invalid");
+    const page = await loadProfile({
+      request: new Request("http://localhost:5173/en/profilo", {
+        headers: { cookie: seller.cookie },
+      }),
+    } as Parameters<typeof loadProfile>[0]);
+    expect(page).toEqual({
+      language: "en",
+      account: {
+        name: "Utente Sintetico",
+        email: "profilo@example.invalid",
+        profile: syntheticProfile,
+      },
+    });
+
+    const save = (fields: Record<string, string>, origin = "http://localhost:5173") =>
+      profileAction({
+        request: new Request("http://localhost:5173/profilo", {
+          method: "POST",
+          headers: { cookie: seller.cookie, origin },
+          body: new URLSearchParams({ intent: "profile", ...fields }),
+        }),
+      } as Parameters<typeof profileAction>[0]);
+
+    const foreign = await save({ nome: "Altro", cognome: "Nome" }, "https://esempio.invalid").catch(
+      (response: Response) => response,
+    );
+    expect((foreign as Response).status).toBe(403);
+    const invalid = await save({ nome: " ", cognome: "Nome" });
+    expect((invalid as { init: ResponseInit }).init.status).toBe(400);
+
+    expect(
+      await save({ nome: "Nuovo", cognome: "Nome", tipo: "azienda", ragione_sociale: "Ditta" }),
+    ).toEqual({ ok: true, notice: "Profilo aggiornato." });
+    expect(await profileOf(seller.userId)).toEqual({
+      first_name: "Nuovo",
+      last_name: "Nome",
+      account_type: "private",
+      company_name: null,
+    });
+    const user = await env.DB.prepare('SELECT name FROM "user" WHERE id = ?')
+      .bind(seller.userId)
+      .first();
+    expect(user).toEqual({ name: "Nuovo Nome" });
   });
 });
 

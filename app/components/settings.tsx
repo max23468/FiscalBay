@@ -1240,7 +1240,7 @@ export function ProfilePage({
   t,
   links,
 }: {
-  account: AccountView;
+  account: Pick<AccountView, "name" | "email" | "profile">;
   t: AppCopy;
   links: AppLinks;
 }) {
