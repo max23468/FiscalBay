@@ -1,4 +1,4 @@
-import { KeyRound, Languages, ShieldCheck } from "lucide-react";
+import { ClipboardList, KeyRound, Languages, ShieldCheck, Store, User } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useLocation, useSubmit } from "react-router";
@@ -567,7 +567,7 @@ export function AccountShell({
 }: {
   language: Language;
   account: { name: string; email: string };
-  /** Sicurezza è disponibile dopo la conferma dell'email. */
+  /** Dopo la conferma dell'email: navigazione, Profilo e Sicurezza. */
   security: boolean;
   children: React.ReactNode;
 }) {
@@ -581,12 +581,25 @@ export function AccountShell({
       links={{ language, base: "" }}
       t={t}
       account={account}
-      navigation={false}
+      navigation={
+        security
+          ? [
+              {
+                href: localizedPath(language),
+                label: t.shell.orders,
+                Icon: ClipboardList,
+                end: true,
+              },
+              { href: localizedPath(language, "/negozi"), label: t.shell.stores, Icon: Store },
+            ]
+          : []
+      }
       home={localizedPath(language)}
       menu={[
         ...(security
           ? [
               [
+                { href: localizedPath(language, "/profilo"), label: t.shell.profile, Icon: User },
                 {
                   href: localizedPath(language, securityPath),
                   label: t.shell.security,
