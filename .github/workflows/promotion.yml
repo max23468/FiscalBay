@@ -1,0 +1,35 @@
+name: Riallinea develop
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: read
+  actions: write
+
+concurrency:
+  group: align-develop
+  cancel-in-progress: false
+
+jobs:
+  align:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Preserve develop commits and merge promotion history
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PROMOTED_SHA: ${{ github.sha }}
+        run: |
+          prs="$(gh api "repos/${GH_REPO}/commits/${PROMOTED_SHA}/pulls")"
+          allowed="$(jq -r 'any(.[]; .merged_at != null and .base.ref == "main" and .head.ref == "develop" and .head.repo.full_name == .base.repo.full_name)' <<< "${prs}")"
+          test "${allowed}" = true
+          before="$(gh api "repos/${GH_REPO}/git/ref/heads/develop" --jq '.object.sha')"
+          gh api "repos/${GH_REPO}/merges" -f base=develop -f head="${PROMOTED_SHA}" -f commit_message='chore: riallinea la storia di promozione' > /tmp/alignment.json
+          after="$(gh api "repos/${GH_REPO}/git/ref/heads/develop" --jq '.object.sha')"
+          if [ "${before}" != "${after}" ]; then
+            gh workflow run ci.yml --ref develop -f expected_sha="${after}"
+          fi

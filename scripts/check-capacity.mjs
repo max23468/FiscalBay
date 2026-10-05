@@ -53,8 +53,10 @@ export function percentile95(values) {
 }
 
 /** Esito sugli eventi delle richieste misurate. */
-export function evaluate(events, { sent, maxP95 }) {
+export function evaluate(events, { sent, expected = sent, maxP95 }) {
   const failures = [];
+  if (sent !== expected)
+    failures.push(`campione interrotto: ${sent} richieste su ${expected} previste`);
   if (events.length < sent) failures.push(`eventi ricevuti ${events.length} su ${sent} richieste`);
   const errors = events.filter(
     (event) =>
@@ -63,9 +65,20 @@ export function evaluate(events, { sent, maxP95 }) {
       !(event.event?.response?.status < 500),
   );
   if (errors.length > 0) failures.push(`${errors.length} invocazioni con errore`);
-  const p95 = events.length > 0 ? percentile95(events.map((event) => event.cpuTime)) : undefined;
-  if (p95 === undefined || !(p95 <= maxP95)) failures.push(`CPU p95 ${p95} ms oltre ${maxP95} ms`);
-  return { ok: failures.length === 0, p95, failures };
+  const valid =
+    sent > 0 &&
+    sent === expected &&
+    events.length === sent &&
+    events.every((event) => Number.isFinite(event.cpuTime));
+  const p95 = valid ? percentile95(events.map((event) => event.cpuTime)) : undefined;
+  if (!valid && failures.length === 0) failures.push("campione non attendibile");
+  if (valid && !(p95 <= maxP95)) failures.push(`CPU p95 ${p95} ms oltre ${maxP95} ms`);
+  return {
+    ok: failures.length === 0,
+    status: !valid ? "non attendibile" : failures.length ? "non superata" : "superata",
+    p95,
+    failures,
+  };
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -133,7 +146,10 @@ async function main() {
   });
 
   const request = async (path, marker) => {
-    const response = await fetch(new URL(path, values.url), { headers: { [probeHeader]: marker } });
+    const response = await fetch(new URL(path, values.url), {
+      headers: { [probeHeader]: marker },
+      signal: AbortSignal.timeout(20000),
+    });
     await response.arrayBuffer();
   };
 
@@ -149,17 +165,25 @@ async function main() {
     if (events.warmup.length === 0)
       throw new Error("Tail non collegato: nessun evento di riscaldamento.");
 
-    for (let round = 0; round < rounds; round++)
-      for (const path of probePaths) await request(path, token);
-    const sent = rounds * probePaths.length;
+    // Evita una raffica che induce il tail a campionare: un piccolo giro alla volta.
+    let sent = 0;
+    for (let round = 0; round < rounds; round++) {
+      for (const path of probePaths) {
+        await request(path, token);
+        sent++;
+      }
+      if (!(await waitFor(() => events.measure.length >= (round + 1) * probePaths.length, 5_000)))
+        break;
+      await sleep(500);
+    }
     await waitFor(() => events.measure.length >= sent, 30_000);
 
-    const result = evaluate(events.measure, { sent, maxP95 });
+    const result = evaluate(events.measure, { sent, expected: rounds * probePaths.length, maxP95 });
     const receipt = [
-      `Capacità ${values.worker}: ${result.ok ? "superata" : "non superata"}`,
+      `Capacità ${values.worker}: ${result.status}`,
       `- versione ${version}`,
       `- eventi ${events.measure.length} su ${sent} richieste, route ${probePaths.join(" ")}`,
-      `- CPU p95 ${result.p95} ms, soglia ${maxP95} ms`,
+      `- CPU p95 ${result.p95 === undefined ? "non qualificato" : `${result.p95} ms`}, soglia ${maxP95} ms`,
       ...result.failures.map((failure) => `- ${failure}`),
     ].join("\n");
     console.log(receipt);

@@ -4,6 +4,7 @@
   "compatibility_date": "2026-09-13",
   "compatibility_flags": ["nodejs_compat"],
   "main": "./workers/app.ts",
+  "version_metadata": { "binding": "VERSION_METADATA" },
   "workers_dev": false,
   "routes": [{ "pattern": "test.fiscalbay.it", "custom_domain": true }],
   "triggers": { "crons": ["*/30 * * * *"] },
@@ -51,6 +52,7 @@
   "upload_source_maps": true,
   "env": {
     "production": {
+      "version_metadata": { "binding": "VERSION_METADATA" },
       "name": "fiscalbay",
       "routes": [{ "pattern": "fiscalbay.it", "custom_domain": true }],
       "vars": {

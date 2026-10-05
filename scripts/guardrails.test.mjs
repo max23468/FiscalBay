@@ -7,7 +7,17 @@ import { describe, it } from "node:test";
 import { randomBytes } from "node:crypto";
 import { budgetKiB } from "./check-bundle-size.mjs";
 import { evaluate as evaluateCapacity, jsonObjects, percentile95 } from "./check-capacity.mjs";
-import { classifyFile, plan } from "./classify-changes.mjs";
+import { classifyFile, plan as changePlan } from "./classify-changes.mjs";
+import { missingPages, missingSections, routePatterns } from "./verify-pages.mjs";
+import {
+  migrationPlan,
+  publish,
+  productionReadiness,
+  assertResume,
+  digestDirectory,
+  assertAppliedMigrations,
+} from "./release.mjs";
+import { releaseNotes } from "./release-notes.mjs";
 import { evaluate } from "./mutation.mjs";
 import {
   checkActionPins,
@@ -21,6 +31,10 @@ import {
 const milestone = "M" + "3";
 const task = `${milestone}-06`;
 const gate = "G-" + "EBAY";
+const plan = (files) => {
+  const { gate, e2e, unclassified } = changePlan(files);
+  return { gate, e2e, unclassified };
+};
 
 describe("sigle di piano", () => {
   it("ammette le sigle nella documentazione e nelle migration già applicate", () => {
@@ -153,6 +167,43 @@ describe("Action fissate", () => {
 });
 
 describe("classificazione dei file modificati", () => {
+  it("segue i consumatori transitivi e allarga la selezione quando ne arriva uno nuovo", () => {
+    const files = [
+      { path: "app/domain/stores.server.ts", text: "" },
+      {
+        path: "app/routes/store-link.tsx",
+        text: 'import { load } from "../domain/stores.server";',
+      },
+    ];
+    assert.deepEqual(changePlan([files[0].path], files).areas, ["stores"]);
+    files.push({
+      path: "app/routes/home.tsx",
+      text: 'import { load } from "../domain/stores.server";',
+    });
+    assert.deepEqual(changePlan([files[0].path], files).areas, [
+      "auth",
+      "orders",
+      "public",
+      "stores",
+    ]);
+    assert.equal(changePlan(["app/new-module.ts"], files).mode, "full");
+  });
+
+  it("seleziona una route circoscritta ma forza il completo sulla tabella delle route", () => {
+    const sources = [{ path: "app/routes/stores.tsx", text: "export default function Page() {}" }];
+    assert.equal(changePlan([sources[0].path], sources).mode, "targeted");
+    assert.equal(changePlan(["app/routes.ts"], sources).mode, "full");
+  });
+
+  it("non distribuisce un aggiornamento actionlint e forza il completo sul candidato", () => {
+    const files = [".github/workflows/actionlint.yml"];
+    assert.equal(changePlan(files).mode, "tooling");
+    assert.equal(changePlan(files).deploy, false);
+    assert.equal(changePlan(files, [], true).mode, "full");
+    assert.equal(changePlan(["app/integrations/stripe.server.ts"]).mutation.length, 1);
+    assert.equal(changePlan([".github/workflows/publish.yml"]).promotionReuse, false);
+    assert.equal(changePlan(["app/routes/stores.tsx"]).promotionReuse, true);
+  });
   it("assegna le categorie note", () => {
     assert.equal(classifyFile("README.md"), "documentation");
     assert.equal(classifyFile("test/orders.spec.ts"), "test");
@@ -185,6 +236,144 @@ describe("classificazione dei file modificati", () => {
     assert.deepEqual(plan(["test/orders.spec.ts"]), { gate: "full", e2e: false, unclassified: [] });
     assert.equal(plan(["e2e/app-components.spec.ts"]).e2e, true);
     assert.equal(plan(["app/root.tsx"]).e2e, true);
+  });
+});
+
+describe("catalogo delle pagine", () => {
+  it("segnala anche nuove sezioni e una lingua dimenticata", () => {
+    assert.deepEqual(
+      missingSections(["aspetto", "nuova"], [{ path: "/anteprima/impostazioni/aspetto" }]),
+      [
+        "/en/anteprima/impostazioni/aspetto",
+        "/anteprima/impostazioni/nuova",
+        "/en/anteprima/impostazioni/nuova",
+      ],
+    );
+  });
+  it("richiede scenari anche per route annidate e nuove route", () => {
+    const patterns = routePatterns([{ path: "app", children: [{ path: "orders/:id" }] }]);
+    assert.deepEqual(patterns, ["/app", "/app/orders/:id"]);
+    assert.deepEqual(missingPages(patterns, [{ pattern: "/app" }]), ["/app/orders/:id"]);
+  });
+});
+
+describe("pubblicazione riprendibile", () => {
+  const manifest = { sha: "a".repeat(40), tree: "tree", digest: "artifact", environment: "test" };
+  const harness = () => {
+    let current = { version: "old", identity: "old" };
+    const calls = [];
+    const receipts = [];
+    const io = {
+      assertCurrent: async () => calls.push("current"),
+      preflight: async () => calls.push("preflight"),
+      migrations: async () => ({ pending: [], rollbackCompatible: true }),
+      migrate: async () => calls.push("migration"),
+      schema: async () => [],
+      current: async () => current,
+      canRollback: async () => true,
+      deploy: async (identity) => {
+        calls.push("deploy");
+        current = { version: "new", identity };
+      },
+      readback: async () => calls.push("readback"),
+      save: async (state) => receipts.push(structuredClone(state)),
+    };
+    return { io, calls, receipts };
+  };
+
+  it("non ridistribuisce dopo un'interruzione successiva al deploy", async () => {
+    const { io, calls, receipts } = harness();
+    const readback = io.readback;
+    io.readback = async () => {
+      throw new Error("interruzione");
+    };
+    await assert.rejects(publish(manifest, io), /interruzione/u);
+    io.readback = readback;
+    const result = await publish(manifest, io, receipts.at(-1));
+    assert.equal(calls.filter((call) => call === "deploy").length, 1);
+    assert.equal(result.readback, true);
+    assert.equal(result.previous, "old");
+  });
+
+  it("rifiuta candidato superato e ricevuta di un altro artefatto prima degli effetti", async () => {
+    const { io, calls } = harness();
+    io.assertCurrent = async () => {
+      throw new Error("superato");
+    };
+    await assert.rejects(publish(manifest, io), /superato/u);
+    assert.deepEqual(calls, []);
+    assert.throws(() => assertResume({ ...manifest, digest: "other" }, manifest), /diverso/u);
+  });
+
+  it("conserva il blocco del rollback dopo una migration e una ripresa", async () => {
+    const { io, receipts } = harness();
+    let applied = false;
+    io.migrations = async () => ({
+      pending: applied ? [] : [{ name: "new.sql" }],
+      rollbackCompatible: applied,
+    });
+    io.migrate = async () => {
+      applied = true;
+      throw new Error("interruzione dopo schema");
+    };
+    await assert.rejects(publish(manifest, io), /interruzione/u);
+    const result = await publish(manifest, io, receipts.at(-1));
+    assert.equal(result.readback, true);
+    assert.equal(result.rollbackCompatible, false);
+  });
+
+  it("non dichiara readback riuscito se il provider distribuisce un'altra identità", async () => {
+    const { io, receipts } = harness();
+    io.deploy = async () => {};
+    await assert.rejects(publish(manifest, io), /diversa/u);
+    assert.notEqual(receipts.at(-1).readback, true);
+  });
+
+  it("rifiuta una ricostruzione diversa di un commit già distribuito", async () => {
+    const { io, calls } = harness();
+    io.current = async () => ({ version: "new", identity: `${manifest.sha}:different` });
+    await assert.rejects(publish(manifest, io), /artefatto diverso/u);
+    assert.equal(calls.includes("deploy"), false);
+  });
+
+  it("blocca migration distruttive non approvate e schema remoto estraneo", () => {
+    const migrations = [{ name: "change.sql", digest: "hash", sql: "DROP TABLE orders;" }];
+    assert.throws(() => migrationPlan(migrations, []), /Digest/u);
+    assert.throws(() => migrationPlan(migrations, ["unknown.sql"]), /assenti/u);
+    assert.equal(migrationPlan(migrations, ["change.sql"]).pending.length, 0);
+    assert.equal(
+      migrationPlan([{ ...migrations[0], sql: "CREATE TABLE example (id TEXT);" }], [])
+        .rollbackCompatible,
+      false,
+    );
+  });
+
+  it("rifiuta una modifica SQL di una migration già applicata", () => {
+    const current = [{ name: "schema.sql", digest: "new" }];
+    const previous = [{ name: "schema.sql", digest: "old" }];
+    assert.throws(() => assertAppliedMigrations(current, previous, ["schema.sql"]), /modificata/u);
+    assert.doesNotThrow(() => assertAppliedMigrations(current, current, ["schema.sql"]));
+    assert.doesNotThrow(() => assertAppliedMigrations(current, previous, []));
+  });
+
+  it("rileva la manomissione dell'artefatto", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "release-"));
+    writeFileSync(path.join(directory, "worker.js"), "original");
+    const original = digestDirectory(directory);
+    writeFileSync(path.join(directory, "worker.js"), "modified");
+    assert.notEqual(digestDirectory(directory), original);
+  });
+
+  it("non anticipa i checkpoint e ricava le note dalla versione dichiarata", () => {
+    assert.throws(() => productionReadiness(""), /Checkpoint/u);
+    assert.equal(
+      releaseNotes(
+        "## [2.0.0-rc.1]\n\nCorrezione verificata.\n\n## 2.0.0-alpha.1\nPrima versione.",
+        "2.0.0-rc.1",
+      ),
+      "Correzione verificata.",
+    );
+    assert.throws(() => releaseNotes("## 2.0.0\n", "2.0.0"), /vuota/u);
   });
 });
 
@@ -254,6 +443,14 @@ describe("capacità al deploy", () => {
 
   it("supera la soglia con eventi completi e senza errori", () => {
     assert.deepEqual(evaluateCapacity([event(2), event(4)], { sent: 2, maxP95: 5 }).failures, []);
+  });
+  it("non presenta un p95 attendibile con un campione incompleto", () => {
+    const result = evaluateCapacity([event(2)], { sent: 200, maxP95: 5 });
+    assert.equal(result.status, "non attendibile");
+    assert.equal(result.p95, undefined);
+    const interrupted = evaluateCapacity([event(2)], { sent: 1, expected: 200, maxP95: 5 });
+    assert.equal(interrupted.status, "non attendibile");
+    assert.equal(interrupted.p95, undefined);
   });
 
   it("fallisce oltre soglia, con errori o con eventi mancanti", () => {
