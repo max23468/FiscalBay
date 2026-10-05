@@ -30,6 +30,9 @@ const scenarios = production
           index,
     )
   : pageCases;
+// Le richieste locali ancora intercettate a fine prova non sono errori del collaudo.
+test.afterEach(async ({ context }) => context.unrouteAll({ behavior: "ignoreErrors" }));
+
 for (const scenario of scenarios) {
   for (const { width, scheme } of scenario.endpoint ? [matrix[0]] : matrix) {
     test(
