@@ -793,8 +793,9 @@ Realizzare elenco e pannello con URL del negozio, ultima sincronizzazione, frequ
 
 **Resta:**
 
-- Il deploy sul test di `82f490b` ([#273](https://github.com/max23468/FiscalBay/pull/273)) si è fermato su `wrangler deploy --strict`: dopo l'ultimo deploy la configurazione remota di `fiscalbay-test` è stata cambiata fuori da Wrangler (attivazione Sandbox) e `EBAY_SANDBOX_ENABLED` manca in remoto. Finché un deploy non riallinea la configurazione, nessun merge su `develop` arriva sul test.
 - Collaudo sul test dopo il deploy, con il seller controllato: elenco, pannello e azioni reversibili (pausa e ripresa).
+
+**Readback del deploy (2026-10-05):** il deploy di `82f490b` ([#273](https://github.com/max23468/FiscalBay/pull/273)) si era fermato su `wrangler deploy --strict` con rollback alla versione precedente. Il merge di [#274](https://github.com/max23468/FiscalBay/pull/274) (`164ff38`) ha poi completato [CI e deploy test](https://github.com/max23468/FiscalBay/actions/runs/37377929129): Worker `ce65c586-5a8f-459b-859d-0c7158f8166c`, che include anche #273. Nella stessa run il ripristino dell'account di collaudo su D1 è riuscito e lo smoke autenticato ha passato 4 prove su 4, quindi il token dell'environment `test` ha già il permesso D1. Controllo di capacità in avviso non bloccante (D148): CPU p95 10 ms sulla soglia di 10 ms con 7 eventi su 200 richieste. Senza sessione `/negozi` e `/profilo` rispondono 302 verso la radice con `no-store`, `/admin` 404.
 
 ### M2-08 · Routing pubblico autenticato
 
