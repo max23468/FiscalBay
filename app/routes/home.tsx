@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { cn } from "cn";
 import { ClipboardList, Copy, KeyRound, LogOut, Plus, Store } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 
 import { AccessNotice, AccountShell } from "~/components/account";
 import { EmptyState } from "~/components/empty-state";
@@ -10,7 +11,7 @@ import { Logo } from "~/components/standalone-page";
 import { useFieldErrors, type FieldErrors } from "~/components/form-validation";
 import { LanguageSwitch } from "~/components/language-switch";
 import { StatusAlert } from "~/components/status";
-import { ImportedOrders } from "~/components/orders";
+import { ImportedOrders, StoreIssueAlert } from "~/components/orders";
 import { Button } from "~/components/ui/button";
 import { buttonVariants } from "~/components/ui/button-variants";
 import { Checkbox } from "~/components/ui/checkbox";
@@ -26,6 +27,13 @@ import {
 } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { createAuth } from "../auth.server";
 import { registrationStatus } from "../domain/registration.server";
@@ -896,6 +904,45 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   return <OrdersPage loaderData={loaderData} noticeAlert={noticeAlert} />;
 }
 
+/** Ambiente eBay degli ordini mostrati, sul solo dominio di test: lo stesso campo dei filtri. */
+function EnvironmentSelect({
+  language,
+  value,
+}: {
+  language: Language;
+  value: "production" | "sandbox";
+}) {
+  const t = appCopy[language].storeLink;
+  const navigate = useNavigate();
+  const items = (["production", "sandbox"] as const).map((environment) => ({
+    value: environment,
+    label: t[environment],
+  }));
+  return (
+    <Field className="sm:max-w-sm">
+      <FieldLabel htmlFor="ebay-environment">{t.environment}</FieldLabel>
+      <Select
+        items={items}
+        value={value}
+        onValueChange={(next) =>
+          void navigate(`${localizedPath(language)}?environment=${String(next)}`)
+        }
+      >
+        <SelectTrigger id="ebay-environment" className="w-full min-w-0">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {items.map((item) => (
+            <SelectItem key={item.value} value={item.value}>
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
 type SignedIn = Extract<Awaited<ReturnType<typeof loader>>, { authenticated: true }>;
 
 /** Pagina Ordini dell'area reale, dentro la shell condivisa. */
@@ -935,50 +982,33 @@ function OrdersPage({
           emailVerified={loaderData.emailVerified}
         />
         {loaderData.sandbox && (
-          <nav
-            aria-label={appCopy[language].storeLink.environment}
-            className="flex flex-wrap gap-3"
-          >
-            {(["production", "sandbox"] as const).map((environment) => (
-              <a
-                key={environment}
-                href={`${localizedPath(language)}?environment=${environment}`}
-                aria-current={loaderData.ebayEnvironment === environment ? "page" : undefined}
-                className={cn(
-                  buttonVariants({
-                    variant: loaderData.ebayEnvironment === environment ? "default" : "outline",
-                  }),
-                )}
-              >
-                {appCopy[language].storeLink[environment]}
-              </a>
-            ))}
-          </nav>
+          <EnvironmentSelect language={language} value={loaderData.ebayEnvironment} />
         )}
-        {loaderData.reminders.map((store) => (
-          <StatusAlert
-            key={store.id}
-            tone={store.kind === "expired" ? "warning" : "info"}
-            title={
-              store.kind === "expired"
-                ? t.consentExpiredTitle(store.name)
-                : t.consentExpiringTitle(store.name)
-            }
-          >
-            <span className="grid justify-items-start gap-3">
-              {store.kind === "expired"
-                ? t.consentExpiredBody
-                : t.consentExpiringBody(formatDate(store.at, language, "date"))}
-              <a
-                href={`${localizedPath(language, "/negozi/collega")}?ricollega&environment=${store.ebayEnvironment}`}
-                data-slot="button"
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                {t.reconnectStore}
-              </a>
-            </span>
-          </StatusAlert>
-        ))}
+        {loaderData.reminders.map((store) =>
+          // Come nell'anteprima, il collegamento scaduto porta al pannello del negozio.
+          store.kind === "expired" ? (
+            <StoreIssueAlert
+              key={store.id}
+              storeId={store.id}
+              storeName={store.name}
+              t={appCopy[language]}
+              links={{ language, base: "" }}
+            />
+          ) : (
+            <StatusAlert key={store.id} tone="info" title={t.consentExpiringTitle(store.name)}>
+              <span className="grid justify-items-start gap-3">
+                {t.consentExpiringBody(formatDate(store.at, language, "date"))}
+                <a
+                  href={`${localizedPath(language, "/negozi/collega")}?ricollega&environment=${store.ebayEnvironment}`}
+                  data-slot="button"
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                >
+                  {t.reconnectStore}
+                </a>
+              </span>
+            </StatusAlert>
+          ),
+        )}
         {loaderData.orders.length === 0 ? (
           <EmptyState
             title={loaderData.storeLinked ? t.noImportedOrders : t.noOrders}

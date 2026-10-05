@@ -1253,18 +1253,21 @@ describe("collegamento negozio eBay", () => {
       expect(page).toEqual({
         language: base ? "en" : "it",
         reconnect: false,
+        fromStores: false,
         sandbox: false,
         ebayEnvironment: "production",
       });
     }
+    // Da Negozi la schermata riporta lì con «Annulla».
     const reconnect = await loadStoreLink({
-      request: new Request("http://localhost:5173/negozi/collega?ricollega", {
+      request: new Request("http://localhost:5173/negozi/collega?ricollega&da=negozi", {
         headers: { cookie },
       }),
     } as Parameters<typeof loadStoreLink>[0]);
     expect(reconnect).toEqual({
       language: "it",
       reconnect: true,
+      fromStores: true,
       sandbox: false,
       ebayEnvironment: "production",
     });

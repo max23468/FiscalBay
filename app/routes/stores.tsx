@@ -82,6 +82,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       ebayDown: false,
       elsewhere: false,
       connectHref: localizedPath(language, "/negozi/collega"),
+      // Notifiche, piano e supporto non hanno ancora una pagina reale.
+      settings: false,
     },
   };
   return data(payload, { status: payload.notFound ? 404 : 200 });

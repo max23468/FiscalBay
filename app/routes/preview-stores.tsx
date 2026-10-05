@@ -29,6 +29,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     now: scenario.now,
     ebayDown: scenario.ebayDown,
     elsewhere: scenario.elsewhere,
+    settings: true,
   };
   return page;
 }

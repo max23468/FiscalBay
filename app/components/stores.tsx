@@ -82,11 +82,19 @@ export interface StoresPageData {
    * senza, l'anteprima simula l'esito.
    */
   connectHref?: string;
+  /** Impostazioni esistono: le scorciatoie verso notifiche, piano e supporto hanno una meta. */
+  settings: boolean;
+}
+
+/** La schermata preparatoria riporta ai negozi con «Annulla». */
+function connectFromStores(connectHref: string) {
+  return `${connectHref}?da=negozi`;
 }
 
 /** Ricollegamento dalla schermata preparatoria, nello stesso ambiente eBay del negozio. */
 function reconnectHref(connectHref: string, store: StoreView) {
-  return `${connectHref}?ricollega&environment=${store.sandbox ? "sandbox" : "production"}`;
+  const environment = store.sandbox ? "sandbox" : "production";
+  return `${connectHref}?ricollega&environment=${environment}&da=negozi`;
 }
 
 /** Nome proprio dell'ambiente di prova di eBay, uguale nelle due lingue. */
@@ -205,7 +213,7 @@ function StoreActions({
         {t.stores.sectionActions}
       </h3>
       {disconnected ? (
-        <div className="grid justify-items-start">
+        <div className="grid gap-2">
           <ReconnectButton store={store} ebayDown={ebayDown} connectHref={connectHref} t={t} />
         </div>
       ) : store.pauseReason === "plan" ? (
@@ -366,43 +374,52 @@ function DisconnectActions({ store, t }: { store: StoreView; t: AppCopy }) {
   );
 }
 
-/** Ricollega: nell'area reale apre la schermata preparatoria, nell'anteprima simula l'esito. */
+/**
+ * Ricollega: nell'area reale apre la schermata preparatoria, nell'anteprima simula l'esito.
+ * Nell'avviso del problema è il pulsante piccolo dell'avviso, fra le azioni ha la loro forma.
+ */
 function ReconnectButton({
   store,
   ebayDown,
   connectHref,
   t,
-  size,
+  inAlert = false,
 }: {
   store: StoreView;
   ebayDown: boolean;
   connectHref?: string;
   t: AppCopy;
-  size?: "sm";
+  inAlert?: boolean;
 }) {
   const action = useAction();
+  const look = inAlert
+    ? { size: "sm" as const }
+    : { variant: "outline" as const, className: "justify-start" };
+  const content = (
+    <>
+      {inAlert ? null : <Link2 aria-hidden="true" data-icon="inline-start" />}
+      {t.stores.reconnect}
+    </>
+  );
   if (connectHref && !ebayDown) {
     return (
       <Link
         to={reconnectHref(connectHref, store)}
         data-slot="button"
-        className={buttonVariants({ variant: size ? "default" : "outline", size })}
+        className={cn(buttonVariants(look), look.className)}
       >
-        <Link2 aria-hidden="true" data-icon="inline-start" />
-        {t.stores.reconnect}
+        {content}
       </Link>
     );
   }
   return (
     <Button
-      size={size}
-      variant={size ? "default" : "outline"}
+      {...look}
       disabled={ebayDown}
       focusableWhenDisabled
       onClick={() => action.run("store-fix", { store: store.id })}
     >
-      <Link2 aria-hidden="true" data-icon="inline-start" />
-      {t.stores.reconnect}
+      {content}
     </Button>
   );
 }
@@ -439,7 +456,7 @@ function StoreDetail({
         <StatusAlert tone="warning" title={t.stores.issue[store.issue].title}>
           <span className="grid justify-items-start gap-3">
             {t.stores.issue[store.issue].body}
-            {store.issue === "unverifiable" ? (
+            {store.issue === "unverifiable" && data.settings ? (
               <Link
                 to={appHref(links, "impostazioni/supporto")}
                 className="underline underline-offset-4"
@@ -452,7 +469,7 @@ function StoreDetail({
               ebayDown={data.ebayDown}
               connectHref={data.connectHref}
               t={t}
-              size="sm"
+              inAlert
             />
           </span>
         </StatusAlert>
@@ -461,7 +478,7 @@ function StoreDetail({
       <ConnectionSection store={store} now={data.now} t={t} language={links.language} />
       <SyncSection store={store} data={data} t={t} language={links.language} />
       <RecentSection store={store} t={t} language={links.language} />
-      <NotificationsSection store={store} t={t} links={links} />
+      <NotificationsSection store={store} settings={data.settings} t={t} links={links} />
       <StoreActions
         store={store}
         ebayDown={data.ebayDown}
@@ -592,10 +609,12 @@ function RecentSection({ store, t, language }: SectionProps) {
 
 function NotificationsSection({
   store,
+  settings,
   t,
   links,
 }: {
   store: StoreView;
+  settings: boolean;
   t: AppCopy;
   links: AppLinks;
 }) {
@@ -608,20 +627,19 @@ function NotificationsSection({
       {store.notifications === null ? (
         <PremiumNote>{t.stores.notificationsFree}</PremiumNote>
       ) : (
-        <>
-          <p className="text-sm">{notificationsLabel(store, t, true)}</p>
-          {/* Le notifiche si impostano in Impostazioni, una volta disponibili nel piano. */}
-          <p className="text-sm text-muted-foreground">
-            {t.stores.notificationsShortcut}{" "}
-            <Link
-              to={appHref(links, "impostazioni/notifiche")}
-              className="font-medium text-primary underline-offset-4 hover:underline"
-            >
-              {t.stores.notificationsLink}
-            </Link>
-          </p>
-        </>
+        <p className="text-sm">{notificationsLabel(store, t, true)}</p>
       )}
+      {settings ? (
+        <p className="text-sm text-muted-foreground">
+          {t.stores.notificationsShortcut}{" "}
+          <Link
+            to={appHref(links, "impostazioni/notifiche")}
+            className="font-medium text-primary underline-offset-4 hover:underline"
+          >
+            {t.stores.notificationsLink}
+          </Link>
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -752,7 +770,11 @@ function ConnectButton({
   const action = useAction();
   if (data.connectHref && !data.ebayDown) {
     return (
-      <Link to={data.connectHref} data-slot="button" className={buttonVariants()}>
+      <Link
+        to={connectFromStores(data.connectHref)}
+        data-slot="button"
+        className={buttonVariants()}
+      >
         <Plus aria-hidden="true" data-icon="inline-start" />
         {t.stores.connect}
       </Link>
