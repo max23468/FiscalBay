@@ -9,6 +9,7 @@
   "triggers": { "crons": ["*/30 * * * *"] },
   "vars": {
     "APP_ORIGIN": "https://test.fiscalbay.it",
+    "EBAY_SANDBOX_ENABLED": "true",
     "STRIPE_PRICE_MONTHLY": "price_1UHlnnJP7SSN14Zph79bnCQu",
     "STRIPE_PRICE_ANNUAL": "price_1UHlnnJP7SSN14Zpc0f7vZkS",
     "STRIPE_PRICE_LIFETIME": "price_1UHlngJP7SSN14ZpuFWGNO5w",
@@ -55,6 +56,7 @@
       "routes": [{ "pattern": "fiscalbay.it", "custom_domain": true }],
       "vars": {
         "APP_ORIGIN": "https://fiscalbay.it",
+        "EBAY_SANDBOX_ENABLED": "false",
         "STRIPE_PRICE_MONTHLY": "",
         "STRIPE_PRICE_ANNUAL": "",
         "STRIPE_PRICE_LIFETIME": "",

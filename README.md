@@ -53,6 +53,31 @@ pnpm dev
 
 Per provare gli endpoint Auth con account controllati, copiare `.dev.vars.example` in `.dev.vars` e sostituire i soli valori test. `EBAY_RUNAME` è il RuName eBay dell’ambiente test, distinto dall’autorizzazione seller. Il file `.dev.vars` resta ignorato da Git. Nessun comando applicativo esegue deploy.
 
+### Negozi eBay Production e Sandbox sul sito test
+
+Il collegamento dei negozi mantiene eBay Production come scelta predefinita. Sul dominio
+`test.fiscalbay.it` e in locale, `EBAY_SANDBOX_ENABLED=true` abilita la scelta Sandbox soltanto
+quando sono presenti i tre segreti `EBAY_SANDBOX_CLIENT_ID`, `EBAY_SANDBOX_CLIENT_SECRET` e
+`EBAY_SANDBOX_RUNAME`. Le credenziali `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET` e `EBAY_RUNAME`
+continuano a servire i negozi Production e il login eBay, distinto dal consenso seller.
+Il dominio pubblico `fiscalbay.it` non permette collegamenti Sandbox.
+
+Applicare la migration `0014_ebay_environments.sql` prima del codice. I negozi esistenti restano
+Production con ID, token e ordini invariati. La sessione OAuth conserva l'ambiente scelto sul
+server; lettura iniziale e rinnovi usano chiavi ed endpoint dello stesso ambiente. Account e
+ordini con ID uguali nei due ambienti rimangono distinti. I nomi dei negozi sugli ordini Sandbox
+riportano `(Sandbox)` e gli inviti a ricollegare conservano l'ambiente originale. L'elenco ordini
+mostra Production per impostazione predefinita; sul test il selettore permette di consultare
+separatamente Sandbox, senza mescolare le due fonti nello stesso elenco.
+
+Nel keyset Sandbox configurare il RuName con callback accettato e rifiutato
+`https://test.fiscalbay.it/api/auth/callback/ebay`, mantenendo i soli scope base,
+`commerce.identity.readonly` e `sell.fulfillment.readonly`. Custodire i valori dei segreti nel
+Worker test, mai nel repository. Il flag è abilitato nella configurazione test e disabilitato
+in Production; la scelta resta nascosta finché mancano i segreti. Verificare il callback prima
+di configurare i segreti. Nessuna configurazione
+Sandbox richiede di cambiare il keyset Production.
+
 ### Mandato pronto da inviare quando si intende partire
 
 Il testo seguente avvia l’implementazione soltanto quando viene inviato dall’owner nella sessione Codex:

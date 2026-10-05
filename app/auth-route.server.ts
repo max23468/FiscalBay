@@ -195,7 +195,10 @@ async function handleEbayCallback(
     await recordStoreLinkOutcome(environment.DB, state, outcome);
   }
   const home = localizedPath(state.startsWith("en_") ? "en" : "it");
-  const destination = outcome ? `${home}?negozio=${outcome}` : home;
+  const query = new URLSearchParams();
+  if (outcome) query.set("negozio", outcome);
+  if (link.ebayEnvironment === "sandbox") query.set("environment", "sandbox");
+  const destination = query.size > 0 ? `${home}?${query}` : home;
   return noStore(Response.redirect(new URL(destination, environment.APP_ORIGIN), 303));
 }
 
