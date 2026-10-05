@@ -114,7 +114,11 @@ jobs:
       - name: Read Playwright version
         id: playwright
         if: steps.detect.outputs.e2e == 'true' && !steps.reuse.outputs.run-id
-        run: echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
+        env:
+          BROWSERS: ${{ steps.detect.outputs.browsers }}
+        run: |
+          echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
+          echo "browsers=${BROWSERS//,/-}" >> "${GITHUB_OUTPUT}"
 
       - name: Restore browser cache
         id: browsers
@@ -122,7 +126,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ steps.detect.outputs.browsers }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.browsers }}
           restore-keys: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-
 
       - name: Install browser for interaction tests

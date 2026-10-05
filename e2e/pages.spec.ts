@@ -136,8 +136,14 @@ for (const scenario of scenarios) {
         const links = await page
           .getByRole("link")
           .evaluateAll((elements) => elements.map((element) => element.getAttribute("href")));
+        // Solo destinazioni navigabili: nessun schema eseguibile o dati incorporati.
         expect(
-          links.every((href) => href !== null && href !== "" && !href.startsWith("javascript:")),
+          links.every(
+            (href) =>
+              href !== null &&
+              href !== "" &&
+              ["http:", "https:", "mailto:", "tel:"].includes(new URL(href, page.url()).protocol),
+          ),
         ).toBe(true);
         for (const href of links) {
           const url = new URL(href!, page.url());
