@@ -16,6 +16,7 @@ async function open(page: Page, path: string, scenario?: string) {
   await page.goto(path);
   // Con un pannello aperto il resto della pagina è inerte: si attende il controllo per id.
   await expect(page.locator("#preview-scenario")).toBeEnabled({ timeout: 20_000 });
+  await page.waitForLoadState("networkidle");
 }
 
 const noPageOverflow = (page: Page) =>
@@ -214,6 +215,9 @@ for (const language of ["it", "en"] as const) {
         await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
         await page.reload();
         await expect(page.locator("html")).not.toHaveAttribute("data-theme", "dark");
+        // Lo scroll aggiorna la voce attiva solo dopo l'idratazione.
+        await expect(page.locator("#preview-scenario")).toBeEnabled({ timeout: 20_000 });
+        await page.waitForLoadState("networkidle");
         if (width >= 768) {
           await page
             .locator("#settings-privacy")
@@ -979,6 +983,7 @@ for (const language of ["it", "en"] as const) {
             contentType: "image/png",
           });
           await backLink.click();
+          await page.waitForLoadState("networkidle");
           await expect(page).toHaveURL(new RegExp(`${prefix || "/"}$`));
           await expect(
             page.getByRole("tab", { name: language === "it" ? "Accedi" : "Sign in", exact: true }),
