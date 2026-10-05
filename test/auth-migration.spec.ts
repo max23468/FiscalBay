@@ -545,6 +545,64 @@ describe("Better Auth su Workers e D1", () => {
     expect(await removal.json()).toMatchObject({ code: "FAILED_TO_UNLINK_LAST_ACCOUNT" });
   });
 
+  it("chiude il login eBay senza account se Identity non risponde o risponde fuori schema", async () => {
+    const ebayAccounts = () =>
+      env.DB.prepare('SELECT COUNT(*) AS total FROM "account" WHERE "providerId" = ?')
+        .bind("ebay")
+        .first<{ total: number }>();
+    const before = await ebayAccounts();
+    for (const identity of [
+      () => new Response(null, { status: 503 }),
+      () => Response.json({ username: "senza-identificativo" }),
+    ]) {
+      const start = await createAuth(env).handler(
+        new Request("http://localhost:5173/api/auth/sign-in/social", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ provider: "ebay", callbackURL: "/" }),
+        }),
+      );
+      const state = new URL((await start.json<{ url: string }>()).url).searchParams.get("state");
+      const cookie = start.headers
+        .getSetCookie()
+        .map((value) => value.split(";")[0])
+        .join("; ");
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url.endsWith("/identity/v1/oauth2/token")) {
+          return Response.json({
+            access_token: "sintetico",
+            token_type: "Bearer",
+            expires_in: 7200,
+          });
+        }
+        return identity();
+      });
+      try {
+        const response = await handleAuthRequest(
+          new Request(
+            `http://localhost:5173/api/auth/callback/ebay?code=synthetic&state=${state}`,
+            {
+              headers: { cookie },
+            },
+          ),
+          env,
+        );
+        expect(new URL(response.headers.get("location")!, "http://localhost:5173").pathname).toBe(
+          "/auth/error",
+        );
+        expect(log.mock.calls.map(([line]) => JSON.parse(String(line)))).toContainEqual(
+          expect.objectContaining({ operation: "sign_in", code: "UPSTREAM_UNAVAILABLE" }),
+        );
+      } finally {
+        fetchMock.mockRestore();
+        log.mockRestore();
+      }
+    }
+    expect(await ebayAccounts()).toEqual(before);
+  });
+
   it.each([
     "verificata",
     "non-verificata",
