@@ -44,6 +44,7 @@ Il piano contiene i requisiti completi: qui si descrivono il lavoro e la prova, 
   | P1 | Risposta CLI persa dopo un deploy riuscito lasciava l'esito remoto non registrato | Riconciliazione con il provider e ricevuta salvata prima di restituire il fallimento |
   | P2 | Piano non additivo parzialmente applicato richiedeva un nuovo digest alla ripresa | Piano originale persistito; residuo ammesso solo con SQL e approvazione originali |
   | P2 | Mutation omesse per sessioni, isolamento, export e integrazioni eBay | Selezione estesa ai consumatori dei moduli critici effettivi |
+  | P2 | In CI un modulo condiviso non critico (`i18n.ts`) estendeva le mutation a 8 domini interi, oltre il limite di 30 minuti del job | Mutation dai moduli critici modificati e dai loro consumatori critici; il modulo condiviso conserva il gate completo |
   | P2 | Un modulo critico eliminato restava fra i target mutation inesistenti | Target limitati ai sorgenti attuali; eliminazioni mantengono il gate completo |
   | P2 | Titoli generici escludevano interazioni dalla selezione mirata | Suite funzionali Chromium conservate; selezione del catalogo ancora proporzionata |
   | P2 | Dopo il deploy test veniva ignorata la selezione delle pagine | Stesso filtro trasferito dal piano CI al collaudo remoto |

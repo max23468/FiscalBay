@@ -212,6 +212,22 @@ describe("classificazione dei file modificati", () => {
     assert.equal(changePlan(["app/new-module.ts"], files).mode, "full");
   });
 
+  it("limita le mutation ai moduli critici modificati e ai loro consumatori critici", () => {
+    const files = [
+      { path: "app/i18n.ts", text: "" },
+      { path: "app/domain/stores.server.ts", text: 'import { t } from "../i18n";' },
+      {
+        path: "app/auth.server.ts",
+        text: 'import { t } from "./i18n";\nimport { load } from "./domain/stores.server";',
+      },
+    ];
+    assert.deepEqual(changePlan(["app/i18n.ts"], files).mutation, []);
+    assert.deepEqual(changePlan(["app/domain/stores.server.ts"], files).mutation.sort(), [
+      "app/auth.server.ts",
+      "app/domain/stores.server.ts",
+    ]);
+  });
+
   it("seleziona una route circoscritta ma forza il completo sulla tabella delle route", () => {
     const sources = [{ path: "app/routes/stores.tsx", text: "export default function Page() {}" }];
     assert.equal(changePlan([sources[0].path], sources).mode, "targeted");

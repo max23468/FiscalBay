@@ -45,6 +45,22 @@ export function classifyFile(file) {
 }
 
 /** Controlli necessari per un insieme di file modificati. */
+/** Chiusura inversa: un consumatore di un modulo modificato cambia con esso. */
+function consumers(files, graph) {
+  const affected = new Set(files);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const [file, imports] of graph) {
+      if (!affected.has(file) && [...imports].some((target) => affected.has(target))) {
+        affected.add(file);
+        grew = true;
+      }
+    }
+  }
+  return affected;
+}
+
 export function plan(files, sources = [], complete = false) {
   const unclassified = files.filter((file) => !classifyFile(file));
   const kinds = new Set(files.map(classifyFile));
@@ -61,19 +77,8 @@ export function plan(files, sources = [], complete = false) {
           file,
         ),
     );
-  const affected = new Set(files);
   const graph = importGraph(sources);
-  // Chiusura inversa: un consumatore di un modulo modificato cambia con esso.
-  let grew = true;
-  while (grew) {
-    grew = false;
-    for (const [file, imports] of graph) {
-      if (!affected.has(file) && [...imports].some((target) => affected.has(target))) {
-        affected.add(file);
-        grew = true;
-      }
-    }
-  }
+  const affected = consumers(files, graph);
   const full =
     complete ||
     files.length === 0 ||
@@ -131,13 +136,14 @@ export function plan(files, sources = [], complete = false) {
           ...[...areas].map((area) => patterns[area]),
         ].join("|")
       : ".";
-  const mutation = [...affected].filter(
-    (file) =>
-      (sources.length === 0 || graph.has(file)) &&
-      /^app\/(?:auth(?:-route)?|domain\/(?:orders|quota|grants|cycles|sessions|sign-in-methods|registration|stores|export)|integrations\/(?:stripe|ebay\/(?:seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
-        file,
-      ),
-  );
+  // I mutanti partono dai moduli critici modificati e risalgono ai consumatori critici:
+  // un modulo condiviso non critico non estende la campagna a tutti i domini.
+  const critical = (file) =>
+    (sources.length === 0 || graph.has(file)) &&
+    /^app\/(?:auth(?:-route)?|domain\/(?:orders|quota|grants|cycles|sessions|sign-in-methods|registration|stores|export)|integrations\/(?:stripe|ebay\/(?:seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
+      file,
+    );
+  const mutation = [...consumers(files.filter(critical), graph)].filter(critical);
   const browsers = e2e
     ? mode === "full" ||
       areas.has("auth") ||
