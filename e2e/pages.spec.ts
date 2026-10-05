@@ -69,7 +69,22 @@ for (const scenario of scenarios) {
         if (scenario.role !== "anonymous") {
           if (!remote) {
             const cookie = localCookie(scenario.role, baseURL!);
-            await context.setExtraHTTPHeaders({ cookie: `${cookie.name}=${cookie.value}` });
+            const origin = new URL(baseURL!).origin;
+            // Il browser non accetta un Cookie iniettato né, in WebKit Linux, un cookie Secure
+            // su http: le richieste locali passano dal client HTTP di Playwright con la sessione.
+            await context.route(
+              (url) => url.origin === origin,
+              async (route) =>
+                route.fulfill({
+                  response: await route.fetch({
+                    headers: {
+                      ...route.request().headers(),
+                      cookie: `${cookie.name}=${cookie.value}`,
+                    },
+                    maxRedirects: 0,
+                  }),
+                }),
+            );
           } else {
             await page.goto("/");
             const signIn = page.getByRole("tabpanel", { name: "Accedi" });
