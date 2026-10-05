@@ -29,6 +29,7 @@ export async function listVisibleOrders(
   db: D1Database,
   userId: string,
   requestedLimit = 50,
+  ebayEnvironment: "production" | "sandbox" = "production",
 ): Promise<VisibleOrder[]> {
   const limit = Math.max(1, Math.min(100, Math.trunc(requestedLimit)));
   const result = await db
@@ -38,13 +39,14 @@ export async function listVisibleOrders(
            FROM workspace_members wm
            JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
            JOIN orders o ON o.store_id = s.id
-          WHERE wm.user_id = ? AND ${consultable}
+          WHERE wm.user_id = ? AND s.ebay_environment = ? AND ${consultable}
           ORDER BY o.last_modified_time DESC, o.id DESC
           LIMIT ?
        )
        SELECT o.id, o.ebay_order_id, o.creation_time, o.last_modified_time,
               o.currency, o.total_minor, o.summary_json,
-              COALESCE(s.display_name, s.ebay_user_id) AS store_name,
+              COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id) ||
+                CASE WHEN s.ebay_environment = 'sandbox' THEN ' (Sandbox)' ELSE '' END AS store_name,
               EXISTS (SELECT 1 FROM tax_identifiers WHERE order_id = o.id) AS has_identifiers,
               g.id AS grant_id, ti.identifier_type,
               ti.issuing_country, ti.value, ti.source, ti.observed_at
@@ -57,7 +59,7 @@ export async function listVisibleOrders(
            ON ti.order_id = o.id AND g.id IS NOT NULL
         ORDER BY o.last_modified_time DESC, o.id DESC, ti.identifier_type`,
     )
-    .bind(userId, limit)
+    .bind(userId, ebayEnvironment, limit)
     .all<{
       id: string;
       ebay_order_id: string;

@@ -3,7 +3,8 @@ import { logFailure } from "../../errors";
 import type { Language } from "../../i18n";
 import { upstreamJson, upstreamText } from "../http.server";
 import { orderSummarySchema } from "./fulfillment.server";
-import { base64Url, ebayTokenUrl, saveStoreCredentials } from "./seller-credentials.server";
+import { base64Url, saveStoreCredentials } from "./seller-credentials.server";
+import { ebayConfiguration, type EbayEnvironment } from "./environment.server";
 
 import {
   mapTradingTaxIdentifiers,
@@ -47,8 +48,19 @@ const ordersPageSchema = z.looseObject({ orders: z.array(orderSchema).default([]
 
 export type StoreLinkOutcome = "collegato" | "negato" | "altro-spazio" | "errore";
 export type StoreLinkClaim =
-  | { kind: "new"; userId: string; codeVerifier: string; expired: boolean }
-  | { kind: "duplicate"; userId: string; outcome: StoreLinkOutcome | null };
+  | {
+      kind: "new";
+      userId: string;
+      codeVerifier: string;
+      expired: boolean;
+      ebayEnvironment: EbayEnvironment;
+    }
+  | {
+      kind: "duplicate";
+      userId: string;
+      outcome: StoreLinkOutcome | null;
+      ebayEnvironment: EbayEnvironment;
+    };
 
 function randomToken(): string {
   return base64Url(crypto.getRandomValues(new Uint8Array(32)));
@@ -64,7 +76,9 @@ export async function startStoreLink(
   userId: string,
   now = new Date(),
   language: Language = "it",
+  ebayEnvironment: EbayEnvironment = "production",
 ): Promise<string> {
+  const configuration = ebayConfiguration(environment, ebayEnvironment);
   const state = `${language}_${randomToken()}`;
   const codeVerifier = randomToken();
   const challenge = base64Url(
@@ -75,20 +89,21 @@ export async function startStoreLink(
       now.toISOString(),
     ),
     environment.DB.prepare(
-      `INSERT INTO ebay_store_link_sessions (state, user_id, code_verifier, expires_at)
-       VALUES (?, ?, ?, ?)`,
+      `INSERT INTO ebay_store_link_sessions (state, user_id, code_verifier, expires_at, ebay_environment)
+       VALUES (?, ?, ?, ?, ?)`,
     ).bind(
       state,
       userId,
       codeVerifier,
       new Date(now.getTime() + linkSessionTtlMilliseconds).toISOString(),
+      ebayEnvironment,
     ),
   ]);
 
-  const url = new URL("https://auth.ebay.com/oauth2/authorize");
+  const url = new URL(configuration.authorizationUrl);
   url.search = new URLSearchParams({
-    client_id: environment.EBAY_CLIENT_ID,
-    redirect_uri: environment.EBAY_RUNAME,
+    client_id: configuration.clientId,
+    redirect_uri: configuration.runame,
     response_type: "code",
     scope: ebayStoreScopes.join(" "),
     state,
@@ -111,23 +126,42 @@ export async function claimStoreLinkSession(
     .prepare(
       `UPDATE ebay_store_link_sessions SET consumed_at = ?
         WHERE state = ? AND consumed_at IS NULL
-       RETURNING user_id, code_verifier, expires_at`,
+       RETURNING user_id, code_verifier, expires_at, ebay_environment`,
     )
     .bind(now.toISOString(), state)
-    .first<{ user_id: string; code_verifier: string; expires_at: string }>();
+    .first<{
+      user_id: string;
+      code_verifier: string;
+      expires_at: string;
+      ebay_environment: EbayEnvironment;
+    }>();
   if (claimed) {
     return {
       kind: "new",
       userId: claimed.user_id,
       codeVerifier: claimed.code_verifier,
       expired: claimed.expires_at <= now.toISOString(),
+      ebayEnvironment: claimed.ebay_environment,
     };
   }
   const used = await db
-    .prepare("SELECT user_id, outcome FROM ebay_store_link_sessions WHERE state = ?")
+    .prepare(
+      "SELECT user_id, outcome, ebay_environment FROM ebay_store_link_sessions WHERE state = ?",
+    )
     .bind(state)
-    .first<{ user_id: string; outcome: StoreLinkOutcome | null }>();
-  return used ? { kind: "duplicate", userId: used.user_id, outcome: used.outcome } : null;
+    .first<{
+      user_id: string;
+      outcome: StoreLinkOutcome | null;
+      ebay_environment: EbayEnvironment;
+    }>();
+  return used
+    ? {
+        kind: "duplicate",
+        userId: used.user_id,
+        outcome: used.outcome,
+        ebayEnvironment: used.ebay_environment,
+      }
+    : null;
 }
 
 /** Registra l'esito per i callback duplicati e cancella il verifier, ormai inutile. */
@@ -178,27 +212,25 @@ export async function completeStoreLink(input: {
 
   const issued = input.now ?? new Date();
   const now = issued.toISOString();
-  const token = await upstreamJson(fetcher, ebayTokenUrl, tokenSchema, {
+  const configuration = ebayConfiguration(environment, link.ebayEnvironment);
+  const token = await upstreamJson(fetcher, configuration.tokenUrl, tokenSchema, {
     method: "POST",
     headers: {
-      authorization: `Basic ${btoa(`${environment.EBAY_CLIENT_ID}:${environment.EBAY_CLIENT_SECRET}`)}`,
+      authorization: `Basic ${btoa(`${configuration.clientId}:${configuration.clientSecret}`)}`,
       "content-type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams({
       grant_type: "authorization_code",
       code: search.get("code")!,
-      redirect_uri: environment.EBAY_RUNAME,
+      redirect_uri: configuration.runame,
       code_verifier: link.codeVerifier,
     }),
   });
-  const identity = await upstreamJson(
-    fetcher,
-    "https://apiz.ebay.com/commerce/identity/v1/user/",
-    identitySchema,
-    { headers: { authorization: `Bearer ${token.access_token}` } },
-  );
+  const identity = await upstreamJson(fetcher, configuration.identityUrl, identitySchema, {
+    headers: { authorization: `Bearer ${token.access_token}` },
+  });
 
-  const storeId = await linkStore(environment.DB, link.userId, identity, now);
+  const storeId = await linkStore(environment.DB, link.userId, identity, now, link.ebayEnvironment);
   // Il negozio di un altro spazio non riceve token e l'esito non dice nulla di quello spazio.
   if (!storeId) return "altro-spazio";
   await saveStoreCredentials(
@@ -231,6 +263,7 @@ export async function completeStoreLink(input: {
     accessToken: token.access_token,
     fetcher,
     now,
+    configuration,
   }).catch((error: unknown) => {
     logFailure({ request: input.request, error, operation: "store_link" });
   });
@@ -248,19 +281,31 @@ async function linkStore(
   userId: string,
   identity: z.infer<typeof identitySchema>,
   now: string,
+  ebayEnvironment: EbayEnvironment,
 ): Promise<string | null> {
   const workspaceId = await workspaceFor(db, userId, now);
   const store = await db
     .prepare(
-      `INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name, ebay_environment, ebay_account_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(ebay_user_id) DO UPDATE SET
          display_name = COALESCE(excluded.display_name, ebay_stores.display_name),
          disconnected_at = NULL
        WHERE ebay_stores.workspace_id = excluded.workspace_id
+         AND ebay_stores.ebay_environment = excluded.ebay_environment
        RETURNING id`,
     )
-    .bind(crypto.randomUUID(), workspaceId, identity.userId, now, identity.username ?? null)
+    .bind(
+      crypto.randomUUID(),
+      workspaceId,
+      ebayEnvironment === "production"
+        ? identity.userId
+        : JSON.stringify([ebayEnvironment, identity.userId]),
+      now,
+      identity.username ?? null,
+      ebayEnvironment,
+      identity.userId,
+    )
     .first<{ id: string }>();
   return store?.id ?? null;
 }
@@ -279,14 +324,12 @@ async function importLatestOrder(input: {
   accessToken: string;
   fetcher: typeof fetch;
   now: string;
+  configuration: ReturnType<typeof ebayConfiguration>;
 }): Promise<void> {
   const { db, fetcher, now } = input;
-  const page = await upstreamJson(
-    fetcher,
-    "https://api.ebay.com/sell/fulfillment/v1/order?limit=1",
-    ordersPageSchema,
-    { headers: { authorization: `Bearer ${input.accessToken}` } },
-  );
+  const page = await upstreamJson(fetcher, input.configuration.ordersUrl, ordersPageSchema, {
+    headers: { authorization: `Bearer ${input.accessToken}` },
+  });
   const order = page.orders[0];
   if (!order) return;
 
@@ -316,7 +359,7 @@ async function importLatestOrder(input: {
         JSON.stringify(orderSummarySchema.parse(order)),
       )
       .first<{ id: string }>(),
-    upstreamText(fetcher, "https://api.ebay.com/ws/api.dll", {
+    upstreamText(fetcher, input.configuration.tradingUrl, {
       method: "POST",
       headers: {
         "content-type": "text/xml;charset=UTF-8",
