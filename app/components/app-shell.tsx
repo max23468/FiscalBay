@@ -95,6 +95,14 @@ export interface AccountMenuItem {
   reloadDocument?: boolean;
 }
 
+/** Destinazione della navigazione principale; `end` per la radice dell'area. */
+export interface NavDestination {
+  href: string;
+  label: string;
+  Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  end?: boolean;
+}
+
 /**
  * Shell dell'app. Navigazione, ricerca e campanella compaiono quando le loro
  * destinazioni esistono: l'area reale le riceve insieme alle funzioni relative.
@@ -106,7 +114,7 @@ export function AppShell({
   notifications,
   now,
   suggest,
-  navigation = true,
+  navigation,
   menu,
   home = appHref(links, "ordini"),
   onSignOut,
@@ -119,7 +127,8 @@ export function AppShell({
   notifications?: NotificationView[];
   now?: string;
   suggest?: (query: string) => { items: SearchSuggestion[]; total: number };
-  navigation?: boolean;
+  /** Destinazioni principali; senza, quelle complete dell'app. Vuota, nessuna navigazione. */
+  navigation?: NavDestination[];
   /** Gruppi di voci separati; «Esci» chiude l'ultimo. */
   menu?: AccountMenuItem[][];
   home?: string;
@@ -139,11 +148,12 @@ export function AppShell({
     [],
   );
 
-  const destinations = [
-    { path: "ordini", label: t.shell.orders, Icon: ClipboardList },
-    { path: "negozi", label: t.shell.stores, Icon: Store },
-    { path: "impostazioni", label: t.shell.settings, Icon: Settings },
+  const destinations: NavDestination[] = navigation ?? [
+    { href: appHref(links, "ordini"), label: t.shell.orders, Icon: ClipboardList },
+    { href: appHref(links, "negozi"), label: t.shell.stores, Icon: Store },
+    { href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings },
   ];
+  const navigable = destinations.length > 0;
 
   return (
     <NoticeContext value={notify}>
@@ -175,13 +185,14 @@ export function AppShell({
               className="hidden h-6 w-auto dark:block"
             />
           </Link>
-          {navigation ? (
+          {navigable ? (
             <nav aria-label={t.shell.mainNav} className="hidden h-full md:flex">
               <ul className="flex h-full items-stretch gap-1">
-                {destinations.map(({ path, label }) => (
-                  <li key={path} className="flex">
+                {destinations.map(({ href, label, end }) => (
+                  <li key={href} className="flex">
                     <NavLink
-                      to={appHref(links, path)}
+                      to={href}
+                      end={end}
                       className="relative flex items-center rounded-md px-3 text-sm font-medium text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:text-foreground aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-3 aria-[current=page]:after:bottom-0 aria-[current=page]:after:h-0.5 aria-[current=page]:after:rounded-full aria-[current=page]:after:bg-primary"
                     >
                       {label}
@@ -248,21 +259,22 @@ export function AppShell({
         tabIndex={-1}
         className={cn(
           "mx-auto w-[min(72rem,calc(100%-2rem))] pt-6 pb-12 outline-none",
-          navigation && "max-md:pb-28",
+          navigable && "max-md:pb-28",
         )}
       >
         {children}
       </main>
-      {navigation ? (
+      {navigable ? (
         <nav
           aria-label={t.shell.mainNav}
           className="fixed inset-x-0 bottom-0 z-40 border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden"
         >
-          <ul className="grid grid-cols-3">
-            {destinations.map(({ path, label, Icon }) => (
-              <li key={path}>
+          <ul className="grid auto-cols-fr grid-flow-col">
+            {destinations.map(({ href, label, Icon, end }) => (
+              <li key={href}>
                 <NavLink
-                  to={appHref(links, path)}
+                  to={href}
+                  end={end}
                   className="flex min-h-14 flex-col items-center justify-center gap-1 px-1 text-xs font-medium text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset aria-[current=page]:text-primary"
                 >
                   <Icon aria-hidden="true" className="size-5" />
@@ -284,7 +296,7 @@ export function AppShell({
         className={cn(
           "pointer-events-none fixed inset-x-0 bottom-[calc(1.5rem+env(safe-area-inset-bottom)+var(--selection-bar,0px))] z-[60] flex justify-center px-4",
           // Sopra la bottom navigation, quando c'è.
-          navigation &&
+          navigable &&
             "max-md:bottom-[calc(5rem+env(safe-area-inset-bottom)+var(--selection-bar,0px))]",
         )}
       >

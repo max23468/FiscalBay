@@ -258,6 +258,7 @@ const it = {
       paused: "In pausa",
       reconnect_required: "Collegamento scaduto",
       error: "Autorizzazione incompleta",
+      disconnected: "Scollegato",
     },
     syncing: "In sincronizzazione",
     never: "Mai",
@@ -332,6 +333,22 @@ const it = {
     elsewhereBody:
       "Questo negozio eBay è collegato a un altro account FiscalBay. Accedi con quell’account oppure contatta l’assistenza.",
     ebayDown: "eBay non risponde: sincronizzazione e ricollegamento sono sospesi.",
+    planScope: (plan: string) =>
+      `Il piano ${plan} è del tuo spazio FiscalBay e vale per tutti i negozi collegati.`,
+    syncNotScheduled:
+      "L’aggiornamento automatico degli ordini non è ancora attivo: FiscalBay legge l’ordine più recente quando colleghi il negozio.",
+    disconnectedHint:
+      "FiscalBay non legge più questo negozio. Gli ordini già importati restano consultabili; ricollegalo per riprendere.",
+    deletedHint:
+      "FiscalBay non legge più questo negozio e i suoi ordini sono stati eliminati. Ricollegalo per riprendere.",
+    done: {
+      "store-pause": "Negozio in pausa.",
+      "store-resume": "Negozio ripreso.",
+      "store-disconnect": "Negozio scollegato.",
+      "store-delete": "Negozio scollegato e ordini eliminati.",
+    } as Record<string, string>,
+    deleteMismatch: "Il nome non corrisponde: nessun dato eliminato.",
+    failed: "Operazione non riuscita. Riprova.",
   },
   settings: {
     title: "Impostazioni",
@@ -552,6 +569,8 @@ const it = {
     security: "Metodi di accesso e sessioni sono in Sicurezza.",
     securityLink: "Apri Sicurezza",
     saved: "Anteprima: profilo non salvato.",
+    updated: "Profilo aggiornato.",
+    invalid: "Compila nome e cognome, e la ragione sociale per un’azienda.",
   },
   errors: {
     title: "Errore",
@@ -1008,6 +1027,7 @@ const en: AppCopy = {
       paused: "Paused",
       reconnect_required: "Connection expired",
       error: "Incomplete authorisation",
+      disconnected: "Disconnected",
     },
     syncing: "Syncing",
     never: "Never",
@@ -1082,6 +1102,22 @@ const en: AppCopy = {
     elsewhereBody:
       "This eBay store is connected to another FiscalBay account. Sign in with that account or contact support.",
     ebayDown: "eBay is not responding: syncing and reconnecting are paused.",
+    planScope: (plan: string) =>
+      `The ${plan} plan belongs to your FiscalBay space and covers all connected stores.`,
+    syncNotScheduled:
+      "Automatic order updates are not active yet: FiscalBay reads the most recent order when you connect the store.",
+    disconnectedHint:
+      "FiscalBay no longer reads this store. Orders already imported remain available; reconnect it to resume.",
+    deletedHint:
+      "FiscalBay no longer reads this store and its orders have been deleted. Reconnect it to resume.",
+    done: {
+      "store-pause": "Store paused.",
+      "store-resume": "Store resumed.",
+      "store-disconnect": "Store disconnected.",
+      "store-delete": "Store disconnected and orders deleted.",
+    },
+    deleteMismatch: "The name does not match: no data deleted.",
+    failed: "Something went wrong. Try again.",
   },
   settings: {
     title: "Settings",
@@ -1289,6 +1325,8 @@ const en: AppCopy = {
     security: "Sign-in methods and sessions are in Security.",
     securityLink: "Open Security",
     saved: "Preview: profile not saved.",
+    updated: "Profile updated.",
+    invalid: "Enter your first and last name, and the company name for a business.",
   },
   errors: {
     title: "Error",

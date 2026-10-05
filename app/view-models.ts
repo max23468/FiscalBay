@@ -121,7 +121,7 @@ export interface OrderView {
   lastSyncedAt: string;
 }
 
-export type ConnectionState = "active" | "paused" | "reconnect_required" | "error";
+export type ConnectionState = "active" | "paused" | "reconnect_required" | "error" | "disconnected";
 
 export interface StoreSyncView {
   at: string;
@@ -133,7 +133,10 @@ export interface StoreView {
   id: string;
   name: string;
   username: string;
-  marketplace: string;
+  /** Marketplace prevalente, quando noto. */
+  marketplace: string | null;
+  /** Negozio dell'ambiente Sandbox di eBay, disponibile solo sul test. */
+  sandbox?: boolean;
   connection: ConnectionState;
   /** Pausa manuale o per piano: la seconda non lascia consultare i dati. */
   pauseReason?: "manual" | "plan";
@@ -142,11 +145,15 @@ export interface StoreView {
   lastSyncAt: string | null;
   notifications: boolean | null;
   importedOrders: number;
-  historyDays: number;
+  /** Finestra dello storico e frequenza prevista; null finché la sincronizzazione continua non è attiva. */
+  historyDays: number | null;
   importing: boolean;
-  connectedAt: string;
-  consentExpiresAt: string;
-  targetMinutes: number;
+  /** Inizio e scadenza del consenso corrente; null per un negozio scollegato. */
+  connectedAt: string | null;
+  consentExpiresAt: string | null;
+  targetMinutes: number | null;
+  /** Dati eliminati con «Scollega ed elimina dati». */
+  dataDeleted?: boolean;
   recent: StoreSyncView[];
 }
 

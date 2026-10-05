@@ -770,17 +770,25 @@ Sette mutazioni manuali fanno fallire i test: senza protezione del consenso nell
 **Resta:**
 
 - Le eccezioni assistite al vincolo Free di sostituzione ogni 90 giorni richiedono la scelta del negozio attivo nel Free, che non ha ancora un modello di piano su cui poggiare: per decisione owner del 2026-10-05 il criterio passa a [M5-06](#m5-06). L'implementazione garantisce già che ricollegare non crei un nuovo negozio.
-- Le azioni di pausa, ripresa, scollegamento ed eliminazione si espongono nella schermata negozi di M2-07; anche quella route deve verificare origine e sessione.
+- Le azioni di pausa, ripresa, scollegamento ed eliminazione sono esposte dalla schermata Negozi di [M2-07](#m2-07), con controllo di origine e sessione.
 - Lettura del limite giornaliero dei token in Developer Analytics prima della sync continuativa: le credenziali locali sono segnaposto, quindi la lettura non è stata fatta.
 - Migration `0013` su Production prima del deploy Production. Collaudo sul test superato il 2026-10-05 dopo [#270](https://github.com/max23468/FiscalBay/pull/270).
 
+<a id="m2-07"></a>
+
 ### M2-07 · Schermata negozi e profilo
 
-**Stato:** TODO · **Prerequisiti:** M2-04, M2-06 · **Contratto:** [§18](docs/MASTER_PLAN.md#s18) · [§19](docs/MASTER_PLAN.md#s19)
+**Stato:** DONE · **Prerequisiti:** M2-04, M2-06 · **Contratto:** [§18](docs/MASTER_PLAN.md#s18) · [§19](docs/MASTER_PLAN.md#s19)
 
 Realizzare elenco e pannello con URL del negozio, ultima sincronizzazione, frequenza prevista, storico e notifiche. Completare profilo minimo e scorciatoie a Sicurezza.
 
 **Criterio di completamento:** Link diretto, ritorno, refresh e mobile funzionano; il piano è chiaramente dello spazio FiscalBay, non del singolo negozio.
+
+**Implementazione (2026-10-05):** mandato owner «implementa in modo completo». Le route reali `negozi`, `negozi/:id` e `profilo` (IT/EN) usano gli stessi componenti dell'anteprima dentro la shell reale e richiedono sessione, email confermata e registrazione completa (`app/account-area.server.ts`, riusato anche da Sicurezza). Dopo la conferma dell'email la shell ha la navigazione Ordini e Negozi eBay e nel menu dell'avatar Profilo e Sicurezza; Impostazioni, ricerca e campanella restano a M4-06/M4-02. Elenco e pannello mostrano solo dati posseduti: stato del collegamento (anche «Scollegato», che resta in elenco con «Ricollega negozio» e, finché ha dati, l'eliminazione), account eBay, ambiente Sandbox sul test, inizio e scadenza del consenso, ordini importati e ultima sincronizzazione. Questa ora si registra in `sync_state.last_success_at` a ogni lettura riuscita al collegamento, con lo stesso controllo del consenso dell'import e senza toccare il cursore. Frequenza prevista, storico, ultimi aggiornamenti, «Sincronizza» e «Reimporta» compaiono solo quando la sincronizzazione continua li rende veri (M3-04): fino ad allora il pannello dice che l'aggiornamento automatico non è attivo. Le notifiche seguono il piano con la nota Premium; quelle per negozio arrivano con M5-09. Una riga sotto il titolo dice che il piano è dello spazio e vale per tutti i negozi; il limite Free sulle pause compare solo se un negozio è davvero in pausa per il piano. Pausa, ripresa, scollegamento ed eliminazione passano dall'action della route con controllo di origine, sessione e spazio; l'eliminazione invia il nome digitato, verificato anche sul server. Collega e Ricollega aprono la schermata preparatoria nello stesso ambiente eBay. Un negozio inesistente o di un altro spazio risponde 404 dentro la shell. Il Profilo aggiorna nome, cognome e ragione sociale; il tipo di account resta quello registrato anche se il modulo ne invia un altro. Nomi eBay lunghi senza spazi vanno a capo in elenco e pannello.
+
+**Prove locali:** `pnpm verify` verde con 185 test applicativi e 24 degli script, React Doctor 100/100, client 329,0 KiB gzip su 350. Tre test nuovi coprono elenco e pannello con link diretto in EN, 404 per il negozio di un altro spazio, ritorno alla radice senza sessione, azioni con origine estranea (403), negozio altrui (404), nome errato (409) ed eliminazione riuscita, e il Profilo con tipo di account invariato; l'import interrotto da un'eliminazione non registra la sincronizzazione. Nel browser su D1 locale, con un utente sintetico poi eliminato (readback a zero): lista desktop in IT scuro, pannello da link diretto, chiusura con Esc e ritorno con Indietro, pausa, scollegamento ed eliminazione con avviso e lista aggiornata, link di ricollegamento con l'ambiente, lista e pannello a schermo intero in EN chiaro a 375 px senza overflow, Profilo salvato e menu dell'avatar.
+
+**Resta:** collaudo sul test dopo il deploy, con il seller controllato: elenco, pannello e azioni reversibili (pausa e ripresa).
 
 ### M2-08 · Routing pubblico autenticato
 
@@ -893,6 +901,8 @@ Implementare target 10/30 minuti, eventi qualificati con riconciliazione, priori
 Provare risposte tardive fra sync, refresh e reconnect con revisione attesa o controllo atomico equivalente. Iniettare interruzioni fra acquisizione, accodamento, commit e ACK: presa in carico recuperabile, nessun evento perso o doppio effetto. Le verifiche fiscali rispettano anche la precedenza delle fonti.
 
 **Criterio di completamento:** Test con clic ripetuti, backfill e processi concorrenti; eventi Free non ritardati artificiosamente e Retry-After rispettato. Nessun countdown inventato.
+
+La schermata Negozi di M2-07 mostra frequenza prevista, storico, stato dell'import, ultimi aggiornamenti, «Sincronizza» e «Reimporta» quando la route reale fornisce `targetMinutes`, `historyDays` e `recent`: oggi li passa vuoti.
 
 Usare consegna/retry/ritardi/DLQ del servizio scelto. Stato applicativo solo per checkpoint, deduplica e recupero di effetti di business; outbox/lease soltanto se necessari, non un secondo orchestratore.
 
@@ -1176,7 +1186,7 @@ Integrare bot privato e bot test separato, token monouso, cambio chat, preferenz
 
 **Criterio di completamento:** Nessuna notifica alla vecchia chat o ad altri spazi; default rispettati e login web indipendente da Telegram.
 
-I job rileggono il diritto Premium e le preferenze al momento dell’invio. Collegamento, cambio chat e disattivazione invalidano le consegne incompatibili già accodate.
+I job rileggono il diritto Premium e le preferenze al momento dell’invio. Collegamento, cambio chat e disattivazione invalidano le consegne incompatibili già accodate. La route reale dei Negozi (M2-07) passa oggi `notifications: null`: qui riceve lo stato per negozio.
 
 Da [§37.1](docs/MASTER_PLAN.md#s37): il webhook Telegram entra dall'ingresso Worker di M3-11, già compreso nel prerequisito M3.
 
