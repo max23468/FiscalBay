@@ -16,6 +16,19 @@ export function releaseNotes(changelog, version) {
   return section.slice(section.indexOf("\n") + 1).trim();
 }
 
+export function assertBrowserEvidence(browser, sha) {
+  if (
+    browser.status !== "passed" ||
+    browser.partial ||
+    !(browser.counts?.passed > 0) ||
+    browser.sha !== sha ||
+    browser.dirty !== false ||
+    browser.baseURL !== "https://fiscalbay.it" ||
+    browser.environment !== "production"
+  )
+    throw new Error("Collaudo incompleto o di un altro candidato/ambiente.");
+}
+
 async function main() {
   const version = process.argv[2];
   const notes = releaseNotes(readFileSync("CHANGELOG.md", "utf8"), version);
@@ -28,11 +41,11 @@ async function main() {
   if (receipt.sha !== sha || !receipt.readback || receipt.rolledBack)
     throw new Error("Distribuzione non confermata.");
   const browser = JSON.parse(readFileSync("test-results/browser/summary.json", "utf8"));
-  if (browser.status !== "passed" || browser.partial) throw new Error("Collaudo incompleto.");
+  assertBrowserEvidence(browser, sha);
   // Rilegge provider e branch subito prima del tag, senza ridistribuire una versione confermata.
   execFileSync(
     process.execPath,
-    ["scripts/release.mjs", "deploy", "--environment", "production", "--expected-sha", sha],
+    ["scripts/release.mjs", "confirm", "--environment", "production", "--expected-sha", sha],
     { stdio: "inherit" },
   );
   const repo = process.env.GH_REPO;

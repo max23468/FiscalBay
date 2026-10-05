@@ -10,8 +10,10 @@ import {
   readdirSync,
   writeFileSync,
   rmSync,
+  mkdtempSync,
 } from "node:fs";
 import path from "node:path";
+import { tmpdir } from "node:os";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 
@@ -40,7 +42,7 @@ export function digestDirectory(directory) {
   return hash(JSON.stringify(files));
 }
 
-export function migrationPlan(migrations, applied, reviewed = "") {
+export function migrationPlan(migrations, applied, reviewed = "", approved) {
   if (applied.some((name) => !migrations.some((migration) => migration.name === name)))
     throw new Error("Schema remoto contiene migration assenti dal candidato.");
   const pending = migrations.filter(({ name }) => !applied.includes(name));
@@ -52,7 +54,17 @@ export function migrationPlan(migrations, applied, reviewed = "") {
       /\bALTER\s+TABLE\b/iu.test(text)
     );
   });
-  if (unsafe.length && reviewed !== digest)
+  const resumed =
+    approved &&
+    reviewed === approved.digest &&
+    hash(JSON.stringify(approved.pending)) === approved.digest &&
+    approved.pending.every((entry) =>
+      migrations.some((item) => item.name === entry.name && item.digest === entry.digest),
+    ) &&
+    pending.every((entry) =>
+      approved.pending.some((item) => item.name === entry.name && item.digest === entry.digest),
+    );
+  if (unsafe.length && reviewed !== digest && !resumed)
     throw new Error(
       `Migration da approvare: ${unsafe.map(({ name }) => name).join(", ")}. Digest ${digest}`,
     );
@@ -93,27 +105,41 @@ export async function publish(manifest, io, receipt = {}) {
   state.readback = false;
   delete state.rolledBack;
   const migrations = await io.migrations();
-  if (migrations.pending.length) {
-    state.schemaChanged = true;
-    state.rollbackCompatible = false;
-    await io.save(state);
-    await io.migrate(migrations);
-  }
-  state.schema = await io.schema();
-  await io.save(state);
   const current = await io.current();
   const identity = `${manifest.sha}:${manifest.digest}`;
   if (current.identity?.startsWith(`${manifest.sha}:`) && current.identity !== identity)
     throw new Error(
       "Commit già distribuito con artefatto diverso: recuperare l'artefatto originale.",
     );
+  if (migrations.pending.length) {
+    await io.assertCurrent();
+    state.schemaChanged = true;
+    state.rollbackCompatible = false;
+    state.migrationPlan ??= {
+      digest: migrations.digest,
+      pending: migrations.pending.map(({ name, digest }) => ({ name, digest })),
+    };
+    await io.save(state);
+    await io.migrate(migrations);
+  }
+  state.schema = await io.schema();
+  await io.save(state);
+  if ((await io.current()).version !== current.version)
+    throw new Error("Stato remoto cambiato durante il preflight: deploy rifiutato.");
+  let deployError;
   if (current.identity !== identity) {
     await io.assertCurrent();
     state.previous = current.version;
     state.rollbackCompatible =
       migrations.rollbackCompatible && !state.schemaChanged && (await io.canRollback(current));
+    state.deployAttempted = true;
+    state.deployed = false;
     await io.save(state);
-    await io.deploy(identity);
+    try {
+      await io.deploy(identity);
+    } catch (error) {
+      deployError = error;
+    }
   }
   const deployed = await io.current();
   if (deployed.identity !== identity)
@@ -121,6 +147,7 @@ export async function publish(manifest, io, receipt = {}) {
   state.version = deployed.version;
   state.deployed = true;
   await io.save(state);
+  if (deployError) throw deployError;
   await io.readback(deployed.version);
   state.readback = true;
   await io.save(state);
@@ -184,6 +211,24 @@ export function productionReadiness(backlog) {
   }
 }
 
+export function receiptArtifact(artifacts, prefix, runId, attempt) {
+  const start = `${prefix}-${runId}-`;
+  return artifacts
+    .filter((artifact) => {
+      const suffix = artifact.name.startsWith(start) ? artifact.name.slice(start.length) : "";
+      return !artifact.expired && /^\d+$/u.test(suffix) && Number(suffix) < attempt;
+    })
+    .sort((a, b) => Number(b.name.slice(start.length)) - Number(a.name.slice(start.length)))[0];
+}
+
+export function readReceipt(directory, manifest) {
+  const file = path.join(directory, "reports/release.json");
+  if (!existsSync(file)) return null;
+  const receipt = JSON.parse(readFileSync(file, "utf8"));
+  assertResume(receipt, manifest);
+  return receipt;
+}
+
 async function main() {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
@@ -191,6 +236,7 @@ async function main() {
       environment: { type: "string", default: "test" },
       "reviewed-migrations": { type: "string", default: "" },
       "expected-sha": { type: "string" },
+      "receipt-prefix": { type: "string" },
     },
   });
   const environment = values.environment;
@@ -208,11 +254,64 @@ async function main() {
     return;
   }
   const manifest = verify(environment);
+  if (command === "restore") {
+    const runId = process.env.GITHUB_RUN_ID;
+    const attempt = Number(process.env.GITHUB_RUN_ATTEMPT);
+    const prefix = values["receipt-prefix"];
+    if (!/^\d+$/u.test(runId ?? "") || !["deployed", "release-receipt"].includes(prefix))
+      throw new Error("Run o ricevuta non identificata.");
+    if (attempt <= 1) return;
+    const pages = JSON.parse(
+      execFileSync(
+        "gh",
+        [
+          "api",
+          "--paginate",
+          "--slurp",
+          `repos/${process.env.GH_REPO}/actions/runs/${runId}/artifacts?per_page=100`,
+        ],
+        { encoding: "utf8" },
+      ),
+    );
+    const artifact = receiptArtifact(
+      pages.flatMap((page) => page.artifacts),
+      prefix,
+      runId,
+      attempt,
+    );
+    if (!artifact) return;
+    const directory = mkdtempSync(path.join(tmpdir(), "release-receipt-"));
+    try {
+      execFileSync(
+        "gh",
+        [
+          "run",
+          "download",
+          runId,
+          "--repo",
+          process.env.GH_REPO,
+          "--name",
+          artifact.name,
+          "--dir",
+          directory,
+        ],
+        { stdio: "inherit" },
+      );
+      const receipt = readReceipt(directory, manifest);
+      if (!receipt) return;
+      mkdirSync("reports", { recursive: true });
+      writeFileSync("reports/release.json", JSON.stringify(receipt, null, 2));
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+    return;
+  }
   if (command === "verify") {
     console.log("Provenienza dell'artefatto confermata.");
     return;
   }
-  if (!["deploy", "rollback"].includes(command)) throw new Error("Comando non supportato.");
+  if (!["deploy", "rollback", "confirm"].includes(command))
+    throw new Error("Comando non supportato.");
   if (environment === "production") {
     if (
       process.env.PRODUCTION_PUBLISH_ENABLED !== "true" ||
@@ -278,6 +377,21 @@ async function main() {
   };
   const receiptFile = "reports/release.json";
   const receipt = existsSync(receiptFile) ? JSON.parse(readFileSync(receiptFile, "utf8")) : {};
+  if (command === "confirm") {
+    assertResume(receipt, manifest);
+    const remote = git("ls-remote", "origin", `refs/heads/${target.ref}`).split(/\s/u)[0];
+    const current = await currentVersion();
+    if (
+      remote !== manifest.sha ||
+      !receipt.readback ||
+      receipt.rolledBack ||
+      current.version !== receipt.version ||
+      current.identity !== `${manifest.sha}:${manifest.digest}`
+    )
+      throw new Error("Distribuzione o candidato cambiato: release rifiutata.");
+    await liveReadback(current.version);
+    return;
+  }
   if (command === "rollback") {
     assertResume(Object.keys(receipt).length ? receipt : null, manifest);
     if (!receipt.deployed || !receipt.previous) return;
@@ -340,6 +454,7 @@ async function main() {
           })),
           names,
           values["reviewed-migrations"],
+          receipt.migrationPlan,
         );
       },
       migrate: async () => {

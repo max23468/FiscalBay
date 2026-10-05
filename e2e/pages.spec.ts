@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { localCookie } from "./local-account";
-import { pageCases } from "./page-cases";
+import { pageCases, knownPagePath } from "./page-cases";
 import { testAccount } from "./test-account";
 
 const remote = Boolean(process.env.E2E_BASE_URL);
@@ -35,8 +35,14 @@ for (const scenario of scenarios) {
       async ({ page, context, baseURL, browserName }, info) => {
         // Una prova comprende visita, audit, ricarica e navigazione avanti/indietro.
         test.setTimeout(60_000);
+        const checked = (description: string) =>
+          info.annotations.push({ type: "check", description });
         info.annotations.push(
           { type: "route", description: scenario.pattern },
+          {
+            type: "expected",
+            description: `HTTP ${production && scenario.preview ? 404 : scenario.status}; percorso ${scenario.redirect && !(production && scenario.preview) ? scenario.redirect : new URL(scenario.path, baseURL!).pathname}`,
+          },
           {
             type: "ambito",
             description: scenario.preview ? "anteprima sintetica" : "pagina reale",
@@ -76,6 +82,7 @@ for (const scenario of scenarios) {
           const response = await context.request.get(scenario.path);
           expect(response.status()).toBe(scenario.status);
           expect(await response.json()).toBeNull();
+          checked("HTTP e contratto JSON anonimo");
           return;
         }
         const errors: string[] = [];
@@ -98,6 +105,7 @@ for (const scenario of scenarios) {
         if (scenario.redirect && !(production && scenario.preview))
           expect(new URL(page.url()).pathname).toBe(scenario.redirect);
         else expect(new URL(page.url()).pathname).toBe(new URL(scenario.path, baseURL!).pathname);
+        checked("HTTP e percorso/redirect");
         await expect(page).toHaveTitle(/^FiscalBay \| /);
         await expect(page.locator("main")).toBeVisible();
         await expect(page.getByRole("heading").first()).toBeVisible();
@@ -106,6 +114,7 @@ for (const scenario of scenarios) {
           scenario.path.startsWith("/en") ? "en" : "it",
         );
         await expect(page.locator("vite-error-overlay")).toHaveCount(0);
+        checked("titolo, contenuto e lingua");
         await page.evaluate(() => document.fonts.ready);
         expect(
           await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
@@ -127,6 +136,15 @@ for (const scenario of scenarios) {
         expect(
           links.every((href) => href !== null && href !== "" && !href.startsWith("javascript:")),
         ).toBe(true);
+        for (const href of links) {
+          const url = new URL(href!, page.url());
+          if (url.origin === new URL(baseURL!).origin)
+            expect(
+              knownPagePath(url.pathname),
+              `Collegamento interno senza route: ${url.pathname}`,
+            ).toBe(true);
+        }
+        checked("font, layout, immagini e collegamenti interni");
         await page.keyboard.press(browserName === "webkit" ? "Alt+Tab" : "Tab");
         expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true);
         const accessibility = await new AxeBuilder({ page })
@@ -157,11 +175,15 @@ for (const scenario of scenarios) {
             }))
             .filter(({ targets }) => targets.length > 0),
         ).toEqual([]);
-        if (scenario.role === "admin-verify")
+        checked("tastiera e axe WCAG A/AA");
+        if (scenario.role === "admin-verify") {
           await expect(page.getByRole("button", { name: /passkey/i })).toBeVisible();
+          checked("secondo fattore richiesto per admin");
+        }
         if (scenario.role === "member" && scenario.area === "orders") {
           await expect(page.getByText(testAccount.taxCodes.unlocked).first()).toBeVisible();
           expect(await page.content()).not.toContain(testAccount.taxCodes.locked);
+          checked("dato sbloccato presente e dato bloccato assente dall'HTML");
         }
         const before = page.url();
         // La scoperta delle route termina prima di interromperla con un'altra navigazione.
@@ -169,6 +191,7 @@ for (const scenario of scenarios) {
         const reload = await page.reload();
         expect(reload?.status()).toBe(expectedStatus);
         await expect(page.locator("main")).toBeVisible();
+        checked("ricarica");
         await page.waitForLoadState("networkidle");
         const home = scenario.path.startsWith("/en") ? "/en" : "/";
         const homeLink = page.locator(`a[href="${home}"]`).first();
@@ -179,8 +202,22 @@ for (const scenario of scenarios) {
           await page.goBack();
           await expect(page).toHaveURL(before);
           await page.waitForLoadState("networkidle");
+          await page.goForward();
+          await expect(page).toHaveURL(new URL(home, baseURL!).href);
+          await page.waitForLoadState("networkidle");
+          await page.goBack();
+          await expect(page).toHaveURL(before);
+          await page.waitForLoadState("networkidle");
+          checked("navigazione interna, indietro e avanti");
+        } else {
+          info.annotations.push({
+            type: "omission",
+            description:
+              "Navigazione interna non applicabile: pagina iniziale o collegamento iniziale assente.",
+          });
         }
         expect(errors).toEqual([]);
+        checked("JavaScript, idratazione e risorse senza errori");
       },
     );
   }

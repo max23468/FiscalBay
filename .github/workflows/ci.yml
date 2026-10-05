@@ -34,6 +34,7 @@ jobs:
     outputs:
       deploy: ${{ steps.detect.outputs.deploy }}
       e2e: ${{ steps.detect.outputs.e2e }}
+      grep: ${{ steps.detect.outputs.grep }}
       artifact: build-${{ steps.tree.outputs.tree }}
       artifact-run: ${{ steps.reuse.outputs.run-id || github.run_id }}
 
@@ -227,6 +228,12 @@ jobs:
           current_sha="$(git ls-remote https://github.com/${{ github.repository }}.git refs/heads/develop | cut -f1)"
           test "${current_sha}" = "${VERIFIED_SHA}"
 
+      - name: Restore receipt from previous attempt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: node scripts/release.mjs restore --environment test --receipt-prefix deployed
+
       - name: Deploy verified artifact
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -288,8 +295,9 @@ jobs:
         env:
           E2E_RUN_ID: test-pages
           E2E_BASE_URL: https://test.fiscalbay.it
+          BROWSER_GREP: ${{ needs.verify.outputs.grep }}
           E2E_ACCOUNT_PASSWORD: ${{ steps.account.outcome == 'success' && secrets.E2E_ACCOUNT_PASSWORD || '' }}
-        run: node scripts/browser-tests.mjs --pages
+        run: node scripts/browser-tests.mjs --pages --grep "${BROWSER_GREP}"
 
       # Misura e ricevuta senza bloccare (D148): il p95 oscilla di qualche ms fra misure
       # della stessa versione, quindi oltre soglia resta un avviso e non un rollback.

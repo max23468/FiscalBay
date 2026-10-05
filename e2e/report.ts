@@ -1,4 +1,5 @@
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import type { FullResult, Reporter, TestCase, TestResult } from "@playwright/test/reporter";
 
 /** Ricevuta senza DOM, cookie, password o dati applicativi; fallimenti nei trace locali. */
@@ -9,6 +10,10 @@ export default class Report implements Reporter {
     status: string;
     reason: string;
     durationMs: number;
+    route: string;
+    expected: string;
+    checks: string[];
+    omissions: string[];
   }> = [];
   onTestEnd(test: TestCase, result: TestResult) {
     this.rows.push({
@@ -16,6 +21,14 @@ export default class Report implements Reporter {
       project: test.parent.project()?.name ?? "",
       status: result.status,
       durationMs: result.duration,
+      route: test.annotations.find(({ type }) => type === "route")?.description ?? "",
+      expected: test.annotations.find(({ type }) => type === "expected")?.description ?? "",
+      checks: test.annotations
+        .filter(({ type }) => type === "check")
+        .map(({ description }) => description ?? ""),
+      omissions: test.annotations
+        .filter(({ type }) => type === "omission")
+        .map(({ description }) => description ?? ""),
       reason: test.annotations
         .filter(({ type }) => type === "skip")
         .map(({ description }) => description)
@@ -35,7 +48,21 @@ export default class Report implements Reporter {
       (row) => row.status === "skipped" && !row.reason.startsWith("Non applicabile:"),
     );
     const summary = JSON.stringify(
-      { status: result.status, partial, counts, rows: this.rows },
+      {
+        status: result.status,
+        partial,
+        counts,
+        rows: this.rows,
+        sha: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+        dirty: Boolean(execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim()),
+        baseURL: process.env.E2E_BASE_URL || "locale",
+        environment:
+          process.env.E2E_PRODUCTION === "1"
+            ? "production"
+            : process.env.E2E_BASE_URL
+              ? "test"
+              : "local",
+      },
       null,
       2,
     );
@@ -47,7 +74,7 @@ export default class Report implements Reporter {
       const escape = (text: string) => text.replaceAll("|", "\\|").replaceAll("\n", " ");
       appendFileSync(
         process.env.GITHUB_STEP_SUMMARY,
-        `\n### Collaudo browser: ${result.status}${partial ? ", parziale" : ""}\n\n${JSON.stringify(counts)}\n\n| Pagina o scenario | Browser | Esito | Motivo |\n|---|---|---|---|\n${this.rows.map((row) => `| ${escape(row.page)} | ${row.project} | ${row.status} | ${escape(row.reason)} |`).join("\n")}\n`,
+        `\n### Collaudo browser: ${result.status}${partial ? ", parziale" : ""}\n\n${JSON.stringify(counts)}\n\n| Pagina o scenario | Browser | Esito | Secondi | Controlli eseguiti | Omissioni |\n|---|---|---|---|---|---|\n${this.rows.map((row) => `| ${escape(row.page)} | ${row.project} | ${row.status} | ${(row.durationMs / 1000).toFixed(1)} | ${escape(row.checks.join(", "))} | ${escape([row.reason, ...row.omissions].filter(Boolean).join("; "))} |`).join("\n")}\n`,
       );
     }
   }

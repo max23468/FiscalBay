@@ -123,16 +123,25 @@ export function plan(files, sources = [], complete = false) {
     public: "pubblico|standalone|public|termini|privacy",
   };
   const browserGrep =
-    mode === "targeted" ? ["@smoke", ...[...areas].map((area) => patterns[area])].join("|") : ".";
-  const mutation = [...affected].filter((file) =>
-    /^app\/(?:domain\/(?:orders|quota|grants|cycles)|integrations\/stripe).*\.server\.ts$/u.test(
-      file,
-    ),
+    mode === "targeted"
+      ? [
+          "app-shell.spec",
+          "app-components.spec",
+          "@smoke",
+          ...[...areas].map((area) => patterns[area]),
+        ].join("|")
+      : ".";
+  const mutation = [...affected].filter(
+    (file) =>
+      (sources.length === 0 || graph.has(file)) &&
+      /^app\/(?:auth(?:-route)?|domain\/(?:orders|quota|grants|cycles|sessions|sign-in-methods|registration|stores|export)|integrations\/(?:stripe|ebay\/(?:seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
+        file,
+      ),
   );
   const browsers = e2e
     ? mode === "full" ||
       areas.has("auth") ||
-      files.some((file) => /i18n|view-models|date/u.test(file))
+      files.some((file) => /i18n|view-models|date|\.tsx$/u.test(file))
       ? "chromium,webkit"
       : "chromium"
     : "";

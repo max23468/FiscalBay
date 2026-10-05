@@ -4,6 +4,8 @@
 
 `pnpm verify:changed` usa lo stesso classificatore della CI. I documenti ordinari richiedono copy e link; il tooling ammesso richiede anche test degli script, repository, formato e lint. Le modifiche applicative conservano il gate completo e selezionano le prove browser seguendo gli import fino alle route. Moduli condivisi, configurazioni, nuovi percorsi non risolvibili e modifiche ai gate richiedono tutte le prove. I domini critici interessati eseguono anche mutation test, senza considerare timeout o assenza di copertura come successi.
 
+La selezione mirata conserva entrambe le suite funzionali Chromium: i titoli generici di alcune interazioni non consentono una riduzione affidabile per dominio. Riduce le visite del catalogo alle aree coinvolte e riusa la stessa selezione dopo il deploy test. Le mutation includono i consumatori server pertinenti per Auth, sessioni, isolamento, ordini, export, negozi e integrazioni, oltre a quota e diritti.
+
 `Node 26` resta il controllo richiesto. La verifica superata produce `build-<tree>`: un push o una promozione dello stesso tree può riusarlo soltanto da una run CI riuscita dello stesso repository e prima della scadenza. Dopo un merge Dependabot, il workflow avvia esplicitamente la CI sul commit integrato, perché gli effetti del token GitHub non generano un nuovo evento push. I deploy sono serializzati; la verifica delle PR può essere cancellata quando superata da una nuova revisione.
 
 ## Tutte le pagine
@@ -20,6 +22,8 @@ In Production l'anteprima assente viene verificata una volta per ciascun pattern
 
 Il reporter scrive `test-results/browser/summary.json` e il riepilogo GitHub con pagine, browser, esiti e motivi delle esclusioni. Le tracce restano disponibili soltanto in locale; il report remoto non contiene DOM, cookie o dati degli account. Le sentinelle invisibili di Base UI per il cursore VoiceOver in WebKit sono escluse soltanto dalla regola `aria-command-name`: non sono comandi utente. Ogni altro nodo e regola resta controllato. Axe e WebKit non attestano un dispositivo Safari/iOS né i flussi esterni fiscali o di pagamento.
 
+Ogni visita registra route, risposta/percorso attesi, controlli effettivamente completati e omissioni. I collegamenti interni devono risolvere un pattern registrato; la navigazione verifica anche Avanti quando applicabile. Il report identifica commit, ambiente e sorgenti modificati: la release rifiuta un report vuoto, parziale, di un checkout non salvato, di un altro candidato o del dominio test.
+
 Le prove locali usano due worker, quelle remote uno. Ogni caso ha un limite di 60 secondi per visita, audit, ricarica e navigazione; non è una soglia di velocità della pagina. La durata effettiva di ciascun caso entra nel report JSON. Il gate non applica retry automatici per nascondere un errore.
 
 ## Artefatto e readback
@@ -31,6 +35,8 @@ Il Worker restituisce `x-fiscalbay-version` dal binding nativo di Cloudflare. Il
 Quando la precedente versione espone un commit qualificato, le migration già applicate devono coincidere byte per byte con quel sorgente Git. Una versione storica senza identità qualificata non permette questo confronto: il primo ciclo test deve registrare tale limite. La provenienza rifiuta un checkout con modifiche non salvate nel commit.
 
 Le migration nuove additive vengono applicate prima del deploy, poi rilette dal registro D1. Quelle contenenti alterazioni o scritture distruttive richiedono il digest esatto del piano nel campo `reviewed_migrations`. Il primo tentativo senza digest mostra il valore da esaminare e si arresta prima dell'applicazione. Non riutilizzare il digest dopo modifiche al piano. I file delle migration già applicate restano immutabili.
+
+Prima della migration si ricontrolla il candidato remoto; un artefatto diverso dello stesso commit viene rifiutato prima degli effetti. Il piano approvato è salvato nella ricevuta: una ripresa può completarne il sottoinsieme ancora pendente, soltanto con gli stessi hash SQL e lo stesso digest approvato. Un cambiamento della versione provider durante il preflight impedisce il deploy. Una risposta CLI persa dopo un deploy viene riconciliata con l'identità provider, così il rollback può usare un esito effettivamente confermato.
 
 Il rollback automatico è ammesso soltanto senza nuove migration e con precedente versione identificata, configurazione e migration uguali. Altrimenti resta necessario un forward-fix o una compatibilità qualificata. Prima del rollback si rilegge la versione attuale: uno stato cambiato impedisce di sovrascrivere un altro deploy. Il rollback del codice non ripristina dati.
 
@@ -44,7 +50,9 @@ La configurazione dell'environment richiede `CLOUDFLARE_ACCOUNT_ID`, `PRODUCTION
 
 Il confronto è cumulativo dall'ultima release, o dalla radice della storia alla prima pubblicazione. Il candidato esegue il collaudo completo. Production viene ricostruita con `CLOUDFLARE_ENV=production` dagli input fissati, provata localmente e registrata in un artefatto proprio: non si distribuisce la build test in Production. Dopo deploy, readback e collaudo anonimo completi si creano tag e GitHub Release dalle note della versione. Un tag già esistente deve puntare al commit atteso, senza riscritture.
 
-Una ripresa rilegge registro D1, branch e identità provider; le migration già applicate e il deploy già confermato non si ripetono. La creazione della release può ripartire dopo un tag riuscito. La ricevuta è conservata negli artefatti della run; quando il processo resta nella stessa directory mantiene anche il precedente riferimento per il rollback. Una nuova run senza tale riferimento non inventa una versione precedente.
+Una ripresa rilegge registro D1, branch e identità provider; le migration già applicate e il deploy già confermato non si ripetono. La creazione della release può ripartire dopo un tag riuscito. Nei tentativi successivi della stessa run i workflow recuperano la ricevuta del tentativo precedente non scaduto, verificandone candidato, artefatto e ambiente prima di usarla. Una nuova run senza tale riferimento non inventa una versione precedente.
+
+Subito prima del tag, `confirm` rilegge branch, versione provider e risposte HTTP, senza applicare migration o ridistribuire. Un cambiamento rispetto alla versione collaudata blocca la release.
 
 Dopo un fallimento del collaudo o del tag, usare la ripetizione dei soli job falliti su GitHub per conservare l'artefatto originale qualificato. Una ricostruzione dello stesso commit con digest diverso viene rifiutata se quel commit è già distribuito: non viene scambiata per una ripresa della stessa versione.
 

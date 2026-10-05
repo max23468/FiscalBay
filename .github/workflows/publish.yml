@@ -160,6 +160,12 @@ jobs:
         with:
           name: production-${{ inputs.expected_sha }}
           path: build/
+      - name: Restore receipt from previous attempt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: node scripts/release.mjs restore --environment production --receipt-prefix release-receipt
+
       - name: Deploy or resume confirmed deployment
         id: deploy
         env:

@@ -11,6 +11,24 @@ export interface PageCase {
   endpoint?: boolean;
 }
 
+export function knownPagePath(pathname: string) {
+  return pageCases.some(({ pattern }) => {
+    if (pattern === "*") return false;
+    const expression = pattern
+      .split("/")
+      .map((segment, index) => {
+        if (!segment) return "";
+        const slash = index ? "/" : "";
+        if (segment.startsWith(":"))
+          return segment.endsWith("?") ? `(?:${slash}[^/]+)?` : `${slash}[^/]+`;
+        if (segment === "*") return `${slash}.*`;
+        return slash + segment.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+      })
+      .join("");
+    return new RegExp(`^${expression || "/"}$`, "u").test(pathname);
+  });
+}
+
 const settings = [
   "piano",
   "notifiche",
