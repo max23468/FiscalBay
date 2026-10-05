@@ -188,13 +188,14 @@ export function AppShell({
           {navigable ? (
             <nav aria-label={t.shell.mainNav} className="hidden h-full md:flex">
               <ul className="flex h-full items-stretch gap-1">
-                {destinations.map(({ href, label, end }) => (
+                {destinations.map(({ href, label, Icon, end }) => (
                   <li key={href} className="flex">
                     <NavLink
                       to={href}
                       end={end}
-                      className="relative flex items-center rounded-md px-3 text-sm font-medium text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:text-foreground aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-3 aria-[current=page]:after:bottom-0 aria-[current=page]:after:h-0.5 aria-[current=page]:after:rounded-full aria-[current=page]:after:bg-primary"
+                      className="relative flex items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:text-foreground aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-3 aria-[current=page]:after:bottom-0 aria-[current=page]:after:h-0.5 aria-[current=page]:after:rounded-full aria-[current=page]:after:bg-primary"
                     >
+                      <Icon aria-hidden="true" className="size-4" />
                       {label}
                     </NavLink>
                   </li>
