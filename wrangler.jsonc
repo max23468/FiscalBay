@@ -6,6 +6,7 @@
   "main": "./workers/app.ts",
   "workers_dev": false,
   "routes": [{ "pattern": "test.fiscalbay.it", "custom_domain": true }],
+  "triggers": { "crons": ["*/30 * * * *"] },
   "vars": {
     "APP_ORIGIN": "https://test.fiscalbay.it",
     "STRIPE_PRICE_MONTHLY": "price_1UHlnnJP7SSN14Zph79bnCQu",

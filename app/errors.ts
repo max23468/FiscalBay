@@ -64,18 +64,24 @@ export function errorResponse(request: Request, code: ErrorCode): Response {
 
 // Only enumerated fields are logged. Never serialize Error, request, headers or provider payloads.
 export function logFailure(input: {
-  request: Request;
-  code: ErrorCode;
-  operation: "route" | "render" | "store_link" | "stripe_webhook";
+  request?: Request;
+  code?: ErrorCode;
+  error?: unknown;
+  operation: "route" | "render" | "store_link" | "stripe_webhook" | "token_refresh";
   status?: number;
 }): void {
-  if (input.request.signal.aborted) return;
+  if (input.request?.signal.aborted) return;
+  const { error } = input;
+  // Il tipo di errore del provider (UpstreamError) è un'etichetta fissa, mai il suo contenuto.
+  const failure =
+    error instanceof ApplicationError && "failure" in error ? String(error.failure) : undefined;
   console.error(
     JSON.stringify({
       event: "application_error",
-      code: input.code,
+      code: input.code ?? classifyFailure(error),
       operation: input.operation,
-      correlationId: correlationId(input.request),
+      ...(input.request ? { correlationId: correlationId(input.request) } : {}),
+      ...(failure ? { failure } : {}),
       ...(input.status ? { status: input.status } : {}),
     }),
   );

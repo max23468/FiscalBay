@@ -18,6 +18,7 @@ Il piano contiene i requisiti completi: qui si descrivono il lavoro e la prova, 
 
 ## Stato corrente e ripresa
 
+- **2026-10-05 · M2-05 OAuth negozi e identità stabile · DONE, resta il collaudo sul test:** mandato owner «implementazione completa» su `claude/collegamento-negozi-oauth` da `develop` `8a733b4`. Schermata preparatoria, confine HTTP, callback idempotente, identità stabile, token cifrati e rinnovo in background; dettaglio e prove in [M2-05](#m2-05). Migration `0012` additiva da applicare alla D1 di test prima del merge.
 - **2026-10-04 · Audit UI/UX, etichetta breve delle notifiche dei negozi · DONE, resta il collaudo sul test:** collaudo Chrome della PR #263 (`fbf0a5d`) registrato nella §15 dell'audit: N10, N11, N12 e I9 corretti live. Emerso N13, introdotto da N12: la frase lunga allargava la colonna Notifiche. Ora Sospese in tabella e nella lista, frase completa nel dettaglio. Rientra nel via owner «Correggi tutto poi pubblica»: PR verso `develop`, merge automatico, CI, deploy test, verifica Chrome e pulizia Git.
   - **Indicazione owner durante il lavoro (D155):** la scelta «Negozio attivo se torni al piano Free» non deve comparire in Premium, perché invoglia al downgrade. Rimossa da Piano e pagamenti di Premium; resta soltanto nel Free come «Scegli il negozio attivo». Senza scelta resta attivo il primo negozio ancora collegato, come già previsto dal piano. Master Plan e registro aggiornati; I9 superato.
   - **Prove:** `pnpm verify` verde, 158 test applicativi e 24 test degli script, React Doctor 100/100, client 323,9 KiB gzip su 350; suite Chromium completa 109/109 sulla build finale. Il caso negozi controlla Sospese nell'elenco e frase completa nel dettaglio; il caso Impostazioni controlla che Premium non mostri la scelta del negozio, IT/EN.
@@ -708,7 +709,7 @@ Provare un token precedente su API, RPC e download dopo revoca. Se un percorso d
 
 ### M2-05 · OAuth negozi e identità stabile
 
-**Stato:** TODO · **Prerequisiti:** M2-01, G-EBAY · **Contratto:** [§8](docs/MASTER_PLAN.md#s08) · [§29](docs/MASTER_PLAN.md#s29)
+**Stato:** DONE · **Prerequisiti:** M2-01, G-EBAY · **Contratto:** [§8](docs/MASTER_PLAN.md#s08) · [§29](docs/MASTER_PLAN.md#s29)
 
 Implementare schermata preparatoria, callback e protezioni OAuth, token cifrati e identificatore stabile. Consentire una sola associazione del negozio a uno spazio.
 
@@ -717,6 +718,12 @@ Introdurre il confine HTTP minimo del §28 per le chiamate OAuth/Identity, con t
 **Criterio di completamento:** Replay e callback duplicate gestiti; nessuna informazione rivelata sullo spazio altrui. Un cambio di nome eBay non crea un nuovo negozio.
 
 Parte dal flusso seller della slice M0-13, che non persiste il token. Qui si provano dal vivo consenso e callback seller 2.0 sul dominio di test, rinviati da M0, insieme a storage cifrato e rinnovo del token.
+
+**Implementazione (2026-10-05):** mandato owner «implementazione completa». `/negozi/collega` mostra la schermata preparatoria IT/EN a chi ha sessione, email verificata e registrazione completa: account venditore anche diverso dal login, sola lettura, nessuna email eBay, un negozio per un solo account; il passaggio a eBay parte solo dal suo invio con controllo dell'origine. Senza sessione il GET torna alla radice come prima. Il confine HTTP (`app/integrations/http.server.ts`) applica timeout all'intera lettura, limite dei byte anche senza Content-Length, validazione con schema e classificazione stabile (credenziali, rate limit, indisponibilità, risposta invalida, rifiuto) con Retry-After; del body del provider resta solo un codice OAuth breve. Lo state è consumato una sola volta e conserva l'esito fino alla scadenza: il callback duplicato riceve lo stesso esito senza un secondo scambio del codice, a un altro utente risponde errore. Il negozio si associa allo spazio con una sola istruzione sull'identificativo eBay immutabile: un nuovo username aggiorna il nome, un negozio di un altro spazio dà l'esito generico e non riceve token. Access e refresh token sono cifrati con AES-GCM (migration `0012`), chiave derivata con HKDF dal segreto server già custodito e legame a negozio e tipo; si registrano scadenza del token e del consenso. Il rinnovo parte da un cron ogni 30 minuti per i token con meno di 40 minuti residui, non dal percorso di una pagina; scrive solo se il consenso letto è ancora quello corrente e registra il rifiuto soltanto con `invalid_grant`. Un errore nella lettura del primo ordine non annulla un collegamento riuscito.
+
+**Prove locali:** `pnpm verify` verde con 172 test applicativi e 24 test degli script, React Doctor 100/100, client 325,3 KiB gzip su 350. Test nuovi su schermata preparatoria, cifratura e legame dei token, cambio di username, negozio di un altro spazio, callback duplicato e replicato, scambio del codice fallito, import fallito, rinnovo anticipato, `invalid_grant` contro credenziali dell'app errate, rinnovo superato da un nuovo consenso, consenso scaduto, timeout durante il body, limite dei byte e payload invalido. Mutation manuale: senza il vincolo di spazio nell'upsert o senza il confronto del consenso nel rinnovo i test falliscono.
+
+**Resta:** collaudo sul test dopo il deploy, con consenso reale del seller controllato: esito `collegato`, token cifrati e scadenze in D1, callback ripetuto, rinnovo eseguito dal cron. La migration `0012` va applicata prima del deploy Production, insieme al cron ereditato dall'ambiente; avviso di scadenza del consenso, reconnect e revoca restano a M2-06. Ruotare `BETTER_AUTH_SECRET` richiede di ricollegare i negozi.
 
 ### M2-06 · Reconnect, pause e disconnessioni
 

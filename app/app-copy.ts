@@ -601,6 +601,19 @@ const it = {
         "L’account che hai appena usato è già collegato a un altro utente FiscalBay. Accedi all’utente FiscalBay associato oppure scegli un altro account.",
     },
   },
+  storeLink: {
+    title: "Collega un negozio eBay",
+    intro:
+      "Ti portiamo su eBay per autorizzare FiscalBay. Accedi con l’account venditore del negozio da collegare: può essere diverso da quello che usi per entrare in FiscalBay.",
+    points: [
+      "FiscalBay legge gli ordini e i dati fiscali che eBay rende disponibili, in sola lettura.",
+      "Non modifica nulla su eBay e non contatta gli acquirenti.",
+      "Non chiede l’indirizzo email del tuo account eBay.",
+      "Un negozio eBay può essere collegato a un solo account FiscalBay.",
+    ],
+    continue: "Continua su eBay",
+    cancel: "Annulla",
+  },
   legal: {
     navigation: "Documenti legali",
     termini: "Termini di servizio",
@@ -1307,6 +1320,19 @@ const en: AppCopy = {
       generic:
         "The account you just used is already linked to another FiscalBay user. Sign in to the associated FiscalBay user or choose a different account.",
     },
+  },
+  storeLink: {
+    title: "Connect an eBay store",
+    intro:
+      "We’ll take you to eBay to authorize FiscalBay. Sign in with the seller account of the store you want to connect: it can differ from the one you use to sign in to FiscalBay.",
+    points: [
+      "FiscalBay reads orders and the tax data eBay makes available, read-only.",
+      "It changes nothing on eBay and never contacts buyers.",
+      "It doesn’t ask for the email address of your eBay account.",
+      "An eBay store can be connected to only one FiscalBay account.",
+    ],
+    continue: "Continue to eBay",
+    cancel: "Cancel",
   },
   legal: {
     navigation: "Legal documents",

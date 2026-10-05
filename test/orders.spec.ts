@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import {
   buildLastModifiedFilter,
@@ -20,7 +21,14 @@ import { handleAuthRequest } from "../app/auth-route.server";
 import { loader as loadHome } from "../app/routes/home";
 import { action as signIn } from "../app/routes/sign-in";
 import { loader as loadLegal } from "../app/routes/legal";
-import { action as startStoreLink } from "../app/routes/store-link";
+import { action as startStoreLink, loader as loadStoreLink } from "../app/routes/store-link";
+import {
+  openToken,
+  refreshExpiringTokens,
+  refreshStoreToken,
+  sealToken,
+} from "../app/integrations/ebay/seller-credentials.server";
+import { UpstreamError, upstreamJson, upstreamText } from "../app/integrations/http.server";
 
 const now = "2026-09-13T20:00:00.000Z";
 const syntheticProfile = {
@@ -33,6 +41,7 @@ const syntheticProfile = {
 beforeEach(async () => {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM ebay_store_link_sessions"),
+    env.DB.prepare("DELETE FROM ebay_store_credentials"),
     env.DB.prepare("DELETE FROM lifetime_allocations"),
     env.DB.prepare("DELETE FROM order_grants"),
     env.DB.prepare("DELETE FROM free_cycles"),
@@ -488,14 +497,25 @@ const syntheticTradingXml = `<?xml version="1.0" encoding="UTF-8"?>
   </OrderArray>
 </GetOrdersResponse>`;
 
-function syntheticEbay() {
+function syntheticEbay(
+  options: { username?: string; trading?: () => Response; token?: () => Response } = {},
+) {
   return vi.fn<typeof fetch>(async (input) => {
     const url = String(input);
     if (url.endsWith("/identity/v1/oauth2/token")) {
-      return Response.json({ access_token: "token-sintetico" });
+      if (options.token) return options.token();
+      return Response.json({
+        access_token: "token-sintetico",
+        expires_in: 7200,
+        refresh_token: "refresh-sintetico",
+        refresh_token_expires_in: 47_304_000,
+      });
     }
     if (url.includes("/commerce/identity/v1/user/")) {
-      return Response.json({ userId: "ebay-user-sintetico", username: "venditore" });
+      return Response.json({
+        userId: "ebay-user-sintetico",
+        username: options.username ?? "venditore",
+      });
     }
     if (url.includes("/sell/fulfillment/v1/order")) {
       return Response.json({
@@ -521,7 +541,9 @@ function syntheticEbay() {
         total: 1,
       });
     }
-    if (url.endsWith("/ws/api.dll")) return new Response(syntheticTradingXml);
+    if (url.endsWith("/ws/api.dll")) {
+      return options.trading?.() ?? new Response(syntheticTradingXml);
+    }
     return new Response(null, { status: 404 });
   });
 }
@@ -1065,12 +1087,21 @@ describe("collegamento negozio eBay", () => {
       home.orders.map(({ ebayOrderId, taxIdentifiers }) => [ebayOrderId, taxIdentifiers]),
     ).toEqual([[syntheticOrderId, []]]);
 
+    // Il callback duplicato riceve lo stesso esito senza un secondo scambio del codice;
+    // replicato da un altro utente non rivela nulla.
     const replay = await handleAuthRequest(
       storeCallback(`state=${state}&code=codice-sintetico`, cookie),
       env,
       ebay,
     );
-    expect(replay.headers.get("location")).not.toContain("negozio=collegato");
+    expect(replay.headers.get("location")).toBe("http://localhost:5173/?negozio=collegato");
+    const intruder = await verifiedSession("intruso@example.invalid");
+    const stolenReplay = await handleAuthRequest(
+      storeCallback(`state=${state}&code=codice-sintetico`, intruder.cookie),
+      env,
+      ebay,
+    );
+    expect(stolenReplay.headers.get("location")).toBe("http://localhost:5173/?negozio=errore");
     expect(ebay).toHaveBeenCalledTimes(4);
   });
 
@@ -1098,5 +1129,406 @@ describe("collegamento negozio eBay", () => {
     expect(ebay).not.toHaveBeenCalled();
     const stores = await env.DB.prepare("SELECT COUNT(*) AS count FROM ebay_stores").first();
     expect(stores).toEqual({ count: 0 });
+  });
+
+  it("mostra la schermata preparatoria solo a chi può collegare e parte per eBay dal suo invio", async () => {
+    const { cookie } = await verifiedSession("preparatoria@example.invalid");
+    for (const base of ["", "/en"]) {
+      const page = await loadStoreLink({
+        request: new Request(`http://localhost:5173${base}/negozi/collega`, {
+          headers: { cookie },
+        }),
+      } as Parameters<typeof loadStoreLink>[0]);
+      expect(page).toEqual({ language: base ? "en" : "it" });
+    }
+    expect((await beginStoreLink(cookie)).hostname).toBe("auth.ebay.com");
+  });
+
+  it("cifra i token legandoli al negozio e calcola le scadenze del consenso", async () => {
+    const { cookie } = await verifiedSession("token-cifrati@example.invalid");
+    const state = (await beginStoreLink(cookie)).searchParams.get("state");
+    await handleAuthRequest(
+      storeCallback(`state=${state}&code=codice`, cookie),
+      env,
+      syntheticEbay(),
+    );
+
+    const row = await env.DB.prepare(
+      `SELECT c.* FROM ebay_store_credentials c JOIN ebay_stores s ON s.id = c.store_id`,
+    ).first<Record<string, string | null>>();
+    expect(row!.access_token).toMatch(/^v1\./u);
+    expect(JSON.stringify(row)).not.toMatch(/token-sintetico|refresh-sintetico/u);
+    const storeId = row!.store_id!;
+    const secret = env.BETTER_AUTH_SECRET;
+    expect(await openToken(secret, storeId, "access", row!.access_token!)).toBe("token-sintetico");
+    expect(await openToken(secret, storeId, "refresh", row!.refresh_token!)).toBe(
+      "refresh-sintetico",
+    );
+    // Lo stesso valore non si apre come altro tipo, per un altro negozio o con un altro segreto.
+    await expect(openToken(secret, storeId, "refresh", row!.access_token!)).rejects.toThrow();
+    await expect(openToken(secret, "altro", "access", row!.access_token!)).rejects.toThrow();
+    await expect(
+      openToken(`${secret}-diverso`, storeId, "access", row!.access_token!),
+    ).rejects.toThrow();
+
+    const grantedAt = Date.parse(row!.granted_at!);
+    expect(Date.parse(row!.access_expires_at!) - grantedAt).toBe(7200 * 1000);
+    expect(Date.parse(row!.refresh_expires_at!) - grantedAt).toBe(47_304_000 * 1000);
+    expect(row!.rejected_at).toBeNull();
+  });
+
+  it("riconosce lo stesso negozio dopo un cambio di nome eBay e rinnova il consenso", async () => {
+    const { cookie } = await verifiedSession("cambio-nome@example.invalid");
+    const first = (await beginStoreLink(cookie)).searchParams.get("state");
+    await handleAuthRequest(storeCallback(`state=${first}&code=uno`, cookie), env, syntheticEbay());
+    await env.DB.prepare("UPDATE ebay_store_credentials SET rejected_at = ?").bind(now).run();
+
+    const second = (await beginStoreLink(cookie)).searchParams.get("state");
+    const renamed = await handleAuthRequest(
+      storeCallback(`state=${second}&code=due`, cookie),
+      env,
+      syntheticEbay({ username: "venditore-rinominato" }),
+    );
+    expect(renamed.headers.get("location")).toBe("http://localhost:5173/?negozio=collegato");
+    const stores = await env.DB.prepare(
+      `SELECT s.display_name, c.rejected_at FROM ebay_stores s
+         JOIN ebay_store_credentials c ON c.store_id = s.id`,
+    ).all();
+    expect(stores.results).toEqual([{ display_name: "venditore-rinominato", rejected_at: null }]);
+  });
+
+  it("non associa a un secondo spazio un negozio già collegato e non ne conserva i token", async () => {
+    const owner = await verifiedSession("primo-spazio@example.invalid");
+    const other = await verifiedSession("secondo-spazio@example.invalid");
+    const ownerState = (await beginStoreLink(owner.cookie)).searchParams.get("state");
+    await handleAuthRequest(
+      storeCallback(`state=${ownerState}&code=uno`, owner.cookie),
+      env,
+      syntheticEbay(),
+    );
+    const before = (await env.DB.prepare("SELECT * FROM ebay_store_credentials").all()).results;
+
+    const otherState = (await beginStoreLink(other.cookie)).searchParams.get("state");
+    const attempt = await handleAuthRequest(
+      storeCallback(`state=${otherState}&code=due`, other.cookie),
+      env,
+      syntheticEbay({ username: "nome-dal-secondo-tentativo" }),
+    );
+    expect(attempt.headers.get("location")).toBe("http://localhost:5173/?negozio=altro-spazio");
+    expect((await env.DB.prepare("SELECT * FROM ebay_store_credentials").all()).results).toEqual(
+      before,
+    );
+    const stores = await env.DB.prepare(
+      `SELECT wm.user_id, s.display_name FROM ebay_stores s
+         JOIN workspace_members wm ON wm.workspace_id = s.workspace_id`,
+    ).all();
+    expect(stores.results).toEqual([{ user_id: owner.userId, display_name: "venditore" }]);
+    // L'esito è un testo generico: nessun dato dell'altro account FiscalBay.
+    const home = await loadHome({
+      request: new Request("http://localhost:5173/?negozio=altro-spazio", {
+        headers: { cookie: other.cookie },
+      }),
+    } as Parameters<typeof loadHome>[0]);
+    expect(home.notice?.text).toBe(
+      "Questo negozio eBay è già collegato a un altro account FiscalBay.",
+    );
+  });
+
+  it("conserva il collegamento riuscito se la lettura del primo ordine fallisce", async () => {
+    const { cookie } = await verifiedSession("import-fallito@example.invalid");
+    const state = (await beginStoreLink(cookie)).searchParams.get("state");
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const callback = await handleAuthRequest(
+        storeCallback(`state=${state}&code=codice`, cookie),
+        env,
+        syntheticEbay({ trading: () => new Response("<Errore/>", { status: 503 }) }),
+      );
+      expect(callback.headers.get("location")).toBe("http://localhost:5173/?negozio=collegato");
+      const line = JSON.parse(log.mock.calls[0]![0] as string);
+      expect(line).toMatchObject({
+        code: "UPSTREAM_UNAVAILABLE",
+        operation: "store_link",
+        failure: "unavailable",
+      });
+    } finally {
+      log.mockRestore();
+    }
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) AS total FROM ebay_store_credentials").first(),
+    ).toEqual({ total: 1 });
+  });
+
+  it("non crea il negozio se eBay non scambia il codice", async () => {
+    const { cookie } = await verifiedSession("scambio-fallito@example.invalid");
+    const state = (await beginStoreLink(cookie)).searchParams.get("state");
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const callback = await handleAuthRequest(
+        storeCallback(`state=${state}&code=scaduto`, cookie),
+        env,
+        syntheticEbay({
+          token: () => Response.json({ error: "invalid_grant" }, { status: 400 }),
+        }),
+      );
+      expect(callback.headers.get("location")).toBe("http://localhost:5173/?negozio=errore");
+    } finally {
+      log.mockRestore();
+    }
+    expect(await env.DB.prepare("SELECT COUNT(*) AS total FROM ebay_stores").first()).toEqual({
+      total: 0,
+    });
+  });
+});
+
+describe("rinnovo dei token del negozio", () => {
+  const issued = new Date("2026-10-01T10:00:00.000Z");
+
+  async function linkedStore(email: string): Promise<string> {
+    const { cookie } = await verifiedSession(email);
+    const state = (await beginStoreLink(cookie)).searchParams.get("state");
+    await handleAuthRequest(
+      storeCallback(`state=${state}&code=codice`, cookie),
+      env,
+      syntheticEbay(),
+    );
+    const store = await env.DB.prepare("SELECT id FROM ebay_stores").first<{ id: string }>();
+    await env.DB.prepare(
+      "UPDATE ebay_store_credentials SET granted_at = ?, access_expires_at = ?, refresh_expires_at = ?",
+    )
+      .bind(issued.toISOString(), "2026-10-01T12:00:00.000Z", "2028-04-01T10:00:00.000Z")
+      .run();
+    return store!.id;
+  }
+
+  function tokenEndpoint(response: () => Response) {
+    return vi.fn<typeof fetch>(async (_input, init) => {
+      const body = new URLSearchParams(String(init?.body));
+      expect(body.get("grant_type")).toBe("refresh_token");
+      expect(body.get("refresh_token")).toBe("refresh-sintetico");
+      return response();
+    });
+  }
+
+  async function credentials() {
+    return env.DB.prepare(
+      "SELECT store_id, access_token, access_expires_at, refreshed_at, rejected_at FROM ebay_store_credentials",
+    ).first<Record<string, string | null>>();
+  }
+
+  it("rinnova in anticipo solo i token vicini alla scadenza", async () => {
+    const storeId = await linkedStore("rinnovo@example.invalid");
+    const fetcher = tokenEndpoint(() =>
+      Response.json({ access_token: "token-rinnovato", expires_in: 7200 }),
+    );
+
+    expect(await refreshExpiringTokens(env, fetcher, new Date("2026-10-01T11:00:00.000Z"))).toEqual(
+      [],
+    );
+    const at = new Date("2026-10-01T11:30:00.000Z");
+    expect(await refreshExpiringTokens(env, fetcher, at)).toEqual(["refreshed"]);
+    const row = await credentials();
+    expect(await openToken(env.BETTER_AUTH_SECRET, storeId, "access", row!.access_token!)).toBe(
+      "token-rinnovato",
+    );
+    expect(row).toMatchObject({
+      access_expires_at: "2026-10-01T13:30:00.000Z",
+      refreshed_at: at.toISOString(),
+      rejected_at: null,
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("registra il rifiuto del consenso solo per invalid_grant", async () => {
+    const storeId = await linkedStore("consenso-revocato@example.invalid");
+    const misconfigured = tokenEndpoint(() =>
+      Response.json({ error: "invalid_client" }, { status: 401 }),
+    );
+    await expect(
+      refreshStoreToken({ environment: env, storeId, fetcher: misconfigured, now: issued }),
+    ).rejects.toMatchObject({ failure: "credentials" });
+    expect((await credentials())!.rejected_at).toBeNull();
+
+    const revoked = tokenEndpoint(() => Response.json({ error: "invalid_grant" }, { status: 400 }));
+    expect(
+      await refreshStoreToken({ environment: env, storeId, fetcher: revoked, now: issued }),
+    ).toBe("rejected");
+    expect((await credentials())!.rejected_at).toBe(issued.toISOString());
+    // Un consenso rifiutato non viene più ritentato dal lavoro in background.
+    expect(await refreshExpiringTokens(env, revoked, issued)).toEqual([]);
+  });
+
+  it("non sovrascrive un consenso più recente con un rinnovo partito prima", async () => {
+    const storeId = await linkedStore("rinnovo-superato@example.invalid");
+    const before = await credentials();
+    const fetcher = tokenEndpoint(() =>
+      Response.json({ access_token: "vecchio", expires_in: 7200 }),
+    );
+    fetcher.mockImplementationOnce(async () => {
+      // Durante la risposta il merchant ricollega il negozio con un nuovo consenso.
+      await env.DB.prepare("UPDATE ebay_store_credentials SET granted_at = ?")
+        .bind("2026-10-01T10:05:00.000Z")
+        .run();
+      return Response.json({ access_token: "vecchio", expires_in: 7200 });
+    });
+    expect(await refreshStoreToken({ environment: env, storeId, fetcher, now: issued })).toBe(
+      "superseded",
+    );
+    expect((await credentials())!.access_token).toBe(before!.access_token);
+  });
+
+  it("considera rifiutato un consenso già scaduto senza chiamare eBay", async () => {
+    const storeId = await linkedStore("consenso-scaduto@example.invalid");
+    const fetcher = vi.fn<typeof fetch>();
+    expect(
+      await refreshStoreToken({
+        environment: env,
+        storeId,
+        fetcher,
+        now: new Date("2028-04-01T10:00:00.000Z"),
+      }),
+    ).toBe("rejected");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("produce cifrati diversi per lo stesso token", async () => {
+    const a = await sealToken(env.BETTER_AUTH_SECRET, "negozio", "access", "uguale");
+    const b = await sealToken(env.BETTER_AUTH_SECRET, "negozio", "access", "uguale");
+    expect(a).not.toBe(b);
+  });
+});
+
+describe("confine HTTP dei provider", () => {
+  const url = "https://api.ebay.invalid/risorsa";
+  const failure = (promise: Promise<unknown>) =>
+    promise.then(
+      () => null,
+      (error: unknown) =>
+        error instanceof UpstreamError
+          ? { failure: error.failure, code: error.code, ...error.details }
+          : error,
+    );
+
+  it("classifica credenziali, rate limit, indisponibilità e rifiuti con Retry-After", async () => {
+    const reply = (response: Response) => vi.fn<typeof fetch>(async () => response);
+    expect(await failure(upstreamText(reply(new Response(null, { status: 401 })), url))).toEqual({
+      failure: "credentials",
+      code: "STORE_RECONNECT_REQUIRED",
+      status: 401,
+    });
+    expect(
+      await failure(
+        upstreamText(
+          reply(new Response(null, { status: 429, headers: { "retry-after": "120" } })),
+          url,
+        ),
+      ),
+    ).toEqual({
+      failure: "rate_limited",
+      code: "UPSTREAM_UNAVAILABLE",
+      status: 429,
+      retryAfter: 120,
+    });
+    expect(
+      await failure(
+        upstreamText(
+          reply(
+            new Response(null, {
+              status: 503,
+              headers: { "retry-after": "Thu, 01 Oct 2026 10:01:00 GMT" },
+            }),
+          ),
+          url,
+          {},
+          { now: Date.parse("2026-10-01T10:00:00.000Z") },
+        ),
+      ),
+    ).toEqual({
+      failure: "unavailable",
+      code: "UPSTREAM_UNAVAILABLE",
+      status: 503,
+      retryAfter: 60,
+    });
+    // Del body del provider resta solo un codice OAuth breve, mai il testo.
+    expect(
+      await failure(
+        upstreamText(
+          reply(Response.json({ error: "invalid_grant", detail: "NON-ESPORRE" }, { status: 400 })),
+          url,
+        ),
+      ),
+    ).toEqual({
+      failure: "rejected",
+      code: "INVALID_REQUEST",
+      status: 400,
+      providerCode: "invalid_grant",
+    });
+    expect(
+      await failure(
+        upstreamText(
+          vi.fn<typeof fetch>(async () => {
+            throw new TypeError("rete");
+          }),
+          url,
+        ),
+      ),
+    ).toEqual({ failure: "unavailable", code: "UPSTREAM_UNAVAILABLE" });
+  });
+
+  it("limita i byte anche senza Content-Length e interrompe una lettura troppo lunga", async () => {
+    const declared = new Response("x".repeat(10), { headers: { "content-length": "2000" } });
+    expect(
+      await failure(
+        upstreamText(
+          vi.fn<typeof fetch>(async () => declared),
+          url,
+          {},
+          { maxBytes: 1000 },
+        ),
+      ),
+    ).toMatchObject({ failure: "invalid_response" });
+
+    const streamed = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new Uint8Array(400));
+      },
+    });
+    expect(
+      await failure(
+        upstreamText(
+          vi.fn<typeof fetch>(async () => new Response(streamed)),
+          url,
+          {},
+          { maxBytes: 1000 },
+        ),
+      ),
+    ).toMatchObject({ failure: "invalid_response" });
+
+    // Il timeout copre anche il body: un flusso che si ferma a metà non resta appeso.
+    const stalled = vi.fn<typeof fetch>(async (_input, init) => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("{"));
+          init!.signal!.addEventListener("abort", () => controller.error(init!.signal!.reason));
+        },
+      });
+      return new Response(body);
+    });
+    expect(await failure(upstreamText(stalled, url, {}, { timeoutMs: 20 }))).toEqual({
+      failure: "unavailable",
+      code: "UPSTREAM_UNAVAILABLE",
+    });
+  });
+
+  it("distingue JSON illeggibile o diverso dallo schema", async () => {
+    const schema = z.object({ ok: z.literal(true) });
+    const reply = (body: string) => vi.fn<typeof fetch>(async () => new Response(body));
+    expect(await failure(upstreamJson(reply("{"), url, schema))).toMatchObject({
+      failure: "invalid_response",
+    });
+    expect(await failure(upstreamJson(reply('{"ok":false}'), url, schema))).toMatchObject({
+      failure: "invalid_response",
+    });
+    expect(await upstreamJson(reply('{"ok":true,"extra":1}'), url, schema)).toEqual({ ok: true });
   });
 });

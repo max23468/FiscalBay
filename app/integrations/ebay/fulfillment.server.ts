@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { retryAfterSeconds } from "../http.server";
+
 /** Proiezione per card e dettaglio: i campi estranei, inclusi i dati fiscali, sono esclusi. */
 export const orderSummarySchema = z.object({
   buyer: z.object({ username: z.string().optional() }).nullish(),
@@ -65,12 +67,6 @@ export function classifyEbayRetry(
 ): { retryable: false } | { retryable: true; delaySeconds: number } {
   if (status !== 429 && status < 500) return { retryable: false };
 
-  const seconds = retryAfter?.trim() ? Number(retryAfter) : Number.NaN;
-  const dateDelay = retryAfter ? (Date.parse(retryAfter) - now) / 1000 : Number.NaN;
-  const delaySeconds = Number.isFinite(seconds)
-    ? seconds
-    : Number.isFinite(dateDelay)
-      ? dateDelay
-      : 2 ** Math.max(0, attempt - 1);
+  const delaySeconds = retryAfterSeconds(retryAfter, now) ?? 2 ** Math.max(0, attempt - 1);
   return { retryable: true, delaySeconds: Math.max(1, Math.min(300, Math.ceil(delaySeconds))) };
 }
