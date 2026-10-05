@@ -5,14 +5,7 @@ import { redirect } from "react-router";
 
 import { StandalonePage } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
-import { Field, FieldLabel } from "~/components/ui/field";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
+import { EbayEnvironmentField, type EbayEnvironment } from "~/components/ebay-environment";
 import { buttonVariants } from "~/components/ui/button-variants";
 import { appCopy } from "../app-copy";
 import { createAuth } from "../auth.server";
@@ -22,8 +15,6 @@ import { languageFromPath, localizedPath } from "../i18n";
 import { startStoreLink } from "../integrations/ebay/store-link.server";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import type { Route } from "./+types/store-link";
-
-const environments = ["production", "sandbox"] as const;
 
 const noStore = { headers: { "cache-control": "no-store" } };
 
@@ -68,13 +59,15 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (search.get("environment") === "sandbox" && !sandboxAvailable(env)) {
     return errorResponse(request, "FORBIDDEN");
   }
+  const ebayEnvironment: EbayEnvironment =
+    search.get("environment") === "sandbox" ? "sandbox" : "production";
   return {
     language,
     reconnect: search.has(reconnectParam),
     // Arrivando da Negozi, «Annulla» torna lì.
     fromStores: search.get("da") === "negozi",
     sandbox: sandboxAvailable(env),
-    ebayEnvironment: search.get("environment") === "sandbox" ? "sandbox" : "production",
+    ebayEnvironment,
   };
 }
 
@@ -131,25 +124,12 @@ export default function StoreLink({ loaderData }: Route.ComponentProps) {
         className="flex flex-wrap gap-3"
       >
         {sandbox && (
-          <Field className="w-full">
-            <FieldLabel htmlFor="ebay-environment">{t.environment}</FieldLabel>
-            <Select
-              name="environment"
-              defaultValue={ebayEnvironment}
-              items={environments.map((value) => ({ value, label: t[value] }))}
-            >
-              <SelectTrigger id="ebay-environment" className="w-full min-w-0">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {environments.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {t[value]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
+          <EbayEnvironmentField
+            language={language}
+            className="w-full"
+            name="environment"
+            defaultValue={ebayEnvironment}
+          />
         )}
         <Button type="submit">{t.continue}</Button>
         <a

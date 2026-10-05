@@ -18,6 +18,7 @@ Il piano contiene i requisiti completi: qui si descrivono il lavoro e la prova, 
 
 ## Stato corrente e ripresa
 
+- **2026-10-05 · Menu a tendina e cursore dei controlli · DONE, resta il collaudo sul test:** richieste owner sul design del menu «Ambiente eBay» e sul cursore dell'avatar; via «pubblica» con PR verso `develop`, merge automatico, CI, deploy test e pulizia Git. Il `Select` condiviso si apre sotto il campo, largo quanto il campo e con margine interno; «Ambiente eBay» è un solo componente per Ordini e collegamento negozio, con nome dell'ambiente e tipo di account al posto della barra verticale. Pulsanti, select, caselle, interruttori e voci di menu attivi mostrano la mano. Prove locali: formattazione, lint, typecheck, React Doctor, 185 test, build, copy/docs, 109 test Chromium e cursore calcolato nel browser. PR [#278](https://github.com/max23468/FiscalBay/pull/278). Nessuna promozione Production.
 - **2026-10-05 · Seconda revisione di test e pubblicazione prima dell'integrazione · DONE, locale:** mandato owner «Prima di pubblicare, verifica che l'implementazione sia corretta e completa»; durante la revisione l'owner ha deciso «Rimuoviamo Firefox è superfluo» (D156). Branch `codex/test-publication` allineato a `develop` dopo #273 (conflitto solo nel backlog, voci conservate). Findings, confidenza alta salvo indicazione:
 
   | Severità | Finding | Correzione |
