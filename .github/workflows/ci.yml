@@ -63,11 +63,20 @@ jobs:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
 
-      # Sul push confronta il commit precedente di `develop` con quello nuovo.
+      # Sul push il confronto parte dall'ultimo deploy test riuscito, non dal push precedente:
+      # una run annullata da un push successivo o un deploy fallito restano nel diff.
+      - name: Find last test deploy
+        id: deployed
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: node scripts/find-deployed.mjs
+
       - name: Classify changes
         id: detect
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || steps.deployed.outputs.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.after }}
         run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --github-output
 
