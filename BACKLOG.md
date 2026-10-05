@@ -18,7 +18,7 @@ Il piano contiene i requisiti completi: qui si descrivono il lavoro e la prova, 
 
 ## Stato corrente e ripresa
 
-- **2026-10-05 · M2-05 OAuth negozi e identità stabile · DONE, resta il collaudo sul test:** mandato owner «implementazione completa» su `claude/collegamento-negozi-oauth` da `develop` `8a733b4`. Schermata preparatoria, confine HTTP, callback idempotente, identità stabile, token cifrati e rinnovo in background; dettaglio e prove in [M2-05](#m2-05). Migration `0012` additiva da applicare alla D1 di test prima del merge.
+- **2026-10-05 · M2-05 OAuth negozi e identità stabile · DONE, resta il collaudo sul test:** mandato owner «implementazione completa», integrata con [#268](https://github.com/max23468/FiscalBay/pull/268) (`029c67b`); revisione e via «poi pubblica» dell'owner con correzione del login eBay sul confine HTTP. Schermata preparatoria, confine HTTP, callback idempotente, identità stabile, token cifrati e rinnovo in background; dettaglio e prove in [M2-05](#m2-05). Migration `0012` additiva applicata e riletta sulla D1 di test.
 - **2026-10-04 · Audit UI/UX, etichetta breve delle notifiche dei negozi · DONE, resta il collaudo sul test:** collaudo Chrome della PR #263 (`fbf0a5d`) registrato nella §15 dell'audit: N10, N11, N12 e I9 corretti live. Emerso N13, introdotto da N12: la frase lunga allargava la colonna Notifiche. Ora Sospese in tabella e nella lista, frase completa nel dettaglio. Rientra nel via owner «Correggi tutto poi pubblica»: PR verso `develop`, merge automatico, CI, deploy test, verifica Chrome e pulizia Git.
   - **Indicazione owner durante il lavoro (D155):** la scelta «Negozio attivo se torni al piano Free» non deve comparire in Premium, perché invoglia al downgrade. Rimossa da Piano e pagamenti di Premium; resta soltanto nel Free come «Scegli il negozio attivo». Senza scelta resta attivo il primo negozio ancora collegato, come già previsto dal piano. Master Plan e registro aggiornati; I9 superato.
   - **Prove:** `pnpm verify` verde, 158 test applicativi e 24 test degli script, React Doctor 100/100, client 323,9 KiB gzip su 350; suite Chromium completa 109/109 sulla build finale. Il caso negozi controlla Sospese nell'elenco e frase completa nel dettaglio; il caso Impostazioni controlla che Premium non mostri la scelta del negozio, IT/EN.
@@ -725,6 +725,8 @@ Parte dal flusso seller della slice M0-13, che non persiste il token. Qui si pro
 
 **Resta:** collaudo sul test dopo il deploy, con consenso reale del seller controllato: esito `collegato`, token cifrati e scadenze in D1, callback ripetuto, rinnovo eseguito dal cron. La migration `0012` va applicata prima del deploy Production, insieme al cron ereditato dall'ambiente; avviso di scadenza del consenso, reconnect e revoca restano a M2-06. Ruotare `BETTER_AUTH_SECRET` richiede di ricollegare i negozi.
 
+**Revisione del 2026-10-05:** chiesta dall'owner dopo il merge di [#268](https://github.com/max23468/FiscalBay/pull/268) (`029c67b`). Difetto P3, confidenza alta: la lettura Identity del login eBay usava ancora `fetch` diretto, senza timeout né limite dei byte, e un payload fuori schema produceva un'eccezione; ora passa dal confine HTTP, chiude il login con l'errore generico e registra il tipo di errore. Confermati sulla guida eBay Authorization: `scope` facoltativo nel rinnovo, campi `expires_in` e `refresh_token_expires_in`, revoca del refresh token anche al cambio di username, gestita dal rifiuto `invalid_grant` e dal ricollegamento che ritrova lo stesso negozio. La stessa guida indica un limite giornaliero ai token generati per tipo di grant: il vincolo è riportato in M2-06. Prove: `pnpm verify` verde con 173 test applicativi e 24 degli script; il nuovo test copre Identity indisponibile e payload senza `userId` al login, senza account creati.
+
 ### M2-06 · Reconnect, pause e disconnessioni
 
 **Stato:** TODO · **Prerequisiti:** M2-05 · **Contratto:** [§8](docs/MASTER_PLAN.md#s08)
@@ -738,6 +740,8 @@ Provare che una risposta iniziata prima del reconnect o dello scollegamento non 
 Distinguere manual pause da pausa imposta dal piano; nessuna sospensione ferma la retention temporale. Ricollegare non resuscita dati cancellati né azzera il vincolo di sostituzione.
 
 Da [§37.1](docs/MASTER_PLAN.md#s37): registrare la scadenza nota del consenso seller, avvisare il merchant prima che scada con la CTA di reconnect e rinnovare i token di accesso in background, non nel percorso di una pagina.
+
+Il rinnovo in background di M2-05 oggi riguarda ogni consenso non rifiutato: con pausa e scollegamento deve escludere i negozi che non leggono più eBay. Prima della sync continuativa leggere in Developer Analytics il limite giornaliero dei token del grant `refresh_token` e confrontarlo con circa dodici rinnovi al giorno per negozio attivo.
 
 ### M2-07 · Schermata negozi e profilo
 

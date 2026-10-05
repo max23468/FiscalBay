@@ -67,7 +67,7 @@ export function logFailure(input: {
   request?: Request;
   code?: ErrorCode;
   error?: unknown;
-  operation: "route" | "render" | "store_link" | "stripe_webhook" | "token_refresh";
+  operation: "route" | "render" | "sign_in" | "store_link" | "stripe_webhook" | "token_refresh";
   status?: number;
 }): void {
   if (input.request?.signal.aborted) return;
