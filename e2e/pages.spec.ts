@@ -112,16 +112,20 @@ for (const scenario of scenarios) {
           if (message.type() === "error" && !message.text().includes("404"))
             errors.push(message.text());
         });
+        const expectedStatus = production && scenario.preview ? 404 : scenario.status;
+        // Tornando su una pagina 404 il router richiede di nuovo i suoi dati con lo stesso esito.
+        const ownData = `${new URL(scenario.path, baseURL!).pathname.replace(/\/$/u, "")}.data`;
         page.on("response", (response) => {
+          const url = new URL(response.url());
           if (
             response.request().resourceType() !== "document" &&
             response.status() >= 400 &&
-            new URL(response.url()).origin === new URL(baseURL!).origin
+            url.origin === new URL(baseURL!).origin &&
+            !(url.pathname === ownData && response.status() === expectedStatus)
           )
-            errors.push(`Risorsa ${response.status()}: ${new URL(response.url()).pathname}`);
+            errors.push(`Risorsa ${response.status()}: ${url.pathname}`);
         });
         const response = await page.goto(scenario.path);
-        const expectedStatus = production && scenario.preview ? 404 : scenario.status;
         expect(response?.status()).toBe(expectedStatus);
         if (scenario.redirect && !(production && scenario.preview))
           expect(new URL(page.url()).pathname).toBe(scenario.redirect);

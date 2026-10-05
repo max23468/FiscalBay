@@ -71,6 +71,16 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
       role: "member",
       pattern: `${prefix}/negozi/collega`,
     }),
+    make("/negozi", "stores", { pattern: `${prefix}/negozi/:negozio?`, redirect: home }),
+    ...["", "/non-esiste"].map((suffix) =>
+      make(`/negozi${suffix}`, "stores", {
+        role: "member",
+        pattern: `${prefix}/negozi/:negozio?`,
+        status: suffix ? 404 : 200,
+      }),
+    ),
+    make("/profilo", "profile", { redirect: home }),
+    make("/profilo", "profile", { role: "member" }),
     make("/impostazioni/sicurezza", "auth", { redirect: home }),
     make("/impostazioni/sicurezza", "auth", { role: "member" }),
     make("/admin", "auth", { status: 404 }),
