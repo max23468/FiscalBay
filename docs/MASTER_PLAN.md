@@ -822,6 +822,8 @@ Branch feature→`develop`, integrato su `test.fiscalbay.it`; `main` candidato P
 
 Pipeline minima: install frozen lockfile → format check → lint → typecheck → React Doctor → unit/integration → build. Smoke Playwright per modifiche UI/backend pertinenti, contract/concurrency test in base all'impatto. CodeQL/dependency review/secret scanning e controlli licenze dove disponibili; non presumere capacità o costi GitHub del piano senza preflight. PR da fork senza segreti/live writes, action pin e permessi minimi.
 
+Build, gate locale e prove browser girano in job paralleli; le prove browser sulla build locale usano più worker e più macchine, mentre sul dominio test restano seriali per l'account di collaudo unico. Il controllo richiesto `Node 26` riassume gli esiti. Sulle PR verso `develop` le prove browser usano una sola combinazione Chromium; la matrice completa di browser, viewport e temi gira sulla promozione verso `main` e in Pubblica. Il push su `develop` confronta le modifiche con l'ultimo commit distribuito sul test: una run annullata, fallita o superata non fa perdere il deploy delle sue modifiche. [D157](DECISION_REGISTER.md)
+
 **Guardrail della pipeline.**
 
 - Ogni Action di terze parti è pinnata allo SHA completo del commit, con la versione in commento; Dependabot aggiorna SHA e commento insieme.

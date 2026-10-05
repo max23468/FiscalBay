@@ -10,22 +10,28 @@ on:
       - develop
   workflow_dispatch:
 
+# Sulle PR una nuova revisione annulla la verifica superata. Su `develop` una run avviata
+# non viene annullata a metà deploy; una run in attesa sostituita resta coperta, perché il
+# push successivo confronta le modifiche con l'ultimo commit distribuito sul test.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   actions: read
   contents: read
 
 jobs:
-  verify:
-    name: Node 26
+  # Decide i controlli e, sul push, cerca una verifica già riuscita dello stesso tree.
+  changes:
+    name: Changes
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
     outputs:
-      deploy: ${{ steps.detect.outputs.gate == 'full' }}
+      gate: ${{ steps.detect.outputs.gate }}
       e2e: ${{ steps.detect.outputs.e2e }}
+      reused: ${{ steps.reuse.outputs.run-id != '' }}
+      deploy: ${{ steps.detect.outputs.gate == 'full' }}
       artifact: build-${{ steps.tree.outputs.tree }}
       artifact-run: ${{ steps.reuse.outputs.run-id || github.run_id }}
 
@@ -48,12 +54,36 @@ jobs:
             exit 1
           fi
 
-      # Sul push confronta il commit precedente di `develop` con quello nuovo.
+      # Su `develop` la base è l'ultimo commit distribuito sul test, non il push precedente:
+      # le modifiche di una run annullata, fallita o superata restano nel confronto finché
+      # un deploy non le distribuisce. Senza un deploy riconoscibile il gate è completo.
+      - name: Find last test deploy
+        id: deployed
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/develop'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          runs="$(gh api "repos/${REPOSITORY}/actions/workflows/ci.yml/runs?branch=develop&status=success&per_page=30" --jq \
+            '.workflow_runs[] | select(.event != "pull_request") | "\(.id) \(.head_sha)"')"
+          while read -r run_id sha; do
+            [ -n "${run_id}" ] || continue
+            deployed="$(gh api "repos/${REPOSITORY}/actions/runs/${run_id}/jobs" --jq \
+              '[.jobs[] | select(.name == "Deploy test" and .conclusion == "success") | .steps[] | select(.name == "Deploy verified artifact" and .conclusion == "success")] | length')"
+            if [ "${deployed}" -gt 0 ]; then
+              echo "Ultimo deploy test: ${sha} (run ${run_id})."
+              echo "sha=${sha}" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+          done <<< "${runs}"
+          echo "Nessun deploy test riconoscibile: gate completo."
+
       - name: Classify changes
         id: detect
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.after }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || steps.deployed.outputs.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --github-output
 
       - name: Identify tree
@@ -84,83 +114,16 @@ jobs:
           done
           echo "Nessuna verifica riusabile: eseguo il gate completo."
 
-      - name: Set up pnpm
-        if: steps.detect.outputs.gate == 'full' && !steps.reuse.outputs.run-id
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 12.9.1
-
-      - name: Set up Node
-        if: steps.detect.outputs.gate == 'full' && !steps.reuse.outputs.run-id
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 26.10.0
-          cache: pnpm
-
-      - name: Install dependencies
-        if: steps.detect.outputs.gate == 'full' && !steps.reuse.outputs.run-id
-        run: pnpm install --frozen-lockfile
-
-      - name: Run local CI gate
-        if: steps.detect.outputs.gate == 'full' && !steps.reuse.outputs.run-id
-        run: pnpm verify
-
-      - name: Read Playwright version
-        id: playwright
-        if: steps.detect.outputs.e2e == 'true' && !steps.reuse.outputs.run-id
-        run: echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
-
-      - name: Restore browser cache
-        id: browsers
-        if: steps.detect.outputs.e2e == 'true' && !steps.reuse.outputs.run-id
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
-
-      - name: Install browser for interaction tests
-        if: steps.detect.outputs.e2e == 'true' && !steps.reuse.outputs.run-id && steps.browsers.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Install browser system dependencies
-        if: steps.detect.outputs.e2e == 'true' && !steps.reuse.outputs.run-id && steps.browsers.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
-
-      - name: Check browser interactions before deploy
-        if: steps.detect.outputs.e2e == 'true' && !steps.reuse.outputs.run-id
-        env:
-          E2E_PREBUILT: "1"
-        run: pnpm test:e2e
-
-      - name: Upload verified build
-        if: steps.detect.outputs.gate == 'full' && !steps.reuse.outputs.run-id
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: build-${{ steps.tree.outputs.tree }}
-          path: build/
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Check docs-only changes
-        if: steps.detect.outputs.gate == 'docs'
-        run: |
-          node scripts/verify-copy.mjs
-          node scripts/verify-docs.mjs
-
-  deploy-test:
-    name: Deploy test
-    needs: verify
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/develop' && vars.TEST_DEPLOY_ENABLED == 'true' && needs.verify.outputs.deploy == 'true'
+  # Produce l'artefatto provato dalle prove browser e distribuito sul test.
+  build:
+    name: Build
+    needs: changes
+    if: needs.changes.outputs.gate == 'full' && needs.changes.outputs.reused != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment: test
-    concurrency:
-      group: deploy-test
-      cancel-in-progress: false
+    timeout-minutes: 10
 
     steps:
-      - name: Checkout verified commit
+      - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -176,26 +139,216 @@ jobs:
           node-version: 26.10.0
           cache: pnpm
 
-      # L'applicazione non viene ricompilata; Wrangler distribuisce la build verificata.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Upload verified build
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ needs.changes.outputs.artifact }}
+          path: build/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+  # Gate locale completo, in parallelo con build e prove browser.
+  verify:
+    name: Verify
+    needs: changes
+    if: needs.changes.outputs.reused != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        if: needs.changes.outputs.gate == 'full'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 12.9.1
+
+      - name: Set up Node
+        if: needs.changes.outputs.gate == 'full'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26.10.0
+          cache: pnpm
+
+      - name: Install dependencies
+        if: needs.changes.outputs.gate == 'full'
+        run: pnpm install --frozen-lockfile
+
+      - name: Run local CI gate
+        if: needs.changes.outputs.gate == 'full'
+        run: pnpm verify
+
+      - name: Check docs-only changes
+        if: needs.changes.outputs.gate == 'docs'
+        run: |
+          node scripts/verify-copy.mjs
+          node scripts/verify-docs.mjs
+
+  # Prove browser sulla build verificata, divise in due macchine con quattro worker ciascuna.
+  browser:
+    name: Browser ${{ matrix.shard }}/2
+    needs: [changes, build]
+    if: needs.changes.outputs.e2e == 'true' && needs.changes.outputs.reused != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 12.9.1
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26.10.0
+          cache: pnpm
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Download verified build
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: ${{ needs.verify.outputs.artifact }}
+          name: ${{ needs.changes.outputs.artifact }}
           path: build/
-          run-id: ${{ needs.verify.outputs.artifact-run }}
-          github-token: ${{ github.token }}
 
+      # `vite preview` trova la configurazione del Worker tramite il rinvio che la build
+      # scrive fuori da `build/`; l'artefatto contiene soltanto `build/`.
+      - name: Point preview to the build
+        run: |
+          mkdir -p .wrangler/deploy
+          echo '{"configPath":"../../build/server/wrangler.json","auxiliaryWorkers":[]}' > .wrangler/deploy/config.json
+
+      - name: Read Playwright version
+        id: playwright
+        run: echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
+
+      - name: Restore browser cache
+        id: browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install browser for interaction tests
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install browser system dependencies
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+
+      - name: Check browser interactions before deploy
+        env:
+          E2E_PREBUILT: "1"
+        run: pnpm test:e2e --shard=${{ matrix.shard }}/2
+
+  # Unico controllo richiesto dalla protezione dei branch: riassume gli esiti dei job.
+  gate:
+    name: Node 26
+    needs: [changes, build, verify, browser]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check job results
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Esiti: ${RESULTS}"
+          for result in ${RESULTS}; do
+            case "${result}" in
+              success | skipped) ;;
+              *)
+                echo "::error::Almeno un controllo non è riuscito (${result})."
+                exit 1
+                ;;
+            esac
+          done
+
+  deploy-test:
+    name: Deploy test
+    needs: [changes, gate]
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/develop' && vars.TEST_DEPLOY_ENABLED == 'true' && needs.changes.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: test
+    concurrency:
+      group: deploy-test
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout verified commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Una run superata non sovrascrive il deploy di una successiva e non conta come
+      # distribuita: la run del commit più recente confronta dall'ultimo deploy riuscito.
       - name: Check commit still on develop
+        id: current
         env:
           VERIFIED_SHA: ${{ github.sha }}
         run: |
           current_sha="$(git ls-remote https://github.com/${{ github.repository }}.git refs/heads/develop | cut -f1)"
-          test "${current_sha}" = "${VERIFIED_SHA}"
+          if [ "${current_sha}" = "${VERIFIED_SHA}" ]; then
+            echo "latest=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "::notice::develop è avanzato a ${current_sha}: il deploy passa alla run più recente."
+            echo "latest=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Set up pnpm
+        if: steps.current.outputs.latest == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 12.9.1
+
+      - name: Set up Node
+        if: steps.current.outputs.latest == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26.10.0
+          cache: pnpm
+
+      # L'applicazione non viene ricompilata; Wrangler distribuisce la build verificata.
+      - name: Install dependencies
+        if: steps.current.outputs.latest == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Download verified build
+        if: steps.current.outputs.latest == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.changes.outputs.artifact }}
+          path: build/
+          run-id: ${{ needs.changes.outputs.artifact-run }}
+          github-token: ${{ github.token }}
 
       - name: Read deployed version
+        if: steps.current.outputs.latest == 'true'
         id: previous
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -205,34 +358,37 @@ jobs:
           test -n "${version}"
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
+      # Nome di job e passo letti da "Find last test deploy": rinominarli insieme.
       - name: Deploy verified artifact
+        if: steps.current.outputs.latest == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm exec wrangler deploy --config build/server/wrangler.json --strict
 
       - name: Check test endpoint
+        if: steps.current.outputs.latest == 'true'
         run: curl --fail --silent --show-error --max-time 20 --output /dev/null https://test.fiscalbay.it/
 
       - name: Read Playwright version
         id: playwright
-        if: needs.verify.outputs.e2e == 'true'
+        if: steps.current.outputs.latest == 'true' && needs.changes.outputs.e2e == 'true'
         run: echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
 
       - name: Restore browser cache
         id: browsers
-        if: needs.verify.outputs.e2e == 'true'
+        if: steps.current.outputs.latest == 'true' && needs.changes.outputs.e2e == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
 
       - name: Install browser for interaction tests
-        if: needs.verify.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit != 'true'
+        if: steps.current.outputs.latest == 'true' && needs.changes.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Install browser system dependencies
-        if: needs.verify.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit == 'true'
+        if: steps.current.outputs.latest == 'true' && needs.changes.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
 
       # L'account di collaudo torna a uno stato noto prima delle prove autenticate. Se il
@@ -240,7 +396,7 @@ jobs:
       # vengono saltate con un avviso: il deploy non torna indietro per un problema del dato.
       - name: Reset test account
         id: account
-        if: needs.verify.outputs.e2e == 'true'
+        if: steps.current.outputs.latest == 'true' && needs.changes.outputs.e2e == 'true'
         continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -249,11 +405,11 @@ jobs:
         run: node scripts/reset-test-account.mjs
 
       - name: Report test account warning
-        if: needs.verify.outputs.e2e == 'true' && steps.account.outcome == 'failure'
+        if: steps.current.outputs.latest == 'true' && needs.changes.outputs.e2e == 'true' && steps.account.outcome == 'failure'
         run: echo "::warning::Account di collaudo non ripristinato, prove autenticate saltate."
 
       - name: Check deployed browser interactions
-        if: needs.verify.outputs.e2e == 'true'
+        if: steps.current.outputs.latest == 'true' && needs.changes.outputs.e2e == 'true'
         env:
           E2E_ACCOUNT_PASSWORD: ${{ steps.account.outcome == 'success' && secrets.E2E_ACCOUNT_PASSWORD || '' }}
         run: pnpm test:e2e:smoke
@@ -261,6 +417,7 @@ jobs:
       # Misura e ricevuta senza bloccare (D148): il p95 oscilla di qualche ms fra misure
       # della stessa versione, quindi oltre soglia resta un avviso e non un rollback.
       - name: Check capacity
+        if: steps.current.outputs.latest == 'true'
         id: capacity
         continue-on-error: true
         env:
@@ -269,7 +426,7 @@ jobs:
         run: pnpm test:capacity --url https://test.fiscalbay.it --worker fiscalbay-test
 
       - name: Report capacity warning
-        if: steps.capacity.outcome == 'failure'
+        if: steps.current.outputs.latest == 'true' && steps.capacity.outcome == 'failure'
         run: echo "::warning::Controllo di capacità non superato, deploy mantenuto. Ricevuta nel riepilogo della run."
 
       # Un deploy con endpoint o interazioni falliti non resta distribuito sul test.

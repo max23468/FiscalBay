@@ -16,7 +16,6 @@ async function open(page: Page, path: string, scenario?: string) {
   await page.goto(path);
   // Con un pannello aperto il resto della pagina è inerte: si attende il controllo per id.
   await expect(page.locator("#preview-scenario")).toBeEnabled({ timeout: 20_000 });
-  await page.waitForLoadState("networkidle");
 }
 
 const noPageOverflow = (page: Page) =>
@@ -980,7 +979,6 @@ for (const language of ["it", "en"] as const) {
             contentType: "image/png",
           });
           await backLink.click();
-          await page.waitForLoadState("networkidle");
           await expect(page).toHaveURL(new RegExp(`${prefix || "/"}$`));
           await expect(
             page.getByRole("tab", { name: language === "it" ? "Accedi" : "Sign in", exact: true }),

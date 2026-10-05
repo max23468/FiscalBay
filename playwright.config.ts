@@ -3,7 +3,10 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   outputDir: process.env.E2E_BASE_URL ? "./test-results/deployed" : "./test-results/local",
-  workers: 1,
+  // Ogni prova locale usa un contesto proprio e lo scenario vive nel cookie: le prove sono
+  // indipendenti. Sul dominio test l'account di collaudo è unico, quindi un solo worker.
+  workers: process.env.E2E_BASE_URL ? 1 : process.env.CI ? 4 : "50%",
+  fullyParallel: !process.env.E2E_BASE_URL,
   forbidOnly: !!process.env.CI,
   use: {
     baseURL: process.env.E2E_BASE_URL || "http://127.0.0.1:5186",

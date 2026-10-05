@@ -9,7 +9,6 @@ async function open(page: Page, path = "/anteprima/ordini") {
   await page.goto(path);
   // Il selettore di scenario è interattivo solo dopo l'idratazione.
   await expect(page.getByRole("combobox", { name: /Scenario/ })).toBeEnabled({ timeout: 20_000 });
-  await page.waitForLoadState("networkidle");
 }
 
 async function chooseScenario(page: Page, name: string) {

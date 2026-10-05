@@ -22,7 +22,7 @@ Codex desktop può usare file/CLI locali e le connessioni effettivamente autoriz
 | Comando previsto | Responsabilità |
 |---|---|
 | `pnpm format:check`, `pnpm lint`, `pnpm typecheck` | Oxfmt, Oxlint e compilatore; versione esatta nel lockfile/config, non copiata in più documenti. |
-| `pnpm test`, `pnpm test:e2e` | Vitest/Testing Library e Playwright sulla build locale prima del deploy, fixture controllate; accessibilità smoke dove pertinente. |
+| `pnpm test`, `pnpm test:e2e` | Vitest/Testing Library e Playwright sulla build locale prima del deploy, fixture controllate; accessibilità smoke dove pertinente. Le prove Playwright locali sono indipendenti e girano in parallelo (metà dei core in locale, quattro worker in CI); in CI si dividono con `--shard` su due job. |
 | `pnpm test:e2e:smoke` | Controllo Playwright breve sul dominio test dopo il deploy, senza avviare un server locale. Con `E2E_ACCOUNT_PASSWORD` entra anche nell'area riservata con l'account di collaudo `collaudo@example.invalid`, che `node scripts/reset-test-account.mjs` riporta prima a uno stato noto soltanto sulla D1 `fiscalbay-test`; password nel segreto dell'environment GitHub `test`. Il ripristino fallito salta le prove autenticate con un avviso, senza rollback. |
 | `pnpm build` | Artefatto del runtime selezionato, nessun deploy implicito. |
 | `pnpm verify` | Composizione dei gate applicabili; comandi e risultati realmente verificati. |
