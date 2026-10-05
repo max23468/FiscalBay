@@ -16,10 +16,14 @@ import type { Route } from "./+types/store-link";
 
 const noStore = { headers: { "cache-control": "no-store" } };
 
+/** Arrivando da un avviso di scadenza la schermata parla di ricollegamento. */
+const reconnectParam = "ricollega";
+
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
-  const language = languageFromPath(location.pathname);
+  const t = appCopy[languageFromPath(location.pathname)].storeLink;
+  const reconnect = new URLSearchParams(location.search).has(reconnectParam);
   return [
-    { title: `FiscalBay | ${appCopy[language].storeLink.title}` },
+    { title: `FiscalBay | ${reconnect ? t.reconnectTitle : t.title}` },
     { name: "robots", content: "noindex" },
   ];
 }
@@ -49,7 +53,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     const base = localizedPath(language);
     return redirect(status.blocked === "email" ? `${base}?negozio=accesso` : base, noStore);
   }
-  return { language };
+  return { language, reconnect: new URL(request.url).searchParams.has(reconnectParam) };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -69,12 +73,19 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function StoreLink({ loaderData }: Route.ComponentProps) {
-  const { language } = loaderData;
+  const { language, reconnect } = loaderData;
   const t = appCopy[language].storeLink;
   const home = localizedPath(language);
   return (
-    <StandalonePage icon={Store} tone="teal" title={t.title} homeHref={home}>
-      <p className="leading-relaxed text-pretty text-muted-foreground">{t.intro}</p>
+    <StandalonePage
+      icon={Store}
+      tone="teal"
+      title={reconnect ? t.reconnectTitle : t.title}
+      homeHref={home}
+    >
+      <p className="leading-relaxed text-pretty text-muted-foreground">
+        {reconnect ? t.reconnectIntro : t.intro}
+      </p>
       <ul className="grid gap-3">
         {t.points.map((point) => (
           <li key={point} className="flex gap-3 leading-relaxed text-pretty">

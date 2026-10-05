@@ -1448,7 +1448,7 @@ for (const language of ["it", "en"] as const) {
 }
 
 test("l'esito dell'accesso esce dall'indirizzo e non torna alla ricarica", async ({ page }) => {
-  const text = "Questo negozio eBay è già collegato a un altro account FiscalBay.";
+  const text = "Negozio già collegato a un altro account";
   await page.goto("/?negozio=altro-spazio");
   await expect(page.getByText(text, { exact: true })).toBeVisible();
   await expect.poll(() => new URL(page.url()).search).toBe("");

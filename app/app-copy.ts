@@ -93,6 +93,7 @@ const it = {
     payment: { paid: "Pagato", unpaid: "Non pagato", refunded: "Rimborsato" },
     shipping: {
       to_ship: "Da spedire",
+      in_progress: "Spedizione in corso",
       shipped: "Spedito",
       delivered: "Consegnato",
       cancelled: "Annullato",
@@ -603,6 +604,9 @@ const it = {
   },
   storeLink: {
     title: "Collega un negozio eBay",
+    reconnectTitle: "Ricollega un negozio eBay",
+    reconnectIntro:
+      "Ti portiamo su eBay per rinnovare l’autorizzazione. Accedi con l’account venditore del negozio da ricollegare: FiscalBay lo riconosce e conserva gli ordini già importati.",
     intro:
       "Ti portiamo su eBay per autorizzare FiscalBay. Accedi con l’account venditore del negozio da collegare: può essere diverso da quello che usi per entrare in FiscalBay.",
     points: [
@@ -715,6 +719,8 @@ const it = {
     verifyResend: "Invia di nuovo il link",
     noOrders: "Nessun ordine",
     noOrdersBody: "Collega un negozio eBay per importare gli ordini disponibili.",
+    noImportedOrders: "Nessun ordine importato",
+    noImportedOrdersBody: "Il negozio eBay è collegato. Gli ordini importati compariranno qui.",
     noOrdersVerifyBody:
       "Dopo la conferma dell’indirizzo email potrai collegare un negozio eBay e importare gli ordini.",
     list: "Ordini qualificati",
@@ -837,6 +843,7 @@ const en: AppCopy = {
     payment: { paid: "Paid", unpaid: "Unpaid", refunded: "Refunded" },
     shipping: {
       to_ship: "To ship",
+      in_progress: "Fulfillment in progress",
       shipped: "Shipped",
       delivered: "Delivered",
       cancelled: "Cancelled",
@@ -1330,6 +1337,9 @@ const en: AppCopy = {
   },
   storeLink: {
     title: "Connect an eBay store",
+    reconnectTitle: "Reconnect an eBay store",
+    reconnectIntro:
+      "We’ll take you to eBay to renew the authorisation. Sign in with the seller account of the store you want to reconnect: FiscalBay recognises it and keeps the orders already imported.",
     intro:
       "We’ll take you to eBay to authorize FiscalBay. Sign in with the seller account of the store you want to connect: it can differ from the one you use to sign in to FiscalBay.",
     points: [
@@ -1440,6 +1450,8 @@ const en: AppCopy = {
     verifyResend: "Send the link again",
     noOrders: "No orders",
     noOrdersBody: "Connect an eBay store to import available orders.",
+    noImportedOrders: "No imported orders",
+    noImportedOrdersBody: "Your eBay store is connected. Imported orders will appear here.",
     noOrdersVerifyBody:
       "Once your email address is confirmed, you can connect an eBay store and import orders.",
     list: "Qualified orders",

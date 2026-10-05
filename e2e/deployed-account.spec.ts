@@ -31,7 +31,7 @@ test(
     await expect(alerts.nth(0)).toContainText(`${stores.expired}: collegamento scaduto`);
     await expect(alerts.nth(1)).toContainText(`${stores.expiring}: autorizzazione in scadenza`);
     for (const link of await alerts.getByRole("link", { name: "Ricollega negozio" }).all()) {
-      await expect(link).toHaveAttribute("href", "/negozi/collega");
+      await expect(link).toHaveAttribute("href", "/negozi/collega?ricollega");
     }
     await expect(page.getByText(stores.paused)).toHaveCount(0);
 
