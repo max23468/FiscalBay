@@ -1,7 +1,9 @@
 import { z } from "zod";
-import { ApplicationError } from "../../errors";
+import { logFailure } from "../../errors";
 import type { Language } from "../../i18n";
+import { upstreamJson, upstreamText } from "../http.server";
 import { orderSummarySchema } from "./fulfillment.server";
+import { base64Url, ebayTokenUrl, saveStoreCredentials } from "./seller-credentials.server";
 
 import {
   mapTradingTaxIdentifiers,
@@ -19,10 +21,16 @@ const linkSessionTtlMilliseconds = 10 * 60 * 1000;
 const tradingApiVersion = "1455";
 const tradingSiteId = "101";
 
-const tokenSchema = z.looseObject({ access_token: z.string().min(1) });
+const tokenSchema = z.looseObject({
+  access_token: z.string().min(1),
+  expires_in: z.number().int().positive(),
+  refresh_token: z.string().min(1),
+  refresh_token_expires_in: z.number().int().positive(),
+});
+// `userId` è l'identificativo eBay immutabile; lo username può cambiare ed è solo un attributo.
 const identitySchema = z.looseObject({
-  userId: z.string().min(1),
-  username: z.string().optional(),
+  userId: z.string().min(1).max(256),
+  username: z.string().min(1).max(256).optional(),
 });
 const orderSchema = z.looseObject({
   orderId: z.string().min(1),
@@ -37,15 +45,10 @@ const orderSchema = z.looseObject({
 });
 const ordersPageSchema = z.looseObject({ orders: z.array(orderSchema).default([]) });
 
-export type StoreLinkSession = { userId: string; codeVerifier: string; expired: boolean };
 export type StoreLinkOutcome = "collegato" | "negato" | "altro-spazio" | "errore";
-
-function base64Url(bytes: Uint8Array): string {
-  return btoa(String.fromCharCode(...bytes))
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replace(/=+$/u, "");
-}
+export type StoreLinkClaim =
+  | { kind: "new"; userId: string; codeVerifier: string; expired: boolean }
+  | { kind: "duplicate"; userId: string; outcome: StoreLinkOutcome | null };
 
 function randomToken(): string {
   return base64Url(crypto.getRandomValues(new Uint8Array(32)));
@@ -95,38 +98,48 @@ export async function startStoreLink(
   return url.toString();
 }
 
-// Consuma lo state una sola volta; null indica un callback che non appartiene al collegamento negozio.
-export async function takeStoreLinkSession(
+/**
+ * Consuma lo state una sola volta. Un secondo callback con lo stesso state non ripete lo scambio
+ * del codice: riceve l'esito del primo. null indica un callback estraneo al collegamento negozio.
+ */
+export async function claimStoreLinkSession(
   db: D1Database,
   state: string,
   now = new Date(),
-): Promise<StoreLinkSession | null> {
-  const row = await db
+): Promise<StoreLinkClaim | null> {
+  const claimed = await db
     .prepare(
-      `DELETE FROM ebay_store_link_sessions WHERE state = ?
+      `UPDATE ebay_store_link_sessions SET consumed_at = ?
+        WHERE state = ? AND consumed_at IS NULL
        RETURNING user_id, code_verifier, expires_at`,
     )
-    .bind(state)
+    .bind(now.toISOString(), state)
     .first<{ user_id: string; code_verifier: string; expires_at: string }>();
-  if (!row) return null;
-  return {
-    userId: row.user_id,
-    codeVerifier: row.code_verifier,
-    expired: row.expires_at <= now.toISOString(),
-  };
+  if (claimed) {
+    return {
+      kind: "new",
+      userId: claimed.user_id,
+      codeVerifier: claimed.code_verifier,
+      expired: claimed.expires_at <= now.toISOString(),
+    };
+  }
+  const used = await db
+    .prepare("SELECT user_id, outcome FROM ebay_store_link_sessions WHERE state = ?")
+    .bind(state)
+    .first<{ user_id: string; outcome: StoreLinkOutcome | null }>();
+  return used ? { kind: "duplicate", userId: used.user_id, outcome: used.outcome } : null;
 }
 
-async function ebayJson(fetcher: typeof fetch, url: string, init: RequestInit): Promise<unknown> {
-  const response = await fetcher(url, init);
-  if (!response.ok)
-    throw new ApplicationError(
-      response.status === 401 || response.status === 403
-        ? "STORE_RECONNECT_REQUIRED"
-        : response.status === 429 || response.status >= 500
-          ? "UPSTREAM_UNAVAILABLE"
-          : "INVALID_REQUEST",
-    );
-  return response.json();
+/** Registra l'esito per i callback duplicati e cancella il verifier, ormai inutile. */
+export async function recordStoreLinkOutcome(
+  db: D1Database,
+  state: string,
+  outcome: StoreLinkOutcome,
+): Promise<void> {
+  await db
+    .prepare("UPDATE ebay_store_link_sessions SET outcome = ?, code_verifier = '' WHERE state = ?")
+    .bind(outcome, state)
+    .run();
 }
 
 async function workspaceFor(db: D1Database, userId: string, now: string): Promise<string> {
@@ -152,87 +165,115 @@ async function workspaceFor(db: D1Database, userId: string, now: string): Promis
 
 export async function completeStoreLink(input: {
   environment: Env;
-  link: StoreLinkSession;
+  link: Extract<StoreLinkClaim, { kind: "new" }>;
   sessionUserId: string | null;
   search: URLSearchParams;
   fetcher: typeof fetch;
+  request?: Request;
   now?: Date;
 }): Promise<StoreLinkOutcome> {
   const { environment, link, search, fetcher } = input;
   if (link.expired || input.sessionUserId !== link.userId) return "errore";
   if (search.has("error")) return "negato";
 
-  const now = (input.now ?? new Date()).toISOString();
-  const token = tokenSchema.parse(
-    await ebayJson(fetcher, "https://api.ebay.com/identity/v1/oauth2/token", {
-      method: "POST",
-      headers: {
-        authorization: `Basic ${btoa(`${environment.EBAY_CLIENT_ID}:${environment.EBAY_CLIENT_SECRET}`)}`,
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code: search.get("code")!,
-        redirect_uri: environment.EBAY_RUNAME,
-        code_verifier: link.codeVerifier,
-      }),
+  const issued = input.now ?? new Date();
+  const now = issued.toISOString();
+  const token = await upstreamJson(fetcher, ebayTokenUrl, tokenSchema, {
+    method: "POST",
+    headers: {
+      authorization: `Basic ${btoa(`${environment.EBAY_CLIENT_ID}:${environment.EBAY_CLIENT_SECRET}`)}`,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      code: search.get("code")!,
+      redirect_uri: environment.EBAY_RUNAME,
+      code_verifier: link.codeVerifier,
     }),
+  });
+  const identity = await upstreamJson(
+    fetcher,
+    "https://apiz.ebay.com/commerce/identity/v1/user/",
+    identitySchema,
+    { headers: { authorization: `Bearer ${token.access_token}` } },
   );
-  return importStoreOrders({
+
+  const storeId = await linkStore(environment.DB, link.userId, identity, now);
+  // Il negozio di un altro spazio non riceve token e l'esito non dice nulla di quello spazio.
+  if (!storeId) return "altro-spazio";
+  await saveStoreCredentials(
+    environment,
+    storeId,
+    {
+      accessToken: token.access_token,
+      accessExpiresAt: new Date(issued.getTime() + token.expires_in * 1000).toISOString(),
+      refreshToken: token.refresh_token,
+      refreshExpiresAt: new Date(
+        issued.getTime() + token.refresh_token_expires_in * 1000,
+      ).toISOString(),
+    },
+    now,
+  );
+
+  // Il collegamento è già riuscito: un errore nella lettura del primo ordine non lo annulla.
+  await importLatestOrder({
     db: environment.DB,
-    userId: link.userId,
+    storeId,
     accessToken: token.access_token,
     fetcher,
     now,
+  }).catch((error: unknown) => {
+    logFailure({ request: input.request, error, operation: "store_link" });
   });
+  return "collegato";
 }
 
-// Collega il negozio al primo spazio dell'utente e importa l'ordine più recente con la fonte fiscale.
-export async function importStoreOrders(input: {
+/**
+ * Associa l'account eBay al primo spazio dell'utente con una sola istruzione: l'identificativo
+ * stabile è unico, quindi lo stesso negozio non entra in due spazi neppure con richieste
+ * concorrenti. Un nuovo username aggiorna il negozio esistente. null se appartiene ad altri.
+ */
+async function linkStore(
+  db: D1Database,
+  userId: string,
+  identity: z.infer<typeof identitySchema>,
+  now: string,
+): Promise<string | null> {
+  const workspaceId = await workspaceFor(db, userId, now);
+  const store = await db
+    .prepare(
+      `INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(ebay_user_id) DO UPDATE SET
+         display_name = COALESCE(excluded.display_name, ebay_stores.display_name)
+       WHERE ebay_stores.workspace_id = excluded.workspace_id
+       RETURNING id`,
+    )
+    .bind(crypto.randomUUID(), workspaceId, identity.userId, now, identity.username ?? null)
+    .first<{ id: string }>();
+  return store?.id ?? null;
+}
+
+/** Importa l'ordine più recente con la relativa fonte fiscale Trading. */
+async function importLatestOrder(input: {
   db: D1Database;
-  userId: string;
+  storeId: string;
   accessToken: string;
   fetcher: typeof fetch;
   now: string;
-}): Promise<"collegato" | "altro-spazio"> {
+}): Promise<void> {
   const { db, fetcher, now } = input;
-  const bearer = { authorization: `Bearer ${input.accessToken}` };
-  const identity = identitySchema.parse(
-    await ebayJson(fetcher, "https://apiz.ebay.com/commerce/identity/v1/user/", {
-      headers: bearer,
-    }),
-  );
-
-  const workspaceId = await workspaceFor(db, input.userId, now);
-  await db
-    .prepare(
-      `INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
-       VALUES (?, ?, ?, ?, ?) ON CONFLICT(ebay_user_id) DO NOTHING`,
-    )
-    .bind(crypto.randomUUID(), workspaceId, identity.userId, now, identity.username ?? null)
-    .run();
-  const store = await db
-    .prepare("SELECT id, workspace_id FROM ebay_stores WHERE ebay_user_id = ?")
-    .bind(identity.userId)
-    .first<{ id: string; workspace_id: string }>();
-  if (!store || store.workspace_id !== workspaceId) return "altro-spazio";
-  if (identity.username) {
-    await db
-      .prepare("UPDATE ebay_stores SET display_name = ? WHERE id = ?")
-      .bind(identity.username, store.id)
-      .run();
-  }
-
-  const page = ordersPageSchema.parse(
-    await ebayJson(fetcher, "https://api.ebay.com/sell/fulfillment/v1/order?limit=1", {
-      headers: bearer,
-    }),
+  const page = await upstreamJson(
+    fetcher,
+    "https://api.ebay.com/sell/fulfillment/v1/order?limit=1",
+    ordersPageSchema,
+    { headers: { authorization: `Bearer ${input.accessToken}` } },
   );
   const order = page.orders[0];
-  if (!order) return "collegato";
+  if (!order) return;
 
   // L'upsert dell'ordine e la lettura Trading sono indipendenti: partono insieme.
-  const [saved, tradingResponse] = await Promise.all([
+  const [saved, tradingXml] = await Promise.all([
     db
       .prepare(
         `INSERT INTO orders
@@ -247,7 +288,7 @@ export async function importStoreOrders(input: {
       )
       .bind(
         crypto.randomUUID(),
-        store.id,
+        input.storeId,
         order.orderId,
         order.creationDate,
         order.lastModifiedDate,
@@ -256,7 +297,7 @@ export async function importStoreOrders(input: {
         JSON.stringify(orderSummarySchema.parse(order)),
       )
       .first<{ id: string }>(),
-    fetcher("https://api.ebay.com/ws/api.dll", {
+    upstreamText(fetcher, "https://api.ebay.com/ws/api.dll", {
       method: "POST",
       headers: {
         "content-type": "text/xml;charset=UTF-8",
@@ -274,16 +315,8 @@ export async function importStoreOrders(input: {
         "</GetOrdersRequest>",
     }),
   ]);
-  if (!tradingResponse.ok)
-    throw new ApplicationError(
-      tradingResponse.status === 401 || tradingResponse.status === 403
-        ? "STORE_RECONNECT_REQUIRED"
-        : tradingResponse.status === 429 || tradingResponse.status >= 500
-          ? "UPSTREAM_UNAVAILABLE"
-          : "INVALID_REQUEST",
-    );
   const observations = mapTradingTaxIdentifiers(
-    parseTradingOrderTaxIdentifiers(await tradingResponse.text(), order.orderId),
+    parseTradingOrderTaxIdentifiers(tradingXml, order.orderId),
   );
   if (observations.length > 0) {
     await db.batch(
@@ -306,5 +339,4 @@ export async function importStoreOrders(input: {
       ),
     );
   }
-  return "collegato";
 }

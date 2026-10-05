@@ -2,6 +2,7 @@
 import * as build from "virtual:react-router/server-build";
 import { createRequestHandler } from "react-router";
 import { correlateResponse, correlationHeader, logFailure } from "../app/errors";
+import { refreshExpiringTokens } from "../app/integrations/ebay/seller-credentials.server";
 
 const requestHandler = createRequestHandler(build, import.meta.env.MODE);
 
@@ -18,5 +19,9 @@ export default {
       logFailure({ request: correlatedRequest, code: "INTERNAL_ERROR", operation: "route" });
       return new Response(null, { status: 500, headers: { [correlationHeader]: id } });
     }
+  },
+  // Rinnovo anticipato dei token di accesso dei negozi, fuori dal percorso delle pagine.
+  async scheduled(controller, env) {
+    await refreshExpiringTokens(env, fetch, new Date(controller.scheduledTime));
   },
 } satisfies ExportedHandler<Env>;

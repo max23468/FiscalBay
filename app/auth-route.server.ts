@@ -3,8 +3,13 @@ import { waitUntil } from "cloudflare:workers";
 import { createAuth } from "./auth.server";
 import { registrationStatus } from "./domain/registration.server";
 import { passkeyChangeBlock, recentSignIn, type AuthSession } from "./domain/sessions.server";
-import { completeStoreLink, takeStoreLinkSession } from "./integrations/ebay/store-link.server";
-import { classifyFailure, logFailure } from "./errors";
+import {
+  claimStoreLinkSession,
+  completeStoreLink,
+  recordStoreLinkOutcome,
+  type StoreLinkOutcome,
+} from "./integrations/ebay/store-link.server";
+import { logFailure } from "./errors";
 import { localizedPath } from "./i18n";
 
 // I token OAuth restano al codice server; metodi e passkey si rimuovono dalle azioni dell'app,
@@ -164,24 +169,34 @@ async function handleEbayCallback(
   }
   // Il RuName ha un solo callback: lo state distingue il collegamento negozio dal login eBay.
   const search = new URL(request.url).searchParams;
-  const link = await takeStoreLinkSession(environment.DB, search.get("state")!);
+  const state = search.get("state")!;
+  const link = await claimStoreLinkSession(environment.DB, state);
   if (!link) return noStore(await authResponse(request, environment));
 
   const session = await createAuth(environment).api.getSession({ headers: request.headers });
-  const outcome = await completeStoreLink({
-    environment,
-    link,
-    sessionUserId: session?.user.id ?? null,
-    search,
-    fetcher,
-  }).catch((error: unknown) => {
-    logFailure({ request, code: classifyFailure(error), operation: "store_link" });
-    return "errore" as const;
-  });
-  const home = localizedPath(search.get("state")!.startsWith("en_") ? "en" : "it");
-  return noStore(
-    Response.redirect(new URL(`${home}?negozio=${outcome}`, environment.APP_ORIGIN), 303),
-  );
+  const sessionUserId = session?.user.id ?? null;
+  let outcome: StoreLinkOutcome | null;
+  if (link.kind === "duplicate") {
+    // Stesso esito del primo callback, solo a chi ha avviato il collegamento; mentre il primo
+    // è ancora in corso si torna agli ordini senza un esito anticipato.
+    outcome = sessionUserId === link.userId ? link.outcome : "errore";
+  } else {
+    outcome = await completeStoreLink({
+      environment,
+      link,
+      sessionUserId,
+      search,
+      fetcher,
+      request,
+    }).catch((error: unknown) => {
+      logFailure({ request, error, operation: "store_link" });
+      return "errore" as const;
+    });
+    await recordStoreLinkOutcome(environment.DB, state, outcome);
+  }
+  const home = localizedPath(state.startsWith("en_") ? "en" : "it");
+  const destination = outcome ? `${home}?negozio=${outcome}` : home;
+  return noStore(Response.redirect(new URL(destination, environment.APP_ORIGIN), 303));
 }
 
 export function handleAuthRequest(

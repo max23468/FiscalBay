@@ -11,17 +11,17 @@ import { loader as securityLoader } from "../app/routes/security";
 import { action as signInAction, loader as signInLoader } from "../app/routes/sign-in";
 import { action as storeLinkAction, loader as storeLinkLoader } from "../app/routes/store-link";
 
-it("riporta i GET delle azioni alla radice localizzata senza accettare redirect esterni", () => {
+it("riporta i GET delle azioni alla radice localizzata senza accettare redirect esterni", async () => {
   for (const base of ["", "/en"]) {
     for (const [path, loader] of [
       ["/accesso", signInLoader],
       ["/negozi/collega", storeLinkLoader],
     ] as const) {
-      const response = loader({
+      const response = (await loader({
         request: new Request(
           `http://localhost:5173${base}${path}?token=synthetic&redirectTo=https://example.invalid`,
         ),
-      } as never);
+      } as never)) as Response;
       expect(response.status).toBe(302);
       expect(response.headers.get("location")).toBe(base || "/");
       expect(response.headers.get("cache-control")).toBe("no-store");

@@ -12,6 +12,7 @@ import { LanguageSwitch } from "~/components/language-switch";
 import { StatusAlert } from "~/components/status";
 import { ImportedOrders } from "~/components/orders";
 import { Button } from "~/components/ui/button";
+import { buttonVariants } from "~/components/ui/button-variants";
 import { Checkbox } from "~/components/ui/checkbox";
 import {
   Field,
@@ -688,14 +689,17 @@ function VerifyEmail({
   );
 }
 
+/** Apre la schermata preparatoria: il passaggio a eBay parte solo da lì. */
 function LinkStore({ t, language }: { t: AccessCopy; language: Language }) {
   return (
-    <form method="post" action={localizedPath(language, "/negozi/collega")}>
-      <Button type="submit">
-        <Plus aria-hidden="true" data-icon="inline-start" />
-        {t.linkStore}
-      </Button>
-    </form>
+    <a
+      href={localizedPath(language, "/negozi/collega")}
+      data-slot="button"
+      className={cn(buttonVariants(), "w-fit")}
+    >
+      <Plus aria-hidden="true" data-icon="inline-start" />
+      {t.linkStore}
+    </a>
   );
 }
 
