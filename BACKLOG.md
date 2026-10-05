@@ -18,7 +18,7 @@ Il piano contiene i requisiti completi: qui si descrivono il lavoro e la prova, 
 
 ## Stato corrente e ripresa
 
-- **2026-10-05 · M2-06 Reconnect, pause e disconnessioni · IN PROGRESS, implementazione locale completa:** mandato owner «implementazione completa», branch `claude/negozi-pausa-scollegamento` da `develop fd01332`. Migration `0013` additiva, applicata soltanto alla D1 locale. Dettaglio, prove e residui in [M2-06](#m2-06). Resta la decisione owner sul vincolo di sostituzione Free; pubblicazione non ancora autorizzata.
+- **2026-10-05 · M2-06 Reconnect, pause e disconnessioni · DONE, resta il collaudo sul test:** mandato owner «implementazione completa», branch `claude/negozi-pausa-scollegamento` da `develop fd01332`. Via owner del 2026-10-05 «Va bene per tutto, pubblica poi»: le eccezioni assistite al vincolo Free dei 90 giorni passano a [M5-06](#m5-06) insieme alla scelta del negozio attivo; pubblicazione test autorizzata con PR verso `develop`, merge automatico, CI, migration `0013` sulla D1 di test, deploy, collaudo e pulizia Git. Dettaglio e prove in [M2-06](#m2-06).
 - **2026-10-05 · M2-05 OAuth negozi e identità stabile · DONE, resta il collaudo sul test:** mandato owner «implementazione completa», integrata con [#268](https://github.com/max23468/FiscalBay/pull/268) (`029c67b`); revisione e via «poi pubblica» dell'owner con correzione del login eBay sul confine HTTP. Schermata preparatoria, confine HTTP, callback idempotente, identità stabile, token cifrati e rinnovo in background; dettaglio e prove in [M2-05](#m2-05). Migration `0012` additiva applicata e riletta sulla D1 di test.
 - **2026-10-04 · Audit UI/UX, etichetta breve delle notifiche dei negozi · DONE, resta il collaudo sul test:** collaudo Chrome della PR #263 (`fbf0a5d`) registrato nella §15 dell'audit: N10, N11, N12 e I9 corretti live. Emerso N13, introdotto da N12: la frase lunga allargava la colonna Notifiche. Ora Sospese in tabella e nella lista, frase completa nel dettaglio. Rientra nel via owner «Correggi tutto poi pubblica»: PR verso `develop`, merge automatico, CI, deploy test, verifica Chrome e pulizia Git.
   - **Indicazione owner durante il lavoro (D155):** la scelta «Negozio attivo se torni al piano Free» non deve comparire in Premium, perché invoglia al downgrade. Rimossa da Piano e pagamenti di Premium; resta soltanto nel Free come «Scegli il negozio attivo». Senza scelta resta attivo il primo negozio ancora collegato, come già previsto dal piano. Master Plan e registro aggiornati; I9 superato.
@@ -732,7 +732,7 @@ Parte dal flusso seller della slice M0-13, che non persiste il token. Qui si pro
 
 ### M2-06 · Reconnect, pause e disconnessioni
 
-**Stato:** IN PROGRESS · **Prerequisiti:** M2-05 · **Contratto:** [§8](docs/MASTER_PLAN.md#s08)
+**Stato:** DONE · **Prerequisiti:** M2-05 · **Contratto:** [§8](docs/MASTER_PLAN.md#s08)
 
 Separare stato della connessione e della sincronizzazione. Implementare pausa, reconnect con riconciliazione recente, reminder per massimo 30 giorni, scollegamento ed eliminazione distinta.
 
@@ -762,10 +762,10 @@ Sette mutazioni manuali fanno fallire i test: senza protezione del consenso nell
 
 **Resta:**
 
-- Decisione owner sulle eccezioni assistite al vincolo Free di sostituzione ogni 90 giorni: richiedono la scelta del negozio attivo nel Free, che nessun task assegna ancora e che oggi non ha un modello di piano su cui poggiare. L'implementazione garantisce già che ricollegare non crei un nuovo negozio.
+- Le eccezioni assistite al vincolo Free di sostituzione ogni 90 giorni richiedono la scelta del negozio attivo nel Free, che non ha ancora un modello di piano su cui poggiare: per decisione owner del 2026-10-05 il criterio passa a [M5-06](#m5-06). L'implementazione garantisce già che ricollegare non crei un nuovo negozio.
 - Le azioni di pausa, ripresa, scollegamento ed eliminazione si espongono nella schermata negozi di M2-07; anche quella route deve verificare origine e sessione.
 - Lettura del limite giornaliero dei token in Developer Analytics prima della sync continuativa: le credenziali locali sono segnaposto, quindi la lettura non è stata fatta.
-- Migration `0013` sulla D1 di test e poi Production prima del rispettivo deploy; collaudo sul test dopo la pubblicazione.
+- Migration `0013` su Production prima del deploy Production; collaudo sul test dopo la pubblicazione, da riferire in chat.
 
 ### M2-07 · Schermata negozi e profilo
 
@@ -1121,6 +1121,8 @@ Eventi out-of-order o dati Stripe non più disponibili non significano automatic
 
 Da [§37.1](docs/MASTER_PLAN.md#s37): ciclo periodico che riconcilia i diritti attivi con Stripe come rete di sicurezza, senza inventare diritti in caso di errore; ogni passo periodico registra il proprio errore senza fermare gli altri; priorità di recupero una sola volta per gli elementi mai tentati. Mutation test mirati sui diritti Stripe.
 
+<a id="m5-06"></a>
+
 ### M5-06 · Cambi piano e Portal/Link
 
 **Stato:** TODO · **Prerequisiti:** M5-05 · **Contratto:** [§6](docs/MASTER_PLAN.md#s06)
@@ -1130,6 +1132,8 @@ Implementare cambi periodicità alla scadenza, protezione di entrambi i prezzi o
 **Criterio di completamento:** Gli eventi nativi del provider rispettano i diritti; scollegare un negozio non disdice l’abbonamento e le email di pagamento non vengono duplicate.
 
 Prove client Link/Portal e comunicazioni distinguono sandbox e live; i casi non riproducibili nel primo sono assegnati a M9-01. Cambio carta tramite provider non richiede una copia completa nel DB FiscalBay.
+
+Da M2-06, per decisione owner del 2026-10-05: scelta del negozio attivo nel Free (D155), pausa del piano per gli altri negozi con la ragione `plan` già prevista da `ebay_store_pauses`, vincolo di sostituzione ogni 90 giorni non spostato dal ricollegamento ed eccezioni assistite motivate e registrate in audit, senza reset di quota, prova o ciclo.
 
 ### M5-07 · Lifetime e concessioni
 
