@@ -249,12 +249,14 @@ describe("percorso ordini", () => {
         issuingCountry: null,
         value: "RSSMRA80A01H501U",
         source: "ebay_trading_get_orders",
+        observedAt: now,
       },
       {
         type: "VAT_ID",
         issuingCountry: "IT",
         value: "01234567890",
         source: "ebay_trading_get_orders",
+        observedAt: now,
       },
     ]);
     expect(otherTenantOrders[0]?.taxIdentifiers).toEqual([]);
@@ -1146,8 +1148,15 @@ describe("collegamento negozio eBay", () => {
           headers: { cookie },
         }),
       } as Parameters<typeof loadStoreLink>[0]);
-      expect(page).toEqual({ language: base ? "en" : "it" });
+      expect(page).toEqual({ language: base ? "en" : "it", reconnect: false });
     }
+    const reconnect = await loadStoreLink({
+      request: new Request("http://localhost:5173/negozi/collega?ricollega", {
+        headers: { cookie },
+      }),
+    } as Parameters<typeof loadStoreLink>[0]);
+    expect(reconnect).toEqual({ language: "it", reconnect: true });
+    expect((await homeFor(cookie)).storeLinked).toBe(false);
     expect((await beginStoreLink(cookie)).hostname).toBe("auth.ebay.com");
   });
 
@@ -1264,6 +1273,13 @@ describe("collegamento negozio eBay", () => {
     expect(
       await env.DB.prepare("SELECT COUNT(*) AS total FROM ebay_store_credentials").first(),
     ).toEqual({ total: 1 });
+    // Senza ordini importati la pagina non chiede di collegare un negozio già collegato.
+    await env.DB.prepare("DELETE FROM orders").run();
+    const home = await homeFor(cookie);
+    expect({ orders: home.orders, storeLinked: home.storeLinked }).toEqual({
+      orders: [],
+      storeLinked: true,
+    });
   });
 
   it("non crea il negozio se eBay non scambia il codice", async () => {

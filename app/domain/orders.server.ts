@@ -16,6 +16,7 @@ export type VisibleOrder = {
     issuingCountry: string | null;
     value: string;
     source: string;
+    observedAt: string;
   }>;
 };
 
@@ -46,7 +47,7 @@ export async function listVisibleOrders(
               COALESCE(s.display_name, s.ebay_user_id) AS store_name,
               EXISTS (SELECT 1 FROM tax_identifiers WHERE order_id = o.id) AS has_identifiers,
               g.id AS grant_id, ti.identifier_type,
-              ti.issuing_country, ti.value, ti.source
+              ti.issuing_country, ti.value, ti.source, ti.observed_at
          FROM visible_orders vo
          JOIN orders o ON o.id = vo.id
          JOIN ebay_stores s ON s.id = o.store_id
@@ -72,6 +73,7 @@ export async function listVisibleOrders(
       issuing_country: string | null;
       value: string | null;
       source: string | null;
+      observed_at: string | null;
     }>();
 
   const orders = new Map<string, VisibleOrder>();
@@ -88,12 +90,13 @@ export async function listVisibleOrders(
       fiscalState: row.has_identifiers ? (row.grant_id ? "available" : "locked") : "unchecked",
       taxIdentifiers: [],
     };
-    if (row.identifier_type && row.value && row.source) {
+    if (row.identifier_type && row.value && row.source && row.observed_at) {
       order.taxIdentifiers.push({
         type: row.identifier_type,
         issuingCountry: row.issuing_country,
         value: row.value,
         source: row.source,
+        observedAt: row.observed_at,
       });
     }
     orders.set(row.id, order);

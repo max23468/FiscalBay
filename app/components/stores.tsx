@@ -498,7 +498,7 @@ export function StoresPage({
         {data.stores.length > 0 ? connect : null}
       </header>
       {data.elsewhere && attempted ? (
-        <StatusAlert tone="warning" title={t.access.storeNotices["altro-spazio"]}>
+        <StatusAlert tone="warning" title={t.stores.elsewhereTitle}>
           {t.stores.elsewhereBody}
           <a href="mailto:supporto@fiscalbay.it" className="block underline underline-offset-4">
             {t.authError.support}: supporto@fiscalbay.it

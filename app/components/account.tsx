@@ -526,9 +526,14 @@ export function AccessNotice({
     if (!url.searchParams.has("token")) url.searchParams.delete("error");
     if (url.search !== before) window.history.replaceState(window.history.state, "", url);
   }, []);
+  const elsewhere = notice?.text === t.storeNotices["altro-spazio"];
   return notice ? (
     <div ref={banner} tabIndex={-1} className="outline-none">
-      <StatusAlert tone={notice.tone} title={notice.text}>
+      <StatusAlert
+        tone={notice.tone}
+        // Il testo dell'esito ripete la spiegazione: qui serve solo il titolo breve.
+        title={elsewhere ? appCopy[language].stores.elsewhereTitle : notice.text}
+      >
         {notice.text === t.signInNotices["nuovo-accesso"] ||
         notice.text === t.signInNotices["conferma-passkey"] ? (
           <form method="post" action={localizedPath(language, "/accesso")}>
@@ -537,7 +542,7 @@ export function AccessNotice({
             </Button>
           </form>
         ) : null}
-        {notice.text === t.storeNotices["altro-spazio"] ? (
+        {elsewhere ? (
           <span className="grid gap-2">
             <span>{appCopy[language].stores.elsewhereBody}</span>
             <a href="mailto:supporto@fiscalbay.it" className="underline underline-offset-4">

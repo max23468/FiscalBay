@@ -77,6 +77,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const providerName =
     status.profile || ebayLinked || session.user.name.includes("@") ? "" : session.user.name;
   const [firstName = "", ...lastName] = providerName.trim().split(/\s+/u).filter(Boolean);
+  const stores = complete ? await listStores(env.DB, session.user.id) : [];
   return {
     authenticated: true as const,
     language,
@@ -89,12 +90,12 @@ export async function loader({ request }: Route.LoaderArgs) {
     canLinkStore: session.user.emailVerified && complete,
     suggestedName: { firstName, lastName: lastName.join(" ") },
     orders: complete ? await listVisibleOrders(env.DB, session.user.id) : [],
+    // Senza ordini, un negozio già collegato cambia il messaggio: non va ricollegato.
+    storeLinked: stores.some(({ connection }) => connection !== "disconnected"),
     // Prima i collegamenti già scaduti, poi quelli in scadenza.
-    reminders: complete
-      ? (await listStores(env.DB, session.user.id))
-          .flatMap(({ id, name, reminder }) => (reminder ? [{ id, name, ...reminder }] : []))
-          .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "expired" ? -1 : 1))
-      : [],
+    reminders: stores
+      .flatMap(({ id, name, reminder }) => (reminder ? [{ id, name, ...reminder }] : []))
+      .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "expired" ? -1 : 1)),
   };
 }
 
@@ -926,7 +927,7 @@ function OrdersPage({
                 ? t.consentExpiredBody
                 : t.consentExpiringBody(formatDate(store.at, language, "date"))}
               <a
-                href={localizedPath(language, "/negozi/collega")}
+                href={`${localizedPath(language, "/negozi/collega")}?ricollega`}
                 data-slot="button"
                 className={buttonVariants({ variant: "outline", size: "sm" })}
               >
@@ -937,8 +938,14 @@ function OrdersPage({
         ))}
         {loaderData.orders.length === 0 ? (
           <EmptyState
-            title={t.noOrders}
-            description={loaderData.canLinkStore ? t.noOrdersBody : t.noOrdersVerifyBody}
+            title={loaderData.storeLinked ? t.noImportedOrders : t.noOrders}
+            description={
+              loaderData.storeLinked
+                ? t.noImportedOrdersBody
+                : loaderData.canLinkStore
+                  ? t.noOrdersBody
+                  : t.noOrdersVerifyBody
+            }
             action={loaderData.canLinkStore ? <LinkStore t={t} language={language} /> : undefined}
           />
         ) : (
