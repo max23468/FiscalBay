@@ -48,11 +48,32 @@ jobs:
             exit 1
           fi
 
-      # Sul push confronta il commit precedente di `develop` con quello nuovo.
+      # Una run annullata da un push successivo non arriva al deploy: il push confronta
+      # quindi l'ultimo commit distribuito sul test, non il commit precedente.
+      - name: Find last test deploy
+        id: deployed
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          runs="$(gh api "repos/${REPOSITORY}/actions/workflows/ci.yml/runs?branch=develop&status=success&per_page=30" --jq '.workflow_runs[] | "\(.id) \(.head_sha)"')"
+          while read -r run_id sha; do
+            [ -n "${run_id}" ] || continue
+            deployed="$(gh api "repos/${REPOSITORY}/actions/runs/${run_id}/jobs" --jq '.jobs[] | select(.name == "Deploy test" and .conclusion == "success") | .name')"
+            if [ -n "${deployed}" ] && git merge-base --is-ancestor "${sha}" HEAD; then
+              echo "Ultimo deploy test: ${sha} (run ${run_id})."
+              echo "sha=${sha}" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+          done <<< "${runs}"
+          echo "Nessun deploy test recente: gate completo."
+
       - name: Classify changes
         id: detect
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || steps.deployed.outputs.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.after }}
         run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --github-output
 
