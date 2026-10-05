@@ -19,10 +19,10 @@ Personalità scelta dall'owner il 2026-09-27: **precisa e sobria**, uno strument
 | Tailwind CSS + `@tailwindcss/vite` | 4.3.3 | MIT | CSS previsto dallo stack ([§26](../MASTER_PLAN.md#s26)) |
 | shadcn/ui, stile `base-nova` | CLI 4.21.0 | MIT | Sorgenti copiati e posseduti, base personalizzabile |
 | Base UI (`@base-ui/react`) | 1.8.0 | MIT | Primitive accessibili (focus, tastiera, ARIA); un solo kit al posto di Radix |
-| Motion (`motion`) | 13.4.4 | MIT | Solo dove il CSS non basta: ingresso e riordino animato delle liste; caricato con `LazyMotion` |
+| Motion (`motion`) | 14.0.0 | MIT | Solo dove il CSS non basta: ingresso e riordino animato delle liste; caricato con `LazyMotion` |
 | `cn` | 0.4.0 | MIT | Fusione delle classi Tailwind usata dai sorgenti shadcn |
 | `class-variance-authority` | 0.7.1 | Apache-2.0 | Varianti dei componenti |
-| Lucide (`lucide-react`) | 1.48.0 | ISC | Icone outline uniformi, confermate da D103 |
+| Lucide (`lucide-react`) | 1.52.0 | ISC | Icone outline uniformi, confermate da D103 |
 | Inter Variable (`@fontsource-variable/inter`) | 5.3.0 | OFL-1.1 | Unico sans-serif, lo stesso del wordmark; servito dal nostro dominio |
 
 `shadcn` è una dipendenza di sviluppo: serve soltanto il suo CSS al build. `tw-animate-css` è stato rimosso: aperture e chiusure usano i ruoli di movimento qui sotto.
