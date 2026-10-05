@@ -9,10 +9,15 @@ on:
     branches:
       - develop
   workflow_dispatch:
-
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+    inputs:
+      expected_sha:
+        description: Commit esatto atteso dopo un merge automatico
+        type: string
+        required: false
+      reviewed_migrations:
+        description: Digest delle migration non additive approvate, se presenti
+        type: string
+        required: false
 
 permissions:
   actions: read
@@ -22,10 +27,14 @@ jobs:
   verify:
     name: Node 26
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    concurrency:
+      group: verify-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
     outputs:
-      deploy: ${{ steps.detect.outputs.gate == 'full' }}
+      deploy: ${{ steps.detect.outputs.deploy }}
       e2e: ${{ steps.detect.outputs.e2e }}
+      grep: ${{ steps.detect.outputs.grep }}
       artifact: build-${{ steps.tree.outputs.tree }}
       artifact-run: ${{ steps.reuse.outputs.run-id || github.run_id }}
 
@@ -48,11 +57,26 @@ jobs:
             exit 1
           fi
 
-      # Sul push confronta il commit precedente di `develop` con quello nuovo.
+      - name: Check dispatched commit
+        if: inputs.expected_sha != ''
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+
+      # Sul push il confronto parte dall'ultimo deploy test riuscito, non dal push precedente:
+      # una run annullata da un push successivo o un deploy fallito restano nel diff.
+      - name: Find last test deploy
+        id: deployed
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: node scripts/find-deployed.mjs
+
       - name: Classify changes
         id: detect
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || steps.deployed.outputs.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.after }}
         run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --github-output
 
@@ -64,51 +88,46 @@ jobs:
       # il deploy distribuisce l'artefatto prodotto da quella verifica.
       - name: Find verified artifact
         id: reuse
-        if: github.event_name == 'push' && steps.detect.outputs.gate == 'full'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.base_ref == 'main' && steps.detect.outputs.promotion-reuse == 'true')) && steps.detect.outputs.gate == 'full'
         env:
-          ARTIFACT: build-${{ steps.tree.outputs.tree }}
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           REPOSITORY_ID: ${{ github.repository_id }}
-        run: |
-          set -euo pipefail
-          candidates="$(gh api "repos/${REPOSITORY}/actions/artifacts?name=${ARTIFACT}&per_page=20" --jq \
-            ".artifacts[] | select(.expired == false and .workflow_run.repository_id == ${REPOSITORY_ID} and .workflow_run.head_repository_id == ${REPOSITORY_ID}) | .workflow_run.id")"
-          for run_id in ${candidates}; do
-            run="$(gh api "repos/${REPOSITORY}/actions/runs/${run_id}" --jq '.path + " " + (.conclusion // "")')"
-            if [ "${run}" = ".github/workflows/ci.yml success" ]; then
-              echo "Tree già verificato dalla run ${run_id}: gate non ripetuto."
-              echo "run-id=${run_id}" >> "${GITHUB_OUTPUT}"
-              exit 0
-            fi
-          done
-          echo "Nessuna verifica riusabile: eseguo il gate completo."
+        run: node scripts/find-build.mjs
 
       - name: Set up pnpm
-        if: steps.detect.outputs.gate == 'full' && !steps.reuse.outputs.run-id
+        if: steps.detect.outputs.gate != 'docs' && !steps.reuse.outputs.run-id
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 12.9.1
 
       - name: Set up Node
-        if: steps.detect.outputs.gate == 'full' && !steps.reuse.outputs.run-id
+        if: steps.detect.outputs.gate != 'docs' && !steps.reuse.outputs.run-id
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 26.10.0
           cache: pnpm
 
       - name: Install dependencies
-        if: steps.detect.outputs.gate == 'full' && !steps.reuse.outputs.run-id
+        if: steps.detect.outputs.gate != 'docs' && !steps.reuse.outputs.run-id
         run: pnpm install --frozen-lockfile
 
       - name: Run local CI gate
         if: steps.detect.outputs.gate == 'full' && !steps.reuse.outputs.run-id
         run: pnpm verify
 
+      - name: Check tooling
+        if: steps.detect.outputs.gate == 'tooling'
+        run: pnpm verify:tooling
+
       - name: Read Playwright version
         id: playwright
         if: steps.detect.outputs.e2e == 'true' && !steps.reuse.outputs.run-id
-        run: echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
+        env:
+          BROWSERS: ${{ steps.detect.outputs.browsers }}
+        run: |
+          echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
+          echo "browsers=${BROWSERS//,/-}" >> "${GITHUB_OUTPUT}"
 
       - name: Restore browser cache
         id: browsers
@@ -116,21 +135,44 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.browsers }}
+          restore-keys: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-
 
       - name: Install browser for interaction tests
-        if: steps.detect.outputs.e2e == 'true' && !steps.reuse.outputs.run-id && steps.browsers.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Install browser system dependencies
-        if: steps.detect.outputs.e2e == 'true' && !steps.reuse.outputs.run-id && steps.browsers.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
+        if: steps.detect.outputs.e2e == 'true' && !steps.reuse.outputs.run-id
+        env:
+          BROWSERS: ${{ steps.detect.outputs.browsers }}
+        run: |
+          IFS=, read -ra browsers <<< "${BROWSERS}"
+          pnpm exec playwright install --with-deps "${browsers[@]}"
 
       - name: Check browser interactions before deploy
         if: steps.detect.outputs.e2e == 'true' && !steps.reuse.outputs.run-id
         env:
           E2E_PREBUILT: "1"
-        run: pnpm test:e2e
+          BROWSER_GREP: ${{ steps.detect.outputs.grep }}
+          BROWSERS: ${{ steps.detect.outputs.browsers }}
+        run: node scripts/browser-tests.mjs --grep "${BROWSER_GREP}" --browsers "${BROWSERS}"
+
+      - name: Check changed critical domains
+        if: steps.detect.outputs.mutation != '' && !steps.reuse.outputs.run-id
+        env:
+          MUTATION_TARGETS: ${{ steps.detect.outputs.mutation }}
+        run: |
+          read -ra targets <<< "${MUTATION_TARGETS}"
+          pnpm test:mutation "${targets[@]}"
+
+      - name: Record build provenance
+        if: steps.detect.outputs.gate == 'full' && !steps.reuse.outputs.run-id
+        run: node scripts/release.mjs manifest --environment test
+
+      - name: Upload browser evidence
+        if: always() && steps.detect.outputs.e2e == 'true' && !steps.reuse.outputs.run-id
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/
+          retention-days: 7
 
       - name: Upload verified build
         if: steps.detect.outputs.gate == 'full' && !steps.reuse.outputs.run-id
@@ -153,7 +195,7 @@ jobs:
     needs: verify
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/develop' && vars.TEST_DEPLOY_ENABLED == 'true' && needs.verify.outputs.deploy == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment: test
     concurrency:
       group: deploy-test
@@ -164,6 +206,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -188,6 +231,9 @@ jobs:
           run-id: ${{ needs.verify.outputs.artifact-run }}
           github-token: ${{ github.token }}
 
+      - name: Verify artifact provenance
+        run: node scripts/release.mjs verify --environment test
+
       - name: Check commit still on develop
         env:
           VERIFIED_SHA: ${{ github.sha }}
@@ -195,21 +241,18 @@ jobs:
           current_sha="$(git ls-remote https://github.com/${{ github.repository }}.git refs/heads/develop | cut -f1)"
           test "${current_sha}" = "${VERIFIED_SHA}"
 
-      - name: Read deployed version
-        id: previous
+      - name: Restore receipt from previous attempt
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          version="$(pnpm exec wrangler deployments status --name fiscalbay-test --json | jq -r '.versions[] | select(.percentage == 100) | .version_id')"
-          test -n "${version}"
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: node scripts/release.mjs restore --environment test --receipt-prefix deployed
 
       - name: Deploy verified artifact
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm exec wrangler deploy --config build/server/wrangler.json --strict
+          REVIEWED_MIGRATIONS: ${{ inputs.reviewed_migrations }}
+        run: node scripts/release.mjs deploy --environment test --reviewed-migrations "${REVIEWED_MIGRATIONS}"
 
       - name: Check test endpoint
         run: curl --fail --silent --show-error --max-time 20 --output /dev/null https://test.fiscalbay.it/
@@ -225,7 +268,8 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
+          restore-keys: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-
 
       - name: Install browser for interaction tests
         if: needs.verify.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit != 'true'
@@ -255,8 +299,19 @@ jobs:
       - name: Check deployed browser interactions
         if: needs.verify.outputs.e2e == 'true'
         env:
+          E2E_RUN_ID: test-smoke
           E2E_ACCOUNT_PASSWORD: ${{ steps.account.outcome == 'success' && secrets.E2E_ACCOUNT_PASSWORD || '' }}
         run: pnpm test:e2e:smoke
+
+      - name: Check deployed pages
+        if: needs.verify.outputs.e2e == 'true'
+        env:
+          E2E_RUN_ID: test-pages
+          E2E_MATRIX: single
+          E2E_BASE_URL: https://test.fiscalbay.it
+          BROWSER_GREP: ${{ needs.verify.outputs.grep }}
+          E2E_ACCOUNT_PASSWORD: ${{ steps.account.outcome == 'success' && secrets.E2E_ACCOUNT_PASSWORD || '' }}
+        run: node scripts/browser-tests.mjs --pages --grep "${BROWSER_GREP}"
 
       # Misura e ricevuta senza bloccare (D148): il p95 oscilla di qualche ms fra misure
       # della stessa versione, quindi oltre soglia resta un avviso e non un rollback.
@@ -274,11 +329,19 @@ jobs:
 
       # Un deploy con endpoint o interazioni falliti non resta distribuito sul test.
       - name: Roll back test deploy
-        if: failure() && steps.previous.outputs.version
+        if: failure()
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          PREVIOUS_VERSION: ${{ steps.previous.outputs.version }}
         run: |
-          pnpm exec wrangler rollback "${PREVIOUS_VERSION}" --name fiscalbay-test --message "Controlli del deploy test non superati" --yes
-          echo "Ripristinata la versione ${PREVIOUS_VERSION}." >> "${GITHUB_STEP_SUMMARY}"
+          node scripts/release.mjs rollback --environment test
+
+      - name: Upload deployed evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deployed-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test-results/browser/
+            reports/release.json
+          retention-days: 7

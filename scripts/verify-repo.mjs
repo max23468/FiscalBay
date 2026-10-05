@@ -103,7 +103,7 @@ function resolveImport(from, specifier, known) {
 }
 
 /** Grafo degli import applicativi (`app/`, `workers/`) aciclico e moduli server raggiungibili. */
-export function checkImports(files, pending = pendingServerModules) {
+export function importGraph(files) {
   const sources = new Map(
     files
       .filter(({ path: file }) => /^(?:app|workers)\/.+\.tsx?$/u.test(file))
@@ -118,6 +118,12 @@ export function checkImports(files, pending = pendingServerModules) {
     }
     graph.set(file, targets);
   }
+  return graph;
+}
+
+export function checkImports(files, pending = pendingServerModules) {
+  const graph = importGraph(files);
+  const sources = new Map(files.map(({ path: file, text }) => [file, text]));
 
   const errors = [];
   const state = new Map();

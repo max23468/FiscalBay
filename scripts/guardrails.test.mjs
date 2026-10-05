@@ -1,14 +1,29 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { randomBytes } from "node:crypto";
 import { budgetKiB } from "./check-bundle-size.mjs";
 import { evaluate as evaluateCapacity, jsonObjects, percentile95 } from "./check-capacity.mjs";
-import { classifyFile, plan } from "./classify-changes.mjs";
+import { classifyFile, plan as changePlan } from "./classify-changes.mjs";
+import { missingPages, missingSections, routePatterns } from "./verify-pages.mjs";
+import {
+  migrationPlan,
+  publish,
+  productionReadiness,
+  assertResume,
+  digestDirectory,
+  assertAppliedMigrations,
+  receiptArtifact,
+  readReceipt,
+  releaseIdentity,
+} from "./release.mjs";
+import { releaseNotes, assertBrowserEvidence } from "./release-notes.mjs";
+import { knownPagePath } from "../e2e/page-cases.ts";
 import { evaluate } from "./mutation.mjs";
+import { lastDeployed } from "./find-deployed.mjs";
 import {
   checkActionPins,
   checkFixtures,
@@ -21,6 +36,10 @@ import {
 const milestone = "M" + "3";
 const task = `${milestone}-06`;
 const gate = "G-" + "EBAY";
+const plan = (files) => {
+  const { gate, e2e, unclassified } = changePlan(files);
+  return { gate, e2e, unclassified };
+};
 
 describe("sigle di piano", () => {
   it("ammette le sigle nella documentazione e nelle migration già applicate", () => {
@@ -153,6 +172,82 @@ describe("Action fissate", () => {
 });
 
 describe("classificazione dei file modificati", () => {
+  it("copre sicurezza, isolamento, integrazioni e suite funzionali dai titoli generici", () => {
+    for (const file of [
+      "app/auth.server.ts",
+      "app/domain/sessions.server.ts",
+      "app/domain/stores.server.ts",
+      "app/domain/export.server.ts",
+      "app/integrations/ebay/store-link.server.ts",
+    ])
+      assert.ok(changePlan([file]).mutation.includes(file));
+    const sources = [{ path: "app/routes/stores.tsx", text: "" }];
+    const selected = new RegExp(changePlan([sources[0].path], sources).browserGrep);
+    assert.ok(
+      selected.test(
+        "chromium app-shell.spec.ts il salvataggio automatico fallito ripristina il valore",
+      ),
+    );
+    assert.ok(selected.test("stores: /negozi/collega"));
+    assert.equal(selected.test("profile: /anteprima/profilo"), false);
+  });
+  it("segue i consumatori transitivi e allarga la selezione quando ne arriva uno nuovo", () => {
+    const files = [
+      { path: "app/domain/stores.server.ts", text: "" },
+      {
+        path: "app/routes/store-link.tsx",
+        text: 'import { load } from "../domain/stores.server";',
+      },
+    ];
+    assert.deepEqual(changePlan([files[0].path], files).areas, ["stores"]);
+    files.push({
+      path: "app/routes/home.tsx",
+      text: 'import { load } from "../domain/stores.server";',
+    });
+    assert.deepEqual(changePlan([files[0].path], files).areas, [
+      "auth",
+      "orders",
+      "public",
+      "stores",
+    ]);
+    assert.equal(changePlan(["app/new-module.ts"], files).mode, "full");
+  });
+
+  it("limita le mutation ai moduli critici modificati e ai loro consumatori critici", () => {
+    const files = [
+      { path: "app/i18n.ts", text: "" },
+      { path: "app/domain/stores.server.ts", text: 'import { t } from "../i18n";' },
+      {
+        path: "app/auth.server.ts",
+        text: 'import { t } from "./i18n";\nimport { load } from "./domain/stores.server";',
+      },
+    ];
+    assert.deepEqual(changePlan(["app/i18n.ts"], files).mutation, []);
+    assert.deepEqual(changePlan(["app/domain/stores.server.ts"], files).mutation.sort(), [
+      "app/auth.server.ts",
+      "app/domain/stores.server.ts",
+    ]);
+  });
+
+  it("seleziona una route circoscritta ma forza il completo sulla tabella delle route", () => {
+    const sources = [{ path: "app/routes/stores.tsx", text: "export default function Page() {}" }];
+    assert.equal(changePlan([sources[0].path], sources).mode, "targeted");
+    assert.equal(changePlan([sources[0].path], sources).browsers, "chromium,webkit");
+    assert.equal(changePlan(["app/routes.ts"], sources).mode, "full");
+    const deleted = changePlan(["app/domain/sessions.server.ts"], sources);
+    assert.equal(deleted.mode, "full");
+    assert.deepEqual(deleted.mutation, []);
+  });
+
+  it("non distribuisce un aggiornamento actionlint e forza il completo sul candidato", () => {
+    const files = [".github/workflows/actionlint.yml"];
+    assert.equal(changePlan(files).mode, "tooling");
+    assert.equal(changePlan(files).deploy, false);
+    assert.equal(changePlan(files, [], true).mode, "full");
+    assert.equal(changePlan(["app/integrations/stripe.server.ts"]).mutation.length, 1);
+    assert.equal(changePlan([".github/workflows/publish.yml"]).promotionReuse, false);
+    assert.equal(changePlan(["app/routes/stores.tsx"]).promotionReuse, true);
+  });
   it("assegna le categorie note", () => {
     assert.equal(classifyFile("README.md"), "documentation");
     assert.equal(classifyFile("test/orders.spec.ts"), "test");
@@ -185,6 +280,320 @@ describe("classificazione dei file modificati", () => {
     assert.deepEqual(plan(["test/orders.spec.ts"]), { gate: "full", e2e: false, unclassified: [] });
     assert.equal(plan(["e2e/app-components.spec.ts"]).e2e, true);
     assert.equal(plan(["app/root.tsx"]).e2e, true);
+  });
+});
+
+describe("catalogo delle pagine", () => {
+  it("rifiuta collegamenti a route assenti ma ammette parametri opzionali e endpoint", () => {
+    for (const pathname of [
+      "/",
+      "/en",
+      "/anteprima/ordini",
+      "/en/anteprima/ordini/ord-02",
+      "/api/auth/get-session",
+    ])
+      assert.ok(knownPagePath(pathname), pathname);
+    assert.equal(knownPagePath("/pagina-che-non-esiste"), false);
+    assert.equal(knownPagePath("/anteprima/ordini/ord-02/extra"), false);
+  });
+  it("segnala anche nuove sezioni e una lingua dimenticata", () => {
+    assert.deepEqual(
+      missingSections(["aspetto", "nuova"], [{ path: "/anteprima/impostazioni/aspetto" }]),
+      [
+        "/en/anteprima/impostazioni/aspetto",
+        "/anteprima/impostazioni/nuova",
+        "/en/anteprima/impostazioni/nuova",
+      ],
+    );
+  });
+  it("richiede scenari anche per route annidate e nuove route", () => {
+    const patterns = routePatterns([{ path: "app", children: [{ path: "orders/:id" }] }]);
+    assert.deepEqual(patterns, ["/app", "/app/orders/:id"]);
+    assert.deepEqual(missingPages(patterns, [{ pattern: "/app" }]), ["/app/orders/:id"]);
+  });
+});
+
+describe("pubblicazione riprendibile", () => {
+  const manifest = { sha: "a".repeat(40), tree: "tree", digest: "artifact", environment: "test" };
+  const harness = () => {
+    let current = { version: "old", identity: "old" };
+    const calls = [];
+    const receipts = [];
+    const io = {
+      assertCurrent: async () => calls.push("current"),
+      preflight: async () => calls.push("preflight"),
+      migrations: async () => ({ pending: [], rollbackCompatible: true }),
+      migrate: async () => calls.push("migration"),
+      schema: async () => [],
+      current: async () => current,
+      canRollback: async () => true,
+      deploy: async (identity) => {
+        calls.push("deploy");
+        current = { version: "new", identity };
+      },
+      readback: async () => calls.push("readback"),
+      save: async (state) => receipts.push(structuredClone(state)),
+    };
+    return { io, calls, receipts };
+  };
+
+  it("non ridistribuisce dopo un'interruzione successiva al deploy", async () => {
+    const { io, calls, receipts } = harness();
+    const readback = io.readback;
+    io.readback = async () => {
+      throw new Error("interruzione");
+    };
+    await assert.rejects(publish(manifest, io), /interruzione/u);
+    io.readback = readback;
+    const result = await publish(manifest, io, receipts.at(-1));
+    assert.equal(calls.filter((call) => call === "deploy").length, 1);
+    assert.equal(result.readback, true);
+    assert.equal(result.previous, "old");
+  });
+
+  it("rifiuta candidato superato e ricevuta di un altro artefatto prima degli effetti", async () => {
+    const { io, calls } = harness();
+    io.assertCurrent = async () => {
+      throw new Error("superato");
+    };
+    await assert.rejects(publish(manifest, io), /superato/u);
+    assert.deepEqual(calls, []);
+    assert.throws(() => assertResume({ ...manifest, digest: "other" }, manifest), /diverso/u);
+  });
+
+  it("conserva il blocco del rollback dopo una migration e una ripresa", async () => {
+    const { io, receipts } = harness();
+    let applied = false;
+    io.migrations = async () => ({
+      pending: applied ? [] : [{ name: "new.sql" }],
+      rollbackCompatible: applied,
+    });
+    io.migrate = async () => {
+      applied = true;
+      throw new Error("interruzione dopo schema");
+    };
+    await assert.rejects(publish(manifest, io), /interruzione/u);
+    const result = await publish(manifest, io, receipts.at(-1));
+    assert.equal(result.readback, true);
+    assert.equal(result.rollbackCompatible, false);
+  });
+
+  it("non dichiara readback riuscito se il provider distribuisce un'altra identità", async () => {
+    const { io, receipts } = harness();
+    io.deploy = async () => {};
+    await assert.rejects(publish(manifest, io), /diversa/u);
+    assert.notEqual(receipts.at(-1).readback, true);
+  });
+
+  it("riconcilia un deploy riuscito sul provider anche se la CLI perde la risposta", async () => {
+    const { io, receipts, calls } = harness();
+    const deploy = io.deploy;
+    io.deploy = async (identity) => {
+      await deploy(identity);
+      throw new Error("risposta persa");
+    };
+    await assert.rejects(publish(manifest, io), /risposta persa/u);
+    assert.equal(receipts.at(-1).deployed, true);
+    assert.equal(receipts.at(-1).version, "new");
+    assert.equal(receipts.at(-1).readback, false);
+    io.deploy = deploy;
+    await publish(manifest, io, receipts.at(-1));
+    assert.equal(calls.filter((call) => call === "deploy").length, 1);
+  });
+
+  it("rifiuta una ricostruzione diversa di un commit già distribuito", async () => {
+    const { io, calls } = harness();
+    io.current = async () => ({ version: "new", identity: `${manifest.sha}:different` });
+    io.migrations = async () => ({ pending: [{ name: "change.sql" }], rollbackCompatible: false });
+    await assert.rejects(publish(manifest, io), /artefatto diverso/u);
+    assert.equal(calls.includes("deploy"), false);
+    assert.equal(calls.includes("migration"), false);
+  });
+
+  it("ricontrolla il candidato prima delle migration e rifiuta un deploy esterno durante il preflight", async () => {
+    const { io, calls } = harness();
+    let checks = 0;
+    io.assertCurrent = async () => {
+      if (++checks > 1) throw new Error("superato");
+    };
+    io.migrations = async () => ({ pending: [{ name: "change.sql" }], rollbackCompatible: false });
+    await assert.rejects(publish(manifest, io), /superato/u);
+    assert.equal(calls.includes("migration"), false);
+    const next = harness();
+    let reads = 0;
+    next.io.current = async () => ({
+      version: ++reads === 1 ? "old" : "external",
+      identity: "old",
+    });
+    await assert.rejects(publish(manifest, next.io), /Stato remoto cambiato/u);
+    assert.equal(next.calls.includes("deploy"), false);
+  });
+
+  it("riprende un piano approvato parzialmente applicato senza autorizzare SQL diverso", () => {
+    const entries = ["a.sql", "b.sql"].map((name) => ({
+      name,
+      digest: name,
+      sql: "DROP TABLE example;",
+    }));
+    let digest;
+    try {
+      migrationPlan(entries, []);
+    } catch (error) {
+      digest = error.message.split("Digest ")[1];
+    }
+    const approved = { digest, pending: entries.map(({ name, digest }) => ({ name, digest })) };
+    assert.equal(migrationPlan(entries, ["a.sql"], digest, approved).pending.length, 1);
+    assert.throws(
+      () =>
+        migrationPlan(
+          [{ ...entries[1], digest: "changed" }, entries[0]],
+          ["a.sql"],
+          digest,
+          approved,
+        ),
+      /approvare/u,
+    );
+    assert.throws(() => migrationPlan(entries, ["a.sql"], "unapproved", approved), /approvare/u);
+  });
+
+  it("recupera solo la ricevuta non scaduta del tentativo precedente della stessa run", () => {
+    const artifacts = [
+      { name: "deployed-123-1", expired: false },
+      { name: "deployed-123-2", expired: false },
+      { name: "deployed-123-3", expired: false },
+      { name: "deployed-124-2", expired: false },
+      { name: "deployed-123-4", expired: true },
+    ];
+    assert.equal(receiptArtifact(artifacts, "deployed", "123", 3).name, "deployed-123-2");
+    assert.equal(receiptArtifact(artifacts, "release-receipt", "123", 3), undefined);
+  });
+
+  it("la release richiede un collaudo eseguito sul candidato e sull'ambiente Production", () => {
+    const evidence = {
+      status: "passed",
+      partial: false,
+      counts: { passed: 1 },
+      sha: manifest.sha,
+      environment: "production",
+      dirty: false,
+      baseURL: "https://fiscalbay.it",
+    };
+    assert.doesNotThrow(() => assertBrowserEvidence(evidence, manifest.sha));
+    for (const change of [
+      { counts: { passed: 0 } },
+      { partial: true },
+      { dirty: true },
+      { sha: "other" },
+      { baseURL: "https://test.fiscalbay.it" },
+      { environment: "local" },
+    ])
+      assert.throws(
+        () => assertBrowserEvidence({ ...evidence, ...change }, manifest.sha),
+        /Collaudo/u,
+      );
+  });
+
+  it("verifica la ricevuta estratta dall'artefatto prima di ripristinare lo stato", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "receipt-"));
+    assert.equal(readReceipt(directory, manifest), null);
+    mkdirSync(path.join(directory, "reports"));
+    const file = path.join(directory, "reports/release.json");
+    const receipt = { ...manifest, previous: "old", schemaChanged: true };
+    writeFileSync(file, JSON.stringify(receipt));
+    assert.deepEqual(readReceipt(directory, manifest), receipt);
+    writeFileSync(file, JSON.stringify({ ...receipt, digest: "other" }));
+    assert.throws(() => readReceipt(directory, manifest), /diverso/u);
+  });
+
+  it("blocca migration distruttive non approvate e schema remoto estraneo", () => {
+    const migrations = [{ name: "change.sql", digest: "hash", sql: "DROP TABLE orders;" }];
+    assert.throws(() => migrationPlan(migrations, []), /Digest/u);
+    assert.throws(() => migrationPlan(migrations, ["unknown.sql"]), /assenti/u);
+    assert.equal(migrationPlan(migrations, ["change.sql"]).pending.length, 0);
+    const additive = [
+      "ALTER TABLE ebay_stores ADD COLUMN paused_at TEXT;",
+      'ALTER TABLE "session" ADD "passkeyVerified" INTEGER;',
+      "CREATE TABLE child (id TEXT REFERENCES parent(id) ON DELETE CASCADE ON UPDATE CASCADE);",
+    ];
+    for (const sql of additive)
+      assert.equal(migrationPlan([{ ...migrations[0], sql }], []).pending.length, 1);
+    for (const sql of [
+      "ALTER TABLE orders RENAME TO archived;",
+      "ALTER TABLE orders DROP COLUMN status;",
+      "ALTER TABLE orders ADD COLUMN status TEXT; UPDATE orders SET status = 'open';",
+    ])
+      assert.throws(() => migrationPlan([{ ...migrations[0], sql }], []), /Digest/u);
+    assert.equal(
+      migrationPlan([{ ...migrations[0], sql: "CREATE TABLE example (id TEXT);" }], [])
+        .rollbackCompatible,
+      false,
+    );
+  });
+
+  it("rifiuta una modifica SQL di una migration già applicata", () => {
+    const current = [{ name: "schema.sql", digest: "new" }];
+    const previous = [{ name: "schema.sql", digest: "old" }];
+    assert.throws(() => assertAppliedMigrations(current, previous, ["schema.sql"]), /modificata/u);
+    assert.doesNotThrow(() => assertAppliedMigrations(current, current, ["schema.sql"]));
+    assert.doesNotThrow(() => assertAppliedMigrations(current, previous, []));
+  });
+
+  it("registra un'identità di versione entro il limite del messaggio Cloudflare", () => {
+    const identity = releaseIdentity({ sha: "a".repeat(40), digest: "b".repeat(64) });
+    assert.ok(identity.length <= 100);
+    assert.ok(identity.startsWith(`${"a".repeat(40)}:`));
+  });
+
+  it("rileva la manomissione dell'artefatto", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "release-"));
+    writeFileSync(path.join(directory, "worker.js"), "original");
+    const original = digestDirectory(directory);
+    writeFileSync(path.join(directory, "worker.js"), "modified");
+    assert.notEqual(digestDirectory(directory), original);
+  });
+
+  it("non anticipa i checkpoint e ricava le note dalla versione dichiarata", () => {
+    assert.throws(() => productionReadiness(""), /Checkpoint/u);
+    assert.equal(
+      releaseNotes(
+        "## [2.0.0-rc.1]\n\nCorrezione verificata.\n\n## 2.0.0-alpha.1\nPrima versione.",
+        "2.0.0-rc.1",
+      ),
+      "Correzione verificata.",
+    );
+    assert.throws(() => releaseNotes("## 2.0.0\n", "2.0.0"), /vuota/u);
+  });
+});
+
+describe("base del confronto sui push", () => {
+  it("parte dall'ultimo deploy test riuscito, saltando run annullate, fallite e senza deploy", () => {
+    const jobs = {
+      docs: [{ name: "Deploy test", conclusion: "skipped" }],
+      cancelled: [{ name: "Deploy test", conclusion: "cancelled" }],
+      failed: [{ name: "Deploy test", conclusion: "failure" }],
+      foreign: [{ name: "Deploy test", conclusion: "success" }],
+      deployed: [{ name: "Deploy test", conclusion: "success" }],
+    };
+    const runs = [
+      { event: "pull_request", head_sha: "pr" },
+      ...Object.keys(jobs).map((sha) => ({ event: "push", head_sha: sha })),
+    ];
+    const visited = [];
+    const sha = lastDeployed(
+      runs,
+      (run) => (visited.push(run.head_sha), jobs[run.head_sha]),
+      (commit) => commit !== "foreign",
+    );
+    assert.equal(sha, "deployed");
+    assert.equal(visited.includes("pr"), false);
+    assert.equal(
+      lastDeployed(
+        runs.slice(0, 4),
+        (run) => jobs[run.head_sha] ?? [],
+        () => true,
+      ),
+      undefined,
+    );
   });
 });
 
@@ -254,6 +663,14 @@ describe("capacità al deploy", () => {
 
   it("supera la soglia con eventi completi e senza errori", () => {
     assert.deepEqual(evaluateCapacity([event(2), event(4)], { sent: 2, maxP95: 5 }).failures, []);
+  });
+  it("non presenta un p95 attendibile con un campione incompleto", () => {
+    const result = evaluateCapacity([event(2)], { sent: 200, maxP95: 5 });
+    assert.equal(result.status, "non attendibile");
+    assert.equal(result.p95, undefined);
+    const interrupted = evaluateCapacity([event(2)], { sent: 1, expected: 200, maxP95: 5 });
+    assert.equal(interrupted.status, "non attendibile");
+    assert.equal(interrupted.p95, undefined);
   });
 
   it("fallisce oltre soglia, con errori o con eventi mancanti", () => {

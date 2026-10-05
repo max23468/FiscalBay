@@ -106,11 +106,26 @@ export async function resetStatements(password, now = new Date()) {
 }
 
 async function main() {
+  const local = process.argv.includes("--local");
+  const sessions = process.argv.includes("--sessions");
+  if (sessions && !local)
+    throw new Error("Le sessioni sintetiche privilegiate sono ammesse soltanto in locale.");
   const password = process.env.E2E_ACCOUNT_PASSWORD ?? "";
   if (password.length < 32) {
     throw new Error("E2E_ACCOUNT_PASSWORD deve contenere almeno 32 caratteri.");
   }
   // `--command` esegue le istruzioni senza l'import di `--file`, che sospende il database.
+  const statements = await resetStatements(password);
+  if (sessions) {
+    const now = new Date().toISOString();
+    const expires = new Date(Date.now() + 86400000).toISOString();
+    statements.push(`INSERT OR REPLACE INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt", admin)
+      VALUES ('collaudo-admin', 'Collaudo admin', 'admin@example.invalid', 1, '${now}', '${now}', 1);`);
+    for (const role of ["member", "admin-verify", "admin-granted"])
+      statements.push(
+        `INSERT OR REPLACE INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt", "passkeyVerified") VALUES ('pages-${role}', 'pages-${role}', '${role === "member" ? testAccount.userId : "collaudo-admin"}', '${expires}', '${now}', '${now}', ${role === "admin-granted" ? 1 : 0});`,
+      );
+  }
   execFileSync(
     "pnpm",
     [
@@ -119,9 +134,9 @@ async function main() {
       "d1",
       "execute",
       database,
-      "--remote",
+      local ? "--local" : "--remote",
       "--command",
-      (await resetStatements(password)).join("\n"),
+      statements.join("\n"),
     ],
     { stdio: ["ignore", "ignore", "inherit"] },
   );

@@ -634,7 +634,7 @@ function NotificationsSection({
           {t.stores.notificationsShortcut}{" "}
           <Link
             to={appHref(links, "impostazioni/notifiche")}
-            className="font-medium text-primary underline-offset-4 hover:underline"
+            className="font-medium text-foreground underline underline-offset-4 hover:text-muted-foreground"
           >
             {t.stores.notificationsLink}
           </Link>
