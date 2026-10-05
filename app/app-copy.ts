@@ -689,6 +689,13 @@ const it = {
     passwordRecoveryConfirm: "Salva nuova password",
     signOut: "Esci",
     linkStore: "Collega negozio eBay",
+    reconnectStore: "Ricollega negozio",
+    consentExpiredTitle: (store: string) => `${store}: collegamento scaduto`,
+    consentExpiredBody:
+      "Gli ordini già importati restano consultabili. Ricollega il negozio per riprendere la sincronizzazione.",
+    consentExpiringTitle: (store: string) => `${store}: autorizzazione in scadenza`,
+    consentExpiringBody: (date: string) =>
+      `L’autorizzazione eBay scade il ${date}. Ricollega il negozio entro quella data per non interrompere la sincronizzazione.`,
     signOutSignIn: "Esci e accedi di nuovo",
     terms: {
       before: "Accetto i ",
@@ -1408,6 +1415,12 @@ const en: AppCopy = {
     passwordRecoveryConfirm: "Save new password",
     signOut: "Sign out",
     linkStore: "Connect eBay store",
+    reconnectStore: "Reconnect store",
+    consentExpiredTitle: (store) => `${store}: connection expired`,
+    consentExpiredBody: "Imported orders remain available. Reconnect the store to resume syncing.",
+    consentExpiringTitle: (store) => `${store}: authorisation expiring`,
+    consentExpiringBody: (date) =>
+      `The eBay authorisation expires on ${date}. Reconnect the store by then to keep syncing.`,
     signOutSignIn: "Sign out and sign in again",
     terms: {
       before: "I accept the ",

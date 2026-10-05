@@ -215,10 +215,19 @@ export async function completeStoreLink(input: {
     now,
   );
 
+  // Un negozio in pausa non legge eBay neppure al ricollegamento: riprende alla ripresa.
+  const paused = await environment.DB.prepare(
+    "SELECT 1 FROM ebay_store_pauses WHERE store_id = ? LIMIT 1",
+  )
+    .bind(storeId)
+    .first();
+  if (paused) return "collegato";
+
   // Il collegamento è già riuscito: un errore nella lettura del primo ordine non lo annulla.
   await importLatestOrder({
     db: environment.DB,
     storeId,
+    grantedAt: now,
     accessToken: token.access_token,
     fetcher,
     now,
@@ -231,7 +240,8 @@ export async function completeStoreLink(input: {
 /**
  * Associa l'account eBay al primo spazio dell'utente con una sola istruzione: l'identificativo
  * stabile è unico, quindi lo stesso negozio non entra in due spazi neppure con richieste
- * concorrenti. Un nuovo username aggiorna il negozio esistente. null se appartiene ad altri.
+ * concorrenti. Un nuovo username aggiorna il negozio esistente e il ricollegamento lo riattiva,
+ * anche dopo uno scollegamento. null se appartiene ad altri.
  */
 async function linkStore(
   db: D1Database,
@@ -245,7 +255,8 @@ async function linkStore(
       `INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
        VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(ebay_user_id) DO UPDATE SET
-         display_name = COALESCE(excluded.display_name, ebay_stores.display_name)
+         display_name = COALESCE(excluded.display_name, ebay_stores.display_name),
+         disconnected_at = NULL
        WHERE ebay_stores.workspace_id = excluded.workspace_id
        RETURNING id`,
     )
@@ -254,10 +265,17 @@ async function linkStore(
   return store?.id ?? null;
 }
 
+// Le scritture dell'import valgono solo per il consenso con cui è partito: dopo uno
+// scollegamento, un'eliminazione dei dati, un nuovo consenso o una pausa non scrivono nulla.
+const sameConsent = `EXISTS (SELECT 1 FROM ebay_store_credentials
+   WHERE store_id = ?1 AND granted_at = ?2)
+  AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses WHERE store_id = ?1)`;
+
 /** Importa l'ordine più recente con la relativa fonte fiscale Trading. */
 async function importLatestOrder(input: {
   db: D1Database;
   storeId: string;
+  grantedAt: string;
   accessToken: string;
   fetcher: typeof fetch;
   now: string;
@@ -278,7 +296,7 @@ async function importLatestOrder(input: {
       .prepare(
         `INSERT INTO orders
          (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor, summary_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       SELECT ?3, ?1, ?4, ?5, ?6, ?7, ?8, ?9 WHERE ${sameConsent}
        ON CONFLICT(store_id, ebay_order_id) DO UPDATE SET
          last_modified_time = excluded.last_modified_time,
          currency = excluded.currency,
@@ -287,8 +305,9 @@ async function importLatestOrder(input: {
        RETURNING id`,
       )
       .bind(
-        crypto.randomUUID(),
         input.storeId,
+        input.grantedAt,
+        crypto.randomUUID(),
         order.orderId,
         order.creationDate,
         order.lastModifiedDate,
@@ -318,18 +337,20 @@ async function importLatestOrder(input: {
   const observations = mapTradingTaxIdentifiers(
     parseTradingOrderTaxIdentifiers(tradingXml, order.orderId),
   );
-  if (observations.length > 0) {
+  if (saved && observations.length > 0) {
     await db.batch(
       observations.map((observation) =>
         db
           .prepare(
             `INSERT OR IGNORE INTO tax_identifiers
                (id, order_id, identifier_type, issuing_country, value, source, observed_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+             SELECT ?3, ?4, ?5, ?6, ?7, ?8, ?9 WHERE ${sameConsent}`,
           )
           .bind(
+            input.storeId,
+            input.grantedAt,
             crypto.randomUUID(),
-            saved!.id,
+            saved.id,
             observation.type,
             observation.issuingCountry,
             observation.value,

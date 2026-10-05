@@ -14,6 +14,13 @@ import {
   parseTradingOrderTaxIdentifiers,
 } from "../app/integrations/ebay/tax-identifiers.server";
 import { grantFreeOrder, listVisibleOrders } from "../app/domain/orders.server";
+import {
+  deleteStoreData,
+  disconnectStore,
+  listStores,
+  pauseStore,
+  resumeStore,
+} from "../app/domain/stores.server";
 import { forwardToAuth } from "../app/auth-route.server";
 import { completeRegistration, legalVersions } from "../app/domain/registration.server";
 import { createAuth } from "../app/auth.server";
@@ -1395,6 +1402,316 @@ describe("rinnovo dei token del negozio", () => {
     const a = await sealToken(env.BETTER_AUTH_SECRET, "negozio", "access", "uguale");
     const b = await sealToken(env.BETTER_AUTH_SECRET, "negozio", "access", "uguale");
     expect(a).not.toBe(b);
+  });
+});
+
+describe("pausa, ricollegamento e scollegamento dei negozi", () => {
+  const day = 24 * 60 * 60 * 1000;
+
+  async function linkThroughEbay(cookie: string, ebay = syntheticEbay()) {
+    const state = (await beginStoreLink(cookie)).searchParams.get("state");
+    return handleAuthRequest(storeCallback(`state=${state}&code=codice`, cookie), env, ebay);
+  }
+
+  async function linkedSeller(email: string) {
+    const session = await verifiedSession(email);
+    await linkThroughEbay(session.cookie);
+    const store = await env.DB.prepare("SELECT id, workspace_id FROM ebay_stores").first<{
+      id: string;
+      workspace_id: string;
+    }>();
+    return { ...session, storeId: store!.id, workspaceId: store!.workspace_id };
+  }
+
+  async function count(table: string): Promise<number> {
+    const row = await env.DB.prepare(`SELECT COUNT(*) AS total FROM ${table}`).first<{
+      total: number;
+    }>();
+    return row!.total;
+  }
+
+  /** Sblocca l'ordine importato consumando un posto del ciclo Free. */
+  async function grantImportedOrder(seller: { userId: string; workspaceId: string }) {
+    const grantedAt = new Date().toISOString();
+    await env.DB.prepare(
+      `INSERT INTO free_cycles (id, workspace_id, starts_at, ends_at, quota)
+       VALUES ('ciclo', ?, ?, ?, 5)`,
+    )
+      .bind(
+        seller.workspaceId,
+        new Date(Date.now() - day).toISOString(),
+        new Date(Date.now() + day).toISOString(),
+      )
+      .run();
+    const order = await env.DB.prepare("SELECT id FROM orders").first<{ id: string }>();
+    await grantFreeOrder(env.DB, seller.userId, {
+      id: "sblocco",
+      workspaceId: seller.workspaceId,
+      orderId: order!.id,
+      cycleId: "ciclo",
+      grantedAt,
+    });
+  }
+
+  async function quotaUsed(): Promise<number> {
+    const row = await env.DB.prepare("SELECT used FROM free_cycles").first<{ used: number }>();
+    return row!.used;
+  }
+
+  it("avvisa prima della scadenza del consenso e, dopo, per al massimo trenta giorni", async () => {
+    const seller = await linkedSeller("avvisi@example.invalid");
+    const at = new Date("2027-01-01T00:00:00.000Z");
+    const setExpiry = (value: Date) =>
+      env.DB.prepare("UPDATE ebay_store_credentials SET refresh_expires_at = ?")
+        .bind(value.toISOString())
+        .run();
+
+    await setExpiry(new Date(at.getTime() + 31 * day));
+    expect(await listStores(env.DB, seller.userId, at)).toEqual([
+      {
+        id: seller.storeId,
+        name: "venditore",
+        connection: "active",
+        pauseReasons: [],
+        consentExpiresAt: "2027-02-01T00:00:00.000Z",
+        reminder: null,
+      },
+    ]);
+    await setExpiry(new Date(at.getTime() + 30 * day));
+    expect((await listStores(env.DB, seller.userId, at))[0]).toMatchObject({
+      connection: "active",
+      reminder: { kind: "expiring", at: "2027-01-31T00:00:00.000Z" },
+    });
+
+    // Dopo la scadenza il negozio chiede il ricollegamento: avviso per trenta giorni, poi basta,
+    // senza scollegamento automatico.
+    await setExpiry(at);
+    expect(
+      (await listStores(env.DB, seller.userId, new Date(at.getTime() + 29 * day)))[0],
+    ).toMatchObject({
+      connection: "reconnect_required",
+      reminder: { kind: "expired", at: at.toISOString() },
+    });
+    expect(
+      (await listStores(env.DB, seller.userId, new Date(at.getTime() + 30 * day)))[0],
+    ).toMatchObject({
+      connection: "reconnect_required",
+      reminder: null,
+    });
+
+    // Il rifiuto di eBay fa partire i trenta giorni dal rifiuto, anche prima della scadenza.
+    await setExpiry(new Date(at.getTime() + 300 * day));
+    await env.DB.prepare("UPDATE ebay_store_credentials SET rejected_at = ?")
+      .bind(at.toISOString())
+      .run();
+    expect((await listStores(env.DB, seller.userId, at))[0]).toMatchObject({
+      connection: "reconnect_required",
+      reminder: { kind: "expired", at: at.toISOString() },
+    });
+    // Un negozio in pausa non legge eBay: nessun invito a ricollegarlo.
+    await pauseStore(env.DB, seller.userId, seller.storeId, at);
+    expect((await listStores(env.DB, seller.userId, at))[0]).toMatchObject({
+      connection: "reconnect_required",
+      pauseReasons: ["manual"],
+      reminder: null,
+    });
+  });
+
+  it("mostra in Ordini l'invito a ricollegare con il percorso del collegamento", async () => {
+    const seller = await linkedSeller("invito@example.invalid");
+    await env.DB.prepare("UPDATE ebay_store_credentials SET rejected_at = ?")
+      .bind(new Date().toISOString())
+      .run();
+    const home = await homeFor(seller.cookie);
+    expect(home.authenticated && home.reminders).toEqual([
+      { id: seller.storeId, name: "venditore", kind: "expired", at: expect.any(String) },
+    ]);
+    // Ricollegare lo stesso account eBay toglie l'invito.
+    await linkThroughEbay(seller.cookie);
+    const after = await homeFor(seller.cookie);
+    expect(after.authenticated && after.reminders).toEqual([]);
+  });
+
+  it("la pausa manuale ferma letture e rinnovi, lascia i dati e si distingue da quella del piano", async () => {
+    const seller = await linkedSeller("pausa@example.invalid");
+    await env.DB.prepare("UPDATE ebay_store_credentials SET access_expires_at = ?")
+      .bind(new Date().toISOString())
+      .run();
+    expect(await pauseStore(env.DB, seller.userId, seller.storeId)).toBe("done");
+    expect(await pauseStore(env.DB, seller.userId, seller.storeId)).toBe("done");
+    expect((await listStores(env.DB, seller.userId))[0]).toMatchObject({
+      connection: "paused",
+      pauseReasons: ["manual"],
+    });
+    expect(await listVisibleOrders(env.DB, seller.userId)).toHaveLength(1);
+    const refresh = vi.fn<typeof fetch>();
+    expect(await refreshExpiringTokens(env, refresh)).toEqual([]);
+
+    // Ricollegare un negozio in pausa rinnova il consenso senza leggere ordini.
+    await env.DB.prepare("DELETE FROM orders").run();
+    const ebay = syntheticEbay();
+    await linkThroughEbay(seller.cookie, ebay);
+    expect(ebay.mock.calls.map(([input]) => new URL(String(input)).pathname)).toEqual([
+      "/identity/v1/oauth2/token",
+      "/commerce/identity/v1/user/",
+    ]);
+    expect(await count("orders")).toBe(0);
+    await linkThroughEbay(seller.cookie, syntheticEbay());
+    expect(await count("orders")).toBe(0);
+
+    // La pausa del piano toglie la consultazione e lo sblocco; riprendere toglie solo la manuale.
+    await resumeStore(env.DB, seller.userId, seller.storeId);
+    await linkThroughEbay(seller.cookie);
+    await env.DB.prepare(
+      "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES (?, 'plan', ?)",
+    )
+      .bind(seller.storeId, now)
+      .run();
+    await pauseStore(env.DB, seller.userId, seller.storeId);
+    expect(await listVisibleOrders(env.DB, seller.userId)).toEqual([]);
+    await expect(grantImportedOrder(seller)).rejects.toThrow("order_not_available");
+    expect(await resumeStore(env.DB, seller.userId, seller.storeId)).toBe("done");
+    expect((await listStores(env.DB, seller.userId))[0]).toMatchObject({
+      connection: "paused",
+      pauseReasons: ["plan"],
+    });
+    expect(await refreshExpiringTokens(env, refresh)).toEqual([]);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("scollega senza toccare quota, diritti e piano e ritrova lo stesso negozio al ricollegamento", async () => {
+    const seller = await linkedSeller("scollega@example.invalid");
+    await grantImportedOrder(seller);
+    await env.DB.prepare(
+      "INSERT INTO lifetime_allocations (slot, workspace_id, status, created_at) VALUES (1, ?, 'active', ?)",
+    )
+      .bind(seller.workspaceId, now)
+      .run();
+    await pauseStore(env.DB, seller.userId, seller.storeId);
+
+    expect(await disconnectStore(env.DB, seller.userId, seller.storeId)).toBe("done");
+    expect((await listStores(env.DB, seller.userId))[0]).toMatchObject({
+      connection: "disconnected",
+      pauseReasons: [],
+      consentExpiresAt: null,
+      reminder: null,
+    });
+    expect(await count("ebay_store_credentials")).toBe(0);
+    expect(await quotaUsed()).toBe(1);
+    expect(await count("order_grants")).toBe(1);
+    expect(await count("lifetime_allocations")).toBe(1);
+    expect((await listVisibleOrders(env.DB, seller.userId))[0]).toMatchObject({
+      fiscalState: "available",
+    });
+    // Un negozio scollegato non si mette in pausa.
+    expect(await pauseStore(env.DB, seller.userId, seller.storeId)).toBe("invalid");
+
+    await linkThroughEbay(seller.cookie);
+    expect(await listStores(env.DB, seller.userId)).toMatchObject([
+      { id: seller.storeId, connection: "active", pauseReasons: [] },
+    ]);
+    expect(await count("ebay_stores")).toBe(1);
+    expect(await quotaUsed()).toBe(1);
+    expect((await listVisibleOrders(env.DB, seller.userId))[0]).toMatchObject({
+      fiscalState: "available",
+    });
+  });
+
+  it("elimina i dati solo con il nome del negozio, senza restituire quota né resuscitarli", async () => {
+    const seller = await linkedSeller("elimina@example.invalid");
+    await grantImportedOrder(seller);
+    await env.DB.prepare(
+      "INSERT INTO sync_state (store_id, cursor, updated_at) VALUES (?, 'cursore', ?)",
+    )
+      .bind(seller.storeId, now)
+      .run();
+    const before = await env.DB.prepare("SELECT id FROM orders").first<{ id: string }>();
+
+    expect(await deleteStoreData(env.DB, seller.userId, seller.storeId, "altro nome")).toBe(
+      "invalid",
+    );
+    expect(await count("orders")).toBe(1);
+    expect(await count("ebay_store_credentials")).toBe(1);
+
+    expect(await deleteStoreData(env.DB, seller.userId, seller.storeId, " venditore ")).toBe(
+      "done",
+    );
+    for (const table of [
+      "orders",
+      "order_items",
+      "tax_identifiers",
+      "order_grants",
+      "sync_state",
+      "ebay_store_credentials",
+    ]) {
+      expect(await count(table), table).toBe(0);
+    }
+    expect(await quotaUsed()).toBe(1);
+    expect(
+      await env.DB.prepare(
+        "SELECT disconnected_at IS NOT NULL AS disconnected, data_deleted_at IS NOT NULL AS deleted FROM ebay_stores",
+      ).first(),
+    ).toEqual({ disconnected: 1, deleted: 1 });
+
+    // Ricollegare ritrova il negozio: l'ordine riletto da eBay è nuovo e il vecchio sblocco
+    // non torna, mentre la quota consumata resta consumata.
+    await linkThroughEbay(seller.cookie);
+    expect(await count("ebay_stores")).toBe(1);
+    const orders = await listVisibleOrders(env.DB, seller.userId);
+    expect(orders).toMatchObject([{ fiscalState: "locked" }]);
+    expect(orders[0]!.id).not.toBe(before!.id);
+    expect(await quotaUsed()).toBe(1);
+  });
+
+  it("agisce solo sui negozi del proprio spazio", async () => {
+    const seller = await linkedSeller("proprio@example.invalid");
+    const other = await verifiedSession("estraneo@example.invalid");
+    expect(await pauseStore(env.DB, other.userId, seller.storeId)).toBe("not_found");
+    expect(await resumeStore(env.DB, other.userId, seller.storeId)).toBe("not_found");
+    expect(await disconnectStore(env.DB, other.userId, seller.storeId)).toBe("not_found");
+    expect(await deleteStoreData(env.DB, other.userId, seller.storeId, "venditore")).toBe(
+      "not_found",
+    );
+    expect(await listStores(env.DB, other.userId)).toEqual([]);
+    expect((await listStores(env.DB, seller.userId))[0]!.connection).toBe("active");
+    expect(await count("orders")).toBe(1);
+  });
+
+  it("un rinnovo o un import partiti prima dello scollegamento non ripristinano token né dati", async () => {
+    const seller = await linkedSeller("concorrenza@example.invalid");
+    const refreshed = vi.fn<typeof fetch>(async () => {
+      await disconnectStore(env.DB, seller.userId, seller.storeId);
+      return Response.json({ access_token: "tardivo", expires_in: 7200 });
+    });
+    expect(
+      await refreshStoreToken({ environment: env, storeId: seller.storeId, fetcher: refreshed }),
+    ).toBe("superseded");
+    expect(await count("ebay_store_credentials")).toBe(0);
+
+    // Un rifiuto arrivato dopo il ricollegamento non segna come scaduto il nuovo consenso.
+    await linkThroughEbay(seller.cookie);
+    const rejected = vi.fn<typeof fetch>(async () => {
+      await linkThroughEbay(seller.cookie);
+      return Response.json({ error: "invalid_grant" }, { status: 400 });
+    });
+    expect(
+      await refreshStoreToken({ environment: env, storeId: seller.storeId, fetcher: rejected }),
+    ).toBe("superseded");
+    expect((await listStores(env.DB, seller.userId))[0]!.connection).toBe("active");
+
+    // L'eliminazione dei dati durante la lettura del primo ordine vince sull'import.
+    await env.DB.prepare("DELETE FROM orders").run();
+    const ebay = syntheticEbay();
+    const read = ebay.getMockImplementation()!;
+    ebay.mockImplementation(async (input, init) => {
+      if (String(input).includes("/sell/fulfillment/v1/order")) {
+        await deleteStoreData(env.DB, seller.userId, seller.storeId, "venditore");
+      }
+      return read(input, init);
+    });
+    await linkThroughEbay(seller.cookie, ebay);
+    expect(await count("orders")).toBe(0);
+    expect(await count("tax_identifiers")).toBe(0);
   });
 });
 
