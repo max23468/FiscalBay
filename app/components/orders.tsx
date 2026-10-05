@@ -145,7 +145,7 @@ export function ImportedOrders({
   };
   const shipping: Record<string, string> = {
     NOT_STARTED: t.orders.shipping.to_ship,
-    IN_PROGRESS: language === "it" ? "Spedizione in corso" : "Fulfillment in progress",
+    IN_PROGRESS: t.orders.shipping.in_progress,
     FULFILLED: t.orders.shipping.shipped,
   };
   const fields = (order: VisibleOrder, expanded = false) => (
@@ -230,7 +230,9 @@ export function ImportedOrders({
                 }}
               />
               {expanded ? (
-                <p className="text-sm text-muted-foreground">{identifier.source}</p>
+                <p className="text-sm text-muted-foreground">
+                  {t.order.source(formatDate(identifier.observedAt, language))}
+                </p>
               ) : null}
             </div>
           );
