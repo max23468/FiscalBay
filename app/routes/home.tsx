@@ -32,6 +32,8 @@ import { registrationStatus } from "../domain/registration.server";
 import { listSignInMethods } from "../domain/sign-in-methods.server";
 import { listVisibleOrders } from "../domain/orders.server";
 import { listStores } from "../domain/stores.server";
+import { errorResponse } from "../errors";
+import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import { accessNotice } from "../access-notice";
 import { appCopy } from "../app-copy";
 import { languageFromPath, localizedPath, type Language } from "../i18n";
@@ -78,6 +80,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     status.profile || ebayLinked || session.user.name.includes("@") ? "" : session.user.name;
   const [firstName = "", ...lastName] = providerName.trim().split(/\s+/u).filter(Boolean);
   const stores = complete ? await listStores(env.DB, session.user.id) : [];
+  const ebayEnvironment: "production" | "sandbox" =
+    search.get("environment") === "sandbox" ? "sandbox" : "production";
+  if (ebayEnvironment === "sandbox" && !sandboxAvailable(env)) {
+    throw errorResponse(request, "FORBIDDEN");
+  }
   return {
     authenticated: true as const,
     language,
@@ -89,12 +96,19 @@ export async function loader({ request }: Route.LoaderArgs) {
     needsAgreement: !status.termsAccepted,
     canLinkStore: session.user.emailVerified && complete,
     suggestedName: { firstName, lastName: lastName.join(" ") },
-    orders: complete ? await listVisibleOrders(env.DB, session.user.id) : [],
+    orders: complete ? await listVisibleOrders(env.DB, session.user.id, 50, ebayEnvironment) : [],
+    sandbox: sandboxAvailable(env),
+    ebayEnvironment,
     // Senza ordini, un negozio già collegato cambia il messaggio: non va ricollegato.
-    storeLinked: stores.some(({ connection }) => connection !== "disconnected"),
+    storeLinked: stores.some(
+      (store) => store.ebayEnvironment === ebayEnvironment && store.connection !== "disconnected",
+    ),
     // Prima i collegamenti già scaduti, poi quelli in scadenza.
     reminders: stores
-      .flatMap(({ id, name, reminder }) => (reminder ? [{ id, name, ...reminder }] : []))
+      .filter((store) => store.ebayEnvironment === ebayEnvironment)
+      .flatMap(({ id, name, ebayEnvironment, reminder }) =>
+        reminder ? [{ id, name, ebayEnvironment, ...reminder }] : [],
+      )
       .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "expired" ? -1 : 1)),
   };
 }
@@ -699,10 +713,18 @@ function VerifyEmail({
 }
 
 /** Apre la schermata preparatoria: il passaggio a eBay parte solo da lì. */
-function LinkStore({ t, language }: { t: AccessCopy; language: Language }) {
+function LinkStore({
+  t,
+  language,
+  ebayEnvironment = "production",
+}: {
+  t: AccessCopy;
+  language: Language;
+  ebayEnvironment?: "production" | "sandbox";
+}) {
   return (
     <a
-      href={localizedPath(language, "/negozi/collega")}
+      href={`${localizedPath(language, "/negozi/collega")}?environment=${ebayEnvironment}`}
       data-slot="button"
       className={cn(buttonVariants(), "w-fit")}
     >
@@ -902,7 +924,7 @@ function OrdersPage({
             {t.title}
           </PageTitle>
           {loaderData.canLinkStore && loaderData.orders.length > 0 ? (
-            <LinkStore t={t} language={language} />
+            <LinkStore t={t} language={language} ebayEnvironment={loaderData.ebayEnvironment} />
           ) : null}
         </header>
         {noticeAlert}
@@ -912,6 +934,27 @@ function OrdersPage({
           email={loaderData.email}
           emailVerified={loaderData.emailVerified}
         />
+        {loaderData.sandbox && (
+          <nav
+            aria-label={appCopy[language].storeLink.environment}
+            className="flex flex-wrap gap-3"
+          >
+            {(["production", "sandbox"] as const).map((environment) => (
+              <a
+                key={environment}
+                href={`${localizedPath(language)}?environment=${environment}`}
+                aria-current={loaderData.ebayEnvironment === environment ? "page" : undefined}
+                className={cn(
+                  buttonVariants({
+                    variant: loaderData.ebayEnvironment === environment ? "default" : "outline",
+                  }),
+                )}
+              >
+                {appCopy[language].storeLink[environment]}
+              </a>
+            ))}
+          </nav>
+        )}
         {loaderData.reminders.map((store) => (
           <StatusAlert
             key={store.id}
@@ -927,7 +970,7 @@ function OrdersPage({
                 ? t.consentExpiredBody
                 : t.consentExpiringBody(formatDate(store.at, language, "date"))}
               <a
-                href={`${localizedPath(language, "/negozi/collega")}?ricollega`}
+                href={`${localizedPath(language, "/negozi/collega")}?ricollega&environment=${store.ebayEnvironment}`}
                 data-slot="button"
                 className={buttonVariants({ variant: "outline", size: "sm" })}
               >
@@ -946,7 +989,11 @@ function OrdersPage({
                   ? t.noOrdersBody
                   : t.noOrdersVerifyBody
             }
-            action={loaderData.canLinkStore ? <LinkStore t={t} language={language} /> : undefined}
+            action={
+              loaderData.canLinkStore ? (
+                <LinkStore t={t} language={language} ebayEnvironment={loaderData.ebayEnvironment} />
+              ) : undefined
+            }
           />
         ) : (
           <ImportedOrders orders={loaderData.orders} language={language} t={appCopy[language]} />

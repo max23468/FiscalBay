@@ -3,7 +3,7 @@ import { z } from "zod";
 import { logFailure } from "../../errors";
 import { UpstreamError, upstreamJson } from "../http.server";
 
-export const ebayTokenUrl = "https://api.ebay.com/identity/v1/oauth2/token";
+import { ebayConfiguration, type EbayEnvironment } from "./environment.server";
 
 export type SellerTokens = {
   accessToken: string;
@@ -144,12 +144,19 @@ export async function refreshStoreToken(input: {
   const { environment, storeId } = input;
   const now = input.now ?? new Date();
   const row = await environment.DB.prepare(
-    `SELECT refresh_token, refresh_expires_at, granted_at FROM ebay_store_credentials
-      WHERE store_id = ? AND rejected_at IS NULL`,
+    `SELECT c.refresh_token, c.refresh_expires_at, c.granted_at, s.ebay_environment
+       FROM ebay_store_credentials c JOIN ebay_stores s ON s.id = c.store_id
+      WHERE c.store_id = ? AND c.rejected_at IS NULL`,
   )
     .bind(storeId)
-    .first<{ refresh_token: string; refresh_expires_at: string; granted_at: string }>();
+    .first<{
+      refresh_token: string;
+      refresh_expires_at: string;
+      granted_at: string;
+      ebay_environment: EbayEnvironment;
+    }>();
   if (!row) return "missing";
+  const configuration = ebayConfiguration(environment, row.ebay_environment);
 
   const reject = async (): Promise<RefreshOutcome> => {
     const result = await environment.DB.prepare(
@@ -170,10 +177,10 @@ export async function refreshStoreToken(input: {
   );
   let token: z.infer<typeof refreshSchema>;
   try {
-    token = await upstreamJson(input.fetcher, ebayTokenUrl, refreshSchema, {
+    token = await upstreamJson(input.fetcher, configuration.tokenUrl, refreshSchema, {
       method: "POST",
       headers: {
-        authorization: `Basic ${btoa(`${environment.EBAY_CLIENT_ID}:${environment.EBAY_CLIENT_SECRET}`)}`,
+        authorization: `Basic ${btoa(`${configuration.clientId}:${configuration.clientSecret}`)}`,
         "content-type": "application/x-www-form-urlencoded",
       },
       body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),

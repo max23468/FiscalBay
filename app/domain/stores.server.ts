@@ -9,6 +9,7 @@ export type PauseReason = "manual" | "plan" | "inactivity" | "admin";
 
 export type StoreStatus = {
   id: string;
+  ebayEnvironment: "production" | "sandbox";
   name: string;
   connection: StoreConnection;
   pauseReasons: PauseReason[];
@@ -35,7 +36,7 @@ async function ownedStore(
 ): Promise<OwnedStore | null> {
   return db
     .prepare(
-      `SELECT COALESCE(s.display_name, s.ebay_user_id) AS name, s.disconnected_at
+      `SELECT COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id) AS name, s.disconnected_at
          FROM ebay_stores s
          JOIN workspace_members wm ON wm.workspace_id = s.workspace_id
         WHERE wm.user_id = ? AND s.id = ?`,
@@ -51,7 +52,7 @@ export async function listStores(
 ): Promise<StoreStatus[]> {
   const { results } = await db
     .prepare(
-      `SELECT s.id, COALESCE(s.display_name, s.ebay_user_id) AS name, s.disconnected_at,
+      `SELECT s.id, s.ebay_environment, COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id) AS name, s.disconnected_at,
               c.store_id AS credentials, c.refresh_expires_at, c.rejected_at,
               (SELECT group_concat(reason) FROM ebay_store_pauses p WHERE p.store_id = s.id)
                 AS pauses
@@ -64,6 +65,7 @@ export async function listStores(
     .bind(userId)
     .all<{
       id: string;
+      ebay_environment: "production" | "sandbox";
       name: string;
       disconnected_at: string | null;
       credentials: string | null;
@@ -99,6 +101,7 @@ export async function listStores(
     }
     return {
       id: row.id,
+      ebayEnvironment: row.ebay_environment,
       name: row.name,
       connection,
       pauseReasons,

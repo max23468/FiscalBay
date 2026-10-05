@@ -5,6 +5,7 @@ import { redirect } from "react-router";
 
 import { StandalonePage } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
+import { Field, FieldLabel } from "~/components/ui/field";
 import { buttonVariants } from "~/components/ui/button-variants";
 import { appCopy } from "../app-copy";
 import { createAuth } from "../auth.server";
@@ -12,6 +13,7 @@ import { registrationComplete, registrationStatus } from "../domain/registration
 import { errorResponse } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
 import { startStoreLink } from "../integrations/ebay/store-link.server";
+import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import type { Route } from "./+types/store-link";
 
 const noStore = { headers: { "cache-control": "no-store" } };
@@ -53,7 +55,16 @@ export async function loader({ request }: Route.LoaderArgs) {
     const base = localizedPath(language);
     return redirect(status.blocked === "email" ? `${base}?negozio=accesso` : base, noStore);
   }
-  return { language, reconnect: new URL(request.url).searchParams.has(reconnectParam) };
+  const search = new URL(request.url).searchParams;
+  if (search.get("environment") === "sandbox" && !sandboxAvailable(env)) {
+    return errorResponse(request, "FORBIDDEN");
+  }
+  return {
+    language,
+    reconnect: search.has(reconnectParam),
+    sandbox: sandboxAvailable(env),
+    ebayEnvironment: search.get("environment") === "sandbox" ? "sandbox" : "production",
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -66,14 +77,22 @@ export async function action({ request }: Route.ActionArgs) {
   if ("blocked" in status) {
     return redirect(status.blocked === "registration" ? base : `${base}?negozio=accesso`, 303);
   }
-  return redirect(await startStoreLink(env, status.userId, new Date(), language), {
+  const form = request.body ? await request.formData() : new FormData();
+  const ebayEnvironment = form.get("environment") ?? "production";
+  if (ebayEnvironment !== "production" && ebayEnvironment !== "sandbox") {
+    return errorResponse(request, "FORBIDDEN");
+  }
+  if (ebayEnvironment === "sandbox" && !sandboxAvailable(env)) {
+    return errorResponse(request, "FORBIDDEN");
+  }
+  return redirect(await startStoreLink(env, status.userId, new Date(), language, ebayEnvironment), {
     status: 303,
     ...noStore,
   });
 }
 
 export default function StoreLink({ loaderData }: Route.ComponentProps) {
-  const { language, reconnect } = loaderData;
+  const { language, reconnect, sandbox, ebayEnvironment } = loaderData;
   const t = appCopy[language].storeLink;
   const home = localizedPath(language);
   return (
@@ -99,6 +118,21 @@ export default function StoreLink({ loaderData }: Route.ComponentProps) {
         action={localizedPath(language, "/negozi/collega")}
         className="flex flex-wrap gap-3"
       >
+        {sandbox && (
+          <Field className="w-full">
+            <FieldLabel htmlFor="ebay-environment">{t.environment}</FieldLabel>
+            <select
+              id="ebay-environment"
+              aria-label={t.environment}
+              name="environment"
+              defaultValue={ebayEnvironment}
+              className="rounded-md border border-input bg-background px-3 py-2"
+            >
+              <option value="production">{t.production}</option>
+              <option value="sandbox">{t.sandbox}</option>
+            </select>
+          </Field>
+        )}
         <Button type="submit">{t.continue}</Button>
         <a
           href={home}

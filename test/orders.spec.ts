@@ -36,6 +36,11 @@ import {
   sealToken,
 } from "../app/integrations/ebay/seller-credentials.server";
 import { UpstreamError, upstreamJson, upstreamText } from "../app/integrations/http.server";
+import {
+  startStoreLink as beginLink,
+  claimStoreLinkSession,
+} from "../app/integrations/ebay/store-link.server";
+import { ebayConfiguration, sandboxAvailable } from "../app/integrations/ebay/environment.server";
 
 const now = "2026-09-13T20:00:00.000Z";
 const syntheticProfile = {
@@ -1000,6 +1005,101 @@ describe("registrazione e verifica del contatto", () => {
 });
 
 describe("collegamento negozio eBay", () => {
+  it("separa account e ordini con gli stessi ID nei due ambienti e rinnova con le chiavi corrette", async () => {
+    const seller = await verifiedSession("ambienti@example.invalid");
+    const sandbox = {
+      ...env,
+      EBAY_SANDBOX_ENABLED: "true",
+      EBAY_SANDBOX_CLIENT_ID: "sandbox-client",
+      EBAY_SANDBOX_CLIENT_SECRET: "sandbox-secret",
+      EBAY_SANDBOX_RUNAME: "sandbox-runame",
+    } as unknown as Env;
+    const configuration = ebayConfiguration(sandbox, "sandbox");
+    for (const ebayEnvironment of ["production", "sandbox"] as const) {
+      const authorize = new URL(
+        await beginLink(sandbox, seller.userId, new Date(), "it", ebayEnvironment),
+      );
+      expect(authorize.hostname).toBe(
+        ebayEnvironment === "sandbox" ? "auth.sandbox.ebay.com" : "auth.ebay.com",
+      );
+      expect(authorize.searchParams.get("client_id")).toBe(
+        ebayEnvironment === "sandbox" ? "sandbox-client" : env.EBAY_CLIENT_ID,
+      );
+      const provider = syntheticEbay();
+      const callback = await handleAuthRequest(
+        storeCallback(
+          `state=${authorize.searchParams.get("state")}&code=codice-sintetico&environment=production`,
+          seller.cookie,
+        ),
+        sandbox,
+        provider,
+      );
+      expect(callback.headers.get("location")).toContain("negozio=collegato");
+      expect(new URL(callback.headers.get("location")!).searchParams.get("environment")).toBe(
+        ebayEnvironment === "sandbox" ? "sandbox" : null,
+      );
+      expect(provider.mock.calls.map(([url]) => new URL(String(url)).hostname)).toEqual(
+        ebayEnvironment === "sandbox"
+          ? [
+              "api.sandbox.ebay.com",
+              "apiz.sandbox.ebay.com",
+              "api.sandbox.ebay.com",
+              "api.sandbox.ebay.com",
+            ]
+          : ["api.ebay.com", "apiz.ebay.com", "api.ebay.com", "api.ebay.com"],
+      );
+    }
+    const { results: stores } = await env.DB.prepare(
+      "SELECT id, ebay_environment, ebay_account_id FROM ebay_stores ORDER BY ebay_environment",
+    ).all<{ id: string; ebay_environment: "production" | "sandbox"; ebay_account_id: string }>();
+    expect(stores.map((s) => [s.ebay_environment, s.ebay_account_id])).toEqual([
+      ["production", "ebay-user-sintetico"],
+      ["sandbox", "ebay-user-sintetico"],
+    ]);
+    expect((await env.DB.prepare("SELECT id FROM orders").all()).results).toHaveLength(2);
+    const visible = await listVisibleOrders(env.DB, seller.userId);
+    expect(visible.map((o) => o.storeName)).toEqual(["venditore"]);
+    expect(
+      (await listVisibleOrders(env.DB, seller.userId, 50, "sandbox")).map((o) => o.storeName),
+    ).toEqual(["venditore (Sandbox)"]);
+    const refresh = vi.fn<typeof fetch>(async () =>
+      Response.json({ access_token: "rinnovato", expires_in: 7200 }),
+    );
+    for (const store of stores) {
+      expect(
+        await refreshStoreToken({ environment: sandbox, storeId: store.id, fetcher: refresh }),
+      ).toBe("refreshed");
+      const [url, init] = refresh.mock.calls.at(-1)!;
+      expect(String(url)).toBe(
+        store.ebay_environment === "sandbox"
+          ? configuration.tokenUrl
+          : "https://api.ebay.com/identity/v1/oauth2/token",
+      );
+      expect(new Headers(init?.headers).get("authorization")).toBe(
+        `Basic ${btoa(store.ebay_environment === "sandbox" ? "sandbox-client:sandbox-secret" : `${env.EBAY_CLIENT_ID}:${env.EBAY_CLIENT_SECRET}`)}`,
+      );
+    }
+  });
+
+  it("rifiuta Sandbox senza credenziali e sul dominio Production prima di registrare uno state", async () => {
+    expect(sandboxAvailable(env)).toBe(false);
+    await expect(beginLink(env, "utente", new Date(), "it", "sandbox")).rejects.toThrow(
+      "ebay_sandbox_unavailable",
+    );
+    const configured = {
+      ...env,
+      EBAY_SANDBOX_ENABLED: "true",
+      EBAY_SANDBOX_CLIENT_ID: "client",
+      EBAY_SANDBOX_CLIENT_SECRET: "secret",
+      EBAY_SANDBOX_RUNAME: "runame",
+      APP_ORIGIN: "https://fiscalbay.it",
+    };
+    expect(sandboxAvailable(configured)).toBe(false);
+    expect(await storeLinkSessions()).toBe(0);
+    const authorize = new URL(await beginLink(env, "utente"));
+    const claim = await claimStoreLinkSession(env.DB, authorize.searchParams.get("state")!);
+    expect(claim).toMatchObject({ kind: "new", ebayEnvironment: "production" });
+  });
   it("registra e apre la sessione dal modulo di accesso solo dalla propria origine", async () => {
     await verifiedSession("accesso@example.invalid");
     const submit = (password: string, origin = "http://localhost:5173") =>
@@ -1148,14 +1248,32 @@ describe("collegamento negozio eBay", () => {
           headers: { cookie },
         }),
       } as Parameters<typeof loadStoreLink>[0]);
-      expect(page).toEqual({ language: base ? "en" : "it", reconnect: false });
+      expect(page).toEqual({
+        language: base ? "en" : "it",
+        reconnect: false,
+        sandbox: false,
+        ebayEnvironment: "production",
+      });
     }
     const reconnect = await loadStoreLink({
       request: new Request("http://localhost:5173/negozi/collega?ricollega", {
         headers: { cookie },
       }),
     } as Parameters<typeof loadStoreLink>[0]);
-    expect(reconnect).toEqual({ language: "it", reconnect: true });
+    expect(reconnect).toEqual({
+      language: "it",
+      reconnect: true,
+      sandbox: false,
+      ebayEnvironment: "production",
+    });
+    const blockedSandbox = (await startStoreLink({
+      request: new Request("http://localhost:5173/negozi/collega", {
+        method: "POST",
+        headers: { cookie, origin: "http://localhost:5173" },
+        body: new URLSearchParams({ environment: "sandbox" }),
+      }),
+    } as Parameters<typeof startStoreLink>[0])) as Response;
+    expect(blockedSandbox.status).toBe(403);
     expect((await homeFor(cookie)).storeLinked).toBe(false);
     expect((await beginStoreLink(cookie)).hostname).toBe("auth.ebay.com");
   });
@@ -1487,6 +1605,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       {
         id: seller.storeId,
         name: "venditore",
+        ebayEnvironment: "production",
         connection: "active",
         pauseReasons: [],
         consentExpiresAt: "2027-02-01T00:00:00.000Z",
@@ -1540,7 +1659,13 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       .run();
     const home = await homeFor(seller.cookie);
     expect(home.authenticated && home.reminders).toEqual([
-      { id: seller.storeId, name: "venditore", kind: "expired", at: expect.any(String) },
+      {
+        id: seller.storeId,
+        name: "venditore",
+        ebayEnvironment: "production",
+        kind: "expired",
+        at: expect.any(String),
+      },
     ]);
     // Ricollegare lo stesso account eBay toglie l'invito.
     await linkThroughEbay(seller.cookie);
