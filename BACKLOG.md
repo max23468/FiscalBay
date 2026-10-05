@@ -18,6 +18,7 @@ Il piano contiene i requisiti completi: qui si descrivono il lavoro e la prova, 
 
 ## Stato corrente e ripresa
 
+- **2026-10-05 · M2-06 Reconnect, pause e disconnessioni · DONE, resta il collaudo sul test:** mandato owner «implementazione completa», branch `claude/negozi-pausa-scollegamento` da `develop fd01332`. Via owner del 2026-10-05 «Va bene per tutto, pubblica poi»: le eccezioni assistite al vincolo Free dei 90 giorni passano a [M5-06](#m5-06) insieme alla scelta del negozio attivo; pubblicazione test autorizzata con PR verso `develop`, merge automatico, CI, migration `0013` sulla D1 di test, deploy, collaudo e pulizia Git. Dettaglio e prove in [M2-06](#m2-06).
 - **2026-10-05 · M2-05 OAuth negozi e identità stabile · DONE, resta il collaudo sul test:** mandato owner «implementazione completa», integrata con [#268](https://github.com/max23468/FiscalBay/pull/268) (`029c67b`); revisione e via «poi pubblica» dell'owner con correzione del login eBay sul confine HTTP. Schermata preparatoria, confine HTTP, callback idempotente, identità stabile, token cifrati e rinnovo in background; dettaglio e prove in [M2-05](#m2-05). Migration `0012` additiva applicata e riletta sulla D1 di test.
 - **2026-10-04 · Audit UI/UX, etichetta breve delle notifiche dei negozi · DONE, resta il collaudo sul test:** collaudo Chrome della PR #263 (`fbf0a5d`) registrato nella §15 dell'audit: N10, N11, N12 e I9 corretti live. Emerso N13, introdotto da N12: la frase lunga allargava la colonna Notifiche. Ora Sospese in tabella e nella lista, frase completa nel dettaglio. Rientra nel via owner «Correggi tutto poi pubblica»: PR verso `develop`, merge automatico, CI, deploy test, verifica Chrome e pulizia Git.
   - **Indicazione owner durante il lavoro (D155):** la scelta «Negozio attivo se torni al piano Free» non deve comparire in Premium, perché invoglia al downgrade. Rimossa da Piano e pagamenti di Premium; resta soltanto nel Free come «Scegli il negozio attivo». Senza scelta resta attivo il primo negozio ancora collegato, come già previsto dal piano. Master Plan e registro aggiornati; I9 superato.
@@ -727,9 +728,11 @@ Parte dal flusso seller della slice M0-13, che non persiste il token. Qui si pro
 
 **Revisione del 2026-10-05:** chiesta dall'owner dopo il merge di [#268](https://github.com/max23468/FiscalBay/pull/268) (`029c67b`). Difetto P3, confidenza alta: la lettura Identity del login eBay usava ancora `fetch` diretto, senza timeout né limite dei byte, e un payload fuori schema produceva un'eccezione; ora passa dal confine HTTP, chiude il login con l'errore generico e registra il tipo di errore. Confermati sulla guida eBay Authorization: `scope` facoltativo nel rinnovo, campi `expires_in` e `refresh_token_expires_in`, revoca del refresh token anche al cambio di username, gestita dal rifiuto `invalid_grant` e dal ricollegamento che ritrova lo stesso negozio. La stessa guida indica un limite giornaliero ai token generati per tipo di grant: il vincolo è riportato in M2-06. Prove: `pnpm verify` verde con 173 test applicativi e 24 degli script; il nuovo test copre Identity indisponibile e payload senza `userId` al login, senza account creati.
 
+<a id="m2-06"></a>
+
 ### M2-06 · Reconnect, pause e disconnessioni
 
-**Stato:** TODO · **Prerequisiti:** M2-05 · **Contratto:** [§8](docs/MASTER_PLAN.md#s08)
+**Stato:** DONE · **Prerequisiti:** M2-05 · **Contratto:** [§8](docs/MASTER_PLAN.md#s08)
 
 Separare stato della connessione e della sincronizzazione. Implementare pausa, reconnect con riconciliazione recente, reminder per massimo 30 giorni, scollegamento ed eliminazione distinta.
 
@@ -742,6 +745,27 @@ Distinguere manual pause da pausa imposta dal piano; nessuna sospensione ferma l
 Da [§37.1](docs/MASTER_PLAN.md#s37): registrare la scadenza nota del consenso seller, avvisare il merchant prima che scada con la CTA di reconnect e rinnovare i token di accesso in background, non nel percorso di una pagina.
 
 Il rinnovo in background di M2-05 oggi riguarda ogni consenso non rifiutato: con pausa e scollegamento deve escludere i negozi che non leggono più eBay. Prima della sync continuativa leggere in Developer Analytics il limite giornaliero dei token del grant `refresh_token` e confrontarlo con circa dodici rinnovi al giorno per negozio attivo.
+
+**Implementazione (2026-10-05):** mandato owner «implementazione completa». Lo stato del collegamento (`app/domain/stores.server.ts`) deriva da scollegamento, consenso e pause, separato da `sync_state`: `disconnected`, poi `reconnect_required` per consenso rifiutato o scaduto, poi `paused`, altrimenti `active`. `connecting` resta il passaggio OAuth senza riga propria; `error` non ha ancora una causa che lo produca. Le ragioni di pausa (manuale, piano, inattività, amministrativa) sono righe indipendenti di `ebay_store_pauses` (migration `0013`): riprendere toglie solo la pausa manuale. La pausa manuale lascia consultabili ordini e dati; quella del piano li esclude da elenco e sblocco. Nessuna pausa ferma la retention. Rinnovo dei token e import escludono ogni negozio in pausa; ricollegare un negozio in pausa rinnova il consenso senza leggere ordini. Scollegare cancella i token e la pausa manuale e conserva ordini, diritti, quota, lifetime e piano. Il negozio resta associato allo spazio: ricollegare lo stesso account eBay ritrova la stessa riga, con il cursore di sync intatto, e legge l'ordine più recente come riconciliazione disponibile prima di M3. `Scollega ed elimina dati` richiede il nome del negozio anche sul server: elimina ordini, articoli, identificativi, grant e cursore. La quota consumata resta consumata e ricollegare non resuscita i vecchi sblocchi né crea un duplicato. Rinnovo e import scrivono solo se il consenso letto esiste ancora: una risposta partita prima di scollegamento, eliminazione o nuovo consenso non scrive. In Ordini un avviso porta a `/negozi/collega` per i consensi che scadono entro 30 giorni e, dopo la scadenza o il rifiuto di eBay, per 30 giorni; poi cessa, senza scollegamento automatico e mai per i negozi in pausa. eBay non offre la revoca del token utente via API: lo scollegamento cancella la copia FiscalBay.
+
+**Prove locali:** `pnpm verify` verde con 180 test applicativi e 24 degli script, React Doctor 100/100, client 325,7 KiB gzip su 350. Sette test nuovi coprono:
+
+- avvisi prima e dopo la scadenza, con il limite dei 30 giorni;
+- avviso in Ordini che scompare dopo il ricollegamento;
+- pausa manuale e pausa del piano, con il rinnovo dei token escluso;
+- scollegamento e ricollegamento che conservano quota, grant e lifetime;
+- eliminazione con conferma del nome, senza restituzione della quota;
+- isolamento fra spazi;
+- rinnovo, rifiuto e import tardivi rispetto a scollegamento, ricollegamento ed eliminazione.
+
+Sette mutazioni manuali fanno fallire i test: senza protezione del consenso nell'import, senza riattivazione al ricollegamento, con import durante la pausa, con rinnovo dei negozi in pausa, con dati del piano visibili, senza conferma dell'eliminazione e con controllo dello spazio allentato. Nel browser su D1 locale, con un utente sintetico poi eliminato (readback a zero): avvisi in IT scuro a 800 px e in EN chiaro a 375 px, scaduto prima di in scadenza, collegamento a `/negozi/collega`, nessun overflow.
+
+**Resta:**
+
+- Le eccezioni assistite al vincolo Free di sostituzione ogni 90 giorni richiedono la scelta del negozio attivo nel Free, che non ha ancora un modello di piano su cui poggiare: per decisione owner del 2026-10-05 il criterio passa a [M5-06](#m5-06). L'implementazione garantisce già che ricollegare non crei un nuovo negozio.
+- Le azioni di pausa, ripresa, scollegamento ed eliminazione si espongono nella schermata negozi di M2-07; anche quella route deve verificare origine e sessione.
+- Lettura del limite giornaliero dei token in Developer Analytics prima della sync continuativa: le credenziali locali sono segnaposto, quindi la lettura non è stata fatta.
+- Migration `0013` su Production prima del deploy Production; collaudo sul test dopo la pubblicazione, da riferire in chat.
 
 ### M2-07 · Schermata negozi e profilo
 
@@ -1097,6 +1121,8 @@ Eventi out-of-order o dati Stripe non più disponibili non significano automatic
 
 Da [§37.1](docs/MASTER_PLAN.md#s37): ciclo periodico che riconcilia i diritti attivi con Stripe come rete di sicurezza, senza inventare diritti in caso di errore; ogni passo periodico registra il proprio errore senza fermare gli altri; priorità di recupero una sola volta per gli elementi mai tentati. Mutation test mirati sui diritti Stripe.
 
+<a id="m5-06"></a>
+
 ### M5-06 · Cambi piano e Portal/Link
 
 **Stato:** TODO · **Prerequisiti:** M5-05 · **Contratto:** [§6](docs/MASTER_PLAN.md#s06)
@@ -1106,6 +1132,8 @@ Implementare cambi periodicità alla scadenza, protezione di entrambi i prezzi o
 **Criterio di completamento:** Gli eventi nativi del provider rispettano i diritti; scollegare un negozio non disdice l’abbonamento e le email di pagamento non vengono duplicate.
 
 Prove client Link/Portal e comunicazioni distinguono sandbox e live; i casi non riproducibili nel primo sono assegnati a M9-01. Cambio carta tramite provider non richiede una copia completa nel DB FiscalBay.
+
+Da M2-06, per decisione owner del 2026-10-05: scelta del negozio attivo nel Free (D155), pausa del piano per gli altri negozi con la ragione `plan` già prevista da `ebay_store_pauses`, vincolo di sostituzione ogni 90 giorni non spostato dal ricollegamento ed eccezioni assistite motivate e registrate in audit, senza reset di quota, prova o ciclo.
 
 ### M5-07 · Lifetime e concessioni
 

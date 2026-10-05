@@ -19,6 +19,11 @@ export type VisibleOrder = {
   }>;
 };
 
+// La pausa del piano esclude i dati del negozio; la pausa manuale li lascia consultabili.
+const consultable = `NOT EXISTS (
+  SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = s.id AND p.reason = 'plan'
+)`;
+
 export async function listVisibleOrders(
   db: D1Database,
   userId: string,
@@ -32,7 +37,7 @@ export async function listVisibleOrders(
            FROM workspace_members wm
            JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
            JOIN orders o ON o.store_id = s.id
-          WHERE wm.user_id = ?
+          WHERE wm.user_id = ? AND ${consultable}
           ORDER BY o.last_modified_time DESC, o.id DESC
           LIMIT ?
        )
@@ -119,6 +124,7 @@ export async function grantFreeOrder(
         WHERE wm.user_id = ? AND wm.workspace_id = ?
           AND o.id = ? AND c.id = ?
           AND EXISTS (SELECT 1 FROM tax_identifiers WHERE order_id = o.id)
+          AND ${consultable}
        RETURNING id`,
     )
     .bind(input.id, input.grantedAt, userId, input.workspaceId, input.orderId, input.cycleId)

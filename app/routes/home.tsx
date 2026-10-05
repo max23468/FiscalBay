@@ -31,9 +31,11 @@ import { createAuth } from "../auth.server";
 import { registrationStatus } from "../domain/registration.server";
 import { listSignInMethods } from "../domain/sign-in-methods.server";
 import { listVisibleOrders } from "../domain/orders.server";
+import { listStores } from "../domain/stores.server";
 import { accessNotice } from "../access-notice";
 import { appCopy } from "../app-copy";
 import { languageFromPath, localizedPath, type Language } from "../i18n";
+import { formatDate } from "../view-models";
 import type { Route } from "./+types/home";
 
 export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescriptors {
@@ -87,6 +89,12 @@ export async function loader({ request }: Route.LoaderArgs) {
     canLinkStore: session.user.emailVerified && complete,
     suggestedName: { firstName, lastName: lastName.join(" ") },
     orders: complete ? await listVisibleOrders(env.DB, session.user.id) : [],
+    // Prima i collegamenti già scaduti, poi quelli in scadenza.
+    reminders: complete
+      ? (await listStores(env.DB, session.user.id))
+          .flatMap(({ id, name, reminder }) => (reminder ? [{ id, name, ...reminder }] : []))
+          .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "expired" ? -1 : 1))
+      : [],
   };
 }
 
@@ -903,6 +911,30 @@ function OrdersPage({
           email={loaderData.email}
           emailVerified={loaderData.emailVerified}
         />
+        {loaderData.reminders.map((store) => (
+          <StatusAlert
+            key={store.id}
+            tone={store.kind === "expired" ? "warning" : "info"}
+            title={
+              store.kind === "expired"
+                ? t.consentExpiredTitle(store.name)
+                : t.consentExpiringTitle(store.name)
+            }
+          >
+            <span className="grid justify-items-start gap-3">
+              {store.kind === "expired"
+                ? t.consentExpiredBody
+                : t.consentExpiringBody(formatDate(store.at, language, "date"))}
+              <a
+                href={localizedPath(language, "/negozi/collega")}
+                data-slot="button"
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                {t.reconnectStore}
+              </a>
+            </span>
+          </StatusAlert>
+        ))}
         {loaderData.orders.length === 0 ? (
           <EmptyState
             title={t.noOrders}

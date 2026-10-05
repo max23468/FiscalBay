@@ -203,16 +203,20 @@ export async function refreshStoreToken(input: {
   return result.meta.changes === 1 ? "refreshed" : "superseded";
 }
 
-/** Lavoro in background: rinnova in anticipo i token di accesso vicini alla scadenza. */
+/**
+ * Lavoro in background: rinnova in anticipo i token di accesso vicini alla scadenza. I negozi
+ * in pausa non leggono eBay e restano esclusi; quelli scollegati non hanno più token.
+ */
 export async function refreshExpiringTokens(
   environment: Env,
   fetcher: typeof fetch,
   now = new Date(),
 ): Promise<RefreshOutcome[]> {
   const { results } = await environment.DB.prepare(
-    `SELECT store_id FROM ebay_store_credentials
-      WHERE rejected_at IS NULL AND access_expires_at <= ?
-      ORDER BY access_expires_at LIMIT ?`,
+    `SELECT c.store_id FROM ebay_store_credentials c
+      WHERE c.rejected_at IS NULL AND c.access_expires_at <= ?
+        AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = c.store_id)
+      ORDER BY c.access_expires_at LIMIT ?`,
   )
     .bind(new Date(now.getTime() + refreshMarginMilliseconds).toISOString(), refreshBatch)
     .all<{ store_id: string }>();
