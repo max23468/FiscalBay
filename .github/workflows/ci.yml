@@ -235,8 +235,27 @@ jobs:
         if: needs.verify.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
 
+      # L'account di collaudo torna a uno stato noto prima delle prove autenticate. Se il
+      # ripristino non riesce (permessi del token, D1 non raggiungibile) le prove autenticate
+      # vengono saltate con un avviso: il deploy non torna indietro per un problema del dato.
+      - name: Reset test account
+        id: account
+        if: needs.verify.outputs.e2e == 'true'
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          E2E_ACCOUNT_PASSWORD: ${{ secrets.E2E_ACCOUNT_PASSWORD }}
+        run: node scripts/reset-test-account.mjs
+
+      - name: Report test account warning
+        if: needs.verify.outputs.e2e == 'true' && steps.account.outcome == 'failure'
+        run: echo "::warning::Account di collaudo non ripristinato, prove autenticate saltate."
+
       - name: Check deployed browser interactions
         if: needs.verify.outputs.e2e == 'true'
+        env:
+          E2E_ACCOUNT_PASSWORD: ${{ steps.account.outcome == 'success' && secrets.E2E_ACCOUNT_PASSWORD || '' }}
         run: pnpm test:e2e:smoke
 
       # Misura e ricevuta senza bloccare (D148): il p95 oscilla di qualche ms fra misure
