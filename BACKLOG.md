@@ -18,6 +18,18 @@ Il piano contiene i requisiti completi: qui si descrivono il lavoro e la prova, 
 
 ## Stato corrente e ripresa
 
+- **2026-10-05 · Seconda revisione di test e pubblicazione prima dell'integrazione · DONE, locale:** mandato owner «Prima di pubblicare, verifica che l'implementazione sia corretta e completa»; durante la revisione l'owner ha deciso «Rimuoviamo Firefox è superfluo» (D156). Branch `codex/test-publication` allineato a `develop` dopo #273 (conflitto solo nel backlog, voci conservate). Findings, confidenza alta salvo indicazione:
+
+  | Severità | Finding | Correzione |
+  |---|---|---|
+  | P1 | `Riallinea develop` spingeva con `GITHUB_TOKEN` un merge commit su `develop`, che richiede `Node 26` sul commit: push respinto; con il solo squash ammesso il riallineamento automatico previsto dal piano non poteva riuscire | Merge su branch temporaneo, CI avviata sul commit, poi fast-forward di `develop`; branch temporaneo rimosso |
+  | P2 | Il preflight considerava non additive `ADD COLUMN` e `ON DELETE/UPDATE`: ogni migration ordinaria (come 0010-0013) avrebbe fermato il deploy test dopo il merge, contro la procedura | Azioni referenziali e colonne aggiunte restano additive; `DROP`, `RENAME`, altre `ALTER`, trigger e scritture sui dati richiedono ancora il digest |
+  | P2 | Dopo il deploy il collaudo remoto ripeteva la matrice layout/tema già provata sullo stesso artefatto, circa 150 visite in serie entro un job da 20 minuti | Una combinazione per pagina sul remoto (`E2E_MATRIX=single`); matrici complete invariate prima del merge e per il candidato |
+  | Scelta owner (D156) | Firefox superfluo: matrice di release a tre browser | Progetto Playwright, workflow, script e piano limitati a Chromium e WebKit |
+  | P3, confidenza media | L'identità della versione (105 caratteri) poteva superare il limite del messaggio Cloudflare, non documentato né controllato da Wrangler | Identità con SHA e prefisso di 32 caratteri del digest, entro 100 |
+
+  **Prove:** `pnpm verify` verde dopo l'allineamento, 48/48 test degli script, catalogo 27 route e 77 scenari, actionlint, lint, tipi, copy e documentazione verdi. Suite funzionale Chromium 262 passate e 1 esclusa come non applicabile (collaudo riservato al dominio remoto), 7,8 minuti; catalogo di tutte le pagine in Chromium e WebKit 306/306, report completo con controlli dichiarati per ogni prova, 6,8 minuti; mediana locale di una visita 2,2 secondi. Il worktree Codex `test-publication` è stato rimosso dall'esterno durante la revisione: branch intatto, lavoro proseguito nel worktree `FiscalBay-test-publication`. Restano da qualificare sul provider CI/deploy, migration, rollback, ripresa, riallineamento dopo promozione e `Pubblica`.
+
 - **2026-10-05 · Revisione della completezza di test e pubblicazione · DONE, locale:** confronto con i cinque interventi della proposta originale nella chat; correzioni sul medesimo branch `codex/test-publication`. Nessuna pubblicazione o effetto provider autorizzato/eseguito. Tutti i findings sotto hanno confidenza alta, sono corretti e coperti dalle prove pertinenti.
 
   | Severità | Finding | Correzione |
@@ -1476,7 +1488,7 @@ Eseguire registrazione, quattro accessi, collegamento, sync, dati fiscali, copia
 
 **Stato:** TODO · **Prerequisiti:** M8-01 · **Contratto:** [§22](docs/MASTER_PLAN.md#s22) · [§35](docs/MASTER_PLAN.md#s35)
 
-Verificare Chromium/WebKit e regressione Firefox, viewport, touch/tastiera, IT/EN, scuro e testi lunghi. Usare screenshot reali solo nei contesti approvati.
+Verificare Chromium/WebKit, viewport, touch/tastiera, IT/EN, scuro e testi lunghi. Usare screenshot reali solo nei contesti approvati.
 
 **Criterio di completamento:** Layout e funzioni coerenti; mockup non sostituisce prova del software. Nessuna funzione assente viene annunciata come già attiva.
 

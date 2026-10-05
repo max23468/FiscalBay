@@ -14,10 +14,13 @@ const matrix =
         { width: 1280, scheme: "light" },
         { width: 1280, scheme: "dark" },
       ] as const)
-    : ([
-        { width: 390, scheme: "dark" },
-        { width: 1280, scheme: "light" },
-      ] as const);
+    : process.env.E2E_MATRIX === "single"
+      ? // Dopo il deploy: layout e temi sono già provati sullo stesso artefatto.
+        ([{ width: 390, scheme: "dark" }] as const)
+      : ([
+          { width: 390, scheme: "dark" },
+          { width: 1280, scheme: "light" },
+        ] as const);
 
 const scenarios = production
   ? pageCases.filter(

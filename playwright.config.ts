@@ -17,7 +17,6 @@ export default defineConfig({
   projects: [
     { name: "chromium", use: { browserName: "chromium" } },
     { name: "webkit", testMatch: /pages\.spec\.ts/u, use: { browserName: "webkit" } },
-    { name: "firefox", testMatch: /pages\.spec\.ts/u, use: { browserName: "firefox" } },
   ],
   webServer: process.env.E2E_BASE_URL
     ? undefined

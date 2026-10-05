@@ -18,6 +18,7 @@ import {
   assertAppliedMigrations,
   receiptArtifact,
   readReceipt,
+  releaseIdentity,
 } from "./release.mjs";
 import { releaseNotes, assertBrowserEvidence } from "./release-notes.mjs";
 import { knownPagePath } from "../e2e/page-cases.ts";
@@ -492,6 +493,19 @@ describe("pubblicazione riprendibile", () => {
     assert.throws(() => migrationPlan(migrations, []), /Digest/u);
     assert.throws(() => migrationPlan(migrations, ["unknown.sql"]), /assenti/u);
     assert.equal(migrationPlan(migrations, ["change.sql"]).pending.length, 0);
+    const additive = [
+      "ALTER TABLE ebay_stores ADD COLUMN paused_at TEXT;",
+      'ALTER TABLE "session" ADD "passkeyVerified" INTEGER;',
+      "CREATE TABLE child (id TEXT REFERENCES parent(id) ON DELETE CASCADE ON UPDATE CASCADE);",
+    ];
+    for (const sql of additive)
+      assert.equal(migrationPlan([{ ...migrations[0], sql }], []).pending.length, 1);
+    for (const sql of [
+      "ALTER TABLE orders RENAME TO archived;",
+      "ALTER TABLE orders DROP COLUMN status;",
+      "ALTER TABLE orders ADD COLUMN status TEXT; UPDATE orders SET status = 'open';",
+    ])
+      assert.throws(() => migrationPlan([{ ...migrations[0], sql }], []), /Digest/u);
     assert.equal(
       migrationPlan([{ ...migrations[0], sql: "CREATE TABLE example (id TEXT);" }], [])
         .rollbackCompatible,
@@ -505,6 +519,12 @@ describe("pubblicazione riprendibile", () => {
     assert.throws(() => assertAppliedMigrations(current, previous, ["schema.sql"]), /modificata/u);
     assert.doesNotThrow(() => assertAppliedMigrations(current, current, ["schema.sql"]));
     assert.doesNotThrow(() => assertAppliedMigrations(current, previous, []));
+  });
+
+  it("registra un'identità di versione entro il limite del messaggio Cloudflare", () => {
+    const identity = releaseIdentity({ sha: "a".repeat(40), digest: "b".repeat(64) });
+    assert.ok(identity.length <= 100);
+    assert.ok(identity.startsWith(`${"a".repeat(40)}:`));
   });
 
   it("rileva la manomissione dell'artefatto", () => {

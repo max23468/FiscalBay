@@ -16,20 +16,38 @@ concurrency:
 jobs:
   align:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 45
     steps:
+      # `develop` richiede `Node 26` sul commit: il merge nasce su un branch temporaneo,
+      # passa la CI e solo dopo `develop` avanza in fast-forward, senza forzature.
       - name: Preserve develop commits and merge promotion history
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           PROMOTED_SHA: ${{ github.sha }}
         run: |
+          set -euo pipefail
           prs="$(gh api "repos/${GH_REPO}/commits/${PROMOTED_SHA}/pulls")"
           allowed="$(jq -r 'any(.[]; .merged_at != null and .base.ref == "main" and .head.ref == "develop" and .head.repo.full_name == .base.repo.full_name)' <<< "${prs}")"
           test "${allowed}" = true
           before="$(gh api "repos/${GH_REPO}/git/ref/heads/develop" --jq '.object.sha')"
-          gh api "repos/${GH_REPO}/merges" -f base=develop -f head="${PROMOTED_SHA}" -f commit_message='chore: riallinea la storia di promozione' > /tmp/alignment.json
-          after="$(gh api "repos/${GH_REPO}/git/ref/heads/develop" --jq '.object.sha')"
-          if [ "${before}" != "${after}" ]; then
-            gh workflow run ci.yml --ref develop -f expected_sha="${after}"
+          status="$(gh api "repos/${GH_REPO}/compare/${before}...${PROMOTED_SHA}" --jq '.status')"
+          if [ "${status}" = behind ] || [ "${status}" = identical ]; then
+            echo "develop contiene già ${PROMOTED_SHA}."
+            exit 0
           fi
+          branch="riallinea/${PROMOTED_SHA}"
+          gh api "repos/${GH_REPO}/git/refs" -f ref="refs/heads/${branch}" -f sha="${before}" > /dev/null
+          trap 'gh api -X DELETE "repos/${GH_REPO}/git/refs/heads/${branch}" > /dev/null 2>&1 || true' EXIT
+          merged="$(gh api "repos/${GH_REPO}/merges" -f base="${branch}" -f head="${PROMOTED_SHA}" -f commit_message='chore: riallinea la storia di promozione' --jq '.sha')"
+          gh workflow run ci.yml --ref "${branch}" -f expected_sha="${merged}"
+          run=""
+          for _ in $(seq 30); do
+            run="$(gh run list --workflow ci.yml --branch "${branch}" --event workflow_dispatch --json databaseId,headSha --jq "map(select(.headSha == \"${merged}\"))[0].databaseId // empty")"
+            [ -n "${run}" ] && break
+            sleep 10
+          done
+          test -n "${run}"
+          gh run watch "${run}" --exit-status > /dev/null
+          gh api -X PATCH "repos/${GH_REPO}/git/refs/heads/develop" -f sha="${merged}" -F force=false > /dev/null
+          echo "develop avanzato a ${merged} dopo la CI ${run}."

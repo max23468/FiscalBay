@@ -48,11 +48,12 @@ export function migrationPlan(migrations, applied, reviewed = "", approved) {
   const pending = migrations.filter(({ name }) => !applied.includes(name));
   const digest = hash(JSON.stringify(pending.map(({ name, digest }) => ({ name, digest }))));
   const unsafe = pending.filter(({ sql }) => {
-    const text = sql.replace(/--[^\n]*|\/\*[\s\S]*?\*\//gu, "");
-    return (
-      /\b(?:DROP|DELETE|UPDATE|INSERT|REPLACE|RENAME|TRIGGER)\b/iu.test(text) ||
-      /\bALTER\s+TABLE\b/iu.test(text)
-    );
+    // Azioni referenziali e nuove colonne non toccano dati esistenti: restano additive.
+    const text = sql
+      .replace(/--[^\n]*|\/\*[\s\S]*?\*\//gu, "")
+      .replace(/\bON\s+(?:DELETE|UPDATE)\b/giu, "")
+      .replace(/\bALTER\s+TABLE\s+\S+\s+ADD\s+(?:COLUMN\s+)?(?!CONSTRAINT\b)/giu, "");
+    return /\b(?:DROP|DELETE|UPDATE|INSERT|REPLACE|RENAME|TRIGGER|ALTER)\b/iu.test(text);
   });
   const resumed =
     approved &&
@@ -90,6 +91,9 @@ export function assertAppliedMigrations(migrations, previous, applied) {
   }
 }
 
+/** Identità registrata nel messaggio della versione Cloudflare, entro 100 caratteri. */
+export const releaseIdentity = (manifest) => `${manifest.sha}:${manifest.digest.slice(0, 32)}`;
+
 /** Passi riprendibili: la fonte dell'esito remoto viene riletta anche dopo un'interruzione. */
 export async function publish(manifest, io, receipt = {}) {
   assertResume(Object.keys(receipt).length ? receipt : null, manifest);
@@ -106,7 +110,7 @@ export async function publish(manifest, io, receipt = {}) {
   delete state.rolledBack;
   const migrations = await io.migrations();
   const current = await io.current();
-  const identity = `${manifest.sha}:${manifest.digest}`;
+  const identity = releaseIdentity(manifest);
   if (current.identity?.startsWith(`${manifest.sha}:`) && current.identity !== identity)
     throw new Error(
       "Commit già distribuito con artefatto diverso: recuperare l'artefatto originale.",
@@ -386,7 +390,7 @@ async function main() {
       !receipt.readback ||
       receipt.rolledBack ||
       current.version !== receipt.version ||
-      current.identity !== `${manifest.sha}:${manifest.digest}`
+      current.identity !== releaseIdentity(manifest)
     )
       throw new Error("Distribuzione o candidato cambiato: release rifiutata.");
     await liveReadback(current.version);

@@ -294,6 +294,7 @@ jobs:
         if: needs.verify.outputs.e2e == 'true'
         env:
           E2E_RUN_ID: test-pages
+          E2E_MATRIX: single
           E2E_BASE_URL: https://test.fiscalbay.it
           BROWSER_GREP: ${{ needs.verify.outputs.grep }}
           E2E_ACCOUNT_PASSWORD: ${{ steps.account.outcome == 'success' && secrets.E2E_ACCOUNT_PASSWORD || '' }}

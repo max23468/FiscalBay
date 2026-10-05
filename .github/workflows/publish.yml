@@ -51,7 +51,7 @@ jobs:
           node-version: 26.10.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium webkit firefox
+      - run: pnpm exec playwright install --with-deps chromium webkit
       - name: Read last published reference
         id: base
         env:
@@ -97,7 +97,7 @@ jobs:
           E2E_RUN_ID: source-full
         run: |
           node scripts/release.mjs verify --environment test
-          node scripts/browser-tests.mjs --browsers chromium,webkit,firefox
+          node scripts/browser-tests.mjs --browsers chromium,webkit
       - name: Check critical mutations
         run: |
           targets="$(tail -1 /tmp/change-plan.log | node -e 'let input="";process.stdin.on("data",c=>input+=c);process.stdin.on("end",()=>process.stdout.write(JSON.parse(input).mutation.join(" ")))')"
@@ -116,7 +116,7 @@ jobs:
           E2E_PREBUILT: "1"
           E2E_MATRIX: full
           E2E_RUN_ID: production-local
-        run: node scripts/browser-tests.mjs --pages --browsers chromium,webkit,firefox
+        run: node scripts/browser-tests.mjs --pages --browsers chromium,webkit
       - name: Record Production provenance
         run: |
           node scripts/release.mjs manifest --environment production
@@ -176,14 +176,14 @@ jobs:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
           REVIEWED_MIGRATIONS: ${{ inputs.reviewed_migrations }}
         run: node scripts/release.mjs deploy --environment production --expected-sha "${EXPECTED_SHA}" --reviewed-migrations "${REVIEWED_MIGRATIONS}"
-      - run: pnpm exec playwright install --with-deps chromium webkit firefox
+      - run: pnpm exec playwright install --with-deps chromium webkit
       - name: Check Production public pages and preview exclusion
         env:
           E2E_BASE_URL: https://fiscalbay.it
           E2E_RUN_ID: production-remote
           E2E_PRODUCTION: "1"
           E2E_MATRIX: full
-        run: node scripts/browser-tests.mjs --pages --browsers chromium,webkit,firefox
+        run: node scripts/browser-tests.mjs --pages --browsers chromium,webkit
       - name: Rollback compatible deployment
         if: failure()
         env:

@@ -10,7 +10,7 @@ const { values } = parseArgs({
   },
 });
 const browsers = values.browsers.split(",");
-if (browsers.some((browser) => !["chromium", "webkit", "firefox"].includes(browser)))
+if (browsers.some((browser) => !["chromium", "webkit"].includes(browser)))
   throw new Error("Browser non supportato.");
 execFileSync(
   "pnpm",

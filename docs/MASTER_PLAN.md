@@ -830,7 +830,7 @@ Pipeline minima: install frozen lockfile → format check → lint → typecheck
 - Dopo una promozione su `main`, `develop` viene riallineato automaticamente ai commit di promozione, così le PR successive non divergono.
 - Il push su `develop` non ripete il gate applicativo su un tree già verificato da una PR dello stesso repository, né su un diff solo documentale: il deploy test distribuisce l'artefatto prodotto dalla verifica, senza ricompilarlo, e un merge solo documentale non ridistribuisce.
 - La CI classifica i file modificati in documentazione, test, runtime e tooling; un file non classificato esegue il gate completo. Le suite pesanti (E2E, concorrenza, mutation) partono solo quando la classificazione le rende pertinenti.
-- La selezione browser segue i consumatori transitivi fino alle route; componenti condivisi e grafo non risolvibile richiedono tutte le prove. Il catalogo delle pagine è confrontato con le route reali e il candidato esegue IT/EN, mobile/desktop, chiaro/scuro nei tre browser. Ambiente locale sintetico, remoto test autenticato e Production anonima producono evidenze distinte nella [procedura di pubblicazione](engineering/RELEASE.md).
+- La selezione browser segue i consumatori transitivi fino alle route; componenti condivisi e grafo non risolvibile richiedono tutte le prove. Il catalogo delle pagine è confrontato con le route reali e il candidato esegue IT/EN, mobile/desktop, chiaro/scuro in Chromium e WebKit. Ambiente locale sintetico, remoto test autenticato e Production anonima producono evidenze distinte nella [procedura di pubblicazione](engineering/RELEASE.md).
 - Mutation test mirati sui domini critici toccati dalla PR: sblocco, quota e grant, diritti Stripe, ingresso webhook. Il perimetro dei file per dominio vive nel repository.
 - Test di repository fanno rispettare le regole di AGENTS: nessuna sigla di milestone, task o fase nel codice, nei test, nelle fixture, nei log e nel copy runtime; fixture solo con host sintetici `.invalid` e senza dati reali; grafo degli import applicativi aciclico; ogni modulo server ha almeno un consumatore runtime; versioni di Node e pnpm coincidenti fra `mise.toml`, `package.json` e workflow.
 
@@ -855,7 +855,7 @@ Il readback del candidato confronta commit/artefatto, schema e configurazione at
 <a id="s35"></a>
 ## 35. Strategia di test e criteri osservabili
 
-Vitest dominio/integrazione; Testing Library e user-event componenti; Playwright E2E; axe come aiuto, non certificazione. Chromium e WebKit sui flussi principali, Firefox prima delle release importanti/regressioni pertinenti. Viewport desktop/mobile più prova reale su Safari/iOS e un browser mobile rappresentativo quando disponibile: emulazione non dimostra comportamento passkey/clipboard/download su dispositivo. Fixture sintetiche o sanitizzate, accesso live controllato quando necessario.
+Vitest dominio/integrazione; Testing Library e user-event componenti; Playwright E2E; axe come aiuto, non certificazione. Chromium e WebKit sui flussi principali e prima delle release; nessun collaudo Firefox dedicato (D156). Viewport desktop/mobile più prova reale su Safari/iOS e un browser mobile rappresentativo quando disponibile: emulazione non dimostra comportamento passkey/clipboard/download su dispositivo. Fixture sintetiche o sanitizzate, accesso live controllato quando necessario.
 
 | Suite critica | Casi minimi bloccanti |
 |---|---|
