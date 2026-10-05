@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { AccessNotice, AccountShell } from "~/components/account";
+import { EbayEnvironmentField, type EbayEnvironment } from "~/components/ebay-environment";
 import { EmptyState } from "~/components/empty-state";
 import { PageTitle } from "~/components/icon-tile";
 import { Logo } from "~/components/standalone-page";
@@ -27,13 +28,6 @@ import {
 } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { createAuth } from "../auth.server";
 import { registrationStatus } from "../domain/registration.server";
@@ -905,41 +899,15 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 }
 
 /** Ambiente eBay degli ordini mostrati, sul solo dominio di test: lo stesso campo dei filtri. */
-function EnvironmentSelect({
-  language,
-  value,
-}: {
-  language: Language;
-  value: "production" | "sandbox";
-}) {
-  const t = appCopy[language].storeLink;
+function EnvironmentSelect({ language, value }: { language: Language; value: EbayEnvironment }) {
   const navigate = useNavigate();
-  const items = (["production", "sandbox"] as const).map((environment) => ({
-    value: environment,
-    label: t[environment],
-  }));
   return (
-    <Field className="sm:max-w-sm">
-      <FieldLabel htmlFor="ebay-environment">{t.environment}</FieldLabel>
-      <Select
-        items={items}
-        value={value}
-        onValueChange={(next) =>
-          void navigate(`${localizedPath(language)}?environment=${String(next)}`)
-        }
-      >
-        <SelectTrigger id="ebay-environment" className="w-full min-w-0">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {items.map((item) => (
-            <SelectItem key={item.value} value={item.value}>
-              {item.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </Field>
+    <EbayEnvironmentField
+      language={language}
+      className="sm:max-w-sm"
+      value={value}
+      onValueChange={(next) => void navigate(`${localizedPath(language)}?environment=${next}`)}
+    />
   );
 }
 

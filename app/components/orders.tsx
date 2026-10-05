@@ -1218,7 +1218,7 @@ function FilterSelect({
         <SelectTrigger id={id} className="w-full min-w-0">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent alignItemWithTrigger={false} align="start" className="min-w-0">
+        <SelectContent className="min-w-0">
           {items.map((item) => (
             <SelectItem key={item.value} value={item.value} disabled={item.premium}>
               {item.label}
