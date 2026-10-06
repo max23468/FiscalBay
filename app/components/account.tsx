@@ -1,4 +1,4 @@
-import { ClipboardList, KeyRound, Languages, ShieldCheck, Store, User } from "lucide-react";
+import { ClipboardList, Globe, KeyRound, Languages, ShieldCheck, Store, User } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useLocation, useSubmit } from "react-router";
@@ -24,7 +24,7 @@ import type { ActiveSession } from "../domain/sessions.server";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
 import type { AccessNoticeView } from "../access-notice";
 import { appCopy } from "../app-copy";
-import { securityPath } from "../app-links";
+import { accessPath, appBase, appHref, securityPath, visitParam } from "../app-links";
 import { languageNames, localizedPath, type Language } from "../i18n";
 import { formatDate, formatRelative } from "../view-models";
 
@@ -94,7 +94,7 @@ function MethodAction({
   const form = (
     <form
       method="post"
-      action={actionPath ?? localizedPath(language, "/accesso")}
+      action={actionPath ?? localizedPath(language, accessPath)}
       onSubmit={simulated ? () => setOpen(false) : undefined}
     >
       {method ? <input type="hidden" name="metodo" value={method} /> : null}
@@ -322,7 +322,7 @@ export function AccountSecurity({
   const { access: t, settings } = appCopy[language];
   const { pathname } = useLocation();
   // Anche senza JavaScript i form dell'anteprima restano nella route simulata.
-  const actionPath = onAction ? pathname : localizedPath(language, "/accesso");
+  const actionPath = onAction ? pathname : localizedPath(language, accessPath);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
   const status = (connected: boolean) =>
@@ -536,7 +536,7 @@ export function AccessNotice({
       >
         {notice.text === t.signInNotices["nuovo-accesso"] ||
         notice.text === t.signInNotices["conferma-passkey"] ? (
-          <form method="post" action={localizedPath(language, "/accesso")}>
+          <form method="post" action={localizedPath(language, accessPath)}>
             <Button type="submit" variant="outline" size="sm" name="intent" value="esci">
               {t.signOutSignIn}
             </Button>
@@ -576,30 +576,26 @@ export function AccountShell({
   const { pathname } = useLocation();
   const other: Language = language === "it" ? "en" : "it";
   const bare = pathname.replace(/^\/en(?=\/|$)/u, "") || "/";
+  const links = { language, base: appBase };
   return (
     <AppShell
-      links={{ language, base: "" }}
+      links={links}
       t={t}
       account={account}
       navigation={
         security
           ? [
-              {
-                href: localizedPath(language),
-                label: t.shell.orders,
-                Icon: ClipboardList,
-                end: true,
-              },
-              { href: localizedPath(language, "/negozi"), label: t.shell.stores, Icon: Store },
+              { href: appHref(links, "ordini"), label: t.shell.orders, Icon: ClipboardList },
+              { href: appHref(links, "negozi"), label: t.shell.stores, Icon: Store },
             ]
           : []
       }
-      home={localizedPath(language)}
+      home={appHref(links, "ordini")}
       menu={[
         ...(security
           ? [
               [
-                { href: localizedPath(language, "/profilo"), label: t.shell.profile, Icon: User },
+                { href: appHref(links, "profilo"), label: t.shell.profile, Icon: User },
                 {
                   href: localizedPath(language, securityPath),
                   label: t.shell.security,
@@ -616,12 +612,18 @@ export function AccountShell({
             lang: other,
             reloadDocument: true,
           },
+          {
+            href: `${localizedPath(language)}?${visitParam}=1`,
+            label: t.shell.visitSite,
+            Icon: Globe,
+            reloadDocument: true,
+          },
         ],
       ]}
       onSignOut={() =>
         void submit(
           { intent: "esci" },
-          { method: "post", action: localizedPath(language, "/accesso") },
+          { method: "post", action: localizedPath(language, accessPath) },
         )
       }
     >

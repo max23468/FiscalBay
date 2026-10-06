@@ -6,6 +6,7 @@ import { StandalonePage } from "~/components/standalone-page";
 import { buttonVariants } from "~/components/ui/button-variants";
 import type { Route } from "./+types/auth-error";
 import { appCopy } from "../app-copy";
+import { accessPath } from "../app-links";
 import { languageFromPath, localizedPath } from "../i18n";
 
 type AuthErrorCopy = (typeof appCopy)["it"]["authError"];
@@ -55,8 +56,9 @@ export default function AuthError({ matches }: Route.ComponentProps) {
       <a href="mailto:supporto@fiscalbay.it" className="w-fit underline underline-offset-4">
         {t.support}: supporto@fiscalbay.it
       </a>
+      {/* Si torna all'accesso; con la sessione l'accesso porta all'app. */}
       <a
-        href={localizedPath(language)}
+        href={localizedPath(language, accessPath)}
         data-slot="button"
         className={cn(buttonVariants({ variant: "outline" }), "w-fit")}
       >

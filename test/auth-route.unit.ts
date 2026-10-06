@@ -366,10 +366,10 @@ describe("callback eBay", () => {
   });
 
   it.each([
-    ["s", "production", "collegato", "/?negozio=collegato"],
-    ["en_s", "sandbox", "collegato", "/en?negozio=collegato&environment=sandbox"],
-    ["english", "production", null, "/"],
-    ["en_s", "sandbox", null, "/en?environment=sandbox"],
+    ["s", "production", "collegato", "/app/ordini?negozio=collegato"],
+    ["en_s", "sandbox", "collegato", "/en/app/ordini?negozio=collegato&environment=sandbox"],
+    ["english", "production", null, "/app/ordini"],
+    ["en_s", "sandbox", null, "/en/app/ordini?environment=sandbox"],
   ])(
     "ripete l'esito del callback per il suo utente (%s, %s, %s)",
     async (state, ebayEnvironment, outcome, destination) => {
@@ -399,7 +399,7 @@ describe("callback eBay", () => {
         outcome: "collegato",
       });
       expect((await handle("/api/auth/callback/ebay?state=s&code=c")).headers.get("location")).toBe(
-        "https://test.fiscalbay.it/?negozio=errore",
+        "https://test.fiscalbay.it/app/ordini?negozio=errore",
       );
     },
   );
@@ -428,7 +428,7 @@ describe("callback eBay", () => {
       fails ? "errore" : "collegato",
     );
     expect(response.headers.get("location")).toBe(
-      `https://test.fiscalbay.it/?negozio=${fails ? "errore" : "collegato"}`,
+      `https://test.fiscalbay.it/app/ordini?negozio=${fails ? "errore" : "collegato"}`,
     );
     expect(services.failure.mock.calls).toEqual(
       fails ? [[{ request: input, error, operation: "store_link" }]] : [],

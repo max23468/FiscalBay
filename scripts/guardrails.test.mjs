@@ -206,12 +206,9 @@ describe("classificazione dei file modificati", () => {
       path: "app/routes/home.tsx",
       text: 'import { load } from "../domain/stores.server";',
     });
-    assert.deepEqual(changePlan([files[0].path], files).areas, [
-      "auth",
-      "orders",
-      "public",
-      "stores",
-    ]);
+    assert.deepEqual(changePlan([files[0].path], files).areas, ["auth", "orders", "stores"]);
+    files.push({ path: "app/routes/site.tsx", text: "" });
+    assert.deepEqual(changePlan(["app/routes/site.tsx"], files).areas, ["public"]);
     assert.equal(changePlan(["app/new-module.ts"], files).mode, "full");
   });
 
