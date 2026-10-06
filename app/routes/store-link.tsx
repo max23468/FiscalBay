@@ -10,7 +10,7 @@ import { buttonVariants } from "~/components/ui/button-variants";
 import { appCopy } from "../app-copy";
 import { createAuth } from "../auth.server";
 import { registrationComplete, registrationStatus } from "../domain/registration.server";
-import { errorResponse, traceDatabase, tracePhase } from "../errors";
+import { errorResponse, tracePhase } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
 import { startStoreLink } from "../integrations/ebay/store-link.server";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
@@ -38,7 +38,6 @@ type Eligibility = { blocked: "session" | "email" | "registration" } | { userId:
 
 /** Il collegamento richiede sessione, email verificata e registrazione completa. */
 async function eligibility(request: Request): Promise<Eligibility> {
-  await traceDatabase(request, env.DB);
   const session = await createAuth(env).api.getSession({ headers: request.headers });
   tracePhase(request, "session");
   if (!session) return { blocked: "session" };
