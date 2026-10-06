@@ -1,3 +1,5 @@
+import { testAccount } from "./test-account.ts";
+
 /** Scenari delle route esistenti: le azioni esterne non vengono inviate dal collaudo. */
 export type PageRole = "anonymous" | "member" | "admin-verify" | "admin-granted";
 export interface PageCase {
@@ -72,11 +74,12 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
       pattern: `${prefix}/negozi/collega`,
     }),
     make("/negozi", "stores", { pattern: `${prefix}/negozi/:negozio?`, redirect: home }),
-    ...["", "/non-esiste"].map((suffix) =>
+    // Un negozio inesistente o di un altro spazio risponde 404 dentro la shell.
+    ...["", `/${testAccount.stores.active}`, "/non-esiste"].map((suffix) =>
       make(`/negozi${suffix}`, "stores", {
         role: "member",
         pattern: `${prefix}/negozi/:negozio?`,
-        status: suffix ? 404 : 200,
+        status: suffix === "/non-esiste" ? 404 : 200,
       }),
     ),
     make("/profilo", "profile", { redirect: home }),
