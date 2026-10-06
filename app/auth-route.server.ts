@@ -123,11 +123,12 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
     if (!session.user.emailVerified || !recentSignIn(session as AuthSession)) {
       return new Response(null, { status: 403 });
     }
-    const body = await request
-      .clone()
-      .json()
-      // Stryker disable next-line ArrowFunction: null e undefined danno lo stesso rifiuto.
-      .catch(() => null);
+    let body: unknown = null;
+    try {
+      body = await request.clone().json();
+    } catch {
+      // Un corpo non valido resta null e viene rifiutato sotto.
+    }
     if (typeof body !== "object" || body === null || "idToken" in body) {
       return new Response(null, { status: 400 });
     }

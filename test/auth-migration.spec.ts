@@ -1713,7 +1713,6 @@ describe("confine delle route Auth", () => {
   it("toglie a volte le finestre chiuse da oltre un'ora", async () => {
     const start = 1_900_000_000_000;
     const clock = vi.spyOn(Date, "now").mockReturnValue(start);
-    const random = vi.spyOn(Math, "random");
     const windows = async (old: number) => {
       await env.DB.prepare('DELETE FROM "rateLimit" WHERE "key" LIKE ?').bind("pulizia|%").run();
       for (const [key, last] of [
@@ -1743,14 +1742,16 @@ describe("confine delle route Auth", () => {
         [0.5, ["pulizia|recente", "pulizia|vecchia"]],
       ] as const) {
         await windows(start - 3_600_001);
-        random.mockReturnValue(value);
-        await send("/sign-in/email", "198.51.100.30");
-        random.mockRestore();
+        const random = vi.spyOn(Math, "random").mockReturnValue(value);
+        try {
+          await send("/sign-in/email", "198.51.100.30");
+        } finally {
+          random.mockRestore();
+        }
         expect(await remaining()).toEqual(expected);
       }
     } finally {
       clock.mockRestore();
-      random.mockRestore();
     }
   });
 
