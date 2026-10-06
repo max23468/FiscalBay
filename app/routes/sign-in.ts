@@ -22,7 +22,7 @@ import {
   type AuthSession,
 } from "../domain/sessions.server";
 import { securityPath } from "../app-links";
-import { errorResponse } from "../errors";
+import { errorResponse, tracePhase } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
 import type { Route } from "./+types/sign-in";
 
@@ -55,14 +55,19 @@ export async function action({ request }: Route.ActionArgs) {
     return errorResponse(request, "FORBIDDEN");
   }
   const form = await request.formData();
+  tracePhase(request, "form");
   const field = (name: string) => String(form.get(name) ?? "");
   const intent = field("intent");
   // Le azioni di Sicurezza riportano alla sua pagina, le altre alla radice.
   const security = localizedPath(language, securityPath);
   const back = securityIntents.has(intent) ? security : base;
   const notice = (value: string, page = back) => redirect(`${page}?accesso=${value}`, 303);
-  const forward = (path: string, body?: Record<string, unknown>) =>
-    forwardToAuth(env, request, path, body);
+  const forward = async (path: string, body?: Record<string, unknown>) => {
+    tracePhase(request, "auth-forward");
+    const response = await forwardToAuth(env, request, path, body);
+    tracePhase(request, "auth-response");
+    return response;
+  };
 
   if (intent === "esci") return withCookies(base, await forward("/sign-out"));
 
