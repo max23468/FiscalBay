@@ -43,17 +43,37 @@ export async function resetStatements(password, now = new Date()) {
       iso,
       rejectedAt,
     ]);
-  const summary = (title) =>
-    JSON.stringify({
-      buyer: { username: "acquirente-collaudo" },
-      orderPaymentStatus: "PAID",
-      orderFulfillmentStatus: "NOT_STARTED",
-      lineItems: [
-        { lineItemId: `riga-${title}`, title: `Articolo di collaudo ${title}`, quantity: 1 },
-      ],
-    });
-  const order = (id, ebayOrderId, title, offset) =>
-    row([id, stores.active, ebayOrderId, at(offset), at(offset), "EUR", 1250, summary(title)]);
+  const buyer = JSON.stringify({
+    username: "acquirente-collaudo",
+    name: null,
+    email: null,
+    phone: null,
+    billingAddress: null,
+    shipTo: null,
+  });
+  const order = (id, ebayOrderId, offset) =>
+    row([
+      id,
+      stores.active,
+      ebayOrderId,
+      at(offset),
+      at(offset),
+      "EUR",
+      1250,
+      "PAID",
+      "NOT_STARTED",
+      buyer,
+    ]);
+  const item = (orderId, title) =>
+    row([
+      `${orderId}-riga`,
+      orderId,
+      `riga-${title}`,
+      `Articolo di collaudo ${title}`,
+      1,
+      1250,
+      "EUR",
+    ]);
 
   return [
     `DELETE FROM session WHERE "userId" = ${quote(userId)};`,
@@ -92,10 +112,15 @@ export async function resetStatements(password, now = new Date()) {
     `INSERT INTO ebay_store_pauses (store_id, reason, paused_at)
      VALUES ${row([stores.paused, "manual", iso])};`,
     `INSERT INTO orders
-       (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor, summary_json)
+       (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor,
+        payment_status, fulfillment_status, buyer_json)
      VALUES
-     ${order("collaudo-ordine-sbloccato", orders.unlocked, "A", -2 * 60 * 60 * 1000)},
-     ${order("collaudo-ordine-bloccato", orders.locked, "B", -60 * 60 * 1000)};`,
+     ${order("collaudo-ordine-sbloccato", orders.unlocked, -2 * 60 * 60 * 1000)},
+     ${order("collaudo-ordine-bloccato", orders.locked, -60 * 60 * 1000)};`,
+    `INSERT INTO order_items (id, order_id, line_item_id, title, quantity, total_minor, currency)
+     VALUES
+     ${item("collaudo-ordine-sbloccato", "A")},
+     ${item("collaudo-ordine-bloccato", "B")};`,
     `INSERT INTO tax_identifiers (id, order_id, identifier_type, issuing_country, value, source, observed_at)
      VALUES
      ${row(["collaudo-cf-sbloccato", "collaudo-ordine-sbloccato", "CODICE_FISCALE", "IT", taxCodes.unlocked, "synthetic_fixture", iso])},

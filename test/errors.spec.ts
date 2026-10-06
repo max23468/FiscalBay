@@ -9,6 +9,7 @@ import {
 } from "../app/errors";
 import { appCopy } from "../app/app-copy";
 import { formatAmount, languageFromPath, localizedPath } from "../app/i18n";
+import { minorToDecimal, parseMinor } from "../app/money";
 import { formatDate } from "../app/view-models";
 import { loader as loadAccess } from "../app/routes/sign-in";
 
@@ -106,6 +107,15 @@ describe("errors, locale and redacted logs", () => {
     expect(formatAmount(124900, "EUR", "it")).toContain("1249,00");
     expect(formatAmount(1234560, "EUR", "it")).toContain("12.345,60");
     expect(formatAmount(124900, "EUR", "en")).toContain("1,249.00");
+    // L'esponente segue la valuta: lo yen non ha decimali, il dinaro kuwaitiano tre.
+    expect(formatAmount(1000, "JPY", "en")).toContain("1,000");
+    expect(formatAmount(1000, "JPY", "en")).not.toContain(".");
+    expect(parseMinor("12.5", "EUR")).toBe(1250);
+    expect(parseMinor("1.234", "KWD")).toBe(1234);
+    expect(parseMinor("12.500", "EUR")).toBe(1250);
+    expect(() => parseMinor("1.5", "JPY")).toThrow("inexact_amount");
+    expect(() => parseMinor("-1", "EUR")).toThrow("invalid_amount");
+    expect([minorToDecimal(5, "EUR"), minorToDecimal(1000, "JPY")]).toEqual(["0.05", "1000"]);
     expect(() => formatDate("bad", "it")).toThrow();
   });
 

@@ -1,23 +1,113 @@
 import { z } from "zod";
 
+import type { OrderObservation } from "../../domain/order-import.server";
+import { parseMinor } from "../../money";
 import { retryAfterSeconds } from "../http.server";
 
-/** Proiezione per card e dettaglio: i campi estranei, inclusi i dati fiscali, sono esclusi. */
-export const orderSummarySchema = z.object({
-  buyer: z.object({ username: z.string().optional() }).nullish(),
-  orderPaymentStatus: z.string().nullish(),
-  orderFulfillmentStatus: z.string().nullish(),
-  lineItems: z
+const text = z.string().optional();
+const amount = z.looseObject({ value: z.string(), currency: z.string() });
+const contactAddress = z
+  .looseObject({
+    addressLine1: text,
+    addressLine2: text,
+    city: text,
+    postalCode: text,
+    stateOrProvince: text,
+    countryCode: text,
+  })
+  .optional();
+const phone = z.looseObject({ phoneNumber: text }).optional();
+
+/** Campi dell'ordine Fulfillment usati dal modello; gli altri, inclusi i dati fiscali, no. */
+export const fulfillmentOrderDetailSchema = z.looseObject({
+  orderId: z.string().min(1),
+  creationDate: z.iso.datetime(),
+  lastModifiedDate: z.iso.datetime(),
+  orderPaymentStatus: text,
+  orderFulfillmentStatus: text,
+  cancelStatus: z.looseObject({ cancelState: text }).optional(),
+  pricingSummary: z.looseObject({ total: amount }),
+  buyer: z
+    .looseObject({
+      username: text,
+      buyerRegistrationAddress: z
+        .looseObject({ fullName: text, email: text, primaryPhone: phone, contactAddress })
+        .optional(),
+    })
+    .optional(),
+  fulfillmentStartInstructions: z
     .array(
-      z.object({
-        lineItemId: z.string(),
-        title: z.string(),
-        quantity: z.number().int().positive(),
-        sku: z.string().optional(),
+      z.looseObject({
+        shippingStep: z
+          .looseObject({
+            shipTo: z
+              .looseObject({ fullName: text, primaryPhone: phone, contactAddress })
+              .optional(),
+          })
+          .optional(),
       }),
     )
     .optional(),
+  lineItems: z
+    .array(
+      z.looseObject({
+        lineItemId: z.string().min(1),
+        legacyItemId: text,
+        title: z.string(),
+        sku: text,
+        quantity: z.number().int().positive(),
+        lineItemCost: amount.optional(),
+        listingMarketplaceId: text,
+      }),
+    )
+    .default([]),
 });
+
+/** Lettura Fulfillment come osservazione del modello ordini, con importi esatti. */
+export function fulfillmentObservation(payload: unknown): OrderObservation {
+  const order = fulfillmentOrderDetailSchema.parse(payload);
+  const registration = order.buyer?.buyerRegistrationAddress;
+  const shipTo = order.fulfillmentStartInstructions?.[0]?.shippingStep?.shipTo;
+  const marketplaces = new Set(order.lineItems.map((item) => item.listingMarketplaceId));
+  const money = ({ value, currency }: z.infer<typeof amount>) => ({
+    minor: parseMinor(value, currency),
+    currency,
+  });
+  return {
+    source: "fulfillment",
+    externalOrderId: order.orderId,
+    provisional: false,
+    creationTime: order.creationDate,
+    lastModifiedTime: order.lastModifiedDate,
+    marketplaceId: marketplaces.size === 1 ? [...marketplaces][0] : null,
+    total: money(order.pricingSummary.total),
+    paymentStatus: order.orderPaymentStatus,
+    fulfillmentStatus: order.orderFulfillmentStatus,
+    cancelStatus: order.cancelStatus?.cancelState,
+    buyer: {
+      username: order.buyer?.username,
+      name: registration?.fullName,
+      email: registration?.email,
+      phone: registration?.primaryPhone?.phoneNumber,
+      billingAddress: registration?.contactAddress,
+      shipTo: shipTo && {
+        name: shipTo.fullName,
+        phone: shipTo.primaryPhone?.phoneNumber,
+        address: shipTo.contactAddress,
+      },
+    },
+    items: order.lineItems.map((item) => ({
+      lineItemId: item.lineItemId,
+      // Stessa forma di `OrderLineItemID` Trading (articolo-transazione), da qualificare
+      // sugli ordini combinati: senza coincidenza gli ordini restano distinti.
+      stableKey: item.legacyItemId ? `${item.legacyItemId}-${item.lineItemId}` : null,
+      title: item.title,
+      sku: item.sku,
+      quantity: item.quantity,
+      total: item.lineItemCost ? money(item.lineItemCost) : null,
+    })),
+  };
+}
 
 const fulfillmentOrderSchema = z.looseObject({ orderId: z.string().min(1) });
 const fulfillmentPageSchema = z.looseObject({

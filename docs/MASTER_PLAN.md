@@ -962,7 +962,7 @@ Ogni milestone elenca in coda i propri task (D164) con codice `Mx-yy`, stato (`D
 | [M0](#m0) | Completata | Candidato Workers/D1/Queues/Better Auth qualificato e approvato; slice reale controllata, Stripe sandbox e recovery nativa preliminare. Via del 2026-09-23; prove nella storia Git precedente alla rimozione del tracker. Capacità pubblica, integrazioni e prove live finali restano nelle milestone competenti. |
 | [M1](#m1) | Completata | Fondazioni, ambienti, logo, design system e prototipo approvati entro il 2026-09-28; fonti tecniche in codice/test/config e [design system](brand/DESIGN_SYSTEM.md). Cutover repository in [#163](https://github.com/max23468/FiscalBay/pull/163); la dismissione remota 1.x resta aperta. |
 | [M2](#m2) | Completata | Account, quattro login, sessioni/MFA admin, OAuth seller, pause/scollegamento, Negozi/Profilo e routing collaudati sul test il 2026-10-06, compreso il primo rinnovo dei token dal cron. Login/linking eBay reali in M8 (D160), cancellazione account in M6 (D163). Riferimenti: [#229](https://github.com/max23468/FiscalBay/pull/229), [#241](https://github.com/max23468/FiscalBay/pull/241), [#245](https://github.com/max23468/FiscalBay/pull/245), [#269](https://github.com/max23468/FiscalBay/pull/269), [#270](https://github.com/max23468/FiscalBay/pull/270), [#296](https://github.com/max23468/FiscalBay/pull/296). |
-| [M3](#m3) | Da completare | Acquisizione iniziale al collegamento e riepilogo minimo disponibili; sync continuativa, modello completo, riqualifica fiscale, grant, retention e ingresso eventi da integrare. |
+| [M3](#m3) | In corso | Modello ordini strutturato (stato corrente, snapshot buyer, articoli, chiavi esterne per fonte, storico fiscale, riconciliazione per identità di riga) e acquisizione iniziale al collegamento disponibili; sync continuativa, riqualifica fiscale, grant, retention e ingresso eventi da integrare. |
 | [M4](#m4) | Da completare | Anteprima e componenti condivisi disponibili; ricerca, preferenze persistenti, campanella, onboarding e pagina Ordini definitiva da integrare nei percorsi reali. |
 | [M5](#m5) | Da completare | Stripe e generatori di diritti qualificati preliminarmente; billing reale, ciclo commerciale e Telegram da integrare. Checkpoint live in attesa. |
 | [M6](#m6) | Da completare | Generatori export e sito pubblico minimo disponibili; export autenticato, cancellazione account, console, supporto, sito completo e KPI da integrare. |
@@ -1369,7 +1369,7 @@ Qualifica rinviata da M0-04 per decisione owner del 2026-09-23: provare sul domi
 <a id="m3-01"></a>
 #### M3-01 · Modello ordini, articoli e buyer
 
-**Stato:** Da completare · **Prerequisiti:** M2, G-DATA · **Contratto:** [§9](#s09) · [§27](#s27)
+**Stato:** Completato · **Prerequisiti:** M2, G-DATA · **Contratto:** [§9](#s09) · [§27](#s27)
 
 Implementare stato corrente e snapshot degli ordini, mapping delle chiavi esterne, importi esatti, UTC e dati fiscali separati. Mantenere articoli e buyer nel modello qualificato.
 
@@ -1378,6 +1378,8 @@ Provare identità provvisoria→definitiva e arrivo invertito Trading/Fulfillmen
 **Criterio di completamento:** Importazioni multi-articolo idempotenti; valori monetari precisi; modificare l’anagrafica corrente non riscrive lo storico dell’ordine.
 
 Entità logiche accorpabili quando sicuro; mantenere dati correnti e snapshot dell’ordine senza duplicati a ogni sync. Lo storico di tutte le variazioni fiscali effettive resta richiesto.
+
+**Limiti residui:** l'identità stabile ricavata da Fulfillment (articolo e riga) ha la forma di `OrderLineItemID` Trading ma non è provata su ordini combinati reali: senza coincidenza gli ordini restano distinti, mai uniti. Il consolidamento di più provvisori in un definitivo resta un'anomalia esplicita fino a M3-09; la rimozione autorevole di un identificativo si applica solo quando la fonte la dichiara, e la lettura Trading al collegamento non lo fa ancora (M3-05). Migration non ancora applicata al test.
 
 <a id="m3-02"></a>
 #### M3-02 · Client eBay e normalizzazione

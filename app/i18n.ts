@@ -1,3 +1,5 @@
+import { currencyExponent } from "./money";
+
 export const languages = ["it", "en"] as const;
 export type Language = (typeof languages)[number];
 
@@ -19,16 +21,15 @@ export function localizedPath(language: Language, path = "/"): string {
 const amountGrouping = { it: "min2", en: "always" } as const;
 
 export function formatAmount(minor: number, currency: string, language: Language): string {
-  if (!Number.isSafeInteger(minor) || !/^[A-Z]{3}$/u.test(currency)) {
-    throw new RangeError("invalid_amount");
-  }
+  if (!Number.isSafeInteger(minor)) throw new RangeError("invalid_amount");
+  const exponent = currencyExponent(currency);
   return new Intl.NumberFormat(locales[language], {
     style: "currency",
     currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: exponent,
+    maximumFractionDigits: exponent,
     // CLDR ha cambiato il raggruppamento italiano (1249 contro 1.249): una regola esplicita
     // evita testi diversi fra server e browser con dati ICU meno recenti.
     useGrouping: amountGrouping[language],
-  }).format(minor / 100);
+  }).format(minor / 10 ** exponent);
 }
