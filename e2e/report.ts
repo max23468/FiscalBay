@@ -5,6 +5,8 @@ import type { FullResult, Reporter, TestCase, TestResult } from "@playwright/tes
 /** Ricevuta senza DOM, cookie, password o dati applicativi; fallimenti nei trace locali. */
 export default class Report implements Reporter {
   rows: Array<{
+    id: string;
+    retry: number;
     page: string;
     project: string;
     status: string;
@@ -16,7 +18,11 @@ export default class Report implements Reporter {
     omissions: string[];
   }> = [];
   onTestEnd(test: TestCase, result: TestResult) {
+    // Con la ripetizione remota conta l'ultimo tentativo; `retry` distingue le prove instabili.
+    this.rows = this.rows.filter((row) => row.id !== test.id);
     this.rows.push({
+      id: test.id,
+      retry: result.retry,
       page: test.title,
       project: test.parent.project()?.name ?? "",
       status: result.status,
@@ -44,6 +50,10 @@ export default class Report implements Reporter {
         this.rows.filter((row) => row.status === status).length,
       ]),
     );
+    const flaky = this.rows.filter((row) => row.status === "passed" && row.retry > 0);
+    counts.flaky = flaky.length;
+    for (const row of flaky)
+      console.log(`::warning::Prova instabile, riuscita alla ripetizione: ${row.page}`);
     const partial = this.rows.some(
       (row) => row.status === "skipped" && !row.reason.startsWith("Non applicabile:"),
     );
@@ -74,7 +84,7 @@ export default class Report implements Reporter {
       const escape = (text: string) => text.replaceAll("|", "\\|").replaceAll("\n", " ");
       appendFileSync(
         process.env.GITHUB_STEP_SUMMARY,
-        `\n### Collaudo browser: ${result.status}${partial ? ", parziale" : ""}\n\n${JSON.stringify(counts)}\n\n| Pagina o scenario | Browser | Esito | Secondi | Controlli eseguiti | Omissioni |\n|---|---|---|---|---|---|\n${this.rows.map((row) => `| ${escape(row.page)} | ${row.project} | ${row.status} | ${(row.durationMs / 1000).toFixed(1)} | ${escape(row.checks.join(", "))} | ${escape([row.reason, ...row.omissions].filter(Boolean).join("; "))} |`).join("\n")}\n`,
+        `\n### Collaudo browser: ${result.status}${partial ? ", parziale" : ""}\n\n${JSON.stringify(counts)}\n\n| Pagina o scenario | Browser | Esito | Secondi | Controlli eseguiti | Omissioni |\n|---|---|---|---|---|---|\n${this.rows.map((row) => `| ${escape(row.page)} | ${row.project} | ${row.status} | ${(row.durationMs / 1000).toFixed(1)} | ${escape(row.checks.join(", "))} | ${escape([row.reason, ...row.omissions, ...(row.retry ? [`riuscita alla ripetizione ${row.retry}`] : [])].filter(Boolean).join("; "))} |`).join("\n")}\n`,
       );
     }
   }

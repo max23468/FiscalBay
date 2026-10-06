@@ -7,6 +7,9 @@ export default defineConfig({
   // Sul dominio test l'account di collaudo è unico; in CI ogni macchina esegue una parte.
   workers: process.env.E2E_BASE_URL ? 1 : process.env.CI ? 4 : 2,
   fullyParallel: true,
+  // Sul dominio remoto una sola ripetizione separa l'instabilità della rete da un difetto:
+  // una prova che fallisce due volte fa ancora tornare indietro il deploy.
+  retries: process.env.E2E_BASE_URL ? 1 : 0,
   globalSetup: "./e2e/setup.ts",
   reporter: [["list"], ["./e2e/report.ts"]],
   forbidOnly: !!process.env.CI,
