@@ -68,7 +68,7 @@ const attemptLimits = [
 /** Un indirizzo IPv6 conta per la sua rete /64, che un singolo client controlla per intero. */
 function clientKey(ip: string): string {
   if (!ip.includes(":")) return ip;
-  const [head = "", tail = ""] = ip.split("::");
+  const [head, tail = ""] = ip.split("::");
   const left = head ? head.split(":") : [];
   const right = tail ? tail.split(":") : [];
   const groups = [...left, ...Array(8 - left.length - right.length).fill("0"), ...right];
@@ -124,7 +124,7 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
     const body = await request
       .clone()
       .json()
-      .catch(() => null);
+      .catch(() => undefined);
     if (typeof body !== "object" || body === null || "idToken" in body) {
       return new Response(null, { status: 400 });
     }
@@ -194,7 +194,12 @@ async function handleEbayCallback(
     });
     await recordStoreLinkOutcome(environment.DB, state, outcome);
   }
-  const home = localizedPath(state.startsWith("en_") ? "en" : "it");
+  const home = localizedPath(
+    state.startsWith("en_")
+      ? "en"
+      : // Stryker disable next-line StringLiteral: la stringa vuota e it selezionano entrambe la radice italiana in localizedPath.
+        "it",
+  );
   const query = new URLSearchParams();
   if (outcome) query.set("negozio", outcome);
   if (link.ebayEnvironment === "sandbox") query.set("environment", "sandbox");

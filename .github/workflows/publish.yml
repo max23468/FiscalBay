@@ -29,15 +29,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  qualify:
-    name: Qualifica candidato
+  plan:
+    name: Verifica candidato e pianifica
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 5
+    outputs:
+      mutation: ${{ steps.plan.outputs.mutation }}
+      mutation-matrix: ${{ steps.plan.outputs.mutation-matrix }}
+      promotion-reuse: ${{ steps.plan.outputs.promotion-reuse }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26.10.0
       - name: Check candidate
         env:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
@@ -50,15 +57,6 @@ jobs:
           test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
           if [ "${PROVA}" != true ]; then node scripts/release.mjs readiness; fi
           if [ "${PROVA}" != true ] || [ -n "${VERSION}" ]; then node scripts/release-notes.mjs "${VERSION}"; fi
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 12.9.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 26.10.0
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium webkit
       - name: Read last published reference
         id: base
         env:
@@ -74,10 +72,37 @@ jobs:
         run: |
           base="${BASE_REF}"
           node scripts/classify-changes.mjs --base "${base}" --head HEAD --complete --github-output
-          node scripts/classify-changes.mjs --base "${base}" --head HEAD --complete --json > /tmp/change-plan.log
+
+  mutation:
+    name: Mutation candidato
+    needs: plan
+    if: needs.plan.outputs.mutation != ''
+    uses: ./.github/workflows/mutation.yml
+    with:
+      targets: ${{ needs.plan.outputs.mutation-matrix }}
+
+  qualify:
+    name: Qualifica candidato
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 12.9.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26.10.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium webkit
       - name: Find verified source artifact
         id: reuse
-        if: steps.plan.outputs.promotion-reuse == 'true'
+        if: needs.plan.outputs.promotion-reuse == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -105,13 +130,6 @@ jobs:
         run: |
           node scripts/release.mjs verify --environment test
           node scripts/browser-tests.mjs --browsers chromium,webkit
-      - name: Check critical mutations
-        run: |
-          targets="$(tail -1 /tmp/change-plan.log | node -e 'let input="";process.stdin.on("data",c=>input+=c);process.stdin.on("end",()=>process.stdout.write(JSON.parse(input).mutation.join(" ")))')"
-          if [ -n "${targets}" ]; then
-            read -ra files <<< "${targets}"
-            pnpm test:mutation "${files[@]}"
-          fi
       - name: Build Production artifact
         env:
           CLOUDFLARE_ENV: production
@@ -143,8 +161,8 @@ jobs:
 
   publish:
     name: Distribuisci e verifica
-    needs: qualify
-    if: ${{ !inputs.prova }}
+    needs: [qualify, mutation]
+    if: ${{ !inputs.prova && !cancelled() && needs.qualify.result == 'success' && (needs.mutation.result == 'success' || needs.mutation.result == 'skipped') }}
     environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 45
