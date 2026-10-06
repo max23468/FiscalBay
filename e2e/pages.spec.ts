@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { type BrowserContext, expect, test } from "@playwright/test";
 import { localCookie } from "./local-account";
 import { pageCases, knownPagePath } from "./page-cases";
 import { testAccount } from "./test-account";
@@ -30,6 +30,10 @@ const scenarios = production
           index,
     )
   : pageCases;
+// Sul dominio remoto l'accesso avviene una volta per worker: le visite riusano la sessione,
+// l'accesso ripetuto resta provato dalla suite funzionale remota.
+let remoteSession: Awaited<ReturnType<BrowserContext["cookies"]>> | undefined;
+
 // Le richieste locali ancora intercettate a fine prova non sono errori del collaudo.
 test.afterEach(async ({ context }) => context.unrouteAll({ behavior: "ignoreErrors" }));
 
@@ -88,6 +92,8 @@ for (const scenario of scenarios) {
                   }),
                 }),
             );
+          } else if (remoteSession) {
+            await context.addCookies(remoteSession);
           } else {
             await page.goto("/");
             const signIn = page.getByRole("tabpanel", { name: "Accedi" });
@@ -95,8 +101,21 @@ for (const scenario of scenarios) {
             await signIn
               .getByRole("textbox", { name: "Password" })
               .fill(process.env.E2E_ACCOUNT_PASSWORD!);
-            await signIn.getByRole("button", { name: "Accedi", exact: true }).click();
-            await expect(page).toHaveTitle("FiscalBay | Ordini");
+            const started = Date.now();
+            const [answer] = await Promise.all([
+              page.waitForResponse(
+                (response) =>
+                  response.request().method() === "POST" &&
+                  new URL(response.url()).pathname.endsWith("/accesso"),
+                { timeout: 30_000 },
+              ),
+              signIn.getByRole("button", { name: "Accedi", exact: true }).click(),
+            ]);
+            await expect(
+              page,
+              `Accesso: HTTP ${answer.status()} in ${Date.now() - started} ms`,
+            ).toHaveTitle("FiscalBay | Ordini", { timeout: 15_000 });
+            remoteSession = await context.cookies();
           }
         }
         if (scenario.endpoint) {
