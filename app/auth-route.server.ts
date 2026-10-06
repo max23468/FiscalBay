@@ -9,7 +9,7 @@ import {
   recordStoreLinkOutcome,
   type StoreLinkOutcome,
 } from "./integrations/ebay/store-link.server";
-import { logFailure, traceHeader, tracePhase } from "./errors";
+import { logFailure } from "./errors";
 import { localizedPath } from "./i18n";
 
 // I token OAuth restano al codice server; metodi e passkey si rimuovono dalle azioni dell'app,
@@ -148,7 +148,6 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
     if (passkeyChangeBlock(session as AuthSession)) return new Response(null, { status: 403 });
   }
   const wait = await attemptWait(request, environment);
-  tracePhase(request, "attempt-limit");
   if (wait !== null) {
     return Response.json(
       { code: "TOO_MANY_REQUESTS", message: "Too many requests. Try again later." },
@@ -156,7 +155,6 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
     );
   }
   const response = await createAuth(environment).handler(request);
-  tracePhase(request, "auth-handler");
   if (response.status >= 500) logFailure({ request, code: "INTERNAL_ERROR", operation: "route" });
   return response;
 }
@@ -215,14 +213,7 @@ export function handleAuthRequest(
   return handleEbayCallback(request, environment, fetcher);
 }
 
-const forwardedHeaders = [
-  "cookie",
-  "origin",
-  "user-agent",
-  "accept-language",
-  "cf-connecting-ip",
-  traceHeader,
-];
+const forwardedHeaders = ["cookie", "origin", "user-agent", "accept-language", "cf-connecting-ip"];
 
 /**
  * Invia al router di Better Auth un'azione dei moduli dell'app, con lo stesso limite dei
