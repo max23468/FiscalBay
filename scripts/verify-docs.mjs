@@ -43,6 +43,7 @@ const skipped = new Set([
   ".wrangler",
   "test-results",
   "playwright-report",
+  ".stryker-tmp",
 ]);
 function walk(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((item) => {
