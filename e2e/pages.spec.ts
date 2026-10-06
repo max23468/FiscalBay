@@ -41,7 +41,7 @@ for (const scenario of scenarios) {
   for (const { width, scheme } of scenario.endpoint ? [matrix[0]] : matrix) {
     test(
       `${scenario.area}: ${scenario.path} ${scenario.role} ${width}px ${scheme}`,
-      { tag: ["@pages", `@pages-${scenario.area}`] },
+      { tag: ["@pages", `@pages-${scenario.area}`, ...(scenario.remote ? ["@remote"] : [])] },
       async ({ page, context, baseURL, browserName }, info) => {
         // Una prova comprende visita, audit, ricarica e navigazione avanti/indietro.
         test.setTimeout(60_000);

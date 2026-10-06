@@ -2,6 +2,8 @@ name: CI
 
 on:
   pull_request:
+    # `ready_for_review` riavvia le prove browser e mutation saltate mentre la PR era in bozza.
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - develop
       - main
@@ -148,7 +150,8 @@ jobs:
   browser:
     name: Browser ${{ matrix.shard }}/4
     needs: verify
-    if: needs.verify.outputs.e2e == 'true' && needs.verify.outputs.reused != 'true'
+    # Una PR in bozza esegue soltanto `Verify`: le prove complete partono quando è pronta.
+    if: needs.verify.outputs.e2e == 'true' && needs.verify.outputs.reused != 'true' && github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     concurrency:
@@ -235,7 +238,7 @@ jobs:
   mutation:
     name: Mutation
     needs: verify
-    if: needs.verify.outputs.mutation != '' && needs.verify.outputs.reused != 'true'
+    if: needs.verify.outputs.mutation != '' && needs.verify.outputs.reused != 'true' && github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 60
     concurrency:
@@ -416,11 +419,15 @@ jobs:
           E2E_ACCOUNT_PASSWORD: ${{ steps.account.outcome == 'success' && secrets.E2E_ACCOUNT_PASSWORD || '' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        # Le pagine sono già provate sullo stesso artefatto prima del merge: qui si visitano quelle
+        # che provano ambiente, D1, sessione e segreti (@remote) e le aree toccate dalla modifica.
         # Le invocazioni del Worker restano nell'evidenza, ripulite, per le richieste lente o fallite.
-        run: >-
-          node scripts/watch-invocations.mjs --worker fiscalbay-test
-          --output test-results/browser/invocations.json --
-          node scripts/browser-tests.mjs --pages --grep "${BROWSER_GREP}"
+        run: |
+          grep="@remote"
+          if [ "${BROWSER_GREP}" != "." ]; then grep="@remote|${BROWSER_GREP}"; fi
+          node scripts/watch-invocations.mjs --worker fiscalbay-test \
+            --output test-results/browser/invocations.json -- \
+            node scripts/browser-tests.mjs --pages --grep "${grep}"
 
       # Un deploy con endpoint o interazioni falliti non resta distribuito sul test.
       - name: Roll back test deploy

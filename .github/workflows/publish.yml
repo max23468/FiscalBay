@@ -8,13 +8,17 @@ on:
         type: string
         required: true
       version:
-        description: Versione 2.x presente nel changelog
+        description: Versione 2.x presente nel changelog (facoltativa nella prova)
         type: string
-        required: true
+        required: false
       reviewed_migrations:
         description: Digest delle migration non additive approvate, se presenti
         type: string
         required: false
+      prova:
+        description: Prova a vuoto, solo qualifica del candidato senza checkpoint né Production
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -38,11 +42,14 @@ jobs:
         env:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
           VERSION: ${{ inputs.version }}
+          PROVA: ${{ inputs.prova }}
+        # La prova qualifica il candidato prima dei checkpoint: salta solo checkpoint e, senza
+        # versione, il changelog; il job che distribuisce non parte.
         run: |
           test "${GITHUB_REF}" = refs/heads/main
           test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
-          node scripts/release.mjs readiness
-          node scripts/release-notes.mjs "${VERSION}"
+          if [ "${PROVA}" != true ]; then node scripts/release.mjs readiness; fi
+          if [ "${PROVA}" != true ] || [ -n "${VERSION}" ]; then node scripts/release-notes.mjs "${VERSION}"; fi
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 12.9.1
@@ -137,6 +144,7 @@ jobs:
   publish:
     name: Distribuisci e verifica
     needs: qualify
+    if: ${{ !inputs.prova }}
     environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 45
