@@ -33,7 +33,7 @@ Codex desktop può usare file/CLI locali e le connessioni effettivamente autoriz
 | `pnpm test:mutation <file[:righe]>` | Stryker con runner Vitest sui soli file indicati; prove unitarie Node per il confine Auth e Cloudflare per gli altri moduli. Fallisce per sopravvissuti, timeout ed errori, ammette equivalenze motivate con `Stryker disable`. Report per modulo in `reports/mutation/`; riuso incrementale e ricevute descritti nella [procedura](RELEASE.md). |
 | Workflow `Pubblica` | Contratto [§34](../MASTER_PLAN.md#s34), candidato esatto, artefatto Production collaudato, migration, readback, tag e release; [procedura](RELEASE.md). Checkpoint e autorizzazione Production restano richiesti. |
 
-La tabella descrive i comandi presenti e le loro responsabilità; prove e qualifiche remote restano nel backlog. Node locale/CI non è il runtime Workers o Supabase. Librerie opzionali non si installano per riempire un catalogo.
+La tabella descrive i comandi presenti e le loro responsabilità; prove in PR/CI e ricevute, qualifiche mancanti nelle [questioni aperte](../MASTER_PLAN.md#questioni-aperte). Node locale/CI non è il runtime Workers o Supabase. Librerie opzionali non si installano per riempire un catalogo.
 
 ## 2. Due livelli di verifica dei tool
 
@@ -48,7 +48,7 @@ La riuscita di una chiamata dimostra quella chiamata, non l’intera funzionalit
 <a id="lettura"></a>
 ## 3. Lettura mirata per attività
 
-Leggere AGENTS e il task corrente, poi le sezioni pertinenti. La tabella non è un secondo grafo di dipendenze; sicurezza, privacy, localizzazione e prove si applicano a ogni funzione interessata.
+Leggere AGENTS, avanzamento e questioni aperte nel piano, poi la capacità interessata e le sezioni pertinenti. La tabella non è un secondo grafo di dipendenze; sicurezza, privacy, localizzazione e prove si applicano a ogni funzione interessata.
 
 | Attività | Sezioni canoniche |
 |---|---|
@@ -59,7 +59,7 @@ Leggere AGENTS e il task corrente, poi le sezioni pertinenti. La tabella non è 
 | Piani/Stripe | [Piani](../MASTER_PLAN.md#s04), [Free](../MASTER_PLAN.md#s05), [billing](../MASTER_PLAN.md#s06), [fonti Stripe](../SOURCES.md#s01) |
 | Export/comunicazioni/admin | [Export](../MASTER_PLAN.md#s12), [Telegram](../MASTER_PLAN.md#s13), [email](../MASTER_PLAN.md#s14), [admin](../MASTER_PLAN.md#s15), [dominio](../MASTER_PLAN.md#s24) |
 | Operations/test/release | [Sicurezza](../MASTER_PLAN.md#s29)–[recovery](../MASTER_PLAN.md#s32), [Git/release](../MASTER_PLAN.md#s34), [test](../MASTER_PLAN.md#s35), [milestone](../MASTER_PLAN.md#s37), [rischi](../MASTER_PLAN.md#s38), [DoD](../MASTER_PLAN.md#s41) |
-| Documentazione | [Governo](../MASTER_PLAN.md#s00), [README](../../README.md#documenti), fonte interessata e relativo task; archivio solo per ricostruzioni storiche eccezionali |
+| Documentazione | [Governo](../MASTER_PLAN.md#s00), [README](../../README.md#documenti), fonte interessata e relativa milestone; archivio solo per ricostruzioni storiche eccezionali |
 
 <a id="input"></a>
 ## 4. Input esterni
@@ -68,27 +68,27 @@ Prima di chiedere un input controllare checkout, tool autorizzati e inventario p
 
 | ID | Input / responsabilità | Quando e acquisizione | Se manca |
 |---|---|---|---|
-| IN-01 | Mandato di adozione/avvio e checkout corretto | Avvio owner, remote/branch/commit verificati in M0-01 | Sola lettura/preparazione; nessuna M0 dichiarata iniziata. |
-| IN-02 | Istruzioni applicabili, stato locale e automazioni legacy | Lettura del checkout e scope autorizzato; configurazioni remote pertinenti in M0-01 | Isolare le modifiche; bloccare solo push/deploy rischiosi. |
-| IN-03 | Accesso GitHub al repository e ambiente CI | Tool/CLI esistenti, autorizzazione repo-scoped già per M0-01/03; setup esteso M0-02 | Proseguire localmente; nessun check remoto fittizio. |
-| IN-04 | Account Cloudflare, zona fiscalbay.it, quote condivise | Enumerazione autorizzata e selezione risorsa M0-03; no token globali superflui | Qualifica documentale/sintetica soltanto, scelta non conclusa. |
-| IN-05 | Account/progetti Supabase da valutare, piani e limiti | Solo se candidati, lettura M0-03 e prove isolate approvate | Nessuna obbligatorietà Supabase introdotta per mancanza di accesso. |
-| IN-06 | Keyset eBay, ambiente, RuName/callback, scope, account controllato | Canale sicuro M0-05; inventario delle condivisioni con altri progetti; consenso seller quando necessario | Mock/documentazione; blocco della qualifica live pertinente, nessuna credenziale presa da un altro progetto senza mandato. |
-| IN-07 | Configurazione login Google e identità eBay | M0-04, console/account appropriati e redirect test; passkey origin/RP ID secondo host reale | Non eliminare un metodo richiesto: registrare il blocco del gate Auth. |
-| IN-08 | Account Stripe, Managed Payments eligibility, contesti test/live | Scoperta account autorizzata M0-08; prodotti/config live soltanto M5 sotto checkpoint | Nessun fallback Payments standard o Paddle autonomo. |
+| IN-01 | Mandato di adozione/avvio e checkout corretto | Avvio owner, remote/branch/commit verificati nell'adozione M0 | Sola lettura/preparazione; nessuna M0 dichiarata iniziata. |
+| IN-02 | Istruzioni applicabili, stato locale e automazioni legacy | Lettura del checkout e scope autorizzato; inventario iniziale M0 | Isolare le modifiche; bloccare solo push/deploy rischiosi. |
+| IN-03 | Accesso GitHub al repository e ambiente CI | Tool/CLI esistenti, autorizzazione repo-scoped e setup mirato M0 | Proseguire localmente; nessun check remoto fittizio. |
+| IN-04 | Account Cloudflare, zona fiscalbay.it, quote condivise | Enumerazione autorizzata e selezione risorsa M0; no token globali superflui | Qualifica documentale/sintetica soltanto, scelta non conclusa. |
+| IN-05 | Account/progetti Supabase da valutare, piani e limiti | Solo se candidati M0, letture e prove isolate approvate | Nessuna obbligatorietà Supabase introdotta per mancanza di accesso. |
+| IN-06 | Keyset eBay, ambiente, RuName/callback, scope, account controllato | Canale sicuro per qualifica eBay M0; inventario delle condivisioni con altri progetti; consenso seller quando necessario | Mock/documentazione; blocco della qualifica live pertinente, nessuna credenziale presa da un altro progetto senza mandato. |
+| IN-07 | Configurazione login Google e identità eBay | Qualifica Auth M0, console/account appropriati e redirect test; passkey origin/RP ID secondo host reale | Non eliminare un metodo richiesto: registrare il blocco del gate Auth. |
+| IN-08 | Account Stripe, Managed Payments eligibility, contesti test/live | Scoperta account autorizzata M0; prodotti/config live soltanto M5 sotto checkpoint | Nessun fallback Payments standard o Paddle autonomo. |
 | IN-09 | Identità bot Telegram esistente e bot di test separato | Metadati/token protetti M0/M2/M5; chat controllata, webhook/poller inventariati | Nessun invio a chat sconosciute; il bot operativo non viene riutilizzato come test. |
-| IN-10 | Registrar Register.it e controllo DNS | M0-02 per callback minimo, completamento M1-08; registrar solo ciò che non può essere svolto altrove | Non inventare records/password; niente Dynu o host alternativi esclusi. |
-| IN-11 | Abbonamento iCloud+ e dominio posta, account destinatario controllato | Owner/sessione sicura M1-08; info@ e supporto@, terzo indirizzo libero | Preparare record e procedura, non dichiarare ricezione/risposta verificate. |
-| IN-12 | Trasporto email Auth/transazionale e relativo mittente | Prova controllata M0-02, scelta nei costi di M0; configurazione finale M1/M6 | Endpoint Auth email non qualificato; non usare iCloud come sistema di invio automatico massivo. |
+| IN-10 | Registrar Register.it e controllo DNS | M0 per callback minimo, completamento M1; registrar solo ciò che non può essere svolto altrove | Non inventare records/password; niente Dynu o host alternativi esclusi. |
+| IN-11 | Abbonamento iCloud+ e dominio posta, account destinatario controllato | Owner/sessione sicura M1; info@ e supporto@, terzo indirizzo libero | Preparare record e procedura, non dichiarare ricezione/risposta verificate. |
+| IN-12 | Trasporto email Auth/transazionale e relativo mittente | Prova controllata e scelta nei costi di M0; configurazione finale M1/M6 | Endpoint Auth email non qualificato; non usare iCloud come sistema di invio automatico massivo. |
 | IN-13 | Canale amministrativo privato e fallback email | Owner o inventario privato M0/M7; destinatari confermati | Allarmi di test su destinatario controllato; readiness alert non chiusa. |
-| IN-14 | Dati legali Temisfera e rapporto contabile con il MoR | Dati effettivi dell’operatore in M0-12/M7-07, fonti e condizioni applicabili | Non usare generalità/P.IVA inventate; blocco della sola pubblicazione legale/commerciale dipendente. |
-| IN-15 | Budget/prove a pagamento e piani iniziali | Proposta con costi in M0; autorizzazione prima di sostenere la spesa, scelta finale M0-14 | Eseguire prove gratuite possibili; nessuna spesa retroattivamente autorizzata. |
-| IN-16 | Asset originali e scelte visuali approvate | Già nello ZIP: manifest e quattro PNG; rifiniture M1-05/07 sottoposte all’owner | Verificare checksum, non sostituire con immagini omonime rigenerate. |
+| IN-14 | Dati legali Temisfera e rapporto contabile con il MoR | Dati effettivi dell'operatore nella qualifica preliminare M0 e finale M7, fonti e condizioni applicabili | Non usare generalità/P.IVA inventate; blocco della sola pubblicazione legale/commerciale dipendente. |
+| IN-15 | Budget/prove a pagamento e piani iniziali | Proposta con costi in M0; autorizzazione prima di sostenere la spesa, scelta finale al checkpoint | Eseguire prove gratuite possibili; nessuna spesa retroattivamente autorizzata. |
+| IN-16 | Asset originali e scelte visuali approvate | Già nello ZIP: manifest e quattro PNG; rifiniture logo/prototipo M1 sottoposte all'owner | Verificare checksum, non sostituire con immagini omonime rigenerate. |
 | IN-17 | Merchant di fiducia, consenso al test e dati/ambiente | Acquisizione nel checkpoint M8, non requisito per partire con M0 | Test automatici proseguibili; test reale non inventato. |
 | IN-18 | Date promozione globale e configurazione finale | Owner nella milestone finale, inizio/fine e cicli già avviati coerenti | Nessuna data fittizia o countdown pubblico; go-live commerciale in attesa. |
-| IN-19 | Custodia delle chiavi e percorso di recupero nativo | Assetto selezionato M0-09/M7-06, accesso privato realmente disponibile | Gate recovery aperto; non introdurre automaticamente backup esterni o test periodici. |
+| IN-19 | Custodia delle chiavi e percorso di recupero nativo | Assetto selezionato M0 e readiness M7, accesso privato realmente disponibile | Gate recovery aperto; non introdurre automaticamente backup esterni o test periodici. |
 
-Nel contesto privato segnare disponibilità, owner, fonte e blocco; nel backlog pubblico soltanto il nome logico e l’attività dipendente. IN-17/18 non bloccano M0. Un token valido non sostituisce la qualifica del contratto. Dove non si può completare una prova, continuare le attività indipendenti e riportare il limite.
+Nel contesto privato segnare disponibilità, owner, fonte e blocco; nelle questioni aperte del piano soltanto il nome logico e la capacità dipendente. IN-17/18 non bloccano M0. Un token valido non sostituisce la qualifica del contratto. Dove non si può completare una prova, continuare le attività indipendenti e riportare il limite.
 
 ### Ambienti
 
@@ -112,13 +112,12 @@ Per creare o aggiornare una PR, passare la descrizione direttamente alla CLI tra
 
 | Quando / responsabile | Informazione che deve risultare verificabile | Collocazione più semplice |
 |---|---|---|
-| M0-01/11/02 | Mandato, istruzioni applicabili, trigger legacy; toolchain e accessi minimi verificati | Stato backlog, manifest/lockfile/config; nota operativa solo se necessaria |
-| M0-03..M0-14 | Confronto progressivo, prove, capacità/costi e decisione del candidato; 4 login, copertura eBay, Stripe, export, recuperabilità | Memo unico M0, prove sintetiche e ADR solo per scelte durevoli; dettagli privati fuori repo |
+| Adozione e qualifica M0 | Mandato, trigger legacy, toolchain/accessi; confronto progressivo e decisione del candidato, capacità/costi, Auth/eBay/Stripe/export/recovery | Governo e roadmap del piano; manifest/lockfile/config e prove collegate alla PR; ADR solo per scelte durevoli, dettagli privati fuori repo |
 | M1 e frontend | Asset rifiniti, token, origine/licenza/modifiche dei componenti, approvazione grafica | Brand foundation + asset e registro delle sole risorse integrate |
 | M2/M3 | Identità, isolamento, unità dello sblocco, quota, versioni fiscali, permessi, fonti/cursori e budget eBay | Schema/migrazioni/test e contratto breve eBay/Auth soltanto dove serve spiegazione oltre il codice |
 | M5 | Incasso/periodi/grant, lifetime, callback e riconciliazione; Telegram/opt-out/arretrati | Contratto billing utile per i casi incrociati, adapter e test; Telegram vicino al codice salvo complessità reale |
 | M6 | CSV/XLSX/ZIP, accesso/scadenza file; email, consenso, supporto e KPI | Tipi/schema/test, template e definizioni riusate; nessun catalogo API manuale duplicato |
 | M7/M8 | Cancellazione e restore, escalation, rilascio interrotto, rollback/forward-fix, evidenze RC | Runbook reali di release, incidenti e recovery, eventualmente accorpati; prove brevi collegate |
-| M9 | Date/prezzi/promo, readiness, unico restore riuscito, mandato Pubblica, readback e dismissione 1.x | Checklist unica e ricevuta conclusiva proporzionata; backlog con rimandi |
+| M9 | Date/prezzi/promo, readiness, unico restore riuscito, mandato Pubblica, readback e dismissione 1.x | Gate e checkpoint nel piano; checklist unica e ricevuta conclusiva proporzionata |
 
-Se un’informazione richiesta manca, il task competente la produce prima di chiudersi; l’assenza di un file con un nome ipotetico non è da sola un blocco. Una lettura approvata non inventa un’API o una condizione legale: i vincoli esterni rimangono da qualificare. Gli audit storici non sono contratti da mantenere in parallelo.
+Se un'informazione richiesta manca, l'intervento competente la produce prima di dichiarare chiusa la capacità; l'assenza di un file con un nome ipotetico non è da sola un blocco. Una lettura approvata non inventa un'API o una condizione legale: i vincoli esterni rimangono da qualificare. Gli audit storici non sono contratti da mantenere in parallelo.

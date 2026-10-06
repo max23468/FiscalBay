@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
@@ -47,7 +47,7 @@ describe("sigle di piano", () => {
   it("ammette le sigle nella documentazione e nelle migration già applicate", () => {
     assert.deepEqual(
       checkPlanCodes([
-        { path: "BACKLOG.md", text: task },
+        { path: "docs/MASTER_PLAN.md", text: task },
         { path: "docs/MASTER_PLAN.md", text: gate },
         { path: "migrations/0001_m0_slice.sql", text: "create table orders (id text);" },
       ]),
@@ -598,6 +598,69 @@ describe("pubblicazione riprendibile", () => {
     );
     assert.throws(() => releaseNotes("## 2.0.0\n", "2.0.0"), /vuota/u);
   });
+
+  it("richiede tutti i gate Production del piano, senza duplicati e con prove", () => {
+    const heading = "### Gate per la pubblicazione Production\n\n";
+    const rows = ["commerciale", "ripristino", "operativita"].map(
+      (gate) => `| ${gate} | COMPLETATO | [Prova](https://example.invalid/prova) |`,
+    );
+    const complete = heading + rows.join("\n") + "\n";
+    assert.doesNotThrow(() => productionReadiness(complete));
+    for (const row of rows) {
+      for (const invalid of [
+        complete.replace(row, ""),
+        complete.replace(row, row.replace("COMPLETATO", "DA COMPLETARE")),
+        complete.replace(row, row.replace("COMPLETATO", "COMPLETATO PARZIALMENTE")),
+        complete.replace(row, row.replace("[Prova](https://example.invalid/prova)", "")),
+        complete.replace(row, row.replace("[Prova](https://example.invalid/prova)", "-")),
+        complete + row,
+        complete.replace(row, row.slice(0, -1)),
+      ])
+        assert.throws(() => productionReadiness(invalid), /Checkpoint/u);
+    }
+    assert.throws(() => productionReadiness(complete + complete), /Checkpoint/u);
+    assert.throws(() => productionReadiness(rows.join("\n")), /Checkpoint/u);
+    assert.throws(
+      () => productionReadiness(heading + "### Altra sezione\n" + rows.join("\n")),
+      /Checkpoint/u,
+    );
+    assert.throws(
+      () => productionReadiness(heading + '<a id="altro"></a>\n' + rows.join("\n")),
+      /Checkpoint/u,
+    );
+  });
+});
+
+describe("integrità dei documenti", () => {
+  it("verifica link, tabelle e decisioni senza un tracker separato", () => {
+    const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "docs-")));
+    const check = (text) => {
+      writeFileSync(path.join(directory, "README.md"), text);
+      const result = spawnSync(
+        process.execPath,
+        ["scripts/verify-docs.mjs", "--root", directory, "--json"],
+        { encoding: "utf8" },
+      );
+      return { status: result.status, ...JSON.parse(result.stdout) };
+    };
+    try {
+      assert.equal(check("# Piano\n\n[Sezione](#piano)\n").status, 0);
+      for (const [text, code] of [
+        ["[Assente](mancante.md)", "LINK_MISSING"],
+        ["[Assente](#mancante)", "LINK_ANCHOR"],
+        ['<a id="stato"></a>\n<a id="stato"></a>', "ANCHOR_DUPLICATE"],
+        ["| Uno | Due |\n| Uno |\n", "TABLE"],
+        ["| D999 | Scelta |\n| D999 | Duplicata |\n", "DECISION_DUPLICATE"],
+        ["Riferimento a D999.", "DECISION_REFERENCE"],
+      ]) {
+        const result = check(text);
+        assert.equal(result.status, 1);
+        assert.ok(result.errors.some((error) => error.code === code));
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("base del confronto sui push", () => {
@@ -709,7 +772,7 @@ describe("esito dei mutation test", () => {
       { path: "pnpm-lock.yaml", text: "dependencies" },
       { path: "vitest.config.ts", text: "config" },
       { path: "docs/brand/logo.svg", text: "asset" },
-      { path: "BACKLOG.md", text: "stato" },
+      { path: "docs/MASTER_PLAN.md", text: "stato" },
     ];
     const base = identity(target, files, "node|linux|x64");
     for (const path of [
