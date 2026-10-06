@@ -121,7 +121,10 @@ for (const scenario of scenarios) {
             response.request().resourceType() !== "document" &&
             response.status() >= 400 &&
             url.origin === new URL(baseURL!).origin &&
-            !(url.pathname === ownData && response.status() === expectedStatus)
+            !(url.pathname === ownData && response.status() === expectedStatus) &&
+            // Cloudflare rifiuta i precaricamenti speculativi verso il Worker: la navigazione
+            // reale carica comunque la pagina, quindi il rifiuto non è un errore visibile.
+            !response.headers()["cf-speculation-refused"]
           )
             errors.push(`Risorsa ${response.status()}: ${url.pathname}`);
         });

@@ -401,7 +401,9 @@ async function main() {
     if (!receipt.deployed || !receipt.previous) return;
     if (!receipt.rollbackCompatible)
       throw new Error(
-        "Rollback automatico escluso: schema modificato, serve forward-fix o compatibilità qualificata.",
+        receipt.schemaChanged
+          ? "Rollback automatico escluso: schema modificato, serve forward-fix o compatibilità qualificata."
+          : "Rollback automatico escluso: versione precedente senza provenienza attestata o con migration e configurazione diverse.",
       );
     const current = JSON.parse(
       wrangler("deployments", "status", "--name", target.worker, "--json"),
