@@ -119,4 +119,4 @@ Controllo ordinario dopo modifiche documentali:
 node scripts/verify-docs.mjs
 ```
 
-Il controllo rileva link e ancore interni rotti, tabelle incoerenti e decisioni duplicate/inesistenti. Non impone un tracker separato, un grafo di task o ID consecutivi. `--assets` aggiunge la verifica degli originali secondo il manifest; `SHA256SUMS.txt` serve solo a confrontare la consegna iniziale. Comandi e gate attuali sono in `package.json` e [Agent Setup](docs/engineering/AGENT_SETUP.md); il percorso di pubblicazione è in [RELEASE](docs/engineering/RELEASE.md).
+Il controllo rileva link e ancore interni rotti, tabelle incoerenti, decisioni duplicate/inesistenti e gate Production mancanti o non validi. Gli stati aperti sono ammessi nel piano, ma bloccano la pubblicazione. Non impone un tracker separato, un grafo di task o ID consecutivi. `--assets` aggiunge la verifica degli originali secondo il manifest; `SHA256SUMS.txt` serve solo a confrontare la consegna iniziale. Comandi e gate attuali sono in `package.json` e [Agent Setup](docs/engineering/AGENT_SETUP.md); il percorso di pubblicazione è in [RELEASE](docs/engineering/RELEASE.md).

@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, realpathSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, realpathSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { createHash, randomBytes } from "node:crypto";
 import { budgetKiB } from "./check-bundle-size.mjs";
 import { shardTests } from "./browser-tests.mjs";
-import { classifyFile, plan as changePlan } from "./classify-changes.mjs";
+import { classifyFile, plan as changePlan, gateCommands } from "./classify-changes.mjs";
 import { missingPages, missingSections, routePatterns } from "./verify-pages.mjs";
 import {
   migrationPlan,
@@ -268,13 +268,154 @@ describe("classificazione dei file modificati", () => {
     assert.equal(classifyFile("docs/brand/logo/fiscalbay-logo.svg"), undefined);
   });
 
-  it("riduce il gate soltanto per la documentazione ordinaria", () => {
+  it("distingue documentazione ordinaria e governo senza browser o distribuzione", () => {
     assert.deepEqual(plan(["README.md", "docs/DECISION_REGISTER.md"]), {
       gate: "docs",
       e2e: false,
       unclassified: [],
     });
-    assert.equal(plan(["README.md", "AGENTS.md"]).gate, "full");
+    assert.equal(plan(["README.md", "AGENTS.md"]).gate, "tooling");
+  });
+
+  it("separa controlli, browser, build, deploy e React nei diff misti", () => {
+    const tools = [
+      "AGENTS.md",
+      "docs/MASTER_PLAN.md",
+      "docs/engineering/RELEASE.md",
+      "scripts/release.mjs",
+      "scripts/classify-changes.mjs",
+      "scripts/guardrails.test.mjs",
+      ".github/workflows/ci.yml",
+      ".github/workflows/publish.yml",
+      ".github/workflows/react-doctor.yml",
+      ".oxfmtrc.json",
+    ];
+    for (const files of tools.map((file) => [file, "README.md"]).concat([tools])) {
+      const selected = changePlan(files);
+      assert.equal(selected.gate, "tooling");
+      for (const flag of ["e2e", "build", "deploy", "doctor"]) assert.equal(selected[flag], false);
+    }
+    for (const file of [
+      "wrangler.jsonc",
+      "package.json",
+      "pnpm-lock.yaml",
+      "vite.config.ts",
+      "scripts/unknown.mjs",
+      "new.bin",
+    ]) {
+      const selected = changePlan([...tools, file]);
+      assert.equal(selected.gate, "full");
+      assert.equal(selected.build, true);
+      assert.equal(selected.deploy, true);
+      assert.equal(selected.e2e, true);
+    }
+    const runtime = changePlan([...tools, "app/root.tsx"]);
+    for (const flag of ["e2e", "build", "deploy", "doctor"]) assert.equal(runtime[flag], true);
+    const route = "app/routes/stores.tsx";
+    const targeted = changePlan([...tools, route], [{ path: route, text: "" }]);
+    assert.equal(targeted.mode, "targeted");
+    assert.deepEqual(targeted.areas, ["stores"]);
+    const browserTests = changePlan(["e2e/pages.spec.ts"]);
+    assert.equal(browserTests.e2e, true);
+    assert.equal(browserTests.build, true);
+    assert.equal(browserTests.deploy, false);
+    const unitTests = changePlan([...tools, "test/orders.spec.ts"]);
+    assert.equal(unitTests.mode, "unit");
+    assert.equal(unitTests.e2e, false);
+    assert.equal(unitTests.deploy, false);
+    const candidate = changePlan(tools, [], true);
+    for (const flag of ["e2e", "build", "doctor"]) assert.equal(candidate[flag], true);
+    assert.equal(candidate.deploy, false);
+    assert.equal(changePlan(["doctor.config.json"]).doctor, true);
+    assert.equal(changePlan(["docs/MASTER_PLAN.md"]).promotionReuse, true);
+    assert.equal(changePlan(["scripts/release.mjs"]).promotionReuse, false);
+  });
+
+  it("espone alla CI tutti i controlli quando il confronto non identifica modifiche", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "classification-"));
+    const output = path.join(directory, "outputs");
+    try {
+      const result = spawnSync(
+        process.execPath,
+        ["scripts/classify-changes.mjs", "--base", "HEAD", "--head", "HEAD", "--github-output"],
+        {
+          encoding: "utf8",
+          env: { ...process.env, GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: "" },
+        },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      const fields = Object.fromEntries(
+        readFileSync(output, "utf8")
+          .trim()
+          .split("\n")
+          .map((line) => line.split(/=(.*)/u).slice(0, 2)),
+      );
+      assert.equal(fields.gate, "full");
+      for (const flag of ["e2e", "build", "deploy", "doctor"]) assert.equal(fields[flag], "true");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("applica React Doctor nel gate e riserva browser e mutation ai job separati", () => {
+    const commands = (files, sources = [], complete = false) =>
+      gateCommands(changePlan(files, sources, complete)).map(([, args]) => args[0]);
+    assert.deepEqual(commands(["scripts/release.mjs"]), ["verify:tooling"]);
+    assert.deepEqual(commands(["doctor.config.json"]), ["verify:tooling", "doctor:react"]);
+    assert.deepEqual(commands(["test/orders.spec.ts"]), [
+      "verify:tooling",
+      "verify:pages",
+      "typecheck",
+      "test",
+      "build",
+    ]);
+    for (const files of [["app/new-module.ts"], ["scripts/unknown.mjs"], []]) {
+      assert.equal(changePlan(files).doctor, true);
+      assert.ok(commands(files).includes("doctor:react"));
+    }
+    assert.ok(commands(["scripts/release.mjs"], [], true).includes("doctor:react"));
+
+    const directory = mkdtempSync(path.join(tmpdir(), "gate-run-"));
+    const log = path.join(directory, "commands");
+    const runner = `#!${process.execPath}\nconst fs = require("node:fs");\nif (require("node:path").basename(process.argv[1]) === "node") process.exit(77);\nfs.appendFileSync(process.env.GATE_TEST_LOG, process.argv.slice(2).join(" ") + "\\n");\n`;
+    try {
+      for (const name of ["pnpm", "node"])
+        writeFileSync(path.join(directory, name), runner, { mode: 0o700 });
+      const result = spawnSync(
+        process.execPath,
+        [
+          "scripts/classify-changes.mjs",
+          "--base",
+          "HEAD",
+          "--head",
+          "HEAD",
+          "--run",
+          "--gate-only",
+        ],
+        {
+          encoding: "utf8",
+          timeout: 10000,
+          env: {
+            ...process.env,
+            PATH: `${directory}${path.delimiter}${process.env.PATH}`,
+            GATE_TEST_LOG: log,
+            GITHUB_OUTPUT: "",
+            GITHUB_STEP_SUMMARY: "",
+          },
+        },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      assert.deepEqual(readFileSync(log, "utf8").trim().split("\n"), [
+        "verify:tooling",
+        "verify:pages",
+        "typecheck",
+        "test",
+        "build",
+        "doctor:react",
+      ]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it("esegue il gate completo con E2E per un file non classificato o un diff vuoto", () => {
@@ -606,6 +747,17 @@ describe("pubblicazione riprendibile", () => {
     );
     const complete = heading + rows.join("\n") + "\n";
     assert.doesNotThrow(() => productionReadiness(complete));
+    const pending = complete
+      .replaceAll("COMPLETATO", "DA COMPLETARE")
+      .replaceAll("[Prova](https://example.invalid/prova)", "-");
+    assert.doesNotThrow(() => productionReadiness(pending, false));
+    assert.throws(() => productionReadiness(pending), /Checkpoint/u);
+    for (const invalid of [
+      pending + rows[0],
+      pending.replace("DA COMPLETARE", "SCONOSCIUTO"),
+      complete.replace("[Prova](https://example.invalid/prova)", "-"),
+    ])
+      assert.throws(() => productionReadiness(invalid, false), /Checkpoint/u);
     for (const row of rows) {
       for (const invalid of [
         complete.replace(row, ""),
@@ -656,6 +808,26 @@ describe("integrità dei documenti", () => {
         const result = check(text);
         assert.equal(result.status, 1);
         assert.ok(result.errors.some((error) => error.code === code));
+      }
+      mkdirSync(path.join(directory, "docs"));
+      const planFile = path.join(directory, "docs/MASTER_PLAN.md");
+      const pending =
+        "### Gate per la pubblicazione Production\n\n" +
+        ["commerciale", "ripristino", "operativita"]
+          .map((gate) => `| ${gate} | DA COMPLETARE | - |`)
+          .join("\n");
+      writeFileSync(planFile, pending);
+      assert.equal(check("# Piano\n").status, 0);
+      for (const invalid of [
+        "",
+        pending.replace("commerciale", "assente"),
+        pending.replace("DA COMPLETARE", "COMPLETATO"),
+        pending + "\n| commerciale | DA COMPLETARE | - |",
+      ]) {
+        writeFileSync(planFile, invalid);
+        const result = check("# Piano\n");
+        assert.equal(result.status, 1);
+        assert.ok(result.errors.some((error) => error.code === "PRODUCTION_GATES"));
       }
     } finally {
       rmSync(directory, { recursive: true, force: true });

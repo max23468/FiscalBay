@@ -36,7 +36,20 @@ jobs:
           persist-credentials: false
 
       # Stesse versioni del gate locale: nessun `latest` risolto a ogni run.
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26.10.0
+
+      - name: Select React checks
+        id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --github-output
+
       - name: Read pinned versions
+        if: steps.detect.outputs.doctor == 'true'
         id: versions
         run: |
           {
@@ -45,6 +58,7 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
 
       - name: Scan
+        if: steps.detect.outputs.doctor == 'true'
         uses: millionco/react-doctor@013f7373f91a3b9e68bd1dc7d4d354f4b041b117 # v2.2.9
         with:
           version: ${{ steps.versions.outputs.doctor }}
