@@ -998,6 +998,17 @@ Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o
 
 **Assetto approvato:** Workers, una D1 UE, Queues e Better Auth; Supabase Pro escluso per budget e Free per continuità insufficiente. Nessun adapter alternativo mantenuto. Protezione nativa Time Travel e riapertura fail-closed secondo §32; nessun backup parallelo. Il progetto Better Auth Infrastructure non è più collegato al runtime dopo D152. Generatori OAS ammessi solo se supportano TypeScript 7 senza secondo compilatore: finché manca tale compatibilità, schemi Zod mirati per Identity/Fulfillment, parser Trading e SDK Stripe ufficiale (§25).
 
+**Esiti di qualifica utili alle milestone successive.** Misure di settembre 2026 sull'account Cloudflare condiviso e su dati sintetici: sono riferimenti per decidere, non capienza pubblica approvata, e vanno rimisurate prima dell'apertura (M7-03).
+
+| Area | Esito misurato | Conseguenza |
+|---|---|---|
+| Limiti Free | Workers: 100.000 richieste dinamiche/giorno, 10 ms CPU e 50 subrequest per invocazione, 200.000 eventi log/giorno. Queues: 10.000 operazioni/giorno, retention 24 ore. D1: 5 milioni di righe lette e 100.000 scritte/giorno, 500 MB per database | L'account è condiviso con altri progetti: il margine residuo si rilegge prima della sync continuativa e dell'apertura |
+| Coda e sync | Con un messaggio per ciclo, tre operazioni per messaggio, 48 cicli/giorno Free e 144 Premium, la soglia prudenziale di 8.000 operazioni copre 55 negozi tutti Free, 18 tutti Premium o 33 nel mix un Premium ogni due Free (69, 23 e 39 ai limiti nominali). 150 negozi richiedono circa 36.000 operazioni/giorno prima dei retry | La Queue è il primo limite del Free: evitare messaggi per polling senza lavoro (M3-04) e rivalutare il piano prima dell'apertura |
+| D1 | 150 negozi, 70.000 ordini, 210.000 articoli, 84.000 identificativi e 14.000 grant: 44,8 MB, caricamento in 830 ms. Pagina da 50 ordini con grant: 996 righe lette, 11,4 ms a freddo e 0,6-1,8 ms dopo. Burst di 30.000 raw: 90.000 righe scritte in 395 ms; picco con raw attivi e scaduti 130,6 MB; pruning TTL di 30.000 raw in 128 ms | Lo storage regge circa 459 negozi entro 400 MB prudenziali, prima di eBay, CPU e retry. Un backfill pieno supera la soglia Free di 80.000 scritture/giorno: va distribuito (M3-03) |
+| Costo Paid | Workers Paid da 5 USD/mese per account con 10 milioni di richieste e 30 milioni di CPU-ms; circa 1,08 milioni di operazioni Queue/mese per 360.000 messaggi, circa 0,03 USD oltre l'incluso | Ordine di costo indicativo di circa 5 USD/mese prima di retry ed email; decisione al checkpoint competente |
+| Export | `exceljs` e `fflate` (MIT) in Workerd: 1.000 ordini con due identificativi in 81 ms | Percorso CSV/XLSX/ZIP fattibile nel runtime (M6-01..M6-03) |
+| Recovery | D1 Time Travel: 7 giorni sul Free, 30 sul Paid. Restore sintetico dopo un bookmark riuscito, migration conservate | Superare i 7 giorni richiede di rivalutare il piano; drill conclusivo in M9-02 |
+
 <a id="m0-01"></a>
 #### M0-01 · Inventario della baseline e conflitti legacy
 
