@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { budgetKiB } from "./check-bundle-size.mjs";
 import { shardTests } from "./browser-tests.mjs";
 import { classifyFile, plan as changePlan } from "./classify-changes.mjs";
@@ -23,7 +23,7 @@ import {
 } from "./release.mjs";
 import { releaseNotes, assertBrowserEvidence } from "./release-notes.mjs";
 import { knownPagePath } from "../e2e/page-cases.ts";
-import { evaluate } from "./mutation.mjs";
+import { checkReceipt, evaluate, identity, verifiedMutationOrigin } from "./mutation.mjs";
 import { lastDeployed } from "./find-deployed.mjs";
 import { jsonObjects, summarize as summarizeInvocations } from "./watch-invocations.mjs";
 import {
@@ -228,6 +228,16 @@ describe("classificazione dei file modificati", () => {
     ]);
   });
 
+  it("ripete mutation Auth quando cambiano le sue prove veloci o il loro runtime", () => {
+    for (const file of [
+      "test/auth-route.unit.ts",
+      "test/worker-context.ts",
+      "vitest.unit.config.ts",
+    ])
+      assert.deepEqual(changePlan([file]).mutation, ["app/auth-route.server.ts"]);
+    assert.equal(classifyFile("vitest.cloudflare.config.ts"), "tooling");
+  });
+
   it("seleziona una route circoscritta ma forza il completo sulla tabella delle route", () => {
     const sources = [{ path: "app/routes/stores.tsx", text: "export default function Page() {}" }];
     assert.equal(changePlan([sources[0].path], sources).mode, "targeted");
@@ -245,6 +255,7 @@ describe("classificazione dei file modificati", () => {
     assert.equal(changePlan(files, [], true).mode, "full");
     assert.equal(changePlan(["app/integrations/stripe.server.ts"]).mutation.length, 1);
     assert.equal(changePlan([".github/workflows/publish.yml"]).promotionReuse, false);
+    assert.equal(changePlan([".github/workflows/mutation.yml"]).promotionReuse, false);
     assert.equal(changePlan(["app/routes/stores.tsx"]).promotionReuse, true);
   });
   it("assegna le categorie note", () => {
@@ -686,6 +697,127 @@ describe("esito dei mutation test", () => {
 
   it("fallisce se non viene generato alcun mutante", () => {
     assert.deepEqual(evaluate({ files: {} }), ["nessun mutante generato"]);
+  });
+
+  it("riusa il contesto solo quando dipendenze, test, fixture, configurazione e runtime coincidono", () => {
+    const target = "app/grants.server.ts";
+    const files = [
+      { path: target, text: "return true" },
+      { path: "app/helper.ts", text: "helper" },
+      { path: "test/grants.spec.ts", text: "assertion" },
+      { path: "test/setup.ts", text: "fixture" },
+      { path: "pnpm-lock.yaml", text: "dependencies" },
+      { path: "vitest.config.ts", text: "config" },
+      { path: "docs/brand/logo.svg", text: "asset" },
+      { path: "BACKLOG.md", text: "stato" },
+    ];
+    const base = identity(target, files, "node|linux|x64");
+    for (const path of [
+      "app/helper.ts",
+      "test/grants.spec.ts",
+      "test/setup.ts",
+      "pnpm-lock.yaml",
+      "vitest.config.ts",
+      "docs/brand/logo.svg",
+    ]) {
+      const changed = files.map((file) =>
+        file.path === path ? { ...file, text: "changed" } : file,
+      );
+      assert.notEqual(identity(target, changed, "node|linux|x64").prefix, base.prefix);
+    }
+    assert.notEqual(identity(target, files, "other-runtime").prefix, base.prefix);
+    const changedSource = identity(
+      target,
+      files.map((file) => (file.path === target ? { ...file, text: "return false" } : file)),
+      "node|linux|x64",
+    );
+    assert.notEqual(changedSource.prefix, base.prefix);
+    assert.notEqual(changedSource.key, base.key);
+    // Il mutante può restare uguale mentre cambia un helper nello stesso file.
+    const helperBefore = [{ path: target, text: "const helper = true; return helper || false" }];
+    const helperAfter = [{ path: target, text: "const helper = false; return helper || false" }];
+    assert.notEqual(
+      identity(target, helperBefore, "node|linux|x64").prefix,
+      identity(target, helperAfter, "node|linux|x64").prefix,
+    );
+    assert.deepEqual(identity(target, [...files].reverse(), "node|linux|x64"), base);
+    assert.deepEqual(
+      identity(
+        target,
+        files.map((file) => (file.path.endsWith(".md") ? { ...file, text: "nuovo stato" } : file)),
+        "node|linux|x64",
+      ),
+      base,
+    );
+    assert.throws(() => identity("missing", files));
+  });
+
+  it("rifiuta ricevute incompatibili, parziali, vuote o con mutanti non uccisi", () => {
+    const target = "app/grants.server.ts";
+    const expected = { target, key: "verified-inputs" };
+    const source = "source";
+    const complete = { files: { [target]: { source, mutants: [mutant("Killed")] } } };
+    const receipt = {
+      ...expected,
+      passed: true,
+      reportDigest: createHash("sha256").update(JSON.stringify(complete)).digest("hex"),
+    };
+    assert.doesNotThrow(() => checkReceipt(expected, receipt, complete, source));
+    for (const invalid of [
+      { ...receipt, key: "old-inputs" },
+      { ...receipt, target: "other" },
+      { ...receipt, passed: false },
+    ])
+      assert.throws(() => checkReceipt(expected, invalid, complete, source));
+    assert.throws(() => checkReceipt(expected, receipt, complete, "changed-source"));
+    assert.throws(() =>
+      checkReceipt(expected, { ...receipt, reportDigest: "changed" }, complete, source),
+    );
+    assert.throws(() => checkReceipt(expected, receipt, { files: {} }, source));
+    assert.throws(() =>
+      checkReceipt(expected, receipt, { files: { [target]: { source, mutants: [] } } }, source),
+    );
+    assert.throws(() =>
+      checkReceipt(
+        expected,
+        receipt,
+        { files: { [target]: { source, mutants: [mutant("Survived")] } } },
+        source,
+      ),
+    );
+  });
+
+  it("riusa solo artefatti non scaduti del modulo verificato nello stesso repository", () => {
+    const candidate = { expired: false, workflow_run: { repository_id: 1, head_repository_id: 1 } };
+    const run = { path: ".github/workflows/ci.yml", conclusion: "failure" };
+    const target = "app/auth-route.server.ts";
+    const job = { name: `Mutation / ${target}`, conclusion: "success" };
+    assert.equal(verifiedMutationOrigin(candidate, run, [job], 1, target), true);
+    assert.equal(
+      verifiedMutationOrigin({ ...candidate, expired: true }, run, [job], 1, target),
+      false,
+    );
+    assert.equal(verifiedMutationOrigin(candidate, run, [job], 2, target), false);
+    assert.equal(
+      verifiedMutationOrigin(
+        { ...candidate, workflow_run: { repository_id: 1, head_repository_id: 2 } },
+        run,
+        [job],
+        1,
+        target,
+      ),
+      false,
+    );
+    assert.equal(verifiedMutationOrigin(candidate, { path: "other.yml" }, [job], 1, target), false);
+    assert.equal(
+      verifiedMutationOrigin(candidate, run, [{ ...job, conclusion: "failure" }], 1, target),
+      false,
+    );
+    assert.equal(
+      verifiedMutationOrigin(candidate, run, [{ ...job, conclusion: "cancelled" }], 1, target),
+      false,
+    );
+    assert.equal(verifiedMutationOrigin(candidate, run, [job], 1, "app/other.server.ts"), false);
   });
 });
 

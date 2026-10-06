@@ -69,7 +69,7 @@ const attemptLimits = [
 /** Un indirizzo IPv6 conta per la sua rete /64, che un singolo client controlla per intero. */
 function clientKey(ip: string): string {
   if (!ip.includes(":")) return ip;
-  const [head, tail] = ip.split("::");
+  const [head, tail = ""] = ip.split("::");
   const left = head ? head.split(":") : [];
   const right = tail ? tail.split(":") : [];
   const groups = [...left, ...Array(8 - left.length - right.length).fill("0"), ...right];
@@ -83,7 +83,6 @@ function clientKey(ip: string): string {
  */
 async function attemptWait(request: Request, environment: Env): Promise<number | null> {
   if (request.method !== "POST" || !environment.APP_ORIGIN.startsWith("https:")) return null;
-  // Stryker disable next-line Regex: il percorso inizia sempre con /api/auth, ancora o no.
   const path = new URL(request.url).pathname.replace(/^\/api\/auth/u, "");
   const rule = attemptLimits.find(({ paths }) => paths.test(path));
   const ip = request.headers.get("cf-connecting-ip");
@@ -123,12 +122,10 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
     if (!session.user.emailVerified || !recentSignIn(session as AuthSession)) {
       return new Response(null, { status: 403 });
     }
-    let body: unknown = null;
-    try {
-      body = await request.clone().json();
-    } catch {
-      // Un corpo non valido resta null e viene rifiutato sotto.
-    }
+    const body = await request
+      .clone()
+      .json()
+      .catch(() => undefined);
     if (typeof body !== "object" || body === null || "idToken" in body) {
       return new Response(null, { status: 400 });
     }
@@ -217,8 +214,7 @@ export function handleAuthRequest(
   return handleEbayCallback(request, environment, fetcher);
 }
 
-// Better Auth usa lo user agent per riconoscere il dispositivo delle sessioni.
-const forwardedHeaders = ["cookie", "origin", "user-agent", "cf-connecting-ip"];
+const forwardedHeaders = ["cookie", "origin", "user-agent", "accept-language", "cf-connecting-ip"];
 
 /**
  * Invia al router di Better Auth un'azione dei moduli dell'app, con lo stesso limite dei

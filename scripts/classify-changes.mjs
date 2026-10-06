@@ -30,7 +30,7 @@ const categories = [
       /^scripts\//u,
       /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|mise\.toml)$/u,
       /^tsconfig(?:\.\w+)?\.json$/u,
-      /^(?:vite|vitest|playwright|react-router)\.config\.ts$/u,
+      /^(?:vite|vitest(?:\.(?:unit|cloudflare))?|playwright|react-router)\.config\.ts$/u,
       /^(?:wrangler\.jsonc|components\.json|doctor\.config\.json|stryker\.config\.json)$/u,
       /^(?:\.oxfmtrc\.json|\.gitignore|\.dev\.vars\.example)$/u,
     ],
@@ -139,7 +139,14 @@ export function plan(files, sources = [], complete = false) {
     /^app\/(?:auth(?:-route)?|domain\/(?:orders|quota|grants|cycles|sessions|sign-in-methods|registration|stores|export)|integrations\/(?:stripe|ebay\/(?:seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
       file,
     );
-  const mutation = [...consumers(files.filter(critical), graph)].filter(critical);
+  const mutationInputs = files.filter(critical);
+  if (
+    files.some((file) =>
+      /^(?:test\/(?:auth-route\.unit|worker-context)\.ts|vitest\.unit\.config\.ts)$/u.test(file),
+    )
+  )
+    mutationInputs.push("app/auth-route.server.ts");
+  const mutation = [...consumers(mutationInputs, graph)].filter(critical);
   const browsers = e2e
     ? mode === "full" ||
       areas.has("auth") ||
@@ -159,7 +166,7 @@ export function plan(files, sources = [], complete = false) {
     promotionReuse: !files.some(
       (file) =>
         governance.some((pattern) => pattern.test(file)) ||
-        /^\.github\/workflows\/(?:ci|publish|promotion)\.yml$/u.test(file),
+        /^\.github\/workflows\/(?:ci|mutation|publish|promotion)\.yml$/u.test(file),
     ),
     mutation,
     reasons: [
@@ -221,7 +228,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   if (args.includes("--github-output") && process.env.GITHUB_OUTPUT)
     appendFileSync(
       process.env.GITHUB_OUTPUT,
-      `gate=${result.gate}\ne2e=${result.e2e}\ndeploy=${result.deploy}\npromotion-reuse=${result.promotionReuse}\nmode=${result.mode}\ngrep=${result.browserGrep}\nbrowsers=${result.browsers}\nmutation=${result.mutation.join(" ")}\n`,
+      `gate=${result.gate}\ne2e=${result.e2e}\ndeploy=${result.deploy}\npromotion-reuse=${result.promotionReuse}\nmode=${result.mode}\ngrep=${result.browserGrep}\nbrowsers=${result.browsers}\nmutation=${result.mutation.join(" ")}\nmutation-matrix=${JSON.stringify({ target: result.mutation })}\n`,
     );
   if (process.env.GITHUB_STEP_SUMMARY)
     appendFileSync(
