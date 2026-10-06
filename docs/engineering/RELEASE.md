@@ -40,8 +40,6 @@ Prima della migration si ricontrolla il candidato remoto; un artefatto diverso d
 
 Il rollback automatico è ammesso soltanto senza nuove migration e con precedente versione identificata, configurazione e migration uguali. Altrimenti resta necessario un forward-fix o una compatibilità qualificata. Prima del rollback si rilegge la versione attuale: uno stato cambiato impedisce di sovrascrivere un altro deploy. Il rollback del codice non ripristina dati.
 
-La capacità è un controllo separato, consultivo: campione incompleto o CPU non disponibile producono `non attendibile`, senza presentare un p95 valido. Il campionamento procede per piccoli gruppi aspettando la telemetria.
-
 ## Pubblica e ripresa
 
 Il workflow `Pubblica` accetta il commit completo su `main` e la versione presente in `CHANGELOG.md`. Verifica i checkpoint nel backlog e la variabile `PRODUCTION_PUBLISH_ENABLED`; l'environment Production conserva il suo gate owner. Nessuno di questi prerequisiti viene attivato dall'implementazione del workflow.
