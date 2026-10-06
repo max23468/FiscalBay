@@ -14,3 +14,8 @@ trustPolicy: no-downgrade
 # arriva da Babel tramite `@react-router/dev`.
 trustPolicyExclude:
   - semver@6.3.1
+# Kysely 0.29 serializza le query SQLite con un lucchetto per isolate, che una richiesta
+# annullata non rilascia più: D1 non ha connessioni da proteggere. Da rimuovere quando
+# il dialetto D1 di Better Auth lo dichiara da sé.
+patchedDependencies:
+  "@better-auth/kysely-adapter@1.7.7": patches/@better-auth__kysely-adapter@1.7.7.patch

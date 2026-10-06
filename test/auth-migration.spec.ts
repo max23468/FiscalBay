@@ -65,6 +65,28 @@ it("mantiene lo schema D1 allineato ai quattro metodi Auth", async () => {
 });
 
 describe("Better Auth su Workers e D1", () => {
+  it("non accoda le query D1 dietro una richiesta rimasta sospesa", async () => {
+    // Una richiesta annullata dal browser lascia la sua query D1 senza risposta: con l'istanza
+    // condivisa dall'isolate, le richieste successive non devono restare in attesa dietro di lei.
+    let stalled = false;
+    const database = new Proxy(env.DB, {
+      get(target, key) {
+        const value = Reflect.get(target, key) as unknown;
+        if (key !== "prepare") return typeof value === "function" ? value.bind(target) : value;
+        return (query: string) => {
+          if (stalled) return target.prepare(query);
+          stalled = true;
+          return { bind: () => ({ all: () => new Promise(() => {}) }) };
+        };
+      },
+    });
+    const context = await createAuth({ ...env, DB: database } as Env).$context;
+    void context.internalAdapter.findUserByEmail("sospesa@example.invalid");
+    const second = context.internalAdapter.findUserByEmail("successiva@example.invalid");
+    const timeout = new Promise((resolve) => setTimeout(resolve, 2_000, "in attesa"));
+    expect(await Promise.race([second, timeout])).toBeNull();
+  });
+
   it("usa mittente e Reply-To previsti per verifica e reset", async () => {
     const send = vi.fn(async () => ({ messageId: "synthetic" }));
     const options = createAuthOptions({ ...env, AUTH_EMAIL: { send } } as Env);

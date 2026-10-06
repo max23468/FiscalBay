@@ -24,16 +24,6 @@ export function tracePhase(request: Request, phase: string): void {
     console.log(JSON.stringify({ event: "phase", phase }));
 }
 
-/**
- * Nelle sole richieste tracciate interroga D1 direttamente prima della sessione: separa
- * un'attesa del database da un'attesa dello strato Auth.
- */
-export async function traceDatabase(request: Request, db: D1Database): Promise<void> {
-  if (request.headers.get(traceHeader) !== "1") return;
-  await db.prepare("SELECT 1").first();
-  tracePhase(request, "d1");
-}
-
 export function correlateResponse(response: Response, id: string): Response {
   const headers = new Headers(response.headers);
   headers.set(correlationHeader, id);

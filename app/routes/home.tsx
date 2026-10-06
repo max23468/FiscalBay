@@ -34,7 +34,7 @@ import { registrationStatus } from "../domain/registration.server";
 import { listSignInMethods } from "../domain/sign-in-methods.server";
 import { listVisibleOrders } from "../domain/orders.server";
 import { listStores } from "../domain/stores.server";
-import { errorResponse, traceDatabase, tracePhase } from "../errors";
+import { errorResponse, tracePhase } from "../errors";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import { accessNotice } from "../access-notice";
 import { appCopy } from "../app-copy";
@@ -63,7 +63,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   const auth = createAuth(env);
   await auth.$context;
   tracePhase(request, "auth-context");
-  await traceDatabase(request, env.DB);
   const session = await auth.api.getSession({ headers: request.headers });
   tracePhase(request, "session");
   const search = new URL(request.url).searchParams;
