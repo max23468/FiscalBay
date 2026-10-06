@@ -167,10 +167,11 @@ function AutoSwitch({
         checked={checked}
         disabled={disabled || state === "saving"}
         onCheckedChange={(next) => setChecked(next)}
+        aria-labelledby={`${id}-label`}
         aria-describedby={description ? `${id}-description` : undefined}
       />
       <div className="grid min-w-0 flex-1 gap-1">
-        <FieldLabel htmlFor={id} className="font-normal">
+        <FieldLabel id={`${id}-label`} htmlFor={id} className="font-normal">
           {label}
         </FieldLabel>
         {description ? (
@@ -208,14 +209,53 @@ function AutoRadio({
         className="gap-3"
       >
         {options.map((option) => (
-          <FieldLabel key={option.value} className="font-normal">
-            <RadioGroupItem value={option.value} />
+          <RadioOption key={option.value} value={option.value}>
             {option.label}
-          </FieldLabel>
+          </RadioOption>
         ))}
       </RadioGroup>
       <SaveStatus state={state} t={t} />
     </FieldSet>
+  );
+}
+
+/**
+ * Opzioni con nome accessibile già nell'HTML del server: Base UI collega la `<label>`
+ * esterna soltanto dopo l'idratazione.
+ */
+function RadioOption({
+  value,
+  disabled,
+  children,
+}: {
+  value: string;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  const id = useId();
+  return (
+    <FieldLabel id={id} className="font-normal">
+      <RadioGroupItem value={value} disabled={disabled} aria-labelledby={id} />
+      {children}
+    </FieldLabel>
+  );
+}
+
+function CheckboxOption({
+  name,
+  defaultChecked,
+  children,
+}: {
+  name?: string;
+  defaultChecked?: boolean;
+  children: React.ReactNode;
+}) {
+  const id = useId();
+  return (
+    <FieldLabel id={id} className="font-normal">
+      <Checkbox name={name} defaultChecked={defaultChecked} aria-labelledby={id} />
+      {children}
+    </FieldLabel>
   );
 }
 
@@ -490,8 +530,13 @@ function NotificationsSection({
                 checked={enabled}
                 onCheckedChange={setEnabled}
                 disabled={enabledState === "saving"}
+                aria-labelledby="telegram-enabled-label"
               />
-              <FieldLabel htmlFor="telegram-enabled" className="flex-1 font-normal">
+              <FieldLabel
+                id="telegram-enabled-label"
+                htmlFor="telegram-enabled"
+                className="flex-1 font-normal"
+              >
                 {t.settings.telegramEnabled}
               </FieldLabel>
               <SaveStatus state={enabledState} t={t} />
@@ -516,14 +561,8 @@ function NotificationsSection({
                   onValueChange={(next) => setMode(String(next))}
                   className="gap-3"
                 >
-                  <FieldLabel className="font-normal">
-                    <RadioGroupItem value="each" />
-                    {t.settings.telegramModeEach}
-                  </FieldLabel>
-                  <FieldLabel className="font-normal">
-                    <RadioGroupItem value="digest" />
-                    {t.settings.telegramModeDigest}
-                  </FieldLabel>
+                  <RadioOption value="each">{t.settings.telegramModeEach}</RadioOption>
+                  <RadioOption value="digest">{t.settings.telegramModeDigest}</RadioOption>
                 </RadioGroup>
                 <SaveStatus state={modeState} t={t} />
               </FieldSet>
@@ -598,17 +637,13 @@ function ExportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
               onValueChange={(next) => setFormat(String(next))}
               className="gap-3"
             >
-              <FieldLabel className="font-normal">
-                <RadioGroupItem value="csv" />
-                CSV
-              </FieldLabel>
-              <FieldLabel className="font-normal">
-                <RadioGroupItem value="xlsx" disabled={!premium} />
+              <RadioOption value="csv">CSV</RadioOption>
+              <RadioOption value="xlsx" disabled={!premium}>
                 XLSX
                 {premium ? null : (
                   <StatusBadge tone="premium">{t.settings.premiumBadge}</StatusBadge>
                 )}
-              </FieldLabel>
+              </RadioOption>
             </RadioGroup>
           </FieldSet>
           <FieldSet>
@@ -618,14 +653,8 @@ function ExportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
               onValueChange={(next) => setRows(String(next))}
               className="gap-3"
             >
-              <FieldLabel className="font-normal">
-                <RadioGroupItem value="order" />
-                {t.settings.exportRowOrder}
-              </FieldLabel>
-              <FieldLabel className="font-normal">
-                <RadioGroupItem value="item" />
-                {t.settings.exportRowItem}
-              </FieldLabel>
+              <RadioOption value="order">{t.settings.exportRowOrder}</RadioOption>
+              <RadioOption value="item">{t.settings.exportRowItem}</RadioOption>
             </RadioGroup>
           </FieldSet>
           <FieldSet>
@@ -633,10 +662,9 @@ function ExportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
             {premium ? (
               <div className="grid gap-3 sm:grid-cols-2">
                 {columns.map(([key, label]) => (
-                  <FieldLabel key={key} className="font-normal">
-                    <Checkbox defaultChecked />
+                  <CheckboxOption key={key} defaultChecked>
                     {label}
-                  </FieldLabel>
+                  </CheckboxOption>
                 ))}
               </div>
             ) : (
@@ -723,11 +751,10 @@ function AppearanceSection({ t, links }: { t: AppCopy; links: AppLinks }) {
               ["dark", t.settings.themeDark, Moon],
             ] as const
           ).map(([value, label, Icon]) => (
-            <FieldLabel key={value} className="font-normal">
-              <RadioGroupItem value={value} />
+            <RadioOption key={value} value={value}>
               <Icon aria-hidden="true" className="size-4" />
               {label}
-            </FieldLabel>
+            </RadioOption>
           ))}
         </RadioGroup>
         <p className="text-sm text-muted-foreground">{t.settings.themeNote}</p>
@@ -991,10 +1018,9 @@ function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
                   </div>
                 ))}
               </dl>
-              <FieldLabel className="font-normal">
-                <Checkbox name="diagnostics" defaultChecked />
+              <CheckboxOption name="diagnostics" defaultChecked>
                 {t.settings.includeDiagnostics}
-              </FieldLabel>
+              </CheckboxOption>
             </FieldSet>
           </FieldGroup>
           <Button type="submit" className="w-fit">
