@@ -7,6 +7,7 @@ const { values } = parseArgs({
     grep: { type: "string", default: "." },
     browsers: { type: "string", default: "chromium" },
     pages: { type: "boolean", default: false },
+    shard: { type: "string" },
   },
 });
 const browsers = values.browsers.split(",");
@@ -22,6 +23,7 @@ execFileSync(
     "--grep",
     values.grep,
     ...browsers.flatMap((browser) => ["--project", browser]),
+    ...(values.shard ? ["--shard", values.shard] : []),
   ],
   { stdio: "inherit" },
 );

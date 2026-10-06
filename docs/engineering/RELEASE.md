@@ -6,7 +6,7 @@
 
 La selezione mirata conserva entrambe le suite funzionali Chromium: i titoli generici di alcune interazioni non consentono una riduzione affidabile per dominio. Riduce le visite del catalogo alle aree coinvolte e riusa la stessa selezione dopo il deploy test, con una sola combinazione di layout e tema: le varianti sono già provate sullo stesso artefatto prima del merge, mentre il remoto verifica ambiente, dati e accesso. Le mutation includono i consumatori server pertinenti per Auth, sessioni, isolamento, ordini, export, negozi e integrazioni, oltre a quota e diritti: partono dai moduli critici modificati e ne seguono i consumatori critici, senza estendersi a tutti i domini quando cambia un modulo condiviso non critico.
 
-`Node 26` resta il controllo richiesto. La verifica superata produce `build-<tree>`: un push o una promozione dello stesso tree può riusarlo soltanto da una run CI riuscita dello stesso repository e prima della scadenza. Dopo un merge Dependabot, il workflow avvia esplicitamente la CI sul commit integrato, perché gli effetti del token GitHub non generano un nuovo evento push. I deploy sono serializzati; la verifica delle PR può essere cancellata quando superata da una nuova revisione.
+`Node 26` resta il controllo richiesto e riassume i job `Verify`, che esegue gate, build e provenienza, e `Browser 1/4`…`4/4`, che dividono le prove browser sull'artefatto caricato da `Verify` ([D157](../DECISION_REGISTER.md)). La verifica superata produce `build-<tree>`: un push o una promozione dello stesso tree può riusarlo soltanto da una run CI riuscita dello stesso repository e prima della scadenza. Dopo un merge Dependabot, il workflow avvia esplicitamente la CI sul commit integrato, perché gli effetti del token GitHub non generano un nuovo evento push. I deploy sono serializzati; la verifica delle PR può essere cancellata quando superata da una nuova revisione.
 
 ## Tutte le pagine
 
@@ -24,7 +24,7 @@ Il reporter scrive `test-results/browser/summary.json` e il riepilogo GitHub con
 
 Ogni visita registra route, risposta/percorso attesi, controlli effettivamente completati e omissioni. I collegamenti interni devono risolvere un pattern registrato; la navigazione verifica anche Avanti quando applicabile. Il report identifica commit, ambiente e sorgenti modificati: la release rifiuta un report vuoto, parziale, di un checkout non salvato, di un altro candidato o del dominio test.
 
-Le prove locali usano due worker, quelle remote uno. Ogni caso ha un limite di 60 secondi per visita, audit, ricarica e navigazione; non è una soglia di velocità della pagina. La durata effettiva di ciascun caso entra nel report JSON. Il gate non applica retry automatici per nascondere un errore.
+Le prove locali usano due worker, quattro per ciascuna macchina in CI, quelle remote uno. Ogni caso ha un limite di 60 secondi per visita, audit, ricarica e navigazione; non è una soglia di velocità della pagina. La durata effettiva di ciascun caso entra nel report JSON. Il gate non applica retry automatici per nascondere un errore.
 
 ## Artefatto e readback
 

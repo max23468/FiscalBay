@@ -4,7 +4,8 @@ import { localPort, localSecret } from "./e2e/local-account";
 export default defineConfig({
   testDir: "./e2e",
   outputDir: `./test-results/${process.env.E2E_RUN_ID || (process.env.E2E_BASE_URL ? "deployed" : "local")}`,
-  workers: process.env.E2E_BASE_URL ? 1 : 2,
+  // Sul dominio test l'account di collaudo è unico; in CI ogni macchina esegue una parte.
+  workers: process.env.E2E_BASE_URL ? 1 : process.env.CI ? 4 : 2,
   fullyParallel: true,
   globalSetup: "./e2e/setup.ts",
   reporter: [["list"], ["./e2e/report.ts"]],

@@ -143,6 +143,16 @@ for (const scenario of scenarios) {
           if (message.type() === "error" && !message.text().includes("404"))
             errors.push(message.text());
         });
+        // La scoperta delle route riparte dopo ogni cambiamento del DOM: se la prova naviga
+        // mentre `/__manifest` è in corso, il browser interrompe la richiesta e la registra in
+        // console, insieme all'errore di React Router (WebKit la descrive come controllo di
+        // accesso e non sempre emette `requestfailed`). Si escludono soltanto questi messaggi:
+        // una risposta HTTP di errore del manifest resta intercettata dal controllo sulle
+        // risorse, e una versione cambiata fa ricaricare la pagina al router.
+        const discoveryMessage = (error: string) =>
+          error.startsWith("Failed to fetch manifest patches") ||
+          /\/__manifest\?\S* due to access control checks\.?$/u.test(error);
+        const unexpectedErrors = () => errors.filter((error) => !discoveryMessage(error));
         const expectedStatus = production && scenario.preview ? 404 : scenario.status;
         // Tornando su una pagina 404 il router richiede di nuovo i suoi dati con lo stesso esito.
         const ownData = `${new URL(scenario.path, baseURL!).pathname.replace(/\/$/u, "")}.data`;
@@ -281,7 +291,7 @@ for (const scenario of scenarios) {
               "Navigazione interna non applicabile: pagina iniziale o collegamento iniziale assente.",
           });
         }
-        expect(errors).toEqual([]);
+        expect(unexpectedErrors()).toEqual([]);
         checked("JavaScript, idratazione e risorse senza errori");
       },
     );
