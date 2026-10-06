@@ -6,7 +6,6 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { randomBytes } from "node:crypto";
 import { budgetKiB } from "./check-bundle-size.mjs";
-import { evaluate as evaluateCapacity, jsonObjects, percentile95 } from "./check-capacity.mjs";
 import { classifyFile, plan as changePlan } from "./classify-changes.mjs";
 import { missingPages, missingSections, routePatterns } from "./verify-pages.mjs";
 import {
@@ -25,7 +24,7 @@ import { releaseNotes, assertBrowserEvidence } from "./release-notes.mjs";
 import { knownPagePath } from "../e2e/page-cases.ts";
 import { evaluate } from "./mutation.mjs";
 import { lastDeployed } from "./find-deployed.mjs";
-import { summarize as summarizeInvocations } from "./watch-invocations.mjs";
+import { jsonObjects, summarize as summarizeInvocations } from "./watch-invocations.mjs";
 import {
   checkActionPins,
   checkFixtures,
@@ -704,46 +703,10 @@ describe("budget del JavaScript client", () => {
   it("fa fallire la build oltre budget", () => assert.equal(run((budgetKiB + 10) * 1024), 1));
 });
 
-describe("capacità al deploy", () => {
-  const event = (cpuTime, overrides = {}) => ({
-    cpuTime,
-    outcome: "ok",
-    exceptions: [],
-    event: { response: { status: 200 } },
-    ...overrides,
-  });
-
+describe("eventi di wrangler tail", () => {
   it("separa gli oggetti JSON anche spezzati fra più blocchi", () => {
     const parse = jsonObjects();
     assert.deepEqual(parse('{"a":"}{"}\n{"b":'), [{ a: "}{" }]);
     assert.deepEqual(parse("{}}\n"), [{ b: {} }]);
-  });
-
-  it("calcola il p95 con rango più vicino", () => {
-    assert.equal(percentile95([...Array.from({ length: 19 }, () => 1), 50]), 1);
-    assert.equal(percentile95([...Array.from({ length: 18 }, () => 1), 50, 60]), 50);
-  });
-
-  it("supera la soglia con eventi completi e senza errori", () => {
-    assert.deepEqual(evaluateCapacity([event(2), event(4)], { sent: 2, maxP95: 5 }).failures, []);
-  });
-  it("non presenta un p95 attendibile con un campione incompleto", () => {
-    const result = evaluateCapacity([event(2)], { sent: 200, maxP95: 5 });
-    assert.equal(result.status, "non attendibile");
-    assert.equal(result.p95, undefined);
-    const interrupted = evaluateCapacity([event(2)], { sent: 1, expected: 200, maxP95: 5 });
-    assert.equal(interrupted.status, "non attendibile");
-    assert.equal(interrupted.p95, undefined);
-  });
-
-  it("fallisce oltre soglia, con errori o con eventi mancanti", () => {
-    const failures = (events, sent = events.length) =>
-      evaluateCapacity(events, { sent, maxP95: 5 }).failures.length;
-    assert.equal(failures([event(6)]), 1);
-    assert.equal(failures([event(1, { outcome: "exception" })]), 1);
-    assert.equal(failures([event(1, { exceptions: [{ name: "Error" }] })]), 1);
-    assert.equal(failures([event(1, { event: { response: { status: 503 } } })]), 1);
-    assert.equal(failures([event(1)], 2), 1);
-    assert.equal(failures([]), 1);
   });
 });

@@ -26,8 +26,7 @@
     "verify:copy": "node scripts/verify-copy.mjs",
     "verify:docs": "node scripts/verify-docs.mjs",
     "verify:full": "pnpm verify && E2E_PREBUILT=1 E2E_MATRIX=full node scripts/browser-tests.mjs --browsers chromium,webkit",
-    "verify:repo": "node scripts/verify-repo.mjs",
-    "test:capacity": "node scripts/check-capacity.mjs"
+    "verify:repo": "node scripts/verify-repo.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.8.0",

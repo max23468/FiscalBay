@@ -10,7 +10,34 @@ import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { jsonObjects } from "./check-capacity.mjs";
+
+/** Separa gli oggetti JSON concatenati che `wrangler tail --format json` scrive su stdout. */
+export function jsonObjects() {
+  let buffer = "";
+  return (chunk) => {
+    buffer += chunk;
+    const objects = [];
+    let depth = 0;
+    let start = 0;
+    let inString = false;
+    let escaped = false;
+    for (let index = 0; index < buffer.length; index++) {
+      const char = buffer[index];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === "\\") escaped = true;
+        else if (char === '"') inString = false;
+      } else if (char === '"') inString = true;
+      else if (char === "{" && depth++ === 0) start = index;
+      else if (char === "}" && --depth === 0) {
+        objects.push(JSON.parse(buffer.slice(start, index + 1)));
+        buffer = buffer.slice(index + 1);
+        index = -1;
+      }
+    }
+    return objects;
+  };
+}
 
 /** Invocazioni oltre questo tempo totale sono segnalate come lente. */
 export const slowWallMs = 10_000;

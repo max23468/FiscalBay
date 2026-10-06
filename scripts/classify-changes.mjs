@@ -70,9 +70,7 @@ export function plan(files, sources = [], complete = false) {
     files.every(
       (file) =>
         (file.endsWith(".md") && !governance.some((pattern) => pattern.test(file))) ||
-        /^scripts\/(?:verify-(?:copy|docs|repo)|guardrails\.test|check-capacity)\.mjs$/u.test(
-          file,
-        ) ||
+        /^scripts\/(?:verify-(?:copy|docs|repo)|guardrails\.test)\.mjs$/u.test(file) ||
         /^\.github\/(?:dependabot\.yml|workflows\/(?:actionlint|pr-title|dependency-review|dependabot-auto-merge)\.yml)$/u.test(
           file,
         ),
