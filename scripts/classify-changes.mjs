@@ -93,15 +93,13 @@ export function plan(files, sources = [], complete = false) {
   const routes = [...affected].filter((file) => file.startsWith("app/routes/"));
   for (const route of routes) {
     if (/orders|home/u.test(route)) areas.add("orders");
-    if (route.endsWith("/home.tsx")) {
-      areas.add("auth");
-      areas.add("public");
-    }
+    // Ordini e accesso condividono la pagina; il sito pubblico è `site.tsx`.
+    if (route.endsWith("/home.tsx")) areas.add("auth");
     if (/stores|store-link/u.test(route)) areas.add("stores");
     if (/settings/u.test(route)) areas.add("settings");
     if (/profile/u.test(route)) areas.add("profile");
     if (/security|admin|auth|sign-in/u.test(route)) areas.add("auth");
-    if (/legal/u.test(route)) areas.add("public");
+    if (/legal|site|robots/u.test(route)) areas.add("public");
   }
   const unitOnly =
     files.length > 0 &&

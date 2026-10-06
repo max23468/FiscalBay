@@ -21,7 +21,8 @@ import {
   revokeSession,
   type AuthSession,
 } from "../domain/sessions.server";
-import { securityPath } from "../app-links";
+import { accessPath, ordersPath, securityPath, visitCookie } from "../app-links";
+import { accountLoader } from "../account-page.server";
 import { errorResponse, tracePhase } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
 import type { Route } from "./+types/sign-in";
@@ -42,15 +43,19 @@ const securityIntents = new Set([
   "passkey-remove",
 ]);
 
+// La pagina di accesso è la stessa degli Ordini, che la mostrano a chi non ha la sessione.
+export { default, meta } from "./home";
+
 export function loader({ request }: Route.LoaderArgs) {
-  return redirect(localizedPath(languageFromPath(new URL(request.url).pathname)), {
-    headers: { "cache-control": "no-store" },
-  });
+  return accountLoader(request, "access");
 }
 
 export async function action({ request }: Route.ActionArgs) {
   const language = languageFromPath(new URL(request.url).pathname);
-  const base = localizedPath(language);
+  // Con la sessione si torna agli Ordini, senza all'accesso: ciascuna pagina rimanda all'altra
+  // se il caso non è il suo, conservando l'esito.
+  const base = localizedPath(language, ordersPath);
+  const access = localizedPath(language, accessPath);
   if (request.headers.get("origin") !== new URL(env.APP_ORIGIN).origin) {
     return errorResponse(request, "FORBIDDEN");
   }
@@ -58,9 +63,9 @@ export async function action({ request }: Route.ActionArgs) {
   tracePhase(request, "form");
   const field = (name: string) => String(form.get(name) ?? "");
   const intent = field("intent");
-  // Le azioni di Sicurezza riportano alla sua pagina, le altre alla radice.
+  // Le azioni di Sicurezza riportano alla sua pagina, le altre all'accesso.
   const security = localizedPath(language, securityPath);
-  const back = securityIntents.has(intent) ? security : base;
+  const back = securityIntents.has(intent) ? security : access;
   const notice = (value: string, page = back) => redirect(`${page}?accesso=${value}`, 303);
   const forward = async (path: string, body?: Record<string, unknown>) => {
     tracePhase(request, "auth-forward");
@@ -69,7 +74,12 @@ export async function action({ request }: Route.ActionArgs) {
     return response;
   };
 
-  if (intent === "esci") return withCookies(base, await forward("/sign-out"));
+  // Dopo l'uscita la radice torna a essere il sito pubblico, senza la scelta di visita.
+  if (intent === "esci") {
+    const response = withCookies(localizedPath(language), await forward("/sign-out"));
+    response.headers.append("set-cookie", `${visitCookie}=; Path=/; Max-Age=0`);
+    return response;
+  }
 
   if (intent === "esci-sessione" || intent === "esci-altri") {
     // Chiudere sessioni protegge l'account: basta la sessione corrente, anche non recente.
@@ -81,7 +91,9 @@ export async function action({ request }: Route.ActionArgs) {
     }
     const id = field("id");
     if (!id || id.length > 128) return notice("errore");
-    if (id === session.session.id) return withCookies(base, await forward("/sign-out"));
+    if (id === session.session.id) {
+      return withCookies(localizedPath(language), await forward("/sign-out"));
+    }
     await revokeSession(env.DB, session.user.id, id);
     return notice("sessione-chiusa");
   }
@@ -136,7 +148,7 @@ export async function action({ request }: Route.ActionArgs) {
       // credential che manca a chi è entrato con Google, eBay o passkey.
       const response = await forward("/request-password-reset", {
         email: session.user.email,
-        redirectTo: `${new URL(env.APP_ORIGIN).origin}${base}`,
+        redirectTo: `${new URL(env.APP_ORIGIN).origin}${access}`,
       });
       if (response.status === 429) return notice("troppi-tentativi");
       return notice(response.ok ? "password-link" : "errore");
@@ -156,7 +168,7 @@ export async function action({ request }: Route.ActionArgs) {
   if (intent === "recupera-password") {
     const response = await forward("/request-password-reset", {
       email: field("email"),
-      redirectTo: `${new URL(env.APP_ORIGIN).origin}${base}`,
+      redirectTo: `${new URL(env.APP_ORIGIN).origin}${access}`,
     });
     return notice(
       response.status === 429 ? "troppi-tentativi" : response.ok ? "recupero-inviato" : "errore",
@@ -218,14 +230,14 @@ export async function action({ request }: Route.ActionArgs) {
         email: session.user.email,
         callbackURL: base,
       });
-      if (response.status === 429) return notice("troppi-tentativi");
-      return notice(response.ok ? "verifica-inviata" : "errore");
+      if (response.status === 429) return notice("troppi-tentativi", base);
+      return notice(response.ok ? "verifica-inviata" : "errore", base);
     }
     // Chi è entrato con Google o prima di una nuova versione dei Termini completa qui ciò che manca.
     const status = await registrationStatus(env.DB, session.user.id);
     const profile = status.profile ? undefined : parseProfile(form);
-    if (profile === null) return notice("dati");
-    if (!status.termsAccepted && field("termini") !== "on") return notice("termini");
+    if (profile === null) return notice("dati", base);
+    if (!status.termsAccepted && field("termini") !== "on") return notice("termini", base);
     await completeRegistration(env.DB, {
       userId: session.user.id,
       language,

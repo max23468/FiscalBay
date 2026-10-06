@@ -7,6 +7,7 @@ import { StandalonePage } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
 import { EbayEnvironmentField, type EbayEnvironment } from "~/components/ebay-environment";
 import { buttonVariants } from "~/components/ui/button-variants";
+import { accessPath, appBase, ordersPath, storeLinkPath } from "../app-links";
 import { appCopy } from "../app-copy";
 import { createAuth } from "../auth.server";
 import { registrationComplete, registrationStatus } from "../domain/registration.server";
@@ -53,7 +54,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   const language = languageFromPath(new URL(request.url).pathname);
   const status = await eligibility(request);
   if ("blocked" in status) {
-    const base = localizedPath(language);
+    if (status.blocked === "session") return redirect(localizedPath(language, accessPath), noStore);
+    const base = localizedPath(language, ordersPath);
     return redirect(status.blocked === "email" ? `${base}?negozio=accesso` : base, noStore);
   }
   const search = new URL(request.url).searchParams;
@@ -74,7 +76,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export async function action({ request }: Route.ActionArgs) {
   const language = languageFromPath(new URL(request.url).pathname);
-  const base = localizedPath(language);
+  const base = localizedPath(language, ordersPath);
   if (request.headers.get("origin") !== new URL(env.APP_ORIGIN).origin) {
     return errorResponse(request, "FORBIDDEN");
   }
@@ -99,8 +101,8 @@ export async function action({ request }: Route.ActionArgs) {
 export default function StoreLink({ loaderData }: Route.ComponentProps) {
   const { language, reconnect, sandbox, ebayEnvironment } = loaderData;
   const t = appCopy[language].storeLink;
-  const home = localizedPath(language);
-  const back = loaderData.fromStores ? localizedPath(language, "/negozi") : home;
+  const home = localizedPath(language, ordersPath);
+  const back = loaderData.fromStores ? localizedPath(language, `${appBase}/negozi`) : home;
   return (
     <StandalonePage
       icon={Store}
@@ -121,7 +123,7 @@ export default function StoreLink({ loaderData }: Route.ComponentProps) {
       </ul>
       <form
         method="post"
-        action={localizedPath(language, "/negozi/collega")}
+        action={localizedPath(language, storeLinkPath)}
         className="flex flex-wrap gap-3"
       >
         {sandbox && (

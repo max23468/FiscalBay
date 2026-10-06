@@ -2,31 +2,29 @@ import { env } from "cloudflare:workers";
 import { getMigrations } from "better-auth/db/migration";
 import { describe, expect, it, vi } from "vitest";
 
-import { handleAuthRequest } from "../app/auth-route.server";
+import { forwardToAuth, handleAuthRequest } from "../app/auth-route.server";
 import { createAuth, createAuthOptions, gmailDomain } from "../app/auth.server";
 import { completeRegistration } from "../app/domain/registration.server";
 import { loader as adminLoader } from "../app/routes/admin";
-import { loader as homeLoader } from "../app/routes/home";
 import { loader as securityLoader } from "../app/routes/security";
 import { action as signInAction, loader as signInLoader } from "../app/routes/sign-in";
 import { action as storeLinkAction, loader as storeLinkLoader } from "../app/routes/store-link";
 
-it("riporta i GET delle azioni alla radice localizzata senza accettare redirect esterni", async () => {
+it("non segue redirect esterni nei GET di accesso e collegamento", async () => {
   for (const base of ["", "/en"]) {
-    for (const [path, loader] of [
-      ["/accesso", signInLoader],
-      ["/negozi/collega", storeLinkLoader],
-    ] as const) {
-      const response = (await loader({
-        request: new Request(
-          `http://localhost:5173${base}${path}?token=synthetic&redirectTo=https://example.invalid`,
-        ),
-      } as never)) as Response;
-      expect(response.status).toBe(302);
-      expect(response.headers.get("location")).toBe(base || "/");
-      expect(response.headers.get("cache-control")).toBe("no-store");
-      expect(response.headers.getSetCookie()).toEqual([]);
-    }
+    const query = "?token=synthetic&redirectTo=https://example.invalid";
+    // L'accesso mostra il modulo per la nuova password, senza seguire il redirect richiesto.
+    const access = await signInLoader({
+      request: new Request(`http://localhost:5173${base}/accesso${query}`),
+    } as never);
+    expect(access).toMatchObject({ authenticated: false, resetToken: "synthetic" });
+    const response = (await storeLinkLoader({
+      request: new Request(`http://localhost:5173${base}/app/negozi/collega${query}`),
+    } as never)) as Response;
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe(`${base}/accesso`);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.getSetCookie()).toEqual([]);
   }
 });
 
@@ -34,7 +32,7 @@ it("conserva il rifiuto POST da origine estranea e del collegamento senza sessio
   for (const base of ["", "/en"]) {
     for (const [path, action] of [
       ["/accesso", signInAction],
-      ["/negozi/collega", storeLinkAction],
+      ["/app/negozi/collega", storeLinkAction],
     ] as const) {
       const response = await action({
         request: new Request(`http://localhost:5173${base}${path}`, {
@@ -45,13 +43,13 @@ it("conserva il rifiuto POST da origine estranea e del collegamento senza sessio
       expect(response.status).toBe(403);
     }
     const response = await storeLinkAction({
-      request: new Request(`http://localhost:5173${base}/negozi/collega`, {
+      request: new Request(`http://localhost:5173${base}/app/negozi/collega`, {
         method: "POST",
         headers: { origin: "http://localhost:5173" },
       }),
     } as never);
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe(`${base || "/"}?negozio=accesso`);
+    expect(response.headers.get("location")).toBe(`${base}/app/ordini?negozio=accesso`);
   }
 });
 
@@ -215,6 +213,15 @@ describe("Better Auth su Workers e D1", () => {
         env,
       );
     expect((await options()).status).toBe(403);
+    const verify = await handleAuthRequest(
+      new Request(`${origin}/api/auth/passkey/verify-registration`, {
+        method: "POST",
+        headers: { cookie, origin, "content-type": "application/json" },
+        body: JSON.stringify({ response: {} }),
+      }),
+      env,
+    );
+    expect(verify.status).toBe(403);
     const trailing = await handleAuthRequest(
       new Request(`${origin}/api/auth/passkey/generate-register-options/`, {
         headers: { cookie },
@@ -935,6 +942,8 @@ describe("Collegamento e modifica dell'identità", () => {
       .run();
     expect((await linkRoute(squatter.cookie, idToken)).status).toBe(400);
     expect((await linkRoute(squatter.cookie, "1")).status).toBe(400);
+    expect((await linkRoute(squatter.cookie, "null")).status).toBe(400);
+    expect((await linkRoute(squatter.cookie, "{")).status).toBe(400);
     expect((await linkRoute(squatter.cookie, JSON.stringify({ provider: "google" }))).status).toBe(
       200,
     );
@@ -1201,9 +1210,9 @@ describe("Sessioni, revoche e area admin", () => {
       response.headers.get("location"),
     );
   const home = (cookie: string) =>
-    homeLoader({ request: new Request(`${origin}/`, { headers: { cookie } }) } as never);
-  /** Pagina Sicurezza; chi non può vederla torna alla radice con l'esito ricevuto. */
-  const security = async (cookie: string, path = "/impostazioni/sicurezza") => {
+    signInLoader({ request: new Request(`${origin}/accesso`, { headers: { cookie } }) } as never);
+  /** Pagina Sicurezza; chi non può vederla torna all'accesso con l'esito ricevuto. */
+  const security = async (cookie: string, path = "/app/impostazioni/sicurezza") => {
     try {
       return await securityLoader({
         request: new Request(`${origin}${path}`, { headers: { cookie } }),
@@ -1270,18 +1279,44 @@ describe("Sessioni, revoche e area admin", () => {
   async function expectRevoked(cookie: string) {
     expect(await jsonRequest("get-session", cookie).then((response) => response.json())).toBeNull();
     expect((await home(cookie)).authenticated).toBe(false);
-    expect(await security(cookie, "/en/impostazioni/sicurezza?accesso=sessione-chiusa")).toBe(
-      "/en?accesso=sessione-chiusa",
+    expect(await security(cookie, "/en/app/impostazioni/sicurezza?accesso=sessione-chiusa")).toBe(
+      "/en/accesso?accesso=sessione-chiusa",
     );
     expect(
       await appAction(cookie, { intent: "cambia-email", email: "x@example.invalid" }),
     ).toContain("accesso-non-verificato");
     expect(await appAction(cookie, { intent: "esci-altri" })).toContain("accesso=errore");
-    const link = await storeLinkAction({ request: form("/negozi/collega", cookie, {}) } as never);
+    const link = await storeLinkAction({
+      request: form("/app/negozi/collega", cookie, {}),
+    } as never);
     expect(link.headers.get("location")).toContain("negozio=accesso");
     expect((await jsonRequest("passkey/generate-register-options", cookie)).status).toBe(401);
     expect(await admin(cookie)).toBe(404);
   }
+
+  it("inoltra a Better Auth lo user agent dei moduli e nessun header assente", async () => {
+    await createUser("inoltro@example.invalid");
+    const signIn = (headers: Record<string, string>) =>
+      forwardToAuth(
+        env,
+        new Request(`${origin}/accesso`, { method: "POST", headers }),
+        "/sign-in/email",
+        {
+          email: "inoltro@example.invalid",
+          password: "Password-sintetica-123!",
+        },
+      );
+    const agentOf = async (response: Response) => {
+      const token = decodeURIComponent(cookies(response).split("=")[1]!).split(".")[0];
+      return (
+        await env.DB.prepare('SELECT "userAgent" FROM "session" WHERE "token" = ?')
+          .bind(token)
+          .first<{ userAgent: string | null }>()
+      )?.userAgent;
+    };
+    expect(await agentOf(await signIn({ origin, "user-agent": userAgent }))).toBe(userAgent);
+    expect(await agentOf(await signIn({ origin }))).toBeFalsy();
+  });
 
   it("elenca le sessioni senza token e chiude una sessione o tutte le altre", async () => {
     const user = await createUser("sessioni@example.invalid");
@@ -1316,7 +1351,7 @@ describe("Sessioni, revoche e area admin", () => {
 
     // Le azioni di Sicurezza tornano alla sua pagina.
     expect(await appAction(user.cookie, { intent: "esci-altri" })).toBe(
-      "/impostazioni/sicurezza?accesso=sessioni-chiuse",
+      "/app/impostazioni/sicurezza?accesso=sessioni-chiuse",
     );
     await expectRevoked(third);
     expect(await sessionId(user.cookie)).toBeDefined();
@@ -1345,6 +1380,8 @@ describe("Sessioni, revoche e area admin", () => {
       expect(await appAction(user.cookie, fields)).toContain("nuovo-accesso");
     }
     expect((await jsonRequest("passkey/generate-register-options", user.cookie)).status).toBe(403);
+    // Le altre route non chiedono un accesso recente.
+    expect((await jsonRequest("get-session", user.cookie)).status).toBe(200);
     expect(await security(user.cookie)).toMatchObject({
       recent: false,
       passkeyRestriction: "nuovo-accesso",
