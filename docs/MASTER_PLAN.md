@@ -825,7 +825,7 @@ Pipeline minima: install frozen lockfile → format check → lint → typecheck
 **Guardrail della pipeline.**
 
 - Ogni Action di terze parti è pinnata allo SHA completo del commit, con la versione in commento; Dependabot aggiorna SHA e commento insieme.
-- `develop` richiede il controllo `Node 26` e ammette il merge automatico, che parte solo con i controlli verdi; l'amministratore conserva la possibilità di intervenire. `Node 26` riassume job paralleli: gate e build in uno, prove browser divise su più macchine, senza ridurre matrice o browser selezionati ([D157](DECISION_REGISTER.md)).
+- `develop` richiede il controllo `Node 26` e ammette il merge automatico, che parte solo con i controlli verdi; l'amministratore conserva la possibilità di intervenire. `Node 26` riassume job paralleli: gate e build in uno, prove browser divise su più macchine e mutation dei domini critici in un job proprio, senza ridurre matrice o browser selezionati ([D157](DECISION_REGISTER.md)).
 - `main` accetta PR soltanto da `develop` dello stesso repository. La promozione riusa i controlli già verdi sullo stesso tree invece di ripeterli, purché il tree coincida e i controlli provengano da GitHub Actions del repository; se cambia un file che governa la pubblicazione (workflow, AGENTS, sezioni di governo) il riuso non vale.
 - Dopo una promozione su `main`, `develop` viene riallineato automaticamente ai commit di promozione, così le PR successive non divergono.
 - Il push su `develop` non ripete il gate applicativo su un tree già verificato da una PR dello stesso repository, né su un diff solo documentale: il deploy test distribuisce l'artefatto prodotto dalla verifica, senza ricompilarlo, e un merge solo documentale non ridistribuisce.
