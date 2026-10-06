@@ -3,7 +3,7 @@ import { redirect } from "react-router";
 
 import { createAuth } from "./auth.server";
 import { registrationStatus, type Profile } from "./domain/registration.server";
-import { errorResponse } from "./errors";
+import { errorResponse, tracePhase } from "./errors";
 import { languageFromPath, localizedPath, type Language } from "./i18n";
 
 export type AccountArea = {
@@ -22,8 +22,13 @@ export type AccountArea = {
 export async function requireAccountArea(request: Request): Promise<AccountArea> {
   const url = new URL(request.url);
   const language = languageFromPath(url.pathname);
-  const session = await createAuth(env).api.getSession({ headers: request.headers });
+  const auth = createAuth(env);
+  await auth.$context;
+  tracePhase(request, "auth-context");
+  const session = await auth.api.getSession({ headers: request.headers });
+  tracePhase(request, "session");
   const status = session ? await registrationStatus(env.DB, session.user.id) : null;
+  tracePhase(request, "registration");
   if (!session?.user.emailVerified || !status?.profile || !status.termsAccepted) {
     throw redirect(`${localizedPath(language)}${url.search}`, {
       headers: { "cache-control": "no-store" },

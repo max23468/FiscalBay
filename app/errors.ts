@@ -13,6 +13,16 @@ export const errorCatalog = {
 
 export type ErrorCode = keyof typeof errorCatalog;
 export const correlationHeader = "x-correlation-id";
+export const traceHeader = "x-fiscalbay-trace";
+
+/**
+ * Fasi raggiunte dalle richieste marcate dal collaudo remoto: solo il nome della fase, mai
+ * dati. Una richiesta rimasta in attesa mostra nei log del Worker l'ultima fase superata.
+ */
+export function tracePhase(request: Request, phase: string): void {
+  if (request.headers.get(traceHeader) === "1")
+    console.log(JSON.stringify({ event: "phase", phase }));
+}
 
 export function correlateResponse(response: Response, id: string): Response {
   const headers = new Headers(response.headers);

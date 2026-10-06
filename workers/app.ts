@@ -1,7 +1,7 @@
 // Valutata all'avvio dell'isolate, fuori dalla CPU della richiesta; handler creato una volta.
 import * as build from "virtual:react-router/server-build";
 import { createRequestHandler } from "react-router";
-import { correlateResponse, correlationHeader, logFailure } from "../app/errors";
+import { correlateResponse, correlationHeader, logFailure, tracePhase } from "../app/errors";
 import { refreshExpiringTokens } from "../app/integrations/ebay/seller-credentials.server";
 
 const requestHandler = createRequestHandler(build, import.meta.env.MODE);
@@ -13,7 +13,9 @@ export default {
     headers.set(correlationHeader, id);
     const correlatedRequest = new Request(request, { headers });
     try {
+      tracePhase(correlatedRequest, "start");
       const response = await requestHandler(correlatedRequest);
+      tracePhase(correlatedRequest, "response");
       const correlated = correlateResponse(response, id);
       if (env.VERSION_METADATA?.id)
         correlated.headers.set("x-fiscalbay-version", env.VERSION_METADATA.id);
