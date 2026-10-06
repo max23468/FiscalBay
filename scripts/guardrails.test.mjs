@@ -19,6 +19,7 @@ import {
   receiptArtifact,
   readReceipt,
   releaseIdentity,
+  retryReadback,
 } from "./release.mjs";
 import { releaseNotes, assertBrowserEvidence } from "./release-notes.mjs";
 import { knownPagePath } from "../e2e/page-cases.ts";
@@ -376,6 +377,31 @@ describe("pubblicazione riprendibile", () => {
     const result = await publish(manifest, io, receipts.at(-1));
     assert.equal(result.readback, true);
     assert.equal(result.rollbackCompatible, false);
+  });
+
+  it("attende la propagazione della versione entro una finestra limitata", async () => {
+    let calls = 0;
+    await retryReadback(
+      async () => {
+        if (++calls < 3) throw new Error("Readback della versione non riuscito: /.");
+      },
+      5,
+      0,
+    );
+    assert.equal(calls, 3);
+    calls = 0;
+    await assert.rejects(
+      retryReadback(
+        async () => {
+          calls++;
+          throw new Error("Readback della versione non riuscito: /en.");
+        },
+        4,
+        0,
+      ),
+      /\/en/u,
+    );
+    assert.equal(calls, 4);
   });
 
   it("non dichiara readback riuscito se il provider distribuisce un'altra identità", async () => {

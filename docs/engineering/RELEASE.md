@@ -30,7 +30,7 @@ Le prove locali usano due worker, quelle remote uno. Ogni caso ha un limite di 6
 
 `node scripts/release.mjs manifest --environment test` registra commit, tree, SHA256 dell'artefatto, configurazione, lockfile, toolchain e hash delle migration. `verify` controlla gli stessi input prima della distribuzione. Un merge può cambiare commit conservando il tree. Il deploy rifiuta un candidato superato sul branch remoto e registra l'identità completa nelle annotazioni della versione Cloudflare.
 
-Il Worker restituisce `x-fiscalbay-version` dal binding nativo di Cloudflare. Il readback confronta questa versione su `/`, `/en` e `/api/auth/get-session`. La ricevuta `reports/release.json` distingue schema applicato, deploy e readback. D1 espone i nomi delle migration applicate: gli hash SQL nella provenienza sono locali, non un attestato byte per byte del remoto.
+Il Worker restituisce `x-fiscalbay-version` dal binding nativo di Cloudflare. Il readback confronta questa versione su `/`, `/en` e `/api/auth/get-session` e, poiché l'edge può servire la versione precedente per qualche secondo dopo il deploy, riprova per circa un minuto prima di fallire. La ricevuta `reports/release.json` distingue schema applicato, deploy e readback. D1 espone i nomi delle migration applicate: gli hash SQL nella provenienza sono locali, non un attestato byte per byte del remoto.
 
 Quando la precedente versione espone un commit qualificato, le migration già applicate devono coincidere byte per byte con quel sorgente Git. Una versione storica senza identità qualificata non permette questo confronto: il primo ciclo test deve registrare tale limite. La provenienza rifiuta un checkout con modifiche non salvate nel commit.
 
