@@ -311,7 +311,13 @@ jobs:
           E2E_BASE_URL: https://test.fiscalbay.it
           BROWSER_GREP: ${{ needs.verify.outputs.grep }}
           E2E_ACCOUNT_PASSWORD: ${{ steps.account.outcome == 'success' && secrets.E2E_ACCOUNT_PASSWORD || '' }}
-        run: node scripts/browser-tests.mjs --pages --grep "${BROWSER_GREP}"
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        # Le invocazioni del Worker restano nell'evidenza, ripulite, per le richieste lente o fallite.
+        run: >-
+          node scripts/watch-invocations.mjs --worker fiscalbay-test
+          --output test-results/browser/invocations.json --
+          node scripts/browser-tests.mjs --pages --grep "${BROWSER_GREP}"
 
       # Misura e ricevuta senza bloccare (D148): il p95 oscilla di qualche ms fra misure
       # della stessa versione, quindi oltre soglia resta un avviso e non un rollback.

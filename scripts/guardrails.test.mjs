@@ -25,6 +25,7 @@ import { releaseNotes, assertBrowserEvidence } from "./release-notes.mjs";
 import { knownPagePath } from "../e2e/page-cases.ts";
 import { evaluate } from "./mutation.mjs";
 import { lastDeployed } from "./find-deployed.mjs";
+import { summarize as summarizeInvocations } from "./watch-invocations.mjs";
 import {
   checkActionPins,
   checkFixtures,
@@ -620,6 +621,40 @@ describe("base del confronto sui push", () => {
       ),
       undefined,
     );
+  });
+});
+
+describe("invocazioni osservate durante il collaudo remoto", () => {
+  it("riporta solo percorso e tempi, e segnala le invocazioni lente o fallite", () => {
+    const request = (url) => ({ url, method: "GET", headers: { cookie: "sessione" } });
+    const summary = summarizeInvocations([
+      {
+        outcome: "ok",
+        wallTime: 120,
+        cpuTime: 4,
+        event: { request: request("https://test.example/?token=x"), response: { status: 200 } },
+      },
+      {
+        outcome: "ok",
+        wallTime: 58_000,
+        cpuTime: 6,
+        event: { request: request("https://test.example/negozi"), response: { status: 200 } },
+      },
+      {
+        outcome: "canceled",
+        wallTime: 30,
+        cpuTime: 1,
+        event: { request: request("https://test.example/profilo") },
+      },
+      { outcome: "ok", event: { scheduledTime: 1 } },
+    ]);
+    assert.equal(summary.total, 3);
+    assert.deepEqual(
+      summary.anomalies.map(({ path }) => path),
+      ["/negozi", "/profilo"],
+    );
+    assert.equal(JSON.stringify(summary).includes("sessione"), false);
+    assert.equal(JSON.stringify(summary).includes("token"), false);
   });
 });
 
