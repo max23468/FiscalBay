@@ -9,6 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { productionReadiness } from "./release.mjs";
 
 let root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 let assets = false,
@@ -193,6 +194,17 @@ function main() {
     for (const m of text.matchAll(/^\|\s*(D\d+)\s*\|/gm)) decisionIds.push(m[1]);
   const decisions = duplicateIds(decisionIds, "DECISION_DUPLICATE");
   stats.decisions = decisions.size;
+  const masterPlan = documents.get(path.join(root, "docs/MASTER_PLAN.md"));
+  if (masterPlan !== undefined) {
+    try {
+      productionReadiness(masterPlan, false);
+    } catch {
+      error(
+        "PRODUCTION_GATES",
+        "Gate Production mancanti, duplicati o non validi nel Master Plan.",
+      );
+    }
+  }
   for (const [file, text] of documents) {
     for (const m of text.matchAll(/\bD\d{3,}\b/g))
       if (!decisions.has(m[0])) error("DECISION_REFERENCE", `${relative(file)}: ${m[0]}`);

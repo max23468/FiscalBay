@@ -12,7 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { importGraph } from "./verify-repo.mjs";
 
-// Documenti che governano operazioni e gate: non ottengono la corsia ridotta.
+// Il governo richiede anche i test degli script, senza implicare browser o deploy.
 const governance = [
   /^AGENTS\.md$/u,
   /^CLAUDE\.md$/u,
@@ -36,6 +36,19 @@ const categories = [
     ],
   ],
 ];
+
+function toolingFile(file) {
+  return (
+    file.endsWith(".md") ||
+    /^scripts\/(?:verify-(?:copy|docs|repo|pages)|guardrails\.test|classify-changes|release(?:-notes)?|find-(?:build|deployed)|reset-test-account|watch-invocations)\.mjs$/u.test(
+      file,
+    ) ||
+    /^\.github\/(?:dependabot\.yml|workflows\/(?:ci|publish|promotion|mutation|react-doctor|actionlint|pr-title|dependency-review|dependabot-auto-merge)\.yml)$/u.test(
+      file,
+    ) ||
+    /^(?:\.oxfmtrc\.json|doctor\.config\.json)$/u.test(file)
+  );
+}
 
 /** Categoria di un file, oppure `undefined` se non classificato. */
 export function classifyFile(file) {
@@ -65,23 +78,14 @@ export function plan(files, sources = [], complete = false) {
   const unclassified = files.filter((file) => !classifyFile(file));
   const kinds = new Set(files.map(classifyFile));
   const docsOnly = kinds.size === 1 && kinds.has("documentation");
-  const toolsOnly =
-    files.length > 0 &&
-    files.every(
-      (file) =>
-        (file.endsWith(".md") && !governance.some((pattern) => pattern.test(file))) ||
-        /^scripts\/(?:verify-(?:copy|docs|repo)|guardrails\.test)\.mjs$/u.test(file) ||
-        /^\.github\/(?:dependabot\.yml|workflows\/(?:actionlint|pr-title|dependency-review|dependabot-auto-merge)\.yml)$/u.test(
-          file,
-        ),
-    );
+  const toolsOnly = files.length > 0 && files.every(toolingFile);
   const graph = importGraph(sources);
   const affected = consumers(files, graph);
   const full =
     complete ||
     files.length === 0 ||
     unclassified.length > 0 ||
-    (kinds.has("tooling") && !toolsOnly) ||
+    files.some((file) => classifyFile(file) === "tooling" && !toolingFile(file)) ||
     files.some((file) =>
       /^(?:app\/(?:root\.tsx|routes\.ts|entry\.server|app-copy|app-links)|app\/components\/(?:ui\/|app-shell|account)|app\/app\.css|public\/|workers\/|migrations\/|e2e\/)/u.test(
         file,
@@ -102,8 +106,10 @@ export function plan(files, sources = [], complete = false) {
     if (/legal|site|robots/u.test(route)) areas.add("public");
   }
   const unitOnly =
-    files.length > 0 &&
-    files.every((file) => classifyFile(file) === "test" && !file.startsWith("e2e/"));
+    files.some((file) => classifyFile(file) === "test") &&
+    files.every(
+      (file) => toolingFile(file) || (classifyFile(file) === "test" && !file.startsWith("e2e/")),
+    );
   const mode =
     docsOnly && !complete
       ? "docs"
@@ -154,6 +160,20 @@ export function plan(files, sources = [], complete = false) {
       ? "chromium,webkit"
       : "chromium"
     : "";
+  const build = mode === "full" || mode === "targeted" || mode === "unit";
+  const deploy =
+    files.length === 0 ||
+    unclassified.length > 0 ||
+    kinds.has("runtime") ||
+    files.some((file) => classifyFile(file) === "tooling" && !toolingFile(file));
+  const doctor =
+    complete ||
+    unclassified.length > 0 ||
+    files.length === 0 ||
+    (full && kinds.has("runtime")) ||
+    files.some((file) => classifyFile(file) === "tooling" && !toolingFile(file)) ||
+    [...affected].some((file) => /^app\/.*\.tsx$/u.test(file)) ||
+    files.some((file) => /^(?:package\.json|pnpm-lock\.yaml|doctor\.config\.json)$/u.test(file));
   return {
     gate: mode === "docs" ? "docs" : mode === "tooling" ? "tooling" : "full",
     e2e,
@@ -162,10 +182,12 @@ export function plan(files, sources = [], complete = false) {
     areas: [...areas].sort(),
     browserGrep,
     browsers,
-    deploy: kinds.has("runtime") || (!toolsOnly && !docsOnly && !unitOnly),
+    build,
+    deploy,
+    doctor,
     promotionReuse: !files.some(
       (file) =>
-        governance.some((pattern) => pattern.test(file)) ||
+        /^scripts\/(?:classify-changes|release(?:-notes)?|find-build)\.mjs$/u.test(file) ||
         /^\.github\/workflows\/(?:ci|mutation|publish|promotion)\.yml$/u.test(file),
     ),
     mutation,
@@ -173,8 +195,29 @@ export function plan(files, sources = [], complete = false) {
       complete ? "diff cumulativo, collaudo completo" : `modalità ${mode}`,
       ...(unclassified.length ? ["file non classificati"] : []),
       ...routes.map((route) => `consumatore ${route}`),
+      `browser ${e2e ? "richiesti dal perimetro applicativo" : "non richiesti"}`,
+      `build ${build ? "richiesta dal gate applicativo" : "non richiesta"}`,
+      `deploy ${deploy ? "richiesto da runtime, configurazione o perimetro sconosciuto" : "nessun artefatto applicativo modificato"}`,
+      ...files
+        .filter((file) => !toolingFile(file) && classifyFile(file) !== "test")
+        .map((file) => `impatto applicativo o non classificato: ${file}`),
     ],
   };
+}
+
+/** Sequenza del gate condivisa da locale e CI, senza browser o mutation. */
+export function gateCommands({ gate, doctor }) {
+  if (gate === "docs")
+    return [
+      ["node", ["scripts/verify-copy.mjs"]],
+      ["node", ["scripts/verify-docs.mjs"]],
+    ];
+  const checks =
+    gate === "tooling"
+      ? ["verify:tooling"]
+      : ["verify:tooling", "verify:pages", "typecheck", "test", "build"];
+  if (doctor) checks.push("doctor:react");
+  return checks.map((check) => ["pnpm", [check]]);
 }
 
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" });
@@ -228,9 +271,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   if (args.includes("--github-output") && process.env.GITHUB_OUTPUT)
     appendFileSync(
       process.env.GITHUB_OUTPUT,
-      `gate=${result.gate}\ne2e=${result.e2e}\ndeploy=${result.deploy}\npromotion-reuse=${result.promotionReuse}\nmode=${result.mode}\ngrep=${result.browserGrep}\nbrowsers=${result.browsers}\nmutation=${result.mutation.join(" ")}\nmutation-matrix=${JSON.stringify({ target: result.mutation })}\n`,
+      `gate=${result.gate}\ne2e=${result.e2e}\nbuild=${result.build}\ndeploy=${result.deploy}\ndoctor=${result.doctor}\npromotion-reuse=${result.promotionReuse}\nmode=${result.mode}\ngrep=${result.browserGrep}\nbrowsers=${result.browsers}\nmutation=${result.mutation.join(" ")}\nmutation-matrix=${JSON.stringify({ target: result.mutation })}\n`,
     );
-  if (process.env.GITHUB_STEP_SUMMARY)
+  if (process.env.GITHUB_STEP_SUMMARY && !args.includes("--gate-only"))
     appendFileSync(
       process.env.GITHUB_STEP_SUMMARY,
       `### Piano dei controlli\n\n${result.reasons.map((reason) => `- ${reason}`).join("\n")}\n\nBrowser: ${result.browsers || "non applicabili"}. Mutation: ${result.mutation.join(", ") || "nessun dominio critico modificato"}.\n`,
@@ -238,16 +281,14 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   if (args.includes("--json")) console.log(JSON.stringify(result));
 
   if (args.includes("--run")) {
-    if (result.gate === "docs") {
-      run("node", ["scripts/verify-copy.mjs"]);
-      run("node", ["scripts/verify-docs.mjs"]);
-    } else run("pnpm", [result.gate === "tooling" ? "verify:tooling" : "verify"]);
-    if (result.e2e)
+    for (const [command, arguments_] of gateCommands(result)) run(command, arguments_);
+    if (result.e2e && !args.includes("--gate-only"))
       run(
         "node",
         ["scripts/browser-tests.mjs", "--grep", result.browserGrep, "--browsers", result.browsers],
         { E2E_PREBUILT: "1" },
       );
-    if (result.mutation.length) run("pnpm", ["test:mutation", ...result.mutation]);
+    if (result.mutation.length && !args.includes("--gate-only"))
+      run("pnpm", ["test:mutation", ...result.mutation]);
   }
 }

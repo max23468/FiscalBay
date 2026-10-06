@@ -221,7 +221,7 @@ export async function retryReadback(check, attempts = 12, delayMs = 5000) {
   }
 }
 
-export function productionReadiness(plan) {
+export function productionReadiness(plan, requireCompleted = true) {
   const sections = plan.split(/^### Gate per la pubblicazione Production\s*$/mu);
   const section = sections.length === 2 ? sections[1].split(/^#{1,3} |^<a id=/mu)[0] : "";
   const rows = section
@@ -239,9 +239,9 @@ export function productionReadiness(plan) {
       matches.length !== 1 ||
       matches[0].length !== 5 ||
       matches[0][4] !== "" ||
-      matches[0][2] !== "COMPLETATO" ||
-      !matches[0][3] ||
-      matches[0][3] === "-"
+      !["COMPLETATO", "DA COMPLETARE"].includes(matches[0][2]) ||
+      (requireCompleted && matches[0][2] !== "COMPLETATO") ||
+      (matches[0][2] === "COMPLETATO" && (!matches[0][3] || matches[0][3] === "-"))
     )
       throw new Error("Checkpoint Production non chiusi nel Master Plan.");
   }
