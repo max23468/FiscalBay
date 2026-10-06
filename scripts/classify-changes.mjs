@@ -168,7 +168,7 @@ export function plan(files, sources = [], complete = false) {
     promotionReuse: !files.some(
       (file) =>
         governance.some((pattern) => pattern.test(file)) ||
-        /^\.github\/workflows\/(?:ci|publish|promotion)\.yml$/u.test(file),
+        /^\.github\/workflows\/(?:ci|mutation|publish|promotion)\.yml$/u.test(file),
     ),
     mutation,
     reasons: [

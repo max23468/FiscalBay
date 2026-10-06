@@ -258,6 +258,7 @@ describe("classificazione dei file modificati", () => {
     assert.equal(changePlan(files, [], true).mode, "full");
     assert.equal(changePlan(["app/integrations/stripe.server.ts"]).mutation.length, 1);
     assert.equal(changePlan([".github/workflows/publish.yml"]).promotionReuse, false);
+    assert.equal(changePlan([".github/workflows/mutation.yml"]).promotionReuse, false);
     assert.equal(changePlan(["app/routes/stores.tsx"]).promotionReuse, true);
   });
   it("assegna le categorie note", () => {
