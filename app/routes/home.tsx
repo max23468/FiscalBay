@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 import { cn } from "cn";
 import { ClipboardList, Copy, KeyRound, LogOut, Plus, Store } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -29,14 +28,8 @@ import {
 import { Input } from "~/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import { createAuth } from "../auth.server";
-import { registrationStatus } from "../domain/registration.server";
-import { listSignInMethods } from "../domain/sign-in-methods.server";
-import { listVisibleOrders } from "../domain/orders.server";
-import { listStores } from "../domain/stores.server";
-import { errorResponse, tracePhase } from "../errors";
-import { sandboxAvailable } from "../integrations/ebay/environment.server";
-import { accessNotice } from "../access-notice";
+import { accountLoader } from "../account-page.server";
+import { accessPath, appBase, ordersPath, storeLinkPath } from "../app-links";
 import { appCopy } from "../app-copy";
 import { languageFromPath, localizedPath, type Language } from "../i18n";
 import { formatDate } from "../view-models";
@@ -58,65 +51,8 @@ export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescri
   ];
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const language = languageFromPath(new URL(request.url).pathname);
-  const auth = createAuth(env);
-  await auth.$context;
-  tracePhase(request, "auth-context");
-  const session = await auth.api.getSession({ headers: request.headers });
-  tracePhase(request, "session");
-  const search = new URL(request.url).searchParams;
-  const notice = accessNotice(search, language);
-  if (!session || search.has("token")) {
-    return {
-      authenticated: false as const,
-      language,
-      notice,
-      orders: [],
-      resetToken: search.get("token") || null,
-    };
-  }
-  // Finché mancano profilo o Termini correnti l'utente vede solo il passaggio per completarli.
-  const status = await registrationStatus(env.DB, session.user.id);
-  const complete = status.termsAccepted && status.profile !== null;
-  const ebayLinked = (await listSignInMethods(env.DB, session.user.id)).accounts.ebay;
-  // eBay fornisce uno username, non il nome della persona. Vale anche per gli utenti
-  // già registrati: né lo username né un indirizzo email devono precompilare il profilo.
-  const providerName =
-    status.profile || ebayLinked || session.user.name.includes("@") ? "" : session.user.name;
-  const [firstName = "", ...lastName] = providerName.trim().split(/\s+/u).filter(Boolean);
-  const stores = complete ? await listStores(env.DB, session.user.id) : [];
-  const ebayEnvironment: "production" | "sandbox" =
-    search.get("environment") === "sandbox" ? "sandbox" : "production";
-  if (ebayEnvironment === "sandbox" && !sandboxAvailable(env)) {
-    throw errorResponse(request, "FORBIDDEN");
-  }
-  return {
-    authenticated: true as const,
-    language,
-    notice,
-    email: session.user.email,
-    name: status.profile ? `${status.profile.firstName} ${status.profile.lastName}` : "",
-    emailVerified: session.user.emailVerified,
-    needsProfile: !status.profile,
-    needsAgreement: !status.termsAccepted,
-    canLinkStore: session.user.emailVerified && complete,
-    suggestedName: { firstName, lastName: lastName.join(" ") },
-    orders: complete ? await listVisibleOrders(env.DB, session.user.id, 50, ebayEnvironment) : [],
-    sandbox: sandboxAvailable(env),
-    ebayEnvironment,
-    // Senza ordini, un negozio già collegato cambia il messaggio: non va ricollegato.
-    storeLinked: stores.some(
-      (store) => store.ebayEnvironment === ebayEnvironment && store.connection !== "disconnected",
-    ),
-    // Prima i collegamenti già scaduti, poi quelli in scadenza.
-    reminders: stores
-      .filter((store) => store.ebayEnvironment === ebayEnvironment)
-      .flatMap(({ id, name, ebayEnvironment, reminder }) =>
-        reminder ? [{ id, name, ebayEnvironment, ...reminder }] : [],
-      )
-      .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "expired" ? -1 : 1)),
-  };
+export function loader({ request }: Route.LoaderArgs) {
+  return accountLoader(request, "app");
 }
 
 type AccessCopy = (typeof appCopy)[Language]["access"];
@@ -351,7 +287,7 @@ function PasskeyButton({ t, language }: { t: AccessCopy; language: Language }) {
             const { authClient } = await import("../passkey-client");
             const result = await authClient.signIn.passkey();
             if (result.error) setError(true);
-            else window.location.assign(localizedPath(language));
+            else window.location.assign(localizedPath(language, ordersPath));
           } catch {
             setError(true);
           } finally {
@@ -426,12 +362,14 @@ function AccessForms({
   t,
   language,
   remembered,
+  initialTab,
 }: {
   t: AccessCopy;
   language: Language;
   remembered: Remembered | null;
+  initialTab: string;
 }) {
-  const [tab, setTab] = useState("accedi");
+  const [tab, setTab] = useState(initialTab);
   const [recovering, setRecovering] = useState(false);
   const [restored, setRestored] = useState<Remembered | null>(null);
   if (remembered && remembered !== restored) {
@@ -625,7 +563,7 @@ function ResetPassword({
         {t.passwordRecoveryConfirm}
       </Button>
       <a
-        href={localizedPath(language)}
+        href={localizedPath(language, accessPath)}
         className="w-fit text-sm text-primary underline underline-offset-4"
       >
         {t.backToSignIn}
@@ -730,7 +668,7 @@ function LinkStore({
 }) {
   return (
     <a
-      href={`${localizedPath(language, "/negozi/collega")}?environment=${ebayEnvironment}`}
+      href={`${localizedPath(language, storeLinkPath)}?environment=${ebayEnvironment}`}
       data-slot="button"
       className={cn(buttonVariants(), "w-fit")}
     >
@@ -816,7 +754,9 @@ function AccessPanel({
   if (loaderData.resetToken) {
     return <ResetPassword t={t} language={language} token={loaderData.resetToken} />;
   }
-  return <AccessForms t={t} language={language} remembered={remembered} />;
+  return (
+    <AccessForms t={t} language={language} remembered={remembered} initialTab={loaderData.tab} />
+  );
 }
 
 function accessHeading(loaderData: Awaited<ReturnType<typeof loader>>, t: AccessCopy) {
@@ -841,7 +781,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <LanguageSwitch
               label={t.language}
               current={language}
-              hrefFor={(code) => localizedPath(code)}
+              hrefFor={(code) =>
+                localizedPath(code, loaderData.authenticated ? ordersPath : accessPath)
+              }
               reloadDocument
             />
           </header>
@@ -910,7 +852,9 @@ function EnvironmentSelect({ language, value }: { language: Language; value: Eba
       language={language}
       className="sm:max-w-sm"
       value={value}
-      onValueChange={(next) => void navigate(`${localizedPath(language)}?environment=${next}`)}
+      onValueChange={(next) =>
+        void navigate(`${localizedPath(language, ordersPath)}?environment=${next}`)
+      }
     />
   );
 }
@@ -964,14 +908,14 @@ function OrdersPage({
               storeId={store.id}
               storeName={store.name}
               t={appCopy[language]}
-              links={{ language, base: "" }}
+              links={{ language, base: appBase }}
             />
           ) : (
             <StatusAlert key={store.id} tone="info" title={t.consentExpiringTitle(store.name)}>
               <span className="grid justify-items-start gap-3">
                 {t.consentExpiringBody(formatDate(store.at, language, "date"))}
                 <a
-                  href={`${localizedPath(language, "/negozi/collega")}?ricollega&environment=${store.ebayEnvironment}`}
+                  href={`${localizedPath(language, storeLinkPath)}?ricollega&environment=${store.ebayEnvironment}`}
                   data-slot="button"
                   className={buttonVariants({ variant: "outline", size: "sm" })}
                 >

@@ -51,12 +51,20 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
     ...options,
   });
   const home = prefix || "/";
+  const access = `${prefix}/accesso`;
+  const orders = `${prefix}/app/ordini`;
   const preview = (path: string, area: string, options: Partial<PageCase> = {}) =>
     make(`/anteprima${path}`, area, { preview: true, ...options });
   return [
     make("", "public"),
-    make("", "orders", { role: "member" }),
-    make("?token=synthetic-reset-token", "auth", { pattern: home }),
+    // Con la sessione la radice porta agli Ordini, salvo la scelta di visitare il sito.
+    make("", "public", { role: "member", redirect: orders }),
+    make("?visita=1", "public", { role: "member", pattern: home, redirect: home }),
+    make("/accesso", "auth"),
+    make("/accesso?token=synthetic-reset-token", "auth", { pattern: access }),
+    make("/accesso", "auth", { role: "member", redirect: orders }),
+    make("/app/ordini", "orders", { redirect: access }),
+    make("/app/ordini", "orders", { role: "member" }),
     make("/auth/error", "auth"),
     ...["email_not_found", "account_not_linked", "account_already_linked_to_different_user"].map(
       (error) =>
@@ -64,28 +72,27 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
           pattern: `${prefix}/auth/error`,
         }),
     ),
-    make("/accesso", "auth", { redirect: home }),
     make("/termini", "public"),
     make("/privacy", "public"),
-    make("/negozi/collega", "stores", { redirect: home }),
-    make("/negozi/collega", "stores", { role: "member" }),
-    make("/negozi/collega?ricollega", "stores", {
+    make("/app/negozi/collega", "stores", { redirect: access }),
+    make("/app/negozi/collega", "stores", { role: "member" }),
+    make("/app/negozi/collega?ricollega", "stores", {
       role: "member",
-      pattern: `${prefix}/negozi/collega`,
+      pattern: `${prefix}/app/negozi/collega`,
     }),
-    make("/negozi", "stores", { pattern: `${prefix}/negozi/:negozio?`, redirect: home }),
+    make("/app/negozi", "stores", { pattern: `${prefix}/app/negozi/:negozio?`, redirect: access }),
     // Un negozio inesistente o di un altro spazio risponde 404 dentro la shell.
     ...["", `/${testAccount.stores.active}`, "/non-esiste"].map((suffix) =>
-      make(`/negozi${suffix}`, "stores", {
+      make(`/app/negozi${suffix}`, "stores", {
         role: "member",
-        pattern: `${prefix}/negozi/:negozio?`,
+        pattern: `${prefix}/app/negozi/:negozio?`,
         status: suffix === "/non-esiste" ? 404 : 200,
       }),
     ),
-    make("/profilo", "profile", { redirect: home }),
-    make("/profilo", "profile", { role: "member" }),
-    make("/impostazioni/sicurezza", "auth", { redirect: home }),
-    make("/impostazioni/sicurezza", "auth", { role: "member" }),
+    make("/app/profilo", "profile", { redirect: access }),
+    make("/app/profilo", "profile", { role: "member" }),
+    make("/app/impostazioni/sicurezza", "auth", { redirect: access }),
+    make("/app/impostazioni/sicurezza", "auth", { role: "member" }),
     make("/admin", "auth", { status: 404 }),
     make("/admin", "auth", { role: "member", status: 404 }),
     make("/admin", "auth", { role: "admin-verify" }),
@@ -113,6 +120,9 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
     make("/pagina-inesistente", "public", { status: 404, pattern: "*" }),
     ...(prefix
       ? []
-      : [make("/api/auth/get-session", "auth", { pattern: "/api/auth/*", endpoint: true })]),
+      : [
+          make("/api/auth/get-session", "auth", { pattern: "/api/auth/*", endpoint: true }),
+          make("/robots.txt", "public", { endpoint: true }),
+        ]),
   ];
 });

@@ -651,6 +651,21 @@ const it = {
     draft:
       "Il testo definitivo sarà pubblicato prima dell’apertura del servizio. Se cambia, ti chiederemo di accettare la nuova versione.",
   },
+  /** Home pubblica minima: il sito completo arriva con Funzionalità, Prezzi e FAQ. */
+  site: {
+    title: "Recupera il Codice Fiscale dagli ordini eBay",
+    description:
+      "FiscalBay legge i tuoi ordini eBay con le API ufficiali e ti mostra il Codice Fiscale dell’acquirente, quando disponibile su eBay.",
+    hero: "Trova e gestisci il Codice Fiscale dei tuoi ordini eBay.",
+    body: "Colleghi il tuo negozio eBay e FiscalBay riporta il Codice Fiscale dell’acquirente, quando disponibile su eBay, pronto da copiare.",
+    start: "Inizia gratis",
+    signIn: "Accedi",
+    openApp: "Vai all’app",
+    trust:
+      "Dati letti con le API ufficiali di eBay, in sola lettura: FiscalBay non modifica i tuoi ordini.",
+    independent: "FiscalBay è un servizio indipendente, non affiliato a eBay.",
+    support: "Assistenza",
+  },
   /** Pagina minima di accesso e ordini, finché le route reali non usano la shell. */
   access: {
     title: "Ordini",
@@ -1402,6 +1417,20 @@ const en: AppCopy = {
         : `Version ${version}`,
     draft:
       "The final text will be published before the service opens. If it changes, we will ask you to accept the new version.",
+  },
+  site: {
+    title: "Get the Codice Fiscale from your eBay orders",
+    description:
+      "FiscalBay reads your eBay orders through the official APIs and shows you the buyer’s Codice Fiscale, when eBay provides it.",
+    hero: "Find and manage the Codice Fiscale of your eBay orders.",
+    body: "Connect your eBay store and FiscalBay shows the buyer’s Codice Fiscale, when eBay provides it, ready to copy.",
+    start: "Start for free",
+    signIn: "Sign in",
+    openApp: "Go to the app",
+    trust:
+      "Data read through eBay’s official APIs, read-only: FiscalBay never changes your orders.",
+    independent: "FiscalBay is an independent service, not affiliated with eBay.",
+    support: "Support",
   },
   access: {
     title: "Orders",

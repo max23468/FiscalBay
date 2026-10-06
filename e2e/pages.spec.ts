@@ -91,23 +91,42 @@ for (const scenario of scenarios) {
             const origin = new URL(baseURL!).origin;
             // Il browser non accetta un Cookie iniettato né, in WebKit Linux, un cookie Secure
             // su http: le richieste locali passano dal client HTTP di Playwright con la sessione.
+            // Le richieste che seguono un redirect non tornano dal gestore e arriverebbero senza
+            // sessione: per le navigazioni il redirect diventa una navigazione del documento,
+            // che torna dal gestore con la sessione e con i cookie del browser.
             await context.route(
               (url) => url.origin === origin,
-              async (route) =>
-                route.fulfill({
-                  response: await route.fetch({
-                    headers: {
-                      ...route.request().headers(),
-                      cookie: `${cookie.name}=${cookie.value}`,
-                    },
-                    maxRedirects: 0,
-                  }),
-                }),
+              async (route) => {
+                const request = route.request();
+                const sent = await request.allHeaders();
+                const session = `${cookie.name}=${cookie.value}`;
+                const response = await route.fetch({
+                  headers: {
+                    ...sent,
+                    cookie: sent.cookie ? `${sent.cookie}; ${session}` : session,
+                  },
+                  maxRedirects: 0,
+                });
+                const location = response.headers().location;
+                if (!location || !request.isNavigationRequest()) return route.fulfill({ response });
+                const cookies = response
+                  .headersArray()
+                  .filter(({ name }) => name.toLowerCase() === "set-cookie")
+                  .map(({ value }) => value);
+                return route.fulfill({
+                  status: 200,
+                  headers: {
+                    "content-type": "text/html",
+                    ...(cookies.length ? { "set-cookie": cookies.join("\n") } : {}),
+                  },
+                  body: `<script>location.replace(${JSON.stringify(location)})</script>`,
+                });
+              },
             );
           } else if (remoteSession) {
             await context.addCookies(remoteSession);
           } else {
-            await page.goto("/");
+            await page.goto("/accesso");
             const signIn = page.getByRole("tabpanel", { name: "Accedi" });
             await signIn.getByRole("textbox", { name: "Email" }).fill(testAccount.email);
             await signIn
@@ -133,6 +152,14 @@ for (const scenario of scenarios) {
         if (scenario.endpoint) {
           const response = await context.request.get(scenario.path);
           expect(response.status()).toBe(scenario.status);
+          if (scenario.path.endsWith("/robots.txt")) {
+            // In produzione chiude l'area riservata, altrove tutto il dominio.
+            expect(await response.text()).toMatch(
+              production ? /^Disallow: \/app$/mu : /^User-agent: \*\nDisallow: \/\n/u,
+            );
+            checked("HTTP e robots.txt");
+            return;
+          }
           expect(await response.json()).toBeNull();
           checked("HTTP e contratto JSON anonimo");
           return;
@@ -172,7 +199,8 @@ for (const scenario of scenarios) {
         const response = await page.goto(scenario.path);
         expect(response?.status()).toBe(expectedStatus);
         if (scenario.redirect && !(production && scenario.preview))
-          expect(new URL(page.url()).pathname).toBe(scenario.redirect);
+          // In locale, con la sessione, il redirect arriva come navigazione del documento.
+          await expect(page).toHaveURL((url) => url.pathname === scenario.redirect);
         else expect(new URL(page.url()).pathname).toBe(new URL(scenario.path, baseURL!).pathname);
         checked("HTTP e percorso/redirect");
         await expect(page).toHaveTitle(/^FiscalBay \| /);
@@ -268,7 +296,9 @@ for (const scenario of scenarios) {
         await expect(page.locator("main")).toBeVisible();
         checked("ricarica");
         await page.waitForLoadState("networkidle");
-        const home = scenario.path.startsWith("/en") ? "/en" : "/";
+        // Con la sessione la radice porta agli Ordini: la pagina iniziale è quella dell'app.
+        const prefix = scenario.path.startsWith("/en") ? "/en" : "";
+        const home = scenario.role === "anonymous" ? prefix || "/" : `${prefix}/app/ordini`;
         const homeLink = page.locator(`a[href="${home}"]`).first();
         // Un pannello modale aperto dalla route (dettaglio del negozio) copre i collegamenti sotto.
         const modal = await page.getByRole("dialog").isVisible();

@@ -465,7 +465,7 @@ for (const language of ["it", "en"] as const) {
         page.on("console", (message) => {
           if (message.type() === "error") errors.push(message.text());
         });
-        await page.goto(prefix || "/");
+        await page.goto(`${prefix}/accesso`);
         await page.waitForLoadState("networkidle");
         await expect(page).toHaveTitle(
           language === "it" ? "FiscalBay | Accedi" : "FiscalBay | Sign in",
@@ -575,13 +575,13 @@ for (const language of ["it", "en"] as const) {
 
 for (const language of ["it", "en"] as const) {
   test(`esito di sicurezza con focus e nuovo accesso ${language}`, async ({ page }) => {
-    const prefix = language === "it" ? "/" : "/en";
+    const prefix = language === "it" ? "/accesso" : "/en/accesso";
     await page.goto(`${prefix}?accesso=nuovo-accesso`);
     const status = page
       .getByRole("status")
       .filter({ hasText: language === "it" ? "accesso recente" : "recent sign-in" });
     await expect(status.locator("..")).toBeFocused();
-    await expect(page).toHaveURL(new RegExp(`${prefix === "/" ? "/" : "/en"}$`));
+    await expect(page).toHaveURL(new RegExp(`${prefix}$`));
     const button = page.getByRole("button", {
       name: language === "it" ? "Esci e accedi di nuovo" : "Sign out and sign in again",
     });
@@ -907,19 +907,30 @@ for (const locale of ["it", "en"] as const) {
 const supportAddress = ["supporto", "fiscalbay.it"].join("@");
 
 test(
-  "GET delle azioni pubbliche torna all'accesso nella lingua richiesta",
+  "radice pubblica, accesso e area riservata senza sessione né cache",
   { tag: "@smoke" },
   async ({ request }) => {
     for (const prefix of ["", "/en"]) {
-      for (const path of ["/accesso", "/negozi/collega"]) {
+      // Sito e accesso rispondono all'anonimo; nessuna risposta del Worker resta in cache.
+      for (const path of [prefix || "/", `${prefix}/accesso`]) {
+        const response = await request.get(path, { maxRedirects: 0 });
+        expect(response.status()).toBe(200);
+        expect(response.headers()["cache-control"]).toBe("no-store");
+        // Fuori dalla produzione nessuna pagina è indicizzabile.
+        expect(response.headers()["x-robots-tag"]).toBe("noindex, nofollow");
+      }
+      // L'area riservata rimanda all'accesso, senza seguire un redirect esterno.
+      for (const path of ["/app/ordini", "/app/negozi", "/app/negozi/collega", "/app/profilo"]) {
         const response = await request.get(`${prefix}${path}?redirectTo=https://example.invalid`, {
           maxRedirects: 0,
         });
         expect(response.status()).toBe(302);
-        expect(response.headers().location).toBe(prefix || "/");
+        expect(response.headers().location).toMatch(new RegExp(`^${prefix}/accesso(?:\\?|$)`));
         expect(response.headers()["cache-control"]).toBe("no-store");
       }
     }
+    const robots = await request.get("/robots.txt");
+    expect(await robots.text()).toBe("User-agent: *\nDisallow: /\n");
   },
 );
 
@@ -956,9 +967,9 @@ for (const language of ["it", "en"] as const) {
             }),
             contentType: "image/png",
           });
-          await page.goto(`${prefix || "/"}?negozio=altro-spazio`);
+          await page.goto(`${prefix}/accesso?negozio=altro-spazio`);
           await expect(page.getByRole("link", { name: new RegExp(supportAddress) })).toBeVisible();
-          await page.goto(`${prefix || "/"}?token=synthetic-invalid-token`);
+          await page.goto(`${prefix}/accesso?token=synthetic-invalid-token`);
           await expect(page).toHaveTitle(`FiscalBay | ${title}`);
           await expect(page.getByRole("heading", { name: title, level: 2 })).toBeVisible();
           const form = page.locator("form");
@@ -985,7 +996,7 @@ for (const language of ["it", "en"] as const) {
           });
           await backLink.click();
           await page.waitForLoadState("networkidle");
-          await expect(page).toHaveURL(new RegExp(`${prefix || "/"}$`));
+          await expect(page).toHaveURL(new RegExp(`${prefix}/accesso$`));
           await expect(
             page.getByRole("tab", { name: language === "it" ? "Accedi" : "Sign in", exact: true }),
           ).toBeVisible();
@@ -1395,7 +1406,7 @@ for (const language of ["it", "en"] as const) {
     page,
   }) => {
     const it = language === "it";
-    await page.goto(it ? "/" : "/en");
+    await page.goto(it ? "/accesso" : "/en/accesso");
     await page.waitForLoadState("networkidle");
     const signIn = page.getByRole("tabpanel");
     await signIn.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }).click();
@@ -1453,7 +1464,7 @@ for (const language of ["it", "en"] as const) {
 
 test("l'esito dell'accesso esce dall'indirizzo e non torna alla ricarica", async ({ page }) => {
   const text = "Negozio già collegato a un altro account";
-  await page.goto("/?negozio=altro-spazio");
+  await page.goto("/accesso?negozio=altro-spazio");
   await expect(page.getByText(text, { exact: true })).toBeVisible();
   await expect.poll(() => new URL(page.url()).search).toBe("");
   await page.reload();

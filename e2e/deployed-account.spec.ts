@@ -19,7 +19,7 @@ test(
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
 
-    await page.goto("/");
+    await page.goto("/accesso");
     const signIn = page.getByRole("tabpanel", { name: "Accedi" });
     await signIn.getByRole("textbox", { name: "Email" }).fill(testAccount.email);
     await signIn.getByRole("textbox", { name: "Password" }).fill(password!);
@@ -34,12 +34,12 @@ test(
     await expect(alerts.nth(0)).toContainText(`${stores.expired}: collegamento scaduto`);
     await expect(alerts.nth(0).getByRole("link", { name: "Apri il negozio" })).toHaveAttribute(
       "href",
-      `/negozi/${stores.expired}`,
+      `/app/negozi/${stores.expired}`,
     );
     await expect(alerts.nth(1)).toContainText(`${stores.expiring}: autorizzazione in scadenza`);
     await expect(alerts.nth(1).getByRole("link", { name: "Ricollega negozio" })).toHaveAttribute(
       "href",
-      "/negozi/collega?ricollega&environment=production",
+      "/app/negozi/collega?ricollega&environment=production",
     );
     await expect(page.getByText(stores.paused)).toHaveCount(0);
 
@@ -56,16 +56,24 @@ test(
     for (const name of Object.values(stores)) {
       await expect(page.getByRole("table").getByText(name, { exact: true })).toBeVisible();
     }
-    await page.goto(`/negozi/${stores.paused}`);
+    await page.goto(`/app/negozi/${stores.paused}`);
     const panel = page.getByRole("dialog", { name: stores.paused });
     await expect(panel.getByRole("button", { name: "Riprendi" })).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(page).toHaveURL(/\/negozi$/u);
+    await expect(page).toHaveURL(/\/app\/negozi$/u);
 
-    await page.goto("/profilo");
+    await page.goto("/app/profilo");
     await expect(page).toHaveTitle("FiscalBay | Profilo");
 
+    // Con la sessione la radice porta agli Ordini; «Visita fiscalbay.it» mostra il sito e
+    // «Vai all'app» torna agli Ordini, senza uscire.
+    await page.goto("/?visita=1");
+    await expect(page).toHaveURL(/\/$/u);
+    await expect(page).toHaveTitle("FiscalBay | Recupera il Codice Fiscale dagli ordini eBay");
+    await page.getByRole("link", { name: "Vai all’app" }).click();
+    await expect(page).toHaveTitle("FiscalBay | Ordini");
     await page.goto("/en");
+    await expect(page).toHaveURL(/\/en\/app\/ordini$/u);
     await expect(page).toHaveTitle("FiscalBay | Orders");
     await expect(page.getByText(`${stores.expired}: connection expired`)).toBeVisible();
     expect(await page.content()).not.toContain(taxCodes.locked);

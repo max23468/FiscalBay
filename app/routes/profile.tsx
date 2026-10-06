@@ -5,6 +5,7 @@ import { AccountShell } from "~/components/account";
 import { ProfilePage } from "~/components/settings";
 import { assertSameOrigin, requireAccountArea } from "../account-area.server";
 import { appCopy } from "../app-copy";
+import { appBase } from "../app-links";
 import { completeRegistration, parseProfile } from "../domain/registration.server";
 import { languageFromPath } from "../i18n";
 import type { ActionResult } from "../view-models";
@@ -49,7 +50,7 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
   const { language, account } = loaderData;
   return (
     <AccountShell language={language} account={account} security>
-      <ProfilePage account={account} t={appCopy[language]} links={{ language, base: "" }} />
+      <ProfilePage account={account} t={appCopy[language]} links={{ language, base: appBase }} />
     </AccountShell>
   );
 }

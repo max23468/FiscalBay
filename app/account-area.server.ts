@@ -3,6 +3,7 @@ import { redirect } from "react-router";
 
 import { createAuth } from "./auth.server";
 import { registrationStatus, type Profile } from "./domain/registration.server";
+import { accessPath, ordersPath } from "./app-links";
 import { errorResponse, tracePhase } from "./errors";
 import { languageFromPath, localizedPath, type Language } from "./i18n";
 
@@ -16,8 +17,8 @@ export type AccountArea = {
 
 /**
  * Pagine dell'area riservata oltre agli ordini: richiedono sessione, email confermata e
- * registrazione completa. Altrimenti la radice mostra il passo che manca, conservando l'esito
- * eventualmente arrivato nell'indirizzo.
+ * registrazione completa. Altrimenti l'accesso o gli Ordini mostrano il passo che manca,
+ * conservando l'esito eventualmente arrivato nell'indirizzo.
  */
 export async function requireAccountArea(request: Request): Promise<AccountArea> {
   const url = new URL(request.url);
@@ -30,7 +31,7 @@ export async function requireAccountArea(request: Request): Promise<AccountArea>
   const status = session ? await registrationStatus(env.DB, session.user.id) : null;
   tracePhase(request, "registration");
   if (!session?.user.emailVerified || !status?.profile || !status.termsAccepted) {
-    throw redirect(`${localizedPath(language)}${url.search}`, {
+    throw redirect(`${localizedPath(language, session ? ordersPath : accessPath)}${url.search}`, {
       headers: { "cache-control": "no-store" },
     });
   }

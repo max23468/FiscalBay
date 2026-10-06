@@ -10,7 +10,7 @@ import {
 import { appCopy } from "../app/app-copy";
 import { formatAmount, languageFromPath, localizedPath } from "../app/i18n";
 import { formatDate } from "../app/view-models";
-import { loader as loadHome } from "../app/routes/home";
+import { loader as loadAccess } from "../app/routes/sign-in";
 
 describe("errors, locale and redacted logs", () => {
   it("adds correlation to redirects with immutable headers", () => {
@@ -31,10 +31,10 @@ describe("errors, locale and redacted logs", () => {
     expect(signedIn.headers.getSetCookie()).toEqual(cookieHeaders.getSetCookie());
   });
 
-  it("localizes notices from the actual home loader", async () => {
-    const result = await loadHome({
-      request: new Request("http://localhost:5173/en?accesso=errore"),
-    } as Parameters<typeof loadHome>[0]);
+  it("localizes notices from the actual access loader", async () => {
+    const result = await loadAccess({
+      request: new Request("http://localhost:5173/en/accesso?accesso=errore"),
+    } as Parameters<typeof loadAccess>[0]);
     expect(result).toMatchObject({
       language: "en",
       notice: {

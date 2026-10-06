@@ -10,6 +10,7 @@ import {
   type StoreLinkOutcome,
 } from "./integrations/ebay/store-link.server";
 import { logFailure } from "./errors";
+import { ordersPath } from "./app-links";
 import { localizedPath } from "./i18n";
 
 // I token OAuth restano al codice server; metodi e passkey si rimuovono dalle azioni dell'app,
@@ -194,7 +195,7 @@ async function handleEbayCallback(
     });
     await recordStoreLinkOutcome(environment.DB, state, outcome);
   }
-  const home = localizedPath(state.startsWith("en_") ? "en" : "it");
+  const home = localizedPath(state.startsWith("en_") ? "en" : "it", ordersPath);
   const query = new URLSearchParams();
   if (outcome) query.set("negozio", outcome);
   if (link.ebayEnvironment === "sandbox") query.set("environment", "sandbox");

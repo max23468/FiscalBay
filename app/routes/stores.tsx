@@ -6,7 +6,7 @@ import { NotFoundState } from "~/components/not-found";
 import { StoresPage } from "~/components/stores";
 import { assertSameOrigin, requireAccountArea } from "../account-area.server";
 import { appCopy } from "../app-copy";
-import type { AppLinks } from "../app-links";
+import { appBase, storeLinkPath, type AppLinks } from "../app-links";
 import {
   deleteStoreData,
   disconnectStore,
@@ -81,7 +81,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       now: new Date().toISOString(),
       ebayDown: false,
       elsewhere: false,
-      connectHref: localizedPath(language, "/negozi/collega"),
+      connectHref: localizedPath(language, storeLinkPath),
       // Notifiche, piano e supporto non hanno ancora una pagina reale.
       settings: false,
     },
@@ -125,7 +125,7 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function Stores({ loaderData }: Route.ComponentProps) {
   const { language, account, page } = loaderData;
-  const links: AppLinks = { language, base: "" };
+  const links: AppLinks = { language, base: appBase };
   const t = appCopy[language];
   return (
     <AccountShell language={language} account={account} security>
