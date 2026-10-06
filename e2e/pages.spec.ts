@@ -151,7 +151,7 @@ for (const scenario of scenarios) {
         // risorse, e una versione cambiata fa ricaricare la pagina al router.
         const discoveryMessage = (error: string) =>
           error.startsWith("Failed to fetch manifest patches") ||
-          /cannot load .*\/__manifest\?.* due to access control checks/u.test(error);
+          /\/__manifest\?\S* due to access control checks\.?$/u.test(error);
         const unexpectedErrors = () => errors.filter((error) => !discoveryMessage(error));
         const expectedStatus = production && scenario.preview ? 404 : scenario.status;
         // Tornando su una pagina 404 il router richiede di nuovo i suoi dati con lo stesso esito.
