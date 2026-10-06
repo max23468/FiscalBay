@@ -221,12 +221,29 @@ export async function retryReadback(check, attempts = 12, delayMs = 5000) {
   }
 }
 
-export function productionReadiness(backlog) {
-  for (const suffix of ["01", "02", "03"]) {
-    const task = "M" + "9-" + suffix;
-    const section = backlog.split(`### ${task} `)[1]?.split("\n### ")[0];
-    if (!section || !/\*\*Stato:\*\* DONE\b/u.test(section))
-      throw new Error("Checkpoint Production non chiusi nel backlog.");
+export function productionReadiness(plan) {
+  const sections = plan.split(/^### Gate per la pubblicazione Production\s*$/mu);
+  const section = sections.length === 2 ? sections[1].split(/^#{1,3} |^<a id=/mu)[0] : "";
+  const rows = section
+    .split("\n")
+    .filter((line) => line.trim().startsWith("|"))
+    .map((line) =>
+      line
+        .trim()
+        .split("|")
+        .map((cell) => cell.trim()),
+    );
+  for (const gate of ["commerciale", "ripristino", "operativita"]) {
+    const matches = rows.filter((row) => row[1] === gate);
+    if (
+      matches.length !== 1 ||
+      matches[0].length !== 5 ||
+      matches[0][4] !== "" ||
+      matches[0][2] !== "COMPLETATO" ||
+      !matches[0][3] ||
+      matches[0][3] === "-"
+    )
+      throw new Error("Checkpoint Production non chiusi nel Master Plan.");
   }
 }
 
@@ -263,7 +280,7 @@ async function main() {
   if (!target) throw new Error("Ambiente non supportato.");
   const command = positionals[0];
   if (command === "readiness") {
-    productionReadiness(readFileSync("BACKLOG.md", "utf8"));
+    productionReadiness(readFileSync("docs/MASTER_PLAN.md", "utf8"));
     return;
   }
   if (command === "manifest") {
@@ -338,7 +355,7 @@ async function main() {
       values["expected-sha"] !== manifest.sha
     )
       throw new Error("Manca il via Production sul commit atteso.");
-    productionReadiness(readFileSync("BACKLOG.md", "utf8"));
+    productionReadiness(readFileSync("docs/MASTER_PLAN.md", "utf8"));
   }
   const wrangler = (...args) =>
     execFileSync("pnpm", ["exec", "wrangler", ...args], {

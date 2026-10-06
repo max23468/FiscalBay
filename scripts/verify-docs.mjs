@@ -25,8 +25,7 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 const errors = [],
-  stats = {},
-  graph = {};
+  stats = {};
 const error = (code, detail) => errors.push({ code, detail });
 const relative = (p) => path.relative(root, p).split(path.sep).join("/");
 const inside = (p) => {
@@ -194,103 +193,10 @@ function main() {
     for (const m of text.matchAll(/^\|\s*(D\d+)\s*\|/gm)) decisionIds.push(m[1]);
   const decisions = duplicateIds(decisionIds, "DECISION_DUPLICATE");
   stats.decisions = decisions.size;
-  // Il backlog è l'unico tracker; il numero di task/milestone non è un vincolo.
-  const backlogFile = path.join(root, "BACKLOG.md");
-  if (!documents.has(backlogFile)) {
-    error("BACKLOG_MISSING", "BACKLOG.md");
-    return;
-  }
-  const backlog = documents.get(backlogFile),
-    matches = [...backlog.matchAll(/^### (M\d+-\d+) · .+$/gm)];
-  const tasks = duplicateIds(
-    matches.map((m) => m[1]),
-    "TASK_DUPLICATE",
-  );
-  const milestoneTasks = new Map();
-  for (const id of tasks) {
-    const ms = id.split("-")[0];
-    if (!milestoneTasks.has(ms)) milestoneTasks.set(ms, []);
-    milestoneTasks.get(ms).push(id);
-  }
-  const expand = (expr, owner) => {
-    const result = new Set();
-    const addMilestone = (ms) => {
-      if (!milestoneTasks.has(ms)) error("MILESTONE_UNKNOWN", `${owner}: ${ms}`);
-      for (const x of milestoneTasks.get(ms) || []) result.add(x);
-    };
-    expr = expr
-      .replace(/(M\d+)-(\d+)\.\.(M\d+)-(\d+)/g, (_, a, start, b, end) => {
-        if (a !== b || +start > +end || +end - +start > 10000) {
-          error("TASK_RANGE", owner);
-          return "";
-        }
-        for (let n = +start; n <= +end; n++)
-          result.add(`${a}-${String(n).padStart(start.length, "0")}`);
-        return "";
-      })
-      .replace(/M(\d+)\.\.M(\d+)/g, (_, start, end) => {
-        if (+start > +end || +end - +start > 1000) {
-          error("MILESTONE_RANGE", owner);
-          return "";
-        }
-        for (let n = +start; n <= +end; n++) addMilestone(`M${n}`);
-        return "";
-      })
-      .replace(/\bM\d+-\d+\b/g, (id) => {
-        result.add(id);
-        return "";
-      });
-    for (const m of expr.matchAll(/\bM\d+\b/g)) addMilestone(m[0]);
-    for (const id of result) if (!tasks.has(id)) error("TASK_UNKNOWN", `${owner}: ${id}`);
-    return [...result].filter((id) => tasks.has(id));
-  };
-  stats.task_states = {};
-  for (const [i, match] of matches.entries()) {
-    const id = match[1];
-    let body = backlog.slice(match.index, matches[i + 1]?.index ?? backlog.length);
-    body = body.split(/\n<a id="m\d+">/)[0];
-    const meta = body.match(
-      /\*\*Stato:\*\* ([A-Z ]+) · \*\*Prerequisiti:\*\* (.+?) · \*\*Contratto:/,
-    );
-    if (!meta) {
-      error("TASK_META", id);
-      continue;
-    }
-    const state = meta[1].trim();
-    stats.task_states[state] = (stats.task_states[state] || 0) + 1;
-    if (!["TODO", "IN PROGRESS", "BLOCKED", "DONE", "DEFERRED"].includes(state))
-      error("TASK_STATE", `${id}: ${state}`);
-    if (!/\*\*Criterio di completamento:\*\*\s*\S/.test(body)) error("TASK_DOD", id);
-    graph[id] = {
-      start: expand(meta[2], id),
-      close: expand(body.match(/\*\*Per chiudere:\*\* ([^\n]+)/)?.[1] || "", id),
-    };
-  }
-  const visiting = new Set(),
-    visited = new Set();
-  function visit(id, chain = []) {
-    if (visiting.has(id)) {
-      error("TASK_CYCLE", [...chain, id].join(" → "));
-      return;
-    }
-    if (visited.has(id)) return;
-    visiting.add(id);
-    for (const dep of new Set([...(graph[id]?.start || []), ...(graph[id]?.close || [])]))
-      visit(dep, [...chain, id]);
-    visiting.delete(id);
-    visited.add(id);
-  }
-  for (const id of tasks) visit(id);
   for (const [file, text] of documents) {
-    for (const m of text.matchAll(/\bM\d+-\d+\b/g))
-      if (!tasks.has(m[0])) error("TASK_REFERENCE", `${relative(file)}: ${m[0]}`);
     for (const m of text.matchAll(/\bD\d{3,}\b/g))
       if (!decisions.has(m[0])) error("DECISION_REFERENCE", `${relative(file)}: ${m[0]}`);
   }
-  stats.tasks = tasks.size;
-  stats.milestones = milestoneTasks.size;
-  stats.start_dependencies = Object.values(graph).reduce((n, x) => n + x.start.length, 0);
-  stats.close_dependencies = Object.values(graph).reduce((n, x) => n + x.close.length, 0);
   if (assets) {
     const manifestFile = path.join(root, "docs/brand/references/manifest.json");
     const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
@@ -332,7 +238,7 @@ try {
 } catch (e) {
   error("READ_OR_PARSE", e.message);
 }
-const result = { ok: errors.length === 0, stats, errors, dependencies: graph };
+const result = { ok: errors.length === 0, stats, errors };
 if (jsonOutput) console.log(JSON.stringify(result, null, 2));
 else {
   console.log(

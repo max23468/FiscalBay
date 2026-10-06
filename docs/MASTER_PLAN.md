@@ -3,7 +3,7 @@
 **Prodotto:** FiscalBay · **Operatore/brand:** Temisfera · **Owner:** Matteo
 **Obiettivo:** prima release web completa `2.0.0` · **Repository:** `max23468/FiscalBay`
 
-Specifica canonica del prodotto e dei criteri di accettazione. Le decisioni sono consolidate fino a Q569 e comprendono le semplificazioni tecniche/documentali approvate. Le scelte rinviate a M0 sono gate, non funzionalità già qualificate. Stato del lavoro e autorizzazioni effettive vivono in [BACKLOG.md](../BACKLOG.md#stato).
+Specifica canonica del prodotto e dei criteri di accettazione. Le decisioni sono consolidate fino a Q569 e comprendono le semplificazioni tecniche/documentali approvate. Le scelte rinviate a M0 sono gate, non funzionalità già qualificate. [Avanzamento e questioni aperte](#stato) vivono nella roadmap; i via effettivi nel governo qui sotto. Codice, PR/CI e readback attestano rispettivamente implementazione, verifiche e stato remoto.
 
 [Avvio e indice](../README.md) · [Istruzioni agente](../AGENTS.md) · [Decisioni e motivazioni](DECISION_REGISTER.md) · [Setup](engineering/AGENT_SETUP.md) · [Fonti](SOURCES.md) · [Riferimenti grafici](brand/REFERENCES.md)
 
@@ -74,20 +74,28 @@ Codex decide i dettagli tecnici reversibili ed esegue le attività previste nel 
 | M8 | Test con il merchant reale di fiducia |
 | M9 | Candidato e pubblicazione commerciale `Pubblica` |
 
-Il mandato iniziale adotta la baseline e avvia M0; non concede anticipatamente questi checkpoint. Registrare i via effettivi nel backlog con il relativo perimetro. La preparazione dei documenti non avvia l’implementazione.
+Il mandato iniziale adotta la baseline e avvia M0; non concede anticipatamente questi checkpoint. La preparazione dei documenti non avvia l’implementazione. I via effettivi sono registrati soltanto nella tabella seguente, con data e perimetro; un mandato tecnico di pubblicazione sul test resta nella PR pertinente e non anticipa la Production.
+
+| Checkpoint | Via effettivo e perimetro |
+|---|---|
+| Fine M0 | 2026-09-23: Workers, una D1 UE, Queues e Better Auth, costi differiti, limiti e rinvii espliciti; avvio di M1. Nessun nuovo costo o go-live autorizzato. Adozione e avvio originari: 2026-09-13. |
+| M1 | Logo approvato il 2026-09-26, design system il 2026-09-27, prototipo e chiusura M1 il 2026-09-28. Nessuna pubblicazione Production autorizzata. |
+| M5 | In attesa: configurazione commerciale/live e confini degli effetti economici. |
+| M8 | In attesa: merchant, ambiente, dati e prove reali autorizzati. |
+| M9 | In attesa: candidato/manifest, date promo, checklist e comando `Pubblica`. |
 
 ### 0.3 Una fonte per responsabilità
 
 | Fonte | Contenuto canonico |
 |---|---|
-| Questo piano | Requisiti completi, eccezioni, invarianti, gate e DoD |
+| Questo piano | Requisiti, eccezioni, invarianti, gate e DoD; roadmap, avanzamento sintetico, checkpoint e questioni aperte |
 | Decision Register | Sintesi della scelta, motivazione utile e collegamento al requisito; non una seconda specifica |
-| BACKLOG.md | Attività, prerequisiti d’avvio/chiusura, stato, prove e ripresa della sessione |
+| PR, CI e ricevute di pubblicazione | Cambiamento e verifiche dell'intervento; commit/artefatto distribuito, migration e readback pertinenti |
 | Codice, schema, configurazioni e test | Contratti eseguibili e stato tecnico; versioni nei manifest/lockfile |
 | ADR / contratti / runbook pertinenti | Solo scelte costose da invertire, comportamenti condivisi non autoesplicativi o procedure reali |
 | Fonti e riferimenti di brand | Documentazione esterna e immagini approvate |
 
-Non ripetere la stessa prescrizione per esteso in più fonti. Nel backlog si collega il requisito e si descrive la prova; nel registro si conserva il perché. I test possono riprendere una regola per verificarla, non ridefinirla. Documenti separati solo con contenuto sostanziale e riusato; niente catalogo di file vuoti o API descritte a mano due volte se lo schema eseguibile è già sufficiente.
+Non ripetere la stessa prescrizione per esteso in più fonti. Nel piano si mantiene il requisito, nella PR la prova dell'intervento e nel registro il perché. La granularità ordinaria è la milestone o una capacità significativa; i passi tecnici restano nella PR. Aggiornare questo piano soltanto per cambi di requisito, checkpoint, avanzamento significativo o questioni aperte, nella stessa PR dell'implementazione e prima del merge. Fix ordinari, refactoring e miglioramenti dei test non richiedono una modifica documentale fittizia. Il template PR dichiara l'impatto sul piano e il motivo. I test verificano una regola, non la ridefiniscono. Documenti separati solo con contenuto sostanziale e riusato; niente catalogo di file vuoti o API descritte a mano due volte se lo schema eseguibile è già sufficiente.
 
 Gli audit e la copertura numerica del grill in `docs/archive/` sono fotografie storiche, non letture ordinarie, specifiche correnti o vincoli di CI. Nuove sezioni, file accorpati e identificativi non consecutivi sono ammessi se i riferimenti e i requisiti restano coerenti.
 
@@ -99,7 +107,7 @@ Una prova breve, un test o il log CI pertinenti possono bastare: non serve una r
 
 ### 0.5 Avvio e continuità
 
-La procedura di adozione e ripresa è unica nel [README](../README.md#avvio). Allineare le istruzioni 1.x e verificare i trigger legacy nell'inventario iniziale, senza alterare istruzioni globali o lavoro altrui. `BACKLOG.md` conserva stato, checkpoint ed effetti remoti incompleti, non la cronaca di ogni comando.
+La procedura di adozione e ripresa è unica nel [README](../README.md#avvio). Allineare le istruzioni 1.x e verificare i trigger legacy nell'inventario iniziale, senza alterare istruzioni globali o lavoro altrui. La roadmap conserva soltanto avanzamento e pendenze utili alla ripresa; Git conserva la storia. Non creare un archivio del vecchio tracker, un diario o uno stato concorrente.
 
 Accessi, dati legali, destinatario del test e date promo si acquisiscono secondo il [catalogo input](engineering/AGENT_SETUP.md#input). Non occorre ricostruire le decisioni dalla chat; una credenziale mancante blocca soltanto il lavoro dipendente. Le [responsabilità documentali](engineering/AGENT_SETUP.md#deliverable) indicano dove mantenere le informazioni prodotte nello sviluppo, senza imporre file anticipati.
 
@@ -251,7 +259,7 @@ I confini di ciclo, trial e periodo si confrontano sull'istante UTC e sul fuso d
 <a id="s07"></a>
 ## 7. Autenticazione, identità e sessioni
 
-Quattro metodi obbligatori nella 2.0: **email/password, Google, Sign in with eBay e passkey**. Non due sistemi Auth sovrapposti. Cloudflare-only: Better Auth candidato; con Supabase valutare Auth nativa senza Better Auth. M0 qualifica tutti e quattro, inclusi recupero, collegamento identità, revoca e supporto runtime; per decisione owner del 2026-09-23 la sola qualifica di Sign in with eBay, bloccata dal diritto eBay sull'email Identity, passa a M2-09 secondo [§36.2](#s36), senza dichiararla collaudata; per decisione owner del 2026-10-06 le prove reali si eseguono in M8-03 sull'ambiente Production (D160). Dopo il diniego eBay di quel diritto, Sign in with eBay vale per gli account eBay che espongono un'email business; per gli altri il login si ferma su un avviso che indirizza agli altri tre metodi (D153). Un limite del provider non autorizza a togliere un login. Passkey Supabase sperimentali: rischio esplicito del gate; niente dichiarazione preventiva di stabilità. [S04](SOURCES.md#s04) [S05](SOURCES.md#s05)
+Quattro metodi obbligatori nella 2.0: **email/password, Google, Sign in with eBay e passkey**. Non due sistemi Auth sovrapposti. Cloudflare-only: Better Auth candidato; con Supabase valutare Auth nativa senza Better Auth. M0 qualifica inclusi recupero, collegamento identità, revoca e supporto runtime; per decisione owner del 2026-09-23 la sola qualifica di Sign in with eBay, bloccata dal diritto eBay sull'email Identity, passa a M2 secondo [§36.2](#s36), senza dichiararla collaudata; per decisione owner del 2026-10-06 le [prove reali](#prove-ebay) si eseguono in M8 sull'ambiente Production (D160). Dopo il diniego eBay di quel diritto, Sign in with eBay vale per gli account eBay che espongono un'email business; per gli altri il login si ferma su un avviso che indirizza agli altri tre metodi (D153). Un limite del provider non autorizza a togliere un login. Passkey Supabase sperimentali: rischio esplicito del gate; niente dichiarazione preventiva di stabilità. [S04](SOURCES.md#s04) [S05](SOURCES.md#s05)
 
 Registrazione essenziale: email di contatto verificata, nome e cognome obbligatori, tipo di account privato o azienda; per l'azienda la ragione sociale è obbligatoria (D151). Nessuna P.IVA né altro dato fiscale in registrazione; il tipo di account non cambia piano, quote o limiti. Verifica prima di collegare eBay, riutilizzando la verifica affidabile del provider. Se eBay non prova un'email utilizzabile, richiedere verifica nel prodotto senza inventare l'attributo. Passkey può essere aggiunta dopo account confermato: non implica necessariamente signup passkey-first.
 
@@ -301,7 +309,7 @@ Dati eBay in sola lettura. Normalizzazione tecnica, formattazione e validazione 
 
 Ogni identificativo registra tipo, Paese quando noto, fonte, valore e qualità formale. Trading `GetOrders` è la fonte primaria degli identificativi fiscali dell'acquirente; Fulfillment resta la fonte primaria per acquisizione, stato e dettaglio generale dell'ordine. Un eventuale identificativo osservato anche in Fulfillment conserva la propria provenienza e viene confrontato, senza sostituire implicitamente la precedenza Trading. Distinguere identificativo dell'acquirente da quello del venditore o di eBay. Deduplicare lo stesso valore, preservandone provenienza. Validazione CF/P.IVA italiana formale non bloccante; nessun collegamento all'Anagrafe tributaria o certificazione di esistenza. Tipi esteri sconosciuti mostrati correttamente senza falsa validazione.
 
-**Riqualifica della lettura fiscale Fulfillment.** Un'integrazione eBay separata ha osservato in Production che `getOrder` restituisce `buyer.taxIdentifier` soltanto con l'header `X-EBAY-C-MARKETPLACE-ID` uguale al marketplace dell'inserzione (ricavato da `lineItems[].listingMarketplaceId`, unico per ordine) e con `fieldGroups=TAX_BREAKDOWN`; senza header il campo non compare. La prova M0-05 non usava l'header. D135 resta valida finché una lettura controllata sul keyset FiscalBay non misura, sugli stessi ordini, presenza e coincidenza dei valori fra Fulfillment con header e Trading. Se la prova regge, si propone all'owner di rivedere D135 e il budget delle quote (Fulfillment 100.000 chiamate/giorno, Trading 5.000); fino ad allora il valore Fulfillment è una seconda osservazione con la propria provenienza.
+**Riqualifica della lettura fiscale Fulfillment.** Un'integrazione eBay separata ha osservato in Production che `getOrder` restituisce `buyer.taxIdentifier` soltanto con l'header `X-EBAY-C-MARKETPLACE-ID` uguale al marketplace dell'inserzione (ricavato da `lineItems[].listingMarketplaceId`, unico per ordine) e con `fieldGroups=TAX_BREAKDOWN`; senza header il campo non compare. La prova iniziale M0 non usava l'header. D135 resta valida finché una lettura controllata sul keyset FiscalBay non misura, sugli stessi ordini, presenza e coincidenza dei valori fra Fulfillment con header e Trading. Se la prova regge, si propone all'owner di rivedere D135 e il budget delle quote (Fulfillment 100.000 chiamate/giorno, Trading 5.000); fino ad allora il valore Fulfillment è una seconda osservazione con la propria provenienza.
 
 **Qualità formale.** Per il Codice Fiscale italiano: formato e carattere di controllo; per le persone fisiche, coerenza delle prime sei lettere con nome e cognome dell'ordine, provando entrambe le orientazioni e il nome di registrazione dell'acquirente quando disponibile. Un riferimento `c/o` nel nome di spedizione viene separato ai soli fini del confronto. L'esito (`valido`, `formato errato`, `controllo errato`, `nome non coerente`, `non verificabile`) è un'indicazione mostrata al merchant: non corregge, non sostituisce e non blocca il dato, e non cambia il consumo di quota. Omocodie e nomi composti ambigui producono `non verificabile`, non un errore.
 
@@ -682,21 +690,21 @@ Condividere negli adapter un punto minimo per timeout dell'intera lettura, limit
 
 Sicurezza da M0/M1, non rinviata a M7. Threat model minimo: accesso fra tenant, CF non sbloccati, takeover/linking, furto token eBay, replay OAuth/webhook, injection da titoli/CSV, privilege escalation admin, ripristino di revoche obsolete, supply chain e prompt injection nei tool.
 
-Il threat model minimo è la tabella seguente (D147): ogni task che introduce un percorso esposto aggiunge qui la prova negativa pertinente, e M7-01 verifica la tabella intera sul candidato, non un documento separato.
+Il threat model minimo è la tabella seguente (D147): ogni intervento che introduce un percorso esposto aggiunge qui la prova negativa pertinente, e M7 verifica la tabella intera sul candidato, non un documento separato.
 
 | Minaccia | Controllo richiesto | Prova già presente | Da completare |
 |---|---|---|---|
-| Accesso fra tenant | Spazio e diritto all'ordine verificati nel servizio su ogni percorso ([§29.1](#s29)) | Test D1: utente di altro spazio, ordine altrui, grant altrui rifiutati; negozio già collegato altrove senza token salvati né dati dell'altro spazio nell'esito | Ricerca, conteggi ed export (M4-02, M6-03); tutti i percorsi esposti in M7-01 |
-| CF non sbloccati | Valore inviato solo dopo un grant valido; mai in log, URL o export non autorizzati | Grant atomico e quota concorrente; log con soli metadati ammessi; anteprima senza valore prima dello sblocco | Sblocco reale (M3-06), ricerca fiscale (M4-02), export (M6-01..03) |
-| Takeover e linking | Collegamento automatico solo con email verificata e provider affidabile; ultimo accesso non rimovibile | Callback eBay ambigui o senza stato rifiutati; enrollment passkey solo dopo verifica, profilo e Termini; revoca atomica con ultimo metodo valido conservato; origin estranea rifiutata, verifiche WebAuthn limitate per IP; reset password con revoca delle sessioni e token monouso; collegamento esplicito solo dalla stessa sessione verificata e senza `idToken` diretto; collegamento per email solo con email Google autorevole (Gmail o `hd`); account creato in anticipo con l'email altrui senza metodi propri; subject Google stabile anche con email cambiata e mai collegato a un secondo utente; rimozione atomica dei metodi anche concorrente; cambio email con conferma del vecchio e del nuovo indirizzo | Prove eBay reali in M8-03 (D160) |
-| Furto token eBay | Scope minimi, token cifrati, nessuna route che li esponga, rotazione | Token OAuth cifrati; `get-access-token` e `refresh-token` non esposti; collegamento negozio senza scope email; token seller cifrati con AES-GCM, chiave dedicata e legame a negozio e tipo; rinnovo in background che non sovrascrive un consenso più recente | Revoca e scollegamento (M2-06) |
-| Replay OAuth e webhook | State/PKCE legati all'utente; firma sul corpo grezzo e claim idempotente | State di un altro utente rifiutato; callback negozio duplicato con lo stesso esito e senza secondo scambio del codice; firma Stripe verificata ed evento registrato una volta | Ingresso Worker (M3-11), webhook e riconciliazione (M5-05) |
-| Injection da titoli e CSV | Escaping in pagina, formule neutralizzate negli export, CSP | CSV con formule neutralizzate; rendering React con escaping | CSP assente: da introdurre e provare entro M7-01 |
-| Privilege escalation admin | Ruolo admin esplicito, MFA e nuova verifica per azioni sensibili | Nessuna superficie admin esposta | M2-04, M6-04 |
-| Ripristino di revoche obsolete | Marker di erasure e revoca riapplicati dopo un restore ([§32.1](#s32)) | Nessuna | M3-08, M7-02, drill M9-02 |
-| Supply chain | Lockfile e versioni fissate, età minima dei pacchetti, Action a SHA, analisi statica | `minimumReleaseAge` e `trustPolicy`, Action a SHA, Dependabot, dependency review e CodeQL | Licenze e codice copiato (M7-01) |
-| Prompt injection nei tool | Dati esterni trattati come contenuto, permessi MCP minimi, separazione test/Production | Regola in AGENTS e in questo capitolo | Verifica in M7-01 |
-| Perdita o esposizione di segreti | Custodia fuori repository, segreti elencati in `secrets.required` di ogni configurazione di deploy, nessun segreto nel client | Deploy test e Production che rifiutano un segreto mancante; pagina provvisoria che li conserva | Scadenze (M7-04), readback alla pubblicazione (M9-04) |
+| Accesso fra tenant | Spazio e diritto all'ordine verificati nel servizio su ogni percorso ([§29.1](#s29)) | Test D1: utente di altro spazio, ordine altrui, grant altrui rifiutati; negozio già collegato altrove senza token salvati né dati dell'altro spazio nell'esito | Ricerca/conteggi M4, export M6; tutti i percorsi esposti in M7 |
+| CF non sbloccati | Valore inviato solo dopo un grant valido; mai in log, URL o export non autorizzati | Grant atomico e quota concorrente; log con soli metadati ammessi; anteprima senza valore prima dello sblocco | Sblocco reale M3, ricerca fiscale M4, export M6 |
+| Takeover e linking | Collegamento automatico solo con email verificata e provider affidabile; ultimo accesso non rimovibile | Callback eBay ambigui o senza stato rifiutati; enrollment passkey solo dopo verifica, profilo e Termini; revoca atomica con ultimo metodo valido conservato; origin estranea rifiutata, verifiche WebAuthn limitate per IP; reset password con revoca delle sessioni e token monouso; collegamento esplicito solo dalla stessa sessione verificata e senza `idToken` diretto; collegamento per email solo con email Google autorevole (Gmail o `hd`); account creato in anticipo con l'email altrui senza metodi propri; subject Google stabile anche con email cambiata e mai collegato a un secondo utente; rimozione atomica dei metodi anche concorrente; cambio email con conferma del vecchio e del nuovo indirizzo | Prove eBay reali in M8 (D160) |
+| Furto token eBay | Scope minimi, token cifrati, nessuna route che li esponga, rotazione | Token OAuth cifrati; `get-access-token` e `refresh-token` non esposti; collegamento negozio senza scope email; token seller cifrati con AES-GCM, chiave dedicata e legame a negozio e tipo; rinnovo in background che non sovrascrive un consenso più recente; scollegamento cancella i token e impedisce scritture tardive | Primo rinnovo reale e qualifiche provider nelle questioni aperte |
+| Replay OAuth e webhook | State/PKCE legati all'utente; firma sul corpo grezzo e claim idempotente | State di un altro utente rifiutato; callback negozio duplicato con lo stesso esito e senza secondo scambio del codice; firma Stripe verificata ed evento registrato una volta | Ingresso Worker M3, webhook e riconciliazione M5 |
+| Injection da titoli e CSV | Escaping in pagina, formule neutralizzate negli export, CSP | CSV con formule neutralizzate; rendering React con escaping | CSP assente: da introdurre e provare entro M7 |
+| Privilege escalation admin | Ruolo admin esplicito, MFA e nuova verifica per azioni sensibili | Confine admin e passkey UV provati con asserzioni sintetiche, revoca del ruolo applicata alla richiesta successiva | Enrollment owner e console completa M6 |
+| Ripristino di revoche obsolete | Marker di erasure e revoca riapplicati dopo un restore ([§32.1](#s32)) | Nessuna prova conclusiva sul candidato finale | Retention M3, erasure M7 e drill pre-go-live M9 |
+| Supply chain | Lockfile e versioni fissate, età minima dei pacchetti, Action a SHA, analisi statica | `minimumReleaseAge` e `trustPolicy`, Action a SHA, Dependabot, dependency review e CodeQL | Licenze e codice copiato M7 |
+| Prompt injection nei tool | Dati esterni trattati come contenuto, permessi MCP minimi, separazione test/Production | Regola in AGENTS e in questo capitolo | Verifica in M7 |
+| Perdita o esposizione di segreti | Custodia fuori repository, segreti elencati in `secrets.required` di ogni configurazione di deploy, nessun segreto nel client | Deploy test e Production che rifiutano un segreto mancante; pagina provvisoria che li conserva | Scadenze M7, readback alla pubblicazione M9 |
 
 Misure: scope minimi effettivamente necessari; state/nonce/PKCE dove supportati e corretti per il provider; redirect allowlist; cookie/sessioni sicure e CSRF/origin check sulle mutation; rate limit di login e operazioni costose; token cifrati e rotazione; firme webhook su corpo originale e replay protection; validazione input/output; CSP e escaping; download autorizzati; nessun segreto build-time esportato al browser.
 
@@ -765,7 +773,9 @@ Alert amministrativi azionabili o aggregati, non ogni errore transitorio; Telegr
 
 Ogni log strutturato contiene soltanto campi in allowlist: evento, classe, istante, correlation ID, codice errore stabile e metadati tecnici. Mai URL con query, payload, header, token, CF o dati buyer. Errori, webhook e sicurezza sono registrati sempre; gli eventi ordinari riusciti possono essere campionati. Le query di diagnosi (errori per codice, webhook, correlation ID, scritture di eventi fallite) e le soglie iniziali P1/P2 sono documentate nel runbook insieme al percorso che le legge. Il correlation ID si copia nella ricevuta dell'incidente, non i log completi.
 
-**Quote e stop point.** Nessun controllo automatico di capacità dopo il deploy test (D158): la CPU per invocazione si legge quando serve nei log del Worker, e la capacità reale si misura in M7-03. Il runbook elenca per Worker, D1 e Queue le quote di riferimento e gli stop point operativi; al raggiungimento si fermano nuovi ingressi, si verifica a quale progetto dell'account appartiene il consumo e si sceglie fra ottimizzazione e cambio piano con l'owner.
+**Quote e stop point.** Nessun controllo automatico di capacità dopo il deploy test (D158): la CPU per invocazione si legge quando serve nei log del Worker, e la capacità reale si misura in M7. Il runbook elenca per Worker, D1 e Queue le quote di riferimento e gli stop point operativi; al raggiungimento si fermano nuovi ingressi, si verifica a quale progetto dell'account appartiene il consumo e si sceglie fra ottimizzazione e cambio piano con l'owner.
+
+Le soglie di attenzione Free approvate in M0 sono 80.000 richieste dinamiche/giorno, CPU p95 di 8 ms, 8.000 operazioni Queue/giorno, 4 milioni di righe D1 lette/giorno, 80.000 scritte/giorno, 4 GB D1 complessivi, 160.000 eventi log/giorno o necessità di Time Travel oltre 7 giorni. Sono riferimenti iniziali da riconfermare con limiti per singola risorsa e consumo condiviso corrente prima di cambiare piano o aprire al pubblico, non un controllo al deploy né autorizzazione automatica a costi. Il budget M0 di un messaggio Queue per polling copriva soltanto 33 negozi nel mix un Premium ogni due Free entro l'80% della quota: il target di 150 richiede misure e assetto adeguati.
 
 Metriche prodotto aggregate iniziali: signup, email verificata, primo negozio, prima sync, primo CF trovato, primo sblocco, trial, Free→Premium, trial→acquisto, cancellazioni, attivi, error rate, ritardo sync, uso quota. Nessun session replay o funnel UI dettagliato nella 2.0; eventuale ampliamento approvato dopo.
 
@@ -800,7 +810,7 @@ Durante il recupero tenere sospesi job in uscita, checkout e accessi ai dati non
 
 Classificare ciò che è recuperabile (dati/grant), riconciliabile dal provider (stati finanziari consentiti), ricreabile (configurazione da manifest) e rigenerabile (export temporanei). Account, chiavi e file non sono automaticamente compresi in un backup DB. Un ripristino di credenziali compromesse non è una recovery valida. Il drill conclusivo dimostra queste differenze con dati controllati, non la semplice riapertura di una tabella.
 
-Il solo adempimento richiesto è **un drill conclusivo riuscito** sul candidato finale prima del go-live. Le attività M0/M7 preparano meccanismo e runbook; M8 prepara il candidato. M9-02 può richiamare la stessa prova svolta a fine M8 se candidato, schema e procedura sono invariati. Un tentativo fallito non chiude il gate: correggere e ottenere una prova riuscita non introduce una periodicità post-lancio.
+Il solo adempimento richiesto è **un drill conclusivo riuscito** sul candidato finale prima del go-live. Le attività M0/M7 preparano meccanismo e runbook; M8 prepara il candidato. Il [gate di ripristino](#pubblicazione-production) può richiamare la stessa prova svolta a fine M8 se candidato, schema e procedura sono invariati. Un tentativo fallito non chiude il gate: correggere e ottenere una prova riuscita non introduce una periodicità post-lancio.
 
 Per incidenti con dati personali, il runbook individua anche ruoli, destinatari e termini di comunicazione imposti dai contratti/norme applicabili. L’obiettivo RTO24h e l’assenza di SLA pubblico non sostituiscono tali adempimenti.
 
@@ -840,11 +850,11 @@ Versioni interne `2.0.0-alpha.N`→`2.0.0-rc.N`→`2.0.0`. Non significano beta 
 
 **Pubblica** è un atto esplicito che autorizza l'intero ciclo tecnico applicabile nel perimetro: commit atteso, gate, preflight provider, migration controllate, deploy, smoke/readback, ricevuta, tag/release solo dopo successo. Non fermarsi dopo push o prima del readback; non estendere il comando a provider/scopi non approvati. Cinque checkpoint owner restano separati dalle normali attività.
 
-La chiusura di ogni PR unita a `develop` comprende il readback del merge e del deploy test applicabile, seguito dalla pulizia dei suoi riferimenti temporanei. Nessuna PR serve solo a registrare readback, collaudo, stato o chiusura di un task: la PR che completa il lavoro porta il task allo stato finale con le prove pre-merge quando resta soltanto il collaudo sul test, mentre readback e collaudo si riferiscono all'owner ed entrano nel backlog solo con la prossima PR che ha contenuto proprio. Un difetto trovato si registra nella PR che lo corregge. `Pubblica` comprende, dopo il readback Production e tag/release riusciti, anche l'inventario e la pulizia dei branch e worktree temporanei già conclusi, inclusi i residui di cicli precedenti. Il coordinatore verifica per ciascuno PR e contenuto integrato anche quando il merge è squash, stato pulito, commit non pubblicati, file non tracciati e processi o altri lavori che usano il checkout. Solo allora elimina il branch remoto, libera il worktree e rimuove il branch locale e i riferimenti remoti obsoleti; riallinea il checkout principale alla branch di riferimento. Conserva `main`, `develop`, `legacy/1.x`, tag, rollback e ogni lavoro non integrato o ancora in uso. Se una pulizia non è sicura o un passo del ciclo fallisce, registra il residuo e la ripresa in `BACKLOG.md`, senza dichiarare conclusa la pulizia.
+La chiusura di ogni PR unita a `develop` comprende il readback del merge e del deploy test applicabile, seguito dalla pulizia dei suoi riferimenti temporanei. Nessuna PR serve solo a registrare readback o chiusura: l'aggiornamento significativo del piano entra nella stessa PR dell'implementazione secondo §0.3, con prove pre-merge e collaudi mancanti espliciti. Readback e collaudo successivi si riferiscono all'owner; una pendenza utile alla ripresa entra nelle questioni aperte con il prossimo intervento che ha contenuto proprio. Un difetto si registra nella PR che lo corregge. `Pubblica` comprende, dopo il readback Production e tag/release riusciti, anche l'inventario e la pulizia dei branch e worktree temporanei già conclusi, inclusi i residui di cicli precedenti. Il coordinatore verifica per ciascuno PR e contenuto integrato anche quando il merge è squash, stato pulito, commit non pubblicati, file non tracciati e processi o altri lavori che usano il checkout. Solo allora elimina il branch remoto, libera il worktree e rimuove il branch locale e i riferimenti remoti obsoleti; riallinea il checkout principale alla branch di riferimento. Conserva `main`, `develop`, `legacy/1.x`, tag, rollback e ogni lavoro non integrato o ancora in uso. Se una pulizia non è sicura o un passo del ciclo fallisce, conserva ricevuta e riferimento di ripresa, segnala il residuo all'owner e mantienilo nelle questioni aperte alla prima modifica pertinente, senza dichiarare conclusa la pulizia.
 
 Migrazioni versionate, testate su schema/dati rappresentativi, forward-only dove sensato, approccio expand/contract se serve compatibilità. Release manifest collega codice, schema, config e artifact immutabile. Rollback codice automatico se sicuro, altrimenti forward-fix; recovery dati separato. Nessun comando di pubblicazione deve contenere token/PII nelle evidenze.
 
-Backlog stati TODO, IN PROGRESS, BLOCKED, DONE, DEFERRED: BLOCKED è una condizione, non passaggio obbligatorio. Ogni task DONE collega una prova proporzionata; niente duplicazione di output grezzi. Codex preserva modifiche dell'owner e worktree non propri.
+L'avanzamento segue le capacità della roadmap (§37), con prove proporzionate e limiti espliciti. Non duplicare output grezzi né creare un diario di microtask. Codex preserva modifiche dell'owner e worktree non propri.
 
 **Pubblicazione riprendibile e provenienza dell’artefatto.** Legare il via a commit e release manifest attesi. Serializzare le pubblicazioni per ambiente; un workflow più vecchio non deve sovrascrivere uno successivo. Promuovere lo stesso artefatto verificato quando il provider lo consente; se serve una ricostruzione specifica Production, registrare gli input immutabili e verificarne l’artefatto, non chiamarlo automaticamente «lo stesso build testato».
 
@@ -916,11 +926,11 @@ Il margine di lancio deve essere significativo rispetto ai limiti hard; soglie n
 
 ### 36.1 Prerequisiti reali di M0
 
-Distinguere tre percorsi: **inventario/lettura**, **prove eseguibili** e **chiusura della scelta**. Dopo M0-01, l’inventario M0-03 può partire appena disponibili accessi read-only, senza attendere callback o email. M0-11 prepara gli strumenti locali, senza endpoint remoto; M0-02 usa poi questa base per HTTPS/callback e trasporto Auth minimi su `test.fiscalbay.it`, solo per le prove che ne hanno bisogno. Documentazione, quote e review possono procedere nel frattempo.
+Distinguere tre percorsi: **inventario/lettura**, **prove eseguibili** e **chiusura della scelta**. Dopo l'adozione autorizzata, l'inventario può partire appena disponibili accessi read-only, senza attendere callback o email. La toolchain si prepara localmente, senza endpoint remoto; HTTPS/callback e trasporto Auth minimi su `test.fiscalbay.it` servono solo alle prove che ne dipendono. Documentazione, quote e review possono procedere nel frattempo.
 
-Prima di acquisizioni reali verificare target, permessi e trattamento. M1-08 completa DNS/posta di servizio. Nessuna nuova spesa o modifica DNS fuori mandato per accelerare una prova. I prerequisiti d’avvio e le integrazioni necessarie alla chiusura sono distinti nel backlog; la numerazione non è una catena obbligatoria.
+Prima di acquisizioni reali verificare target, permessi e trattamento. M1 completa DNS/posta di servizio. Nessuna nuova spesa o modifica DNS fuori mandato per accelerare una prova. I prerequisiti d'avvio e le integrazioni necessarie alla chiusura sono distinti nella roadmap; la numerazione non è una catena obbligatoria.
 
-L’inventario privacy preliminare precede ogni acquisizione reale; M0-12 ne consolida poi la verifica trasversale. Costi necessari a una prova prima della scelta finale richiedono una specifica autorizzazione limitata: il checkpoint di fine M0 non è autorizzazione retroattiva a spendere. In assenza di permessi, endpoint o trasporto qualificato, il test è BLOCKED, non simulato come prova reale.
+L'inventario privacy preliminare precede ogni acquisizione reale; M0 ne consolida la verifica trasversale. Costi necessari a una prova prima della scelta finale richiedono una specifica autorizzazione limitata: il checkpoint di fine M0 non è autorizzazione retroattiva a spendere. In assenza di permessi, endpoint o trasporto qualificato, la prova è bloccata e non può essere sostituita da una simulazione dichiarata reale.
 
 ### 36.2 G-STRIPE: cosa si può provare in ogni fase
 
@@ -938,29 +948,46 @@ G-LEGAL e G-RECOVERY hanno analogamente una qualifica preliminare M0 e una chius
 <a id="s37"></a>
 ## 37. Milestone M0–M9
 
-Ogni milestone aggiorna `BACKLOG.md`, contratti coinvolti e prove. Dipendenze rigide sui gate, parallelismo per attività indipendenti. La numerazione non impone che ogni dettaglio sia una consegna sequenziale né autorizza a rinviare sicurezza/test all'ultima fase.
+Dipendenze rigide sui gate, attività indipendenti avviabili prima dell'integrazione completa. La numerazione non impone consegne sequenziali né autorizza a rinviare sicurezza/test all'ultima fase. Le integrazioni da CF Ready e Hub Fatture (D143 e D147) sono consolidate nei requisiti funzionali e nelle milestone qui sotto; non riaprono M0 né introducono un secondo elenco di task.
 
-### Integrazioni complementari da CF Ready e Hub Fatture
+<a id="stato"></a>
+### Avanzamento
 
-Le quindici integrazioni approvate il 2026-09-27 sono assegnate esclusivamente a M1 e successive. Non riaprono M0 né aggiungono criteri retroattivi ai task DONE. I requisiti sono nelle sezioni funzionali indicate; stato, dipendenze e prove restano soltanto nel backlog. Le repository di origine sono riferimenti progettuali: nessuna copia automatica di codice, dati, dipendenze o infrastruttura.
+Gli stati descrivono capacità significative: `Da completare`, `In corso`, `Bloccata`, `Completata`. La chiusura richiede comportamento, prove pertinenti e checkpoint previsto; implementazione, distribuzione sul test e collaudo reale restano distinti. Non ripetere conteggi di test, durate, branch o cronaca delle sessioni. Le prove di una chiusura si collegano alla PR, CI o ricevuta competente. Questa sintesi proviene dalle evidenze registrate prima della migrazione documentale del 2026-10-06; non è un nuovo readback dei provider.
 
-| N. | Integrazione | Requisito | Task di implementazione e verifica |
-|---|---|---|---|
-| 1 | Identità eBay provvisoria e definitiva | [§9](#s09) | [M3](../BACKLOG.md#m3): M3-01, M3-02, M3-09; diritti M3-06 |
-| 2 | Protezione dalle risposte tardive | [§11](#s11) | [M3](../BACKLOG.md#m3): M3-04, M3-05; reconnect M2-06 |
-| 3 | Problemi con conseguenza e azione utile | [§15](#s15) | [M6](../BACKLOG.md#m6): M6-04; prototipo M1-07 |
-| 4 | Diagnostica minima nel supporto | [§14](#s14) | [M6](../BACKLOG.md#m6): M6-06; prototipo M1-07 |
-| 5 | Ordini disponibili durante aggiornamento remoto | [§20](#s20) | [M4](../BACKLOG.md#m4): M4-01, M4-07 |
-| 6 | Recupero eventi fra accodamento e commit | [§11](#s11) | [M3](../BACKLOG.md#m3): M3-04; M5-05, M5-10 per gli effetti integrati |
-| 7 | Casi limite del mapping eBay | [§9](#s09) | [M3](../BACKLOG.md#m3): M3-02 |
-| 8 | Limiti HTTP ed errori provider condivisi | [§28](#s28) | [M2](../BACKLOG.md#m2): M2-05; completamento eBay M3-02, Stripe M5-05 |
-| 9 | Riconciliazione commerciale senza browser | [§6.6](#s06) | [M5](../BACKLOG.md#m5): M5-05, M5-08 |
-| 10 | Scadenza applicata prima della pulizia | [§30](#s30) | [M3](../BACKLOG.md#m3): M3-08; export M6-03, prova trasversale M7-02 |
-| 11 | Passaggi di attivazione deduplicati | [§31](#s31) | [M6](../BACKLOG.md#m6): M6-08 |
-| 12 | Misure separate server, provider e browser | [§31](#s31) | [M4](../BACKLOG.md#m4): M4-01; M6-08, verifica sotto carico M7-03 |
-| 13 | Scenari sintetici condivisi fra dominio e UI | [§35](#s35) | [M1](../BACKLOG.md#m1): M1-07; completamento M3-05, M4-07 |
-| 14 | Mutation test delle invarianti critiche | [§35](#s35) | [M1-09](../BACKLOG.md#m1-09): tooling; casi M3-06, M3-08, M5-08 |
-| 15 | Controlli per diff e pubblicazione riprendibile | [§34](#s34) | [M1-09](../BACKLOG.md#m1-09): selezione; M7-06, esecuzione M9-04 |
+| Milestone | Stato | Capacità e limite |
+|---|---|---|
+| [M0](#m0) | Completata | Candidato Workers/D1/Queues/Better Auth qualificato e approvato; slice reale controllata, Stripe sandbox e recovery nativa preliminare. Via del 2026-09-23; prove nella storia Git precedente alla rimozione del tracker. Capacità pubblica, integrazioni e prove live finali restano nelle milestone competenti. |
+| [M1](#m1) | Completata | Fondazioni, ambienti, logo, design system e prototipo approvati entro il 2026-09-28; fonti tecniche in codice/test/config e [design system](brand/DESIGN_SYSTEM.md). Cutover repository in [#163](https://github.com/max23468/FiscalBay/pull/163); la dismissione remota 1.x resta aperta. |
+| [M2](#m2) | In corso | Account, quattro login, sessioni/MFA admin, OAuth seller, pause/scollegamento, Negozi/Profilo e routing implementati sul test. Restano i collaudi e le riconciliazioni sotto; login/linking eBay reali rinviati a M8 (D160). Riferimenti: [#229](https://github.com/max23468/FiscalBay/pull/229), [#241](https://github.com/max23468/FiscalBay/pull/241), [#245](https://github.com/max23468/FiscalBay/pull/245), [#269](https://github.com/max23468/FiscalBay/pull/269), [#270](https://github.com/max23468/FiscalBay/pull/270), [#296](https://github.com/max23468/FiscalBay/pull/296). |
+| [M3](#m3) | Da completare | Acquisizione iniziale al collegamento e riepilogo minimo disponibili; sync continuativa, modello completo, riqualifica fiscale, grant, retention e ingresso eventi da integrare. |
+| [M4](#m4) | Da completare | Anteprima e componenti condivisi disponibili; ricerca, preferenze persistenti, campanella, onboarding e pagina Ordini definitiva da integrare nei percorsi reali. |
+| [M5](#m5) | Da completare | Stripe e generatori di diritti qualificati preliminarmente; billing reale, ciclo commerciale e Telegram da integrare. Checkpoint live in attesa. |
+| [M6](#m6) | Da completare | Generatori export e sito pubblico minimo disponibili; export autenticato, console, supporto, sito completo e KPI da integrare. |
+| [M7](#m7) | Da completare | Tooling di pubblicazione e prove locali disponibili; qualifiche remote, hardening, legali, capacità e recovery readiness da chiudere. |
+| [M8](#m8) | Da completare | RC, merchant e prove reali autorizzate ancora da preparare; checkpoint in attesa. |
+| [M9](#m9) | Da completare | Go-live non autorizzato; gate Production sotto ancora aperti. |
+
+<a id="questioni-aperte"></a>
+### Questioni aperte e ripresa
+
+Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o richiedono di riconciliare un effetto remoto. Chiuderle o rimuoverle con il prossimo intervento pertinente, senza accumulare il diario delle prove riuscite. Il prossimo lavoro di integrazione è M3; le qualifiche residue di M2 e della pubblicazione non vanno attribuite a un test sintetico.
+
+| Ambito | Pendenza e condizione di chiusura |
+|---|---|
+| Collaudo sul test | Riconciliare CI, ricevuta e collaudo del routing, Negozi/Profilo e rifiniture UI dopo il deploy, inclusi visita del sito/ritorno all'app, cache e indicizzazione; [#296](https://github.com/max23468/FiscalBay/pull/296) e correzione deploy [#299](https://github.com/max23468/FiscalBay/pull/299) sono integrate nel checkout. Negozi: elenco, pannello, pausa/ripresa con seller controllato. Le vecchie voci «resta il collaudo» non dimostrano né successo né fallimento sul candidato attuale. |
+| Pubblicazione | Qualificare sul provider ripresa fra run, migration, primo rollback e ricevute secondo [RELEASE](engineering/RELEASE.md). Modalità `prova` di `Pubblica` ancora da eseguire sul candidato autorizzato; creare `CHANGELOG.md` prima della pubblicazione reale. Il riuso mutation è stato osservato in [#298](https://github.com/max23468/FiscalBay/pull/298); resta la riconciliazione del deploy successivo. |
+| Consenso eBay | Primo rinnovo reale del cron non ancora attestato; leggere in Developer Analytics il limite del grant `refresh_token` prima della sync continuativa e confrontarlo con circa dodici rinnovi/giorno per negozio attivo. La rotazione di `BETTER_AUTH_SECRET` richiede il ricollegamento dei negozi. |
+| Sandbox e dati fiscali | Supporto Sandbox distribuito con [#273](https://github.com/max23468/FiscalBay/pull/273), migration e smoke attestati dalla [run di #274](https://github.com/max23468/FiscalBay/actions/runs/37377929129). I pagamenti Sandbox provati sono falliti; l'alternativa `CashOnPickup` è stata rimossa da eBay per managed payments e l'acquisto confermato resta non pagato, assente da Fulfillment. Buy API esclusa dall'owner. Serve pagamento Sandbox riuscito e importazione, oppure soluzione concordata. L'owner ha autorizzato la consultazione degli ordini Production esistenti: i dati persistiti sono stati letti, ma nuova lettura API e disponibilità fiscale non sono qualificate. Nessun permesso implicito di modificare ordini Production o introdurre import Trading. |
+| Login eBay | Prove reali su Production in M8 (D160), con checklist sotto. Il readback D1 del 2026-10-06 attesta un'identità eBay collegata all'utente owner con password/Google; la precedente registrazione descriveva un utente separato non verificato. Discrepanza non risolta: non vale come prova di linking. Keyset e RuName non riletti dal portale Developers. |
+| Identità e admin | Collaudo passkey fisico Safari/iOS dichiarato positivo dall'owner il 2026-09-29, senza dispositivo/versione specificati; cambio email remoto escluso dall'owner il 2026-09-30, prove locali conservate. MFA admin provata con asserzioni sintetiche: quando serve la console, scegliere account owner, registrare due passkey indipendenti e concedere il ruolo secondo §7. |
+| Piano e costi | Workers Paid esistente utilizzabile fino al 20 ottobre 2026, senza downgrade anticipato o rinnovo autorizzato. Rileggere piano, quote condivise, CPU e Queue reale prima dell'apertura pubblica; invio Auth a destinatari arbitrari richiede Paid. Le misure M0 non autorizzano capacità pubblica né costi. |
+| Cutover provider | OAuth Production sul keyset `botCF` salvato ma disattivato: sul keyset un solo RuName può averlo attivo ed è quello del test. Scegliere al cutover fra keyset dedicato al test e perdita del login eBay sul test. Non modificare `botCF 2` (SyncBay) o il callback condiviso con Hub Fatture. Branding finale Checkout ancora da osservare. |
+| Dati e risorse di prova | Eliminare prima del go-live utenti e dati reali controllati nella D1 di test, compresi ordine e identificativo fiscale ratificati dall'owner il 2026-09-23, e la copia recuperabile con Time Travel. Account sintetico di collaudo ammesso solo nel test. Better Auth Infrastructure rimosso dal runtime (D152), progetto Starter residuo da eliminare se inutile; Supabase escluso già eliminato. Inventario privato fuori checkout: `FiscalBay/m0-inventory`. |
+| Legacy 1.x | Ultimo inventario registrato: VPS `fiscalbay-bot`, checkout `/opt/fiscalbay`, autodeploy disabilitato; bot `fiscalbay-bot`, callback `fiscalbay-oauth` e timer `reconcile`, `alertcheck`, `external-healthcheck`, `backup`, `log-maintenance`, `restore-drill`, `duckdns` ancora operativi. Owner responsabile del cutover: callback cancellazione 2.0 e consumatore Hub Fatture coordinati in M7, poller fermato prima del webhook bot live, dismissione conclusiva in M9. Nessuno spegnimento attestato da questa migrazione. |
+| Pulizia sospesa | Le precedenti sessioni conservavano `FiscalBay-audit-ui-ux` / `docs/audit-ui-ux-test` per file non tracciati e i checkout `b8c4` e `4a9e` per associazione alla chat incerta. Verificare esistenza, contenuto, PR assorbite e uso corrente prima di rimuoverli; l'inventario Git locale di questa migrazione mostra soltanto il checkout principale. |
+
+<a id="m0"></a>
 
 ### M0 · Qualificazione tecnica e transizione delle fondamenta
 
@@ -968,90 +995,128 @@ Le quindici integrazioni approvate il 2026-09-27 sono assegnate esclusivamente a
 
 **Output:** memo decisionale del candidato selezionato con alternative scartate, costi/quote residue, responsabilità, ADR solo se necessari, matrice API, versioni congelate, slice riproducibile e gate evidenziati. Nessun adapter completo delle alternative scartate. **DoD:** ogni requisito critico ha esito/prova/limite; nessun impedimento nascosto; via owner a scelta/costi. Fonti insufficienti non diventano «PASS».
 
+**Assetto approvato:** Workers, una D1 UE, Queues e Better Auth; Supabase Pro escluso per budget e Free per continuità insufficiente. Nessun adapter alternativo mantenuto. Protezione nativa Time Travel e riapertura fail-closed secondo §32; nessun backup parallelo. Il progetto Better Auth Infrastructure non è più collegato al runtime dopo D152. Generatori OAS ammessi solo se supportano TypeScript 7 senza secondo compilatore: finché manca tale compatibilità, schemi Zod mirati per Identity/Fulfillment, parser Trading e SDK Stripe ufficiale (§25).
+
+<a id="m1"></a>
 ### M1 · Fondazioni applicative e design
 
 **Prerequisiti:** M0 e scelte approvate per l’implementazione dipendente; preparazione grafica/copy indipendente può anticipare. **Attività:** cutover controllato che rende canonico l’albero 2.0 e congela la 1.x in un riferimento Git separato, senza confonderlo con la dismissione remota; monorepo minimo, CI/local dev/test, migration iniziale, confini tenant/AuthZ, logging redatto, errore/i18n, top nav/shell, tema/tokens; rifinitura manuale/vettoriale Concept 4 e asset; completamento di DNS/TLS/test e posta già avviati limitatamente ai prerequisiti M0; prototipo approvabile dei tre schermi e stati.
 
 **Output:** repository con una sola implementazione e documentazione canonica 2.0, foundation eseguibile, brand foundation e inventario componenti scelti realmente, pipeline test, struttura dati iniziale. **DoD:** riferimento 1.x recuperabile, merge incapace di avviare il deploy legacy, componenti 1.x ancora live censiti fino al loro cutover operativo; approvazione owner logo/design system; test authz/shell/IT-EN/theme verdi; asset non inventano funzioni; ambiente test separato. No UI provvisoria massiva da rifare in M4.
 
+<a id="m2"></a>
 ### M2 · Account, Auth e Negozi eBay
 
-**Prerequisiti:** foundation/Auth gate. **Attività:** quattro login, compresa l'integrazione di Sign in with eBay rinviata da M0 (prove reali in M8-03, D160), verifica email/linking, sessioni/reauth/MFA admin, profilo, OAuth login vs seller, connessioni/reconnect, pausa/scollega/elimina, unicità negozio/spazio, stati UI e reminder; instradamento utente autenticato/sito pubblico.
+**Prerequisiti:** foundation/Auth gate. **Attività:** quattro login, compresa l'integrazione di Sign in with eBay rinviata da M0 (prove reali in M8, D160), verifica email/linking, sessioni/reauth/MFA admin, profilo, OAuth login vs seller, connessioni/reconnect, pausa/scollega/elimina, unicità negozio/spazio, stati UI e reminder; instradamento utente autenticato/sito pubblico.
 
-**Output:** flusso utente e account completo e testabile. **DoD:** i percorsi positivi e negativi dei quattro accessi passano, per eBay con risposte sintetiche fino a M8-03; nessun trasferimento/merge improprio; segreti isolati; cronologie e azioni non approvate assenti.
+**Output:** flusso utente e account completo e testabile. **DoD:** i percorsi positivi e negativi dei quattro accessi passano, per eBay con risposte sintetiche fino a M8; nessun trasferimento/merge improprio; segreti isolati; cronologie e azioni non approvate assenti.
 
+**Verifica delle integrazioni:** callback seller e consenso reali, token cifrati/scadenze e rinnovo in background; replay senza doppio scambio e risposte tardive incapaci di ripristinare un consenso superato. Pausa manuale distinta da quella imposta dal piano; nessuna pausa ferma la retention. Scollegamento senza disdetta o reset dei benefici, eliminazione con nome verificato sul server e quota già consumata conservata. Le eccezioni assistite al vincolo Free dei 90 giorni si integrano in M5 insieme alla scelta del negozio attivo, per decisione owner del 2026-10-05.
+
+**UI e routing:** elenco/pannello Negozi e Profilo da link diretto, ritorno e ricarica, mobile e testi lunghi; tipo di account registrato non modificato dal salvataggio del profilo. Frequenza, storico, aggiornamenti e azioni di sincronizzazione si mostrano quando M3 fornisce dati reali; notifiche per negozio quando M5 le integra. Root pubblica e area `/app` separate, visita esplicita del sito senza logout, IT/EN, nessun loop. Cache verificata con anonimo e due utenti, redirect/payload privati mai riusati; test/anteprima/area privata non indicizzati (§16, §23). Noindex non è un controllo d'accesso.
+
+<a id="m3"></a>
 ### M3 · Sincronizzazione, ordini e modello fiscale
 
 **Prerequisiti:** M2, G-EBAY/DATA. **Attività:** modelli/versioni, adapters, elenco/dettaglio, import recenti/storico, scheduler/eventi, priorità/coalescing/checkpoint/retry, classificazione dato, controlli formali, suggerimenti e conflitti, contratto sblocco atomico e grant iniziali.
 
 **Output:** ordini consistenti, ricerca di base e pipeline riprendibile con fixture/live controllato. **DoD:** fonte/campo provati, nessun consumo su assenza, nessun leak o doppio ordine, cancellazione/retention rispettata dai job; nuovi ordini non bloccati dal backfill. Test sicurezza/contratti presenti prima della UI completa. Il calcolo diritti/cicli di base deve già essere testabile con fixture tipizzate e transazioni; M5 integra il motore con billing, calendario commerciale e provider reali. Non dichiarare «Free/Premium completo» soltanto per uno sblocco simulato.
 
+**Fonti e modello:** importazioni multi-articolo idempotenti, importi esatti, UTC e snapshot non riscritti dall'anagrafica corrente; storia di tutte le variazioni fiscali effettive, senza versioni duplicate. Identità di riga riconciliata fra acquisti provvisori Trading e ordine definitivo: consolidare solo se tutte le righe appartengono allo stesso ordine; sovrapposizioni parziali, identità mancanti o più candidati restano anomalie. Cambio di ID senza perdita di grant, nuova quota o doppia notifica; fixture e prova reale controllata di ordine combinato se disponibile, altrimenti limite dichiarato. Riqualificare Fulfillment con marketplace e `TAX_BREAKDOWN` secondo §9, senza stampare o persistere valori della prova; Trading resta primario fino alla decisione owner.
+
+**Contratto eBay qualificato preliminarmente:** Fulfillment lista/dettaglio fino a due anni, pagine fino a 200, PII mascherata oltre 90 giorni ed email buyer non disponibile dopo 14 giorni; acquisti pending-payment con pagamento anticipato assenti, ordini senza pagamento anticipato da classificare senza inventarne lo stato. Trading `GetOrders` ha finestra massima di 90 giorni e `BuyerTaxIdentifier` può non avere Paese emittente, che resta nullo. `legacyOrderId` eventuale non è chiave canonica. Immagini da Trading `GetItem` tramite `legacyItemId`, con domini/formati qualificati contro SSRF. Quote osservate in M0: Fulfillment 100.000 chiamate/giorno, Trading `GetOrders` e `GetItem` 5.000 ciascuna; da riconfermare sul keyset prima della sync continuativa. Fixture per `c/o`, destinatario diverso dal buyer, telefono strutturato, campi assenti/inattesi; stato sconosciuto sicuro e provenienza conservata (§9, §28, §29).
+
+**Ripresa e sblocco:** dettaglio e lavoro fiscale presi in carico in modo recuperabile prima di avanzare il watermark; interruzioni fra pagina, accodamento, commit e ACK senza salti o doppi effetti. Polling con overlap autorevole; `ORDER_CONFIRMATION` opzionale anticipa solo la verifica mirata e non blocca il polling se assente. Ingresso Worker condiviso per eventi eBay, Stripe, Telegram e cancellazione account: metodo/dimensione/firma sul corpo grezzo, claim D1, coda con soli riferimenti, ACK solo dopo accettazione, retry/DLQ nativi (§25). Nessun orchestratore parallelo; callback OAuth browser separate. Mutation su ingresso, isolamento, ultimo credito e scadenza dei grant. Accesso negato alla scadenza anche con pulizia sospesa; vecchi eventi/job non resuscitano raw, versioni, suggerimenti o dati eliminati (§30).
+
+<a id="m4"></a>
 ### M4 · UX completa Ordini, Negozi e Impostazioni
 
 **Prerequisiti:** contratti M2/M3 stabili. **Attività:** card 2×riga, drawer URL/Articoli, query completa, filtri/sorting, Carica altri, selezione/barra, contesto export, profilo/impostazioni/inbox, onboarding progressivo, loading/error/degraded, light/dark/IT-EN/mobile e microcopy.
 
-**Output:** esperienza completa su dati rappresentativi, senza funzionalità future nascoste nel concept. **DoD:** flow browser/touch/back/refresh/scroll coerente, nessun dato bloccato dal client bypassabile, inventario opzioni concordate coperto; integrazioni M5/M6 ancora assenti indicate come tali nel backlog, non dichiarate Production-ready. M4 chiude struttura e comportamento UI sui contratti stabili, non fatturazione, Telegram o export funzionanti se ancora simulati. M6/M7 chiudono gli stessi flussi end-to-end prima della RC.
+**Output:** esperienza completa su dati rappresentativi, senza funzionalità future nascoste nel concept. **DoD:** flow browser/touch/back/refresh/scroll coerente, nessun dato bloccato dal client bypassabile, inventario opzioni concordate coperto; integrazioni M5/M6 ancora assenti indicate come questioni aperte, non dichiarate Production-ready. M4 chiude struttura e comportamento UI sui contratti stabili, non fatturazione, Telegram o export funzionanti se ancora simulati. M6/M7 chiudono gli stessi flussi end-to-end prima della RC.
 
+**Accettazione:** ricerca e conteggi solo su valori fiscali accessibili, senza CF/P.IVA in URL, referrer o log edge e senza inferenza dei valori bloccati; query server senza caricamento dell'intero storico nel browser. Cursori stabili, selezioni rivalidate, solo negozio e ordinamento ricordati fra sessioni. Pannello con URL, ritorno/focus/tastiera e contesto conservato; sblocco multiplo/export mai impliciti. Impostazioni con inventario completo, modifiche non salvate protette, lingua/tema persistenti, errore mai mostrato come successo. Onboarding riprendibile senza wizard bloccante; ordini autorizzati disponibili durante outage eBay, prima sync distinta dalla disponibilità fiscale. Integrare misure Auth/D1/eBay/browser allowlistate, controlli visivi e a11y in IT/EN, chiaro/scuro, smartphone/tablet/desktop e movimento ridotto (§17–§22, §31).
+
+<a id="m5"></a>
 ### M5 · Free/Premium, Stripe e Telegram
 
 **Prerequisiti:** gate Stripe e modello diritti/sblocchi. **Attività:** cicli/promo/inattività, trial, checkout/portal/link, catalogo generazioni, prepagamento+residuo trial, upgrade/lifetime/prorata residua qualificata, webhook/reconciliation, grant admin base, Telegram linking/messaggi/riepiloghi/retry/preferences, comunicazioni pagamento vs prodotto.
 
 **Output:** matrice commerciale osservabile funzionante in test, casi solo-live esplicitamente assegnati al gate finale; configurazione live dopo checkpoint owner senza incassi non autorizzati. **DoD:** nessun doppio incasso/sblocco; diritti post-downgrade Q568, concessioni, rimborsi e lifetime ultimo posto testati; Telegram non è accesso obbligatorio; acquisto eleggibile coperto dal MoR; Paddle inattivo salvo via.
 
+**Dipendenze e accettazione:** completare i cicli/diritti M3 prima dei percorsi commerciali e riusare l'ingresso eventi; configurazione live solo dopo integrazione test e checkpoint. Verificare confini UTC/fuso, fine mese/anno bisestile, promo e quota congelata. Costruzione Q567 qualificata in sandbox: prezzo una tantum del primo periodo più prezzo ricorrente con `trial_end` alla scadenza originale più il periodo; Test Clock deve provare un solo incasso iniziale, nessun addebito a fine prova e rinnovo corretto, anche in Link/Portal con cancellazione/rimborso mentre Stripe indica `trialing`. Posti lifetime: `expires_at` fra 30 minuti e meno di 24 ore, mai liberazione prematura con pagamento asincrono; sessione completata non pagata conserva il posto fino all'esito asincrono. Casi solo-live assegnati al gate commerciale, senza copertura fittizia.
+
+Nel Free integrare scelta del negozio attivo, pause `plan`, vincolo dei 90 giorni ed eccezioni assistite motivate/auditate senza reset di quota, trial o ciclo. Webhook e riconciliazione autonoma con browser chiuso, eventi mancanti/tardivi/fuori ordine, oggetti Stripe non disponibili e outage, senza inventare refund o diritti. Mutation su grant, revoca del solo diritto rimborsato e diritti indipendenti. Telegram rilegge Premium/preferenze all'invio, invalida vecchia chat/consegne, distingue esito remoto incerto e fallimento certo, recupera solo arretrati tecnici e non promette exactly-once (§6, §13).
+
+<a id="m6"></a>
 ### M6 · Export, admin e supporto
 
 **Prerequisiti:** modelli/diritti/UX e G-EXPORT per la chiusura end-to-end; generazione formati e test puri possono iniziare prima su contratti stabili. **Attività:** CSV/XLSX e template colonne, granularità ordine/articolo, file lifecycle e portabilità ZIP, admin operativo/retry/pause/flag, concessioni/config commerciale, supporto IT/EN/form, email e consensi, sito pubblico completo e KPI aggregati.
 
 **Output:** percorsi self-service e controllo operativo senza accesso diretto ordinario al DB. **DoD:** tutte le opzioni Free/Premium effettive, export sicuri e test grandi, admin MFA minimizzato, notifiche/supporto/consensi verificati; niente copie pagamento inutili.
 
+**Dipendenze e accettazione:** export completo solo con selezione UI e diritti reali M4/M5, non con il solo generatore. CSV letterale con escaping/neutralizzazione formule e istruzioni per import testuale; XLSX con CF/P.IVA/SKU come testo; più articoli/identificativi non duplicano importi o righe. Generazione/pubblicazione/download verificano revisione workspace, sessione, diritti e retention, anche con pulizia sospesa o revoca durante il lavoro; file privati massimo 24 ore, URL bearer insufficiente, ZIP JSON/CSV senza copie delle ricevute di pagamento (§12, §30).
+
+Console e Control Center owner sulle stesse query aggregate, senza impersonazione o dati buyer ordinari; anomalie con conseguenza/azione e scritture con conferma/audit. Webhook/menu del bot test riletti, chat/utente estranei ignorati, incidenti deduplicati all'apertura e risoluzione; gli alert M7 dipendono da questa integrazione (§15). Supporto/consensi richiedono impostazioni persistenti; diagnostica allowlistata opzionale, form funzionante anche senza diagnostica, retention applicata. Sito completo chiuso solo con prezzi/checkout e routing coerenti, poi qualifica legale M7. KPI aggregati esposti nella console, primi passaggi deduplicati anche con retry/reconnect, sync a zero ordini distinta e attività automatica separata da inattività umana (§14, §23, §31).
+
+<a id="m7"></a>
 ### M7 · Hardening, privacy, performance e recovery readiness
 
 **Prerequisiti:** funzionalità complete. **Attività:** audit contratti/sicurezza/dipendenze/licenze, retention/deletion/supply chain, carico/margine/costi residui, incidenti/kill switch/forward-fix, monitoraggio e runbook; revisione legale e marchi; preparazione restore, **non aggiunta di drill periodici**.
 
 **Output:** candidato senza P1/P2, rischi residui espliciti, runbook e capacità misurata. **DoD:** test isolamento/concorrenza/pagamenti/erasure/limiti verdi; nessun segreto/PII pubblici; provider produzione conformi al progetto; G-LEGAL chiuso per go-live.
 
+**Verifica conclusiva:** threat model §29, CSP, licenze/notices e marchi eBay; inventario dei trattamenti/trasferimenti e condizioni IT/EN, consumatore, versioni/accettazioni e copertura effettiva Temisfera/MoR. Verificare piano/account e trattamento OpenAI prima di un uso sistematico di Codex su dati reali; nessun training o riuso estraneo di dati eBay. Account-deletion eBay senza esenzione per dati persistiti: callback 2.0 condiviso con l'ingresso eventi, firma, retry e budget/cache delle chiavi, cutover coordinato con Hub Fatture prima di readiness. Eliminazione attraversa Auth, ordini, raw, code, suggerimenti, export e billing, anche con pulizia sospesa; recupero lifetime non ripristina dati o trial consumati (§30, §32).
+
+Carico su almeno 70.000 ordini, multistore, picchi, code/export/log, separando Auth/D1/eBay/browser e consumi dell'account condiviso; quote e stop point nel runbook, nessun controllo CPU automatico al deploy reintrodotto (D158). Alert/rientro P1–P3 senza PII, query di diagnosi, campionamento e scadenze credenziali con avviso a 45 giorni (§29, §31). Qualificare pubblicazione e ripresa sul provider: diff cumulativo, artefatto Production distinto, rollback/forward-fix, candidato superato, interruzioni migration/deploy/tag e readback coerente. Riuso dei gate/promozione e riallineamento di `develop` secondo §34 e RELEASE; nessun restore periodico. Matrice interna di tutte le funzioni e rinvii, P3 espliciti, zero P1/P2; prove solo-live finali assegnate al preflight M9.
+
+<a id="m8"></a>
 ### M8 · Release Candidate e merchant di fiducia
 
 **Prerequisiti:** M7 e via owner al test reale. **Attività:** freeze feature, RC tracciata su test; un merchant, scenari guidati e dati autorizzati, quattro login e percorsi reali pertinenti, mobile/IT-EN/dark; correction-only. Test senza durata arbitraria ma con criteri osservabili. Manifest di ambiente/risorse/dati del merchant esplicito: credenziali e passkey test non diventano Production, oggetti Stripe sandbox non attestano diritti live, bot e messaggi di test rimangono separati. Nessuna migrazione test→Production o riuso di dati personali per default.
 
 **Output:** evidenza test e RC approvabile. **DoD:** scenari core riusciti, nessun P1/P2, P3 accettati; test non generalizzato come prova statistica; reali effetti e condizioni registrati. Restore unico svolto sul candidato finale a fine M8 o nel preflight M9, immediatamente prima del live.
 
+Il manifest approvato identifica candidato, artefatto, schema/config, account, dati, credenziali, bot ed effetti live; nessuna attivazione implicita di Production. Provare registrazione, quattro login, seller, sync, dati fiscali/copia, export, Telegram, preferenze e billing pertinente; dispositivi/browser effettivi distinti dai motori sintetici. Una correzione cambia la RC e richiede i controlli pertinenti. Il preflight prepara target isolato e marker per il solo drill conclusivo di M9.
+
+<a id="prove-ebay"></a>
+#### Prove reali di Sign in with eBay su Production
+
+Checklist rinviata da M2 con D160, eseguibile soltanto nel manifest e negli effetti autorizzati del checkpoint M8; non autorizza di per sé deploy o go-live:
+
+1. Registrare esito/data del riferimento `260920-000007` e rileggere sul keyset `botCF` il diritto effettivo, senza cambiare scope, RuName o callback legacy.
+2. Verificare consenso con soli scope base e `commerce.identity.readonly`, RuName FiscalBay attivo e candidato esatto distribuito sul Worker Production dopo gate e autorizzazioni applicabili.
+3. Dalla sessione email verificata controllata, collegare `ebay` con state/PKCE, consenso e callback Production; D1 deve attestare un solo utente, stesso user ID, nessun subject duplicato e token cifrati non esposti via HTTP.
+4. Dopo logout, accedere con eBay e ritrovare lo stesso utente; il login non collega negozi.
+5. Provare revoca globale della sessione FiscalBay, rinnovo del token provider quando necessario e revoca/scollegamento secondo il contratto corrente; nessun dato personale o token nelle evidenze.
+6. Rileggere sessioni/account e identità del Worker, revocare sessioni residue senza disattivare RuName o callback 1.x condiviso; dichiarare collaudato solo con tutte le prove.
+7. Account individuale controllato: avviso dedicato senza utenti/account creati; email business già registrata: rifiuto del collegamento implicito.
+
+<a id="m9"></a>
 ### M9 · Go-live
 
 **Prerequisiti:** M0–M8 chiuse, RC, controlli commerciali live e via owner. **Attività:** fissare date promo globale, validare checklist unica §41, restore drill unico, Pubblica, readback, tag/release/changelog; aprire iscrizioni con ammissione corretta, sorveglianza rafforzata iniziale senza beta pubblica. Conclusa la sorveglianza e dismessa la 1.x, chiudere il passaggio definitivo alla 2.x eliminando `legacy/1.x` secondo il criterio sotto.
 
 **Output:** `2.0.0` realmente pubblicata e verificata, no claim anticipato. **DoD:** dominio/posta/provider/diritti/job/alert/supporto/SEO operativi; rollback o forward-fix pronto; nessuna vecchia automazione concorrente. Il mantenimento del bot 1.x non è prerequisito: può essere dismesso prima, preservando identità bot/keyset utili e storia Git.
 
-La branch `legacy/1.x` resta disponibile durante il cutover operativo e la sorveglianza iniziale. Eliminarla, sia in locale sia sul remoto, soltanto dopo M9-05 e la sorveglianza prevista da M9-06: runtime e automazioni 1.x inattivi, consumatori e callback trasferiti e verificati, nessun intervento o rollback operativo ancora dipendente dal codice 1.x. Prima della cancellazione verificare che il commit finale 1.x sia raggiungibile da un tag Git permanente pubblicato sul remoto; registrare nel backlog commit, tag e readback della rimozione. La cancellazione della branch non elimina la storia Git né le identità bot o i keyset condivisi.
+La branch `legacy/1.x` resta disponibile durante il cutover operativo e la sorveglianza iniziale. Eliminarla, sia in locale sia sul remoto, soltanto dopo dismissione e sorveglianza: runtime e automazioni 1.x inattivi, consumatori e callback trasferiti e verificati, nessun intervento o rollback operativo ancora dipendente dal codice 1.x. Prima della cancellazione verificare che il commit finale 1.x sia raggiungibile da un tag Git permanente pubblicato sul remoto; registrare commit, tag e readback nella ricevuta conclusiva. La cancellazione della branch non elimina la storia Git né le identità bot o i keyset condivisi. La dismissione può anticipare il go-live nel mandato, ma M9 si chiude soltanto dopo pubblicazione, sorveglianza e pulizia verificate.
 
-### 37.1 Requisiti integrati da CF Ready e Hub Fatture
+<a id="pubblicazione-production"></a>
+### Gate per la pubblicazione Production
 
-Requisiti ricavati dall'esperienza di CF Ready e Hub Fatture, integrati il 2026-09-27. Il dettaglio vive nelle sezioni indicate e nei task del backlog; qui si fissa l'assegnazione. Dove un punto toccava task già chiusi o più task insieme è stato creato un task dedicato. Nessuno riapre M0: ciò che riguarda qualifiche già chiuse passa a M1 o dopo.
+Prima di `Pubblica` devono risultare chiusi preflight commerciale, restore conclusivo e checklist operativa sul candidato. Le righe seguenti sostituiscono i tre stati dei vecchi task di preflight; `scripts/release.mjs` le legge sia prima del workflow reale sia prima degli effetti Production. Una riga `COMPLETATO` richiede un riferimento alla prova applicabile; righe mancanti, duplicate, prive di prova o con altro stato bloccano il ciclo. Non modificare i nomi dei tre gate senza aggiornare lo script e i suoi test. Il via owner riferito al commit, la variabile di abilitazione e il gate dell'environment restano controlli separati obbligatori.
 
-| Requisito | Sezione | Task |
+| Gate | Stato | Prova |
 |---|---|---|
-| Riqualifica della lettura fiscale Fulfillment con header marketplace; D135 invariata fino alla prova e alla decisione owner | [§9](#s09) | M3-10 (nuovo); M3-02 conserva il marketplace |
-| Ordini combinati, identità di riga e quota/grant stabili al cambio di ID | [§9](#s09) · [§35](#s35) | M3-09 (nuovo), necessario per chiudere M3-06 |
-| Qualità formale del CF (controllo, coerenza nome, `c/o`) | [§9](#s09) | M3-05 calcolo; M4-01 visualizzazione |
-| Difese sulle risposte eBay: XML, `next` sulla stessa origine | [§29](#s29) · [§35](#s35) | M3-02 |
-| Limiti del callback di cancellazione e budget chiavi pubbliche | [§29](#s29) | M7-02 |
-| Osservazioni tardive e confronto normalizzato senza falsi cambiamenti | [§9](#s09) · [§35](#s35) | M3-05 |
-| Ingresso Worker leggero con claim, coda e ACK | [§25](#s25) | M3-11 (nuovo); riusato da M3-04, M5-05, M5-09, M7-02 |
-| Controllo CPU dopo ogni deploy test, rimosso con D158 | [§31](#s31) | M1-10 (nuovo, estende M1-02 chiusa) |
-| Stop point di quota nel runbook | [§31](#s31) | M7-03 |
-| Budget del bundle client | [§22](#s22) | M1-10 (nuovo), chiude dopo M1-06 |
-| Ultimo stato salvato e verifica in streaming | [§22](#s22) | M4-01, con allineamento di M2-07 |
-| Confini di ciclo sul fuso | [§6](#s06) · [§35](#s35) | M5-01 |
-| Riconciliazione periodica dei diritti e passi periodici indipendenti | [§6](#s06) | M5-05 |
-| Control Center Telegram dell'owner e notifiche incidenti con risoluzione | [§15](#s15) | M6-09 (nuovo), necessario per chiudere M7-04 |
-| Query di diagnosi, soglie P1/P2 e campionamento, sopra i log redatti già chiusi in M1-04 | [§31](#s31) | M7-04 |
-| Avviso al merchant prima della scadenza del consenso seller e rinnovo anticipato dei token | [§8](#s08) | M2-06 |
-| Registro delle scadenze delle credenziali con avviso owner a 45 giorni | [§29](#s29) | M7-04 |
-| Action pinnate a SHA, `main` solo da `develop` | [§34](#s34) | M1-09 (nuovo, estende M1-02 chiusa) |
-| Riuso dei controlli verdi alla promozione e riallineamento automatico di `develop` | [§34](#s34) | M7-06, usato da M9-04 |
-| Test di repository sulle regole di AGENTS | [§34](#s34) | M1-09 (nuovo) |
-| CI per impatto con fallback sul gate completo | [§34](#s34) | M1-09 (nuovo) |
-| Mutation test sui domini critici | [§34](#s34) | M3-06, M3-11 e M5-05 |
+| commerciale | DA COMPLETARE | - |
+| ripristino | DA COMPLETARE | - |
+| operativita | DA COMPLETARE | - |
+
+`commerciale`: date promo approvate, Stripe/database/UI allineati, Link/Portal, ricevute, contatti e riconciliazione osservati nei casi solo-live autorizzati da M8/M9, con effetti economici espliciti; nessun acquisto senza capacità o caso necessario soltanto simulato senza decisione sul limite. Nessuna apertura pubblica anticipata.
+
+`ripristino`: unico drill reale isolato sul candidato finale a fine M8 o prima del go-live, senza ripetizioni periodiche; dati, Auth, grant, configurazioni e marker successivi allo snapshot riconciliati, outbound isolato, revoche ed erasure rispettate. Un fallimento blocca la pubblicazione finché corretto e riprovato.
+
+`operativita`: M0–M8 concluse e RC approvata; checklist §41 riletta per DNS/TLS/www/test, email, Auth, eBay, Telegram, Stripe, SEO, legali, supporto, alert, KPI, quote e rollback, con zero P1/P2 e i due gate precedenti chiusi. Non confonde readiness con il via owner o con un deploy già avvenuto.
 
 <a id="s38"></a>
 ## 38. Registro rischi operativo
@@ -1104,10 +1169,12 @@ Quattro chiarimenti finali prevalenti: **Q566** listino EUR con conversione prov
 
 Le semplificazioni approvate eliminano duplicazioni, vincoli documentali storici, dipendenze artificiali e implementazioni speculative; non cambiano prezzi, diritti, quattro login, checkpoint, retention o protezioni native. M0 confronta progressivamente i candidati; runtime scelto soltanto dopo qualifica. Per ogni nuova incompatibilità sostanziale vale [§0](#s00).
 
+Il tracker separato, la cronaca delle sessioni e il grafo di microtask sono superati da D161. Stato e questioni aperte sono nella roadmap di questo piano; prove in PR/CI e ricevute. I vecchi task sopravvivono soltanto come riferimenti storici in Git e nel registro, senza criteri di avvio o chiusura concorrenti.
+
 <a id="s41"></a>
 ## 41. Definition of Done finale e checklist go-live
 
-La 2.0 è completa, visivamente curata, veloce, responsive, IT/EN, robusta e operabile senza frequenti interventi manuali. Non basta «funziona sul mio account». Tutti i task necessari M0–M8 devono essere chiusi con prove; M9 pubblica solo dopo il via esplicito.
+La 2.0 è completa, visivamente curata, veloce, responsive, IT/EN, robusta e operabile senza frequenti interventi manuali. Non basta «funziona sul mio account». Tutte le capacità necessarie di M0–M8 devono essere complete con prove pertinenti; M9 pubblica solo dopo il via esplicito e i [gate Production](#pubblicazione-production).
 
 | Gate finale | Prova richiesta |
 |---|---|
