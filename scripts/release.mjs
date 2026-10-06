@@ -206,6 +206,21 @@ function verify(environment) {
   return { ...saved, sha: current.sha };
 }
 
+/**
+ * Dopo un deploy l'edge può servire ancora la versione precedente per qualche secondo:
+ * il readback riprova entro una finestra limitata e fallisce con l'ultimo errore.
+ */
+export async function retryReadback(check, attempts = 12, delayMs = 5000) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await check();
+    } catch (error) {
+      if (attempt >= attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
 export function productionReadiness(backlog) {
   for (const suffix of ["01", "02", "03"]) {
     const task = "M" + "9-" + suffix;
@@ -341,18 +356,19 @@ async function main() {
     );
     return { version, identity: metadata.annotations?.["workers/message"] };
   };
-  const liveReadback = async (version) => {
-    for (const pathname of ["/", "/en", "/api/auth/get-session"]) {
-      const response = await fetch(`${target.origin}${pathname}`, {
-        headers: { "cache-control": "no-cache" },
-        signal: AbortSignal.timeout(20000),
-      });
-      if (!response.ok || response.headers.get("x-fiscalbay-version") !== version)
-        throw new Error(`Readback della versione non riuscito: ${pathname}.`);
-      if (pathname === "/api/auth/get-session" && (await response.json()) !== null)
-        throw new Error("Risposta anonima Auth non valida.");
-    }
-  };
+  const liveReadback = (version) =>
+    retryReadback(async () => {
+      for (const pathname of ["/", "/en", "/api/auth/get-session"]) {
+        const response = await fetch(`${target.origin}${pathname}`, {
+          headers: { "cache-control": "no-cache" },
+          signal: AbortSignal.timeout(20000),
+        });
+        if (!response.ok || response.headers.get("x-fiscalbay-version") !== version)
+          throw new Error(`Readback della versione non riuscito: ${pathname}.`);
+        if (pathname === "/api/auth/get-session" && (await response.json()) !== null)
+          throw new Error("Risposta anonima Auth non valida.");
+      }
+    });
   const query = async (sql, params = []) => {
     const response = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/d1/database/${database.database_id}/query`,
