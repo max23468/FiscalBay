@@ -17,21 +17,23 @@ L’avvio e la ripresa sono nel [README](../../README.md); autonomia e checkpoin
 
 Codex desktop può usare file/CLI locali e le connessioni effettivamente autorizzate. Non assumere che un MCP presente in un’altra applicazione o una skill citata nella chat sia già disponibile qui. Configurare secondo documentazione corrente, senza URL, plugin o nomi di tool inventati. Le skill guidano l’implementazione, non prevalgono su scope e checkpoint. `/grill-me` e `/grill-with-docs` non sono dipendenze dell’app.
 
-### Comandi del progetto da implementare nello scaffolding
+### Comandi del progetto
 
 | Comando previsto | Responsabilità |
 |---|---|
 | `pnpm format:check`, `pnpm lint`, `pnpm typecheck` | Oxfmt, Oxlint e compilatore; versione esatta nel lockfile/config, non copiata in più documenti. |
-| `pnpm test`, `pnpm test:e2e` | Vitest/Testing Library e Playwright sulla build locale prima del deploy, fixture controllate; accessibilità smoke dove pertinente. Le prove Playwright locali sono indipendenti e girano in parallelo (metà dei core in locale, quattro worker in CI); in CI si dividono con `--shard` su due job. |
+| `pnpm test`, `pnpm test:e2e` | Vitest/Testing Library e Playwright sulla build locale prima del deploy, fixture controllate; accessibilità smoke dove pertinente. |
 | `pnpm test:e2e:smoke` | Controllo Playwright breve sul dominio test dopo il deploy, senza avviare un server locale. Con `E2E_ACCOUNT_PASSWORD` entra anche nell'area riservata con l'account di collaudo `collaudo@example.invalid`, che `node scripts/reset-test-account.mjs` riporta prima a uno stato noto soltanto sulla D1 `fiscalbay-test`; password nel segreto dell'environment GitHub `test`. Il ripristino fallito salta le prove autenticate con un avviso, senza rollback. |
 | `pnpm build` | Artefatto del runtime selezionato, nessun deploy implicito. |
 | `pnpm verify` | Composizione dei gate applicabili; comandi e risultati realmente verificati. |
 | `pnpm verify:repo`, `pnpm test:scripts` | Regole di repository (sigle di piano, fixture `.invalid`, import aciclici, moduli server con consumatore, versioni di Node/pnpm, Action fissate a SHA) e test dei guardrail con casi negativi; entrambi in `pnpm verify`. |
-| `pnpm verify:changed` | Classificatore dei file modificati condiviso con la CI: gate documentale soltanto per documenti ordinari, gate completo per il resto e per ogni file non classificato, E2E prima del deploy salvo modifiche ai soli test unitari. |
+| `pnpm verify:changed` | Classificatore condiviso con la CI: documenti ordinari, tooling esplicitamente ammesso, unitari o controlli applicativi. Per il runtime segue gli import transitivi fino alle route e seleziona i test browser pertinenti; percorsi condivisi, sconosciuti o non risolvibili eseguono il completo. |
+| `pnpm verify:pages`, `pnpm test:pages` | Catalogo confrontato con le route reali; visite dirette, ricarica, navigazione, console, immagini, overflow, tastiera e axe. IT/EN, mobile/desktop, chiaro/scuro, Chromium/WebKit; utenti sintetici nel solo D1 locale. |
+| `pnpm verify:full` | Gate applicativo, suite funzionale Chromium e tutte le pagine con la matrice completa Chromium/WebKit. Per candidato/release o modifiche trasversali. |
 | `pnpm test:mutation <file[:righe]>` | Stryker con runner Vitest sui soli file indicati; fallisce per sopravvissuti, timeout ed errori, ammette equivalenze motivate con `Stryker disable`. |
-| Workflow `Pubblica` | Contratto [§34](../MASTER_PLAN.md#s34), readback e ripresa degli esiti parziali. |
+| Workflow `Pubblica` | Contratto [§34](../MASTER_PLAN.md#s34), candidato esatto, artefatto Production collaudato, migration, readback, tag e release; [procedura](RELEASE.md). Checkpoint e autorizzazione Production restano richiesti. |
 
-Sono comandi **da creare**, non già presenti per effetto della guida. Il solo verificatore documentale è consegnato eseguibile. Node locale/CI non è il runtime Workers o Supabase. Librerie opzionali non si installano per riempire un catalogo.
+La tabella descrive i comandi presenti e le loro responsabilità; prove e qualifiche remote restano nel backlog. Node locale/CI non è il runtime Workers o Supabase. Librerie opzionali non si installano per riempire un catalogo.
 
 ## 2. Due livelli di verifica dei tool
 

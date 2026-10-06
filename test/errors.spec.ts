@@ -103,6 +103,9 @@ describe("errors, locale and redacted logs", () => {
     );
     expect(formatAmount(12345, "EUR", "it")).toContain("123,45");
     expect(formatAmount(12345, "EUR", "en")).toContain("123.45");
+    expect(formatAmount(124900, "EUR", "it")).toContain("1249,00");
+    expect(formatAmount(1234560, "EUR", "it")).toContain("12.345,60");
+    expect(formatAmount(124900, "EUR", "en")).toContain("1,249.00");
     expect(() => formatDate("bad", "it")).toThrow();
   });
 

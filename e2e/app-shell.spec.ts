@@ -435,6 +435,8 @@ test("stati coerenti: aggiornamento, eBay fermo e collegamento già usato", asyn
     .getByRole("navigation", { name: "Navigazione principale" })
     .getByRole("link", { name: "Negozi eBay" })
     .click();
+  await expect(page).toHaveURL(/\/anteprima\/negozi$/u);
+  await page.waitForLoadState("networkidle");
   await expect(page.getByText("Negozio già collegato a un altro account")).toHaveCount(0);
   await page.getByRole("button", { name: "Collega negozio eBay" }).click();
   await expect(page.getByText("Negozio già collegato a un altro account")).toBeVisible();

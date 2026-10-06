@@ -16,6 +16,8 @@ export function localizedPath(language: Language, path = "/"): string {
   return language === "en" ? `/en${path === "/" ? "" : path}` : path;
 }
 
+const amountGrouping = { it: "min2", en: "always" } as const;
+
 export function formatAmount(minor: number, currency: string, language: Language): string {
   if (!Number.isSafeInteger(minor) || !/^[A-Z]{3}$/u.test(currency)) {
     throw new RangeError("invalid_amount");
@@ -25,5 +27,8 @@ export function formatAmount(minor: number, currency: string, language: Language
     currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
+    // CLDR ha cambiato il raggruppamento italiano (1249 contro 1.249): una regola esplicita
+    // evita testi diversi fra server e browser con dati ICU meno recenti.
+    useGrouping: amountGrouping[language],
   }).format(minor / 100);
 }

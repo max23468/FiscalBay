@@ -16,6 +16,7 @@ on:
       - completed
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
@@ -104,4 +105,6 @@ jobs:
           pr_url="$(jq -r '.url' <<< "${pr_json}")"
 
           gh pr merge "${pr_url}" --squash --delete-branch
+          merged_sha="$(gh pr view "${pr_number}" --json mergeCommit --jq '.mergeCommit.oid')"
+          gh workflow run ci.yml --ref develop -f expected_sha="${merged_sha}"
           echo "Dependabot PR merged after successful CI."

@@ -5,9 +5,10 @@ import { testAccount } from "./test-account";
 const password = process.env.E2E_ACCOUNT_PASSWORD;
 
 // Solo sul dominio distribuito, dopo il ripristino dell'account di collaudo.
+test.skip(!process.env.E2E_BASE_URL, "Non applicabile: collaudo riservato al dominio remoto.");
 test.skip(
-  !process.env.E2E_BASE_URL || !password,
-  "Richiede E2E_BASE_URL e la password dell'account di collaudo.",
+  Boolean(process.env.E2E_BASE_URL) && !password,
+  "Password assente: collaudo remoto parziale.",
 );
 
 test(

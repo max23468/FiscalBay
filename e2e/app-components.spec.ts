@@ -174,7 +174,8 @@ for (const language of ["it", "en"] as const) {
         const allOrders = page.getByRole("radio", {
           name: t("Tutti i nuovi ordini", "All new orders"),
         });
-        await enabled.uncheck();
+        // Il salvataggio fallisce e lo switch torna acceso: `uncheck` pretenderebbe il nuovo stato.
+        await enabled.click();
         await expect(enabled).toBeChecked();
         await expect(allOrders).toBeEnabled();
         await expect(

@@ -9,29 +9,35 @@ on:
     branches:
       - develop
   workflow_dispatch:
-
-# Sulle PR una nuova revisione annulla la verifica superata. Su `develop` una run avviata
-# non viene annullata a metà deploy; una run in attesa sostituita resta coperta, perché il
-# push successivo confronta le modifiche con l'ultimo commit distribuito sul test.
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    inputs:
+      expected_sha:
+        description: Commit esatto atteso dopo un merge automatico
+        type: string
+        required: false
+      reviewed_migrations:
+        description: Digest delle migration non additive approvate, se presenti
+        type: string
+        required: false
 
 permissions:
   actions: read
   contents: read
 
 jobs:
-  # Decide i controlli e, sul push, cerca una verifica già riuscita dello stesso tree.
-  changes:
-    name: Changes
+  # Gate locale, build e artefatto; le prove browser girano nei job `browser`.
+  verify:
+    name: Verify
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
+    concurrency:
+      group: verify-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
     outputs:
-      gate: ${{ steps.detect.outputs.gate }}
+      deploy: ${{ steps.detect.outputs.deploy }}
       e2e: ${{ steps.detect.outputs.e2e }}
+      grep: ${{ steps.detect.outputs.grep }}
+      browsers: ${{ steps.detect.outputs.browsers }}
       reused: ${{ steps.reuse.outputs.run-id != '' }}
-      deploy: ${{ steps.detect.outputs.gate == 'full' }}
       artifact: build-${{ steps.tree.outputs.tree }}
       artifact-run: ${{ steps.reuse.outputs.run-id || github.run_id }}
 
@@ -54,36 +60,27 @@ jobs:
             exit 1
           fi
 
-      # Su `develop` la base è l'ultimo commit distribuito sul test, non il push precedente:
-      # le modifiche di una run annullata, fallita o superata restano nel confronto finché
-      # un deploy non le distribuisce. Senza un deploy riconoscibile il gate è completo.
+      - name: Check dispatched commit
+        if: inputs.expected_sha != ''
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+
+      # Sul push il confronto parte dall'ultimo deploy test riuscito, non dal push precedente:
+      # una run annullata da un push successivo o un deploy fallito restano nel diff.
       - name: Find last test deploy
         id: deployed
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/develop'
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          runs="$(gh api "repos/${REPOSITORY}/actions/workflows/ci.yml/runs?branch=develop&status=success&per_page=30" --jq \
-            '.workflow_runs[] | select(.event != "pull_request") | "\(.id) \(.head_sha)"')"
-          while read -r run_id sha; do
-            [ -n "${run_id}" ] || continue
-            deployed="$(gh api "repos/${REPOSITORY}/actions/runs/${run_id}/jobs" --jq \
-              '[.jobs[] | select(.name == "Deploy test" and .conclusion == "success") | .steps[] | select(.name == "Deploy verified artifact" and .conclusion == "success")] | length')"
-            if [ "${deployed}" -gt 0 ]; then
-              echo "Ultimo deploy test: ${sha} (run ${run_id})."
-              echo "sha=${sha}" >> "${GITHUB_OUTPUT}"
-              exit 0
-            fi
-          done <<< "${runs}"
-          echo "Nessun deploy test riconoscibile: gate completo."
+        run: node scripts/find-deployed.mjs
 
       - name: Classify changes
         id: detect
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || steps.deployed.outputs.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.after }}
         run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --github-output
 
       - name: Identify tree
@@ -94,118 +91,80 @@ jobs:
       # il deploy distribuisce l'artefatto prodotto da quella verifica.
       - name: Find verified artifact
         id: reuse
-        if: github.event_name == 'push' && steps.detect.outputs.gate == 'full'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.base_ref == 'main' && steps.detect.outputs.promotion-reuse == 'true')) && steps.detect.outputs.gate == 'full'
         env:
-          ARTIFACT: build-${{ steps.tree.outputs.tree }}
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           REPOSITORY_ID: ${{ github.repository_id }}
-        run: |
-          set -euo pipefail
-          candidates="$(gh api "repos/${REPOSITORY}/actions/artifacts?name=${ARTIFACT}&per_page=20" --jq \
-            ".artifacts[] | select(.expired == false and .workflow_run.repository_id == ${REPOSITORY_ID} and .workflow_run.head_repository_id == ${REPOSITORY_ID}) | .workflow_run.id")"
-          for run_id in ${candidates}; do
-            run="$(gh api "repos/${REPOSITORY}/actions/runs/${run_id}" --jq '.path + " " + (.conclusion // "")')"
-            if [ "${run}" = ".github/workflows/ci.yml success" ]; then
-              echo "Tree già verificato dalla run ${run_id}: gate non ripetuto."
-              echo "run-id=${run_id}" >> "${GITHUB_OUTPUT}"
-              exit 0
-            fi
-          done
-          echo "Nessuna verifica riusabile: eseguo il gate completo."
-
-  # Produce l'artefatto provato dalle prove browser e distribuito sul test.
-  build:
-    name: Build
-    needs: changes
-    if: needs.changes.outputs.gate == 'full' && needs.changes.outputs.reused != 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+        run: node scripts/find-build.mjs
 
       - name: Set up pnpm
+        if: steps.detect.outputs.gate != 'docs' && !steps.reuse.outputs.run-id
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 12.9.1
 
       - name: Set up Node
+        if: steps.detect.outputs.gate != 'docs' && !steps.reuse.outputs.run-id
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 26.10.0
           cache: pnpm
 
       - name: Install dependencies
+        if: steps.detect.outputs.gate != 'docs' && !steps.reuse.outputs.run-id
         run: pnpm install --frozen-lockfile
 
-      - name: Build
-        run: pnpm build
+      - name: Run local CI gate
+        if: steps.detect.outputs.gate == 'full' && !steps.reuse.outputs.run-id
+        run: pnpm verify
+
+      - name: Check tooling
+        if: steps.detect.outputs.gate == 'tooling'
+        run: pnpm verify:tooling
+
+      - name: Check changed critical domains
+        if: steps.detect.outputs.mutation != '' && !steps.reuse.outputs.run-id
+        env:
+          MUTATION_TARGETS: ${{ steps.detect.outputs.mutation }}
+        run: |
+          read -ra targets <<< "${MUTATION_TARGETS}"
+          pnpm test:mutation "${targets[@]}"
+
+      - name: Record build provenance
+        if: steps.detect.outputs.gate == 'full' && !steps.reuse.outputs.run-id
+        run: node scripts/release.mjs manifest --environment test
 
       - name: Upload verified build
+        if: steps.detect.outputs.gate == 'full' && !steps.reuse.outputs.run-id
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ needs.changes.outputs.artifact }}
+          name: build-${{ steps.tree.outputs.tree }}
           path: build/
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
 
-  # Gate locale completo, in parallelo con build e prove browser.
-  verify:
-    name: Verify
-    needs: changes
-    if: needs.changes.outputs.reused != 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up pnpm
-        if: needs.changes.outputs.gate == 'full'
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 12.9.1
-
-      - name: Set up Node
-        if: needs.changes.outputs.gate == 'full'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 26.10.0
-          cache: pnpm
-
-      - name: Install dependencies
-        if: needs.changes.outputs.gate == 'full'
-        run: pnpm install --frozen-lockfile
-
-      - name: Run local CI gate
-        if: needs.changes.outputs.gate == 'full'
-        run: pnpm verify
-
       - name: Check docs-only changes
-        if: needs.changes.outputs.gate == 'docs'
+        if: steps.detect.outputs.gate == 'docs'
         run: |
           node scripts/verify-copy.mjs
           node scripts/verify-docs.mjs
 
-  # Prove browser sulla build verificata, divise in due macchine con quattro worker ciascuna.
+  # Prove browser sulla build verificata, divise su quattro macchine con quattro worker ciascuna.
   browser:
-    name: Browser ${{ matrix.shard }}/2
-    needs: [changes, build]
-    if: needs.changes.outputs.e2e == 'true' && needs.changes.outputs.reused != 'true'
+    name: Browser ${{ matrix.shard }}/4
+    needs: verify
+    if: needs.verify.outputs.e2e == 'true' && needs.verify.outputs.reused != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    concurrency:
+      group: browser-${{ github.event.pull_request.number || github.ref }}-${{ matrix.shard }}
+      cancel-in-progress: true
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3, 4]
 
     steps:
       - name: Checkout
@@ -230,7 +189,7 @@ jobs:
       - name: Download verified build
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: ${{ needs.changes.outputs.artifact }}
+          name: ${{ needs.verify.outputs.artifact }}
           path: build/
 
       # `vite preview` trova la configurazione del Worker tramite il rinvio che la build
@@ -242,33 +201,47 @@ jobs:
 
       - name: Read Playwright version
         id: playwright
-        run: echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
+        env:
+          BROWSERS: ${{ needs.verify.outputs.browsers }}
+        run: |
+          echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
+          echo "browsers=${BROWSERS//,/-}" >> "${GITHUB_OUTPUT}"
 
       - name: Restore browser cache
-        id: browsers
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.browsers }}
+          restore-keys: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-
 
       - name: Install browser for interaction tests
-        if: steps.browsers.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Install browser system dependencies
-        if: steps.browsers.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
+        env:
+          BROWSERS: ${{ needs.verify.outputs.browsers }}
+        run: |
+          IFS=, read -ra browsers <<< "${BROWSERS}"
+          pnpm exec playwright install --with-deps "${browsers[@]}"
 
       - name: Check browser interactions before deploy
         env:
           E2E_PREBUILT: "1"
-        run: pnpm test:e2e --shard=${{ matrix.shard }}/2
+          BROWSER_GREP: ${{ needs.verify.outputs.grep }}
+          BROWSERS: ${{ needs.verify.outputs.browsers }}
+          SHARD: ${{ matrix.shard }}/4
+        run: node scripts/browser-tests.mjs --grep "${BROWSER_GREP}" --browsers "${BROWSERS}" --shard "${SHARD}"
+
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: test-results/
+          retention-days: 7
 
   # Unico controllo richiesto dalla protezione dei branch: riassume gli esiti dei job.
   gate:
     name: Node 26
-    needs: [changes, build, verify, browser]
-    if: always()
+    needs: [verify, browser]
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -290,10 +263,10 @@ jobs:
 
   deploy-test:
     name: Deploy test
-    needs: [changes, gate]
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/develop' && vars.TEST_DEPLOY_ENABLED == 'true' && needs.changes.outputs.deploy == 'true'
+    needs: [verify, gate]
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/develop' && vars.TEST_DEPLOY_ENABLED == 'true' && needs.verify.outputs.deploy == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment: test
     concurrency:
       group: deploy-test
@@ -304,30 +277,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      # Una run superata non sovrascrive il deploy di una successiva e non conta come
-      # distribuita: la run del commit più recente confronta dall'ultimo deploy riuscito.
-      - name: Check commit still on develop
-        id: current
-        env:
-          VERIFIED_SHA: ${{ github.sha }}
-        run: |
-          current_sha="$(git ls-remote https://github.com/${{ github.repository }}.git refs/heads/develop | cut -f1)"
-          if [ "${current_sha}" = "${VERIFIED_SHA}" ]; then
-            echo "latest=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "::notice::develop è avanzato a ${current_sha}: il deploy passa alla run più recente."
-            echo "latest=false" >> "${GITHUB_OUTPUT}"
-          fi
+          fetch-depth: 0
 
       - name: Set up pnpm
-        if: steps.current.outputs.latest == 'true'
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 12.9.1
 
       - name: Set up Node
-        if: steps.current.outputs.latest == 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 26.10.0
@@ -335,60 +292,62 @@ jobs:
 
       # L'applicazione non viene ricompilata; Wrangler distribuisce la build verificata.
       - name: Install dependencies
-        if: steps.current.outputs.latest == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Download verified build
-        if: steps.current.outputs.latest == 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: ${{ needs.changes.outputs.artifact }}
+          name: ${{ needs.verify.outputs.artifact }}
           path: build/
-          run-id: ${{ needs.changes.outputs.artifact-run }}
+          run-id: ${{ needs.verify.outputs.artifact-run }}
           github-token: ${{ github.token }}
 
-      - name: Read deployed version
-        if: steps.current.outputs.latest == 'true'
-        id: previous
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          version="$(pnpm exec wrangler deployments status --name fiscalbay-test --json | jq -r '.versions[] | select(.percentage == 100) | .version_id')"
-          test -n "${version}"
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+      - name: Verify artifact provenance
+        run: node scripts/release.mjs verify --environment test
 
-      # Nome di job e passo letti da "Find last test deploy": rinominarli insieme.
+      - name: Check commit still on develop
+        env:
+          VERIFIED_SHA: ${{ github.sha }}
+        run: |
+          current_sha="$(git ls-remote https://github.com/${{ github.repository }}.git refs/heads/develop | cut -f1)"
+          test "${current_sha}" = "${VERIFIED_SHA}"
+
+      - name: Restore receipt from previous attempt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: node scripts/release.mjs restore --environment test --receipt-prefix deployed
+
       - name: Deploy verified artifact
-        if: steps.current.outputs.latest == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm exec wrangler deploy --config build/server/wrangler.json --strict
+          REVIEWED_MIGRATIONS: ${{ inputs.reviewed_migrations }}
+        run: node scripts/release.mjs deploy --environment test --reviewed-migrations "${REVIEWED_MIGRATIONS}"
 
       - name: Check test endpoint
-        if: steps.current.outputs.latest == 'true'
         run: curl --fail --silent --show-error --max-time 20 --output /dev/null https://test.fiscalbay.it/
 
       - name: Read Playwright version
         id: playwright
-        if: steps.current.outputs.latest == 'true' && needs.changes.outputs.e2e == 'true'
+        if: needs.verify.outputs.e2e == 'true'
         run: echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
 
       - name: Restore browser cache
         id: browsers
-        if: steps.current.outputs.latest == 'true' && needs.changes.outputs.e2e == 'true'
+        if: needs.verify.outputs.e2e == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
+          restore-keys: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-
 
       - name: Install browser for interaction tests
-        if: steps.current.outputs.latest == 'true' && needs.changes.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit != 'true'
+        if: needs.verify.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Install browser system dependencies
-        if: steps.current.outputs.latest == 'true' && needs.changes.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit == 'true'
+        if: needs.verify.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
 
       # L'account di collaudo torna a uno stato noto prima delle prove autenticate. Se il
@@ -396,7 +355,7 @@ jobs:
       # vengono saltate con un avviso: il deploy non torna indietro per un problema del dato.
       - name: Reset test account
         id: account
-        if: steps.current.outputs.latest == 'true' && needs.changes.outputs.e2e == 'true'
+        if: needs.verify.outputs.e2e == 'true'
         continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -405,19 +364,35 @@ jobs:
         run: node scripts/reset-test-account.mjs
 
       - name: Report test account warning
-        if: steps.current.outputs.latest == 'true' && needs.changes.outputs.e2e == 'true' && steps.account.outcome == 'failure'
+        if: needs.verify.outputs.e2e == 'true' && steps.account.outcome == 'failure'
         run: echo "::warning::Account di collaudo non ripristinato, prove autenticate saltate."
 
       - name: Check deployed browser interactions
-        if: steps.current.outputs.latest == 'true' && needs.changes.outputs.e2e == 'true'
+        if: needs.verify.outputs.e2e == 'true'
         env:
+          E2E_RUN_ID: test-smoke
           E2E_ACCOUNT_PASSWORD: ${{ steps.account.outcome == 'success' && secrets.E2E_ACCOUNT_PASSWORD || '' }}
         run: pnpm test:e2e:smoke
+
+      - name: Check deployed pages
+        if: needs.verify.outputs.e2e == 'true'
+        env:
+          E2E_RUN_ID: test-pages
+          E2E_MATRIX: single
+          E2E_BASE_URL: https://test.fiscalbay.it
+          BROWSER_GREP: ${{ needs.verify.outputs.grep }}
+          E2E_ACCOUNT_PASSWORD: ${{ steps.account.outcome == 'success' && secrets.E2E_ACCOUNT_PASSWORD || '' }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        # Le invocazioni del Worker restano nell'evidenza, ripulite, per le richieste lente o fallite.
+        run: >-
+          node scripts/watch-invocations.mjs --worker fiscalbay-test
+          --output test-results/browser/invocations.json --
+          node scripts/browser-tests.mjs --pages --grep "${BROWSER_GREP}"
 
       # Misura e ricevuta senza bloccare (D148): il p95 oscilla di qualche ms fra misure
       # della stessa versione, quindi oltre soglia resta un avviso e non un rollback.
       - name: Check capacity
-        if: steps.current.outputs.latest == 'true'
         id: capacity
         continue-on-error: true
         env:
@@ -426,16 +401,24 @@ jobs:
         run: pnpm test:capacity --url https://test.fiscalbay.it --worker fiscalbay-test
 
       - name: Report capacity warning
-        if: steps.current.outputs.latest == 'true' && steps.capacity.outcome == 'failure'
+        if: steps.capacity.outcome == 'failure'
         run: echo "::warning::Controllo di capacità non superato, deploy mantenuto. Ricevuta nel riepilogo della run."
 
       # Un deploy con endpoint o interazioni falliti non resta distribuito sul test.
       - name: Roll back test deploy
-        if: failure() && steps.previous.outputs.version
+        if: failure()
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          PREVIOUS_VERSION: ${{ steps.previous.outputs.version }}
         run: |
-          pnpm exec wrangler rollback "${PREVIOUS_VERSION}" --name fiscalbay-test --message "Controlli del deploy test non superati" --yes
-          echo "Ripristinata la versione ${PREVIOUS_VERSION}." >> "${GITHUB_STEP_SUMMARY}"
+          node scripts/release.mjs rollback --environment test
+
+      - name: Upload deployed evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deployed-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test-results/browser/
+            reports/release.json
+          retention-days: 7

@@ -822,16 +822,15 @@ Branch feature→`develop`, integrato su `test.fiscalbay.it`; `main` candidato P
 
 Pipeline minima: install frozen lockfile → format check → lint → typecheck → React Doctor → unit/integration → build. Smoke Playwright per modifiche UI/backend pertinenti, contract/concurrency test in base all'impatto. CodeQL/dependency review/secret scanning e controlli licenze dove disponibili; non presumere capacità o costi GitHub del piano senza preflight. PR da fork senza segreti/live writes, action pin e permessi minimi.
 
-Build, gate locale e prove browser girano in job paralleli; le prove browser sulla build locale usano più worker e più macchine, mentre sul dominio test restano seriali per l'account di collaudo unico. Il controllo richiesto `Node 26` riassume gli esiti. Sulle PR verso `develop` le prove browser usano una sola combinazione Chromium; la matrice completa di browser, viewport e temi gira sulla promozione verso `main` e in Pubblica. Il push su `develop` confronta le modifiche con l'ultimo commit distribuito sul test: una run annullata, fallita o superata non fa perdere il deploy delle sue modifiche. [D157](DECISION_REGISTER.md)
-
 **Guardrail della pipeline.**
 
 - Ogni Action di terze parti è pinnata allo SHA completo del commit, con la versione in commento; Dependabot aggiorna SHA e commento insieme.
-- `develop` richiede il controllo `Node 26` e ammette il merge automatico, che parte solo con i controlli verdi; l'amministratore conserva la possibilità di intervenire.
+- `develop` richiede il controllo `Node 26` e ammette il merge automatico, che parte solo con i controlli verdi; l'amministratore conserva la possibilità di intervenire. `Node 26` riassume job paralleli: gate e build in uno, prove browser divise su più macchine, senza ridurre matrice o browser selezionati ([D157](DECISION_REGISTER.md)).
 - `main` accetta PR soltanto da `develop` dello stesso repository. La promozione riusa i controlli già verdi sullo stesso tree invece di ripeterli, purché il tree coincida e i controlli provengano da GitHub Actions del repository; se cambia un file che governa la pubblicazione (workflow, AGENTS, sezioni di governo) il riuso non vale.
 - Dopo una promozione su `main`, `develop` viene riallineato automaticamente ai commit di promozione, così le PR successive non divergono.
 - Il push su `develop` non ripete il gate applicativo su un tree già verificato da una PR dello stesso repository, né su un diff solo documentale: il deploy test distribuisce l'artefatto prodotto dalla verifica, senza ricompilarlo, e un merge solo documentale non ridistribuisce.
 - La CI classifica i file modificati in documentazione, test, runtime e tooling; un file non classificato esegue il gate completo. Le suite pesanti (E2E, concorrenza, mutation) partono solo quando la classificazione le rende pertinenti.
+- La selezione browser segue i consumatori transitivi fino alle route; componenti condivisi e grafo non risolvibile richiedono tutte le prove. Il catalogo delle pagine è confrontato con le route reali e il candidato esegue IT/EN, mobile/desktop, chiaro/scuro in Chromium e WebKit. Ambiente locale sintetico, remoto test autenticato e Production anonima producono evidenze distinte nella [procedura di pubblicazione](engineering/RELEASE.md).
 - Mutation test mirati sui domini critici toccati dalla PR: sblocco, quota e grant, diritti Stripe, ingresso webhook. Il perimetro dei file per dominio vive nel repository.
 - Test di repository fanno rispettare le regole di AGENTS: nessuna sigla di milestone, task o fase nel codice, nei test, nelle fixture, nei log e nel copy runtime; fixture solo con host sintetici `.invalid` e senza dati reali; grafo degli import applicativi aciclico; ogni modulo server ha almeno un consumatore runtime; versioni di Node e pnpm coincidenti fra `mise.toml`, `package.json` e workflow.
 
@@ -856,7 +855,7 @@ Il readback del candidato confronta commit/artefatto, schema e configurazione at
 <a id="s35"></a>
 ## 35. Strategia di test e criteri osservabili
 
-Vitest dominio/integrazione; Testing Library e user-event componenti; Playwright E2E; axe come aiuto, non certificazione. Chromium e WebKit sui flussi principali, Firefox prima delle release importanti/regressioni pertinenti. Viewport desktop/mobile più prova reale su Safari/iOS e un browser mobile rappresentativo quando disponibile: emulazione non dimostra comportamento passkey/clipboard/download su dispositivo. Fixture sintetiche o sanitizzate, accesso live controllato quando necessario.
+Vitest dominio/integrazione; Testing Library e user-event componenti; Playwright E2E; axe come aiuto, non certificazione. Chromium e WebKit sui flussi principali e prima delle release; nessun collaudo Firefox dedicato (D156). Viewport desktop/mobile più prova reale su Safari/iOS e un browser mobile rappresentativo quando disponibile: emulazione non dimostra comportamento passkey/clipboard/download su dispositivo. Fixture sintetiche o sanitizzate, accesso live controllato quando necessario.
 
 | Suite critica | Casi minimi bloccanti |
 |---|---|

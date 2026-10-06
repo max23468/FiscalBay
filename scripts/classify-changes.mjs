@@ -7,9 +7,10 @@
  * Senza --base confronta il checkout, file non tracciati inclusi, con origin/develop.
  */
 import { execFileSync } from "node:child_process";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { importGraph } from "./verify-repo.mjs";
 
 // Documenti che governano operazioni e gate: non ottengono la corsia ridotta.
 const governance = [
@@ -44,17 +45,133 @@ export function classifyFile(file) {
 }
 
 /** Controlli necessari per un insieme di file modificati. */
-export function plan(files) {
-  if (files.length === 0) return { gate: "full", e2e: true, unclassified: [] };
+/** Chiusura inversa: un consumatore di un modulo modificato cambia con esso. */
+function consumers(files, graph) {
+  const affected = new Set(files);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const [file, imports] of graph) {
+      if (!affected.has(file) && [...imports].some((target) => affected.has(target))) {
+        affected.add(file);
+        grew = true;
+      }
+    }
+  }
+  return affected;
+}
+
+export function plan(files, sources = [], complete = false) {
   const unclassified = files.filter((file) => !classifyFile(file));
   const kinds = new Set(files.map(classifyFile));
   const docsOnly = kinds.size === 1 && kinds.has("documentation");
-  const e2e =
+  const toolsOnly =
+    files.length > 0 &&
+    files.every(
+      (file) =>
+        (file.endsWith(".md") && !governance.some((pattern) => pattern.test(file))) ||
+        /^scripts\/(?:verify-(?:copy|docs|repo)|guardrails\.test|check-capacity)\.mjs$/u.test(
+          file,
+        ) ||
+        /^\.github\/(?:dependabot\.yml|workflows\/(?:actionlint|pr-title|dependency-review|dependabot-auto-merge)\.yml)$/u.test(
+          file,
+        ),
+    );
+  const graph = importGraph(sources);
+  const affected = consumers(files, graph);
+  const full =
+    complete ||
+    files.length === 0 ||
     unclassified.length > 0 ||
-    kinds.has("runtime") ||
-    kinds.has("tooling") ||
-    files.some((file) => file.startsWith("e2e/"));
-  return { gate: docsOnly ? "docs" : "full", e2e, unclassified };
+    (kinds.has("tooling") && !toolsOnly) ||
+    files.some((file) =>
+      /^(?:app\/(?:root\.tsx|routes\.ts|entry\.server|app-copy|app-links)|app\/components\/(?:ui\/|app-shell|account)|app\/app\.css|public\/|workers\/|migrations\/|e2e\/)/u.test(
+        file,
+      ),
+    ) ||
+    (kinds.has("runtime") &&
+      (sources.length === 0 || files.some((file) => file.startsWith("app/") && !graph.has(file))));
+  const areas = new Set();
+  const routes = [...affected].filter((file) => file.startsWith("app/routes/"));
+  for (const route of routes) {
+    if (/orders|home/u.test(route)) areas.add("orders");
+    if (route.endsWith("/home.tsx")) {
+      areas.add("auth");
+      areas.add("public");
+    }
+    if (/stores|store-link/u.test(route)) areas.add("stores");
+    if (/settings/u.test(route)) areas.add("settings");
+    if (/profile/u.test(route)) areas.add("profile");
+    if (/security|admin|auth|sign-in/u.test(route)) areas.add("auth");
+    if (/legal/u.test(route)) areas.add("public");
+  }
+  const unitOnly =
+    files.length > 0 &&
+    files.every((file) => classifyFile(file) === "test" && !file.startsWith("e2e/"));
+  const mode =
+    docsOnly && !complete
+      ? "docs"
+      : toolsOnly && !complete
+        ? "tooling"
+        : unitOnly && !complete
+          ? "unit"
+          : full || areas.size === 0
+            ? "full"
+            : "targeted";
+  const e2e = mode === "full" || mode === "targeted";
+  const patterns = {
+    orders: "ordini|ordine|orders|idratazione",
+    stores: "negozi|negozio|stores",
+    settings: "impostazioni|settings|superfici",
+    profile: "profilo|profile",
+    auth: "accesso|sicurezza|security|auth|admin|idratazione",
+    public: "pubblico|standalone|public|termini|privacy",
+  };
+  const browserGrep =
+    mode === "targeted"
+      ? [
+          "app-shell.spec",
+          "app-components.spec",
+          "@smoke",
+          ...[...areas].map((area) => patterns[area]),
+        ].join("|")
+      : ".";
+  // I mutanti partono dai moduli critici modificati e risalgono ai consumatori critici:
+  // un modulo condiviso non critico non estende la campagna a tutti i domini.
+  const critical = (file) =>
+    (sources.length === 0 || graph.has(file)) &&
+    /^app\/(?:auth(?:-route)?|domain\/(?:orders|quota|grants|cycles|sessions|sign-in-methods|registration|stores|export)|integrations\/(?:stripe|ebay\/(?:seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
+      file,
+    );
+  const mutation = [...consumers(files.filter(critical), graph)].filter(critical);
+  const browsers = e2e
+    ? mode === "full" ||
+      areas.has("auth") ||
+      files.some((file) => /i18n|view-models|date|\.tsx$/u.test(file))
+      ? "chromium,webkit"
+      : "chromium"
+    : "";
+  return {
+    gate: mode === "docs" ? "docs" : mode === "tooling" ? "tooling" : "full",
+    e2e,
+    unclassified,
+    mode,
+    areas: [...areas].sort(),
+    browserGrep,
+    browsers,
+    deploy: kinds.has("runtime") || (!toolsOnly && !docsOnly && !unitOnly),
+    promotionReuse: !files.some(
+      (file) =>
+        governance.some((pattern) => pattern.test(file)) ||
+        /^\.github\/workflows\/(?:ci|publish|promotion)\.yml$/u.test(file),
+    ),
+    mutation,
+    reasons: [
+      complete ? "diff cumulativo, collaudo completo" : `modalità ${mode}`,
+      ...(unclassified.length ? ["file non classificati"] : []),
+      ...routes.map((route) => `consumatore ${route}`),
+    ],
+  };
 }
 
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" });
@@ -63,7 +180,7 @@ const lines = (text) => text.split("\n").filter(Boolean);
 function committedChanges(base, head) {
   if (!base || !head || /^0+$/u.test(base)) return [];
   try {
-    return lines(git("diff", "--name-only", `${base}...${head}`));
+    return lines(git("diff", "--name-only", base, head));
   } catch {
     console.log(`Confronto ${base}...${head} non disponibile: gate completo.`);
     return [];
@@ -96,20 +213,38 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   // Base vuota, a zeri o non raggiungibile (avvio manuale, nuovo branch, storia riscritta):
   // il diff resta vuoto e il gate completo.
   const files = !args.includes("--base") ? localChanges() : committedChanges(base, head);
-  const result = plan(files);
+  const sources = lines(git("ls-files", "--cached", "--others", "--exclude-standard"))
+    .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file) && existsSync(file))
+    .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
+  const result = plan(files, sources, args.includes("--complete"));
 
   for (const file of files) console.log(`${classifyFile(file) ?? "non classificato"}: ${file}`);
   console.log(
-    `Gate: ${result.gate === "docs" ? "documentazione" : "completo"}; E2E: ${result.e2e ? "sì" : "no"}.`,
+    `Gate: ${result.gate === "docs" ? "documentazione" : result.gate === "tooling" ? "strumenti" : "completo"}; E2E: ${result.e2e ? "sì" : "no"}.`,
   );
   if (args.includes("--github-output") && process.env.GITHUB_OUTPUT)
-    appendFileSync(process.env.GITHUB_OUTPUT, `gate=${result.gate}\ne2e=${result.e2e}\n`);
+    appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      `gate=${result.gate}\ne2e=${result.e2e}\ndeploy=${result.deploy}\npromotion-reuse=${result.promotionReuse}\nmode=${result.mode}\ngrep=${result.browserGrep}\nbrowsers=${result.browsers}\nmutation=${result.mutation.join(" ")}\n`,
+    );
+  if (process.env.GITHUB_STEP_SUMMARY)
+    appendFileSync(
+      process.env.GITHUB_STEP_SUMMARY,
+      `### Piano dei controlli\n\n${result.reasons.map((reason) => `- ${reason}`).join("\n")}\n\nBrowser: ${result.browsers || "non applicabili"}. Mutation: ${result.mutation.join(", ") || "nessun dominio critico modificato"}.\n`,
+    );
+  if (args.includes("--json")) console.log(JSON.stringify(result));
 
   if (args.includes("--run")) {
     if (result.gate === "docs") {
       run("node", ["scripts/verify-copy.mjs"]);
       run("node", ["scripts/verify-docs.mjs"]);
-    } else run("pnpm", ["verify"]);
-    if (result.e2e) run("pnpm", ["test:e2e"], { E2E_PREBUILT: "1" });
+    } else run("pnpm", [result.gate === "tooling" ? "verify:tooling" : "verify"]);
+    if (result.e2e)
+      run(
+        "node",
+        ["scripts/browser-tests.mjs", "--grep", result.browserGrep, "--browsers", result.browsers],
+        { E2E_PREBUILT: "1" },
+      );
+    if (result.mutation.length) run("pnpm", ["test:mutation", ...result.mutation]);
   }
 }

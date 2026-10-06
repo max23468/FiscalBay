@@ -34,7 +34,7 @@ import { registrationStatus } from "../domain/registration.server";
 import { listSignInMethods } from "../domain/sign-in-methods.server";
 import { listVisibleOrders } from "../domain/orders.server";
 import { listStores } from "../domain/stores.server";
-import { errorResponse } from "../errors";
+import { errorResponse, traceDatabase, tracePhase } from "../errors";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import { accessNotice } from "../access-notice";
 import { appCopy } from "../app-copy";
@@ -60,7 +60,12 @@ export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescri
 
 export async function loader({ request }: Route.LoaderArgs) {
   const language = languageFromPath(new URL(request.url).pathname);
-  const session = await createAuth(env).api.getSession({ headers: request.headers });
+  const auth = createAuth(env);
+  await auth.$context;
+  tracePhase(request, "auth-context");
+  await traceDatabase(request, env.DB);
+  const session = await auth.api.getSession({ headers: request.headers });
+  tracePhase(request, "session");
   const search = new URL(request.url).searchParams;
   const notice = accessNotice(search, language);
   if (!session || search.has("token")) {
