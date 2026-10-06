@@ -146,17 +146,13 @@ for (const scenario of scenarios) {
         // La scoperta delle route riparte dopo ogni cambiamento del DOM: se la prova naviga
         // mentre `/__manifest` è in corso, il browser interrompe la richiesta e la registra in
         // console, insieme all'errore di React Router (WebKit la descrive come controllo di
-        // accesso). Si escludono soltanto questi messaggi e soltanto con una richiesta al
-        // manifest effettivamente interrotta; le risposte HTTP del manifest restano controllate.
-        let interruptedDiscovery = false;
-        page.on("requestfailed", (request) => {
-          if (new URL(request.url()).pathname === "/__manifest") interruptedDiscovery = true;
-        });
+        // accesso e non sempre emette `requestfailed`). Si escludono soltanto questi messaggi:
+        // una risposta HTTP di errore del manifest resta intercettata dal controllo sulle
+        // risorse, e una versione cambiata fa ricaricare la pagina al router.
         const discoveryMessage = (error: string) =>
           error.startsWith("Failed to fetch manifest patches") ||
           /cannot load .*\/__manifest\?.* due to access control checks/u.test(error);
-        const unexpectedErrors = () =>
-          errors.filter((error) => !(interruptedDiscovery && discoveryMessage(error)));
+        const unexpectedErrors = () => errors.filter((error) => !discoveryMessage(error));
         const expectedStatus = production && scenario.preview ? 404 : scenario.status;
         // Tornando su una pagina 404 il router richiede di nuovo i suoi dati con lo stesso esito.
         const ownData = `${new URL(scenario.path, baseURL!).pathname.replace(/\/$/u, "")}.data`;
