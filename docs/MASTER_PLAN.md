@@ -1525,6 +1525,8 @@ Realizzare la griglia a due schede o una secondo viewport, dettagli intermedi, a
 
 Integrato da CF Ready e Hub Fatture: mostrare la qualità formale calcolata in M3-05 come indicazione, non come errore. Dove una verifica remota è lenta, HTML subito con l'ultimo stato salvato, «Verifica in corso» e azioni sensibili disabilitate, poi stato confermato in streaming; se fallisce, avviso e «Riprova». La schermata Negozi di M2-07 si allinea allo stesso comportamento in questo task.
 
+Un solo albero di componenti per la pagina Ordini: area reale e anteprima la rendono con le stesse parti, alimentate da dati persistiti autorizzati o da scenari sintetici. La vista ridotta degli ordini importati, con le sue etichette locali di pagamento e spedizione, si rimuove a favore di quelle condivise. Accesso e Ordini smettono di condividere pagina e loader: login, registrazione, reset, passkey e completamento del profilo diventano una pagina propria, e il loader Ordini carica soltanto i dati dell'area autenticata. Riscrivendo i componenti Ordini, separarli per area (scheda, dettaglio, barra strumenti e selezione). Il task non si chiude se area reale e anteprima divergono.
+
 <a id="m4-02"></a>
 #### M4-02 · Ricerca e filtri
 
