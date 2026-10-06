@@ -94,7 +94,7 @@ Segui la procedura di adozione del README e le istruzioni AGENTS correnti, con g
 
 Leggere `AGENTS.md`, [avanzamento e questioni aperte](docs/MASTER_PLAN.md#stato), checkpoint e milestone pertinente, poi le sole sezioni della [matrice di lettura](docs/engineering/AGENT_SETUP.md#lettura) necessarie. Verificare Git, PR/CI e ricevute degli ultimi effetti remoti prima di ripetere operazioni; una sessione interrotta non prova che una scrittura sia fallita.
 
-Aggiornare il piano nella stessa PR quando cambiano requisiti, checkpoint, avanzamento significativo o questioni aperte. Nel template dichiarare «Impatto sul piano: aggiornato / non necessario, con motivo»; fix ordinari e miglioramenti dei test restano nella PR con le loro prove. Non mantenere un secondo stato, diario o tracker; la cronologia è in Git. Chat e audit vecchi non sono prerequisiti per lavorare.
+Aggiornare il piano nella stessa PR quando cambiano requisiti, checkpoint, stato dei task, avanzamento significativo o questioni aperte. Nel template dichiarare «Impatto sul piano: aggiornato / non necessario, con motivo»; fix ordinari e miglioramenti dei test restano nella PR con le loro prove. Non mantenere un secondo stato, diario o tracker; la cronologia è in Git. Chat e audit vecchi non sono prerequisiti per lavorare.
 
 <a id="documenti"></a>
 
@@ -119,4 +119,4 @@ Controllo ordinario dopo modifiche documentali:
 node scripts/verify-docs.mjs
 ```
 
-Il controllo rileva link e ancore interni rotti, tabelle incoerenti, decisioni duplicate/inesistenti e gate Production mancanti o non validi. Gli stati aperti sono ammessi nel piano, ma bloccano la pubblicazione. Non impone un tracker separato, un grafo di task o ID consecutivi. `--assets` aggiunge la verifica degli originali secondo il manifest; `SHA256SUMS.txt` serve solo a confrontare la consegna iniziale. Comandi e gate attuali sono in `package.json` e [Agent Setup](docs/engineering/AGENT_SETUP.md); il percorso di pubblicazione è in [RELEASE](docs/engineering/RELEASE.md).
+Il controllo rileva link e ancore interni rotti, tabelle incoerenti, decisioni duplicate/inesistenti e gate Production mancanti o non validi. Gli stati aperti sono ammessi nel piano, ma bloccano la pubblicazione. Non impone un tracker separato, un grafo dei task verificato dallo script o ID consecutivi. `--assets` aggiunge la verifica degli originali secondo il manifest; `SHA256SUMS.txt` serve solo a confrontare la consegna iniziale. Comandi e gate attuali sono in `package.json` e [Agent Setup](docs/engineering/AGENT_SETUP.md); il percorso di pubblicazione è in [RELEASE](docs/engineering/RELEASE.md).

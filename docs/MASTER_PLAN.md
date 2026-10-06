@@ -107,7 +107,7 @@ Una prova breve, un test o il log CI pertinenti possono bastare: non serve una r
 
 ### 0.5 Avvio e continuità
 
-La procedura di adozione e ripresa è unica nel [README](../README.md#avvio). Allineare le istruzioni 1.x e verificare i trigger legacy nell'inventario iniziale, senza alterare istruzioni globali o lavoro altrui. La roadmap conserva soltanto avanzamento e pendenze utili alla ripresa; Git conserva la storia. Non creare un archivio del vecchio tracker, un diario o uno stato concorrente.
+La procedura di adozione e ripresa è unica nel [README](../README.md#avvio). Allineare le istruzioni 1.x e verificare i trigger legacy nell'inventario iniziale, senza alterare istruzioni globali o lavoro altrui. La roadmap conserva avanzamento, task per milestone e pendenze utili alla ripresa; Git conserva la storia. Non creare un archivio del vecchio tracker, un diario o uno stato concorrente.
 
 Accessi, dati legali, destinatario del test e date promo si acquisiscono secondo il [catalogo input](engineering/AGENT_SETUP.md#input). Non occorre ricostruire le decisioni dalla chat; una credenziale mancante blocca soltanto il lavoro dipendente. Le [responsabilità documentali](engineering/AGENT_SETUP.md#deliverable) indicano dove mantenere le informazioni prodotte nello sviluppo, senza imporre file anticipati.
 
@@ -854,7 +854,7 @@ La chiusura di ogni PR unita a `develop` comprende il readback del merge e del d
 
 Migrazioni versionate, testate su schema/dati rappresentativi, forward-only dove sensato, approccio expand/contract se serve compatibilità. Release manifest collega codice, schema, config e artifact immutabile. Rollback codice automatico se sicuro, altrimenti forward-fix; recovery dati separato. Nessun comando di pubblicazione deve contenere token/PII nelle evidenze.
 
-L'avanzamento segue le capacità della roadmap (§37), con prove proporzionate e limiti espliciti. Non duplicare output grezzi né creare un diario di microtask. Codex preserva modifiche dell'owner e worktree non propri.
+L'avanzamento segue milestone e task della roadmap (§37), con prove proporzionate e limiti espliciti. Non duplicare output grezzi né creare un diario delle sessioni. Codex preserva modifiche dell'owner e worktree non propri.
 
 **Pubblicazione riprendibile e provenienza dell’artefatto.** Legare il via a commit e release manifest attesi. Serializzare le pubblicazioni per ambiente; un workflow più vecchio non deve sovrascrivere uno successivo. Promuovere lo stesso artefatto verificato quando il provider lo consente; se serve una ricostruzione specifica Production, registrare gli input immutabili e verificarne l’artefatto, non chiamarlo automaticamente «lo stesso build testato».
 
@@ -948,12 +948,14 @@ G-LEGAL e G-RECOVERY hanno analogamente una qualifica preliminare M0 e una chius
 <a id="s37"></a>
 ## 37. Milestone M0–M9
 
-Dipendenze rigide sui gate, attività indipendenti avviabili prima dell'integrazione completa. La numerazione non impone consegne sequenziali né autorizza a rinviare sicurezza/test all'ultima fase. Le integrazioni da CF Ready e Hub Fatture (D143 e D147) sono consolidate nei requisiti funzionali e nelle milestone qui sotto; non riaprono M0 né introducono un secondo elenco di task.
+Dipendenze rigide sui gate, attività indipendenti avviabili prima dell'integrazione completa. La numerazione non impone consegne sequenziali né autorizza a rinviare sicurezza/test all'ultima fase. Le integrazioni da CF Ready e Hub Fatture (D143 e D147) sono consolidate nei requisiti funzionali e nei task delle milestone qui sotto; non riaprono M0.
 
 <a id="stato"></a>
 ### Avanzamento
 
 Gli stati descrivono capacità significative: `Da completare`, `In corso`, `Bloccata`, `Completata`. La chiusura richiede comportamento, prove pertinenti e checkpoint previsto; implementazione, distribuzione sul test e collaudo reale restano distinti. Non ripetere conteggi di test, durate, branch o cronaca delle sessioni. Le prove di una chiusura si collegano alla PR, CI o ricevuta competente. Questa sintesi proviene dalle evidenze registrate prima della migrazione documentale del 2026-10-06; non è un nuovo readback dei provider.
+
+Ogni milestone elenca in coda i propri task (D164) con codice `Mx-yy`, stato (`Da completare`, `In corso`, `Bloccato`, `Completato`), prerequisiti d'avvio, eventuali dipendenze **Per chiudere**, contratto e criterio di completamento. I prerequisiti indicano ciò che serve per iniziare; **Per chiudere** aggiunge integrazioni che non impediscono di lavorare prima. La PR che avvia, blocca o chiude un task ne aggiorna lo stato nello stesso diff; un task completato conserva descrizione, criterio e limiti residui, non la cronaca delle prove. I codici dei task restano nella documentazione di piano, mai nel codice o nel runtime. Prima di chiudere una milestone confrontare funzionalità, piano, task applicabili e DoD: un conflitto con un provider va portato al gate, non risolto eliminando in silenzio una funzione.
 
 | Milestone | Stato | Capacità e limite |
 |---|---|---|
@@ -996,12 +998,249 @@ Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o
 
 **Assetto approvato:** Workers, una D1 UE, Queues e Better Auth; Supabase Pro escluso per budget e Free per continuità insufficiente. Nessun adapter alternativo mantenuto. Protezione nativa Time Travel e riapertura fail-closed secondo §32; nessun backup parallelo. Il progetto Better Auth Infrastructure non è più collegato al runtime dopo D152. Generatori OAS ammessi solo se supportano TypeScript 7 senza secondo compilatore: finché manca tale compatibilità, schemi Zod mirati per Identity/Fulfillment, parser Trading e SDK Stripe ufficiale (§25).
 
+<a id="m0-01"></a>
+#### M0-01 · Inventario della baseline e conflitti legacy
+
+**Stato:** Completato · **Prerequisiti:** Avvio autorizzato · **Contratto:** [§0](#s00) · [§2](#s02) · [§34](#s34)
+
+Seguire [README](../README.md#avvio), verificare l’integrità iniziale e le istruzioni/automazioni pertinenti (AGENTS, README, workflow, main, autodeploy e keyset condivisi); individuare cosa deve essere dismesso/allineato senza spostare gli altri progetti.
+
+**Criterio di completamento:** Adozione locale e istruzioni 2.0 verificate; inventario dei trigger e regola di blocco per ogni effetto remoto non ancora qualificato. Questo chiude il prerequisito delle attività locali indipendenti, non autorizza push/merge: prima di quei passaggi occorre attestare che le automazioni legacy non possano attivare il vecchio deploy. Un accesso remoto mancante resta un blocco circoscritto registrato nelle questioni aperte, senza dichiarare dismessa la 1.x. Nessun checkpoint owner aggiuntivo.
+
+<a id="m0-02"></a>
+#### M0-02 · Bootstrap delle prove, agenti e custodia privata
+
+**Stato:** Completato · **Prerequisiti:** M0-01, M0-11 · **Contratto:** [§33](#s33)
+
+Configurare accessi minimi e inventario privato; preparare solo l’endpoint test HTTPS/callback e il trasporto email Auth necessari alla qualifica, su risorse autorizzate. Prima dell’acquisizione reale verificare il relativo perimetro di trattamento; applicare la qualifica tool proporzionata al rischio e riusare prove condivise fra CLI/MCP. M1-08 completa la configurazione, non è il primo momento in cui un login può essere provato.
+
+**Criterio di completamento:** Prerequisiti di prova osservabili: endpoint/TLS, destinatario email controllato, account/ambiente corretti, autorizzazioni e lista tool. Mancanze segnate BLOCKED; nessuna spesa, PII pubblica o scrittura estranea. Le prove eseguibili usano la toolchain qualificata in M0-11.
+
+<a id="m0-03"></a>
+#### M0-03 · Inventario risorse Cloudflare/Supabase
+
+**Stato:** Completato · **Prerequisiti:** M0-01; accessi di lettura pertinenti (non callback/email) · **Contratto:** [§25](#s25) · [§36](#s36)
+
+Leggere piani, quote e consumi degli account pertinenti, inclusi altri progetti; separare capacità nominale da residua e individuare costi nuovi.
+
+**Criterio di completamento:** Misure/fonti per CPU, DB, file, queue, egress, auth, email e log; nessun canone dato per già pagato o gratuito senza evidenza.
+
+<a id="m0-04"></a>
+#### M0-04 · Qualifica dei quattro accessi
+
+**Stato:** Completato · **Prerequisiti:** M0-02, M0-11 · **Contratto:** [§7](#s07) · [§36](#s36)
+
+Escludere documentalmente candidati incompatibili; sul candidato preferito provare email/password, Google, eBay e passkey con linking, recupero e revoca. La MFA amministrativa resta assegnata a M2-04 e non è un gate M0. Un secondo spike Auth è necessario solo se resta un’incertezza determinante. Non costruire quattro schermate definitive per ogni provider.
+
+**Criterio di completamento:** Matrice pass/fail con prove e limiti; nessun secondo layer nascosto o metodo eliminato per comodità.
+
+<a id="m0-05"></a>
+#### M0-05 · Qualifica fonti eBay e keyset
+
+**Stato:** Completato · **Prerequisiti:** M0-02, M0-11 · **Contratto:** [§9](#s09) · [§11](#s11) · [§36](#s36)
+
+Verificare OAuth seller/Identity, scope, ID stabili, getOrders/getOrder/Trading necessarie, età campi, mascheramenti, immagini e ordini non pagati.
+
+**Criterio di completamento:** Matrice fonte-campo-età-stato, condizioni autorizzate, quote effettive; fixture sanitizzate e test read-only autorizzati.
+
+<a id="m0-06"></a>
+#### M0-06 · Qualifica eventi, polling e lavoro API
+
+**Stato:** Completato · **Prerequisiti:** M0-05 · **Contratto:** [§11](#s11) · [§36](#s36)
+
+Misurare strategia incrementale, disponibilità eventi utili, manuale, 10/30min, backfill, retry e vincoli keyset condivisi.
+
+**Criterio di completamento:** Budget chiamate/messaggi realistico con margine, eventi non presunti, nessuna invasione quote altrui.
+
+<a id="m0-07"></a>
+#### M0-07 · Schema rappresentativo e concorrenza
+
+**Stato:** Completato · **Prerequisiti:** M0-03, M0-05, M0-11 · **Contratto:** [§27](#s27) · [§36](#s36)
+
+Misurare sul candidato credibile un dataset sintetico rappresentativo di 70.000+ ordini con articoli, dati fiscali, grant/cicli e telemetria effettivamente necessaria. Niente tabella per ogni concetto o copia di ogni polling; misurare spazio, indici, query, isolamento e consumi.
+
+**Criterio di completamento:** Dati misurati più scenari picchi/multistore/retention; test consumo atomico e privacy senza record reali pubblici.
+
+<a id="m0-08"></a>
+#### M0-08 · Qualifica Stripe Managed Payments
+
+**Stato:** Completato · **Prerequisiti:** M0-02, M0-11 · **Contratto:** [§6](#s06) · [§36](#s36)
+
+Leggere eligibility effettiva, copertura fiscale, capabilities checkout/portal/Link, prezzi/metodi e testare i casi commerciali critici.
+
+**Criterio di completamento:** Matrice commerciale con esito e ambito docs/sandbox/live per ogni caso; prove non supportate dal sandbox assegnate esplicitamente al gate finale, senza falso PASS. MoR effettivo verificato, nessun Payments standard o Paddle senza owner.
+
+<a id="m0-09"></a>
+#### M0-09 · Recovery nativa e limiti
+
+**Stato:** Completato · **Prerequisiti:** M0-03, M0-04, M0-07 · **Contratto:** [§32](#s32) · [§36](#s36)
+
+Verificare le protezioni native dei candidati ancora ammissibili; approfondire il percorso dati/Auth/grant/file/config/chiavi del candidato migliore e i costi. Nessun restore completo su ogni alternativa: l’unico drill conclusivo rimane pre-go-live.
+
+**Criterio di completamento:** Meccanismo nativo, finestra, costo, limiti e percorso fail-closed qualificati quanto basta per scegliere l'architettura. Free senza recovery non viene promosso. Una prova tecnica circoscritta può dimostrare la fattibilità, ma non sostituisce né anticipa il drill conclusivo sul candidato finale.
+
+<a id="m0-10"></a>
+#### M0-10 · Qualifica export e runtime
+
+**Stato:** Completato · **Prerequisiti:** M0-07 · **Contratto:** [§12](#s12) · [§26](#s26)
+
+Qualificare un percorso minimo CSV/XLSX/ZIP sul candidato runtime, con memoria, durata, tipi e licenze; confrontare un’altra libreria soltanto se il percorso non basta. Non costruire già il sistema export completo per ogni stack.
+
+**Criterio di completamento:** Almeno un percorso sicuro fattibile per ogni formato promesso; libreria scelta se utile, nessun taglio di XLSX.
+
+<a id="m0-11"></a>
+#### M0-11 · Toolchain latest stable riproducibile
+
+**Stato:** Completato · **Prerequisiti:** M0-01 · **Contratto:** [§26](#s26) · [§34](#s34)
+
+Qualificare localmente Node/TS/pnpm/ReactRouter/Vite/lint/test/CLI e una baseline eseguibile minima. Nessun endpoint/provider già configurato è prerequisito. Le integrazioni specifiche e i generatori OAS vengono verificati nei task pertinenti e riallineati prima del memo M0-14; congelare i pin effettivamente qualificati, senza presumere scelto il runtime finale.
+
+**Criterio di completamento:** Install pulita e smoke di typecheck/build/test passano nell’ambiente locale/runner controllato; M0-04..M0-10 completano la compatibilità dei candidati esterni. Eccezioni latest motivate, non assunte.
+
+<a id="m0-12"></a>
+#### M0-12 · Consolidamento dei vincoli legali preliminari
+
+**Stato:** Completato · **Prerequisiti:** M0-04, M0-05, M0-08 · **Contratto:** [§29](#s29) · [§30](#s30)
+
+Mappare ruoli dati, uso Codex necessario, copertura MoR, obblighi italiani residui, eBay marchi/retention e licenze legacy.
+
+**Criterio di completamento:** Nessun blocco legale ignorato prima di dati reali; deliverable pubblico/privato distinti e attività di chiusura assegnate.
+
+<a id="m0-13"></a>
+#### M0-13 · Vertical slice end-to-end
+
+**Stato:** Completato · **Prerequisiti:** M0-04, M0-05, M0-07, M0-11, M0-12 · **Contratto:** [§36](#s36)
+
+Sul candidato migliore: login→link seller→ordine→DB→pagina minima, con permessi e timestamp coerenti. Non implementare più prodotti paralleli; un’ulteriore slice richiede un problema concreto o un confronto ancora irrisolto.
+
+**Criterio di completamento:** Flusso osservato con risorsa e commit identificati, errori gestiti e nessun segreto nel client; setup e trattamento dati già qualificati, non aggiunti retroattivamente.
+
+**Limite:** il consenso OAuth seller 2.0 e il suo callback sono provati da test locali, non dal vivo: la prova live passa a [M2-05](#m2-05), insieme a storage cifrato e rinnovo del token. Sign in with eBay è in [M2-09](#m2-09).
+
+<a id="m0-14"></a>
+#### M0-14 · Memo di scelta e via owner
+
+**Stato:** Completato · **Prerequisiti:** M0-03..M0-13 · **Contratto:** [§25](#s25) · [§36](#s36) · [§37](#s37)
+
+Confrontare costo/complessità/capacità/Auth/recovery/jobs/lock-in, scegliere un assetto e separazione responsabilità, ADR limitati ai nodi stabili.
+
+**Criterio di completamento:** Gate preliminari con esito, ambito e prova; prove ammissibili solo più avanti assegnate a task/checkpoint e non dichiarate completate. Owner approva architettura/costi e rischi derogabili; incompatibilità già dimostrate o obblighi inderogabili restano bloccanti.
+
+**Stato residuo:** tutte le prove tecniche M0 sono chiuse o assegnate in modo esplicito a task successivi: Sign in with eBay a M2-09, consenso seller live e token a M2-05, requisiti Better Auth Infrastructure a M7-07, MFA amministrativa a M2-04, runbook e drill di recovery al pre go-live. Il readback Free e le misure giornaliere dopo la cessazione di Workers Paid sono un controllo operativo differito. L'invio email a utenti arbitrari richiede Workers Paid e appartiene al checkpoint pre pubblico. Su richiesta owner il progetto Supabase Free `FiscalBay` del candidato escluso è stato eliminato il 2026-09-23; la rilettura mostra intatti i progetti SyncBay e Pratix. Il via owner di fine M0 è registrato il 2026-09-23 nel registro dei via.
+
 <a id="m1"></a>
 ### M1 · Fondazioni applicative e design
 
 **Prerequisiti:** M0 e scelte approvate per l’implementazione dipendente; preparazione grafica/copy indipendente può anticipare. **Attività:** cutover controllato che rende canonico l’albero 2.0 e congela la 1.x in un riferimento Git separato, senza confonderlo con la dismissione remota; monorepo minimo, CI/local dev/test, migration iniziale, confini tenant/AuthZ, logging redatto, errore/i18n, top nav/shell, tema/tokens; rifinitura manuale/vettoriale Concept 4 e asset; completamento di DNS/TLS/test e posta già avviati limitatamente ai prerequisiti M0; prototipo approvabile dei tre schermi e stati.
 
 **Output:** repository con una sola implementazione e documentazione canonica 2.0, foundation eseguibile, brand foundation e inventario componenti scelti realmente, pipeline test, struttura dati iniziale. **DoD:** riferimento 1.x recuperabile, merge incapace di avviare il deploy legacy, componenti 1.x ancora live censiti fino al loro cutover operativo; approvazione owner logo/design system; test authz/shell/IT-EN/theme verdi; asset non inventano funzioni; ambiente test separato. No UI provvisoria massiva da rifare in M4.
+
+<a id="m1-00"></a>
+#### M1-00 · Cutover repository 1.x → 2.0
+
+**Stato:** Completato · **Prerequisiti:** M0-14 completata e via owner di fine M0 · **Contratto:** [§33](#s33) · [§34](#s34)
+
+Rendere la 2.0 canonica nell'albero attivo con un diff controllato di istruzioni di progetto, documentazione, codice, test, dipendenze, toolchain e CI. Congelare la 1.x in un riferimento Git identificabile per la sola manutenzione residua, senza mantenere due implementazioni o due fonti canoniche in `main`.
+
+Prima dell'integrazione riconciliare i commit sopraggiunti sulla 1.x e rileggere hook, workflow, release script, timer e autodeploy. Disinnescare ogni percorso per cui il merge della 2.0 potrebbe distribuire il runtime 1.x. Conservare temporaneamente l'inventario operativo necessario a bot e callback ancora attivi, con proprietario e condizione di spegnimento espliciti: il cutover del repository non prova né implica la loro dismissione remota.
+
+**Criterio di completamento:** Un checkout pulito presenta una sola implementazione e una sola documentazione canonica 2.0; la 1.x resta recuperabile dal riferimento Git dichiarato; nessun merge avvia il deploy legacy; componenti 1.x ancora live e successivo cutover operativo sono registrati senza duplicarne codice e istruzioni nell'albero attivo.
+
+<a id="m1-01"></a>
+#### M1-01 · Bootstrap monorepo e comandi comuni
+
+**Stato:** Completato · **Prerequisiti:** M1-00 · **Contratto:** [§25](#s25) · [§26](#s26) · [§33](#s33)
+
+Strutturare web/dominio/contratti/integrazioni/jobs/UI solo dove utile; script pnpm di controllo e manifest lockati.
+
+**Criterio di completamento:** Checkout pulito installa e verifica; no dipendenze duplicate, output o backend Python richiesto dal nuovo runtime.
+
+<a id="m1-02"></a>
+#### M1-02 · Ambienti e CI fondamentale
+
+**Stato:** Completato · **Prerequisiti:** M1-01 · **Contratto:** [§34](#s34)
+
+Develop/main, PR test/lint/type/build, test deploy controllato; guardrail branch/credential e segreti ambienti separati.
+
+**Criterio di completamento:** PR senza segreti eseguibile, test genera artefatto proprio; il merge main da solo non pubblica.
+
+<a id="m1-03"></a>
+#### M1-03 · Fondazioni DB, tenant e grant
+
+**Stato:** Completato · **Prerequisiti:** M0, M1-01 · **Contratto:** [§27](#s27) · [§29](#s29)
+
+Migration iniziale, chiavi/uniqueness, authz tenant/ordine, grant e transazioni; test concorrenza/rollback compatibile.
+
+**Criterio di completamento:** Richieste tra workspace negate; ultimi sblocchi/lifetime non possono duplicarsi; migrazione verificata nel test.
+
+<a id="m1-04"></a>
+#### M1-04 · Errori, log e localizzazione
+
+**Stato:** Completato · **Prerequisiti:** M1-01 · **Contratto:** [§26](#s26) · [§28](#s28) · [§31](#s31)
+
+Registro errori tipizzato, correlationID, redazione, testi IT/EN e formatter UTC/locale (dizionari tipizzati da D149).
+
+**Criterio di completamento:** Nessun CF/token nei log di errore; errori comprensibili in entrambe le lingue e retryability coerente.
+
+<a id="m1-05"></a>
+#### M1-05 · Logo 2.0
+
+**Stato:** Completato · **Prerequisiti:** M0-01; mandato owner · **Contratto:** [§21](#s21)
+
+Definire in vettoriale il logo 2.0 partendo dal Concept 4, con libertà di migliorarlo (D141): prima l'icona base generica, poi, dopo il via owner, wordmark con `Bay` blu, logo orizzontale, chiaro/scuro, monocromo, favicon e avatar Telegram.
+
+**Criterio di completamento:** Icona base e varianti approvate dall'owner con prove a dimensioni piccole, fondo scuro e monocromo. Fino all'approvazione, usare sempre gli asset 1.0 su tutte le superfici, incluso Stripe. Dopo l’approvazione, sostituire il logo 1.0 provvisorio nel branding Google Auth e Stripe e aggiornare il logo dei keyset eBay pertinenti.
+
+<a id="m1-06"></a>
+#### M1-06 · Design system e catalogo candidati
+
+**Stato:** Completato · **Prerequisiti:** M0, M1-05 · **Contratto:** [§22](#s22)
+
+Esaminare i nove riferimenti nella fase frontend; scegliere componenti effettivi in base a funzione, licenza e qualità. Definire token, stati, form, icone e tipografia.
+
+**Criterio di completamento:** Registro della provenienza e campione chiaro/scuro, IT/EN, tastiera e touch coerenti con il brief, senza kit sovrapposti.
+
+<a id="m1-07"></a>
+#### M1-07 · Shell e prototipo delle tre sezioni
+
+**Stato:** Completato · **Prerequisiti:** M1-06 · **Contratto:** [§16](#s16) · [§17](#s17) · [§18](#s18) · [§19](#s19)
+
+Realizzare top navigation desktop e bottom navigation mobile con tre destinazioni, ricerca, campanella e avatar. Prototipare Ordini a due schede, Negozi a lista e Impostazioni per categorie.
+
+Aggiungere al prototipo esempi di problema con conseguenza/azione, supporto con diagnostica minima e ordini disponibili durante refresh. Riusare scenari sintetici del §35, includendo quota esaurita, errore fonte e dati discordanti; nessun dato demo nei percorsi reali.
+
+**Criterio di completamento:** Approvazione dell’owner; mostrare anche testi lunghi, errori, quote e campi mancanti. I testi dei mockup non introducono nuove funzioni.
+
+<a id="m1-08"></a>
+#### M1-08 · Completamento DNS, ambienti e posta
+
+**Stato:** Completato · **Prerequisiti:** M0 · **Contratto:** [§24](#s24)
+
+Consolidare il bootstrap test predisposto in M0-02: DNS/TLS/redirect, configurazione Production, iCloud info/supporto e trasporto transazionale selezionato. Verificare inventario record, callback, SPF/DKIM/DMARC e isolamento; allineare i contatti dei provider alla regola email di [§14](#s14), incluso il branding Google OAuth; dismettere i record Register senza consumatori dopo il readback Cloudflare e non attivare servizi Register aggiuntivi.
+
+**Criterio di completamento:** HTTP/TLS e callback test/live coerenti, posta umana e Auth provate, record attivi preservati o sostituiti con prova; nessun cookie/RP ID condiviso accidentalmente e nessun setup iniziale rinviato dopo il gate che lo richiedeva.
+
+<a id="m1-09"></a>
+#### M1-09 · Guardrail della pipeline e del repository
+
+**Stato:** Completato · **Prerequisiti:** M1-02 · **Contratto:** [§34](#s34) · [§37](#s37)
+
+Estende M1-02, già chiusa, con i guardrail ricavati da CF Ready e Hub Fatture: Action di terze parti pinnate a SHA completo con versione in commento e Dependabot allineato; guardia che accetta su `main` soltanto PR da `develop` dello stesso repository; classificazione dei file modificati (documentazione, test, runtime, tooling) che esegue il gate completo per ogni file non classificato e sostituisce l'attuale rilevamento docs-only; test di repository su sigle di milestone/task fuori dalla documentazione di piano, fixture solo con host `.invalid`, import applicativi aciclici, moduli server con almeno un consumatore e pin di Node/pnpm coincidenti fra `mise.toml`, `package.json` e workflow.
+
+**Criterio di completamento:** Una PR verso `main` da una branch diversa da `develop` fallisce; un file fuori classificazione esegue il gate completo; ogni test di repository ha un caso negativo che fallisce davvero; nessun `uses:` di terze parti senza SHA. CI verde sul commit integrato.
+
+<a id="m1-10"></a>
+#### M1-10 · Budget di prestazioni e capacità al deploy
+
+**Stato:** Completato · **Prerequisiti:** M1-02 · **Contratto:** [§22](#s22) · [§31](#s31) · [§37](#s37)
+
+**Per chiudere:** M1-06; il budget del bundle si misura sul design system effettivo.
+
+Aggiungere alla build il controllo del JavaScript client entro il budget gzip dichiarato nel repository (valore iniziale 350 KiB) e al deploy test il controllo CPU: traffico sintetico marcato, raccolta via tail delle sole invocazioni marcate, fallimento sopra il p95 ammesso o con errori, rollback del deploy test. Nessun traffico verso eBay, Stripe o Telegram.
+
+**Criterio di completamento:** Un bundle oltre budget fa fallire la build; un deploy test con p95 oltre soglia o con errori fallisce e ripristina la versione precedente, provato almeno una volta con soglia forzata. Ricevuta con p95, numero di eventi e versione.
+
+**Limite:** il controllo CPU al deploy test è stato rimosso con D158; resta bloccante il budget del bundle client.
 
 <a id="m2"></a>
 ### M2 · Account, Auth e Negozi eBay
@@ -1013,6 +1252,95 @@ Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o
 **Verifica delle integrazioni:** callback seller e consenso reali, token cifrati/scadenze e rinnovo in background; replay senza doppio scambio e risposte tardive incapaci di ripristinare un consenso superato. Pausa manuale distinta da quella imposta dal piano; nessuna pausa ferma la retention. Scollegamento senza disdetta o reset dei benefici, eliminazione con nome verificato sul server e quota già consumata conservata. Le eccezioni assistite al vincolo Free dei 90 giorni si integrano in M5 insieme alla scelta del negozio attivo, per decisione owner del 2026-10-05.
 
 **UI e routing:** elenco/pannello Negozi e Profilo da link diretto, ritorno e ricarica, mobile e testi lunghi; tipo di account registrato non modificato dal salvataggio del profilo. Frequenza, storico, aggiornamenti e azioni di sincronizzazione si mostrano quando M3 fornisce dati reali; notifiche per negozio quando M5 le integra. Root pubblica e area `/app` separate, visita esplicita del sito senza logout, IT/EN, nessun loop. Cache verificata con anonimo e due utenti, redirect/payload privati mai riusati; test/anteprima/area privata non indicizzati (§16, §23). Noindex non è un controllo d'accesso.
+
+<a id="m2-01"></a>
+#### M2-01 · Signup e verifica contatto
+
+**Stato:** Completato · **Prerequisiti:** M1, G-AUTH · **Contratto:** [§7](#s07) · [§14](#s14)
+
+Implementare login/signup email e Google, verifica richiesta prima eBay, opt-in facoltativo non bloccante.
+
+**Criterio di completamento:** Sessione non verificata esplora ma non collega seller; nessun consenso preselezionato o dato fiscale obbligatorio.
+
+<a id="m2-02"></a>
+#### M2-02 · Passkey
+
+**Stato:** Completato · **Prerequisiti:** M2-01 · **Contratto:** [§7](#s07)
+
+Integrare il percorso passkey qualificato in M0, inclusi registrazione, recupero e revoca. Sign in with eBay è in [M2-09](#m2-09), così l'attesa del diritto eBay non ferma la catena Auth.
+
+**Criterio di completamento:** La passkey funziona sui browser previsti. Un errore dell'autenticatore non produce un account attivato solo parzialmente.
+
+<a id="m2-03"></a>
+#### M2-03 · Linking e modifica identità
+
+**Stato:** Completato · **Prerequisiti:** M2-01, M2-02 · **Contratto:** [§7](#s07) · [§29](#s29)
+
+Collegare automaticamente solo identità con email verificata e affidabile. Consentire aggiunta e rimozione dei metodi, modifica email protetta e mantenimento di almeno un accesso valido.
+
+**Criterio di completamento:** Test su registrazione preventiva abusiva, provider non attendibile ed email cambiata; nessuna fusione impropria di spazi né blocco dell’utente per rimozione dell’ultimo metodo.
+
+<a id="m2-04"></a>
+#### M2-04 · Sessioni e admin MFA
+
+**Stato:** Completato · **Prerequisiti:** M2-03 · **Contratto:** [§7](#s07) · [§15](#s15)
+
+Implementare durata e rotazione delle sessioni, elenco, revoche e nuova verifica per azioni sensibili. Proteggere l’admin con autorizzazione esplicita, MFA e recupero robusto.
+
+**Criterio di completamento:** Logout singolo/globale e revoche effettivi anche sulle azioni sensibili; nessun metodo alternativo debole aggira la MFA amministrativa.
+
+**Limiti:** la verifica dell'utente è provata con asserzioni sintetiche firmate, non con un autenticatore fisico; nessun account reale ha oggi il ruolo admin. Scegliere l'account owner, registrare due passkey indipendenti e concedere il ruolo restano passi da fare quando servirà l'area admin, secondo la procedura del [§7](#s07).
+
+<a id="m2-05"></a>
+#### M2-05 · OAuth negozi e identità stabile
+
+**Stato:** Completato · **Prerequisiti:** M2-01, G-EBAY · **Contratto:** [§8](#s08) · [§29](#s29)
+
+Implementare schermata preparatoria, callback e protezioni OAuth, token cifrati e identificatore stabile. Consentire una sola associazione del negozio a uno spazio.
+
+Introdurre il confine HTTP minimo del §28 per le chiamate OAuth/Identity, con timeout, limite dei body e mapping degli errori provati. M3-02 lo riusa per gli ordini e M5-05 per Stripe, senza cambiare i contratti dei rispettivi provider.
+
+**Criterio di completamento:** Replay e callback duplicate gestiti; nessuna informazione rivelata sullo spazio altrui. Un cambio di nome eBay non crea un nuovo negozio.
+
+<a id="m2-06"></a>
+#### M2-06 · Reconnect, pause e disconnessioni
+
+**Stato:** Completato · **Prerequisiti:** M2-05 · **Contratto:** [§8](#s08)
+
+Separare stato della connessione e della sincronizzazione. Implementare pausa, reconnect con riconciliazione recente, reminder per massimo 30 giorni, scollegamento ed eliminazione distinta.
+
+Provare che una risposta iniziata prima del reconnect o dello scollegamento non ripristini uno stato superato; M3-04 completa la prova con sync e refresh concorrenti.
+
+**Criterio di completamento:** Nessun reset di quota o diritti; scollegare non cancella l’abbonamento. Le eccezioni assistite al vincolo di sostituzione Free sono motivate e auditate, non un nuovo trial. Token e lavori pendenti incompatibili vengono invalidati.
+
+<a id="m2-07"></a>
+#### M2-07 · Schermata negozi e profilo
+
+**Stato:** Completato · **Prerequisiti:** M2-04, M2-06 · **Contratto:** [§18](#s18) · [§19](#s19)
+
+Realizzare elenco e pannello con URL del negozio, ultima sincronizzazione, frequenza prevista, storico e notifiche. Completare profilo minimo e scorciatoie a Sicurezza.
+
+**Criterio di completamento:** Link diretto, ritorno, refresh e mobile funzionano; il piano è chiaramente dello spazio FiscalBay, non del singolo negozio.
+
+<a id="m2-08"></a>
+#### M2-08 · Routing pubblico autenticato
+
+**Stato:** Completato · **Prerequisiti:** M2-01 · **Contratto:** [§16](#s16) · [§23](#s23)
+
+Applicare il redirect dalla root all’app per l’utente autenticato, con comando esplicito per visitare il sito pubblico mantenendo la sessione. Gestire IT/EN.
+
+**Criterio di completamento:** Nessun loop o logout forzato per leggere prezzi e FAQ; test e area riservata non sono esposti anonimamente né indicizzati.
+
+<a id="m2-09"></a>
+#### M2-09 · Qualifica e integrazione Sign in with eBay
+
+**Stato:** Completato · **Prerequisiti:** M2-01; account eBay business controllato per la prova reale · **Contratto:** [§7](#s07) · [§36](#s36)
+
+Qualifica rinviata da M0-04 per decisione owner del 2026-09-23: provare sul dominio di test login e linking eBay con lo scope Identity base (D153), poi integrarli con i percorsi di M2-03. Il consenso seller resta un flusso distinto (D048) ed è già provato in M0.
+
+**Criterio di completamento:** Login eBay e linking integrati e provati in locale con risposte eBay sintetiche; nessun account attivato solo parzialmente, nessuna email simulata e nessun duplicato d'identità. Le prove reali sui browser previsti sono in [M8-03](#m8-03) (D160).
+
+**Caso limite accettato:** Better Auth controlla l'email prima di cercare l'account già collegato, quindi un utente registrato con eBay business che passa a un account individuale non può più accedere con eBay; l'avviso lo indirizza agli altri metodi e il recupero password resta disponibile sull'email FiscalBay.
 
 <a id="m3"></a>
 ### M3 · Sincronizzazione, ordini e modello fiscale
@@ -1027,6 +1355,143 @@ Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o
 
 **Ripresa e sblocco:** dettaglio e lavoro fiscale presi in carico in modo recuperabile prima di avanzare il watermark; interruzioni fra pagina, accodamento, commit e ACK senza salti o doppi effetti. Polling con overlap autorevole; `ORDER_CONFIRMATION` opzionale anticipa solo la verifica mirata e non blocca il polling se assente. Ingresso Worker condiviso per eventi eBay, Stripe, Telegram e cancellazione account: metodo/dimensione/firma sul corpo grezzo, claim D1, coda con soli riferimenti, ACK solo dopo accettazione, retry/DLQ nativi (§25). Nessun orchestratore parallelo; callback OAuth browser separate. Mutation su ingresso, isolamento, ultimo credito e scadenza dei grant. Accesso negato alla scadenza anche con pulizia sospesa; vecchi eventi/job non resuscitano raw, versioni, suggerimenti o dati eliminati (§30).
 
+<a id="m3-01"></a>
+#### M3-01 · Modello ordini, articoli e buyer
+
+**Stato:** Da completare · **Prerequisiti:** M2, G-DATA · **Contratto:** [§9](#s09) · [§27](#s27)
+
+Implementare stato corrente e snapshot degli ordini, mapping delle chiavi esterne, importi esatti, UTC e dati fiscali separati. Mantenere articoli e buyer nel modello qualificato.
+
+Provare identità provvisoria→definitiva e arrivo invertito Trading/Fulfillment tramite identità comprovate delle righe: UUID stabile, nessun duplicato o unione fra negozi, ambiguità esplicita. M3-06 verifica conservazione di grant e quota.
+
+**Criterio di completamento:** Importazioni multi-articolo idempotenti; valori monetari precisi; modificare l’anagrafica corrente non riscrive lo storico dell’ordine.
+
+Entità logiche accorpabili quando sicuro; mantenere dati correnti e snapshot dell’ordine senza duplicati a ogni sync. Lo storico di tutte le variazioni fiscali effettive resta richiesto.
+
+<a id="m3-02"></a>
+#### M3-02 · Client eBay e normalizzazione
+
+**Stato:** Da completare · **Prerequisiti:** M3-01, G-EBAY · **Contratto:** [§11](#s11) · [§28](#s28)
+
+Integrare client generati o adapter REST e Trading mirato, errori tipizzati, provenienza dei campi e stati normalizzati.
+
+Riusare il confine HTTP di M2-05: timeout dell'intera lettura, limiti anche senza Content-Length, parsing e codici stabili con Retry-After. Aggiungere fixture per `c/o`, destinatario diverso dall'acquirente, telefono strutturato, campi assenti e inattesi; conservare originale/provenienza senza correggere l'intestatario fiscale.
+
+**Criterio di completamento:** Contract test con fixture; stati sconosciuti non inventati; ordini pagati, non pagati e dati mascherati classificati correttamente.
+
+Da M0: immagini articolo da Trading `GetItem` tramite `legacyItemId`, con domini e formati qualificati contro SSRF; nessun generatore OAS finché TypeScript 7 non espone un'API compatibile (M0-11).
+
+Integrato da CF Ready e Hub Fatture: XML Trading rifiutato oltre limite, con byte NUL o con `DOCTYPE`/`ENTITY` prima del parsing; `next` e URL del provider accettati solo HTTPS sulla stessa origine API eBay dell'ambiente, altrimenti la pagina fallisce chiusa senza inviare il token. Contract test negativi per entrambi. La lettura Fulfillment conserva il marketplace dell'inserzione per [M3-10](#m3-10).
+
+<a id="m3-03"></a>
+#### M3-03 · Import recenti e backfill
+
+**Stato:** Da completare · **Prerequisiti:** M3-02 · **Contratto:** [§11](#s11)
+
+Implementare paginazione, cursori, checkpoint, finestra di sovrapposizione e ripresa del backfill. Rendere disponibili prima gli ordini recenti e un avanzamento veritiero.
+
+**Criterio di completamento:** Interruzioni fra pagine recuperabili senza duplicati o salti; il backfill non impedisce l’acquisizione dei nuovi ordini.
+
+<a id="m3-04"></a>
+#### M3-04 · Scheduler, eventi e manuale
+
+**Stato:** Da completare · **Prerequisiti:** M3-03 · **Contratto:** [§11](#s11)
+
+Implementare target 10/30 minuti, eventi qualificati con riconciliazione, priorità, concorrenza controllata ed equità. Unificare richieste manuali ripetute rispettando la quota del provider.
+
+Provare risposte tardive fra sync, refresh e reconnect con revisione attesa o controllo atomico equivalente. Iniettare interruzioni fra acquisizione, accodamento, commit e ACK: presa in carico recuperabile, nessun evento perso o doppio effetto. Le verifiche fiscali rispettano anche la precedenza delle fonti.
+
+**Criterio di completamento:** Test con clic ripetuti, backfill e processi concorrenti; eventi Free non ritardati artificiosamente e Retry-After rispettato. Nessun countdown inventato.
+
+La schermata Negozi di M2-07 mostra frequenza prevista, storico, stato dell'import, ultimi aggiornamenti, «Sincronizza» e «Reimporta» quando la route reale fornisce `targetMinutes`, `historyDays` e `recent`: oggi li passa vuoti.
+
+Usare consegna/retry/ritardi/DLQ del servizio scelto. Stato applicativo solo per checkpoint, deduplica e recupero di effetti di business; outbox/lease soltanto se necessari, non un secondo orchestratore.
+
+**Per chiudere:** M3-11; `ORDER_CONFIRMATION` entra dall'ingresso Worker condiviso.
+
+<a id="m3-05"></a>
+#### M3-05 · Controllo fiscale e aggiornamenti
+
+**Stato:** Da completare · **Prerequisiti:** M3-02 · **Contratto:** [§9](#s09)
+
+Mostrare subito l’ordine e verificare i dati fiscali con un lavoro separato. Gestire più identificativi, controlli formali e distinzione fra assenza, errore, mascheramento e rimozione.
+
+Completare gli scenari sintetici condivisi con la UI e provare che una risposta fiscale tardiva non sovrascriva una versione autorevole più recente; includere omocodia e identificativi formalmente invalidi senza certificazione d'identità.
+
+**Criterio di completamento:** Un errore fiscale non blocca l’ordine; rimozione solo su evidenza autorevole, prima disponibilità e variazioni elaborate senza duplicati.
+
+Integrato da CF Ready e Hub Fatture: qualità formale del CF (formato, carattere di controllo, coerenza con nome e cognome nelle due orientazioni e con il nome di registrazione, `c/o` separato solo per il confronto) come indicazione che non corregge, non blocca e non cambia la quota; omocodie e nomi ambigui danno `non verificabile`. Osservazioni con `lastModifiedDate` più vecchia scartate prima di ogni scrittura e contate; confronto normalizzato (omesso uguale a `null`, stessi formati e precisione) che non crea versioni, notifiche o consumi per riletture invariate.
+
+<a id="m3-06"></a>
+#### M3-06 · Sblocco per ordine e diritti acquisiti
+
+**Stato:** Da completare · **Prerequisiti:** M3-05, M1-03 · **Contratto:** [§5](#s05) · [§6](#s06) · [§9](#s09)
+
+**Per chiudere:** M1-09 per i mutation test delle invarianti; M3-09 per conservare lo sblocco quando un ordine combinato cambia ID.
+
+Implementare diritto per ordine, ciclo e quota con controllo atomico. Preservare dati acquisiti in Premium anche mai aperti; non restituire valori fiscali prima dell’autorizzazione.
+
+Aggiungere mutation test mirati con il tooling di M1-09 per ultimo credito e isolamento. Provare anche che il passaggio fra identificativi eBay preservi il grant e non consumi nuovamente quota o produca una nuova notifica dello stesso evento.
+
+**Criterio di completamento:** Test su ultimo credito, concorrenza, sblocco multiplo, downgrade e valori tardivi. Un ordine copre tutti gli identificativi e la ricerca non permette di indovinare valori bloccati.
+
+M3 realizza il contratto dominio/transaction con cicli e grant testabili; M5 integra provider e calendario commerciale. Non dichiarare funzionante l’intero billing solo perché il grant di una fixture passa.
+
+Integrato da CF Ready e Hub Fatture: mutation test mirati su sblocco, quota e grant, eseguiti dalla CI quando la PR tocca quei file.
+
+<a id="m3-07"></a>
+#### M3-07 · Suggerimenti e template mancanti
+
+**Stato:** Da completare · **Prerequisiti:** M3-01, M3-05 · **Contratto:** [§10](#s10)
+
+Collegare soltanto buyer affidabili dentro lo stesso spazio. Suggerire il valore più recente con avviso di conflitto e provenienza, invalidandolo quando cambia la fonte. Aggiungere il template IT/EN copiabile.
+
+**Criterio di completamento:** Il suggerimento non modifica l’ordine e non attraversa spazi; fonti cancellate o fuori conservazione non restano utilizzabili. Nessun invio automatico all’acquirente.
+
+La recenza segue la data dell’ordine sorgente, non import/sync; la sua versione corrente è quella autorevole. Conflitto soltanto tra dati omogenei: un CF diverso da una P.IVA non è di per sé incoerenza.
+
+<a id="m3-08"></a>
+#### M3-08 · Retention operativa e anti-resurrezione
+
+**Stato:** Da completare · **Prerequisiti:** M3-01, M3-04 · **Contratto:** [§30](#s30)
+
+**Per chiudere:** M1-09 per i mutation test della scadenza.
+
+Implementare cancellazioni periodiche deterministiche, raw a 24 ore e conservazione di ordini, versioni, identificativi e buyer. Usare marcatori di eliminazione dove necessari e invalidare lavori pendenti.
+
+**Criterio di completamento:** Vecchi job o eventi rielaborati non ricreano dati cancellati; la richiesta di eliminazione prevale sulla finestra ordinaria di ripensamento del piano.
+
+Inventariare body degli eventi, outbox, code, snapshot e suggerimenti: riferimenti minimi persistenti, dati grezzi soggetti a TTL anche dopo retry. Accesso negato alla scadenza; pulizia fisica nel margine dichiarato.
+
+Con job di pulizia sospeso, provare dettaglio, ricerca e suggerimenti ai confini di scadenza e dopo revoca. Aggiungere mutation test della scadenza dei grant; M6-03 estende la prova agli export e M7-02 verifica l'intero percorso.
+
+<a id="m3-09"></a>
+#### M3-09 · Ordini combinati e identità di riga
+
+**Stato:** Da completare · **Prerequisiti:** M3-02 · **Contratto:** [§9](#s09) · [§35](#s35)
+
+Il punto tocca insieme modello (M3-01), client (M3-02) e sblocco (M3-06), quindi ha un task proprio. Leggere gli acquisti prima del checkout da Trading, collegarli all'ordine definitivo tramite l'identità stabile di riga e consolidare solo quando tutte le righe di ogni provvisorio appartengono allo stesso ordine definitivo. Sovrapposizioni parziali, righe senza identità o più candidati restano anomalie visibili. Quota, grant e sblocchi seguono il consolidamento.
+
+**Criterio di completamento:** Test su ordine combinato con ID nuovo e righe rinominate al pagamento: nessuna seconda quota, nessun diritto perso, nessun duplicato; provvisorio annullato o assorbito fuori dalle viste correnti; casi ambigui bloccati senza indovinare. Prova su un ordine combinato reale dell'account controllato, se disponibile nella finestra; altrimenti fixture sanitizzata e limite dichiarato.
+
+<a id="m3-10"></a>
+#### M3-10 · Riqualifica della lettura fiscale Fulfillment
+
+**Stato:** Da completare · **Prerequisiti:** M3-02 · **Contratto:** [§9](#s09) · [§11](#s11)
+
+Riapre in modo circoscritto l'esito di M0-05, senza modificarlo retroattivamente: con l'header `X-EBAY-C-MARKETPLACE-ID` ricavato dal marketplace dell'inserzione e `fieldGroups=TAX_BREAKDOWN`, leggere sugli stessi ordini controllati `buyer.taxIdentifier` da Fulfillment e `BuyerTaxIdentifier` da Trading, senza persistere né stampare valori.
+
+**Criterio di completamento:** Matrice di presenza e coincidenza per ordine (solo conteggi ed esiti), limiti di età e marketplace osservati, impatto sul budget quote. Se Fulfillment con header è equivalente, proposta all'owner di rivedere D135; fino al suo via Trading resta primario e il client M3-02 conserva la seconda osservazione con provenienza.
+
+<a id="m3-11"></a>
+#### M3-11 · Ingresso Worker per webhook e callback
+
+**Stato:** Da completare · **Prerequisiti:** M3-03 · **Contratto:** [§25](#s25) · [§11](#s11)
+
+Realizzare una volta sola l'ingresso prima di React Router: metodo, dimensione e firma sul corpo grezzo, claim idempotente in D1, messaggio in coda con soli identificativi, risposta positiva solo dopo l'accettazione della coda, consumer con retry e dead-letter nativi. Il primo consumatore è `ORDER_CONFIRMATION` per M3-04; M5-05 (Stripe), M5-09 (Telegram) e M7-02 (cancellazione account eBay) lo riusano invece di creare percorsi propri.
+
+**Criterio di completamento:** Consegna duplicata senza effetti ripetuti; coda non disponibile senza ACK al provider; firma errata o corpo oltre limite rifiutati prima di caricare l'app; CPU per invocazione letta nei log del Worker entro il limite del piano (D158); mutation test mirati sull'ingresso eseguiti dalla CI quando la PR lo tocca. Le callback OAuth aperte dal browser restano fuori da questo ingresso.
+
 <a id="m4"></a>
 ### M4 · UX completa Ordini, Negozi e Impostazioni
 
@@ -1035,6 +1500,90 @@ Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o
 **Output:** esperienza completa su dati rappresentativi, senza funzionalità future nascoste nel concept. **DoD:** flow browser/touch/back/refresh/scroll coerente, nessun dato bloccato dal client bypassabile, inventario opzioni concordate coperto; integrazioni M5/M6 ancora assenti indicate come questioni aperte, non dichiarate Production-ready. M4 chiude struttura e comportamento UI sui contratti stabili, non fatturazione, Telegram o export funzionanti se ancora simulati. M6/M7 chiudono gli stessi flussi end-to-end prima della RC.
 
 **Accettazione:** ricerca e conteggi solo su valori fiscali accessibili, senza CF/P.IVA in URL, referrer o log edge e senza inferenza dei valori bloccati; query server senza caricamento dell'intero storico nel browser. Cursori stabili, selezioni rivalidate, solo negozio e ordinamento ricordati fra sessioni. Pannello con URL, ritorno/focus/tastiera e contesto conservato; sblocco multiplo/export mai impliciti. Impostazioni con inventario completo, modifiche non salvate protette, lingua/tema persistenti, errore mai mostrato come successo. Onboarding riprendibile senza wizard bloccante; ordini autorizzati disponibili durante outage eBay, prima sync distinta dalla disponibilità fiscale. Integrare misure Auth/D1/eBay/browser allowlistate, controlli visivi e a11y in IT/EN, chiaro/scuro, smartphone/tablet/desktop e movimento ridotto (§17–§22, §31).
+
+<a id="m4-01"></a>
+#### M4-01 · Pagina Ordini definitiva
+
+Integrare caricamento dai dati persistiti autorizzati e aggiornamento remoto separato (§20). Strumentare Auth, D1, eBay e rendering con metriche allowlistate (§31); verificare prima visualizzazione e refresh con provider lento, senza esporre dati prima del controllo dei diritti. M6-08 completa aggregazione e protezione dei report, M7-03 misura sotto carico.
+
+**Stato:** Da completare · **Prerequisiti:** M1-07, M3 · **Contratto:** [§17](#s17)
+
+Realizzare la griglia a due schede o una secondo viewport, dettagli intermedi, area fiscale e azioni primarie/secondarie. Usare segnaposto che non rivelino dati bloccati.
+
+**Criterio di completamento:** Nessuna personalizzazione delle schede nella 2.0; titoli lunghi, importi e Partite IVA non rompono il layout. Sono visibili soltanto dati autorizzati.
+
+Integrato da CF Ready e Hub Fatture: mostrare la qualità formale calcolata in M3-05 come indicazione, non come errore. Dove una verifica remota è lenta, HTML subito con l'ultimo stato salvato, «Verifica in corso» e azioni sensibili disabilitate, poi stato confermato in streaming; se fallisce, avviso e «Riprova». La schermata Negozi di M2-07 si allinea allo stesso comportamento in questo task.
+
+<a id="m4-02"></a>
+#### M4-02 · Ricerca e filtri
+
+**Stato:** Da completare · **Prerequisiti:** M4-01 · **Contratto:** [§17](#s17) · [§28](#s28)
+
+Unificare ricerca rapida e pagina risultati; implementare filtri per negozi, date, stati e situazione fiscale. Interrogare soltanto valori fiscali accessibili.
+
+**Criterio di completamento:** Query e conteggi non rivelano dati bloccati; indicizzazione e filtri server non richiedono di caricare tutto lo storico nel browser.
+
+Per query CF/P.IVA preservare stato della vista senza mettere il valore in URL, referrer o log edge. Nessuna inferenza di identificativi bloccati attraverso conteggi o risultati parziali.
+
+<a id="m4-03"></a>
+#### M4-03 · Carica altri e contesto
+
+**Stato:** Da completare · **Prerequisiti:** M4-02 · **Contratto:** [§17](#s17)
+
+Implementare ordinamento recente, cursori stabili e conservazione del contesto durante la navigazione. Tra sessioni mantenere solo negozio e ordinamento; nuovi elementi automatici soltanto in cima.
+
+**Criterio di completamento:** Nessun salto durante la lettura né filtro temporaneo invisibile al nuovo accesso; selezioni rivalidate rispetto ai permessi correnti.
+
+<a id="m4-04"></a>
+#### M4-04 · Drawer e articoli
+
+**Stato:** Da completare · **Prerequisiti:** M4-01 · **Contratto:** [§17](#s17)
+
+Realizzare il pannello con URL su desktop e la vista completa mobile, Dettagli/Articoli e ultimo aggiornamento, senza cronologia.
+
+**Criterio di completamento:** Link diretto, ritorno e ricarica funzionano; ricerca e selezione rimangono, con focus e tastiera corretti.
+
+<a id="m4-05"></a>
+#### M4-05 · Multiselezione ed export entrypoint
+
+**Stato:** Da completare · **Prerequisiti:** M4-03 · **Contratto:** [§12](#s12) · [§17](#s17)
+
+Aggiungere modalità Seleziona, barra contestuale sticky, sblocco multiplo ed Esporta, con conteggi coerenti e conferma.
+
+**Criterio di completamento:** Nessun addebito, sblocco o file generato implicitamente. Ordini assenti o già sbloccati non consumano nuovi recuperi; autorizzazioni rilette.
+
+<a id="m4-06"></a>
+#### M4-06 · Impostazioni e campanella
+
+**Stato:** Da completare · **Prerequisiti:** M2, M1-07 · **Contratto:** [§19](#s19)
+
+Completare tutte le categorie e opzioni delle impostazioni. Autosalvataggio per scelte semplici, Salva per testi; profilo separato e popover notifiche selettivo, senza pagina dedicata 2.0.
+
+**Criterio di completamento:** Inventario delle preferenze coperto; modifiche non salvate protette, errori non presentati come successi, lingua e tema coerenti.
+
+Le schermate dei servizi M5/M6 possono essere verificate su contratti/fixture in questa milestone, ma la loro integrazione rimane un requisito tracciato: niente impostazione «salvata» che in realtà non governa alcun servizio.
+
+<a id="m4-07"></a>
+#### M4-07 · Onboarding e degradazione
+
+**Stato:** Da completare · **Prerequisiti:** M4-01, M2 · **Contratto:** [§20](#s20)
+
+Implementare stati vuoti reali, passaggi riprendibili, prerequisiti funzionali senza wizard bloccante, avanzamento dell’import e avvisi contestuali.
+
+Riusare gli scenari sintetici di M1-07/M3-05 nelle prove IT/EN e mobile. Con eBay lento o indisponibile, gli ordini persistiti autorizzati restano utilizzabili con timestamp e avanzamento locale, senza skeleton globale né azioni autorizzate da stato obsoleto.
+
+**Criterio di completamento:** Prima sincronizzazione e disponibilità fiscale sono distinte; nessun dato demo spacciato per reale, nessun blocco globale quando parti sicure funzionano.
+
+<a id="m4-08"></a>
+#### M4-08 · Review visiva e a11y baseline
+
+**Stato:** Da completare · **Prerequisiti:** M4-01..M4-07 · **Contratto:** [§22](#s22) · [§35](#s35)
+
+Verificare desktop, tablet e smartphone, IT/EN, chiaro/scuro, tastiera, focus, contrasto e movimento ridotto con gli asset approvati.
+
+**Criterio di completamento:** E2E e controlli visivi mirati superati; nessuna dichiarazione di certificazione WCAG o supporto browser non provati.
+
+Distinguere approvazione visuale e collaudo end-to-end delle impostazioni: i percorsi billing/Telegram/export vengono ricontrollati su implementazioni reali in M6/M7.
 
 <a id="m5"></a>
 ### M5 · Free/Premium, Stripe e Telegram
@@ -1047,6 +1596,152 @@ Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o
 
 Nel Free integrare scelta del negozio attivo, pause `plan`, vincolo dei 90 giorni ed eccezioni assistite motivate/auditate senza reset di quota, trial o ciclo. Webhook e riconciliazione autonoma con browser chiuso, eventi mancanti/tardivi/fuori ordine, oggetti Stripe non disponibili e outage, senza inventare refund o diritti. Mutation su grant, revoca del solo diritto rimborsato e diritti indipendenti. Telegram rilegge Premium/preferenze all'invio, invalida vecchia chat/consegne, distingue esito remoto incerto e fallimento certo, recupera solo arretrati tecnici e non promette exactly-once (§6, §13).
 
+<a id="m5-01"></a>
+#### M5-01 · Cicli, promo e quota Free
+
+**Stato:** Da completare · **Prerequisiti:** M3-06 · **Contratto:** [§5](#s05)
+
+Implementare cicli di 7×24 ore dal collegamento, quota congelata nel ciclo e promozione globale configurabile, senza azzeramenti abusabili. Assenza del dato non consuma quota.
+
+**Criterio di completamento:** Test su confini UTC, ora legale, fine promo e accessi concorrenti; sito pubblico e quota personale spiegano correttamente eventuali differenze temporanee.
+
+Integrato da CF Ready e Hub Fatture: i confini si confrontano sull'istante UTC e sul fuso del ciclo, mai sulla data locale ricavata da un timestamp UTC; test con evento nella prima notte del ciclo e fuso a est e a ovest di UTC.
+
+<a id="m5-02"></a>
+#### M5-02 · Trial e grant accesso
+
+**Stato:** Da completare · **Prerequisiti:** M5-01 · **Contratto:** [§6](#s06)
+
+Implementare trial interno di 14 giorni scelto dopo la prima sync, senza ripartenze o pause. Distinguere origine dei diritti e acquisizione automatica dei dati durante Premium.
+
+**Criterio di completamento:** Il trial da solo non crea abbonamento o addebito. Dati mai aperti e tardivi seguono Q568; la prova non scorre mentre il servizio è in attesa.
+
+<a id="m5-03"></a>
+#### M5-03 · Catalogo e Hosted Checkout
+
+**Stato:** Da completare · **Prerequisiti:** G-STRIPE, M5-02 · **Contratto:** [§4](#s04) · [§6](#s06)
+
+Configurare generazioni di prezzo, listino netto e totale comprensibile, conversione ammessa, metodi valutati economicamente e copertura fiscale. Richiedere collegamento e prima sync prima dell’acquisto.
+
+**Criterio di completamento:** Operazioni non coperte bloccate prima della vendita; checkout senza segreti client, nessun passaggio involontario a Paddle o conto PayPal personale.
+
+Dimostrare che le sessioni usano davvero Managed Payments, non Checkout standard. Qualificare opzioni metodi e costo per ticket, Link/descriptor e raccolta dati; nessun custom checkout domain acquistato come requisito.
+
+<a id="m5-04"></a>
+#### M5-04 · Prepagamento durante prova
+
+**Stato:** Da completare · **Prerequisiti:** M5-03 · **Contratto:** [§6](#s06)
+
+Implementare il percorso qualificato Q567 per mensile e annuale: incasso volontario immediato, giorni gratuiti residui preservati e rinnovo differito correttamente.
+
+**Criterio di completamento:** Test temporali e ricevute sandbox dimostrano un solo pagamento iniziale, residuo completo e rinnovo alla data corretta, senza doppio addebito a fine prova.
+
+Separare istante incasso, termine trial, inizio/fine copertura e prossimo rinnovo; test fine mese/anno bisestile e assenza di un secondo addebito alla scadenza del trial.
+
+Costruzione qualificata in M0-08: Checkout Managed Payments in modalità abbonamento con prezzo una tantum pari al primo periodo e prezzo ricorrente con `trial_end` pari alla scadenza originale più il periodo. Verificare con Test Clock rinnovo e assenza di addebito a fine prova, e come Link e Portal mostrano un periodo pagato che Stripe registra come `trialing`, incluse cancellazione e rimborso in quella fase.
+
+<a id="m5-05"></a>
+#### M5-05 · Webhook e riconciliazione
+
+**Stato:** Da completare · **Prerequisiti:** M5-03 · **Contratto:** [§6](#s06) · [§28](#s28)
+
+Verificare firme sul corpo originale, persistenza, idempotenza ed eventi fuori ordine. Riconciliare dal server, applicando subito Free al rinnovo fallito e sette giorni di tutela del prezzo.
+
+Provare browser chiuso dopo pagamento, evento mancante/tardivo, errore di accodamento e riavvio. La riconciliazione autonoma usa la stessa logica di grant, priorità e cadenze motivate dai limiti Stripe; riusare timeout e limiti HTTP, senza doppi retry o doppi diritti.
+
+**Criterio di completamento:** Un redirect falso non attiva Premium e un evento duplicato non raddoppia i diritti. Un outage Stripe non blocca l’uso già autorizzato né concede proroghe indefinite.
+
+Eventi out-of-order o dati Stripe non più disponibili non significano automaticamente acquisto inesistente o refund. I corpi grezzi dei webhook non diventano archivio fiscale permanente.
+
+**Per chiudere:** M3-11; il webhook Stripe entra dall'ingresso Worker condiviso.
+
+Integrato da CF Ready e Hub Fatture: ciclo periodico che riconcilia i diritti attivi con Stripe come rete di sicurezza, senza inventare diritti in caso di errore; ogni passo periodico registra il proprio errore senza fermare gli altri; priorità di recupero una sola volta per gli elementi mai tentati. Mutation test mirati sui diritti Stripe.
+
+<a id="m5-06"></a>
+#### M5-06 · Cambi piano e Portal/Link
+
+**Stato:** Da completare · **Prerequisiti:** M5-05 · **Contratto:** [§6](#s06)
+
+Implementare cambi periodicità alla scadenza, protezione di entrambi i prezzi originari, disdetta e cambio carta da Link/Portal, accesso ai documenti mediante link.
+
+**Criterio di completamento:** Gli eventi nativi del provider rispettano i diritti; scollegare un negozio non disdice l’abbonamento e le email di pagamento non vengono duplicate.
+
+Prove client Link/Portal e comunicazioni distinguono sandbox e live; i casi non riproducibili nel primo sono assegnati a M9-01. Cambio carta tramite provider non richiede una copia completa nel DB FiscalBay.
+
+Da M2-06, per decisione owner del 2026-10-05: scelta del negozio attivo nel Free (D155), pausa del piano per gli altri negozi con la ragione `plan` già prevista da `ebay_store_pauses`, vincolo di sostituzione ogni 90 giorni non spostato dal ricollegamento ed eccezioni assistite motivate e registrate in audit, senza reset di quota, prova o ciclo.
+
+<a id="m5-07"></a>
+#### M5-07 · Lifetime e concessioni
+
+**Stato:** Da completare · **Prerequisiti:** M5-05 · **Contratto:** [§6](#s06) · [§15](#s15)
+
+Gestire 20 disponibilità fra vendite e omaggi, prenotazioni atomiche con scadenza, detrazione del residuo effettivamente pagato, grant amministrativi ed estensioni con stop/rinvio dei rinnovi.
+
+**Criterio di completamento:** Test ultimo posto concorrente, webhook tardivo e rimborso; nessuna sovravendita o incasso fittizio. Lifetime valido anche dopo cambio provider.
+
+La scadenza locale della prenotazione deve essere coerente con la possibilità residua di incasso del checkout. Provare ultimo posto, sessione scaduta, pagamento asincrono, conferma tardiva e ripresa dopo crash: nessuna liberazione prematura.
+
+Dati qualificati in M0-08: `expires_at` fra 30 minuti e meno di 24 ore; `checkout.session.expired` libera il posto solo se la sessione non è stata completata; i metodi dinamici includono anche Bancontact, quindi una sessione completata con pagamento non ancora confermato tiene il posto fino a `checkout.session.async_payment_succeeded` o `failed`.
+
+<a id="m5-08"></a>
+#### M5-08 · Rimborsi, dispute e recovery commerciale
+
+Con il tooling di M1-09, mutation test mirati provano che il rimborso revochi soltanto il grant correlato, preservando diritti indipendenti. Coprire riconciliazione senza browser, eventi duplicati e arrivo fuori ordine insieme a M5-05.
+
+**Stato:** Da completare · **Prerequisiti:** M5-06, M5-07 · **Contratto:** [§6](#s06) · [§30](#s30)
+
+**Per chiudere:** M1-09 per i mutation test della revoca dei grant.
+
+Revocare dopo rimborso totale soltanto il diritto collegato. Gestire dispute, rimborsi del supporto provider, escalation e cancellazione account coordinata con i rinnovi.
+
+**Criterio di completamento:** Nessun altro diritto legittimo cancellato; rimborso parziale non convertito automaticamente in giorni; casi temporali e schermate coerenti.
+
+Includere cancellazione finanziaria tramite Link: verificare segnale/ambito, annullamento subscription e perdita oggetti, senza eliminare tacitamente lo spazio o ricreare i dati cancellati. Conservare soltanto la prova dei diritti lecita e necessaria.
+
+<a id="m5-09"></a>
+#### M5-09 · Telegram link e preferenze
+
+**Stato:** Da completare · **Prerequisiti:** M3, M2, M5-02 · **Contratto:** [§13](#s13)
+
+Integrare bot privato e bot test separato, token monouso, cambio chat, preferenze off/soli fiscali/tutti, scelta negozi e messaggi singoli o digest nel fuso configurato.
+
+**Criterio di completamento:** Nessuna notifica alla vecchia chat o ad altri spazi; default rispettati e login web indipendente da Telegram.
+
+I job rileggono il diritto Premium e le preferenze al momento dell’invio. Collegamento, cambio chat e disattivazione invalidano le consegne incompatibili già accodate. La route reale dei Negozi (M2-07) passa oggi `notifications: null`: qui riceve lo stato per negozio.
+
+Integrato da CF Ready e Hub Fatture: il webhook Telegram entra dall'ingresso Worker di M3-11, già compreso nel prerequisito M3.
+
+<a id="m5-10"></a>
+#### M5-10 · Telegram invii e arretrati
+
+Estendere le prove di interruzione di M3-04 al commit→accodamento→invio: ripresa senza perdita dell'evento né duplicazioni applicative. Distinguere l'esito remoto incerto da un fallimento certo, senza promettere consegna esattamente una volta se il provider non la garantisce.
+
+**Stato:** Da completare · **Prerequisiti:** M5-09, M3-05 · **Contratto:** [§13](#s13)
+
+Gestire nuovo ordine in verifica, dato successivamente disponibile, cambi/rimozioni, digest, escaping, suddivisione e retry. Recuperare arretrati soltanto per interruzioni tecniche.
+
+**Criterio di completamento:** CF autorizzato leggibile; riepilogo singolo di completamento import senza messaggi per ogni ordine storico; niente indirizzo/email buyer standard, duplicati da ripresa o arretrato volontariamente disabilitato. Correzioni/rimozioni pertinenti non soppresse dal filtro «solo fiscali»; nessuna garanzia exactly-once esterna.
+
+<a id="m5-11"></a>
+#### M5-11 · Ammissione, inattività e costo
+
+**Stato:** Da completare · **Prerequisiti:** M5-01, M5-03 · **Contratto:** [§5](#s05)
+
+Implementare inattività Free 30+7 giorni, riattivazione autonoma, waitlist manuale e percorso Q569 con verifica della capacità disponibile.
+
+**Criterio di completamento:** Nessun trial che scorre o nuovo incasso per servizio non erogabile; utenti esistenti non messi in attesa e benefici non azzerati abusivamente.
+
+<a id="m5-12"></a>
+#### M5-12 · Configurazione live sotto checkpoint
+
+**Stato:** Da completare · **Prerequisiti:** M5-03..M5-11 · **Contratto:** [§33](#s33) · [§37](#s37)
+
+Dopo il checkpoint owner, configurare branding, webhook, catalogo, coperture e metodi live, separandoli dal test. Non eseguire incassi indiscriminati.
+
+**Criterio di completamento:** Target live riletti e coerenti con Managed Payments; nessun oggetto test riutilizzato come live. Evidenza minima con dati sensibili protetti.
+
+Configurare contatto supporto realmente ricevibile e alert di richieste a scadenza. Nessuna migrazione automatica di ID test. Prima di agganciare il bot live, fermare il poller 1.x concorrente; prove con incasso reale restano sotto gate finale autorizzato.
+
 <a id="m6"></a>
 ### M6 · Export, admin e supporto
 
@@ -1058,6 +1753,109 @@ Nel Free integrare scelta del negozio attivo, pause `plan`, vincolo dei 90 giorn
 
 Console e Control Center owner sulle stesse query aggregate, senza impersonazione o dati buyer ordinari; anomalie con conseguenza/azione e scritture con conferma/audit. Webhook/menu del bot test riletti, chat/utente estranei ignorati, incidenti deduplicati all'apertura e risoluzione; gli alert M7 dipendono da questa integrazione (§15). Supporto/consensi richiedono impostazioni persistenti; diagnostica allowlistata opzionale, form funzionante anche senza diagnostica, retention applicata. Sito completo chiuso solo con prezzi/checkout e routing coerenti, poi qualifica legale M7. KPI aggregati esposti nella console, primi passaggi deduplicati anche con retry/reconnect, sync a zero ordini distinta e attività automatica separata da inattività umana (§14, §23, §31).
 
+<a id="m6-01"></a>
+#### M6-01 · CSV e opzioni standard
+
+**Stato:** Da completare · **Prerequisiti:** M3-06, G-EXPORT · **Contratto:** [§12](#s12)
+
+**Per chiudere:** M4-05, M5-05; integrazione UI e diritti reali verificata, non solo generatore con fixture.
+
+Implementare CSV standard per ordine/articolo, tipi e campi fiscali, ambito da filtri o selezione, opzione soli dati accessibili e motivo dei campi vuoti.
+
+**Criterio di completamento:** CSV con valori sorgente integri, escaping e istruzioni di import colonne testuali; nessuna promessa di conservare zeri al doppio clic. Più identificativi non moltiplicano righe/importi, dati bloccati assenti, formule in input neutralizzate.
+
+<a id="m6-02"></a>
+#### M6-02 · XLSX e configurazioni Premium
+
+**Stato:** Da completare · **Prerequisiti:** M6-01 · **Contratto:** [§12](#s12)
+
+Implementare XLSX qualificato, colonne e ordinamenti personalizzati, configurazioni Premium salvate e dataset estesi con più identificativi.
+
+**Criterio di completamento:** Memoria, bundle e durata misurati; cambiare libreria non elimina funzioni promesse. Totali ordine non sommati più volte nelle righe articolo.
+
+Campi CF/P.IVA/SKU tipizzati testo nel file XLSX; verificare i totali anche in ordini con più articoli e più identificativi contemporaneamente.
+
+<a id="m6-03"></a>
+#### M6-03 · Job export e portabilità
+
+Provare generazione e download con pulizia fisica sospesa: file scaduti e accessi revocati rimangono negati anche se i byte esistono ancora. Includere scadenza o revoca durante la generazione e il download secondo §30.
+
+**Stato:** Da completare · **Prerequisiti:** M6-01, M6-02 · **Contratto:** [§12](#s12) · [§30](#s30)
+
+Implementare storage privato con scadenza a 24 ore, download autenticato, ZIP del profilo JSON/CSV e notifica dei job pronti, senza duplicare documenti di pagamento.
+
+**Criterio di completamento:** Test su revisione workspace prima della generazione/pubblicazione/download: una revoca o cancellazione invalida anche gli export pendenti. Coprire concorrenza e scadenza naturale dei diritti/dati prima del job di pulizia; rigenerare invece di mantenere un grafo file/versioni. Nessun bypass via link bearer o sblocco implicito.
+
+<a id="m6-04"></a>
+#### M6-04 · Console admin
+
+**Stato:** Da completare · **Prerequisiti:** M2-04, M5 · **Contratto:** [§15](#s15)
+
+Completare liste utenti/spazi/negozi, diritti e incassi, grant, promo, prezzi, configurazioni, retry, pause e revisione antiabuso.
+
+Ogni anomalia espone gravità, conseguenza e azione contestuale; raggruppare duplicati e verificare permessi/stato aggiornato all'esecuzione. Provare rientro effettivo e isolamento del problema a un negozio, senza payload buyer nella console ordinaria.
+
+**Criterio di completamento:** MFA e autorizzazione per operazione, nessuna impersonazione o vista fiscale ordinaria; azioni auditate senza reset surrettizi dei benefici.
+
+<a id="m6-05"></a>
+#### M6-05 · Flag e ammissione manuale
+
+**Stato:** Da completare · **Prerequisiti:** M6-04 · **Contratto:** [§15](#s15) · [§32](#s32)
+
+Configurare flag tipizzati, soglie di attenzione, efficacia temporale delle modifiche, waitlist e interruttori distinti.
+
+**Criterio di completamento:** Nessun prezzo protetto riscritto, ciclo corrente invariato, comportamento sicuro quando manca una configurazione.
+
+<a id="m6-06"></a>
+#### M6-06 · Email, supporto e consenso
+
+**Stato:** Da completare · **Prerequisiti:** M1-08, M4-06 · **Contratto:** [§14](#s14) · [§24](#s24)
+
+Qualificare info/supporto iCloud e noreply transazionale, template Auth/servizio IT/EN, form/FAQ, consenso/revoca e gestione mancata consegna.
+
+Integrare il riepilogo diagnostico visibile e allowlistato del §14. Provare isolamento fra spazi, assenza di CF/token/payload e invio del form anche con diagnostica indisponibile; includere il riepilogo nella gestione della retention del supporto.
+
+**Criterio di completamento:** Ricezione e risposte funzionano, marketing separato dal servizio; nessun CF copiato automaticamente nei ticket e nessun digest ordini via email nella 2.0.
+
+<a id="m6-07"></a>
+#### M6-07 · Sito pubblico e SEO
+
+**Stato:** Da completare · **Prerequisiti:** M1-06 · **Contratto:** [§23](#s23)
+
+**Per chiudere:** M5-03, M2-08.
+
+Verificare contenuti/prezzi e percorsi autenticati; la qualifica legale conclusiva resta nel successivo M7-07.
+
+Completare Home, Funzionalità, Prezzi, Sicurezza, FAQ, Supporto e legali. Focus Codice Fiscale, P.IVA secondaria, canonical, hreflang, Open Graph e sitemap.
+
+**Criterio di completamento:** Verificati percorsi pubblici/autenticati e prezzi totali; niente social proof inventata, blog o roadmap pubblica. Noindex non è la sola protezione delle aree private.
+
+Verificare il comportamento della cache su home/redirect autenticati e pagina prezzi, mantenendo i totali fiscali e la preferenza di visita del sito corretti per il singolo utente.
+
+<a id="m6-08"></a>
+#### M6-08 · KPI e misure minime
+
+**Stato:** Da completare · **Prerequisiti:** M3 · **Contratto:** [§31](#s31)
+
+**Per chiudere:** M6-04; metriche esposte nella console e collegate ai flussi effettivi.
+
+Implementare eventi business e operativi tipizzati, funnel aggregato, separazione fra MRR, trial e lifetime, errori/ritardi sync e capacità.
+
+**Criterio di completamento:** Metriche riproducibili senza doppioni da retry, nessun dato fiscale nel tracking o session replay. L’attività automatica non azzera l’inattività umana.
+
+Successi ordinari aggregati, senza record dettagliato di ogni polling nei log a novanta giorni. Testare formule KPI e consumo del volume realmente conservato.
+
+Deduplicare i primi passaggi account verificato→negozio→sync→ordine anche con retry, schede concorrenti e reconnect; distinguere sync riuscita a zero ordini. Aggregare conteggi e tempi con denominatori espliciti. Integrare le misure Auth/D1/eBay/browser avviate in M4-01, con report limitati e allowlistati, senza tracciamento dei clic.
+
+<a id="m6-09"></a>
+#### M6-09 · Control Center Telegram dell'owner
+
+**Stato:** Da completare · **Prerequisiti:** M6-04, M6-08, M5-09 · **Contratto:** [§15](#s15) · [§31](#s31)
+
+Il punto si sovrappone a console admin (M6-04), KPI (M6-08), bot Telegram (M5-09) e alert (M7-04), quindi ha un task proprio. Bot privato dell'owner con comandi di sola lettura sulle stesse query aggregate della console, navigazione inline e aggiornamento dello stesso messaggio; webhook tramite l'ingresso di M3-11 con verifica di secret, chat privata e identità owner; notifiche incidenti deduplicate all'apertura e alla risoluzione. Nessun CF o dato buyer.
+
+**Criterio di completamento:** Chat o utente diversi ignorati senza risposta informativa; stesso update ripetuto senza doppio effetto; ogni comando coerente con la vista console corrispondente; eventuale azione di scrittura prevista da §15 con conferma e audit. Readback del webhook e del menu comandi nell'ambiente test, bot test separato.
+
 <a id="m7"></a>
 ### M7 · Hardening, privacy, performance e recovery readiness
 
@@ -1068,6 +1866,108 @@ Console e Control Center owner sulle stesse query aggregate, senza impersonazion
 **Verifica conclusiva:** threat model §29, CSP, licenze/notices e marchi eBay; inventario dei trattamenti/trasferimenti e condizioni IT/EN, consumatore, versioni/accettazioni e copertura effettiva Temisfera/MoR. Verificare piano/account e trattamento OpenAI prima di un uso sistematico di Codex su dati reali; nessun training o riuso estraneo di dati eBay. Account-deletion eBay senza esenzione per dati persistiti: callback 2.0 condiviso con l'ingresso eventi, firma, retry e budget/cache delle chiavi, cutover coordinato con Hub Fatture prima di readiness. Eliminazione attraversa Auth, ordini, raw, code, suggerimenti, export e billing, anche con pulizia sospesa; recupero lifetime non ripristina dati o trial consumati (§30, §32).
 
 Carico su almeno 70.000 ordini, multistore, picchi, code/export/log, separando Auth/D1/eBay/browser e consumi dell'account condiviso; quote e stop point nel runbook, nessun controllo CPU automatico al deploy reintrodotto (D158). Alert/rientro P1–P3 senza PII, query di diagnosi, campionamento e scadenze credenziali con avviso a 45 giorni (§29, §31). Qualificare pubblicazione e ripresa sul provider: diff cumulativo, artefatto Production distinto, rollback/forward-fix, candidato superato, interruzioni migration/deploy/tag e readback coerente. Riuso dei gate/promozione e riallineamento di `develop` secondo §34 e RELEASE; nessun restore periodico. Matrice interna di tutte le funzioni e rinvii, P3 espliciti, zero P1/P2; prove solo-live finali assegnate al preflight M9.
+
+<a id="m7-01"></a>
+#### M7-01 · Audit sicurezza e licenze
+
+**Stato:** Da completare · **Prerequisiti:** M2..M6 · **Contratto:** [§29](#s29) · [§30](#s30) · [§35](#s35)
+
+Verificare la tabella del threat model nel [§29](#s29) sul candidato, riga per riga, inclusa la CSP ancora assente, e poi XSS, CSRF, isolamento e autorizzazioni, rotazione token, dipendenze e codice copiato, separazione pubblico/privato e dati usati da Codex.
+
+**Criterio di completamento:** Nessun P1/P2; ogni finding ha riproduzione e regression test. Avvisi delle licenze terze preservati e nessun segreto esposto.
+
+<a id="m7-02"></a>
+#### M7-02 · Erasure e retention end-to-end
+
+Verificare trasversalmente i casi di M3-08/M6-03 con il job di pulizia sospeso: dettaglio, ricerca, suggerimenti ed export rispettano subito scadenza e revoca, senza estensioni implicite della retention.
+
+**Stato:** Da completare · **Prerequisiti:** M7-01 · **Contratto:** [§30](#s30) · [§32](#s32)
+
+Verificare eliminazioni di account, negozio e buyer, comprese richieste eBay, su job, export, raw, versioni, suggerimenti, Auth e billing. Separare i minimi diritti commerciali.
+
+**Criterio di completamento:** Vecchi job o recovery non ricreano dati eliminati; firme e ambito delle richieste corretti. Recuperare lifetime non ripristina dati operativi o prova già consumata.
+
+Coprire anche outbox/event payload/file/indici e segnalazioni Stripe/Link. Il test di logica erasure usa fixture e non sostituisce il drill nativo finale; qualifica delle condizioni di irreversibilità eBay esplicita.
+
+Integrato da CF Ready e Hub Fatture: il callback 2.0 di cancellazione account eBay entra dall'ingresso Worker di M3-11, con limite di richieste per origine a memoria limitata e budget per il recupero delle chiavi pubbliche, riusate dalla cache; il superamento risponde 429 senza perdere notifiche valide.
+
+<a id="m7-03"></a>
+#### M7-03 · Stress capacità e costi residui
+
+**Stato:** Da completare · **Prerequisiti:** M0, M3, M5, M6 · **Contratto:** [§36](#s36)
+
+Misurare il runtime reale con almeno 70.000 ordini, più negozi, picchi, code, export, log e traffico. Considerare capacità residua degli account condivisi.
+
+Separare nei risultati tempi Auth, D1, eBay e rendering/browser usando la strumentazione di M4-01/M6-08; identificare la fase limitante e verificare i budget con campionamento proporzionato.
+
+**Criterio di completamento:** Soglie misurate e configurazione approvata sufficiente; nessuna stima di clienti basata sui soli MAU Auth o sulla media degli ordini.
+
+Integrato da CF Ready e Hub Fatture: runbook con quote di riferimento e stop point per Worker, D1 e Queue, e con la procedura al raggiungimento (fermare nuovi ingressi, attribuire il consumo al progetto giusto dell'account, scegliere con l'owner fra ottimizzazione e cambio piano). Il controllo CPU al deploy resta quello di M1-10.
+
+<a id="m7-04"></a>
+#### M7-04 · Monitoraggio e incidenti
+
+**Stato:** Da completare · **Prerequisiti:** M6-04, M6-08 · **Contratto:** [§31](#s31) · [§32](#s32)
+
+Configurare log ordinari a 90 giorni e audit a un anno, alert azionabili e business, severità P1–P3, canali Telegram/email ed escalation del MoR.
+
+**Criterio di completamento:** Allarme, deduplicazione e rientro provati senza PII; soglie reali nella documentazione privata. Nessun indicatore di salute puramente decorativo.
+
+Runbook dati personali separa risposta operativa, obblighi di notifica ai soggetti pertinenti e finestre del supporto MoR; l’assenza di SLA pubblico non li annulla.
+
+**Per chiudere:** M6-09; gli alert owner usano le notifiche incidenti del Control Center.
+
+Integrato da CF Ready e Hub Fatture: i log redatti con correlation ID sono già attivi da M1-04; qui si aggiungono campionamento degli eventi ordinari riusciti, query di diagnosi documentate (errori per codice, webhook, correlation ID, scritture di eventi fallite) e soglie iniziali P1/P2. Registro delle scadenze delle credenziali nell'inventario privato, con controllo periodico che avvisa l'owner almeno 45 giorni prima e segnala le voci senza data.
+
+<a id="m7-05"></a>
+#### M7-05 · Kill switch e modalità degrade
+
+**Stato:** Da completare · **Prerequisiti:** M7-04 · **Contratto:** [§20](#s20) · [§32](#s32)
+
+Provare interruttori distinti per eBay, Telegram e nuovi checkout, continuità dei grant validi e dei webhook, accesso alle parti che rimangono sicure.
+
+**Criterio di completamento:** Simulazioni di guasto limitano soltanto le operazioni pertinenti; nessuna promessa di consultazione quando manca il database o l’autenticazione.
+
+<a id="m7-06"></a>
+#### M7-06 · Release, migration e recovery readiness
+
+**Stato:** Da completare · **Prerequisiti:** M7-01, M7-02 · **Contratto:** [§32](#s32) · [§34](#s34)
+
+Qualificare pubblicazione e readback, migrazioni, scelta rollback/forward-fix, recovery nativa dei componenti e custodia delle chiavi necessarie.
+
+**Preparazione locale:** workflow e procedura disponibili in [Test e pubblicazione](engineering/RELEASE.md), con build Production separata, provenienza, controllo del candidato, ripresa, confronto delle migration applicate e rollback limitato alla compatibilità provata. Non chiude le qualifiche remote, recovery o checkpoint.
+
+**Criterio di completamento:** Percorso eseguibile documentato e RC preparabile; nessun drill periodico aggiunto né ripristino dichiarato prima della prova effettiva.
+
+Provare la ripresa idempotente di Pubblica dopo deploy riuscito/tag fallito e blocco di deploy concorrenti. Preparare riconciliazione post-snapshot di cancellazioni e diritti senza inventare un backup esterno.
+
+Integrato da CF Ready e Hub Fatture: la promozione `develop`→`main` riusa i controlli già verdi sullo stesso tree, salvo modifiche ai file che governano la pubblicazione; dopo la promozione `develop` viene riallineato automaticamente. M9-04 usa questo percorso.
+
+Provare anche candidato superato e interruzioni fra passi già confermati. Il readback confronta artefatto/commit, schema, configurazione e invarianti applicative pertinenti; il classificatore di M1-09 considera il diff cumulativo dal distribuito e non elude gate live.
+
+Da D145: su `develop` sono già attivi l'artefatto verificato per tree (`build-<tree>`) e il riuso della verifica; la promozione su `main` e Pubblica partono da questi. La build Production usa l'ambiente Wrangler `production`, quindi non coincide con l'artefatto test: stabilire se produrre e verificare un artefatto Production per tree già alla verifica o registrarne la ricostruzione con input immutabili ([§34](#s34)). Una promozione oltre la scadenza degli artefatti ripete il gate.
+
+<a id="m7-07"></a>
+#### M7-07 · Qualifica legale e commerciale finale
+
+**Stato:** Da completare · **Prerequisiti:** M6-06, M6-07, M5-12 · **Contratto:** [§30](#s30) · [§36](#s36)
+
+Chiudere verifica marchi/API eBay, ruoli dati, copertura MoR, adempimenti italiani residui, diritti consumatori e testi IT/EN di Termini, Privacy e consenso.
+
+**Criterio di completamento:** Blocchi legali risolti; nessuna certificazione non dimostrata e distinzione chiara fra operatore Temisfera e venditore MoR.
+
+Verificare testi accettati/versioni, ruoli effettivi, erasure provider e obblighi residui della vendita al MoR. Nessuna rinuncia generale a diritti consumatore nascosta in una traduzione o nel prezzo IVA esclusa.
+
+<a id="m7-08"></a>
+#### M7-08 · Verifica interna della matrice funzionale
+
+**Stato:** Da completare · **Prerequisiti:** M7-01..M7-07 · **Contratto:** [§35](#s35) · [§41](#s41)
+
+Riesaminare tutte le funzioni, i diritti, le schermate, i dispositivi, gli errori e i rinvii rispetto al piano; eliminare aggiunte accidentali dei mockup.
+
+**Criterio di completamento:** Matrice di accettazione coperta, P3 espliciti, zero P1/P2. Piano ed evidenze distinguono lavoro concluso e futuro.
+
+Distinguere criteri già provati e casi live finali assegnati a M9-01. La readiness per RC non è una certificazione di compliance o un PASS delle transazioni non ancora osservate.
 
 <a id="m8"></a>
 ### M8 · Release Candidate e merchant di fiducia
@@ -1091,6 +1991,62 @@ Checklist rinviata da M2 con D160, eseguibile soltanto nel manifest e negli effe
 6. Rileggere sessioni/account e identità del Worker, revocare sessioni residue senza disattivare RuName o callback 1.x condiviso; dichiarare collaudato solo con tutte le prove.
 7. Account individuale controllato: avviso dedicato senza utenti/account creati; email business già registrata: rifiuto del collegamento implicito.
 
+<a id="m8-01"></a>
+#### M8-01 · Congelamento RC
+
+**Stato:** Da completare · **Prerequisiti:** M7 · **Contratto:** [§34](#s34) · [§37](#s37)
+
+Selezionare il candidato esatto da promuovere a RC, congelare nuove funzioni e identificare artefatto, schema e configurazione dell’ambiente di test.
+
+**Criterio di completamento:** Commit e artefatto corrispondono, gate CI superati; soltanto correzioni necessarie. Nessuna release stabile 2.0 anticipata.
+
+<a id="m8-02"></a>
+#### M8-02 · Preparazione test merchant
+
+**Stato:** Da completare · **Prerequisiti:** M8-01 e via owner · **Contratto:** [§30](#s30) · [§35](#s35)
+
+Preparare il test con un merchant di fiducia, dati e risorse autorizzati, scenari reali e modalità che non falsino i diritti della Production.
+
+**Criterio di completamento:** Manifest del test approvato: account, ambiente, dati, credenziali, bot, eventuali effetti live e condizioni di uscita. Nessuna migrazione implicita di passkey, oggetti sandbox, ordini o diritti nel live; nessuna beta aperta o durata minima senza criterio.
+
+<a id="m8-03"></a>
+#### M8-03 · Esecuzione percorsi reali
+
+**Stato:** Da completare · **Prerequisiti:** M8-02 · **Contratto:** [§35](#s35)
+
+Eseguire registrazione, quattro accessi, collegamento, sync, dati fiscali, copia, export, Telegram, impostazioni e percorsi billing pertinenti.
+
+Comprende le [prove reali di Sign in with eBay](#prove-ebay) rinviate da M2-09 (D160).
+
+**Criterio di completamento:** Evidenze proporzionate di risultati e limiti, nessun P1/P2 né difficoltà strutturale di comprensione del prodotto principale.
+
+<a id="m8-04"></a>
+#### M8-04 · Verifica browser e presentazione
+
+**Stato:** Da completare · **Prerequisiti:** M8-01 · **Contratto:** [§22](#s22) · [§35](#s35)
+
+Verificare Chromium/WebKit, viewport, touch/tastiera, IT/EN, scuro e testi lunghi. Usare screenshot reali solo nei contesti approvati.
+
+**Criterio di completamento:** Layout e funzioni coerenti; mockup non sostituisce prova del software. Nessuna funzione assente viene annunciata come già attiva.
+
+<a id="m8-05"></a>
+#### M8-05 · Correzioni e decisione RC
+
+**Stato:** Da completare · **Prerequisiti:** M8-03, M8-04 · **Contratto:** [§34](#s34) · [§41](#s41)
+
+Correggere difetti, aggiungere regressioni mirate e identificare una nuova RC quando cambia il candidato; accettare soltanto P3 non critici.
+
+**Criterio di completamento:** Candidato tracciato e approvabile; test pertinenti superati e nessuna regressione di checkout, grant e decorrenze.
+
+<a id="m8-06"></a>
+#### M8-06 · Preflight restore unico
+
+**Stato:** Da completare · **Prerequisiti:** M8-05 · **Contratto:** [§32](#s32) · [§41](#s41)
+
+Preparare target isolato, fonte di backup nativa, procedura e controlli su dati, diritti e revoche per l’unico ripristino pre-go-live.
+
+**Criterio di completamento:** Unico drill conclusivo assegnato a M9-02 con candidato/schema/procedura identificati; eseguibile a fine M8 richiamando la stessa evidenza, senza duplicazione né periodicità obbligatoria. Non dichiararlo riuscito prima della prova.
+
 <a id="m9"></a>
 ### M9 · Go-live
 
@@ -1100,10 +2056,70 @@ Checklist rinviata da M2 con D160, eseguibile soltanto nel manifest e negli effe
 
 La branch `legacy/1.x` resta disponibile durante il cutover operativo e la sorveglianza iniziale. Eliminarla, sia in locale sia sul remoto, soltanto dopo dismissione e sorveglianza: runtime e automazioni 1.x inattivi, consumatori e callback trasferiti e verificati, nessun intervento o rollback operativo ancora dipendente dal codice 1.x. Prima della cancellazione verificare che il commit finale 1.x sia raggiungibile da un tag Git permanente pubblicato sul remoto; registrare commit, tag e readback nella ricevuta conclusiva. La cancellazione della branch non elimina la storia Git né le identità bot o i keyset condivisi. La dismissione può anticipare il go-live nel mandato, ma M9 si chiude soltanto dopo pubblicazione, sorveglianza e pulizia verificate.
 
+<a id="m9-01"></a>
+#### M9-01 · Preflight commerciale e promo
+
+**Stato:** Da completare · **Prerequisiti:** M8 · **Contratto:** [§4](#s04) · [§5](#s05) · [§6](#s06)
+
+Confermare date promo e configurazione commerciale; chiudere le prove Stripe residualmente solo-live nel perimetro autorizzato dei checkpoint M8/M9 già approvati, con effetti economici espliciti e senza apertura pubblica prima di Pubblica. Verificare percorso cliente Link/Portal, ricevute/contatti, riferimento del pagamento e riconciliazione dei diritti, con impatti economici espliciti.
+
+**Criterio di completamento:** Nessun caso commerciale necessario rimane solo documentato/simulato senza prova consentita o decisione esplicita sul limite. Configurazione database/Stripe/UI allineata, nessun acquisto di capacità assente, Paddle inattivo salvo owner.
+
+<a id="m9-02"></a>
+#### M9-02 · Restore drill pre-go-live
+
+**Stato:** Da completare · **Prerequisiti:** M8-06 · **Contratto:** [§32](#s32) · [§41](#s41)
+
+Eseguire il solo restore reale isolato sul candidato finale, oppure riusare la prova appena svolta a fine M8. Verificare dati, Auth, diritti, configurazioni e revoche.
+
+**Criterio di completamento:** Un’unica prova conclusiva riuscita: dati/grant/config recuperati, post-snapshot riconciliato e accessi/erasure rispettati, outbound isolato. Può richiamare il drill sullo stesso candidato a fine M8; un fallimento blocca Pubblica finché corretto e riprovato.
+
+<a id="m9-03"></a>
+#### M9-03 · Checklist pubblica e operativa
+
+**Stato:** Da completare · **Prerequisiti:** M9-01, M9-02 · **Contratto:** [§41](#s41)
+
+Rileggere in una checklist DNS/TLS/www/test, email, Auth, eBay, Telegram, Stripe, SEO, legali, supporto, alert, KPI, quote e rollback.
+
+**Criterio di completamento:** Gate effettivamente superati, zero P1/P2 e go-live pronto per l’owner. Nessun evento o target non verificato indicato come riuscito.
+
+<a id="m9-04"></a>
+#### M9-04 · Pubblica 2.0.0
+
+**Stato:** Da completare · **Prerequisiti:** M9-03 e comando owner · **Contratto:** [§34](#s34)
+
+Dopo Pubblica dell’owner, eseguire workflow sul commit atteso: gate, migrazioni, deploy, readback, tag, release e changelog; concludere con l'inventario e la pulizia Git di [§34](#s34).
+
+**Criterio di completamento:** Artefatto e servizi attivi corrispondono; branch e worktree temporanei conclusi sono rimossi e il checkout è allineato. Eventuali riferimenti conservati per lavoro in corso o ripresa sono motivati qui. Dichiarazione di pubblicazione soltanto dopo conclusione del ciclo applicabile.
+
+Via riferito a commit/manifest, ambiente serializzato e artefatto verificato; ricevute per migration/deploy/tag. Se fallisce solo la Release GitHub dopo deploy riuscito, riprendere il passo mancante senza riscrivere dati o ripubblicare ciecamente.
+
+<a id="m9-05"></a>
+#### M9-05 · Dismissione residui 1.x e handover
+
+**Stato:** Da completare · **Prerequisiti:** M0-01; dismissione anticipata consentita nel mandato · **Contratto:** [§2](#s02) · [§33](#s33)
+
+**Per chiudere:** M9-04; verifica conclusiva del passaggio di runtime e bot dopo il go-live.
+
+Verificare che runtime e auto-update 1.x siano inattivi; rimuovere file obsoleti dopo aver trasferito contenuti utili. Preservare identità bot, keyset condivisi e storia Git.
+
+**Criterio di completamento:** Nessun processo concorrente o credenziale condivisa eliminata; indici e procedure 2.0 autorevoli, altri progetti invariati. La dismissione può già essere avvenuta prima del go-live.
+
+<a id="m9-06"></a>
+#### M9-06 · Sorveglianza iniziale
+
+**Stato:** Da completare · **Prerequisiti:** M9-04 · **Contratto:** [§31](#s31) · [§41](#s41)
+
+**Per chiudere:** M9-05; passaggio definitivo e rimozione della branch 1.x secondo [§37](#s37).
+
+Nei primi giorni sorvegliare registrazioni, sync, Stripe, code, quote, errori e supporto, usando interventi mirati secondo le procedure.
+
+**Criterio di completamento:** Esiti e anomalie registrati senza inventare una nuova beta pubblica o un SLA. Normale esercizio predisposto e nessuna chiusura fittizia delle verifiche. Dopo la prova che nessun percorso operativo dipende dalla 1.x, commit finale conservato tramite tag remoto e cancellazione di `legacy/1.x` verificata in locale e sul remoto; riferimenti registrati qui.
+
 <a id="pubblicazione-production"></a>
 ### Gate per la pubblicazione Production
 
-Prima di `Pubblica` devono risultare chiusi preflight commerciale, restore conclusivo e checklist operativa sul candidato. Le righe seguenti sostituiscono i tre stati dei vecchi task di preflight; `scripts/release.mjs` le legge sia prima del workflow reale sia prima degli effetti Production. Una riga `COMPLETATO` richiede un riferimento alla prova applicabile; righe mancanti, duplicate, prive di prova o con altro stato bloccano il ciclo. Non modificare i nomi dei tre gate senza aggiornare lo script e i suoi test. Il via owner riferito al commit, la variabile di abilitazione e il gate dell'environment restano controlli separati obbligatori.
+Prima di `Pubblica` devono risultare chiusi preflight commerciale, restore conclusivo e checklist operativa sul candidato. Le righe seguenti riportano l'esito di [M9-01](#m9-01), [M9-02](#m9-02) e [M9-03](#m9-03); `scripts/release.mjs` le legge sia prima del workflow reale sia prima degli effetti Production. Una riga `COMPLETATO` richiede un riferimento alla prova applicabile; righe mancanti, duplicate, prive di prova o con altro stato bloccano il ciclo. Non modificare i nomi dei tre gate senza aggiornare lo script e i suoi test. Il via owner riferito al commit, la variabile di abilitazione e il gate dell'environment restano controlli separati obbligatori.
 
 | Gate | Stato | Prova |
 |---|---|---|
@@ -1168,7 +2184,7 @@ Quattro chiarimenti finali prevalenti: **Q566** listino EUR con conversione prov
 
 Le semplificazioni approvate eliminano duplicazioni, vincoli documentali storici, dipendenze artificiali e implementazioni speculative; non cambiano prezzi, diritti, quattro login, checkpoint, retention o protezioni native. M0 confronta progressivamente i candidati; runtime scelto soltanto dopo qualifica. Per ogni nuova incompatibilità sostanziale vale [§0](#s00).
 
-Il tracker separato, la cronaca delle sessioni e il grafo di microtask sono superati da D161. Stato e questioni aperte sono nella roadmap di questo piano; prove in PR/CI e ricevute. I vecchi task sopravvivono soltanto come riferimenti storici in Git e nel registro, senza criteri di avvio o chiusura concorrenti.
+Il tracker separato e la cronaca delle sessioni sono superati da D161; i task per milestone sono tornati nella roadmap di questo piano con D164, senza diario delle prove. Stato, task e questioni aperte sono nella roadmap; prove in PR/CI e ricevute.
 
 <a id="s41"></a>
 ## 41. Definition of Done finale e checklist go-live
