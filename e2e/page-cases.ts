@@ -11,6 +11,8 @@ export interface PageCase {
   redirect?: string;
   preview?: boolean;
   endpoint?: boolean;
+  /** Visitata anche dopo il deploy test: prova ambiente, D1, sessione e segreti. */
+  remote?: boolean;
 }
 
 export function knownPagePath(pathname: string) {
@@ -56,23 +58,23 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
   const preview = (path: string, area: string, options: Partial<PageCase> = {}) =>
     make(`/anteprima${path}`, area, { preview: true, ...options });
   return [
-    make("", "public"),
+    make("", "public", { remote: true }),
     // Con la sessione la radice porta agli Ordini, salvo la scelta di visitare il sito.
-    make("", "public", { role: "member", redirect: orders }),
-    make("?visita=1", "public", { role: "member", pattern: home, redirect: home }),
-    make("/accesso", "auth"),
+    make("", "public", { role: "member", redirect: orders, remote: true }),
+    make("?visita=1", "public", { role: "member", pattern: home, redirect: home, remote: !prefix }),
+    make("/accesso", "auth", { remote: !prefix }),
     make("/accesso?token=synthetic-reset-token", "auth", { pattern: access }),
     make("/accesso", "auth", { role: "member", redirect: orders }),
     make("/app/ordini", "orders", { redirect: access }),
-    make("/app/ordini", "orders", { role: "member" }),
-    make("/auth/error", "auth"),
+    make("/app/ordini", "orders", { role: "member", remote: true }),
+    make("/auth/error", "auth", { remote: !prefix }),
     ...["email_not_found", "account_not_linked", "account_already_linked_to_different_user"].map(
       (error) =>
         make(`/auth/error?error=${error}&provider=ebay`, "auth", {
           pattern: `${prefix}/auth/error`,
         }),
     ),
-    make("/termini", "public"),
+    make("/termini", "public", { remote: !prefix }),
     make("/privacy", "public"),
     make("/app/negozi/collega", "stores", { redirect: access }),
     make("/app/negozi/collega", "stores", { role: "member" }),
@@ -80,19 +82,24 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
       role: "member",
       pattern: `${prefix}/app/negozi/collega`,
     }),
-    make("/app/negozi", "stores", { pattern: `${prefix}/app/negozi/:negozio?`, redirect: access }),
+    make("/app/negozi", "stores", {
+      pattern: `${prefix}/app/negozi/:negozio?`,
+      redirect: access,
+      remote: !prefix,
+    }),
     // Un negozio inesistente o di un altro spazio risponde 404 dentro la shell.
     ...["", `/${testAccount.stores.active}`, "/non-esiste"].map((suffix) =>
       make(`/app/negozi${suffix}`, "stores", {
         role: "member",
         pattern: `${prefix}/app/negozi/:negozio?`,
         status: suffix === "/non-esiste" ? 404 : 200,
+        remote: !prefix && suffix !== "/non-esiste",
       }),
     ),
     make("/app/profilo", "profile", { redirect: access }),
-    make("/app/profilo", "profile", { role: "member" }),
+    make("/app/profilo", "profile", { role: "member", remote: !prefix }),
     make("/app/impostazioni/sicurezza", "auth", { redirect: access }),
-    make("/app/impostazioni/sicurezza", "auth", { role: "member" }),
+    make("/app/impostazioni/sicurezza", "auth", { role: "member", remote: !prefix }),
     make("/admin", "auth", { status: 404 }),
     make("/admin", "auth", { role: "member", status: 404 }),
     make("/admin", "auth", { role: "admin-verify" }),
@@ -102,6 +109,7 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
       preview(`/ordini${suffix}`, "orders", {
         pattern: `${prefix}/anteprima/ordini/:ordine?`,
         status: suffix === "/non-esiste" ? 404 : 200,
+        remote: !prefix && !suffix,
       }),
     ),
     ...["", "/neg-vintage", "/non-esiste"].map((suffix) =>
@@ -117,12 +125,16 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
       }),
     ),
     preview("/profilo", "profile"),
-    make("/pagina-inesistente", "public", { status: 404, pattern: "*" }),
+    make("/pagina-inesistente", "public", { status: 404, pattern: "*", remote: !prefix }),
     ...(prefix
       ? []
       : [
-          make("/api/auth/get-session", "auth", { pattern: "/api/auth/*", endpoint: true }),
-          make("/robots.txt", "public", { endpoint: true }),
+          make("/api/auth/get-session", "auth", {
+            pattern: "/api/auth/*",
+            endpoint: true,
+            remote: true,
+          }),
+          make("/robots.txt", "public", { endpoint: true, remote: true }),
         ]),
   ];
 });

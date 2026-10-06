@@ -70,6 +70,9 @@ export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   ];
 }
 
+// Sulla fascia blu i pulsanti restano chiari anche al passaggio e nel tema scuro.
+const onBrand = "bg-white text-brand-navy hover:bg-white/90 hover:text-brand-navy";
+
 const featureIcons = [
   { Icon: ClipboardList, className: "text-brand-sky" },
   { Icon: Copy, className: "text-[#f5c451]" },
@@ -112,7 +115,7 @@ export default function Site({ loaderData }: Route.ComponentProps) {
               {signedIn ? (
                 <a
                   href={`${localizedPath(language)}?${visitParam}=0`}
-                  className={cn(buttonVariants({ size: "lg" }), "bg-white text-brand-navy")}
+                  className={cn(buttonVariants({ size: "lg" }), onBrand)}
                 >
                   {t.openApp}
                 </a>
@@ -120,7 +123,7 @@ export default function Site({ loaderData }: Route.ComponentProps) {
                 <>
                   <a
                     href={`${access}?registrati`}
-                    className={cn(buttonVariants({ size: "lg" }), "bg-white text-brand-navy")}
+                    className={cn(buttonVariants({ size: "lg" }), onBrand)}
                   >
                     {t.start}
                   </a>
@@ -128,7 +131,7 @@ export default function Site({ loaderData }: Route.ComponentProps) {
                     href={access}
                     className={cn(
                       buttonVariants({ variant: "outline", size: "lg" }),
-                      "border-white/40 bg-transparent text-white hover:bg-white/10",
+                      "border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white dark:bg-transparent dark:hover:bg-white/10",
                     )}
                   >
                     {t.signIn}

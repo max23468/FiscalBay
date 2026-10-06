@@ -6,6 +6,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { randomBytes } from "node:crypto";
 import { budgetKiB } from "./check-bundle-size.mjs";
+import { shardTests } from "./browser-tests.mjs";
 import { classifyFile, plan as changePlan } from "./classify-changes.mjs";
 import { missingPages, missingSections, routePatterns } from "./verify-pages.mjs";
 import {
@@ -205,12 +206,9 @@ describe("classificazione dei file modificati", () => {
       path: "app/routes/home.tsx",
       text: 'import { load } from "../domain/stores.server";',
     });
-    assert.deepEqual(changePlan([files[0].path], files).areas, [
-      "auth",
-      "orders",
-      "public",
-      "stores",
-    ]);
+    assert.deepEqual(changePlan([files[0].path], files).areas, ["auth", "orders", "stores"]);
+    files.push({ path: "app/routes/site.tsx", text: "" });
+    assert.deepEqual(changePlan(["app/routes/site.tsx"], files).areas, ["public"]);
     assert.equal(changePlan(["app/new-module.ts"], files).mode, "full");
   });
 
@@ -701,6 +699,40 @@ describe("budget del JavaScript client", () => {
 
   it("accetta un bundle entro budget", () => assert.equal(run(100 * 1024), 0));
   it("fa fallire la build oltre budget", () => assert.equal(run((budgetKiB + 10) * 1024), 1));
+});
+
+describe("prove browser divise fra macchine", () => {
+  const listing = {
+    suites: [
+      {
+        file: "lente.spec.ts",
+        specs: ["a", "b", "c"].map((title) => ({ title, tests: [{ projectName: "chromium" }] })),
+        suites: [
+          {
+            title: "gruppo",
+            specs: [{ title: "d", tests: [{ projectName: "webkit" }] }],
+          },
+        ],
+      },
+      {
+        file: "rapide.spec.ts",
+        specs: ["e", "f"].map((title) => ({ title, tests: [{ projectName: "chromium" }] })),
+      },
+    ],
+  };
+
+  it("assegna le prove a turno, ciascuna a un solo shard", () => {
+    assert.deepEqual(shardTests(listing, 1, 2), [
+      "[chromium] › lente.spec.ts › a",
+      "[chromium] › lente.spec.ts › c",
+      "[chromium] › rapide.spec.ts › e",
+    ]);
+    assert.deepEqual(shardTests(listing, 2, 2), [
+      "[chromium] › lente.spec.ts › b",
+      "[webkit] › lente.spec.ts › gruppo › d",
+      "[chromium] › rapide.spec.ts › f",
+    ]);
+  });
 });
 
 describe("eventi di wrangler tail", () => {
