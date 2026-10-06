@@ -1517,12 +1517,57 @@ describe("collegamento negozio eBay", () => {
       expect(callback.headers.get("location")).toBe(
         "http://localhost:5173/app/ordini?negozio=errore",
       );
+      expect(log.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([
+        expect.objectContaining({ event: "application_error", operation: "store_link" }),
+      ]);
     } finally {
       log.mockRestore();
     }
     expect(await env.DB.prepare("SELECT COUNT(*) AS total FROM ebay_stores").first()).toEqual({
       total: 0,
     });
+  });
+
+  it("torna agli Ordini nella lingua del collegamento, anche senza sessione o con il primo callback in corso", async () => {
+    const { cookie } = await verifiedSession("ritorno-callback@example.invalid");
+    const begin = async (path: string) =>
+      new URL(
+        (
+          (await startStoreLink({
+            request: new Request(`http://localhost:5173${path}`, {
+              method: "POST",
+              headers: { cookie, origin: "http://localhost:5173" },
+            }),
+          } as Parameters<typeof startStoreLink>[0])) as Response
+        ).headers.get("location")!,
+      ).searchParams.get("state")!;
+    const english = await begin("/en/app/negozi/collega");
+    const linked = await handleAuthRequest(
+      storeCallback(`state=${english}&code=codice-sintetico`, cookie),
+      env,
+      syntheticEbay(),
+    );
+    expect(linked.headers.get("location")).toBe(
+      "http://localhost:5173/en/app/ordini?negozio=collegato",
+    );
+    // Senza sessione nessun collegamento, e nessun errore del server.
+    const anonymous = await handleAuthRequest(
+      storeCallback(`state=${await begin("/app/negozi/collega")}&code=codice-sintetico`, ""),
+      env,
+      syntheticEbay(),
+    );
+    expect(anonymous.headers.get("location")).toBe(
+      "http://localhost:5173/app/ordini?negozio=errore",
+    );
+    // Mentre il primo callback è in corso il secondo torna agli Ordini senza esito.
+    const pending = await begin("/app/negozi/collega");
+    await claimStoreLinkSession(env.DB, pending);
+    const duplicate = await handleAuthRequest(
+      storeCallback(`state=${pending}&code=codice-sintetico`, cookie),
+      env,
+      syntheticEbay(),
+    );
+    expect(duplicate.headers.get("location")).toBe("http://localhost:5173/app/ordini");
   });
 });
 

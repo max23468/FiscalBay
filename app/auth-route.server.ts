@@ -69,7 +69,7 @@ const attemptLimits = [
 /** Un indirizzo IPv6 conta per la sua rete /64, che un singolo client controlla per intero. */
 function clientKey(ip: string): string {
   if (!ip.includes(":")) return ip;
-  const [head = "", tail = ""] = ip.split("::");
+  const [head, tail] = ip.split("::");
   const left = head ? head.split(":") : [];
   const right = tail ? tail.split(":") : [];
   const groups = [...left, ...Array(8 - left.length - right.length).fill("0"), ...right];
@@ -83,6 +83,7 @@ function clientKey(ip: string): string {
  */
 async function attemptWait(request: Request, environment: Env): Promise<number | null> {
   if (request.method !== "POST" || !environment.APP_ORIGIN.startsWith("https:")) return null;
+  // Stryker disable next-line Regex: il percorso inizia sempre con /api/auth, ancora o no.
   const path = new URL(request.url).pathname.replace(/^\/api\/auth/u, "");
   const rule = attemptLimits.find(({ paths }) => paths.test(path));
   const ip = request.headers.get("cf-connecting-ip");
@@ -125,6 +126,7 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
     const body = await request
       .clone()
       .json()
+      // Stryker disable next-line ArrowFunction: null e undefined danno lo stesso rifiuto.
       .catch(() => null);
     if (typeof body !== "object" || body === null || "idToken" in body) {
       return new Response(null, { status: 400 });
@@ -195,7 +197,7 @@ async function handleEbayCallback(
     });
     await recordStoreLinkOutcome(environment.DB, state, outcome);
   }
-  const home = localizedPath(state.startsWith("en_") ? "en" : "it", ordersPath);
+  const home = state.startsWith("en_") ? localizedPath("en", ordersPath) : ordersPath;
   const query = new URLSearchParams();
   if (outcome) query.set("negozio", outcome);
   if (link.ebayEnvironment === "sandbox") query.set("environment", "sandbox");
@@ -214,7 +216,8 @@ export function handleAuthRequest(
   return handleEbayCallback(request, environment, fetcher);
 }
 
-const forwardedHeaders = ["cookie", "origin", "user-agent", "accept-language", "cf-connecting-ip"];
+// Better Auth usa lo user agent per riconoscere il dispositivo delle sessioni.
+const forwardedHeaders = ["cookie", "origin", "user-agent", "cf-connecting-ip"];
 
 /**
  * Invia al router di Better Auth un'azione dei moduli dell'app, con lo stesso limite dei

@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { getMigrations } from "better-auth/db/migration";
 import { describe, expect, it, vi } from "vitest";
 
-import { handleAuthRequest } from "../app/auth-route.server";
+import { forwardToAuth, handleAuthRequest } from "../app/auth-route.server";
 import { createAuth, createAuthOptions, gmailDomain } from "../app/auth.server";
 import { completeRegistration } from "../app/domain/registration.server";
 import { loader as adminLoader } from "../app/routes/admin";
@@ -213,6 +213,15 @@ describe("Better Auth su Workers e D1", () => {
         env,
       );
     expect((await options()).status).toBe(403);
+    const verify = await handleAuthRequest(
+      new Request(`${origin}/api/auth/passkey/verify-registration`, {
+        method: "POST",
+        headers: { cookie, origin, "content-type": "application/json" },
+        body: JSON.stringify({ response: {} }),
+      }),
+      env,
+    );
+    expect(verify.status).toBe(403);
     const trailing = await handleAuthRequest(
       new Request(`${origin}/api/auth/passkey/generate-register-options/`, {
         headers: { cookie },
@@ -933,6 +942,8 @@ describe("Collegamento e modifica dell'identità", () => {
       .run();
     expect((await linkRoute(squatter.cookie, idToken)).status).toBe(400);
     expect((await linkRoute(squatter.cookie, "1")).status).toBe(400);
+    expect((await linkRoute(squatter.cookie, "null")).status).toBe(400);
+    expect((await linkRoute(squatter.cookie, "{")).status).toBe(400);
     expect((await linkRoute(squatter.cookie, JSON.stringify({ provider: "google" }))).status).toBe(
       200,
     );
@@ -1283,6 +1294,30 @@ describe("Sessioni, revoche e area admin", () => {
     expect(await admin(cookie)).toBe(404);
   }
 
+  it("inoltra a Better Auth lo user agent dei moduli e nessun header assente", async () => {
+    await createUser("inoltro@example.invalid");
+    const signIn = (headers: Record<string, string>) =>
+      forwardToAuth(
+        env,
+        new Request(`${origin}/accesso`, { method: "POST", headers }),
+        "/sign-in/email",
+        {
+          email: "inoltro@example.invalid",
+          password: "Password-sintetica-123!",
+        },
+      );
+    const agentOf = async (response: Response) => {
+      const token = decodeURIComponent(cookies(response).split("=")[1]!).split(".")[0];
+      return (
+        await env.DB.prepare('SELECT "userAgent" FROM "session" WHERE "token" = ?')
+          .bind(token)
+          .first<{ userAgent: string | null }>()
+      )?.userAgent;
+    };
+    expect(await agentOf(await signIn({ origin, "user-agent": userAgent }))).toBe(userAgent);
+    expect(await agentOf(await signIn({ origin }))).toBeFalsy();
+  });
+
   it("elenca le sessioni senza token e chiude una sessione o tutte le altre", async () => {
     const user = await createUser("sessioni@example.invalid");
     const second = await signIn("sessioni@example.invalid");
@@ -1345,6 +1380,8 @@ describe("Sessioni, revoche e area admin", () => {
       expect(await appAction(user.cookie, fields)).toContain("nuovo-accesso");
     }
     expect((await jsonRequest("passkey/generate-register-options", user.cookie)).status).toBe(403);
+    // Le altre route non chiedono un accesso recente.
+    expect((await jsonRequest("get-session", user.cookie)).status).toBe(200);
     expect(await security(user.cookie)).toMatchObject({
       recent: false,
       passkeyRestriction: "nuovo-accesso",
@@ -1560,5 +1597,202 @@ describe("Sessioni, revoche e area admin", () => {
     expect(await admin(last)).toBe("granted");
     await env.DB.prepare('UPDATE "user" SET "admin" = 0 WHERE id = ?').bind(user.id).run();
     expect(await admin(last)).toBe(404);
+  });
+});
+
+describe("confine delle route Auth", () => {
+  const origin = "https://test.fiscalbay.invalid";
+  const deployed = { ...env, APP_ORIGIN: origin };
+  const errorPage = "http://localhost:5173/auth/error";
+  const callback = (query: string, method = "GET", path = "/api/auth/callback/ebay") =>
+    handleAuthRequest(new Request(`http://localhost:5173${path}?${query}`, { method }), env);
+  const rejected = async (query: string, method?: string, path?: string) =>
+    (await callback(query, method, path)).headers.get("location") === errorPage;
+
+  it("accetta dal callback eBay solo GET con state e un solo esito entro i limiti", async () => {
+    const state = "s".repeat(4096);
+    expect(await rejected(`state=${state}&code=${"c".repeat(1024)}`)).toBe(false);
+    expect(await rejected(`state=${state}&error=${"e".repeat(256)}`)).toBe(false);
+    for (const query of [
+      `state=${state}s&code=c`,
+      `state=s&code=${"c".repeat(1025)}`,
+      `state=s&error=${"e".repeat(257)}`,
+      "state=s&code=",
+      "state=s&error=",
+      "state=s&code=c&error=e",
+      "state=s",
+      "code=c",
+    ]) {
+      expect(await rejected(query)).toBe(true);
+    }
+    expect(await rejected("state=s&code=c", "POST")).toBe(true);
+    // Anche con le barre finali il callback resta quello di eBay.
+    expect(await rejected("state=s", "GET", "/api/auth/callback/ebay//")).toBe(true);
+  });
+
+  /** Invio sensibile sul dominio distribuito; il limite si applica prima di Better Auth. */
+  const send = (path: string, ip: string | null, init: { method?: string; env?: Env } = {}) =>
+    handleAuthRequest(
+      new Request(`${origin}/api/auth${path}`, {
+        method: init.method ?? "POST",
+        headers: {
+          origin,
+          "content-type": "application/json",
+          ...(ip ? { "cf-connecting-ip": ip } : {}),
+        },
+        body: (init.method ?? "POST") === "POST" ? "{}" : undefined,
+      }),
+      init.env ?? deployed,
+    );
+  const fourth = async (...args: Parameters<typeof send>) => {
+    for (let index = 0; index < 3; index += 1) await send(...args);
+    return send(...args);
+  };
+
+  it("limita per IP solo gli invii sensibili sul dominio HTTPS, con attesa e risposta stabili", async () => {
+    const start = 1_800_000_000_000;
+    const clock = vi.spyOn(Date, "now").mockReturnValue(start);
+    try {
+      for (let index = 0; index < 3; index += 1) await send("/sign-up/email", "198.51.100.1");
+      clock.mockReturnValue(start + 2_500);
+      const limited = await send("/sign-up/email", "198.51.100.1");
+      expect(limited.status).toBe(429);
+      expect(limited.headers.get("retry-after")).toBe("8");
+      expect(limited.headers.get("cache-control")).toBe("no-store");
+      expect(await limited.json()).toEqual({
+        code: "TOO_MANY_REQUESTS",
+        message: "Too many requests. Try again later.",
+      });
+      clock.mockReturnValue(start);
+      const reset = await fourth("/forget-password", "198.51.100.2");
+      expect(reset.status).toBe(429);
+      expect(reset.headers.get("retry-after")).toBe("60");
+    } finally {
+      clock.mockRestore();
+    }
+    expect((await fourth("/change-password", "198.51.100.3")).status).toBe(429);
+    expect((await fourth("/passkey/verify-authentication", "198.51.100.4")).status).toBe(429);
+    for (const [path, ip, init] of [
+      ["/x/sign-in/email", "198.51.100.5", {}],
+      ["/x/passkey/verify-authentication", "198.51.100.6", {}],
+      ["/x/request-password-reset", "198.51.100.7", {}],
+      ["/sign-in/email", "198.51.100.8", { method: "GET" }],
+      ["/sign-in/email", "198.51.100.9", { env }],
+      ["/sign-in/email", null, {}],
+    ] as const) {
+      expect((await fourth(path, ip, init)).status).not.toBe(429);
+    }
+  });
+
+  it("conta un indirizzo IPv6 per la sua rete /64", async () => {
+    const keys: string[] = [];
+    for (const ip of [
+      "198.51.100.20",
+      "2001:db8:1:2:3:4:5:6",
+      "::1",
+      "2001:db8::",
+      "1::2:3:4:5:6:7",
+    ]) {
+      await send("/sign-in/email", ip);
+    }
+    const rows = await env.DB.prepare(
+      `SELECT "key" FROM "rateLimit" WHERE "key" LIKE '%|/sign-in/email' ORDER BY "key"`,
+    ).all<{ key: string }>();
+    keys.push(...rows.results.map(({ key }) => key.split("|")[0]!));
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        "198.51.100.20",
+        "2001:db8:1:2::/64",
+        "0:0:0:0::/64",
+        "2001:db8:0:0::/64",
+        "1:0:2:3::/64",
+      ]),
+    );
+  });
+
+  it("toglie a volte le finestre chiuse da oltre un'ora", async () => {
+    const start = 1_900_000_000_000;
+    const clock = vi.spyOn(Date, "now").mockReturnValue(start);
+    const random = vi.spyOn(Math, "random");
+    const windows = async (old: number) => {
+      await env.DB.prepare('DELETE FROM "rateLimit" WHERE "key" LIKE ?').bind("pulizia|%").run();
+      for (const [key, last] of [
+        ["pulizia|vecchia", old],
+        ["pulizia|recente", start - 3_599_000],
+      ] as const) {
+        await env.DB.prepare(
+          'INSERT INTO "rateLimit" ("id", "key", "count", "lastRequest") VALUES (?, ?, 1, ?)',
+        )
+          .bind(crypto.randomUUID(), key, last)
+          .run();
+      }
+    };
+    const remaining = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const rows = await env.DB.prepare(
+        'SELECT "key" FROM "rateLimit" WHERE "key" LIKE ? ORDER BY "key"',
+      )
+        .bind("pulizia|%")
+        .all<{ key: string }>();
+      return rows.results.map(({ key }) => key);
+    };
+    try {
+      for (const [value, expected] of [
+        [0.01, ["pulizia|recente"]],
+        [0.02, ["pulizia|recente", "pulizia|vecchia"]],
+        [0.5, ["pulizia|recente", "pulizia|vecchia"]],
+      ] as const) {
+        await windows(start - 3_600_001);
+        random.mockReturnValue(value);
+        await send("/sign-in/email", "198.51.100.30");
+        random.mockRestore();
+        expect(await remaining()).toEqual(expected);
+      }
+    } finally {
+      clock.mockRestore();
+      random.mockRestore();
+    }
+  });
+
+  it("registra solo le risposte di errore del server", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const applicationErrors = () =>
+      log.mock.calls
+        .map(([line]) => String(line))
+        .filter((line) => line.includes('"application_error"'))
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+    // D1 che fallisce le sole letture degli utenti: Better Auth risponde 500.
+    const db = env.DB;
+    const broken = {
+      ...env,
+      DB: new Proxy(db, {
+        get: (target, property) =>
+          property === "prepare"
+            ? (query: string) => {
+                if (query.includes('"user"')) throw new Error("D1 non disponibile");
+                return target.prepare(query);
+              }
+            : Reflect.get(target, property).bind(target),
+      }),
+    } as Env;
+    try {
+      const failed = await handleAuthRequest(
+        new Request("http://localhost:5173/api/auth/sign-in/email", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email: "guasto@example.invalid", password: "password-lunga-1" }),
+        }),
+        broken,
+      );
+      expect(failed.status).toBe(500);
+      expect(applicationErrors()).toEqual([
+        expect.objectContaining({ code: "INTERNAL_ERROR", operation: "route" }),
+      ]);
+      log.mockClear();
+      expect((await send("/sign-in/email", null, { env })).status).toBe(400);
+      expect(applicationErrors()).toEqual([]);
+    } finally {
+      log.mockRestore();
+    }
   });
 });
