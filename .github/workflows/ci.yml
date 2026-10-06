@@ -270,7 +270,9 @@ jobs:
   deploy-test:
     name: Deploy test
     needs: [verify, gate]
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/develop' && vars.TEST_DEPLOY_ENABLED == 'true' && needs.verify.outputs.deploy == 'true'
+    # I job browser e mutation saltati per il riuso non devono bloccare il deploy.
+    # Gli esiti dei due gate restano obbligatori, anche dopo un fallimento o una cancellazione.
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.gate.result == 'success' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/develop' && vars.TEST_DEPLOY_ENABLED == 'true' && needs.verify.outputs.deploy == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: test

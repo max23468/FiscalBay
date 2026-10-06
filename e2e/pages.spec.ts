@@ -90,14 +90,15 @@ for (const scenario of scenarios) {
             const cookie = localCookie(scenario.role, baseURL!);
             const origin = new URL(baseURL!).origin;
             // Il browser non accetta un Cookie iniettato né, in WebKit Linux, un cookie Secure
-            // su http: le richieste locali passano dal client HTTP di Playwright con la sessione.
+            // su http: le richieste applicative passano dal client HTTP con la sessione.
+            // Gli asset pubblici restano al browser, senza il proxy Auth e le sue connessioni.
             // Le richieste che seguono un redirect non tornano dal gestore e arriverebbero senza
             // sessione: per le navigazioni il redirect diventa una navigazione del documento,
             // che torna dal gestore. WebKit non conserva i cookie delle risposte intercettate:
             // quelli impostati dal server (come la scelta di visita) restano qui.
             const jar = new Map<string, string>([[cookie.name, cookie.value]]);
             await context.route(
-              (url) => url.origin === origin,
+              (url) => url.origin === origin && !url.pathname.startsWith("/assets/"),
               async (route) => {
                 const request = route.request();
                 const response = await route.fetch({
