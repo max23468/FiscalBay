@@ -733,8 +733,15 @@ describe("esito dei mutation test", () => {
       files.map((file) => (file.path === target ? { ...file, text: "return false" } : file)),
       "node|linux|x64",
     );
-    assert.equal(changedSource.prefix, base.prefix);
+    assert.notEqual(changedSource.prefix, base.prefix);
     assert.notEqual(changedSource.key, base.key);
+    // Il mutante può restare uguale mentre cambia un helper nello stesso file.
+    const helperBefore = [{ path: target, text: "const helper = true; return helper || false" }];
+    const helperAfter = [{ path: target, text: "const helper = false; return helper || false" }];
+    assert.notEqual(
+      identity(target, helperBefore, "node|linux|x64").prefix,
+      identity(target, helperAfter, "node|linux|x64").prefix,
+    );
     assert.deepEqual(identity(target, [...files].reverse(), "node|linux|x64"), base);
     assert.deepEqual(
       identity(

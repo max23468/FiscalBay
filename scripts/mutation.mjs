@@ -40,9 +40,9 @@ export function evaluate(report) {
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 
-/** Stryker non rileva cambiamenti negli helper, negli altri moduli o nell'ambiente.
- * Solo il sorgente mutato è escluso dal contesto: Stryker confronta quel file da sé.
- * I test, incluse fixture e setup, invalidano integralmente il riuso, anche dei mutanti statici.
+/** Stryker confronta il testo dei singoli mutanti, non tutte le loro dipendenze.
+ * Anche un helper nello stesso sorgente può cambiarne l'esito: il riuso richiede
+ * tutti gli input identici, inclusi sorgente, test, fixture, setup e runtime.
  */
 export function identity(
   target,
@@ -66,7 +66,7 @@ export function identity(
       runtime,
       target,
       files
-        .filter(({ path: file }) => file !== target && !file.endsWith(".md"))
+        .filter(({ path: file }) => !file.endsWith(".md"))
         .sort((a, b) => a.path.localeCompare(b.path)),
     ]),
   );
@@ -160,7 +160,7 @@ async function runTarget(target, files) {
   if (
     !incremental ||
     !existsSync(previous) ||
-    JSON.parse(readFileSync(previous, "utf8")).prefix !== expected.prefix
+    JSON.parse(readFileSync(previous, "utf8")).key !== expected.key
   )
     rmSync(`${dir}/incremental.json`, { force: true });
   writeFileSync(previous, JSON.stringify(expected));
