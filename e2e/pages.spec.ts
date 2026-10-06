@@ -93,32 +93,32 @@ for (const scenario of scenarios) {
             // su http: le richieste locali passano dal client HTTP di Playwright con la sessione.
             // Le richieste che seguono un redirect non tornano dal gestore e arriverebbero senza
             // sessione: per le navigazioni il redirect diventa una navigazione del documento,
-            // che torna dal gestore con la sessione e con i cookie del browser.
+            // che torna dal gestore. WebKit non conserva i cookie delle risposte intercettate:
+            // quelli impostati dal server (come la scelta di visita) restano qui.
+            const jar = new Map<string, string>([[cookie.name, cookie.value]]);
             await context.route(
               (url) => url.origin === origin,
               async (route) => {
                 const request = route.request();
-                const sent = await request.allHeaders();
-                const session = `${cookie.name}=${cookie.value}`;
                 const response = await route.fetch({
                   headers: {
-                    ...sent,
-                    cookie: sent.cookie ? `${sent.cookie}; ${session}` : session,
+                    ...request.headers(),
+                    cookie: [...jar].map(([name, value]) => `${name}=${value}`).join("; "),
                   },
                   maxRedirects: 0,
                 });
+                for (const { name, value } of response.headersArray()) {
+                  if (name.toLowerCase() !== "set-cookie") continue;
+                  const [pair = ""] = value.split(";");
+                  const [key = "", ...rest] = pair.split("=");
+                  if (/max-age=0/iu.test(value)) jar.delete(key.trim());
+                  else jar.set(key.trim(), rest.join("="));
+                }
                 const location = response.headers().location;
                 if (!location || !request.isNavigationRequest()) return route.fulfill({ response });
-                const cookies = response
-                  .headersArray()
-                  .filter(({ name }) => name.toLowerCase() === "set-cookie")
-                  .map(({ value }) => value);
                 return route.fulfill({
                   status: 200,
-                  headers: {
-                    "content-type": "text/html",
-                    ...(cookies.length ? { "set-cookie": cookies.join("\n") } : {}),
-                  },
+                  headers: { "content-type": "text/html" },
                   body: `<script>location.replace(${JSON.stringify(location)})</script>`,
                 });
               },
