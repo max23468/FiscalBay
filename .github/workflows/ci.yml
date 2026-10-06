@@ -390,20 +390,6 @@ jobs:
           --output test-results/browser/invocations.json --
           node scripts/browser-tests.mjs --pages --grep "${BROWSER_GREP}"
 
-      # Misura e ricevuta senza bloccare (D148): il p95 oscilla di qualche ms fra misure
-      # della stessa versione, quindi oltre soglia resta un avviso e non un rollback.
-      - name: Check capacity
-        id: capacity
-        continue-on-error: true
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm test:capacity --url https://test.fiscalbay.it --worker fiscalbay-test
-
-      - name: Report capacity warning
-        if: steps.capacity.outcome == 'failure'
-        run: echo "::warning::Controllo di capacità non superato, deploy mantenuto. Ricevuta nel riepilogo della run."
-
       # Un deploy con endpoint o interazioni falliti non resta distribuito sul test.
       - name: Roll back test deploy
         if: failure()
