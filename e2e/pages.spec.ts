@@ -270,7 +270,9 @@ for (const scenario of scenarios) {
         await page.waitForLoadState("networkidle");
         const home = scenario.path.startsWith("/en") ? "/en" : "/";
         const homeLink = page.locator(`a[href="${home}"]`).first();
-        if ((await homeLink.isVisible()) && new URL(before).pathname !== home) {
+        // Un pannello modale aperto dalla route (dettaglio del negozio) copre i collegamenti sotto.
+        const modal = await page.getByRole("dialog").isVisible();
+        if (!modal && (await homeLink.isVisible()) && new URL(before).pathname !== home) {
           await homeLink.click();
           await expect(page).toHaveURL(new URL(home, baseURL!).href);
           await page.waitForLoadState("networkidle");
@@ -288,7 +290,7 @@ for (const scenario of scenarios) {
           info.annotations.push({
             type: "omission",
             description:
-              "Navigazione interna non applicabile: pagina iniziale o collegamento iniziale assente.",
+              "Navigazione interna non applicabile: pagina iniziale, collegamento iniziale assente o coperto da un pannello modale.",
           });
         }
         expect(unexpectedErrors()).toEqual([]);
