@@ -29,6 +29,69 @@ describe("export ordini", () => {
     expect(csv).toContain('"00123456789"');
   });
 
+  it("scrive il CSV esatto: intestazioni, totale, virgolette e ordine senza identificativi", () => {
+    const bytes = createCsv([
+      {
+        orderId: "24-00001",
+        createdAt: "2026-09-13T20:00:00.000Z",
+        totalMinor: 1299,
+        currency: "EUR",
+        taxIdentifiers: [{ type: "CODICE_FISCALE", value: 'Ditta "Rossi"' }],
+      },
+      {
+        orderId: "24-00002",
+        createdAt: "2026-09-14T08:30:00.000Z",
+        totalMinor: 5,
+        currency: "EUR",
+        taxIdentifiers: [],
+      },
+    ]);
+    // Il BOM fa riconoscere UTF-8 a Excel; la decodifica lo rimuove, quindi si legge sui byte.
+    expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    expect(strFromU8(bytes)).toBe(
+      '"Ordine","Data UTC","Totale","Valuta","Tipo identificativo","Identificativo"\r\n' +
+        '"24-00001","2026-09-13T20:00:00.000Z","12.99","EUR","CODICE_FISCALE","Ditta ""Rossi"""\r\n' +
+        '"24-00002","2026-09-14T08:30:00.000Z","0.05","EUR","",""\r\n',
+    );
+  });
+
+  it("neutralizza ogni prefisso di formula e lascia invariati gli altri valori", () => {
+    const cell = (value: string) =>
+      strFromU8(
+        createCsv([
+          {
+            orderId: "24-00001",
+            createdAt: "2026-09-13T20:00:00.000Z",
+            totalMinor: 100,
+            currency: "EUR",
+            taxIdentifiers: [{ type: "VAT_ID", value }],
+          },
+        ]),
+      )
+        .trimEnd()
+        .split("\r\n")[1]
+        ?.split(",")
+        .at(-1);
+    for (const value of ["=1+1", "+1", "-1", "@SUM(A1)", "\tA", "\rA"])
+      expect(cell(value)).toBe(`"'${value}"`);
+    for (const value of ["a=b", "1-2", "IT00123456789"]) expect(cell(value)).toBe(`"${value}"`);
+  });
+
+  it("intesta il foglio XLSX e ne fissa i metadati", async () => {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load((await createXlsx(orders)) as unknown as ExcelJS.Buffer);
+    expect(workbook.creator).toBe("FiscalBay");
+    expect(workbook.getWorksheet("Ordini")?.getRow(1).values).toEqual([
+      undefined,
+      "Ordine",
+      "Data UTC",
+      "Totale",
+      "Valuta",
+      "Tipo identificativo",
+      "Identificativo",
+    ]);
+  });
+
   it("conserva gli identificativi come testo in XLSX", async () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load((await createXlsx(orders)) as unknown as ExcelJS.Buffer);
