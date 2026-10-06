@@ -71,6 +71,8 @@ for (const scenario of scenarios) {
           production && scenario.role !== "anonymous",
           "Non applicabile: Production in sola lettura anonima, nessun account sintetico inserito.",
         );
+        // Le richieste del collaudo remoto lasciano nei log del Worker le fasi superate.
+        if (remote) await context.setExtraHTTPHeaders({ "x-fiscalbay-trace": "1" });
         await page.setViewportSize({ width, height: 844 });
         await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
         if (scenario.role !== "anonymous") {

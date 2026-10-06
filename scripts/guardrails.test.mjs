@@ -644,6 +644,7 @@ describe("invocazioni osservate durante il collaudo remoto", () => {
         outcome: "canceled",
         wallTime: 30,
         cpuTime: 1,
+        logs: [{ message: ['{"event":"phase","phase":"start"}', "altro"] }],
         event: { request: request("https://test.example/profilo") },
       },
       { outcome: "ok", event: { scheduledTime: 1 } },
@@ -653,6 +654,7 @@ describe("invocazioni osservate durante il collaudo remoto", () => {
       summary.anomalies.map(({ path }) => path),
       ["/negozi", "/profilo"],
     );
+    assert.deepEqual(summary.anomalies[1].phases, ["start"]);
     assert.equal(JSON.stringify(summary).includes("sessione"), false);
     assert.equal(JSON.stringify(summary).includes("token"), false);
   });

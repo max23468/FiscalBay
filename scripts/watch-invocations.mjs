@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Esegue un comando registrando con `wrangler tail` le invocazioni del Worker, e ne salva
- * un riepilogo senza header, cookie né query string: metodo, percorso, stato, esito, tempi
- * ed eccezioni. Serve a distinguere una richiesta appesa nel Worker da una mai arrivata.
+ * un riepilogo senza header, cookie né query string: metodo, percorso, stato, esito, tempi,
+ * eccezioni e fasi tracciate dal collaudo. Serve a distinguere una richiesta appesa nel Worker da una mai arrivata.
  * Uso: node scripts/watch-invocations.mjs --worker NOME --output FILE -- COMANDO [ARGOMENTI]
  */
 import { spawn } from "node:child_process";
@@ -30,6 +30,16 @@ export function summarize(events) {
         wallMs: event.wallTime,
         cpuMs: event.cpuTime,
         exceptions: (event.exceptions ?? []).map(({ name, message }) => `${name}: ${message}`),
+        phases: (event.logs ?? []).flatMap(({ message }) =>
+          (message ?? []).flatMap((entry) => {
+            try {
+              const parsed = JSON.parse(entry);
+              return parsed?.event === "phase" ? [String(parsed.phase)] : [];
+            } catch {
+              return [];
+            }
+          }),
+        ),
       };
     });
   const anomalies = invocations.filter(
@@ -79,7 +89,7 @@ async function main() {
     `Invocazioni ${values.worker}: ${summary.total}, anomalie ${summary.anomalies.length}`,
     ...summary.anomalies.map(
       (entry) =>
-        `- ${entry.at ?? ""} ${entry.method} ${entry.path}: ${entry.status ?? "senza risposta"}, ${entry.outcome}, ${entry.wallMs} ms totali, ${entry.cpuMs} ms CPU${entry.exceptions.length ? `, ${entry.exceptions.join("; ")}` : ""}`,
+        `- ${entry.at ?? ""} ${entry.method} ${entry.path}: ${entry.status ?? "senza risposta"}, ${entry.outcome}, ${entry.wallMs} ms totali, ${entry.cpuMs} ms CPU${entry.exceptions.length ? `, ${entry.exceptions.join("; ")}` : ""}${entry.phases.length ? `, fasi ${entry.phases.join(" > ")}` : ""}`,
     ),
   ];
   console.log(lines.join("\n"));
