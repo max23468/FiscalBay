@@ -220,13 +220,16 @@ export async function recordOrderObservation(
   }
 
   const orderId = matched?.id ?? crypto.randomUUID();
-  // Fulfillment è la fonte dei campi dell'ordine; un provvisorio non sostituisce il definitivo
-  // e una lettura più vecchia dello stato salvato aggancia soltanto il riferimento.
+  // Fulfillment è la fonte dei campi dell'ordine e subentra sempre a un ordine letto solo da
+  // Trading: le date delle due fonti non sono confrontabili. Un provvisorio non sostituisce il
+  // definitivo e una lettura più vecchia della stessa fonte aggancia soltanto il riferimento.
+  const takeover = observation.source === "fulfillment" && !!matched && !matched.has_fulfillment;
   const ownsFields =
     !matched ||
     (!(observation.provisional && !matched.is_provisional) &&
-      (observation.source === "fulfillment" || !matched.has_fulfillment) &&
-      observation.lastModifiedTime >= matched.last_modified_time);
+      (takeover ||
+        ((observation.source === "fulfillment" || !matched.has_fulfillment) &&
+          observation.lastModifiedTime >= matched.last_modified_time)));
 
   const orderValues = [
     observation.externalOrderId,
@@ -263,13 +266,13 @@ export async function recordOrderObservation(
                   currency = ?7, total_minor = ?8, is_provisional = ?9, marketplace_id = ?10,
                   payment_status = ?11, fulfillment_status = ?12, cancel_status = ?13,
                   buyer_json = ?14
-            WHERE id = ?3 AND last_modified_time <= ?6 AND ${writableStore}
+            WHERE id = ?3 AND (?15 OR last_modified_time <= ?6) AND ${writableStore}
               AND (ebay_order_id IS NOT ?4 OR creation_time IS NOT ?5 OR currency IS NOT ?7
                 OR total_minor IS NOT ?8 OR is_provisional IS NOT ?9 OR marketplace_id IS NOT ?10
                 OR payment_status IS NOT ?11 OR fulfillment_status IS NOT ?12
                 OR cancel_status IS NOT ?13 OR buyer_json IS NOT ?14)`,
         )
-        .bind(...scope, orderId, ...orderValues),
+        .bind(...scope, orderId, ...orderValues, takeover ? 1 : 0),
     );
   }
   const orderStatements = statements.length;

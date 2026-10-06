@@ -654,10 +654,12 @@ describe("modello ordini", () => {
   });
 
   it("il definitivo eredita UUID e sblocco del provvisorio con le stesse righe", async () => {
+    // La data Trading del provvisorio può essere successiva a quella Fulfillment del definitivo.
     const draft = await recordOrderObservation(
       env.DB,
       target(),
       provisional({
+        lastModifiedTime: "2026-09-10T11:30:00Z",
         taxIdentifiers: {
           source: "ebay_trading_get_orders",
           complete: false,

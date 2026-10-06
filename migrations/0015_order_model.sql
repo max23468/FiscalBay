@@ -71,6 +71,11 @@ CREATE TABLE order_source_refs (
 CREATE INDEX order_source_refs_order_idx ON order_source_refs(order_id);
 CREATE INDEX order_source_refs_external_idx ON order_source_refs(store_id, external_order_id);
 
+-- Le date si confrontano come testo: stessa forma UTC con millisecondi di `toISOString`.
+UPDATE orders SET
+  creation_time = strftime('%Y-%m-%dT%H:%M:%fZ', creation_time),
+  last_modified_time = strftime('%Y-%m-%dT%H:%M:%fZ', last_modified_time);
+
 INSERT INTO order_source_refs (store_id, source, external_order_id, order_id, last_modified_time)
 SELECT store_id, 'fulfillment', ebay_order_id, id, last_modified_time FROM orders;
 
