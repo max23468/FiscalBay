@@ -11,6 +11,7 @@ import { Spinner } from "~/components/ui/spinner";
 import { appCopy } from "../app-copy";
 import { createAuth } from "../auth.server";
 import { adminAccess, type AuthSession } from "../domain/sessions.server";
+import { traceDatabase, tracePhase } from "../errors";
 import { languageFromPath, localizedPath, type Language } from "../i18n";
 import { formatDate } from "../view-models";
 import type { Route } from "./+types/admin";
@@ -33,9 +34,11 @@ const confirmedParam = "conferma";
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const language = languageFromPath(url.pathname);
+  await traceDatabase(request, env.DB);
   const session = (await createAuth(env).api.getSession({
     headers: request.headers,
   })) as AuthSession | null;
+  tracePhase(request, "session");
   const access = adminAccess(session);
   // Chi non è admin riceve la stessa risposta di un indirizzo inesistente.
   if (access === "none") throw data(null, { status: 404 });
