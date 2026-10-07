@@ -6,7 +6,7 @@ import { forwardToAuth, handleAuthRequest } from "../app/auth-route.server";
 import { createAuth, createAuthOptions, gmailDomain } from "../app/auth.server";
 import { completeRegistration } from "../app/domain/registration.server";
 import { loader as adminLoader } from "../app/routes/admin";
-import { loader as securityLoader } from "../app/routes/security";
+import { action as securityRouteAction, loader as securityLoader } from "../app/routes/security";
 import { action as signInAction, loader as signInLoader } from "../app/routes/sign-in";
 import { action as storeLinkAction, loader as storeLinkLoader } from "../app/routes/store-link";
 
@@ -257,8 +257,8 @@ describe("Better Auth su Workers e D1", () => {
         .run();
     }
     const remove = (passkeyId: string) =>
-      signInAction({
-        request: new Request(`${origin}/accesso`, {
+      securityRouteAction({
+        request: new Request(`${origin}/app/impostazioni/sicurezza`, {
           method: "POST",
           headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({ intent: "passkey-remove", id: passkeyId }),
@@ -841,6 +841,18 @@ describe("Collegamento e modifica dell'identità", () => {
         body: new URLSearchParams(fields),
       }),
     } as never);
+  /** Azione della pagina Sicurezza; chi non può vederla riceve il redirect lanciato. */
+  const securityAction = (cookie: string, fields: Record<string, string>) =>
+    securityRouteAction({
+      request: new Request(`${origin}/app/impostazioni/sicurezza`, {
+        method: "POST",
+        headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(fields),
+      }),
+    } as never).catch((thrown: unknown) => {
+      if (thrown instanceof Response) return thrown;
+      throw thrown;
+    });
   const signUp = async (environment: Env, email: string, verified: boolean) => {
     const response = await post(environment, "sign-up/email", {
       name: "Identità sintetica",
@@ -852,6 +864,18 @@ describe("Collegamento e modifica dell'identità", () => {
       await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?')
         .bind(user.id)
         .run();
+      await completeRegistration(env.DB, {
+        userId: user.id,
+        language: "it",
+        now: new Date(),
+        profile: {
+          firstName: "Identità",
+          lastName: "Sintetica",
+          accountType: "private",
+          companyName: null,
+        },
+        agreement: { marketing: false },
+      });
     }
     return { id: user.id, cookie: cookies(response) };
   };
@@ -906,11 +930,11 @@ describe("Collegamento e modifica dell'identità", () => {
     expect(owner.headers.get("location")).toContain("account_not_linked");
 
     // Chi ha creato l'account non può collegare un proprio Google né dall'app né dalla route.
-    const fromApp = await appAction(squatter.cookie, {
+    const fromApp = await securityAction(squatter.cookie, {
       intent: "collega-metodo",
       metodo: "google",
     });
-    expect(fromApp.headers.get("location")).toContain("accesso-non-verificato");
+    expect(fromApp.headers.get("location")).toBe("/app/ordini");
     const direct = await googleCallback(
       environment,
       await post(
@@ -1058,7 +1082,7 @@ describe("Collegamento e modifica dell'identità", () => {
       ),
     );
     const remove = (metodo: string) =>
-      appAction(user.cookie, { intent: "rimuovi-metodo", metodo }).then((response) =>
+      securityAction(user.cookie, { intent: "rimuovi-metodo", metodo }).then((response) =>
         new URL(response.headers.get("location")!, origin).searchParams.get("accesso"),
       );
     expect(await remove("password")).toBe("metodo-rimosso");
@@ -1084,7 +1108,7 @@ describe("Collegamento e modifica dell'identità", () => {
     );
     expect(
       (
-        await appAction(user.cookie, { intent: "passkey-remove", id: "passkey-metodi" })
+        await securityAction(user.cookie, { intent: "passkey-remove", id: "passkey-metodi" })
       ).headers.get("location"),
     ).toContain("ultimo-accesso");
 
@@ -1115,13 +1139,13 @@ describe("Collegamento e modifica dell'identità", () => {
       )
         .bind(user.id)
         .run();
-      const outcome = (fields: Record<string, string>) =>
-        appAction(user.cookie, fields).then((response) => response.headers.get("location"));
-      expect(await outcome({ intent: "rimuovi-metodo", metodo: "password" })).toContain(
-        "metodo-rimosso",
-      );
+      const outcome = (fields: Record<string, string>, action = appAction) =>
+        action(user.cookie, fields).then((response) => response.headers.get("location"));
+      expect(
+        await outcome({ intent: "rimuovi-metodo", metodo: "password" }, securityAction),
+      ).toContain("metodo-rimosso");
       send.mockClear();
-      expect(await outcome({ intent: "password" })).toContain("password-link");
+      expect(await outcome({ intent: "password" }, securityAction)).toContain("password-link");
       await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
       const message = send.mock.calls[0]![0] as { to: string; text: string };
       expect(message.to).toBe(email);
@@ -1147,7 +1171,7 @@ describe("Collegamento e modifica dell'identità", () => {
     await signUp(environment, "email.occupata@example.invalid", true);
     send.mockClear();
     const request = (email: string) =>
-      appAction(user.cookie, { intent: "cambia-email", email }).then((response) =>
+      securityAction(user.cookie, { intent: "cambia-email", email }).then((response) =>
         response.headers.get("location"),
       );
     const link = (index: number) =>
@@ -1205,10 +1229,13 @@ describe("Sessioni, revoche e area admin", () => {
       headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams(fields),
     });
-  const appAction = (cookie: string, fields: Record<string, string>) =>
-    signInAction({ request: form("/accesso", cookie, fields) } as never).then((response) =>
-      response.headers.get("location"),
-    );
+  const securityAction = (cookie: string, fields: Record<string, string>) =>
+    securityRouteAction({ request: form("/app/impostazioni/sicurezza", cookie, fields) } as never)
+      .catch((thrown: unknown) => {
+        if (thrown instanceof Response) return thrown;
+        throw thrown;
+      })
+      .then((response) => response.headers.get("location"));
   const home = (cookie: string) =>
     signInLoader({ request: new Request(`${origin}/accesso`, { headers: { cookie } }) } as never);
   /** Pagina Sicurezza; chi non può vederla torna all'accesso con l'esito ricevuto. */
@@ -1283,9 +1310,9 @@ describe("Sessioni, revoche e area admin", () => {
       "/en/accesso?accesso=sessione-chiusa",
     );
     expect(
-      await appAction(cookie, { intent: "cambia-email", email: "x@example.invalid" }),
-    ).toContain("accesso-non-verificato");
-    expect(await appAction(cookie, { intent: "esci-altri" })).toContain("accesso=errore");
+      await securityAction(cookie, { intent: "cambia-email", email: "x@example.invalid" }),
+    ).toBe("/accesso");
+    expect(await securityAction(cookie, { intent: "esci-altri" })).toBe("/accesso");
     const link = await storeLinkAction({
       request: form("/app/negozi/collega", cookie, {}),
     } as never);
@@ -1339,18 +1366,24 @@ describe("Sessioni, revoche e area admin", () => {
 
     // Un id di un altro utente non chiude nulla.
     expect(
-      await appAction(other.cookie, { intent: "esci-sessione", id: (await sessionId(second))! }),
+      await securityAction(other.cookie, {
+        intent: "esci-sessione",
+        id: (await sessionId(second))!,
+      }),
     ).toContain("sessione-chiusa");
     expect(await sessionId(second)).toBeDefined();
 
     expect(
-      await appAction(user.cookie, { intent: "esci-sessione", id: (await sessionId(second))! }),
+      await securityAction(user.cookie, {
+        intent: "esci-sessione",
+        id: (await sessionId(second))!,
+      }),
     ).toContain("sessione-chiusa");
     await expectRevoked(second);
     expect(await sessionId(third)).toBeDefined();
 
     // Le azioni di Sicurezza tornano alla sua pagina.
-    expect(await appAction(user.cookie, { intent: "esci-altri" })).toBe(
+    expect(await securityAction(user.cookie, { intent: "esci-altri" })).toBe(
       "/app/impostazioni/sicurezza?accesso=sessioni-chiuse",
     );
     await expectRevoked(third);
@@ -1358,13 +1391,12 @@ describe("Sessioni, revoche e area admin", () => {
     expect(await sessionId(other.cookie)).toBeDefined();
 
     // Chiudere la sessione corrente dall'elenco equivale al logout.
-    const response = await signInAction({
-      request: form("/accesso", user.cookie, {
+    expect(
+      await securityAction(user.cookie, {
         intent: "esci-sessione",
         id: (await sessionId(user.cookie))!,
       }),
-    } as never);
-    expect(response.headers.get("location")).toBe("/");
+    ).toBe("/");
     await expectRevoked(user.cookie);
   });
 
@@ -1377,7 +1409,7 @@ describe("Sessioni, revoche e area admin", () => {
       { intent: "rimuovi-metodo", metodo: "password" },
       { intent: "passkey-remove", id: "qualsiasi" },
     ]) {
-      expect(await appAction(user.cookie, fields)).toContain("nuovo-accesso");
+      expect(await securityAction(user.cookie, fields)).toContain("nuovo-accesso");
     }
     expect((await jsonRequest("passkey/generate-register-options", user.cookie)).status).toBe(403);
     // Le altre route non chiedono un accesso recente.
@@ -1400,7 +1432,9 @@ describe("Sessioni, revoche e area admin", () => {
         .status,
     ).toBe(403);
     // Chiudere le sessioni resta possibile anche con un accesso non recente.
-    expect(await appAction(user.cookie, { intent: "esci-altri" })).toContain("sessioni-chiuse");
+    expect(await securityAction(user.cookie, { intent: "esci-altri" })).toContain(
+      "sessioni-chiuse",
+    );
     expect(
       await env.DB.prepare('SELECT email FROM "user" WHERE id = ?').bind(user.id).first(),
     ).toEqual({ email: "recente@example.invalid" });
@@ -1578,9 +1612,9 @@ describe("Sessioni, revoche e area admin", () => {
     expect(await admin(verified)).toBe("granted");
     expect((await jsonRequest("passkey/generate-register-options", verified)).status).toBe(200);
     // Le passkey dell'admin non si rimuovono da una sessione senza conferma.
-    expect(await appAction(user.cookie, { intent: "passkey-remove", id: "qualsiasi" })).toContain(
-      "conferma-passkey",
-    );
+    expect(
+      await securityAction(user.cookie, { intent: "passkey-remove", id: "qualsiasi" }),
+    ).toContain("conferma-passkey");
 
     await age(verified, 13);
     expect(await admin(verified)).toBe("verify");
@@ -1591,7 +1625,9 @@ describe("Sessioni, revoche e area admin", () => {
     await jsonRequest("sign-out", renewed, {});
     await expectRevoked(renewed);
     const again = await signInWithPasskey(true);
-    expect(await appAction(user.cookie, { intent: "esci-altri" })).toContain("sessioni-chiuse");
+    expect(await securityAction(user.cookie, { intent: "esci-altri" })).toContain(
+      "sessioni-chiuse",
+    );
     await expectRevoked(again);
     const last = await signInWithPasskey(true);
     expect(await admin(last)).toBe("granted");
