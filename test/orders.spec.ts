@@ -7,13 +7,14 @@ import {
   classifyEbayRetry,
   mergeFulfillmentOrders,
   parseFulfillmentPage,
-  orderSummarySchema,
+  fulfillmentObservation,
 } from "../app/integrations/ebay/fulfillment.server";
 import {
   mapTradingTaxIdentifiers,
   parseTradingOrderTaxIdentifiers,
 } from "../app/integrations/ebay/tax-identifiers.server";
 import { grantFreeOrder, listVisibleOrders } from "../app/domain/orders.server";
+import { recordOrderObservation, type OrderObservation } from "../app/domain/order-import.server";
 import {
   deleteStoreData,
   disconnectStore,
@@ -99,10 +100,10 @@ async function seed(): Promise<void> {
     ).bind(now, now, now),
     env.DB.prepare(
       `INSERT INTO order_items
-        (id, order_id, line_item_id, sku, title, quantity, unit_minor)
-       VALUES ('i-a1', 'o-a', 'line-a1', 'SKU-A', 'Articolo A', 1, 999),
-              ('i-a2', 'o-a', 'line-a2', NULL, 'Articolo B', 2, 150),
-              ('i-b', 'o-b', 'line-b', 'SKU-B', 'Articolo B', 1, 2599)`,
+        (id, order_id, line_item_id, sku, title, quantity, total_minor, currency)
+       VALUES ('i-a1', 'o-a', 'line-a1', 'SKU-A', 'Articolo A', 1, 999, 'EUR'),
+              ('i-a2', 'o-a', 'line-a2', NULL, 'Articolo B', 2, 300, 'EUR'),
+              ('i-b', 'o-b', 'line-b', 'SKU-B', 'Articolo B', 1, 2599, 'EUR')`,
     ),
     env.DB.prepare(
       `INSERT INTO free_cycles
@@ -233,10 +234,30 @@ describe("percorso ordini", () => {
         Number.NaN,
       ),
     ).toThrow("Intervallo incrementale eBay non valido");
+    const edge = new Date("2026-09-20T12:00:00.000Z");
+    expect(buildLastModifiedFilter(edge, edge, 0)).toBe(
+      "lastmodifieddate:[2026-09-20T12:00:00.000Z..2026-09-20T12:00:00.000Z]",
+    );
+    for (const [checkpoint, end, overlap] of [
+      [new Date(Number.NaN), edge, 0],
+      [edge, new Date(Number.NaN), 0],
+      [edge, edge, -1],
+      [new Date(edge.getTime() + 1), edge, 0],
+    ] as const) {
+      expect(() => buildLastModifiedFilter(checkpoint, end, overlap)).toThrow(
+        "Intervallo incrementale eBay non valido",
+      );
+    }
+    // La pagina richiede il totale e ID non vuoti; senza `orders` non ci sono ordini.
+    expect(parseFulfillmentPage({ total: 0 }).orders).toEqual([]);
+    expect(() => parseFulfillmentPage({ orders: [] })).toThrow();
+    expect(() => parseFulfillmentPage({ orders: [{ orderId: "" }], total: 1 })).toThrow();
   });
 
   it("classifica i retry eBay senza riprovare gli errori client definitivi", () => {
     expect(classifyEbayRetry(400, null, 1)).toEqual({ retryable: false });
+    expect(classifyEbayRetry(499, null, 1)).toEqual({ retryable: false });
+    expect(classifyEbayRetry(500, null, 1)).toEqual({ retryable: true, delaySeconds: 1 });
     expect(classifyEbayRetry(429, "120", 1)).toEqual({
       retryable: true,
       delaySeconds: 120,
@@ -278,10 +299,15 @@ describe("percorso ordini", () => {
       },
     ]);
     expect(otherTenantOrders[0]?.taxIdentifiers).toEqual([]);
-    expect(ownerOrders[0]).toMatchObject({
-      storeName: "e-a",
-      fiscalState: "available",
-      summary: null,
+    expect(ownerOrders[0]).toMatchObject({ storeName: "e-a", fiscalState: "available" });
+    expect(ownerOrders[0]?.summary).toEqual({
+      buyer: { username: null },
+      orderPaymentStatus: null,
+      orderFulfillmentStatus: null,
+      lineItems: [
+        { lineItemId: "line-a1", title: "Articolo A", quantity: 1, sku: "SKU-A" },
+        { lineItemId: "line-a2", title: "Articolo B", quantity: 2, sku: null },
+      ],
     });
     expect(otherTenantOrders[0]).toMatchObject({ storeName: "e-b", fiscalState: "locked" });
   });
@@ -295,21 +321,140 @@ describe("percorso ordini", () => {
     expect((await listVisibleOrders(env.DB, "u-a"))[0]?.fiscalState).toBe("unchecked");
   });
 
-  it("il riepilogo conserva solo campi validati e scarta dati fiscali anche annidati", () => {
-    const summary = orderSummarySchema.parse({
-      buyer: { username: "acquirente-sintetico", taxIdentifier: { value: "NON-ESPORRE" } },
-      orderPaymentStatus: "PAID",
-      orderFulfillmentStatus: "FULFILLED",
-      lineItems: [
-        { lineItemId: "riga", title: "Articolo", quantity: 2, taxIdentifier: "NON-ESPORRE" },
-      ],
+  it("la lettura Fulfillment conserva solo i campi del modello, con importi esatti", () => {
+    const address = {
+      addressLine1: "Via Roma 1",
+      addressLine2: "Scala B",
+      city: "Trento",
+      postalCode: "38122",
+      stateOrProvince: "TN",
+      countryCode: "IT",
+      county: "NON-ESPORRE",
+    };
+    const { county: _, ...savedAddress } = address;
+    const line = (lineItemId: string, legacyItemId: string | undefined, marketplace: string) => ({
+      lineItemId,
+      legacyItemId,
+      title: `Articolo ${lineItemId}`,
+      quantity: 2,
+      sku: "SKU-1",
+      lineItemCost: { value: "1000", currency: "JPY" },
+      listingMarketplaceId: marketplace,
       taxIdentifier: "NON-ESPORRE",
     });
-    expect(summary.lineItems?.[0]?.quantity).toBe(2);
-    expect(JSON.stringify(summary)).not.toContain("NON-ESPORRE");
+    const complete = fulfillmentObservation({
+      orderId: "ordine",
+      creationDate: "2026-09-20T10:00:00Z",
+      lastModifiedDate: "2026-09-20T11:00:00.000Z",
+      orderPaymentStatus: "PAID",
+      orderFulfillmentStatus: "NOT_STARTED",
+      cancelStatus: { cancelState: "NONE_REQUESTED" },
+      pricingSummary: { total: { value: "2000", currency: "JPY" } },
+      buyer: {
+        username: "acquirente-sintetico",
+        taxIdentifier: { value: "NON-ESPORRE" },
+        buyerRegistrationAddress: {
+          fullName: "Mario Rossi",
+          email: "acquirente@example.invalid",
+          primaryPhone: { phoneNumber: "+39 000 0000000" },
+          contactAddress: address,
+        },
+      },
+      fulfillmentStartInstructions: [
+        {
+          shippingStep: {
+            shipTo: {
+              fullName: "Anna Bianchi",
+              primaryPhone: { phoneNumber: "+39 000 1111111" },
+              contactAddress: address,
+            },
+          },
+        },
+      ],
+      lineItems: [line("riga-1", "110", "EBAY_IT"), line("riga-2", undefined, "EBAY_IT")],
+      taxIdentifier: "NON-ESPORRE",
+    });
+    const item = (lineItemId: string, stableKey: string | null) => ({
+      lineItemId,
+      stableKey,
+      title: `Articolo ${lineItemId}`,
+      sku: "SKU-1",
+      quantity: 2,
+      total: { minor: 1000, currency: "JPY" },
+    });
+    expect(complete).toEqual({
+      source: "fulfillment",
+      externalOrderId: "ordine",
+      provisional: false,
+      creationTime: "2026-09-20T10:00:00.000Z",
+      lastModifiedTime: "2026-09-20T11:00:00.000Z",
+      marketplaceId: "EBAY_IT",
+      total: { minor: 2000, currency: "JPY" },
+      paymentStatus: "PAID",
+      fulfillmentStatus: "NOT_STARTED",
+      cancelStatus: "NONE_REQUESTED",
+      buyer: {
+        username: "acquirente-sintetico",
+        name: "Mario Rossi",
+        email: "acquirente@example.invalid",
+        phone: "+39 000 0000000",
+        billingAddress: savedAddress,
+        shipTo: { name: "Anna Bianchi", phone: "+39 000 1111111", address: savedAddress },
+      },
+      items: [item("riga-1", "110-riga-1"), item("riga-2", null)],
+    });
+    expect(JSON.stringify(complete)).not.toContain("NON-ESPORRE");
+
+    // Campi facoltativi assenti: nulli, senza errori; marketplace diversi non ne scelgono uno.
+    const minimal = {
+      orderId: "minimo",
+      creationDate: "2026-09-20T10:00:00Z",
+      lastModifiedDate: "2026-09-20T10:00:00Z",
+      pricingSummary: { total: { value: "12.5", currency: "EUR" } },
+    };
+    expect(fulfillmentObservation(minimal)).toMatchObject({
+      marketplaceId: null,
+      paymentStatus: null,
+      cancelStatus: null,
+      buyer: {
+        username: null,
+        name: null,
+        email: null,
+        phone: null,
+        billingAddress: null,
+        shipTo: null,
+      },
+      items: [],
+      total: { minor: 1250, currency: "EUR" },
+    });
+    expect(
+      fulfillmentObservation({
+        ...minimal,
+        buyer: { buyerRegistrationAddress: {} },
+        fulfillmentStartInstructions: [{ shippingStep: { shipTo: {} } }],
+        lineItems: [
+          line("a", "1", "EBAY_IT"),
+          { ...line("b", "2", "EBAY_DE"), lineItemCost: undefined },
+        ],
+      }),
+    ).toMatchObject({
+      marketplaceId: null,
+      buyer: { phone: null, shipTo: { name: null, phone: null, address: null } },
+      items: [{ total: { minor: 1000 } }, { total: null }],
+    });
+    expect(
+      fulfillmentObservation({ ...minimal, fulfillmentStartInstructions: [{}] }).buyer.shipTo,
+    ).toBeNull();
+    expect(
+      fulfillmentObservation({ ...minimal, fulfillmentStartInstructions: [] }).buyer.shipTo,
+    ).toBeNull();
     expect(() =>
-      orderSummarySchema.parse({ lineItems: [{ lineItemId: "riga", title: {}, quantity: 0 }] }),
-    ).toThrow();
+      fulfillmentObservation({
+        ...minimal,
+        pricingSummary: { total: { value: "12.345", currency: "EUR" } },
+      }),
+    ).toThrow("inexact_amount");
+    expect(() => fulfillmentObservation({ ...minimal, orderId: "" })).toThrow();
   });
 
   it("mappa la fonte fiscale Trading senza inventare il Paese emittente", () => {
@@ -508,6 +653,630 @@ describe("percorso ordini", () => {
   });
 });
 
+describe("modello ordini", () => {
+  const grantedAt = "2026-09-01T00:00:00.000Z";
+  const target = (storeId = "s-a", observedAt = now) => ({
+    storeId,
+    consentGrantedAt: grantedAt,
+    observedAt,
+  });
+  const line = (stableKey: string | null, lineItemId = `riga-${stableKey}`) => ({
+    lineItemId,
+    stableKey,
+    title: `Articolo ${stableKey}`,
+    quantity: 1,
+    total: { minor: 1250, currency: "EUR" },
+  });
+  const observation = (overrides: Partial<OrderObservation> = {}): OrderObservation => ({
+    source: "fulfillment",
+    externalOrderId: "D-1",
+    provisional: false,
+    creationTime: "2026-09-10T10:00:00Z",
+    lastModifiedTime: "2026-09-10T11:00:00Z",
+    total: { minor: 2500, currency: "EUR" },
+    paymentStatus: "PAID",
+    buyer: { username: "acquirente", name: "Mario Rossi" },
+    items: [line("k1"), line("k2")],
+    ...overrides,
+  });
+  const provisional = (overrides: Partial<OrderObservation> = {}) =>
+    observation({
+      source: "trading",
+      externalOrderId: "P-1",
+      provisional: true,
+      lastModifiedTime: "2026-09-10T10:30:00Z",
+      paymentStatus: "PENDING",
+      items: [line("k1", "t-1"), line("k2", "t-2")],
+      ...overrides,
+    });
+  const orders = (storeId = "s-a") =>
+    env.DB.prepare(
+      `SELECT id, ebay_order_id, is_provisional, payment_status, buyer_json
+         FROM orders WHERE store_id = ? ORDER BY ebay_order_id`,
+    )
+      .bind(storeId)
+      .all()
+      .then(({ results }) => results);
+
+  beforeEach(async () => {
+    await env.DB.prepare("DELETE FROM ebay_store_pauses").run();
+    await seed();
+    await env.DB.prepare("DELETE FROM orders").run();
+    await env.DB.prepare(
+      `INSERT INTO ebay_store_credentials
+         (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
+       VALUES ('s-a', 'a', ?1, 'r', ?1, ?2), ('s-b', 'a', ?1, 'r', ?1, ?2)`,
+    )
+      .bind(now, grantedAt)
+      .run();
+  });
+
+  it("importa ordini multi-articolo in modo idempotente, senza versioni per la sola data", async () => {
+    const created = await recordOrderObservation(env.DB, target(), observation());
+    expect(created).toMatchObject({ outcome: "created", taxChanges: 0, issue: null });
+    const items = () =>
+      env.DB.prepare(
+        "SELECT id, line_item_id, total_minor, currency FROM order_items ORDER BY line_item_id",
+      )
+        .all()
+        .then(({ results }) => results);
+    const firstItems = await items();
+    expect(firstItems).toHaveLength(2);
+
+    expect(await recordOrderObservation(env.DB, target(), observation())).toEqual({
+      outcome: "unchanged",
+      orderId: (created as { orderId: string }).orderId,
+      taxChanges: 0,
+      issue: null,
+    });
+    const touched = observation({ lastModifiedTime: "2026-09-10T12:00:00Z" });
+    expect((await recordOrderObservation(env.DB, target(), touched)).outcome).toBe("unchanged");
+    expect(await items()).toEqual(firstItems);
+
+    // Una sola riga modificata, poi il solo ordine, poi un cambiamento con la stessa data.
+    const quantity = [{ ...line("k1"), quantity: 2 }, line("k2")];
+    for (const [lastModifiedTime, paymentStatus] of [
+      ["2026-09-10T12:30:00Z", "PAID"],
+      ["2026-09-10T12:45:00Z", "PENDING"],
+      ["2026-09-10T12:45:00Z", "PAID"],
+    ] as const) {
+      expect(
+        await recordOrderObservation(
+          env.DB,
+          target(),
+          observation({ lastModifiedTime, paymentStatus, items: quantity }),
+        ),
+      ).toMatchObject({ outcome: "updated" });
+    }
+    expect(
+      await env.DB.prepare("SELECT id, quantity FROM order_items ORDER BY line_item_id")
+        .all()
+        .then(({ results }) => results),
+    ).toEqual([
+      { id: firstItems[0]!.id, quantity: 2 },
+      { id: firstItems[1]!.id, quantity: 1 },
+    ]);
+
+    const changed = observation({
+      lastModifiedTime: "2026-09-10T13:00:00Z",
+      paymentStatus: "PAID",
+      items: [line("k1")],
+    });
+    expect((await recordOrderObservation(env.DB, target(), changed)).outcome).toBe("updated");
+    expect(await items()).toEqual([firstItems[0]]);
+    expect(await orders()).toMatchObject([{ ebay_order_id: "D-1", payment_status: "PAID" }]);
+  });
+
+  it("scarta la lettura tardiva della stessa fonte prima di scrivere", async () => {
+    await recordOrderObservation(env.DB, target(), observation());
+    const late = observation({
+      lastModifiedTime: "2026-09-10T10:59:59Z",
+      paymentStatus: "PENDING",
+    });
+    expect(await recordOrderObservation(env.DB, target(), late)).toEqual({ outcome: "stale" });
+    expect(await orders()).toMatchObject([{ payment_status: "PAID" }]);
+  });
+
+  it("conserva lo snapshot dell'acquirente di ogni ordine", async () => {
+    await recordOrderObservation(env.DB, target(), observation());
+    await recordOrderObservation(
+      env.DB,
+      target(),
+      observation({
+        externalOrderId: "D-2",
+        buyer: { username: "acquirente", name: "Mario Rossi Bianchi" },
+        items: [line("k9")],
+      }),
+    );
+    const [first, second] = await orders();
+    expect(JSON.parse(first!.buyer_json as string)).toMatchObject({ name: "Mario Rossi" });
+    expect(JSON.parse(second!.buyer_json as string)).toMatchObject({ name: "Mario Rossi Bianchi" });
+  });
+
+  it("il definitivo eredita UUID e sblocco del provvisorio con le stesse righe", async () => {
+    // La data Trading del provvisorio può essere successiva a quella Fulfillment del definitivo.
+    const draft = await recordOrderObservation(
+      env.DB,
+      target(),
+      provisional({
+        lastModifiedTime: "2026-09-10T11:30:00Z",
+        taxIdentifiers: {
+          source: "ebay_trading_get_orders",
+          complete: false,
+          values: [{ type: "CODICE_FISCALE", issuingCountry: null, value: "RSSMRA80A01H501U" }],
+        },
+      }),
+    );
+    expect(draft).toMatchObject({ outcome: "created", taxChanges: 1 });
+    const orderId = (draft as { orderId: string }).orderId;
+    const itemRows = () =>
+      env.DB.prepare("SELECT id, line_item_id, stable_key FROM order_items ORDER BY stable_key")
+        .all<{ id: string }>()
+        .then(({ results }) => results);
+    const draftItems = await itemRows();
+    await env.DB.prepare(
+      `INSERT INTO order_grants (id, workspace_id, order_id, source, granted_at)
+       VALUES ('g-1', 'w-a', ?, 'admin', ?)`,
+    )
+      .bind(orderId, now)
+      .run();
+
+    expect(await recordOrderObservation(env.DB, target(), observation())).toMatchObject({
+      outcome: "updated",
+      orderId,
+    });
+    expect(await orders()).toMatchObject([
+      { id: orderId, ebay_order_id: "D-1", is_provisional: 0, payment_status: "PAID" },
+    ]);
+    // Le righe restano le stesse, con gli ID riga del definitivo.
+    expect(await itemRows()).toEqual([
+      { id: draftItems[0]!.id, line_item_id: "riga-k1", stable_key: "k1" },
+      { id: draftItems[1]!.id, line_item_id: "riga-k2", stable_key: "k2" },
+    ]);
+    expect(
+      await env.DB.prepare("SELECT order_id FROM order_grants")
+        .all()
+        .then(({ results }) => results),
+    ).toEqual([{ order_id: orderId }]);
+    const visible = await listVisibleOrders(env.DB, "u-a");
+    expect(visible.map(({ id, fiscalState }) => [id, fiscalState])).toEqual([
+      [orderId, "available"],
+    ]);
+  });
+
+  it("aggancia al definitivo il provvisorio arrivato dopo, senza sovrascriverlo", async () => {
+    const definitive = await recordOrderObservation(env.DB, target(), observation());
+    const orderId = (definitive as { orderId: string }).orderId;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      expect(await recordOrderObservation(env.DB, target(), provisional())).toMatchObject({
+        outcome: "unchanged",
+        orderId,
+      });
+    }
+    // Trading non sovrascrive un ordine letto da Fulfillment, anche con una data successiva.
+    const tradingCopy = observation({
+      source: "trading",
+      lastModifiedTime: "2026-09-10T12:00:00Z",
+      paymentStatus: "PENDING",
+      items: [line("k1", "t-1"), line("k2", "t-2")],
+    });
+    expect(await recordOrderObservation(env.DB, target(), tradingCopy)).toMatchObject({
+      outcome: "unchanged",
+      orderId,
+    });
+    // Anche un ID riemesso con una lettura più vecchia aggancia soltanto il riferimento.
+    const reissued = observation({
+      externalOrderId: "D-0",
+      lastModifiedTime: "2026-09-10T10:45:00Z",
+      paymentStatus: "PENDING",
+      items: [line("k1", "vecchia-1"), line("k2", "vecchia-2")],
+    });
+    expect(await recordOrderObservation(env.DB, target(), reissued)).toMatchObject({
+      outcome: "unchanged",
+      orderId,
+    });
+    expect(await orders()).toMatchObject([
+      { id: orderId, ebay_order_id: "D-1", is_provisional: 0, payment_status: "PAID" },
+    ]);
+    expect(
+      await env.DB.prepare(
+        "SELECT source, external_order_id FROM order_source_refs ORDER BY source, external_order_id",
+      )
+        .all()
+        .then(({ results }) => results),
+    ).toEqual([
+      { source: "fulfillment", external_order_id: "D-0" },
+      { source: "fulfillment", external_order_id: "D-1" },
+      { source: "trading", external_order_id: "D-1" },
+      { source: "trading", external_order_id: "P-1" },
+    ]);
+  });
+
+  it("non riconcilia righe di negozi diversi", async () => {
+    await recordOrderObservation(env.DB, target(), observation());
+    const other = await recordOrderObservation(env.DB, target("s-b"), provisional());
+    expect(other).toMatchObject({ outcome: "created", issue: null });
+    expect(await orders("s-a")).toHaveLength(1);
+    expect(await orders("s-b")).toMatchObject([{ ebay_order_id: "P-1", is_provisional: 1 }]);
+    await expect(
+      env.DB.prepare(
+        `INSERT INTO order_reconciliation_issues (order_id, related_order_id, kind, detected_at)
+         SELECT a.id, b.id, 'partial_overlap', ?
+           FROM orders a, orders b WHERE a.store_id = 's-a' AND b.store_id = 's-b'`,
+      )
+        .bind(now)
+        .run(),
+    ).rejects.toThrow("reconciliation_across_stores");
+  });
+
+  it("rende esplicite sovrapposizioni parziali, identità mancanti e più candidati", async () => {
+    await recordOrderObservation(env.DB, target(), observation());
+    const cases = [
+      ["X-1", [line("k2"), line("k3")], "partial_overlap"],
+      ["Y-1", [line("k4"), line(null, "senza-identita")], null],
+      ["Y-2", [line("k4"), line("k5")], "missing_line_identity"],
+      ["Z-1", [line("k1"), line("k3")], "multiple_candidates"],
+    ] as const;
+    for (const [externalOrderId, items, issue] of cases) {
+      expect(
+        await recordOrderObservation(
+          env.DB,
+          target(),
+          observation({ externalOrderId, items: [...items] }),
+        ),
+      ).toMatchObject({ outcome: "created", issue });
+    }
+    expect(await orders()).toHaveLength(5);
+    expect(
+      await env.DB.prepare(
+        `SELECT o.ebay_order_id AS orderId, r.ebay_order_id AS relatedId, i.kind
+           FROM order_reconciliation_issues i
+           JOIN orders o ON o.id = i.order_id JOIN orders r ON r.id = i.related_order_id
+          ORDER BY orderId, relatedId`,
+      )
+        .all()
+        .then(({ results }) => results),
+    ).toEqual([
+      { orderId: "X-1", relatedId: "D-1", kind: "partial_overlap" },
+      { orderId: "Y-2", relatedId: "Y-1", kind: "missing_line_identity" },
+      { orderId: "Z-1", relatedId: "D-1", kind: "multiple_candidates" },
+      { orderId: "Z-1", relatedId: "X-1", kind: "multiple_candidates" },
+    ]);
+    // Un candidato identico insieme a un altro che condivide una riga resta ambiguo.
+    expect(
+      await recordOrderObservation(env.DB, target(), observation({ externalOrderId: "V-1" })),
+    ).toMatchObject({ outcome: "created", issue: "multiple_candidates" });
+    for (const [items, issue] of [
+      [[line("k1")], "partial_overlap"],
+      [[line("k1"), line(null, "senza")], "missing_line_identity"],
+    ] as const) {
+      await env.DB.prepare("DELETE FROM orders").run();
+      await recordOrderObservation(env.DB, target(), observation());
+      expect(
+        await recordOrderObservation(
+          env.DB,
+          target(),
+          observation({ externalOrderId: "W-1", items: [...items] }),
+        ),
+      ).toMatchObject({ outcome: "created", issue });
+    }
+    await env.DB.prepare("DELETE FROM orders").run();
+    await recordOrderObservation(env.DB, target(), observation());
+    await recordOrderObservation(
+      env.DB,
+      target(),
+      observation({ externalOrderId: "X-1", items: [line("k2"), line("k3")] }),
+    );
+    // La stessa lettura ripetuta riconosce l'ordine già creato e non duplica l'anomalia.
+    expect(
+      await recordOrderObservation(
+        env.DB,
+        target(),
+        observation({ externalOrderId: "X-1", items: [line("k2"), line("k3")] }),
+      ),
+    ).toMatchObject({ outcome: "unchanged", issue: null });
+  });
+
+  it("conserva ogni variazione fiscale effettiva e mostra solo il dato corrente", async () => {
+    const tax = (complete: boolean, ...values: string[]) =>
+      observation({
+        taxIdentifiers: {
+          source: "ebay_trading_get_orders",
+          complete,
+          values: values.map((value) => ({
+            type: "CODICE_FISCALE",
+            issuingCountry: "IT",
+            value,
+          })),
+        },
+      });
+    const changes = async (input: OrderObservation, observedAt: string) =>
+      (
+        (await recordOrderObservation(env.DB, target("s-a", observedAt), input)) as {
+          taxChanges: number;
+        }
+      ).taxChanges;
+    expect(
+      await changes(tax(true, "RSSMRA80A01H501U", "RSSMRA80A01H501U"), "2026-09-11T00:00:00.000Z"),
+    ).toBe(1);
+    expect(await changes(tax(true, "RSSMRA80A01H501U"), "2026-09-12T00:00:00.000Z")).toBe(0);
+    expect(await changes(tax(true, "BNCLGU80A01H501Z"), "2026-09-13T00:00:00.000Z")).toBe(2);
+    // Una lettura che non prova l'assenza non chiude il valore corrente.
+    expect(await changes(tax(false), "2026-09-14T00:00:00.000Z")).toBe(0);
+    expect(await changes(tax(true, "RSSMRA80A01H501U"), "2026-09-15T00:00:00.000Z")).toBe(2);
+    expect(
+      await env.DB.prepare(
+        "SELECT value, observed_at, removed_at FROM tax_identifiers ORDER BY observed_at",
+      )
+        .all()
+        .then(({ results }) => results),
+    ).toEqual([
+      {
+        value: "RSSMRA80A01H501U",
+        observed_at: "2026-09-11T00:00:00.000Z",
+        removed_at: "2026-09-13T00:00:00.000Z",
+      },
+      {
+        value: "BNCLGU80A01H501Z",
+        observed_at: "2026-09-13T00:00:00.000Z",
+        removed_at: "2026-09-15T00:00:00.000Z",
+      },
+      { value: "RSSMRA80A01H501U", observed_at: "2026-09-15T00:00:00.000Z", removed_at: null },
+    ]);
+    const [order] = await orders();
+    await env.DB.prepare(
+      `INSERT INTO order_grants (id, workspace_id, order_id, source, granted_at)
+       VALUES ('g-1', 'w-a', ?, 'admin', ?)`,
+    )
+      .bind(order!.id, now)
+      .run();
+    expect((await listVisibleOrders(env.DB, "u-a"))[0]?.taxIdentifiers).toMatchObject([
+      { value: "RSSMRA80A01H501U", observedAt: "2026-09-15T00:00:00.000Z" },
+    ]);
+  });
+
+  it("non scrive con un consenso diverso o con il negozio in pausa", async () => {
+    expect(
+      await recordOrderObservation(
+        env.DB,
+        { ...target(), consentGrantedAt: "2026-08-01T00:00:00.000Z" },
+        observation(),
+      ),
+    ).toEqual({ outcome: "not_writable" });
+    await env.DB.prepare(
+      "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-a', 'manual', ?)",
+    )
+      .bind(now)
+      .run();
+    expect(await recordOrderObservation(env.DB, target(), observation())).toEqual({
+      outcome: "not_writable",
+    });
+    expect(await orders()).toEqual([]);
+    // Anche un ordine già salvato non cambia dopo la pausa.
+    await env.DB.prepare("DELETE FROM ebay_store_pauses").run();
+    await recordOrderObservation(env.DB, target(), observation());
+    await env.DB.prepare(
+      "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-a', 'manual', ?)",
+    )
+      .bind(now)
+      .run();
+    const later = observation({
+      lastModifiedTime: "2026-09-10T12:00:00Z",
+      paymentStatus: "PENDING",
+    });
+    expect(await recordOrderObservation(env.DB, target(), later)).toEqual({
+      outcome: "not_writable",
+    });
+    expect(await orders()).toMatchObject([{ payment_status: "PAID" }]);
+  });
+
+  it("attribuisce i campi alla fonte proprietaria dell'ordine", async () => {
+    const trading = (overrides: Partial<OrderObservation>) =>
+      observation({ source: "trading", externalOrderId: "T-1", ...overrides });
+    const steps = [
+      // Un ordine letto solo da Trading segue le letture Trading più recenti.
+      [trading({ paymentStatus: "PENDING" }), "created", "T-1", "PENDING"],
+      [trading({ lastModifiedTime: "2026-09-10T12:00:00Z" }), "updated", "T-1", "PAID"],
+      // Un provvisorio non sostituisce il definitivo, neppure se più recente.
+      [
+        provisional({ externalOrderId: "P-9", lastModifiedTime: "2026-09-10T13:00:00Z" }),
+        "unchanged",
+        "T-1",
+        "PAID",
+      ],
+      // Un altro ID Trading più vecchio aggancia soltanto il riferimento.
+      [
+        trading({
+          externalOrderId: "T-0",
+          lastModifiedTime: "2026-09-10T10:00:00Z",
+          paymentStatus: "PENDING",
+          items: [line("k1", "vecchia-1"), line("k2", "vecchia-2")],
+        }),
+        "unchanged",
+        "T-1",
+        "PAID",
+      ],
+      // Fulfillment subentra anche con una data precedente.
+      [
+        observation({ lastModifiedTime: "2026-09-10T09:00:00Z", paymentStatus: "PENDING" }),
+        "updated",
+        "D-1",
+        "PENDING",
+      ],
+    ] as const;
+    for (const [input, outcome, ebayOrderId, paymentStatus] of steps) {
+      expect(await recordOrderObservation(env.DB, target(), input)).toMatchObject({ outcome });
+      expect(await orders()).toMatchObject([
+        { ebay_order_id: ebayOrderId, payment_status: paymentStatus },
+      ]);
+    }
+  });
+
+  it("riconosce le righe salvate senza identità e non abbina due righe alla stessa", async () => {
+    const created = await recordOrderObservation(
+      env.DB,
+      target(),
+      observation({ items: [line(null, "r1")] }),
+    );
+    const [saved] = await env.DB.prepare("SELECT id FROM order_items")
+      .all<{ id: string }>()
+      .then(({ results }) => results);
+    expect(
+      await recordOrderObservation(
+        env.DB,
+        target(),
+        observation({ lastModifiedTime: "2026-09-10T12:00:00Z", items: [line("k1", "r1")] }),
+      ),
+    ).toMatchObject({ outcome: "updated", orderId: (created as { orderId: string }).orderId });
+    expect(
+      await recordOrderObservation(
+        env.DB,
+        target(),
+        observation({
+          lastModifiedTime: "2026-09-10T13:00:00Z",
+          items: [line("k1", "r2"), line(null, "r1")],
+        }),
+      ),
+    ).toMatchObject({ outcome: "updated" });
+    const { results: rows } = await env.DB.prepare(
+      "SELECT id, line_item_id, stable_key FROM order_items ORDER BY line_item_id",
+    ).all<{ id: string; line_item_id: string; stable_key: string | null }>();
+    expect(rows.map(({ line_item_id, stable_key }) => [line_item_id, stable_key])).toEqual([
+      ["r1", null],
+      ["r2", "k1"],
+    ]);
+    expect(rows[1]!.id).toBe(saved!.id);
+    expect(rows[0]!.id).not.toBe(saved!.id);
+
+    // Rilette in ordine inverso, con e senza identità, le righe restano le stesse.
+    const reversed = observation({
+      lastModifiedTime: "2026-09-10T14:00:00Z",
+      items: [line(null, "r1"), line("k1", "r2")],
+    });
+    expect(await recordOrderObservation(env.DB, target(), reversed)).toMatchObject({
+      outcome: "unchanged",
+    });
+    await recordOrderObservation(
+      env.DB,
+      target(),
+      observation({
+        lastModifiedTime: "2026-09-10T15:00:00Z",
+        items: [line("k1", "r2"), line("k2", "r3"), line(null, "r1"), line(null, "r4")],
+      }),
+    );
+    const before = await env.DB.prepare("SELECT id, line_item_id FROM order_items ORDER BY id")
+      .all()
+      .then(({ results }) => results);
+    expect(
+      await recordOrderObservation(
+        env.DB,
+        target(),
+        observation({
+          lastModifiedTime: "2026-09-10T16:00:00Z",
+          items: [line(null, "r4"), line("k2", "r3"), line(null, "r1"), line("k1", "r2")],
+        }),
+      ),
+    ).toMatchObject({ outcome: "unchanged" });
+    expect(
+      await env.DB.prepare("SELECT id, line_item_id FROM order_items ORDER BY id")
+        .all()
+        .then(({ results }) => results),
+    ).toEqual(before);
+  });
+
+  it("valida l'osservazione e salva lo snapshot con tutti i campi", async () => {
+    for (const invalid of [
+      observation({ total: { minor: 1, currency: "EURO" } }),
+      observation({ items: [line("k1", "stessa"), line("k2", "stessa")] }),
+      observation({ items: [line("k1", "a"), line("k1", "b")] }),
+    ]) {
+      await expect(recordOrderObservation(env.DB, target(), invalid)).rejects.toThrow();
+    }
+    const address = {
+      addressLine1: "Via Roma 1",
+      addressLine2: null,
+      city: "Trento",
+      postalCode: "38122",
+      stateOrProvince: "TN",
+      countryCode: "IT",
+    };
+    await recordOrderObservation(
+      env.DB,
+      target(),
+      observation({
+        buyer: {
+          username: "acquirente",
+          name: "Mario Rossi",
+          email: "a@example.invalid",
+          phone: "+39 1",
+          billingAddress: { ...address, extra: "NON-ESPORRE" } as typeof address,
+          shipTo: { name: "Anna", address },
+        },
+        // Righe senza identità possono essere più d'una.
+        items: [line(null, "a"), line(null, "b")],
+        taxIdentifiers: {
+          source: "ebay_fulfillment",
+          complete: true,
+          values: [{ type: "VAT_ID", issuingCountry: null, value: "01234567890" }],
+        },
+      }),
+    );
+    expect((await orders())[0]!.buyer_json).toBe(
+      JSON.stringify({
+        username: "acquirente",
+        name: "Mario Rossi",
+        email: "a@example.invalid",
+        phone: "+39 1",
+        billingAddress: address,
+        shipTo: { name: "Anna", phone: null, address },
+      }),
+    );
+    // La stessa lettura completa con Paese nullo non chiude il valore.
+    expect(
+      await recordOrderObservation(
+        env.DB,
+        target(),
+        observation({
+          buyer: { username: "acquirente" },
+          items: [line(null, "a"), line(null, "b")],
+          taxIdentifiers: {
+            source: "ebay_fulfillment",
+            complete: true,
+            values: [{ type: "VAT_ID", issuingCountry: null, value: "01234567890" }],
+          },
+        }),
+      ),
+    ).toMatchObject({ outcome: "updated", taxChanges: 0 });
+    expect(
+      await env.DB.prepare("SELECT source, removed_at FROM tax_identifiers")
+        .all()
+        .then(({ results }) => results),
+    ).toEqual([{ source: "ebay_fulfillment", removed_at: null }]);
+    expect((await orders())[0]!.buyer_json).toBe(
+      JSON.stringify({
+        username: "acquirente",
+        name: null,
+        email: null,
+        phone: null,
+        billingAddress: null,
+        shipTo: null,
+      }),
+    );
+  });
+
+  it("limita la pagina degli ordini visibili", async () => {
+    await recordOrderObservation(env.DB, target(), observation());
+    await recordOrderObservation(
+      env.DB,
+      target(),
+      observation({ externalOrderId: "D-2", items: [line("k9")] }),
+    );
+    expect(await listVisibleOrders(env.DB, "u-a")).toHaveLength(2);
+    expect(await listVisibleOrders(env.DB, "u-a", 1)).toHaveLength(1);
+    expect(await listVisibleOrders(env.DB, "u-a", 0)).toHaveLength(1);
+  });
+});
+
 const syntheticOrderId = "12-00000-00001";
 const syntheticTradingXml = `<?xml version="1.0" encoding="UTF-8"?>
 <GetOrdersResponse xmlns="urn:ebay:apis:eBLBaseComponents">
@@ -525,7 +1294,15 @@ const syntheticTradingXml = `<?xml version="1.0" encoding="UTF-8"?>
 </GetOrdersResponse>`;
 
 function syntheticEbay(
-  options: { username?: string; trading?: () => Response; token?: () => Response } = {},
+  options: {
+    username?: string;
+    trading?: () => Response;
+    token?: () => Response;
+    orderId?: string;
+    orders?: unknown[];
+    ordersPayload?: unknown;
+    userId?: string;
+  } = {},
 ) {
   return vi.fn<typeof fetch>(async (input) => {
     const url = String(input);
@@ -540,15 +1317,17 @@ function syntheticEbay(
     }
     if (url.includes("/commerce/identity/v1/user/")) {
       return Response.json({
-        userId: "ebay-user-sintetico",
+        userId: options.userId ?? "ebay-user-sintetico",
         username: options.username ?? "venditore",
       });
     }
     if (url.includes("/sell/fulfillment/v1/order")) {
+      if (options.ordersPayload) return Response.json(options.ordersPayload);
+      if (options.orders) return Response.json({ orders: options.orders, total: 0 });
       return Response.json({
         orders: [
           {
-            orderId: syntheticOrderId,
+            orderId: options.orderId ?? syntheticOrderId,
             creationDate: "2026-09-20T10:00:00.000Z",
             lastModifiedDate: "2026-09-20T11:00:00.000Z",
             pricingSummary: { total: { value: "12.5", currency: "EUR" } },
@@ -1151,11 +1930,17 @@ describe("collegamento negozio eBay", () => {
       );
     }
     const { results: stores } = await env.DB.prepare(
-      "SELECT id, ebay_environment, ebay_account_id FROM ebay_stores ORDER BY ebay_environment",
-    ).all<{ id: string; ebay_environment: "production" | "sandbox"; ebay_account_id: string }>();
-    expect(stores.map((s) => [s.ebay_environment, s.ebay_account_id])).toEqual([
-      ["production", "ebay-user-sintetico"],
-      ["sandbox", "ebay-user-sintetico"],
+      `SELECT id, ebay_environment, ebay_account_id, ebay_user_id
+         FROM ebay_stores ORDER BY ebay_environment`,
+    ).all<{
+      id: string;
+      ebay_environment: "production" | "sandbox";
+      ebay_account_id: string;
+      ebay_user_id: string;
+    }>();
+    expect(stores.map((s) => [s.ebay_environment, s.ebay_account_id, s.ebay_user_id])).toEqual([
+      ["production", "ebay-user-sintetico", "ebay-user-sintetico"],
+      ["sandbox", "ebay-user-sintetico", '["sandbox","ebay-user-sintetico"]'],
     ]);
     expect((await env.DB.prepare("SELECT id FROM orders").all()).results).toHaveLength(2);
     const visible = await listVisibleOrders(env.DB, seller.userId);
@@ -1287,14 +2072,19 @@ describe("collegamento negozio eBay", () => {
       }),
     } as Parameters<typeof loadHome>[0]);
     expect(home.notice).toEqual({ text: "Negozio eBay collegato.", tone: "success" });
-    expect(home.orders[0]).toMatchObject({
-      storeName: "venditore",
-      fiscalState: "locked",
-      summary: {
-        buyer: { username: "acquirente-sintetico" },
-        orderPaymentStatus: "PAID",
-        lineItems: [{ title: "Articolo sintetico", quantity: 2 }],
-      },
+    expect(home.orders[0]).toMatchObject({ storeName: "venditore", fiscalState: "locked" });
+    expect(home.orders[0]?.summary).toEqual({
+      buyer: { username: "acquirente-sintetico" },
+      orderPaymentStatus: "PAID",
+      orderFulfillmentStatus: "NOT_STARTED",
+      lineItems: [
+        {
+          lineItemId: "riga-sintetica",
+          title: "Articolo sintetico",
+          quantity: 2,
+          sku: "SKU-SINTETICO",
+        },
+      ],
     });
     expect(JSON.stringify(home.orders)).not.toContain("NON-ESPORRE");
     expect(
@@ -1321,6 +2111,169 @@ describe("collegamento negozio eBay", () => {
       "http://localhost:5173/app/ordini?negozio=errore",
     );
     expect(ebay).toHaveBeenCalledTimes(4);
+  });
+
+  it("invia a eBay soltanto le richieste previste, con sessione di collegamento a scadenza", async () => {
+    const { userId, cookie } = await verifiedSession("richieste@example.invalid");
+    const started = new Date();
+    const at = (offset: number) => new Date(started.getTime() + offset).toISOString();
+    await env.DB.prepare(
+      `INSERT INTO ebay_store_link_sessions (state, user_id, code_verifier, expires_at)
+       VALUES ('scaduta', ?1, 'v', ?2), ('al-limite', ?1, 'v', ?3), ('valida', ?1, 'v', ?4)`,
+    )
+      .bind(userId, at(-60 * 60 * 1000), at(0), at(1000))
+      .run();
+    const authorize = new URL(await beginLink(env, userId, started));
+    const state = authorize.searchParams.get("state")!;
+    expect(state).toMatch(/^it_/u);
+    expect(authorize.searchParams.get("response_type")).toBe("code");
+    const { results: sessions } = await env.DB.prepare(
+      "SELECT state, expires_at FROM ebay_store_link_sessions ORDER BY expires_at",
+    ).all<{ state: string; expires_at: string }>();
+    expect(sessions).toEqual([
+      { state: "valida", expires_at: at(1000) },
+      { state, expires_at: at(10 * 60 * 1000) },
+    ]);
+    // Al limite esatto della scadenza la sessione non vale più.
+    expect(await claimStoreLinkSession(env.DB, "valida", new Date(at(1000)))).toMatchObject({
+      kind: "new",
+      expired: true,
+    });
+
+    const ebay = syntheticEbay({ orderId: "12-<0>&1" });
+    await handleAuthRequest(
+      storeCallback(`state=${state}&code=codice-sintetico`, cookie),
+      env,
+      ebay,
+    );
+    const requests = ebay.mock.calls.map(([url, init]) => ({
+      url: String(url),
+      method: init?.method ?? "GET",
+      headers: init?.headers,
+      body: init?.body === undefined ? undefined : String(init.body),
+    }));
+    const codeVerifier = new URLSearchParams(requests[0]!.body).get("code_verifier");
+    expect(codeVerifier).toMatch(/^[\w-]{43}$/u);
+    expect(requests).toEqual([
+      {
+        url: "https://api.ebay.com/identity/v1/oauth2/token",
+        method: "POST",
+        headers: {
+          authorization: `Basic ${btoa(`${env.EBAY_CLIENT_ID}:${env.EBAY_CLIENT_SECRET}`)}`,
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code: "codice-sintetico",
+          redirect_uri: env.EBAY_RUNAME,
+          code_verifier: codeVerifier!,
+        }).toString(),
+      },
+      {
+        url: expect.stringContaining("/commerce/identity/v1/user/"),
+        method: "GET",
+        headers: { authorization: "Bearer token-sintetico" },
+        body: undefined,
+      },
+      {
+        url: "https://api.ebay.com/sell/fulfillment/v1/order?limit=1",
+        method: "GET",
+        headers: { authorization: "Bearer token-sintetico" },
+        body: undefined,
+      },
+      {
+        url: "https://api.ebay.com/ws/api.dll",
+        method: "POST",
+        headers: {
+          "content-type": "text/xml;charset=UTF-8",
+          "x-ebay-api-call-name": "GetOrders",
+          "x-ebay-api-siteid": "101",
+          "x-ebay-api-compatibility-level": "1455",
+          "x-ebay-api-iaf-token": "token-sintetico",
+        },
+        body:
+          '<?xml version="1.0" encoding="utf-8"?>' +
+          '<GetOrdersRequest xmlns="urn:ebay:apis:eBLBaseComponents">' +
+          "<Version>1455</Version><DetailLevel>ReturnAll</DetailLevel>" +
+          "<OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>" +
+          "<OrderIDArray><OrderID>12-01</OrderID></OrderIDArray>" +
+          "</GetOrdersRequest>",
+      },
+    ]);
+  });
+
+  it("registra la sincronizzazione anche senza ordini da importare", async () => {
+    // Una pagina vuota o senza `orders` non ha ordini e non è un errore.
+    for (const [index, provider] of [
+      syntheticEbay({ orders: [] }),
+      syntheticEbay({ ordersPayload: { total: 0 } }),
+    ].entries()) {
+      const { cookie } = await verifiedSession(`senza-ordini-${index}@example.invalid`);
+      await env.DB.prepare("DELETE FROM ebay_stores").run();
+      const state = (await beginStoreLink(cookie)).searchParams.get("state");
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        await handleAuthRequest(storeCallback(`state=${state}&code=codice`, cookie), env, provider);
+        expect(log).not.toHaveBeenCalled();
+      } finally {
+        log.mockRestore();
+      }
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) AS total FROM sync_state WHERE last_success_at IS NOT NULL",
+        ).first(),
+      ).toEqual({ total: 1 });
+    }
+  });
+
+  it("non collega il negozio con token o identità eBay non validi", async () => {
+    const incomplete = () => Response.json({ access_token: "token-sintetico", expires_in: 7200 });
+    for (const [index, provider] of [
+      syntheticEbay({ token: incomplete }),
+      syntheticEbay({ userId: "x".repeat(257) }),
+    ].entries()) {
+      const { cookie } = await verifiedSession(`risposta-invalida-${index}@example.invalid`);
+      const state = (await beginStoreLink(cookie)).searchParams.get("state");
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const callback = await handleAuthRequest(
+          storeCallback(`state=${state}&code=codice`, cookie),
+          env,
+          provider,
+        );
+        expect(callback.headers.get("location")).toBe(
+          "http://localhost:5173/app/ordini?negozio=errore",
+        );
+      } finally {
+        log.mockRestore();
+      }
+      expect(await env.DB.prepare("SELECT COUNT(*) AS total FROM ebay_stores").first()).toEqual({
+        total: 0,
+      });
+    }
+  });
+
+  it("non considera rimosso l'identificativo assente da una nuova lettura Trading", async () => {
+    const { cookie } = await verifiedSession("rilettura@example.invalid");
+    const first = (await beginStoreLink(cookie)).searchParams.get("state");
+    await handleAuthRequest(storeCallback(`state=${first}&code=uno`, cookie), env, syntheticEbay());
+    const second = (await beginStoreLink(cookie)).searchParams.get("state");
+    await handleAuthRequest(
+      storeCallback(`state=${second}&code=due`, cookie),
+      env,
+      syntheticEbay({
+        trading: () =>
+          new Response(
+            '<GetOrdersResponse xmlns="urn:ebay:apis:eBLBaseComponents"><Ack>Success</Ack>' +
+              "<OrderArray></OrderArray></GetOrdersResponse>",
+          ),
+      }),
+    );
+    expect(
+      await env.DB.prepare("SELECT value, removed_at FROM tax_identifiers")
+        .all()
+        .then(({ results }) => results),
+    ).toEqual([{ value: "SYNTHETIC&ID", removed_at: null }]);
   });
 
   it("rifiuta lo state avviato da un altro utente e registra il rifiuto su eBay", async () => {

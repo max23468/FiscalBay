@@ -1,5 +1,12 @@
-import { orderSummarySchema } from "../integrations/ebay/fulfillment.server";
-import type { z } from "zod";
+import { buyerSnapshotSchema } from "./order-import.server";
+
+/** Stati originali della fonte e righe dell'ordine; null dove la fonte non li ha forniti. */
+export type OrderSummary = {
+  buyer: { username: string | null };
+  orderPaymentStatus: string | null;
+  orderFulfillmentStatus: string | null;
+  lineItems: Array<{ lineItemId: string; title: string; quantity: number; sku: string | null }>;
+};
 
 export type VisibleOrder = {
   id: string;
@@ -9,7 +16,7 @@ export type VisibleOrder = {
   currency: string;
   totalMinor: number;
   storeName: string;
-  summary: z.infer<typeof orderSummarySchema> | null;
+  summary: OrderSummary;
   fiscalState: "available" | "locked" | "unchecked";
   taxIdentifiers: Array<{
     type: string;
@@ -24,6 +31,24 @@ export type VisibleOrder = {
 const consultable = `NOT EXISTS (
   SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = s.id AND p.reason = 'plan'
 )`;
+
+function summaryOf(row: {
+  buyer_json: string | null;
+  payment_status: string | null;
+  fulfillment_status: string | null;
+  items_json: string;
+}): OrderSummary {
+  return {
+    buyer: {
+      username: row.buyer_json
+        ? buyerSnapshotSchema.parse(JSON.parse(row.buyer_json)).username
+        : null,
+    },
+    orderPaymentStatus: row.payment_status,
+    orderFulfillmentStatus: row.fulfillment_status,
+    lineItems: JSON.parse(row.items_json),
+  };
+}
 
 export async function listVisibleOrders(
   db: D1Database,
@@ -44,10 +69,14 @@ export async function listVisibleOrders(
           LIMIT ?
        )
        SELECT o.id, o.ebay_order_id, o.creation_time, o.last_modified_time,
-              o.currency, o.total_minor, o.summary_json,
+              o.currency, o.total_minor, o.buyer_json, o.payment_status, o.fulfillment_status,
+              (SELECT json_group_array(json_object('lineItemId', line_item_id, 'title', title,
+                        'quantity', quantity, 'sku', sku))
+                 FROM (SELECT * FROM order_items WHERE order_id = o.id ORDER BY rowid)) AS items_json,
               COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id) ||
                 CASE WHEN s.ebay_environment = 'sandbox' THEN ' (Sandbox)' ELSE '' END AS store_name,
-              EXISTS (SELECT 1 FROM tax_identifiers WHERE order_id = o.id) AS has_identifiers,
+              EXISTS (SELECT 1 FROM tax_identifiers
+                       WHERE order_id = o.id AND removed_at IS NULL) AS has_identifiers,
               g.id AS grant_id, ti.identifier_type,
               ti.issuing_country, ti.value, ti.source, ti.observed_at
          FROM visible_orders vo
@@ -56,7 +85,7 @@ export async function listVisibleOrders(
          LEFT JOIN order_grants g
            ON g.workspace_id = vo.workspace_id AND g.order_id = o.id
          LEFT JOIN tax_identifiers ti
-           ON ti.order_id = o.id AND g.id IS NOT NULL
+           ON ti.order_id = o.id AND ti.removed_at IS NULL AND g.id IS NOT NULL
         ORDER BY o.last_modified_time DESC, o.id DESC, ti.identifier_type`,
     )
     .bind(userId, ebayEnvironment, limit)
@@ -67,7 +96,10 @@ export async function listVisibleOrders(
       last_modified_time: string;
       currency: string;
       total_minor: number;
-      summary_json: string | null;
+      buyer_json: string | null;
+      payment_status: string | null;
+      fulfillment_status: string | null;
+      items_json: string;
       store_name: string;
       has_identifiers: number;
       grant_id: string | null;
@@ -88,17 +120,18 @@ export async function listVisibleOrders(
       currency: row.currency,
       totalMinor: row.total_minor,
       storeName: row.store_name,
-      summary: row.summary_json ? orderSummarySchema.parse(JSON.parse(row.summary_json)) : null,
+      summary: summaryOf(row),
       fiscalState: row.has_identifiers ? (row.grant_id ? "available" : "locked") : "unchecked",
       taxIdentifiers: [],
     };
-    if (row.identifier_type && row.value && row.source && row.observed_at) {
+    // Le colonne dell'identificativo sono tutte presenti o tutte assenti (join senza grant).
+    if (row.identifier_type !== null) {
       order.taxIdentifiers.push({
         type: row.identifier_type,
         issuingCountry: row.issuing_country,
-        value: row.value,
-        source: row.source,
-        observedAt: row.observed_at,
+        value: row.value!,
+        source: row.source!,
+        observedAt: row.observed_at!,
       });
     }
     orders.set(row.id, order);
@@ -128,7 +161,7 @@ export async function grantFreeOrder(
          JOIN free_cycles c ON c.workspace_id = wm.workspace_id
         WHERE wm.user_id = ? AND wm.workspace_id = ?
           AND o.id = ? AND c.id = ?
-          AND EXISTS (SELECT 1 FROM tax_identifiers WHERE order_id = o.id)
+          AND EXISTS (SELECT 1 FROM tax_identifiers WHERE order_id = o.id AND removed_at IS NULL)
           AND ${consultable}
        RETURNING id`,
     )

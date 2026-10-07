@@ -2,7 +2,8 @@ import { z } from "zod";
 import { logFailure } from "../../errors";
 import type { Language } from "../../i18n";
 import { upstreamJson, upstreamText } from "../http.server";
-import { orderSummarySchema } from "./fulfillment.server";
+import { recordOrderObservation, writableStore } from "../../domain/order-import.server";
+import { fulfillmentObservation } from "./fulfillment.server";
 import { base64Url, saveStoreCredentials } from "./seller-credentials.server";
 import { ebayConfiguration, type EbayEnvironment } from "./environment.server";
 
@@ -33,18 +34,7 @@ const identitySchema = z.looseObject({
   userId: z.string().min(1).max(256),
   username: z.string().min(1).max(256).optional(),
 });
-const orderSchema = z.looseObject({
-  orderId: z.string().min(1),
-  creationDate: z.string().datetime(),
-  lastModifiedDate: z.string().datetime(),
-  pricingSummary: z.looseObject({
-    total: z.looseObject({
-      value: z.string().regex(/^\d+(\.\d{1,2})?$/u),
-      currency: z.string().length(3),
-    }),
-  }),
-});
-const ordersPageSchema = z.looseObject({ orders: z.array(orderSchema).default([]) });
+const ordersPageSchema = z.looseObject({ orders: z.array(z.unknown()).default([]) });
 
 export type StoreLinkOutcome = "collegato" | "negato" | "altro-spazio" | "errore";
 export type StoreLinkClaim =
@@ -64,11 +54,6 @@ export type StoreLinkClaim =
 
 function randomToken(): string {
   return base64Url(crypto.getRandomValues(new Uint8Array(32)));
-}
-
-function toMinor(value: string): number {
-  const [units, decimals = ""] = value.split(".");
-  return Number(units) * 100 + Number(decimals.padEnd(2, "0"));
 }
 
 export async function startStoreLink(
@@ -310,12 +295,6 @@ async function linkStore(
   return store?.id ?? null;
 }
 
-// Le scritture dell'import valgono solo per il consenso con cui è partito: dopo uno
-// scollegamento, un'eliminazione dei dati, un nuovo consenso o una pausa non scrivono nulla.
-const sameConsent = `EXISTS (SELECT 1 FROM ebay_store_credentials
-   WHERE store_id = ?1 AND granted_at = ?2)
-  AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses WHERE store_id = ?1)`;
-
 /** Importa l'ordine più recente con la relativa fonte fiscale Trading. */
 async function importLatestOrder(input: {
   db: D1Database;
@@ -335,88 +314,59 @@ async function importLatestOrder(input: {
     db
       .prepare(
         `INSERT INTO sync_state (store_id, last_success_at, updated_at)
-         SELECT ?1, ?3, ?3 WHERE ${sameConsent}
+         SELECT ?1, ?3, ?3 WHERE ${writableStore}
          ON CONFLICT(store_id) DO UPDATE SET
            last_success_at = excluded.last_success_at,
            updated_at = excluded.updated_at`,
       )
       .bind(input.storeId, input.grantedAt, now)
       .run();
-  const order = page.orders[0];
-  if (!order) {
+  if (page.orders.length === 0) {
     await recordSync();
     return;
   }
 
-  // L'upsert dell'ordine e la lettura Trading sono indipendenti: partono insieme.
-  const [saved, tradingXml] = await Promise.all([
-    db
-      .prepare(
-        `INSERT INTO orders
-         (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor, summary_json)
-       SELECT ?3, ?1, ?4, ?5, ?6, ?7, ?8, ?9 WHERE ${sameConsent}
-       ON CONFLICT(store_id, ebay_order_id) DO UPDATE SET
-         last_modified_time = excluded.last_modified_time,
-         currency = excluded.currency,
-         total_minor = excluded.total_minor,
-         summary_json = excluded.summary_json
-       RETURNING id`,
-      )
-      .bind(
-        input.storeId,
-        input.grantedAt,
-        crypto.randomUUID(),
-        order.orderId,
-        order.creationDate,
-        order.lastModifiedDate,
-        order.pricingSummary.total.currency,
-        toMinor(order.pricingSummary.total.value),
-        JSON.stringify(orderSummarySchema.parse(order)),
-      )
-      .first<{ id: string }>(),
-    upstreamText(fetcher, input.configuration.tradingUrl, {
-      method: "POST",
-      headers: {
-        "content-type": "text/xml;charset=UTF-8",
-        "x-ebay-api-call-name": "GetOrders",
-        "x-ebay-api-siteid": tradingSiteId,
-        "x-ebay-api-compatibility-level": tradingApiVersion,
-        "x-ebay-api-iaf-token": input.accessToken,
-      },
-      body:
-        '<?xml version="1.0" encoding="utf-8"?>' +
-        '<GetOrdersRequest xmlns="urn:ebay:apis:eBLBaseComponents">' +
-        `<Version>${tradingApiVersion}</Version><DetailLevel>ReturnAll</DetailLevel>` +
-        "<OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>" +
-        `<OrderIDArray><OrderID>${order.orderId.replace(/[<>&]/gu, "")}</OrderID></OrderIDArray>` +
-        "</GetOrdersRequest>",
-    }),
-  ]);
-  const observations = mapTradingTaxIdentifiers(
-    parseTradingOrderTaxIdentifiers(tradingXml, order.orderId),
-  );
-  if (saved && observations.length > 0) {
-    await db.batch(
-      observations.map((observation) =>
-        db
-          .prepare(
-            `INSERT OR IGNORE INTO tax_identifiers
-               (id, order_id, identifier_type, issuing_country, value, source, observed_at)
-             SELECT ?3, ?4, ?5, ?6, ?7, ?8, ?9 WHERE ${sameConsent}`,
-          )
-          .bind(
-            input.storeId,
-            input.grantedAt,
-            crypto.randomUUID(),
-            saved.id,
-            observation.type,
-            observation.issuingCountry,
-            observation.value,
-            observation.source,
-            now,
-          ),
+  const observation = fulfillmentObservation(page.orders[0]);
+  const trading = await upstreamText(fetcher, input.configuration.tradingUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "text/xml;charset=UTF-8",
+      "x-ebay-api-call-name": "GetOrders",
+      "x-ebay-api-siteid": tradingSiteId,
+      "x-ebay-api-compatibility-level": tradingApiVersion,
+      "x-ebay-api-iaf-token": input.accessToken,
+    },
+    body:
+      '<?xml version="1.0" encoding="utf-8"?>' +
+      '<GetOrdersRequest xmlns="urn:ebay:apis:eBLBaseComponents">' +
+      `<Version>${tradingApiVersion}</Version><DetailLevel>ReturnAll</DetailLevel>` +
+      "<OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>" +
+      `<OrderIDArray><OrderID>${observation.externalOrderId.replace(/[<>&]/gu, "")}</OrderID></OrderIDArray>` +
+      "</GetOrdersRequest>",
+  }).then(
+    (xml) => ({
+      values: mapTradingTaxIdentifiers(
+        parseTradingOrderTaxIdentifiers(xml, observation.externalOrderId),
       ),
-    );
-  }
+    }),
+    (error: unknown) => ({ error }),
+  );
+  // Senza Trading l'ordine si salva comunque, senza dati fiscali. L'assenza del campo in
+  // Trading non è ancora qualificata come rimozione autorevole.
+  await recordOrderObservation(
+    db,
+    { storeId: input.storeId, consentGrantedAt: input.grantedAt, observedAt: now },
+    "values" in trading
+      ? {
+          ...observation,
+          taxIdentifiers: {
+            source: "ebay_trading_get_orders",
+            complete: false,
+            values: trading.values,
+          },
+        }
+      : observation,
+  );
+  if ("error" in trading) throw trading.error;
   await recordSync();
 }

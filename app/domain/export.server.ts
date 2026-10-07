@@ -1,6 +1,8 @@
 import ExcelJS from "exceljs";
 import { strToU8, zipSync } from "fflate";
 
+import { minorToDecimal } from "../money";
+
 export type ExportOrder = {
   orderId: string;
   createdAt: string;
@@ -19,7 +21,7 @@ function rows(orders: ExportOrder[]): string[][] {
     return identifiers.map((identifier) => [
       order.orderId,
       order.createdAt,
-      (order.totalMinor / 100).toFixed(2),
+      minorToDecimal(order.totalMinor, order.currency),
       order.currency,
       identifier.type,
       identifier.value,

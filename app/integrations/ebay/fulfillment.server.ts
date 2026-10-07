@@ -1,23 +1,86 @@
 import { z } from "zod";
 
+import { orderObservationSchema, type OrderObservation } from "../../domain/order-import.server";
+import { parseMinor } from "../../money";
 import { retryAfterSeconds } from "../http.server";
 
-/** Proiezione per card e dettaglio: i campi estranei, inclusi i dati fiscali, sono esclusi. */
-export const orderSummarySchema = z.object({
-  buyer: z.object({ username: z.string().optional() }).nullish(),
-  orderPaymentStatus: z.string().nullish(),
-  orderFulfillmentStatus: z.string().nullish(),
-  lineItems: z
-    .array(
-      z.object({
-        lineItemId: z.string(),
-        title: z.string(),
-        quantity: z.number().int().positive(),
-        sku: z.string().optional(),
-      }),
-    )
-    .optional(),
-});
+type Amount = { value: string; currency: string };
+type Contact = {
+  fullName?: string;
+  email?: string;
+  primaryPhone?: { phoneNumber?: string };
+  contactAddress?: Record<string, unknown>;
+};
+
+/** Campi dell'ordine Fulfillment letti dal modello; li valida lo schema dell'osservazione. */
+type FulfillmentOrderDetail = {
+  orderId: string;
+  creationDate: string;
+  lastModifiedDate: string;
+  orderPaymentStatus?: string;
+  orderFulfillmentStatus?: string;
+  cancelStatus?: { cancelState?: string };
+  pricingSummary: { total: Amount };
+  buyer?: { username?: string; buyerRegistrationAddress?: Contact };
+  fulfillmentStartInstructions?: Array<{ shippingStep?: { shipTo?: Contact } }>;
+  lineItems?: Array<{
+    lineItemId: string;
+    legacyItemId?: string;
+    title: string;
+    sku?: string;
+    quantity: number;
+    lineItemCost?: Amount;
+    listingMarketplaceId?: string;
+  }>;
+};
+
+const money = ({ value, currency }: Amount) => ({ minor: parseMinor(value, currency), currency });
+
+/**
+ * Lettura Fulfillment come osservazione validata del modello ordini, con importi esatti. I campi
+ * non previsti, inclusi i dati fiscali, non entrano nell'osservazione.
+ */
+export function fulfillmentObservation(payload: unknown): OrderObservation {
+  const order = payload as FulfillmentOrderDetail;
+  const lineItems = order.lineItems ?? [];
+  const registration = order.buyer?.buyerRegistrationAddress;
+  const shipTo = order.fulfillmentStartInstructions?.[0]?.shippingStep?.shipTo;
+  const marketplaces = new Set(lineItems.map((item) => item.listingMarketplaceId));
+  return orderObservationSchema.parse({
+    source: "fulfillment",
+    externalOrderId: order.orderId,
+    provisional: false,
+    creationTime: order.creationDate,
+    lastModifiedTime: order.lastModifiedDate,
+    marketplaceId: marketplaces.size === 1 ? [...marketplaces][0] : null,
+    total: money(order.pricingSummary.total),
+    paymentStatus: order.orderPaymentStatus,
+    fulfillmentStatus: order.orderFulfillmentStatus,
+    cancelStatus: order.cancelStatus?.cancelState,
+    buyer: {
+      username: order.buyer?.username,
+      name: registration?.fullName,
+      email: registration?.email,
+      phone: registration?.primaryPhone?.phoneNumber,
+      billingAddress: registration?.contactAddress,
+      shipTo: shipTo && {
+        name: shipTo.fullName,
+        phone: shipTo.primaryPhone?.phoneNumber,
+        address: shipTo.contactAddress,
+      },
+    },
+    items: lineItems.map((item) => ({
+      lineItemId: item.lineItemId,
+      // Stessa forma di `OrderLineItemID` Trading (articolo-transazione), da qualificare
+      // sugli ordini combinati: senza coincidenza gli ordini restano distinti.
+      stableKey: item.legacyItemId ? `${item.legacyItemId}-${item.lineItemId}` : null,
+      title: item.title,
+      sku: item.sku,
+      quantity: item.quantity,
+      total: item.lineItemCost ? money(item.lineItemCost) : null,
+    })),
+  });
+}
 
 const fulfillmentOrderSchema = z.looseObject({ orderId: z.string().min(1) });
 const fulfillmentPageSchema = z.looseObject({
