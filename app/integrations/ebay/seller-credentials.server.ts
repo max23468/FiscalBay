@@ -20,6 +20,7 @@ const keyInfo = new TextEncoder().encode("fiscalbay/ebay-seller-token/v1");
 // così due esecuzioni ogni trenta minuti lasciano sempre un margine.
 const refreshMarginMilliseconds = 40 * 60 * 1000;
 const refreshBatch = 50;
+const refreshLimit = 300;
 
 const refreshSchema = z.looseObject({
   access_token: z.string().min(1),
@@ -27,10 +28,12 @@ const refreshSchema = z.looseObject({
 });
 
 export function base64Url(bytes: Uint8Array): string {
+  // Stryker disable Regex: in base64 «=» compare solo come riempimento finale.
   return btoa(String.fromCharCode(...bytes))
     .replaceAll("+", "-")
     .replaceAll("/", "_")
     .replace(/=+$/u, "");
+  // Stryker restore Regex
 }
 
 function fromBase64Url(value: string): Uint8Array<ArrayBuffer> {
@@ -47,6 +50,7 @@ async function tokenKey(secret: string): Promise<CryptoKey> {
     false,
     ["deriveKey"],
   );
+  // Stryker disable BooleanLiteral: la chiave non viene mai esportata, estraibile o no.
   return crypto.subtle.deriveKey(
     { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: keyInfo },
     material,
@@ -54,6 +58,7 @@ async function tokenKey(secret: string): Promise<CryptoKey> {
     false,
     ["encrypt", "decrypt"],
   );
+  // Stryker restore BooleanLiteral
 }
 
 // Negozio e tipo entrano nei dati autenticati: un token copiato su un'altra riga non si apre.
@@ -210,31 +215,46 @@ export async function refreshStoreToken(input: {
   return result.meta.changes === 1 ? "refreshed" : "superseded";
 }
 
+type ExpiringRow = { store_id: string; access_expires_at: string };
+
 /**
  * Lavoro in background: rinnova in anticipo i token di accesso vicini alla scadenza. I negozi
  * in pausa non leggono eBay e restano esclusi; quelli scollegati non hanno più token.
+ *
+ * Scorre i negozi a blocchi con un cursore, così un errore non fa rileggere lo stesso negozio,
+ * fino a `refreshLimit` rinnovi: con due esecuzioni l'ora e token di due ore regge circa mille
+ * negozi attivi restando entro le sottorichieste di una esecuzione.
  */
 export async function refreshExpiringTokens(
   environment: Env,
   fetcher: typeof fetch,
   now = new Date(),
 ): Promise<RefreshOutcome[]> {
-  const { results } = await environment.DB.prepare(
-    `SELECT c.store_id FROM ebay_store_credentials c
-      WHERE c.rejected_at IS NULL AND c.access_expires_at <= ?
-        AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = c.store_id)
-      ORDER BY c.access_expires_at LIMIT ?`,
-  )
-    .bind(new Date(now.getTime() + refreshMarginMilliseconds).toISOString(), refreshBatch)
-    .all<{ store_id: string }>();
+  const threshold = new Date(now.getTime() + refreshMarginMilliseconds).toISOString();
   const outcomes: RefreshOutcome[] = [];
-  // In sequenza: un errore di un negozio non ferma gli altri e non sovrappone retry.
-  for (const { store_id: storeId } of results) {
-    try {
-      outcomes.push(await refreshStoreToken({ environment, storeId, fetcher, now }));
-    } catch (error) {
-      logFailure({ error, operation: "token_refresh" });
+  // Ultimo negozio letto: scadenza e identificativo, null prima del primo blocco.
+  let cursor: [string, string] | [null, null] = [null, null];
+  for (let read = 0; read < refreshLimit; read += refreshBatch) {
+    const { results }: D1Result<ExpiringRow> = await environment.DB.prepare(
+      `SELECT c.store_id, c.access_expires_at FROM ebay_store_credentials c
+        WHERE c.rejected_at IS NULL AND c.access_expires_at <= ?1
+          AND (?2 IS NULL OR (c.access_expires_at, c.store_id) > (?2, ?3))
+          AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = c.store_id)
+        ORDER BY c.access_expires_at, c.store_id LIMIT ?4`,
+    )
+      .bind(threshold, ...cursor, refreshBatch)
+      .all<ExpiringRow>();
+    // In sequenza: un errore di un negozio non ferma gli altri e non sovrappone retry.
+    for (const { store_id: storeId } of results) {
+      try {
+        outcomes.push(await refreshStoreToken({ environment, storeId, fetcher, now }));
+      } catch (error) {
+        logFailure({ error, operation: "token_refresh" });
+      }
     }
+    if (results.length < refreshBatch) break;
+    const last: ExpiringRow = results.at(-1)!;
+    cursor = [last.access_expires_at, last.store_id];
   }
   return outcomes;
 }

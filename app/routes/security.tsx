@@ -4,6 +4,7 @@ import { redirect } from "react-router";
 
 import { AccessNotice, AccountSecurity, AccountShell } from "~/components/account";
 import { PageTitle } from "~/components/icon-tile";
+import { notifySecurityEvent } from "../account-email.server";
 import { assertSameOrigin, requireAccountArea } from "../account-area.server";
 import { forwardToAuth, redirectWithCookies } from "../auth-route.server";
 import {
@@ -87,6 +88,7 @@ export async function action({ request }: Route.ActionArgs) {
     const id = field("id");
     if (!id || id.length > 128) return notice("errore");
     const removed = await removePasskey(env.DB, session.user.id, id);
+    if (removed) notifySecurityEvent(env, session.user.id, { kind: "passkey-removed" });
     return notice(removed ? "passkey-rimossa" : "ultimo-accesso");
   }
 
@@ -121,6 +123,10 @@ export async function action({ request }: Route.ActionArgs) {
     if (!Object.hasOwn(accountMethods, method)) return notice("errore");
     const removed = await removeAccountMethod(env.DB, session.user.id, method as AccountMethod);
     if (!removed) return notice("ultimo-metodo");
+    notifySecurityEvent(env, session.user.id, {
+      kind: "method-removed",
+      method: method as AccountMethod,
+    });
     return notice(method === "ebay" ? "ebay-rimosso" : "metodo-rimosso");
   }
 

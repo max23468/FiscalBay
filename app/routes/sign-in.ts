@@ -90,15 +90,23 @@ export async function action({ request }: Route.ActionArgs) {
     if (!response.ok) {
       return notice(response.status === 429 ? "troppi-tentativi" : "registrazione");
     }
+    // Per un indirizzo già registrato Better Auth risponde con un utente fittizio, senza
+    // sessione: profilo e Termini si salvano solo per l'account appena creato. La sessione
+    // nasce dal link di conferma, quindi la risposta è la stessa nei due casi.
     const { user } = await response.clone().json<{ user: { id: string } }>();
-    await completeRegistration(env.DB, {
-      userId: user.id,
-      language,
-      now: new Date(),
-      profile,
-      agreement: { marketing: field("marketing") === "on" },
-    });
-    return redirectWithCookies(`${base}?accesso=registrato`, response);
+    const created = await env.DB.prepare('SELECT 1 FROM "user" WHERE "id" = ?')
+      .bind(user.id)
+      .first();
+    if (created) {
+      await completeRegistration(env.DB, {
+        userId: user.id,
+        language,
+        now: new Date(),
+        profile,
+        agreement: { marketing: field("marketing") === "on" },
+      });
+    }
+    return notice("registrato");
   }
 
   if (intent === "verifica" || intent === "completa") {

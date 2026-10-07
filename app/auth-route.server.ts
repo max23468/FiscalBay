@@ -10,6 +10,7 @@ import {
   recordStoreLinkOutcome,
   type StoreLinkOutcome,
 } from "./integrations/ebay/store-link.server";
+import { notifySecurityEvent } from "./account-email.server";
 import { logFailure, tracePhase } from "./errors";
 import { ordersPath } from "./app-links";
 import { localizedPath } from "./i18n";
@@ -29,6 +30,7 @@ const passkeyEnrollmentPaths = new Set([
   "/api/auth/passkey/generate-register-options",
   "/api/auth/passkey/verify-registration",
 ]);
+const passkeyRegistrationPath = "/api/auth/passkey/verify-registration";
 const linkSocialPath = "/api/auth/link-social";
 const changeEmailPath = "/api/auth/change-email";
 const ebayCallbackPath = "/api/auth/callback/ebay";
@@ -78,9 +80,66 @@ function clientKey(ip: string): string {
 }
 
 /**
+ * Soglie per indirizzo email, indipendenti dall'IP: chi cambia rete non prova più password
+ * sullo stesso account né riempie di email la casella di un altro. Il limite del login vale
+ * solo per l'accesso con password: Google, eBay e passkey restano disponibili al titolare.
+ */
+const addressLimits = [
+  { paths: /^\/sign-in\/email\/?$/u, window: 900, max: 10 },
+  {
+    paths:
+      /^\/(sign-up\/email|send-verification-email|request-password-reset|forget-password)\/?$/u,
+    window: 3600,
+    max: 5,
+  },
+];
+
+/**
  * Conta il tentativo su D1 con una sola istruzione, che apre o incrementa la finestra, e
- * restituisce i secondi di attesa oltre il limite. Attivo sui domini HTTPS, dove Cloudflare
- * fornisce l'IP del client; il limite interno di Better Auth resta spento (vedi auth.server.ts).
+ * restituisce i secondi di attesa oltre il limite.
+ */
+async function countAttempt(
+  environment: Env,
+  key: string,
+  rule: { window: number; max: number },
+  now: number,
+): Promise<number | null> {
+  const windowMs = rule.window * 1000;
+  const row = await environment.DB.prepare(
+    `INSERT INTO "rateLimit" ("id", "key", "count", "lastRequest") VALUES (?1, ?2, 1, ?3)
+     ON CONFLICT ("key") DO UPDATE SET
+       "count" = CASE WHEN ?3 - "lastRequest" >= ?4 THEN 1 ELSE "count" + 1 END,
+       "lastRequest" = CASE WHEN ?3 - "lastRequest" >= ?4 THEN ?3 ELSE "lastRequest" END
+     RETURNING "count", "lastRequest"`,
+  )
+    .bind(crypto.randomUUID(), key, now, windowMs)
+    .first<{ count: number; lastRequest: number }>();
+  if (!row || row.count <= rule.max) return null;
+  return Math.max(1, Math.ceil((row.lastRequest + windowMs - now) / 1000));
+}
+
+/** Indirizzo del corpo JSON come impronta: la tabella dei limiti non conserva email in chiaro. */
+async function addressKey(request: Request): Promise<string | null> {
+  // Stryker disable ArrowFunction: null e undefined danno entrambi «nessun indirizzo».
+  const body: unknown = await request
+    .clone()
+    .json()
+    .catch(() => null);
+  // Stryker restore ArrowFunction
+  const email =
+    typeof body === "object" && body !== null && "email" in body ? body.email : undefined;
+  if (typeof email !== "string" || email.length === 0 || email.length > 254) return null;
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(email.trim().toLowerCase()),
+  );
+  return `email:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/**
+ * Applica i limiti per IP e poi quelli per indirizzo; restituisce i secondi di attesa oltre il
+ * limite. Attivo sui domini HTTPS, dove Cloudflare fornisce l'IP del client; il limite interno
+ * di Better Auth resta spento (vedi auth.server.ts).
  */
 async function attemptWait(request: Request, environment: Env): Promise<number | null> {
   if (request.method !== "POST" || !environment.APP_ORIGIN.startsWith("https:")) return null;
@@ -90,16 +149,6 @@ async function attemptWait(request: Request, environment: Env): Promise<number |
   if (!rule || !ip) return null;
 
   const now = Date.now();
-  const windowMs = rule.window * 1000;
-  const row = await environment.DB.prepare(
-    `INSERT INTO "rateLimit" ("id", "key", "count", "lastRequest") VALUES (?1, ?2, 1, ?3)
-     ON CONFLICT ("key") DO UPDATE SET
-       "count" = CASE WHEN ?3 - "lastRequest" >= ?4 THEN 1 ELSE "count" + 1 END,
-       "lastRequest" = CASE WHEN ?3 - "lastRequest" >= ?4 THEN ?3 ELSE "lastRequest" END
-     RETURNING "count", "lastRequest"`,
-  )
-    .bind(crypto.randomUUID(), `${clientKey(ip)}|${path}`, now, windowMs)
-    .first<{ count: number; lastRequest: number }>();
   // Pulizia occasionale delle finestre chiuse da oltre un'ora, fuori dal percorso della risposta.
   if (Math.random() < 0.02) {
     waitUntil(
@@ -108,8 +157,13 @@ async function attemptWait(request: Request, environment: Env): Promise<number |
         .run(),
     );
   }
-  if (!row || row.count <= rule.max) return null;
-  return Math.max(1, Math.ceil((row.lastRequest + windowMs - now) / 1000));
+  const wait = await countAttempt(environment, `${clientKey(ip)}|${path}`, rule, now);
+  if (wait !== null) return wait;
+  const addressRule = addressLimits.find(({ paths }) => paths.test(path));
+  const address = addressRule ? await addressKey(request) : null;
+  return address && addressRule
+    ? countAttempt(environment, `${address}|${path.replace(/\/$/u, "")}`, addressRule, now)
+    : null;
 }
 
 async function authResponse(request: Request, environment: Env): Promise<Response> {
@@ -137,6 +191,8 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
       return new Response(null, { status: 403 });
     }
   }
+  // Utente che registra una passkey, per avvisarlo quando la registrazione riesce.
+  let enrollingUserId: string | null = null;
   if (passkeyEnrollmentPaths.has(pathname)) {
     const session = await createAuth(environment).api.getSession({ headers: request.headers });
     if (!session) return new Response(null, { status: 401 });
@@ -148,6 +204,7 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
     // il secondo fattore, serve una sessione già confermata da passkey: password o email
     // compromesse non bastano ad aggiungerne una.
     if (passkeyChangeBlock(session as AuthSession)) return new Response(null, { status: 403 });
+    enrollingUserId = session.user.id;
   }
   const wait = await attemptWait(request, environment);
   if (wait !== null) {
@@ -158,6 +215,9 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
   }
   const response = await createAuth(environment).handler(request);
   if (response.status >= 500) logFailure({ request, code: "INTERNAL_ERROR", operation: "route" });
+  if (pathname === passkeyRegistrationPath && response.ok && enrollingUserId) {
+    notifySecurityEvent(environment, enrollingUserId, { kind: "passkey-added" });
+  }
   return response;
 }
 

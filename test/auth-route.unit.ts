@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { forwardToAuth, handleAuthRequest, redirectWithCookies } from "../app/auth-route.server";
@@ -12,6 +13,7 @@ const services = vi.hoisted(() => ({
   failure: vi.fn(),
   trace: vi.fn(),
   background: vi.fn(),
+  notify: vi.fn(),
 }));
 vi.mock("../app/auth.server", () => ({
   createAuth: () => ({ handler: services.handler, api: { getSession: services.session } }),
@@ -25,6 +27,7 @@ vi.mock("../app/integrations/ebay/store-link.server", () => ({
 }));
 vi.mock("../app/errors", () => ({ logFailure: services.failure, tracePhase: services.trace }));
 vi.mock("cloudflare:workers", () => ({ waitUntil: services.background }));
+vi.mock("../app/account-email.server", () => ({ notifySecurityEvent: services.notify }));
 
 let sqlite: DatabaseSync;
 let environment: Env;
@@ -171,6 +174,18 @@ describe("confine HTTP Auth", () => {
     },
   );
 
+  it("avvisa della nuova passkey solo quando la registrazione riesce", async () => {
+    expect((await handle("/api/auth/passkey/generate-register-options")).status).toBe(202);
+    services.handler.mockResolvedValueOnce(new Response(null, { status: 400 }));
+    expect((await handle("/api/auth/passkey/verify-registration")).status).toBe(400);
+    await handle("/api/auth/sign-in/email", { method: "POST" });
+    expect(services.notify).not.toHaveBeenCalled();
+    expect((await handle("/api/auth/passkey/verify-registration")).status).toBe(202);
+    expect(services.notify.mock.calls).toEqual([
+      [environment, "member", { kind: "passkey-added" }],
+    ]);
+  });
+
   it.each([499, 500, 503])("registra gli errori solo da 500 (%i)", async (status) => {
     services.handler.mockResolvedValue(new Response("failure", { status }));
     const input = request("/api/auth/session");
@@ -254,6 +269,99 @@ describe("limiti dei tentativi", () => {
     expect((await attempt(path)).headers.get("retry-after")).toBe("2");
     vi.setSystemTime(now + seconds * 1000);
     expect((await attempt(path)).status).toBe(202);
+  });
+
+  it.each([
+    ["/sign-in/email", 10, 900],
+    ["/request-password-reset", 5, 3600],
+    ["/send-verification-email", 5, 3600],
+    ["/sign-up/email", 5, 3600],
+  ])(
+    "limita %s per indirizzo anche da IP diversi, senza conservare l'email",
+    async (path, max, seconds) => {
+      let ip = 0;
+      const send = (email: string) =>
+        handle(`/api/auth${path}`, {
+          method: "POST",
+          headers: { "cf-connecting-ip": `203.0.113.${++ip}` },
+          body: JSON.stringify({ email }),
+        });
+      for (let count = 0; count < max; count++) {
+        expect(
+          (await send(count % 2 ? "Vittima@Example.invalid " : "vittima@example.invalid")).status,
+        ).toBe(202);
+      }
+      const blocked = await send("vittima@example.invalid");
+      expect(blocked.status).toBe(429);
+      expect(blocked.headers.get("retry-after")).toBe(String(seconds));
+      expect((await send("altro@example.invalid")).status).toBe(202);
+      const keys = sqlite.prepare('SELECT key FROM "rateLimit"').all() as Array<{ key: string }>;
+      expect(keys.some(({ key }) => key.includes("example"))).toBe(false);
+      vi.setSystemTime(now + seconds * 1000);
+      expect((await send("vittima@example.invalid")).status).toBe(202);
+    },
+  );
+
+  it("conta l'impronta dell'indirizzo normalizzato, con o senza barra finale", async () => {
+    let ip = 0;
+    const send = (path: string, email: string) =>
+      handle(`/api/auth${path}`, {
+        method: "POST",
+        headers: { "cf-connecting-ip": `198.51.100.${++ip}` },
+        body: JSON.stringify({ email }),
+      });
+    for (let count = 0; count < 10; count++) {
+      const path = count % 2 ? "/sign-in/email/" : "/sign-in/email";
+      expect(
+        (await send(path, count % 2 ? " Vittima@Example.INVALID" : "vittima@example.invalid"))
+          .status,
+      ).toBe(202);
+    }
+    expect((await send("/sign-in/email/", "VITTIMA@example.invalid")).status).toBe(429);
+    const digest = createHash("sha256").update("vittima@example.invalid").digest("hex");
+    expect(
+      sqlite.prepare("SELECT key, count FROM \"rateLimit\" WHERE key LIKE 'email:%'").all(),
+    ).toEqual([{ key: `email:${digest}|/sign-in/email`, count: 11 }]);
+  });
+
+  it("conta per indirizzo solo i percorsi esatti e gli indirizzi validi", async () => {
+    let ip = 0;
+    const send = (path: string, body: string) =>
+      handle(`/api/auth${path}`, {
+        method: "POST",
+        headers: { "cf-connecting-ip": `198.51.100.${++ip}` },
+        body,
+      });
+    const email = JSON.stringify({ email: "vittima@example.invalid" });
+    for (const path of [
+      "/sign-in/email/altro",
+      "/sign-in/altro/sign-in/email",
+      "/request-password-reset/altro",
+      "/sign-up/altro/request-password-reset",
+    ]) {
+      for (let count = 0; count < 11; count++) expect((await send(path, email)).status).toBe(202);
+    }
+    // Indirizzi vuoti, oltre 254 caratteri o fuori da un oggetto JSON non contano.
+    for (const body of [
+      JSON.stringify({ email: "" }),
+      JSON.stringify({ email: `${"a".repeat(244)}@example.it` }),
+      JSON.stringify("vittima@example.invalid"),
+      "{",
+    ]) {
+      for (let count = 0; count < 11; count++) {
+        expect((await send("/sign-in/email", body)).status).toBe(202);
+      }
+    }
+    expect(sqlite.prepare("SELECT key FROM \"rateLimit\" WHERE key LIKE 'email:%'").all()).toEqual(
+      [],
+    );
+
+    // 254 caratteri sono ancora un indirizzo.
+    const longest = JSON.stringify({ email: `${"a".repeat(243)}@example.it` });
+    for (let count = 0; count < 10; count++) {
+      expect((await send("/sign-in/email", longest)).status).toBe(202);
+    }
+    expect((await send("/sign-in/email", longest)).status).toBe(429);
   });
 
   it("ignora GET, origine HTTP, IP assente e percorsi estranei", async () => {

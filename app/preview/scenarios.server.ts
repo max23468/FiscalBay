@@ -1016,7 +1016,12 @@ export function loadScenario(
       break;
     case "negozio-scaduto": {
       const troubled = [
-        premiumStores[0]!,
+        // Consenso ancora valido che scade fra dodici giorni: il pannello invita a ricollegare.
+        {
+          ...premiumStores[0]!,
+          consentExpiresAt: minutesAgo(-12 * 24 * 60),
+          consentExpiring: true,
+        },
         storeView("outlet", {
           connection: "reconnect_required",
           issue: "reconnect",

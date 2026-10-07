@@ -474,6 +474,24 @@ function StoreDetail({
           </span>
         </StatusAlert>
       ) : null}
+      {!store.issue && store.consentExpiring && store.consentExpiresAt ? (
+        <StatusAlert tone="info" title={t.access.consentExpiringTitle(store.name)}>
+          <span className="grid justify-items-start gap-3">
+            {(store.connection === "paused"
+              ? t.stores.consentExpiringPaused
+              : t.access.consentExpiringBody)(
+              formatDate(store.consentExpiresAt, links.language, "date"),
+            )}
+            <ReconnectButton
+              store={store}
+              ebayDown={data.ebayDown}
+              connectHref={data.connectHref}
+              t={t}
+              inAlert
+            />
+          </span>
+        </StatusAlert>
+      ) : null}
       {data.ebayDown ? <StatusAlert tone="warning" title={t.stores.ebayDown} /> : null}
       <ConnectionSection store={store} now={data.now} t={t} language={links.language} />
       <SyncSection store={store} data={data} t={t} language={links.language} />

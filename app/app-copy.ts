@@ -281,6 +281,8 @@ const it = {
     consentUntil: "Scadenza autorizzazione",
     consentHint: "Prima della scadenza ti chiederemo di ricollegare il negozio.",
     consentExpired: "Scaduta",
+    consentExpiringPaused: (date: string) =>
+      `L’autorizzazione eBay scade il ${date}. Ricollega il negozio entro quella data per riprendere la sincronizzazione senza interruzioni.`,
     target: (minutes: number) => `Aggiornamento previsto circa ogni ${minutes} minuti`,
     history: (days: number) => `Storico degli ultimi ${days} giorni`,
     importDone: "Importazione dello storico completata",
@@ -784,9 +786,9 @@ const it = {
       "sessioni-chiuse": "Sessioni chiuse su tutti gli altri dispositivi.",
       "accesso-non-verificato": "Conferma l’indirizzo email per aggiungere un metodo di accesso.",
       errore: "Operazione non riuscita. Controlla email e password.",
-      registrato: "Account creato. Ti abbiamo inviato un link per confermare l’indirizzo email.",
-      registrazione:
-        "Account non creato. Controlla email e password. Se sei già registrato, accedi.",
+      registrato:
+        "Controlla la posta: ti abbiamo inviato un link per confermare l’indirizzo email e accedere.",
+      registrazione: "Account non creato. Controlla l’indirizzo email e la password.",
       termini: "Per continuare accetta i Termini di servizio.",
       dati: "Indica nome, cognome e, per un’azienda, la ragione sociale.",
       "troppi-tentativi": "Troppi tentativi. Riprova tra qualche minuto.",
@@ -1062,6 +1064,8 @@ const en: AppCopy = {
     consentUntil: "Authorisation expires",
     consentHint: "Before it expires we will ask you to reconnect the store.",
     consentExpired: "Expired",
+    consentExpiringPaused: (date) =>
+      `The eBay authorisation expires on ${date}. Reconnect the store by then so syncing can resume without interruption.`,
     target: (minutes) => `Expected update about every ${minutes} minutes`,
     history: (days) => `History of the last ${days} days`,
     importDone: "History import complete",
@@ -1548,9 +1552,8 @@ const en: AppCopy = {
       "sessioni-chiuse": "Sessions closed on all other devices.",
       "accesso-non-verificato": "Confirm your email address to add a sign-in method.",
       errore: "Could not complete the operation. Check your email and password.",
-      registrato: "Account created. We sent you a link to confirm your email address.",
-      registrazione:
-        "Account not created. Check your email and password. If you already have an account, sign in.",
+      registrato: "Check your inbox: we sent you a link to confirm your email address and sign in.",
+      registrazione: "Account not created. Check your email address and password.",
       termini: "To continue, accept the Terms of service.",
       dati: "Enter your first and last name and, for a business, the company name.",
       "troppi-tentativi": "Too many attempts. Try again in a few minutes.",

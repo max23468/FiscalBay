@@ -161,7 +161,14 @@ export async function recordStoreLinkOutcome(
     .run();
 }
 
-async function workspaceFor(db: D1Database, userId: string, now: string): Promise<string> {
+const workspaceNames: Record<Language, string> = { it: "Spazio personale", en: "Personal space" };
+
+async function workspaceFor(
+  db: D1Database,
+  userId: string,
+  now: string,
+  language: Language,
+): Promise<string> {
   const existing = await db
     .prepare(
       "SELECT workspace_id FROM workspace_members WHERE user_id = ? ORDER BY workspace_id LIMIT 1",
@@ -173,8 +180,8 @@ async function workspaceFor(db: D1Database, userId: string, now: string): Promis
   const workspaceId = crypto.randomUUID();
   await db.batch([
     db
-      .prepare("INSERT INTO workspaces (id, name, created_at) VALUES (?, 'Spazio personale', ?)")
-      .bind(workspaceId, now),
+      .prepare("INSERT INTO workspaces (id, name, created_at) VALUES (?, ?, ?)")
+      .bind(workspaceId, workspaceNames[language], now),
     db
       .prepare("INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'owner')")
       .bind(workspaceId, userId),
@@ -215,7 +222,12 @@ export async function completeStoreLink(input: {
     headers: { authorization: `Bearer ${token.access_token}` },
   });
 
-  const storeId = await linkStore(environment.DB, link.userId, identity, now, link.ebayEnvironment);
+  // Lo state porta la lingua in cui il merchant ha avviato il collegamento.
+  const language: Language = search.get("state")!.startsWith("en_") ? "en" : "it";
+  const storeId = await linkStore(environment.DB, link.userId, identity, now, {
+    ebayEnvironment: link.ebayEnvironment,
+    language,
+  });
   // Il negozio di un altro spazio non riceve token e l'esito non dice nulla di quello spazio.
   if (!storeId) return "altro-spazio";
   await saveStoreCredentials(
@@ -259,23 +271,25 @@ export async function completeStoreLink(input: {
  * Associa l'account eBay al primo spazio dell'utente con una sola istruzione: l'identificativo
  * stabile è unico, quindi lo stesso negozio non entra in due spazi neppure con richieste
  * concorrenti. Un nuovo username aggiorna il negozio esistente e il ricollegamento lo riattiva,
- * anche dopo uno scollegamento. null se appartiene ad altri.
+ * anche dopo uno scollegamento o un'eliminazione dei dati: gli ordini letti da quel momento
+ * sono nuovi e si possono eliminare di nuovo. null se appartiene ad altri.
  */
 async function linkStore(
   db: D1Database,
   userId: string,
   identity: z.infer<typeof identitySchema>,
   now: string,
-  ebayEnvironment: EbayEnvironment,
+  { ebayEnvironment, language }: { ebayEnvironment: EbayEnvironment; language: Language },
 ): Promise<string | null> {
-  const workspaceId = await workspaceFor(db, userId, now);
+  const workspaceId = await workspaceFor(db, userId, now, language);
   const store = await db
     .prepare(
       `INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name, ebay_environment, ebay_account_id)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(ebay_user_id) DO UPDATE SET
          display_name = COALESCE(excluded.display_name, ebay_stores.display_name),
-         disconnected_at = NULL
+         disconnected_at = NULL,
+         data_deleted_at = NULL
        WHERE ebay_stores.workspace_id = excluded.workspace_id
          AND ebay_stores.ebay_environment = excluded.ebay_environment
        RETURNING id`,
