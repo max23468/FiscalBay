@@ -22,7 +22,7 @@ vi.mock("../app/integrations/ebay/store-link.server", () => ({
   completeStoreLink: services.complete,
   recordStoreLinkOutcome: services.record,
 }));
-vi.mock("../app/errors", () => ({ logFailure: services.failure }));
+vi.mock("../app/errors", () => ({ logFailure: services.failure, tracePhase: () => {} }));
 vi.mock("cloudflare:workers", () => ({ waitUntil: services.background }));
 
 let sqlite: DatabaseSync;
