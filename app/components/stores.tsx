@@ -554,7 +554,11 @@ function ConnectionSection({ store, now, t, language }: SectionProps & { now: st
           </div>
         ) : null}
       </dl>
-      {needsReconnect || expired || store.connection === "disconnected" ? null : (
+      {/* Con il consenso in scadenza l'avviso in cima al pannello chiede già di ricollegare. */}
+      {needsReconnect ||
+      expired ||
+      store.consentExpiring ||
+      store.connection === "disconnected" ? null : (
         <p className="text-sm text-muted-foreground">{t.stores.consentHint}</p>
       )}
     </section>

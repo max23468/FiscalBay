@@ -986,7 +986,6 @@ Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o
 | Cutover provider | OAuth Production sul keyset `botCF` salvato ma disattivato: sul keyset un solo RuName può averlo attivo ed è quello del test. Scegliere al cutover fra keyset dedicato al test e perdita del login eBay sul test. Non modificare `botCF 2` (SyncBay) o il callback condiviso con Hub Fatture. Branding finale Checkout ancora da osservare. |
 | Dati e risorse di prova | Eliminare prima del go-live utenti e dati reali controllati nella D1 di test, compresi ordine e identificativo fiscale ratificati dall'owner il 2026-09-23, e la copia recuperabile con Time Travel. Account sintetico di collaudo ammesso solo nel test. Better Auth Infrastructure rimosso dal runtime (D152), progetto Starter residuo da eliminare se inutile; Supabase escluso già eliminato. Inventario privato fuori checkout: `FiscalBay/m0-inventory`. |
 | Legacy 1.x | Ultimo inventario registrato: VPS `fiscalbay-bot`, checkout `/opt/fiscalbay`, autodeploy disabilitato; bot `fiscalbay-bot`, callback `fiscalbay-oauth` e timer `reconcile`, `alertcheck`, `external-healthcheck`, `backup`, `log-maintenance`, `restore-drill`, `duckdns` ancora operativi. Owner responsabile del cutover: callback cancellazione 2.0 e consumatore Hub Fatture coordinati in M7, poller fermato prima del webhook bot live, dismissione conclusiva in M9. Nessuno spegnimento attestato da questa migrazione. |
-| Pulizia sospesa | Le precedenti sessioni conservavano `FiscalBay-audit-ui-ux` / `docs/audit-ui-ux-test` per file non tracciati e i checkout `b8c4` e `4a9e` per associazione alla chat incerta. Verificare esistenza, contenuto, PR assorbite e uso corrente prima di rimuoverli; l'inventario Git locale di questa migrazione mostra soltanto il checkout principale. |
 
 <a id="m0"></a>
 
@@ -1379,7 +1378,7 @@ Provare identità provvisoria→definitiva e arrivo invertito Trading/Fulfillmen
 
 Entità logiche accorpabili quando sicuro; mantenere dati correnti e snapshot dell’ordine senza duplicati a ogni sync. Lo storico di tutte le variazioni fiscali effettive resta richiesto.
 
-**Limiti residui:** l'identità stabile ricavata da Fulfillment (articolo e riga) ha la forma di `OrderLineItemID` Trading ma non è provata su ordini combinati reali: senza coincidenza gli ordini restano distinti, mai uniti. Il consolidamento di più provvisori in un definitivo resta un'anomalia esplicita fino a M3-09; la rimozione autorevole di un identificativo si applica solo quando la fonte la dichiara, e la lettura Trading al collegamento non lo fa ancora (M3-05). Migration non ancora applicata al test.
+**Limiti residui:** l'identità stabile ricavata da Fulfillment (articolo e riga) ha la forma di `OrderLineItemID` Trading ma non è provata su ordini combinati reali: senza coincidenza gli ordini restano distinti, mai uniti. Il consolidamento di più provvisori in un definitivo resta un'anomalia esplicita fino a M3-09; la rimozione autorevole di un identificativo si applica solo quando la fonte la dichiara, e la lettura Trading al collegamento non lo fa ancora (M3-05).
 
 <a id="m3-02"></a>
 #### M3-02 · Client eBay e normalizzazione
