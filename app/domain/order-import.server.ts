@@ -152,14 +152,6 @@ export async function recordOrderObservation(
 ): Promise<OrderObservationResult> {
   const observation = orderObservationSchema.parse(input);
   const scope = [target.storeId, target.consentGrantedAt] as const;
-  if (
-    !(await db
-      .prepare(`SELECT 1 AS ok WHERE ${writableStore}`)
-      .bind(...scope)
-      .first())
-  ) {
-    return { outcome: "not_writable" };
-  }
 
   const direct = await db
     .prepare(
@@ -180,7 +172,7 @@ export async function recordOrderObservation(
   let matched: StoredOrder | null = direct;
   const related: Array<[string, ReconciliationIssue]> = [];
   const keys = observation.items.flatMap((item) => (item.stableKey ? [item.stableKey] : []));
-  if (!matched && keys.length > 0) {
+  if (!matched) {
     const { results: candidates } = await db
       .prepare(
         `SELECT ${storedOrderColumns},
@@ -244,7 +236,8 @@ export async function recordOrderObservation(
     observation.cancelStatus,
     JSON.stringify(observation.buyer),
   ];
-  const statements: D1PreparedStatement[] = [];
+  // Il consenso si verifica nella stessa transazione delle scritture.
+  const statements = [db.prepare(`SELECT 1 AS ok WHERE ${writableStore}`).bind(...scope)];
   if (!matched) {
     statements.push(
       db
@@ -275,29 +268,8 @@ export async function recordOrderObservation(
         .bind(...scope, orderId, ...orderValues, takeover ? 1 : 0),
     );
   }
-  const orderStatements = statements.length;
   const orderExists = `${writableStore} AND EXISTS (SELECT 1 FROM orders WHERE id = ?4)`;
 
-  statements.push(
-    db
-      .prepare(
-        `INSERT INTO order_source_refs
-           (store_id, source, external_order_id, order_id, last_modified_time)
-         SELECT ?1, ?3, ?5, ?4, ?6 WHERE ${orderExists}
-         ON CONFLICT (store_id, source, external_order_id) DO UPDATE
-           SET last_modified_time = excluded.last_modified_time
-         WHERE excluded.last_modified_time > order_source_refs.last_modified_time`,
-      )
-      .bind(
-        ...scope,
-        observation.source,
-        orderId,
-        observation.externalOrderId,
-        observation.lastModifiedTime,
-      ),
-  );
-
-  let itemStatements = 0;
   if (ownsFields) {
     // ponytail: l'ordine fra lettura degli articoli e batch è garantito dalla sincronizzazione
     // serializzata per negozio; con scritture concorrenti servirebbe una versione dell'ordine.
@@ -358,18 +330,15 @@ export async function recordOrderObservation(
       );
     }
     const removed = stored.filter((row) => !kept.has(row.id)).map((row) => row.id);
-    if (removed.length > 0) {
-      statements.push(
-        db
-          .prepare(
-            `DELETE FROM order_items
-              WHERE order_id = ?3 AND id IN (SELECT value FROM json_each(?4)) AND ${writableStore}`,
-          )
-          .bind(...scope, orderId, JSON.stringify(removed)),
-      );
-    }
-    statements.push(...upserts);
-    itemStatements = upserts.length + (removed.length > 0 ? 1 : 0);
+    statements.push(
+      db
+        .prepare(
+          `DELETE FROM order_items
+            WHERE order_id = ?3 AND id IN (SELECT value FROM json_each(?4)) AND ${writableStore}`,
+        )
+        .bind(...scope, orderId, JSON.stringify(removed)),
+      ...upserts,
+    );
   }
 
   const taxStart = statements.length;
@@ -422,6 +391,24 @@ export async function recordOrderObservation(
     }
   }
   const taxEnd = statements.length;
+  statements.push(
+    db
+      .prepare(
+        `INSERT INTO order_source_refs
+           (store_id, source, external_order_id, order_id, last_modified_time)
+         SELECT ?1, ?3, ?5, ?4, ?6 WHERE ${orderExists}
+         ON CONFLICT (store_id, source, external_order_id) DO UPDATE
+           SET last_modified_time = excluded.last_modified_time
+         WHERE excluded.last_modified_time > order_source_refs.last_modified_time`,
+      )
+      .bind(
+        ...scope,
+        observation.source,
+        orderId,
+        observation.externalOrderId,
+        observation.lastModifiedTime,
+      ),
+  );
 
   for (const [relatedOrderId, kind] of related) {
     statements.push(
@@ -436,14 +423,12 @@ export async function recordOrderObservation(
   }
 
   const results = await db.batch(statements);
+  if (results[0]!.results.length === 0) return { outcome: "not_writable" };
   const changes = (from: number, to: number) =>
     results.slice(from, to).reduce((total, result) => total + result.meta.changes, 0);
-  if (!matched && changes(0, 1) === 0) return { outcome: "not_writable" };
-  const changed =
-    changes(0, orderStatements) > 0 ||
-    changes(orderStatements + 1, orderStatements + 1 + itemStatements) > 0;
   return {
-    outcome: !matched ? "created" : changed ? "updated" : "unchanged",
+    // Ordine e articoli occupano le istruzioni fra il controllo del consenso e i dati fiscali.
+    outcome: !matched ? "created" : changes(1, taxStart) > 0 ? "updated" : "unchanged",
     orderId,
     taxChanges: changes(taxStart, taxEnd),
     issue: related[0]?.[1] ?? null,

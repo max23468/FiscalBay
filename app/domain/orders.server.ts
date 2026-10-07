@@ -1,11 +1,11 @@
 import { buyerSnapshotSchema } from "./order-import.server";
 
-/** Stati originali della fonte e righe dell'ordine; null se l'ordine non ne ha ancora. */
+/** Stati originali della fonte e righe dell'ordine; null dove la fonte non li ha forniti. */
 export type OrderSummary = {
-  buyer: { username?: string } | null;
+  buyer: { username: string | null };
   orderPaymentStatus: string | null;
   orderFulfillmentStatus: string | null;
-  lineItems: Array<{ lineItemId: string; title: string; quantity: number; sku?: string }>;
+  lineItems: Array<{ lineItemId: string; title: string; quantity: number; sku: string | null }>;
 };
 
 export type VisibleOrder = {
@@ -16,7 +16,7 @@ export type VisibleOrder = {
   currency: string;
   totalMinor: number;
   storeName: string;
-  summary: OrderSummary | null;
+  summary: OrderSummary;
   fiscalState: "available" | "locked" | "unchecked";
   taxIdentifiers: Array<{
     type: string;
@@ -37,20 +37,16 @@ function summaryOf(row: {
   payment_status: string | null;
   fulfillment_status: string | null;
   items_json: string;
-}): OrderSummary | null {
-  const items: Array<{ lineItemId: string; title: string; quantity: number; sku: string | null }> =
-    JSON.parse(row.items_json);
-  const username = row.buyer_json
-    ? buyerSnapshotSchema.parse(JSON.parse(row.buyer_json)).username
-    : null;
-  if (!username && !row.payment_status && !row.fulfillment_status && items.length === 0) {
-    return null;
-  }
+}): OrderSummary {
   return {
-    buyer: username ? { username } : null,
+    buyer: {
+      username: row.buyer_json
+        ? buyerSnapshotSchema.parse(JSON.parse(row.buyer_json)).username
+        : null,
+    },
     orderPaymentStatus: row.payment_status,
     orderFulfillmentStatus: row.fulfillment_status,
-    lineItems: items.map(({ sku, ...item }) => (sku ? { ...item, sku } : item)),
+    lineItems: JSON.parse(row.items_json),
   };
 }
 
@@ -76,7 +72,7 @@ export async function listVisibleOrders(
               o.currency, o.total_minor, o.buyer_json, o.payment_status, o.fulfillment_status,
               (SELECT json_group_array(json_object('lineItemId', line_item_id, 'title', title,
                         'quantity', quantity, 'sku', sku))
-                 FROM order_items WHERE order_id = o.id) AS items_json,
+                 FROM (SELECT * FROM order_items WHERE order_id = o.id ORDER BY rowid)) AS items_json,
               COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id) ||
                 CASE WHEN s.ebay_environment = 'sandbox' THEN ' (Sandbox)' ELSE '' END AS store_name,
               EXISTS (SELECT 1 FROM tax_identifiers
@@ -128,13 +124,14 @@ export async function listVisibleOrders(
       fiscalState: row.has_identifiers ? (row.grant_id ? "available" : "locked") : "unchecked",
       taxIdentifiers: [],
     };
-    if (row.identifier_type && row.value && row.source && row.observed_at) {
+    // Le colonne dell'identificativo sono tutte presenti o tutte assenti (join senza grant).
+    if (row.identifier_type !== null) {
       order.taxIdentifiers.push({
         type: row.identifier_type,
         issuingCountry: row.issuing_country,
-        value: row.value,
-        source: row.source,
-        observedAt: row.observed_at,
+        value: row.value!,
+        source: row.source!,
+        observedAt: row.observed_at!,
       });
     }
     orders.set(row.id, order);
