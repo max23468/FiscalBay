@@ -1719,6 +1719,7 @@ describe("rinnovo dei token del negozio", () => {
     )
       .bind(first)
       .first<{ workspace_id: string }>())!;
+    // Il negozio collegato ha un UUID e precede questi nell'ordine dei rinnovi.
     for (let index = 1; index < 320; index++) {
       const id = `negozio-${String(index).padStart(3, "0")}`;
       await env.DB.batch([
@@ -1732,23 +1733,34 @@ describe("rinnovo dei token del negozio", () => {
            VALUES (?, 'scaduto', '2026-10-01T12:00:00.000Z', ?, '2028-04-01T10:00:00.000Z', ?)`,
         ).bind(
           id,
-          await sealToken(env.BETTER_AUTH_SECRET, id, "refresh", "refresh-sintetico"),
+          await sealToken(env.BETTER_AUTH_SECRET, id, "refresh", id),
           issued.toISOString(),
         ),
       ]);
     }
-    let calls = 0;
-    const fetcher = tokenEndpoint(() =>
-      ++calls === 1
+    // Due negozi in mezzo al primo blocco restano non disponibili: non vanno riletti.
+    const unavailable = new Set(["negozio-002", "negozio-003"]);
+    const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
+      const token = new URLSearchParams(String(init?.body)).get("refresh_token")!;
+      return unavailable.has(token)
         ? Response.json({ error: "temporarily_unavailable" }, { status: 503 })
-        : Response.json({ access_token: "token-rinnovato", expires_in: 7200 }),
-    );
+        : Response.json({ access_token: "token-rinnovato", expires_in: 7200 });
+    });
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const at = new Date("2026-10-01T11:30:00.000Z");
-    const outcomes = await refreshExpiringTokens(env, fetcher, at);
-    expect(fetcher).toHaveBeenCalledTimes(300);
-    expect(outcomes).toEqual(Array(299).fill("refreshed"));
-    // L'esecuzione successiva riprende dal negozio in errore e da quelli oltre il limite.
-    expect(await refreshExpiringTokens(env, fetcher, at)).toEqual(Array(21).fill("refreshed"));
+    try {
+      expect(await refreshExpiringTokens(env, fetcher, at)).toEqual(Array(298).fill("refreshed"));
+      expect(fetcher).toHaveBeenCalledTimes(300);
+      expect(
+        errors.mock.calls.filter(([line]) => String(line).includes('"operation":"token_refresh"')),
+      ).toHaveLength(2);
+      // L'esecuzione successiva riprova i due negozi e completa quelli oltre il limite.
+      fetcher.mockClear();
+      expect(await refreshExpiringTokens(env, fetcher, at)).toEqual(Array(20).fill("refreshed"));
+      expect(fetcher).toHaveBeenCalledTimes(22);
+    } finally {
+      errors.mockRestore();
+    }
   });
 
   it("registra il rifiuto del consenso solo per invalid_grant", async () => {
