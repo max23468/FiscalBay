@@ -13,6 +13,7 @@ import {
   mapTradingTaxIdentifiers,
   parseTradingOrderTaxIdentifiers,
 } from "../app/integrations/ebay/tax-identifiers.server";
+import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { grantFreeOrder, listVisibleOrders } from "../app/domain/orders.server";
 import {
   deleteStoreData,
@@ -747,7 +748,7 @@ describe("registrazione e verifica del contatto", () => {
   const password = "Una-password-registrazione-lunga";
   const person = { tipo: "privato", nome: "Mario", cognome: "Rossi" };
 
-  it("registra senza consensi preselezionati e apre una sessione non verificata che esplora ma non collega negozi", async () => {
+  it("registra senza consensi preselezionati, apre la sessione dal link e non rivela gli indirizzi già registrati", async () => {
     const email = "registrazione@example.invalid";
     const rejected = [
       [{ intent: "registrati", email, password, termini: "on" }, "dati"],
@@ -763,17 +764,13 @@ describe("registrazione e verifica del contatto", () => {
       await env.DB.prepare('SELECT id FROM "user" WHERE email = ?').bind(email).first(),
     ).toBeNull();
 
-    const created = await accessForm("/en/accesso", {
-      intent: "registrati",
-      ...person,
-      email,
-      password,
-      termini: "on",
-    });
+    const send = vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });
+    const register = (path: string) =>
+      accessForm(path, { intent: "registrati", ...person, email, password, termini: "on" });
+    const created = await register("/en/accesso");
     expect(created.status).toBe(303);
-    expect(created.headers.get("location")).toBe("/en/app/ordini?accesso=registrato");
-    const cookie = sessionCookie(created);
-    expect(cookie).toContain("session_token");
+    expect(created.headers.get("location")).toBe("/en/accesso?accesso=registrato");
+    expect(created.headers.getSetCookie()).toEqual([]);
     const user = await env.DB.prepare(
       'SELECT id, name, "emailVerified" FROM "user" WHERE email = ?',
     )
@@ -796,7 +793,33 @@ describe("registrazione e verifica del contatto", () => {
       ],
       marketing: [{ granted: 0, text_version: legalVersions.marketing, language: "en" }],
     });
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    const confirmation = send.mock.calls[0]![0] as { to: string; subject: string; text: string };
+    expect(confirmation).toMatchObject({
+      to: email,
+      subject: "Confirm your FiscalBay email address",
+    });
 
+    // Lo stesso indirizzo riceve la stessa risposta, senza sessione né nuovo account; il
+    // titolare ne riceve avviso.
+    const duplicate = await register("/accesso");
+    expect(duplicate.headers.get("location")).toBe("/accesso?accesso=registrato");
+    expect(duplicate.headers.getSetCookie()).toEqual([]);
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+    expect(send.mock.calls[1]![0]).toMatchObject({
+      to: email,
+      subject: "Hai già un account FiscalBay",
+    });
+    expect(
+      await env.DB.prepare('SELECT COUNT(*) AS total FROM "user" WHERE email = ?')
+        .bind(email)
+        .first(),
+    ).toEqual({ total: 1 });
+    expect((await agreements(user!.id)).marketing).toHaveLength(1);
+
+    // Chi entra con la password prima della conferma esplora, ma non collega negozi.
+    const cookie = sessionCookie(await accessForm("/accesso", { email, password }));
+    expect(cookie).toContain("session_token");
     expect(await homeFor(cookie)).toMatchObject({
       authenticated: true,
       email,
@@ -817,15 +840,15 @@ describe("registrazione e verifica del contatto", () => {
     const resent = await accessForm("/accesso", { intent: "verifica" }, cookie);
     expect(resent.headers.get("location")).toBe("/app/ordini?accesso=verifica-inviata");
 
-    const duplicate = await accessForm("/accesso", {
-      intent: "registrati",
-      ...person,
-      email,
-      password,
-      termini: "on",
-    });
-    expect(duplicate.headers.get("location")).toBe("/accesso?accesso=registrazione");
-    expect(duplicate.headers.getSetCookie()).toEqual([]);
+    // Il link di conferma apre la sessione verificata.
+    const verified = await handleAuthRequest(
+      new Request(confirmation.text.split("\n").at(-1)!),
+      env,
+    );
+    expect(verified.headers.get("location")).toBe("/en/app/ordini");
+    const verifiedCookie = sessionCookie(verified);
+    expect(await homeFor(verifiedCookie)).toMatchObject({ emailVerified: true });
+    send.mockRestore();
   });
 
   it("registra un'azienda solo con la ragione sociale, senza dati fiscali", async () => {
@@ -841,7 +864,7 @@ describe("registrazione e verifica del contatto", () => {
       password,
       termini: "on",
     });
-    expect(created.headers.get("location")).toBe("/app/ordini?accesso=registrato");
+    expect(created.headers.get("location")).toBe("/accesso?accesso=registrato");
     const user = await env.DB.prepare('SELECT id FROM "user" WHERE email = ?')
       .bind(email)
       .first<{ id: string }>();
@@ -864,7 +887,7 @@ describe("registrazione e verifica del contatto", () => {
     const privateId = await env.DB.prepare('SELECT id FROM "user" WHERE email = ?')
       .bind("privato@example.invalid")
       .first<{ id: string }>();
-    expect(privateUser.headers.get("location")).toBe("/app/ordini?accesso=registrato");
+    expect(privateUser.headers.get("location")).toBe("/accesso?accesso=registrato");
     expect(await profileOf(privateId!.id)).toMatchObject({ company_name: null });
   });
 
@@ -1006,7 +1029,8 @@ describe("registrazione e verifica del contatto", () => {
     const counters = await env.DB.prepare('SELECT COUNT(*) AS total FROM "rateLimit"').first<{
       total: number;
     }>();
-    expect(counters!.total).toBe(3);
+    // Due IP, una rete IPv6 e l'indirizzo email, contato solo per i tentativi ammessi per IP.
+    expect(counters!.total).toBe(4);
 
     // Una finestra scaduta riparte da uno invece di restare bloccata.
     await env.DB.prepare('UPDATE "rateLimit" SET "lastRequest" = "lastRequest" - 60000').run();
@@ -1629,6 +1653,45 @@ describe("rinnovo dei token del negozio", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it("rinnova oltre il primo blocco, prosegue dopo un errore e si ferma al limite", async () => {
+    const first = await linkedStore("molti-negozi@example.invalid");
+    const { workspace_id: workspaceId } = (await env.DB.prepare(
+      "SELECT workspace_id FROM ebay_stores WHERE id = ?",
+    )
+      .bind(first)
+      .first<{ workspace_id: string }>())!;
+    for (let index = 1; index < 320; index++) {
+      const id = `negozio-${String(index).padStart(3, "0")}`;
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, ebay_account_id)
+           VALUES (?1, ?2, ?1, ?3, ?1)`,
+        ).bind(id, workspaceId, issued.toISOString()),
+        env.DB.prepare(
+          `INSERT INTO ebay_store_credentials
+             (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
+           VALUES (?, 'scaduto', '2026-10-01T12:00:00.000Z', ?, '2028-04-01T10:00:00.000Z', ?)`,
+        ).bind(
+          id,
+          await sealToken(env.BETTER_AUTH_SECRET, id, "refresh", "refresh-sintetico"),
+          issued.toISOString(),
+        ),
+      ]);
+    }
+    let calls = 0;
+    const fetcher = tokenEndpoint(() =>
+      ++calls === 1
+        ? Response.json({ error: "temporarily_unavailable" }, { status: 503 })
+        : Response.json({ access_token: "token-rinnovato", expires_in: 7200 }),
+    );
+    const at = new Date("2026-10-01T11:30:00.000Z");
+    const outcomes = await refreshExpiringTokens(env, fetcher, at);
+    expect(fetcher).toHaveBeenCalledTimes(300);
+    expect(outcomes).toEqual(Array(299).fill("refreshed"));
+    // L'esecuzione successiva riprende dal negozio in errore e da quelli oltre il limite.
+    expect(await refreshExpiringTokens(env, fetcher, at)).toEqual(Array(21).fill("refreshed"));
+  });
+
   it("registra il rifiuto del consenso solo per invalid_grant", async () => {
     const storeId = await linkedStore("consenso-revocato@example.invalid");
     const misconfigured = tokenEndpoint(() =>
@@ -1685,6 +1748,52 @@ describe("rinnovo dei token del negozio", () => {
     const a = await sealToken(env.BETTER_AUTH_SECRET, "negozio", "access", "uguale");
     const b = await sealToken(env.BETTER_AUTH_SECRET, "negozio", "access", "uguale");
     expect(a).not.toBe(b);
+  });
+});
+
+describe("pulizia dei dati tecnici scaduti", () => {
+  it("elimina solo sessioni, verifiche, limiti e collegamenti scaduti", async () => {
+    const { userId } = await verifiedSession("pulizia@example.invalid");
+    const at = new Date();
+    const past = new Date(at.getTime() - 60_000).toISOString();
+    const future = new Date(at.getTime() + 60_000).toISOString();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO "session" ("id", "expiresAt", "token", "createdAt", "updatedAt", "userId")
+         VALUES ('sessione-scaduta', ?1, 'token-scaduto', ?1, ?1, ?2)`,
+      ).bind(past, userId),
+      env.DB.prepare(
+        `INSERT INTO "verification" ("id", "identifier", "value", "expiresAt", "createdAt", "updatedAt")
+         VALUES ('scaduta', 'pulizia', 'x', ?1, ?1, ?1), ('valida', 'pulizia', 'x', ?2, ?1, ?1)`,
+      ).bind(past, future),
+      env.DB.prepare(
+        `INSERT INTO "rateLimit" ("id", "key", "count", "lastRequest")
+         VALUES ('vecchio', 'vecchio', 1, ?1), ('recente', 'recente', 1, ?2)`,
+      ).bind(at.getTime() - 3_600_001, at.getTime() - 3_599_000),
+      env.DB.prepare(
+        `INSERT INTO ebay_store_link_sessions (state, user_id, code_verifier, expires_at)
+         VALUES ('scaduto', ?1, 'v', ?2), ('valido', ?1, 'v', ?3)`,
+      ).bind(userId, past, future),
+    ]);
+
+    await purgeExpiredRecords(env.DB, at);
+
+    const ids = async (sql: string) =>
+      (await env.DB.prepare(sql).all<{ id: string }>()).results.map((row) => row.id);
+    expect(await ids('SELECT "id" FROM "session" WHERE "userId" = \'' + userId + "'")).toHaveLength(
+      1,
+    );
+    expect(await ids('SELECT "id" FROM "verification" WHERE "identifier" = \'pulizia\'')).toEqual([
+      "valida",
+    ]);
+    expect(
+      await ids('SELECT "id" FROM "rateLimit" WHERE "id" IN (\'vecchio\', \'recente\')'),
+    ).toEqual(["recente"]);
+    expect(
+      await ids(
+        "SELECT state AS id FROM ebay_store_link_sessions WHERE state IN ('scaduto', 'valido')",
+      ),
+    ).toEqual(["valido"]);
   });
 });
 
@@ -1763,13 +1872,23 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         importedOrders: 1,
         dataDeleted: false,
         reminder: null,
+        consentExpiring: false,
       },
     ]);
     await setExpiry(new Date(at.getTime() + 30 * day));
     expect((await listStores(env.DB, seller.userId, at))[0]).toMatchObject({
       connection: "active",
       reminder: { kind: "expiring", at: "2027-01-31T00:00:00.000Z" },
+      consentExpiring: true,
     });
+    // In pausa il banner degli Ordini tace, il pannello del negozio segnala ancora la scadenza.
+    await pauseStore(env.DB, seller.userId, seller.storeId, at);
+    expect((await listStores(env.DB, seller.userId, at))[0]).toMatchObject({
+      connection: "paused",
+      reminder: null,
+      consentExpiring: true,
+    });
+    await resumeStore(env.DB, seller.userId, seller.storeId);
 
     // Dopo la scadenza il negozio chiede il ricollegamento: avviso per trenta giorni, poi basta,
     // senza scollegamento automatico.
@@ -1957,6 +2076,14 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     expect(orders).toMatchObject([{ fiscalState: "locked" }]);
     expect(orders[0]!.id).not.toBe(before!.id);
     expect(await quotaUsed()).toBe(1);
+
+    // Gli ordini riletti non risultano eliminati: scollegando di nuovo si possono eliminare.
+    expect((await listStores(env.DB, seller.userId))[0]).toMatchObject({ dataDeleted: false });
+    await disconnectStore(env.DB, seller.userId, seller.storeId);
+    expect((await listStores(env.DB, seller.userId))[0]).toMatchObject({
+      connection: "disconnected",
+      dataDeleted: false,
+    });
   });
 
   it("agisce solo sui negozi del proprio spazio", async () => {

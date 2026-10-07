@@ -241,6 +241,37 @@ describe("limiti dei tentativi", () => {
     expect((await attempt(path)).status).toBe(202);
   });
 
+  it.each([
+    ["/sign-in/email", 10, 900],
+    ["/request-password-reset", 5, 3600],
+    ["/send-verification-email", 5, 3600],
+    ["/sign-up/email", 5, 3600],
+  ])(
+    "limita %s per indirizzo anche da IP diversi, senza conservare l'email",
+    async (path, max, seconds) => {
+      let ip = 0;
+      const send = (email: string) =>
+        handle(`/api/auth${path}`, {
+          method: "POST",
+          headers: { "cf-connecting-ip": `203.0.113.${++ip}` },
+          body: JSON.stringify({ email }),
+        });
+      for (let count = 0; count < max; count++) {
+        expect(
+          (await send(count % 2 ? "Vittima@Example.invalid " : "vittima@example.invalid")).status,
+        ).toBe(202);
+      }
+      const blocked = await send("vittima@example.invalid");
+      expect(blocked.status).toBe(429);
+      expect(blocked.headers.get("retry-after")).toBe(String(seconds));
+      expect((await send("altro@example.invalid")).status).toBe(202);
+      const keys = sqlite.prepare('SELECT key FROM "rateLimit"').all() as Array<{ key: string }>;
+      expect(keys.some(({ key }) => key.includes("example"))).toBe(false);
+      vi.setSystemTime(now + seconds * 1000);
+      expect((await send("vittima@example.invalid")).status).toBe(202);
+    },
+  );
+
   it("ignora GET, origine HTTP, IP assente e percorsi estranei", async () => {
     await handle("/api/auth/sign-in/email", { headers: { "cf-connecting-ip": "203.0.113.1" } });
     await handle("/api/auth/sign-in/email", { method: "POST" });

@@ -1,4 +1,5 @@
 import { sessionPolicy } from "../auth.server";
+import { deviceName } from "../device-name";
 import type { Language } from "../i18n";
 
 /** Campi della sessione Better Auth usati qui, compresi quelli aggiunti da FiscalBay. */
@@ -52,32 +53,6 @@ export interface ActiveSession {
   device: string;
   lastActiveAt: string;
   current: boolean;
-}
-
-const browsers: Array<[RegExp, string]> = [
-  [/Edg(A|iOS)?\//u, "Edge"],
-  [/SamsungBrowser\//u, "Samsung Internet"],
-  [/(Firefox|FxiOS)\//u, "Firefox"],
-  [/(Chrome|CriOS)\//u, "Chrome"],
-  [/Safari\//u, "Safari"],
-];
-const systems: Array<[RegExp, string]> = [
-  [/iPhone/u, "iPhone"],
-  [/iPad/u, "iPad"],
-  [/Android/u, "Android"],
-  [/Windows/u, "Windows"],
-  [/Mac OS X|Macintosh/u, "macOS"],
-  [/CrOS/u, "ChromeOS"],
-  [/Linux/u, "Linux"],
-];
-
-/** Browser e sistema dallo user agent; nessun altro dato del dispositivo. */
-export function deviceName(userAgent: string | null, language: Language): string {
-  const browser = browsers.find(([pattern]) => pattern.test(userAgent ?? ""))?.[1];
-  const system = systems.find(([pattern]) => pattern.test(userAgent ?? ""))?.[1];
-  const on = language === "en" ? "on" : "su";
-  if (browser && system) return `${browser} ${on} ${system}`;
-  return browser ?? system ?? (language === "en" ? "Unknown device" : "Dispositivo sconosciuto");
 }
 
 /** Sessioni non scadute: quella in uso, poi le altre per ultima attività. Il token resta al server. */

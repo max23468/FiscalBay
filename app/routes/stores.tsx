@@ -56,6 +56,7 @@ function storeView(store: StoreStatus): StoreView {
     importing: false,
     connectedAt: store.consentGrantedAt,
     consentExpiresAt: store.consentExpiresAt,
+    consentExpiring: store.consentExpiring || undefined,
     targetMinutes: null,
     dataDeleted: store.dataDeleted || undefined,
     recent: [],

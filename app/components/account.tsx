@@ -24,6 +24,7 @@ import type { ActiveSession } from "../domain/sessions.server";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
 import type { AccessNoticeView } from "../access-notice";
 import { appCopy } from "../app-copy";
+import { deviceName } from "../device-name";
 import { accessPath, appBase, appHref, securityPath, visitParam } from "../app-links";
 import { languageNames, localizedPath, type Language } from "../i18n";
 import { formatDate, formatRelative } from "../view-models";
@@ -368,7 +369,10 @@ export function AccountSecurity({
         setError(false);
         try {
           const { authClient } = await import("../passkey-client");
-          const result = await authClient.passkey.addPasskey();
+          // Il dispositivo distingue le passkey in elenco, prima fra tutte le due dell'admin.
+          const result = await authClient.passkey.addPasskey({
+            name: deviceName(navigator.userAgent, language),
+          });
           if (result.error?.status === 403) {
             window.location.assign(
               `${localizedPath(language, securityPath)}?accesso=${passkeyBlock}`,

@@ -151,6 +151,8 @@ export interface StoreView {
   /** Inizio e scadenza del consenso corrente; null per un negozio scollegato. */
   connectedAt: string | null;
   consentExpiresAt: string | null;
+  /** Consenso valido che scade entro trenta giorni: il pannello invita a ricollegare. */
+  consentExpiring?: boolean;
   targetMinutes: number | null;
   /** Dati eliminati con «Scollega ed elimina dati». */
   dataDeleted?: boolean;

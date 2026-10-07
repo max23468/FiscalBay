@@ -25,6 +25,11 @@ export type StoreStatus = {
    * Mai per i negozi in pausa, che non leggono eBay.
    */
   reminder: { kind: "expiring" | "expired"; at: string } | null;
+  /**
+   * Consenso ancora valido che scade entro trenta giorni, anche per un negozio in pausa: il
+   * pannello del negozio lo segnala, così alla ripresa non serve subito un ricollegamento.
+   */
+  consentExpiring: boolean;
 };
 
 export type StoreActionResult = "done" | "not_found" | "invalid";
@@ -124,6 +129,10 @@ export async function listStores(
       importedOrders: row.orders,
       dataDeleted: row.data_deleted_at !== null,
       reminder,
+      consentExpiring:
+        connection !== "disconnected" &&
+        !expired &&
+        Date.parse(expiresAt!) - at <= expiringNoticeMilliseconds,
     };
   });
 }

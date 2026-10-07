@@ -20,6 +20,7 @@ const keyInfo = new TextEncoder().encode("fiscalbay/ebay-seller-token/v1");
 // così due esecuzioni ogni trenta minuti lasciano sempre un margine.
 const refreshMarginMilliseconds = 40 * 60 * 1000;
 const refreshBatch = 50;
+const refreshLimit = 300;
 
 const refreshSchema = z.looseObject({
   access_token: z.string().min(1),
@@ -213,28 +214,40 @@ export async function refreshStoreToken(input: {
 /**
  * Lavoro in background: rinnova in anticipo i token di accesso vicini alla scadenza. I negozi
  * in pausa non leggono eBay e restano esclusi; quelli scollegati non hanno più token.
+ *
+ * Scorre i negozi a blocchi con un cursore, così un errore non fa rileggere lo stesso negozio,
+ * fino a `refreshLimit` rinnovi: con due esecuzioni l'ora e token di due ore regge circa mille
+ * negozi attivi restando entro le sottorichieste di una esecuzione.
  */
 export async function refreshExpiringTokens(
   environment: Env,
   fetcher: typeof fetch,
   now = new Date(),
 ): Promise<RefreshOutcome[]> {
-  const { results } = await environment.DB.prepare(
-    `SELECT c.store_id FROM ebay_store_credentials c
-      WHERE c.rejected_at IS NULL AND c.access_expires_at <= ?
-        AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = c.store_id)
-      ORDER BY c.access_expires_at LIMIT ?`,
-  )
-    .bind(new Date(now.getTime() + refreshMarginMilliseconds).toISOString(), refreshBatch)
-    .all<{ store_id: string }>();
+  const threshold = new Date(now.getTime() + refreshMarginMilliseconds).toISOString();
   const outcomes: RefreshOutcome[] = [];
-  // In sequenza: un errore di un negozio non ferma gli altri e non sovrappone retry.
-  for (const { store_id: storeId } of results) {
-    try {
-      outcomes.push(await refreshStoreToken({ environment, storeId, fetcher, now }));
-    } catch (error) {
-      logFailure({ error, operation: "token_refresh" });
+  let cursor = { expiresAt: "", storeId: "" };
+  for (let read = 0; read < refreshLimit; read += refreshBatch) {
+    const { results } = await environment.DB.prepare(
+      `SELECT c.store_id, c.access_expires_at FROM ebay_store_credentials c
+        WHERE c.rejected_at IS NULL AND c.access_expires_at <= ?
+          AND (c.access_expires_at, c.store_id) > (?, ?)
+          AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = c.store_id)
+        ORDER BY c.access_expires_at, c.store_id LIMIT ?`,
+    )
+      .bind(threshold, cursor.expiresAt, cursor.storeId, refreshBatch)
+      .all<{ store_id: string; access_expires_at: string }>();
+    // In sequenza: un errore di un negozio non ferma gli altri e non sovrappone retry.
+    for (const { store_id: storeId } of results) {
+      try {
+        outcomes.push(await refreshStoreToken({ environment, storeId, fetcher, now }));
+      } catch (error) {
+        logFailure({ error, operation: "token_refresh" });
+      }
     }
+    const last = results.at(-1);
+    if (!last || results.length < refreshBatch) break;
+    cursor = { expiresAt: last.access_expires_at, storeId: last.store_id };
   }
   return outcomes;
 }

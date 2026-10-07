@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { redirect } from "react-router";
 
 import { createAuth } from "../auth.server";
+import { notifySecurityEvent } from "../account-email.server";
 import { forwardToAuth } from "../auth-route.server";
 import {
   completeRegistration,
@@ -140,6 +141,10 @@ export async function action({ request }: Route.ActionArgs) {
       if (!Object.hasOwn(accountMethods, method)) return notice("errore");
       const removed = await removeAccountMethod(env.DB, session.user.id, method as AccountMethod);
       if (!removed) return notice("ultimo-metodo");
+      notifySecurityEvent(env, session.user.id, {
+        kind: "method-removed",
+        method: method as AccountMethod,
+      });
       return notice(method === "ebay" ? "ebay-rimosso" : "metodo-rimosso");
     }
 
@@ -193,6 +198,7 @@ export async function action({ request }: Route.ActionArgs) {
     const id = field("id");
     if (!id || id.length > 128) return notice("errore");
     const removed = await removePasskey(env.DB, session.user.id, id);
+    if (removed) notifySecurityEvent(env, session.user.id, { kind: "passkey-removed" });
     return notice(removed ? "passkey-rimossa" : "ultimo-accesso");
   }
 
@@ -210,15 +216,23 @@ export async function action({ request }: Route.ActionArgs) {
     if (!response.ok) {
       return notice(response.status === 429 ? "troppi-tentativi" : "registrazione");
     }
+    // Per un indirizzo già registrato Better Auth risponde con un utente fittizio, senza
+    // sessione: profilo e Termini si salvano solo per l'account appena creato. La sessione
+    // nasce dal link di conferma, quindi la risposta è la stessa nei due casi.
     const { user } = await response.clone().json<{ user: { id: string } }>();
-    await completeRegistration(env.DB, {
-      userId: user.id,
-      language,
-      now: new Date(),
-      profile,
-      agreement: { marketing: field("marketing") === "on" },
-    });
-    return withCookies(`${base}?accesso=registrato`, response);
+    const created = await env.DB.prepare('SELECT 1 FROM "user" WHERE "id" = ?')
+      .bind(user.id)
+      .first();
+    if (created) {
+      await completeRegistration(env.DB, {
+        userId: user.id,
+        language,
+        now: new Date(),
+        profile,
+        agreement: { marketing: field("marketing") === "on" },
+      });
+    }
+    return notice("registrato");
   }
 
   if (intent === "verifica" || intent === "completa") {

@@ -2,9 +2,13 @@ import { passkey } from "@better-auth/passkey";
 import { betterAuth, type Auth, type BetterAuthOptions } from "better-auth";
 import { getAuthoritativeSessionFromCtx, getOAuthState } from "better-auth/api";
 import { genericOAuth } from "better-auth/plugins";
-import { waitUntil } from "cloudflare:workers";
 import { z } from "zod";
 
+import {
+  notifySecurityEvent,
+  sendAuthEmail,
+  sendExistingAccountEmail,
+} from "./account-email.server";
 import { logFailure } from "./errors";
 import { upstreamJson } from "./integrations/http.server";
 
@@ -19,36 +23,8 @@ const ebayIdentitySchema = z.object({
     .optional(),
 });
 
-const authEmailFrom = "noreply@fiscalbay.it";
-
 /** Dominio delle email di cui Google è autorevole oltre ai domini Workspace. */
 export const gmailDomain = "gmail.com";
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
-async function sendAuthEmail(
-  environment: Env,
-  email: string,
-  subject: string,
-  message: string,
-  url: string,
-): Promise<void> {
-  const safeUrl = escapeHtml(url);
-  await environment.AUTH_EMAIL.send({
-    from: { email: authEmailFrom, name: "FiscalBay" },
-    replyTo: "supporto@fiscalbay.it",
-    to: email,
-    subject,
-    text: `${message}\n\n${url}`,
-    html: `<p>${escapeHtml(message)}</p><p><a href="${safeUrl}">Continua su FiscalBay</a></p>`,
-  });
-}
 
 /**
  * Durata delle sessioni in secondi: scadenza, rinnovo con l'uso e accesso recente. Il rinnovo
@@ -100,6 +76,27 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
       },
     },
     databaseHooks: {
+      account: {
+        create: {
+          // Google o eBay aggiunti a un account che aveva già un accesso: il titolare ne riceve
+          // avviso. La password impostata con il link ha l'avviso del reset.
+          after: async (account) => {
+            if (account.providerId !== "google" && account.providerId !== "ebay") return;
+            const other = await environment.DB.prepare(
+              `SELECT 1 FROM "account" WHERE "userId" = ?1 AND "id" <> ?2
+               UNION ALL SELECT 1 FROM "passkey" WHERE "userId" = ?1 LIMIT 1`,
+            )
+              .bind(account.userId, account.id)
+              .first();
+            if (other) {
+              notifySecurityEvent(environment, account.userId, {
+                kind: "method-linked",
+                method: account.providerId,
+              });
+            }
+          },
+        },
+      },
       session: {
         create: {
           before: async (session, context) => ({
@@ -130,15 +127,7 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
       changeEmail: {
         enabled: true,
         sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
-          waitUntil(
-            sendAuthEmail(
-              environment,
-              user.email,
-              "Conferma il cambio email di FiscalBay",
-              `Hai chiesto di usare ${newEmail} per accedere a FiscalBay. Se non sei stato tu, ignora questa email.`,
-              url,
-            ),
-          );
+          sendAuthEmail(environment, "change-email", { to: user.email, url, newEmail });
         },
       },
       validateUserInfo: async ({ user, source }, context) => {
@@ -166,33 +155,26 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
     emailAndPassword: {
       enabled: true,
       revokeSessionsOnPasswordReset: true,
-      // La sessione nasce subito: chi non ha verificato l'email esplora, ma non collega negozi.
+      // La registrazione non apre la sessione e risponde allo stesso modo per un indirizzo già
+      // registrato: la sessione nasce dal link di conferma. Chi accede con la password senza
+      // aver confermato l'email esplora, ma non collega negozi.
       requireEmailVerification: false,
+      autoSignIn: false,
+      onExistingUserSignUp: async ({ user }, request) => {
+        await sendExistingAccountEmail(environment, user.email, request);
+      },
       sendResetPassword: async ({ user, url }) => {
-        waitUntil(
-          sendAuthEmail(
-            environment,
-            user.email,
-            "Reimposta la password di FiscalBay",
-            "Hai richiesto di reimpostare la password.",
-            url,
-          ),
-        );
+        sendAuthEmail(environment, "reset", { to: user.email, url });
+      },
+      onPasswordReset: async ({ user }) => {
+        notifySecurityEvent(environment, user.id, { kind: "password-reset" });
       },
     },
     emailVerification: {
       sendOnSignUp: true,
       autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, url }) => {
-        waitUntil(
-          sendAuthEmail(
-            environment,
-            user.email,
-            "Conferma l’indirizzo email di FiscalBay",
-            "Conferma il tuo indirizzo email per collegare i tuoi negozi eBay a FiscalBay.",
-            url,
-          ),
-        );
+        sendAuthEmail(environment, "verify", { to: user.email, url });
       },
     },
     socialProviders: {

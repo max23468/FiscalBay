@@ -10,6 +10,21 @@ import { loader as securityLoader } from "../app/routes/security";
 import { action as signInAction, loader as signInLoader } from "../app/routes/sign-in";
 import { action as storeLinkAction, loader as storeLinkLoader } from "../app/routes/store-link";
 
+/** La registrazione non apre la sessione: la apre l'accesso con la password appena scelta. */
+async function passwordSession(environment: Env, email: string, password: string) {
+  const response = await createAuth(environment).handler(
+    new Request("http://localhost:5173/api/auth/sign-in/email", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost:5173" },
+      body: JSON.stringify({ email, password }),
+    }),
+  );
+  return response.headers
+    .getSetCookie()
+    .map((value) => value.split(";")[0])
+    .join("; ");
+}
+
 it("non segue redirect esterni nei GET di accesso e collegamento", async () => {
   for (const base of ["", "/en"]) {
     const query = "?token=synthetic&redirectTo=https://example.invalid";
@@ -196,10 +211,7 @@ describe("Better Auth su Workers e D1", () => {
       }),
     );
     expect(signup.status).toBe(200);
-    const cookie = signup.headers
-      .getSetCookie()
-      .map((value) => value.split(";")[0])
-      .join("; ");
+    const cookie = await passwordSession(env, "passkey@example.invalid", "password-di-prova-lunga");
     const user = await env.DB.prepare('SELECT "id" FROM "user" WHERE "email" = ?')
       .bind("passkey@example.invalid")
       .first<{ id: string }>();
@@ -317,10 +329,11 @@ describe("Better Auth su Workers e D1", () => {
     );
     expect(signup.ok).toBe(true);
     const { user } = await signup.json<{ user: { id: string } }>();
-    const cookie = signup.headers
-      .getSetCookie()
-      .map((value) => value.split(";")[0])
-      .join("; ");
+    const cookie = await passwordSession(
+      env,
+      "recovery@example.invalid",
+      "password-precedente-lunga",
+    );
     const context = await auth.$context;
     await context.internalAdapter.createVerificationValue({
       identifier: "reset-password:synthetic-recovery-token",
@@ -677,7 +690,7 @@ describe("Better Auth su Workers e D1", () => {
         password: "Password-sintetica-123!",
       });
       const { user } = await signup.clone().json<{ user: { id: string } }>();
-      const sessionCookie = cookies(signup);
+      const sessionCookie = await passwordSession(env, email, "Password-sintetica-123!");
       if (scenario !== "non-verificata") {
         await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?')
           .bind(user.id)
@@ -701,7 +714,12 @@ describe("Better Auth su Workers e D1", () => {
           email: "altro@example.invalid",
           password: "Password-sintetica-123!",
         });
-        callbackSession = cookies(other);
+        expect(other.ok).toBe(true);
+        callbackSession = await passwordSession(
+          env,
+          "altro@example.invalid",
+          "Password-sintetica-123!",
+        );
         await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE email = ?')
           .bind("altro@example.invalid")
           .run();
@@ -853,7 +871,10 @@ describe("Collegamento e modifica dell'identità", () => {
         .bind(user.id)
         .run();
     }
-    return { id: user.id, cookie: cookies(response) };
+    return {
+      id: user.id,
+      cookie: await passwordSession(environment, email, "Password-sintetica-123!"),
+    };
   };
   const googleAccounts = (userId: string) =>
     env.DB.prepare('SELECT "accountId" FROM "account" WHERE "providerId" = ? AND "userId" = ?')
@@ -999,7 +1020,8 @@ describe("Collegamento e modifica dell'identità", () => {
   });
 
   it("riconosce Google dal subject anche con email cambiata, senza fondere utenti", async () => {
-    const environment = withEmail();
+    const send = vi.fn(async () => ({}));
+    const environment = withEmail(send);
     const first = await signUp(environment, `prima.identita@${gmailDomain}`, true);
     const second = await signUp(environment, `seconda.identita@${gmailDomain}`, true);
     // Collegamento esplicito da Sicurezza, anche con un'email diversa da quella dell'account.
@@ -1016,6 +1038,15 @@ describe("Collegamento e modifica dell'identità", () => {
     );
     expect(linked.headers.get("location")).toBe("/");
     expect(await googleAccounts(first.id)).toEqual(["google-stabile"]);
+    // Il titolare di un account che aveva già un accesso riceve avviso del nuovo metodo.
+    await vi.waitFor(() =>
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: `prima.identita@${gmailDomain}`,
+          subject: "Nuovo metodo di accesso su FiscalBay",
+        }),
+      ),
+    );
 
     // Su Google l'indirizzo diventa quello del secondo utente: conta il subject.
     const signedIn = await googleCallback(
@@ -1109,6 +1140,8 @@ describe("Collegamento e modifica dell'identità", () => {
     try {
       const email = "password.nuova@example.invalid";
       const user = await signUp(env, email, true);
+      await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+      send.mockClear();
       await env.DB.prepare(
         `INSERT INTO "passkey" ("id", "publicKey", "userId", "credentialID", "counter", "deviceType", "backedUp")
          VALUES ('passkey-password', 'synthetic', ?, 'passkey-password', 0, 'singleDevice', 0)`,
@@ -1120,6 +1153,13 @@ describe("Collegamento e modifica dell'identità", () => {
       expect(await outcome({ intent: "rimuovi-metodo", metodo: "password" })).toContain(
         "metodo-rimosso",
       );
+      // Il titolare riceve avviso della rimozione, con il collegamento a Sicurezza.
+      await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+      expect(send.mock.calls[0]![0]).toMatchObject({
+        to: email,
+        subject: "Metodo di accesso rimosso da FiscalBay",
+        text: expect.stringContaining("/app/impostazioni/sicurezza"),
+      });
       send.mockClear();
       expect(await outcome({ intent: "password" })).toContain("password-link");
       await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
@@ -1129,6 +1169,11 @@ describe("Collegamento e modifica dell'identità", () => {
       expect(
         await outcome({ intent: "reimposta-password", token, password: "Password-reimpostata-1" }),
       ).toContain("password-reimpostata");
+      await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+      expect(send.mock.calls[1]![0]).toMatchObject({
+        to: email,
+        subject: "La password di FiscalBay è stata reimpostata",
+      });
       const signIn = await post(env, "sign-in/email", {
         email,
         password: "Password-reimpostata-1",
@@ -1255,7 +1300,7 @@ describe("Sessioni, revoche e area admin", () => {
       },
       agreement: { marketing: false },
     });
-    return { id: user.id, cookie: cookies(response) };
+    return { id: user.id, cookie: await signIn(email) };
   };
   const sessionId = async (cookie: string) =>
     (
