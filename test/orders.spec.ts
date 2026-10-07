@@ -3733,6 +3733,8 @@ describe("client eBay e normalizzazione", () => {
       fulfillmentStartInstructions: [],
     });
     expect(fulfillmentObservation(recent, "2026-09-10T00:00:00.000Z").buyer.masked).toBeUndefined();
+    // Al quattordicesimo giorno esatto eBay fornisce ancora l'email.
+    expect(fulfillmentObservation(recent, "2026-09-15T08:00:00.000Z").buyer.masked).toBeUndefined();
     expect(fulfillmentObservation(recent, "2026-09-20T00:00:00.000Z").buyer.masked).toEqual([
       "email",
     ]);
@@ -3914,7 +3916,7 @@ describe("client eBay e normalizzazione", () => {
         if (url.includes("/sell/fulfillment/v1/order")) {
           return Response.json({ orders: [options.order ?? order()], total: 1 });
         }
-        const call = (init?.headers as Record<string, string>)["x-ebay-api-call-name"];
+        const call = new Headers(init?.headers).get("x-ebay-api-call-name");
         if (call === "GetItem") {
           return (
             options.getItem?.() ??
@@ -3933,7 +3935,7 @@ describe("client eBay e normalizzazione", () => {
       });
     const calls = (fetcher: ReturnType<typeof provider>, name: string) =>
       fetcher.mock.calls.filter(
-        ([, init]) => (init?.headers as Record<string, string>)["x-ebay-api-call-name"] === name,
+        ([, init]) => new Headers(init?.headers).get("x-ebay-api-call-name") === name,
       ).length;
     const importWith = (fetcher: typeof fetch, readAt = "2026-09-02T00:00:00.000Z") =>
       importLatestOrder({
@@ -3958,12 +3960,20 @@ describe("client eBay e normalizzazione", () => {
     });
 
     it("legge l'immagine una volta per articolo e non blocca l'ordine se GetItem fallisce", async () => {
-      const failing = provider({ getItem: () => new Response(null, { status: 503 }) });
+      // Due righe della stessa inserzione (varianti) richiedono una sola lettura.
+      const [line] = order().lineItems;
+      const variants = order({ lineItems: [line, { ...line, lineItemId: "10000000002" }] });
+      const failing = provider({
+        order: variants,
+        getItem: () => new Response(null, { status: 503 }),
+      });
       await importWith(failing);
       expect(calls(failing, "GetItem")).toBe(1);
       expect(await env.DB.prepare("SELECT image_url FROM order_items").all()).toMatchObject({
-        results: [{ image_url: null }],
+        results: [{ image_url: null }, { image_url: null }],
       });
+      await env.DB.prepare("DELETE FROM orders").run();
+      await importWith(provider({ getItem: () => new Response(null, { status: 503 }) }));
       expect(await env.DB.prepare("SELECT value FROM tax_identifiers").all()).toMatchObject({
         results: [{ value: "SINTETICO" }],
       });
@@ -4038,6 +4048,39 @@ describe("client eBay e normalizzazione", () => {
       });
       const [visible] = await listVisibleOrders(env.DB, "u-a");
       expect(visible!.summary).toMatchObject({ payment: "refunded", shipping: "to_ship" });
+
+      // Un campo assente anche nella lettura precedente resta mascherato, senza valore.
+      await env.DB.prepare("DELETE FROM orders").run();
+      await importWith(
+        provider({
+          order: order({
+            buyer: {
+              username: "acquirente-sintetico",
+              buyerRegistrationAddress: { fullName: "Maria Verdi", email: "a@example.invalid" },
+            },
+            fulfillmentStartInstructions: [],
+          }),
+        }),
+      );
+      await importWith(provider({ order: masked }), "2026-12-02T00:00:00.000Z");
+      expect(
+        JSON.parse(
+          (await env.DB.prepare("SELECT buyer_json FROM orders").first<{ buyer_json: string }>())!
+            .buyer_json,
+        ),
+      ).toMatchObject({
+        name: "Maria Verdi",
+        email: "a@example.invalid",
+        phone: null,
+        shipTo: { name: null, phone: null },
+        masked: [
+          "phone",
+          "billingAddress.addressLine1",
+          "shipTo.name",
+          "shipTo.phone",
+          "shipTo.address.addressLine1",
+        ],
+      });
 
       // Senza una lettura precedente il campo resta mascherato, non inventato.
       await env.DB.prepare("DELETE FROM orders").run();

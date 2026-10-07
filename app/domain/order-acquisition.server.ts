@@ -3,7 +3,6 @@ import {
   writableStore,
   type OrderObservation,
 } from "./order-import.server";
-import { UpstreamError } from "../integrations/http.server";
 import type { EbayAccess } from "../integrations/ebay/environment.server";
 import {
   fulfillmentObservation,
@@ -21,14 +20,13 @@ async function withItemImages(
   access: EbayAccess,
   observation: OrderObservation,
 ): Promise<OrderObservation> {
-  const keys = observation.items.flatMap((item) => (item.stableKey ? [item.stableKey] : []));
   const { results: known } = await db
     .prepare(
       `SELECT i.stable_key FROM order_items i JOIN orders o ON o.id = i.order_id
         WHERE o.store_id = ?1 AND i.image_url IS NOT NULL
           AND i.stable_key IN (SELECT value FROM json_each(?2))`,
     )
-    .bind(storeId, JSON.stringify(keys))
+    .bind(storeId, JSON.stringify(observation.items.map((item) => item.stableKey)))
     .all<{ stable_key: string }>();
   const skip = new Set(known.map((row) => row.stable_key));
   const images = new Map<string, Promise<string | null>>();
@@ -38,6 +36,7 @@ async function withItemImages(
       if (!images.has(item.legacyItemId)) {
         images.set(
           item.legacyItemId,
+          // Stryker disable next-line ArrowFunction: null e undefined lasciano la riga senza immagine.
           readItemImage(access, item.legacyItemId).catch(() => null),
         );
       }
@@ -83,9 +82,8 @@ export async function importLatestOrder(input: {
   );
   const trading = await readTradingTaxIdentifiers(access, observation.externalOrderId)
     .then((values) => ({ values }))
-    .catch((error: unknown) => ({
-      error: error instanceof UpstreamError ? error : new UpstreamError("invalid_response"),
-    }));
+    // La lettura Trading fallisce solo con errori già classificati dal confine HTTP.
+    .catch((error: unknown) => ({ error }));
   // Senza Trading l'ordine si salva comunque, senza dati fiscali. L'assenza del campo in
   // Trading non è ancora qualificata come rimozione autorevole.
   await recordOrderObservation(

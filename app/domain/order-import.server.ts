@@ -164,9 +164,8 @@ function keepMaskedValues(buyer: BuyerSnapshot, stored: string | null): BuyerSna
     const valueAt = (root: unknown, keys: string[]) =>
       keys.reduce<unknown>((value, key) => (value as Record<string, unknown> | null)?.[key], root);
     const kept = valueAt(previous, path);
-    const parent = valueAt(result, path.slice(0, -1)) as Record<string, unknown> | null;
-    if (kept === null || kept === undefined || !parent) return true;
-    parent[path.at(-1)!] = kept;
+    if (kept === null || kept === undefined) return true;
+    (valueAt(result, path.slice(0, -1)) as Record<string, unknown>)[path.at(-1)!] = kept;
     return false;
   });
   return { ...result, masked: masked.length ? masked : undefined };

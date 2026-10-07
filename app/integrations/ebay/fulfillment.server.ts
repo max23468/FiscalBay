@@ -58,7 +58,6 @@ function maskedFields(
   observedAt: string,
 ): MaskedBuyerField[] {
   const age = (Date.parse(observedAt) - Date.parse(order.creationDate)) / day;
-  const missing = (value: unknown) => value === undefined || value === null || value === "";
   // Un campo annidato conta solo se eBay ha fornito il contenitore che lo racchiude.
   const fields: Array<[MaskedBuyerField, unknown, number, unknown]> = [
     ["email", registration?.email, emailDays, true],
@@ -80,7 +79,7 @@ function maskedFields(
     ],
   ];
   return fields.flatMap(([field, value, days, container]) =>
-    age > days && missing(value) && container ? [field] : [],
+    age > days && !value && container ? [field] : [],
   );
 }
 
