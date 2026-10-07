@@ -248,10 +248,8 @@ export async function completeStoreLink(input: {
     db: environment.DB,
     storeId,
     grantedAt: now,
-    accessToken: token.access_token,
-    fetcher,
+    access: { fetcher, configuration, accessToken: token.access_token },
     now,
-    configuration,
   }).catch((error: unknown) => {
     logFailure({ request: input.request, error, operation: "store_link" });
   });

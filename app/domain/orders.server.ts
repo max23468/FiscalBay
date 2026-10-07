@@ -1,10 +1,48 @@
 import { buyerSnapshotSchema } from "./order-import.server";
 
-/** Stati originali della fonte e righe dell'ordine; null dove la fonte non li ha forniti. */
+export type PaymentState = "paid" | "unpaid" | "partially_refunded" | "refunded" | "unknown";
+export type ShippingState = "to_ship" | "in_progress" | "shipped" | "cancelled" | "unknown";
+
+const paymentStates: Record<string, PaymentState> = {
+  PAID: "paid",
+  PENDING: "unpaid",
+  FAILED: "unpaid",
+  PARTIALLY_REFUNDED: "partially_refunded",
+  FULLY_REFUNDED: "refunded",
+};
+const shippingStates: Record<string, ShippingState> = {
+  NOT_STARTED: "to_ship",
+  IN_PROGRESS: "in_progress",
+  FULFILLED: "shipped",
+};
+
+/**
+ * Stato di pagamento normalizzato dall'originale eBay: un pagamento in attesa o fallito non è
+ * incassato e un valore non previsto resta `unknown`. null se la fonte non l'ha fornito.
+ */
+export function paymentState(status: string | null): PaymentState | null {
+  return status === null ? null : (paymentStates[status] ?? "unknown");
+}
+
+/** Stato di evasione normalizzato; un annullamento confermato prevale sull'evasione. */
+export function shippingState(
+  fulfillment: string | null,
+  cancel: string | null,
+): ShippingState | null {
+  if (cancel === "CANCELED") return "cancelled";
+  return fulfillment === null ? null : (shippingStates[fulfillment] ?? "unknown");
+}
+
+/**
+ * Stati originali della fonte, la loro forma normalizzata e righe dell'ordine; null dove la
+ * fonte non li ha forniti.
+ */
 export type OrderSummary = {
   buyer: { username: string | null };
   orderPaymentStatus: string | null;
   orderFulfillmentStatus: string | null;
+  payment: PaymentState | null;
+  shipping: ShippingState | null;
   lineItems: Array<{ lineItemId: string; title: string; quantity: number; sku: string | null }>;
 };
 
@@ -36,6 +74,7 @@ function summaryOf(row: {
   buyer_json: string | null;
   payment_status: string | null;
   fulfillment_status: string | null;
+  cancel_status: string | null;
   items_json: string;
 }): OrderSummary {
   return {
@@ -46,6 +85,8 @@ function summaryOf(row: {
     },
     orderPaymentStatus: row.payment_status,
     orderFulfillmentStatus: row.fulfillment_status,
+    payment: paymentState(row.payment_status),
+    shipping: shippingState(row.fulfillment_status, row.cancel_status),
     lineItems: JSON.parse(row.items_json),
   };
 }
@@ -70,6 +111,7 @@ export async function listVisibleOrders(
        )
        SELECT o.id, o.ebay_order_id, o.creation_time, o.last_modified_time,
               o.currency, o.total_minor, o.buyer_json, o.payment_status, o.fulfillment_status,
+              o.cancel_status,
               (SELECT json_group_array(json_object('lineItemId', line_item_id, 'title', title,
                         'quantity', quantity, 'sku', sku))
                  FROM (SELECT * FROM order_items WHERE order_id = o.id ORDER BY rowid)) AS items_json,
@@ -99,6 +141,7 @@ export async function listVisibleOrders(
       buyer_json: string | null;
       payment_status: string | null;
       fulfillment_status: string | null;
+      cancel_status: string | null;
       items_json: string;
       store_name: string;
       has_identifiers: number;

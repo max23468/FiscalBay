@@ -1,3 +1,5 @@
+import { UpstreamError } from "../http.server";
+
 export type EbayEnvironment = "production" | "sandbox";
 
 type EbayBindings = {
@@ -37,7 +39,42 @@ export function ebayConfiguration(env: EbayBindings, environment: EbayEnvironmen
     identityUrl: sandbox
       ? "https://apiz.sandbox.ebay.com/commerce/identity/v1/user/"
       : "https://apiz.ebay.com/commerce/identity/v1/user/",
-    ordersUrl: `${api}/sell/fulfillment/v1/order?limit=1`,
+    /** Origine delle API seller: solo qui il client invia il token e segue i link del provider. */
+    apiOrigin: api,
+    ordersUrl: `${api}/sell/fulfillment/v1/order`,
     tradingUrl: `${api}/ws/api.dll`,
   };
+}
+
+export type EbayConfiguration = ReturnType<typeof ebayConfiguration>;
+
+/** Ciò che serve a una chiamata seller: il token viaggia solo verso `configuration.apiOrigin`. */
+export type EbayAccess = {
+  fetcher: typeof fetch;
+  configuration: EbayConfiguration;
+  accessToken: string;
+};
+
+/**
+ * URL restituito da eBay (per esempio il link `next`) accettato solo se HTTPS, sulla stessa
+ * origine API dell'ambiente, senza credenziali e sotto il percorso atteso. Altrimenti la lettura
+ * fallisce chiusa prima di inviare il token.
+ */
+export function ebayApiUrl(configuration: EbayConfiguration, value: string, path: string): URL {
+  let url: URL;
+  try {
+    url = new URL(value, configuration.apiOrigin);
+  } catch {
+    throw new UpstreamError("invalid_response");
+  }
+  if (
+    url.protocol !== "https:" ||
+    url.origin !== configuration.apiOrigin ||
+    url.username ||
+    url.password ||
+    (url.pathname !== path && !url.pathname.startsWith(`${path}/`))
+  ) {
+    throw new UpstreamError("invalid_response");
+  }
+  return url;
 }

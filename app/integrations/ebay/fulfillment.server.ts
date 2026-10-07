@@ -1,15 +1,20 @@
 import { z } from "zod";
 
-import { orderObservationSchema, type OrderObservation } from "../../domain/order-import.server";
+import {
+  orderObservationSchema,
+  type MaskedBuyerField,
+  type OrderObservation,
+} from "../../domain/order-import.server";
 import { parseMinor } from "../../money";
-import { retryAfterSeconds } from "../http.server";
+import { upstreamJson } from "../http.server";
+import { ebayApiUrl, type EbayAccess } from "./environment.server";
 
 type Amount = { value: string; currency: string };
 type Contact = {
   fullName?: string;
   email?: string;
   primaryPhone?: { phoneNumber?: string };
-  contactAddress?: Record<string, unknown>;
+  contactAddress?: Record<string, unknown> & { addressLine1?: string };
 };
 
 /** Campi dell'ordine Fulfillment letti dal modello; li valida lo schema dell'osservazione. */
@@ -36,11 +41,54 @@ type FulfillmentOrderDetail = {
 
 const money = ({ value, currency }: Amount) => ({ minor: parseMinor(value, currency), currency });
 
+const day = 86_400_000;
+// eBay smette di restituire email dopo 14 giorni e nome, telefono e prima riga dell'indirizzo
+// dopo 90: oltre quelle età un campo assente è mascherato, non rimosso.
+const emailDays = 14;
+const contactDays = 90;
+
+/**
+ * Campi dell'acquirente assenti per il mascheramento eBay alla data della lettura. Un campo
+ * presente resta un dato fornito, anche oltre il limite.
+ */
+function maskedFields(
+  order: FulfillmentOrderDetail,
+  registration: Contact | undefined,
+  shipTo: Contact | undefined,
+  observedAt: string,
+): MaskedBuyerField[] {
+  const age = (Date.parse(observedAt) - Date.parse(order.creationDate)) / day;
+  // Un campo annidato conta solo se eBay ha fornito il contenitore che lo racchiude.
+  const fields: Array<[MaskedBuyerField, unknown, number, unknown]> = [
+    ["email", registration?.email, emailDays, true],
+    ["name", registration?.fullName, contactDays, true],
+    ["phone", registration?.primaryPhone?.phoneNumber, contactDays, true],
+    [
+      "billingAddress.addressLine1",
+      registration?.contactAddress?.addressLine1,
+      contactDays,
+      registration?.contactAddress,
+    ],
+    ["shipTo.name", shipTo?.fullName, contactDays, shipTo],
+    ["shipTo.phone", shipTo?.primaryPhone?.phoneNumber, contactDays, shipTo],
+    [
+      "shipTo.address.addressLine1",
+      shipTo?.contactAddress?.addressLine1,
+      contactDays,
+      shipTo?.contactAddress,
+    ],
+  ];
+  return fields.flatMap(([field, value, days, container]) =>
+    age > days && !value && container ? [field] : [],
+  );
+}
+
 /**
  * Lettura Fulfillment come osservazione validata del modello ordini, con importi esatti. I campi
- * non previsti, inclusi i dati fiscali, non entrano nell'osservazione.
+ * non previsti, inclusi i dati fiscali, non entrano nell'osservazione. `observedAt` distingue
+ * i campi mascherati per l'età dell'ordine da quelli assenti.
  */
-export function fulfillmentObservation(payload: unknown): OrderObservation {
+export function fulfillmentObservation(payload: unknown, observedAt: string): OrderObservation {
   const order = payload as FulfillmentOrderDetail;
   const lineItems = order.lineItems ?? [];
   const registration = order.buyer?.buyerRegistrationAddress;
@@ -68,9 +116,11 @@ export function fulfillmentObservation(payload: unknown): OrderObservation {
         phone: shipTo.primaryPhone?.phoneNumber,
         address: shipTo.contactAddress,
       },
+      masked: maskedFields(order, registration, shipTo, observedAt),
     },
     items: lineItems.map((item) => ({
       lineItemId: item.lineItemId,
+      legacyItemId: item.legacyItemId,
       // Stessa forma di `OrderLineItemID` Trading (articolo-transazione), da qualificare
       // sugli ordini combinati: senza coincidenza gli ordini restano distinti.
       stableKey: item.legacyItemId ? `${item.legacyItemId}-${item.lineItemId}` : null,
@@ -86,7 +136,8 @@ const fulfillmentOrderSchema = z.looseObject({ orderId: z.string().min(1) });
 const fulfillmentPageSchema = z.looseObject({
   orders: z.array(fulfillmentOrderSchema).default([]),
   total: z.number().int().nonnegative(),
-  next: z.string().url().optional(),
+  // Validato prima di seguirlo: può essere relativo o puntare altrove.
+  next: z.string().optional(),
 });
 
 export type FulfillmentOrder = z.infer<typeof fulfillmentOrderSchema>;
@@ -122,14 +173,25 @@ export function buildLastModifiedFilter(
   return `lastmodifieddate:[${start.toISOString()}..${end.toISOString()}]`;
 }
 
-export function classifyEbayRetry(
-  status: number,
-  retryAfter: string | null,
-  attempt: number,
-  now = Date.now(),
-): { retryable: false } | { retryable: true; delaySeconds: number } {
-  if (status !== 429 && status < 500) return { retryable: false };
+const ordersPath = "/sell/fulfillment/v1/order";
 
-  const delaySeconds = retryAfterSeconds(retryAfter, now) ?? 2 ** Math.max(0, attempt - 1);
-  return { retryable: true, delaySeconds: Math.max(1, Math.min(300, Math.ceil(delaySeconds))) };
+/**
+ * Una pagina di `getOrders`: la prima con limite e filtro, le successive dal link `next` di eBay,
+ * seguito solo sulla stessa origine API dell'ambiente.
+ */
+export async function readFulfillmentOrders(
+  access: EbayAccess,
+  page: { limit: number; filter?: string } | { next: string },
+): Promise<FulfillmentPage> {
+  let url: URL;
+  if ("next" in page) {
+    url = ebayApiUrl(access.configuration, page.next, ordersPath);
+  } else {
+    url = ebayApiUrl(access.configuration, access.configuration.ordersUrl, ordersPath);
+    url.searchParams.set("limit", String(page.limit));
+    if (page.filter) url.searchParams.set("filter", page.filter);
+  }
+  return upstreamJson(access.fetcher, url.href, fulfillmentPageSchema, {
+    headers: { authorization: `Bearer ${access.accessToken}` },
+  });
 }
