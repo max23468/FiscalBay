@@ -852,6 +852,17 @@ describe("modello ordini", () => {
         orderId,
       });
     }
+    // Trading non sovrascrive un ordine letto da Fulfillment, anche con una data successiva.
+    const tradingCopy = observation({
+      source: "trading",
+      lastModifiedTime: "2026-09-10T12:00:00Z",
+      paymentStatus: "PENDING",
+      items: [line("k1", "t-1"), line("k2", "t-2")],
+    });
+    expect(await recordOrderObservation(env.DB, target(), tradingCopy)).toMatchObject({
+      outcome: "unchanged",
+      orderId,
+    });
     // Anche un ID riemesso con una lettura più vecchia aggancia soltanto il riferimento.
     const reissued = observation({
       externalOrderId: "D-0",
@@ -875,6 +886,7 @@ describe("modello ordini", () => {
     ).toEqual([
       { source: "fulfillment", external_order_id: "D-0" },
       { source: "fulfillment", external_order_id: "D-1" },
+      { source: "trading", external_order_id: "D-1" },
       { source: "trading", external_order_id: "P-1" },
     ]);
   });
@@ -1077,6 +1089,7 @@ describe("modello ordini", () => {
           externalOrderId: "T-0",
           lastModifiedTime: "2026-09-10T10:00:00Z",
           paymentStatus: "PENDING",
+          items: [line("k1", "vecchia-1"), line("k2", "vecchia-2")],
         }),
         "unchanged",
         "T-1",
@@ -1133,6 +1146,41 @@ describe("modello ordini", () => {
     ]);
     expect(rows[1]!.id).toBe(saved!.id);
     expect(rows[0]!.id).not.toBe(saved!.id);
+
+    // Rilette in ordine inverso, con e senza identità, le righe restano le stesse.
+    const reversed = observation({
+      lastModifiedTime: "2026-09-10T14:00:00Z",
+      items: [line(null, "r1"), line("k1", "r2")],
+    });
+    expect(await recordOrderObservation(env.DB, target(), reversed)).toMatchObject({
+      outcome: "unchanged",
+    });
+    await recordOrderObservation(
+      env.DB,
+      target(),
+      observation({
+        lastModifiedTime: "2026-09-10T15:00:00Z",
+        items: [line("k1", "r2"), line("k2", "r3"), line(null, "r1"), line(null, "r4")],
+      }),
+    );
+    const before = await env.DB.prepare("SELECT id, line_item_id FROM order_items ORDER BY id")
+      .all()
+      .then(({ results }) => results);
+    expect(
+      await recordOrderObservation(
+        env.DB,
+        target(),
+        observation({
+          lastModifiedTime: "2026-09-10T16:00:00Z",
+          items: [line(null, "r4"), line("k2", "r3"), line(null, "r1"), line("k1", "r2")],
+        }),
+      ),
+    ).toMatchObject({ outcome: "unchanged" });
+    expect(
+      await env.DB.prepare("SELECT id, line_item_id FROM order_items ORDER BY id")
+        .all()
+        .then(({ results }) => results),
+    ).toEqual(before);
   });
 
   it("valida l'osservazione e salva lo snapshot con tutti i campi", async () => {

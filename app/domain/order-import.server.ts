@@ -61,22 +61,16 @@ export const orderObservationSchema = z.object({
   fulfillmentStatus: text,
   cancelStatus: text,
   buyer: buyerSnapshotSchema,
-  items: z
-    .array(
-      z.object({
-        lineItemId: z.string().min(1),
-        stableKey: z.string().min(1).nullable(),
-        title: z.string(),
-        sku: text,
-        quantity: z.number().int().positive(),
-        total: money.nullable(),
-      }),
-    )
-    .refine((items) => new Set(items.map((item) => item.lineItemId)).size === items.length)
-    .refine((items) => {
-      const keys = items.flatMap((item) => (item.stableKey ? [item.stableKey] : []));
-      return new Set(keys).size === keys.length;
+  items: z.array(
+    z.object({
+      lineItemId: z.string().min(1),
+      stableKey: z.string().min(1).nullable(),
+      title: z.string(),
+      sku: text,
+      quantity: z.number().int().positive(),
+      total: money.nullable(),
     }),
+  ),
   taxIdentifiers: z
     .object({
       source: z.enum(["ebay_trading_get_orders", "ebay_fulfillment"]),
