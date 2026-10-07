@@ -15,7 +15,6 @@ import { CircleAlert, FileQuestion } from "lucide-react";
 import type { Route } from "./+types/root";
 import { StandalonePage } from "./components/standalone-page";
 import { buttonVariants } from "./components/ui/button-variants";
-import { TooltipProvider } from "./components/ui/tooltip";
 import { correlationId } from "./errors";
 import { appCopy } from "./app-copy";
 import { languageFromPath, localizedPath } from "./i18n";
@@ -47,7 +46,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        <TooltipProvider>{children}</TooltipProvider>
+        {children}
         <ScrollRestoration />
         <Scripts />
       </body>

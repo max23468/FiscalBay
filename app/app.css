@@ -75,7 +75,6 @@
   --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
   --scale-modal: 0.96;
   --scale-popover: 0.97;
-  --scale-tooltip: 0.98;
   --scale-popover-close: 0.99;
 }
 
@@ -271,21 +270,6 @@
     opacity: 0;
     scale: var(--scale-popover-close);
     transition-duration: var(--duration-quick);
-  }
-}
-
-@utility motion-tooltip {
-  transform-origin: var(--transform-origin);
-  transition:
-    opacity var(--duration-quick) ease-out,
-    scale var(--duration-quick) ease-out;
-  &[data-starting-style] {
-    opacity: 0;
-    scale: var(--scale-tooltip);
-  }
-  &[data-ending-style] {
-    opacity: 0;
-    transition-duration: 0ms;
   }
 }
 

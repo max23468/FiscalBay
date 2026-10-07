@@ -2504,39 +2504,63 @@ describe("collegamento negozio eBay", () => {
     );
   });
 
-  it("conserva il collegamento riuscito se la lettura del primo ordine fallisce", async () => {
-    const { cookie } = await verifiedSession("import-fallito@example.invalid");
-    const state = (await beginStoreLink(cookie)).searchParams.get("state");
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
-    try {
-      const callback = await handleAuthRequest(
-        storeCallback(`state=${state}&code=codice`, cookie),
-        env,
-        syntheticEbay({ trading: () => new Response("<Errore/>", { status: 503 }) }),
-      );
-      expect(callback.headers.get("location")).toBe(
-        "http://localhost:5173/app/ordini?negozio=collegato",
-      );
-      const line = JSON.parse(log.mock.calls[0]![0] as string);
-      expect(line).toMatchObject({
-        code: "UPSTREAM_UNAVAILABLE",
-        operation: "store_link",
-        failure: "unavailable",
+  it.each([
+    { response: "HTTP 503", xml: "<Errore/>", status: 503, failure: "unavailable" },
+    {
+      response: "Ack Failure",
+      xml: "<GetOrdersResponse><Ack>Failure</Ack></GetOrdersResponse>",
+      status: 200,
+      failure: "invalid_response",
+    },
+    { response: "XML inatteso", xml: "<Errore/>", status: 200, failure: "invalid_response" },
+  ])(
+    "conserva ordine e collegamento quando Trading risponde $response",
+    async ({ xml, status, failure }) => {
+      const { cookie } = await verifiedSession("import-fallito@example.invalid");
+      const state = (await beginStoreLink(cookie)).searchParams.get("state");
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const callback = await handleAuthRequest(
+          storeCallback(`state=${state}&code=codice`, cookie),
+          env,
+          syntheticEbay({ trading: () => new Response(xml, { status }) }),
+        );
+        expect(callback.headers.get("location")).toBe(
+          "http://localhost:5173/app/ordini?negozio=collegato",
+        );
+        const line = JSON.parse(log.mock.calls[0]![0] as string);
+        expect(line).toMatchObject({
+          code: "UPSTREAM_UNAVAILABLE",
+          operation: "store_link",
+          failure,
+        });
+      } finally {
+        log.mockRestore();
+      }
+      expect(
+        await env.DB.prepare("SELECT COUNT(*) AS total FROM ebay_store_credentials").first(),
+      ).toEqual({ total: 1 });
+      expect(await env.DB.prepare("SELECT ebay_order_id FROM orders").all()).toMatchObject({
+        results: [{ ebay_order_id: syntheticOrderId }],
       });
-    } finally {
-      log.mockRestore();
-    }
-    expect(
-      await env.DB.prepare("SELECT COUNT(*) AS total FROM ebay_store_credentials").first(),
-    ).toEqual({ total: 1 });
-    // Senza ordini importati la pagina non chiede di collegare un negozio già collegato.
-    await env.DB.prepare("DELETE FROM orders").run();
-    const home = await homeFor(cookie);
-    expect({ orders: home.orders, storeLinked: home.storeLinked }).toEqual({
-      orders: [],
-      storeLinked: true,
-    });
-  });
+      expect(await env.DB.prepare("SELECT COUNT(*) AS total FROM tax_identifiers").first()).toEqual(
+        {
+          total: 0,
+        },
+      );
+      // La verifica fiscale fallita non dichiara riuscita la sincronizzazione.
+      expect(await env.DB.prepare("SELECT COUNT(*) AS total FROM sync_state").first()).toEqual({
+        total: 0,
+      });
+      // Senza ordini importati la pagina non chiede di collegare un negozio già collegato.
+      await env.DB.prepare("DELETE FROM orders").run();
+      const home = await homeFor(cookie);
+      expect({ orders: home.orders, storeLinked: home.storeLinked }).toEqual({
+        orders: [],
+        storeLinked: true,
+      });
+    },
+  );
 
   it("non crea il negozio se eBay non scambia il codice", async () => {
     const { cookie } = await verifiedSession("scambio-fallito@example.invalid");

@@ -1402,6 +1402,8 @@ Integrato da CF Ready e Hub Fatture: XML Trading rifiutato oltre limite, con byt
 
 Implementare paginazione, cursori, checkpoint, finestra di sovrapposizione e ripresa del backfill. Rendere disponibili prima gli ordini recenti e un avanzamento veritiero.
 
+Estendere l'acquisizione condivisa già usata dal collegamento del negozio per recenti, backfill e richieste manuali, senza mantenere un secondo import dentro OAuth. Il percorso iniziale legge oggi soltanto l'ordine più recente; la paginazione e il lavoro fiscale separato restano da integrare, mantenendo il salvataggio dell'ordine quando Trading fallisce anche durante il parsing.
+
 **Criterio di completamento:** Interruzioni fra pagine recuperabili senza duplicati o salti; il backfill non impedisce l’acquisizione dei nuovi ordini.
 
 <a id="m3-04"></a>
@@ -1501,6 +1503,8 @@ Riapre in modo circoscritto l'esito di M0-05, senza modificarlo retroattivamente
 **Stato:** Da completare · **Prerequisiti:** M3-03 · **Contratto:** [§25](#s25) · [§11](#s11)
 
 Realizzare una volta sola l'ingresso prima di React Router: metodo, dimensione e firma sul corpo grezzo, claim idempotente in D1, messaggio in coda con soli identificativi, risposta positiva solo dopo l'accettazione della coda, consumer con retry e dead-letter nativi. Il primo consumatore è `ORDER_CONFIRMATION` per M3-04; M5-05 (Stripe), M5-09 (Telegram) e M7-02 (cancellazione account eBay) lo riusano invece di creare percorsi propri.
+
+Il webhook Stripe preliminare in `app/routes/stripe-webhook.ts`, oggi non registrato, non va attivato come route React Router: rimuoverlo quando l'ingresso condiviso ne sostituisce verifica e presa in carico. M5-05 integra gli effetti commerciali sullo stesso ingresso, conservando le prove di firma e deduplica già qualificate.
 
 **Criterio di completamento:** Consegna duplicata senza effetti ripetuti; coda non disponibile senza ACK al provider; firma errata o corpo oltre limite rifiutati prima di caricare l'app; CPU per invocazione letta nei log del Worker entro il limite del piano (D158); mutation test mirati sull'ingresso eseguiti dalla CI quando la PR lo tocca. Le callback OAuth aperte dal browser restano fuori da questo ingresso.
 

@@ -82,7 +82,7 @@ Scala ricavata da transitions.dev e usata tramite token (`--duration-*`, `--ease
 |---|---|---|---|
 | `motion-modal` (dialog, alert dialog) | 250 ms | 150 ms | Dissolvenza e scala da 0,96 |
 | `motion-popover` (menu, select) | 250 ms | 150 ms | Scala da 0,97 dal punto d'origine, chiusura a 0,99 |
-| `motion-tooltip` | 150 ms dopo 400 ms di attesa | istantanea | Scala da 0,98 |
+| Tooltip, quando presenti | 150 ms dopo 400 ms di attesa | istantanea | Scala da 0,98; primitive da introdurre solo con un consumatore reale |
 | `motion-panel` (pannello laterale) | 250 ms | 150 ms | Scorrimento di 2,5 rem e dissolvenza |
 | `motion-backdrop` | 250 ms | 150 ms | Sola dissolvenza |
 | Indicatore delle schede | 250 ms | · | Pillola o barra che segue la scheda attiva |

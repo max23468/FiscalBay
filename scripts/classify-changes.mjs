@@ -142,7 +142,7 @@ export function plan(files, sources = [], complete = false) {
   // un modulo condiviso non critico non estende la campagna a tutti i domini.
   const critical = (file) =>
     (sources.length === 0 || graph.has(file)) &&
-    /^app\/(?:auth(?:-route)?|domain\/(?:orders|order-import|quota|grants|cycles|sessions|sign-in-methods|registration|stores|export)|integrations\/(?:stripe|ebay\/(?:seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
+    /^app\/(?:auth(?:-route)?|domain\/(?:orders|order-import|order-acquisition|quota|grants|cycles|sessions|sign-in-methods|registration|stores|export)|integrations\/(?:stripe|ebay\/(?:seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
       file,
     );
   const mutationInputs = files.filter(critical);
