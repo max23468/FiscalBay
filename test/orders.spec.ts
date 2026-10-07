@@ -810,6 +810,14 @@ describe("registrazione e verifica del contatto", () => {
       to: email,
       subject: "Hai già un account FiscalBay",
     });
+    // Dalla pagina inglese l'avviso è in inglese e porta all'accesso inglese.
+    await register("/en/accesso");
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(3));
+    expect(send.mock.calls[2]![0]).toMatchObject({
+      to: email,
+      subject: "You already have a FiscalBay account",
+      text: expect.stringContaining("/en/accesso"),
+    });
     expect(
       await env.DB.prepare('SELECT COUNT(*) AS total FROM "user" WHERE email = ?')
         .bind(email)
@@ -1794,6 +1802,10 @@ describe("pulizia dei dati tecnici scaduti", () => {
         "SELECT state AS id FROM ebay_store_link_sessions WHERE state IN ('scaduto', 'valido')",
       ),
     ).toEqual(["valido"]);
+
+    // La sessione creata da Better Auth usa lo stesso formato: oltre la scadenza se ne va.
+    await purgeExpiredRecords(env.DB, new Date(at.getTime() + 8 * 24 * 60 * 60 * 1000));
+    expect(await ids(`SELECT "id" FROM "session" WHERE "userId" = '${userId}'`)).toEqual([]);
   });
 });
 
