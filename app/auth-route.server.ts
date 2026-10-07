@@ -1,4 +1,5 @@
 import { waitUntil } from "cloudflare:workers";
+import { redirect } from "react-router";
 
 import { createAuth } from "./auth.server";
 import { registrationStatus } from "./domain/registration.server";
@@ -10,7 +11,7 @@ import {
   type StoreLinkOutcome,
 } from "./integrations/ebay/store-link.server";
 import { notifySecurityEvent } from "./account-email.server";
-import { logFailure } from "./errors";
+import { logFailure, tracePhase } from "./errors";
 import { ordersPath } from "./app-links";
 import { localizedPath } from "./i18n";
 
@@ -280,7 +281,7 @@ const forwardedHeaders = ["cookie", "origin", "user-agent", "accept-language", "
  * Invia al router di Better Auth un'azione dei moduli dell'app, con lo stesso limite dei
  * tentativi delle chiamate dirette alle route Auth.
  */
-export function forwardToAuth(
+export async function forwardToAuth(
   environment: Env,
   request: Request,
   path: string,
@@ -291,7 +292,8 @@ export function forwardToAuth(
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
-  return authResponse(
+  tracePhase(request, "auth-forward");
+  const response = await authResponse(
     new Request(new URL(`/api/auth${path}`, environment.APP_ORIGIN), {
       method: "POST",
       headers,
@@ -299,4 +301,13 @@ export function forwardToAuth(
     }),
     environment,
   );
+  tracePhase(request, "auth-response");
+  return response;
+}
+
+/** Redirect dopo un'azione inoltrata ad Auth, con i cookie di sessione che ha impostato. */
+export function redirectWithCookies(location: string, response: Response): Response {
+  const headers = new Headers({ "cache-control": "no-store" });
+  for (const cookie of response.headers.getSetCookie()) headers.append("set-cookie", cookie);
+  return redirect(location, { status: 303, headers });
 }

@@ -28,6 +28,7 @@ import { createAuth } from "../app/auth.server";
 import { handleAuthRequest } from "../app/auth-route.server";
 import { loader as loadHome } from "../app/routes/home";
 import { action as signIn, loader as loadAccess } from "../app/routes/sign-in";
+import { action as securityAction } from "../app/routes/security";
 import { headers as siteHeaders, loader as loadSite } from "../app/routes/site";
 import { loader as loadRobots } from "../app/routes/robots";
 import { indexable } from "../app/app-links";
@@ -633,6 +634,22 @@ function accessForm(path: string, fields: Record<string, string>, cookie?: strin
   } as Parameters<typeof signIn>[0]) as Promise<Response>;
 }
 
+/** Azione della pagina Sicurezza; chi non può vederla riceve il redirect lanciato. */
+function securityForm(path: string, fields: Record<string, string>, cookie?: string) {
+  return (
+    securityAction({
+      request: new Request(`http://localhost:5173${path}`, {
+        method: "POST",
+        headers: { origin: "http://localhost:5173", ...(cookie ? { cookie } : {}) },
+        body: new URLSearchParams(fields),
+      }),
+    } as Parameters<typeof securityAction>[0]) as Promise<Response>
+  ).catch((thrown: unknown) => {
+    if (thrown instanceof Response) return thrown;
+    throw thrown;
+  });
+}
+
 function sessionCookie(response: Response): string {
   return response.headers
     .getSetCookie()
@@ -1069,11 +1086,14 @@ describe("registrazione e verifica del contatto", () => {
       "https://api.ebay.com/oauth/api_scope",
       "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
     ]);
-    const refused = await accessForm("/en/accesso", { intent: "collega-metodo", metodo: "ebay" });
-    expect(refused.headers.get("location")).toBe("/en/app/ordini?accesso=accesso-non-verificato");
+    const refused = await securityForm("/en/app/impostazioni/sicurezza", {
+      intent: "collega-metodo",
+      metodo: "ebay",
+    });
+    expect(refused.headers.get("location")).toBe("/en/accesso");
     const session = await verifiedSession("link-modulo@example.invalid");
-    const allowed = await accessForm(
-      "/accesso",
+    const allowed = await securityForm(
+      "/app/impostazioni/sicurezza",
       { intent: "collega-metodo", metodo: "ebay" },
       session.cookie,
     );

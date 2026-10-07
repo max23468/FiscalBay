@@ -323,7 +323,7 @@ export function AccountSecurity({
   const { access: t, settings } = appCopy[language];
   const { pathname } = useLocation();
   // Anche senza JavaScript i form dell'anteprima restano nella route simulata.
-  const actionPath = onAction ? pathname : localizedPath(language, accessPath);
+  const actionPath = onAction ? pathname : localizedPath(language, securityPath);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
   const status = (connected: boolean) =>
