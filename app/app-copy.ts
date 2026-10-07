@@ -90,7 +90,12 @@ const it = {
     clearSearch: "Cancella ricerca",
     resetFilters: "Reimposta filtri",
     premiumOption: "Disponibile con Premium",
-    payment: { paid: "Pagato", unpaid: "Non pagato", refunded: "Rimborsato" },
+    payment: {
+      paid: "Pagato",
+      unpaid: "Non pagato",
+      partially_refunded: "Rimborsato in parte",
+      refunded: "Rimborsato",
+    },
     shipping: {
       to_ship: "Da spedire",
       in_progress: "Spedizione in corso",
@@ -105,7 +110,6 @@ const it = {
     notImported: "Dato non ancora acquisito",
     fiscalUnchecked: "Disponibilità fiscale da verificare",
     taxData: "Dati fiscali",
-    paymentPending: "Pagamento in attesa",
     orderLabel: (id: string) => `Ordine ${id}`,
     fiscal: {
       available: "Disponibile",
@@ -876,7 +880,12 @@ const en: AppCopy = {
     clearSearch: "Clear search",
     resetFilters: "Reset filters",
     premiumOption: "Available with Premium",
-    payment: { paid: "Paid", unpaid: "Unpaid", refunded: "Refunded" },
+    payment: {
+      paid: "Paid",
+      unpaid: "Unpaid",
+      partially_refunded: "Partially refunded",
+      refunded: "Refunded",
+    },
     shipping: {
       to_ship: "To ship",
       in_progress: "Fulfillment in progress",
@@ -891,7 +900,6 @@ const en: AppCopy = {
     notImported: "Data not yet imported",
     fiscalUnchecked: "Tax identifier availability not yet checked",
     taxData: "Tax identifiers",
-    paymentPending: "Payment pending",
     orderLabel: (id) => `Order ${id}`,
     fiscal: {
       available: "Available",

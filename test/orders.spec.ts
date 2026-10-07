@@ -4,17 +4,28 @@ import { z } from "zod";
 
 import {
   buildLastModifiedFilter,
-  classifyEbayRetry,
   mergeFulfillmentOrders,
   parseFulfillmentPage,
   fulfillmentObservation,
+  readFulfillmentOrders,
 } from "../app/integrations/ebay/fulfillment.server";
 import {
   mapTradingTaxIdentifiers,
+  parseItemImage,
   parseTradingOrderTaxIdentifiers,
-} from "../app/integrations/ebay/tax-identifiers.server";
+  qualifiedImageUrl,
+  readItemImage,
+  readTradingTaxIdentifiers,
+  tradingAck,
+} from "../app/integrations/ebay/trading.server";
+import { importLatestOrder } from "../app/domain/order-acquisition.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-import { grantFreeOrder, listVisibleOrders } from "../app/domain/orders.server";
+import {
+  grantFreeOrder,
+  listVisibleOrders,
+  paymentState,
+  shippingState,
+} from "../app/domain/orders.server";
 import { recordOrderObservation, type OrderObservation } from "../app/domain/order-import.server";
 import {
   deleteStoreData,
@@ -255,20 +266,6 @@ describe("percorso ordini", () => {
     expect(() => parseFulfillmentPage({ orders: [{ orderId: "" }], total: 1 })).toThrow();
   });
 
-  it("classifica i retry eBay senza riprovare gli errori client definitivi", () => {
-    expect(classifyEbayRetry(400, null, 1)).toEqual({ retryable: false });
-    expect(classifyEbayRetry(499, null, 1)).toEqual({ retryable: false });
-    expect(classifyEbayRetry(500, null, 1)).toEqual({ retryable: true, delaySeconds: 1 });
-    expect(classifyEbayRetry(429, "120", 1)).toEqual({
-      retryable: true,
-      delaySeconds: 120,
-    });
-    expect(classifyEbayRetry(503, null, 3)).toEqual({
-      retryable: true,
-      delaySeconds: 4,
-    });
-  });
-
   it("mostra i dati fiscali dell'ordine sbloccato solo al tenant proprietario", async () => {
     await seed();
     await grantFreeOrder(env.DB, "u-a", {
@@ -305,6 +302,8 @@ describe("percorso ordini", () => {
       buyer: { username: null },
       orderPaymentStatus: null,
       orderFulfillmentStatus: null,
+      payment: null,
+      shipping: null,
       lineItems: [
         { lineItemId: "line-a1", title: "Articolo A", quantity: 1, sku: "SKU-A" },
         { lineItemId: "line-a2", title: "Articolo B", quantity: 2, sku: null },
@@ -323,6 +322,7 @@ describe("percorso ordini", () => {
   });
 
   it("la lettura Fulfillment conserva solo i campi del modello, con importi esatti", () => {
+    const readAt = "2026-09-21T00:00:00.000Z";
     const address = {
       addressLine1: "Via Roma 1",
       addressLine2: "Scala B",
@@ -343,40 +343,44 @@ describe("percorso ordini", () => {
       listingMarketplaceId: marketplace,
       taxIdentifier: "NON-ESPORRE",
     });
-    const complete = fulfillmentObservation({
-      orderId: "ordine",
-      creationDate: "2026-09-20T10:00:00Z",
-      lastModifiedDate: "2026-09-20T11:00:00.000Z",
-      orderPaymentStatus: "PAID",
-      orderFulfillmentStatus: "NOT_STARTED",
-      cancelStatus: { cancelState: "NONE_REQUESTED" },
-      pricingSummary: { total: { value: "2000", currency: "JPY" } },
-      buyer: {
-        username: "acquirente-sintetico",
-        taxIdentifier: { value: "NON-ESPORRE" },
-        buyerRegistrationAddress: {
-          fullName: "Mario Rossi",
-          email: "acquirente@example.invalid",
-          primaryPhone: { phoneNumber: "+39 000 0000000" },
-          contactAddress: address,
-        },
-      },
-      fulfillmentStartInstructions: [
-        {
-          shippingStep: {
-            shipTo: {
-              fullName: "Anna Bianchi",
-              primaryPhone: { phoneNumber: "+39 000 1111111" },
-              contactAddress: address,
-            },
+    const complete = fulfillmentObservation(
+      {
+        orderId: "ordine",
+        creationDate: "2026-09-20T10:00:00Z",
+        lastModifiedDate: "2026-09-20T11:00:00.000Z",
+        orderPaymentStatus: "PAID",
+        orderFulfillmentStatus: "NOT_STARTED",
+        cancelStatus: { cancelState: "NONE_REQUESTED" },
+        pricingSummary: { total: { value: "2000", currency: "JPY" } },
+        buyer: {
+          username: "acquirente-sintetico",
+          taxIdentifier: { value: "NON-ESPORRE" },
+          buyerRegistrationAddress: {
+            fullName: "Mario Rossi",
+            email: "acquirente@example.invalid",
+            primaryPhone: { phoneNumber: "+39 000 0000000" },
+            contactAddress: address,
           },
         },
-      ],
-      lineItems: [line("riga-1", "110", "EBAY_IT"), line("riga-2", undefined, "EBAY_IT")],
-      taxIdentifier: "NON-ESPORRE",
-    });
+        fulfillmentStartInstructions: [
+          {
+            shippingStep: {
+              shipTo: {
+                fullName: "Anna Bianchi",
+                primaryPhone: { phoneNumber: "+39 000 1111111" },
+                contactAddress: address,
+              },
+            },
+          },
+        ],
+        lineItems: [line("riga-1", "110", "EBAY_IT"), line("riga-2", undefined, "EBAY_IT")],
+        taxIdentifier: "NON-ESPORRE",
+      },
+      readAt,
+    );
     const item = (lineItemId: string, stableKey: string | null) => ({
       lineItemId,
+      legacyItemId: stableKey?.split("-")[0] ?? null,
       stableKey,
       title: `Articolo ${lineItemId}`,
       sku: "SKU-1",
@@ -413,7 +417,7 @@ describe("percorso ordini", () => {
       lastModifiedDate: "2026-09-20T10:00:00Z",
       pricingSummary: { total: { value: "12.5", currency: "EUR" } },
     };
-    expect(fulfillmentObservation(minimal)).toMatchObject({
+    expect(fulfillmentObservation(minimal, readAt)).toMatchObject({
       marketplaceId: null,
       paymentStatus: null,
       cancelStatus: null,
@@ -429,33 +433,40 @@ describe("percorso ordini", () => {
       total: { minor: 1250, currency: "EUR" },
     });
     expect(
-      fulfillmentObservation({
-        ...minimal,
-        buyer: { buyerRegistrationAddress: {} },
-        fulfillmentStartInstructions: [{ shippingStep: { shipTo: {} } }],
-        lineItems: [
-          line("a", "1", "EBAY_IT"),
-          { ...line("b", "2", "EBAY_DE"), lineItemCost: undefined },
-        ],
-      }),
+      fulfillmentObservation(
+        {
+          ...minimal,
+          buyer: { buyerRegistrationAddress: {} },
+          fulfillmentStartInstructions: [{ shippingStep: { shipTo: {} } }],
+          lineItems: [
+            line("a", "1", "EBAY_IT"),
+            { ...line("b", "2", "EBAY_DE"), lineItemCost: undefined },
+          ],
+        },
+        readAt,
+      ),
     ).toMatchObject({
       marketplaceId: null,
       buyer: { phone: null, shipTo: { name: null, phone: null, address: null } },
       items: [{ total: { minor: 1000 } }, { total: null }],
     });
     expect(
-      fulfillmentObservation({ ...minimal, fulfillmentStartInstructions: [{}] }).buyer.shipTo,
+      fulfillmentObservation({ ...minimal, fulfillmentStartInstructions: [{}] }, readAt).buyer
+        .shipTo,
     ).toBeNull();
     expect(
-      fulfillmentObservation({ ...minimal, fulfillmentStartInstructions: [] }).buyer.shipTo,
+      fulfillmentObservation({ ...minimal, fulfillmentStartInstructions: [] }, readAt).buyer.shipTo,
     ).toBeNull();
     expect(() =>
-      fulfillmentObservation({
-        ...minimal,
-        pricingSummary: { total: { value: "12.345", currency: "EUR" } },
-      }),
+      fulfillmentObservation(
+        {
+          ...minimal,
+          pricingSummary: { total: { value: "12.345", currency: "EUR" } },
+        },
+        readAt,
+      ),
     ).toThrow("inexact_amount");
-    expect(() => fulfillmentObservation({ ...minimal, orderId: "" })).toThrow();
+    expect(() => fulfillmentObservation({ ...minimal, orderId: "" }, readAt)).toThrow();
   });
 
   it("mappa la fonte fiscale Trading senza inventare il Paese emittente", () => {
@@ -2049,7 +2060,7 @@ describe("collegamento negozio eBay", () => {
     ]);
     expect(() =>
       parseTradingOrderTaxIdentifiers("<GetOrdersResponse><Ack>Failure</Ack>", syntheticOrderId),
-    ).toThrow("trading_get_orders_failed");
+    ).toThrow(UpstreamError);
   });
 
   it("dà allo spazio creato al collegamento il nome nella lingua dell'utente", async () => {
@@ -2140,6 +2151,8 @@ describe("collegamento negozio eBay", () => {
       buyer: { username: "acquirente-sintetico" },
       orderPaymentStatus: "PAID",
       orderFulfillmentStatus: "NOT_STARTED",
+      payment: "paid",
+      shipping: "to_ship",
       lineItems: [
         {
           lineItemId: "riga-sintetica",
@@ -2259,7 +2272,7 @@ describe("collegamento negozio eBay", () => {
           '<GetOrdersRequest xmlns="urn:ebay:apis:eBLBaseComponents">' +
           "<Version>1455</Version><DetailLevel>ReturnAll</DetailLevel>" +
           "<OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>" +
-          "<OrderIDArray><OrderID>12-01</OrderID></OrderIDArray>" +
+          "<OrderIDArray><OrderID>12-&lt;0&gt;&amp;1</OrderID></OrderIDArray>" +
           "</GetOrdersRequest>",
       },
     ]);
@@ -3575,5 +3588,492 @@ describe("confine HTTP dei provider", () => {
       failure: "invalid_response",
     });
     expect(await upstreamJson(reply('{"ok":true,"extra":1}'), url, schema)).toEqual({ ok: true });
+  });
+});
+
+describe("client eBay e normalizzazione", () => {
+  const configuration = ebayConfiguration(env, "production");
+  const access = (fetcher: typeof fetch) => ({
+    fetcher,
+    configuration,
+    accessToken: "token-sintetico",
+  });
+  const failure = (promise: Promise<unknown>) =>
+    promise.then(
+      () => null,
+      (error: unknown) =>
+        error instanceof UpstreamError ? { failure: error.failure, ...error.details } : error,
+    );
+  const trading = (body: string) => vi.fn<typeof fetch>(async () => new Response(body));
+  const withUser = (url: string) => Object.assign(new URL(url), { username: "utente" }).href;
+  const ack = (inner: string) =>
+    `<?xml version="1.0" encoding="UTF-8"?><GetItemResponse xmlns="urn:ebay:apis:eBLBaseComponents">${inner}</GetItemResponse>`;
+  const tradingError = (code: string, classification = "RequestError", severity = "Error") =>
+    ack(
+      `<Ack>Failure</Ack><Errors><ShortMessage>NON-ESPORRE</ShortMessage><ErrorCode>${code}</ErrorCode>` +
+        `<SeverityCode>${severity}</SeverityCode><ErrorClassification>${classification}</ErrorClassification></Errors>`,
+    );
+
+  // Ordine sintetico: acquirente registrato, destinatario diverso con `c/o`, telefono
+  // strutturato, campi inattesi e marketplace dell'inserzione.
+  const order = (overrides: Record<string, unknown> = {}) => ({
+    orderId: "12-34567-89012",
+    creationDate: "2026-09-01T08:00:00.000Z",
+    lastModifiedDate: "2026-09-01T09:00:00.000Z",
+    orderPaymentStatus: "PAID",
+    orderFulfillmentStatus: "NOT_STARTED",
+    cancelStatus: { cancelState: "NONE_REQUESTED", cancelRequests: [] },
+    pricingSummary: { total: { value: "49.90", currency: "EUR" } },
+    salesRecordReference: "NON-ESPORRE",
+    buyer: {
+      username: "acquirente-sintetico",
+      buyerRegistrationAddress: {
+        fullName: "Maria Verdi",
+        email: "acquirente@example.invalid",
+        primaryPhone: { phoneNumber: "+39 0461 000000", countryCode: "IT" },
+        contactAddress: {
+          addressLine1: "Via Fiscale 1",
+          city: "Trento",
+          postalCode: "38122",
+          countryCode: "IT",
+        },
+      },
+    },
+    fulfillmentStartInstructions: [
+      {
+        shippingStep: {
+          shipTo: {
+            fullName: "Luca Neri c/o Hotel Sintetico",
+            companyName: "NON-ESPORRE",
+            primaryPhone: { phoneNumber: "+39 0461 111111" },
+            contactAddress: {
+              addressLine1: "Piazza Spedizione 2",
+              addressLine2: "c/o Reception",
+              city: "Bolzano",
+              postalCode: "39100",
+              countryCode: "IT",
+            },
+          },
+        },
+      },
+    ],
+    lineItems: [
+      {
+        lineItemId: "10000000001",
+        legacyItemId: "110000000001",
+        title: "Articolo sintetico",
+        quantity: 1,
+        lineItemCost: { value: "49.90", currency: "EUR" },
+        listingMarketplaceId: "EBAY_IT",
+        purchaseMarketplaceId: "EBAY_DE",
+        nuovoCampoEbay: { valore: "NON-ESPORRE" },
+      },
+    ],
+    ...overrides,
+  });
+
+  it("conserva acquirente, destinatario con c/o e telefono così come li fornisce eBay", () => {
+    const observation = fulfillmentObservation(order(), "2026-09-02T00:00:00.000Z");
+    expect(observation.buyer).toEqual({
+      username: "acquirente-sintetico",
+      name: "Maria Verdi",
+      email: "acquirente@example.invalid",
+      phone: "+39 0461 000000",
+      billingAddress: {
+        addressLine1: "Via Fiscale 1",
+        addressLine2: null,
+        city: "Trento",
+        postalCode: "38122",
+        stateOrProvince: null,
+        countryCode: "IT",
+      },
+      shipTo: {
+        name: "Luca Neri c/o Hotel Sintetico",
+        phone: "+39 0461 111111",
+        address: {
+          addressLine1: "Piazza Spedizione 2",
+          addressLine2: "c/o Reception",
+          city: "Bolzano",
+          postalCode: "39100",
+          stateOrProvince: null,
+          countryCode: "IT",
+        },
+      },
+    });
+    // Il marketplace è quello dell'inserzione, non quello d'acquisto.
+    expect(observation.marketplaceId).toBe("EBAY_IT");
+    expect(JSON.stringify(observation)).not.toContain("NON-ESPORRE");
+  });
+
+  it("distingue i campi mascherati per età da quelli assenti", () => {
+    const old = order({
+      creationDate: "2026-05-01T08:00:00.000Z",
+      buyer: {
+        username: "acquirente-sintetico",
+        buyerRegistrationAddress: {
+          contactAddress: { city: "Trento", postalCode: "38122", countryCode: "IT" },
+        },
+      },
+      fulfillmentStartInstructions: [
+        { shippingStep: { shipTo: { contactAddress: { city: "Bolzano", countryCode: "IT" } } } },
+      ],
+    });
+    expect(fulfillmentObservation(old, "2026-09-01T00:00:00.000Z").buyer.masked).toEqual([
+      "email",
+      "name",
+      "phone",
+      "billingAddress.addressLine1",
+      "shipTo.name",
+      "shipTo.phone",
+      "shipTo.address.addressLine1",
+    ]);
+    // Entro 14 giorni un campo assente è soltanto assente; dopo, l'email è mascherata.
+    const recent = order({
+      buyer: { username: "acquirente-sintetico", buyerRegistrationAddress: { fullName: "X" } },
+      fulfillmentStartInstructions: [],
+    });
+    expect(fulfillmentObservation(recent, "2026-09-10T00:00:00.000Z").buyer.masked).toBeUndefined();
+    expect(fulfillmentObservation(recent, "2026-09-20T00:00:00.000Z").buyer.masked).toEqual([
+      "email",
+    ]);
+    // Un campo ancora fornito oltre il limite resta un dato, non un mascheramento.
+    expect(
+      fulfillmentObservation(order(), "2026-12-31T00:00:00.000Z").buyer.masked,
+    ).toBeUndefined();
+  });
+
+  it("normalizza pagamento ed evasione senza inventare stati sconosciuti", () => {
+    expect(
+      ["PAID", "PENDING", "FAILED", "PARTIALLY_REFUNDED", "FULLY_REFUNDED", "NUOVO", null].map(
+        paymentState,
+      ),
+    ).toEqual(["paid", "unpaid", "unpaid", "partially_refunded", "refunded", "unknown", null]);
+    expect(
+      [
+        ["NOT_STARTED", "NONE_REQUESTED"],
+        ["IN_PROGRESS", "IN_PROGRESS"],
+        ["FULFILLED", null],
+        ["NOT_STARTED", "CANCELED"],
+        ["NUOVO", "NONE_REQUESTED"],
+        [null, null],
+      ].map(([fulfillment, cancel]) => shippingState(fulfillment!, cancel!)),
+    ).toEqual(["to_ship", "in_progress", "shipped", "cancelled", "unknown", null]);
+  });
+
+  it("segue `next` solo sulla stessa origine API HTTPS, senza inviare il token altrove", async () => {
+    const pages = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        orders: [{ orderId: "A" }],
+        total: 2,
+        next: "https://api.ebay.com/sell/fulfillment/v1/order?limit=1&offset=1",
+      }),
+    );
+    const first = await readFulfillmentOrders(access(pages), {
+      limit: 1,
+      filter: "lastmodifieddate:[2026-09-01T00:00:00.000Z..]",
+    });
+    await readFulfillmentOrders(access(pages), { next: first.next! });
+    await readFulfillmentOrders(access(pages), { next: "/sell/fulfillment/v1/order?offset=2" });
+    expect(pages.mock.calls.map(([url, init]) => [String(url), init?.headers])).toEqual([
+      [
+        "https://api.ebay.com/sell/fulfillment/v1/order?limit=1&filter=lastmodifieddate%3A%5B2026-09-01T00%3A00%3A00.000Z..%5D",
+        { authorization: "Bearer token-sintetico" },
+      ],
+      [
+        "https://api.ebay.com/sell/fulfillment/v1/order?limit=1&offset=1",
+        { authorization: "Bearer token-sintetico" },
+      ],
+      [
+        "https://api.ebay.com/sell/fulfillment/v1/order?offset=2",
+        { authorization: "Bearer token-sintetico" },
+      ],
+    ]);
+
+    const guarded = vi.fn<typeof fetch>(async () => Response.json({ total: 0 }));
+    for (const next of [
+      "http://api.ebay.com/sell/fulfillment/v1/order?offset=1",
+      "https://api.ebay.com.esempio.invalid/sell/fulfillment/v1/order",
+      "https://api.sandbox.ebay.com/sell/fulfillment/v1/order",
+      "https://api.ebay.com:8443/sell/fulfillment/v1/order",
+      withUser("https://api.ebay.com/sell/fulfillment/v1/order"),
+      "https://api.ebay.com/sell/fulfillment/v1/orderx",
+      "https://api.ebay.com/identity/v1/oauth2/token",
+      "//esempio.invalid/sell/fulfillment/v1/order",
+      "javascript:alert(1)",
+    ]) {
+      expect(await failure(readFulfillmentOrders(access(guarded), { next }))).toEqual({
+        failure: "invalid_response",
+      });
+    }
+    expect(guarded).not.toHaveBeenCalled();
+  });
+
+  it("rifiuta prima del parsing l'XML Trading troppo grande, con NUL o con DOCTYPE/ENTITY", async () => {
+    for (const body of [
+      `<?xml version="1.0"?><!DOCTYPE x [<!ENTITY a "b">]>${ack("<Ack>Success</Ack>")}`,
+      `<?xml version="1.0"?><!entity a "b">${ack("<Ack>Success</Ack>")}`,
+      ack("<Ack>Success</Ack>\0"),
+    ]) {
+      expect(await failure(readTradingTaxIdentifiers(access(trading(body)), "1"))).toEqual({
+        failure: "invalid_response",
+      });
+    }
+    // Oltre il limite, anche senza Content-Length, la lettura si interrompe.
+    const oversized = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new Uint8Array(65_536).fill(32));
+      },
+    });
+    expect(
+      await failure(
+        readTradingTaxIdentifiers(
+          access(vi.fn<typeof fetch>(async () => new Response(oversized))),
+          "1",
+        ),
+      ),
+    ).toEqual({ failure: "invalid_response", status: 200 });
+    expect(() => tradingAck(ack("<Ack>Success</Ack>") + " ".repeat(2_097_153))).toThrow(
+      UpstreamError,
+    );
+  });
+
+  it("tipizza gli errori Trading con il solo codice eBay", async () => {
+    for (const [body, expected] of [
+      [tradingError("931"), { failure: "credentials", providerCode: "931" }],
+      [tradingError("21916984"), { failure: "credentials", providerCode: "21916984" }],
+      [tradingError("518"), { failure: "rate_limited", providerCode: "518" }],
+      [tradingError("10007", "SystemError"), { failure: "unavailable", providerCode: "10007" }],
+      [tradingError("37"), { failure: "rejected", providerCode: "37" }],
+      [ack("<Ack>Sconosciuto</Ack>"), { failure: "invalid_response" }],
+      [ack(""), { failure: "invalid_response" }],
+    ] as const) {
+      const result = await failure(readItemImage(access(trading(body)), "1"));
+      expect(result).toEqual(expected);
+      expect(JSON.stringify(result)).not.toContain("NON-ESPORRE");
+    }
+    // Un avviso non è un errore.
+    expect(
+      await readItemImage(
+        access(
+          trading(ack("<Ack>Warning</Ack><Errors><SeverityCode>Warning</SeverityCode></Errors>")),
+        ),
+        "1",
+      ),
+    ).toBeNull();
+  });
+
+  it("accetta solo immagini eBay HTTPS in formato raster", async () => {
+    const valid = "https://i.ebayimg.com/images/g/abc/s-l1600.jpg";
+    for (const url of [
+      valid,
+      "https://i.ebayimg.com/00/s/MTYwMA==/z/abc/$_57.JPG?set_id=1",
+      "https://i.ebayimg.sandbox.ebay.com/images/g/abc/s-l500.webp",
+    ]) {
+      expect(qualifiedImageUrl(url)).toBe(new URL(url).href);
+    }
+    for (const url of [
+      "http://i.ebayimg.com/images/g/abc/s-l1600.jpg",
+      "https://i.ebayimg.com.esempio.invalid/a.jpg",
+      "https://esempio.invalid/i.ebayimg.com/a.jpg",
+      "https://i.ebayimg.com/images/a.svg",
+      "https://i.ebayimg.com/images/a.jpg.html",
+      "https://i.ebayimg.com:444/images/a.jpg",
+      withUser("https://i.ebayimg.com/images/a.jpg"),
+      "data:image/png;base64,AAAA",
+      "non un url",
+    ]) {
+      expect(qualifiedImageUrl(url)).toBeNull();
+    }
+    expect(
+      parseItemImage(
+        ack(
+          "<Ack>Success</Ack><Item><PictureDetails><GalleryURL>https://esempio.invalid/a.jpg</GalleryURL>" +
+            `<PictureURL>${valid}</PictureURL></PictureDetails></Item>`,
+        ),
+      ),
+    ).toBe(valid);
+    expect(parseItemImage(ack("<Ack>Success</Ack><Item></Item>"))).toBeNull();
+
+    const getItem = trading(
+      ack(
+        `<Ack>Success</Ack><Item><PictureDetails><PictureURL>${valid}</PictureURL></PictureDetails></Item>`,
+      ),
+    );
+    expect(await readItemImage(access(getItem), "110<1>")).toBe(valid);
+    const [, init] = getItem.mock.calls[0]!;
+    expect((init!.headers as Record<string, string>)["x-ebay-api-call-name"]).toBe("GetItem");
+    expect(String(init!.body)).toContain("<ItemID>110&lt;1&gt;</ItemID>");
+  });
+
+  describe("acquisizione con il client", () => {
+    const grantedAt = "2026-09-01T00:00:00.000Z";
+    const image = "https://i.ebayimg.com/images/g/abc/s-l1600.jpg";
+    const provider = (options: { getItem?: () => Response; order?: unknown } = {}) =>
+      vi.fn<typeof fetch>(async (input, init) => {
+        const url = String(input);
+        if (url.includes("/sell/fulfillment/v1/order")) {
+          return Response.json({ orders: [options.order ?? order()], total: 1 });
+        }
+        const call = (init?.headers as Record<string, string>)["x-ebay-api-call-name"];
+        if (call === "GetItem") {
+          return (
+            options.getItem?.() ??
+            new Response(
+              ack(
+                `<Ack>Success</Ack><Item><PictureDetails><PictureURL>${image}</PictureURL></PictureDetails></Item>`,
+              ),
+            )
+          );
+        }
+        return new Response(
+          `<GetOrdersResponse><Ack>Success</Ack><OrderArray><Order><OrderID>12-34567-89012</OrderID>` +
+            `<BuyerTaxIdentifier><Type>CODICE_FISCALE</Type><ID>SINTETICO</ID></BuyerTaxIdentifier>` +
+            `</Order></OrderArray></GetOrdersResponse>`,
+        );
+      });
+    const calls = (fetcher: ReturnType<typeof provider>, name: string) =>
+      fetcher.mock.calls.filter(
+        ([, init]) => (init?.headers as Record<string, string>)["x-ebay-api-call-name"] === name,
+      ).length;
+    const importWith = (fetcher: typeof fetch, readAt = "2026-09-02T00:00:00.000Z") =>
+      importLatestOrder({
+        db: env.DB,
+        storeId: "s-a",
+        grantedAt,
+        access: access(fetcher),
+        now: readAt,
+      });
+
+    beforeEach(async () => {
+      await env.DB.prepare("DELETE FROM ebay_store_pauses").run();
+      await seed();
+      await env.DB.prepare("DELETE FROM orders").run();
+      await env.DB.prepare(
+        `INSERT INTO ebay_store_credentials
+           (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
+         VALUES ('s-a', 'a', ?1, 'r', ?1, ?2)`,
+      )
+        .bind(now, grantedAt)
+        .run();
+    });
+
+    it("legge l'immagine una volta per articolo e non blocca l'ordine se GetItem fallisce", async () => {
+      const failing = provider({ getItem: () => new Response(null, { status: 503 }) });
+      await importWith(failing);
+      expect(calls(failing, "GetItem")).toBe(1);
+      expect(await env.DB.prepare("SELECT image_url FROM order_items").all()).toMatchObject({
+        results: [{ image_url: null }],
+      });
+      expect(await env.DB.prepare("SELECT value FROM tax_identifiers").all()).toMatchObject({
+        results: [{ value: "SINTETICO" }],
+      });
+
+      const working = provider();
+      await importWith(working);
+      expect(await env.DB.prepare("SELECT image_url FROM order_items").all()).toMatchObject({
+        results: [{ image_url: image }],
+      });
+      // Con l'immagine già salvata non si richiama GetItem e la rilettura la conserva.
+      const again = provider();
+      await importWith(again);
+      expect(calls(again, "GetItem")).toBe(0);
+      expect(await env.DB.prepare("SELECT image_url FROM order_items").all()).toMatchObject({
+        results: [{ image_url: image }],
+      });
+    });
+
+    it("una rilettura con dati mascherati non cancella quelli già acquisiti", async () => {
+      await importWith(provider());
+      const masked = order({
+        lastModifiedDate: "2026-12-01T09:00:00.000Z",
+        orderPaymentStatus: "FULLY_REFUNDED",
+        buyer: {
+          username: "acquirente-sintetico",
+          buyerRegistrationAddress: {
+            contactAddress: { city: "Trento", postalCode: "38122", countryCode: "IT" },
+          },
+        },
+        fulfillmentStartInstructions: [
+          {
+            shippingStep: {
+              shipTo: {
+                contactAddress: { city: "Bolzano", postalCode: "39100", countryCode: "IT" },
+              },
+            },
+          },
+        ],
+      });
+      await importWith(provider({ order: masked }), "2026-12-02T00:00:00.000Z");
+      const row = await env.DB.prepare("SELECT buyer_json, payment_status FROM orders").first<{
+        buyer_json: string;
+        payment_status: string;
+      }>();
+      expect(row!.payment_status).toBe("FULLY_REFUNDED");
+      expect(JSON.parse(row!.buyer_json)).toEqual({
+        username: "acquirente-sintetico",
+        name: "Maria Verdi",
+        email: "acquirente@example.invalid",
+        phone: "+39 0461 000000",
+        billingAddress: {
+          addressLine1: "Via Fiscale 1",
+          addressLine2: null,
+          city: "Trento",
+          postalCode: "38122",
+          stateOrProvince: null,
+          countryCode: "IT",
+        },
+        shipTo: {
+          name: "Luca Neri c/o Hotel Sintetico",
+          phone: "+39 0461 111111",
+          address: {
+            addressLine1: "Piazza Spedizione 2",
+            // La seconda riga non è mascherata da eBay: la sua assenza è un dato.
+            addressLine2: null,
+            city: "Bolzano",
+            postalCode: "39100",
+            stateOrProvince: null,
+            countryCode: "IT",
+          },
+        },
+      });
+      const [visible] = await listVisibleOrders(env.DB, "u-a");
+      expect(visible!.summary).toMatchObject({ payment: "refunded", shipping: "to_ship" });
+
+      // Senza una lettura precedente il campo resta mascherato, non inventato.
+      await env.DB.prepare("DELETE FROM orders").run();
+      await importWith(provider({ order: masked }), "2026-12-02T00:00:00.000Z");
+      expect(
+        JSON.parse(
+          (await env.DB.prepare("SELECT buyer_json FROM orders").first<{ buyer_json: string }>())!
+            .buyer_json,
+        ),
+      ).toMatchObject({
+        name: null,
+        email: null,
+        masked: [
+          "email",
+          "name",
+          "phone",
+          "billingAddress.addressLine1",
+          "shipTo.name",
+          "shipTo.phone",
+          "shipTo.address.addressLine1",
+        ],
+      });
+    });
+
+    it("classifica gli ordini non pagati senza rappresentarli come incassati", async () => {
+      await importWith(
+        provider({
+          order: order({ orderPaymentStatus: "PENDING", orderFulfillmentStatus: undefined }),
+        }),
+      );
+      const [visible] = await listVisibleOrders(env.DB, "u-a");
+      expect(visible!.summary).toMatchObject({
+        orderPaymentStatus: "PENDING",
+        payment: "unpaid",
+        shipping: null,
+      });
+    });
   });
 });

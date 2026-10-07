@@ -35,6 +35,9 @@ const fixtureHosts = new Set([
   "api.ebay.com",
   "apiz.ebay.com",
   "auth.ebay.com",
+  "api.sandbox.ebay.com",
+  "i.ebayimg.com",
+  "i.ebayimg.sandbox.ebay.com",
   "www.w3.org",
 ]);
 

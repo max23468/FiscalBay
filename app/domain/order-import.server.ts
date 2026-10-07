@@ -30,7 +30,22 @@ const address = z
   .nullish()
   .transform((value) => value ?? null);
 
-/** Snapshot dell'ordine: l'ordine dei campi è fisso, così la stessa lettura dà lo stesso testo. */
+/** Campi che eBay smette di restituire con l'età dell'ordine. */
+export const maskedBuyerFields = [
+  "email",
+  "name",
+  "phone",
+  "billingAddress.addressLine1",
+  "shipTo.name",
+  "shipTo.phone",
+  "shipTo.address.addressLine1",
+] as const;
+export type MaskedBuyerField = (typeof maskedBuyerFields)[number];
+
+/**
+ * Snapshot dell'ordine: l'ordine dei campi è fisso, così la stessa lettura dà lo stesso testo.
+ * `masked` elenca i campi mascherati da eBay e mai letti prima; vuoto non compare.
+ */
 export const buyerSnapshotSchema = z.object({
   username: text,
   name: text,
@@ -41,6 +56,10 @@ export const buyerSnapshotSchema = z.object({
     .object({ name: text, phone: text, address })
     .nullish()
     .transform((value) => value ?? null),
+  masked: z
+    .array(z.enum(maskedBuyerFields))
+    .optional()
+    .transform((value) => (value?.length ? value : undefined)),
 });
 export type BuyerSnapshot = z.output<typeof buyerSnapshotSchema>;
 
@@ -64,11 +83,15 @@ export const orderObservationSchema = z.object({
   items: z.array(
     z.object({
       lineItemId: z.string().min(1),
+      // ID dell'inserzione per leggere l'immagine; non si salva.
+      legacyItemId: text,
       stableKey: z.string().min(1).nullable(),
       title: z.string(),
       sku: text,
       quantity: z.number().int().positive(),
       total: money.nullable(),
+      // URL qualificato dell'immagine; se assente resta quello già salvato.
+      imageUrl: z.string().url().optional(),
     }),
   ),
   taxIdentifiers: z
@@ -105,10 +128,11 @@ type StoredOrder = {
   id: string;
   is_provisional: number;
   last_modified_time: string;
+  buyer_json: string | null;
   has_fulfillment: number;
 };
 
-const storedOrderColumns = `o.id, o.is_provisional, o.last_modified_time,
+const storedOrderColumns = `o.id, o.is_provisional, o.last_modified_time, o.buyer_json,
   EXISTS (SELECT 1 FROM order_source_refs r
            WHERE r.order_id = o.id AND r.source = 'fulfillment') AS has_fulfillment`;
 
@@ -121,9 +145,32 @@ type StoredItem = {
   quantity: number;
   total_minor: number | null;
   currency: string | null;
+  image_url: string | null;
 };
 
 const separator = "\u001f";
+
+/**
+ * Un campo mascherato non cancella il valore letto prima: lo snapshot lo conserva e il campo
+ * resta in `masked` solo se non è mai stato fornito. Il contenitore è sempre presente, perché
+ * la fonte segnala un campo annidato solo insieme al suo contenitore.
+ */
+function keepMaskedValues(buyer: BuyerSnapshot, stored: string | null): BuyerSnapshot {
+  if (!buyer.masked || !stored) return buyer;
+  const previous = buyerSnapshotSchema.parse(JSON.parse(stored));
+  const result = structuredClone(buyer);
+  const masked = buyer.masked.filter((field) => {
+    const path = field.split(".");
+    const valueAt = (root: unknown, keys: string[]) =>
+      keys.reduce<unknown>((value, key) => (value as Record<string, unknown> | null)?.[key], root);
+    const kept = valueAt(previous, path);
+    const parent = valueAt(result, path.slice(0, -1)) as Record<string, unknown> | null;
+    if (kept === null || kept === undefined || !parent) return true;
+    parent[path.at(-1)!] = kept;
+    return false;
+  });
+  return { ...result, masked: masked.length ? masked : undefined };
+}
 
 /**
  * Registra una lettura dell'ordine nello stesso negozio, con un UUID interno stabile.
@@ -206,6 +253,7 @@ export async function recordOrderObservation(
   }
 
   const orderId = matched?.id ?? crypto.randomUUID();
+  const buyer = keepMaskedValues(observation.buyer, matched?.buyer_json ?? null);
   // Fulfillment è la fonte dei campi dell'ordine e subentra sempre a un ordine letto solo da
   // Trading: le date delle due fonti non sono confrontabili. Un provvisorio non sostituisce il
   // definitivo e una lettura più vecchia della stessa fonte aggancia soltanto il riferimento.
@@ -228,7 +276,7 @@ export async function recordOrderObservation(
     observation.paymentStatus,
     observation.fulfillmentStatus,
     observation.cancelStatus,
-    JSON.stringify(observation.buyer),
+    JSON.stringify(buyer),
   ];
   // Il consenso si verifica nella stessa transazione delle scritture.
   const statements = [db.prepare(`SELECT 1 AS ok WHERE ${writableStore}`).bind(...scope)];
@@ -270,7 +318,8 @@ export async function recordOrderObservation(
     const { results: stored } = matched
       ? await db
           .prepare(
-            `SELECT id, line_item_id, stable_key, sku, title, quantity, total_minor, currency
+            `SELECT id, line_item_id, stable_key, sku, title, quantity, total_minor, currency,
+                    image_url
                FROM order_items WHERE order_id = ?`,
           )
           .bind(orderId)
@@ -295,6 +344,7 @@ export async function recordOrderObservation(
         item.quantity,
         item.total?.minor ?? null,
         item.total?.currency ?? null,
+        item.imageUrl ?? existing?.image_url ?? null,
       ];
       if (existing) {
         kept.add(existing.id);
@@ -306,6 +356,7 @@ export async function recordOrderObservation(
           existing.quantity,
           existing.total_minor,
           existing.currency,
+          existing.image_url,
         ];
         if (values.every((value, index) => value === current[index])) continue;
       }
@@ -313,12 +364,13 @@ export async function recordOrderObservation(
         db
           .prepare(
             `INSERT INTO order_items
-               (id, order_id, line_item_id, stable_key, sku, title, quantity, total_minor, currency)
-             SELECT ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11 WHERE ${orderExists}
+               (id, order_id, line_item_id, stable_key, sku, title, quantity, total_minor, currency,
+                image_url)
+             SELECT ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12 WHERE ${orderExists}
              ON CONFLICT (id) DO UPDATE SET line_item_id = excluded.line_item_id,
                stable_key = excluded.stable_key, sku = excluded.sku, title = excluded.title,
                quantity = excluded.quantity, total_minor = excluded.total_minor,
-               currency = excluded.currency`,
+               currency = excluded.currency, image_url = excluded.image_url`,
           )
           .bind(...scope, existing?.id ?? crypto.randomUUID(), orderId, ...values),
       );

@@ -138,16 +138,6 @@ export function ImportedOrders({
     next.delete("ordine");
     setParams(next, { preventScrollReset: true });
   };
-  const payment: Record<string, string> = {
-    PAID: t.orders.payment.paid,
-    PENDING: t.orders.paymentPending,
-    FULLY_REFUNDED: t.orders.payment.refunded,
-  };
-  const shipping: Record<string, string> = {
-    NOT_STARTED: t.orders.shipping.to_ship,
-    IN_PROGRESS: t.orders.shipping.in_progress,
-    FULFILLED: t.orders.shipping.shipped,
-  };
   const fields = (order: VisibleOrder, expanded = false) => (
     <div className="grid min-w-0 gap-4">
       <dl className="grid gap-2 text-sm">
@@ -156,16 +146,20 @@ export function ImportedOrders({
           [t.order.buyer, order.summary?.buyer?.username ?? t.orders.notImported],
           [
             t.orders.paymentStatus,
-            order.summary?.orderPaymentStatus
-              ? (payment[order.summary.orderPaymentStatus] ?? order.summary.orderPaymentStatus)
-              : t.orders.notImported,
+            // Uno stato non previsto si mostra con il codice originale eBay.
+            !order.summary?.payment
+              ? t.orders.notImported
+              : order.summary.payment === "unknown"
+                ? order.summary.orderPaymentStatus
+                : t.orders.payment[order.summary.payment],
           ],
           [
             t.orders.shippingStatus,
-            order.summary?.orderFulfillmentStatus
-              ? (shipping[order.summary.orderFulfillmentStatus] ??
-                order.summary.orderFulfillmentStatus)
-              : t.orders.notImported,
+            !order.summary?.shipping
+              ? t.orders.notImported
+              : order.summary.shipping === "unknown"
+                ? order.summary.orderFulfillmentStatus
+                : t.orders.shipping[order.summary.shipping],
           ],
         ].map(([label, value]) => (
           <div key={label} className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-3">
