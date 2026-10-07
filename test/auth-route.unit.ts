@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { forwardToAuth, handleAuthRequest } from "../app/auth-route.server";
+import { forwardToAuth, handleAuthRequest, redirectWithCookies } from "../app/auth-route.server";
 
 const services = vi.hoisted(() => ({
   handler: vi.fn(),
@@ -10,6 +10,7 @@ const services = vi.hoisted(() => ({
   complete: vi.fn(),
   record: vi.fn(),
   failure: vi.fn(),
+  trace: vi.fn(),
   background: vi.fn(),
 }));
 vi.mock("../app/auth.server", () => ({
@@ -22,7 +23,7 @@ vi.mock("../app/integrations/ebay/store-link.server", () => ({
   completeStoreLink: services.complete,
   recordStoreLinkOutcome: services.record,
 }));
-vi.mock("../app/errors", () => ({ logFailure: services.failure, tracePhase: () => {} }));
+vi.mock("../app/errors", () => ({ logFailure: services.failure, tracePhase: services.trace }));
 vi.mock("cloudflare:workers", () => ({ waitUntil: services.background }));
 
 let sqlite: DatabaseSync;
@@ -200,11 +201,25 @@ describe("confine HTTP Auth", () => {
       "content-type": "application/json",
     });
     expect(await forwarded.json()).toEqual({ email: "member@example.invalid" });
+    expect(services.trace.mock.calls.map(([, phase]) => phase)).toEqual([
+      "auth-forward",
+      "auth-response",
+    ]);
     await forwardToAuth(environment, request("/app"), "/session");
     expect(Object.fromEntries((services.handler.mock.calls[1]![0] as Request).headers)).toEqual({
       "content-type": "application/json",
     });
     expect(await (services.handler.mock.calls[1]![0] as Request).json()).toEqual({});
+  });
+
+  it("reindirizza con i cookie impostati da Auth e senza cache", () => {
+    const auth = new Response(null, { headers: { "set-cookie": "first=1; Path=/" } });
+    auth.headers.append("set-cookie", "second=2; Path=/");
+    const response = redirectWithCookies("/app/ordini", auth);
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/app/ordini");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.getSetCookie()).toEqual(["first=1; Path=/", "second=2; Path=/"]);
   });
 });
 
