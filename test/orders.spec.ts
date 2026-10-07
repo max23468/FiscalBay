@@ -1676,6 +1676,10 @@ describe("rinnovo dei token del negozio", () => {
 
   function tokenEndpoint(response: () => Response) {
     return vi.fn<typeof fetch>(async (_input, init) => {
+      expect(init?.method).toBe("POST");
+      expect(new Headers(init?.headers).get("content-type")).toBe(
+        "application/x-www-form-urlencoded",
+      );
       const body = new URLSearchParams(String(init?.body));
       expect(body.get("grant_type")).toBe("refresh_token");
       expect(body.get("refresh_token")).toBe("refresh-sintetico");
@@ -1813,6 +1817,71 @@ describe("rinnovo dei token del negozio", () => {
       }),
     ).toBe("rejected");
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("apre un token cifrato con la chiave derivata prevista, legato a negozio e tipo", async () => {
+    // Cifratura indipendente con HKDF-SHA-256 e info fissa: cambiare la derivazione rende
+    // illeggibili i token già salvati.
+    const material = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(env.BETTER_AUTH_SECRET),
+      "HKDF",
+      false,
+      ["deriveKey"],
+    );
+    const key = await crypto.subtle.deriveKey(
+      {
+        name: "HKDF",
+        hash: "SHA-256",
+        salt: new Uint8Array(),
+        info: new TextEncoder().encode("fiscalbay/ebay-seller-token/v1"),
+      },
+      material,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt"],
+    );
+    const iv = new Uint8Array(12).fill(7);
+    const sealed = new Uint8Array(
+      await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv, additionalData: new TextEncoder().encode("negozio:access") },
+        key,
+        new TextEncoder().encode("token-noto"),
+      ),
+    );
+    const value = `v1.${btoa(String.fromCharCode(...iv, ...sealed))
+      .replaceAll("+", "-")
+      .replaceAll("/", "_")
+      .replace(/=+$/u, "")}`;
+    expect(await openToken(env.BETTER_AUTH_SECRET, "negozio", "access", value)).toBe("token-noto");
+    await expect(openToken(env.BETTER_AUTH_SECRET, "negozio", "refresh", value)).rejects.toThrow();
+    await expect(
+      openToken(env.BETTER_AUTH_SECRET, "negozio", "access", value.slice(3)),
+    ).rejects.toThrow("unsupported_token_format");
+  });
+
+  it("non rinnova senza credenziali né con una risposta senza token", async () => {
+    expect(
+      await refreshStoreToken({
+        environment: env,
+        storeId: "inesistente",
+        fetcher: vi.fn<typeof fetch>(),
+        now: issued,
+      }),
+    ).toBe("missing");
+    await linkedStore("risposta-incompleta@example.invalid");
+    const storeId = (await env.DB.prepare("SELECT id FROM ebay_stores").first<{ id: string }>())!
+      .id;
+    const before = await credentials();
+    await expect(
+      refreshStoreToken({
+        environment: env,
+        storeId,
+        fetcher: tokenEndpoint(() => Response.json({ expires_in: 7200 })),
+        now: issued,
+      }),
+    ).rejects.toBeInstanceOf(UpstreamError);
+    expect(await credentials()).toEqual(before);
   });
 
   it("produce cifrati diversi per lo stesso token", async () => {

@@ -132,12 +132,14 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
       },
       validateUserInfo: async ({ user, source }, context) => {
         const provider = source.oauth?.providerId;
+        // Stryker disable next-line ConditionalExpression: solo eBay può dare un profilo senza email.
         if (provider === "ebay" && !user.email) return { error: "email_not_found" };
         if (source.action !== "link-account") return;
         // Lo state è già validato da Better Auth. Senza linking esplicito il collegamento avviene
         // per email: Better Auth richiede l'utente locale verificato, qui serve anche l'email
         // verificata e autorevole del provider, che eBay non fornisce.
         const state = await getOAuthState();
+        // Stryker disable next-line OptionalChaining: nel callback OAuth lo state c'è sempre.
         if (!state?.link) return user.emailVerified ? undefined : { error: "account_not_linked" };
         // Non basta essere autenticati: il linking esplicito vale solo per la stessa sessione,
         // ancora valida e verificata. Così un account creato in anticipo con l'email di un altro

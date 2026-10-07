@@ -101,6 +101,11 @@ describe("Better Auth su Workers e D1", () => {
     expect(await Promise.race([second, timeout])).toBeNull();
   });
 
+  it("riusa l'istanza Better Auth per lo stesso ambiente", () => {
+    expect(createAuth(env)).toBe(createAuth(env));
+    expect(createAuth({ ...env } as Env)).not.toBe(createAuth(env));
+  });
+
   it("usa mittente e Reply-To previsti per verifica e reset", async () => {
     const send = vi.fn(async () => ({ messageId: "synthetic" }));
     const options = createAuthOptions({ ...env, AUTH_EMAIL: { send } } as Env);
@@ -550,6 +555,11 @@ describe("Better Auth su Workers e D1", () => {
         headers: { cookie },
       }),
       environment,
+    );
+    // Il profilo si legge da Identity con il token di accesso appena ottenuto.
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://apiz.ebay.com/commerce/identity/v1/user/",
+      expect.objectContaining({ headers: { Authorization: "Bearer sintetico" } }),
     );
     fetchMock.mockRestore();
 

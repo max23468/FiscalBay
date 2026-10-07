@@ -28,10 +28,12 @@ const refreshSchema = z.looseObject({
 });
 
 export function base64Url(bytes: Uint8Array): string {
+  // Stryker disable Regex: in base64 «=» compare solo come riempimento finale.
   return btoa(String.fromCharCode(...bytes))
     .replaceAll("+", "-")
     .replaceAll("/", "_")
     .replace(/=+$/u, "");
+  // Stryker restore Regex
 }
 
 function fromBase64Url(value: string): Uint8Array<ArrayBuffer> {
@@ -48,6 +50,7 @@ async function tokenKey(secret: string): Promise<CryptoKey> {
     false,
     ["deriveKey"],
   );
+  // Stryker disable BooleanLiteral: la chiave non viene mai esportata, estraibile o no.
   return crypto.subtle.deriveKey(
     { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: keyInfo },
     material,
@@ -55,6 +58,7 @@ async function tokenKey(secret: string): Promise<CryptoKey> {
     false,
     ["encrypt", "decrypt"],
   );
+  // Stryker restore BooleanLiteral
 }
 
 // Negozio e tipo entrano nei dati autenticati: un token copiato su un'altra riga non si apre.
