@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { forwardToAuth, handleAuthRequest } from "../app/auth-route.server";
 import { createAuth, createAuthOptions, gmailDomain } from "../app/auth.server";
 import { completeRegistration } from "../app/domain/registration.server";
+import { adminAccess, recentSignIn } from "../app/domain/sessions.server";
 import { loader as adminLoader } from "../app/routes/admin";
 import { loader as securityLoader } from "../app/routes/security";
 import { action as signInAction, loader as signInLoader } from "../app/routes/sign-in";
@@ -778,6 +779,16 @@ describe("Better Auth su Workers e D1", () => {
         }
         expect(result.headers.get("location")).toBe("/?accesso=ebay-collegato");
         expect(account).toMatchObject({ userId: user.id, accountId: ebayId });
+        // eBay si aggiunge alla password: il titolare ne riceve avviso.
+        await vi.waitFor(() =>
+          expect(environment.AUTH_EMAIL.send).toHaveBeenCalledWith(
+            expect.objectContaining({
+              to: email,
+              subject: "Nuovo metodo di accesso su FiscalBay",
+              text: expect.stringContaining("eBay"),
+            }),
+          ),
+        );
         expect(account?.accessToken).not.toBe("access-token-sintetico");
         expect(account?.refreshToken).not.toBe("refresh-token-sintetico");
         const localUser = await env.DB.prepare(
@@ -1017,6 +1028,9 @@ describe("Collegamento e modifica dell'identità", () => {
     ).toEqual({ emailVerified: 0 });
     await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
     expect(send.mock.calls[0]?.[0]).toMatchObject({ to: email });
+    // Il primo metodo di un nuovo utente non è un collegamento da segnalare.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(send).toHaveBeenCalledOnce();
   });
 
   it("riconosce Google dal subject anche con email cambiata, senza fondere utenti", async () => {
@@ -1174,6 +1188,9 @@ describe("Collegamento e modifica dell'identità", () => {
         to: email,
         subject: "La password di FiscalBay è stata reimpostata",
       });
+      // La password creata dal link ha già il suo avviso, non quello di un nuovo metodo.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(send).toHaveBeenCalledTimes(2);
       const signIn = await post(env, "sign-in/email", {
         email,
         password: "Password-reimpostata-1",
@@ -1227,6 +1244,23 @@ describe("Collegamento e modifica dell'identità", () => {
 });
 
 describe("Sessioni, revoche e area admin", () => {
+  it("considera recente un accesso sotto le 24 ore e la conferma admin sotto le 12", () => {
+    const at = new Date("2026-10-01T12:00:00.000Z");
+    const session = (hours: number) => ({
+      session: {
+        id: "s",
+        createdAt: new Date(at.getTime() - hours * 3_600_000),
+        passkeyVerified: true,
+      },
+      user: { id: "u", admin: true },
+    });
+    const justUnder = (hours: number) => session(hours - 1 / 3_600_000);
+    expect(recentSignIn(justUnder(24), at)).toBe(true);
+    expect(recentSignIn(session(24), at)).toBe(false);
+    expect(adminAccess(justUnder(12), at)).toBe("granted");
+    expect(adminAccess(session(12), at)).toBe("verify");
+  });
+
   const origin = "http://localhost:5173";
   const cookies = (response: Response) =>
     response.headers

@@ -129,10 +129,8 @@ export async function listStores(
       importedOrders: row.orders,
       dataDeleted: row.data_deleted_at !== null,
       reminder,
-      consentExpiring:
-        connection !== "disconnected" &&
-        !expired &&
-        Date.parse(expiresAt!) - at <= expiringNoticeMilliseconds,
+      // Un negozio scollegato non ha credenziali, quindi risulta già scaduto.
+      consentExpiring: !expired && Date.parse(expiresAt!) - at <= expiringNoticeMilliseconds,
     };
   });
 }

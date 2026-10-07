@@ -1247,6 +1247,37 @@ describe("collegamento negozio eBay", () => {
     ).toThrow("trading_get_orders_failed");
   });
 
+  it("dà allo spazio creato al collegamento il nome nella lingua dell'utente", async () => {
+    for (const [prefix, name] of [
+      ["", "Spazio personale"],
+      ["/en", "Personal space"],
+    ] as const) {
+      const { userId, cookie } = await verifiedSession(
+        `spazio${prefix.replace("/", "-")}@example.invalid`,
+      );
+      const start = (await startStoreLink({
+        request: new Request(`http://localhost:5173${prefix}/app/negozi/collega`, {
+          method: "POST",
+          headers: { cookie, origin: "http://localhost:5173" },
+        }),
+      } as Parameters<typeof startStoreLink>[0])) as Response;
+      const state = new URL(start.headers.get("location")!).searchParams.get("state");
+      await handleAuthRequest(
+        storeCallback(`state=${state}&code=codice`, cookie),
+        env,
+        syntheticEbay(),
+      );
+      expect(
+        await env.DB.prepare(
+          `SELECT w.name FROM workspaces w
+             JOIN workspace_members wm ON wm.workspace_id = w.id WHERE wm.user_id = ?`,
+        )
+          .bind(userId)
+          .first(),
+      ).toEqual({ name });
+    }
+  });
+
   it("collega il negozio senza scope email e importa ordine e fonte fiscale", async () => {
     const { userId, cookie } = await verifiedSession("negozio@example.invalid");
     const authorize = await beginStoreLink(cookie);
@@ -1905,11 +1936,18 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     // Dopo la scadenza il negozio chiede il ricollegamento: avviso per trenta giorni, poi basta,
     // senza scollegamento automatico.
     await setExpiry(at);
+    // Alla scadenza esatta il consenso non vale più.
+    expect((await listStores(env.DB, seller.userId, at))[0]).toMatchObject({
+      connection: "reconnect_required",
+      reminder: { kind: "expired", at: at.toISOString() },
+      consentExpiring: false,
+    });
     expect(
       (await listStores(env.DB, seller.userId, new Date(at.getTime() + 29 * day)))[0],
     ).toMatchObject({
       connection: "reconnect_required",
       reminder: { kind: "expired", at: at.toISOString() },
+      consentExpiring: false,
     });
     expect(
       (await listStores(env.DB, seller.userId, new Date(at.getTime() + 30 * day)))[0],

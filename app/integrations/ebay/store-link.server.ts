@@ -238,7 +238,7 @@ export async function completeStoreLink(input: {
   });
 
   // Lo state porta la lingua in cui il merchant ha avviato il collegamento.
-  const language: Language = search.get("state")?.startsWith("en_") ? "en" : "it";
+  const language: Language = search.get("state")!.startsWith("en_") ? "en" : "it";
   const storeId = await linkStore(environment.DB, link.userId, identity, now, {
     ebayEnvironment: link.ebayEnvironment,
     language,

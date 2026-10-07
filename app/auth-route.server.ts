@@ -119,10 +119,12 @@ async function countAttempt(
 
 /** Indirizzo del corpo JSON come impronta: la tabella dei limiti non conserva email in chiaro. */
 async function addressKey(request: Request): Promise<string | null> {
+  // Stryker disable ArrowFunction: null e undefined danno entrambi «nessun indirizzo».
   const body: unknown = await request
     .clone()
     .json()
     .catch(() => null);
+  // Stryker restore ArrowFunction
   const email =
     typeof body === "object" && body !== null && "email" in body ? body.email : undefined;
   if (typeof email !== "string" || email.length === 0 || email.length > 254) return null;
