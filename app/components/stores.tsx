@@ -31,7 +31,6 @@ import {
 import {
   AlertDialog,
   AlertDialogCancel,
-  AlertDialogClose,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -94,7 +93,7 @@ function connectFromStores(connectHref: string) {
 /** Ricollegamento dalla schermata preparatoria, nello stesso ambiente eBay del negozio. */
 function reconnectHref(connectHref: string, store: StoreView) {
   const environment = store.sandbox ? "sandbox" : "production";
-  return `${connectHref}?ricollega&environment=${environment}&da=negozi`;
+  return `${connectHref}?ricollega=${encodeURIComponent(store.id)}&environment=${environment}&da=negozi`;
 }
 
 /** Nome proprio dell'ambiente di prova di eBay, uguale nelle due lingue. */
@@ -291,15 +290,38 @@ function ReadActions({ store, ebayDown, t }: { store: StoreView; ebayDown: boole
 }
 
 /** Scollega ed elimina dati; un negozio già scollegato offre solo l'eliminazione. */
-function DisconnectActions({ store, t }: { store: StoreView; t: AppCopy }) {
+function useDisconnectDialog(store: StoreView, t: AppCopy) {
   const action = useAction();
+  const [open, setOpen] = useState<"disconnect" | "delete" | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+  const [handled, setHandled] = useState(action.result);
+  if (action.result && handled !== action.result) {
+    setHandled(action.result);
+    if (action.result.ok) setOpen(null);
+    else setFailure(action.result.notice || t.stores.failed);
+  }
+  const changeOpen = (kind: "disconnect" | "delete", next: boolean) => {
+    if (action.pending) return;
+    setOpen(next ? kind : null);
+    setFailure(null);
+    setConfirmName("");
+  };
   const run = (intent: string, fields: Record<string, string> = {}) =>
     action.run(intent, { store: store.id, ...fields });
   const [confirmName, setConfirmName] = useState("");
+  return { action, open, failure, changeOpen, run, confirmName, setConfirmName };
+}
+
+function DisconnectActions({ store, t }: { store: StoreView; t: AppCopy }) {
+  const { action, open, failure, changeOpen, run, confirmName, setConfirmName } =
+    useDisconnectDialog(store, t);
   return (
     <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-2 border-t pt-3">
       {store.connection === "disconnected" ? null : (
-        <AlertDialog>
+        <AlertDialog
+          open={open === "disconnect"}
+          onOpenChange={(next) => changeOpen("disconnect", next)}
+        >
           <AlertDialogTrigger
             render={
               <Button
@@ -316,19 +338,26 @@ function DisconnectActions({ store, t }: { store: StoreView; t: AppCopy }) {
               <AlertDialogTitle>{t.stores.disconnectTitle(store.name)}</AlertDialogTitle>
               <AlertDialogDescription>{t.stores.disconnectBody}</AlertDialogDescription>
             </AlertDialogHeader>
+            {failure ? (
+              <p role="alert" className="text-sm text-danger">
+                {failure}
+              </p>
+            ) : null}
             <AlertDialogFooter>
-              <AlertDialogCancel>{t.stores.cancel}</AlertDialogCancel>
-              <AlertDialogClose
-                render={<Button variant="destructive-solid" />}
+              <AlertDialogCancel disabled={action.pending}>{t.stores.cancel}</AlertDialogCancel>
+              <Button
+                variant="destructive-solid"
+                disabled={action.pending}
+                aria-busy={action.pending || undefined}
                 onClick={() => run("store-disconnect")}
               >
-                {t.stores.disconnect}
-              </AlertDialogClose>
+                {action.pending ? t.settings.saving : t.stores.disconnect}
+              </Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       )}
-      <AlertDialog onOpenChange={() => setConfirmName("")}>
+      <AlertDialog open={open === "delete"} onOpenChange={(next) => changeOpen("delete", next)}>
         <AlertDialogTrigger
           render={
             <Button
@@ -355,18 +384,25 @@ function DisconnectActions({ store, t }: { store: StoreView; t: AppCopy }) {
               id="store-delete-confirm"
               autoComplete="off"
               value={confirmName}
+              disabled={action.pending}
               onChange={(event) => setConfirmName(event.target.value)}
             />
           </Field>
+          {failure ? (
+            <p role="alert" className="text-sm text-danger">
+              {failure}
+            </p>
+          ) : null}
           <AlertDialogFooter>
-            <AlertDialogCancel>{t.stores.cancel}</AlertDialogCancel>
-            <AlertDialogClose
-              disabled={confirmName.trim() !== store.name}
-              render={<Button variant="destructive-solid" />}
+            <AlertDialogCancel disabled={action.pending}>{t.stores.cancel}</AlertDialogCancel>
+            <Button
+              disabled={action.pending || confirmName.trim() !== store.name}
+              aria-busy={action.pending || undefined}
+              variant="destructive-solid"
               onClick={() => run("store-delete", { conferma: confirmName.trim() })}
             >
-              {t.stores.deleteConfirm}
-            </AlertDialogClose>
+              {action.pending ? t.settings.saving : t.stores.deleteConfirm}
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

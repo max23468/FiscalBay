@@ -1,5 +1,5 @@
 import { defineConfig } from "@playwright/test";
-import { localPort, localSecret } from "./e2e/local-account";
+import { localOrigin, localPort, localSecret } from "./e2e/local-account";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -14,7 +14,7 @@ export default defineConfig({
   reporter: [["list"], ["./e2e/report.ts"]],
   forbidOnly: !!process.env.CI,
   use: {
-    baseURL: process.env.E2E_BASE_URL || `http://127.0.0.1:${localPort}`,
+    baseURL: process.env.E2E_BASE_URL || localOrigin,
     viewport: { width: 1280, height: 900 },
     trace: process.env.E2E_BASE_URL ? "off" : "retain-on-failure",
   },
@@ -28,7 +28,7 @@ export default defineConfig({
         // Le pagine pubbliche inizializzano Auth anche senza sessione: solo valori sintetici.
         env: {
           ...(process.env.E2E_PRODUCTION === "1" ? { CLOUDFLARE_ENV: "production" } : {}),
-          APP_ORIGIN: `http://127.0.0.1:${localPort}`,
+          APP_ORIGIN: localOrigin,
           BETTER_AUTH_SECRET: localSecret,
           GOOGLE_CLIENT_ID: "google-test-client",
           GOOGLE_CLIENT_SECRET: "google-test-secret",
@@ -37,9 +37,9 @@ export default defineConfig({
           EBAY_RUNAME: "ebay-test-runame",
         },
         // In CI `pnpm verify` ha già prodotto la build che viene poi distribuita.
-        command: `${process.env.E2E_PREBUILT ? "" : "pnpm build && "}node scripts/local-preview.mjs && node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port ${localPort} --strictPort`,
+        command: `${process.env.E2E_PREBUILT ? "" : "pnpm build && "}node scripts/local-preview.mjs && node node_modules/vite/bin/vite.js preview --host localhost --port ${localPort} --strictPort`,
         gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
-        url: `http://127.0.0.1:${localPort}${process.env.E2E_PRODUCTION === "1" ? "/" : "/anteprima/ordini"}`,
+        url: `${localOrigin}${process.env.E2E_PRODUCTION === "1" ? "/" : "/anteprima/ordini"}`,
         reuseExistingServer: false,
         timeout: 120_000,
       },

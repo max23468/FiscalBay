@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { data } from "react-router";
+import { data, isRouteErrorResponse } from "react-router";
 
 import { AccountShell } from "~/components/account";
 import { NotFoundState } from "~/components/not-found";
@@ -18,6 +18,7 @@ import {
 } from "../domain/stores.server";
 import { languageFromPath, localizedPath } from "../i18n";
 import type { ActionResult, StoreView } from "../view-models";
+import { logFailure } from "../errors";
 import type { Route } from "./+types/stores";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
@@ -113,7 +114,13 @@ export async function action({ request }: Route.ActionArgs) {
   if (!run || !storeId || storeId.length > 64) {
     return data<ActionResult>({ ok: false, notice: t.failed }, { status: 400 });
   }
-  const result = await run(session.user.id, storeId, form);
+  let result: StoreActionResult;
+  try {
+    result = await run(session.user.id, storeId, form);
+  } catch (error) {
+    logFailure({ request, error, operation: "route" });
+    return data<ActionResult>({ ok: false, notice: t.failed }, { status: 500 });
+  }
   if (result === "not_found") {
     return data<ActionResult>({ ok: false, notice: t.failed }, { status: 404 });
   }
@@ -122,6 +129,18 @@ export async function action({ request }: Route.ActionArgs) {
     return data<ActionResult>({ ok: false, notice }, { status: 409 });
   }
   return { ok: true, notice: t.done[intent] } satisfies ActionResult;
+}
+
+/** Mantiene la conferma aperta quando il browser non riceve un esito affidabile. */
+export async function clientAction({ request, serverAction }: Route.ClientActionArgs) {
+  try {
+    return await serverAction();
+  } catch (error) {
+    if (error instanceof Response || isRouteErrorResponse(error) || request.signal.aborted)
+      throw error;
+    const language = languageFromPath(new URL(request.url).pathname);
+    return { ok: false, notice: appCopy[language].errors.unconfirmed } satisfies ActionResult;
+  }
 }
 
 export default function Stores({ loaderData }: Route.ComponentProps) {

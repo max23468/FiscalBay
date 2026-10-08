@@ -166,10 +166,18 @@ for (const scenario of scenarios) {
           return;
         }
         const errors: string[] = [];
+        const expectedStatus = production && scenario.preview ? 404 : scenario.status;
+        const ownPage = new URL(scenario.path, baseURL!);
+        const ownData = `${ownPage.pathname.replace(/\/$/u, "")}.data`;
         page.on("pageerror", (error) => errors.push(error.message));
         page.on("console", (message) => {
-          if (message.type() === "error" && !message.text().includes("404"))
-            errors.push(message.text());
+          if (message.type() !== "error") return;
+          const resource = message.location().url;
+          const expectedError =
+            expectedStatus >= 400 &&
+            message.text().includes(`${expectedStatus}`) &&
+            (resource === ownPage.href || resource.startsWith(`${ownPage.origin}${ownData}`));
+          if (!expectedError && !message.text().includes("404")) errors.push(message.text());
         });
         // La scoperta delle route riparte dopo ogni cambiamento del DOM: se la prova naviga
         // mentre `/__manifest` è in corso, il browser interrompe la richiesta e la registra in
@@ -181,9 +189,7 @@ for (const scenario of scenarios) {
           error.startsWith("Failed to fetch manifest patches") ||
           /\/__manifest\?\S* due to access control checks\.?$/u.test(error);
         const unexpectedErrors = () => errors.filter((error) => !discoveryMessage(error));
-        const expectedStatus = production && scenario.preview ? 404 : scenario.status;
         // Tornando su una pagina 404 il router richiede di nuovo i suoi dati con lo stesso esito.
-        const ownData = `${new URL(scenario.path, baseURL!).pathname.replace(/\/$/u, "")}.data`;
         page.on("response", (response) => {
           const url = new URL(response.url());
           if (

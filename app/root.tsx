@@ -7,7 +7,9 @@ import {
   ScrollRestoration,
   useLocation,
   useRouteLoaderData,
+  useRevalidator,
 } from "react-router";
+import { useEffect } from "react";
 
 import { cn } from "cn";
 import { CircleAlert, FileQuestion } from "lucide-react";
@@ -55,6 +57,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const { pathname } = useLocation();
+  const revalidator = useRevalidator();
+  useEffect(() => {
+    if (!/^\/(en\/)?(app(?:\/|$)|accesso$)/u.test(pathname)) return;
+    let refreshing = false;
+    const refresh = () => {
+      if (document.visibilityState !== "visible" || refreshing) return;
+      refreshing = true;
+      void revalidator.revalidate().finally(() => {
+        refreshing = false;
+      });
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [pathname, revalidator]);
   return <Outlet />;
 }
 

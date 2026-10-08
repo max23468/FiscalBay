@@ -33,7 +33,7 @@ let sqlite: DatabaseSync;
 let environment: Env;
 const now = 1_800_000_000_000;
 const member = (overrides = {}) => ({
-  user: { id: "member", emailVerified: true, ...overrides },
+  user: { id: "member", email: "member@example.invalid", emailVerified: true, ...overrides },
   session: { id: "session", createdAt: new Date(now), passkeyVerified: false },
 });
 const request = (path: string, options: RequestInit = {}) =>
@@ -57,6 +57,9 @@ beforeEach(() => {
   sqlite.exec(
     'CREATE TABLE "rateLimit" (id TEXT, key TEXT UNIQUE, count INTEGER, lastRequest INTEGER)',
   );
+  sqlite.exec(`CREATE TABLE account_email_changes (
+    user_id TEXT PRIMARY KEY, current_email TEXT, new_email TEXT, stage TEXT, expires_at TEXT
+  )`);
   // La SQL del modulo viene eseguita realmente: soglie, finestre e pulizia non sono simulate.
   environment = {
     APP_ORIGIN: "https://test.fiscalbay.it",
@@ -148,7 +151,7 @@ describe("confine HTTP Auth", () => {
     expect((await handle("/api/auth/change-email")).status).toBe(202);
   });
 
-  it.each(["generate-register-options", "verify-registration"])(
+  it.each(["generate-register-options", "verify-registration", "update-passkey"])(
     "protegge l'aggiunta passkey %s",
     async (path) => {
       const url = `/api/auth/passkey/${path}`;
@@ -173,6 +176,55 @@ describe("confine HTTP Auth", () => {
       expect(services.registration).toHaveBeenLastCalledWith(environment.DB, "member");
     },
   );
+
+  it("registra il cambio email solo dopo una risposta Auth riuscita con sessione e indirizzo", async () => {
+    const row = () => sqlite.prepare("SELECT * FROM account_email_changes").get();
+    for (const body of ["invalid", "null", "1", '"test"', "{}", '{"newEmail":1}']) {
+      expect((await handle("/api/auth/change-email", { method: "POST", body })).status).toBe(202);
+      expect(row()).toBeUndefined();
+    }
+    const options = { method: "POST", body: '{"newEmail":"New@Example.invalid"}' };
+    services.session.mockResolvedValueOnce(null);
+    await handle("/api/auth/change-email", options);
+    expect(row()).toBeUndefined();
+    services.handler.mockResolvedValueOnce(new Response(null, { status: 400 }));
+    await handle("/api/auth/change-email", options);
+    expect(row()).toBeUndefined();
+    await handle("/api/auth/change-email", options);
+    expect(row()).toEqual({
+      user_id: "member",
+      current_email: "member@example.invalid",
+      new_email: "new@example.invalid",
+      stage: "current",
+      expires_at: new Date(now + 3600_000).toISOString(),
+    });
+  });
+
+  it("valida il nome delle passkey senza consumare il corpo o impedire il nome automatico", async () => {
+    const url = "/api/auth/passkey/update-passkey";
+    for (const name of [null, 1, false, "", "   ", "a".repeat(81), ` ${"a".repeat(80)} `]) {
+      const calls = services.handler.mock.calls.length;
+      expect((await handle(url, { method: "POST", body: JSON.stringify({ name }) })).status).toBe(
+        400,
+      );
+      expect(services.handler).toHaveBeenCalledTimes(calls);
+    }
+    for (const body of [
+      "invalid",
+      "null",
+      "1",
+      '"test"',
+      "{}",
+      JSON.stringify({ name: "a".repeat(80) }),
+      JSON.stringify({ name: "  chiave  " }),
+    ]) {
+      expect((await handle(url, { method: "POST", body })).status).toBe(202);
+      const forwarded = services.handler.mock.calls.at(-1)![0] as Request;
+      expect(await forwarded.text()).toBe(body);
+    }
+    expect((await handle(url, { method: "GET" })).status).toBe(202);
+    expect(services.notify).not.toHaveBeenCalled();
+  });
 
   it("avvisa della nuova passkey solo quando la registrazione riesce", async () => {
     expect((await handle("/api/auth/passkey/generate-register-options")).status).toBe(202);

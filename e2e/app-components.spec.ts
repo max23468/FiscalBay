@@ -1,4 +1,321 @@
 import { expect, test, type Page } from "@playwright/test";
+import { localCookie, localPassword } from "./local-account";
+import { testAccount } from "./test-account";
+
+test.describe("miglioramenti account e negozi", () => {
+  test.skip(
+    Boolean(process.env.E2E_BASE_URL),
+    "Prove con dati sintetici soltanto sul database locale.",
+  );
+
+  for (const language of ["it", "en"] as const) {
+    const prefix = language === "it" ? "" : "/en";
+    const it = language === "it";
+    test(`profilo: modifiche, uscita, attesa e salvataggio ${language}`, async ({ page }) => {
+      await open(page, `${prefix}/anteprima/profilo`, "ordinario");
+      const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
+      const save = page.getByRole("button", { name: it ? "Salva" : "Save", exact: true });
+      const original = await first.inputValue();
+      await expect(save).toBeDisabled();
+      await first.fill(`${original} modificato`);
+      await expect(save).toBeEnabled();
+      await page
+        .getByRole("link", { name: it ? "Apri Sicurezza" : "Open Security", exact: true })
+        .click();
+      const dialog = page.getByRole("alertdialog");
+      await expect(dialog).toBeVisible();
+      await dialog
+        .getByRole("button", { name: it ? "Continua a modificare" : "Keep editing" })
+        .click();
+      await expect(first).toHaveValue(`${original} modificato`);
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await page.route(`**${prefix}/anteprima/profilo.data*`, async (route) => {
+        if (route.request().method() === "POST") await gate;
+        await route.continue();
+      });
+      await save.click();
+      await expect(
+        page.getByRole("button", { name: it ? "Salvataggio…" : "Saving…", exact: true }),
+      ).toBeDisabled();
+      await expect(first).toBeDisabled();
+      await page
+        .getByRole("link", { name: it ? "Apri Sicurezza" : "Open Security", exact: true })
+        .click();
+      await expect(dialog).toBeVisible();
+      await expect(
+        dialog.getByRole("button", { name: it ? "Lascia il profilo" : "Leave profile" }),
+      ).toBeDisabled();
+      await dialog
+        .getByRole("button", { name: it ? "Continua a modificare" : "Keep editing" })
+        .click();
+      release();
+      await expect(save).toBeDisabled();
+      await expect(first).toBeEnabled();
+      await expect(
+        page
+          .getByRole("status")
+          .filter({ hasText: it ? "profilo non salvato" : "profile not saved" })
+          .first(),
+      ).toBeVisible();
+      await page
+        .getByRole("link", { name: it ? "Apri Sicurezza" : "Open Security", exact: true })
+        .click();
+      await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/sicurezza$`));
+    });
+
+    test(`conferma negozio: resta aperta durante la richiesta e si chiude al successo ${language}`, async ({
+      page,
+    }) => {
+      await open(page, `${prefix}/anteprima/negozi/neg-vintage`, "ordinario");
+      await page.getByRole("button", { name: it ? "Scollega" : "Disconnect", exact: true }).click();
+      const dialog = page.getByRole("alertdialog");
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await page.route("**/anteprima/negozi/*.data*", async (route) => {
+        if (route.request().method() === "POST") await gate;
+        await route.continue();
+      });
+      await dialog
+        .getByRole("button", { name: it ? "Scollega" : "Disconnect", exact: true })
+        .click();
+      await expect(dialog).toBeVisible();
+      await expect(
+        dialog.getByRole("button", { name: it ? "Salvataggio…" : "Saving…" }),
+      ).toBeDisabled();
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeVisible();
+      release();
+      await expect(dialog).toHaveCount(0);
+    });
+
+    test(`errore eliminazione negozio e profilo: conserva finestra e valori ${language}`, async ({
+      page,
+      context,
+      baseURL,
+    }) => {
+      await context.addCookies([localCookie("member", baseURL!)]);
+      await page.goto(`${prefix}/app/negozi/${testAccount.stores.paused}`);
+      await page
+        .getByRole("button", {
+          name: it ? "Scollega ed elimina dati" : "Disconnect and delete data",
+          exact: true,
+        })
+        .click();
+      const dialog = page.getByRole("alertdialog");
+      const input = dialog.getByRole("textbox");
+      await input.fill(testAccount.stores.paused);
+      await page.route("**/app/negozi/*.data*", async (route) => {
+        if (route.request().method() !== "POST") return route.continue();
+        const form = new URLSearchParams(route.request().postData()!);
+        form.set("conferma", "conferma-errata");
+        await route.continue({ postData: form.toString() });
+      });
+      await dialog
+        .getByRole("button", {
+          name: it ? "Scollega ed elimina" : "Disconnect and delete",
+          exact: true,
+        })
+        .click();
+      await expect(dialog.getByRole("alert")).toBeVisible();
+      await expect(input).toHaveValue(testAccount.stores.paused);
+      await page.route("**/app/negozi/*.data*", (route) =>
+        route.request().method() === "POST" ? route.abort("failed") : route.continue(),
+      );
+      await dialog
+        .getByRole("button", {
+          name: it ? "Scollega ed elimina" : "Disconnect and delete",
+          exact: true,
+        })
+        .click();
+      await expect(dialog.getByRole("alert")).toContainText(
+        it ? "confermare l’esito" : "outcome could not be confirmed",
+      );
+      await expect(input).toHaveValue(testAccount.stores.paused);
+      await dialog.getByRole("button", { name: it ? "Annulla" : "Cancel", exact: true }).click();
+      await page.goto(`${prefix}/app/profilo`);
+      await page.route("**/app/profilo.data*", async (route) => {
+        if (route.request().method() !== "POST") return route.continue();
+        const form = new URLSearchParams(route.request().postData()!);
+        form.set("nome", "");
+        await route.continue({ postData: form.toString() });
+      });
+      const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
+      await first.fill("Valore da conservare");
+      await page.getByRole("button", { name: it ? "Salva" : "Save", exact: true }).click();
+      await expect(
+        page.getByRole("alert").filter({ hasText: it ? "Compila nome" : "Enter your first" }),
+      ).toBeVisible();
+      await expect(first).toHaveValue("Valore da conservare");
+      await expect(
+        page.getByRole("button", { name: it ? "Salva" : "Save", exact: true }),
+      ).toBeEnabled();
+      await page.route("**/app/profilo.data*", (route) =>
+        route.request().method() === "POST" ? route.abort("failed") : route.continue(),
+      );
+      await page.getByRole("button", { name: it ? "Salva" : "Save", exact: true }).click();
+      await expect(
+        page
+          .getByRole("alert")
+          .filter({ hasText: it ? "confermare l’esito" : "outcome could not be confirmed" }),
+      ).toBeVisible();
+      await expect(first).toHaveValue("Valore da conservare");
+    });
+
+    test(`nuovo accesso: ritorno a Sicurezza anche dopo password errata ${language}`, async ({
+      page,
+      baseURL,
+    }) => {
+      expect(
+        (
+          await page.request.post("/api/auth/sign-in/email", {
+            headers: { origin: baseURL! },
+            data: { email: testAccount.email, password: localPassword },
+          })
+        ).ok(),
+      ).toBe(true);
+      const target = `${prefix}/app/impostazioni/sicurezza#security-email`;
+      const response = await page.request.post(`${prefix}/app/impostazioni/sicurezza`, {
+        headers: { origin: baseURL! },
+        form: { intent: "riautentica", returnTo: target },
+        maxRedirects: 0,
+      });
+      await page.goto(response.headers().location);
+      const form = page.getByRole("tabpanel", { name: it ? "Accedi" : "Sign in", exact: true });
+      await form.getByRole("textbox", { name: "Email", exact: true }).fill(testAccount.email);
+      await form.getByRole("textbox", { name: "Password", exact: true }).fill("password-errata");
+      await form.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }).click();
+      await expect(page).toHaveURL(/returnTo=/);
+      await form.getByRole("textbox", { name: "Password", exact: true }).fill(localPassword);
+      await form.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }).click();
+      await expect(page).toHaveURL(
+        new RegExp(`${prefix}/app/impostazioni/sicurezza#security-email$`),
+      );
+    });
+  }
+
+  test("passkey: nome, rinomina, rimozione e unico metodo visibili nella pagina reale", async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    await context.addCookies([localCookie("member", baseURL!)]);
+    const cdp = await context.newCDPSession(page);
+    await cdp.send("WebAuthn.enable");
+    await cdp.send("WebAuthn.addVirtualAuthenticator", {
+      options: {
+        protocol: "ctap2",
+        transport: "internal",
+        hasResidentKey: true,
+        hasUserVerification: true,
+        isUserVerified: true,
+        automaticPresenceSimulation: true,
+      },
+    });
+    await page.goto("/app/impostazioni/sicurezza");
+    const methods = page.locator('section[aria-labelledby="security-methods"]');
+    await expect(methods.getByText("Questo è il tuo unico metodo", { exact: false })).toBeVisible();
+    await expect(methods.getByRole("button", { name: "Rimuovi", exact: true })).toBeDisabled();
+    await page
+      .getByRole("textbox", { name: "Nome della passkey", exact: true })
+      .fill("Chiave browser sintetica");
+    await page.getByRole("button", { name: "Aggiungi passkey", exact: true }).click();
+    const row = methods.getByRole("group", { name: /Chiave browser sintetica/ });
+    await expect(row).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await page.screenshot({ path: "/tmp/fiscalbay-security-improvements.png", fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await noPageOverflow(page)).toBe(true);
+    await page.screenshot({
+      path: "/tmp/fiscalbay-security-improvements-mobile.png",
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await row.getByRole("button", { name: "Rinomina", exact: true }).click();
+    await expect(row.getByRole("button", { name: "Salva", exact: true })).toBeVisible();
+    const renamedName = `Chiave ${"r".repeat(73)}`;
+    await row.locator('input[name="name"]').fill(renamedName);
+    await row.getByRole("button", { name: "Salva", exact: true }).click();
+    const renamed = methods.getByRole("group", { name: new RegExp(renamedName) });
+    await expect(renamed).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await noPageOverflow(page)).toBe(true);
+    await page.screenshot({ path: "/tmp/fiscalbay-passkey-name-mobile.png", fullPage: true });
+    await renamed.getByRole("button", { name: "Rimuovi", exact: true }).click();
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Rimuovi", exact: true })
+      .click();
+    await expect(renamed).toHaveCount(0);
+    await expect(methods.getByText("Questo è il tuo unico metodo", { exact: false })).toBeVisible();
+  });
+
+  test("passkey non supportata e scheda revocata si aggiornano senza ricarica manuale", async ({
+    browser,
+    baseURL,
+  }) => {
+    const context = await browser.newContext({ baseURL });
+    try {
+      const page = await context.newPage();
+      await page.goto("/accesso");
+      await page.evaluate(() =>
+        Object.defineProperty(window, "PublicKeyCredential", {
+          configurable: true,
+          value: undefined,
+        }),
+      );
+      await page.getByRole("button", { name: "Accedi con passkey", exact: true }).click();
+      await expect(
+        page.getByRole("alert").filter({ hasText: "non supporta le passkey" }),
+      ).toBeVisible();
+      const form = page.getByRole("tabpanel", { name: "Accedi", exact: true });
+      await form.getByRole("textbox", { name: "Email", exact: true }).fill(testAccount.email);
+      await form.getByRole("textbox", { name: "Password", exact: true }).fill(localPassword);
+      await form.getByRole("button", { name: "Accedi", exact: true }).click();
+      await page.goto("/app/impostazioni/sicurezza");
+      await expect(page.getByRole("heading", { name: "Sicurezza", exact: true })).toBeVisible();
+      await expect(page.getByText(/^Sessione aperta il/).first()).toBeVisible();
+      const profile = await context.newPage();
+      await profile.goto("/app/profilo");
+      const firstName = profile.getByRole("textbox", { name: "Nome", exact: true });
+      const save = profile.getByRole("button", { name: "Salva", exact: true });
+      const originalName = await firstName.inputValue();
+      await firstName.fill(`  ${originalName} aggiornato  `);
+      await save.click();
+      await expect(firstName).toHaveValue(`${originalName} aggiornato`);
+      await expect(save).toBeDisabled();
+      await firstName.fill(` ${originalName} aggiornato `);
+      await expect(save).toBeDisabled();
+      await firstName.fill(originalName);
+      await save.click();
+      await expect(save).toBeDisabled();
+      await expect(firstName).toBeEnabled();
+      await firstName.fill("Bozza non salvata");
+      const second = await context.newPage();
+      await second.goto("/app/impostazioni/sicurezza");
+      await second.request.post("/accesso", {
+        headers: { origin: baseURL! },
+        form: { intent: "esci" },
+        maxRedirects: 0,
+      });
+      await page.bringToFront();
+      // Il browser headless non genera sempre focus quando porta avanti una scheda.
+      await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+      await expect(page).toHaveURL(/\/accesso$/);
+      await expect(page.getByRole("textbox", { name: "Email", exact: true })).toBeVisible();
+      await profile.bringToFront();
+      await profile.evaluate(() => window.dispatchEvent(new Event("focus")));
+      await expect(profile).toHaveURL(/\/accesso$/);
+    } finally {
+      await context.close();
+    }
+  });
+});
 
 /*
  * Garanzie del design system verificate sulle schermate reali dell'anteprima:

@@ -5,6 +5,8 @@ import type { PageRole } from "./page-cases";
 export const localSecret = "fiscalbay-e2e-secret-at-least-32-bytes";
 export const localPassword = "fiscalbay-local-synthetic-password-only";
 export const localPort = process.env.E2E_PORT || "5186";
+// WebAuthn richiede un dominio come RP ID: un indirizzo IP non è valido.
+export const localOrigin = `http://localhost:${localPort}`;
 
 /** Unicamente locale: nessun flag remote e nessuna sessione privilegiata sul dominio test. */
 export async function seedLocalAccount() {
@@ -22,7 +24,7 @@ export async function seedLocalAccount() {
 export function localCookie(role: PageRole, baseURL: string) {
   const token = `pages-${role}`;
   return {
-    name: "__Secure-better-auth.session_token",
+    name: `${new URL(baseURL).protocol === "https:" ? "__Secure-" : ""}better-auth.session_token`,
     value: encodeURIComponent(
       `${token}.${createHmac("sha256", localSecret).update(token).digest("base64")}`,
     ),

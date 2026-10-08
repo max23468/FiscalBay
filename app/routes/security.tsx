@@ -23,7 +23,8 @@ import {
   type AccountMethod,
 } from "../domain/sign-in-methods.server";
 import { accessNotice } from "../access-notice";
-import { accessPath } from "../app-links";
+import { accessPath, securityReturnPath } from "../app-links";
+import { pendingEmailChange } from "../domain/email-change.server";
 import { appCopy } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
 import type { Route } from "./+types/security";
@@ -40,6 +41,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const now = new Date();
   return {
     language,
+    userId: session.user.id,
     notice: accessNotice(url.searchParams, language),
     ...account,
     methods: await listSignInMethods(env.DB, session.user.id),
@@ -49,6 +51,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     passkeyRestriction: passkeyChangeBlock(session as AuthSession, now),
     // Avviso da mostrare se la registrazione di una passkey viene rifiutata.
     passkeyBlock: passkeyChangeBlock(session as AuthSession, now) ?? "nuovo-accesso",
+    pendingEmail: await pendingEmailChange(env.DB, session.user.id, session.user.email),
   };
 }
 
@@ -63,6 +66,14 @@ export async function action({ request }: Route.ActionArgs) {
   const security = new URL(request.url).pathname;
   const notice = (value: string) => redirect(`${security}?accesso=${value}`, 303);
   const authError = `${localizedPath(language, "/auth/error")}?provider=`;
+
+  if (intent === "riautentica") {
+    const target = securityReturnPath(language, field("returnTo")) ?? security;
+    return redirectWithCookies(
+      `${localizedPath(language, accessPath)}?${new URLSearchParams({ returnTo: target })}`,
+      await forwardToAuth(env, request, "/sign-out"),
+    );
+  }
 
   // Chiudere sessioni protegge l'account: basta la sessione corrente, anche non recente.
   if (intent === "esci-altri") {
@@ -82,11 +93,17 @@ export async function action({ request }: Route.ActionArgs) {
     return notice("sessione-chiusa");
   }
 
-  if (intent === "passkey-remove") {
+  if (intent === "passkey-remove" || intent === "passkey-rename") {
     const block = passkeyChangeBlock(auth);
     if (block) return notice(block);
     const id = field("id");
     if (!id || id.length > 128) return notice("errore");
+    if (intent === "passkey-rename") {
+      const name = field("name").trim();
+      if (!name || name.length > 80) return notice("passkey-nome-non-valido");
+      const response = await forwardToAuth(env, request, "/passkey/update-passkey", { id, name });
+      return notice(response.ok ? "passkey-rinominata" : "errore");
+    }
     const removed = await removePasskey(env.DB, session.user.id, id);
     if (removed) notifySecurityEvent(env, session.user.id, { kind: "passkey-removed" });
     return notice(removed ? "passkey-rimossa" : "ultimo-accesso");
@@ -130,8 +147,12 @@ export async function action({ request }: Route.ActionArgs) {
     return notice(method === "ebay" ? "ebay-rimosso" : "metodo-rimosso");
   }
 
-  if (intent === "cambia-email") {
-    const email = field("email").trim();
+  if (intent === "cambia-email" || intent === "reinvia-email") {
+    const pending =
+      intent === "reinvia-email"
+        ? await pendingEmailChange(env.DB, session.user.id, session.user.email)
+        : null;
+    const email = (intent === "reinvia-email" ? (pending?.new_email ?? "") : field("email")).trim();
     if (!email || email.length > 254) return notice("email-non-valida");
     const response = await forwardToAuth(env, request, "/change-email", {
       newEmail: email,
@@ -149,7 +170,7 @@ export default function Security({ loaderData }: Route.ComponentProps) {
   const { language } = loaderData;
   const t = appCopy[language];
   return (
-    <AccountShell language={language} account={loaderData} security>
+    <AccountShell key={loaderData.userId} language={language} account={loaderData} security>
       <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
         <PageTitle icon={ShieldCheck} tone="neutral">
           {t.shell.security}
@@ -164,6 +185,7 @@ export default function Security({ loaderData }: Route.ComponentProps) {
           passkeyBlock={loaderData.passkeyBlock}
           recent={loaderData.recent}
           passkeyRestriction={loaderData.passkeyRestriction}
+          pendingEmail={loaderData.pendingEmail}
         />
       </div>
     </AccountShell>

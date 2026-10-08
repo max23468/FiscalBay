@@ -10,6 +10,37 @@ import { loader as adminLoader } from "../app/routes/admin";
 import { action as securityRouteAction, loader as securityLoader } from "../app/routes/security";
 import { action as signInAction, loader as signInLoader } from "../app/routes/sign-in";
 import { action as storeLinkAction, loader as storeLinkLoader } from "../app/routes/store-link";
+import { pendingEmailChange } from "../app/domain/email-change.server";
+import { purgeExpiredRecords } from "../app/domain/maintenance.server";
+import { passkeyFailure } from "../app/passkey-error";
+import { securityReturnPath } from "../app/app-links";
+
+it("distingue le cause passkey riconoscibili e non indovina quelle ambigue", () => {
+  for (const [name, expected] of [
+    ["AbortError", "cancelled"],
+    ["TimeoutError", "timeout"],
+    ["NotSupportedError", "unsupported"],
+    ["NotAllowedError", "incomplete"],
+    ["Error", "technical"],
+  ]) {
+    expect(passkeyFailure(new DOMException("synthetic", name))).toBe(expected);
+  }
+  expect(passkeyFailure({ code: "AUTH_CANCELLED" })).toBe("incomplete");
+  expect(passkeyFailure({ code: "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED" })).toBe("duplicate");
+  expect(passkeyFailure(null)).toBe("technical");
+  for (const value of [
+    "//example.invalid",
+    "https://example.invalid",
+    "/app/impostazioni/sicurezza?delete=1",
+    "/app/impostazioni/sicurezza#unknown",
+    "/en/app/impostazioni/sicurezza",
+  ]) {
+    expect(securityReturnPath("it", value)).toBeNull();
+  }
+  expect(securityReturnPath("en", "/en/app/impostazioni/sicurezza#security-methods")).toBe(
+    "/en/app/impostazioni/sicurezza#security-methods",
+  );
+});
 
 /** La registrazione non apre la sessione: la apre l'accesso con la password appena scelta. */
 async function passwordSession(environment: Env, email: string, password: string) {
@@ -109,7 +140,7 @@ describe("Better Auth su Workers e D1", () => {
   it("usa mittente e Reply-To previsti per verifica e reset", async () => {
     const send = vi.fn(async () => ({ messageId: "synthetic" }));
     const options = createAuthOptions({ ...env, AUTH_EMAIL: { send } } as Env);
-    const user = { email: "auth@example.invalid" };
+    const user = { id: "auth-email-fixture", email: "auth@example.invalid" };
     const url = "https://test.fiscalbay.it/verifica";
 
     await options.emailVerification?.sendVerificationEmail?.(
@@ -1257,6 +1288,9 @@ describe("Collegamento e modifica dell'identità", () => {
 
     // Un indirizzo già registrato ha la stessa risposta ma nessuna email e nessun cambio.
     expect(await request("email.occupata@example.invalid")).toContain("email-richiesta");
+    expect(
+      await pendingEmailChange(env.DB, user.id, "email.precedente@example.invalid"),
+    ).toMatchObject({ new_email: "email.occupata@example.invalid", stage: "current" });
     expect(await request("non-valida")).toContain("email-non-valida");
     expect(send).not.toHaveBeenCalled();
 
@@ -1264,15 +1298,52 @@ describe("Collegamento e modifica dell'identità", () => {
     await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
     expect(send.mock.calls[0]![0]).toMatchObject({ to: "email.precedente@example.invalid" });
     expect(await stored()).toEqual({ email: "email.precedente@example.invalid", emailVerified: 1 });
+    expect(
+      await pendingEmailChange(env.DB, user.id, "email.precedente@example.invalid"),
+    ).toMatchObject({ new_email: "email.nuova@example.invalid", stage: "current" });
 
     expect((await follow(link(0))).headers.get("location")).toContain("email-confermata");
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2));
     expect(send.mock.calls[1]![0]).toMatchObject({ to: "email.nuova@example.invalid" });
+    expect(
+      await pendingEmailChange(env.DB, user.id, "email.precedente@example.invalid"),
+    ).toMatchObject({ stage: "new" });
     expect(await stored()).toEqual({ email: "email.precedente@example.invalid", emailVerified: 1 });
 
     await follow(link(1));
     // Stesso utente, quindi stessi spazi, negozi e piani: cambia soltanto l'indirizzo.
     expect(await stored()).toEqual({ email: "email.nuova@example.invalid", emailVerified: 1 });
+    // La conferma elimina subito lo stato temporaneo, prima della pulizia eseguita da un loader.
+    expect(
+      await env.DB.prepare("SELECT 1 FROM account_email_changes WHERE user_id = ?")
+        .bind(user.id)
+        .first(),
+    ).toBeNull();
+    expect(await pendingEmailChange(env.DB, user.id, "email.nuova@example.invalid")).toBeNull();
+    send.mockClear();
+    expect(await request("email.destinazione@example.invalid")).toContain("email-richiesta");
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    expect(
+      (
+        await securityAction(user.cookie, {
+          intent: "reinvia-email",
+          email: "email.estranea@example.invalid",
+        })
+      ).headers.get("location"),
+    ).toContain("email-richiesta");
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+    expect(send.mock.calls[1]![0]).toMatchObject({ to: "email.nuova@example.invalid" });
+    expect(await pendingEmailChange(env.DB, user.id, "email.nuova@example.invalid")).toMatchObject({
+      new_email: "email.destinazione@example.invalid",
+      stage: "current",
+    });
+    expect(await stored()).toEqual({ email: "email.nuova@example.invalid", emailVerified: 1 });
+    await purgeExpiredRecords(env.DB, new Date(Date.now() + 3_600_001));
+    expect(
+      await env.DB.prepare("SELECT 1 FROM account_email_changes WHERE user_id = ?")
+        .bind(user.id)
+        .first(),
+    ).toBeNull();
     send.mockRestore();
   });
 });
@@ -1338,6 +1409,113 @@ describe("Sessioni, revoche e area admin", () => {
       throw thrown;
     }
   };
+  it("rinomina solo passkey proprie con accesso recente, anche attraverso la route Auth", async () => {
+    const user = await createUser("rinomina.passkey@example.invalid");
+    const other = await createUser("rinomina.estraneo@example.invalid");
+    await env.DB.prepare(`INSERT INTO passkey (id, name, publicKey, userId, credentialID, counter, deviceType, backedUp)
+      VALUES ('rename-owned', 'Originale', 'synthetic', ?, 'rename-owned', 0, 'singleDevice', 0)`)
+      .bind(user.id)
+      .run();
+    expect(
+      await securityAction(user.cookie, {
+        intent: "passkey-rename",
+        id: "rename-owned",
+        name: "  Chiave di riserva  ",
+      }),
+    ).toContain("passkey-rinominata");
+    expect(
+      await env.DB.prepare("SELECT name FROM passkey WHERE id = 'rename-owned'").first(),
+    ).toEqual({ name: "Chiave di riserva" });
+    expect(
+      await securityAction(other.cookie, {
+        intent: "passkey-rename",
+        id: "rename-owned",
+        name: "Estraneo",
+      }),
+    ).toContain("errore");
+    expect(
+      (
+        await jsonRequest("passkey/update-passkey", other.cookie, {
+          id: "rename-owned",
+          name: "Estraneo",
+        })
+      ).ok,
+    ).toBe(false);
+    expect(
+      await securityAction(user.cookie, {
+        intent: "passkey-rename",
+        id: "rename-owned",
+        name: " ",
+      }),
+    ).toContain("passkey-nome-non-valido");
+    expect(
+      (
+        await jsonRequest("passkey/update-passkey", user.cookie, {
+          id: "rename-owned",
+          name: "a".repeat(81),
+        })
+      ).status,
+    ).toBe(400);
+    await env.DB.prepare('UPDATE session SET "createdAt" = ? WHERE "userId" = ?')
+      .bind(new Date(Date.now() - 2 * 86_400_000).toISOString(), user.id)
+      .run();
+    expect(
+      await securityAction(user.cookie, {
+        intent: "passkey-rename",
+        id: "rename-owned",
+        name: "Vecchia sessione",
+      }),
+    ).toContain("nuovo-accesso");
+    expect(
+      (
+        await jsonRequest("passkey/update-passkey", user.cookie, {
+          id: "rename-owned",
+          name: "Vecchia sessione",
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      await env.DB.prepare("SELECT name FROM passkey WHERE id = 'rename-owned'").first(),
+    ).toEqual({ name: "Chiave di riserva" });
+  });
+
+  it("esce per riautenticare e torna soltanto a una sezione consentita di Sicurezza", async () => {
+    for (const prefix of ["", "/en"]) {
+      const user = await createUser(`ritorno${prefix.replace("/", "-")}@example.invalid`);
+      const target = `${prefix}/app/impostazioni/sicurezza#security-email`;
+      const area = await securityLoader({
+        request: new Request(`${origin}${prefix}/app/impostazioni/sicurezza`, {
+          headers: { cookie: user.cookie },
+        }),
+      } as never);
+      expect(area.userId).toBe(user.id);
+      const out = await securityRouteAction({
+        request: form(`${prefix}/app/impostazioni/sicurezza`, user.cookie, {
+          intent: "riautentica",
+          returnTo: target,
+        }),
+      } as never);
+      const destination = new URL(out.headers.get("location")!, origin);
+      expect(destination.pathname).toBe(`${prefix}/accesso`);
+      expect(destination.searchParams.get("returnTo")).toBe(target);
+      expect(await security(user.cookie)).toBe("/accesso");
+      for (const [returnTo, expected] of [
+        [target, target],
+        ["https://example.invalid", `${prefix}/app/ordini`],
+        [`${prefix}/app/negozi`, `${prefix}/app/ordini`],
+      ]) {
+        const signedIn = await signInAction({
+          request: form(`${prefix}/accesso`, "", {
+            email: user.email,
+            password: "Password-sintetica-123!",
+            returnTo,
+          }),
+        } as never);
+        expect(signedIn.headers.get("location")).toBe(expected);
+      }
+    }
+  });
+
   /** Esito del loader admin: 404 per chi non è admin, altrimenti il livello di accesso. */
   const admin = async (cookie: string) => {
     try {
@@ -1371,7 +1549,7 @@ describe("Sessioni, revoche e area admin", () => {
       },
       agreement: { marketing: false },
     });
-    return { id: user.id, cookie: await signIn(email) };
+    return { id: user.id, email, cookie: await signIn(email) };
   };
   const sessionId = async (cookie: string) =>
     (
@@ -1443,6 +1621,9 @@ describe("Sessioni, revoche e area admin", () => {
     const loaded = await security(user.cookie);
     if (typeof loaded === "string" || !loaded) throw new Error("sessione attesa");
     expect(loaded.sessions).toHaveLength(3);
+    expect(
+      loaded.sessions.every((session) => Number.isFinite(Date.parse(session.createdAt!))),
+    ).toBe(true);
     expect(loaded.sessions.filter((session) => session.current)).toEqual([
       expect.objectContaining({ id: await sessionId(user.cookie), device: "Safari su macOS" }),
     ]);

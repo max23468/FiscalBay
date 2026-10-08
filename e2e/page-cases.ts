@@ -78,8 +78,13 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
     make("/privacy", "public"),
     make("/app/negozi/collega", "stores", { redirect: access }),
     make("/app/negozi/collega", "stores", { role: "member" }),
+    make(`/app/negozi/collega?ricollega=${testAccount.stores.expiring}`, "stores", {
+      role: "member",
+      pattern: `${prefix}/app/negozi/collega`,
+    }),
     make("/app/negozi/collega?ricollega", "stores", {
       role: "member",
+      status: 400,
       pattern: `${prefix}/app/negozi/collega`,
     }),
     make("/app/negozi", "stores", {
