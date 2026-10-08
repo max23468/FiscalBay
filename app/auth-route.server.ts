@@ -13,7 +13,7 @@ import {
 } from "./integrations/ebay/store-link.server";
 import { notifySecurityEvent } from "./account-email.server";
 import { logFailure, tracePhase } from "./errors";
-import { ordersPath } from "./app-links";
+import { appBase, ordersPath } from "./app-links";
 import { localizedPath } from "./i18n";
 
 // I token OAuth restano al codice server; metodi e passkey si rimuovono dalle azioni dell'app,
@@ -296,10 +296,14 @@ async function handleEbayCallback(
     });
     await recordStoreLinkOutcome(environment.DB, state, outcome);
   }
-  const home = state.startsWith("en_") ? localizedPath("en", ordersPath) : ordersPath;
+  // Lo state comincia con la lingua e, se il collegamento parte da Negozi, con «-negozi».
+  const [language, place] = state.split("_", 1)[0]!.split("-");
+  const target = place === "negozi" ? `${appBase}/negozi` : ordersPath;
+  const home = language === "en" ? localizedPath("en", target) : target;
   const query = new URLSearchParams();
   if (outcome) query.set("negozio", outcome);
-  if (link.ebayEnvironment === "sandbox") query.set("environment", "sandbox");
+  // Negozi elenca tutti gli ambienti; gli Ordini mostrano quello del negozio collegato.
+  if (link.ebayEnvironment === "sandbox" && place !== "negozi") query.set("environment", "sandbox");
   const destination = query.size > 0 ? `${home}?${query}` : home;
   return noStore(Response.redirect(new URL(destination, environment.APP_ORIGIN), 303));
 }

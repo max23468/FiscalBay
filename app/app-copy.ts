@@ -654,6 +654,8 @@ const it = {
     reconnectTitle: "Ricollega un negozio eBay",
     reconnectIntro:
       "Ti portiamo su eBay per rinnovare l’autorizzazione. Accedi con l’account venditore del negozio da ricollegare: FiscalBay lo riconosce e conserva gli ordini già importati.",
+    reconnectIntroDeleted:
+      "Ti portiamo su eBay per autorizzare di nuovo FiscalBay. Accedi con l’account venditore del negozio da ricollegare: gli ordini eliminati non tornano, FiscalBay legge da capo quelli che eBay rende disponibili.",
     intro:
       "Ti portiamo su eBay per autorizzare FiscalBay. Accedi con l’account venditore del negozio da collegare: può essere diverso da quello che usi per entrare in FiscalBay.",
     points: [
@@ -797,7 +799,7 @@ const it = {
       collegato: "Negozio eBay collegato.",
       negato: "Collegamento annullato su eBay.",
       "negozio-diverso":
-        "Hai scelto un account eBay diverso dal negozio da ricollegare. Il consenso non è stato salvato. Torna a Negozi e riprova con l’account corretto.",
+        "Hai scelto un account eBay diverso dal negozio da ricollegare, quindi il consenso non è stato salvato. Se eBay ti fa entrare in automatico con un altro account, esci da eBay e riprova con quello del negozio.",
       "altro-spazio": "Questo negozio eBay è già collegato a un altro account FiscalBay.",
       accesso: "Conferma l’indirizzo email per collegare un negozio.",
       errore: "Collegamento non riuscito. Riprova.",
@@ -1460,6 +1462,8 @@ const en: AppCopy = {
     reconnectTitle: "Reconnect an eBay store",
     reconnectIntro:
       "We’ll take you to eBay to renew the authorisation. Sign in with the seller account of the store you want to reconnect: FiscalBay recognises it and keeps the orders already imported.",
+    reconnectIntroDeleted:
+      "We’ll take you to eBay to authorise FiscalBay again. Sign in with the seller account of the store you want to reconnect: deleted orders don’t come back, FiscalBay reads again the ones eBay makes available.",
     intro:
       "We’ll take you to eBay to authorize FiscalBay. Sign in with the seller account of the store you want to connect: it can differ from the one you use to sign in to FiscalBay.",
     points: [
@@ -1601,7 +1605,7 @@ const en: AppCopy = {
       collegato: "eBay store connected.",
       negato: "Connection cancelled on eBay.",
       "negozio-diverso":
-        "You selected a different eBay account from the store to reconnect. The consent was not saved. Return to Stores and try again with the correct account.",
+        "You selected a different eBay account from the store to reconnect, so the consent was not saved. If eBay signs you in automatically with another account, sign out of eBay and try again with the store’s account.",
       "altro-spazio": "This eBay store is already connected to another FiscalBay account.",
       accesso: "Confirm your email address to connect a store.",
       errore: "Could not connect the store. Try again.",

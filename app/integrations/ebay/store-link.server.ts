@@ -60,9 +60,11 @@ export async function startStoreLink(
   language: Language = "it",
   ebayEnvironment: EbayEnvironment = "production",
   expectedStoreId: string | null = null,
+  fromStores = false,
 ): Promise<string> {
   const configuration = ebayConfiguration(environment, ebayEnvironment);
-  const state = `${language}_${randomToken()}`;
+  // Lingua e pagina di ritorno viaggiano nello state: il callback le legge senza altre tabelle.
+  const state = `${language}${fromStores ? "-negozi" : ""}_${randomToken()}`;
   const codeVerifier = randomToken();
   const challenge = base64Url(
     new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(codeVerifier))),

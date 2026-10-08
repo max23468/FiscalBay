@@ -294,6 +294,13 @@ test("negozi con problema e conferma forte dell'eliminazione", async ({ page }) 
   await expect(button).toBeDisabled();
   await confirm.getByRole("textbox").fill("Retro Parts Europe");
   await expect(button).toBeEnabled();
+  // Riuscita l'eliminazione, il pannello si chiude e l'avviso resta visibile sull'elenco.
+  await button.click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Anteprima: l’azione è simulata." }),
+  ).toBeVisible();
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(page).toHaveURL(/\/anteprima\/negozi$/u);
 });
 
 test("il salvataggio automatico fallito ripristina il valore", async ({ page }) => {
