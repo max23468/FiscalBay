@@ -14,7 +14,7 @@ import {
   Trash2,
   Unplug,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { useAction } from "~/components/app-shell";
@@ -231,8 +231,7 @@ function StoreActions({
       {store.connection === "active" ? (
         <p className="text-sm text-muted-foreground">{t.stores.pauseHint}</p>
       ) : null}
-      {/* Dopo l'eliminazione resta soltanto il ricollegamento. */}
-      {disconnected && store.dataDeleted ? null : <DisconnectActions store={store} t={t} />}
+      <DisconnectActions store={store} t={t} links={links} />
     </section>
   );
 }
@@ -289,17 +288,28 @@ function ReadActions({ store, ebayDown, t }: { store: StoreView; ebayDown: boole
   );
 }
 
-/** Scollega ed elimina dati; un negozio già scollegato offre solo l'eliminazione. */
-function useDisconnectDialog(store: StoreView, t: AppCopy) {
+/**
+ * Scollega ed elimina dati; un negozio già scollegato offre solo l'eliminazione. Dopo
+ * l'eliminazione il pannello si chiude e l'elenco mostra il negozio scollegato.
+ */
+function useDisconnectDialog(store: StoreView, t: AppCopy, links: AppLinks) {
   const action = useAction();
+  const navigate = useNavigate();
   const [open, setOpen] = useState<"disconnect" | "delete" | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [deleted, setDeleted] = useState(false);
   const [handled, setHandled] = useState(action.result);
   if (action.result && handled !== action.result) {
     setHandled(action.result);
-    if (action.result.ok) setOpen(null);
-    else setFailure(action.result.notice || t.stores.failed);
+    if (action.result.ok) {
+      setDeleted(open === "delete");
+      setOpen(null);
+    } else setFailure(action.result.notice || t.stores.failed);
   }
+  const storesHref = appHref(links, "negozi");
+  useEffect(() => {
+    if (deleted) void navigate(storesHref, { preventScrollReset: true });
+  }, [deleted, navigate, storesHref]);
   const changeOpen = (kind: "disconnect" | "delete", next: boolean) => {
     if (action.pending) return;
     setOpen(next ? kind : null);
@@ -312,9 +322,12 @@ function useDisconnectDialog(store: StoreView, t: AppCopy) {
   return { action, open, failure, changeOpen, run, confirmName, setConfirmName };
 }
 
-function DisconnectActions({ store, t }: { store: StoreView; t: AppCopy }) {
+function DisconnectActions({ store, t, links }: { store: StoreView; t: AppCopy; links: AppLinks }) {
   const { action, open, failure, changeOpen, run, confirmName, setConfirmName } =
-    useDisconnectDialog(store, t);
+    useDisconnectDialog(store, t, links);
+  // Dopo l'eliminazione resta soltanto il ricollegamento. Il componente resta montato perché
+  // l'esito dell'azione, con il suo avviso, arriva insieme ai dati aggiornati.
+  if (store.connection === "disconnected" && store.dataDeleted) return null;
   return (
     <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-2 border-t pt-3">
       {store.connection === "disconnected" ? null : (
@@ -707,10 +720,13 @@ export function StoresPage({
   data,
   t,
   links,
+  notice,
 }: {
   data: StoresPageData;
   t: AppCopy;
   links: AppLinks;
+  /** Esito del collegamento eBay appena concluso, sotto il titolo. */
+  notice?: React.ReactNode;
 }) {
   // «Già collegato a un altro account» è l'esito di un tentativo, non uno stato della pagina.
   const [attempted, setAttempted] = useState(false);
@@ -734,6 +750,7 @@ export function StoresPage({
         </PageTitle>
         {data.stores.length > 0 ? connect : null}
       </header>
+      {notice}
       {data.elsewhere && attempted ? (
         <StatusAlert tone="warning" title={t.stores.elsewhereTitle}>
           {t.stores.elsewhereBody}

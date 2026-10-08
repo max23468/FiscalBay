@@ -1,9 +1,10 @@
 import { env } from "cloudflare:workers";
 import { data, isRouteErrorResponse } from "react-router";
 
-import { AccountShell } from "~/components/account";
+import { AccessNotice, AccountShell } from "~/components/account";
 import { NotFoundState } from "~/components/not-found";
 import { StoresPage } from "~/components/stores";
+import { accessNotice } from "../access-notice";
 import { assertSameOrigin, requireAccountArea } from "../account-area.server";
 import { appCopy } from "../app-copy";
 import { appBase, storeLinkPath, type AppLinks } from "../app-links";
@@ -75,6 +76,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     notFound: Boolean(params.negozio) && !detail,
     language,
     account,
+    // Il collegamento eBay partito da Negozi torna qui con il suo esito.
+    notice: accessNotice(new URL(request.url).searchParams, language),
     page: {
       stores,
       detail,
@@ -144,7 +147,7 @@ export async function clientAction({ request, serverAction }: Route.ClientAction
 }
 
 export default function Stores({ loaderData }: Route.ComponentProps) {
-  const { language, account, page } = loaderData;
+  const { language, account, page, notice } = loaderData;
   const links: AppLinks = { language, base: appBase };
   const t = appCopy[language];
   return (
@@ -152,7 +155,12 @@ export default function Stores({ loaderData }: Route.ComponentProps) {
       {loaderData.notFound ? (
         <NotFoundState kind="store" t={t} links={links} />
       ) : (
-        <StoresPage data={page} t={t} links={links} />
+        <StoresPage
+          data={page}
+          t={t}
+          links={links}
+          notice={<AccessNotice language={language} notice={notice} />}
+        />
       )}
     </AccountShell>
   );

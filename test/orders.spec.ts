@@ -1961,13 +1961,14 @@ describe("collegamento negozio eBay", () => {
       expectedStoreName: "venditore",
       reconnect: true,
       fromStores: true,
+      dataDeleted: false,
     });
     const start = async (cookie: string) =>
       (await startStoreLink({
         request: new Request("http://localhost:5173/app/negozi/collega", {
           method: "POST",
           headers: { cookie, origin: "http://localhost:5173" },
-          body: new URLSearchParams({ negozio: store!.id }),
+          body: new URLSearchParams({ negozio: store!.id, da: "negozi" }),
         }),
       } as never)) as Response;
     expect((await start(other.cookie)).status).toBe(400);
@@ -1980,7 +1981,10 @@ describe("collegamento negozio eBay", () => {
       env,
       wrong,
     );
-    expect(callback.headers.get("location")).toContain("negozio=negozio-diverso");
+    // Partito da Negozi, il ricollegamento torna lì con l'esito.
+    expect(callback.headers.get("location")).toBe(
+      "http://localhost:5173/app/negozi?negozio=negozio-diverso",
+    );
     expect(wrong).toHaveBeenCalledTimes(2);
     expect(
       await env.DB.prepare("SELECT * FROM ebay_store_credentials WHERE store_id = ?")
@@ -2003,10 +2007,28 @@ describe("collegamento negozio eBay", () => {
       env,
       syntheticEbay({ username: "nome-aggiornato" }),
     );
-    expect(correct.headers.get("location")).toContain("negozio=collegato");
+    expect(correct.headers.get("location")).toBe(
+      "http://localhost:5173/app/negozi?negozio=collegato",
+    );
+    const stores = (await loadStores({
+      request: new Request(correct.headers.get("location")!, {
+        headers: { cookie: owner.cookie },
+      }),
+      params: {},
+    } as Parameters<typeof loadStores>[0])) as unknown as { data: { notice: unknown } };
+    expect(stores.data.notice).toEqual({ text: "Negozio eBay collegato.", tone: "success" });
     expect(await listStores(env.DB, owner.userId)).toMatchObject([
       { id: store!.id, name: "nome-aggiornato" },
     ]);
+    // Dopo l'eliminazione la schermata non promette più di conservare gli ordini.
+    expect(await deleteStoreData(env.DB, owner.userId, store!.id, "nome-aggiornato")).toBe("done");
+    const deleted = await loadStoreLink({
+      request: new Request(
+        `http://localhost:5173/app/negozi/collega?ricollega=${store!.id}&da=negozi`,
+        { headers: { cookie: owner.cookie } },
+      ),
+    } as never);
+    expect(deleted).toMatchObject({ dataDeleted: true });
   });
 
   it("non accetta il reconnect se il negozio cambia proprietario durante OAuth", async () => {
@@ -2516,6 +2538,7 @@ describe("collegamento negozio eBay", () => {
         ebayEnvironment: "production",
         expectedStoreId: null,
         expectedStoreName: null,
+        dataDeleted: false,
       });
     }
     // Da Negozi la schermata riporta lì con «Annulla».

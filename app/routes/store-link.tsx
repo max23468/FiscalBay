@@ -81,6 +81,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     ebayEnvironment,
     expectedStoreId: expected?.id ?? null,
     expectedStoreName: expected?.name ?? null,
+    dataDeleted: expected?.dataDeleted ?? false,
   };
 }
 
@@ -103,6 +104,7 @@ export async function action({ request }: Route.ActionArgs) {
     return errorResponse(request, "FORBIDDEN");
   }
   const expectedStoreId = String(form.get("negozio") ?? "");
+  const fromStores = form.get("da") === "negozi";
   if (
     expectedStoreId &&
     !(await listStores(env.DB, status.userId)).some(
@@ -118,6 +120,7 @@ export async function action({ request }: Route.ActionArgs) {
       language,
       ebayEnvironment,
       expectedStoreId || null,
+      fromStores,
     ),
     {
       status: 303,
@@ -139,7 +142,11 @@ export default function StoreLink({ loaderData }: Route.ComponentProps) {
       homeHref={home}
     >
       <p className="leading-relaxed text-pretty text-muted-foreground">
-        {reconnect ? t.reconnectIntro : t.intro}
+        {reconnect
+          ? loaderData.dataDeleted
+            ? t.reconnectIntroDeleted
+            : t.reconnectIntro
+          : t.intro}
       </p>
       {loaderData.expectedStoreName ? (
         <p className="font-medium">{loaderData.expectedStoreName}</p>
@@ -172,6 +179,7 @@ export default function StoreLink({ loaderData }: Route.ComponentProps) {
             />
           )
         )}
+        {loaderData.fromStores ? <input type="hidden" name="da" value="negozi" /> : null}
         <Button type="submit">{t.continue}</Button>
         <a
           href={back}
