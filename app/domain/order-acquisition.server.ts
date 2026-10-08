@@ -414,7 +414,7 @@ type ActiveStore = {
 
 /**
  * Lavoro periodico: acquisisce gli ordini dei negozi attivi con un token valido, dal negozio
- * aggiornato meno di recente. Un errore di un negozio non ferma gli altri.
+ * aggiornato o tentato meno di recente. Un errore di un negozio non ferma gli altri.
  */
 export async function acquireStoresOrders(
   environment: Env,
@@ -454,6 +454,14 @@ export async function acquireStoresOrders(
       });
     } catch (error) {
       logFailure({ error, operation: "order_acquisition" });
+      // Anche un tentativo fallito prima di iniziare, per esempio con un token che non si
+      // apre, passa il turno: altrimenti il negozio resterebbe sempre il primo della coda.
+      await environment.DB.prepare(
+        `INSERT INTO sync_state (store_id, updated_at) SELECT ?1, ?3 WHERE ${writableStore}
+         ON CONFLICT(store_id) DO UPDATE SET updated_at = excluded.updated_at`,
+      )
+        .bind(store.store_id, store.granted_at, now.toISOString())
+        .run();
     }
   }
 }

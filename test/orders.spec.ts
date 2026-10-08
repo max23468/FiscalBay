@@ -4742,7 +4742,7 @@ describe("client eBay e normalizzazione", () => {
     it("il lavoro periodico legge a turno tre negozi attivi, con un budget ciascuno, isolando gli errori", async () => {
       const seal = (storeId: string) =>
         sealToken(env.BETTER_AUTH_SECRET, storeId, "access", `token-${storeId}`);
-      const expires = "2026-09-02T02:00:00.000Z";
+      const expires = "2026-09-02T03:00:00.000Z";
       await env.DB.prepare(
         `INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at)
          VALUES ('s-c', 'w-a', 'e-c', ?1), ('s-d', 'w-a', 'e-d', ?1)`,
@@ -4756,7 +4756,13 @@ describe("client eBay e normalizzazione", () => {
              (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
            VALUES (?1, ?2, ?3, 'r', ?3, ?4)`,
         )
-          .bind(storeId, await seal(storeId), expires, grantedAt)
+          // Il token di B non si apre, come dopo una rotazione del segreto.
+          .bind(
+            storeId,
+            storeId === "s-b" ? "v1.illeggibile" : await seal(storeId),
+            expires,
+            grantedAt,
+          )
           .run();
       }
       const tokenOf = (init?: RequestInit) => {
@@ -4772,38 +4778,55 @@ describe("client eBay e normalizzazione", () => {
             ([token, list]) => [token, list!.length],
           ),
         );
+      const attempted = async () =>
+        Object.fromEntries(
+          (
+            await env.DB.prepare(
+              "SELECT store_id, updated_at FROM sync_state ORDER BY store_id",
+            ).all<{
+              store_id: string;
+              updated_at: string;
+            }>()
+          ).results.map(({ store_id, updated_at }) => [store_id, updated_at]),
+        );
       const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      const logged = () =>
+        errors.mock.calls.filter(([line]) =>
+          String(line).includes('"operation":"order_acquisition"'),
+        ).length;
       try {
-        // A ha più lavoro del proprio budget; B risponde 401; D attende il turno successivo.
+        // A ha più lavoro del proprio budget; B non apre il token; C risponde 401; D attende.
         const fetcher = ebay({
           orders: series("12-turno", 10, "2026-09-02T00:00:00.000Z"),
           fail: (_, init) =>
-            tokenOf(init) === "token-s-b" ? new Response(null, { status: 401 }) : undefined,
+            tokenOf(init) === "token-s-c" ? new Response(null, { status: 401 }) : undefined,
         });
         await acquireStoresOrders(env, fetcher, new Date("2026-09-02T00:00:00.000Z"));
-        expect(perStore(fetcher)).toEqual({ "token-s-a": 12, "token-s-b": 1, "token-s-c": 12 });
-        expect(
-          errors.mock.calls.filter(([line]) =>
-            String(line).includes('"operation":"order_acquisition"'),
-          ),
-        ).toHaveLength(1);
+        expect(perStore(fetcher)).toEqual({ "token-s-a": 12, "token-s-c": 1 });
+        expect(logged()).toBe(2);
+        // Anche i tentativi falliti passano il turno.
+        expect(await attempted()).toEqual({
+          "s-a": "2026-09-02T00:00:00.000Z",
+          "s-b": "2026-09-02T00:00:00.000Z",
+          "s-c": "2026-09-02T00:00:00.000Z",
+        });
 
-        // Il turno passa al negozio aggiornato meno di recente; in pausa o con il token in
+        // Il turno passa al negozio tentato meno di recente; in pausa o con il token in
         // scadenza un negozio non si legge.
         await env.DB.prepare(
-          "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-b', 'manual', ?)",
+          "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-c', 'manual', ?)",
         )
           .bind(now)
           .run();
         const later = ebay({ orders: [] });
         await acquireStoresOrders(env, later, new Date("2026-09-02T01:00:00.000Z"));
-        expect(Object.keys(perStore(later)).sort()).toEqual([
-          "token-s-a",
-          "token-s-c",
-          "token-s-d",
-        ]);
+        expect(Object.keys(perStore(later)).sort()).toEqual(["token-s-a", "token-s-d"]);
+        expect(await attempted()).toMatchObject({
+          "s-b": "2026-09-02T01:00:00.000Z",
+          "s-d": "2026-09-02T01:00:00.000Z",
+        });
         const expiring = ebay();
-        await acquireStoresOrders(env, expiring, new Date("2026-09-02T01:56:00.000Z"));
+        await acquireStoresOrders(env, expiring, new Date("2026-09-02T02:56:00.000Z"));
         expect(expiring).not.toHaveBeenCalled();
       } finally {
         errors.mockRestore();
