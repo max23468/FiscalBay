@@ -258,16 +258,9 @@ export async function completeStoreLink(input: {
     now,
   );
 
-  // Un negozio in pausa non legge eBay neppure al ricollegamento: riprende alla ripresa.
-  const paused = await environment.DB.prepare(
-    "SELECT 1 FROM ebay_store_pauses WHERE store_id = ? LIMIT 1",
-  )
-    .bind(storeId)
-    .first();
-  if (paused) return "collegato";
-
   // Il collegamento è già riuscito: un errore nella prima acquisizione non lo annulla. Qui si
   // leggono soltanto i recenti e la prima pagina dello storico; il resto prosegue in background.
+  // Un negozio in pausa non legge eBay neppure al ricollegamento: riprende alla ripresa.
   await acquireOrders({
     db: environment.DB,
     storeId,

@@ -1320,6 +1320,7 @@ function syntheticEbay(
     trading?: () => Response;
     token?: () => Response;
     orderId?: string;
+    lastModifiedDate?: string;
     orders?: unknown[];
     ordersPayload?: unknown;
     userId?: string;
@@ -1365,7 +1366,7 @@ function syntheticEbay(
         {
           orderId: options.orderId ?? syntheticOrderId,
           creationDate: "2026-09-20T10:00:00.000Z",
-          lastModifiedDate: "2026-09-20T11:00:00.000Z",
+          lastModifiedDate: options.lastModifiedDate ?? "2026-09-20T11:00:00.000Z",
           pricingSummary: { total: { value: "12.5", currency: "EUR" } },
           buyer: { username: "acquirente-sintetico", taxIdentifier: { value: "NON-ESPORRE" } },
           orderPaymentStatus: "PAID",
@@ -2445,6 +2446,30 @@ describe("collegamento negozio eBay", () => {
     }
   });
 
+  it("al collegamento legge soltanto recenti, una pagina di storico e pochi dettagli", async () => {
+    const { cookie } = await verifiedSession("primo-import@example.invalid");
+    const state = (await beginStoreLink(cookie)).searchParams.get("state");
+    const orders = Array.from({ length: 4 }, (_, index) => ({
+      orderId: `12-00000-0000${index}`,
+      creationDate: new Date(Date.now() - (index + 1) * 60 * 60 * 1000).toISOString(),
+      lastModifiedDate: new Date(Date.now() - (index + 1) * 60 * 60 * 1000).toISOString(),
+      pricingSummary: { total: { value: "1", currency: "EUR" } },
+      lineItems: [],
+    }));
+    const ebay = syntheticEbay({ orders });
+    await handleAuthRequest(storeCallback(`state=${state}&code=codice`, cookie), env, ebay);
+    // Token e identità, due pagine e tre dettagli da due chiamate: otto chiamate di acquisizione.
+    expect(ebay).toHaveBeenCalledTimes(10);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS total FROM orders").first()).toEqual({
+      total: 4,
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) AS total FROM order_source_refs WHERE detail_for IS NULL",
+      ).first(),
+    ).toEqual({ total: 1 });
+  });
+
   it("non collega il negozio con token o identità eBay non validi", async () => {
     const incomplete = () => Response.json({ access_token: "token-sintetico", expires_in: 7200 });
     for (const [index, provider] of [
@@ -2480,7 +2505,9 @@ describe("collegamento negozio eBay", () => {
     await handleAuthRequest(
       storeCallback(`state=${second}&code=due`, cookie),
       env,
+      // Una nuova versione dell'ordine rilegge Trading, che non riporta più l'identificativo.
       syntheticEbay({
+        lastModifiedDate: "2026-09-21T11:00:00.000Z",
         trading: () =>
           new Response(
             '<GetOrdersResponse xmlns="urn:ebay:apis:eBLBaseComponents"><Ack>Success</Ack>' +
@@ -2493,6 +2520,9 @@ describe("collegamento negozio eBay", () => {
         .all()
         .then(({ results }) => results),
     ).toEqual([{ value: "SYNTHETIC&ID", removed_at: null }]);
+    expect(await env.DB.prepare("SELECT detail_for FROM order_source_refs").first()).toEqual({
+      detail_for: "2026-09-21T11:00:00.000Z",
+    });
   });
 
   it("rifiuta lo state avviato da un altro utente e registra il rifiuto su eBay", async () => {
@@ -4122,7 +4152,7 @@ describe("client eBay e normalizzazione", () => {
     type FakeOrder = ReturnType<typeof order>;
     /**
      * eBay sintetico con paginazione reale: filtra per data, ordina dal più recente e restituisce
-     * `next` con l'offset. `served` vede ogni pagina dell'elenco dopo la risposta.
+     * `next` con l'offset. `before` interviene prima di ogni richiesta.
      */
     const ebay = (
       options: {
@@ -4130,12 +4160,13 @@ describe("client eBay e normalizzazione", () => {
         getItem?: () => Response;
         trading?: () => Response;
         fail?: (url: URL, init?: RequestInit) => Response | undefined;
-        served?: (url: URL) => void | Promise<void>;
+        before?: (url: URL, init?: RequestInit) => void | Promise<void>;
       } = {},
     ) => {
       const orders = options.orders ?? [order()];
       const fetcher = vi.fn<typeof fetch>(async (input, init) => {
         const url = new URL(String(input));
+        await options.before?.(url, init);
         const failed = options.fail?.(url, init);
         if (failed) return failed;
         const call = new Headers(init?.headers).get("x-ebay-api-call-name");
@@ -4181,7 +4212,6 @@ describe("client eBay e normalizzazione", () => {
           total: matching.length,
           ...(offset + limit < matching.length ? { next: next.href } : {}),
         });
-        await options.served?.(url);
         return response;
       });
       return Object.assign(fetcher, { orders });
@@ -4333,8 +4363,8 @@ describe("client eBay e normalizzazione", () => {
         orders,
         // Dopo la prima pagina un ordine già letto esce dall'intervallo: senza ripartire,
         // l'offset della seconda pagina salterebbe il primo ordine non ancora letto.
-        served: (url) => {
-          if (moved || url.searchParams.has("offset")) return;
+        before: (url) => {
+          if (moved || url.searchParams.get("offset") !== "25") return;
           moved = true;
           orders[0] = { ...orders[0]!, lastModifiedDate: "2026-09-03T00:00:00.000Z" };
         },
@@ -4368,6 +4398,8 @@ describe("client eBay e normalizzazione", () => {
     it("acquisisce i nuovi ordini prima di completare lo storico e ne mostra l'avanzamento", async () => {
       const orders = series("12-storico", 60, "2026-09-02T00:00:00.000Z");
       const small = { calls: 2, pages: 2 };
+      // Prima del primo avvio lo storico non ha ancora una finestra.
+      expect((await listStores(env.DB, "u-a"))[0]).toMatchObject({ history: null, syncing: false });
       await acquire(ebay({ orders }), "2026-09-02T00:00:00.000Z", { ...small });
       expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(25);
       expect(
@@ -4517,7 +4549,7 @@ describe("client eBay e normalizzazione", () => {
           ...item,
           lastModifiedDate: "2026-09-02T12:00:00.000Z",
         })),
-        served: async () => {
+        before: async () => {
           await env.DB.prepare(
             "UPDATE ebay_store_credentials SET granted_at = '2026-09-03T00:00:00.000Z'",
           ).run();
@@ -4528,53 +4560,248 @@ describe("client eBay e normalizzazione", () => {
       expect(await syncState()).toEqual({ ...before, locked_until: null });
     });
 
-    it("il lavoro periodico legge i negozi attivi a turno, entro il budget, isolando gli errori", async () => {
+    it("rispetta separatamente chiamate e pagine e lascia il dettaglio alle chiamate rimaste", async () => {
+      const reset = () => env.DB.prepare("DELETE FROM sync_state").run();
+      const orders = series("12-budget", 60, "2026-09-02T00:00:00.000Z");
+      // Senza chiamate lo storico non parte, anche con pagine disponibili.
+      const noCalls = ebay({ orders });
+      expect(await acquire(noCalls, undefined, { calls: 1, pages: 10 })).toBe("budget");
+      expect(noCalls).toHaveBeenCalledTimes(1);
+      await reset();
+      // Senza pagine lo storico non parte, anche con chiamate disponibili.
+      const noPages = ebay({ orders });
+      expect(await acquire(noPages, undefined, { calls: 10, pages: 1 })).toBe("budget");
+      expect(noPages).toHaveBeenCalledTimes(1);
+
+      // Recenti incompleti: nessuna ultima sincronizzazione e lo storico aspetta.
+      await reset();
+      await acquire(ebay({ orders: [] }));
+      const recent = series("12-recenti", 30, "2026-07-01T00:00:00.000Z").map((item) => ({
+        ...item,
+        lastModifiedDate: "2026-09-02T00:30:00.000Z",
+      }));
+      const partial = ebay({ orders: recent });
+      expect(await acquire(partial, "2026-09-02T01:00:00.000Z", { calls: 1, pages: 1 })).toBe(
+        "budget",
+      );
+      expect(await syncState()).toMatchObject({
+        last_success_at: "2026-09-02T00:00:00.000Z",
+        recent_next: expect.stringContaining("offset=25"),
+      });
+
+      // Finite le pagine, le chiamate rimaste leggono il dettaglio fino al budget.
+      const details = ebay({ orders: recent });
+      expect(await acquire(details, "2026-09-02T01:10:00.000Z", { calls: 10, pages: 1 })).toBe(
+        "budget",
+      );
+      const singles = details.mock.calls.filter(([input]) =>
+        new URL(String(input)).pathname.includes("/order/"),
+      );
+      expect([singles.length, calls(details, "GetOrders")]).toEqual([4, 4]);
+      expect(await syncState()).toMatchObject({
+        cursor: "2026-09-02T01:00:00.000Z",
+        recent_next: null,
+        last_success_at: "2026-09-02T01:10:00.000Z",
+      });
+
+      // Con chiamate per un solo dettaglio di due, l'esecuzione non si dichiara completa.
+      await acquire(ebay({ orders: recent }), "2026-09-02T01:20:00.000Z");
+      await env.DB.prepare(
+        `UPDATE order_source_refs SET detail_for = NULL
+          WHERE external_order_id IN (SELECT external_order_id FROM order_source_refs LIMIT 2)`,
+      ).run();
+      const last = ebay({ orders: recent });
+      expect(await acquire(last, "2026-09-02T01:30:00.000Z", { calls: 3, pages: 1 })).toBe(
+        "budget",
+      );
+      expect(calls(last, "GetOrders")).toBe(1);
+      expect(await acquire(ebay({ orders: recent }), "2026-09-02T01:40:00.000Z")).toBe("complete");
+    });
+
+    it("limita le immagini per versione e rimanda il dettaglio senza chiamate sufficienti", async () => {
+      const [line] = order().lineItems;
+      const listings = Array.from({ length: 10 }, (_, index) => ({
+        ...line,
+        lineItemId: `2000000000${index}`,
+        legacyItemId: `21000000000${index}`,
+      }));
+      const many = ebay({ orders: [order({ lineItems: listings })] });
+      await acquire(many);
+      expect(calls(many, "GetItem")).toBe(8);
+
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM orders"),
+        env.DB.prepare("DELETE FROM sync_state"),
+      ]);
+      // Due pagine, il dettaglio e tre delle otto immagini necessarie: l'ordine si legge una
+      // volta sola e resta in attesa.
+      const short = ebay({ orders: [order({ lineItems: listings.slice(0, 8) })] });
+      expect(await acquire(short, undefined, { calls: 7, pages: 2 })).toBe("budget");
+      expect([calls(short, "GetItem"), calls(short, "GetOrders")]).toEqual([0, 0]);
+      expect(
+        short.mock.calls.filter(([input]) => new URL(String(input)).pathname.includes("/order/")),
+      ).toHaveLength(1);
+      expect(
+        await env.DB.prepare("SELECT detail_for, detail_attempts FROM order_source_refs").first(),
+      ).toEqual({ detail_for: null, detail_attempts: 0 });
+    });
+
+    it("distingue gli errori del dettaglio che fermano l'esecuzione da quelli dell'ordine", async () => {
+      const detail = () =>
+        env.DB.prepare(
+          "SELECT detail_for, detail_error, detail_attempts FROM order_source_refs",
+        ).first();
+      const pending = { detail_for: null, detail_error: null, detail_attempts: 0 };
+      for (const [status, failure] of [
+        [401, "credentials"],
+        [429, "rate_limited"],
+      ] as const) {
+        await expect(
+          acquire(ebay({ trading: () => new Response(null, { status }) })),
+        ).rejects.toMatchObject({ failure });
+        expect(await detail()).toEqual(pending);
+      }
+
+      const single = (response: () => Response) => (url: URL) =>
+        url.pathname.includes("/order/") ? response() : undefined;
+      // Ordine non più leggibile, risposta che non è un ordine e versione più vecchia di
+      // quella già registrata: errori del solo ordine, con un nuovo tentativo.
+      let at = Date.parse("2026-09-02T00:00:00.000Z");
+      for (const [fail, error] of [
+        [single(() => new Response(null, { status: 404 })), "rejected"],
+        [single(() => Response.json({ orderId: "12-34567-89012" })), "invalid_response"],
+        [
+          single(() => Response.json(order({ lastModifiedDate: "2026-09-01T08:30:00.000Z" }))),
+          "invalid_response",
+        ],
+      ] as const) {
+        await env.DB.prepare(
+          "UPDATE order_source_refs SET detail_attempts = 0, detail_retry_at = NULL",
+        ).run();
+        at += 60_000;
+        expect(await acquire(ebay({ fail }), new Date(at).toISOString())).toBe("complete");
+        expect(await detail()).toEqual({
+          detail_for: null,
+          detail_error: error,
+          detail_attempts: 1,
+        });
+      }
+    });
+
+    it("non scrive se il consenso cambia dopo una pagina vuota o durante il dettaglio", async () => {
+      const reconnect = () =>
+        env.DB.prepare(
+          "UPDATE ebay_store_credentials SET granted_at = '2026-09-03T00:00:00.000Z'",
+        ).run();
+      const empty = ebay({ orders: [], before: reconnect });
+      expect(await acquire(empty)).toBe("not_writable");
+      expect(await syncState()).toMatchObject({
+        cursor: "2026-09-02T00:00:00.000Z",
+        last_success_at: null,
+      });
+
+      for (const fail of [undefined, () => new Response(null, { status: 404 })]) {
+        await env.DB.batch([
+          env.DB.prepare("DELETE FROM orders"),
+          env.DB.prepare("DELETE FROM sync_state"),
+          env.DB.prepare("UPDATE ebay_store_credentials SET granted_at = ?").bind(grantedAt),
+        ]);
+        const during = ebay({
+          before: async (url) => {
+            if (url.pathname.includes("/order/")) await reconnect();
+          },
+          fail: (url) => (url.pathname.includes("/order/") ? fail?.() : undefined),
+        });
+        expect(await acquire(during)).toBe("not_writable");
+        expect(
+          await env.DB.prepare(
+            "SELECT detail_for, detail_error, detail_attempts FROM order_source_refs",
+          ).first(),
+        ).toEqual({ detail_for: null, detail_error: null, detail_attempts: 0 });
+      }
+    });
+
+    it("tiene il negozio per l'esecuzione e regge un orologio indietro rispetto al limite", async () => {
+      let nested: string | null = null;
+      const fetcher = ebay({
+        before: async () => {
+          nested ??= await acquire(ebay(), "2026-09-02T00:05:00.000Z");
+        },
+      });
+      expect(await acquire(fetcher)).toBe("complete");
+      expect(nested).toBe("busy");
+
+      const earlier = ebay();
+      expect(await acquire(earlier, "2026-09-01T23:00:00.000Z")).toBe("complete");
+      expect(new URL(String(earlier.mock.calls[0]![0])).searchParams.get("filter")).toBe(
+        "lastmodifieddate:[2026-09-01T22:45:00.000Z..2026-09-01T23:00:00.000Z]",
+      );
+      expect((await syncState())!.cursor).toBe("2026-09-02T00:00:00.000Z");
+    });
+
+    it("il lavoro periodico legge a turno tre negozi attivi, con un budget ciascuno, isolando gli errori", async () => {
       const seal = (storeId: string) =>
         sealToken(env.BETTER_AUTH_SECRET, storeId, "access", `token-${storeId}`);
+      const expires = "2026-09-02T02:00:00.000Z";
       await env.DB.prepare(
-        `INSERT INTO ebay_store_credentials
-           (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
-         VALUES ('s-b', ?1, ?2, 'r', ?2, ?3)
-         ON CONFLICT(store_id) DO NOTHING`,
+        `INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at)
+         VALUES ('s-c', 'w-a', 'e-c', ?1), ('s-d', 'w-a', 'e-d', ?1)`,
       )
-        .bind(await seal("s-b"), "2026-09-02T02:00:00.000Z", grantedAt)
+        .bind(now)
         .run();
-      await env.DB.prepare(
-        "UPDATE ebay_store_credentials SET access_token = ?, access_expires_at = ? WHERE store_id = 's-a'",
-      )
-        .bind(await seal("s-a"), "2026-09-02T02:00:00.000Z")
-        .run();
-      const tokens = (fetcher: ReturnType<typeof ebay>) =>
-        fetcher.mock.calls.flatMap(
-          ([, init]) => new Headers(init?.headers).get("authorization") ?? [],
+      await env.DB.prepare("DELETE FROM ebay_store_credentials").run();
+      for (const storeId of ["s-a", "s-b", "s-c", "s-d"]) {
+        await env.DB.prepare(
+          `INSERT INTO ebay_store_credentials
+             (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
+           VALUES (?1, ?2, ?3, 'r', ?3, ?4)`,
+        )
+          .bind(storeId, await seal(storeId), expires, grantedAt)
+          .run();
+      }
+      const tokenOf = (init?: RequestInit) => {
+        const headers = new Headers(init?.headers);
+        return (
+          headers.get("authorization")?.slice("Bearer ".length) ??
+          headers.get("x-ebay-api-iaf-token")
+        );
+      };
+      const perStore = (fetcher: ReturnType<typeof ebay>) =>
+        Object.fromEntries(
+          Object.entries(Object.groupBy(fetcher.mock.calls, ([, init]) => tokenOf(init) ?? "")).map(
+            ([token, list]) => [token, list!.length],
+          ),
         );
       const errors = vi.spyOn(console, "error").mockImplementation(() => {});
       try {
-        // Il negozio B risponde 401: l'errore si registra e A procede.
+        // A ha più lavoro del proprio budget; B risponde 401; D attende il turno successivo.
         const fetcher = ebay({
+          orders: series("12-turno", 10, "2026-09-02T00:00:00.000Z"),
           fail: (_, init) =>
-            new Headers(init?.headers).get("authorization") === "Bearer token-s-b"
-              ? new Response(null, { status: 401 })
-              : undefined,
+            tokenOf(init) === "token-s-b" ? new Response(null, { status: 401 }) : undefined,
         });
         await acquireStoresOrders(env, fetcher, new Date("2026-09-02T00:00:00.000Z"));
-        expect(new Set(tokens(fetcher))).toEqual(new Set(["Bearer token-s-a", "Bearer token-s-b"]));
-        expect(await count("SELECT COUNT(*) AS total FROM orders WHERE store_id = 's-a'")).toBe(1);
+        expect(perStore(fetcher)).toEqual({ "token-s-a": 12, "token-s-b": 1, "token-s-c": 12 });
         expect(
           errors.mock.calls.filter(([line]) =>
             String(line).includes('"operation":"order_acquisition"'),
           ),
         ).toHaveLength(1);
 
-        // In pausa, scaduto o con il token in scadenza il negozio non si legge.
+        // Il turno passa al negozio aggiornato meno di recente; in pausa o con il token in
+        // scadenza un negozio non si legge.
         await env.DB.prepare(
           "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-b', 'manual', ?)",
         )
           .bind(now)
           .run();
-        const later = ebay();
+        const later = ebay({ orders: [] });
         await acquireStoresOrders(env, later, new Date("2026-09-02T01:00:00.000Z"));
-        expect(new Set(tokens(later))).toEqual(new Set(["Bearer token-s-a"]));
+        expect(Object.keys(perStore(later)).sort()).toEqual([
+          "token-s-a",
+          "token-s-c",
+          "token-s-d",
+        ]);
         const expiring = ebay();
         await acquireStoresOrders(env, expiring, new Date("2026-09-02T01:56:00.000Z"));
         expect(expiring).not.toHaveBeenCalled();

@@ -173,12 +173,9 @@ export function buildLastModifiedFilter(
   return `lastmodifieddate:[${start.toISOString()}..${end.toISOString()}]`;
 }
 
-/** Ordini creati nell'intervallo, estremi inclusi. */
-export function buildCreationDateFilter(from: Date, until: Date): string {
-  if (!Number.isFinite(from.getTime()) || !Number.isFinite(until.getTime()) || from > until) {
-    throw new RangeError("Intervallo dello storico eBay non valido");
-  }
-  return `creationdate:[${from.toISOString()}..${until.toISOString()}]`;
+/** Ordini creati nell'intervallo, estremi inclusi: date UTC già normalizzate. */
+export function buildCreationDateFilter(from: string, until: string): string {
+  return `creationdate:[${from}..${until}]`;
 }
 
 const ordersPath = "/sell/fulfillment/v1/order";
@@ -189,7 +186,7 @@ const ordersPath = "/sell/fulfillment/v1/order";
  */
 export async function readFulfillmentOrders(
   access: EbayAccess,
-  page: { limit: number; filter?: string } | { next: string },
+  page: { limit: number; filter: string } | { next: string },
 ): Promise<FulfillmentPage> {
   let url: URL;
   if ("next" in page) {
@@ -197,7 +194,7 @@ export async function readFulfillmentOrders(
   } else {
     url = ebayApiUrl(access.configuration, access.configuration.ordersUrl, ordersPath);
     url.searchParams.set("limit", String(page.limit));
-    if (page.filter) url.searchParams.set("filter", page.filter);
+    url.searchParams.set("filter", page.filter);
   }
   return upstreamJson(access.fetcher, url.href, fulfillmentPageSchema, {
     headers: { authorization: `Bearer ${access.accessToken}` },

@@ -16,7 +16,6 @@ import {
   fulfillmentObservation,
   readFulfillmentOrder,
   readFulfillmentOrders,
-  type FulfillmentOrder,
 } from "../integrations/ebay/fulfillment.server";
 import { readItemImage, readTradingTaxIdentifiers } from "../integrations/ebay/trading.server";
 import { openToken } from "../integrations/ebay/seller-credentials.server";
@@ -61,7 +60,8 @@ export type AcquisitionResult =
   /** Consenso cambiato, negozio in pausa o scollegato: nessuna scrittura. */
   | "not_writable";
 
-type Stop = Exclude<AcquisitionResult, "complete" | "busy">;
+/** Il consenso con cui è partita l'esecuzione non vale più: si ferma senza scrivere. */
+class NotWritable extends Error {}
 
 type Context = {
   db: D1Database;
@@ -88,19 +88,17 @@ async function saveState(ctx: Context, assignments: string, ...values: unknown[]
     )
     .bind(ctx.storeId, ctx.grantedAt, ctx.at, ...values)
     .run();
-  return result.meta.changes === 1;
+  if (result.meta.changes === 0) throw new NotWritable();
 }
 
-async function applyPage(ctx: Context, orders: ReadonlyArray<FulfillmentOrder>) {
-  for (const order of orders) {
-    const result = await recordOrderObservation(
-      ctx.db,
-      { storeId: ctx.storeId, consentGrantedAt: ctx.grantedAt, observedAt: ctx.at },
-      fulfillmentObservation(order, ctx.at),
-    );
-    if (result.outcome === "not_writable") return false;
-  }
-  return true;
+async function record(ctx: Context, observation: OrderObservation) {
+  const result = await recordOrderObservation(
+    ctx.db,
+    { storeId: ctx.storeId, consentGrantedAt: ctx.grantedAt, observedAt: ctx.at },
+    observation,
+  );
+  if (result.outcome === "not_writable") throw new NotWritable();
+  return result;
 }
 
 type Pass = {
@@ -108,31 +106,39 @@ type Pass = {
   total: number | null;
   /** Filtro di una nuova passata. */
   begin: () => string;
-  progress: (next: string, total: number) => Promise<boolean>;
-  restart: () => Promise<boolean>;
-  finish: () => Promise<boolean>;
+  progress: (next: string, total: number) => Promise<void>;
+  finish: () => Promise<void>;
 };
 
-async function runPass(ctx: Context, pass: Pass): Promise<Stop | "complete"> {
+/**
+ * Legge le pagine di una passata. Una ripartenza non si salva: se l'esecuzione si interrompe
+ * prima della pagina successiva, la ripresa dal link precedente rivede il totale cambiato e
+ * ricomincia comunque.
+ */
+async function runPass(ctx: Context, pass: Pass): Promise<boolean> {
   let { next, total } = pass;
-  for (;;) {
-    if (!spend(ctx.budget, 1, 1)) return "budget";
+  while (spend(ctx.budget, 1, 1)) {
     const page = await readFulfillmentOrders(
       ctx.access,
       next ? { next } : { limit: pageSize, filter: pass.begin() },
     );
-    if (!(await applyPage(ctx, page.orders))) return "not_writable";
+    // In sequenza: la riconciliazione delle righe presuppone scritture serializzate per negozio.
+    await page.orders.reduce<Promise<unknown>>(
+      (previous, order) => previous.then(() => record(ctx, fulfillmentObservation(order, ctx.at))),
+      Promise.resolve(),
+    );
     if (next !== null && page.total !== total) {
       next = null;
-      if (!(await pass.restart())) return "not_writable";
     } else if (page.next) {
       next = page.next;
       total = page.total;
-      if (!(await pass.progress(next, total))) return "not_writable";
+      await pass.progress(next, total);
     } else {
-      return (await pass.finish()) ? "complete" : "not_writable";
+      await pass.finish();
+      return true;
     }
   }
+  return false;
 }
 
 type SyncRow = {
@@ -148,34 +154,35 @@ type SyncRow = {
 };
 
 function recentPass(ctx: Context, state: SyncRow): Pass {
-  let end = state.recent_end ?? ctx.at;
-  const clear = "recent_end = NULL, recent_next = NULL, recent_total = NULL";
+  let end = state.recent_end;
   return {
     next: state.recent_next,
     total: state.recent_total,
     begin: () => {
       end = ctx.at;
-      const checkpoint = state.cursor < end ? state.cursor : end;
-      return buildLastModifiedFilter(new Date(checkpoint), new Date(end), overlapMilliseconds);
+      // Un orologio indietro rispetto al limite già applicato non produce un intervallo vuoto.
+      const [checkpoint] = [state.cursor, end].sort();
+      return buildLastModifiedFilter(new Date(checkpoint!), new Date(end), overlapMilliseconds);
     },
     progress: (next, total) =>
       saveState(ctx, "recent_end = ?4, recent_next = ?5, recent_total = ?6", end, next, total),
-    restart: () => saveState(ctx, clear),
     // Il limite non torna indietro se un'esecuzione più lenta conclude una passata precedente.
-    finish: () => saveState(ctx, `cursor = MAX(cursor, ?4), ${clear}`, end),
+    finish: () =>
+      saveState(
+        ctx,
+        "cursor = MAX(cursor, ?4), recent_end = NULL, recent_next = NULL, recent_total = NULL",
+        end,
+      ),
   };
 }
 
 function historyPass(ctx: Context, state: SyncRow): Pass {
-  const clear = "history_next = NULL, history_total = NULL";
   return {
     next: state.history_next,
     total: state.history_total,
-    begin: () =>
-      buildCreationDateFilter(new Date(state.history_from), new Date(state.history_until)),
+    begin: () => buildCreationDateFilter(state.history_from, state.history_until),
     progress: (next, total) => saveState(ctx, "history_next = ?4, history_total = ?5", next, total),
-    restart: () => saveState(ctx, clear),
-    finish: () => saveState(ctx, `history_done_at = ?3, ${clear}`),
+    finish: () => saveState(ctx, "history_done_at = ?3, history_next = NULL, history_total = NULL"),
   };
 }
 
@@ -201,60 +208,47 @@ async function listingsWithoutImage(
 }
 
 /** Errori che riguardano eBay o il consenso, non il singolo ordine: fermano l'esecuzione. */
-function stopsRun(error: unknown): boolean {
-  return (
-    error instanceof UpstreamError &&
-    (error.failure === "credentials" ||
-      error.failure === "rate_limited" ||
-      error.failure === "unavailable")
-  );
-}
+const runFailures = new Set(["credentials", "rate_limited", "unavailable"]);
 
-type PendingDetail = {
-  external_order_id: string;
-  last_modified_time: string;
-  detail_attempts: number;
-};
+type PendingDetail = { external_order_id: string; detail_attempts: number };
+
+/** Rimanda il dettaglio dopo un errore del singolo ordine o, all'ultimo tentativo, lo chiude. */
+async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) {
+  if (error instanceof UpstreamError && runFailures.has(error.failure)) throw error;
+  const attempts = pending.detail_attempts + 1;
+  const delay = detailRetryMinutes[attempts - 1];
+  const code = error instanceof UpstreamError ? error.failure : "invalid_response";
+  const scope = `WHERE store_id = ?1 AND source = 'fulfillment' AND external_order_id = ?3
+                   AND ${writableStore}`;
+  const result = await ctx.db
+    .prepare(
+      delay === undefined
+        ? `UPDATE order_source_refs SET detail_for = last_modified_time, detail_error = ?4,
+                  detail_attempts = 0, detail_retry_at = NULL ${scope}`
+        : `UPDATE order_source_refs SET detail_error = ?4, detail_attempts = ?5,
+                  detail_retry_at = ?6 ${scope}`,
+    )
+    .bind(
+      ctx.storeId,
+      ctx.grantedAt,
+      pending.external_order_id,
+      code,
+      ...(delay === undefined
+        ? []
+        : [attempts, new Date(Date.parse(ctx.at) + delay * 60_000).toISOString()]),
+    )
+    .run();
+  if (result.meta.changes === 0) throw new NotWritable();
+}
 
 /**
  * Dettaglio di una versione dell'ordine: rilegge l'ordine, le immagini mancanti (un errore
  * lascia la riga senza immagine) e gli identificativi fiscali Trading. Senza Trading l'ordine
  * si salva comunque, senza dati fiscali; l'assenza del campo in Trading non è ancora qualificata
- * come rimozione autorevole.
+ * come rimozione autorevole. false se il budget non basta: la versione resta in attesa.
  */
-async function readDetail(ctx: Context, pending: PendingDetail): Promise<Stop | "done"> {
-  const target = { storeId: ctx.storeId, consentGrantedAt: ctx.grantedAt, observedAt: ctx.at };
-  const fail = async (error: unknown): Promise<Stop | "done"> => {
-    if (stopsRun(error)) throw error;
-    const attempts = pending.detail_attempts + 1;
-    const delay = detailRetryMinutes[attempts - 1];
-    const code = error instanceof UpstreamError ? error.failure : "invalid_response";
-    const closed = await ctx.db
-      .prepare(
-        delay === undefined
-          ? `UPDATE order_source_refs SET detail_for = last_modified_time, detail_error = ?4,
-                    detail_attempts = 0, detail_retry_at = NULL
-              WHERE store_id = ?1 AND source = 'fulfillment' AND external_order_id = ?3
-                AND ${writableStore}`
-          : `UPDATE order_source_refs SET detail_error = ?4, detail_attempts = ?5,
-                    detail_retry_at = ?6
-              WHERE store_id = ?1 AND source = 'fulfillment' AND external_order_id = ?3
-                AND ${writableStore}`,
-      )
-      .bind(
-        ctx.storeId,
-        ctx.grantedAt,
-        pending.external_order_id,
-        code,
-        ...(delay === undefined
-          ? []
-          : [attempts, new Date(Date.parse(ctx.at) + delay * 60_000).toISOString()]),
-      )
-      .run();
-    return closed.meta.changes === 1 ? "done" : "not_writable";
-  };
-
-  if (!spend(ctx.budget, 2)) return "budget";
+async function readDetail(ctx: Context, pending: PendingDetail): Promise<boolean> {
+  if (!spend(ctx.budget, 2)) return false;
   let observation: OrderObservation;
   try {
     observation = fulfillmentObservation(
@@ -262,14 +256,11 @@ async function readDetail(ctx: Context, pending: PendingDetail): Promise<Stop | 
       ctx.at,
     );
   } catch (error) {
-    return fail(error);
+    await failDetail(ctx, pending, error);
+    return true;
   }
   const listings = [...(await listingsWithoutImage(ctx, observation))].slice(0, maxImagesPerDetail);
-  // Senza chiamate per le immagini la versione resta in attesa: la prossima esecuzione la rilegge.
-  if (!spend(ctx.budget, listings.length)) {
-    ctx.budget.calls += 1;
-    return "budget";
-  }
+  if (!spend(ctx.budget, listings.length)) return false;
   const images = new Map(
     await Promise.all(
       listings.map(
@@ -289,9 +280,8 @@ async function readDetail(ctx: Context, pending: PendingDetail): Promise<Stop | 
   const trading = await readTradingTaxIdentifiers(ctx.access, observation.externalOrderId)
     .then((values) => ({ values }))
     .catch((error: unknown) => ({ error }));
-  const result = await recordOrderObservation(
-    ctx.db,
-    target,
+  const result = await record(
+    ctx,
     "values" in trading
       ? {
           ...observation,
@@ -303,46 +293,51 @@ async function readDetail(ctx: Context, pending: PendingDetail): Promise<Stop | 
         }
       : observation,
   );
-  if (result.outcome === "not_writable") return "not_writable";
-  if ("error" in trading) return fail(trading.error);
-  // eBay ha restituito una versione più vecchia di quella già registrata: si riprova.
-  if (result.outcome === "stale") return fail(new UpstreamError("invalid_response"));
-  // Una versione più recente registrata nel frattempo resta da leggere.
-  await ctx.db
-    .prepare(
-      `UPDATE order_source_refs SET detail_for = last_modified_time, detail_error = NULL,
-              detail_attempts = 0, detail_retry_at = NULL
-        WHERE store_id = ?1 AND source = 'fulfillment' AND external_order_id = ?3
-          AND last_modified_time <= ?4 AND ${writableStore}`,
-    )
-    .bind(ctx.storeId, ctx.grantedAt, pending.external_order_id, observation.lastModifiedTime)
-    .run();
-  return "done";
+  if ("error" in trading) {
+    await failDetail(ctx, pending, trading.error);
+  } else if (result.outcome === "stale") {
+    // eBay ha restituito una versione più vecchia di quella già registrata: si riprova.
+    await failDetail(ctx, pending, new UpstreamError("invalid_response"));
+  } else {
+    // Una versione più recente registrata nel frattempo resta da leggere.
+    await ctx.db
+      .prepare(
+        `UPDATE order_source_refs SET detail_for = last_modified_time, detail_error = NULL,
+                detail_attempts = 0, detail_retry_at = NULL
+          WHERE store_id = ?1 AND source = 'fulfillment' AND external_order_id = ?3
+            AND last_modified_time <= ?4 AND ${writableStore}`,
+      )
+      .bind(ctx.storeId, ctx.grantedAt, pending.external_order_id, observation.lastModifiedTime)
+      .run();
+  }
+  return true;
 }
 
-async function readDetails(ctx: Context): Promise<Stop | "complete"> {
-  for (;;) {
-    // Il più recente per data di modifica, quindi anche i cambiamenti di ordini vecchi.
-    const pending = await ctx.db
-      .prepare(
-        `SELECT external_order_id, last_modified_time, detail_attempts FROM order_source_refs
-          WHERE store_id = ?1 AND source = 'fulfillment'
-            AND detail_for IS NOT last_modified_time
-            AND (detail_retry_at IS NULL OR detail_retry_at <= ?2)
-          ORDER BY last_modified_time DESC LIMIT 1`,
-      )
-      .bind(ctx.storeId, ctx.at)
-      .first<PendingDetail>();
-    if (!pending) return "complete";
-    const outcome = await readDetail(ctx, pending);
-    if (outcome !== "done") return outcome;
-  }
+/**
+ * Versioni in attesa dalla più recente per data di modifica, quindi anche i cambiamenti di
+ * ordini vecchi. Ogni dettaglio costa almeno due chiamate: una riga in più delle chiamate
+ * rimaste basta a sapere se ne restano oltre il budget.
+ */
+async function readDetails(ctx: Context): Promise<boolean> {
+  const { results } = await ctx.db
+    .prepare(
+      `SELECT external_order_id, detail_attempts FROM order_source_refs
+        WHERE store_id = ?1 AND source = 'fulfillment'
+          AND detail_for IS NOT last_modified_time
+          AND (detail_retry_at IS NULL OR detail_retry_at <= ?2)
+        ORDER BY last_modified_time DESC LIMIT ?3`,
+    )
+    .bind(ctx.storeId, ctx.at, ctx.budget.calls + 1)
+    .all<PendingDetail>();
+  for (const pending of results) if (!(await readDetail(ctx, pending))) return false;
+  return true;
 }
 
 /**
  * Esegue l'acquisizione di un negozio entro il budget. Le esecuzioni dello stesso negozio non
  * si sovrappongono: chi trova il negozio occupato rinuncia. Al primo avvio fissa il limite dei
- * recenti all'istante corrente e lo storico ai `historyDays` giorni precedenti.
+ * recenti all'istante corrente e lo storico ai `historyDays` giorni precedenti. Lo storico
+ * attende i recenti; il dettaglio usa anche le chiamate rimaste quando le pagine finiscono.
  */
 export async function acquireOrders(input: {
   db: D1Database;
@@ -385,17 +380,18 @@ export async function acquireOrders(input: {
     return writable ? "busy" : "not_writable";
   }
 
-  const ctx: Context = { ...input, at, budget: input.budget };
+  const ctx: Context = { ...input, at };
   try {
     const recent = await runPass(ctx, recentPass(ctx, state));
-    if (recent !== "complete") return recent;
-    // Lettura dei recenti riuscita: l'ultima sincronizzazione del negozio.
-    if (!(await saveState(ctx, "last_success_at = ?3"))) return "not_writable";
-    if (!state.history_done_at) {
-      const history = await runPass(ctx, historyPass(ctx, state));
-      if (history !== "complete") return history;
-    }
-    return await readDetails(ctx);
+    // Lettura dei recenti conclusa: l'ultima sincronizzazione del negozio.
+    if (recent) await saveState(ctx, "last_success_at = ?3");
+    const history =
+      recent && (!!state.history_done_at || (await runPass(ctx, historyPass(ctx, state))));
+    const details = await readDetails(ctx);
+    return history && details ? "complete" : "budget";
+  } catch (error) {
+    if (error instanceof NotWritable) return "not_writable";
+    throw error;
   } finally {
     await db
       .prepare("UPDATE sync_state SET locked_until = NULL WHERE store_id = ? AND locked_until = ?")
@@ -404,9 +400,9 @@ export async function acquireOrders(input: {
   }
 }
 
-/** Budget di un'esecuzione periodica e quota massima di un singolo negozio. */
-const periodicBudget = { calls: 36, pages: 9 };
-const storeShare = { calls: 12, pages: 3 };
+/** Negozi letti da un'esecuzione periodica e budget di ciascuno. */
+const storesPerRun = 3;
+const storeBudget: AcquisitionBudget = { calls: 12, pages: 3 };
 const tokenMarginMilliseconds = 5 * 60_000;
 
 type ActiveStore = {
@@ -418,14 +414,13 @@ type ActiveStore = {
 
 /**
  * Lavoro periodico: acquisisce gli ordini dei negozi attivi con un token valido, dal negozio
- * aggiornato meno di recente, finché resta budget. Un errore di un negozio non ferma gli altri.
+ * aggiornato meno di recente. Un errore di un negozio non ferma gli altri.
  */
 export async function acquireStoresOrders(
   environment: Env,
   fetcher: typeof fetch,
   now = new Date(),
 ): Promise<void> {
-  const budget = { ...periodicBudget };
   const { results } = await environment.DB.prepare(
     `SELECT c.store_id, c.access_token, c.granted_at, s.ebay_environment
        FROM ebay_store_credentials c
@@ -436,18 +431,9 @@ export async function acquireStoresOrders(
       ORDER BY ss.updated_at IS NOT NULL, ss.updated_at, c.store_id
       LIMIT ?2`,
   )
-    .bind(
-      new Date(now.getTime() + tokenMarginMilliseconds).toISOString(),
-      Math.ceil(periodicBudget.pages / storeShare.pages),
-    )
+    .bind(new Date(now.getTime() + tokenMarginMilliseconds).toISOString(), storesPerRun)
     .all<ActiveStore>();
   for (const store of results) {
-    const share = {
-      calls: Math.min(storeShare.calls, budget.calls),
-      pages: Math.min(storeShare.pages, budget.pages),
-    };
-    if (share.pages === 0 || share.calls === 0) break;
-    const before = { ...share };
     try {
       await acquireOrders({
         db: environment.DB,
@@ -464,13 +450,10 @@ export async function acquireStoresOrders(
           ),
         },
         now,
-        budget: share,
+        budget: { ...storeBudget },
       });
     } catch (error) {
       logFailure({ error, operation: "order_acquisition" });
-    } finally {
-      budget.calls -= before.calls - share.calls;
-      budget.pages -= before.pages - share.pages;
     }
   }
 }
