@@ -545,6 +545,10 @@ describe("callback eBay", () => {
     ["en_s", "sandbox", "collegato", "/en/app/ordini?negozio=collegato&environment=sandbox"],
     ["english", "production", null, "/app/ordini"],
     ["en_s", "sandbox", null, "/en/app/ordini?environment=sandbox"],
+    // Partito da Negozi torna lì, che elenca tutti gli ambienti.
+    ["it-negozi_s", "sandbox", "negozio-diverso", "/app/negozi?negozio=negozio-diverso"],
+    ["en-negozi_s", "production", "collegato", "/en/app/negozi?negozio=collegato"],
+    ["en-ordini_s", "sandbox", null, "/en/app/ordini?environment=sandbox"],
   ])(
     "ripete l'esito del callback per il suo utente (%s, %s, %s)",
     async (state, ebayEnvironment, outcome, destination) => {

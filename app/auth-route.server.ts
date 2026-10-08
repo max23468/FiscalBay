@@ -297,11 +297,9 @@ async function handleEbayCallback(
     await recordStoreLinkOutcome(environment.DB, state, outcome);
   }
   // Lo state comincia con la lingua e, se il collegamento parte da Negozi, con «-negozi».
-  const [language, place] = state.slice(0, state.indexOf("_")).split("-");
-  const home = localizedPath(
-    language === "en" ? "en" : "it",
-    place === "negozi" ? `${appBase}/negozi` : ordersPath,
-  );
+  const [language, place] = state.split("_", 1)[0]!.split("-");
+  const target = place === "negozi" ? `${appBase}/negozi` : ordersPath;
+  const home = language === "en" ? localizedPath("en", target) : target;
   const query = new URLSearchParams();
   if (outcome) query.set("negozio", outcome);
   // Negozi elenca tutti gli ambienti; gli Ordini mostrano quello del negozio collegato.
