@@ -18,7 +18,14 @@ export type StoreStatus = {
   consentExpiresAt: string | null;
   /** Ultima lettura riuscita degli ordini su eBay. */
   lastSyncAt: string | null;
+  /**
+   * Un'acquisizione degli ordini tiene il negozio in questo momento. Un blocco rimasto da
+   * un'esecuzione interrotta smette di contare alla sua scadenza.
+   */
+  syncing: boolean;
   importedOrders: number;
+  /** Finestra dello storico e completamento della sua importazione; null prima del primo avvio. */
+  history: { days: number; done: boolean } | null;
   dataDeleted: boolean;
   /**
    * Invito a ricollegare: prima che il consenso scada e, dopo, per al massimo trenta giorni.
@@ -65,7 +72,8 @@ export async function listStores(
     .prepare(
       `SELECT s.id, s.ebay_environment, COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id) AS name, s.disconnected_at,
               s.data_deleted_at, c.store_id AS credentials, c.granted_at, c.refresh_expires_at,
-              c.rejected_at, ss.last_success_at,
+              c.rejected_at, ss.last_success_at, ss.history_from, ss.history_until,
+              ss.history_done_at, ss.locked_until > ?2 AS syncing,
               (SELECT group_concat(reason) FROM ebay_store_pauses p WHERE p.store_id = s.id)
                 AS pauses,
               (SELECT COUNT(*) FROM orders o WHERE o.store_id = s.id) AS orders
@@ -73,10 +81,10 @@ export async function listStores(
          JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
          LEFT JOIN ebay_store_credentials c ON c.store_id = s.id
          LEFT JOIN sync_state ss ON ss.store_id = s.id
-        WHERE wm.user_id = ?
+        WHERE wm.user_id = ?1
         ORDER BY s.linked_at, s.id`,
     )
-    .bind(userId)
+    .bind(userId, now.toISOString())
     .all<{
       id: string;
       ebay_environment: "production" | "sandbox";
@@ -88,6 +96,10 @@ export async function listStores(
       refresh_expires_at: string | null;
       rejected_at: string | null;
       last_success_at: string | null;
+      history_from: string | null;
+      history_until: string | null;
+      history_done_at: string | null;
+      syncing: number | null;
       pauses: string | null;
       orders: number;
     }>();
@@ -126,7 +138,18 @@ export async function listStores(
       consentGrantedAt: row.disconnected_at ? null : row.granted_at,
       consentExpiresAt: row.disconnected_at ? null : expiresAt,
       lastSyncAt: row.last_success_at,
+      syncing: row.syncing === 1,
       importedOrders: row.orders,
+      history:
+        // Le due date dello storico si fissano insieme al primo avvio.
+        row.history_from
+          ? {
+              days: Math.round(
+                (Date.parse(row.history_until!) - Date.parse(row.history_from)) / dayMilliseconds,
+              ),
+              done: row.history_done_at !== null,
+            }
+          : null,
       dataDeleted: row.data_deleted_at !== null,
       reminder,
       // Un negozio scollegato non ha credenziali, quindi risulta già scaduto.

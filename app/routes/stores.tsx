@@ -31,8 +31,10 @@ export function headers(): HeadersInit {
 }
 
 /**
- * Vista del negozio con i soli dati che FiscalBay possiede: senza sincronizzazione continua
- * mancano frequenza, storico e ultimi aggiornamenti; senza Telegram le notifiche seguono il piano.
+ * Vista del negozio con i soli dati che FiscalBay possiede: lo storico compare dal primo avvio
+ * dell'importazione e resta «in corso» finché non è completo, e la sincronizzazione risulta in
+ * corso mentre un'acquisizione tiene il negozio; frequenza e ultimi aggiornamenti mancano ancora,
+ * e senza Telegram le notifiche seguono il piano.
  */
 function storeView(store: StoreStatus): StoreView {
   return {
@@ -49,12 +51,13 @@ function storeView(store: StoreStatus): StoreView {
           ? "plan"
           : "manual",
     issue: store.connection === "reconnect_required" ? "reconnect" : undefined,
-    syncing: false,
+    syncing: store.syncing,
     lastSyncAt: store.lastSyncAt,
     notifications: null,
     importedOrders: store.importedOrders,
-    historyDays: null,
-    importing: false,
+    historyDays: store.history?.days ?? null,
+    // Uno storico incompleto resta in corso anche in pausa: riprende con la lettura di eBay.
+    importing: store.history?.done === false,
     connectedAt: store.consentGrantedAt,
     consentExpiresAt: store.consentExpiresAt,
     consentExpiring: store.consentExpiring || undefined,
