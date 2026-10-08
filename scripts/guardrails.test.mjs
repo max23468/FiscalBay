@@ -905,6 +905,28 @@ describe("invocazioni osservate durante il collaudo remoto", () => {
 });
 
 describe("esito dei mutation test", () => {
+  it("allinea ID, nomi annidati e filtro del runner a Vitest 5", async () => {
+    const runner = import.meta.resolve("@stryker-mutator/vitest-runner");
+    const { collectTestName, toRawTestId } = await import(new URL("./test-helpers.js", runner));
+    const { convertTestToTestResult, fromTestId } = await import(
+      new URL("./vitest-helpers.js", runner)
+    );
+    const test = {
+      name: "somma [2 + 3]",
+      suite: { name: "add", suite: { name: "math (numbers)" } },
+      file: { filepath: path.resolve("test/runner.spec.ts") },
+      mode: "run",
+      result: { state: "pass", duration: 1 },
+    };
+    const name = "math (numbers) > add > somma [2 + 3]";
+    const result = convertTestToTestResult(test, " > ");
+    assert.equal(collectTestName(test, " > "), name);
+    assert.equal(toRawTestId(test, " > "), `${test.file.filepath}#${name}`);
+    assert.deepEqual(fromTestId(result.id), { file: "test/runner.spec.ts", test: name });
+    assert.equal(result.name, name);
+    assert.equal(collectTestName(test), "math (numbers) add somma [2 + 3]");
+  });
+
   const mutant = (status, statusReason) => ({
     mutatorName: "ConditionalExpression",
     status,

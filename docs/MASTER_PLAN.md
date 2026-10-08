@@ -617,6 +617,8 @@ Inventario read-only delle risorse condivise in M0; nessuna migrazione di altri 
 
 Pin esatti dei pacchetti diretti dove appropriato, lockfile unico e install riproducibile; versione pnpm nel manifest. Niente `latest` non risolto a ogni build. Aggiornamenti regolari: patch/minor accorpabili con test, major review dedicata; runtime/compiler qualification gate e rollback sicuro. Nessuna dipendenza nuova solo perché presente in uno starter.
 
+Dal 2026-10-08, su indicazione dell'owner, nessuna attesa minima di 24 ore dalla pubblicazione dei pacchetti npm. Restano il controllo che rifiuta perdite di firme o provenance, i pin e i gate di qualifica.
+
 | Funzione | Base approvata / default tecnico |
 |---|---|
 | Package manager | pnpm workspaces, unico lockfile; npm non incompatibile ma non la scelta corrente |
