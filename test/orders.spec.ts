@@ -46,8 +46,16 @@ import { loader as loadRobots } from "../app/routes/robots";
 import { indexable } from "../app/app-links";
 import { loader as loadLegal } from "../app/routes/legal";
 import { action as startStoreLink, loader as loadStoreLink } from "../app/routes/store-link";
-import { action as storesAction, loader as loadStores } from "../app/routes/stores";
-import { action as profileAction, loader as loadProfile } from "../app/routes/profile";
+import {
+  action as storesAction,
+  loader as loadStores,
+  clientAction as storesClientAction,
+} from "../app/routes/stores";
+import {
+  action as profileAction,
+  loader as loadProfile,
+  clientAction as profileClientAction,
+} from "../app/routes/profile";
 import {
   openToken,
   refreshExpiringTokens,
@@ -58,6 +66,7 @@ import { UpstreamError, upstreamJson, upstreamText } from "../app/integrations/h
 import {
   startStoreLink as beginLink,
   claimStoreLinkSession,
+  completeStoreLink,
 } from "../app/integrations/ebay/store-link.server";
 import { ebayConfiguration, sandboxAvailable } from "../app/integrations/ebay/environment.server";
 
@@ -1928,6 +1937,115 @@ describe("registrazione e verifica del contatto", () => {
 });
 
 describe("collegamento negozio eBay", () => {
+  it("ricollega solo il negozio scelto, senza salvare un consenso di un altro account", async () => {
+    const owner = await verifiedSession("reconnect.esatto@example.invalid");
+    const other = await verifiedSession("reconnect.estraneo@example.invalid");
+    const initial = await beginStoreLink(owner.cookie);
+    await handleAuthRequest(
+      storeCallback(`state=${initial.searchParams.get("state")}&code=uno`, owner.cookie),
+      env,
+      syntheticEbay(),
+    );
+    const [store] = await listStores(env.DB, owner.userId);
+    const original = await env.DB.prepare("SELECT * FROM ebay_store_credentials WHERE store_id = ?")
+      .bind(store!.id)
+      .first();
+    const page = await loadStoreLink({
+      request: new Request(
+        `http://localhost:5173/app/negozi/collega?ricollega=${store!.id}&da=negozi`,
+        { headers: { cookie: owner.cookie } },
+      ),
+    } as never);
+    expect(page).toMatchObject({
+      expectedStoreId: store!.id,
+      expectedStoreName: "venditore",
+      reconnect: true,
+      fromStores: true,
+    });
+    const start = async (cookie: string) =>
+      (await startStoreLink({
+        request: new Request("http://localhost:5173/app/negozi/collega", {
+          method: "POST",
+          headers: { cookie, origin: "http://localhost:5173" },
+          body: new URLSearchParams({ negozio: store!.id }),
+        }),
+      } as never)) as Response;
+    expect((await start(other.cookie)).status).toBe(400);
+    const state = new URL((await start(owner.cookie)).headers.get("location")!).searchParams.get(
+      "state",
+    );
+    const wrong = syntheticEbay({ userId: "account-diverso" });
+    const callback = await handleAuthRequest(
+      storeCallback(`state=${state}&code=due`, owner.cookie),
+      env,
+      wrong,
+    );
+    expect(callback.headers.get("location")).toContain("negozio=negozio-diverso");
+    expect(wrong).toHaveBeenCalledTimes(2);
+    expect(
+      await env.DB.prepare("SELECT * FROM ebay_store_credentials WHERE store_id = ?")
+        .bind(store!.id)
+        .first(),
+    ).toEqual(original);
+    expect(await listStores(env.DB, owner.userId)).toHaveLength(1);
+    const replay = await handleAuthRequest(
+      storeCallback(`state=${state}&code=due`, owner.cookie),
+      env,
+      wrong,
+    );
+    expect(replay.headers.get("location")).toBe(callback.headers.get("location"));
+    expect(wrong).toHaveBeenCalledTimes(2);
+    const correctState = new URL(
+      (await start(owner.cookie)).headers.get("location")!,
+    ).searchParams.get("state");
+    const correct = await handleAuthRequest(
+      storeCallback(`state=${correctState}&code=tre`, owner.cookie),
+      env,
+      syntheticEbay({ username: "nome-aggiornato" }),
+    );
+    expect(correct.headers.get("location")).toContain("negozio=collegato");
+    expect(await listStores(env.DB, owner.userId)).toMatchObject([
+      { id: store!.id, name: "nome-aggiornato" },
+    ]);
+  });
+
+  it("non accetta il reconnect se il negozio cambia proprietario durante OAuth", async () => {
+    const owner = await verifiedSession("reconnect.trasferito@example.invalid");
+    const initial = await beginStoreLink(owner.cookie);
+    await handleAuthRequest(
+      storeCallback(`state=${initial.searchParams.get("state")}&code=uno`, owner.cookie),
+      env,
+      syntheticEbay(),
+    );
+    const [store] = await listStores(env.DB, owner.userId);
+    const url = new URL(
+      await beginLink(env, owner.userId, new Date(), "it", "production", store!.id),
+    );
+    const direct = new URL(
+      await beginLink(env, owner.userId, new Date(), "it", "production", store!.id),
+    );
+    const claim = await claimStoreLinkSession(env.DB, direct.searchParams.get("state")!);
+    if (!claim || claim.kind !== "new") throw new Error("consenso iniziale atteso");
+    await env.DB.prepare("DELETE FROM workspace_members WHERE user_id = ?")
+      .bind(owner.userId)
+      .run();
+    await expect(
+      completeStoreLink({
+        environment: env,
+        link: claim,
+        sessionUserId: owner.userId,
+        search: new URLSearchParams({ state: direct.searchParams.get("state")!, code: "diretto" }),
+        fetcher: syntheticEbay(),
+      }),
+    ).resolves.toBe("errore");
+    const response = await handleAuthRequest(
+      storeCallback(`state=${url.searchParams.get("state")}&code=due`, owner.cookie),
+      env,
+      syntheticEbay(),
+    );
+    expect(response.headers.get("location")).toContain("negozio=errore");
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM ebay_stores").first()).toEqual({ n: 1 });
+  });
   it("separa account e ordini con gli stessi ID nei due ambienti e rinnova con le chiavi corrette", async () => {
     const seller = await verifiedSession("ambienti@example.invalid");
     const sandbox = {
@@ -2396,6 +2514,8 @@ describe("collegamento negozio eBay", () => {
         fromStores: false,
         sandbox: false,
         ebayEnvironment: "production",
+        expectedStoreId: null,
+        expectedStoreName: null,
       });
     }
     // Da Negozi la schermata riporta lì con «Annulla».
@@ -2403,14 +2523,8 @@ describe("collegamento negozio eBay", () => {
       request: new Request("http://localhost:5173/app/negozi/collega?ricollega&da=negozi", {
         headers: { cookie },
       }),
-    } as Parameters<typeof loadStoreLink>[0]);
-    expect(reconnect).toEqual({
-      language: "it",
-      reconnect: true,
-      fromStores: true,
-      sandbox: false,
-      ebayEnvironment: "production",
-    });
+    } as Parameters<typeof loadStoreLink>[0]).catch((response: Response) => response);
+    expect((reconnect as Response).status).toBe(400);
     const blockedSandbox = (await startStoreLink({
       request: new Request("http://localhost:5173/app/negozi/collega", {
         method: "POST",
@@ -2932,6 +3046,52 @@ describe("pulizia dei dati tecnici scaduti", () => {
 });
 
 describe("pausa, ricollegamento e scollegamento dei negozi", () => {
+  it.each([
+    ["profilo", profileClientAction],
+    ["negozi", storesClientAction],
+  ] as const)(
+    "%s conserva gli errori di rete senza assorbire autorizzazioni e richieste annullate",
+    async (path, clientAction) => {
+      const request = new Request(`http://localhost:5173/en/app/${path}`);
+      const ok = { ok: true, notice: "ok" };
+      expect(await clientAction({ request, serverAction: async () => ok } as never)).toEqual(ok);
+      const network = new TypeError("synthetic network failure");
+      const failure = await clientAction({
+        request,
+        serverAction: async () => {
+          throw network;
+        },
+      } as never);
+      expect(failure).toEqual({
+        ok: false,
+        notice:
+          "The outcome could not be confirmed. Reload the page to check its state before trying again.",
+      });
+      for (const error of [
+        new Response(null, { status: 303, headers: { location: "/accesso" } }),
+        { status: 403, statusText: "Forbidden", data: "denied", internal: true },
+      ]) {
+        await expect(
+          clientAction({
+            request,
+            serverAction: async () => {
+              throw error;
+            },
+          } as never),
+        ).rejects.toBe(error);
+      }
+      const controller = new AbortController();
+      controller.abort();
+      await expect(
+        clientAction({
+          request: new Request(request, { signal: controller.signal }),
+          serverAction: async () => {
+            throw network;
+          },
+        } as never),
+      ).rejects.toBe(network);
+    },
+  );
   const day = 24 * 60 * 60 * 1000;
 
   async function linkThroughEbay(cookie: string, ebay = syntheticEbay()) {
@@ -3417,6 +3577,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     } as Parameters<typeof loadProfile>[0]);
     expect(page).toEqual({
       language: "en",
+      userId: seller.userId,
       account: {
         name: "Utente Sintetico",
         email: "profilo@example.invalid",

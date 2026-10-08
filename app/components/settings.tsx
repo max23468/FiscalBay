@@ -18,7 +18,7 @@ import {
   User,
 } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { Link, useLocation } from "react-router";
+import { Link, useLocation, useBlocker, useBeforeUnload } from "react-router";
 
 import { useAction } from "~/components/app-shell";
 import { AccountSecurity } from "~/components/account";
@@ -1260,6 +1260,47 @@ function ProfileCard({
   );
 }
 
+function useProfileDraft(profile: AccountView["profile"], action: ReturnType<typeof useAction>) {
+  const current = JSON.stringify([profile.firstName, profile.lastName, profile.companyName ?? ""]);
+  const [observed, setObserved] = useState(current);
+  const [saved, setSaved] = useState(current);
+  const [submitted, setSubmitted] = useState(saved);
+  const [dirty, setDirty] = useState(false);
+  const [handled, setHandled] = useState(action.result);
+  // Una rilettura aggiorna il form pulito; una bozza locale resta disponibile.
+  if (current !== observed && !dirty && !action.pending) {
+    setObserved(current);
+    setSaved(current);
+    setSubmitted(current);
+  }
+  const formKey = (form: HTMLFormElement) => {
+    return JSON.stringify(
+      ["nome", "cognome", "ragione_sociale"].map(
+        (name) => (form.elements.namedItem(name) as HTMLInputElement | null)?.value.trim() ?? "",
+      ),
+    );
+  };
+  // Il risultato si applica ai valori inviati, senza perdere eventuali modifiche successive.
+  if (action.result && action.result !== handled) {
+    setHandled(action.result);
+    if (action.result.ok) {
+      setSaved(submitted);
+      setDirty(false);
+    }
+  }
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      dirty && currentLocation.pathname !== nextLocation.pathname,
+  );
+  useBeforeUnload((event) => {
+    if (dirty) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+  });
+  return { dirty, setDirty, setSubmitted, saved, formKey, blocker };
+}
+
 /** Profilo dall'avatar: soltanto le informazioni personali minime. */
 export function ProfilePage({
   account,
@@ -1273,6 +1314,10 @@ export function ProfilePage({
   const action = useAction();
   const v = useFieldErrors(t.access.validation);
   const profile = account.profile;
+  const { dirty, setDirty, setSubmitted, saved, formKey, blocker } = useProfileDraft(
+    profile,
+    action,
+  );
   return (
     <div className="mx-auto grid w-full max-w-2xl gap-6">
       <div className="flex items-center gap-4">
@@ -1289,12 +1334,16 @@ export function ProfilePage({
       </div>
       <ProfileCard icon={User} title={t.profile.details} id="profile-name-title">
         <form
+          key={saved}
           className="grid gap-4"
           {...v.form}
+          onChange={(event) => setDirty(formKey(event.currentTarget) !== saved)}
           onSubmit={(event) => {
             event.preventDefault();
+            if (!dirty || action.pending) return;
             if (!v.check(event)) return;
             const form = new FormData(event.currentTarget);
+            setSubmitted(formKey(event.currentTarget));
             action.run("profile", {
               nome: String(form.get("nome")),
               cognome: String(form.get("cognome")),
@@ -1319,6 +1368,7 @@ export function ProfilePage({
               name="nome"
               autoComplete="given-name"
               defaultValue={profile.firstName}
+              disabled={action.pending}
               maxLength={100}
               required
               {...v.control("nome", "profile-name-hint")}
@@ -1337,6 +1387,7 @@ export function ProfilePage({
               maxLength={100}
               required
               defaultValue={profile.lastName}
+              disabled={action.pending}
               {...v.control("cognome")}
             />
             {v.error("cognome")}
@@ -1353,16 +1404,54 @@ export function ProfilePage({
                 maxLength={200}
                 required
                 defaultValue={profile.companyName ?? ""}
+                disabled={action.pending}
                 {...v.control("ragione_sociale")}
               />
               {v.error("ragione_sociale")}
             </Field>
           ) : null}
-          <Button type="submit" className="w-fit">
-            {t.settings.save}
+          <Button
+            type="submit"
+            className="w-fit"
+            disabled={!dirty || action.pending}
+            aria-busy={action.pending || undefined}
+          >
+            {action.pending ? t.settings.saving : t.settings.save}
           </Button>
+          {action.result ? (
+            <p
+              role={action.result.ok ? "status" : "alert"}
+              className={action.result.ok ? "text-sm text-muted-foreground" : "text-sm text-danger"}
+            >
+              {action.result.notice}
+            </p>
+          ) : null}
         </form>
       </ProfileCard>
+      <AlertDialog
+        open={blocker.state === "blocked"}
+        onOpenChange={(open) => {
+          if (!open && blocker.state === "blocked") blocker.reset();
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t.profile.unsaved}</AlertDialogTitle>
+            <AlertDialogDescription>{t.profile.unsaved}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.profile.stay}</AlertDialogCancel>
+            <Button
+              disabled={action.pending}
+              onClick={() => {
+                if (blocker.state === "blocked") blocker.proceed();
+              }}
+            >
+              {t.profile.leave}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <ProfileCard
         icon={ShieldCheck}
         title={t.settings.sections.sicurezza.title}

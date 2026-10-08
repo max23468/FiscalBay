@@ -22,6 +22,8 @@ import { Input } from "~/components/ui/input";
 import { Spinner } from "~/components/ui/spinner";
 import type { ActiveSession } from "../domain/sessions.server";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
+import type { PendingEmailChange } from "../domain/email-change.server";
+import { passkeyFailure, type PasskeyFailure } from "../passkey-error";
 import type { AccessNoticeView } from "../access-notice";
 import { appCopy } from "../app-copy";
 import { deviceName } from "../device-name";
@@ -45,11 +47,11 @@ function MethodRow({
   const id = useId();
   return (
     <li className="flex flex-col items-start gap-x-4 gap-y-2 py-3 md:flex-row md:flex-wrap md:items-center md:justify-between">
-      <span className="grid min-w-0 md:flex-1 md:basis-48">
+      <span className="grid min-w-0 max-w-full md:flex-1 md:basis-48">
         <span id={`${id}-label`} className="font-medium">
           {label}
         </span>
-        <span id={`${id}-status`} className="text-sm text-muted-foreground">
+        <span id={`${id}-status`} className="text-sm wrap-anywhere text-muted-foreground">
           {status}
         </span>
         {hint ? <span className="text-sm text-muted-foreground">{hint}</span> : null}
@@ -157,16 +159,77 @@ function SecurityGroup({
 }
 
 /** Email attuale; il nuovo indirizzo si inserisce solo quando serve. */
+function PasskeyRename({
+  passkey,
+  language,
+  actionPath,
+  disabled,
+}: {
+  passkey: SignInMethods["passkeys"][number];
+  language: Language;
+  actionPath: string;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const { settings, orders } = appCopy[language];
+  const trigger = useRef<HTMLButtonElement>(null);
+  return open ? (
+    <form method="post" action={actionPath} className="grid w-full gap-2">
+      <input type="hidden" name="id" value={passkey.id} />
+      <FieldLabel htmlFor={id}>{settings.passkeyName}</FieldLabel>
+      <Input
+        id={id}
+        name="name"
+        defaultValue={passkey.name ?? ""}
+        required
+        maxLength={80}
+        autoFocus
+        disabled={disabled}
+      />
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" name="intent" value="passkey-rename" disabled={disabled}>
+          {settings.save}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            flushSync(() => setOpen(false));
+            trigger.current?.focus();
+          }}
+        >
+          {orders.cancel}
+        </Button>
+      </div>
+    </form>
+  ) : (
+    <Button
+      ref={trigger}
+      type="button"
+      variant="outline"
+      size="sm"
+      disabled={disabled}
+      onClick={() => setOpen(true)}
+    >
+      {settings.renamePasskey}
+    </Button>
+  );
+}
+
 function EmailChange({
   language,
   email,
   actionPath,
   disabled,
+  pendingEmail,
 }: {
   language: Language;
   email: string;
   actionPath: string;
   disabled: boolean;
+  pendingEmail?: PendingEmailChange | null;
 }) {
   const { access: t, profile, orders } = appCopy[language];
   const [open, setOpen] = useState(false);
@@ -190,6 +253,38 @@ function EmailChange({
           </Button>
         )}
       </div>
+      {disabled ? (
+        <form method="post" action={actionPath}>
+          <input
+            type="hidden"
+            name="returnTo"
+            value={`${localizedPath(language, securityPath)}#security-email`}
+          />
+          <Button type="submit" variant="outline" size="sm" name="intent" value="riautentica">
+            {t.signOutSignIn}
+          </Button>
+        </form>
+      ) : null}
+      {pendingEmail ? (
+        <div role="status" className="grid gap-2 rounded-lg border p-3 text-sm">
+          <p>{profile.emailPending(pendingEmail.new_email)}</p>
+          <p className="text-muted-foreground">
+            {pendingEmail.stage === "new" ? profile.emailPendingNew : profile.emailPendingCurrent}
+          </p>
+          <form method="post" action={actionPath}>
+            <Button
+              type="submit"
+              variant="outline"
+              size="sm"
+              name="intent"
+              value="reinvia-email"
+              disabled={disabled}
+            >
+              {profile.emailRestart}
+            </Button>
+          </form>
+        </div>
+      ) : null}
       {open ? (
         <form
           method="post"
@@ -262,6 +357,11 @@ function SessionList({
           <MethodRow
             key={session.id}
             label={session.device}
+            hint={
+              session.createdAt
+                ? settings.sessionOpened(formatDate(session.createdAt, language))
+                : undefined
+            }
             status={
               session.current
                 ? settings.thisDevice
@@ -296,6 +396,95 @@ function SessionList({
   );
 }
 
+function AddPasskey({
+  language,
+  restriction,
+  block,
+  onAction,
+}: {
+  language: Language;
+  restriction: string | null;
+  block: string;
+  onAction?: (intent: string, fields: Record<string, string>) => void;
+}) {
+  const { access: t, settings } = appCopy[language];
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<PasskeyFailure | null>(null);
+  const [name, setName] = useState("");
+  const id = useId();
+  const add = async () => {
+    if (onAction) {
+      onAction("passkey-add", {});
+      return;
+    }
+    setPending(true);
+    setError(null);
+    try {
+      if (!window.PublicKeyCredential) {
+        setError("unsupported");
+        return;
+      }
+      const { authClient } = await import("../passkey-client");
+      const result = await authClient.passkey.addPasskey({
+        name: name.trim() || deviceName(navigator.userAgent, language),
+      });
+      if (result.error?.status === 403)
+        window.location.assign(`${localizedPath(language, securityPath)}?accesso=${block}`);
+      else if (result.error) setError(passkeyFailure(result.error));
+      else window.location.reload();
+    } catch (failure) {
+      setError(passkeyFailure(failure));
+    } finally {
+      setPending(false);
+    }
+  };
+  return (
+    <div className="grid w-full gap-2">
+      {!onAction ? (
+        <Field>
+          <FieldLabel htmlFor={id}>{settings.passkeyName}</FieldLabel>
+          <Input
+            id={id}
+            aria-describedby={`${id}-hint`}
+            maxLength={80}
+            value={name}
+            disabled={pending || restriction !== null}
+            onChange={(event) => setName(event.target.value)}
+          />
+          <FieldDescription id={`${id}-hint`}>{settings.passkeyNameHint}</FieldDescription>
+        </Field>
+      ) : null}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="w-fit"
+        disabled={pending || restriction !== null}
+        focusableWhenDisabled
+        aria-busy={pending || undefined}
+        onClick={add}
+      >
+        {pending ? (
+          <Spinner
+            label={settings.addPasskey}
+            aria-hidden="true"
+            role={undefined}
+            data-icon="inline-start"
+          />
+        ) : (
+          <KeyRound aria-hidden="true" data-icon="inline-start" />
+        )}
+        {settings.addPasskey}
+      </Button>
+      {error ? (
+        <p role="alert" className="text-sm text-danger">
+          {t.passkeyErrors[error]}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function AccountSecurity({
   language,
   email,
@@ -305,6 +494,7 @@ export function AccountSecurity({
   passkeyBlock,
   recent = true,
   passkeyRestriction = null,
+  pendingEmail = null,
   onAction,
   className = "grid gap-4 rounded-xl border bg-card p-5 md:p-6",
 }: {
@@ -316,6 +506,7 @@ export function AccountSecurity({
   passkeyBlock: string;
   recent?: boolean;
   passkeyRestriction?: "conferma-passkey" | "nuovo-accesso" | null;
+  pendingEmail?: PendingEmailChange | null;
   /** L'anteprima risponde con la propria azione simulata, senza chiamare Auth. */
   onAction?: (intent: string, fields: Record<string, string>) => void;
   className?: string;
@@ -324,8 +515,8 @@ export function AccountSecurity({
   const { pathname } = useLocation();
   // Anche senza JavaScript i form dell'anteprima restano nella route simulata.
   const actionPath = onAction ? pathname : localizedPath(language, securityPath);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState(false);
+  const lastMethod =
+    Object.values(methods.accounts).filter(Boolean).length + methods.passkeys.length === 1;
   const status = (connected: boolean) =>
     connected ? settings.methodConnected : settings.methodNotConnected;
   const oauth = (method: "google" | "ebay") =>
@@ -337,7 +528,7 @@ export function AccountSecurity({
         label={method === "google" ? settings.methodGoogle : settings.methodEbay}
         simulated={!!onAction}
         actionPath={actionPath}
-        disabled={!recent}
+        disabled={!recent || lastMethod}
       >
         {settings.remove}
       </MethodAction>
@@ -353,51 +544,12 @@ export function AccountSecurity({
       </MethodAction>
     );
   const addPasskey = (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      disabled={pending || passkeyRestriction !== null}
-      focusableWhenDisabled
-      aria-busy={pending || undefined}
-      onClick={async () => {
-        if (onAction) {
-          onAction("passkey-add", {});
-          return;
-        }
-        setPending(true);
-        setError(false);
-        try {
-          const { authClient } = await import("../passkey-client");
-          // Il dispositivo distingue le passkey in elenco, prima fra tutte le due dell'admin.
-          const result = await authClient.passkey.addPasskey({
-            name: deviceName(navigator.userAgent, language),
-          });
-          if (result.error?.status === 403) {
-            window.location.assign(
-              `${localizedPath(language, securityPath)}?accesso=${passkeyBlock}`,
-            );
-          } else if (result.error) setError(true);
-          else window.location.reload();
-        } catch {
-          setError(true);
-        } finally {
-          setPending(false);
-        }
-      }}
-    >
-      {pending ? (
-        <Spinner
-          label={settings.addPasskey}
-          aria-hidden="true"
-          role={undefined}
-          data-icon="inline-start"
-        />
-      ) : (
-        <KeyRound aria-hidden="true" data-icon="inline-start" />
-      )}
-      {settings.addPasskey}
-    </Button>
+    <AddPasskey
+      language={language}
+      restriction={passkeyRestriction}
+      block={passkeyBlock}
+      onAction={onAction}
+    />
   );
   const passkeys = methods.passkeys;
   return (
@@ -420,14 +572,30 @@ export function AccountSecurity({
       {!recent || passkeyRestriction ? (
         <StatusAlert tone="warning" title={t.signInNotices[passkeyRestriction ?? "nuovo-accesso"]}>
           <form method="post" action={actionPath}>
-            <Button type="submit" variant="outline" size="sm" name="intent" value="esci">
+            <input
+              type="hidden"
+              name="returnTo"
+              value={`${localizedPath(language, securityPath)}#security-methods`}
+            />
+            <Button type="submit" variant="outline" size="sm" name="intent" value="riautentica">
               {t.signOutSignIn}
             </Button>
           </form>
         </StatusAlert>
       ) : null}
-      <EmailChange language={language} email={email} actionPath={actionPath} disabled={!recent} />
+      <EmailChange
+        language={language}
+        email={email}
+        actionPath={actionPath}
+        disabled={!recent}
+        pendingEmail={pendingEmail}
+      />
       <SecurityGroup id="security-methods" title={settings.methods}>
+        {lastMethod ? (
+          <p role="status" className="text-sm text-warning">
+            {settings.addAlternative}
+          </p>
+        ) : null}
         <ul className="grid divide-y border-y">
           <MethodRow label={settings.methodPassword} status={status(methods.accounts.password)}>
             <MethodAction language={language} intent="password" actionPath={actionPath}>
@@ -441,7 +609,7 @@ export function AccountSecurity({
                 label={settings.methodPassword}
                 simulated={!!onAction}
                 actionPath={actionPath}
-                disabled={!recent}
+                disabled={!recent || lastMethod}
               >
                 {settings.remove}
               </MethodAction>
@@ -467,7 +635,7 @@ export function AccountSecurity({
               {addPasskey}
             </MethodRow>
           ) : (
-            passkeys.map((passkey, index) => (
+            passkeys.map((passkey) => (
               <MethodRow
                 key={passkey.id}
                 label={settings.methodPasskey}
@@ -487,24 +655,48 @@ export function AccountSecurity({
                   label={passkey.name || settings.methodPasskey}
                   simulated={!!onAction}
                   actionPath={actionPath}
-                  disabled={passkeyRestriction !== null}
+                  disabled={passkeyRestriction !== null || lastMethod}
                 >
                   {settings.remove}
                 </MethodAction>
-                {index === passkeys.length - 1 ? addPasskey : null}
+                <PasskeyRename
+                  passkey={passkey}
+                  language={language}
+                  actionPath={actionPath}
+                  disabled={passkeyRestriction !== null}
+                />
               </MethodRow>
             ))
           )}
         </ul>
-        {error ? (
-          <p role="alert" className="text-sm text-danger">
-            {t.passkeyFailed}
-          </p>
-        ) : null}
+        {passkeys.length > 0 ? <div className="max-w-xl">{addPasskey}</div> : null}
         <p className="text-sm text-muted-foreground">{settings.lastMethod}</p>
       </SecurityGroup>
       <SessionList language={language} sessions={sessions} now={now} actionPath={actionPath} />
     </div>
+  );
+}
+
+function SignInAgain({ language, inSecurity }: { language: Language; inSecurity: boolean }) {
+  return (
+    <form method="post" action={localizedPath(language, inSecurity ? securityPath : accessPath)}>
+      {inSecurity ? (
+        <input
+          type="hidden"
+          name="returnTo"
+          value={`${localizedPath(language, securityPath)}#security-methods`}
+        />
+      ) : null}
+      <Button
+        type="submit"
+        variant="outline"
+        size="sm"
+        name="intent"
+        value={inSecurity ? "riautentica" : "esci"}
+      >
+        {appCopy[language].access.signOutSignIn}
+      </Button>
+    </form>
   );
 }
 
@@ -516,6 +708,8 @@ export function AccessNotice({
   notice: AccessNoticeView | null;
 }) {
   const t = appCopy[language].access;
+  const { pathname } = useLocation();
+  const inSecurity = pathname === localizedPath(language, securityPath);
   const banner = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (notice) banner.current?.focus();
@@ -540,11 +734,7 @@ export function AccessNotice({
       >
         {notice.text === t.signInNotices["nuovo-accesso"] ||
         notice.text === t.signInNotices["conferma-passkey"] ? (
-          <form method="post" action={localizedPath(language, accessPath)}>
-            <Button type="submit" variant="outline" size="sm" name="intent" value="esci">
-              {t.signOutSignIn}
-            </Button>
-          </form>
+          <SignInAgain language={language} inSecurity={inSecurity} />
         ) : null}
         {elsewhere ? (
           <span className="grid gap-2">

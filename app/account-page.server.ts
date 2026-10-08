@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { redirect } from "react-router";
 
 import { accessNotice } from "./access-notice";
-import { accessPath, ordersPath } from "./app-links";
+import { accessPath, ordersPath, securityReturnPath } from "./app-links";
 import { createAuth } from "./auth.server";
 import { registrationStatus } from "./domain/registration.server";
 import { listSignInMethods } from "./domain/sign-in-methods.server";
@@ -33,6 +33,8 @@ export async function accountLoader(request: Request, place: "access" | "app") {
     throw redirect(`${localizedPath(language, accessPath)}${url.search}`, { headers: noStore });
   }
   if (place === "access" && session && !search.has("token")) {
+    const target = securityReturnPath(language, search.get("returnTo"));
+    if (target) throw redirect(target, { headers: noStore });
     throw redirect(`${localizedPath(language, ordersPath)}${url.search}`, { headers: noStore });
   }
   if (place === "access" || !session) {

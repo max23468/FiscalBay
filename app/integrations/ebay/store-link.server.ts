@@ -27,7 +27,12 @@ const identitySchema = z.looseObject({
   username: z.string().min(1).max(256).optional(),
 });
 
-export type StoreLinkOutcome = "collegato" | "negato" | "altro-spazio" | "errore";
+export type StoreLinkOutcome =
+  | "collegato"
+  | "negato"
+  | "altro-spazio"
+  | "negozio-diverso"
+  | "errore";
 export type StoreLinkClaim =
   | {
       kind: "new";
@@ -35,6 +40,7 @@ export type StoreLinkClaim =
       codeVerifier: string;
       expired: boolean;
       ebayEnvironment: EbayEnvironment;
+      expectedStoreId: string | null;
     }
   | {
       kind: "duplicate";
@@ -53,6 +59,7 @@ export async function startStoreLink(
   now = new Date(),
   language: Language = "it",
   ebayEnvironment: EbayEnvironment = "production",
+  expectedStoreId: string | null = null,
 ): Promise<string> {
   const configuration = ebayConfiguration(environment, ebayEnvironment);
   const state = `${language}_${randomToken()}`;
@@ -65,14 +72,15 @@ export async function startStoreLink(
       now.toISOString(),
     ),
     environment.DB.prepare(
-      `INSERT INTO ebay_store_link_sessions (state, user_id, code_verifier, expires_at, ebay_environment)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO ebay_store_link_sessions (state, user_id, code_verifier, expires_at, ebay_environment, expected_store_id)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     ).bind(
       state,
       userId,
       codeVerifier,
       new Date(now.getTime() + linkSessionTtlMilliseconds).toISOString(),
       ebayEnvironment,
+      expectedStoreId,
     ),
   ]);
 
@@ -102,7 +110,7 @@ export async function claimStoreLinkSession(
     .prepare(
       `UPDATE ebay_store_link_sessions SET consumed_at = ?
         WHERE state = ? AND consumed_at IS NULL
-       RETURNING user_id, code_verifier, expires_at, ebay_environment`,
+       RETURNING user_id, code_verifier, expires_at, ebay_environment, expected_store_id`,
     )
     .bind(now.toISOString(), state)
     .first<{
@@ -110,6 +118,7 @@ export async function claimStoreLinkSession(
       code_verifier: string;
       expires_at: string;
       ebay_environment: EbayEnvironment;
+      expected_store_id: string | null;
     }>();
   if (claimed) {
     return {
@@ -118,6 +127,7 @@ export async function claimStoreLinkSession(
       codeVerifier: claimed.code_verifier,
       expired: claimed.expires_at <= now.toISOString(),
       ebayEnvironment: claimed.ebay_environment,
+      expectedStoreId: claimed.expected_store_id,
     };
   }
   const used = await db
@@ -212,6 +222,19 @@ export async function completeStoreLink(input: {
   const identity = await upstreamJson(fetcher, configuration.identityUrl, identitySchema, {
     headers: { authorization: `Bearer ${token.access_token}` },
   });
+
+  // Il consenso deve riguardare proprio il negozio scelto, ancora appartenente all'utente.
+  if (link.expectedStoreId) {
+    const expected = await environment.DB.prepare(
+      `SELECT s.ebay_account_id FROM ebay_stores s
+       JOIN workspace_members m ON m.workspace_id = s.workspace_id
+       WHERE s.id = ? AND m.user_id = ? AND s.ebay_environment = ?`,
+    )
+      .bind(link.expectedStoreId, link.userId, link.ebayEnvironment)
+      .first<{ ebay_account_id: string }>();
+    if (!expected) return "errore";
+    if (expected.ebay_account_id !== identity.userId) return "negozio-diverso";
+  }
 
   // Lo state porta la lingua in cui il merchant ha avviato il collegamento.
   const language: Language = search.get("state")!.startsWith("en_") ? "en" : "it";

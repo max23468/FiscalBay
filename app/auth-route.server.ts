@@ -3,6 +3,7 @@ import { redirect } from "react-router";
 
 import { createAuth } from "./auth.server";
 import { registrationStatus } from "./domain/registration.server";
+import { recordEmailChange } from "./domain/email-change.server";
 import { passkeyChangeBlock, recentSignIn, type AuthSession } from "./domain/sessions.server";
 import {
   claimStoreLinkSession,
@@ -29,6 +30,7 @@ const closedAuthPaths = new Set([
 const passkeyEnrollmentPaths = new Set([
   "/api/auth/passkey/generate-register-options",
   "/api/auth/passkey/verify-registration",
+  "/api/auth/passkey/update-passkey",
 ]);
 const passkeyRegistrationPath = "/api/auth/passkey/verify-registration";
 const linkSocialPath = "/api/auth/link-social";
@@ -168,6 +170,7 @@ async function attemptWait(request: Request, environment: Env): Promise<number |
 
 async function authResponse(request: Request, environment: Env): Promise<Response> {
   const pathname = new URL(request.url).pathname;
+  let emailChange: { userId: string; email: string; newEmail: string } | null = null;
   if (pathname === linkSocialPath) {
     // Un nuovo metodo si collega solo da una sessione verificata e sempre con il consenso del
     // provider: il ramo `idToken` di Better Auth creerebbe l'account senza validateUserInfo.
@@ -190,6 +193,21 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
     if (session && !recentSignIn(session as AuthSession)) {
       return new Response(null, { status: 403 });
     }
+    // Stryker disable ArrowFunction: null e undefined indicano entrambi un corpo non valido.
+    const body = await request
+      .clone()
+      .json()
+      .catch(() => null);
+    // Stryker restore ArrowFunction
+    if (
+      session &&
+      typeof body === "object" &&
+      body !== null &&
+      "newEmail" in body &&
+      typeof body.newEmail === "string"
+    ) {
+      emailChange = { userId: session.user.id, email: session.user.email, newEmail: body.newEmail };
+    }
   }
   // Utente che registra una passkey, per avvisarlo quando la registrazione riesce.
   let enrollingUserId: string | null = null;
@@ -204,6 +222,20 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
     // il secondo fattore, serve una sessione già confermata da passkey: password o email
     // compromesse non bastano ad aggiungerne una.
     if (passkeyChangeBlock(session as AuthSession)) return new Response(null, { status: 403 });
+    // Stryker disable ArrowFunction: null e undefined lasciano la validazione del corpo ad Auth.
+    const body = await request
+      .clone()
+      .json()
+      .catch(() => null);
+    // Stryker restore ArrowFunction
+    if (
+      typeof body === "object" &&
+      body !== null &&
+      "name" in body &&
+      (typeof body.name !== "string" || !body.name.trim() || body.name.length > 80)
+    ) {
+      return new Response(null, { status: 400 });
+    }
     enrollingUserId = session.user.id;
   }
   const wait = await attemptWait(request, environment);
@@ -214,6 +246,14 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
     );
   }
   const response = await createAuth(environment).handler(request);
+  if (response.ok && emailChange) {
+    await recordEmailChange(
+      environment.DB,
+      emailChange.userId,
+      emailChange.email,
+      emailChange.newEmail,
+    );
+  }
   if (response.status >= 500) logFailure({ request, code: "INTERNAL_ERROR", operation: "route" });
   if (pathname === passkeyRegistrationPath && response.ok && enrollingUserId) {
     notifySecurityEvent(environment, enrollingUserId, { kind: "passkey-added" });

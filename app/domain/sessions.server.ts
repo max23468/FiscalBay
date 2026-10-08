@@ -52,6 +52,7 @@ export interface ActiveSession {
   id: string;
   device: string;
   lastActiveAt: string;
+  createdAt?: string;
   current: boolean;
 }
 
@@ -65,15 +66,16 @@ export async function listActiveSessions(
 ): Promise<ActiveSession[]> {
   const { results } = await db
     .prepare(
-      `SELECT "id", "userAgent", "updatedAt" FROM "session"
+      `SELECT "id", "userAgent", "updatedAt", "createdAt" FROM "session"
        WHERE "userId" = ?1 AND "expiresAt" > ?2 ORDER BY "id" = ?3 DESC, "updatedAt" DESC`,
     )
     .bind(userId, now.toISOString(), currentId)
-    .all<{ id: string; userAgent: string | null; updatedAt: string }>();
+    .all<{ id: string; userAgent: string | null; updatedAt: string; createdAt: string }>();
   return results.map((row) => ({
     id: row.id,
     device: deviceName(row.userAgent, language),
     lastActiveAt: new Date(row.updatedAt).toISOString(),
+    createdAt: new Date(row.createdAt).toISOString(),
     current: row.id === currentId,
   }));
 }

@@ -8,7 +8,7 @@ import {
   parseProfile,
   registrationStatus,
 } from "../domain/registration.server";
-import { accessPath, ordersPath, visitCookie } from "../app-links";
+import { accessPath, ordersPath, visitCookie, securityReturnPath } from "../app-links";
 import { accountLoader } from "../account-page.server";
 import { errorResponse, tracePhase } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
@@ -34,7 +34,14 @@ export async function action({ request }: Route.ActionArgs) {
   tracePhase(request, "form");
   const field = (name: string) => String(form.get(name) ?? "");
   const intent = field("intent");
-  const notice = (value: string, page = access) => redirect(`${page}?accesso=${value}`, 303);
+  const returnTo = securityReturnPath(language, field("returnTo"));
+  const destination = returnTo ?? base;
+  const accessReturn = returnTo ? `${access}?${new URLSearchParams({ returnTo })}` : access;
+  const notice = (value: string, page = access) => {
+    const query = new URLSearchParams({ accesso: value });
+    if (returnTo) query.set("returnTo", returnTo);
+    return redirect(`${page}?${query}`, 303);
+  };
   const forward = (path: string, body?: Record<string, unknown>) =>
     forwardToAuth(env, request, path, body);
 
@@ -48,8 +55,8 @@ export async function action({ request }: Route.ActionArgs) {
   if (intent === "google" || intent === "ebay") {
     const response = await forward("/sign-in/social", {
       provider: intent,
-      callbackURL: base,
-      errorCallbackURL: `${localizedPath(language, "/auth/error")}?provider=${intent}`,
+      callbackURL: destination,
+      errorCallbackURL: `${localizedPath(language, "/auth/error")}?${new URLSearchParams({ provider: intent, ...(returnTo ? { returnTo } : {}) })}`,
     });
     if (!response.ok) return notice(response.status === 429 ? "troppi-tentativi" : "errore");
     const { url } = await response.clone().json<{ url: string }>();
@@ -59,7 +66,7 @@ export async function action({ request }: Route.ActionArgs) {
   if (intent === "recupera-password") {
     const response = await forward("/request-password-reset", {
       email: field("email"),
-      redirectTo: `${new URL(env.APP_ORIGIN).origin}${access}`,
+      redirectTo: `${new URL(env.APP_ORIGIN).origin}${accessReturn}`,
     });
     return notice(
       response.status === 429 ? "troppi-tentativi" : response.ok ? "recupero-inviato" : "errore",
@@ -140,6 +147,6 @@ export async function action({ request }: Route.ActionArgs) {
     email: field("email"),
     password: field("password"),
   });
-  if (response.ok) return redirectWithCookies(base, response);
+  if (response.ok) return redirectWithCookies(destination, response);
   return notice(response.status === 429 ? "troppi-tentativi" : "errore");
 }

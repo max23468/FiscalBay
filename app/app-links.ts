@@ -22,6 +22,17 @@ export const ordersPath = `${appBase}/ordini`;
 /** Pagina reale di Sicurezza; le Impostazioni complete la ospiteranno fra le categorie. */
 export const securityPath = `${appBase}/impostazioni/sicurezza`;
 
+/** Solo la pagina Sicurezza e i suoi gruppi, mai URL esterni o azioni da rieseguire. */
+export function securityReturnPath(language: Language, value: string | null): string | null {
+  const base = localizedPath(language, securityPath);
+  return [
+    base,
+    ...["email", "methods", "sessions"].map((group) => `${base}#security-${group}`),
+  ].includes(value ?? "")
+    ? value
+    : null;
+}
+
 /** Collegamento di un negozio eBay, dalla schermata preparatoria. */
 export const storeLinkPath = `${appBase}/negozi/collega`;
 

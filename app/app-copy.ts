@@ -473,6 +473,13 @@ const it = {
     removeMethodBody: (method: string) =>
       `Non potrai più accedere con ${method}. Gli altri metodi restano disponibili.`,
     addPasskey: "Aggiungi passkey",
+    passkeyName: "Nome della passkey",
+    passkeyNameHint:
+      "Facoltativo: ad esempio iPhone personale o chiave di riserva. Se vuoto usiamo il nome del dispositivo.",
+    renamePasskey: "Rinomina",
+    addAlternative:
+      "Questo è il tuo unico metodo di accesso. Aggiungi una passkey o collega un altro metodo qui sotto prima di rimuoverlo.",
+    sessionOpened: (date: string) => `Sessione aperta il ${date}`,
     passkeyItem: (device: string, date: string) => `${device}, aggiunta il ${date}`,
     lastMethod: "Serve almeno un metodo di accesso.",
     sessions: "Sessioni attive",
@@ -577,6 +584,16 @@ const it = {
     saved: "Anteprima: profilo non salvato.",
     updated: "Profilo aggiornato.",
     invalid: "Compila nome e cognome, e la ragione sociale per un’azienda.",
+    unsaved: "Hai modifiche non salvate. Vuoi lasciare il profilo?",
+    leave: "Lascia il profilo",
+    stay: "Continua a modificare",
+    emailPending: (email: string) =>
+      `Cambio richiesto verso ${email}. L’indirizzo attuale resta valido fino alla conferma.`,
+    emailPendingCurrent:
+      "Conferma prima dal link all’indirizzo attuale, poi da quello al nuovo indirizzo. Se non ricevi il link, controlla l’indirizzo richiesto.",
+    emailPendingNew:
+      "La prima conferma è completata. Ora apri il link ricevuto al nuovo indirizzo.",
+    emailRestart: "Invia di nuovo il primo link",
   },
   errors: {
     title: "Errore",
@@ -584,6 +601,8 @@ const it = {
     notFound: "Controlla l’indirizzo oppure torna a FiscalBay per continuare.",
     home: "Torna a FiscalBay",
     unexpected: "Si è verificato un errore inatteso. Riprova più tardi.",
+    unconfirmed:
+      "Non è stato possibile confermare l’esito. Ricarica la pagina per verificare lo stato prima di riprovare.",
     reference: (id: string) => `Riferimento: ${id}`,
     codes: {
       AUTH_REQUIRED: "Accedi per continuare.",
@@ -720,7 +739,17 @@ const it = {
     passkeySecurity: "Sicurezza",
     passkeyRecovery: "Accedi con impronta, volto o blocco schermo del dispositivo.",
     passkeyEmpty: "Nessuna passkey aggiunta.",
-    passkeyFailed: "Operazione passkey non riuscita. Riprova sul tuo dispositivo.",
+    passkeyErrors: {
+      cancelled: "Operazione annullata. Puoi riprovare o usare un altro metodo di accesso.",
+      timeout: "Il tempo per la verifica è scaduto. Riprova tenendo il dispositivo pronto.",
+      unsupported:
+        "Questo browser o dispositivo non supporta le passkey. Usa un browser compatibile o un altro metodo di accesso.",
+      incomplete:
+        "Verifica non completata: può essere stata annullata o essere scaduta. Riprova o usa un altro metodo di accesso.",
+      duplicate:
+        "Questa passkey è già registrata. Usa un’altra passkey o gestisci quella presente nell’elenco.",
+      technical: "Operazione passkey non riuscita. Riprova o usa un altro metodo di accesso.",
+    },
     passwordRecovery: "Hai dimenticato la password?",
     passwordResetTitle: "Scegli una nuova password",
     backToSignIn: "Torna ad accedere",
@@ -767,6 +796,8 @@ const it = {
     storeNotices: {
       collegato: "Negozio eBay collegato.",
       negato: "Collegamento annullato su eBay.",
+      "negozio-diverso":
+        "Hai scelto un account eBay diverso dal negozio da ricollegare. Il consenso non è stato salvato. Torna a Negozi e riprova con l’account corretto.",
       "altro-spazio": "Questo negozio eBay è già collegato a un altro account FiscalBay.",
       accesso: "Conferma l’indirizzo email per collegare un negozio.",
       errore: "Collegamento non riuscito. Riprova.",
@@ -798,6 +829,8 @@ const it = {
       "troppi-tentativi": "Troppi tentativi. Riprova tra qualche minuto.",
       "verifica-inviata": "Link di conferma inviato. Controlla la posta.",
       "passkey-rimossa": "Passkey rimossa.",
+      "passkey-rinominata": "Nome della passkey aggiornato.",
+      "passkey-nome-non-valido": "Indica un nome per la passkey, fino a 80 caratteri.",
       "ultimo-accesso": "Aggiungi un altro metodo di accesso prima di rimuovere questa passkey.",
       "recupero-inviato":
         "Controlla la posta: se l’indirizzo è registrato, trovi il link per scegliere una nuova password.",
@@ -1250,6 +1283,13 @@ const en: AppCopy = {
     removeMethodBody: (method: string) =>
       `You will no longer be able to sign in with ${method}. Your other methods remain available.`,
     addPasskey: "Add passkey",
+    passkeyName: "Passkey name",
+    passkeyNameHint:
+      "Optional: for example personal iPhone or spare key. When empty, we use the device name.",
+    renamePasskey: "Rename",
+    addAlternative:
+      "This is your only sign-in method. Add a passkey or connect another method below before removing it.",
+    sessionOpened: (date: string) => `Session opened on ${date}`,
     passkeyItem: (device, date) => `${device}, added on ${date}`,
     lastMethod: "At least one sign-in method is required.",
     sessions: "Active sessions",
@@ -1351,6 +1391,16 @@ const en: AppCopy = {
     saved: "Preview: profile not saved.",
     updated: "Profile updated.",
     invalid: "Enter your first and last name, and the company name for a business.",
+    unsaved: "You have unsaved changes. Leave your profile?",
+    leave: "Leave profile",
+    stay: "Keep editing",
+    emailPending: (email: string) =>
+      `Change requested to ${email}. Your current address remains valid until confirmation.`,
+    emailPendingCurrent:
+      "First confirm using the link sent to your current address, then the one sent to the new address. If no link arrives, check the requested address.",
+    emailPendingNew:
+      "The first confirmation is complete. Now open the link sent to your new address.",
+    emailRestart: "Resend the first link",
   },
   errors: {
     title: "Error",
@@ -1358,6 +1408,8 @@ const en: AppCopy = {
     notFound: "Check the address or return to FiscalBay to continue.",
     home: "Back to FiscalBay",
     unexpected: "An unexpected error occurred. Try again later.",
+    unconfirmed:
+      "The outcome could not be confirmed. Reload the page to check its state before trying again.",
     reference: (id) => `Reference: ${id}`,
     codes: {
       AUTH_REQUIRED: "Sign in to continue.",
@@ -1491,7 +1543,17 @@ const en: AppCopy = {
     passkeySecurity: "Security",
     passkeyRecovery: "Sign in with your fingerprint, face or device screen lock.",
     passkeyEmpty: "No passkeys added.",
-    passkeyFailed: "Passkey operation failed. Try again on your device.",
+    passkeyErrors: {
+      cancelled: "Operation cancelled. Try again or use another sign-in method.",
+      timeout: "Verification timed out. Try again with your device ready.",
+      unsupported:
+        "This browser or device does not support passkeys. Use a compatible browser or another sign-in method.",
+      incomplete:
+        "Verification was not completed: it may have been cancelled or timed out. Try again or use another sign-in method.",
+      duplicate:
+        "This passkey is already registered. Use another passkey or manage the one in the list.",
+      technical: "Passkey operation failed. Try again or use another sign-in method.",
+    },
     passwordRecovery: "Forgot your password?",
     passwordResetTitle: "Choose a new password",
     backToSignIn: "Back to sign in",
@@ -1538,6 +1600,8 @@ const en: AppCopy = {
     storeNotices: {
       collegato: "eBay store connected.",
       negato: "Connection cancelled on eBay.",
+      "negozio-diverso":
+        "You selected a different eBay account from the store to reconnect. The consent was not saved. Return to Stores and try again with the correct account.",
       "altro-spazio": "This eBay store is already connected to another FiscalBay account.",
       accesso: "Confirm your email address to connect a store.",
       errore: "Could not connect the store. Try again.",
@@ -1567,6 +1631,8 @@ const en: AppCopy = {
       "troppi-tentativi": "Too many attempts. Try again in a few minutes.",
       "verifica-inviata": "Confirmation link sent. Check your inbox.",
       "passkey-rimossa": "Passkey removed.",
+      "passkey-rinominata": "Passkey name updated.",
+      "passkey-nome-non-valido": "Enter a passkey name up to 80 characters long.",
       "ultimo-accesso": "Add another sign-in method before removing this passkey.",
       "recupero-inviato":
         "Check your inbox: if the address is registered, you will find a link to set a new password.",

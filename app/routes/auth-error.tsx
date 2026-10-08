@@ -6,7 +6,7 @@ import { StandalonePage } from "~/components/standalone-page";
 import { buttonVariants } from "~/components/ui/button-variants";
 import type { Route } from "./+types/auth-error";
 import { appCopy } from "../app-copy";
-import { accessPath } from "../app-links";
+import { accessPath, securityReturnPath } from "../app-links";
 import { languageFromPath, localizedPath } from "../i18n";
 
 type AuthErrorCopy = (typeof appCopy)["it"]["authError"];
@@ -45,6 +45,7 @@ export default function AuthError({ matches }: Route.ComponentProps) {
   const t = appCopy[language].authError;
   const [search] = useSearchParams();
   const message = messageFor(t, search.get("error"), search.get("provider"));
+  const returnTo = securityReturnPath(language, search.get("returnTo"));
   return (
     <StandalonePage
       icon={LogIn}
@@ -58,7 +59,7 @@ export default function AuthError({ matches }: Route.ComponentProps) {
       </a>
       {/* Si torna all'accesso; con la sessione l'accesso porta all'app. */}
       <a
-        href={localizedPath(language, accessPath)}
+        href={`${localizedPath(language, accessPath)}${returnTo ? `?${new URLSearchParams({ returnTo })}` : ""}`}
         data-slot="button"
         className={cn(buttonVariants({ variant: "outline" }), "w-fit")}
       >

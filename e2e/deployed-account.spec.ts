@@ -39,7 +39,7 @@ test(
     await expect(alerts.nth(1)).toContainText(`${stores.expiring}: autorizzazione in scadenza`);
     await expect(alerts.nth(1).getByRole("link", { name: "Ricollega negozio" })).toHaveAttribute(
       "href",
-      "/app/negozi/collega?ricollega&environment=production",
+      `/app/negozi/collega?ricollega=${encodeURIComponent(stores.expiring)}&environment=production`,
     );
     await expect(page.getByText(stores.paused)).toHaveCount(0);
 

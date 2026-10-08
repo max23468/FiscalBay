@@ -10,6 +10,7 @@ import {
   sendExistingAccountEmail,
 } from "./account-email.server";
 import { logFailure } from "./errors";
+import { emailVerificationSeconds } from "./domain/email-change.server";
 import { upstreamJson } from "./integrations/http.server";
 
 // Con `commerce.identity.readonly` eBay restituisce l'email soltanto per gli account business.
@@ -173,10 +174,26 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
       },
     },
     emailVerification: {
+      expiresIn: emailVerificationSeconds,
       sendOnSignUp: true,
       autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, url }) => {
+        // Il secondo link arriva al nuovo indirizzo; l'accesso resta sul precedente fino alla conferma.
+        await environment.DB.prepare(
+          "UPDATE account_email_changes SET stage = 'new', expires_at = ? WHERE user_id = ? AND new_email = ?",
+        )
+          .bind(
+            new Date(Date.now() + emailVerificationSeconds * 1000).toISOString(),
+            user.id,
+            user.email,
+          )
+          .run();
         sendAuthEmail(environment, "verify", { to: user.email, url });
+      },
+      afterEmailVerification: async (user) => {
+        await environment.DB.prepare("DELETE FROM account_email_changes WHERE user_id = ?")
+          .bind(user.id)
+          .run();
       },
     },
     socialProviders: {

@@ -1,7 +1,7 @@
 import { cn } from "cn";
 import { ClipboardList, Copy, KeyRound, LogOut, Plus, Store } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useLocation } from "react-router";
 
 import { AccessNotice, AccountShell } from "~/components/account";
 import { EbayEnvironmentField, type EbayEnvironment } from "~/components/ebay-environment";
@@ -29,7 +29,8 @@ import { Input } from "~/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { accountLoader } from "../account-page.server";
-import { accessPath, appBase, ordersPath, storeLinkPath } from "../app-links";
+import { accessPath, appBase, ordersPath, storeLinkPath, securityReturnPath } from "../app-links";
+import { passkeyFailure, type PasskeyFailure } from "../passkey-error";
 import { appCopy } from "../app-copy";
 import { languageFromPath, localizedPath, type Language } from "../i18n";
 import { formatDate } from "../view-models";
@@ -256,9 +257,16 @@ function EbayMark() {
   );
 }
 
+function ReturnToField({ language }: { language: Language }) {
+  const { search } = useLocation();
+  const target = securityReturnPath(language, new URLSearchParams(search).get("returnTo"));
+  return target ? <input type="hidden" name="returnTo" value={target} /> : null;
+}
+
 function SocialForms({ t, language }: { t: AccessCopy; language: Language }) {
   return (
     <form method="post" action={localizedPath(language, "/accesso")} className="grid gap-2">
+      <ReturnToField language={language} />
       <Button type="submit" variant="outline" name="intent" value="google" className="w-full">
         <GoogleMark />
         {t.google}
@@ -273,7 +281,9 @@ function SocialForms({ t, language }: { t: AccessCopy; language: Language }) {
 
 function PasskeyButton({ t, language }: { t: AccessCopy; language: Language }) {
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<PasskeyFailure | null>(null);
+  const { search } = useLocation();
+  const target = securityReturnPath(language, new URLSearchParams(search).get("returnTo"));
   return (
     <div className="grid gap-2">
       <Button
@@ -282,14 +292,18 @@ function PasskeyButton({ t, language }: { t: AccessCopy; language: Language }) {
         disabled={pending}
         onClick={async () => {
           setPending(true);
-          setError(false);
+          setError(null);
           try {
+            if (!window.PublicKeyCredential) {
+              setError("unsupported");
+              return;
+            }
             const { authClient } = await import("../passkey-client");
             const result = await authClient.signIn.passkey();
-            if (result.error) setError(true);
-            else window.location.assign(localizedPath(language, ordersPath));
-          } catch {
-            setError(true);
+            if (result.error) setError(passkeyFailure(result.error));
+            else window.location.assign(target ?? localizedPath(language, ordersPath));
+          } catch (failure) {
+            setError(passkeyFailure(failure));
           } finally {
             setPending(false);
           }
@@ -300,7 +314,7 @@ function PasskeyButton({ t, language }: { t: AccessCopy; language: Language }) {
       </Button>
       {error ? (
         <p role="alert" className="text-sm text-danger">
-          {t.passkeyFailed}
+          {t.passkeyErrors[error]}
         </p>
       ) : null}
     </div>
@@ -406,6 +420,7 @@ function AccessForms({
           }}
         >
           <FieldGroup className="gap-3">
+            <ReturnToField language={language} />
             <Field>
               <FieldLabel htmlFor="email" required>
                 {t.email}
@@ -543,6 +558,7 @@ function ResetPassword({
     >
       <h2 className="text-xl font-semibold">{t.passwordResetTitle}</h2>
       <input type="hidden" name="token" value={token} />
+      <ReturnToField language={language} />
       <Field>
         <FieldLabel htmlFor="reset-password" required>
           {t.newPassword}
@@ -915,7 +931,7 @@ function OrdersPage({
               <span className="grid justify-items-start gap-3">
                 {t.consentExpiringBody(formatDate(store.at, language, "date"))}
                 <a
-                  href={`${localizedPath(language, storeLinkPath)}?ricollega&environment=${store.ebayEnvironment}`}
+                  href={`${localizedPath(language, storeLinkPath)}?ricollega=${encodeURIComponent(store.id)}&environment=${store.ebayEnvironment}`}
                   data-slot="button"
                   className={buttonVariants({ variant: "outline", size: "sm" })}
                 >

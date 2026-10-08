@@ -11,6 +11,7 @@ import { accessPath, appBase, ordersPath, storeLinkPath } from "../app-links";
 import { appCopy } from "../app-copy";
 import { createAuth } from "../auth.server";
 import { registrationComplete, registrationStatus } from "../domain/registration.server";
+import { listStores } from "../domain/stores.server";
 import { errorResponse, tracePhase } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
 import { startStoreLink } from "../integrations/ebay/store-link.server";
@@ -60,10 +61,17 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
   const search = new URL(request.url).searchParams;
   if (search.get("environment") === "sandbox" && !sandboxAvailable(env)) {
-    return errorResponse(request, "FORBIDDEN");
+    throw errorResponse(request, "FORBIDDEN");
   }
   const ebayEnvironment: EbayEnvironment =
     search.get("environment") === "sandbox" ? "sandbox" : "production";
+  const expectedStoreId = search.get(reconnectParam);
+  const expected = expectedStoreId
+    ? (await listStores(env.DB, status.userId)).find(
+        (store) => store.id === expectedStoreId && store.ebayEnvironment === ebayEnvironment,
+      )
+    : null;
+  if (search.has(reconnectParam) && !expected) throw errorResponse(request, "INVALID_REQUEST");
   return {
     language,
     reconnect: search.has(reconnectParam),
@@ -71,6 +79,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     fromStores: search.get("da") === "negozi",
     sandbox: sandboxAvailable(env),
     ebayEnvironment,
+    expectedStoreId: expected?.id ?? null,
+    expectedStoreName: expected?.name ?? null,
   };
 }
 
@@ -92,10 +102,28 @@ export async function action({ request }: Route.ActionArgs) {
   if (ebayEnvironment === "sandbox" && !sandboxAvailable(env)) {
     return errorResponse(request, "FORBIDDEN");
   }
-  return redirect(await startStoreLink(env, status.userId, new Date(), language, ebayEnvironment), {
-    status: 303,
-    ...noStore,
-  });
+  const expectedStoreId = String(form.get("negozio") ?? "");
+  if (
+    expectedStoreId &&
+    !(await listStores(env.DB, status.userId)).some(
+      (store) => store.id === expectedStoreId && store.ebayEnvironment === ebayEnvironment,
+    )
+  )
+    return errorResponse(request, "INVALID_REQUEST");
+  return redirect(
+    await startStoreLink(
+      env,
+      status.userId,
+      new Date(),
+      language,
+      ebayEnvironment,
+      expectedStoreId || null,
+    ),
+    {
+      status: 303,
+      ...noStore,
+    },
+  );
 }
 
 export default function StoreLink({ loaderData }: Route.ComponentProps) {
@@ -113,6 +141,9 @@ export default function StoreLink({ loaderData }: Route.ComponentProps) {
       <p className="leading-relaxed text-pretty text-muted-foreground">
         {reconnect ? t.reconnectIntro : t.intro}
       </p>
+      {loaderData.expectedStoreName ? (
+        <p className="font-medium">{loaderData.expectedStoreName}</p>
+      ) : null}
       <ul className="grid gap-3">
         {t.points.map((point) => (
           <li key={point} className="flex gap-3 leading-relaxed text-pretty">
@@ -126,13 +157,20 @@ export default function StoreLink({ loaderData }: Route.ComponentProps) {
         action={localizedPath(language, storeLinkPath)}
         className="flex flex-wrap gap-3"
       >
-        {sandbox && (
-          <EbayEnvironmentField
-            language={language}
-            className="w-full"
-            name="environment"
-            defaultValue={ebayEnvironment}
-          />
+        {loaderData.expectedStoreId ? (
+          <>
+            <input type="hidden" name="negozio" value={loaderData.expectedStoreId} />
+            <input type="hidden" name="environment" value={ebayEnvironment} />
+          </>
+        ) : (
+          sandbox && (
+            <EbayEnvironmentField
+              language={language}
+              className="w-full"
+              name="environment"
+              defaultValue={ebayEnvironment}
+            />
+          )
         )}
         <Button type="submit">{t.continue}</Button>
         <a

@@ -141,6 +141,13 @@ async function main() {
   }
   // `--command` esegue le istruzioni senza l'import di `--file`, che sospende il database.
   const statements = await resetStatements(password);
+  if (local) {
+    // Le prove browser creano passkey e richieste email: ogni collaudo locale riparte pulito.
+    statements.push(`DELETE FROM passkey WHERE "userId" = ${quote(testAccount.userId)};`);
+    statements.push(
+      `DELETE FROM account_email_changes WHERE user_id = ${quote(testAccount.userId)};`,
+    );
+  }
   if (sessions) {
     const now = new Date().toISOString();
     const expires = new Date(Date.now() + 86400000).toISOString();
