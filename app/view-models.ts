@@ -145,7 +145,7 @@ export interface StoreView {
   lastSyncAt: string | null;
   notifications: boolean | null;
   importedOrders: number;
-  /** Finestra dello storico e frequenza prevista; null finché la sincronizzazione continua non è attiva. */
+  /** Finestra dello storico; null prima del primo avvio dell'importazione. */
   historyDays: number | null;
   importing: boolean;
   /** Inizio e scadenza del consenso corrente; null per un negozio scollegato. */
@@ -153,6 +153,7 @@ export interface StoreView {
   consentExpiresAt: string | null;
   /** Consenso valido che scade entro trenta giorni: il pannello invita a ricollegare. */
   consentExpiring?: boolean;
+  /** Frequenza prevista; null finché la sincronizzazione continua non è attiva. */
   targetMinutes: number | null;
   /** Dati eliminati con «Scollega ed elimina dati». */
   dataDeleted?: boolean;

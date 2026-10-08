@@ -2,7 +2,7 @@ import { z } from "zod";
 import { logFailure } from "../../errors";
 import type { Language } from "../../i18n";
 import { upstreamJson } from "../http.server";
-import { importLatestOrder } from "../../domain/order-acquisition.server";
+import { acquireOrders } from "../../domain/order-acquisition.server";
 import { base64Url, saveStoreCredentials } from "./seller-credentials.server";
 import { ebayConfiguration, type EbayEnvironment } from "./environment.server";
 
@@ -266,13 +266,15 @@ export async function completeStoreLink(input: {
     .first();
   if (paused) return "collegato";
 
-  // Il collegamento è già riuscito: un errore nella lettura del primo ordine non lo annulla.
-  await importLatestOrder({
+  // Il collegamento è già riuscito: un errore nella prima acquisizione non lo annulla. Qui si
+  // leggono soltanto i recenti e la prima pagina dello storico; il resto prosegue in background.
+  await acquireOrders({
     db: environment.DB,
     storeId,
     grantedAt: now,
     access: { fetcher, configuration, accessToken: token.access_token },
-    now,
+    now: issued,
+    budget: { calls: 8, pages: 2 },
   }).catch((error: unknown) => {
     logFailure({ request: input.request, error, operation: "store_link" });
   });

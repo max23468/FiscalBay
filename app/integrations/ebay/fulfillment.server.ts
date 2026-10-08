@@ -173,6 +173,14 @@ export function buildLastModifiedFilter(
   return `lastmodifieddate:[${start.toISOString()}..${end.toISOString()}]`;
 }
 
+/** Ordini creati nell'intervallo, estremi inclusi. */
+export function buildCreationDateFilter(from: Date, until: Date): string {
+  if (!Number.isFinite(from.getTime()) || !Number.isFinite(until.getTime()) || from > until) {
+    throw new RangeError("Intervallo dello storico eBay non valido");
+  }
+  return `creationdate:[${from.toISOString()}..${until.toISOString()}]`;
+}
+
 const ordersPath = "/sell/fulfillment/v1/order";
 
 /**
@@ -192,6 +200,18 @@ export async function readFulfillmentOrders(
     if (page.filter) url.searchParams.set("filter", page.filter);
   }
   return upstreamJson(access.fetcher, url.href, fulfillmentPageSchema, {
+    headers: { authorization: `Bearer ${access.accessToken}` },
+  });
+}
+
+/** Un solo ordine con `getOrder`, per la lettura del dettaglio. */
+export async function readFulfillmentOrder(access: EbayAccess, orderId: string): Promise<unknown> {
+  const url = ebayApiUrl(
+    access.configuration,
+    `${access.configuration.ordersUrl}/${encodeURIComponent(orderId)}`,
+    ordersPath,
+  );
+  return upstreamJson(access.fetcher, url.href, fulfillmentOrderSchema, {
     headers: { authorization: `Bearer ${access.accessToken}` },
   });
 }

@@ -84,6 +84,7 @@ export function logFailure(input: {
     | "store_link"
     | "stripe_webhook"
     | "token_refresh"
+    | "order_acquisition"
     | "account_email"
     | "maintenance";
   status?: number;
