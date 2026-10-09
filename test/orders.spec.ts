@@ -2255,6 +2255,7 @@ describe("collegamento negozio eBay", () => {
       "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
     ]);
     expect(authorize.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(authorize.searchParams.get("locale")).toBe("it-IT");
     const state = authorize.searchParams.get("state")!;
 
     const ebay = syntheticEbay();
@@ -2812,7 +2813,10 @@ describe("collegamento negozio eBay", () => {
   });
 
   it("torna agli Ordini nella lingua del collegamento, anche senza sessione o con il primo callback in corso", async () => {
-    const { cookie } = await verifiedSession("ritorno-callback@example.invalid");
+    const { cookie, userId } = await verifiedSession("ritorno-callback@example.invalid");
+    // eBay parla italiano solo se richiesto; in inglese resta la sua lingua predefinita.
+    const englishLink = new URL(await beginLink(env, userId, new Date(), "en"));
+    expect(englishLink.searchParams.has("locale")).toBe(false);
     const begin = async (path: string) =>
       new URL(
         (

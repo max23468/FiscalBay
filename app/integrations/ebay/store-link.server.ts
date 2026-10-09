@@ -96,6 +96,8 @@ export async function startStoreLink(
     code_challenge: challenge,
     code_challenge_method: "S256",
   }).toString();
+  // Senza locale eBay mostra accesso e consenso in inglese anche agli account italiani.
+  if (language === "it") url.searchParams.set("locale", "it-IT");
   return url.toString();
 }
 
