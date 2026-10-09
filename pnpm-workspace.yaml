@@ -6,9 +6,9 @@ allowBuilds:
 # `exceljs` dichiara `uuid` 8, con vulnerabilità nota; la 11 è compatibile.
 overrides:
   uuid: 11.1.1
-# Installa solo release pubblicate da almeno un giorno e rifiuta i pacchetti
-# che perdono firme o provenance rispetto alle versioni precedenti.
-minimumReleaseAge: 1440
+# Nessuna attesa dalla pubblicazione: il valore esplicito evita il default di pnpm.
+minimumReleaseAge: 0
+# Rifiuta i pacchetti che perdono firme o provenance rispetto alle versioni precedenti.
 trustPolicy: no-downgrade
 # Backport ufficiale della serie 6, pubblicato dopo le 7.x con provenance;
 # arriva da Babel tramite `@react-router/dev`.
@@ -19,3 +19,6 @@ trustPolicyExclude:
 # il dialetto D1 di Better Auth lo dichiara da sé.
 patchedDependencies:
   "@better-auth/kysely-adapter@1.7.7": patches/@better-auth__kysely-adapter@1.7.7.patch
+  # Backport della PR Stryker #6220, commit 4e7930409c221c99ea25f9ab2c961e4fd8485c9b.
+  # Rimuovere quando il runner pubblicato allinea ID e copertura con i nomi di Vitest 5.
+  "@stryker-mutator/vitest-runner@10.0.0": patches/@stryker-mutator__vitest-runner@10.0.0.patch
