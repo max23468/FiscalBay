@@ -35,6 +35,10 @@ const failures = new Set([
 const stoppingFailures = new Set(["credentials", "rate_limited", "unavailable"]);
 const day = 86_400_000;
 
+// I due enum ufficiali chiamano lo stesso tipo CODICE_FISCALE e CodiceFiscale.
+const sameType = (fulfillment, trading) =>
+  fulfillment === trading || (fulfillment === "CODICE_FISCALE" && trading === "CodiceFiscale");
+
 function metadata(payload, orderId, at) {
   const order = metadataSchema.parse(payload);
   const age = (at - Date.parse(order.creationDate)) / day;
@@ -107,7 +111,7 @@ export async function compareEbayTax(input, access, client, at = Date.now()) {
         fulfillment.every((tax) =>
           unique.some(
             (other) =>
-              other.type === tax.type &&
+              sameType(tax.type, other.type) &&
               other.value === tax.value &&
               (!other.issuingCountry ||
                 !tax.issuingCountry ||

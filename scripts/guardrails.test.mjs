@@ -1204,6 +1204,14 @@ describe("confronto fiscale eBay senza dati privati", () => {
     }
     const unknownCountry = await fixture({ trading: [{ ...tax, issuingCountry: null }] })();
     assert.equal(unknownCountry.rows[0].countryComplete, false);
+    const officialType = await fixture({
+      trading: [{ ...tax, type: "CodiceFiscale", issuingCountry: null }],
+    })();
+    assert.equal(officialType.rows[0].outcome, "equal");
+    assert.equal(officialType.rows[0].countryComplete, false);
+    assert.equal(officialType.supportsReview, true);
+    for (const type of ["codice_fiscale", "CODICEFISCALE", "VATIN"])
+      assert.equal((await fixture({ trading: [{ ...tax, type }] })()).rows[0].outcome, "different");
   });
 
   it("non dichiara equivalenza da assenze, ordini non restituiti o marketplace ambigui", async () => {

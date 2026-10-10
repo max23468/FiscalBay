@@ -99,6 +99,8 @@ Locale per fixture e prove isolate; `test.fiscalbay.it` per collaudo separato, b
 
 Predisporre un riferimento locale non versionato a una custodia **fuori da checkout e directory distribuibili**, accessibile alle sessioni autorizzate. Nessun obbligo di comprare un secret manager; scegliere quanto è già adatto e disponibile. L’inventario contiene nomi logici, owner, ID/ambiente, scope e riferimenti alla custodia, **non segreti in chiaro**.
 
+Prima di caricare un nuovo segreto sul provider, conservarlo nella custodia scelta e verificarne la rilettura senza stamparlo. Per `BETTER_AUTH_SECRET` del test il valore attivo è custodito nel Worker e nel Portachiavi macOS, con riferimento nell'inventario privato; la copia custodita apre i token seller reali. `.dev.vars` resta riservato alle prove locali sintetiche. Una rotazione del segreto Auth richiede anche di gestire sessioni e credenziali cifrate, quindi non serve per correggere un riferimento di custodia mancante.
+
 Tenere privati capacità residue e costi reali degli account condivisi, euristiche anti-abuso, identità dei tester/chat e prove contenenti dati reali. Conservare il minimo necessario a riconoscere target, autorizzazioni, rotazione e recovery. Le normali evidenze nel repository usano dati sintetici/sanificati e riferimenti logici; verificare anche screenshot, allegati, log CI e ZIP. Un hash pseudonimo non è automaticamente anonimo.
 
 Per sostenibilità misurare ordini, negozi multipli, storico, retry, export, log, email e ambienti, distinguendo entrate ricorrenti/lifetime/omaggi e commissioni effettive. Non attribuire a FB l’intera quota di account usati da altri progetti. Non introdurre backup esterni o consultazioni periodiche obbligatorie contrarie alle scelte approvate.

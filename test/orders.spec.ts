@@ -307,6 +307,35 @@ describe("percorso ordini", () => {
     ]);
     expect(otherTenantOrders[0]?.taxIdentifiers).toEqual([]);
     expect(ownerOrders[0]).toMatchObject({ storeName: "e-a", fiscalState: "available" });
+    await env.DB.prepare(
+      `INSERT INTO tax_identifiers (id, order_id, identifier_type, issuing_country, value, source, observed_at)
+       VALUES ('fiscal-f', 'o-a', 'CODICE_FISCALE', 'IT', 'RSSMRA80A01H501U', 'ebay_fulfillment', ?1),
+              ('fiscal-f-before', 'o-a', 'CODICE_FISCALE', NULL, 'RSSMRA80A01H501U', 'ebay_fulfillment', ?1),
+              ('fiscal-t', 'o-a', 'CodiceFiscale', NULL, 'RSSMRA80A01H501U', 'ebay_trading_get_orders', ?1),
+              ('fiscal-other', 'o-a', 'CodiceFiscale', NULL, 'ALTRO-SINTETICO', 'ebay_trading_get_orders', ?1),
+              ('fiscal-country', 'o-a', 'CodiceFiscale', 'ES', 'RSSMRA80A01H501U', 'ebay_trading_get_orders', ?1),
+              ('fiscal-unknown', 'o-a', 'codice_fiscale', NULL, 'RSSMRA80A01H501U', 'ebay_trading_get_orders', ?1)`,
+    )
+      .bind(now)
+      .run();
+    const identifiers = (await listVisibleOrders(env.DB, "u-a"))[0]!.taxIdentifiers;
+    expect(identifiers).toHaveLength(5);
+    expect(identifiers).toContainEqual({
+      type: "CODICE_FISCALE",
+      issuingCountry: "IT",
+      value: "RSSMRA80A01H501U",
+      source: "ebay_fulfillment",
+      observedAt: now,
+    });
+    expect(
+      identifiers.filter((tax) => tax.type === "CodiceFiscale").map((tax) => tax.value),
+    ).toEqual(["ALTRO-SINTETICO", "RSSMRA80A01H501U"]);
+    expect((await listVisibleOrders(env.DB, "u-b"))[0]?.taxIdentifiers).toEqual([]);
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) AS total FROM tax_identifiers WHERE order_id = 'o-a'",
+      ).first(),
+    ).toEqual({ total: 8 });
     expect(ownerOrders[0]?.summary).toEqual({
       buyer: { username: null },
       orderPaymentStatus: null,
@@ -4295,6 +4324,160 @@ describe("client eBay e normalizzazione", () => {
       )
         .bind(now, grantedAt)
         .run();
+    });
+
+    it("legge il CF Fulfillment italiano con header e conserva lo storico quando manca", async () => {
+      const tax = {
+        taxpayerId: "SINTETICO",
+        taxIdentifierType: "CODICE_FISCALE",
+        issuingCountry: "IT",
+      };
+      const source = order();
+      const fetcher = ebay({ orders: [order({ buyer: { ...source.buyer, taxIdentifier: tax } })] });
+      expect(await acquire(fetcher)).toBe("complete");
+      const single = fetcher.mock.calls.find(([input]) =>
+        new URL(String(input)).pathname.includes("/order/"),
+      )!;
+      expect(new URL(String(single[0])).searchParams.get("fieldGroups")).toBe("TAX_BREAKDOWN");
+      expect(new Headers(single[1]?.headers).get("X-EBAY-C-MARKETPLACE-ID")).toBe("EBAY_IT");
+      expect(calls(fetcher, "GetOrders")).toBe(0);
+      expect(
+        await env.DB.prepare("SELECT identifier_type, source, value FROM tax_identifiers").all(),
+      ).toMatchObject({
+        results: [
+          { identifier_type: "CODICE_FISCALE", source: "ebay_fulfillment", value: "SINTETICO" },
+        ],
+      });
+      fetcher.orders[0] = order({ lastModifiedDate: "2026-09-02T02:00:00.000Z" });
+      await acquire(fetcher, "2026-09-02T03:00:00.000Z");
+      expect(calls(fetcher, "GetOrders")).toBe(1);
+      expect(
+        await count("SELECT count(*) AS total FROM tax_identifiers WHERE removed_at IS NULL"),
+      ).toBe(2);
+    });
+
+    it.each([
+      { tax: undefined },
+      { tax: { taxpayerId: "SINTETICO", taxIdentifierType: "VATIN", issuingCountry: "IT" } },
+      {
+        tax: { taxpayerId: "SINTETICO", taxIdentifierType: "CODICE_FISCALE", issuingCountry: "ES" },
+      },
+      { tax: { taxpayerId: "", taxIdentifierType: "CODICE_FISCALE" } },
+    ])("usa Trading per un dato fiscale assente o non qualificato: $tax", async ({ tax }) => {
+      const source = order();
+      const fetcher = ebay({ orders: [order({ buyer: { ...source.buyer, taxIdentifier: tax } })] });
+      expect(await acquire(fetcher)).toBe("complete");
+      expect(calls(fetcher, "GetOrders")).toBe(1);
+      expect(await env.DB.prepare("SELECT source FROM tax_identifiers").all()).toMatchObject({
+        results: [{ source: "ebay_trading_get_orders" }],
+      });
+    });
+
+    it.each(["EBAY_ES", null])(
+      "mantiene Trading sul marketplace non qualificato %s",
+      async (marketplace) => {
+        const source = order();
+        const fetcher = ebay({
+          orders: [
+            order({
+              buyer: {
+                ...source.buyer,
+                taxIdentifier: { taxpayerId: "SINTETICO", taxIdentifierType: "CODICE_FISCALE" },
+              },
+              lineItems: source.lineItems.map((line) => ({
+                ...line,
+                listingMarketplaceId: marketplace,
+              })),
+            }),
+          ],
+        });
+        expect(await acquire(fetcher)).toBe("complete");
+        expect(calls(fetcher, "GetOrders")).toBe(1);
+        const single = fetcher.mock.calls.find(([input]) =>
+          new URL(String(input)).pathname.includes("/order/"),
+        )!;
+        expect(new URL(String(single[0])).searchParams.has("fieldGroups")).toBe(false);
+        expect(new Headers(single[1]?.headers).has("X-EBAY-C-MARKETPLACE-ID")).toBe(false);
+      },
+    );
+
+    it("mantiene Trading come fonte fiscale in Sandbox", async () => {
+      const source = order();
+      const fetcher = ebay({
+        orders: [
+          order({
+            buyer: {
+              ...source.buyer,
+              taxIdentifier: {
+                taxpayerId: "SINTETICO",
+                taxIdentifierType: "CODICE_FISCALE",
+                issuingCountry: "IT",
+              },
+            },
+          }),
+        ],
+      });
+      const seller = access(fetcher);
+      await acquireOrders({
+        db: env.DB,
+        storeId: "s-a",
+        grantedAt,
+        access: {
+          ...seller,
+          configuration: {
+            ...seller.configuration,
+            apiOrigin: "https://api.sandbox.ebay.com",
+            ordersUrl: "https://api.sandbox.ebay.com/sell/fulfillment/v1/order",
+            tradingUrl: "https://api.sandbox.ebay.com/ws/api.dll",
+          },
+        },
+        now: new Date("2026-09-02T00:00:00.000Z"),
+        budget: { calls: 12, pages: 3 },
+      });
+      expect(calls(fetcher, "GetOrders")).toBe(1);
+      expect(await env.DB.prepare("SELECT source FROM tax_identifiers").all()).toMatchObject({
+        results: [{ source: "ebay_trading_get_orders" }],
+      });
+    });
+
+    it("non applica il dettaglio di un ordine diverso da quello richiesto", async () => {
+      const fetcher = ebay({
+        fail: (url) =>
+          url.pathname.includes("/order/")
+            ? Response.json(order({ orderId: "ALTRO-ORDINE" }))
+            : undefined,
+      });
+      expect(await acquire(fetcher)).toBe("complete");
+      expect(calls(fetcher, "GetOrders")).toBe(0);
+      expect(
+        await env.DB.prepare("SELECT detail_error FROM order_source_refs").all(),
+      ).toMatchObject({
+        results: [{ detail_error: "invalid_response" }],
+      });
+      expect(
+        await count("SELECT count(*) AS total FROM orders WHERE ebay_order_id = 'ALTRO-ORDINE'"),
+      ).toBe(0);
+    });
+
+    it("conclude un dettaglio fiscale qualificato con una sola chiamata disponibile", async () => {
+      const source = order();
+      const fetcher = ebay({
+        orders: [
+          order({
+            buyer: {
+              ...source.buyer,
+              taxIdentifier: {
+                taxpayerId: "SINTETICO",
+                taxIdentifierType: "CODICE_FISCALE",
+              },
+            },
+          }),
+        ],
+      });
+      await acquire(fetcher);
+      await env.DB.prepare("UPDATE order_source_refs SET detail_for = NULL").run();
+      expect(await acquire(fetcher, undefined, { calls: 2, pages: 1 })).toBe("complete");
+      expect(calls(fetcher, "GetOrders")).toBe(0);
     });
 
     it("legge dati fiscali e immagini una volta per versione, senza bloccare l'ordine", async () => {

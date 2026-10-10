@@ -179,7 +179,40 @@ export async function listVisibleOrders(
     }
     orders.set(row.id, order);
   }
-  return [...orders.values()];
+  return [...orders.values()].map((order) => ({
+    ...order,
+    // Le osservazioni restano nel database; lo stesso CF si consulta una sola volta.
+    taxIdentifiers: order.taxIdentifiers.filter(
+      (tax) =>
+        !(
+          tax.source === "ebay_trading_get_orders" &&
+          ["CodiceFiscale", "CODICE_FISCALE"].includes(tax.type) &&
+          (tax.issuingCountry === null || tax.issuingCountry === "IT") &&
+          order.taxIdentifiers.some(
+            (other) =>
+              other.source === "ebay_fulfillment" &&
+              other.type === "CODICE_FISCALE" &&
+              (other.issuingCountry === null || other.issuingCountry === "IT") &&
+              other.value === tax.value &&
+              (!other.issuingCountry ||
+                !tax.issuingCountry ||
+                other.issuingCountry === tax.issuingCountry),
+          )
+        ) &&
+        !(
+          tax.source === "ebay_fulfillment" &&
+          tax.type === "CODICE_FISCALE" &&
+          tax.issuingCountry === null &&
+          order.taxIdentifiers.some(
+            (other) =>
+              other.source === "ebay_fulfillment" &&
+              other.type === tax.type &&
+              other.value === tax.value &&
+              other.issuingCountry === "IT",
+          )
+        ),
+    ),
+  }));
 }
 
 export async function grantFreeOrder(
