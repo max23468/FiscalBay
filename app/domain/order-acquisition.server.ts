@@ -14,6 +14,7 @@ import {
   buildCreationDateFilter,
   buildLastModifiedFilter,
   fulfillmentObservation,
+  fulfillmentTaxIdentifiers,
   readFulfillmentOrder,
   readFulfillmentOrders,
 } from "../integrations/ebay/fulfillment.server";
@@ -25,7 +26,7 @@ import { openToken } from "../integrations/ebay/seller-credentials.server";
  *
  * 1. recenti: ordini modificati dopo l'ultimo limite applicato, con una sovrapposizione;
  * 2. storico: ordini creati nella finestra fissata al primo avvio, dal più recente;
- * 3. dettaglio: dati fiscali Trading e immagini di ogni versione Fulfillment non ancora letta.
+ * 3. dettaglio: dati fiscali e immagini di ogni versione Fulfillment non ancora letta.
  *
  * Ogni pagina si applica prima di salvarne il link `next`, e il limite dei recenti avanza
  * solo a passata conclusa: un'interruzione riprende dall'ultima pagina applicata e la rilegge
@@ -210,7 +211,11 @@ async function listingsWithoutImage(
 /** Errori che riguardano eBay o il consenso, non il singolo ordine: fermano l'esecuzione. */
 const runFailures = new Set(["credentials", "rate_limited", "unavailable"]);
 
-type PendingDetail = { external_order_id: string; detail_attempts: number };
+type PendingDetail = {
+  external_order_id: string;
+  detail_attempts: number;
+  marketplace_id: string | null;
+};
 
 /** Rimanda il dettaglio dopo un errore del singolo ordine o, all'ultimo tentativo, lo chiude. */
 async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) {
@@ -243,24 +248,56 @@ async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) 
 
 /**
  * Dettaglio di una versione dell'ordine: rilegge l'ordine, le immagini mancanti (un errore
- * lascia la riga senza immagine) e gli identificativi fiscali Trading. Senza Trading l'ordine
- * si salva comunque, senza dati fiscali; l'assenza del campo in Trading non è ancora qualificata
- * come rimozione autorevole. false se il budget non basta: la versione resta in attesa.
+ * lascia la riga senza immagine) e il CF Fulfillment sul marketplace italiano Production.
+ * Negli altri casi Trading resta il fallback. Un'assenza non rimuove dati già osservati.
+ * false se il budget non basta: la versione resta in attesa.
  */
 async function readDetail(ctx: Context, pending: PendingDetail): Promise<boolean> {
-  if (!spend(ctx.budget, 2)) return false;
+  const qualifiedMarketplace =
+    ctx.access.configuration.apiOrigin === "https://api.ebay.com" &&
+    pending.marketplace_id === "EBAY_IT";
+  if (!spend(ctx.budget, qualifiedMarketplace ? 1 : 2)) return false;
   let observation: OrderObservation;
   try {
-    observation = fulfillmentObservation(
-      await readFulfillmentOrder(ctx.access, pending.external_order_id),
-      ctx.at,
+    const payload = await readFulfillmentOrder(
+      ctx.access,
+      pending.external_order_id,
+      qualifiedMarketplace ? { marketplaceId: pending.marketplace_id! } : undefined,
     );
+    observation = fulfillmentObservation(payload, ctx.at);
+    if (
+      observation.externalOrderId !== pending.external_order_id ||
+      (qualifiedMarketplace && observation.marketplaceId !== pending.marketplace_id)
+    )
+      throw new UpstreamError("invalid_response");
+    if (qualifiedMarketplace) {
+      // Un campo fiscale malformato non impedisce il fallback sulla seconda fonte.
+      let values: ReturnType<typeof fulfillmentTaxIdentifiers> | undefined;
+      try {
+        values = fulfillmentTaxIdentifiers(payload);
+      } catch {}
+      if (
+        values?.length === 1 &&
+        values[0]!.type === "CODICE_FISCALE" &&
+        (values[0]!.issuingCountry === null || values[0]!.issuingCountry === "IT")
+      )
+        observation = {
+          ...observation,
+          taxIdentifiers: { source: "ebay_fulfillment", complete: false, values },
+        };
+    }
   } catch (error) {
     await failDetail(ctx, pending, error);
     return true;
   }
   const listings = [...(await listingsWithoutImage(ctx, observation))].slice(0, maxImagesPerDetail);
-  if (!spend(ctx.budget, listings.length)) return false;
+  if (
+    !spend(
+      ctx.budget,
+      listings.length + (qualifiedMarketplace && !observation.taxIdentifiers ? 1 : 0),
+    )
+  )
+    return false;
   const images = new Map(
     await Promise.all(
       listings.map(
@@ -277,12 +314,14 @@ async function readDetail(ctx: Context, pending: PendingDetail): Promise<boolean
       return imageUrl ? { ...item, imageUrl } : item;
     }),
   };
-  const trading = await readTradingTaxIdentifiers(ctx.access, observation.externalOrderId)
-    .then((values) => ({ values }))
-    .catch((error: unknown) => ({ error }));
+  const trading = observation.taxIdentifiers
+    ? null
+    : await readTradingTaxIdentifiers(ctx.access, observation.externalOrderId)
+        .then((values) => ({ values }))
+        .catch((error: unknown) => ({ error }));
   const result = await record(
     ctx,
-    "values" in trading
+    trading && "values" in trading
       ? {
           ...observation,
           taxIdentifiers: {
@@ -293,7 +332,7 @@ async function readDetail(ctx: Context, pending: PendingDetail): Promise<boolean
         }
       : observation,
   );
-  if ("error" in trading) {
+  if (trading && "error" in trading) {
     await failDetail(ctx, pending, trading.error);
   } else if (result.outcome === "stale") {
     // eBay ha restituito una versione più vecchia di quella già registrata: si riprova.
@@ -315,17 +354,18 @@ async function readDetail(ctx: Context, pending: PendingDetail): Promise<boolean
 
 /**
  * Versioni in attesa dalla più recente per data di modifica, quindi anche i cambiamenti di
- * ordini vecchi. Ogni dettaglio costa almeno due chiamate: una riga in più delle chiamate
+ * ordini vecchi. Ogni dettaglio costa almeno una chiamata: una riga in più delle chiamate
  * rimaste basta a sapere se ne restano oltre il budget.
  */
 async function readDetails(ctx: Context): Promise<boolean> {
   const { results } = await ctx.db
     .prepare(
-      `SELECT external_order_id, detail_attempts FROM order_source_refs
-        WHERE store_id = ?1 AND source = 'fulfillment'
-          AND detail_for IS NOT last_modified_time
-          AND (detail_retry_at IS NULL OR detail_retry_at <= ?2)
-        ORDER BY last_modified_time DESC LIMIT ?3`,
+      `SELECT r.external_order_id, r.detail_attempts, o.marketplace_id
+         FROM order_source_refs r JOIN orders o ON o.id = r.order_id
+        WHERE r.store_id = ?1 AND r.source = 'fulfillment'
+          AND r.detail_for IS NOT r.last_modified_time
+          AND (r.detail_retry_at IS NULL OR r.detail_retry_at <= ?2)
+        ORDER BY r.last_modified_time DESC LIMIT ?3`,
     )
     .bind(ctx.storeId, ctx.at, ctx.budget.calls + 1)
     .all<PendingDetail>();

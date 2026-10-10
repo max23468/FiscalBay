@@ -134,7 +134,7 @@ export function fulfillmentObservation(payload: unknown, observedAt: string): Or
 
 const fulfillmentOrderSchema = z.looseObject({ orderId: z.string().min(1) });
 
-/** Seconda osservazione, mai prova di assenza autorevole né sostituto di Trading. */
+/** Osservazione fiscale con tipo originale; un'assenza non è mai una rimozione autorevole. */
 export function fulfillmentTaxIdentifiers(payload: unknown) {
   const order = z
     .object({
