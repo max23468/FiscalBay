@@ -272,12 +272,12 @@ async function readDetail(ctx: Context, pending: PendingDetail): Promise<boolean
       throw new UpstreamError("invalid_response");
     if (qualifiedMarketplace) {
       // Un campo fiscale malformato non impedisce il fallback sulla seconda fonte.
-      let values: ReturnType<typeof fulfillmentTaxIdentifiers> = [];
+      let values: ReturnType<typeof fulfillmentTaxIdentifiers> | undefined;
       try {
         values = fulfillmentTaxIdentifiers(payload);
       } catch {}
       if (
-        values.length === 1 &&
+        values?.length === 1 &&
         values[0]!.type === "CODICE_FISCALE" &&
         (values[0]!.issuingCountry === null || values[0]!.issuingCountry === "IT")
       )

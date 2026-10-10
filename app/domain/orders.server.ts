@@ -65,6 +65,14 @@ export type VisibleOrder = {
   }>;
 };
 
+function isFulfillmentCf(tax: VisibleOrder["taxIdentifiers"][number]): boolean {
+  return (
+    tax.source === "ebay_fulfillment" &&
+    tax.type === "CODICE_FISCALE" &&
+    (tax.issuingCountry ?? "IT") === "IT"
+  );
+}
+
 // La pausa del piano esclude i dati del negozio; la pausa manuale li lascia consultabili.
 const consultable = `NOT EXISTS (
   SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = s.id AND p.reason = 'plan'
@@ -128,7 +136,7 @@ export async function listVisibleOrders(
            ON g.workspace_id = vo.workspace_id AND g.order_id = o.id
          LEFT JOIN tax_identifiers ti
            ON ti.order_id = o.id AND ti.removed_at IS NULL AND g.id IS NOT NULL
-        ORDER BY o.last_modified_time DESC, o.id DESC, ti.identifier_type`,
+        ORDER BY o.last_modified_time DESC, o.id DESC, ti.identifier_type, ti.issuing_country DESC`,
     )
     .bind(userId, ebayEnvironment, limit)
     .all<{
@@ -179,40 +187,25 @@ export async function listVisibleOrders(
     }
     orders.set(row.id, order);
   }
-  return [...orders.values()].map((order) => ({
-    ...order,
-    // Le osservazioni restano nel database; lo stesso CF si consulta una sola volta.
-    taxIdentifiers: order.taxIdentifiers.filter(
-      (tax) =>
-        !(
+  return [...orders.values()].map((order) => {
+    const primary = new Map<string, VisibleOrder["taxIdentifiers"][number]>();
+    for (const tax of order.taxIdentifiers) {
+      if (isFulfillmentCf(tax) && !primary.has(tax.value)) primary.set(tax.value, tax);
+    }
+    return {
+      ...order,
+      // Le osservazioni restano nel database; la consultazione sceglie il CF più completo.
+      taxIdentifiers: order.taxIdentifiers.filter((tax) => {
+        if (isFulfillmentCf(tax)) return primary.get(tax.value) === tax;
+        return !(
           tax.source === "ebay_trading_get_orders" &&
           ["CodiceFiscale", "CODICE_FISCALE"].includes(tax.type) &&
-          (tax.issuingCountry === null || tax.issuingCountry === "IT") &&
-          order.taxIdentifiers.some(
-            (other) =>
-              other.source === "ebay_fulfillment" &&
-              other.type === "CODICE_FISCALE" &&
-              (other.issuingCountry === null || other.issuingCountry === "IT") &&
-              other.value === tax.value &&
-              (!other.issuingCountry ||
-                !tax.issuingCountry ||
-                other.issuingCountry === tax.issuingCountry),
-          )
-        ) &&
-        !(
-          tax.source === "ebay_fulfillment" &&
-          tax.type === "CODICE_FISCALE" &&
-          tax.issuingCountry === null &&
-          order.taxIdentifiers.some(
-            (other) =>
-              other.source === "ebay_fulfillment" &&
-              other.type === tax.type &&
-              other.value === tax.value &&
-              other.issuingCountry === "IT",
-          )
-        ),
-    ),
-  }));
+          (tax.issuingCountry ?? "IT") === "IT" &&
+          primary.has(tax.value)
+        );
+      }),
+    };
+  });
 }
 
 export async function grantFreeOrder(
