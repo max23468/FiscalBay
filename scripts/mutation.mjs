@@ -173,7 +173,8 @@ async function runTarget(target, files) {
     incremental,
     incrementalFile: `${dir}/incremental.json`,
     jsonReporter: { fileName: reportPath },
-    ...(file === "app/auth-route.server.ts"
+    ...(file === "app/auth-route.server.ts" ||
+    file === "app/integrations/ebay/fulfillment.server.ts"
       ? { vitest: { configFile: "vitest.unit.config.ts" } }
       : {}),
   };

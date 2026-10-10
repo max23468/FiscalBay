@@ -1507,11 +1507,13 @@ Il punto tocca insieme modello (M3-01), client (M3-02) e sblocco (M3-06), quindi
 <a id="m3-10"></a>
 #### M3-10 · Riqualifica della lettura fiscale Fulfillment
 
-**Stato:** Da completare · **Prerequisiti:** M3-02 · **Contratto:** [§9](#s09) · [§11](#s11)
+**Stato:** In corso · **Prerequisiti:** M3-02 · **Contratto:** [§9](#s09) · [§11](#s11)
 
 Riapre in modo circoscritto l'esito di M0-05, senza modificarlo retroattivamente: con l'header `X-EBAY-C-MARKETPLACE-ID` ricavato dal marketplace dell'inserzione e `fieldGroups=TAX_BREAKDOWN`, leggere sugli stessi ordini controllati `buyer.taxIdentifier` da Fulfillment e `BuyerTaxIdentifier` da Trading, senza persistere né stampare valori.
 
 **Criterio di completamento:** Matrice di presenza e coincidenza per ordine (solo conteggi ed esiti), limiti di età e marketplace osservati, impatto sul budget quote. Se Fulfillment con header è equivalente, proposta all'owner di rivedere D135; fino al suo via Trading resta primario e il client M3-02 conserva la seconda osservazione con provenienza.
+
+**Implementazione locale:** Adapter con lettura fiscale esplicita e provenienza Fulfillment, confronto controllato senza persistenza o stampa dei valori, conteggi delle chiamate e test sintetici disponibili. [Procedura e interpretazione](engineering/EBAY_TAX_COMPARISON.md). L'import automatico mantiene Trading primario. Restano la matrice reale sul keyset FiscalBay, la qualifica delle finestre/marketplace e l'eventuale proposta all'owner: nessuna equivalenza reale dichiarata dalle fixture.
 
 <a id="m3-11"></a>
 #### M3-11 · Ingresso Worker per webhook e callback
