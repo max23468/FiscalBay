@@ -126,13 +126,32 @@ export async function readTradingTaxIdentifiers(
   access: EbayAccess,
   orderId: string,
 ): Promise<EbayTaxIdentifierObservation[]> {
+  return (await readTradingTaxObservation(access, orderId)).values;
+}
+
+/** Distingue ordine non restituito e ordine presente senza identificativi. */
+export async function readTradingTaxObservation(access: EbayAccess, orderId: string) {
   const xml = await tradingCall(
     access,
     "GetOrders",
     "<DetailLevel>ReturnAll</DetailLevel><OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>" +
       `<OrderIDArray><OrderID>${escapeXml(orderId)}</OrderID></OrderIDArray>`,
   );
-  return mapTradingTaxIdentifiers(parseTradingOrderTaxIdentifiers(xml, orderId));
+  const matching = [...xml.matchAll(/<Order>([\s\S]*?)<\/Order>/gu)].filter(
+    ([, order]) =>
+      xmlField(order!, "OrderID") === orderId || xmlField(order!, "ExtendedOrderID") === orderId,
+  );
+  if (matching.length > 1) throw new UpstreamError("invalid_response");
+  for (const [, block] of (matching[0]?.[1] ?? "").matchAll(
+    /<BuyerTaxIdentifier>([\s\S]*?)<\/BuyerTaxIdentifier>/gu,
+  )) {
+    if (!xmlField(block!, "ID") || !xmlField(block!, "Type"))
+      throw new UpstreamError("invalid_response");
+  }
+  return {
+    orderFound: matching.length === 1,
+    values: mapTradingTaxIdentifiers(parseTradingOrderTaxIdentifiers(xml, orderId)),
+  };
 }
 
 export function parseTradingOrderTaxIdentifiers(

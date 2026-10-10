@@ -133,6 +133,39 @@ export function fulfillmentObservation(payload: unknown, observedAt: string): Or
 }
 
 const fulfillmentOrderSchema = z.looseObject({ orderId: z.string().min(1) });
+
+/** Seconda osservazione, mai prova di assenza autorevole né sostituto di Trading. */
+export function fulfillmentTaxIdentifiers(payload: unknown) {
+  const order = z
+    .object({
+      buyer: z
+        .object({
+          taxIdentifier: z
+            .object({
+              taxpayerId: z.string().trim().min(1),
+              taxIdentifierType: z.string().trim().min(1),
+              issuingCountry: z
+                .string()
+                .regex(/^[A-Z]{2}$/u)
+                .nullish(),
+            })
+            .nullish(),
+        })
+        .nullish(),
+    })
+    .parse(payload);
+  const tax = order.buyer?.taxIdentifier;
+  return tax
+    ? [
+        {
+          value: tax.taxpayerId,
+          type: tax.taxIdentifierType,
+          issuingCountry: tax.issuingCountry ?? null,
+          source: "ebay_fulfillment" as const,
+        },
+      ]
+    : [];
+}
 const fulfillmentPageSchema = z.looseObject({
   orders: z.array(fulfillmentOrderSchema).default([]),
   total: z.number().int().nonnegative(),
@@ -202,13 +235,27 @@ export async function readFulfillmentOrders(
 }
 
 /** Un solo ordine con `getOrder`, per la lettura del dettaglio. */
-export async function readFulfillmentOrder(access: EbayAccess, orderId: string): Promise<unknown> {
+export async function readFulfillmentOrder(
+  access: EbayAccess,
+  orderId: string,
+  tax?: { marketplaceId?: string },
+): Promise<unknown> {
   const url = ebayApiUrl(
     access.configuration,
     `${access.configuration.ordersUrl}/${encodeURIComponent(orderId)}`,
     ordersPath,
   );
+  const headers: Record<string, string> = { authorization: `Bearer ${access.accessToken}` };
+  if (tax) {
+    url.searchParams.set("fieldGroups", "TAX_BREAKDOWN");
+    if (tax.marketplaceId !== undefined) {
+      headers["X-EBAY-C-MARKETPLACE-ID"] = z
+        .string()
+        .regex(/^EBAY_[A-Z_]{2,20}$/u)
+        .parse(tax.marketplaceId);
+    }
+  }
   return upstreamJson(access.fetcher, url.href, fulfillmentOrderSchema, {
-    headers: { authorization: `Bearer ${access.accessToken}` },
+    headers,
   });
 }
