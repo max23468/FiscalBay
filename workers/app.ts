@@ -1,16 +1,26 @@
-// Valutata all'avvio dell'isolate, fuori dalla CPU della richiesta; handler creato una volta.
-import * as build from "virtual:react-router/server-build";
 import { createRequestHandler } from "react-router";
+import {
+  receiveWebhook,
+  consumeWebhooks,
+  recoverWebhookIngress,
+} from "../app/integrations/webhooks.server";
 import { indexable } from "../app/app-links";
 import { correlateResponse, correlationHeader, logFailure, tracePhase } from "../app/errors";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { acquireStoresOrders } from "../app/domain/order-acquisition.server";
 import { refreshExpiringTokens } from "../app/integrations/ebay/seller-credentials.server";
 
-const requestHandler = createRequestHandler(build, import.meta.env.MODE);
+// I webhook vengono rifiutati o presi in carico prima di caricare la build dell'app.
+let requestHandler: ReturnType<typeof createRequestHandler> | undefined;
 
 export default {
   async fetch(request, env) {
+    const webhook = await receiveWebhook(request, env);
+    if (webhook) return webhook;
+    requestHandler ??= createRequestHandler(
+      await import("virtual:react-router/server-build"),
+      import.meta.env.MODE,
+    );
     const id = crypto.randomUUID();
     const headers = new Headers(request.headers);
     headers.set(correlationHeader, id);
@@ -34,6 +44,9 @@ export default {
       return new Response(null, { status: 500, headers: { [correlationHeader]: id } });
     }
   },
+  async queue(batch, env) {
+    await consumeWebhooks(batch, env);
+  },
   // Pulizia dei dati tecnici scaduti, rinnovo anticipato dei token di accesso dei negozi e
   // acquisizione degli ordini, fuori dal percorso delle pagine. Un passo fallito non ferma i
   // successivi; l'acquisizione usa i token appena rinnovati.
@@ -42,6 +55,7 @@ export default {
     await purgeExpiredRecords(env.DB, now).catch((error: unknown) =>
       logFailure({ error, operation: "maintenance" }),
     );
+    await recoverWebhookIngress(env, now).catch(() => logFailure({ operation: "webhook_ingress" }));
     await refreshExpiringTokens(env, fetch, now).catch((error: unknown) =>
       logFailure({ error, operation: "token_refresh" }),
     );

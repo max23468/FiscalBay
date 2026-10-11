@@ -142,10 +142,19 @@ export function plan(files, sources = [], complete = false) {
   // un modulo condiviso non critico non estende la campagna a tutti i domini.
   const critical = (file) =>
     (sources.length === 0 || graph.has(file)) &&
-    /^app\/(?:auth(?:-route)?|domain\/(?:orders|order-import|order-acquisition|quota|grants|cycles|sessions|sign-in-methods|registration|stores|export)|integrations\/(?:stripe|ebay\/(?:seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
+    /^app\/(?:auth(?:-route)?|domain\/(?:orders|order-import|order-acquisition|quota|grants|cycles|sessions|sign-in-methods|registration|stores|export)|integrations\/(?:webhooks|stripe|ebay\/(?:notifications|seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
       file,
     );
   const mutationInputs = files.filter(critical);
+  if (
+    files.some((file) =>
+      /^(?:workers\/app\.ts|wrangler\.jsonc|test\/webhooks\.spec\.ts)$/u.test(file),
+    )
+  )
+    mutationInputs.push(
+      "app/integrations/webhooks.server.ts",
+      "app/integrations/ebay/notifications.server.ts",
+    );
   if (
     files.some((file) =>
       /^(?:test\/(?:auth-route\.unit|worker-context)\.ts|vitest\.unit\.config\.ts)$/u.test(file),

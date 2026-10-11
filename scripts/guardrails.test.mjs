@@ -256,6 +256,17 @@ describe("classificazione dei file modificati", () => {
     assert.equal(changePlan(files).deploy, false);
     assert.equal(changePlan(files, [], true).mode, "full");
     assert.equal(changePlan(["app/integrations/stripe.server.ts"]).mutation.length, 1);
+    assert.deepEqual(changePlan(["app/integrations/webhooks.server.ts"]).mutation, [
+      "app/integrations/webhooks.server.ts",
+    ]);
+    assert.deepEqual(changePlan(["app/integrations/ebay/notifications.server.ts"]).mutation, [
+      "app/integrations/ebay/notifications.server.ts",
+    ]);
+    for (const file of ["workers/app.ts", "wrangler.jsonc", "test/webhooks.spec.ts"])
+      assert.deepEqual(changePlan([file]).mutation, [
+        "app/integrations/webhooks.server.ts",
+        "app/integrations/ebay/notifications.server.ts",
+      ]);
     assert.equal(changePlan([".github/workflows/publish.yml"]).promotionReuse, false);
     assert.equal(changePlan([".github/workflows/mutation.yml"]).promotionReuse, false);
     assert.equal(changePlan(["app/routes/stores.tsx"]).promotionReuse, true);

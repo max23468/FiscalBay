@@ -1,13 +1,10 @@
 import { env } from "cloudflare:workers";
 import Stripe from "stripe";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  buildManagedCheckoutParams,
-  recordStripeEvent,
-  verifyStripeEvent,
-} from "../app/integrations/stripe.server";
+import { buildManagedCheckoutParams, verifyStripeEvent } from "../app/integrations/stripe.server";
 import { action as checkoutAction } from "../app/routes/stripe-checkout";
+import { receiveWebhook } from "../app/integrations/webhooks.server";
 
 const event = {
   id: "evt_checkout_completed",
@@ -22,7 +19,7 @@ const event = {
 } satisfies Stripe.Event;
 
 beforeEach(async () => {
-  await env.DB.prepare("DELETE FROM stripe_events").run();
+  await env.DB.prepare("DELETE FROM webhook_receipts").run();
 });
 
 describe("Stripe Managed Payments", () => {
@@ -83,19 +80,31 @@ describe("Stripe Managed Payments", () => {
       secret,
     });
     const verified = await verifyStripeEvent(body, signature, secret);
-
-    expect(await recordStripeEvent(env.DB, verified)).toBe(true);
-    expect(await recordStripeEvent(env.DB, verified)).toBe(false);
+    expect(verified).toEqual(event);
+    const send = vi.fn().mockResolvedValue(undefined);
+    const environment = { ...env, WEBHOOK_QUEUE: { send } } as Env;
+    const request = () =>
+      new Request("https://test.fiscalbay.it/webhooks/stripe", {
+        method: "POST",
+        headers: { "stripe-signature": signature },
+        body,
+      });
+    for (let delivery = 0; delivery < 2; delivery++)
+      expect(
+        (await receiveWebhook(request(), environment, fetch, new Date(event.created * 1000)))
+          ?.status,
+      ).toBe(204);
+    expect(send).toHaveBeenCalledOnce();
     expect(
       await env.DB.prepare(
-        "SELECT event_type, object_id, livemode FROM stripe_events WHERE stripe_event_id = ?",
+        "SELECT topic, object_id, environment FROM webhook_receipts WHERE provider = 'stripe' AND provider_id = ?",
       )
         .bind(event.id)
         .first(),
     ).toEqual({
-      event_type: "checkout.session.completed",
+      topic: "checkout.session.completed",
       object_id: "cs_test_checkout",
-      livemode: 0,
+      environment: "test",
     });
   });
 

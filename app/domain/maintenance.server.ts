@@ -6,6 +6,7 @@
 export async function purgeExpiredRecords(db: D1Database, now = new Date()): Promise<void> {
   const at = now.toISOString();
   await db.batch([
+    db.prepare("DELETE FROM webhook_receipts WHERE expires_at <= ?").bind(at),
     db.prepare('DELETE FROM "session" WHERE "expiresAt" <= ?').bind(at),
     db.prepare('DELETE FROM "verification" WHERE "expiresAt" <= ?').bind(at),
     // Le finestre più lunghe durano un'ora.

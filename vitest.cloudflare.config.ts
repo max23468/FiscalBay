@@ -19,10 +19,7 @@ export default defineConfig({
           STRIPE_PRICE_MONTHLY: "price_test_monthly",
           STRIPE_PRICE_ANNUAL: "price_test_annual",
           STRIPE_PRICE_LIFETIME: "price_test_lifetime",
-          TEST_MIGRATIONS: [
-            ...(await readD1Migrations("./migrations")),
-            ...(await readD1Migrations("./test/migrations")),
-          ],
+          TEST_MIGRATIONS: await readD1Migrations("./migrations"),
         },
       },
     })),

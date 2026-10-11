@@ -386,6 +386,8 @@ export async function acquireOrders(input: {
   access: EbayAccess;
   now: Date;
   budget: AcquisitionBudget;
+  /** Evento verificato: rilegge soltanto l'ordine indicato, senza avanzare il polling. */
+  confirmedOrderId?: string;
 }): Promise<AcquisitionResult> {
   const { db, storeId, grantedAt, now } = input;
   const at = now.toISOString();
@@ -422,6 +424,24 @@ export async function acquireOrders(input: {
 
   const ctx: Context = { ...input, at };
   try {
+    if (input.confirmedOrderId) {
+      if (!spend(ctx.budget, 1)) return "budget";
+      const payload = await readFulfillmentOrder(ctx.access, input.confirmedOrderId);
+      const observation = fulfillmentObservation(payload, at);
+      if (observation.externalOrderId !== input.confirmedOrderId)
+        throw new UpstreamError("invalid_response");
+      // Un evento tardivo non estende la finestra dello storico né ricrea dati scaduti.
+      if (Date.parse(observation.creationTime) < now.getTime() - historyDays * dayMilliseconds)
+        return "complete";
+      await record(ctx, observation);
+      return (await readDetail(ctx, {
+        external_order_id: observation.externalOrderId,
+        detail_attempts: 0,
+        marketplace_id: observation.marketplaceId ?? null,
+      }))
+        ? "complete"
+        : "budget";
+    }
     const recent = await runPass(ctx, recentPass(ctx, state));
     // Lettura dei recenti conclusa: l'ultima sincronizzazione del negozio.
     if (recent) await saveState(ctx, "last_success_at = ?3");
@@ -451,6 +471,51 @@ type ActiveStore = {
   granted_at: string;
   ebay_environment: EbayEnvironment;
 };
+
+/** Rilegge consenso, pausa e token prima di eseguire un evento già accettato. */
+export async function consumeOrderConfirmation(
+  environment: Env,
+  event: {
+    storeId: string;
+    grantedAt: string;
+    environment: string;
+    orderId: string;
+    eventAt: string;
+  },
+  fetcher: typeof fetch,
+  now: Date,
+) {
+  const store =
+    await environment.DB.prepare(`SELECT c.store_id, c.access_token, c.granted_at, c.access_expires_at, s.ebay_environment
+    FROM ebay_store_credentials c JOIN ebay_stores s ON s.id = c.store_id
+    WHERE s.id = ? AND c.granted_at = ? AND s.ebay_environment = ? AND s.disconnected_at IS NULL
+      AND c.rejected_at IS NULL AND (s.data_deleted_at IS NULL OR s.data_deleted_at < ?)
+      AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = s.id)`)
+      .bind(event.storeId, event.grantedAt, event.environment, event.eventAt)
+      .first<ActiveStore & { access_expires_at: string }>();
+  if (!store) return;
+  if (store.access_expires_at <= now.toISOString()) throw new UpstreamError("credentials");
+  const result = await acquireOrders({
+    db: environment.DB,
+    storeId: store.store_id,
+    grantedAt: store.granted_at,
+    access: {
+      fetcher,
+      configuration: ebayConfiguration(environment, store.ebay_environment),
+      accessToken: await openToken(
+        environment.BETTER_AUTH_SECRET,
+        store.store_id,
+        "access",
+        store.access_token,
+      ),
+    },
+    now,
+    // Stryker disable next-line ObjectLiteral: questo percorso usa al massimo 11 chiamate e nessuna pagina; rimuovere il budget non cambia l'esito di un singolo ordine.
+    budget: { calls: 12, pages: 0 },
+    confirmedOrderId: event.orderId,
+  });
+  if (result !== "complete" && result !== "not_writable") throw new UpstreamError("unavailable");
+}
 
 /**
  * Lavoro periodico: acquisisce gli ordini dei negozi attivi con un token valido, dal negozio
