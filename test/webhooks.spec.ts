@@ -13,6 +13,7 @@ import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import worker from "../workers/app";
 import { acquireOrders, consumeOrderConfirmation } from "../app/domain/order-acquisition.server";
 import { ebayConfiguration } from "../app/integrations/ebay/environment.server";
+import delivery from "./ebay-order-notification.json";
 
 const now = new Date("2026-10-11T12:00:00.000Z");
 const grantedAt = "2026-10-10T12:00:00.000Z";
@@ -74,9 +75,9 @@ function ebayRequest(payload = notification, kid = "synthetic-key") {
   const signature = btoa(
     JSON.stringify({
       kid,
-      signature: sign("sha1", Buffer.from(body), pair.privateKey).toString("base64"),
+      signature: sign("sha256", Buffer.from(body), pair.privateKey).toString("base64"),
       alg: "ECDSA",
-      digest: "SHA1",
+      digest: "SHA256",
     }),
   );
   return new Request("https://test.fiscalbay.it/webhooks/ebay", {
@@ -626,8 +627,8 @@ it("accetta un corpo al limite, legge più chunk senza alterare byte e rifiuta l
     JSON.stringify({
       kid: "synthetic-key",
       alg: "ECDSA",
-      digest: "SHA1",
-      signature: sign("sha1", Buffer.from(body), pair.privateKey).toString("base64"),
+      digest: "SHA256",
+      signature: sign("sha256", Buffer.from(body), pair.privateKey).toString("base64"),
     }),
   );
   const bytes = new TextEncoder().encode(body);
@@ -651,7 +652,7 @@ it("accetta un corpo al limite, legge più chunk senza alterare byte e rifiuta l
   ).toBe(204);
   const wrong = ebayRequest();
   const header = JSON.parse(atob(wrong.headers.get("x-ebay-signature")!));
-  wrong.headers.set("x-ebay-signature", btoa(JSON.stringify({ ...header, digest: "SHA256" })));
+  wrong.headers.set("x-ebay-signature", btoa(JSON.stringify({ ...header, digest: "SHA1" })));
   expect((await receive(wrong))?.status).toBe(412);
 });
 
@@ -1128,4 +1129,26 @@ it("la data canonica non cambia la deduplica quando eBay omette i millisecondi",
   };
   expect((await receive(ebayRequest(same)))?.status).toBe(204);
   expect(send).toHaveBeenCalledTimes(1);
+});
+
+it("verifica una consegna di prova eBay reale e la conferma senza effetti", async () => {
+  // Corpo, firma e chiave pubblica catturati da una consegna Sandbox: ECDSA SHA-256 sui byte ricevuti.
+  const later = new Date(now.getTime() + 3_600_000);
+  const real = vi.fn<typeof fetch>(async (input) =>
+    String(input).includes("/public_key/")
+      ? Response.json({ key: delivery.key })
+      : Response.json({ access_token: "token-synthetic" }),
+  );
+  const request = () =>
+    new Request("https://test.fiscalbay.it/webhooks/ebay", {
+      method: "POST",
+      headers: { "x-ebay-signature": delivery.signature, "content-type": "application/json" },
+      body: delivery.body,
+    });
+  expect((await receiveWebhook(request(), environment, real, later))?.status).toBe(204);
+  const altered = new Request(request(), { body: JSON.stringify(JSON.parse(delivery.body)) });
+  expect((await receiveWebhook(altered, environment, real, later))?.status).toBe(412);
+  expect(send).not.toHaveBeenCalled();
+  const { results } = await env.DB.prepare("SELECT id FROM webhook_receipts").all();
+  expect(results).toEqual([]);
 });
