@@ -81,7 +81,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     ebayEnvironment,
     expectedStoreId: expected?.id ?? null,
     expectedStoreName: expected?.name ?? null,
-    dataDeleted: expected?.dataDeleted ?? false,
   };
 }
 
@@ -142,11 +141,7 @@ export default function StoreLink({ loaderData }: Route.ComponentProps) {
       homeHref={home}
     >
       <p className="leading-relaxed text-pretty text-muted-foreground">
-        {reconnect
-          ? loaderData.dataDeleted
-            ? t.reconnectIntroDeleted
-            : t.reconnectIntro
-          : t.intro}
+        {reconnect ? t.reconnectIntro : t.intro}
       </p>
       {loaderData.expectedStoreName ? (
         <p className="font-medium">{loaderData.expectedStoreName}</p>

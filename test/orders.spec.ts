@@ -2053,7 +2053,6 @@ describe("collegamento negozio eBay", () => {
       expectedStoreName: "venditore",
       reconnect: true,
       fromStores: true,
-      dataDeleted: false,
     });
     const start = async (cookie: string) =>
       (await startStoreLink({
@@ -2675,7 +2674,6 @@ describe("collegamento negozio eBay", () => {
         ebayEnvironment: "production",
         expectedStoreId: null,
         expectedStoreName: null,
-        dataDeleted: false,
       });
     }
     // Da Negozi la schermata riporta lì con «Annulla».
@@ -3348,7 +3346,6 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         importedOrders: 1,
         // Al collegamento l'unico ordine dello storico completa l'importazione.
         history: { days: 30, done: true },
-        dataDeleted: false,
         reminder: null,
         consentExpiring: false,
       },
@@ -3564,11 +3561,13 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     expect(await quotaUsed()).toBe(1);
 
     // Gli ordini riletti non risultano eliminati: scollegando di nuovo si possono eliminare.
-    expect((await listStores(env.DB, seller.userId))[0]).toMatchObject({ dataDeleted: false });
+    expect((await listStores(env.DB, seller.userId))[0]).toMatchObject({
+      id: seller.storeId,
+      connection: "active",
+    });
     await disconnectStore(env.DB, seller.userId, seller.storeId);
     expect((await listStores(env.DB, seller.userId))[0]).toMatchObject({
       connection: "disconnected",
-      dataDeleted: false,
     });
   });
 

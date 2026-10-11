@@ -26,7 +26,6 @@ export type StoreStatus = {
   importedOrders: number;
   /** Finestra dello storico e completamento della sua importazione; null prima del primo avvio. */
   history: { days: number; done: boolean } | null;
-  dataDeleted: boolean;
   /**
    * Invito a ricollegare: prima che il consenso scada e, dopo, per al massimo trenta giorni.
    * Mai per i negozi in pausa, che non leggono eBay.
@@ -71,7 +70,7 @@ export async function listStores(
   const { results } = await db
     .prepare(
       `SELECT s.id, s.ebay_environment, COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id) AS name, s.disconnected_at,
-              s.data_deleted_at, c.store_id AS credentials, c.granted_at, c.refresh_expires_at,
+              c.store_id AS credentials, c.granted_at, c.refresh_expires_at,
               c.rejected_at, ss.last_success_at, ss.history_from, ss.history_until,
               ss.history_done_at, ss.locked_until > ?2 AS syncing,
               (SELECT group_concat(reason) FROM ebay_store_pauses p WHERE p.store_id = s.id)
@@ -90,7 +89,6 @@ export async function listStores(
       ebay_environment: "production" | "sandbox";
       name: string;
       disconnected_at: string | null;
-      data_deleted_at: string | null;
       credentials: string | null;
       granted_at: string | null;
       refresh_expires_at: string | null;
@@ -150,7 +148,6 @@ export async function listStores(
               done: row.history_done_at !== null,
             }
           : null,
-      dataDeleted: row.data_deleted_at !== null,
       reminder,
       // Un negozio scollegato non ha credenziali, quindi risulta già scaduto.
       consentExpiring: !expired && Date.parse(expiresAt!) - at <= expiringNoticeMilliseconds,

@@ -344,8 +344,6 @@ const it = {
       "L’aggiornamento automatico degli ordini non è ancora attivo: FiscalBay legge l’ordine più recente quando colleghi il negozio.",
     disconnectedHint:
       "FiscalBay non legge più questo negozio. Gli ordini già importati restano consultabili; ricollegalo per riprendere.",
-    deletedHint:
-      "FiscalBay non legge più questo negozio e i suoi ordini sono stati eliminati. Ricollegalo per riprendere.",
     done: {
       "store-pause": "Negozio in pausa.",
       "store-resume": "Negozio ripreso.",
@@ -652,8 +650,6 @@ const it = {
     reconnectTitle: "Ricollega un negozio eBay",
     reconnectIntro:
       "Ti portiamo su eBay per rinnovare l’autorizzazione. Accedi con l’account venditore del negozio da ricollegare: FiscalBay lo riconosce e conserva gli ordini già importati.",
-    reconnectIntroDeleted:
-      "Ti portiamo su eBay per autorizzare di nuovo FiscalBay. Accedi con l’account venditore del negozio da ricollegare: gli ordini eliminati non tornano, FiscalBay legge da capo quelli che eBay rende disponibili.",
     intro:
       "Ti portiamo su eBay per autorizzare FiscalBay. Accedi con l’account venditore del negozio da collegare: può essere diverso da quello che usi per entrare in FiscalBay.",
     points: [
@@ -1165,8 +1161,6 @@ const en: AppCopy = {
       "Automatic order updates are not active yet: FiscalBay reads the most recent order when you connect the store.",
     disconnectedHint:
       "FiscalBay no longer reads this store. Orders already imported remain available; reconnect it to resume.",
-    deletedHint:
-      "FiscalBay no longer reads this store and its orders have been deleted. Reconnect it to resume.",
     done: {
       "store-pause": "Store paused.",
       "store-resume": "Store resumed.",
@@ -1459,8 +1453,6 @@ const en: AppCopy = {
     reconnectTitle: "Reconnect an eBay store",
     reconnectIntro:
       "We’ll take you to eBay to renew the authorisation. Sign in with the seller account of the store you want to reconnect: FiscalBay recognises it and keeps the orders already imported.",
-    reconnectIntroDeleted:
-      "We’ll take you to eBay to authorise FiscalBay again. Sign in with the seller account of the store you want to reconnect: deleted orders don’t come back, FiscalBay reads again the ones eBay makes available.",
     intro:
       "We’ll take you to eBay to authorize FiscalBay. Sign in with the seller account of the store you want to connect: it can differ from the one you use to sign in to FiscalBay.",
     points: [

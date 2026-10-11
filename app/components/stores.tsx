@@ -472,7 +472,7 @@ function ReconnectButton({
 
 function syncDescription(store: StoreView, ebayDown: boolean, t: AppCopy) {
   if (store.connection === "disconnected") {
-    return store.dataDeleted ? t.stores.deletedHint : t.stores.disconnectedHint;
+    return t.stores.disconnectedHint;
   }
   if (ebayDown) return t.stores.ebayDown;
   if (store.connection === "active") {
