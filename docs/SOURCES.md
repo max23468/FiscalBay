@@ -297,3 +297,29 @@ Le pagine OpenAI possono essere reindirizzate alla documentazione ufficiale corr
 **Verifica locale:** `pnpm licenses list --prod --json` sul lockfile candidato ha censito licenze permissive, una scelta duale MIT/GPL per `jszip`, MIT+Zlib per `pako` e un solo metadata mancante per `buffers@0.1.1`, risolto dalla provenienza distribuita come MIT. Il risultato qualifica la dipendenza corrente, non sostituisce il notice distributivo né l'inventario di asset e componenti copiati.
 
 **Uso:** §30; M0-10/12, M1 e M7-07.
+
+<a id="s34"></a>
+### S34 · Cloudflare · servizi della piattaforma
+
+- [Prezzi e Workers Logs](https://developers.cloudflare.com/workers/platform/pricing/)
+- [Limiti Workers e Cron Trigger](https://developers.cloudflare.com/workers/platform/limits/)
+- [Workers Logpush](https://developers.cloudflare.com/workers/observability/logs/logpush/)
+- [Lifecycle R2](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)
+- [Rate Limiting](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
+- [Turnstile, verifica lato server](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/)
+- [Workers Analytics Engine](https://developers.cloudflare.com/analytics/analytics-engine/)
+- [Prezzi Email Service](https://developers.cloudflare.com/email-service/platform/pricing/)
+
+**Verifica del 2026-10-11:** Workers Logs conserva 3 giorni sul Free e 7 sul Paid e passa ai prezzi Observability dal 1° dicembre 2026; Logpush dei Workers richiede Paid. Cron Trigger: 5 per account sul Free, 250 sul Paid. Email Sending è in beta e l'invio a destinatari non verificati richiede Paid, con 3.000 email al mese incluse. Token Turnstile monouso, validi 300 secondi, da verificare con Siteverify. Quote e retention di Analytics Engine non rilette: da verificare in M6-08.
+
+**Uso:** §12, §14, §25, §29, §31; M3-12, M6-03, M6-06, M6-10, M6-11, M7-03, M7-09, M7-10, M7-11. Limiti e prezzi cambiano: rileggerli prima di una decisione di piano o dell'apertura pubblica.
+
+<a id="s35"></a>
+### S35 · Trasporto email alternativo
+
+- [Prezzi Resend](https://resend.com/pricing)
+- [Prezzi Brevo](https://www.brevo.com/pricing/)
+
+**Verifica del 2026-10-11:** soltanto confronti di terze parti, non le pagine ufficiali: Resend circa 3.000 email al mese con massimo 100 al giorno e un dominio nel piano gratuito; Brevo circa 300 email al giorno. Valori da rileggere sulle fonti ufficiali prima della scelta.
+
+**Uso:** §14; M6-06. Opzioni aperte accanto a Cloudflare Email Service ([S34](#s34)).

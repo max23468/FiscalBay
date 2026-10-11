@@ -374,6 +374,8 @@ Più identificativi sono rappresentati deterministicamente con tipo/Paese/valore
 
 Storage privato, file con scadenza di **24 ore** e rimozione effettiva. La richiesta conserva spazio, selezione o filtri, opzioni, formato, istante di generazione e riferimento al file; nessun archivio permanente degli export.
 
+Lo storage è un bucket R2 per ambiente, con giurisdizione UE, accessibile solo dal binding del Worker: niente dominio pubblico, `r2.dev` o URL prefirmati. La chiave dell'oggetto è un identificativo opaco senza dati personali. La pulizia applicativa elimina l'oggetto alla scadenza; una regola di lifecycle R2 a un giorno è soltanto la rete di sicurezza, perché opera a giorni e non è puntuale: la validità resta decisa dall'app a ogni download (D166). [S34](SOURCES.md#s34)
+
 Default: invalidazione prudenziale **per workspace**, non grafo file→ordini→versioni. Cancellazioni o modifiche che revocano/riducono un accesso rilevante invalidano gli export dello spazio, anche se alcuni file non erano direttamente coinvolti. Un contatore/revisione di accesso dello spazio, o equivalente semplice, collega richieste e generazioni al contesto valido. Un nuovo ordine o un semplice aggiornamento non sensibile non invalida da solo tutti i file.
 
 Rileggere autorizzazioni e retention quando il job parte, prima che il file diventi scaricabile e a ogni download. Un job avviato prima di una revoca non può promuovere un file dopo di essa. Per scadenze temporali note, limitare la validità effettiva del file al primo termine rilevante del formato, del diritto o dello storico incluso, anche prima delle 24 ore: non dipendere dalla puntualità del job di cancellazione. Se l’ambito non può più essere verificato, negare il vecchio file e proporre rigenerazione su dati attualmente autorizzati. La UI spiega la rigenerazione senza esporre dettagli sensibili.
@@ -411,6 +413,16 @@ Il form di supporto include un riepilogo diagnostico minimo visibile al merchant
 Email operative per Auth, sicurezza e problemi importanti a tutti i piani; niente digest ordini via email nella 2.0. Stripe gestisce comunicazioni di pagamento/rinnovo/carte/rimborso; evitare doppioni FiscalBay. Avviso prodotto solo se aggiunge informazione utile.
 
 Indirizzi umani iCloud+: **info@fiscalbay.it**, **supporto@fiscalbay.it**; terzo indirizzo libero, nessuna casella privacy/sicurezza obbligatoria. **supporto@** serve soltanto all’assistenza clienti; ogni altro contatto (privacy, sicurezza, contatti sviluppatore e di provider, comunicazioni amministrative) usa **info@**. **noreply@fiscalbay.it** è un mittente transazionale separato, non SMTP iCloud per invii automatici massivi. Configurare Reply-To appropriato e gestione risposte involontarie. Provider transazionale scelto nel perimetro economico approvato; nessun nuovo abbonamento implicito.
+
+Il trasporto di **noreply@** è una decisione aperta dell'owner fra tre opzioni, tutte dietro lo stesso modulo email applicativo che Better Auth e il resto dell'app già chiamano, così che la scelta cambi soltanto l'adattatore di invio:
+
+| Opzione | Condizione | Note |
+|---|---|---|
+| Cloudflare Email Service | Workers Paid, 3.000 email al mese incluse | Già integrato con il binding `send_email`; Email Sending in beta, accettata dall'owner. Sul Free invia soltanto agli indirizzi verificati dell'account |
+| Resend | Piano gratuito o a pagamento | API HTTP; nuovo fornitore e destinatario di dati personali |
+| Brevo | Piano gratuito o a pagamento | API HTTP, operatore con sede nell'UE; nuovo fornitore e destinatario di dati personali |
+
+Quote, limiti giornalieri, domini e condizioni dei piani gratuiti si rileggono sulle pagine ufficiali al momento della scelta ([S35](SOURCES.md#s35)); un provider esterno entra nell'inventario dei trattamenti e nell'informativa. Finché la scelta manca, registrazione, verifica e reset funzionano soltanto verso gli indirizzi verificati nell'account Cloudflare e la registrazione pubblica resta chiusa. Le email destinate all'owner e a `supporto@` possono usare gratuitamente gli indirizzi verificati su qualsiasi piano. Better Auth genera link e token ma delega l'invio a questo trasporto. [S34](SOURCES.md#s34)
 
 Supporto IT/EN, pagina pubblica con FAQ/form e pannello in-app con contenuti essenziali. Nessun ticketing completo, chatbot o chat live. Form raccoglie il minimo contesto utile, account e consenso/accesso necessario; non invia PII fiscali automaticamente. No SLA pubblico, obiettivo qualitativo di risposta rapida. Richieste MoR con scadenza prioritarie su supporto e alert admin.
 
@@ -608,6 +620,23 @@ Una sola fonte autorevole per responsabilità: niente D1+Postgres per duplicare 
 
 Inventario read-only delle risorse condivise in M0; nessuna migrazione di altri prodotti o modifica di keyset comuni senza mandato. Scelta e costi al checkpoint di fine M0. Le alternative scartate restano motivazioni nel registro, non implementazioni di riserva da manutenere.
 
+**Servizi Cloudflare dell'assetto (D166).** Ogni servizio ha una sola responsabilità e un binding separato per test e Production.
+
+| Servizio | Uso in FiscalBay |
+|---|---|
+| Workers | Web app, ingresso webhook, consumer Queue e lavoro pianificato in un solo Worker per ambiente |
+| D1 (UE) | Unica fonte autorevole di dati applicativi, sessioni, checkpoint, ricevute, contatori per indirizzo e audit |
+| Queues e DLQ | Consegna, ritardi, retry e dead-letter di eventi e lavori ([§11](#s11)) |
+| Cron Triggers | Un solo trigger per ambiente che smista il lavoro periodico per `scheduledTime` ([§31](#s31)) |
+| R2 (UE) | File export a 24 ore ([§12.1](#s12)) e archivio dei log a 90 giorni ([§31](#s31)) |
+| Rate Limiting | Primo filtro per IP e percorso davanti ad Auth e operazioni costose ([§29](#s29)) |
+| Turnstile | Verifica anti-automazione su registrazione, richieste di link email e form di supporto ([§29](#s29)) |
+| Analytics Engine | Metriche tecniche aggregate e budget di prestazione, senza dati personali ([§31](#s31)) |
+| Email Service | Mittente transazionale `noreply@` attuale e invio gratuito agli indirizzi verificati; trasporto definitivo fra Cloudflare, Resend e Brevo ancora da scegliere ([§14](#s14)) |
+| Workers Logs e Logpush | Diagnosi recente nella dashboard ed esportazione verso R2 ([§31](#s31)) |
+
+Non adottati: KV, perché le letture possono restare non aggiornate mentre revoche e sessioni valgono subito; Durable Objects, finché il blocco per negozio in D1 basta; Workflows, perché duplicherebbe Queue e checkpoint come secondo orchestratore; Hyperdrive, che serve solo a PostgreSQL; Images, perché le immagini restano sugli host eBay ([§29](#s29)); Email Routing sull'apex, perché i suoi MX confliggono con iCloud+ ([§24](#s24)). Riaprirli richiede un rischio dimostrato che le primitive adottate non coprono.
+
 **Ingresso leggero per webhook e callback.** Le route esatte dei webhook e delle callback server-to-server dei provider (Stripe, eBay `ORDER_CONFIRMATION` e cancellazione account, Telegram) sono gestite dall'entrypoint Worker prima di React Router: verificano metodo, dimensione e firma sul corpo grezzo, registrano un claim idempotente in D1 e pubblicano in coda un messaggio con soli identificativi, senza payload, sessioni o token. La risposta positiva al provider parte soltanto dopo che la coda ha accettato il messaggio; `waitUntil` da solo non basta perché non garantisce la riconsegna. Il consumer ricostruisce il contesto da D1 e usa retry e dead-letter nativi. La build React Router si carica al primo accesso applicativo e resta esclusa dal percorso dei webhook; la CPU di questi ingressi deve essere misurata sul Worker entro il limite Workers Free, senza dedurla dalla build o dal caricamento dei moduli. Per eventi ad alta frequenza e già confermati è ammessa una memoria di breve durata nell'isolate per evitare letture D1 ripetute, mai come fonte autorevole. Le callback OAuth aperte dal browser restano nell'applicazione e nel sistema Auth.
 
 <a id="s26"></a>
@@ -712,11 +741,15 @@ Il threat model minimo è la tabella seguente (D147): ogni intervento che introd
 | Injection da titoli e CSV | Escaping in pagina, formule neutralizzate negli export, CSP | CSV con formule neutralizzate; rendering React con escaping; XML Trading oltre limite, con NUL o con `DOCTYPE`/`ENTITY` rifiutato prima del parsing; immagini solo da host eBay HTTPS in formato raster | CSP assente: da introdurre e provare entro M7 |
 | Privilege escalation admin | Ruolo admin esplicito, MFA e nuova verifica per azioni sensibili | Confine admin e passkey UV provati con asserzioni sintetiche, revoca del ruolo applicata alla richiesta successiva | Enrollment owner e console completa M6 |
 | Ripristino di revoche obsolete | Marker di erasure e revoca riapplicati dopo un restore ([§32.1](#s32)) | Nessuna prova conclusiva sul candidato finale | Retention M3, erasure M7 e drill pre-go-live M9 |
-| Supply chain | Lockfile e versioni fissate, età minima dei pacchetti, Action a SHA, analisi statica | `minimumReleaseAge` e `trustPolicy`, Action a SHA, Dependabot, dependency review e CodeQL | Licenze e codice copiato M7 |
+| Supply chain | Lockfile e versioni fissate, rifiuto di firme o provenance perse, Action a SHA, analisi statica; nessuna età minima dei pacchetti dal 2026-10-08 ([§26](#s26)) | `trustPolicy`, `minimumReleaseAge: 0`, Action a SHA, Dependabot, dependency review e CodeQL | Licenze e codice copiato M7 |
 | Prompt injection nei tool | Dati esterni trattati come contenuto, permessi MCP minimi, separazione test/Production | Regola in AGENTS e in questo capitolo | Verifica in M7 |
 | Perdita o esposizione di segreti | Custodia fuori repository, segreti elencati in `secrets.required` di ogni configurazione di deploy, nessun segreto nel client | Deploy test e Production che rifiutano un segreto mancante; pagina provvisoria che li conserva | Scadenze M7, readback alla pubblicazione M9 |
 
 Misure: scope minimi effettivamente necessari; state/nonce/PKCE dove supportati e corretti per il provider; redirect allowlist; cookie/sessioni sicure e CSRF/origin check sulle mutation; rate limit di login e operazioni costose; token cifrati e rotazione; firme webhook su corpo originale e replay protection; validazione input/output; CSP e escaping; download autorizzati; nessun segreto build-time esportato al browser.
+
+**Limiti di richiesta e anti-automazione (D166).** Il binding Rate Limiting di Workers è il primo filtro per IP e percorso su Auth, richieste di link email, form di supporto, export e altre operazioni costose: non scrive su D1 e scarta il traffico anomalo prima del lavoro applicativo. Il suo contatore è locale al data center e approssimato, quindi non sostituisce i contatori D1 per indirizzo email e operazione, che restano dove serve un limite coerente per account. Il superamento risponde 429 con `Retry-After` e `no-store`, senza rivelare se l'account esiste.
+
+Turnstile protegge registrazione con password, richiesta di reset, reinvio dei link email e form di supporto. Non si applica a passkey, Google, eBay, webhook o callback dei provider. Il token è verificato lato server con Siteverify, accettato una sola volta entro i cinque minuti di validità e confrontato con hostname e azione attesi; senza esito positivo, anche per indisponibilità di Siteverify, la richiesta è rifiutata con un messaggio che permette di riprovare. Widget e chiavi sono separati per test e Production; la CSP ammette soltanto l'origine del widget. Turnstile entra nell'inventario delle tecnologie e nell'informativa ([§30](#s30)). [S34](SOURCES.md#s34)
 
 Dati fiscali non presenti in analytics, log automatici, URL pubblici, issue o Git. Error tracing elimina payload/request body sensibili. Fetch immagini/URL esterni solo su domini/formati qualificati, evitando SSRF e contenuti attivi. XML Trading con parser sicuro senza entità esterne. Non includere l'intera risposta provider in un messaggio di errore.
 
@@ -760,11 +793,13 @@ Pseudonimizzato non significa anonimo. Gli ultimi casi richiedono inventario di 
 
 Cancellazione account: riautenticazione e conferma forte, stop immediato accesso/sync/notifiche e rinnovi, avvio cancellazione senza ripensamento. Se Stripe non conferma stop rinnovi, conservare solo job/tombstone e riferimenti minimi necessari a completarlo, alertare: non cancellare il raccordo che impedisce ulteriori addebiti. Non obbligare il merchant a disdire a mano. Proporre export prima della conferma senza vincolarlo.
 
+La conferma via email usa `sendDeleteAccountVerification` di Better Auth, ma il callback di conferma avvia soltanto il job di cancellazione di FiscalBay: la cancellazione nativa di Better Auth non elimina l'utente nella stessa richiesta, prima dello stop dei rinnovi e dei marker. L'utente Auth viene eliminato dal job, dopo gli altri passaggi; l'email di cancellazione completata parte dal modulo email applicativo ([M6-12](#m6-12)).
+
 Scollega vs Scollega ed elimina negozio separati. Eliminazioni richieste eBay/buyer autorevoli prevalgono sullo storico commerciale. L’accesso cessa quando scade il diritto/la finestra; la pulizia fisica segue il job deterministico, normalmente entro 24 ore dalla scadenza prevista, salvo termini prevalenti; nessun clone in suggerimenti/versioni/export già invalidati. Backup non equivale a diritto di restaurare dati cancellati: tombstone/replay delle revoche prima di riaprire servizio, oppure riconciliazione conservativa.
 
 Le letture applicano scadenza e revoca anche se il job di pulizia non è ancora passato: dettaglio, ricerca, suggerimenti, generazione e download export non estendono la visibilità dei dati ancora fisicamente presenti. Provare i confini temporali con pulizia sospesa e le revoche durante richieste concorrenti.
 
-Privacy e Termini IT/EN, italiano prevalente se appropriato; informativa cookie separata solo quando necessaria, comunque inventario delle tecnologie reali. Trasparenza fornitori e cosa leggiamo/non facciamo; diritto di recesso e tutela consumatori da qualificare, senza confondere assenza di garanzia commerciale con assenza di diritti obbligatori. Dati legali reali di Temisfera raccolti privatamente, non inventati.
+Privacy e Termini IT/EN, italiano prevalente se appropriato; informativa cookie separata solo quando necessaria, comunque inventario delle tecnologie reali, incluso Turnstile ([§29](#s29)). Trasparenza fornitori e cosa leggiamo/non facciamo; diritto di recesso e tutela consumatori da qualificare, senza confondere assenza di garanzia commerciale con assenza di diritti obbligatori. Dati legali reali di Temisfera raccolti privatamente, non inventati.
 
 Nuovo codice originale proprietario/all rights reserved, repo pubblico senza promessa community. Riuso legacy già MIT e componenti terzi conserva condizioni/notices pertinenti; non revocare licenze già concesse. Registro provenienza dei componenti, licenze miste/Pro valutate file per file. Nome/logo eBay e FiscalBay passano gate marchi/licenza API prima del lancio, nessun cambio nome automatico.
 
@@ -779,19 +814,25 @@ Le richieste di cancellazione finanziaria ricevute tramite Stripe/Link seguono a
 
 Log strutturati con correlation ID; contatori/istogrammi per esito e latenza, senza CF/buyer nei label. Audit separato dai log ordinari. Conservazione 90 giorni/un anno qualificata contro quote/costi: la retention breve della dashboard provider non soddisfa da sola la scelta. Preferire strumenti nativi e dati minimizzati; monitoring esterno soltanto se utile e autorizzato. Il polling ordinario riuscito alimenta contatori aggregati e ultimo stato utile, non un dump dettagliato per ogni ciclo conservato 90 giorni. Dettaglio per errori, sicurezza e riconciliazione quando necessario; le durate approvate restano invariate.
 
+**Conservazione effettiva (D166).** Workers Logs serve alla diagnosi recente: conserva al massimo 3 giorni sul Free e 7 sul Paid. I 90 giorni dei log ordinari si ottengono con Workers Logpush verso un bucket R2 dedicato, con giurisdizione UE, accesso limitato all'owner e regola di lifecycle a 90 giorni; i campi esportati sono gli stessi dell'allowlist sotto, senza payload o messaggi liberi. Logpush dei Workers richiede Workers Paid: finché quella decisione è in sospeso, il requisito dei 90 giorni non è soddisfatto e [M7-04](#m7-04) non si chiude. L'audit sensibile a un anno non dipende dai log: vive in una tabella D1 minimizzata, con pulizia periodica alla scadenza e nessun dato fiscale o buyer. Dal 1° dicembre 2026 Workers Logs adotta i prezzi Cloudflare Observability: soglie e costi si rileggono prima di [M7-03](#m7-03). [S34](SOURCES.md#s34)
+
+**Metriche tecniche (D166).** Contatori e istogrammi per esito e latenza, budget di prestazione e consumo per fase (Auth, D1, eBay, rendering) si scrivono su Workers Analytics Engine, senza CF, buyer, email, ID utente o URL con query fra i campi e gli indici. Analytics Engine non deduplica: i KPI di business che devono resistere a retry, schede concorrenti e reconnect restano eventi deduplicati in D1. Quote, retention e costo si verificano sulla documentazione corrente prima dell'adozione in [M6-08](#m6-08), senza estendere le durate approvate.
+
+**Lavoro pianificato.** Un solo Cron Trigger per ambiente, con cadenza scelta in [M3-04](#m3-04) e compatibile con il target 10/30, smista sync, ripresa delle ricevute non accodate, pulizie di retention, riconciliazioni e controlli periodici in base a `scheduledTime`; il lavoro pesante passa dalla Queue invece di restare nell'invocazione del cron. Sul Free l'account condiviso ha 5 trigger in tutto: con 2 usati da CF Ready (indicazione owner del 2026-10-11) e uno per ciascun ambiente FiscalBay ne resta uno di riserva. Un terzo trigger FiscalBay (per esempio giornaliero in Production) non aggiunge capacità, perché ogni lavoro pesante passa dalla coda, e consumerebbe l'ultimo posto dell'account: si valuta soltanto se le misure di [M3-12](#m3-12) mostrano che lo smistamento ordinario non riesce a programmare i compiti giornalieri. I riepiloghi Telegram usano la granularità del trigger.
+
 Alert amministrativi azionabili o aggregati, non ogni errore transitorio; Telegram primario ed email alternativa, deduplica e messaggio di rientro. P1 sicurezza/corruzione/billing errato/indisponibilità sostanziale; P2 funzione importante degradata; P3 problema circoscritto. Escalation del MoR e richieste soggette a finestra temporale prioritarie. Un account email iCloud non deve essere l'unico controllo invisibile di incidenti critici.
 
 Ogni log strutturato contiene soltanto campi in allowlist: evento, classe, istante, correlation ID, codice errore stabile e metadati tecnici. Mai URL con query, payload, header, token, CF o dati buyer. Errori, webhook e sicurezza sono registrati sempre; gli eventi ordinari riusciti possono essere campionati. Le query di diagnosi (errori per codice, webhook, correlation ID, scritture di eventi fallite) e le soglie iniziali P1/P2 sono documentate nel runbook insieme al percorso che le legge. Il correlation ID si copia nella ricevuta dell'incidente, non i log completi.
 
 **Quote e stop point.** Nessun controllo automatico di capacità dopo il deploy test (D158): la CPU per invocazione si legge quando serve nei log del Worker, e la capacità reale si misura in M7. Il runbook elenca per Worker, D1 e Queue le quote di riferimento e gli stop point operativi; al raggiungimento si fermano nuovi ingressi, si verifica a quale progetto dell'account appartiene il consumo e si sceglie fra ottimizzazione e cambio piano con l'owner.
 
-Le soglie di attenzione Free approvate in M0 sono 80.000 richieste dinamiche/giorno, CPU p95 di 8 ms, 8.000 operazioni Queue/giorno, 4 milioni di righe D1 lette/giorno, 80.000 scritte/giorno, 4 GB D1 complessivi, 160.000 eventi log/giorno o necessità di Time Travel oltre 7 giorni. Sono riferimenti iniziali da riconfermare con limiti per singola risorsa e consumo condiviso corrente prima di cambiare piano o aprire al pubblico, non un controllo al deploy né autorizzazione automatica a costi. Il budget M0 di un messaggio Queue per polling copriva soltanto 33 negozi nel mix un Premium ogni due Free entro l'80% della quota: il target di 150 richiede misure e assetto adeguati.
+Le soglie di attenzione Free approvate in M0 sono 80.000 richieste dinamiche/giorno, CPU p95 di 8 ms, 8.000 operazioni Queue/giorno, 4 milioni di righe D1 lette/giorno, 80.000 scritte/giorno, 4 GB D1 complessivi, 160.000 eventi log/giorno, un quinto Cron Trigger nell'account o necessità di Time Travel oltre 7 giorni. Sono riferimenti iniziali da riconfermare con limiti per singola risorsa e consumo condiviso corrente prima di cambiare piano o aprire al pubblico, non un controllo al deploy né autorizzazione automatica a costi. Il budget M0 di un messaggio Queue per polling copriva soltanto 33 negozi nel mix un Premium ogni due Free entro l'80% della quota: il target di 150 richiede misure e assetto adeguati.
 
 Metriche prodotto aggregate iniziali: signup, email verificata, primo negozio, prima sync, primo CF trovato, primo sblocco, trial, Free→Premium, trial→acquisto, cancellazioni, attivi, error rate, ritardo sync, uso quota. Nessun session replay o funnel UI dettagliato nella 2.0; eventuale ampliamento approvato dopo.
 
 Distinguere anche il primo ordine disponibile dalla prima sync riuscita a zero ordini. Misurare il passaggio fra account verificato, negozio collegato, prima sync e primo ordine con eventi business deduplicati per spazio, resistenti a retry, schede concorrenti e reconnect. Esporre conteggi aggregati e tempi fra passaggi con denominatore e finestra espliciti; nessun tracciamento di ogni clic o nuova raccolta di dati buyer.
 
-Misurare separatamente Auth, D1, chiamate eBay e rendering/browser, con nomi e campi allowlistati e campionamento proporzionato. Le metriche distinguono latenza remota, tempo server e resa client; i report client hanno validazione, limite di dimensione e protezione da duplicazioni/abusi. Non includere query, URL con dati personali o identificativi fiscali. Usare questi dati per verificare i budget di prestazione, senza aggiungere un provider di monitoraggio per default.
+Misurare separatamente Auth, D1, chiamate eBay e rendering/browser, con nomi e campi allowlistati e campionamento proporzionato. Le metriche distinguono latenza remota, tempo server e resa client; i report client hanno validazione, limite di dimensione e protezione da duplicazioni/abusi. Non includere query, URL con dati personali o identificativi fiscali. Usare questi dati, scritti su Analytics Engine, per verificare i budget di prestazione, senza aggiungere un provider di monitoraggio esterno per default.
 
 Definizioni: merchant operativo = spazio con negozio collegato e sync riuscita negli ultimi 30 giorni; **non è l'attività umana** usata per sospendere Free. Metriche di conversione per coorte/denominatore/periodo, distinguendo trial ancora aperti. Error rate = tentativi falliti / tentativi definiti, senza mescolare retry e ordini; lag = tempo dalla disponibilità fonte quando noto, altrimenti misurare esplicitamente la proxy osservabile. Paganti distinti da omaggi; ricavo ricorrente normalizza annuale ma esclude lifetime; mostrare cassa, tasse e fee separatamente senza presentare il payout come utile.
 
@@ -993,7 +1034,7 @@ Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o
 | Sandbox e dati fiscali | Supporto Sandbox distribuito con [#273](https://github.com/max23468/FiscalBay/pull/273), migration e smoke attestati dalla [run di #274](https://github.com/max23468/FiscalBay/actions/runs/37377929129). I pagamenti Sandbox provati sono falliti; l'alternativa `CashOnPickup` è stata rimossa da eBay per managed payments e l'acquisto confermato resta non pagato, assente da Fulfillment. Buy API esclusa dall'owner. Serve pagamento Sandbox riuscito e importazione, oppure soluzione concordata. La consultazione Production autorizzata è stata qualificata sul campione fiscale di [M3-10](#m3-10); non prova il pagamento o l'import Sandbox. Nessun permesso implicito di modificare ordini Production o introdurre import Trading. |
 | Login eBay | Prove reali su Production in M8 (D160), con checklist sotto. Il readback D1 del 2026-10-06 attesta un'identità eBay collegata all'utente owner con password/Google; la precedente registrazione descriveva un utente separato non verificato. Discrepanza non risolta: non vale come prova di linking. Keyset e RuName non riletti dal portale Developers. |
 | Identità e admin | Collaudo passkey fisico Safari/iOS dichiarato positivo dall'owner il 2026-09-29, senza dispositivo/versione specificati; cambio email remoto escluso dall'owner il 2026-09-30, prove locali conservate. MFA admin provata con asserzioni sintetiche: quando serve la console, scegliere account owner, registrare due passkey indipendenti e concedere il ruolo secondo §7. |
-| Piano e costi | Workers Paid esistente utilizzabile fino al 20 ottobre 2026, senza downgrade anticipato o rinnovo autorizzato. Rileggere piano, quote condivise, CPU e Queue reale prima dell'apertura pubblica; invio Auth a destinatari arbitrari richiede Paid. Sul test il cron con l'acquisizione ordini ha usato 158-287 ms di CPU per esecuzione (2026-10-08), oltre i 10 ms del Free: prima del 20 ottobre decidere fra Paid e acquisizione distribuita in coda con budget minori ([M3-04](#m3-04)). Le misure M0 non autorizzano capacità pubblica né costi. |
+| Piano e costi | Workers Paid esistente utilizzabile fino al 20 ottobre 2026, senza downgrade anticipato o rinnovo autorizzato. Rileggere piano, quote condivise, CPU e Queue reale prima dell'apertura pubblica. Dipendono da Paid, decisione dell'owner in sospeso: Logpush dei log a 90 giorni ([§31](#s31)), Time Travel oltre 7 giorni e CPU oltre 10 ms. Email a destinatari non verificati: scelta aperta fra Cloudflare con Paid, Resend e Brevo ([§14](#s14)); senza una scelta la registrazione pubblica resta chiusa. Sul test il cron con l'acquisizione ordini ha usato 158-287 ms di CPU per esecuzione (2026-10-08), oltre i 10 ms del Free: prima del 20 ottobre decidere fra Paid e acquisizione distribuita in coda con budget minori ([M3-04](#m3-04)). Le misure M0 non autorizzano capacità pubblica né costi. |
 | Cutover provider | OAuth Production sul keyset `botCF` salvato ma disattivato: sul keyset un solo RuName può averlo attivo ed è quello del test. Scegliere al cutover fra keyset dedicato al test e perdita del login eBay sul test. Non modificare `botCF 2` (SyncBay) o il callback condiviso con Hub Fatture. Branding finale Checkout ancora da osservare. |
 | Dati e risorse di prova | Eliminare prima del go-live utenti e dati reali controllati nella D1 di test, compresi ordine e identificativo fiscale ratificati dall'owner il 2026-09-23, e la copia recuperabile con Time Travel. Account sintetico di collaudo ammesso solo nel test. Better Auth Infrastructure rimosso dal runtime (D152), progetto Starter residuo da eliminare se inutile; Supabase escluso già eliminato. Inventario privato fuori checkout: `FiscalBay/m0-inventory`. |
 | Legacy 1.x | Ultimo inventario registrato: VPS `fiscalbay-bot`, checkout `/opt/fiscalbay`, autodeploy disabilitato; bot `fiscalbay-bot`, callback `fiscalbay-oauth` e timer `reconcile`, `alertcheck`, `external-healthcheck`, `backup`, `log-maintenance`, `restore-drill`, `duckdns` ancora operativi. Owner responsabile del cutover: callback cancellazione 2.0 e consumatore Hub Fatture coordinati in M7, poller fermato prima del webhook bot live, dismissione conclusiva in M9. Nessuno spegnimento attestato da questa migrazione. |
@@ -1436,6 +1477,8 @@ Provare risposte tardive fra sync, refresh e reconnect con revisione attesa o co
 
 La schermata Negozi di M2-07 mostra frequenza prevista, storico, stato dell'import, ultimi aggiornamenti, «Sincronizza» e «Reimporta» quando la route reale fornisce `targetMinutes`, `historyDays` e `recent`: storico e stato dell'import arrivano da [M3-03](#m3-03), `targetMinutes` e `recent` sono ancora vuoti. Il budget fisso del cron di M3-03 lascia il posto alla cadenza per piano.
 
+Lo smistamento del lavoro periodico e l'esecuzione in coda sono in [M3-12](#m3-12); qui si definiscono cadenza per piano, priorità ed equità che lo smistamento applica.
+
 Usare consegna/retry/ritardi/DLQ del servizio scelto. Stato applicativo solo per checkpoint, deduplica e recupero di effetti di business; outbox/lease soltanto se necessari, non un secondo orchestratore.
 
 **Per chiudere:** M3-11; `ORDER_CONFIRMATION` entra dall'ingresso Worker condiviso.
@@ -1532,6 +1575,17 @@ Il webhook Stripe preliminare non va attivato come route React Router: l'ingress
 **Verifica locale:** `pnpm verify` superato con 395 test applicativi; collaudo Chromium locale completo con 317 prove superate e la sola prova dell'account remoto esclusa. Mutation test sull'intero ingresso, sulle firme eBay e sui tratti di acquisizione modificati: 394 mutanti uccisi, quattro equivalenze motivate, nessun sopravvissuto, timeout, errore o caso scoperto. Le prove coprono anche revoca durante la lettura, scadenza token, limiti di budget e retention, collisioni degli identificativi e ripresa dopo crash.
 
 **Qualificazione provider in corso:** il keyset FiscalBay accede al topic `ORDER_CONFIRMATION` sia Sandbox sia Production; configurazione delle notifiche predisposta nei due ambienti. I negozi `testuser_venditore-fiscalbay` e `numisleo` hanno accesso alle sottoscrizioni e non ne avevano di preesistenti. Sul solo test Cloudflare sono predisposte la Queue, la DLQ e la custodia del token challenge. Restano challenge sul Worker pubblicato, sottoscrizioni e consegne eBay, ripresa della coda e CPU nei log del Worker. Il task resta aperto fino alle prove richieste; nessun avvio commerciale Production.
+
+<a id="m3-12"></a>
+#### M3-12 · Smistamento del lavoro pianificato
+
+**Stato:** Da completare · **Prerequisiti:** M3-03, M3-11 · **Contratto:** [§31](#s31) · [§11](#s11)
+
+**Per chiudere:** M3-04 per cadenza e priorità per piano.
+
+Un solo Cron Trigger per ambiente sceglie in base a `scheduledTime` il lavoro dovuto (sync per piano, ricevute non accodate, pulizie di retention, riconciliazioni, controlli periodici) e lo accoda; il consumer lo esegue con budget limitati per invocazione. L'acquisizione ordini esce dall'invocazione del cron. Il secondo trigger dell'account resta di riserva ([§31](#s31)).
+
+**Criterio di completamento:** CPU del cron e di ogni messaggio misurata nei log del Worker sul test ed entro i 10 ms del Free per invocazione ordinaria; compiti giornalieri eseguiti una volta anche con trigger saltati, ripetuti o sovrapposti; nessun negozio affamato da altri. Esito della valutazione di un terzo trigger registrato qui.
 
 <a id="m4"></a>
 ### M4 · UX completa Ordini, Negozi e Impostazioni
@@ -1825,9 +1879,11 @@ Campi CF/P.IVA/SKU tipizzati testo nel file XLSX; verificare i totali anche in o
 
 Provare generazione e download con pulizia fisica sospesa: file scaduti e accessi revocati rimangono negati anche se i byte esistono ancora. Includere scadenza o revoca durante la generazione e il download secondo §30.
 
-**Stato:** Da completare · **Prerequisiti:** M6-01, M6-02 · **Contratto:** [§12](#s12) · [§30](#s30)
+**Stato:** Da completare · **Prerequisiti:** M6-01, M6-02, M6-10 · **Contratto:** [§12](#s12) · [§30](#s30)
 
 Implementare storage privato con scadenza a 24 ore, download autenticato, ZIP del profilo JSON/CSV e notifica dei job pronti, senza duplicare documenti di pagamento.
+
+Salva e trasmette i file tramite lo storage di [M6-10](#m6-10).
 
 **Criterio di completamento:** Test su revisione workspace prima della generazione/pubblicazione/download: una revoca o cancellazione invalida anche gli export pendenti. Coprire concorrenza e scadenza naturale dei diritti/dati prima del job di pulizia; rigenerare invece di mantenere un grafo file/versioni. Nessun bypass via link bearer o sblocco implicito.
 
@@ -1858,7 +1914,9 @@ Configurare flag tipizzati, soglie di attenzione, efficacia temporale delle modi
 
 Qualificare info/supporto iCloud e noreply transazionale, template Auth/servizio IT/EN, form/FAQ, consenso/revoca e gestione mancata consegna.
 
-Integrare il riepilogo diagnostico visibile e allowlistato del §14. Provare isolamento fra spazi, assenza di CF/token/payload e invio del form anche con diagnostica indisponibile; includere il riepilogo nella gestione della retention del supporto.
+Integrare il riepilogo diagnostico visibile e allowlistato del §14. Provare isolamento fra spazi, assenza di CF/token/payload e invio del form anche con diagnostica indisponibile; includere il riepilogo nella gestione della retention del supporto. Il form usa Rate Limiting di [M7-09](#m7-09) e Turnstile di [M7-10](#m7-10).
+
+**Per chiudere:** trasporto email scelto dall'owner fra Cloudflare con Paid, Resend e Brevo ([§14](#s14)).
 
 **Criterio di completamento:** Ricezione e risposte funzionano, marketing separato dal servizio; nessun CF copiato automaticamente nei ticket e nessun digest ordini via email nella 2.0.
 
@@ -1892,6 +1950,8 @@ Successi ordinari aggregati, senza record dettagliato di ogni polling nei log a 
 
 Deduplicare i primi passaggi account verificato→negozio→sync→ordine anche con retry, schede concorrenti e reconnect; distinguere sync riuscita a zero ordini. Aggregare conteggi e tempi con denominatori espliciti. Integrare le misure Auth/D1/eBay/browser avviate in M4-01, con report limitati e allowlistati, senza tracciamento dei clic.
 
+Le metriche tecniche arrivano da [M6-11](#m6-11); i KPI di business restano eventi deduplicati in D1 ([§31](#s31)).
+
 <a id="m6-09"></a>
 #### M6-09 · Control Center Telegram dell'owner
 
@@ -1900,6 +1960,37 @@ Deduplicare i primi passaggi account verificato→negozio→sync→ordine anche 
 Il punto si sovrappone a console admin (M6-04), KPI (M6-08), bot Telegram (M5-09) e alert (M7-04), quindi ha un task proprio. Bot privato dell'owner con comandi di sola lettura sulle stesse query aggregate della console, navigazione inline e aggiornamento dello stesso messaggio; webhook tramite l'ingresso di M3-11 con verifica di secret, chat privata e identità owner; notifiche incidenti deduplicate all'apertura e alla risoluzione. Nessun CF o dato buyer.
 
 **Criterio di completamento:** Chat o utente diversi ignorati senza risposta informativa; stesso update ripetuto senza doppio effetto; ogni comando coerente con la vista console corrispondente; eventuale azione di scrittura prevista da §15 con conferma e audit. Readback del webhook e del menu comandi nell'ambiente test, bot test separato.
+
+<a id="m6-10"></a>
+#### M6-10 · Storage R2 dei file temporanei
+
+**Stato:** Da completare · **Prerequisiti:** M1-02 · **Contratto:** [§12](#s12) · [§25](#s25) · [§30](#s30)
+
+Creare per test e Production un bucket R2 con giurisdizione UE, collegato solo dal binding del Worker, senza dominio pubblico, `r2.dev` o URL prefirmati, e con lifecycle a un giorno come rete di sicurezza ([§12.1](#s12)). Modulo di persistenza unico per scrivere, leggere in streaming ed eliminare oggetti con chiavi opache, riusato da export e portabilità.
+
+**Criterio di completamento:** Il download passa dal Worker dopo sessione, revisione dello spazio e scadenza; un oggetto scaduto o revocato non si scarica anche se esiste ancora; nessun dato personale nelle chiavi; readback di bucket, giurisdizione, lifecycle e assenza di accesso pubblico sul test.
+
+<a id="m6-11"></a>
+#### M6-11 · Metriche tecniche su Analytics Engine
+
+**Stato:** Da completare · **Prerequisiti:** M1-04 · **Contratto:** [§31](#s31)
+
+**Per chiudere:** M4-01 per le misure del browser.
+
+Verificare quote, retention e costo correnti, poi scrivere su Workers Analytics Engine contatori e istogrammi per esito e latenza, con le fasi Auth, D1, eBay e rendering separate, e un dataset per ambiente. Query per i budget di prestazione e per la console di M6-04.
+
+**Criterio di completamento:** Test che nessun campo o indice contenga CF, buyer, email, ID utente o URL con query; campionamento dichiarato; query riproducibili sul test. Nessun KPI che richieda deduplica letto da Analytics Engine.
+
+<a id="m6-12"></a>
+#### M6-12 · Cancellazione dell'account
+
+**Stato:** Da completare · **Prerequisiti:** M6-03, M5-05 · **Contratto:** [§30](#s30) · [§32](#s32)
+
+**Per chiudere:** M7-02 per la verifica trasversale dell'erasure.
+
+Percorso self-service secondo [§30](#s30) e D163: riautenticazione, export proposto senza obbligo, conferma forte. La conferma via email usa `sendDeleteAccountVerification` di Better Auth; il suo callback avvia soltanto il job FiscalBay, che ferma accesso, sync, notifiche e rinnovi Stripe, scrive i marker di cancellazione, elimina i dati operativi e per ultimo l'utente Auth. L'email di cancellazione completata parte dal modulo email applicativo alla fine del job. Se Stripe non conferma lo stop dei rinnovi restano soltanto job, marker e riferimenti minimi, con alert all'owner.
+
+**Criterio di completamento:** Nessuna eliminazione dell'utente nella richiesta di conferma; job ripreso dopo crash o retry senza doppi effetti; nessun rinnovo dopo la conferma; vecchi job, webhook e restore non ricreano i dati; link di conferma scaduto o riusato rifiutato.
 
 <a id="m7"></a>
 ### M7 · Hardening, privacy, performance e recovery readiness
@@ -1949,6 +2040,8 @@ Separare nei risultati tempi Auth, D1, eBay e rendering/browser usando la strume
 
 Integrato da CF Ready e Hub Fatture: runbook con quote di riferimento e stop point per Worker, D1 e Queue, e con la procedura al raggiungimento (fermare nuovi ingressi, attribuire il consumo al progetto giusto dell'account, scegliere con l'owner fra ottimizzazione e cambio piano). Il controllo CPU al deploy resta quello di M1-10.
 
+Includere nel runbook R2, Analytics Engine, Logpush e Cron Trigger dell'account condiviso, e rileggere i prezzi Observability in vigore dal 1° dicembre 2026 ([§31](#s31)).
+
 <a id="m7-04"></a>
 #### M7-04 · Monitoraggio e incidenti
 
@@ -1956,11 +2049,13 @@ Integrato da CF Ready e Hub Fatture: runbook con quote di riferimento e stop poi
 
 Configurare log ordinari a 90 giorni e audit a un anno, alert azionabili e business, severità P1–P3, canali Telegram/email ed escalation del MoR.
 
+La conservazione a 90 giorni e un anno è realizzata in [M7-11](#m7-11).
+
 **Criterio di completamento:** Allarme, deduplicazione e rientro provati senza PII; soglie reali nella documentazione privata. Nessun indicatore di salute puramente decorativo.
 
 Runbook dati personali separa risposta operativa, obblighi di notifica ai soggetti pertinenti e finestre del supporto MoR; l’assenza di SLA pubblico non li annulla.
 
-**Per chiudere:** M6-09; gli alert owner usano le notifiche incidenti del Control Center.
+**Per chiudere:** M6-09; gli alert owner usano le notifiche incidenti del Control Center. M7-11 per la conservazione.
 
 Integrato da CF Ready e Hub Fatture: i log redatti con correlation ID sono già attivi da M1-04; qui si aggiungono campionamento degli eventi ordinari riusciti, query di diagnosi documentate (errori per codice, webhook, correlation ID, scritture di eventi fallite) e soglie iniziali P1/P2. Registro delle scadenze delle credenziali nell'inventario privato, con controllo periodico che avvisa l'owner almeno 45 giorni prima e segnala le voci senza data.
 
@@ -2003,10 +2098,41 @@ Chiudere verifica marchi/API eBay, ruoli dati, copertura MoR, adempimenti italia
 
 Verificare testi accettati/versioni, ruoli effettivi, erasure provider e obblighi residui della vendita al MoR. Nessuna rinuncia generale a diritti consumatore nascosta in una traduzione o nel prezzo IVA esclusa.
 
+<a id="m7-09"></a>
+#### M7-09 · Rate Limiting nativo
+
+**Stato:** Da completare · **Prerequisiti:** M2-01 · **Contratto:** [§29](#s29)
+
+Aggiungere il binding Rate Limiting di Workers come primo filtro per IP e percorso su Auth, richieste di link email, form di supporto, export e altre operazioni costose, davanti ai contatori D1 esistenti, che restano per indirizzo e operazione. Configurazione separata per test e Production.
+
+**Criterio di completamento:** Le richieste scartate dal binding non scrivono su D1; 429 con `Retry-After` e `no-store`, senza enumerazione degli account; i limiti per indirizzo restano coerenti fra data center; readback sul test.
+
+<a id="m7-10"></a>
+#### M7-10 · Turnstile sugli ingressi pubblici
+
+**Stato:** Da completare · **Prerequisiti:** M2-01 · **Contratto:** [§29](#s29) · [§30](#s30)
+
+**Per chiudere:** M6-06 per il form di supporto.
+
+Integrare Turnstile su registrazione con password, richiesta di reset, reinvio dei link email e form di supporto, con verifica Siteverify lato server, widget e chiavi separati per ambiente e CSP coerente. Aggiornare inventario delle tecnologie e informativa.
+
+**Criterio di completamento:** Token assente, scaduto, riusato o di un altro hostname rifiutato; Siteverify indisponibile rifiuta con possibilità di riprovare, senza toccare passkey, Google ed eBay; prove automatiche con le chiavi di test Turnstile e readback sul test.
+
+<a id="m7-11"></a>
+#### M7-11 · Conservazione di log e audit
+
+**Stato:** Da completare · **Prerequisiti:** M1-04, M6-10 · **Contratto:** [§30](#s30) · [§31](#s31)
+
+**Per chiudere:** Workers Paid, se approvato dall'owner, perché Logpush dei Workers lo richiede.
+
+Configurare Workers Logpush verso un bucket R2 UE dedicato, con accesso limitato all'owner e lifecycle a 90 giorni; audit sensibile a un anno in una tabella D1 minimizzata con pulizia periodica nello smistamento di [M3-12](#m3-12).
+
+**Criterio di completamento:** L'esportazione contiene soltanto i campi in allowlist; oggetti e righe scaduti spariscono; query di diagnosi del runbook funzionanti sull'archivio; readback di job Logpush, bucket e lifecycle sul test.
+
 <a id="m7-08"></a>
 #### M7-08 · Verifica interna della matrice funzionale
 
-**Stato:** Da completare · **Prerequisiti:** M7-01..M7-07 · **Contratto:** [§35](#s35) · [§41](#s41)
+**Stato:** Da completare · **Prerequisiti:** M7-01..M7-07, M7-09..M7-11 · **Contratto:** [§35](#s35) · [§41](#s41)
 
 Riesaminare tutte le funzioni, i diritti, le schermate, i dispositivi, gli errori e i rinvii rispetto al piano; eliminare aggiunte accidentali dei mockup.
 
