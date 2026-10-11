@@ -8,6 +8,18 @@
   "workers_dev": false,
   "routes": [{ "pattern": "test.fiscalbay.it", "custom_domain": true }],
   "triggers": { "crons": ["*/30 * * * *"] },
+  "queues": {
+    "producers": [{ "binding": "WEBHOOK_QUEUE", "queue": "fiscalbay-test-webhooks" }],
+    "consumers": [
+      {
+        "queue": "fiscalbay-test-webhooks",
+        "max_batch_size": 1,
+        "max_retries": 5,
+        "max_concurrency": 1,
+        "dead_letter_queue": "fiscalbay-test-webhooks-failed",
+      },
+    ],
+  },
   "vars": {
     "APP_ORIGIN": "https://test.fiscalbay.it",
     "EBAY_SANDBOX_ENABLED": "true",
@@ -53,6 +65,18 @@
   "upload_source_maps": true,
   "env": {
     "production": {
+      "queues": {
+        "producers": [{ "binding": "WEBHOOK_QUEUE", "queue": "fiscalbay-webhooks" }],
+        "consumers": [
+          {
+            "queue": "fiscalbay-webhooks",
+            "max_batch_size": 1,
+            "max_retries": 5,
+            "max_concurrency": 1,
+            "dead_letter_queue": "fiscalbay-webhooks-failed",
+          },
+        ],
+      },
       "version_metadata": { "binding": "VERSION_METADATA" },
       "name": "fiscalbay",
       "routes": [{ "pattern": "fiscalbay.it", "custom_domain": true }],

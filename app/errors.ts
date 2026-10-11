@@ -83,6 +83,8 @@ export function logFailure(input: {
     | "sign_in"
     | "store_link"
     | "stripe_webhook"
+    | "webhook_ingress"
+    | "webhook_consumer"
     | "token_refresh"
     | "order_acquisition"
     | "account_email"

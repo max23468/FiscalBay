@@ -1,6 +1,6 @@
 import Stripe from "stripe";
 
-// Segreti non ancora richiesti dal Worker: arrivano insieme alle route Stripe.
+// Il webhook resta indisponibile senza il suo segreto; i pagamenti si attivano separatamente.
 export type StripeSecrets = { STRIPE_SECRET_KEY: string; STRIPE_WEBHOOK_SECRET: string };
 
 export type PremiumOffer = "monthly" | "annual" | "lifetime";
@@ -53,25 +53,4 @@ export async function verifyStripeEvent(
     undefined,
     Stripe.createSubtleCryptoProvider(),
   );
-}
-
-export async function recordStripeEvent(db: D1Database, event: Stripe.Event): Promise<boolean> {
-  const object = event.data.object as { id?: unknown };
-  const result = await db
-    .prepare(
-      `INSERT OR IGNORE INTO stripe_events
-        (stripe_event_id, event_type, object_id, livemode, provider_created_at, received_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    )
-    .bind(
-      event.id,
-      event.type,
-      typeof object.id === "string" ? object.id : null,
-      event.livemode ? 1 : 0,
-      new Date(event.created * 1000).toISOString(),
-      new Date().toISOString(),
-    )
-    .run();
-
-  return result.meta.changes === 1;
 }
