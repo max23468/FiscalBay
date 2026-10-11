@@ -1531,7 +1531,7 @@ Il webhook Stripe preliminare non va attivato come route React Router: l'ingress
 
 **Verifica locale:** `pnpm verify` superato con 395 test applicativi; collaudo Chromium locale completo con 317 prove superate e la sola prova dell'account remoto esclusa. Mutation test sull'intero ingresso, sulle firme eBay e sui tratti di acquisizione modificati: 394 mutanti uccisi, quattro equivalenze motivate, nessun sopravvissuto, timeout, errore o caso scoperto. Le prove coprono anche revoca durante la lettura, scadenza token, limiti di budget e retention, collisioni degli identificativi e ripresa dopo crash.
 
-**Da qualificare sul provider:** accesso e sottoscrizione al topic eBay sul keyset autorizzato, challenge, Queue/DLQ reali, consegna e ripresa remote e CPU nei log del Worker. Nessuna risorsa remota creata o modificata dall'implementazione locale; il task resta aperto fino alle prove richieste.
+**Qualificazione provider in corso:** il keyset FiscalBay accede al topic `ORDER_CONFIRMATION` sia Sandbox sia Production; configurazione delle notifiche predisposta nei due ambienti. I negozi `testuser_venditore-fiscalbay` e `numisleo` hanno accesso alle sottoscrizioni e non ne avevano di preesistenti. Sul solo test Cloudflare sono predisposte la Queue, la DLQ e la custodia del token challenge. Restano challenge sul Worker pubblicato, sottoscrizioni e consegne eBay, ripresa della coda e CPU nei log del Worker. Il task resta aperto fino alle prove richieste; nessun avvio commerciale Production.
 
 <a id="m4"></a>
 ### M4 · UX completa Ordini, Negozi e Impostazioni

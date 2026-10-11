@@ -2,7 +2,12 @@ import { env } from "cloudflare:workers";
 import Stripe from "stripe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildManagedCheckoutParams, verifyStripeEvent } from "../app/integrations/stripe.server";
+import {
+  buildManagedCheckoutParams,
+  createManagedCheckout,
+  createStripeClient,
+  verifyStripeEvent,
+} from "../app/integrations/stripe.server";
 import { action as checkoutAction } from "../app/routes/stripe-checkout";
 import { receiveWebhook } from "../app/integrations/webhooks.server";
 
@@ -53,11 +58,17 @@ describe("Stripe Managed Payments", () => {
       appOrigin: "https://test.fiscalbay.it",
     });
 
-    expect(params).toMatchObject({
+    expect(params).toEqual({
       mode: "subscription",
       line_items: [{ price: "price_test_monthly", quantity: 1 }],
       managed_payments: { enabled: true },
       client_reference_id: "workspace-test",
+      integration_identifier: "fiscalbay_mp_qnwjrzta",
+      customer_email: "merchant@example.invalid",
+      metadata: { workspace_id: "workspace-test", offer: "monthly" },
+      success_url:
+        "https://test.fiscalbay.it/?checkout=processing&session_id={CHECKOUT_SESSION_ID}",
+      cancel_url: "https://test.fiscalbay.it/?checkout=cancelled",
     });
     expect(params).not.toHaveProperty("automatic_tax");
     expect(params).not.toHaveProperty("payment_method_types");
@@ -70,6 +81,44 @@ describe("Stripe Managed Payments", () => {
         appOrigin: "https://test.fiscalbay.it",
       }).mode,
     ).toBe("payment");
+  });
+
+  it("crea il checkout con il trasporto Fetch del Worker e restituisce la sessione", async () => {
+    const session = {
+      id: "cs_test_transport",
+      object: "checkout.session",
+      url: "https://checkout.stripe.com/test",
+    };
+    const transport = vi.spyOn(Stripe, "createFetchHttpClient");
+    const request = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        Response.json(session, { headers: { "request-id": "req_test_transport" } }),
+      );
+    try {
+      const client = createStripeClient("sk_test_transport");
+      expect(transport).toHaveBeenCalledOnce();
+      expect(
+        await createManagedCheckout(client, {
+          offer: "annual",
+          priceId: "price_test_annual",
+          workspaceId: "workspace-test",
+          email: "merchant@example.invalid",
+          appOrigin: "https://test.fiscalbay.it",
+        }),
+      ).toMatchObject(session);
+      expect(request).toHaveBeenCalledOnce();
+      const [url, options] = request.mock.calls[0]!;
+      expect(url).toBe("https://api.stripe.com/v1/checkout/sessions");
+      expect(options?.method).toBe("POST");
+      expect(new Headers(options?.headers).get("authorization")).toBe("Bearer sk_test_transport");
+      const body = new URLSearchParams(String(options?.body));
+      expect(body.get("line_items[0][price]")).toBe("price_test_annual");
+      expect(body.get("metadata[offer]")).toBe("annual");
+    } finally {
+      request.mockRestore();
+      transport.mockRestore();
+    }
   });
 
   it("verifica la firma sul corpo grezzo e registra l'evento una sola volta", async () => {
