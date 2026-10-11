@@ -81,7 +81,7 @@ export async function listStores(
          JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
          LEFT JOIN ebay_store_credentials c ON c.store_id = s.id
          LEFT JOIN sync_state ss ON ss.store_id = s.id
-        WHERE wm.user_id = ?1
+        WHERE wm.user_id = ?1 AND s.data_deleted_at IS NULL
         ORDER BY s.linked_at, s.id`,
     )
     .bind(userId, now.toISOString())
@@ -222,9 +222,9 @@ export async function disconnectStore(
 }
 
 /**
- * Scollega ed elimina i dati del negozio, senza ripensamento. La conferma deve riportare il
- * nome del negozio. La quota già consumata non torna disponibile e il negozio resta associato
- * allo spazio, così ricollegarlo non crea un duplicato né un nuovo negozio.
+ * Rimuove il negozio dall'elenco ed elimina i dati, senza ripensamento. La conferma riporta
+ * il nome. Il riferimento allo spazio resta per riconoscere l'identità al nuovo collegamento
+ * e preservare quota e diritti commerciali già registrati.
  */
 export async function deleteStoreData(
   db: D1Database,

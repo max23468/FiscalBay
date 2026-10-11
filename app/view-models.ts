@@ -155,7 +155,7 @@ export interface StoreView {
   consentExpiring?: boolean;
   /** Frequenza prevista; null finché la sincronizzazione continua non è attiva. */
   targetMinutes: number | null;
-  /** Dati eliminati con «Scollega ed elimina dati». */
+  /** Dati eliminati con «Scollega ed elimina negozio». */
   dataDeleted?: boolean;
   recent: StoreSyncView[];
 }

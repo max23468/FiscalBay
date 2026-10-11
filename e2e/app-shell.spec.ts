@@ -288,9 +288,9 @@ test("negozi con problema e conferma forte dell'eliminazione", async ({ page }) 
   await page.getByRole("link", { name: /Retro Parts Europe/ }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Autorizzazione incompleta");
-  await dialog.getByRole("button", { name: "Scollega ed elimina dati" }).click();
+  await dialog.getByRole("button", { name: "Scollega ed elimina negozio" }).click();
   const confirm = page.getByRole("alertdialog");
-  const button = confirm.getByRole("button", { name: "Scollega ed elimina" });
+  const button = confirm.getByRole("button", { name: "Scollega ed elimina negozio" });
   await expect(button).toBeDisabled();
   await confirm.getByRole("textbox").fill("Retro Parts Europe");
   await expect(button).toBeEnabled();

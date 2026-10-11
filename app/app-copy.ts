@@ -311,15 +311,14 @@ const it = {
     chooseFreeStore: "Scegli il negozio attivo",
     reconnect: "Ricollega negozio",
     disconnect: "Scollega",
-    disconnectDelete: "Scollega ed elimina dati",
+    disconnectDelete: "Scollega ed elimina negozio",
+    deleteStore: "Elimina negozio",
     disconnectTitle: (name: string) => `Scollegare ${name}?`,
     disconnectBody:
       "FiscalBay smette di leggere il negozio su eBay. Gli ordini già importati restano consultabili per il periodo di conservazione e puoi ricollegare lo stesso negozio in seguito.",
-    deleteTitle: (name: string) => `Scollegare ed eliminare i dati di ${name}?`,
     deleteBody:
-      "Il negozio viene scollegato e tutti i suoi ordini vengono eliminati da FiscalBay. L’operazione non si può annullare.",
+      "Il negozio verrà rimosso da FiscalBay e tutti i suoi ordini importati saranno eliminati. Questa operazione non può essere annullata. Il negozio su eBay e l’abbonamento FiscalBay non vengono modificati.",
     deleteLabel: "Scrivi il nome del negozio per confermare",
-    deleteConfirm: "Scollega ed elimina",
     cancel: "Annulla",
     issue: {
       reconnect: {
@@ -351,7 +350,6 @@ const it = {
       "store-pause": "Negozio in pausa.",
       "store-resume": "Negozio ripreso.",
       "store-disconnect": "Negozio scollegato.",
-      "store-delete": "Negozio scollegato e ordini eliminati.",
     } as Record<string, string>,
     deleteMismatch: "Il nome non corrisponde: nessun dato eliminato.",
     failed: "Operazione non riuscita. Riprova.",
@@ -797,6 +795,7 @@ const it = {
     list: "Ordini qualificati",
     storeNotices: {
       collegato: "Negozio eBay collegato.",
+      eliminato: "Negozio eliminato da FiscalBay.",
       negato: "Collegamento annullato su eBay.",
       "negozio-diverso":
         "Hai scelto un account eBay diverso dal negozio da ricollegare, quindi il consenso non è stato salvato. Se eBay ti fa entrare in automatico con un altro account, esci da eBay e riprova con quello del negozio.",
@@ -1133,15 +1132,14 @@ const en: AppCopy = {
     chooseFreeStore: "Choose the active store",
     reconnect: "Reconnect store",
     disconnect: "Disconnect",
-    disconnectDelete: "Disconnect and delete data",
+    disconnectDelete: "Disconnect and delete store",
+    deleteStore: "Delete store",
     disconnectTitle: (name) => `Disconnect ${name}?`,
     disconnectBody:
       "FiscalBay will stop reading this store on eBay. Imported orders remain available for the retention period and you can reconnect the same store later.",
-    deleteTitle: (name) => `Disconnect ${name} and delete its data?`,
     deleteBody:
-      "The store is disconnected and all its orders are deleted from FiscalBay. This cannot be undone.",
+      "The store will be removed from FiscalBay and all its imported orders will be deleted. This cannot be undone. Your store on eBay and your FiscalBay subscription will not change.",
     deleteLabel: "Type the store name to confirm",
-    deleteConfirm: "Disconnect and delete",
     cancel: "Cancel",
     issue: {
       reconnect: {
@@ -1173,7 +1171,6 @@ const en: AppCopy = {
       "store-pause": "Store paused.",
       "store-resume": "Store resumed.",
       "store-disconnect": "Store disconnected.",
-      "store-delete": "Store disconnected and orders deleted.",
     },
     deleteMismatch: "The name does not match: no data deleted.",
     failed: "Something went wrong. Try again.",
@@ -1603,6 +1600,7 @@ const en: AppCopy = {
     list: "Qualified orders",
     storeNotices: {
       collegato: "eBay store connected.",
+      eliminato: "Store deleted from FiscalBay.",
       negato: "Connection cancelled on eBay.",
       "negozio-diverso":
         "You selected a different eBay account from the store to reconnect, so the consent was not saved. If eBay signs you in automatically with another account, sign out of eBay and try again with the store’s account.",
