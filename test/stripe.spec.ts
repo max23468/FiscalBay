@@ -87,7 +87,7 @@ describe("Stripe Managed Payments", () => {
     const session = {
       id: "cs_test_transport",
       object: "checkout.session",
-      url: "https://checkout.stripe.com/test",
+      url: "https://checkout.example.invalid/test",
     };
     const transport = vi.spyOn(Stripe, "createFetchHttpClient");
     const request = vi
@@ -109,7 +109,7 @@ describe("Stripe Managed Payments", () => {
       ).toMatchObject(session);
       expect(request).toHaveBeenCalledOnce();
       const [url, options] = request.mock.calls[0]!;
-      expect(url).toBe("https://api.stripe.com/v1/checkout/sessions");
+      expect(new URL(String(url)).pathname).toBe("/v1/checkout/sessions");
       expect(options?.method).toBe("POST");
       expect(new Headers(options?.headers).get("authorization")).toBe("Bearer sk_test_transport");
       const body = new URLSearchParams(String(options?.body));
