@@ -133,6 +133,8 @@ export async function receiveWebhook(
           fetcher,
           now.getTime(),
         );
+        // Autentica ma non attribuibile: nessun effetto, l'acquisizione periodica resta la fonte.
+        if (!notification.data.user) return new Response(null, { status: 204 });
         event = {
           provider: "ebay",
           environment: ebayEnvironment,

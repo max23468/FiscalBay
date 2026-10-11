@@ -1,0 +1,5 @@
+{
+  "signature": "eyJhbGciOiJlY2RzYSIsImtpZCI6IjJkODQ3YWQzLTIyNTEtNDZmMC1hM2RlLTUxMWEwYzg4ZjJkYSIsInNpZ25hdHVyZSI6Ik1FUUNJREJheE9jNTNzRVUxbVhlVU45Ym8yQ21JVjZvRng3b0J0Mm5aZGdzQTJKK0FpQmwzNnRtekZPYnNwaDVZdkg4NE5PazZOYi9xMzd0VU5nYSsvZkduVGhKU1E9PSIsImRpZ2VzdCI6InNoYTI1NiJ9",
+  "body": "{\"metadata\":{\"topic\":\"ORDER_CONFIRMATION\",\"schemaVersion\":\"1.0\",\"deprecated\":false},\"notification\":{\"notificationId\":\"bc30f7ed-539b-4d60-b57a-4676ae7dc1ad_e198afb2-da76-4c4d-b85b-1cf8f8ec2177\",\"eventDate\":\"2026-10-11T21:07:19.533Z\",\"publishDate\":\"2026-10-11T21:07:19.543Z\",\"publishAttemptCount\":1,\"data\":{\n  \"order\": {\n    \"orderId\": \"123-123-4435\",\n    \"orderLineItems\": [\n      {\n        \"orderLineItemId\": \"123455\",\n        \"listingId\": \"123566\",\n        \"quantity\": 1\n      }\n    ]\n  }\n}}}",
+  "key": "-----BEGIN PUBLIC KEY-----MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEipuHK0kVgGLJKaw4wit6xuSwssvI0iV1Uf71yV+j/y54mgNipCPxA7yjGh16Y3qRl8SFiHfaJoCdJk0+qt4+aQ==-----END PUBLIC KEY-----"
+}

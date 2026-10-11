@@ -1028,7 +1028,7 @@ Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o
 
 | Ambito | Pendenza e condizione di chiusura |
 |---|---|
-| Ingresso webhook | [M3-11](#m3-11) disponibile localmente; qualificare sul test Queue/DLQ, challenge e sottoscrizione eBay autorizzata, consegna, ripresa e CPU nei log secondo la [procedura](engineering/RELEASE.md#webhook). Nessuna attivazione remota attestata; Stripe conserva soltanto ricevute tecniche fino a M5-05. |
+| Ingresso webhook | [M3-11](#m3-11) qualificato sul test. Sottoscrivere `ORDER_CONFIRMATION` di un negozio Production soltanto con il test merchant; Stripe resta senza `STRIPE_WEBHOOK_SECRET` (503) fino a [M5-05](#m5-05). Un riferimento sintetico di qualifica resta nella DLQ test fino alla scadenza nativa. |
 | Pubblicazione | Qualificare sul provider ripresa fra run, migration, primo rollback e ricevute secondo [RELEASE](engineering/RELEASE.md). Modalità `prova` di `Pubblica` ancora da eseguire sul candidato autorizzato; creare `CHANGELOG.md` prima della pubblicazione reale. Il riuso mutation è stato osservato in [#298](https://github.com/max23468/FiscalBay/pull/298); resta la riconciliazione del deploy successivo. |
 | Consenso eBay | La rotazione di `BETTER_AUTH_SECRET` richiede il ricollegamento dei negozi. Pagina di consenso: senza «Display Title» eBay mostra il nome dell'account sviluppatore. Sul RuName Sandbox (2026-10-08) nome FiscalBay, privacy e termini del sito test, branding con logo orizzontale; il link «terms of service» resta vuoto perché il portale non ha un campo per i termini, che compaiono solo come «About URL» sotto il logo. Prima delle prove Production replicare sul RuName Production con le pagine di fiscalbay.it. Il collegamento chiede `locale=it-IT` per accesso e consenso in italiano. |
 | Sandbox e dati fiscali | Supporto Sandbox distribuito con [#273](https://github.com/max23468/FiscalBay/pull/273), migration e smoke attestati dalla [run di #274](https://github.com/max23468/FiscalBay/actions/runs/37377929129). I pagamenti Sandbox provati sono falliti; l'alternativa `CashOnPickup` è stata rimossa da eBay per managed payments e l'acquisto confermato resta non pagato, assente da Fulfillment. Buy API esclusa dall'owner. Serve pagamento Sandbox riuscito e importazione, oppure soluzione concordata. La consultazione Production autorizzata è stata qualificata sul campione fiscale di [M3-10](#m3-10); non prova il pagamento o l'import Sandbox. Nessun permesso implicito di modificare ordini Production o introdurre import Trading. |
@@ -1481,7 +1481,7 @@ Lo smistamento del lavoro periodico e l'esecuzione in coda sono in [M3-12](#m3-1
 
 Usare consegna/retry/ritardi/DLQ del servizio scelto. Stato applicativo solo per checkpoint, deduplica e recupero di effetti di business; outbox/lease soltanto se necessari, non un secondo orchestratore.
 
-**Per chiudere:** M3-11; `ORDER_CONFIRMATION` entra dall'ingresso Worker condiviso.
+**Per chiudere:** `ORDER_CONFIRMATION` entra già dall'ingresso Worker di [M3-11](#m3-11); resta una consegna attribuita di un negozio Production nel test merchant.
 
 <a id="m3-05"></a>
 #### M3-05 · Controllo fiscale e aggiornamenti
@@ -1562,7 +1562,7 @@ Riapre in modo circoscritto l'esito di M0-05, senza modificarlo retroattivamente
 <a id="m3-11"></a>
 #### M3-11 · Ingresso Worker per webhook e callback
 
-**Stato:** Da completare · **Prerequisiti:** M3-03 · **Contratto:** [§25](#s25) · [§11](#s11)
+**Stato:** Completato · **Prerequisiti:** M3-03 · **Contratto:** [§25](#s25) · [§11](#s11)
 
 Realizzare una volta sola l'ingresso prima di React Router: metodo, dimensione e firma sul corpo grezzo, claim idempotente in D1, messaggio in coda con soli identificativi, risposta positiva solo dopo l'accettazione della coda, consumer con retry e dead-letter nativi. Il primo consumatore è `ORDER_CONFIRMATION` per M3-04; M5-05 (Stripe), M5-09 (Telegram) e M7-02 (cancellazione account eBay) lo riusano invece di creare percorsi propri.
 
@@ -1572,7 +1572,9 @@ Il webhook Stripe preliminare non va attivato come route React Router: l'ingress
 
 **Implementazione locale:** ingresso `/webhooks/ebay` (e percorso `/sandbox`) e `/webhooks/stripe` nel Worker prima del caricamento della build React Router; firme verificate sul corpo grezzo, limite di 256 KiB anche senza `Content-Length`, ricevute D1 con soli riferimenti e scadenza di sette giorni dall'evento. Claim e accettazione Queue sono separati: il cron recupera le ricevute non accodate; duplicati in coda non ripetono gli effetti e una lease scaduta permette la ripresa dopo crash. `ORDER_CONFIRMATION` rilegge soltanto l'ordine indicato, rivalidando ambiente, consenso, pausa, cancellazione e finestra dello storico; non avanza il watermark del polling. Stripe conserva la ricevuta verificata, senza effetti commerciali anticipati. La route preliminare è stata rimossa. Configurazione Queue/retry/DLQ separata per test e Production; procedure nella [pubblicazione](engineering/RELEASE.md#webhook).
 
-**Verifica locale:** `pnpm verify` superato con 395 test applicativi; collaudo Chromium locale completo con 317 prove superate e la sola prova dell'account remoto esclusa. Mutation test sull'intero ingresso, sulle firme eBay e sui tratti di acquisizione modificati: 394 mutanti uccisi, quattro equivalenze motivate, nessun sopravvissuto, timeout, errore o caso scoperto. Le prove coprono anche revoca durante la lettura, scadenza token, limiti di budget e retention, collisioni degli identificativi e ripresa dopo crash.
+**Verifica locale:** `pnpm verify`, collaudo Chromium locale completo e mutation test sull'ingresso, sulle firme eBay e sui tratti di acquisizione modificati, senza sopravvissuti né timeout.
+
+**Qualifica sul test (2026-10-11):** migration applicata, Queue e DLQ create con produttore e consumer. Sul Worker pubblicato challenge eBay 200, firma errata 412, corpo da 2 MB 413 e metodo errato 405 con 0-5 ms di CPU, contro 48 ms della prima pagina che carica React Router; consumer Queue 0-2 ms, entro i 10 ms di Workers Free. Con coda indisponibile l'ingresso risponde 503 senza duplicare la ricevuta, e il cron la accoda e la completa; la stessa consegna ripetuta riceve 204 senza nuovo accodamento, lo stesso ID con contenuto diverso 409. Un riferimento non valido esegue cinque retry con backoff e finisce nella DLQ. Destinazione e sottoscrizione `ORDER_CONFIRMATION` Sandbox attive sul test; la consegna di prova eBay ha mostrato firma ECDSA SHA-256 sui byte ricevuti e payload senza `data.user`, ora gestiti e coperti da una fixture con firma autentica. Il negozio Production si sottoscrive con il test merchant.
 
 **Qualificazione provider in corso:** il keyset FiscalBay accede al topic `ORDER_CONFIRMATION` sia Sandbox sia Production; configurazione delle notifiche predisposta nei due ambienti. I negozi `testuser_venditore-fiscalbay` e `numisleo` hanno accesso alle sottoscrizioni e non ne avevano di preesistenti. Sul solo test Cloudflare sono predisposte la Queue, la DLQ e la custodia del token challenge. Restano challenge sul Worker pubblicato, sottoscrizioni e consegne eBay, ripresa della coda e CPU nei log del Worker. Il task resta aperto fino alle prove richieste; nessun avvio commerciale Production.
 
@@ -1752,7 +1754,7 @@ Provare browser chiuso dopo pagamento, evento mancante/tardivo, errore di accoda
 
 Eventi out-of-order o dati Stripe non più disponibili non significano automaticamente acquisto inesistente o refund. I corpi grezzi dei webhook non diventano archivio fiscale permanente.
 
-**Per chiudere:** M3-11; il webhook Stripe entra dall'ingresso Worker condiviso.
+**Per chiudere:** il webhook Stripe usa l'ingresso Worker già qualificato in [M3-11](#m3-11), con segreto e effetti commerciali configurati qui.
 
 Integrato da CF Ready e Hub Fatture: ciclo periodico che riconcilia i diritti attivi con Stripe come rete di sicurezza, senza inventare diritti in caso di errore; ogni passo periodico registra il proprio errore senza fermare gli altri; priorità di recupero una sola volta per gli elementi mai tentati. Mutation test mirati sui diritti Stripe.
 

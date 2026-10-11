@@ -9,7 +9,7 @@ const headerSchema = z.object({
   kid: identifier,
   signature: z.string().min(1).max(512),
   alg: z.enum(["ECDSA", "ecdsa"]),
-  digest: z.literal("SHA1"),
+  digest: z.enum(["SHA256", "sha256"]),
 });
 const notificationSchema = z.object({
   metadata: z.object({ topic: z.literal("ORDER_CONFIRMATION"), schemaVersion: z.literal("1.0") }),
@@ -17,7 +17,8 @@ const notificationSchema = z.object({
     notificationId: identifier,
     eventDate: z.iso.datetime(),
     data: z.object({
-      user: z.object({ userId: identifier }),
+      // Le consegne di prova eBay non indicano il venditore.
+      user: z.object({ userId: identifier }).optional(),
       order: z.object({ orderId: identifier }),
     }),
   }),
@@ -83,7 +84,7 @@ export async function verifyOrderNotification(
     if (keys.size >= 100) keys.delete(keys.keys().next().value!);
     keys.set(cacheId, publicKey);
   }
-  if (!verify("sha1", Buffer.from(body), publicKey.key, Buffer.from(header.signature, "base64")))
+  if (!verify("sha256", Buffer.from(body), publicKey.key, Buffer.from(header.signature, "base64")))
     throw new Error();
   return notificationSchema.parse(JSON.parse(body)).notification;
 }
