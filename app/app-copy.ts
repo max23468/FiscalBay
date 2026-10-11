@@ -311,15 +311,14 @@ const it = {
     chooseFreeStore: "Scegli il negozio attivo",
     reconnect: "Ricollega negozio",
     disconnect: "Scollega",
-    disconnectDelete: "Scollega ed elimina dati",
+    disconnectDelete: "Scollega ed elimina negozio",
+    deleteStore: "Elimina negozio",
     disconnectTitle: (name: string) => `Scollegare ${name}?`,
     disconnectBody:
       "FiscalBay smette di leggere il negozio su eBay. Gli ordini già importati restano consultabili per il periodo di conservazione e puoi ricollegare lo stesso negozio in seguito.",
-    deleteTitle: (name: string) => `Scollegare ed eliminare i dati di ${name}?`,
     deleteBody:
-      "Il negozio viene scollegato e tutti i suoi ordini vengono eliminati da FiscalBay. L’operazione non si può annullare.",
+      "Il negozio verrà rimosso da FiscalBay e tutti i suoi ordini importati saranno eliminati. Questa operazione non può essere annullata. Il negozio su eBay e l’abbonamento FiscalBay non vengono modificati.",
     deleteLabel: "Scrivi il nome del negozio per confermare",
-    deleteConfirm: "Scollega ed elimina",
     cancel: "Annulla",
     issue: {
       reconnect: {
@@ -345,13 +344,10 @@ const it = {
       "L’aggiornamento automatico degli ordini non è ancora attivo: FiscalBay legge l’ordine più recente quando colleghi il negozio.",
     disconnectedHint:
       "FiscalBay non legge più questo negozio. Gli ordini già importati restano consultabili; ricollegalo per riprendere.",
-    deletedHint:
-      "FiscalBay non legge più questo negozio e i suoi ordini sono stati eliminati. Ricollegalo per riprendere.",
     done: {
       "store-pause": "Negozio in pausa.",
       "store-resume": "Negozio ripreso.",
       "store-disconnect": "Negozio scollegato.",
-      "store-delete": "Negozio scollegato e ordini eliminati.",
     } as Record<string, string>,
     deleteMismatch: "Il nome non corrisponde: nessun dato eliminato.",
     failed: "Operazione non riuscita. Riprova.",
@@ -654,8 +650,6 @@ const it = {
     reconnectTitle: "Ricollega un negozio eBay",
     reconnectIntro:
       "Ti portiamo su eBay per rinnovare l’autorizzazione. Accedi con l’account venditore del negozio da ricollegare: FiscalBay lo riconosce e conserva gli ordini già importati.",
-    reconnectIntroDeleted:
-      "Ti portiamo su eBay per autorizzare di nuovo FiscalBay. Accedi con l’account venditore del negozio da ricollegare: gli ordini eliminati non tornano, FiscalBay legge da capo quelli che eBay rende disponibili.",
     intro:
       "Ti portiamo su eBay per autorizzare FiscalBay. Accedi con l’account venditore del negozio da collegare: può essere diverso da quello che usi per entrare in FiscalBay.",
     points: [
@@ -797,6 +791,7 @@ const it = {
     list: "Ordini qualificati",
     storeNotices: {
       collegato: "Negozio eBay collegato.",
+      eliminato: "Negozio eliminato da FiscalBay.",
       negato: "Collegamento annullato su eBay.",
       "negozio-diverso":
         "Hai scelto un account eBay diverso dal negozio da ricollegare, quindi il consenso non è stato salvato. Se eBay ti fa entrare in automatico con un altro account, esci da eBay e riprova con quello del negozio.",
@@ -1133,15 +1128,14 @@ const en: AppCopy = {
     chooseFreeStore: "Choose the active store",
     reconnect: "Reconnect store",
     disconnect: "Disconnect",
-    disconnectDelete: "Disconnect and delete data",
+    disconnectDelete: "Disconnect and delete store",
+    deleteStore: "Delete store",
     disconnectTitle: (name) => `Disconnect ${name}?`,
     disconnectBody:
       "FiscalBay will stop reading this store on eBay. Imported orders remain available for the retention period and you can reconnect the same store later.",
-    deleteTitle: (name) => `Disconnect ${name} and delete its data?`,
     deleteBody:
-      "The store is disconnected and all its orders are deleted from FiscalBay. This cannot be undone.",
+      "The store will be removed from FiscalBay and all its imported orders will be deleted. This cannot be undone. Your store on eBay and your FiscalBay subscription will not change.",
     deleteLabel: "Type the store name to confirm",
-    deleteConfirm: "Disconnect and delete",
     cancel: "Cancel",
     issue: {
       reconnect: {
@@ -1167,13 +1161,10 @@ const en: AppCopy = {
       "Automatic order updates are not active yet: FiscalBay reads the most recent order when you connect the store.",
     disconnectedHint:
       "FiscalBay no longer reads this store. Orders already imported remain available; reconnect it to resume.",
-    deletedHint:
-      "FiscalBay no longer reads this store and its orders have been deleted. Reconnect it to resume.",
     done: {
       "store-pause": "Store paused.",
       "store-resume": "Store resumed.",
       "store-disconnect": "Store disconnected.",
-      "store-delete": "Store disconnected and orders deleted.",
     },
     deleteMismatch: "The name does not match: no data deleted.",
     failed: "Something went wrong. Try again.",
@@ -1462,8 +1453,6 @@ const en: AppCopy = {
     reconnectTitle: "Reconnect an eBay store",
     reconnectIntro:
       "We’ll take you to eBay to renew the authorisation. Sign in with the seller account of the store you want to reconnect: FiscalBay recognises it and keeps the orders already imported.",
-    reconnectIntroDeleted:
-      "We’ll take you to eBay to authorise FiscalBay again. Sign in with the seller account of the store you want to reconnect: deleted orders don’t come back, FiscalBay reads again the ones eBay makes available.",
     intro:
       "We’ll take you to eBay to authorize FiscalBay. Sign in with the seller account of the store you want to connect: it can differ from the one you use to sign in to FiscalBay.",
     points: [
@@ -1603,6 +1592,7 @@ const en: AppCopy = {
     list: "Qualified orders",
     storeNotices: {
       collegato: "eBay store connected.",
+      eliminato: "Store deleted from FiscalBay.",
       negato: "Connection cancelled on eBay.",
       "negozio-diverso":
         "You selected a different eBay account from the store to reconnect, so the consent was not saved. If eBay signs you in automatically with another account, sign out of eBay and try again with the store’s account.",

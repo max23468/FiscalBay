@@ -102,7 +102,7 @@ test.describe("miglioramenti account e negozi", () => {
       await page.goto(`${prefix}/app/negozi/${testAccount.stores.paused}`);
       await page
         .getByRole("button", {
-          name: it ? "Scollega ed elimina dati" : "Disconnect and delete data",
+          name: it ? "Scollega ed elimina negozio" : "Disconnect and delete store",
           exact: true,
         })
         .click();
@@ -117,7 +117,7 @@ test.describe("miglioramenti account e negozi", () => {
       });
       await dialog
         .getByRole("button", {
-          name: it ? "Scollega ed elimina" : "Disconnect and delete",
+          name: it ? "Scollega ed elimina negozio" : "Disconnect and delete store",
           exact: true,
         })
         .click();
@@ -128,7 +128,7 @@ test.describe("miglioramenti account e negozi", () => {
       );
       await dialog
         .getByRole("button", {
-          name: it ? "Scollega ed elimina" : "Disconnect and delete",
+          name: it ? "Scollega ed elimina negozio" : "Disconnect and delete store",
           exact: true,
         })
         .click();
@@ -430,13 +430,13 @@ for (const language of ["it", "en"] as const) {
           panel.getByRole("button", { name: t("Reimporta storico", "Re-import history") }),
         ).toBeDisabled();
         const remove = panel.getByRole("button", {
-          name: t("Scollega ed elimina dati", "Disconnect and delete data"),
+          name: t("Scollega ed elimina negozio", "Disconnect and delete store"),
           exact: true,
         });
         await remove.click();
         const confirm = page.getByRole("alertdialog");
         await expect(confirm.getByRole("heading")).toHaveText(
-          t("Scollega ed elimina dati", "Disconnect and delete data"),
+          t("Scollega ed elimina negozio", "Disconnect and delete store"),
         );
         const overlay = page.locator("[data-slot=alert-dialog-overlay]");
         expect(await overlay.evaluate((el) => Number(getComputedStyle(el).zIndex))).toBeGreaterThan(
@@ -445,7 +445,7 @@ for (const language of ["it", "en"] as const) {
             .evaluate((el) => Number(getComputedStyle(el).zIndex)),
         );
         const deleteButton = confirm.getByRole("button", {
-          name: t("Scollega ed elimina", "Disconnect and delete"),
+          name: t("Scollega ed elimina negozio", "Disconnect and delete store"),
           exact: true,
         });
         await expect(deleteButton).toBeDisabled();
@@ -1129,7 +1129,7 @@ for (const locale of ["it", "en"] as const) {
           exact: true,
         });
         const remove = dialog.getByRole("button", {
-          name: locale === "it" ? "Scollega ed elimina dati" : "Disconnect and delete data",
+          name: locale === "it" ? "Scollega ed elimina negozio" : "Disconnect and delete store",
           exact: true,
         });
         await remove.scrollIntoViewIfNeeded();
@@ -1162,7 +1162,7 @@ for (const locale of ["it", "en"] as const) {
         await remove.click();
         const confirm = page.getByRole("alertdialog");
         const deletion = confirm.getByRole("button", {
-          name: locale === "it" ? "Scollega ed elimina" : "Disconnect and delete",
+          name: locale === "it" ? "Scollega ed elimina negozio" : "Disconnect and delete store",
           exact: true,
         });
         await expect(deletion).toBeDisabled();

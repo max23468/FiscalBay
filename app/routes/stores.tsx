@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { data, isRouteErrorResponse } from "react-router";
+import { data, isRouteErrorResponse, redirect } from "react-router";
 
 import { AccessNotice, AccountShell } from "~/components/account";
 import { NotFoundState } from "~/components/not-found";
@@ -63,7 +63,6 @@ function storeView(store: StoreStatus): StoreView {
     consentExpiresAt: store.consentExpiresAt,
     consentExpiring: store.consentExpiring || undefined,
     targetMinutes: null,
-    dataDeleted: store.dataDeleted || undefined,
     recent: [],
   };
 }
@@ -133,6 +132,9 @@ export async function action({ request }: Route.ActionArgs) {
   if (result === "invalid") {
     const notice = intent === "store-delete" ? t.deleteMismatch : t.failed;
     return data<ActionResult>({ ok: false, notice }, { status: 409 });
+  }
+  if (intent === "store-delete") {
+    return redirect(localizedPath(language, `${appBase}/negozi?negozio=eliminato`), 303);
   }
   return { ok: true, notice: t.done[intent] } satisfies ActionResult;
 }

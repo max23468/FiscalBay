@@ -26,7 +26,6 @@ export type StoreStatus = {
   importedOrders: number;
   /** Finestra dello storico e completamento della sua importazione; null prima del primo avvio. */
   history: { days: number; done: boolean } | null;
-  dataDeleted: boolean;
   /**
    * Invito a ricollegare: prima che il consenso scada e, dopo, per al massimo trenta giorni.
    * Mai per i negozi in pausa, che non leggono eBay.
@@ -71,7 +70,7 @@ export async function listStores(
   const { results } = await db
     .prepare(
       `SELECT s.id, s.ebay_environment, COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id) AS name, s.disconnected_at,
-              s.data_deleted_at, c.store_id AS credentials, c.granted_at, c.refresh_expires_at,
+              c.store_id AS credentials, c.granted_at, c.refresh_expires_at,
               c.rejected_at, ss.last_success_at, ss.history_from, ss.history_until,
               ss.history_done_at, ss.locked_until > ?2 AS syncing,
               (SELECT group_concat(reason) FROM ebay_store_pauses p WHERE p.store_id = s.id)
@@ -81,7 +80,7 @@ export async function listStores(
          JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
          LEFT JOIN ebay_store_credentials c ON c.store_id = s.id
          LEFT JOIN sync_state ss ON ss.store_id = s.id
-        WHERE wm.user_id = ?1
+        WHERE wm.user_id = ?1 AND s.data_deleted_at IS NULL
         ORDER BY s.linked_at, s.id`,
     )
     .bind(userId, now.toISOString())
@@ -90,7 +89,6 @@ export async function listStores(
       ebay_environment: "production" | "sandbox";
       name: string;
       disconnected_at: string | null;
-      data_deleted_at: string | null;
       credentials: string | null;
       granted_at: string | null;
       refresh_expires_at: string | null;
@@ -150,7 +148,6 @@ export async function listStores(
               done: row.history_done_at !== null,
             }
           : null,
-      dataDeleted: row.data_deleted_at !== null,
       reminder,
       // Un negozio scollegato non ha credenziali, quindi risulta già scaduto.
       consentExpiring: !expired && Date.parse(expiresAt!) - at <= expiringNoticeMilliseconds,
@@ -222,9 +219,9 @@ export async function disconnectStore(
 }
 
 /**
- * Scollega ed elimina i dati del negozio, senza ripensamento. La conferma deve riportare il
- * nome del negozio. La quota già consumata non torna disponibile e il negozio resta associato
- * allo spazio, così ricollegarlo non crea un duplicato né un nuovo negozio.
+ * Rimuove il negozio dall'elenco ed elimina i dati, senza ripensamento. La conferma riporta
+ * il nome. Il riferimento allo spazio resta per riconoscere l'identità al nuovo collegamento
+ * e preservare quota e diritti commerciali già registrati.
  */
 export async function deleteStoreData(
   db: D1Database,

@@ -2053,7 +2053,6 @@ describe("collegamento negozio eBay", () => {
       expectedStoreName: "venditore",
       reconnect: true,
       fromStores: true,
-      dataDeleted: false,
     });
     const start = async (cookie: string) =>
       (await startStoreLink({
@@ -2112,15 +2111,15 @@ describe("collegamento negozio eBay", () => {
     expect(await listStores(env.DB, owner.userId)).toMatchObject([
       { id: store!.id, name: "nome-aggiornato" },
     ]);
-    // Dopo l'eliminazione la schermata non promette più di conservare gli ordini.
+    // Dopo l'eliminazione il vecchio indirizzo di reconnect non è più disponibile.
     expect(await deleteStoreData(env.DB, owner.userId, store!.id, "nome-aggiornato")).toBe("done");
     const deleted = await loadStoreLink({
       request: new Request(
         `http://localhost:5173/app/negozi/collega?ricollega=${store!.id}&da=negozi`,
         { headers: { cookie: owner.cookie } },
       ),
-    } as never);
-    expect(deleted).toMatchObject({ dataDeleted: true });
+    } as never).catch((response: Response) => response);
+    expect((deleted as Response).status).toBe(400);
   });
 
   it("non accetta il reconnect se il negozio cambia proprietario durante OAuth", async () => {
@@ -2675,7 +2674,6 @@ describe("collegamento negozio eBay", () => {
         ebayEnvironment: "production",
         expectedStoreId: null,
         expectedStoreName: null,
-        dataDeleted: false,
       });
     }
     // Da Negozi la schermata riporta lì con «Annulla».
@@ -3348,7 +3346,6 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         importedOrders: 1,
         // Al collegamento l'unico ordine dello storico completa l'importazione.
         history: { days: 30, done: true },
-        dataDeleted: false,
         reminder: null,
         consentExpiring: false,
       },
@@ -3552,6 +3549,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         "SELECT disconnected_at IS NOT NULL AS disconnected, data_deleted_at IS NOT NULL AS deleted FROM ebay_stores",
       ).first(),
     ).toEqual({ disconnected: 1, deleted: 1 });
+    expect(await listStores(env.DB, seller.userId)).toEqual([]);
 
     // Ricollegare ritrova il negozio: l'ordine riletto da eBay è nuovo e il vecchio sblocco
     // non torna, mentre la quota consumata resta consumata.
@@ -3563,11 +3561,13 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     expect(await quotaUsed()).toBe(1);
 
     // Gli ordini riletti non risultano eliminati: scollegando di nuovo si possono eliminare.
-    expect((await listStores(env.DB, seller.userId))[0]).toMatchObject({ dataDeleted: false });
+    expect((await listStores(env.DB, seller.userId))[0]).toMatchObject({
+      id: seller.storeId,
+      connection: "active",
+    });
     await disconnectStore(env.DB, seller.userId, seller.storeId);
     expect((await listStores(env.DB, seller.userId))[0]).toMatchObject({
       connection: "disconnected",
-      dataDeleted: false,
     });
   });
 
@@ -3735,20 +3735,18 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     expect((mismatch as { init: ResponseInit }).init.status).toBe(409);
     expect(await count("orders")).toBe(1);
 
-    expect(
-      await storeForm(seller.cookie, {
-        intent: "store-delete",
-        store: seller.storeId,
-        conferma: "venditore",
-      }),
-    ).toMatchObject({ ok: true });
-    // Il negozio resta nello spazio, scollegato e senza dati: ricollegarlo non crea doppioni.
-    [store] = (await storesPage("/app/negozi", seller.cookie)).data.page.stores;
-    expect(store).toMatchObject({
-      connection: "disconnected",
-      dataDeleted: true,
-      importedOrders: 0,
+    const removed = await storeForm(seller.cookie, {
+      intent: "store-delete",
+      store: seller.storeId,
+      conferma: "venditore",
     });
+    expect((removed as Response).status).toBe(303);
+    expect((removed as Response).headers.get("location")).toBe("/app/negozi?negozio=eliminato");
+    const after = await storesPage("/app/negozi?negozio=eliminato", seller.cookie);
+    expect(after.data.page.stores).toEqual([]);
+    expect(after.data.notice).toEqual({ text: "Negozio eliminato da FiscalBay.", tone: "success" });
+    const removedDetail = await storesPage(`/app/negozi/${seller.storeId}`, seller.cookie);
+    expect(removedDetail.init.status).toBe(404);
 
     const unknown = await storeForm(seller.cookie, { intent: "store-sync", store: seller.storeId });
     expect((unknown as { init: ResponseInit }).init.status).toBe(400);

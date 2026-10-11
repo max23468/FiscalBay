@@ -21,6 +21,7 @@ const noticeTones: Record<string, "success" | "info" | "warning" | "danger"> = {
   "password-reimpostata": "success",
   "recupero-scaduto": "warning",
   collegato: "success",
+  eliminato: "success",
   "metodo-collegato": "success",
   "metodo-rimosso": "success",
   "ebay-rimosso": "success",

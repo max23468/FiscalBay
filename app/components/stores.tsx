@@ -289,8 +289,8 @@ function ReadActions({ store, ebayDown, t }: { store: StoreView; ebayDown: boole
 }
 
 /**
- * Scollega ed elimina dati; un negozio già scollegato offre solo l'eliminazione. Dopo
- * l'eliminazione il pannello si chiude e l'elenco mostra il negozio scollegato.
+ * Scollega ed elimina negozio; un negozio già scollegato offre solo l'eliminazione.
+ * Dopo il successo si torna all'elenco.
  */
 function useDisconnectDialog(store: StoreView, t: AppCopy, links: AppLinks) {
   const action = useAction();
@@ -325,9 +325,8 @@ function useDisconnectDialog(store: StoreView, t: AppCopy, links: AppLinks) {
 function DisconnectActions({ store, t, links }: { store: StoreView; t: AppCopy; links: AppLinks }) {
   const { action, open, failure, changeOpen, run, confirmName, setConfirmName } =
     useDisconnectDialog(store, t, links);
-  // Dopo l'eliminazione resta soltanto il ricollegamento. Il componente resta montato perché
-  // l'esito dell'azione, con il suo avviso, arriva insieme ai dati aggiornati.
-  if (store.connection === "disconnected" && store.dataDeleted) return null;
+  const deleteLabel =
+    store.connection === "disconnected" ? t.stores.deleteStore : t.stores.disconnectDelete;
   return (
     <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-2 border-t pt-3">
       {store.connection === "disconnected" ? null : (
@@ -380,13 +379,11 @@ function DisconnectActions({ store, t, links }: { store: StoreView; t: AppCopy; 
           }
         >
           <Trash2 aria-hidden="true" data-icon="inline-start" />
-          {t.stores.disconnectDelete}
+          {deleteLabel}
         </AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-balance">
-              {t.stores.disconnectDelete}
-            </AlertDialogTitle>
+            <AlertDialogTitle className="text-balance">{deleteLabel}</AlertDialogTitle>
             <AlertDialogDescription>
               <strong>{store.name}</strong>. {t.stores.deleteBody}
             </AlertDialogDescription>
@@ -414,7 +411,7 @@ function DisconnectActions({ store, t, links }: { store: StoreView; t: AppCopy; 
               variant="destructive-solid"
               onClick={() => run("store-delete", { conferma: confirmName.trim() })}
             >
-              {action.pending ? t.settings.saving : t.stores.deleteConfirm}
+              {action.pending ? t.settings.saving : deleteLabel}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -475,7 +472,7 @@ function ReconnectButton({
 
 function syncDescription(store: StoreView, ebayDown: boolean, t: AppCopy) {
   if (store.connection === "disconnected") {
-    return store.dataDeleted ? t.stores.deletedHint : t.stores.disconnectedHint;
+    return t.stores.disconnectedHint;
   }
   if (ebayDown) return t.stores.ebayDown;
   if (store.connection === "active") {
