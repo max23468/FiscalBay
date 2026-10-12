@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHmac } from "node:crypto";
+import { applyLocalMigrations } from "../scripts/local-d1.mjs";
 import type { PageRole } from "./page-cases";
 
 export const localSecret = "fiscalbay-e2e-secret-at-least-32-bytes";
@@ -10,11 +11,7 @@ export const localOrigin = `http://localhost:${localPort}`;
 
 /** Unicamente locale: nessun flag remote e nessuna sessione privilegiata sul dominio test. */
 export async function seedLocalAccount() {
-  execFileSync(
-    "pnpm",
-    ["exec", "wrangler", "d1", "migrations", "apply", "fiscalbay-test", "--local"],
-    { stdio: ["ignore", "ignore", "inherit"] },
-  );
+  applyLocalMigrations();
   execFileSync(process.execPath, ["scripts/reset-test-account.mjs", "--local", "--sessions"], {
     env: { ...process.env, E2E_ACCOUNT_PASSWORD: localPassword },
     stdio: ["ignore", "ignore", "inherit"],

@@ -6,7 +6,7 @@
     "app/**/.server/**/*",
     "app/**/.client/**/*",
     "workers/**/*",
-    "worker-configuration.d.ts"
+    ".cloudflare/types/index.d.ts"
   ],
   "compilerOptions": {
     "composite": true,

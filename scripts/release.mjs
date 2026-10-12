@@ -19,10 +19,21 @@ import { fileURLToPath } from "node:url";
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
+// `mode` è la modalità registrata dalla Build Output: test usa quella predefinita di Vite.
 const targets = {
-  test: { worker: "fiscalbay-test", origin: "https://test.fiscalbay.it", ref: "develop" },
-  production: { worker: "fiscalbay", origin: "https://fiscalbay.it", ref: "main" },
+  test: {
+    worker: "fiscalbay-test",
+    origin: "https://test.fiscalbay.it",
+    ref: "develop",
+    mode: "production",
+  },
+  production: { worker: "fiscalbay", origin: "https://fiscalbay.it", ref: "main", mode: "live" },
 };
+const output = ".cloudflare/output";
+const readOutput = () => ({
+  root: JSON.parse(readFileSync(`${output}/v0/config.json`, "utf8")),
+  worker: JSON.parse(readFileSync(`${output}/v0/workers/default/worker.config.json`, "utf8")),
+});
 
 export function digestDirectory(directory) {
   const files = [];
@@ -161,13 +172,13 @@ export async function publish(manifest, io, receipt = {}) {
 function manifests(environment) {
   if (git("status", "--porcelain"))
     throw new Error("Sorgenti non salvati nel commit: provenienza non attestabile.");
-  const config = JSON.parse(readFileSync("build/server/wrangler.json", "utf8"));
+  const { root, worker } = readOutput();
   const target = targets[environment];
   if (
     !target ||
-    config.name !== target.worker ||
-    config.vars.APP_ORIGIN !== target.origin ||
-    !config.no_bundle
+    worker.name !== target.worker ||
+    worker.env.APP_ORIGIN?.value !== target.origin ||
+    root.buildContext?.mode !== target.mode
   )
     throw new Error("Build o configurazione dell'ambiente errata.");
   const migrations = readdirSync("migrations")
@@ -177,9 +188,9 @@ function manifests(environment) {
   return {
     sha: git("rev-parse", "HEAD"),
     tree: git("rev-parse", "HEAD^{tree}"),
-    digest: digestDirectory("build"),
+    digest: digestDirectory(output),
     environment,
-    config: hash(readFileSync("wrangler.jsonc")),
+    config: hash(readFileSync("cloudflare.config.ts")),
     lockfile: hash(readFileSync("pnpm-lock.yaml")),
     migrations,
     node: process.version,
@@ -188,7 +199,7 @@ function manifests(environment) {
 }
 
 function verify(environment) {
-  const saved = JSON.parse(readFileSync("build/release-manifest.json", "utf8"));
+  const saved = JSON.parse(readFileSync(`${output}/release-manifest.json`, "utf8"));
   const current = manifests(environment);
   for (const key of [
     "tree",
@@ -284,9 +295,10 @@ async function main() {
     return;
   }
   if (command === "manifest") {
-    // Il preview crea questo file con segreti locali: non entra mai nell'artefatto.
-    rmSync("build/server/.dev.vars", { force: true });
-    writeFileSync("build/release-manifest.json", JSON.stringify(manifests(environment), null, 2));
+    writeFileSync(
+      `${output}/release-manifest.json`,
+      JSON.stringify(manifests(environment), null, 2),
+    );
     return;
   }
   const manifest = verify(environment);
@@ -357,19 +369,25 @@ async function main() {
       throw new Error("Manca il via Production sul commit atteso.");
     productionReadiness(readFileSync("docs/MASTER_PLAN.md", "utf8"));
   }
-  const wrangler = (...args) =>
-    execFileSync("pnpm", ["exec", "wrangler", ...args], {
+  const cf = (...args) =>
+    execFileSync("pnpm", ["exec", "cf", ...args], {
       encoding: "utf8",
+      env: { ...process.env, CI: "true" },
       stdio: ["ignore", "pipe", "inherit"],
     });
-  const config = JSON.parse(readFileSync("build/server/wrangler.json", "utf8"));
-  const database = config.d1_databases.find(({ binding }) => binding === "DB");
+  const { worker: config } = readOutput();
+  const database = config.env.DB;
+  // Il primo deployment dell'elenco è quello che serve il traffico.
+  const activeDeployment = () =>
+    JSON.parse(cf("workers", "deployments", "list", "--worker", target.worker, "--per-page", "1"))
+      .deployments[0];
   const currentVersion = async () => {
-    const status = JSON.parse(wrangler("deployments", "status", "--name", target.worker, "--json"));
-    const version = status.versions.find(({ percentage }) => percentage === 100)?.version_id;
+    const version = activeDeployment()?.versions.find(
+      ({ percentage }) => percentage === 100,
+    )?.version_id;
     if (!version) throw new Error("Deployment non interamente assegnato a una versione.");
     const metadata = JSON.parse(
-      wrangler("versions", "view", version, "--name", target.worker, "--json"),
+      cf("workers", "versions", "get", version, "--worker-id", target.worker),
     );
     return { version, identity: metadata.annotations?.["workers/message"] };
   };
@@ -388,7 +406,7 @@ async function main() {
     });
   const query = async (sql, params = []) => {
     const response = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/d1/database/${database.database_id}/query`,
+      `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/d1/database/${database.id}/query`,
       {
         method: "POST",
         headers: {
@@ -438,22 +456,24 @@ async function main() {
           ? "Rollback automatico escluso: schema modificato, serve forward-fix o compatibilità qualificata."
           : "Rollback automatico escluso: versione precedente senza provenienza attestata o con migration e configurazione diverse.",
       );
-    const current = JSON.parse(
-      wrangler("deployments", "status", "--name", target.worker, "--json"),
-    );
-    if (current.versions.length !== 1 || current.versions[0].version_id !== receipt.version)
+    const current = activeDeployment();
+    if (current?.versions.length !== 1 || current.versions[0].version_id !== receipt.version)
       throw new Error("Stato remoto cambiato: rollback rifiutato.");
-    wrangler(
-      "rollback",
-      receipt.previous,
-      "--name",
+    cf(
+      "workers",
+      "deployments",
+      "create",
+      "--worker",
       target.worker,
-      "--message",
-      "Collaudo non superato",
-      "--yes",
+      "--body",
+      JSON.stringify({
+        strategy: "percentage",
+        versions: [{ version_id: receipt.previous, percentage: 100 }],
+        annotations: { "workers/message": "Collaudo non superato" },
+      }),
     );
-    const after = JSON.parse(wrangler("deployments", "status", "--name", target.worker, "--json"));
-    if (after.versions[0]?.version_id !== receipt.previous || after.versions[0]?.percentage !== 100)
+    const after = activeDeployment();
+    if (after?.versions[0]?.version_id !== receipt.previous || after.versions[0].percentage !== 100)
       throw new Error("Rollback non confermato.");
     await liveReadback(receipt.previous);
     writeFileSync(receiptFile, JSON.stringify({ ...receipt, rolledBack: true }, null, 2));
@@ -470,10 +490,11 @@ async function main() {
       preflight: async () => {
         if (!process.env.CLOUDFLARE_API_TOKEN || !process.env.CLOUDFLARE_ACCOUNT_ID)
           throw new Error("Accesso provider non configurato.");
-        const bindings = JSON.parse(wrangler("secret", "list", "--name", target.worker));
-        if (
-          config.secrets.required.some((name) => !bindings.some((binding) => binding.name === name))
-        )
+        const bindings = JSON.parse(cf("workers", "secrets", "list", "--worker", target.worker));
+        const required = Object.keys(config.env).filter(
+          (name) => config.env[name].type === "secret",
+        );
+        if (required.some((name) => !bindings.some((binding) => binding.name === name)))
           throw new Error("Segreti runtime richiesti assenti.");
       },
       migrations: async () => {
@@ -497,15 +518,7 @@ async function main() {
         );
       },
       migrate: async () => {
-        wrangler(
-          "d1",
-          "migrations",
-          "apply",
-          database.database_name,
-          "--remote",
-          "--config",
-          "build/server/wrangler.json",
-        );
+        cf("d1", "migrations", "apply", database.id, "--dir", "migrations");
       },
       schema: async () => {
         const names = await applied();
@@ -516,11 +529,13 @@ async function main() {
       },
       current: currentVersion,
       deploy: async (identity) => {
-        wrangler(
+        // Nessuna risorsa creata al deploy: binding e code devono già esistere.
+        cf(
           "deploy",
-          "--config",
-          "build/server/wrangler.json",
-          "--strict",
+          "--prebuilt",
+          "--mode",
+          target.mode,
+          "--no-provision",
           "--tag",
           manifest.sha.slice(0, 12),
           "--message",
@@ -538,7 +553,7 @@ async function main() {
             manifest.sha,
             "--",
             "migrations",
-            "wrangler.jsonc",
+            "cloudflare.config.ts",
           );
           return true;
         } catch {

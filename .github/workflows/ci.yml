@@ -21,6 +21,10 @@ on:
         type: string
         required: false
 
+# Nessuna telemetria della CLI `cf` dalle esecuzioni automatiche.
+env:
+  DO_NOT_TRACK: "1"
+
 permissions:
   actions: read
   contents: read
@@ -137,7 +141,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-${{ steps.tree.outputs.tree }}
-          path: build/
+          path: .cloudflare/output/
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
@@ -182,14 +186,7 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ needs.verify.outputs.artifact }}
-          path: build/
-
-      # `vite preview` trova la configurazione del Worker tramite il rinvio che la build
-      # scrive fuori da `build/`; l'artefatto contiene soltanto `build/`.
-      - name: Point preview to the build
-        run: |
-          mkdir -p .wrangler/deploy
-          echo '{"configPath":"../../build/server/wrangler.json","auxiliaryWorkers":[]}' > .wrangler/deploy/config.json
+          path: .cloudflare/output/
 
       - name: Read Playwright version
         id: playwright
@@ -301,7 +298,7 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ needs.verify.outputs.artifact }}
-          path: build/
+          path: .cloudflare/output/
           run-id: ${{ needs.verify.outputs.artifact-run }}
           github-token: ${{ github.token }}
 

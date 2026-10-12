@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [
     cloudflareTest(async () => ({
-      wrangler: { configPath: "./wrangler.jsonc" },
+      experimental: { newConfig: { configPath: "./cloudflare.config.ts" } },
       miniflare: {
         bindings: {
           APP_ORIGIN: "http://localhost:5173",

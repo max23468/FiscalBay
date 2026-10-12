@@ -25,7 +25,7 @@ export function measure(directory) {
 const kib = (bytes) => (bytes / 1024).toFixed(1);
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const files = measure(process.argv[2] ?? "build/client");
+  const files = measure(process.argv[2] ?? ".cloudflare/output/v0/workers/default/assets");
   const total = files.reduce((sum, { bytes }) => sum + bytes, 0);
   if (files.length === 0) {
     console.error("Nessun JavaScript client trovato: la build non è stata prodotta.");
