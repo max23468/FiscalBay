@@ -4,7 +4,8 @@ import { redirect } from "react-router";
 import { createAuth } from "./auth.server";
 import { registrationStatus, type Profile } from "./domain/registration.server";
 import { accessPath, ordersPath } from "./app-links";
-import { errorResponse, tracePhase } from "./errors";
+import { errorResponse } from "./error-response";
+import { tracePhase } from "./errors";
 import { languageFromPath, localizedPath, type Language } from "./i18n";
 
 export type AccountArea = {

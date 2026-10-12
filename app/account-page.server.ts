@@ -8,7 +8,8 @@ import { registrationStatus } from "./domain/registration.server";
 import { listSignInMethods } from "./domain/sign-in-methods.server";
 import { listVisibleOrders } from "./domain/orders.server";
 import { listStores } from "./domain/stores.server";
-import { errorResponse, tracePhase } from "./errors";
+import { errorResponse } from "./error-response";
+import { tracePhase } from "./errors";
 import { sandboxAvailable } from "./integrations/ebay/environment.server";
 import { languageFromPath, localizedPath } from "./i18n";
 

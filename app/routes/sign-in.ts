@@ -10,7 +10,8 @@ import {
 } from "../domain/registration.server";
 import { accessPath, ordersPath, visitCookie, securityReturnPath } from "../app-links";
 import { accountLoader } from "../account-page.server";
-import { errorResponse, tracePhase } from "../errors";
+import { errorResponse } from "../error-response";
+import { tracePhase } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
 import type { Route } from "./+types/sign-in";
 
