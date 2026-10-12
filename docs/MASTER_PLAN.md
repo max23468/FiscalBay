@@ -591,7 +591,7 @@ M0/M1: inventario DNS prima di modificare nameserver; trasferire record necessar
 
 Posta umana su iCloud+ già pagato se configurazione verificata, mantenendo info/supporto e terzo slot libero. MX/SPF/DKIM per posta umana e mittente transazionale distinti ma compatibili; un solo record SPF per nome, allineamento DMARC verificato, return-path/subdominio tecnico quando richiesto. Non mettere proxy HTTP davanti a record posta. Provare ricezione/risposta e invii Auth reali autorizzati; nessuna assunzione che l'SMTP di test sia adatto alla produzione. [S12](SOURCES.md#s12)
 
-**Protezioni della zona e della posta (D168).** M1-08 conserva il bootstrap già completato; [M7-12](#m7-12) integra e qualifica le protezioni seguenti prima della RC. Nessuna funzione inclusa nel piano è per questo già attiva sul provider.
+**Protezioni della zona e della posta (D168).** Le nuove attività appartengono soltanto alle milestone aperte: M6-06 qualifica il trasporto email; [M7-12](#m7-12) integra e qualifica le protezioni seguenti prima della RC; M8/M9 completano le prove e il readback finali. Nessuna funzione inclusa nel piano è per questo già attiva sul provider.
 
 | Funzione | Contratto e verifica |
 |---|---|
@@ -1050,6 +1050,8 @@ Ogni milestone elenca in coda i propri task (D164) con codice `Mx-yy`, stato (`D
 | [M8](#m8) | Da completare | RC, merchant e prove reali autorizzate ancora da preparare; checkpoint in attesa. |
 | [M9](#m9) | Da completare | Go-live non autorizzato; gate Production sotto ancora aperti. |
 
+Una milestone chiusa non riceve nuovi compiti o criteri di completamento. Integrazioni e verifiche successive si assegnano a milestone ancora aperte; i riferimenti a task chiusi indicano soltanto capacità già disponibili come prerequisiti, senza riaprirli o modificarne il perimetro concluso.
+
 <a id="questioni-aperte"></a>
 ### Questioni aperte e ripresa
 
@@ -1308,11 +1310,9 @@ Aggiungere al prototipo esempi di problema con conseguenza/azione, supporto con 
 
 **Stato:** Completato · **Prerequisiti:** M0 · **Contratto:** [§24](#s24)
 
-Consolidare il bootstrap test predisposto in M0-02: DNS/TLS/redirect, configurazione Production, iCloud info/supporto e trasporto minimo per gli invii Auth controllati. Verificare inventario record, callback, SPF/DKIM/DMARC e isolamento; allineare i contatti dei provider alla regola email di [§14](#s14), incluso il branding Google OAuth; dismettere i record Register senza consumatori dopo il readback Cloudflare e non attivare servizi Register aggiuntivi.
+Consolidare il bootstrap test predisposto in M0-02: DNS/TLS/redirect, configurazione Production, iCloud info/supporto e trasporto transazionale selezionato. Verificare inventario record, callback, SPF/DKIM/DMARC e isolamento; allineare i contatti dei provider alla regola email di [§14](#s14), incluso il branding Google OAuth; dismettere i record Register senza consumatori dopo il readback Cloudflare e non attivare servizi Register aggiuntivi.
 
 **Criterio di completamento:** HTTP/TLS e callback test/live coerenti, posta umana e Auth provate, record attivi preservati o sostituiti con prova; nessun cookie/RP ID condiviso accidentalmente e nessun setup iniziale rinviato dopo il gate che lo richiedeva.
-
-**Limiti residui:** la scelta e la qualifica del trasporto per destinatari pubblici sono in M6-06; le nuove protezioni della zona e i report posta di D168 sono in M7-12. Il bootstrap completato non attesta questi effetti successivi né autorizza il go-live.
 
 <a id="m1-09"></a>
 #### M1-09 · Guardrail della pipeline e del repository
@@ -1324,17 +1324,17 @@ Estende M1-02, già chiusa, con i guardrail ricavati da CF Ready e Hub Fatture: 
 **Criterio di completamento:** Una PR verso `main` da una branch diversa da `develop` fallisce; un file fuori classificazione esegue il gate completo; ogni test di repository ha un caso negativo che fallisce davvero; nessun `uses:` di terze parti senza SHA. CI verde sul commit integrato.
 
 <a id="m1-10"></a>
-#### M1-10 · Budget del JavaScript client
+#### M1-10 · Budget di prestazioni e capacità al deploy
 
 **Stato:** Completato · **Prerequisiti:** M1-02 · **Contratto:** [§22](#s22) · [§31](#s31) · [§37](#s37)
 
 **Per chiudere:** M1-06; il budget del bundle si misura sul design system effettivo.
 
-Aggiungere alla build il controllo del JavaScript client entro il budget gzip dichiarato nel repository (valore iniziale 350 KiB).
+Aggiungere alla build il controllo del JavaScript client entro il budget gzip dichiarato nel repository (valore iniziale 350 KiB) e al deploy test il controllo CPU: traffico sintetico marcato, raccolta via tail delle sole invocazioni marcate, fallimento sopra il p95 ammesso o con errori, rollback del deploy test. Nessun traffico verso eBay, Stripe o Telegram.
 
-**Criterio di completamento:** Un bundle oltre budget fa fallire la build; la misura si applica all'artefatto effettivo e il caso negativo è provato.
+**Criterio di completamento:** Un bundle oltre budget fa fallire la build; un deploy test con p95 oltre soglia o con errori fallisce e ripristina la versione precedente, provato almeno una volta con soglia forzata. Ricevuta con p95, numero di eventi e versione.
 
-Il controllo CPU al deploy test originariamente incluso è stato rimosso con D158; le misure per invocazione e la qualifica del piano restano in §31 e M7-03, senza ricreare il controllo al deploy.
+**Limite:** il controllo CPU al deploy test è stato rimosso con D158; resta bloccante il budget del bundle client.
 
 <a id="m2"></a>
 ### M2 · Account, Auth e Negozi eBay
