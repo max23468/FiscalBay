@@ -63,7 +63,8 @@ export function logFailure(input: {
     | "token_refresh"
     | "order_acquisition"
     | "account_email"
-    | "maintenance";
+    | "maintenance"
+    | "scheduling";
   status?: number;
 }): void {
   if (input.request?.signal.aborted) return;

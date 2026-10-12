@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { z } from "zod";
 
 import {
@@ -21,10 +21,15 @@ import {
 import { acquireOrders } from "../app/domain/order-acquisition.server";
 import {
   consumeStoreSync,
+  dispatchStoreSyncs,
   requestStoreSync,
   syncOrder,
-  syncStores,
 } from "../app/domain/order-sync.server";
+import {
+  consumeTask,
+  dispatchScheduledWork,
+  dispatchTasks,
+} from "../app/domain/scheduled-work.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import {
   grantFreeOrder,
@@ -100,6 +105,14 @@ beforeEach(async () => {
     env.DB.prepare("DELETE FROM workspaces"),
   ]);
 });
+
+/** Messaggio della coda con conferma e nuovo tentativo osservabili. */
+function queueMessage(body: unknown, attempts = 1) {
+  return { body, attempts, ack: vi.fn(), retry: vi.fn() } as unknown as Message<unknown> & {
+    ack: Mock;
+    retry: Mock;
+  };
+}
 
 async function seed(): Promise<void> {
   await env.DB.batch([
@@ -4407,6 +4420,17 @@ describe("client eBay e normalizzazione", () => {
       ).first<Record<string, string | null>>();
     const count = async (sql: string) =>
       (await env.DB.prepare(sql).first<{ total: number }>())!.total;
+    /** Un turno del cron e poi il consumer della coda nello stesso istante, un messaggio alla volta. */
+    const cronTurn = async (environment: Env, fetcher: typeof fetch, at: Date) => {
+      const sendBatch = vi.fn<Queue["sendBatch"]>(async () => {});
+      const stores = await dispatchStoreSyncs(
+        { ...environment, WEBHOOK_QUEUE: { sendBatch } } as unknown as Env,
+        at,
+      );
+      for (const storeId of stores)
+        await consumeStoreSync(queueMessage({ syncStore: storeId }), environment, fetcher, at);
+      return stores;
+    };
     // Ordini creati a un'ora di distanza prima di `until`, modificati un minuto dopo.
     const series = (prefix: string, total: number, until: string) =>
       Array.from({ length: total }, (_, index) => {
@@ -5098,7 +5122,7 @@ describe("client eBay e normalizzazione", () => {
       expect((await syncState())!.cursor).toBe("2026-09-02T00:00:00.000Z");
     });
 
-    it("il lavoro periodico legge a turno tre negozi attivi, con un budget ciascuno, isolando gli errori", async () => {
+    it("il lavoro periodico accoda ogni negozio dovuto, con un budget ciascuno, isolando gli errori", async () => {
       const seal = (storeId: string) =>
         sealToken(env.BETTER_AUTH_SECRET, storeId, "access", `token-${storeId}`);
       const expires = "2026-09-02T03:00:00.000Z";
@@ -5154,38 +5178,38 @@ describe("client eBay e normalizzazione", () => {
           String(line).includes('"operation":"order_acquisition"'),
         ).length;
       try {
-        // A ha più lavoro del proprio budget; B non apre il token; C risponde 401; D attende.
+        // A e D hanno più lavoro del proprio budget; B non apre il token; C risponde 401.
         const fetcher = ebay({
           orders: series("12-turno", 10, "2026-09-02T00:00:00.000Z"),
           fail: (_, init) =>
             tokenOf(init) === "token-s-c" ? new Response(null, { status: 401 }) : undefined,
         });
-        await syncStores(env, fetcher, new Date("2026-09-02T00:00:00.000Z"));
-        expect(perStore(fetcher)).toEqual({ "token-s-a": 12, "token-s-c": 1 });
+        await cronTurn(env, fetcher, new Date("2026-09-02T00:00:00.000Z"));
+        expect(perStore(fetcher)).toEqual({ "token-s-a": 12, "token-s-c": 1, "token-s-d": 12 });
         expect(logged()).toBe(2);
         // Anche i tentativi falliti passano il turno.
         expect(await attempted()).toEqual({
           "s-a": "2026-09-02T00:00:00.000Z",
           "s-b": "2026-09-02T00:00:00.000Z",
           "s-c": "2026-09-02T00:00:00.000Z",
+          "s-d": "2026-09-02T00:00:00.000Z",
         });
 
-        // Il turno passa al negozio tentato meno di recente; in pausa o con il token in
-        // scadenza un negozio non si legge.
+        // Al turno successivo; in pausa o con il token in scadenza un negozio non si legge.
         await env.DB.prepare(
           "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-c', 'manual', ?)",
         )
           .bind(now)
           .run();
         const later = ebay({ orders: [] });
-        await syncStores(env, later, new Date("2026-09-02T01:00:00.000Z"));
+        await cronTurn(env, later, new Date("2026-09-02T01:00:00.000Z"));
         expect(Object.keys(perStore(later)).sort()).toEqual(["token-s-a", "token-s-d"]);
         expect(await attempted()).toMatchObject({
           "s-b": "2026-09-02T01:00:00.000Z",
           "s-d": "2026-09-02T01:00:00.000Z",
         });
         const expiring = ebay();
-        await syncStores(env, expiring, new Date("2026-09-02T02:56:00.000Z"));
+        expect(await cronTurn(env, expiring, new Date("2026-09-02T02:56:00.000Z"))).toEqual([]);
         expect(expiring).not.toHaveBeenCalled();
       } finally {
         errors.mockRestore();
@@ -5207,8 +5231,8 @@ describe("client eBay e normalizzazione", () => {
       };
       const state = () =>
         env.DB.prepare(
-          `SELECT polled_at, requested_at, history_from, history_until, history_done_at
-             FROM sync_state WHERE store_id = 's-a'`,
+          `SELECT polled_at, requested_at, dispatched_at, history_from, history_until,
+                  history_done_at FROM sync_state WHERE store_id = 's-a'`,
         ).first<Record<string, string | null>>();
       const runs = async () =>
         (
@@ -5270,7 +5294,7 @@ describe("client eBay e normalizzazione", () => {
 
       it("il cron legge con la cadenza Free e l'evento non attende il turno", async () => {
         const fetcher = ebay();
-        await syncStores(env, fetcher, minutes(0));
+        await cronTurn(env, fetcher, minutes(0));
         expect(await state()).toMatchObject({ polled_at: minutes(0).toISOString() });
         expect(await runs()).toEqual([
           { started_at: minutes(0).toISOString(), ok: 1, new_orders: 1 },
@@ -5278,8 +5302,8 @@ describe("client eBay e normalizzazione", () => {
 
         // Dieci e venti minuti dopo il negozio Free non è dovuto e non ha arretrati.
         fetcher.mockClear();
-        await syncStores(env, fetcher, minutes(10));
-        await syncStores(env, fetcher, minutes(20));
+        await cronTurn(env, fetcher, minutes(10));
+        await cronTurn(env, fetcher, minutes(20));
         expect(fetcher).not.toHaveBeenCalled();
 
         // Un evento è letto subito e non sposta il turno della lettura periodica.
@@ -5300,7 +5324,7 @@ describe("client eBay e normalizzazione", () => {
         expect(await runs()).toHaveLength(1);
 
         fetcher.mockClear();
-        await syncStores(env, fetcher, minutes(30));
+        await cronTurn(env, fetcher, minutes(30));
         expect(pages(fetcher, "lastmodifieddate")).toEqual([0]);
         expect(await state()).toMatchObject({ polled_at: minutes(30).toISOString() });
 
@@ -5310,17 +5334,17 @@ describe("client eBay e normalizzazione", () => {
           .bind(minutes(35).toISOString())
           .run();
         fetcher.mockClear();
-        await syncStores(env, fetcher, minutes(40));
+        await cronTurn(env, fetcher, minutes(40));
         expect(pages(fetcher, "lastmodifieddate")).toEqual([0]);
         expect(await state()).toMatchObject({ requested_at: null });
 
         // Lo storico ancora da importare è lavoro arretrato: si legge a ogni esecuzione utile.
         await env.DB.prepare("UPDATE sync_state SET history_done_at = NULL").run();
         fetcher.mockClear();
-        await syncStores(env, fetcher, minutes(50));
+        await cronTurn(env, fetcher, minutes(50));
         expect(pages(fetcher, "creationdate")).toEqual([0]);
         fetcher.mockClear();
-        await syncStores(env, fetcher, minutes(60));
+        await cronTurn(env, fetcher, minutes(60));
         expect(fetcher).not.toHaveBeenCalled();
         expect((await runs()).map(({ ok, new_orders }) => [ok, new_orders])).toEqual([
           [1, 0],
@@ -5387,7 +5411,7 @@ describe("client eBay e normalizzazione", () => {
           );
           expect(await state()).toMatchObject({ requested_at: minutes(0).toISOString() });
           const fetcher = ebay();
-          await syncStores(env, fetcher, minutes(0.5));
+          await cronTurn(env, fetcher, minutes(0.5));
           expect(fetcher).toHaveBeenCalled();
           expect(await state()).toMatchObject({ requested_at: null });
 
@@ -5443,11 +5467,11 @@ describe("client eBay e normalizzazione", () => {
           expect(early.retry).toHaveBeenCalledWith({ delaySeconds: 300 });
           // Il cron esclude il keyset in attesa senza tentare né registrare errori.
           errors.mockClear();
-          await syncStores(env, fetcher, minutes(10));
+          await cronTurn(env, fetcher, minutes(10));
           expect(fetcher).not.toHaveBeenCalled();
           expect(errors).not.toHaveBeenCalled();
 
-          await syncStores(env, fetcher, minutes(11));
+          await cronTurn(env, fetcher, minutes(11));
           expect(fetcher).toHaveBeenCalled();
           expect(await state()).toMatchObject({ requested_at: null });
         } finally {
@@ -5480,14 +5504,14 @@ describe("client eBay e normalizzazione", () => {
         try {
           // Un errore del solo negozio non ferma gli altri.
           const rejected = failing(401);
-          await syncStores(env, rejected, minutes(0));
+          await cronTurn(env, rejected, minutes(0));
           expect(await polledB()).toEqual({ polled_at: minutes(0).toISOString() });
           expect(errors).toHaveBeenCalledOnce();
 
           // Un limite sì: il negozio non tentato resta il primo del prossimo turno utile.
           errors.mockClear();
           const limited = failing(429);
-          await syncStores(env, limited, minutes(30));
+          await cronTurn(env, limited, minutes(30));
           expect(limited).toHaveBeenCalledOnce();
           expect(errors).toHaveBeenCalledOnce();
           expect(await polledB()).toEqual({ polled_at: minutes(0).toISOString() });
@@ -5530,7 +5554,7 @@ describe("client eBay e normalizzazione", () => {
           .bind(minutes(15).toISOString())
           .run();
         const fetcher = ebay();
-        await syncStores(sandbox, fetcher, minutes(0));
+        await cronTurn(sandbox, fetcher, minutes(0));
         expect(fetcher.mock.calls.map(([input]) => new URL(String(input)).origin)).toContain(
           "https://api.sandbox.ebay.com",
         );
@@ -5580,22 +5604,22 @@ describe("client eBay e normalizzazione", () => {
         const errors = vi.spyOn(console, "error").mockImplementation(() => {});
         try {
           // Storico mai importato e lettura rifiutata: nessun nuovo tentativo ogni dieci minuti.
-          await syncStores(
+          await cronTurn(
             env,
             ebay({ fail: () => new Response(null, { status: 401 }) }),
             minutes(0),
           );
           const fetcher = ebay();
-          await syncStores(env, fetcher, minutes(10));
-          await syncStores(env, fetcher, minutes(20));
+          await cronTurn(env, fetcher, minutes(10));
+          await cronTurn(env, fetcher, minutes(20));
           expect(fetcher).not.toHaveBeenCalled();
-          await syncStores(env, fetcher, minutes(30));
+          await cronTurn(env, fetcher, minutes(30));
           expect(pages(fetcher, "creationdate")).toEqual([0]);
 
           // Dopo una lettura riuscita l'arretrato riprende al turno successivo.
           await env.DB.prepare("UPDATE sync_state SET history_done_at = NULL").run();
           fetcher.mockClear();
-          await syncStores(env, fetcher, minutes(40));
+          await cronTurn(env, fetcher, minutes(40));
           expect(pages(fetcher, "creationdate")).toEqual([0]);
         } finally {
           errors.mockRestore();
@@ -5603,12 +5627,12 @@ describe("client eBay e normalizzazione", () => {
       });
 
       it("non anticipa l'arretrato di un negozio letto da meno di nove minuti", async () => {
-        await syncStores(env, ebay(), minutes(0));
+        await cronTurn(env, ebay(), minutes(0));
         await env.DB.prepare("UPDATE sync_state SET history_done_at = NULL").run();
         const fetcher = ebay();
-        await syncStores(env, fetcher, minutes(8));
+        await cronTurn(env, fetcher, minutes(8));
         expect(fetcher).not.toHaveBeenCalled();
-        await syncStores(env, fetcher, minutes(9));
+        await cronTurn(env, fetcher, minutes(9));
         expect(pages(fetcher, "creationdate")).toEqual([0]);
       });
 
@@ -5649,7 +5673,7 @@ describe("client eBay e normalizzazione", () => {
       });
 
       it("non registra richieste per un negozio in pausa o scollegato, neanche in importazione", async () => {
-        await syncStores(env, ebay(), minutes(0));
+        await cronTurn(env, ebay(), minutes(0));
         await env.DB.prepare("UPDATE sync_state SET history_done_at = NULL").run();
         await env.DB.prepare(
           "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-a', 'manual', ?)",
@@ -5703,7 +5727,7 @@ describe("client eBay e normalizzazione", () => {
                 lastModifiedDate: minutes(80).toISOString(),
               }),
             );
-          await syncStores(env, fetcher, minutes(index * 30));
+          await cronTurn(env, fetcher, minutes(index * 30));
         }
         expect(
           (await runs()).map(({ started_at, new_orders }) => [started_at, new_orders]),
@@ -5753,6 +5777,287 @@ describe("client eBay e normalizzazione", () => {
         ).toBe(0);
         expect(await runs()).toHaveLength(1);
         expect(await state()).toMatchObject({ requested_at: minutes(2).toISOString() });
+      });
+
+      describe("smistamento del cron", () => {
+        const sendBatch = vi.fn<Queue["sendBatch"]>();
+        const cron = { ...env, WEBHOOK_QUEUE: { send, sendBatch } } as unknown as Env;
+
+        beforeEach(async () => {
+          sendBatch.mockReset();
+          sendBatch.mockResolvedValue(undefined);
+          await env.DB.prepare("DELETE FROM scheduled_tasks").run();
+        });
+
+        it("accoda un negozio una volta anche con trigger ripetuti e riaccoda un turno perso", async () => {
+          expect(await dispatchStoreSyncs(cron, minutes(0))).toEqual(["s-a"]);
+          expect(sendBatch).toHaveBeenCalledWith([{ body: { syncStore: "s-a" } }]);
+          // Lo stesso turno ricevuto più volte, anche con orari a pochi secondi di distanza.
+          expect(await dispatchStoreSyncs(cron, minutes(0))).toEqual([]);
+          expect(await dispatchStoreSyncs(cron, minutes(0.1))).toEqual([]);
+          expect(sendBatch).toHaveBeenCalledOnce();
+
+          // Il messaggio accettato non arriva più (scaduto o nella DLQ): il checkpoint resta e
+          // dopo un'ora il turno si riaccoda.
+          expect(await dispatchStoreSyncs(cron, minutes(59))).toEqual([]);
+          expect(await dispatchStoreSyncs(cron, minutes(60))).toEqual(["s-a"]);
+          const fetcher = ebay();
+          const served = message();
+          await consumeStoreSync(served, env, fetcher, minutes(61));
+          expect(served.ack).toHaveBeenCalledOnce();
+          expect(await state()).toMatchObject({
+            polled_at: minutes(61).toISOString(),
+            dispatched_at: null,
+          });
+          // Il messaggio originale consegnato in ritardo trova il turno già servito.
+          fetcher.mockClear();
+          const late = message();
+          await consumeStoreSync(late, env, fetcher, minutes(62));
+          expect(fetcher).not.toHaveBeenCalled();
+          expect(late.ack).toHaveBeenCalledOnce();
+
+          // Il prossimo turno segue la cadenza Free.
+          expect(await dispatchStoreSyncs(cron, minutes(80))).toEqual([]);
+          expect(await dispatchStoreSyncs(cron, minutes(90))).toEqual(["s-a"]);
+        });
+
+        it("fra trigger sovrapposti uno solo prende il turno di un negozio", async () => {
+          const turns = await Promise.all([
+            dispatchStoreSyncs(cron, minutes(0)),
+            dispatchStoreSyncs(cron, minutes(0)),
+          ]);
+          expect(turns.flat()).toEqual(["s-a"]);
+          expect(sendBatch).toHaveBeenCalledOnce();
+        });
+
+        it("accoda anche un negozio di un ambiente non configurato, che poi passa il turno", async () => {
+          const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+          try {
+            await env.DB.prepare("UPDATE ebay_stores SET ebay_environment = 'sandbox'").run();
+            await env.DB.prepare(
+              "INSERT INTO ebay_rate_limits (api_origin, until) VALUES ('https://api.ebay.com', ?)",
+            )
+              .bind(minutes(15).toISOString())
+              .run();
+            expect(await dispatchStoreSyncs(cron, minutes(0))).toEqual(["s-a"]);
+            const fetcher = ebay();
+            const turn = message();
+            await consumeStoreSync(turn, env, fetcher, minutes(1));
+            expect(fetcher).not.toHaveBeenCalled();
+            expect(turn.ack).toHaveBeenCalledOnce();
+            expect(errors).toHaveBeenCalledOnce();
+            expect(await state()).toMatchObject({
+              polled_at: minutes(1).toISOString(),
+              dispatched_at: null,
+            });
+          } finally {
+            errors.mockRestore();
+          }
+        });
+
+        it("con la coda non disponibile libera il turno per il trigger successivo", async () => {
+          sendBatch.mockRejectedValueOnce(new Error("queue unavailable"));
+          await expect(dispatchStoreSyncs(cron, minutes(0))).rejects.toThrow("queue unavailable");
+          expect(await state()).toMatchObject({ dispatched_at: null, polled_at: null });
+          expect(await dispatchStoreSyncs(cron, minutes(10))).toEqual(["s-a"]);
+        });
+
+        it("non accoda negozi di un keyset in attesa né negozi in pausa", async () => {
+          await env.DB.prepare(
+            "INSERT INTO ebay_rate_limits (api_origin, until) VALUES ('https://api.ebay.com', ?)",
+          )
+            .bind(minutes(15).toISOString())
+            .run();
+          expect(await dispatchStoreSyncs(cron, minutes(0))).toEqual([]);
+          await env.DB.prepare("DELETE FROM ebay_rate_limits").run();
+          await env.DB.prepare(
+            "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-a', 'manual', ?)",
+          )
+            .bind(minutes(1).toISOString())
+            .run();
+          expect(await dispatchStoreSyncs(cron, minutes(1))).toEqual([]);
+          expect(sendBatch).not.toHaveBeenCalled();
+        });
+
+        it("il cron accoda compiti e letture senza chiamare eBay e un passo fallito non ferma gli altri", async () => {
+          const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+          const fetcher = vi.spyOn(globalThis, "fetch");
+          try {
+            sendBatch.mockRejectedValueOnce(new Error("queue unavailable"));
+            await dispatchScheduledWork(cron, minutes(0));
+            expect(JSON.parse(String(errors.mock.calls[0]![0]))).toMatchObject({
+              operation: "scheduling",
+            });
+            expect(sendBatch).toHaveBeenLastCalledWith([{ body: { syncStore: "s-a" } }]);
+            // I compiti non accodati restano al trigger successivo dello stesso periodo.
+            await dispatchScheduledWork(cron, minutes(1));
+            expect(sendBatch).toHaveBeenLastCalledWith([
+              { body: { task: "maintenance", slot: "2026-09-02T00:00:00.000Z" } },
+              { body: { task: "token_refresh", slot: "2026-09-02T00:00:00.000Z" } },
+            ]);
+            expect(sendBatch).toHaveBeenCalledTimes(3);
+            expect(fetcher).not.toHaveBeenCalled();
+          } finally {
+            errors.mockRestore();
+            fetcher.mockRestore();
+          }
+        });
+
+        it("accoda ogni compito una volta per periodo con trigger ripetuti, sovrapposti o saltati", async () => {
+          const slot = (minute: number) => ({ slot: minutes(minute).toISOString() });
+          expect(await dispatchTasks(cron, minutes(0))).toEqual(["maintenance", "token_refresh"]);
+          expect(sendBatch).toHaveBeenCalledWith([
+            { body: { task: "maintenance", ...slot(0) } },
+            { body: { task: "token_refresh", ...slot(0) } },
+          ]);
+          // Ripetuto a pochi secondi, o un trigger precedente consegnato in ritardo.
+          expect(await dispatchTasks(cron, minutes(0.05))).toEqual([]);
+          expect(await dispatchTasks(cron, minutes(-0.05))).toEqual([]);
+          // Il periodo successivo del rinnovo; la pulizia resta una al giorno.
+          expect(await dispatchTasks(cron, minutes(10))).toEqual(["token_refresh"]);
+          // Trigger saltati fra 20 e 40: il primo che arriva prende il turno.
+          expect(await dispatchTasks(cron, minutes(50))).toEqual(["token_refresh"]);
+          expect(sendBatch).toHaveBeenLastCalledWith([
+            { body: { task: "token_refresh", ...slot(50) } },
+          ]);
+          expect(await dispatchTasks(cron, minutes(24 * 60 + 3))).toEqual([
+            "maintenance",
+            "token_refresh",
+          ]);
+          expect(sendBatch).toHaveBeenLastCalledWith([
+            { body: { task: "maintenance", ...slot(24 * 60) } },
+            { body: { task: "token_refresh", ...slot(24 * 60) } },
+          ]);
+        });
+
+        it("esegue un compito una volta e riaccoda il turno il cui messaggio è andato perso", async () => {
+          const expired = () =>
+            env.DB.prepare(
+              `INSERT INTO "verification" ("id", "identifier", "value", "expiresAt", "createdAt", "updatedAt")
+               VALUES ('compito-scaduto', 'compito', 'x', ?1, ?1, ?1)`,
+            )
+              .bind(minutes(-1).toISOString())
+              .run();
+          const remaining = async () =>
+            (await env.DB.prepare(
+              'SELECT count(*) AS total FROM "verification" WHERE "identifier" = \'compito\'',
+            ).first<{ total: number }>())!.total;
+          await expired();
+          await dispatchTasks(cron, minutes(0));
+          const body = { task: "maintenance", slot: minutes(0).toISOString() };
+
+          // Accettato e mai consegnato: entro l'ora non si riaccoda, dopo sì, con lo stesso turno.
+          expect(await dispatchTasks(cron, minutes(59))).toEqual(["token_refresh"]);
+          expect(await dispatchTasks(cron, minutes(60))).toEqual(["maintenance", "token_refresh"]);
+          expect(sendBatch).toHaveBeenLastCalledWith(expect.arrayContaining([{ body }]));
+
+          const first = queueMessage(body);
+          await consumeTask(first, env, fetch, minutes(61));
+          expect(first.ack).toHaveBeenCalledOnce();
+          expect(await remaining()).toBe(0);
+          // Una consegna ripetuta, o un turno ormai superato, non ripete il lavoro.
+          await expired();
+          const repeated = queueMessage(body);
+          await consumeTask(repeated, env, fetch, minutes(62));
+          expect(repeated.ack).toHaveBeenCalledOnce();
+          const older = queueMessage({
+            task: "maintenance",
+            slot: minutes(-24 * 60).toISOString(),
+          });
+          await consumeTask(older, env, fetch, minutes(62));
+          expect(older.ack).toHaveBeenCalledOnce();
+          expect(await remaining()).toBe(1);
+          // Un turno concluso non si riaccoda nello stesso giorno.
+          expect(await dispatchTasks(cron, minutes(180))).toEqual(["token_refresh"]);
+        });
+
+        it("fra trigger sovrapposti uno solo accoda il turno di un compito", async () => {
+          const turns = await Promise.all([
+            dispatchTasks(cron, minutes(0)),
+            dispatchTasks(cron, minutes(0)),
+          ]);
+          expect(turns.flat().sort()).toEqual(["maintenance", "token_refresh"]);
+          expect(sendBatch).toHaveBeenCalledOnce();
+        });
+
+        it("ogni passo del cron fallito si registra senza fermare gli altri", async () => {
+          const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+          try {
+            await env.DB.prepare(
+              `INSERT INTO webhook_receipts
+                 (id, provider, environment, provider_id, topic, object_id, event_at, expires_at)
+               VALUES ('ricevuta-cron', 'stripe', 'test', 'evt-cron', 'evento', 'oggetto', ?1, ?2)`,
+            )
+              .bind(minutes(0).toISOString(), minutes(60).toISOString())
+              .run();
+            sendBatch.mockRejectedValue(new Error("queue unavailable"));
+            send.mockRejectedValue(new Error("queue unavailable"));
+            await dispatchScheduledWork(cron, minutes(0));
+            expect(errors.mock.calls.map(([line]) => JSON.parse(String(line)).operation)).toEqual([
+              "scheduling",
+              "webhook_ingress",
+              "scheduling",
+            ]);
+            expect(sendBatch).toHaveBeenCalledTimes(2);
+          } finally {
+            errors.mockRestore();
+            await env.DB.prepare("DELETE FROM webhook_receipts").run();
+          }
+        });
+
+        it("il compito di rinnovo rinnova i token in scadenza dal consumer", async () => {
+          await env.DB.prepare(
+            "UPDATE ebay_store_credentials SET refresh_token = ?, access_expires_at = ?",
+          )
+            .bind(
+              await sealToken(env.BETTER_AUTH_SECRET, "s-a", "refresh", "refresh-sintetico"),
+              minutes(20).toISOString(),
+            )
+            .run();
+          await dispatchTasks(cron, minutes(0));
+          const token = vi.fn<typeof fetch>(async () =>
+            Response.json({ access_token: "token-rinnovato", expires_in: 7200 }),
+          );
+          const turn = queueMessage({ task: "token_refresh", slot: minutes(0).toISOString() });
+          await consumeTask(turn, env, token, minutes(1));
+          expect(turn.ack).toHaveBeenCalledOnce();
+          expect(token).toHaveBeenCalledOnce();
+          expect(
+            await env.DB.prepare(
+              "SELECT access_expires_at, refreshed_at FROM ebay_store_credentials WHERE store_id = 's-a'",
+            ).first(),
+          ).toEqual({
+            access_expires_at: minutes(121).toISOString(),
+            refreshed_at: minutes(1).toISOString(),
+          });
+        });
+
+        it("un compito fallito riprova con backoff e resta da concludere", async () => {
+          const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+          try {
+            await dispatchTasks(cron, minutes(0));
+            const failing = {
+              ...env,
+              DB: {
+                prepare: (sql: string) => env.DB.prepare(sql),
+                batch: () => Promise.reject(new Error("d1 unavailable")),
+              },
+            } as unknown as Env;
+            const body = { task: "maintenance", slot: minutes(0).toISOString() };
+            const attempt = queueMessage(body, 3);
+            await consumeTask(attempt, failing, fetch, minutes(1));
+            expect(attempt.retry).toHaveBeenCalledWith({ delaySeconds: 120 });
+            expect(attempt.ack).not.toHaveBeenCalled();
+            expect(JSON.parse(String(errors.mock.calls[0]![0]))).toMatchObject({
+              operation: "maintenance",
+            });
+            const resumed = queueMessage(body, 4);
+            await consumeTask(resumed, env, fetch, minutes(5));
+            expect(resumed.ack).toHaveBeenCalledOnce();
+          } finally {
+            errors.mockRestore();
+          }
+        });
       });
     });
 

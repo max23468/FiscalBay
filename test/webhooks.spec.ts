@@ -275,11 +275,17 @@ beforeEach(async () => {
     .run();
 });
 
-it("la coda smista le richieste di sincronizzazione e i riferimenti dei webhook", async () => {
+it("la coda smista richieste di sincronizzazione, compiti e riferimenti dei webhook", async () => {
   const sync = { body: { syncStore: "webhook-store" }, ack: vi.fn(), retry: vi.fn(), attempts: 1 };
   const webhook = { body: { receiptId: "non-valido" }, ack: vi.fn(), retry: vi.fn(), attempts: 1 };
+  const task = {
+    body: { task: "maintenance", slot: "2026-10-12T00:00:00.000Z" },
+    ack: vi.fn(),
+    retry: vi.fn(),
+    attempts: 1,
+  };
   await worker.queue(
-    { messages: [sync, webhook] } as unknown as MessageBatch<unknown>,
+    { messages: [sync, webhook, task] } as unknown as MessageBatch<unknown>,
     environment,
     {} as ExecutionContext,
   );
@@ -288,6 +294,9 @@ it("la coda smista le richieste di sincronizzazione e i riferimenti dei webhook"
   expect(sync.retry).not.toHaveBeenCalled();
   expect(webhook.retry).toHaveBeenCalledOnce();
   expect(webhook.ack).not.toHaveBeenCalled();
+  // Un compito senza turno aperto si chiude senza lavoro e senza passare dai webhook.
+  expect(task.ack).toHaveBeenCalledOnce();
+  expect(task.retry).not.toHaveBeenCalled();
 });
 
 it("lascia pagine e callback OAuth al router e rifiuta i metodi diversi", async () => {
@@ -466,6 +475,22 @@ it("riprende un claim se Queue fallisce, anche senza altre consegne del provider
   expect((await receipt())?.queued_at).toBe(now.toISOString());
   await recoverWebhookIngress(environment, now);
   expect(send).toHaveBeenCalledTimes(2);
+
+  // Un messaggio accettato e poi perso (scaduto o nella DLQ) si riaccoda dopo un giorno, finché
+  // la ricevuta è valida e nessun consumer la tiene; una ricevuta scaduta non si riaccoda.
+  const day = 86_400_000;
+  await env.DB.prepare("UPDATE webhook_receipts SET locked_until = ?")
+    .bind(new Date(now.getTime() + day + 60_000).toISOString())
+    .run();
+  await recoverWebhookIngress(environment, new Date(now.getTime() + day));
+  expect(send).toHaveBeenCalledTimes(2);
+  await env.DB.prepare("UPDATE webhook_receipts SET locked_until = NULL").run();
+  await recoverWebhookIngress(environment, new Date(now.getTime() + day - 1));
+  expect(send).toHaveBeenCalledTimes(2);
+  await recoverWebhookIngress(environment, new Date(now.getTime() + day));
+  expect(send).toHaveBeenCalledTimes(3);
+  await recoverWebhookIngress(environment, new Date(now.getTime() + 8 * day));
+  expect(send).toHaveBeenCalledTimes(3);
 });
 
 it("il consumer importa solo l'ordine del negozio verificato e non ripete gli effetti", async () => {
