@@ -5576,6 +5576,32 @@ describe("client eBay e normalizzazione", () => {
         expect(await state()).toMatchObject({ requested_at: minutes(0).toISOString() });
       });
 
+      it("dopo una lettura non riuscita l'arretrato attende la cadenza del piano", async () => {
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        try {
+          // Storico mai importato e lettura rifiutata: nessun nuovo tentativo ogni dieci minuti.
+          await syncStores(
+            env,
+            ebay({ fail: () => new Response(null, { status: 401 }) }),
+            minutes(0),
+          );
+          const fetcher = ebay();
+          await syncStores(env, fetcher, minutes(10));
+          await syncStores(env, fetcher, minutes(20));
+          expect(fetcher).not.toHaveBeenCalled();
+          await syncStores(env, fetcher, minutes(30));
+          expect(pages(fetcher, "creationdate")).toEqual([0]);
+
+          // Dopo una lettura riuscita l'arretrato riprende al turno successivo.
+          await env.DB.prepare("UPDATE sync_state SET history_done_at = NULL").run();
+          fetcher.mockClear();
+          await syncStores(env, fetcher, minutes(40));
+          expect(pages(fetcher, "creationdate")).toEqual([0]);
+        } finally {
+          errors.mockRestore();
+        }
+      });
+
       it("non anticipa l'arretrato di un negozio letto da meno di nove minuti", async () => {
         await syncStores(env, ebay(), minutes(0));
         await env.DB.prepare("UPDATE sync_state SET history_done_at = NULL").run();
