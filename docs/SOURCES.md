@@ -319,6 +319,15 @@ Le pagine OpenAI possono essere reindirizzate alla documentazione ufficiale corr
 - [SQL API Analytics Engine e campionamento](https://developers.cloudflare.com/analytics/analytics-engine/sql-api/)
 - [Database supportati da Hyperdrive](https://developers.cloudflare.com/hyperdrive/reference/supported-databases-and-features/)
 - [Prezzi Email Service](https://developers.cloudflare.com/email-service/platform/pricing/)
+- [Workers Logs e Traces nelle Custom Dashboards](https://developers.cloudflare.com/changelog/post/2026-10-02-workers-observability-in-custom-dashboards/)
+- [Dataset e aggregazioni delle Custom Dashboards](https://developers.cloudflare.com/analytics/custom-dashboards/#workers-observability-data)
+- [Marcatori release in Workers Metrics](https://developers.cloudflare.com/changelog/post/2026-09-25-release-flows-workers-metrics/)
+- [Nuove API dei custom span Workers](https://developers.cloudflare.com/changelog/post/2026-09-25-custom-span-apis/)
+- [Soppressioni per dominio mittente](https://developers.cloudflare.com/changelog/post/2026-09-25-sending-domain-suppressions/)
+- [Validazione Rulesets con dry run](https://developers.cloudflare.com/changelog/post/2026-09-17-rulesets-dry-run-validation/)
+- [Logpush generale e tariffazione separata Workers Trace Events](https://developers.cloudflare.com/changelog/post/2026-09-30-logpush-usage-based-pricing/)
+- [Storico analytics della zona fino a 30 giorni](https://developers.cloudflare.com/changelog/post/2026-10-02-30-days-analytics-on-every-plan/)
+- [Prezzi Observability dal 1° dicembre 2026](https://developers.cloudflare.com/observability/pricing/)
 
 **Verifica del 2026-10-11:** Workers Logs conserva 3 giorni sul Free e 7 sul Paid e passa ai prezzi Observability dal 1° dicembre 2026; Logpush dei Workers richiede Paid. Cron Trigger: 5 per account sul Free, 250 sul Paid. Email Sending è in beta e l'invio a destinatari non verificati richiede Paid, con 3.000 email al mese incluse. Token Turnstile monouso, validi 300 secondi, da verificare con Siteverify.
 
@@ -326,7 +335,7 @@ Le pagine OpenAI possono essere reindirizzate alla documentazione ufficiale corr
 
 Analytics Engine conserva tre mesi e ammette fino a 250 datapoint per invocazione. Quote pubblicate: Free 100.000 datapoint e 10.000 query al giorno; Paid 10 milioni di datapoint e un milione di query al mese, poi 0,25 USD e 1 USD per milione rispettivamente. La pagina prezzi dichiara che gli addebiti non sono ancora attivi: riconfermare prima dell'adozione. Nella sua SQL API conteggi, medie e quantili devono rispettare `_sample_interval`. Queste verifiche documentali non attestano binding attivi, capacità residua dell'account o nuovi costi autorizzati.
 
-**Uso:** §12, §14, §25, §29, §31; M3-12, M6-03, M6-06, M6-10, M6-11, M7-03, M7-09, M7-10, M7-11. Limiti e prezzi cambiano: rileggerli prima di una decisione di piano o dell'apertura pubblica.
+**Uso:** §12, §14, §25, §29, §31; M3-12, M4-01, M6-03, M6-06, M6-10, M6-11, M7-03, M7-04, M7-09, M7-10, M7-11, M7-12; procedura in [RELEASE](engineering/RELEASE.md#dashboard-test). Limiti e prezzi cambiano: rileggerli prima di una decisione di piano o dell'apertura pubblica.
 
 <a id="s35"></a>
 ### S35 · Trasporto email alternativo
