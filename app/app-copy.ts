@@ -340,8 +340,13 @@ const it = {
     ebayDown: "eBay non risponde: sincronizzazione e ricollegamento sono sospesi.",
     planScope: (plan: string) =>
       `Il piano ${plan} è del tuo spazio FiscalBay e vale per tutti i negozi collegati.`,
-    syncNotScheduled:
-      "L’aggiornamento automatico degli ordini non è ancora attivo: FiscalBay legge l’ordine più recente quando colleghi il negozio.",
+    requested: {
+      queued: "Sincronizzazione richiesta: i nuovi ordini compaiono appena eBay risponde.",
+      merged: "Sincronizzazione già richiesta: parte appena possibile.",
+      importing: "L’importazione dello storico è già in corso.",
+      limited: "eBay ha chiesto di attendere: la sincronizzazione parte appena possibile.",
+    },
+    reimportRequested: "Reimportazione dello storico richiesta.",
     disconnectedHint:
       "FiscalBay non legge più questo negozio. Gli ordini già importati restano consultabili; ricollegalo per riprendere.",
     done: {
@@ -1157,8 +1162,13 @@ const en: AppCopy = {
     ebayDown: "eBay is not responding: syncing and reconnecting are paused.",
     planScope: (plan: string) =>
       `The ${plan} plan belongs to your FiscalBay space and covers all connected stores.`,
-    syncNotScheduled:
-      "Automatic order updates are not active yet: FiscalBay reads the most recent order when you connect the store.",
+    requested: {
+      queued: "Sync requested: new orders appear as soon as eBay responds.",
+      merged: "Sync already requested: it starts as soon as possible.",
+      importing: "The history import is already in progress.",
+      limited: "eBay asked us to wait: the sync starts as soon as possible.",
+    },
+    reimportRequested: "History re-import requested.",
     disconnectedHint:
       "FiscalBay no longer reads this store. Orders already imported remain available; reconnect it to resume.",
     done: {

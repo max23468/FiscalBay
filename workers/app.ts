@@ -7,7 +7,7 @@ import {
 import { indexable } from "../app/app-links";
 import { correlateResponse, correlationHeader, logFailure, tracePhase } from "../app/errors";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-import { acquireStoresOrders } from "../app/domain/order-acquisition.server";
+import { consumeStoreSync, isSyncMessage, syncStores } from "../app/domain/order-sync.server";
 import { refreshExpiringTokens } from "../app/integrations/ebay/seller-credentials.server";
 
 // I webhook vengono rifiutati o presi in carico prima di caricare la build dell'app. Anche
@@ -50,12 +50,17 @@ export default {
       return new Response(null, { status: 500, headers: { [correlationHeader]: id } });
     }
   },
+  // La coda porta i riferimenti dei webhook e le richieste manuali di sincronizzazione.
   async queue(batch, env) {
-    await consumeWebhooks(batch, env);
+    const syncs = batch.messages.filter((message) => isSyncMessage(message.body));
+    const webhooks = batch.messages.filter((message) => !isSyncMessage(message.body));
+    // Negozi diversi non si ostacolano; lo stesso negozio è serializzato dal suo blocco.
+    await Promise.all(syncs.map((message) => consumeStoreSync(message, env)));
+    if (webhooks.length > 0) await consumeWebhooks({ messages: webhooks }, env);
   },
-  // Pulizia dei dati tecnici scaduti, rinnovo anticipato dei token di accesso dei negozi e
-  // acquisizione degli ordini, fuori dal percorso delle pagine. Un passo fallito non ferma i
-  // successivi; l'acquisizione usa i token appena rinnovati.
+  // Ogni dieci minuti: pulizia dei dati tecnici scaduti, rinnovo anticipato dei token di
+  // accesso dei negozi e lettura dei negozi dovuti, fuori dal percorso delle pagine. Un passo
+  // fallito non ferma i successivi; la lettura usa i token appena rinnovati.
   async scheduled(controller, env) {
     const now = new Date(controller.scheduledTime);
     await purgeExpiredRecords(env.DB, now).catch((error: unknown) =>
@@ -65,6 +70,6 @@ export default {
     await refreshExpiringTokens(env, fetch, now).catch((error: unknown) =>
       logFailure({ error, operation: "token_refresh" }),
     );
-    await acquireStoresOrders(env, fetch, now);
+    await syncStores(env, fetch, now);
   },
 } satisfies ExportedHandler<Env>;

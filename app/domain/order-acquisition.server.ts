@@ -3,7 +3,6 @@ import {
   writableStore,
   type OrderObservation,
 } from "./order-import.server";
-import { logFailure } from "../errors";
 import { UpstreamError } from "../integrations/http.server";
 import {
   ebayConfiguration,
@@ -47,6 +46,12 @@ const lockMilliseconds = 15 * 60_000;
 const maxImagesPerDetail = 8;
 // Attese dopo il primo, secondo, terzo e quarto errore del dettaglio; il quinto chiude la versione.
 const detailRetryMinutes = [15, 60, 240, 960];
+// Attesa quando eBay limita senza Retry-After, e massimo rispettato: oltre un giorno il valore
+// non è credibile e la quota giornaliera si è comunque rinnovata.
+export const defaultRateLimitSeconds = 15 * 60;
+const maxRateLimitSeconds = 86_400;
+/** Letture dei recenti conservate per negozio nella schermata Negozi. */
+const keptRuns = 3;
 
 /** Chiamate a eBay e pagine di elenco ancora consentite; scalate durante l'esecuzione. */
 export type AcquisitionBudget = { calls: number; pages: number };
@@ -71,6 +76,8 @@ type Context = {
   access: EbayAccess;
   at: string;
   budget: AcquisitionBudget;
+  /** Ordini comparsi per la prima volta durante l'esecuzione. */
+  created: number;
 };
 
 function spend(budget: AcquisitionBudget, calls: number, pages = 0): boolean {
@@ -99,6 +106,7 @@ async function record(ctx: Context, observation: OrderObservation) {
     observation,
   );
   if (result.outcome === "not_writable") throw new NotWritable();
+  if (result.outcome === "created") ctx.created += 1;
   return result;
 }
 
@@ -373,11 +381,70 @@ async function readDetails(ctx: Context): Promise<boolean> {
   return true;
 }
 
+/** Secondi di attesa ancora chiesti da eBay per l'origine API; 0 se nessuno. */
+export async function rateLimitWait(db: D1Database, apiOrigin: string, now: Date): Promise<number> {
+  const row = await db
+    .prepare("SELECT until FROM ebay_rate_limits WHERE api_origin = ? AND until > ?")
+    .bind(apiOrigin, now.toISOString())
+    .first<{ until: string }>();
+  return row ? Math.ceil((Date.parse(row.until) - now.getTime()) / 1000) : 0;
+}
+
+/** Registra l'attesa chiesta da eBay; un'attesa già più lunga resta. */
+async function recordRateLimit(db: D1Database, apiOrigin: string, error: UpstreamError, now: Date) {
+  const seconds = Math.min(
+    maxRateLimitSeconds,
+    error.details.retryAfter ?? defaultRateLimitSeconds,
+  );
+  await db
+    .prepare(
+      `INSERT INTO ebay_rate_limits (api_origin, until) VALUES (?, ?)
+       ON CONFLICT(api_origin) DO UPDATE SET until = MAX(until, excluded.until)`,
+    )
+    .bind(apiOrigin, new Date(now.getTime() + seconds * 1000).toISOString())
+    .run();
+}
+
+/**
+ * Chiude una lettura dei recenti: ne conserva esito e ordini nuovi fra le ultime del negozio e,
+ * salvo un limite di eBay, considera servite le richieste manuali arrivate prima del suo inizio.
+ */
+async function recordPoll(ctx: Context, ok: boolean, served: boolean) {
+  await ctx.db.batch([
+    ctx.db
+      .prepare(
+        `INSERT INTO sync_runs (store_id, started_at, ok, new_orders)
+         SELECT ?1, ?3, ?4, ?5 WHERE EXISTS (SELECT 1 FROM ebay_store_credentials
+                                              WHERE store_id = ?1 AND granted_at = ?2)`,
+      )
+      .bind(ctx.storeId, ctx.grantedAt, ctx.at, ok ? 1 : 0, ctx.created),
+    ctx.db
+      .prepare(
+        `DELETE FROM sync_runs WHERE store_id = ?1 AND id NOT IN (
+           SELECT id FROM sync_runs WHERE store_id = ?1 ORDER BY started_at DESC, id DESC LIMIT ?2)`,
+      )
+      .bind(ctx.storeId, keptRuns),
+    ...(served
+      ? [
+          ctx.db
+            .prepare(
+              "UPDATE sync_state SET requested_at = NULL WHERE store_id = ? AND requested_at <= ?",
+            )
+            .bind(ctx.storeId, ctx.at),
+        ]
+      : []),
+  ]);
+}
+
 /**
  * Esegue l'acquisizione di un negozio entro il budget. Le esecuzioni dello stesso negozio non
  * si sovrappongono: chi trova il negozio occupato rinuncia. Al primo avvio fissa il limite dei
  * recenti all'istante corrente e lo storico ai `historyDays` giorni precedenti. Lo storico
  * attende i recenti; il dettaglio usa anche le chiamate rimaste quando le pagine finiscono.
+ *
+ * Mentre eBay chiede di attendere non parte nessuna chiamata, e un nuovo limite vale per tutti
+ * i negozi della stessa origine API. Una lettura dei recenti (tutto tranne un evento) segna il
+ * turno del negozio e resta fra le ultime letture, anche quando fallisce.
  */
 export async function acquireOrders(input: {
   db: D1Database;
@@ -391,16 +458,22 @@ export async function acquireOrders(input: {
 }): Promise<AcquisitionResult> {
   const { db, storeId, grantedAt, now } = input;
   const at = now.toISOString();
+  const apiOrigin = input.access.configuration.apiOrigin;
+  const wait = await rateLimitWait(db, apiOrigin, now);
+  if (wait > 0) throw new UpstreamError("rate_limited", { retryAfter: wait });
+  const poll = !input.confirmedOrderId;
   const lock = new Date(now.getTime() + lockMilliseconds).toISOString();
   const state = await db
     .prepare(
-      `INSERT INTO sync_state (store_id, cursor, history_from, history_until, locked_until, updated_at)
-       SELECT ?1, ?3, ?4, ?3, ?5, ?3 WHERE ${writableStore}
+      `INSERT INTO sync_state
+         (store_id, cursor, history_from, history_until, locked_until, polled_at, updated_at)
+       SELECT ?1, ?3, ?4, ?3, ?5, ?6, ?3 WHERE ${writableStore}
        ON CONFLICT(store_id) DO UPDATE SET
          cursor = COALESCE(sync_state.cursor, excluded.cursor),
          history_from = COALESCE(sync_state.history_from, excluded.history_from),
          history_until = COALESCE(sync_state.history_until, excluded.history_until),
          locked_until = excluded.locked_until,
+         polled_at = COALESCE(excluded.polled_at, sync_state.polled_at),
          updated_at = excluded.updated_at
        WHERE sync_state.locked_until IS NULL OR sync_state.locked_until <= ?3
        RETURNING cursor, recent_end, recent_next, recent_total, history_from, history_until,
@@ -412,6 +485,7 @@ export async function acquireOrders(input: {
       at,
       new Date(now.getTime() - historyDays * dayMilliseconds).toISOString(),
       lock,
+      poll ? at : null,
     )
     .first<SyncRow>();
   if (!state) {
@@ -422,7 +496,9 @@ export async function acquireOrders(input: {
     return writable ? "busy" : "not_writable";
   }
 
-  const ctx: Context = { ...input, at };
+  const ctx: Context = { ...input, at, created: 0 };
+  // Esito della lettura dei recenti da registrare; null per un evento o un consenso cambiato.
+  let outcome: { ok: boolean; served: boolean } | null = null;
   try {
     if (input.confirmedOrderId) {
       if (!spend(ctx.budget, 1)) return "budget";
@@ -448,31 +524,52 @@ export async function acquireOrders(input: {
     const history =
       recent && (!!state.history_done_at || (await runPass(ctx, historyPass(ctx, state))));
     const details = await readDetails(ctx);
+    outcome = { ok: true, served: true };
     return history && details ? "complete" : "budget";
   } catch (error) {
     if (error instanceof NotWritable) return "not_writable";
+    const limited = error instanceof UpstreamError && error.failure === "rate_limited";
+    if (limited) await recordRateLimit(db, apiOrigin, error, now);
+    if (poll) outcome = { ok: false, served: !limited };
     throw error;
   } finally {
     await db
       .prepare("UPDATE sync_state SET locked_until = NULL WHERE store_id = ? AND locked_until = ?")
       .bind(storeId, lock)
       .run();
+    if (outcome) await recordPoll(ctx, outcome.ok, outcome.served);
   }
 }
 
-/** Negozi letti da un'esecuzione periodica e budget di ciascuno. */
-const storesPerRun = 3;
-const storeBudget: AcquisitionBudget = { calls: 12, pages: 3 };
-const tokenMarginMilliseconds = 5 * 60_000;
-
-type ActiveStore = {
+export type ActiveStore = {
   store_id: string;
   access_token: string;
   granted_at: string;
   ebay_environment: EbayEnvironment;
 };
 
-/** Rilegge consenso, pausa e token prima di eseguire un evento già accettato. */
+/** Accesso seller di un negozio attivo, con il token di accesso decifrato. */
+export async function storeAccess(
+  environment: Env,
+  store: ActiveStore,
+  fetcher: typeof fetch,
+): Promise<EbayAccess> {
+  return {
+    fetcher,
+    configuration: ebayConfiguration(environment, store.ebay_environment),
+    accessToken: await openToken(
+      environment.BETTER_AUTH_SECRET,
+      store.store_id,
+      "access",
+      store.access_token,
+    ),
+  };
+}
+
+/**
+ * Rilegge consenso, pausa e token prima di eseguire un evento già accettato. L'evento non
+ * dipende dal piano e non aspetta la cadenza della lettura periodica.
+ */
 export async function consumeOrderConfirmation(
   environment: Env,
   event: {
@@ -499,74 +596,11 @@ export async function consumeOrderConfirmation(
     db: environment.DB,
     storeId: store.store_id,
     grantedAt: store.granted_at,
-    access: {
-      fetcher,
-      configuration: ebayConfiguration(environment, store.ebay_environment),
-      accessToken: await openToken(
-        environment.BETTER_AUTH_SECRET,
-        store.store_id,
-        "access",
-        store.access_token,
-      ),
-    },
+    access: await storeAccess(environment, store, fetcher),
     now,
     // Stryker disable next-line ObjectLiteral: questo percorso usa al massimo 11 chiamate e nessuna pagina; rimuovere il budget non cambia l'esito di un singolo ordine.
     budget: { calls: 12, pages: 0 },
     confirmedOrderId: event.orderId,
   });
   if (result !== "complete" && result !== "not_writable") throw new UpstreamError("unavailable");
-}
-
-/**
- * Lavoro periodico: acquisisce gli ordini dei negozi attivi con un token valido, dal negozio
- * aggiornato o tentato meno di recente. Un errore di un negozio non ferma gli altri.
- */
-export async function acquireStoresOrders(
-  environment: Env,
-  fetcher: typeof fetch,
-  now = new Date(),
-): Promise<void> {
-  const { results } = await environment.DB.prepare(
-    `SELECT c.store_id, c.access_token, c.granted_at, s.ebay_environment
-       FROM ebay_store_credentials c
-       JOIN ebay_stores s ON s.id = c.store_id
-       LEFT JOIN sync_state ss ON ss.store_id = c.store_id
-      WHERE c.rejected_at IS NULL AND c.access_expires_at > ?1 AND s.disconnected_at IS NULL
-        AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = c.store_id)
-      ORDER BY ss.updated_at IS NOT NULL, ss.updated_at, c.store_id
-      LIMIT ?2`,
-  )
-    .bind(new Date(now.getTime() + tokenMarginMilliseconds).toISOString(), storesPerRun)
-    .all<ActiveStore>();
-  for (const store of results) {
-    try {
-      await acquireOrders({
-        db: environment.DB,
-        storeId: store.store_id,
-        grantedAt: store.granted_at,
-        access: {
-          fetcher,
-          configuration: ebayConfiguration(environment, store.ebay_environment),
-          accessToken: await openToken(
-            environment.BETTER_AUTH_SECRET,
-            store.store_id,
-            "access",
-            store.access_token,
-          ),
-        },
-        now,
-        budget: { ...storeBudget },
-      });
-    } catch (error) {
-      logFailure({ error, operation: "order_acquisition" });
-      // Anche un tentativo fallito prima di iniziare, per esempio con un token che non si
-      // apre, passa il turno: altrimenti il negozio resterebbe sempre il primo della coda.
-      await environment.DB.prepare(
-        `INSERT INTO sync_state (store_id, updated_at) SELECT ?1, ?3 WHERE ${writableStore}
-         ON CONFLICT(store_id) DO UPDATE SET updated_at = excluded.updated_at`,
-      )
-        .bind(store.store_id, store.granted_at, now.toISOString())
-        .run();
-    }
-  }
 }

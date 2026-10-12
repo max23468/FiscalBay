@@ -231,7 +231,7 @@ export async function recoverWebhookIngress(env: Env, now = new Date()) {
 }
 
 export async function consumeWebhooks(
-  batch: MessageBatch<unknown>,
+  batch: Pick<MessageBatch<unknown>, "messages">,
   env: Env,
   fetcher = fetch,
   now = new Date(),

@@ -7,7 +7,7 @@
   "version_metadata": { "binding": "VERSION_METADATA" },
   "workers_dev": false,
   "routes": [{ "pattern": "test.fiscalbay.it", "custom_domain": true }],
-  "triggers": { "crons": ["*/30 * * * *"] },
+  "triggers": { "crons": ["*/10 * * * *"] },
   "queues": {
     "producers": [{ "binding": "WEBHOOK_QUEUE", "queue": "fiscalbay-test-webhooks" }],
     "consumers": [

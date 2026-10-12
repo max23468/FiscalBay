@@ -256,6 +256,7 @@ beforeEach(async () => {
   send.mockResolvedValue(undefined);
   await env.DB.batch([
     env.DB.prepare("DELETE FROM webhook_receipts"),
+    env.DB.prepare("DELETE FROM ebay_rate_limits"),
     env.DB.prepare("DELETE FROM ebay_stores"),
     env.DB.prepare("DELETE FROM workspaces WHERE id = 'webhook-workspace'"),
     env.DB.prepare(
@@ -272,6 +273,21 @@ beforeEach(async () => {
       grantedAt,
     )
     .run();
+});
+
+it("la coda smista le richieste di sincronizzazione e i riferimenti dei webhook", async () => {
+  const sync = { body: { syncStore: "webhook-store" }, ack: vi.fn(), retry: vi.fn(), attempts: 1 };
+  const webhook = { body: { receiptId: "non-valido" }, ack: vi.fn(), retry: vi.fn(), attempts: 1 };
+  await worker.queue(
+    { messages: [sync, webhook] } as unknown as MessageBatch<unknown>,
+    environment,
+    {} as ExecutionContext,
+  );
+  // Senza una richiesta in attesa la consegna si chiude senza leggere eBay.
+  expect(sync.ack).toHaveBeenCalledOnce();
+  expect(sync.retry).not.toHaveBeenCalled();
+  expect(webhook.retry).toHaveBeenCalledOnce();
+  expect(webhook.ack).not.toHaveBeenCalled();
 });
 
 it("lascia pagine e callback OAuth al router e rifiuta i metodi diversi", async () => {
@@ -514,7 +530,12 @@ it("rispetta lease, retry del provider e riprende dopo un'interruzione", async (
   await consumeWebhooks(work.value, environment, limited, new Date(now.getTime() + 60001));
   expect(work.message.retry).toHaveBeenLastCalledWith({ delaySeconds: 120 });
   expect((await receipt())?.lease).toBeNull();
+  // Una consegna anticipata rispetta l'attesa chiesta da eBay senza chiamarlo.
+  fetcher.mockClear();
   await consumeWebhooks(work.value, environment, fetcher, new Date(now.getTime() + 120000));
+  expect(fetcher).not.toHaveBeenCalled();
+  expect(work.message.retry).toHaveBeenLastCalledWith({ delaySeconds: 61 });
+  await consumeWebhooks(work.value, environment, fetcher, new Date(now.getTime() + 180001));
   expect(work.message.ack).toHaveBeenCalledOnce();
 });
 

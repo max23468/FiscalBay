@@ -246,11 +246,9 @@ function ReadActions({ store, ebayDown, t }: { store: StoreView; ebayDown: boole
     store.connection === "error";
   // Anche un negozio da ricollegare può essere in pausa: il pulsante segue la pausa.
   const paused = store.pauseReason !== undefined;
-  // Senza sincronizzazione continua non ci sono letture da avviare a richiesta.
-  const syncAvailable = store.targetMinutes !== null;
   return (
     <div className="grid gap-2">
-      {needsReconnect || !syncAvailable ? null : (
+      {needsReconnect ? null : (
         <Button
           variant="outline"
           className="justify-start"
@@ -261,17 +259,15 @@ function ReadActions({ store, ebayDown, t }: { store: StoreView; ebayDown: boole
           {t.stores.syncNow}
         </Button>
       )}
-      {syncAvailable ? (
-        <Button
-          variant="outline"
-          className="justify-start"
-          disabled={ebayDown || needsReconnect || store.connection !== "active"}
-          onClick={() => run("store-reimport")}
-        >
-          <History aria-hidden="true" data-icon="inline-start" />
-          {t.stores.reimport}
-        </Button>
-      ) : null}
+      <Button
+        variant="outline"
+        className="justify-start"
+        disabled={ebayDown || needsReconnect || store.connection !== "active"}
+        onClick={() => run("store-reimport")}
+      >
+        <History aria-hidden="true" data-icon="inline-start" />
+        {t.stores.reimport}
+      </Button>
       <Button
         variant="outline"
         className="justify-start"
@@ -475,11 +471,7 @@ function syncDescription(store: StoreView, ebayDown: boolean, t: AppCopy) {
     return t.stores.disconnectedHint;
   }
   if (ebayDown) return t.stores.ebayDown;
-  if (store.connection === "active") {
-    return store.targetMinutes === null
-      ? t.stores.syncNotScheduled
-      : t.stores.target(store.targetMinutes);
-  }
+  if (store.connection === "active") return t.stores.target(store.targetMinutes);
   if (store.pauseReason === "plan") return t.stores.planPauseHint;
   if (store.connection === "paused") return t.stores.pauseHint;
   return t.stores.syncSuspended;

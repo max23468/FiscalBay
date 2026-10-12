@@ -153,8 +153,8 @@ export interface StoreView {
   consentExpiresAt: string | null;
   /** Consenso valido che scade entro trenta giorni: il pannello invita a ricollegare. */
   consentExpiring?: boolean;
-  /** Frequenza prevista; null finché la sincronizzazione continua non è attiva. */
-  targetMinutes: number | null;
+  /** Frequenza prevista della lettura periodica. */
+  targetMinutes: number;
   recent: StoreSyncView[];
 }
 

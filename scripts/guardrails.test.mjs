@@ -182,6 +182,7 @@ describe("classificazione dei file modificati", () => {
       "app/domain/stores.server.ts",
       "app/domain/export.server.ts",
       "app/domain/order-acquisition.server.ts",
+      "app/domain/order-sync.server.ts",
       "app/integrations/ebay/store-link.server.ts",
     ])
       assert.ok(changePlan([file]).mutation.includes(file));

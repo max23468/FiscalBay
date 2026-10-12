@@ -18,7 +18,13 @@ import {
   readTradingTaxIdentifiers,
   tradingAck,
 } from "../app/integrations/ebay/trading.server";
-import { acquireOrders, acquireStoresOrders } from "../app/domain/order-acquisition.server";
+import { acquireOrders } from "../app/domain/order-acquisition.server";
+import {
+  consumeStoreSync,
+  requestStoreSync,
+  syncOrder,
+  syncStores,
+} from "../app/domain/order-sync.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import {
   grantFreeOrder,
@@ -3343,6 +3349,9 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         consentExpiresAt: "2027-02-01T00:00:00.000Z",
         lastSyncAt: expect.any(String),
         syncing: false,
+        targetMinutes: 30,
+        // La lettura del collegamento è la prima fra gli ultimi aggiornamenti.
+        recent: [{ at: expect.any(String), ok: true, newOrders: 1 }],
         importedOrders: 1,
         // Al collegamento l'unico ordine dello storico completa l'importazione.
         history: { days: 30, done: true },
@@ -3522,6 +3531,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       .bind(now, seller.storeId)
       .run();
     expect(await count("sync_state")).toBe(1);
+    expect(await count("sync_runs")).toBe(1);
     const before = await env.DB.prepare("SELECT id FROM orders").first<{ id: string }>();
 
     expect(await deleteStoreData(env.DB, seller.userId, seller.storeId, "altro nome")).toBe(
@@ -3539,6 +3549,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       "tax_identifiers",
       "order_grants",
       "sync_state",
+      "sync_runs",
       "ebay_store_credentials",
     ]) {
       expect(await count(table), table).toBe(0);
@@ -3658,12 +3669,11 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
           name: "venditore",
           connection: "active",
           importedOrders: 1,
-          // Storico reale dal primo avvio; senza sincronizzazione continua niente frequenza né
-          // aggiornamenti inventati.
-          targetMinutes: null,
+          // Storico reale dal primo avvio, cadenza del piano Free e letture effettive.
+          targetMinutes: 30,
           historyDays: 30,
           importing: false,
-          recent: [],
+          recent: [{ ok: true, newOrders: 1 }],
           notifications: null,
         },
       ],
@@ -3748,8 +3758,54 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     const removedDetail = await storesPage(`/app/negozi/${seller.storeId}`, seller.cookie);
     expect(removedDetail.init.status).toBe(404);
 
-    const unknown = await storeForm(seller.cookie, { intent: "store-sync", store: seller.storeId });
+    const unknown = await storeForm(seller.cookie, {
+      intent: "store-refresh",
+      store: seller.storeId,
+    });
     expect((unknown as { init: ResponseInit }).init.status).toBe(400);
+  });
+
+  it("chiede letture e reimportazione dalla schermata con l'esito della richiesta", async () => {
+    const seller = await linkedSeller("letture-schermata@example.invalid");
+    const send = vi.spyOn(env.WEBHOOK_QUEUE, "send").mockResolvedValue(undefined);
+    try {
+      expect(
+        await storeForm(seller.cookie, { intent: "store-sync", store: seller.storeId }),
+      ).toEqual({
+        ok: true,
+        notice: "Sincronizzazione richiesta: i nuovi ordini compaiono appena eBay risponde.",
+      });
+      expect(
+        await storeForm(seller.cookie, { intent: "store-sync", store: seller.storeId }),
+      ).toEqual({ ok: true, notice: "Sincronizzazione già richiesta: parte appena possibile." });
+      expect(send).toHaveBeenCalledExactlyOnceWith({ syncStore: seller.storeId });
+      const [store] = (await storesPage("/app/negozi", seller.cookie)).data.page.stores;
+      expect(store).toMatchObject({ syncing: false, targetMinutes: 30 });
+
+      // Lo storico importato al collegamento si può reimportare; mentre riparte, no.
+      expect(
+        await storeForm(seller.cookie, { intent: "store-reimport", store: seller.storeId }),
+      ).toEqual({ ok: true, notice: "Reimportazione dello storico richiesta." });
+      expect(
+        await storeForm(seller.cookie, { intent: "store-reimport", store: seller.storeId }),
+      ).toEqual({ ok: true, notice: "L’importazione dello storico è già in corso." });
+
+      const other = await verifiedSession("estraneo-letture@example.invalid");
+      const foreign = await storeForm(other.cookie, {
+        intent: "store-sync",
+        store: seller.storeId,
+      });
+      expect((foreign as { init: ResponseInit }).init.status).toBe(404);
+      await storeForm(seller.cookie, { intent: "store-pause", store: seller.storeId });
+      const paused = await storeForm(seller.cookie, {
+        intent: "store-sync",
+        store: seller.storeId,
+      });
+      expect((paused as { init: ResponseInit }).init.status).toBe(409);
+      expect(send).toHaveBeenCalledOnce();
+    } finally {
+      send.mockRestore();
+    }
   });
 
   it("aggiorna il profilo minimo senza cambiare il tipo di account", async () => {
@@ -4365,6 +4421,7 @@ describe("client eBay e normalizzazione", () => {
 
     beforeEach(async () => {
       await env.DB.prepare("DELETE FROM ebay_store_pauses").run();
+      await env.DB.prepare("DELETE FROM ebay_rate_limits").run();
       await seed();
       await env.DB.prepare("DELETE FROM orders").run();
       await env.DB.prepare(
@@ -4956,6 +5013,13 @@ describe("client eBay e normalizzazione", () => {
         ).rejects.toMatchObject({ failure });
         expect(await detail()).toEqual(pending);
       }
+      // Il limite vale per tutto il keyset: senza Retry-After si attende il valore prudente.
+      expect(
+        await env.DB.prepare("SELECT api_origin, until FROM ebay_rate_limits").all(),
+      ).toMatchObject({
+        results: [{ api_origin: "https://api.ebay.com", until: "2026-09-02T00:15:00.000Z" }],
+      });
+      await env.DB.prepare("DELETE FROM ebay_rate_limits").run();
 
       const single = (response: () => Response) => (url: URL) =>
         url.pathname.includes("/order/") ? response() : undefined;
@@ -5077,12 +5141,12 @@ describe("client eBay e normalizzazione", () => {
         Object.fromEntries(
           (
             await env.DB.prepare(
-              "SELECT store_id, updated_at FROM sync_state ORDER BY store_id",
+              "SELECT store_id, polled_at FROM sync_state ORDER BY store_id",
             ).all<{
               store_id: string;
-              updated_at: string;
+              polled_at: string;
             }>()
-          ).results.map(({ store_id, updated_at }) => [store_id, updated_at]),
+          ).results.map(({ store_id, polled_at }) => [store_id, polled_at]),
         );
       const errors = vi.spyOn(console, "error").mockImplementation(() => {});
       const logged = () =>
@@ -5096,7 +5160,7 @@ describe("client eBay e normalizzazione", () => {
           fail: (_, init) =>
             tokenOf(init) === "token-s-c" ? new Response(null, { status: 401 }) : undefined,
         });
-        await acquireStoresOrders(env, fetcher, new Date("2026-09-02T00:00:00.000Z"));
+        await syncStores(env, fetcher, new Date("2026-09-02T00:00:00.000Z"));
         expect(perStore(fetcher)).toEqual({ "token-s-a": 12, "token-s-c": 1 });
         expect(logged()).toBe(2);
         // Anche i tentativi falliti passano il turno.
@@ -5114,18 +5178,556 @@ describe("client eBay e normalizzazione", () => {
           .bind(now)
           .run();
         const later = ebay({ orders: [] });
-        await acquireStoresOrders(env, later, new Date("2026-09-02T01:00:00.000Z"));
+        await syncStores(env, later, new Date("2026-09-02T01:00:00.000Z"));
         expect(Object.keys(perStore(later)).sort()).toEqual(["token-s-a", "token-s-d"]);
         expect(await attempted()).toMatchObject({
           "s-b": "2026-09-02T01:00:00.000Z",
           "s-d": "2026-09-02T01:00:00.000Z",
         });
         const expiring = ebay();
-        await acquireStoresOrders(env, expiring, new Date("2026-09-02T02:56:00.000Z"));
+        await syncStores(env, expiring, new Date("2026-09-02T02:56:00.000Z"));
         expect(expiring).not.toHaveBeenCalled();
       } finally {
         errors.mockRestore();
       }
+    });
+
+    describe("lettura periodica e richieste manuali", () => {
+      const start = Date.parse("2026-09-02T00:00:00.000Z");
+      const minutes = (value: number) => new Date(start + value * 60_000);
+      const send = vi.fn<Queue["send"]>();
+      const queued = { ...env, WEBHOOK_QUEUE: { send } } as Env;
+      const message = () => {
+        const ack = vi.fn();
+        const retry = vi.fn();
+        return { body: { syncStore: "s-a" }, ack, retry } as unknown as Message<unknown> & {
+          ack: typeof ack;
+          retry: typeof retry;
+        };
+      };
+      const state = () =>
+        env.DB.prepare(
+          `SELECT polled_at, requested_at, history_from, history_until, history_done_at
+             FROM sync_state WHERE store_id = 's-a'`,
+        ).first<Record<string, string | null>>();
+      const runs = async () =>
+        (
+          await env.DB.prepare(
+            "SELECT started_at, ok, new_orders FROM sync_runs WHERE store_id = 's-a' ORDER BY id",
+          ).all()
+        ).results;
+      const request = (at: Date, options: { reimport?: boolean } = {}, userId = "u-a") =>
+        requestStoreSync(queued, userId, "s-a", options, at);
+
+      beforeEach(async () => {
+        send.mockReset();
+        send.mockResolvedValue(undefined);
+        await env.DB.prepare(
+          "UPDATE ebay_store_credentials SET access_token = ? WHERE store_id = 's-a'",
+        )
+          .bind(await sealToken(env.BETTER_AUTH_SECRET, "s-a", "access", "token-s-a"))
+          .run();
+      });
+
+      it("ordina per piano, richiesta, arretrato e turno, escludendo chi non è dovuto", () => {
+        const at = minutes(60);
+        const candidate = (
+          id: string,
+          plan: "free" | "premium",
+          polledMinute: number | null,
+          extra: { requested?: boolean; backlog?: boolean } = {},
+        ) => ({
+          id,
+          plan,
+          polledAt: polledMinute === null ? null : minutes(polledMinute).toISOString(),
+          requestedAt: extra.requested ? minutes(55).toISOString() : null,
+          backlog: extra.backlog ?? false,
+        });
+        const order = syncOrder(
+          [
+            candidate("free-arretrato", "free", 50, { backlog: true }),
+            candidate("free-recente", "free", 40),
+            candidate("free-dovuto", "free", 31),
+            candidate("premium-arretrato", "premium", 55, { backlog: true }),
+            candidate("free-mai", "free", null),
+            candidate("premium-dovuto", "premium", 51),
+            candidate("premium-recente", "premium", 52),
+            candidate("free-richiesto", "free", 58, { requested: true }),
+            candidate("free-vecchio", "free", 10),
+          ],
+          at,
+        ).map(({ id }) => id);
+        expect(order).toEqual([
+          "premium-dovuto",
+          "free-richiesto",
+          "free-mai",
+          "free-vecchio",
+          "free-dovuto",
+          "premium-arretrato",
+          "free-arretrato",
+        ]);
+      });
+
+      it("il cron legge con la cadenza Free e l'evento non attende il turno", async () => {
+        const fetcher = ebay();
+        await syncStores(env, fetcher, minutes(0));
+        expect(await state()).toMatchObject({ polled_at: minutes(0).toISOString() });
+        expect(await runs()).toEqual([
+          { started_at: minutes(0).toISOString(), ok: 1, new_orders: 1 },
+        ]);
+
+        // Dieci e venti minuti dopo il negozio Free non è dovuto e non ha arretrati.
+        fetcher.mockClear();
+        await syncStores(env, fetcher, minutes(10));
+        await syncStores(env, fetcher, minutes(20));
+        expect(fetcher).not.toHaveBeenCalled();
+
+        // Un evento è letto subito e non sposta il turno della lettura periodica.
+        fetcher.orders[0] = order({ lastModifiedDate: minutes(21).toISOString() });
+        expect(
+          await acquireOrders({
+            db: env.DB,
+            storeId: "s-a",
+            grantedAt,
+            access: access(fetcher),
+            now: minutes(22),
+            budget: { calls: 12, pages: 0 },
+            confirmedOrderId: "12-34567-89012",
+          }),
+        ).toBe("complete");
+        expect(fetcher).toHaveBeenCalled();
+        expect(await state()).toMatchObject({ polled_at: minutes(0).toISOString() });
+        expect(await runs()).toHaveLength(1);
+
+        fetcher.mockClear();
+        await syncStores(env, fetcher, minutes(30));
+        expect(pages(fetcher, "lastmodifieddate")).toEqual([0]);
+        expect(await state()).toMatchObject({ polled_at: minutes(30).toISOString() });
+
+        // Una richiesta rende il negozio dovuto anche se il cron l'aveva letto da poco: così si
+        // riprende quella che la coda non ha consegnato.
+        await env.DB.prepare("UPDATE sync_state SET requested_at = ?")
+          .bind(minutes(35).toISOString())
+          .run();
+        fetcher.mockClear();
+        await syncStores(env, fetcher, minutes(40));
+        expect(pages(fetcher, "lastmodifieddate")).toEqual([0]);
+        expect(await state()).toMatchObject({ requested_at: null });
+
+        // Lo storico ancora da importare è lavoro arretrato: si legge a ogni esecuzione utile.
+        await env.DB.prepare("UPDATE sync_state SET history_done_at = NULL").run();
+        fetcher.mockClear();
+        await syncStores(env, fetcher, minutes(50));
+        expect(pages(fetcher, "creationdate")).toEqual([0]);
+        fetcher.mockClear();
+        await syncStores(env, fetcher, minutes(60));
+        expect(fetcher).not.toHaveBeenCalled();
+        expect((await runs()).map(({ ok, new_orders }) => [ok, new_orders])).toEqual([
+          [1, 0],
+          [1, 0],
+          [1, 0],
+        ]);
+      });
+
+      it("unisce le richieste ripetute e le serve una volta, anche con consegne ripetute", async () => {
+        expect(await request(minutes(0))).toBe("queued");
+        expect(await request(minutes(1))).toBe("merged");
+        expect(send).toHaveBeenCalledOnce();
+        expect(send).toHaveBeenCalledWith({ syncStore: "s-a" });
+        expect(await state()).toMatchObject({ requested_at: minutes(0).toISOString() });
+
+        const fetcher = ebay();
+        const first = message();
+        await consumeStoreSync(first, queued, fetcher, minutes(2));
+        expect(first.ack).toHaveBeenCalledOnce();
+        expect(await state()).toMatchObject({
+          requested_at: null,
+          polled_at: minutes(2).toISOString(),
+        });
+        expect(await runs()).toEqual([
+          { started_at: minutes(2).toISOString(), ok: 1, new_orders: 1 },
+        ]);
+
+        // La stessa consegna ripetuta trova la richiesta servita e non chiama eBay.
+        fetcher.mockClear();
+        const repeated = message();
+        const errors = vi.spyOn(console, "error");
+        await consumeStoreSync(repeated, queued, fetcher, minutes(3));
+        expect(errors).not.toHaveBeenCalled();
+        errors.mockRestore();
+        expect(fetcher).not.toHaveBeenCalled();
+        expect(repeated.ack).toHaveBeenCalledOnce();
+        expect(await runs()).toHaveLength(1);
+
+        // Dopo la lettura una nuova richiesta riparte; solo lo spazio proprietario la chiede, e
+        // un negozio in pausa non legge.
+        expect(await request(minutes(4))).toBe("queued");
+        expect(await request(minutes(4), {}, "u-b")).toBe("not_found");
+        await env.DB.prepare(
+          "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-a', 'manual', ?)",
+        )
+          .bind(minutes(5).toISOString())
+          .run();
+        expect(await request(minutes(5))).toBe("invalid");
+        const paused = message();
+        await consumeStoreSync(paused, queued, fetcher, minutes(5));
+        expect(fetcher).not.toHaveBeenCalled();
+        expect(paused.ack).toHaveBeenCalledOnce();
+        expect(await state()).toMatchObject({ requested_at: minutes(4).toISOString() });
+      });
+
+      it("riprende una richiesta dopo una coda non disponibile o un'esecuzione interrotta", async () => {
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        try {
+          // La coda rifiuta l'invio: la richiesta resta in D1 e il cron la serve.
+          send.mockRejectedValueOnce(new Error("queue unavailable"));
+          expect(await request(minutes(0))).toBe("queued");
+          expect(String(errors.mock.calls.at(-1)?.[0])).toContain(
+            '"operation":"order_acquisition"',
+          );
+          expect(await state()).toMatchObject({ requested_at: minutes(0).toISOString() });
+          const fetcher = ebay();
+          await syncStores(env, fetcher, minutes(0.5));
+          expect(fetcher).toHaveBeenCalled();
+          expect(await state()).toMatchObject({ requested_at: null });
+
+          // Un'esecuzione interrotta lascia il negozio tenuto: la consegna riprova più tardi
+          // senza chiamare eBay, poi alla scadenza del blocco la richiesta si completa.
+          expect(await request(minutes(1))).toBe("queued");
+          await env.DB.prepare("UPDATE sync_state SET locked_until = ?")
+            .bind(minutes(16).toISOString())
+            .run();
+          fetcher.mockClear();
+          const held = message();
+          await consumeStoreSync(held, queued, fetcher, minutes(2));
+          expect(fetcher).not.toHaveBeenCalled();
+          expect(held.retry).toHaveBeenCalledWith({ delaySeconds: 60 });
+          expect(held.ack).not.toHaveBeenCalled();
+          const resumed = message();
+          await consumeStoreSync(resumed, queued, fetcher, minutes(16));
+          expect(resumed.ack).toHaveBeenCalledOnce();
+          expect(await state()).toMatchObject({ requested_at: null });
+          // La rilettura non duplica l'ordine già acquisito.
+          expect(await count("SELECT count(*) AS total FROM orders WHERE store_id = 's-a'")).toBe(
+            1,
+          );
+        } finally {
+          errors.mockRestore();
+        }
+      });
+
+      it("rispetta l'attesa chiesta da eBay per tutto il keyset", async () => {
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        try {
+          expect(await request(minutes(0))).toBe("queued");
+          const limited = ebay({
+            fail: () => new Response(null, { status: 429, headers: { "retry-after": "600" } }),
+          });
+          const first = message();
+          await consumeStoreSync(first, queued, limited, minutes(1));
+          expect(first.retry).toHaveBeenCalledWith({ delaySeconds: 600 });
+          expect(String(errors.mock.calls.at(-1)?.[0])).toContain(
+            '"operation":"order_acquisition"',
+          );
+          // La richiesta resta per la ripresa; la lettura non riuscita compare fra le ultime.
+          expect(await state()).toMatchObject({ requested_at: minutes(0).toISOString() });
+          expect(await runs()).toEqual([
+            { started_at: minutes(1).toISOString(), ok: 0, new_orders: 0 },
+          ]);
+
+          // Durante l'attesa né la coda né il cron chiamano eBay e l'utente lo sa.
+          expect(await request(minutes(2))).toBe("limited");
+          const fetcher = ebay();
+          const early = message();
+          await consumeStoreSync(early, queued, fetcher, minutes(6));
+          expect(early.retry).toHaveBeenCalledWith({ delaySeconds: 300 });
+          // Il cron esclude il keyset in attesa senza tentare né registrare errori.
+          errors.mockClear();
+          await syncStores(env, fetcher, minutes(10));
+          expect(fetcher).not.toHaveBeenCalled();
+          expect(errors).not.toHaveBeenCalled();
+
+          await syncStores(env, fetcher, minutes(11));
+          expect(fetcher).toHaveBeenCalled();
+          expect(await state()).toMatchObject({ requested_at: null });
+        } finally {
+          errors.mockRestore();
+        }
+      });
+
+      it("dopo un limite il cron non tenta gli altri negozi dello stesso keyset", async () => {
+        await env.DB.prepare(
+          `INSERT INTO ebay_store_credentials
+             (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
+           VALUES ('s-b', ?1, ?2, 'r', ?2, ?3)`,
+        )
+          .bind(
+            await sealToken(env.BETTER_AUTH_SECRET, "s-b", "access", "token-s-b"),
+            now,
+            grantedAt,
+          )
+          .run();
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        const failing = (status: number) =>
+          ebay({
+            fail: (_, init) =>
+              new Headers(init?.headers).get("authorization") === "Bearer token-s-a"
+                ? new Response(null, { status })
+                : undefined,
+          });
+        const polledB = () =>
+          env.DB.prepare("SELECT polled_at FROM sync_state WHERE store_id = 's-b'").first();
+        try {
+          // Un errore del solo negozio non ferma gli altri.
+          const rejected = failing(401);
+          await syncStores(env, rejected, minutes(0));
+          expect(await polledB()).toEqual({ polled_at: minutes(0).toISOString() });
+          expect(errors).toHaveBeenCalledOnce();
+
+          // Un limite sì: il negozio non tentato resta il primo del prossimo turno utile.
+          errors.mockClear();
+          const limited = failing(429);
+          await syncStores(env, limited, minutes(30));
+          expect(limited).toHaveBeenCalledOnce();
+          expect(errors).toHaveBeenCalledOnce();
+          expect(await polledB()).toEqual({ polled_at: minutes(0).toISOString() });
+        } finally {
+          errors.mockRestore();
+        }
+      });
+
+      it("i negozi di un keyset in attesa non tolgono il turno a quelli dell'altro ambiente", async () => {
+        const sandbox = {
+          ...env,
+          EBAY_SANDBOX_ENABLED: "true",
+          EBAY_SANDBOX_CLIENT_ID: "sandbox-client",
+          EBAY_SANDBOX_CLIENT_SECRET: "sandbox-secret",
+          EBAY_SANDBOX_RUNAME: "sandbox-runame",
+        } as Env;
+        await env.DB.prepare(
+          `INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, ebay_environment)
+           VALUES ('s-c', 'w-a', 'e-c', ?1, 'production'), ('s-d', 'w-a', 'e-d', ?1, 'production'),
+                  ('s-e', 'w-a', 'e-e', ?1, 'sandbox')`,
+        )
+          .bind(now)
+          .run();
+        for (const storeId of ["s-c", "s-d", "s-e"])
+          await env.DB.prepare(
+            `INSERT INTO ebay_store_credentials
+               (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
+             VALUES (?1, ?2, ?3, 'r', ?3, ?4)`,
+          )
+            .bind(
+              storeId,
+              await sealToken(env.BETTER_AUTH_SECRET, storeId, "access", `token-${storeId}`),
+              now,
+              grantedAt,
+            )
+            .run();
+        await env.DB.prepare(
+          "INSERT INTO ebay_rate_limits (api_origin, until) VALUES ('https://api.ebay.com', ?)",
+        )
+          .bind(minutes(15).toISOString())
+          .run();
+        const fetcher = ebay();
+        await syncStores(sandbox, fetcher, minutes(0));
+        expect(fetcher.mock.calls.map(([input]) => new URL(String(input)).origin)).toContain(
+          "https://api.sandbox.ebay.com",
+        );
+        expect(
+          fetcher.mock.calls.every(
+            ([input]) => new URL(String(input)).origin === "https://api.sandbox.ebay.com",
+          ),
+        ).toBe(true);
+      });
+
+      it("mostra nella schermata le letture non riuscite e nessuna per un negozio mai letto", async () => {
+        await env.DB.prepare(
+          "INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at) VALUES ('s-c', 'w-a', 'e-c', ?)",
+        )
+          .bind(now)
+          .run();
+        await env.DB.prepare(
+          "INSERT INTO sync_runs (store_id, started_at, ok, new_orders) VALUES ('s-a', ?, 0, 0)",
+        )
+          .bind(minutes(0).toISOString())
+          .run();
+        const stores = await listStores(env.DB, "u-a", minutes(1));
+        expect(Object.fromEntries(stores.map((store) => [store.id, store.recent]))).toEqual({
+          "s-a": [{ at: minutes(0).toISOString(), ok: false, newOrders: 0 }],
+          "s-c": [],
+        });
+      });
+
+      it("un evento non riuscito non compare fra le letture e non serve la richiesta", async () => {
+        expect(await request(minutes(0))).toBe("queued");
+        await expect(
+          acquireOrders({
+            db: env.DB,
+            storeId: "s-a",
+            grantedAt,
+            access: access(ebay({ fail: () => new Response(null, { status: 503 }) })),
+            now: minutes(1),
+            budget: { calls: 12, pages: 0 },
+            confirmedOrderId: "12-34567-89012",
+          }),
+        ).rejects.toMatchObject({ failure: "unavailable" });
+        expect(await runs()).toEqual([]);
+        expect(await state()).toMatchObject({ requested_at: minutes(0).toISOString() });
+      });
+
+      it("non anticipa l'arretrato di un negozio letto da meno di nove minuti", async () => {
+        await syncStores(env, ebay(), minutes(0));
+        await env.DB.prepare("UPDATE sync_state SET history_done_at = NULL").run();
+        const fetcher = ebay();
+        await syncStores(env, fetcher, minutes(8));
+        expect(fetcher).not.toHaveBeenCalled();
+        await syncStores(env, fetcher, minutes(9));
+        expect(pages(fetcher, "creationdate")).toEqual([0]);
+      });
+
+      it("con il token in rinnovo lascia la richiesta al cron e chiude gli altri errori", async () => {
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        try {
+          expect(await request(minutes(0))).toBe("queued");
+          await env.DB.prepare("UPDATE ebay_store_credentials SET access_expires_at = ?")
+            .bind(minutes(4).toISOString())
+            .run();
+          const fetcher = ebay();
+          const renewing = message();
+          await consumeStoreSync(renewing, queued, fetcher, minutes(0));
+          expect(fetcher).not.toHaveBeenCalled();
+          expect(renewing.ack).toHaveBeenCalledOnce();
+          expect(await state()).toMatchObject({ requested_at: minutes(0).toISOString() });
+
+          // Un errore diverso dal limite chiude la consegna: l'esito resta fra le ultime letture.
+          await env.DB.prepare("UPDATE ebay_store_credentials SET access_expires_at = ?")
+            .bind(now)
+            .run();
+          const rejected = message();
+          await consumeStoreSync(
+            rejected,
+            queued,
+            ebay({ fail: () => new Response(null, { status: 401 }) }),
+            minutes(1),
+          );
+          expect(rejected.ack).toHaveBeenCalledOnce();
+          expect(rejected.retry).not.toHaveBeenCalled();
+          expect(await state()).toMatchObject({ requested_at: null });
+          expect(await runs()).toEqual([
+            { started_at: minutes(1).toISOString(), ok: 0, new_orders: 0 },
+          ]);
+        } finally {
+          errors.mockRestore();
+        }
+      });
+
+      it("non registra richieste per un negozio in pausa o scollegato, neanche in importazione", async () => {
+        await syncStores(env, ebay(), minutes(0));
+        await env.DB.prepare("UPDATE sync_state SET history_done_at = NULL").run();
+        await env.DB.prepare(
+          "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-a', 'manual', ?)",
+        )
+          .bind(minutes(1).toISOString())
+          .run();
+        expect(await request(minutes(1), { reimport: true })).toBe("invalid");
+        await env.DB.prepare("DELETE FROM ebay_store_pauses").run();
+        await env.DB.prepare("DELETE FROM ebay_store_credentials").run();
+        expect(await request(minutes(2), { reimport: true })).toBe("invalid");
+        expect(await state()).toMatchObject({ requested_at: null });
+        expect(send).not.toHaveBeenCalled();
+      });
+
+      it("reimporta lo storico solo a importazione conclusa", async () => {
+        // Prima del primo avvio la richiesta avvia l'importazione.
+        expect(await request(minutes(0), { reimport: true })).toBe("queued");
+        await consumeStoreSync(message(), queued, ebay(), minutes(1));
+        expect(await state()).toMatchObject({
+          history_from: "2026-08-03T00:01:00.000Z",
+          history_done_at: minutes(1).toISOString(),
+        });
+
+        expect(await request(minutes(60 * 24), { reimport: true })).toBe("queued");
+        expect(await state()).toMatchObject({
+          history_from: "2026-08-04T00:00:00.000Z",
+          history_until: minutes(60 * 24).toISOString(),
+          history_done_at: null,
+        });
+        // Una seconda richiesta durante l'importazione non la fa ripartire.
+        expect(await request(minutes(60 * 24 + 1), { reimport: true })).toBe("importing");
+        expect(await state()).toMatchObject({ history_until: minutes(60 * 24).toISOString() });
+        expect(send).toHaveBeenCalledTimes(2);
+
+        const fetcher = ebay();
+        await consumeStoreSync(message(), queued, fetcher, minutes(60 * 24 + 2));
+        expect(pages(fetcher, "creationdate")).toEqual([0]);
+        expect(await state()).toMatchObject({
+          history_done_at: minutes(60 * 24 + 2).toISOString(),
+        });
+      });
+
+      it("conserva le ultime tre letture con gli ordini nuovi di ciascuna", async () => {
+        const fetcher = ebay({ orders: [] });
+        for (let index = 0; index < 6; index += 1) {
+          if (index === 3)
+            fetcher.orders.push(
+              order({
+                orderId: "12-nuovo",
+                creationDate: minutes(80).toISOString(),
+                lastModifiedDate: minutes(80).toISOString(),
+              }),
+            );
+          await syncStores(env, fetcher, minutes(index * 30));
+        }
+        expect(
+          (await runs()).map(({ started_at, new_orders }) => [started_at, new_orders]),
+        ).toEqual([
+          [minutes(90).toISOString(), 1],
+          [minutes(120).toISOString(), 0],
+          [minutes(150).toISOString(), 0],
+        ]);
+      });
+
+      it("rinnovo del token e ricollegamento durante una lettura non ripristinano stati superati", async () => {
+        // Il rinnovo cambia soltanto il token: la lettura partita prima scrive con lo stesso consenso.
+        expect(await request(minutes(0))).toBe("queued");
+        const refreshed = ebay({
+          before: async () => {
+            await env.DB.prepare(
+              "UPDATE ebay_store_credentials SET access_token = 'rinnovato', refreshed_at = ?",
+            )
+              .bind(minutes(1).toISOString())
+              .run();
+          },
+        });
+        const first = message();
+        await consumeStoreSync(first, queued, refreshed, minutes(1));
+        expect(first.ack).toHaveBeenCalledOnce();
+        expect(await count("SELECT count(*) AS total FROM orders WHERE store_id = 's-a'")).toBe(1);
+
+        // Un ricollegamento a metà lettura cambia il consenso: nessuna scrittura né lettura
+        // registrata, e la richiesta resta per il nuovo consenso.
+        await env.DB.prepare("UPDATE ebay_store_credentials SET access_token = ?")
+          .bind(await sealToken(env.BETTER_AUTH_SECRET, "s-a", "access", "token-s-a"))
+          .run();
+        expect(await request(minutes(2))).toBe("queued");
+        const reconnected = ebay({
+          orders: [order({ orderId: "12-dopo", lastModifiedDate: minutes(2).toISOString() })],
+          before: async () => {
+            await env.DB.prepare("UPDATE ebay_store_credentials SET granted_at = ?")
+              .bind(minutes(2).toISOString())
+              .run();
+          },
+        });
+        const second = message();
+        await consumeStoreSync(second, queued, reconnected, minutes(3));
+        expect(second.ack).toHaveBeenCalledOnce();
+        expect(
+          await count("SELECT count(*) AS total FROM orders WHERE ebay_order_id = '12-dopo'"),
+        ).toBe(0);
+        expect(await runs()).toHaveLength(1);
+        expect(await state()).toMatchObject({ requested_at: minutes(2).toISOString() });
+      });
     });
 
     it("una rilettura con dati mascherati non cancella quelli già acquisiti", async () => {
