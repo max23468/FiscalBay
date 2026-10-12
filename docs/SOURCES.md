@@ -304,13 +304,27 @@ Le pagine OpenAI possono essere reindirizzate alla documentazione ufficiale corr
 - [Prezzi e Workers Logs](https://developers.cloudflare.com/workers/platform/pricing/)
 - [Limiti Workers e Cron Trigger](https://developers.cloudflare.com/workers/platform/limits/)
 - [Workers Logpush](https://developers.cloudflare.com/workers/observability/logs/logpush/)
+- [Campi Workers Trace Events](https://developers.cloudflare.com/logs/logpush/logpush-job/datasets/account/workers_trace_events/)
+- [Giurisdizione R2 e limiti della destinazione Logpush diretta](https://developers.cloudflare.com/r2/reference/data-location/)
+- [Logpush verso R2 UE tramite destinazione S3-compatible](https://developers.cloudflare.com/data-localization/how-to/r2/#send-logs-to-r2-via-s3-compatible-endpoint)
 - [Lifecycle R2](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)
+- [Limiti D1](https://developers.cloudflare.com/d1/platform/limits/)
+- [D1 read replication e Sessions API](https://developers.cloudflare.com/d1/best-practices/read-replication/)
+- [Limiti e scadenza dei messaggi Queues](https://developers.cloudflare.com/queues/platform/limits/)
 - [Rate Limiting](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
 - [Turnstile, verifica lato server](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/)
 - [Workers Analytics Engine](https://developers.cloudflare.com/analytics/analytics-engine/)
+- [Quote e prezzi Analytics Engine](https://developers.cloudflare.com/analytics/analytics-engine/pricing/)
+- [Limiti e retention Analytics Engine](https://developers.cloudflare.com/analytics/analytics-engine/limits/)
+- [SQL API Analytics Engine e campionamento](https://developers.cloudflare.com/analytics/analytics-engine/sql-api/)
+- [Database supportati da Hyperdrive](https://developers.cloudflare.com/hyperdrive/reference/supported-databases-and-features/)
 - [Prezzi Email Service](https://developers.cloudflare.com/email-service/platform/pricing/)
 
-**Verifica del 2026-10-11:** Workers Logs conserva 3 giorni sul Free e 7 sul Paid e passa ai prezzi Observability dal 1° dicembre 2026; Logpush dei Workers richiede Paid. Cron Trigger: 5 per account sul Free, 250 sul Paid. Email Sending è in beta e l'invio a destinatari non verificati richiede Paid, con 3.000 email al mese incluse. Token Turnstile monouso, validi 300 secondi, da verificare con Siteverify. Quote e retention di Analytics Engine non rilette: da verificare in M6-08.
+**Verifica del 2026-10-11:** Workers Logs conserva 3 giorni sul Free e 7 sul Paid e passa ai prezzi Observability dal 1° dicembre 2026; Logpush dei Workers richiede Paid. Cron Trigger: 5 per account sul Free, 250 sul Paid. Email Sending è in beta e l'invio a destinatari non verificati richiede Paid, con 3.000 email al mese incluse. Token Turnstile monouso, validi 300 secondi, da verificare con Siteverify.
+
+**Verifica del 2026-10-12:** D1 ha un limite di 500 MB per database sul Free e 10 GB sul Paid, distinto da 5 GB/1 TB per account. Read replication usa Sessions API; `first-primary` avvia la sessione dai dati più recenti, un bookmark conserva soltanto una versione minima. Queue: retention Free fissa a 24 ore, Paid fino a 14 giorni; i messaggi scaduti sono eliminati. Per R2 con giurisdizione UE, Logpush richiede una destinazione S3-compatible sull'endpoint UE: la destinazione R2 diretta non supporta la giurisdizione. Workers Trace Events comprende `Event`, `Exceptions` e `Logs`, da filtrare secondo l'allowlist applicativa. Hyperdrive supporta PostgreSQL e MySQL esterni, non D1.
+
+Analytics Engine conserva tre mesi e ammette fino a 250 datapoint per invocazione. Quote pubblicate: Free 100.000 datapoint e 10.000 query al giorno; Paid 10 milioni di datapoint e un milione di query al mese, poi 0,25 USD e 1 USD per milione rispettivamente. La pagina prezzi dichiara che gli addebiti non sono ancora attivi: riconfermare prima dell'adozione. Nella sua SQL API conteggi, medie e quantili devono rispettare `_sample_interval`. Queste verifiche documentali non attestano binding attivi, capacità residua dell'account o nuovi costi autorizzati.
 
 **Uso:** §12, §14, §25, §29, §31; M3-12, M6-03, M6-06, M6-10, M6-11, M7-03, M7-09, M7-10, M7-11. Limiti e prezzi cambiano: rileggerli prima di una decisione di piano o dell'apertura pubblica.
 
@@ -319,7 +333,9 @@ Le pagine OpenAI possono essere reindirizzate alla documentazione ufficiale corr
 
 - [Prezzi Resend](https://resend.com/pricing)
 - [Prezzi Brevo](https://www.brevo.com/pricing/)
+- [Piani Brevo](https://help.brevo.com/hc/en-us/articles/208589409-About-Brevo-s-pricing-plans)
+- [Limiti Free e invii transazionali Brevo](https://help.brevo.com/hc/en-us/articles/208580669-FAQs-What-are-the-limits-of-the-Free-plan)
 
-**Verifica del 2026-10-11:** soltanto confronti di terze parti, non le pagine ufficiali: Resend circa 3.000 email al mese con massimo 100 al giorno e un dominio nel piano gratuito; Brevo circa 300 email al giorno. Valori da rileggere sulle fonti ufficiali prima della scelta.
+**Verifica del 2026-10-12:** la pagina ufficiale Resend conferma 3.000 email al mese, massimo 100 al giorno e tre domini sul Free. La pagina prezzi Brevo non restituisce contenuto leggibile nel canale di consultazione usato; il suo help ufficiale conferma 300 invii al giorno, senza riporto dei crediti inutilizzati, anche per email transazionali. Verificare nell'account selezionato limiti e gestione del superamento prima di qualificare l'invio Auth pubblico. Nessuna opzione selezionata o nuovo provider attivato.
 
 **Uso:** §14; M6-06. Opzioni aperte accanto a Cloudflare Email Service ([S34](#s34)).
