@@ -17,7 +17,7 @@ type TokenKind = "access" | "refresh";
 const sealedPrefix = "v1.";
 const keyInfo = new TextEncoder().encode("fiscalbay/ebay-seller-token/v1");
 // Il token di accesso vale due ore: il rinnovo parte quando ne restano meno di quaranta minuti,
-// così due esecuzioni ogni trenta minuti lasciano sempre un margine.
+// così più esecuzioni del cron, una ogni dieci minuti, cadono prima della scadenza.
 const refreshMarginMilliseconds = 40 * 60 * 1000;
 const refreshBatch = 50;
 const refreshLimit = 300;
@@ -222,8 +222,8 @@ type ExpiringRow = { store_id: string; access_expires_at: string };
  * in pausa non leggono eBay e restano esclusi; quelli scollegati non hanno più token.
  *
  * Scorre i negozi a blocchi con un cursore, così un errore non fa rileggere lo stesso negozio,
- * fino a `refreshLimit` rinnovi: con due esecuzioni l'ora e token di due ore regge circa mille
- * negozi attivi restando entro le sottorichieste di una esecuzione.
+ * fino a `refreshLimit` rinnovi: con un'esecuzione ogni dieci minuti e token di due ore regge
+ * oltre mille negozi attivi restando entro le sottorichieste di una esecuzione.
  */
 export async function refreshExpiringTokens(
   environment: Env,

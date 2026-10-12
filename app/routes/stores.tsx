@@ -17,6 +17,7 @@ import {
   type StoreActionResult,
   type StoreStatus,
 } from "../domain/stores.server";
+import { requestStoreSync, type SyncRequestResult } from "../domain/order-sync.server";
 import { languageFromPath, localizedPath } from "../i18n";
 import type { ActionResult, StoreView } from "../view-models";
 import { logFailure } from "../errors";
@@ -33,9 +34,10 @@ export function headers(): HeadersInit {
 
 /**
  * Vista del negozio con i soli dati che FiscalBay possiede: lo storico compare dal primo avvio
- * dell'importazione e resta «in corso» finché non è completo, e la sincronizzazione risulta in
- * corso mentre un'acquisizione tiene il negozio; frequenza e ultimi aggiornamenti mancano ancora,
- * e senza Telegram le notifiche seguono il piano.
+ * dell'importazione e resta «in corso» finché non è completo e la sincronizzazione risulta in
+ * corso mentre un'acquisizione tiene il negozio.
+ * Frequenza e ultimi aggiornamenti vengono dalla lettura periodica; senza Telegram le notifiche
+ * seguono il piano.
  */
 function storeView(store: StoreStatus): StoreView {
   return {
@@ -62,8 +64,8 @@ function storeView(store: StoreStatus): StoreView {
     connectedAt: store.consentGrantedAt,
     consentExpiresAt: store.consentExpiresAt,
     consentExpiring: store.consentExpiring || undefined,
-    targetMinutes: null,
-    recent: [],
+    targetMinutes: store.targetMinutes,
+    recent: store.recent,
   };
 }
 
@@ -107,7 +109,15 @@ const storeActions: Record<
     deleteStoreData(env.DB, userId, storeId, String(form.get("conferma") ?? "")),
 };
 
-/** Pausa, ripresa, scollegamento ed eliminazione, solo sui negozi del proprio spazio. */
+const syncActions: Record<string, { reimport: boolean }> = {
+  "store-sync": { reimport: false },
+  "store-reimport": { reimport: true },
+};
+
+/**
+ * Pausa, ripresa, scollegamento, eliminazione e letture a richiesta, solo sui negozi del
+ * proprio spazio. Una lettura richiesta dice se è in coda, già richiesta o in attesa di eBay.
+ */
 export async function action({ request }: Route.ActionArgs) {
   assertSameOrigin(request);
   const { language, session } = await requireAccountArea(request);
@@ -116,12 +126,31 @@ export async function action({ request }: Route.ActionArgs) {
   const intent = String(form.get("intent") ?? "");
   const storeId = String(form.get("store") ?? "");
   const run = Object.hasOwn(storeActions, intent) ? storeActions[intent] : undefined;
-  if (!run || !storeId || storeId.length > 64) {
+  const sync = Object.hasOwn(syncActions, intent) ? syncActions[intent] : undefined;
+  if ((!run && !sync) || !storeId || storeId.length > 64) {
     return data<ActionResult>({ ok: false, notice: t.failed }, { status: 400 });
+  }
+  if (sync) {
+    let requested: SyncRequestResult;
+    try {
+      requested = await requestStoreSync(env, session.user.id, storeId, sync);
+    } catch (error) {
+      logFailure({ request, error, operation: "route" });
+      return data<ActionResult>({ ok: false, notice: t.failed }, { status: 500 });
+    }
+    if (requested === "not_found")
+      return data<ActionResult>({ ok: false, notice: t.failed }, { status: 404 });
+    if (requested === "invalid")
+      return data<ActionResult>({ ok: false, notice: t.failed }, { status: 409 });
+    const notice =
+      sync.reimport && (requested === "queued" || requested === "merged")
+        ? t.reimportRequested
+        : t.requested[requested];
+    return { ok: true, notice } satisfies ActionResult;
   }
   let result: StoreActionResult;
   try {
-    result = await run(session.user.id, storeId, form);
+    result = await run!(session.user.id, storeId, form);
   } catch (error) {
     logFailure({ request, error, operation: "route" });
     return data<ActionResult>({ ok: false, notice: t.failed }, { status: 500 });

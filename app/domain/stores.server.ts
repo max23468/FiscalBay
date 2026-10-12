@@ -1,3 +1,5 @@
+import { syncMinutes } from "./order-sync.server";
+
 /**
  * Collegamento dei negozi: stato derivato da scollegamento, consenso e pause, separato
  * dall'attività di sincronizzazione. Ogni operazione verifica che il negozio appartenga allo
@@ -23,6 +25,10 @@ export type StoreStatus = {
    * un'esecuzione interrotta smette di contare alla sua scadenza.
    */
   syncing: boolean;
+  /** Cadenza prevista della lettura periodica per il piano dello spazio. */
+  targetMinutes: number;
+  /** Ultime letture dei recenti, dalla più recente. */
+  recent: { at: string; ok: boolean; newOrders: number }[];
   importedOrders: number;
   /** Finestra dello storico e completamento della sua importazione; null prima del primo avvio. */
   history: { days: number; done: boolean } | null;
@@ -62,14 +68,35 @@ async function ownedStore(
     .first<OwnedStore>();
 }
 
+type StoreRow = {
+  id: string;
+  ebay_environment: "production" | "sandbox";
+  name: string;
+  disconnected_at: string | null;
+  credentials: string | null;
+  granted_at: string | null;
+  refresh_expires_at: string | null;
+  rejected_at: string | null;
+  last_success_at: string | null;
+  history_from: string | null;
+  history_until: string | null;
+  history_done_at: string | null;
+  syncing: number | null;
+  pauses: string | null;
+  orders: number;
+};
+
+type RunRow = { store_id: string; started_at: string; ok: number; new_orders: number };
+
 export async function listStores(
   db: D1Database,
   userId: string,
   now = new Date(),
 ): Promise<StoreStatus[]> {
-  const { results } = await db
-    .prepare(
-      `SELECT s.id, s.ebay_environment, COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id) AS name, s.disconnected_at,
+  const [{ results }, { results: runs }] = await db.batch<StoreRow | RunRow>([
+    db
+      .prepare(
+        `SELECT s.id, s.ebay_environment, COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id) AS name, s.disconnected_at,
               c.store_id AS credentials, c.granted_at, c.refresh_expires_at,
               c.rejected_at, ss.last_success_at, ss.history_from, ss.history_until,
               ss.history_done_at, ss.locked_until > ?2 AS syncing,
@@ -82,27 +109,28 @@ export async function listStores(
          LEFT JOIN sync_state ss ON ss.store_id = s.id
         WHERE wm.user_id = ?1 AND s.data_deleted_at IS NULL
         ORDER BY s.linked_at, s.id`,
-    )
-    .bind(userId, now.toISOString())
-    .all<{
-      id: string;
-      ebay_environment: "production" | "sandbox";
-      name: string;
-      disconnected_at: string | null;
-      credentials: string | null;
-      granted_at: string | null;
-      refresh_expires_at: string | null;
-      rejected_at: string | null;
-      last_success_at: string | null;
-      history_from: string | null;
-      history_until: string | null;
-      history_done_at: string | null;
-      syncing: number | null;
-      pauses: string | null;
-      orders: number;
-    }>();
+      )
+      .bind(userId, now.toISOString()),
+    // Ultime letture dei negozi dello spazio, dalla più recente.
+    db
+      .prepare(
+        `SELECT r.store_id, r.started_at, r.ok, r.new_orders
+           FROM workspace_members wm
+           JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
+           JOIN sync_runs r ON r.store_id = s.id
+          WHERE wm.user_id = ? AND s.data_deleted_at IS NULL
+          ORDER BY r.started_at DESC, r.id DESC`,
+      )
+      .bind(userId),
+  ]);
+  const recent = new Map<string, StoreStatus["recent"]>();
+  for (const run of runs as RunRow[])
+    recent.set(run.store_id, [
+      ...(recent.get(run.store_id) ?? []),
+      { at: run.started_at, ok: run.ok === 1, newOrders: run.new_orders },
+    ]);
   const at = now.getTime();
-  return results.map((row) => {
+  return (results as StoreRow[]).map((row) => {
     const pauseReasons = (row.pauses?.split(",").sort() ?? []) as PauseReason[];
     const expiresAt = row.refresh_expires_at;
     const expired = !row.credentials || row.rejected_at !== null || Date.parse(expiresAt!) <= at;
@@ -137,6 +165,9 @@ export async function listStores(
       consentExpiresAt: row.disconnected_at ? null : expiresAt,
       lastSyncAt: row.last_success_at,
       syncing: row.syncing === 1,
+      // Finché non esistono gli abbonamenti ogni spazio usa il piano Free.
+      targetMinutes: syncMinutes.free,
+      recent: recent.get(row.id) ?? [],
       importedOrders: row.orders,
       history:
         // Le due date dello storico si fissano insieme al primo avvio.
@@ -239,6 +270,7 @@ export async function deleteStoreData(
     // Articoli, identificativi fiscali e grant seguono gli ordini.
     db.prepare("DELETE FROM orders WHERE store_id = ?").bind(storeId),
     db.prepare("DELETE FROM sync_state WHERE store_id = ?").bind(storeId),
+    db.prepare("DELETE FROM sync_runs WHERE store_id = ?").bind(storeId),
     db.prepare("UPDATE ebay_stores SET data_deleted_at = ? WHERE id = ?").bind(at, storeId),
   ]);
   return "done";
