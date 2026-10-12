@@ -40,13 +40,14 @@ export type SyncCandidate = {
   plan: SyncPlan;
   polledAt: string | null;
   requestedAt: string | null;
-  /** Storico, passata dei recenti o dettagli ancora da leggere. */
+  /** Storico, passata dei recenti o dettagli ancora da leggere dopo una lettura riuscita. */
   backlog: boolean;
 };
 
 /**
  * Ordine della lettura periodica sotto carico: prima i negozi dovuti per cadenza o per una
  * richiesta manuale (Premium, poi Free), poi quelli con lavoro arretrato (Premium, poi Free).
+ * Un negozio la cui ultima lettura è fallita non anticipa l'arretrato: riprova con la cadenza.
  * A parità, prima la richiesta manuale e poi il negozio letto meno di recente: anche chi
  * fallisce passa il turno, così nessun negozio resta indietro per sempre.
  */
@@ -98,11 +99,14 @@ export async function syncStores(
     environment.DB.prepare(
       `SELECT c.store_id, c.access_token, c.granted_at, s.ebay_environment,
               ss.polled_at, ss.requested_at,
-              (ss.history_done_at IS NULL OR ss.recent_next IS NOT NULL OR EXISTS (
+              -- Dopo una lettura non riuscita l'arretrato attende la cadenza del piano.
+              (EXISTS (SELECT 1 FROM sync_runs sr WHERE sr.store_id = c.store_id
+                          AND sr.started_at = ss.polled_at AND sr.ok = 1)
+               AND (ss.history_done_at IS NULL OR ss.recent_next IS NOT NULL OR EXISTS (
                  SELECT 1 FROM order_source_refs r
                   WHERE r.store_id = c.store_id AND r.source = 'fulfillment'
                     AND r.detail_for IS NOT r.last_modified_time
-                    AND (r.detail_retry_at IS NULL OR r.detail_retry_at <= ?1))) AS backlog
+                    AND (r.detail_retry_at IS NULL OR r.detail_retry_at <= ?1)))) AS backlog
          FROM ebay_store_credentials c
          JOIN ebay_stores s ON s.id = c.store_id
          LEFT JOIN sync_state ss ON ss.store_id = c.store_id
