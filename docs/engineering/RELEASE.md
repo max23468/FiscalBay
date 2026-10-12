@@ -73,6 +73,47 @@ Prima della migration si ricontrolla il candidato remoto; un artefatto diverso d
 
 Il rollback automatico è ammesso soltanto senza nuove migration e con precedente versione identificata, configurazione e migration uguali. Altrimenti resta necessario un forward-fix o una compatibilità qualificata. Prima del rollback si rilegge la versione attuale: uno stato cambiato impedisce di sovrascrivere un altro deploy. Il rollback del codice non ripristina dati.
 
+<a id="dashboard-test"></a>
+## Dashboard tecnica test
+
+La vista Cloudflare [FiscalBay | Test](https://dash.cloudflare.com/98195e505f42abaaeb4827f71a924b1a/dashboards/0745e833-f896-4168-9ff4-3246c6ab84a9) usa le sorgenti native già attive, senza telemetria aggiuntiva. Si apre da Osservabilità → Dashboard nell'account del progetto; la finestra iniziale è 24 ore. Il filtro persistente di ogni grafico deve identificare esattamente `fiscalbay-test`, mai un prefisso FiscalBay o l'intero account. Il nome tecnico dell'ambiente nel provider è `production` anche per questo Worker test: non identifica la Production applicativa `fiscalbay`. Il dominio test resta `test.fiscalbay.it`.
+
+| Grafico | Sorgente e selezione | Misura |
+|---|---|---|
+| Invocazioni registrate, HTTP/coda/cron | Workers Observability Logs; `$metadata.service = fiscalbay-test`, `$metadata.type = cf-worker-event`; gruppo `$workers.eventType` | Eventi, totale: solo record di invocazione, distinti dai messaggi applicativi |
+| CPU media | Stessa selezione e gruppo | Tempo CPU (ms), media |
+| Durata media | Stessa selezione e gruppo | Tempo di clock (ms), media; include attesa I/O |
+| Errori e annullamenti | Stessa selezione e gruppo; `$workers.outcome != ok` | Record di invocazione non riuscita; gli annullamenti non sono automaticamente eccezioni |
+| Invocazioni metriche | Workers Invocations; `scriptName = fiscalbay-test` | Richieste totali del dataset metrico, distinte dai record log |
+
+Logs espone anche Durata/media. CPU e tempo di clock nel selettore qualificato offrono la media, non percentili: questi si leggono in Workers Metrics. L'osservabilità attiva del test è stata riletta via API: log persistiti e invocation logs abilitati con `head_sampling_rate = 1`, trace persistiti con `head_sampling_rate = 0.01`. Il primo totale non conta tutte le righe di log: una singola invocazione può emettere più messaggi `cf-worker`. I trace contano span campionati, non richieste, e un trace può avere più span; non moltiplicarne il numero per 100 per attestare invocazioni o KPI.
+
+Per diagnosi scegliere una finestra comune, poi confrontare `fetch`, `queue` e `scheduled`, verificando dove la versione osservata esegue l'acquisizione. Nella release qualificata il cron contiene ancora la sincronizzazione periodica; il consumer esegue webhook e sincronizzazioni manuali. HTTP include pagine, richieste manuali e ingresso webhook. Per isolare un ingresso usare soltanto percorsi statici verificati come `/webhooks/ebay` o `/webhooks/ebay/sandbox` nel filtro nativo `$workers.event.path`; non raggruppare per URL, query, header, messaggi liberi o identificativi di negozio/ordine. Se il campione non distingue l'import dal resto del lavoro, dichiararlo e usare la diagnosi nativa pertinente; non introdurre attributi nuovi per il grafico.
+
+I grafici Logs seguono la retention dei log sottostanti, oggi 7 giorni su Paid, distinta dallo storico analytics della zona e dall'archivio R2 previsto dal piano. Una finestra senza eventi o fuori retention non prova assenza di errori. Query e dashboard non aggiungono un costo secondo i [prezzi Observability](https://developers.cloudflare.com/observability/pricing/); ingestione e storage restano consumi dell'account condiviso.
+
+Per mantenere la vista, aprire Configura dal menu di ciascun grafico e controllare dataset, filtri e aggregazione; dopo una modifica salvare, uscire dall'editor e riaprire il collegamento stabile. Verificare nuovamente filtri e valori: un toast di successo non basta. Aggiornare qui il collegamento soltanto se la vista viene sostituita; il completamento operativo e la manutenzione sono assegnati al piano.
+
+<a id="metriche-release"></a>
+## Confronto delle metriche fra release test
+
+Workers Metrics mostra nativamente i deploy nella finestra scelta: un deploy al 100% appare come marcatore, quelli vicini possono essere raggruppati; un rollout graduale mostra progressione e percentuali. Una versione soltanto caricata o allo 0% non appare. La [capacità di piattaforma](https://developers.cloudflare.com/changelog/post/2026-09-25-release-flows-workers-metrics/) non richiede codice, un nuovo servizio o un gate CPU automatico nella CI.
+
+1. Aprire il Worker `fiscalbay-test` da Compute → Workers e Pages, poi Metrics. Rileggere prima `pnpm exec wrangler deployments list --name fiscalbay-test --json` e la ricevuta della release pertinente: collegare deployment ID, version ID, commit annotato, percentuale e orario UTC. Un deploy concorrente cambia il confronto, non si sovrascrive.
+2. Selezionare una finestra che includa un deploy test esistente con dati su entrambi i lati. Leggere il suo marcatore, o il gruppo di marcatori vicini, e riconciliare versione e posizione temporale con la cronologia delle distribuzioni e la lettura CLI; consultare il dettaglio del rollout quando disponibile. Non distribuire una versione per creare un evento.
+3. Confrontare finestre di uguale durata, escludendo il rollout e il periodo di assestamento. Annotare granularità, fuso, volume e composizione del traffico; usare CPU e wall time p50/p90/p99 disponibili nei grafici nativi e numero/tasso di errori; per p95 usare la lettura GraphQL sotto. Separare HTTP, cron e consumer nei Logs quando disponibile, senza confondere un cambio di carico con un effetto del codice.
+4. Se serve una lettura riproducibile, usare GraphQL Analytics sullo schema effettivo: `workersInvocationsAdaptive` filtrato per `scriptName`, intervallo UTC e `scriptVersion`, con `sum.requests`, `sum.errors`, `quantiles.cpuTimeP50/P95`, `quantiles.wallTimeP50/P95` e `avg.sampleInterval`. I quantili sono in microsecondi, da dividere per 1.000 per ottenere ms. I conteggi del dataset adattivo sono stime quando campionati; non pesarli nuovamente come datapoint Analytics Engine né sommare/mediofare percentili di gruppi diversi. Rileggere `settings` per disponibilità, finestra massima e retention.
+5. Riportare il confronto nella PR/CI o nella ricevuta pertinente con limiti del campione; una correlazione non attribuisce da sola la causa e non chiude il collaudo browser, i gate del piano o la capacità pubblica. Se mancano dati, marcatori o accesso, separare procedura aggiornata e prova rimasta aperta.
+
+La qualifica del 12 ottobre 2026 ha rilevato nel grafico CPU nativo il marcatore `78d2692d` e il gruppo di due distribuzioni precedenti, riconciliati con la cronologia provider; il dettaglio hover del gruppo non è stato letto. La lettura API ha qualificato il confronto sulle release già esistenti sotto, entrambe al 100%; nessun deploy eseguito per questa prova. Le finestre sono UTC e contengono una sola versione ciascuna.
+
+| Lato | Release e finestra | Invocazioni / errori | CPU p50 / p95 | Wall time p50 / p95 |
+|---|---|---|---|---|
+| Prima | Deployment `8e54843f-7141-4918-8520-7c2a7fda52fa`, versione `1f0345d8-b59e-4b84-89ea-4b5450f25a3e`, commit `a2bbf1d5e1dd29382679e4dae63a5523d7ac482c`, deploy 11 ottobre 21:47:42; finestra 12 ottobre 03:00–05:00 | 8 / 0 | 25,416 / 54,869 ms | 2.456,621 / 4.973,567 ms |
+| Dopo | Deployment `95a2d3aa-f777-4068-a7ef-78aea82d9841`, versione `78d2692d-dca9-4448-8a5c-0744f4edcc1b`, commit `1fbdf2f6e8b9ffd11833b682c70539630841ff4e`, deploy 12 ottobre 05:57:42; finestra 12 ottobre 07:00–09:00 | 11 / 0 | 50,384 / 87,476 ms | 2.778,139 / 9.997,963 ms |
+
+`avg.sampleInterval = 1` in entrambi i gruppi; entrambi hanno `status = success`. Il campione ridotto e il carico non controllato qualificano la lettura, non dimostrano una regressione. `settings.workersInvocationsAdaptive` ha confermato dataset abilitato, query fino a 32 giorni e dati non più vecchi di 90 giorni: sono limiti di questo dataset dell'account, non la retention Workers Logs o un'estensione degli analytics della zona.
+
 ## Pubblica e ripresa
 
 Il workflow `Pubblica` accetta il commit completo su `main` e la versione presente in `CHANGELOG.md`. `scripts/release.mjs readiness` e i passi Production leggono dal Master Plan i [gate commerciale, ripristino e operativita](../MASTER_PLAN.md#pubblicazione-production): tutti devono essere `COMPLETATO`, ciascuno con prova, senza righe mancanti o duplicate. Restano richiesti i [checkpoint owner](../MASTER_PLAN.md#s00), la variabile `PRODUCTION_PUBLISH_ENABLED` e il via dell'environment Production. Nessuno di questi prerequisiti viene compilato o attivato dall'implementazione del workflow.
