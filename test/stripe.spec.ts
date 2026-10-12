@@ -96,7 +96,7 @@ describe("Stripe Managed Payments", () => {
         Response.json(session, { headers: { "request-id": "req_test_transport" } }),
       );
     try {
-      const client = createStripeClient("sk_test_transport");
+      const client = await createStripeClient("sk_test_transport");
       expect(transport).toHaveBeenCalledOnce();
       expect(
         await createManagedCheckout(client, {

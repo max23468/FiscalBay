@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { z } from "zod";
 
 import { createAuth } from "../auth.server";
-import { errorResponse } from "../errors";
+import { errorResponse } from "../error-response";
 import {
   createManagedCheckout,
   createStripeClient,
@@ -45,7 +45,7 @@ export async function action({ request }: { request: Request }) {
   if (!membership) return errorResponse(request, "FORBIDDEN");
 
   const checkout = await createManagedCheckout(
-    createStripeClient((env as Env & StripeSecrets).STRIPE_SECRET_KEY),
+    await createStripeClient((env as Env & StripeSecrets).STRIPE_SECRET_KEY),
     {
       offer: parsed.data.offer,
       priceId,

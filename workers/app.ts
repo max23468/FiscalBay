@@ -1,4 +1,4 @@
-import { createRequestHandler } from "react-router";
+import type { createRequestHandler } from "react-router";
 import {
   receiveWebhook,
   consumeWebhooks,
@@ -10,17 +10,23 @@ import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { acquireStoresOrders } from "../app/domain/order-acquisition.server";
 import { refreshExpiringTokens } from "../app/integrations/ebay/seller-credentials.server";
 
-// I webhook vengono rifiutati o presi in carico prima di caricare la build dell'app.
+// I webhook vengono rifiutati o presi in carico prima di caricare la build dell'app. Anche
+// React Router si carica con la build: cron, coda e webhook non ne valutano i moduli all'avvio.
 let requestHandler: ReturnType<typeof createRequestHandler> | undefined;
+
+async function loadRequestHandler() {
+  const [{ createRequestHandler }, build] = await Promise.all([
+    import("react-router"),
+    import("virtual:react-router/server-build"),
+  ]);
+  return createRequestHandler(build, import.meta.env.MODE);
+}
 
 export default {
   async fetch(request, env) {
     const webhook = await receiveWebhook(request, env);
     if (webhook) return webhook;
-    requestHandler ??= createRequestHandler(
-      await import("virtual:react-router/server-build"),
-      import.meta.env.MODE,
-    );
+    requestHandler ??= await loadRequestHandler();
     const id = crypto.randomUUID();
     const headers = new Headers(request.headers);
     headers.set(correlationHeader, id);

@@ -1,6 +1,3 @@
-import { appCopy } from "./app-copy";
-import { languageFromPath, type Language } from "./i18n";
-
 export const errorCatalog = {
   AUTH_REQUIRED: { status: 401, retryable: false },
   FORBIDDEN: { status: 403, retryable: false },
@@ -48,28 +45,6 @@ export function classifyFailure(error: unknown): ErrorCode {
 export function correlationId(request: Request): string {
   const value = request.headers.get(correlationHeader);
   return value && /^[0-9a-f-]{36}$/u.test(value) ? value : crypto.randomUUID();
-}
-
-export function errorMessage(code: ErrorCode, language: Language): string {
-  return appCopy[language].errors.codes[code];
-}
-
-export function errorResponse(request: Request, code: ErrorCode): Response {
-  const definition = errorCatalog[code];
-  const headers = new Headers({
-    "cache-control": "no-store",
-    [correlationHeader]: correlationId(request),
-  });
-  if ("retryAfter" in definition) headers.set("retry-after", String(definition.retryAfter));
-  return Response.json(
-    {
-      code,
-      message: errorMessage(code, languageFromPath(new URL(request.url).pathname)),
-      correlationId: headers.get(correlationHeader),
-      retryable: definition.retryable,
-    },
-    { status: definition.status, headers },
-  );
 }
 
 // Only enumerated fields are logged. Never serialize Error, request, headers or provider payloads.
