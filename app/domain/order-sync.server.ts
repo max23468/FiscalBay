@@ -14,10 +14,11 @@ import { UpstreamError } from "../integrations/http.server";
 import { ebayConfiguration } from "../integrations/ebay/environment.server";
 
 /**
- * Lettura periodica dei negozi e richieste manuali. Il cron parte ogni dieci minuti e sceglie
- * i negozi dovuti; «Sincronizza» e «Reimporta» passano dalla coda con un solo riferimento al
- * negozio. La richiesta resta in D1 finché una lettura partita dopo non la serve: richieste
- * ripetute confluiscono nella stessa e il cron riprende quelle che la coda non ha consegnato.
+ * Lettura periodica dei negozi e richieste manuali. Il cron parte ogni dieci minuti, sceglie i
+ * negozi dovuti e ne accoda la lettura; «Sincronizza» e «Reimporta» la accodano subito. Ogni
+ * messaggio porta soltanto il riferimento al negozio e il consumer legge un negozio per
+ * invocazione. La richiesta resta in D1 finché una lettura partita dopo non la serve: richieste
+ * ripetute confluiscono nella stessa e il cron riaccoda quelle che la coda non ha consegnato.
  * Gli eventi eBay seguono l'ingresso dei webhook e non dipendono dal piano.
  */
 
@@ -28,11 +29,15 @@ export const syncMinutes: Record<SyncPlan, number> = { premium: 10, free: 30 };
 
 // Il cron parte ogni dieci minuti; il margine assorbe un avvio in ritardo rispetto al turno.
 const toleranceMilliseconds = 60_000;
-/** Negozi letti da un'esecuzione del cron e budget di ciascuno. */
-const storesPerRun = 3;
+// Ritardo massimo di un nuovo tentativo ammesso dalla coda.
+const maxRetryDelaySeconds = 43_200;
+/** Budget di una lettura del negozio, cioè di un'invocazione del consumer. */
 const storeBudget = { calls: 12, pages: 3 };
-// Negozi valutati per esecuzione, dai letti meno di recente.
-const candidateLimit = 100;
+// Negozi valutati e accodati per esecuzione del cron, dai letti meno di recente: è anche il
+// massimo di messaggi di un invio a gruppi della coda.
+const dispatchLimit = 100;
+// Un turno accodato senza esito entro questo tempo si considera perso e si ripropone.
+const dispatchStaleMilliseconds = 60 * 60_000;
 const tokenMarginMilliseconds = 5 * 60_000;
 const dayMilliseconds = 86_400_000;
 
@@ -83,16 +88,15 @@ type CandidateRow = ActiveStore & {
 };
 
 /**
- * Lavoro periodico: legge al massimo `storesPerRun` negozi attivi con un token valido, in
- * ordine di priorità. Un errore di un negozio non ferma gli altri; un limite di eBay ferma i
- * negozi della stessa origine API fino alla scadenza dell'attesa.
+ * Smistamento periodico: sceglie in ordine di priorità i negozi attivi con un token valido e
+ * ne accoda la lettura, che il consumer esegue con il budget di un negozio. Il claim in D1
+ * precede l'invio: trigger ripetuti o sovrapposti non accodano due volte lo stesso negozio,
+ * mentre un turno accodato e mai servito si ripropone dopo `dispatchStaleMilliseconds`. I
+ * negozi di un'origine API in attesa per un limite di eBay non si accodano.
  */
-export async function syncStores(
-  environment: Env,
-  fetcher: typeof fetch,
-  now = new Date(),
-): Promise<void> {
+export async function dispatchStoreSyncs(environment: Env, now = new Date()): Promise<string[]> {
   const at = now.toISOString();
+  const stale = new Date(now.getTime() - dispatchStaleMilliseconds).toISOString();
   const [{ results: rows }, { results: limits }] = await environment.DB.batch<
     CandidateRow | { api_origin: string }
   >([
@@ -113,6 +117,7 @@ export async function syncStores(
         WHERE c.rejected_at IS NULL AND c.access_expires_at > ?2 AND s.disconnected_at IS NULL
           AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = c.store_id)
           AND (ss.polled_at IS NULL OR ss.requested_at IS NOT NULL OR ss.polled_at <= ?3)
+          AND (ss.dispatched_at IS NULL OR ss.dispatched_at <= ?5)
         ORDER BY ss.polled_at IS NOT NULL, ss.polled_at, c.store_id
         LIMIT ?4`,
     ).bind(
@@ -122,70 +127,70 @@ export async function syncStores(
       new Date(
         now.getTime() - Math.min(...Object.values(syncMinutes)) * 60_000 + toleranceMilliseconds,
       ).toISOString(),
-      candidateLimit,
+      dispatchLimit,
+      stale,
     ),
     environment.DB.prepare("SELECT api_origin FROM ebay_rate_limits WHERE until > ?").bind(at),
   ]);
-  // Origini API in attesa; un ambiente non configurato (null) non vi entra mai.
-  const limited = new Set<string | null>(
+  // Origini API in attesa. Un ambiente non configurato (undefined) si accoda comunque: il
+  // consumer registra l'errore e il negozio passa il turno.
+  const limited = new Set<string | undefined>(
     (limits as { api_origin: string }[]).map((row) => row.api_origin),
   );
-  const candidates = (rows as CandidateRow[]).map((row) => {
-    let apiOrigin: string | null = null;
-    try {
-      apiOrigin = ebayConfiguration(environment, row.ebay_environment).apiOrigin;
-    } catch {
-      // Ambiente non disponibile: il tentativo fallisce sotto e passa il turno.
-    }
-    return {
-      ...row,
-      apiOrigin,
+  const selected = syncOrder(
+    (rows as CandidateRow[]).map((row) => ({
+      storeId: row.store_id,
+      grantedAt: row.granted_at,
+      apiOrigin: apiOriginOf(environment, row.ebay_environment),
       // Finché non esistono gli abbonamenti ogni spazio usa il piano Free.
       plan: "free" as SyncPlan,
       polledAt: row.polled_at,
       requestedAt: row.requested_at,
       backlog: row.backlog === 1,
-    };
-  });
-  const selected = syncOrder(candidates, now)
-    .filter((store) => !limited.has(store.apiOrigin))
-    .slice(0, storesPerRun);
+    })),
+    now,
+  ).filter((store) => !limited.has(store.apiOrigin));
+  if (selected.length === 0) return [];
 
-  const read = async (store: (typeof selected)[number]) => {
-    // Un limite incontrato da un negozio precedente vale anche per questo.
-    if (limited.has(store.apiOrigin)) return;
-    try {
-      await acquireOrders({
-        db: environment.DB,
-        storeId: store.store_id,
-        grantedAt: store.granted_at,
-        access: await storeAccess(environment, store, fetcher),
-        now,
-        budget: { ...storeBudget },
-      });
-    } catch (error) {
-      logFailure({ error, operation: "order_acquisition" });
-      if (error instanceof UpstreamError && error.failure === "rate_limited") {
-        limited.add(store.apiOrigin);
-        return;
-      }
-      // Anche un tentativo fallito prima di iniziare, per esempio con un token che non si
-      // apre, passa il turno: altrimenti il negozio resterebbe sempre il primo della coda.
-      await environment.DB.prepare(
-        `INSERT INTO sync_state (store_id, polled_at, updated_at)
+  const claims = await environment.DB.batch<{ store_id: string }>(
+    selected.map((store) =>
+      environment.DB.prepare(
+        `INSERT INTO sync_state (store_id, dispatched_at, updated_at)
          SELECT ?1, ?3, ?3 WHERE ${writableStore}
-         ON CONFLICT(store_id) DO UPDATE SET polled_at = excluded.polled_at,
-                                             updated_at = excluded.updated_at`,
-      )
-        .bind(store.store_id, store.granted_at, at)
-        .run();
-    }
-  };
-  // In sequenza: le scritture di un negozio e i limiti di eBay non si sovrappongono.
-  await selected.reduce<Promise<void>>(
-    (previous, store) => previous.then(() => read(store)),
-    Promise.resolve(),
+         ON CONFLICT(store_id) DO UPDATE SET dispatched_at = excluded.dispatched_at,
+                                             updated_at = excluded.updated_at
+         WHERE sync_state.dispatched_at IS NULL OR sync_state.dispatched_at <= ?4
+         RETURNING store_id`,
+      ).bind(store.storeId, store.grantedAt, at, stale),
+    ),
   );
+  // Nell'ordine di priorità: la coda consegna prima i negozi accodati prima.
+  const claimed = claims.flatMap(({ results }) => results.map((row) => row.store_id));
+  if (claimed.length === 0) return [];
+  try {
+    await environment.WEBHOOK_QUEUE.sendBatch(
+      claimed.map((storeId) => ({ body: { syncStore: storeId } })),
+    );
+  } catch (error) {
+    // Il turno torna libero e il prossimo trigger lo riprova.
+    await environment.DB.prepare(
+      `UPDATE sync_state SET dispatched_at = NULL
+        WHERE store_id IN (SELECT value FROM json_each(?1)) AND dispatched_at = ?2`,
+    )
+      .bind(JSON.stringify(claimed), at)
+      .run();
+    throw error;
+  }
+  return claimed;
+}
+
+/** Origine API dell'ambiente del negozio; undefined se l'ambiente non è configurato. */
+function apiOriginOf(environment: Env, ebayEnvironment: ActiveStore["ebay_environment"]) {
+  let origin: string | undefined;
+  try {
+    origin = ebayConfiguration(environment, ebayEnvironment).apiOrigin;
+  } catch {}
+  return origin;
 }
 
 export type SyncRequestResult =
@@ -279,10 +284,10 @@ export async function requestStoreSync(
 }
 
 /**
- * Esegue una richiesta manuale dalla coda. Una consegna ripetuta dopo la lettura trova la
- * richiesta già servita e non chiama eBay; un negozio occupato riprova poco dopo, un limite di
- * eBay alla scadenza dell'attesa. Gli altri errori restano fra gli ultimi aggiornamenti e la
- * lettura riprende con la cadenza del piano.
+ * Esegue dalla coda una richiesta manuale o un turno accodato dal cron. Una consegna ripetuta
+ * dopo la lettura trova il lavoro già servito e non chiama eBay; un negozio occupato riprova
+ * poco dopo, un limite di eBay alla scadenza dell'attesa. Gli altri errori restano fra gli
+ * ultimi aggiornamenti e il negozio passa il turno: la lettura riprende con la cadenza del piano.
  */
 export async function consumeStoreSync(
   message: Message<unknown>,
@@ -291,40 +296,72 @@ export async function consumeStoreSync(
   now = new Date(),
 ): Promise<void> {
   const { syncStore } = syncMessageSchema.parse(message.body);
+  const at = now.toISOString();
   const store = await environment.DB.prepare(
     `SELECT c.store_id, c.access_token, c.granted_at, s.ebay_environment
        FROM ebay_store_credentials c
        JOIN ebay_stores s ON s.id = c.store_id
        JOIN sync_state ss ON ss.store_id = c.store_id
-      WHERE c.store_id = ?1 AND ss.requested_at IS NOT NULL AND c.rejected_at IS NULL
-        AND c.access_expires_at > ?2 AND s.disconnected_at IS NULL
+      WHERE c.store_id = ?1 AND (ss.requested_at IS NOT NULL OR ss.dispatched_at IS NOT NULL)
+        AND c.rejected_at IS NULL AND c.access_expires_at > ?2 AND s.disconnected_at IS NULL
         AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = c.store_id)`,
   )
     .bind(syncStore, new Date(now.getTime() + tokenMarginMilliseconds).toISOString())
     .first<ActiveStore>();
-  // Richiesta già servita o negozio non più attivo. Con il token in rinnovo la richiesta
-  // resta in D1 e la riprende il cron.
-  if (!store) {
-    message.ack();
-    return;
-  }
-  try {
-    const result = await acquireOrders({
-      db: environment.DB,
-      storeId: store.store_id,
-      grantedAt: store.granted_at,
-      access: await storeAccess(environment, store, fetcher),
-      now,
-      budget: { ...storeBudget },
-    });
-    if (result === "busy") message.retry({ delaySeconds: 60 });
-    else message.ack();
-  } catch (error) {
-    logFailure({ error, operation: "order_acquisition" });
-    if (error instanceof UpstreamError && error.failure === "rate_limited")
-      message.retry({
-        delaySeconds: Math.min(43_200, error.details.retryAfter ?? defaultRateLimitSeconds),
+  // Lavoro già servito o negozio non più attivo. Con il token in rinnovo la richiesta resta in
+  // D1 e il cron la riaccoda.
+  if (store) {
+    try {
+      const wait = await rateLimitWait(
+        environment.DB,
+        ebayConfiguration(environment, store.ebay_environment).apiOrigin,
+        now,
+      );
+      // Attesa già nota: nessuna chiamata e nessun errore da registrare.
+      if (wait > 0) {
+        message.retry({ delaySeconds: Math.min(maxRetryDelaySeconds, wait) });
+        return;
+      }
+      const result = await acquireOrders({
+        db: environment.DB,
+        storeId: store.store_id,
+        grantedAt: store.granted_at,
+        access: await storeAccess(environment, store, fetcher),
+        now,
+        budget: { ...storeBudget },
       });
-    else message.ack();
+      if (result === "busy") {
+        message.retry({ delaySeconds: 60 });
+        return;
+      }
+    } catch (error) {
+      logFailure({ error, operation: "order_acquisition" });
+      if (error instanceof UpstreamError && error.failure === "rate_limited") {
+        message.retry({
+          delaySeconds: Math.min(
+            maxRetryDelaySeconds,
+            error.details.retryAfter ?? defaultRateLimitSeconds,
+          ),
+        });
+        return;
+      }
+      // Anche un tentativo fallito prima di iniziare, per esempio con un token che non si
+      // apre, passa il turno e serve la richiesta: altrimenti il negozio resterebbe sempre il
+      // primo della coda.
+      await environment.DB.prepare(
+        `UPDATE sync_state SET polled_at = ?3, updated_at = ?3,
+                requested_at = CASE WHEN requested_at <= ?3 THEN NULL ELSE requested_at END
+          WHERE store_id = ?1 AND ${writableStore}`,
+      )
+        .bind(store.store_id, store.granted_at, at)
+        .run();
+    }
   }
+  // Il turno accodato è chiuso: il cron può accodarne un altro quando il negozio è dovuto.
+  await environment.DB.prepare(
+    "UPDATE sync_state SET dispatched_at = NULL WHERE store_id = ? AND dispatched_at <= ?",
+  )
+    .bind(syncStore, at)
+    .run();
+  message.ack();
 }

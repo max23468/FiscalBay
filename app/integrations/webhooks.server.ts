@@ -217,11 +217,21 @@ async function enqueueReceipt(env: Env, receiptId: string, now: Date) {
     .run();
 }
 
-/** Riprende soltanto la finestra fra claim D1 e accettazione Queue, anche senza retry provider. */
+// Una ricevuta accodata da oltre un giorno e non completata ha perso il messaggio: retry e
+// attese del provider si esauriscono prima, e resta la DLQ o la scadenza della coda.
+const lostMilliseconds = 86_400_000;
+
+/**
+ * Riprende la finestra fra claim D1 e accettazione Queue, anche senza retry provider, e le
+ * ricevute accettate il cui messaggio è andato perso. La ricevuta non scaduta è il checkpoint:
+ * il consumer rivalida consenso, ambiente e finestra prima di ogni effetto.
+ */
 export async function recoverWebhookIngress(env: Env, now = new Date()) {
   const { results } = await env.DB.prepare(`SELECT id FROM webhook_receipts
-    WHERE queued_at IS NULL AND completed_at IS NULL AND expires_at > ? ORDER BY event_at LIMIT 25`)
-    .bind(now.toISOString())
+    WHERE completed_at IS NULL AND expires_at > ?1
+      AND (queued_at IS NULL OR queued_at <= ?2) AND (locked_until IS NULL OR locked_until <= ?1)
+    ORDER BY event_at LIMIT 25`)
+    .bind(now.toISOString(), new Date(now.getTime() - lostMilliseconds).toISOString())
     .all<{ id: string }>();
   // In sequenza: se Queue non accetta, il recupero si ferma senza altri invii destinati a fallire.
   await results.reduce<Promise<void>>(

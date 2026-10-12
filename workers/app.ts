@@ -1,14 +1,13 @@
 import type { createRequestHandler } from "react-router";
-import {
-  receiveWebhook,
-  consumeWebhooks,
-  recoverWebhookIngress,
-} from "../app/integrations/webhooks.server";
+import { receiveWebhook, consumeWebhooks } from "../app/integrations/webhooks.server";
 import { indexable } from "../app/app-links";
 import { correlateResponse, correlationHeader, logFailure, tracePhase } from "../app/errors";
-import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-import { consumeStoreSync, isSyncMessage, syncStores } from "../app/domain/order-sync.server";
-import { refreshExpiringTokens } from "../app/integrations/ebay/seller-credentials.server";
+import { consumeStoreSync, isSyncMessage } from "../app/domain/order-sync.server";
+import {
+  consumeTask,
+  dispatchScheduledWork,
+  isTaskMessage,
+} from "../app/domain/scheduled-work.server";
 
 // I webhook vengono rifiutati o presi in carico prima di caricare la build dell'app. Anche
 // React Router si carica con la build: cron, coda e webhook non ne valutano i moduli all'avvio.
@@ -50,26 +49,23 @@ export default {
       return new Response(null, { status: 500, headers: { [correlationHeader]: id } });
     }
   },
-  // La coda porta i riferimenti dei webhook e le richieste manuali di sincronizzazione.
+  // La coda porta i riferimenti dei webhook, le letture dei negozi e i compiti periodici.
   async queue(batch, env) {
     const syncs = batch.messages.filter((message) => isSyncMessage(message.body));
-    const webhooks = batch.messages.filter((message) => !isSyncMessage(message.body));
+    const tasks = batch.messages.filter((message) => isTaskMessage(message.body));
+    const webhooks = batch.messages.filter(
+      (message) => !isSyncMessage(message.body) && !isTaskMessage(message.body),
+    );
     // Negozi diversi non si ostacolano; lo stesso negozio è serializzato dal suo blocco.
-    await Promise.all(syncs.map((message) => consumeStoreSync(message, env)));
+    await Promise.all([
+      ...syncs.map((message) => consumeStoreSync(message, env)),
+      ...tasks.map((message) => consumeTask(message, env)),
+    ]);
     if (webhooks.length > 0) await consumeWebhooks({ messages: webhooks }, env);
   },
-  // Ogni dieci minuti: pulizia dei dati tecnici scaduti, rinnovo anticipato dei token di
-  // accesso dei negozi e lettura dei negozi dovuti, fuori dal percorso delle pagine. Un passo
-  // fallito non ferma i successivi; la lettura usa i token appena rinnovati.
+  // Ogni dieci minuti accoda il lavoro dovuto, senza eseguirlo: il consumer lo svolge fuori
+  // dal percorso delle pagine e dall'invocazione del cron.
   async scheduled(controller, env) {
-    const now = new Date(controller.scheduledTime);
-    await purgeExpiredRecords(env.DB, now).catch((error: unknown) =>
-      logFailure({ error, operation: "maintenance" }),
-    );
-    await recoverWebhookIngress(env, now).catch(() => logFailure({ operation: "webhook_ingress" }));
-    await refreshExpiringTokens(env, fetch, now).catch((error: unknown) =>
-      logFailure({ error, operation: "token_refresh" }),
-    );
-    await syncStores(env, fetch, now);
+    await dispatchScheduledWork(env, new Date(controller.scheduledTime));
   },
 } satisfies ExportedHandler<Env>;
