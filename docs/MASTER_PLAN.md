@@ -591,6 +591,18 @@ M0/M1: inventario DNS prima di modificare nameserver; trasferire record necessar
 
 Posta umana su iCloud+ già pagato se configurazione verificata, mantenendo info/supporto e terzo slot libero. MX/SPF/DKIM per posta umana e mittente transazionale distinti ma compatibili; un solo record SPF per nome, allineamento DMARC verificato, return-path/subdominio tecnico quando richiesto. Non mettere proxy HTTP davanti a record posta. Provare ricezione/risposta e invii Auth reali autorizzati; nessuna assunzione che l'SMTP di test sia adatto alla produzione. [S12](SOURCES.md#s12)
 
+**Protezioni della zona e della posta (D168).** M1-08 conserva il bootstrap già completato; [M7-12](#m7-12) integra e qualifica le protezioni seguenti prima della RC. Nessuna funzione inclusa nel piano è per questo già attiva sul provider.
+
+| Funzione | Contratto e verifica |
+|---|---|
+| HSTS | Introduzione graduale dopo la verifica HTTPS sui domini interessati; `includeSubDomains` soltanto dopo inventario e collaudo di tutti i sottodomini, preload non automatico |
+| Header di sicurezza | `X-Content-Type-Options`, protezione dall'inclusione in frame e Referrer Policy coerenti sulle risposte reali; header statici da Transform Rules o Worker dove qualificato, CSP applicativa compatibile con Auth, Stripe e Turnstile |
+| WAF e rate limit di zona | Regole mirate per host/percorso e abusi osservati, con quote del piano della zona rilette; il filtro edge precede il binding Workers e i contatori D1, senza duplicare i loro limiti per account |
+| DMARC Management | Report aggregati dei mittenti legittimi e dei fallimenti SPF/DKIM/DMARC, mantenendo MX iCloud e policy DMARC esistente; trasporto transazionale qualificato in M6-06, inventario dei trattamenti in M7-07; beta documentata e inclusa dall'owner |
+| Certificate Transparency Monitoring | Alert nativi su nuove emissioni per il dominio a un destinatario owner confermato, con procedura di verifica e rientro in M7-04 |
+
+Le regole non impongono challenge browser ai webhook e alle callback server-to-server; OAuth, passkey e download autenticati restano funzionanti. Le eventuali eccezioni sono circoscritte alla regola incompatibile e al percorso esatto, senza disabilitare in blocco le protezioni. Bot Fight Mode generalizzato non adottato, perché non supporta eccezioni WAF; nessun upgrade Pro/Business implicito. Cache e ottimizzazioni della zona rispettano sessioni e `no-store`, senza memorizzare risposte private. [S36](SOURCES.md#s36)
+
 <a id="s25"></a>
 ## 25. Architettura e confini dei servizi
 
@@ -629,11 +641,12 @@ Inventario read-only delle risorse condivise in M0; nessuna migrazione di altri 
 | Workers | Web app, ingresso webhook, consumer Queue e lavoro pianificato in un solo Worker per ambiente |
 | Workers Static Assets | Asset della build serviti dalla piattaforma; download privati e risposte dipendenti dalla sessione restano nel Worker |
 | DNS, TLS e Custom Domains | Zona esistente e domini canonici di [§24](#s24); Register.it resta registrar, senza trasferimenti o nuovi domini richiesti |
+| Protezioni e report della zona | HSTS/header, WAF/rate limit edge, DMARC Management e Certificate Transparency secondo [§24](#s24), da qualificare in [M7-12](#m7-12) |
 | D1 (UE) | Unica fonte autorevole di dati applicativi, sessioni, checkpoint, ricevute, contatori per indirizzo e audit |
 | Queues e DLQ | Consegna, ritardi, retry e dead-letter di eventi e lavori ([§11](#s11)) |
 | Cron Triggers | Un solo trigger per ambiente che smista il lavoro periodico per `scheduledTime` ([§31](#s31)) |
 | R2 (UE) | File export a 24 ore ([§12.1](#s12)) e archivio dei log a 90 giorni ([§31](#s31)) |
-| Rate Limiting | Primo filtro per IP e percorso davanti ad Auth e operazioni costose ([§29](#s29)) |
+| Rate Limiting | Primo filtro nel Worker per IP e percorso davanti ad Auth e operazioni costose ([§29](#s29)) |
 | Turnstile | Verifica anti-automazione su registrazione, richieste di link email e form di supporto ([§29](#s29)) |
 | Analytics Engine | Metriche tecniche aggregate e budget di prestazione, senza dati personali ([§31](#s31)) |
 | Email Service | Mittente transazionale `noreply@` attuale e invio gratuito agli indirizzi verificati; trasporto definitivo fra Cloudflare, Resend e Brevo ancora da scegliere ([§14](#s14)) |
@@ -643,7 +656,7 @@ Non adottati: KV, perché le letture possono restare non aggiornate mentre revoc
 
 **D1 e letture distribuite.** Il percorso corrente usa il database primario. Read replication con Sessions API, attualmente in beta, si valuta soltanto se [M7-03](#m7-03) misura un collo di bottiglia nelle letture, qualificando disponibilità, localizzazione e compatibilità Auth. Una replica potenzialmente in ritardo o un bookmark del client non provano l'assenza di revoche successive: i controlli di sessione, ruolo, consenso e grant richiedono lo stato autorevole corrente; `first-primary` avvia una sessione dai dati più recenti. Nessuna replica o cache introdotta soltanto perché disponibile. [S34](SOURCES.md#s34)
 
-**Ingresso leggero per webhook e callback.** Le route esatte dei webhook e delle callback server-to-server dei provider (Stripe, eBay `ORDER_CONFIRMATION` e cancellazione account, Telegram) sono gestite dall'entrypoint Worker prima di React Router: verificano metodo, dimensione e firma sul corpo grezzo, registrano un claim idempotente in D1 e pubblicano in coda un messaggio con soli identificativi, senza payload, sessioni o token. La risposta positiva al provider parte soltanto dopo che la coda ha accettato il messaggio; `waitUntil` da solo non basta perché non garantisce la riconsegna. Il consumer ricostruisce il contesto da D1 e usa retry e dead-letter nativi. La build React Router si carica al primo accesso applicativo insieme a React Router stesso e resta esclusa dal percorso di webhook, cron e coda; lo SDK Stripe e i testi dell'interfaccia si caricano solo dove servono (D167); la CPU di questi ingressi deve essere misurata sul Worker entro il limite Workers Free, senza dedurla dalla build o dal caricamento dei moduli. Per eventi ad alta frequenza e già confermati è ammessa una memoria di breve durata nell'isolate per evitare letture D1 ripetute, mai come fonte autorevole. Le callback OAuth aperte dal browser restano nell'applicazione e nel sistema Auth.
+**Ingresso leggero per webhook e callback.** Le route esatte dei webhook e delle callback server-to-server dei provider (Stripe, eBay `ORDER_CONFIRMATION` e cancellazione account, Telegram) sono gestite dall'entrypoint Worker prima di React Router: verificano metodo, dimensione e firma sul corpo grezzo, registrano un claim idempotente in D1 e pubblicano in coda un messaggio con soli identificativi, senza payload, sessioni o token. La risposta positiva al provider parte soltanto dopo che la coda ha accettato il messaggio; `waitUntil` da solo non basta perché non garantisce la riconsegna. Il consumer ricostruisce il contesto da D1 e usa retry e dead-letter nativi. La build React Router si carica al primo accesso applicativo insieme a React Router stesso e resta esclusa dal percorso di webhook, cron e coda; lo SDK Stripe e i testi dell'interfaccia si caricano solo dove servono (D167). La CPU deve essere misurata sul Worker entro il budget del piano qualificato, senza dedurla dalla build o dal caricamento dei moduli; il confronto con Workers Free resta esplicito quando lo si qualifica, coerentemente con D167 e M3-12. Per eventi ad alta frequenza e già confermati è ammessa una memoria di breve durata nell'isolate per evitare letture D1 ripetute, mai come fonte autorevole. Le callback OAuth aperte dal browser restano nell'applicazione e nel sistema Auth.
 
 <a id="s26"></a>
 ## 26. Toolchain, dipendenze e policy latest
@@ -753,11 +766,13 @@ Il threat model minimo è la tabella seguente (D147): ogni intervento che introd
 
 Misure: scope minimi effettivamente necessari; state/nonce/PKCE dove supportati e corretti per il provider; redirect allowlist; cookie/sessioni sicure e CSRF/origin check sulle mutation; rate limit di login e operazioni costose; token cifrati e rotazione; firme webhook su corpo originale e replay protection; validazione input/output; CSP e escaping; download autorizzati; nessun segreto build-time esportato al browser.
 
-**Limiti di richiesta e anti-automazione (D166).** Il binding Rate Limiting di Workers è il primo filtro per IP e percorso su Auth, richieste di link email, form di supporto, export e altre operazioni costose: non scrive su D1 e scarta il traffico anomalo prima del lavoro applicativo. Il suo contatore è locale al data center e approssimato, quindi non sostituisce i contatori D1 per indirizzo email e operazione, che restano dove serve un limite coerente per account. Il superamento risponde 429 con `Retry-After` e `no-store`, senza rivelare se l'account esiste.
+**Limiti di richiesta e anti-automazione (D166).** Il binding Rate Limiting di Workers è il primo filtro nel Worker per IP e percorso su Auth, richieste di link email, form di supporto, export e altre operazioni costose: non scrive su D1 e scarta il traffico anomalo prima del lavoro applicativo. Il suo contatore è locale al data center e approssimato, quindi non sostituisce i contatori D1 per indirizzo email e operazione, che restano dove serve un limite coerente per account. Il superamento risponde 429 con `Retry-After` e `no-store`, senza rivelare se l'account esiste.
 
 Turnstile protegge registrazione con password, richiesta di reset, reinvio dei link email e form di supporto. Non si applica a passkey, Google, eBay, webhook o callback dei provider. Il token è verificato lato server con Siteverify, accettato una sola volta entro i cinque minuti di validità e confrontato con hostname e azione attesi; senza esito positivo, anche per indisponibilità di Siteverify, la richiesta è rifiutata con un messaggio che permette di riprovare. Widget e chiavi sono separati per test e Production; la CSP ammette soltanto l'origine del widget. Turnstile entra nell'inventario delle tecnologie e nell'informativa ([§30](#s30)). [S34](SOURCES.md#s34)
 
 Dati fiscali non presenti in analytics, log automatici, URL pubblici, issue o Git. Error tracing elimina payload/request body sensibili. Fetch immagini/URL esterni solo su domini/formati qualificati, evitando SSRF e contenuti attivi. XML Trading con parser sicuro senza entità esterne. Non includere l'intera risposta provider in un messaggio di errore.
+
+WAF/rate limit della zona, HSTS e header seguono [§24](#s24), con qualifica in [M7-12](#m7-12). I filtri edge non sostituiscono firme sul corpo grezzo, isolamento, quota o revoca server; le impostazioni esterne alla build entrano nel readback configurativo e nella regressione degli ingressi.
 
 Difese minime sulle risposte eBay: XML Trading rifiutato oltre un limite di dimensione, con byte NUL o con `DOCTYPE`/`ENTITY`, prima di qualsiasi parsing; link di paginazione `next` e URL restituiti dal provider accettati solo se HTTPS e sulla stessa origine API eBay attesa per l'ambiente, altrimenti la pagina fallisce chiusa e il token non viene inviato. Il callback di cancellazione account applica un limite di richieste per origine con memoria limitata e un budget per il recupero delle chiavi pubbliche eBay, riusate dalla cache per la durata consentita; il superamento risponde 429 senza scartare le notifiche valide, che eBay ritenta.
 
@@ -807,6 +822,8 @@ Le letture applicano scadenza e revoca anche se il job di pulizia non è ancora 
 
 Privacy e Termini IT/EN, italiano prevalente se appropriato; informativa cookie separata solo quando necessaria, comunque inventario delle tecnologie reali, incluso Turnstile ([§29](#s29)). Trasparenza fornitori e cosa leggiamo/non facciamo; diritto di recesso e tutela consumatori da qualificare, senza confondere assenza di garanzia commerciale con assenza di diritti obbligatori. Dati legali reali di Temisfera raccolti privatamente, non inventati.
 
+L'inventario comprende anche eventi WAF e report aggregati DMARC ([§24](#s24)): finalità di sicurezza, campi, accessi e retention effettiva del provider si qualificano in M7-07; nessuna raccolta di corpi email, dati fiscali o diagnostica buyer per queste funzioni.
+
 Nuovo codice originale proprietario/all rights reserved, repo pubblico senza promessa community. Riuso legacy già MIT e componenti terzi conserva condizioni/notices pertinenti; non revocare licenze già concesse. Registro provenienza dei componenti, licenze miste/Pro valutate file per file. Nome/logo eBay e FiscalBay passano gate marchi/licenza API prima del lancio, nessun cambio nome automatico.
 
 **Accettazioni e trattamento.** Registrare versione/lingua dei Termini accettati e avvenuta disponibilità dell’informativa secondo il flusso legale qualificato. Non chiamare «consenso privacy» ogni trattamento necessario al servizio. Il consenso marketing è distinto, facoltativo e revocabile, con prova della versione e della scelta. Per nuove finalità o cambi contrattuali sostanziali vale il gate dell’owner; non inventare un consenso retroattivo da un semplice login.
@@ -829,6 +846,8 @@ Analytics Engine conserva i dati per tre mesi, distinti dalla retention dei log 
 **Lavoro pianificato.** Un solo Cron Trigger per ambiente, con cadenza scelta in [M3-04](#m3-04) e compatibile con il target 10/30, smista sync, ripresa delle ricevute non accodate, pulizie di retention, riconciliazioni e controlli periodici in base a `scheduledTime`; il lavoro pesante passa dalla Queue invece di restare nell'invocazione del cron. Sul Free l'account condiviso ha 5 trigger in tutto: con 2 usati da CF Ready (indicazione owner del 2026-10-11) e uno per ciascun ambiente FiscalBay ne resta uno di riserva. Un terzo trigger FiscalBay (per esempio giornaliero in Production) non aggiunge capacità, perché ogni lavoro pesante passa dalla coda, e consumerebbe l'ultimo posto dell'account: si valuta soltanto se le misure di [M3-12](#m3-12) mostrano che lo smistamento ordinario non riesce a programmare i compiti giornalieri. I riepiloghi Telegram usano la granularità del trigger.
 
 Alert amministrativi azionabili o aggregati, non ogni errore transitorio; Telegram primario ed email alternativa, deduplica e messaggio di rientro. P1 sicurezza/corruzione/billing errato/indisponibilità sostanziale; P2 funzione importante degradata; P3 problema circoscritto. Escalation del MoR e richieste soggette a finestra temporale prioritarie. Un account email iCloud non deve essere l'unico controllo invisibile di incidenti critici.
+
+Per la zona, [M7-12](#m7-12) configura Certificate Transparency Monitoring e report DMARC di [§24](#s24); M7-04 definisce chi li consulta e come gestisce un certificato inatteso, un mittente sconosciuto o un falso positivo WAF. Gli eventi del provider non sostituiscono log applicativi, audit o ricevute, e le emissioni legittime non producono automaticamente un incidente P1.
 
 Ogni log strutturato contiene soltanto campi in allowlist: evento, classe, istante, correlation ID, codice errore stabile e metadati tecnici. Mai URL con query, payload, header, token, CF o dati buyer. Errori, webhook e sicurezza sono registrati sempre; gli eventi ordinari riusciti possono essere campionati. Le query di diagnosi (errori per codice, webhook, correlation ID, scritture di eventi fallite) e le soglie iniziali P1/P2 sono documentate nel runbook insieme al percorso che le legge. Il correlation ID si copia nella ricevuta dell'incidente, non i log completi.
 
@@ -1044,6 +1063,7 @@ Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o
 | Sandbox e dati fiscali | Supporto Sandbox distribuito con [#273](https://github.com/max23468/FiscalBay/pull/273), migration e smoke attestati dalla [run di #274](https://github.com/max23468/FiscalBay/actions/runs/37377929129). I pagamenti Sandbox provati sono falliti; l'alternativa `CashOnPickup` è stata rimossa da eBay per managed payments e l'acquisto confermato resta non pagato, assente da Fulfillment. Buy API esclusa dall'owner. Serve pagamento Sandbox riuscito e importazione, oppure soluzione concordata. La consultazione Production autorizzata è stata qualificata sul campione fiscale di [M3-10](#m3-10); non prova il pagamento o l'import Sandbox. Nessun permesso implicito di modificare ordini Production o introdurre import Trading. |
 | Login eBay | Prove reali su Production in M8 (D160), con checklist sotto. Il readback D1 del 2026-10-06 attesta un'identità eBay collegata all'utente owner con password/Google; la precedente registrazione descriveva un utente separato non verificato. Discrepanza non risolta: non vale come prova di linking. Keyset e RuName non riletti dal portale Developers. |
 | Identità e admin | Collaudo passkey fisico Safari/iOS dichiarato positivo dall'owner il 2026-09-29, senza dispositivo/versione specificati; cambio email remoto escluso dall'owner il 2026-09-30, prove locali conservate. MFA admin provata con asserzioni sintetiche: quando serve la console, scegliere account owner, registrare due passkey indipendenti e concedere il ruolo secondo §7. |
+| Protezioni della zona | HSTS/header, WAF/rate limit edge, report DMARC e alert certificati inclusi nel piano con D168, da configurare e qualificare in [M7-12](#m7-12). DNS e risposte pubbliche non attestano impostazioni WAF, destinatari degli alert o piano della zona: servono inventario e readback provider prima della RC. Nessuna attivazione remota attestata dalla revisione documentale. |
 | Piano e costi | Workers Paid esistente utilizzabile fino al 20 ottobre 2026, senza downgrade anticipato o rinnovo autorizzato. Rileggere piano, quote condivise, CPU e Queue reale prima dell'apertura pubblica. Dipendono da Paid, decisione dell'owner in sospeso: Logpush dei log a 90 giorni ([§31](#s31)), Time Travel oltre 7 giorni e CPU oltre 10 ms. Email a destinatari non verificati: scelta aperta fra Cloudflare con Paid, Resend e Brevo ([§14](#s14)); senza una scelta la registrazione pubblica resta chiusa. Sul test il cron con l'acquisizione ordini ha usato 19-54 ms di CPU per esecuzione dopo [#320](https://github.com/max23468/FiscalBay/pull/320) (2026-10-11/12), compresa la valutazione dei moduli all'avvio dell'isolate, oltre i 10 ms del Free. D167 alleggerisce l'avvio; prima del 20 ottobre decidere il piano considerando anche HTTP/Auth/SSR ed export ([M7-03](#m7-03)), poi qualificare i budget di [M3-04](#m3-04) e [M3-12](#m3-12). La sola sync in coda non qualifica il Free per l'intera applicazione né i log a 90 giorni. Dal deploy test del 2026-10-11 alle 21:47 UTC ogni esecuzione pianificata parte due volte a circa 36 s di distanza, con una sola schedulazione registrata: rileggere dopo il deploy successivo e, se persiste, segnalarlo a Cloudflare. Le misure M0 non autorizzano capacità pubblica né costi. |
 | Cutover provider | OAuth Production sul keyset `botCF` salvato ma disattivato: sul keyset un solo RuName può averlo attivo ed è quello del test. Scegliere al cutover fra keyset dedicato al test e perdita del login eBay sul test. Non modificare `botCF 2` (SyncBay) o il callback condiviso con Hub Fatture. Branding finale Checkout ancora da osservare. |
 | Dati e risorse di prova | Eliminare prima del go-live utenti e dati reali controllati nella D1 di test, compresi ordine e identificativo fiscale ratificati dall'owner il 2026-09-23, e la copia recuperabile con Time Travel. Account sintetico di collaudo ammesso solo nel test. Better Auth Infrastructure rimosso dal runtime (D152), progetto Starter residuo da eliminare se inutile; Supabase escluso già eliminato. Inventario privato fuori checkout: `FiscalBay/m0-inventory`. |
@@ -1198,7 +1218,7 @@ Confrontare costo/complessità/capacità/Auth/recovery/jobs/lock-in, scegliere u
 
 **Criterio di completamento:** Gate preliminari con esito, ambito e prova; prove ammissibili solo più avanti assegnate a task/checkpoint e non dichiarate completate. Owner approva architettura/costi e rischi derogabili; incompatibilità già dimostrate o obblighi inderogabili restano bloccanti.
 
-**Stato residuo:** tutte le prove tecniche M0 sono chiuse o assegnate in modo esplicito a task successivi: Sign in with eBay a M2-09, consenso seller live e token a M2-05, requisiti Better Auth Infrastructure a M7-07, MFA amministrativa a M2-04, runbook e drill di recovery al pre go-live. Il readback Free e le misure giornaliere dopo la cessazione di Workers Paid sono un controllo operativo differito. L'invio email a utenti arbitrari richiede Workers Paid e appartiene al checkpoint pre pubblico. Su richiesta owner il progetto Supabase Free `FiscalBay` del candidato escluso è stato eliminato il 2026-09-23; la rilettura mostra intatti i progetti SyncBay e Pratix. Il via owner di fine M0 è registrato il 2026-09-23 nel registro dei via.
+**Stato residuo:** tutte le prove tecniche M0 sono chiuse o assegnate in modo esplicito a task successivi: Sign in with eBay a M2-09 con prove reali in M8, consenso seller live e token a M2-05, MFA amministrativa a M2-04, runbook e drill di recovery al pre go-live. Better Auth Infrastructure è stato rimosso dal runtime con D152; M7-07 qualifica i fornitori effettivamente usati. Il readback Free dopo un eventuale cambio di piano resta differito alla scelta dell'owner. L'invio email a utenti arbitrari richiede un trasporto qualificato secondo §14 e M6-06, senza imporre Cloudflare Paid alle alternative ammesse. Su richiesta owner il progetto Supabase Free `FiscalBay` del candidato escluso è stato eliminato il 2026-09-23; la rilettura mostra intatti i progetti SyncBay e Pratix. Il via owner di fine M0 è registrato il 2026-09-23 nel registro dei via.
 
 <a id="m1"></a>
 ### M1 · Fondazioni applicative e design
@@ -1288,9 +1308,11 @@ Aggiungere al prototipo esempi di problema con conseguenza/azione, supporto con 
 
 **Stato:** Completato · **Prerequisiti:** M0 · **Contratto:** [§24](#s24)
 
-Consolidare il bootstrap test predisposto in M0-02: DNS/TLS/redirect, configurazione Production, iCloud info/supporto e trasporto transazionale selezionato. Verificare inventario record, callback, SPF/DKIM/DMARC e isolamento; allineare i contatti dei provider alla regola email di [§14](#s14), incluso il branding Google OAuth; dismettere i record Register senza consumatori dopo il readback Cloudflare e non attivare servizi Register aggiuntivi.
+Consolidare il bootstrap test predisposto in M0-02: DNS/TLS/redirect, configurazione Production, iCloud info/supporto e trasporto minimo per gli invii Auth controllati. Verificare inventario record, callback, SPF/DKIM/DMARC e isolamento; allineare i contatti dei provider alla regola email di [§14](#s14), incluso il branding Google OAuth; dismettere i record Register senza consumatori dopo il readback Cloudflare e non attivare servizi Register aggiuntivi.
 
 **Criterio di completamento:** HTTP/TLS e callback test/live coerenti, posta umana e Auth provate, record attivi preservati o sostituiti con prova; nessun cookie/RP ID condiviso accidentalmente e nessun setup iniziale rinviato dopo il gate che lo richiedeva.
+
+**Limiti residui:** la scelta e la qualifica del trasporto per destinatari pubblici sono in M6-06; le nuove protezioni della zona e i report posta di D168 sono in M7-12. Il bootstrap completato non attesta questi effetti successivi né autorizza il go-live.
 
 <a id="m1-09"></a>
 #### M1-09 · Guardrail della pipeline e del repository
@@ -1302,17 +1324,17 @@ Estende M1-02, già chiusa, con i guardrail ricavati da CF Ready e Hub Fatture: 
 **Criterio di completamento:** Una PR verso `main` da una branch diversa da `develop` fallisce; un file fuori classificazione esegue il gate completo; ogni test di repository ha un caso negativo che fallisce davvero; nessun `uses:` di terze parti senza SHA. CI verde sul commit integrato.
 
 <a id="m1-10"></a>
-#### M1-10 · Budget di prestazioni e capacità al deploy
+#### M1-10 · Budget del JavaScript client
 
 **Stato:** Completato · **Prerequisiti:** M1-02 · **Contratto:** [§22](#s22) · [§31](#s31) · [§37](#s37)
 
 **Per chiudere:** M1-06; il budget del bundle si misura sul design system effettivo.
 
-Aggiungere alla build il controllo del JavaScript client entro il budget gzip dichiarato nel repository (valore iniziale 350 KiB) e al deploy test il controllo CPU: traffico sintetico marcato, raccolta via tail delle sole invocazioni marcate, fallimento sopra il p95 ammesso o con errori, rollback del deploy test. Nessun traffico verso eBay, Stripe o Telegram.
+Aggiungere alla build il controllo del JavaScript client entro il budget gzip dichiarato nel repository (valore iniziale 350 KiB).
 
-**Criterio di completamento:** Un bundle oltre budget fa fallire la build; un deploy test con p95 oltre soglia o con errori fallisce e ripristina la versione precedente, provato almeno una volta con soglia forzata. Ricevuta con p95, numero di eventi e versione.
+**Criterio di completamento:** Un bundle oltre budget fa fallire la build; la misura si applica all'artefatto effettivo e il caso negativo è provato.
 
-**Limite:** il controllo CPU al deploy test è stato rimosso con D158; resta bloccante il budget del bundle client.
+Il controllo CPU al deploy test originariamente incluso è stato rimosso con D158; le misure per invocazione e la qualifica del piano restano in §31 e M7-03, senza ricreare il controllo al deploy.
 
 <a id="m2"></a>
 ### M2 · Account, Auth e Negozi eBay
@@ -1491,7 +1513,11 @@ Lo smistamento del lavoro periodico e l'esecuzione in coda sono in [M3-12](#m3-1
 
 Usare consegna/retry/ritardi/DLQ del servizio scelto. Stato applicativo solo per checkpoint, deduplica e recupero di effetti di business; outbox/lease soltanto se necessari, non un secondo orchestratore.
 
-**Per chiudere:** `ORDER_CONFIRMATION` entra già dall'ingresso Worker di [M3-11](#m3-11); resta una consegna attribuita di un negozio Production nel test merchant.
+**Per chiudere:** integrazione delle regole di sync con l'ingresso Worker [M3-11](#m3-11), verificata sui casi attribuiti controllati.
+
+Lo smistamento Cron/coda ha la qualifica distinta in M3-12; la chiusura della milestone M3 richiede entrambi i task.
+
+**Qualifica reale successiva obbligatoria:** la sottoscrizione e la consegna attribuita di `ORDER_CONFIRMATION` di un negozio Production appartengono a [M8-03](#m8-03), nel manifest merchant autorizzato. M3 chiude l'implementazione tecnica senza dichiarare riuscita quella prova; M8 e il gate finale restano aperti fino al suo esito.
 
 <a id="m3-05"></a>
 #### M3-05 · Controllo fiscale e aggiornamenti
@@ -1593,11 +1619,11 @@ Il webhook Stripe preliminare non va attivato come route React Router: l'ingress
 
 **Stato:** Da completare · **Prerequisiti:** M3-03, M3-11 · **Contratto:** [§31](#s31) · [§11](#s11)
 
-**Per chiudere:** M3-04 per cadenza e priorità per piano.
+**Per chiudere:** M3-04 per cadenza e priorità per piano, e scelta Free/Paid dell'owner per qualificare i budget (D167).
 
 Un solo Cron Trigger per ambiente sceglie in base a `scheduledTime` il lavoro dovuto (sync per piano, ricevute non accodate, pulizie di retention, riconciliazioni, controlli periodici) e lo accoda; il consumer lo esegue con budget limitati per invocazione. L'acquisizione ordini esce dall'invocazione del cron. Con i quattro trigger già previsti nell'account condiviso, il quinto posto resta di riserva ([§31](#s31)).
 
-**Criterio di completamento:** CPU del cron e di ogni messaggio misurata nei log del Worker sul test ed entro i 10 ms del Free per invocazione ordinaria; compiti giornalieri eseguiti una volta anche con trigger saltati, ripetuti o sovrapposti; nessun negozio affamato da altri. Esito della valutazione di un terzo trigger registrato qui.
+**Criterio di completamento:** CPU del cron e di ogni invocazione consumer misurata sul test entro il budget del piano approvato, distinguendo avvio e lavoro effettivo; i 10 ms valgono se si qualifica Workers Free, non come target incondizionato. Compiti giornalieri eseguiti una volta anche con trigger saltati, ripetuti o sovrapposti; nessun negozio affamato da altri. Esito della valutazione di un terzo trigger registrato qui; nessun frazionamento deciso prima della scelta Free/Paid (D167).
 
 La scadenza nativa di Queue/DLQ segue [§11](#s11): provare anche un messaggio accettato e poi scaduto, con il checkpoint ancora valido, oltre alla sola ripresa delle ricevute mai accodate. La CPU del cron ridotta non qualifica automaticamente consumer, pagine Auth/SSR o generazione export sul Free.
 
@@ -1934,6 +1960,8 @@ Integrare il riepilogo diagnostico visibile e allowlistato del §14. Provare iso
 
 **Criterio di completamento:** Ricezione e risposte funzionano, marketing separato dal servizio; nessun CF copiato automaticamente nei ticket e nessun digest ordini via email nella 2.0.
 
+Qualificare il mittente transazionale insieme alla posta iCloud con SPF/DKIM/DMARC coerenti. La lettura aggregata dei report DMARC appartiene a M7-12 e non sostituisce la prova di consegna qui richiesta.
+
 <a id="m6-07"></a>
 #### M6-07 · Sito pubblico e SEO
 
@@ -2000,7 +2028,7 @@ Verificare quote, retention e costo correnti, poi scrivere su Workers Analytics 
 
 **Stato:** Da completare · **Prerequisiti:** M6-03, M5-05 · **Contratto:** [§30](#s30) · [§32](#s32)
 
-**Per chiudere:** M7-02 per la verifica trasversale dell'erasure.
+**Qualifica successiva obbligatoria:** M7-02 esegue la verifica trasversale dell'erasure sull'implementazione completa di M6-12. Il completamento funzionale di questo task richiede tutte le prove sotto e rende possibile l'audit M7; non attesta né elimina il suo gate o il drill finale.
 
 Percorso self-service secondo [§30](#s30) e D163: riautenticazione, export proposto senza obbligo, conferma forte. La conferma via email usa `sendDeleteAccountVerification` di Better Auth; il suo callback avvia soltanto il job FiscalBay, che ferma accesso, sync, notifiche e rinnovi Stripe, scrive i marker di cancellazione, elimina i dati operativi e per ultimo l'utente Auth. L'email di cancellazione completata parte dal modulo email applicativo alla fine del job. Se Stripe non conferma lo stop dei rinnovi restano soltanto job, marker e riferimenti minimi, con alert all'owner.
 
@@ -2009,7 +2037,7 @@ Percorso self-service secondo [§30](#s30) e D163: riautenticazione, export prop
 <a id="m7"></a>
 ### M7 · Hardening, privacy, performance e recovery readiness
 
-**Prerequisiti:** funzionalità complete. **Attività:** audit contratti/sicurezza/dipendenze/licenze, retention/deletion/supply chain, carico/margine/costi residui, incidenti/kill switch/forward-fix, monitoraggio e runbook; revisione legale e marchi; preparazione restore, **non aggiunta di drill periodici**.
+**Prerequisiti:** implementazioni pertinenti disponibili per avviare i task; funzionalità complete per audit conclusivo e chiusura della milestone. **Attività:** audit contratti/sicurezza/dipendenze/licenze, retention/deletion/supply chain, carico/margine/costi residui, incidenti/kill switch/forward-fix, monitoraggio e runbook; protezioni della zona e report posta di §24; revisione legale e marchi; preparazione restore, **non aggiunta di drill periodici**.
 
 **Output:** candidato senza P1/P2, rischi residui espliciti, runbook e capacità misurata. **DoD:** test isolamento/concorrenza/pagamenti/erasure/limiti verdi; nessun segreto/PII pubblici; provider produzione conformi al progetto; G-LEGAL chiuso per go-live.
 
@@ -2071,6 +2099,8 @@ La conservazione a 90 giorni e un anno è realizzata in [M7-11](#m7-11).
 
 Runbook dati personali separa risposta operativa, obblighi di notifica ai soggetti pertinenti e finestre del supporto MoR; l’assenza di SLA pubblico non li annulla.
 
+Definire anche la gestione degli alert certificati, report DMARC e falsi positivi WAF di [M7-12](#m7-12), usando i canali nativi previsti e la stessa responsabilità degli incidenti applicativi, senza duplicare gli invii.
+
 **Per chiudere:** M6-09; gli alert owner usano le notifiche incidenti del Control Center. M7-11 per la conservazione.
 
 Integrato da CF Ready e Hub Fatture: i log redatti con correlation ID sono già attivi da M1-04; qui si aggiungono campionamento degli eventi ordinari riusciti, query di diagnosi documentate (errori per codice, webhook, correlation ID, scritture di eventi fallite) e soglie iniziali P1/P2. Registro delle scadenze delle credenziali nell'inventario privato, con controllo periodico che avvisa l'owner almeno 45 giorni prima e segnala le voci senza data.
@@ -2114,12 +2144,14 @@ Chiudere verifica marchi/API eBay, ruoli dati, copertura MoR, adempimenti italia
 
 Verificare testi accettati/versioni, ruoli effettivi, erasure provider e obblighi residui della vendita al MoR. Nessuna rinuncia generale a diritti consumatore nascosta in una traduzione o nel prezzo IVA esclusa.
 
+Comprendere nell'inventario gli eventi WAF e i report DMARC di §24, con campi/accessi/retention del servizio effettivo; le impostazioni di sicurezza non autorizzano raccolte aggiuntive di dati fiscali o contenuti email.
+
 <a id="m7-09"></a>
 #### M7-09 · Rate Limiting nativo
 
 **Stato:** Da completare · **Prerequisiti:** M2-01 · **Contratto:** [§29](#s29)
 
-Aggiungere il binding Rate Limiting di Workers come primo filtro per IP e percorso su Auth, richieste di link email, form di supporto, export e altre operazioni costose, davanti ai contatori D1 esistenti, che restano per indirizzo e operazione. Configurazione separata per test e Production.
+Aggiungere il binding Rate Limiting di Workers come primo filtro nel Worker per IP e percorso su Auth, richieste di link email, form di supporto, export e altre operazioni costose, davanti ai contatori D1 esistenti, che restano per indirizzo e operazione. Configurazione separata per test e Production; il filtro di zona di M7-12 non sostituisce questo controllo.
 
 **Criterio di completamento:** Le richieste scartate dal binding non scrivono su D1; 429 con `Retry-After` e `no-store`, senza enumerazione degli account; i limiti per indirizzo restano coerenti fra data center; readback sul test.
 
@@ -2128,7 +2160,7 @@ Aggiungere il binding Rate Limiting di Workers come primo filtro per IP e percor
 
 **Stato:** Da completare · **Prerequisiti:** M2-01 · **Contratto:** [§29](#s29) · [§30](#s30)
 
-**Per chiudere:** M6-06 per il form di supporto.
+**Per chiudere:** form di supporto di M6-06 implementato e disponibile al collaudo, senza richiedere la chiusura dell'intero task email/supporto; il controllo viene poi riverificato nella matrice finale.
 
 Integrare Turnstile su registrazione con password, richiesta di reset, reinvio dei link email e form di supporto, con verifica Siteverify lato server, widget e chiavi separati per ambiente e CSP coerente. Aggiornare inventario delle tecnologie e informativa.
 
@@ -2137,18 +2169,31 @@ Integrare Turnstile su registrazione con password, richiesta di reset, reinvio d
 <a id="m7-11"></a>
 #### M7-11 · Conservazione di log e audit
 
-**Stato:** Da completare · **Prerequisiti:** M1-04, M6-10 · **Contratto:** [§30](#s30) · [§31](#s31)
+**Stato:** Da completare · **Prerequisiti:** M1-02, M1-04 · **Contratto:** [§30](#s30) · [§31](#s31)
 
-**Per chiudere:** Workers Paid, se approvato dall'owner, perché Logpush dei Workers lo richiede.
+**Per chiudere:** Workers Paid, se approvato dall'owner, perché Logpush dei Workers lo richiede; M3-12 per la pulizia periodica dell'audit. Il bucket dei log resta indipendente dal modulo export M6-10 e non è esposto ai merchant.
 
 Configurare Workers Logpush verso un bucket R2 UE dedicato tramite la destinazione S3-compatible di [§31](#s31), con credenziali limitate al bucket, accesso limitato all'owner e lifecycle a 90 giorni; audit sensibile a un anno in una tabella D1 minimizzata con pulizia periodica nello smistamento di [M3-12](#m3-12).
 
 **Criterio di completamento:** L'esportazione contiene soltanto i campi in allowlist e soltanto i Worker FiscalBay dell'ambiente previsto, senza `Event` o eccezioni non sanificate; verificare il contenuto di un oggetto esportato, non soltanto la configurazione del job. Oggetti e righe scaduti spariscono nel margine di pulizia qualificato; query di diagnosi del runbook funzionanti sull'archivio; readback di job Logpush, endpoint UE, bucket e lifecycle sul test.
 
+<a id="m7-12"></a>
+#### M7-12 · Protezioni della zona e della posta
+
+**Stato:** Da completare · **Prerequisiti:** M1-08, M3-11 · **Contratto:** [§24](#s24) · [§29](#s29) · [§30](#s30) · [§31](#s31)
+
+**Per chiudere:** M5-05, M5-09 e M7-02 per i consumer Stripe, Telegram e cancellazione eBay; M6-06 per il trasporto email e i mittenti legittimi.
+
+Inventariare il piano della zona, regole e quote esistenti; configurare HSTS graduale, header di sicurezza, WAF/rate limit mirati, DMARC Management e Certificate Transparency Monitoring secondo §24. Conservare configurazione precedente e percorso di rientro; nessun upgrade a pagamento implicito. La scelta Workers Free/Paid resta distinta dal piano della zona.
+
+**Criterio di completamento:** readback della configurazione e delle risposte reali sul test; DNSSEC/HTTPS e redirect conservano validità, percorso e query sicure; Auth/OAuth/passkey, form e download funzionano con le protezioni attive. Webhook/callback validi raggiungono il Worker senza challenge, quelli invalidi restano rifiutati dal verificatore. La posta iCloud e transazionale mantiene autenticazione e consegna; report DMARC leggibili quando ricevuti e destinatario/procedura degli alert certificati verificati. Inventario privacy coerente; impostazioni Production incluse nel manifest e prove applicabili ripetute in M8/M9 prima dell'apertura pubblica, senza dichiararle passate dal collaudo test.
+
+Le funzioni non si dichiarano complete dal solo toggle della dashboard: report non ancora arrivati o invii non osservati restano prove aperte. M7-04 gestisce la risposta operativa, M7-07 verifica i trattamenti, M7-08 controlla la matrice completa; M9-03 rilegge lo stato finale del dominio. Non introdurre un secondo sistema di alert o un archivio di report email nell'app.
+
 <a id="m7-08"></a>
 #### M7-08 · Verifica interna della matrice funzionale
 
-**Stato:** Da completare · **Prerequisiti:** M7-01..M7-07, M7-09..M7-11 · **Contratto:** [§35](#s35) · [§41](#s41)
+**Stato:** Da completare · **Prerequisiti:** M7-01..M7-07, M7-09..M7-12 · **Contratto:** [§35](#s35) · [§41](#s41)
 
 Riesaminare tutte le funzioni, i diritti, le schermate, i dispositivi, gli errori e i rinvii rispetto al piano; eliminare aggiunte accidentali dei mockup.
 
@@ -2204,6 +2249,8 @@ Preparare il test con un merchant di fiducia, dati e risorse autorizzati, scenar
 Eseguire registrazione, quattro accessi, collegamento, sync, dati fiscali, copia, export, Telegram, impostazioni e percorsi billing pertinenti.
 
 Comprende le [prove reali di Sign in with eBay](#prove-ebay) rinviate da M2-09 (D160).
+
+Comprende la sottoscrizione e la consegna attribuita `ORDER_CONFIRMATION` del negozio Production rinviate da M3-04/M3-11, con un solo effetto anche dopo riconsegna e polling. Il manifest precisa ambiente e mandato; senza consegna osservata la prova resta aperta. Verificare inoltre che la configurazione di zona prevista per la RC non interrompa i percorsi reali autorizzati.
 
 **Criterio di completamento:** Evidenze proporzionate di risultati e limiti, nessun P1/P2 né difficoltà strutturale di comprensione del prodotto principale.
 
@@ -2268,6 +2315,8 @@ Eseguire il solo restore reale isolato sul candidato finale, oppure riusare la p
 
 Rileggere in una checklist DNS/TLS/www/test, email, Auth, eBay, Telegram, Stripe, SEO, legali, supporto, alert, KPI, quote e rollback.
 
+Includere il readback sul dominio Production delle protezioni di §24 e M7-12, con header, compatibilità degli ingressi, report posta e destinatari degli alert; la prova sul test non attesta la configurazione Production.
+
 **Criterio di completamento:** Gate effettivamente superati, zero P1/P2 e go-live pronto per l’owner. Nessun evento o target non verificato indicato come riuscito.
 
 <a id="m9-04"></a>
@@ -2319,6 +2368,8 @@ Prima di `Pubblica` devono risultare chiusi preflight commerciale, restore concl
 `ripristino`: unico drill reale isolato sul candidato finale a fine M8 o prima del go-live, senza ripetizioni periodiche; dati, Auth, grant, configurazioni e marker successivi allo snapshot riconciliati, outbound isolato, revoche ed erasure rispettate. Un fallimento blocca la pubblicazione finché corretto e riprovato.
 
 `operativita`: M0–M8 concluse e RC approvata; checklist §41 riletta per DNS/TLS/www/test, email, Auth, eBay, Telegram, Stripe, SEO, legali, supporto, alert, KPI, quote e rollback, con zero P1/P2 e i due gate precedenti chiusi. Non confonde readiness con il via owner o con un deploy già avvenuto.
+
+La rilettura operativa include le protezioni della zona di §24 e M7-12 sul dominio Production: impostazioni effettive, header, compatibilità degli ingressi e destinatari degli alert. Le prove reali eBay rinviate a M8-03 restano obbligatorie; nessuna chiusura tecnica precedente le sostituisce.
 
 <a id="s38"></a>
 ## 38. Registro rischi operativo
@@ -2388,7 +2439,7 @@ La 2.0 è completa, visivamente curata, veloce, responsive, IT/EN, robusta e ope
 | Commerciale | Catalogo/listino protetto, date promo approvate, quote/ciclo/waitlist e capacità per nuovi acquisti |
 | Telegram/email | Bot corretto, chat/token, preferenze/digest, dominio/iCloud/transazionali, recapiti/alert funzionanti |
 | UX/brand | Logo 2.0 approvato, 2 card, app/sito dark/IT-EN, mobile/browser, baseline accessibilità |
-| Pubblico | Domini/TLS/www, sito/SEO reali, prezzi/tasse chiari, noindex aree private, privacy/termini/supporto/disclaimer |
+| Pubblico | Domini/TLS/www, protezioni di zona §24 qualificate, sito/SEO reali, prezzi/tasse chiari, noindex aree private, privacy/termini/supporto/disclaimer |
 | Recovery | Protezioni native qualificate, unico drill riuscito pre-go-live, revoche/diritti/config recuperabili |
 | Qualità | Nessun P1/P2, P3 accettati, RC congelata e merchant di fiducia superato |
 | Release | Commit/artifact/schema/config tracciati, Pubblica/readback, tag/release/changelog coerenti |

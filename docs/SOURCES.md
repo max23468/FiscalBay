@@ -339,3 +339,21 @@ Analytics Engine conserva tre mesi e ammette fino a 250 datapoint per invocazion
 **Verifica del 2026-10-12:** la pagina ufficiale Resend conferma 3.000 email al mese, massimo 100 al giorno e tre domini sul Free. La pagina prezzi Brevo non restituisce contenuto leggibile nel canale di consultazione usato; il suo help ufficiale conferma 300 invii al giorno, senza riporto dei crediti inutilizzati, anche per email transazionali. Verificare nell'account selezionato limiti e gestione del superamento prima di qualificare l'invio Auth pubblico. Nessuna opzione selezionata o nuovo provider attivato.
 
 **Uso:** §14; M6-06. Opzioni aperte accanto a Cloudflare Email Service ([S34](#s34)).
+
+<a id="s36"></a>
+### S36 · Cloudflare · protezioni della zona e della posta
+
+- [HSTS e sottodomini](https://developers.cloudflare.com/ssl/edge-certificates/additional-options/http-strict-transport-security/)
+- [Response Header Transform Rules](https://developers.cloudflare.com/rules/transform/response-header-modification/)
+- [Header dei Managed Transforms](https://developers.cloudflare.com/rules/transform/managed-transforms/reference/)
+- [WAF e Free Managed Ruleset](https://developers.cloudflare.com/waf/get-started/)
+- [Regole WAF personalizzate](https://developers.cloudflare.com/waf/custom-rules/)
+- [Rate limiting della zona](https://developers.cloudflare.com/waf/rate-limiting-rules/)
+- [Limiti Bot Fight Mode](https://developers.cloudflare.com/bots/get-started/bot-fight-mode/)
+- [DMARC Management e report aggregati](https://developers.cloudflare.com/dmarc-management/)
+- [Attivazione DMARC Management](https://developers.cloudflare.com/dmarc-management/enable/)
+- [Certificate Transparency Monitoring](https://developers.cloudflare.com/ssl/edge-certificates/additional-options/certificate-transparency-monitoring/)
+
+**Verifica del 2026-10-12:** il Free Managed Ruleset è distribuito per default sul Free; il piano Free della zona ammette cinque regole WAF personalizzate e una di rate limiting. Bot Fight Mode non consente eccezioni con le regole WAF. HSTS richiede HTTPS qualificato, con sottodomini e preload da valutare separatamente. Cloudflare offre modifica degli header; l'effetto sulle risposte Workers/asset va provato sul sito effettivo. DMARC Management è disponibile con Cloudflare DNS su tutti i piani ed è indicato come beta nelle pagine operative: aggiunge `rua` al record esistente per ricevere report aggregati. CT Monitoring avvisa delle emissioni presenti nei log pubblici CT, filtrando quelle gestite da Cloudflare; non rileva domini imitativi. Nessuno di questi dati documentali attesta piano, toggle, regole o destinatari attivi su fiscalbay.it.
+
+**Uso:** §24, §29–31; M6-06, M7-04, M7-07, M7-12, M8-03 e M9-03. Qualificare configurazione, regressioni e rientro nei task competenti prima dell'apertura pubblica; nessun upgrade della zona autorizzato dall'inclusione documentale.
