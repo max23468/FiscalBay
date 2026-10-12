@@ -47,7 +47,7 @@ Usare Node 26.11.1 e pnpm 12.10.1 indicati in `mise.toml` e `package.json`. L’
 ```sh
 pnpm install --frozen-lockfile
 pnpm verify
-pnpm exec wrangler d1 migrations apply DB --local
+node -e "import('./scripts/local-d1.mjs').then((d1) => d1.applyLocalMigrations())"
 pnpm dev
 ```
 

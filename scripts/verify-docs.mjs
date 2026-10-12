@@ -40,6 +40,7 @@ const skipped = new Set([
   "build",
   ".cache",
   ".next",
+  ".cloudflare",
   ".wrangler",
   "test-results",
   "playwright-report",

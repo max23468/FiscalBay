@@ -263,7 +263,7 @@ describe("classificazione dei file modificati", () => {
     assert.deepEqual(changePlan(["app/integrations/ebay/notifications.server.ts"]).mutation, [
       "app/integrations/ebay/notifications.server.ts",
     ]);
-    for (const file of ["workers/app.ts", "wrangler.jsonc", "test/webhooks.spec.ts"])
+    for (const file of ["workers/app.ts", "cloudflare.config.ts", "test/webhooks.spec.ts"])
       assert.deepEqual(changePlan([file]).mutation, [
         "app/integrations/webhooks.server.ts",
         "app/integrations/ebay/notifications.server.ts",
@@ -310,7 +310,7 @@ describe("classificazione dei file modificati", () => {
       for (const flag of ["e2e", "build", "deploy", "doctor"]) assert.equal(selected[flag], false);
     }
     for (const file of [
-      "wrangler.jsonc",
+      "cloudflare.config.ts",
       "package.json",
       "pnpm-lock.yaml",
       "vite.config.ts",

@@ -37,6 +37,8 @@ Le PR verso `develop` richiedono il controllo `Node 26` e ammettono il merge aut
 
 Chiudere ogni merge su `develop` e ogni `Pubblica` con la pulizia Git prevista dal [governo](docs/MASTER_PLAN.md#s34): riconciliare PR, commit e readback, poi rimuovere branch e worktree temporanei già assorbiti, anche se lasciati da cicli precedenti. Conservare riferimenti con lavoro non integrato o ancora in uso; una pulizia rimasta sospesa è una questione aperta nel piano.
 
+Cloudflare si gestisce con `pnpm exec cf` alla versione fissata e con `cloudflare.config.ts`: modalità `live` per Production, test negli altri casi; Wrangler soltanto per `tail` e, finché `cf --local` non termina, per D1 locale in `scripts/local-d1.mjs` (D170).
+
 pnpm, latest stable **qualificata**, pin nei manifest/lockfile. Dipendenze opzionali solo con un uso concreto. Primitive native per HTTP/crypto e servizi scelti per code/retry quando bastano; mantenere deduplica e invarianti applicativi. Entità logiche non impongono altrettante tabelle; nessuna versione dati senza cambiamento utile.
 
 Gli artefatti durevoli descrivono prodotto, dominio e comportamento, non il piano di lavoro. Non usare nomi o sigle di milestone, task, fasi, spike o vertical slice nel codice o nei nomi di componenti, moduli, file, cartelle, servizi, risorse provider, package/versioni tecniche, configurazioni, fixture, test, log, metriche o copy runtime. Tali riferimenti restano nella documentazione di piano; fuori da lì sono ammessi soltanto per artefatti realmente temporanei, identificati come tali e destinati alla rimozione. Non rinominare per questo motivo una migration già applicata: il nome registrato dal database è un vincolo di compatibilità.

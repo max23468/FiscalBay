@@ -14,9 +14,11 @@ import { fileURLToPath } from "node:url";
 import { hashPassword } from "better-auth/crypto";
 
 import { legalVersions } from "../app/domain/registration.server.ts";
+import { databases } from "../cloudflare.config.ts";
 import { testAccount } from "../e2e/test-account.ts";
+import { executeLocal } from "./local-d1.mjs";
 
-const database = "fiscalbay-test";
+const database = databases.test;
 
 const day = 24 * 60 * 60 * 1000;
 
@@ -139,7 +141,6 @@ async function main() {
   if (password.length < 32) {
     throw new Error("E2E_ACCOUNT_PASSWORD deve contenere almeno 32 caratteri.");
   }
-  // `--command` esegue le istruzioni senza l'import di `--file`, che sospende il database.
   const statements = await resetStatements(password);
   if (local) {
     // Le prove browser creano passkey e richieste email: ogni collaudo locale riparte pulito.
@@ -158,21 +159,14 @@ async function main() {
         `INSERT OR REPLACE INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt", "passkeyVerified") VALUES ('pages-${role}', 'pages-${role}', '${role === "member" ? testAccount.userId : "collaudo-admin"}', '${expires}', '${now}', '${now}', ${role === "admin-granted" ? 1 : 0});`,
       );
   }
-  execFileSync(
-    "pnpm",
-    [
-      "exec",
-      "wrangler",
-      "d1",
-      "execute",
-      database,
-      local ? "--local" : "--remote",
-      "--command",
-      statements.join("\n"),
-    ],
-    { stdio: ["ignore", "ignore", "inherit"] },
-  );
-  console.log(`Account di collaudo ripristinato su ${database}.`);
+  // Un solo batch di istruzioni SQL: nessun import di file, che sospende il database.
+  const sql = statements.join("\n");
+  if (local) executeLocal(sql);
+  else
+    execFileSync("pnpm", ["exec", "cf", "d1", "raw", database.id, "--sql", sql], {
+      stdio: ["ignore", "ignore", "inherit"],
+    });
+  console.log(`Account di collaudo ripristinato su ${database.name}.`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

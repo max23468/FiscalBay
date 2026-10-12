@@ -27,7 +27,6 @@ export default defineConfig({
     : {
         // Le pagine pubbliche inizializzano Auth anche senza sessione: solo valori sintetici.
         env: {
-          ...(process.env.E2E_PRODUCTION === "1" ? { CLOUDFLARE_ENV: "production" } : {}),
           APP_ORIGIN: localOrigin,
           BETTER_AUTH_SECRET: localSecret,
           GOOGLE_CLIENT_ID: "google-test-client",
@@ -37,7 +36,7 @@ export default defineConfig({
           EBAY_RUNAME: "ebay-test-runame",
         },
         // In CI `pnpm verify` ha già prodotto la build che viene poi distribuita.
-        command: `${process.env.E2E_PREBUILT ? "" : "pnpm build && "}node scripts/local-preview.mjs && node node_modules/vite/bin/vite.js preview --host localhost --port ${localPort} --strictPort`,
+        command: `${process.env.E2E_PREBUILT ? "" : process.env.E2E_PRODUCTION === "1" ? "pnpm build:live && " : "pnpm build && "}node scripts/local-preview.mjs && node node_modules/vite/bin/vite.js preview .cloudflare/preview --config vite.config.ts --host localhost --port ${localPort} --strictPort`,
         gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
         url: `${localOrigin}${process.env.E2E_PRODUCTION === "1" ? "/" : "/anteprima/ordini"}`,
         reuseExistingServer: false,
