@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { hashPassword as originalHash } from "better-auth/crypto";
 import { getMigrations } from "better-auth/db/migration";
 import { describe, expect, it, vi } from "vitest";
 
@@ -13,6 +14,7 @@ import { action as storeLinkAction, loader as storeLinkLoader } from "../app/rou
 import { pendingEmailChange } from "../app/domain/email-change.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { passkeyFailure } from "../app/passkey-error";
+import { hashPassword, verifyPassword } from "../app/password.server";
 import { securityReturnPath } from "../app/app-links";
 
 it("distingue le cause passkey riconoscibili e non indovina quelle ambigue", () => {
@@ -56,6 +58,48 @@ async function passwordSession(environment: Env, email: string, password: string
     .map((value) => value.split(";")[0])
     .join("; ");
 }
+
+it("salva le password con il costo ridotto e accetta quelle già salvate da Better Auth", async () => {
+  const hash = await hashPassword("password-di-prova-lunga");
+  expect(hash).toMatch(/^v2:[0-9a-f]{32}:[0-9a-f]{128}$/u);
+  expect(await verifyPassword({ hash, password: "password-di-prova-lunga" })).toBe(true);
+  expect(await verifyPassword({ hash, password: "password-errata-lunga" })).toBe(false);
+  for (const malformed of ["", "v2:00", "v3:00:00", "00:00:00:00"]) {
+    expect(await verifyPassword({ hash: malformed, password: "password-di-prova-lunga" })).toBe(
+      false,
+    );
+  }
+
+  const email = "costo-password@example.invalid";
+  const signup = await createAuth(env).handler(
+    new Request("http://localhost:5173/api/auth/sign-up/email", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Utente password", email, password: "password-di-prova-lunga" }),
+    }),
+  );
+  expect(signup.status).toBe(200);
+  const stored = () =>
+    env.DB.prepare(
+      `SELECT a."password" FROM "account" a JOIN "user" u ON u."id" = a."userId"
+        WHERE u."email" = ? AND a."providerId" = 'credential'`,
+    )
+      .bind(email)
+      .first<{ password: string }>();
+  expect((await stored())?.password).toMatch(/^v2:/u);
+
+  // Un hash nel formato predefinito di Better Auth resta valido per l'accesso.
+  await env.DB.prepare(
+    `UPDATE "account" SET "password" = ?
+      WHERE "providerId" = 'credential' AND "userId" = (SELECT "id" FROM "user" WHERE "email" = ?)`,
+  )
+    .bind(await originalHash("password-precedente-lunga"), email)
+    .run();
+  expect(await passwordSession(env, email, "password-precedente-lunga")).toContain("session_token");
+  expect(await passwordSession(env, email, "password-di-prova-lunga")).not.toContain(
+    "session_token",
+  );
+});
 
 it("non segue redirect esterni nei GET di accesso e collegamento", async () => {
   for (const base of ["", "/en"]) {

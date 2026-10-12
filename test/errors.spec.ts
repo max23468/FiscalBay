@@ -1,12 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  ApplicationError,
-  classifyFailure,
-  correlateResponse,
-  errorResponse,
-  logFailure,
-} from "../app/errors";
+import { ApplicationError, classifyFailure, correlateResponse, logFailure } from "../app/errors";
+import { errorResponse } from "../app/error-response";
 import { appCopy } from "../app/app-copy";
 import { formatAmount, languageFromPath, localizedPath } from "../app/i18n";
 import { minorToDecimal, parseMinor } from "../app/money";

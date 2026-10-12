@@ -1,4 +1,4 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 
 // Il webhook resta indisponibile senza il suo segreto; i pagamenti si attivano separatamente.
 export type StripeSecrets = { STRIPE_SECRET_KEY: string; STRIPE_WEBHOOK_SECRET: string };
@@ -7,8 +7,13 @@ export type PremiumOffer = "monthly" | "annual" | "lifetime";
 
 const integrationIdentifier = "fiscalbay_mp_qnwjrzta";
 
-export function createStripeClient(secretKey: string): Stripe {
-  return new Stripe(secretKey, { httpClient: Stripe.createFetchHttpClient() });
+// Lo SDK è la parte più pesante del bundle: si valuta solo quando serve, non a ogni avvio
+// dell'isolate per pagine, cron e webhook eBay.
+const loadStripe = () => import("stripe").then((module) => module.default);
+
+export async function createStripeClient(secretKey: string): Promise<Stripe> {
+  const StripeSdk = await loadStripe();
+  return new StripeSdk(secretKey, { httpClient: StripeSdk.createFetchHttpClient() });
 }
 
 export function buildManagedCheckoutParams(input: {
@@ -46,11 +51,12 @@ export async function verifyStripeEvent(
   signature: string,
   webhookSecret: string,
 ): Promise<Stripe.Event> {
-  return Stripe.webhooks.constructEventAsync(
+  const StripeSdk = await loadStripe();
+  return StripeSdk.webhooks.constructEventAsync(
     body,
     signature,
     webhookSecret,
     undefined,
-    Stripe.createSubtleCryptoProvider(),
+    StripeSdk.createSubtleCryptoProvider(),
   );
 }

@@ -12,6 +12,7 @@ import {
 import { logFailure } from "./errors";
 import { emailVerificationSeconds } from "./domain/email-change.server";
 import { upstreamJson } from "./integrations/http.server";
+import { hashPassword, verifyPassword } from "./password.server";
 
 // Con `commerce.identity.readonly` eBay restituisce l'email soltanto per gli account business.
 const ebayIdentitySchema = z.object({
@@ -157,6 +158,7 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
     },
     emailAndPassword: {
       enabled: true,
+      password: { hash: hashPassword, verify: verifyPassword },
       revokeSessionsOnPasswordReset: true,
       // La registrazione non apre la sessione e risponde allo stesso modo per un indirizzo già
       // registrato: la sessione nasce dal link di conferma. Chi accede con la password senza
