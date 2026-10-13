@@ -114,6 +114,28 @@ function acquire(fetcher: typeof fetch, calls = 12) {
   });
 }
 
+it("verifica direttamente una firma valida e rifiuta header fuori limite", async () => {
+  const request = ebayRequest(notification, "direct-validation-key");
+  const body = await request.text();
+  const signature = request.headers.get("x-ebay-signature")!;
+  expect(
+    await verifyOrderNotification(
+      body,
+      signature,
+      environment,
+      "production",
+      fetcher,
+      now.getTime(),
+    ),
+  ).toEqual(notification.notification);
+  expect(send).not.toHaveBeenCalled();
+  for (const invalid of ["", "x".repeat(2049)]) {
+    await expect(
+      verifyOrderNotification(body, invalid, environment, "production", fetcher, now.getTime()),
+    ).rejects.toThrow();
+  }
+});
+
 it("un negozio occupato restituisce un errore riprovabile al consumer", async () => {
   await env.DB.prepare(
     "INSERT INTO sync_state (store_id, locked_until, updated_at) VALUES ('webhook-store', ?, ?)",

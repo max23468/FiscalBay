@@ -46,7 +46,13 @@ import {
   resumeStore,
 } from "../app/domain/stores.server";
 import { forwardToAuth } from "../app/auth-route.server";
-import { completeRegistration, legalVersions } from "../app/domain/registration.server";
+import {
+  completeRegistration,
+  legalVersions,
+  parseProfile,
+  registrationComplete,
+  registrationStatus,
+} from "../app/domain/registration.server";
 import { createAuth } from "../app/auth.server";
 import { handleAuthRequest } from "../app/auth-route.server";
 import { loader as loadHome } from "../app/routes/home";
@@ -1698,6 +1704,81 @@ describe("radice pubblica e area riservata", () => {
 describe("registrazione e verifica del contatto", () => {
   const password = "Una-password-registrazione-lunga";
   const person = { tipo: "privato", nome: "Mario", cognome: "Rossi" };
+
+  it("valida i limiti dei profili e richiede il consenso insieme al profilo", () => {
+    const parse = (fields: Record<string, string>) => {
+      const form = new FormData();
+      for (const [key, value] of Object.entries(fields)) form.set(key, value);
+      return parseProfile(form);
+    };
+    const profile = parse({ ...person, nome: " Mario ", ragione_sociale: "Ignorata" });
+    expect(profile).toEqual({
+      firstName: "Mario",
+      lastName: "Rossi",
+      accountType: "private",
+      companyName: null,
+    });
+    expect(parse({ ...person, nome: "N".repeat(100), cognome: "C".repeat(100) })).not.toBeNull();
+    expect(parse({ ...person, tipo: "azienda", ragione_sociale: "A".repeat(200) })).toMatchObject({
+      accountType: "business",
+      companyName: "A".repeat(200),
+    });
+    for (const fields of [
+      { ...person, nome: "" },
+      { ...person, nome: "N".repeat(101) },
+      { ...person, cognome: "" },
+      { ...person, cognome: "C".repeat(101) },
+      { ...person, tipo: "altro" },
+      { ...person, tipo: "azienda" },
+      { ...person, tipo: "azienda", ragione_sociale: "A".repeat(201) },
+    ])
+      expect(parse(fields)).toBeNull();
+    for (const termsAccepted of [false, true]) {
+      expect(registrationComplete({ termsAccepted, profile: null })).toBe(false);
+      expect(registrationComplete({ termsAccepted, profile })).toBe(termsAccepted);
+    }
+  });
+
+  it("legge separatamente profilo e consenso e non scrive aggiornamenti vuoti", async () => {
+    const { user } = await createAuth(env).api.signUpEmail({
+      body: {
+        name: "Utente profilo",
+        email: "stato-profilo@example.invalid",
+        password: "password-profilo-molto-lunga",
+      },
+    });
+    expect(await registrationStatus(env.DB, user.id)).toEqual({
+      termsAccepted: false,
+      profile: null,
+    });
+    await completeRegistration(env.DB, {
+      userId: user.id,
+      language: "it",
+      now: new Date(now),
+      profile: syntheticProfile,
+    });
+    expect(await registrationStatus(env.DB, user.id)).toEqual({
+      termsAccepted: false,
+      profile: syntheticProfile,
+    });
+    await completeRegistration(env.DB, {
+      userId: user.id,
+      language: "it",
+      now: new Date(now),
+      agreement: { marketing: false },
+    });
+    expect(await registrationStatus(env.DB, user.id)).toEqual({
+      termsAccepted: true,
+      profile: syntheticProfile,
+    });
+    const batch = vi.fn();
+    await completeRegistration({ batch } as unknown as D1Database, {
+      userId: user.id,
+      language: "it",
+      now: new Date(now),
+    });
+    expect(batch).not.toHaveBeenCalled();
+  });
 
   it("registra senza consensi preselezionati, apre la sessione dal link e non rivela gli indirizzi già registrati", async () => {
     const email = "registrazione@example.invalid";

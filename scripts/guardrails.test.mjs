@@ -28,9 +28,11 @@ import {
   evaluate,
   identity,
   mutationInputs,
+  mutationConcurrency,
   verifiedMutationOrigin,
 } from "./mutation.mjs";
 import { verifiedBuildOrigin } from "./find-build.mjs";
+import { strykerPlugins as mutationPlugins } from "./mutation-vitest.mjs";
 import {
   assertBase,
   candidateRef,
@@ -952,6 +954,23 @@ describe("invocazioni osservate durante il collaudo remoto", () => {
 });
 
 describe("esito dei mutation test", () => {
+  it("limita i runner alle CPU e alla memoria senza azzerare l'esecuzione", () => {
+    const gib = 1024 ** 3;
+    assert.equal(mutationConcurrency(4, 8, 8 * gib), 2);
+    assert.equal(mutationConcurrency(4, 4, 16 * gib), 4);
+    assert.equal(mutationConcurrency(4, 2, 16 * gib), 2);
+    assert.equal(mutationConcurrency(4, 8, 2 * gib), 1);
+    assert.equal(mutationConcurrency(1, 8, 32 * gib), 1);
+  });
+  it("usa il fallback nativo per ricaricare i runner e conserva il contratto di injection", () => {
+    const plugin = mutationPlugins[0];
+    const runner = { capabilities: () => ({ reloadEnvironment: true }), marker: "native" };
+    const injector = { provideValue: () => ({ injectClass: () => runner }) };
+    assert.equal(plugin.factory(injector), runner);
+    assert.deepEqual(runner.capabilities(), { reloadEnvironment: false });
+    assert.equal(runner.marker, "native");
+    assert.equal(plugin.factory.inject.length, 1);
+  });
   it("firma sorgente completo, consumatori, fixture e strumenti senza invalidare per moduli estranei", () => {
     const target = "app/domain/grants.server.ts";
     const files = [

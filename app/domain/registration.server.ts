@@ -25,7 +25,7 @@ export type RegistrationStatus = { termsAccepted: boolean; profile: Profile | nu
 export function parseProfile(form: FormData): Profile | null {
   const text = (name: string, max: number) => {
     const value = String(form.get(name) ?? "").trim();
-    return value.length > 0 && value.length <= max ? value : null;
+    return value.length <= max ? value : null;
   };
   const type = form.get("tipo");
   const accountType = type === "azienda" ? "business" : type === "privato" ? "private" : null;
@@ -41,7 +41,9 @@ export async function registrationStatus(
   db: D1Database,
   userId: string,
 ): Promise<RegistrationStatus> {
-  const row = await db
+  // FROM (SELECT 1) conserva una riga anche senza profilo; i suoi campi obbligatori
+  // sono tutti presenti insieme, grazie ai vincoli di user_profiles.
+  const row = (await db
     .prepare(
       `SELECT p.first_name, p.last_name, p.account_type, p.company_name,
               EXISTS (
@@ -57,18 +59,17 @@ export async function registrationStatus(
       account_type: Profile["accountType"] | null;
       company_name: string | null;
       terms_accepted: number;
-    }>();
+    }>())!;
   return {
-    termsAccepted: row?.terms_accepted === 1,
-    profile:
-      row?.first_name && row.last_name && row.account_type
-        ? {
-            firstName: row.first_name,
-            lastName: row.last_name,
-            accountType: row.account_type,
-            companyName: row.company_name,
-          }
-        : null,
+    termsAccepted: row.terms_accepted === 1,
+    profile: row.first_name
+      ? {
+          firstName: row.first_name,
+          lastName: row.last_name!,
+          accountType: row.account_type!,
+          companyName: row.company_name,
+        }
+      : null,
   };
 }
 
