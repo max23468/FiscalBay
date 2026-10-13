@@ -8,7 +8,6 @@ import {
   rmSync,
   existsSync,
   mkdtempSync,
-  symlinkSync,
   cpSync,
 } from "node:fs";
 import path from "node:path";
@@ -20,7 +19,7 @@ import { assertBrowserEvidence } from "./release-notes.mjs";
 import { verifiedBuildOrigin } from "./find-build.mjs";
 
 const execute = (command, args, options = {}) =>
-  execFileSync(command, args, { encoding: "utf8", ...options }).trim();
+  (execFileSync(command, args, { encoding: "utf8", ...options }) ?? "").trim();
 const git = (...args) => execute("git", args);
 const gh = (...args) => execute("gh", args);
 const json = (...args) => JSON.parse(gh(...args));
@@ -246,7 +245,6 @@ async function waitRun(
 }
 
 function readback(repository, run, environment) {
-  const root = git("rev-parse", "--show-toplevel");
   const directory = mkdtempSync(path.join(tmpdir(), "release-readback-"));
   const checkout = path.join(directory, "checkout");
   let attached = false;
@@ -256,20 +254,7 @@ function readback(repository, run, environment) {
     attached = true;
     const executeHere = (command, args, options = {}) =>
       execute(command, args, { cwd: checkout, ...options });
-    if (
-      !git(
-        "diff",
-        "HEAD",
-        run.head_sha,
-        "--",
-        "package.json",
-        "pnpm-lock.yaml",
-        "pnpm-workspace.yaml",
-        "patches",
-      )
-    )
-      symlinkSync(path.join(root, "node_modules"), path.join(checkout, "node_modules"));
-    else executeHere("pnpm", ["install", "--frozen-lockfile"], { stdio: "inherit" });
+    executeHere("pnpm", ["install", "--frozen-lockfile"], { stdio: "inherit" });
     const output = path.join(directory, "build-output");
     executeHere(
       process.execPath,
