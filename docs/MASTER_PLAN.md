@@ -2154,7 +2154,7 @@ Integrato da CF Ready e Hub Fatture: la promozione `develop`→`main` riusa i co
 
 Provare anche candidato superato e interruzioni fra passi già confermati. Il readback confronta artefatto/commit, schema, configurazione e invarianti applicative pertinenti; il classificatore di M1-09 considera il diff cumulativo dal distribuito e non elude gate live.
 
-Da D145: su `develop` sono attivi l'artefatto verificato per tree (`build-<tree>`) e il riuso della verifica. D172 prepara e qualifica separatamente l'artefatto Production con input immutabili nella modalità `prova` di `Pubblica`, poi conserva `candidate-<tree>` per il rilascio. La build live non coincide con quella test; oltre la scadenza delle prove si ripete la qualifica. Il percorso resta da osservare su GitHub e sul provider prima di dichiarare chiusa questa capacità.
+Da D145: su `develop` sono attivi l'artefatto verificato per tree (`build-<tree>`) e il riuso della verifica. D172 prepara e qualifica separatamente l'artefatto Production con input immutabili nella modalità `prova` di `Pubblica`, anche su `develop` senza promozione, poi conserva `candidate-<tree>` per il rilascio. La pubblicazione reale resta limitata a `main` e ai checkpoint approvati. La build live non coincide con quella test; oltre la scadenza delle prove si ripete la qualifica. Il percorso resta da osservare su GitHub e sul provider prima di dichiarare chiusa questa capacità.
 
 <a id="m7-07"></a>
 #### M7-07 · Qualifica legale e commerciale finale

@@ -33,6 +33,7 @@ import {
 import { verifiedBuildOrigin } from "./find-build.mjs";
 import {
   assertBase,
+  candidateRef,
   runTimings,
   assertCycleReceipt,
   checkCycleJobs,
@@ -1355,6 +1356,16 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+
+  it("ammette develop soltanto per la qualifica senza deploy", () => {
+    assert.equal(candidateRef("candidate", "develop"), "develop");
+    assert.equal(candidateRef("candidate"), "main");
+    assert.equal(candidateRef("production"), "main");
+    assert.throws(() => candidateRef("production", "develop"), /Production richiede main/u);
+    assert.throws(() => candidateRef("candidate", "feature"), /sola prova/u);
+    const workflow = readFileSync(".github/workflows/publish.yml", "utf8");
+    assert.match(workflow, /!inputs\.prova && github\.ref == 'refs\/heads\/main'/u);
   });
 
   it("esegue status in sola lettura, conserva modifiche e riconcilia una qualifica riusata", () => {

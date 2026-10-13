@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       expected_sha:
-        description: SHA completo del candidato approvato su main
+        description: SHA completo del candidato, su main oppure develop nella sola prova
         type: string
         required: true
       version:
@@ -57,7 +57,11 @@ jobs:
         # La prova qualifica il candidato prima dei checkpoint: salta solo checkpoint e, senza
         # versione, il changelog; il job che distribuisce non parte.
         run: |
-          test "${GITHUB_REF}" = refs/heads/main
+          if [ "${PROVA}" = true ]; then
+            test "${GITHUB_REF}" = refs/heads/main || test "${GITHUB_REF}" = refs/heads/develop
+          else
+            test "${GITHUB_REF}" = refs/heads/main
+          fi
           test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
           if [ "${PROVA}" != true ]; then node scripts/release.mjs readiness; fi
           if [ "${PROVA}" != true ] || [ -n "${VERSION}" ]; then node scripts/release-notes.mjs "${VERSION}"; fi
@@ -89,7 +93,7 @@ jobs:
   publish:
     name: Distribuisci e verifica
     needs: qualify
-    if: ${{ !inputs.prova && !cancelled() && needs.qualify.result == 'success' }}
+    if: ${{ !inputs.prova && github.ref == 'refs/heads/main' && !cancelled() && needs.qualify.result == 'success' }}
     environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 45
