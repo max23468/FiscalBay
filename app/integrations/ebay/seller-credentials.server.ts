@@ -86,20 +86,52 @@ export async function sealToken(
   return sealedPrefix + base64Url(bytes);
 }
 
+/**
+ * Token salvato che non si apre con il segreto corrente, per esempio dopo una rotazione di
+ * `BETTER_AUTH_SECRET`: il consenso non è più utilizzabile e il negozio va ricollegato.
+ */
+export class UnreadableToken extends Error {}
+
 export async function openToken(
   secret: string,
   storeId: string,
   kind: TokenKind,
   value: string,
 ): Promise<string> {
-  if (!value.startsWith(sealedPrefix)) throw new Error("unsupported_token_format");
-  const bytes = fromBase64Url(value.slice(sealedPrefix.length));
-  const plain = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: bytes.subarray(0, 12), additionalData: boundTo(storeId, kind) },
-    await tokenKey(secret),
-    bytes.subarray(12),
-  );
+  if (!value.startsWith(sealedPrefix)) throw new UnreadableToken("unsupported_token_format");
+  const key = await tokenKey(secret);
+  let plain: ArrayBuffer;
+  try {
+    const bytes = fromBase64Url(value.slice(sealedPrefix.length));
+    plain = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: bytes.subarray(0, 12), additionalData: boundTo(storeId, kind) },
+      key,
+      bytes.subarray(12),
+    );
+  } catch {
+    throw new UnreadableToken("unreadable_token");
+  }
   return new TextDecoder().decode(plain);
+}
+
+/**
+ * Segna come rifiutato il consenso con cui è partita l'operazione: il negozio chiede di essere
+ * ricollegato e il lavoro periodico smette di usarlo. Un consenso già sostituito non cambia.
+ */
+export async function rejectCredentials(
+  db: D1Database,
+  storeId: string,
+  grantedAt: string,
+  now: Date,
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `UPDATE ebay_store_credentials SET rejected_at = ?
+        WHERE store_id = ? AND granted_at = ? AND rejected_at IS NULL`,
+    )
+    .bind(now.toISOString(), storeId, grantedAt)
+    .run();
+  return result.meta.changes === 1;
 }
 
 /** Registra un nuovo consenso: sostituisce i token precedenti e annulla un rifiuto registrato. */
@@ -163,23 +195,24 @@ export async function refreshStoreToken(input: {
   if (!row) return "missing";
   const configuration = ebayConfiguration(environment, row.ebay_environment);
 
-  const reject = async (): Promise<RefreshOutcome> => {
-    const result = await environment.DB.prepare(
-      `UPDATE ebay_store_credentials SET rejected_at = ?
-        WHERE store_id = ? AND granted_at = ? AND rejected_at IS NULL`,
-    )
-      .bind(now.toISOString(), storeId, row.granted_at)
-      .run();
-    return result.meta.changes === 1 ? "rejected" : "superseded";
-  };
+  const reject = async (): Promise<RefreshOutcome> =>
+    (await rejectCredentials(environment.DB, storeId, row.granted_at, now))
+      ? "rejected"
+      : "superseded";
   if (row.refresh_expires_at <= now.toISOString()) return reject();
 
-  const refreshToken = await openToken(
-    environment.BETTER_AUTH_SECRET,
-    storeId,
-    "refresh",
-    row.refresh_token,
-  );
+  let refreshToken: string;
+  try {
+    refreshToken = await openToken(
+      environment.BETTER_AUTH_SECRET,
+      storeId,
+      "refresh",
+      row.refresh_token,
+    );
+  } catch (error) {
+    if (error instanceof UnreadableToken) return reject();
+    throw error;
+  }
   let token: z.infer<typeof refreshSchema>;
   try {
     token = await upstreamJson(input.fetcher, configuration.tokenUrl, refreshSchema, {

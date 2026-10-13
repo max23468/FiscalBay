@@ -72,6 +72,7 @@ import {
   refreshExpiringTokens,
   refreshStoreToken,
   sealToken,
+  UnreadableToken,
 } from "../app/integrations/ebay/seller-credentials.server";
 import { UpstreamError, upstreamJson, upstreamText } from "../app/integrations/http.server";
 import {
@@ -3088,6 +3089,20 @@ describe("rinnovo dei token del negozio", () => {
     expect(await refreshExpiringTokens(env, revoked, issued)).toEqual([]);
   });
 
+  it("chiude il consenso quando il token di rinnovo non si apre più", async () => {
+    const storeId = await linkedStore("segreto-ruotato@example.invalid");
+    await env.DB.prepare(
+      "UPDATE ebay_store_credentials SET refresh_token = 'v1.illeggibile'",
+    ).run();
+    const fetcher = tokenEndpoint(() => Response.json({ access_token: "x", expires_in: 7200 }));
+    expect(await refreshStoreToken({ environment: env, storeId, fetcher, now: issued })).toBe(
+      "rejected",
+    );
+    expect(fetcher).not.toHaveBeenCalled();
+    expect((await credentials())!.rejected_at).toBe(issued.toISOString());
+    expect(await refreshExpiringTokens(env, fetcher, issued)).toEqual([]);
+  });
+
   it("non sovrascrive un consenso più recente con un rinnovo partito prima", async () => {
     const storeId = await linkedStore("rinnovo-superato@example.invalid");
     const before = await credentials();
@@ -3160,6 +3175,11 @@ describe("rinnovo dei token del negozio", () => {
     await expect(
       openToken(env.BETTER_AUTH_SECRET, "negozio", "access", value.slice(3)),
     ).rejects.toThrow("unsupported_token_format");
+    // Formato, cifratura o segreto non validi sono lo stesso caso: il consenso non si usa più.
+    for (const unreadable of [value.slice(3), `${value}x`, "v1.!"])
+      await expect(
+        openToken(env.BETTER_AUTH_SECRET, "negozio", "access", unreadable),
+      ).rejects.toBeInstanceOf(UnreadableToken);
   });
 
   it("non rinnova senza credenziali né con una risposta senza token", async () => {
@@ -5187,12 +5207,24 @@ describe("client eBay e normalizzazione", () => {
         await cronTurn(env, fetcher, new Date("2026-09-02T00:00:00.000Z"));
         expect(perStore(fetcher)).toEqual({ "token-s-a": 12, "token-s-c": 1, "token-s-d": 12 });
         expect(logged()).toBe(2);
+        expect(errors.mock.calls.map(([line]) => JSON.parse(String(line)).failure).sort()).toEqual([
+          "credentials",
+          "credentials",
+        ]);
         // Anche i tentativi falliti passano il turno.
         expect(await attempted()).toEqual({
           "s-a": "2026-09-02T00:00:00.000Z",
           "s-b": "2026-09-02T00:00:00.000Z",
           "s-c": "2026-09-02T00:00:00.000Z",
           "s-d": "2026-09-02T00:00:00.000Z",
+        });
+        // Il token che non si apre chiude il consenso: B va ricollegato e non si ritenta.
+        expect(
+          await env.DB.prepare(
+            "SELECT store_id, rejected_at FROM ebay_store_credentials WHERE rejected_at IS NOT NULL",
+          ).all(),
+        ).toMatchObject({
+          results: [{ store_id: "s-b", rejected_at: "2026-09-02T00:00:00.000Z" }],
         });
 
         // Al turno successivo; in pausa o con il token in scadenza un negozio non si legge.
@@ -5205,9 +5237,10 @@ describe("client eBay e normalizzazione", () => {
         await cronTurn(env, later, new Date("2026-09-02T01:00:00.000Z"));
         expect(Object.keys(perStore(later)).sort()).toEqual(["token-s-a", "token-s-d"]);
         expect(await attempted()).toMatchObject({
-          "s-b": "2026-09-02T01:00:00.000Z",
+          "s-b": "2026-09-02T00:00:00.000Z",
           "s-d": "2026-09-02T01:00:00.000Z",
         });
+        expect(logged()).toBe(2);
         const expiring = ebay();
         expect(await cronTurn(env, expiring, new Date("2026-09-02T02:56:00.000Z"))).toEqual([]);
         expect(expiring).not.toHaveBeenCalled();

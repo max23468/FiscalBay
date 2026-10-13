@@ -113,6 +113,11 @@ export async function resetStatements(password, now = new Date()) {
      ${credential(stores.paused, at(300 * day), at(-day))};`,
     `INSERT INTO ebay_store_pauses (store_id, reason, paused_at)
      VALUES ${row([stores.paused, "manual", iso])};`,
+    // Le credenziali sintetiche non si aprono: alla prima lettura periodica il consenso dei negozi
+    // attivi diventa da ricollegare. Segnati come appena letti, restano attivi per la cadenza Free
+    // di 30 minuti, oltre la durata dei controlli dopo il deploy.
+    `INSERT INTO sync_state (store_id, polled_at, updated_at)
+     VALUES ${row([stores.active, iso, iso])}, ${row([stores.expiring, iso, iso])};`,
     `INSERT INTO orders
        (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor,
         payment_status, fulfillment_status, buyer_json)
