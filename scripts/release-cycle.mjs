@@ -169,6 +169,15 @@ function candidateAvailable(repository, tree) {
   return false;
 }
 
+export function effectiveProductionVariable(read, repository, name) {
+  try {
+    return read(`repos/${repository}/environments/production/variables/${name}`);
+  } catch (error) {
+    if (!/HTTP 404/u.test(String(error.stderr ?? error.message))) throw error;
+    return read(`repos/${repository}/actions/variables/${name}`);
+  }
+}
+
 function summary(repository, runId) {
   const run = json("api", `repos/${repository}/actions/runs/${runId}`);
   const jobs = [];
@@ -340,17 +349,15 @@ function readback(repository, run, environment) {
           ...process.env,
           ...(environment === "production"
             ? {
-                PRODUCTION_PUBLISH_ENABLED: gh(
-                  "api",
-                  `repos/${repository}/environments/production/variables/PRODUCTION_PUBLISH_ENABLED`,
-                  "--jq",
-                  ".value",
+                PRODUCTION_PUBLISH_ENABLED: effectiveProductionVariable(
+                  (endpoint) => gh("api", endpoint, "--jq", ".value"),
+                  repository,
+                  "PRODUCTION_PUBLISH_ENABLED",
                 ),
-                OWNER_APPROVED_SHA: gh(
-                  "api",
-                  `repos/${repository}/environments/production/variables/OWNER_APPROVED_SHA`,
-                  "--jq",
-                  ".value",
+                OWNER_APPROVED_SHA: effectiveProductionVariable(
+                  (endpoint) => gh("api", endpoint, "--jq", ".value"),
+                  repository,
+                  "OWNER_APPROVED_SHA",
                 ),
               }
             : {}),

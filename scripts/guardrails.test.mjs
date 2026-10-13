@@ -39,6 +39,7 @@ import {
   assertRemoteEvidence,
   assertPublishedRelease,
   squashIntegrated,
+  effectiveProductionVariable,
 } from "./release-cycle.mjs";
 import { lastDeployed } from "./find-deployed.mjs";
 import { compareEbayTax } from "./compare-ebay-tax.mjs";
@@ -1249,6 +1250,40 @@ describe("esito dei mutation test", () => {
 });
 
 describe("coordinamento e provenienza della pubblicazione", () => {
+  it("rilegge le variabili effettive senza usare un fallback per errori di accesso", () => {
+    const calls = [];
+    const read = (endpoint) => {
+      calls.push(endpoint);
+      if (endpoint.includes("environments/"))
+        throw Object.assign(new Error("not found"), { stderr: "HTTP 404" });
+      return "approved";
+    };
+    assert.equal(
+      effectiveProductionVariable(read, "example/project", "OWNER_APPROVED_SHA"),
+      "approved",
+    );
+    assert.deepEqual(calls, [
+      "repos/example/project/environments/production/variables/OWNER_APPROVED_SHA",
+      "repos/example/project/actions/variables/OWNER_APPROVED_SHA",
+    ]);
+    assert.equal(
+      effectiveProductionVariable(() => "environment", "example/project", "OWNER_APPROVED_SHA"),
+      "environment",
+    );
+    let count = 0;
+    assert.throws(() =>
+      effectiveProductionVariable(
+        () => {
+          count++;
+          throw new Error("HTTP 403");
+        },
+        "example/project",
+        "OWNER_APPROVED_SHA",
+      ),
+    );
+    assert.equal(count, 1);
+  });
+
   it("prova l'integrazione squash sul tree completo preservando differenze e lavoro aggiunto", () => {
     const directory = mkdtempSync(path.join(tmpdir(), "cycle-git-"));
     const run = (...args) => {
