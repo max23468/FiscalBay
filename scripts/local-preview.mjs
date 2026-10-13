@@ -2,7 +2,7 @@
  * Copia locale della Build Output per `vite preview`, servita da `.cloudflare/preview`:
  * origine locale e segreti sintetici restano fuori dall'artefatto verificato, che non cambia.
  * Il plugin Cloudflare non sostituisce le variabili testuali in locale, quindi `APP_ORIGIN`
- * viene riscritta nella copia.
+ * viene riscritta nella copia test; il collaudo Production conserva l'origine che esclude l'anteprima.
  */
 import { cpSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { localOrigin, localSecret } from "../e2e/local-account.ts";
@@ -14,7 +14,8 @@ rmSync(previewRoot, { recursive: true, force: true });
 cpSync(".cloudflare/output", `${previewRoot}/.cloudflare/output`, { recursive: true });
 const workerConfig = `${previewRoot}/.cloudflare/output/v0/workers/default/worker.config.json`;
 const config = JSON.parse(readFileSync(workerConfig, "utf8"));
-config.env.APP_ORIGIN = { type: "text", value: localOrigin };
+if (process.env.E2E_PRODUCTION !== "1")
+  config.env.APP_ORIGIN = { type: "text", value: localOrigin };
 writeFileSync(workerConfig, JSON.stringify(config));
 writeFileSync(
   `${previewRoot}/.dev.vars`,

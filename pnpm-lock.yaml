@@ -168,6 +168,7 @@ overrides:
 patchedDependencies:
   '@better-auth/kysely-adapter@1.7.7': a7f0259e209227fac1541bc0342c51e76ba97d9a4f8236c14ec2e580cf409e87
   '@stryker-mutator/vitest-runner@10.0.0': dd3ce5e76cb7433cbdbe79d4893e16602318374abaa1bca90189359069a85957
+  cf@1.0.0-beta.14: ac9b3c08fc6f5860bd23141404da71d6dd66f4635fb4ce81577ace6721125d9e
 
 importers:
 
@@ -257,7 +258,7 @@ importers:
         version: 19.3.0(@types/react@19.3.0)
       cf:
         specifier: 1.0.0-beta.14
-        version: 1.0.0-beta.14(@types/node@26.6.4)
+        version: 1.0.0-beta.14(patch_hash=ac9b3c08fc6f5860bd23141404da71d6dd66f4635fb4ce81577ace6721125d9e)(@types/node@26.6.4)
       oxfmt:
         specifier: 0.72.0
         version: 0.72.0
@@ -282,6 +283,15 @@ importers:
       vitest:
         specifier: 5.0.3
         version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@26.6.4)(vite@8.3.4(@types/node@26.6.4)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
+      wrangler:
+        specifier: 4.149.0
+        version: 4.149.0(@types/node@26.6.4)
+
+  placeholder:
+    devDependencies:
+      cf:
+        specifier: 1.0.0-beta.14
+        version: 1.0.0-beta.14(patch_hash=ac9b3c08fc6f5860bd23141404da71d6dd66f4635fb4ce81577ace6721125d9e)(@types/node@26.6.4)
       wrangler:
         specifier: 4.149.0
         version: 4.149.0(@types/node@26.6.4)
@@ -7628,7 +7638,7 @@ snapshots:
 
   caniuse-lite@1.0.30001815: {}
 
-  cf@1.0.0-beta.14(@types/node@26.6.4):
+  cf@1.0.0-beta.14(patch_hash=ac9b3c08fc6f5860bd23141404da71d6dd66f4635fb4ce81577ace6721125d9e)(@types/node@26.6.4):
     dependencies:
       '@cloudflare/build-output-utils': 0.9.0
       '@cloudflare/codemods': 0.4.2

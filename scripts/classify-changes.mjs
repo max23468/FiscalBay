@@ -224,7 +224,15 @@ export function gateCommands({ gate, doctor }) {
   const checks =
     gate === "tooling"
       ? ["verify:tooling"]
-      : ["verify:tooling", "verify:pages", "typecheck", "test", "build"];
+      : [
+          "verify:tooling",
+          "verify:pages",
+          "typecheck",
+          "test",
+          "build:placeholder",
+          "build:live",
+          "build",
+        ];
   if (doctor) checks.push("doctor:react");
   return checks.map((check) => ["pnpm", [check]]);
 }

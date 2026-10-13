@@ -6,6 +6,7 @@
   "scripts": {
     "build": "cf build && node scripts/check-bundle-size.mjs",
     "build:live": "cf build --mode live && node scripts/check-bundle-size.mjs",
+    "build:placeholder": "pnpm --dir placeholder exec cf build --mode live",
     "cf:typegen": "cf workers types",
     "dev": "react-router dev",
     "doctor:react": "react-doctor --scope full --blocking warning .",
@@ -20,7 +21,7 @@
     "test:mutation": "node scripts/mutation.mjs",
     "test:scripts": "node --test scripts/",
     "typecheck": "cf workers types && react-router typegen && tsc -b",
-    "verify": "pnpm verify:copy && pnpm verify:repo && pnpm verify:pages && pnpm test:scripts && pnpm format:check && pnpm lint && pnpm typecheck && pnpm doctor:react && pnpm test && pnpm build && pnpm verify:docs",
+    "verify": "pnpm verify:copy && pnpm verify:repo && pnpm verify:pages && pnpm test:scripts && pnpm format:check && pnpm lint && pnpm typecheck && pnpm doctor:react && pnpm test && pnpm build:placeholder && pnpm build:live && pnpm build && pnpm verify:docs",
     "verify:tooling": "pnpm verify:copy && pnpm verify:repo && pnpm test:scripts && pnpm format:check && pnpm lint && pnpm verify:docs",
     "verify:pages": "node scripts/verify-pages.mjs",
     "verify:changed": "node scripts/classify-changes.mjs --run",
