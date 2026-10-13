@@ -18,6 +18,8 @@ import {
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { availableParallelism } from "node:os";
+import { importPattern, resolveImport } from "./verify-repo.mjs";
 
 const accepted = new Set(["Killed", "Ignored"]);
 
@@ -40,6 +42,111 @@ export function evaluate(report) {
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 
+/** Conserva tutti i test consumatori e i loro input; import ambigui richiedono il completo. */
+export function mutationInputs(target, files) {
+  const unit = ["app/auth-route.server.ts", "app/integrations/ebay/fulfillment.server.ts"].includes(
+    target,
+  );
+  const suite = files.filter(({ path: file }) =>
+    unit ? file.endsWith(".unit.ts") : file.endsWith(".spec.ts") && file.startsWith("test/"),
+  );
+  const known = new Map(files.map((file) => [file.path, file]));
+  const graph = new Map();
+  let ambiguous = false;
+  for (const { text } of files.filter(({ path: file }) => /^tsconfig.*\.json$/u.test(file))) {
+    try {
+      const paths = JSON.parse(text).compilerOptions?.paths ?? {};
+      if (
+        Object.keys(paths).some((alias) => alias !== "~/*") ||
+        (paths["~/*"] && JSON.stringify(paths["~/*"]) !== '["./app/*"]')
+      )
+        ambiguous = true;
+    } catch {
+      // Una configurazione non leggibile non consente una firma ridotta.
+      ambiguous = true;
+    }
+  }
+  for (const { path: file, text } of files.filter(({ path: file }) =>
+    /^(?:app|workers|test)\/.*\.[cm]?[jt]sx?$/u.test(file),
+  )) {
+    const imports = new Set();
+    // I tipi delle route sono generati e non eseguiti dal runner.
+    const source = text.replace(
+      /(?:^|\n)\s*import\s+type\s+(?:\{[^{};"'`]*\}|[\w$]+)\s+from\s*["'][^"'\n]+["']\s*;?/gu,
+      "",
+    );
+    if (
+      /\b(?:import|require|(?:vi|vitest)\.(?:mock|doMock))\s*\(\s*(?!["'\s])|import\.meta\.glob|\b(?:eval|Function)\s*\(/u.test(
+        source,
+      )
+    )
+      ambiguous = true;
+    for (const match of source.matchAll(importPattern)) {
+      const specifier = match[1] ?? match[2];
+      if (!specifier.startsWith(".") && !specifier.startsWith("~/")) continue;
+      const resolved = resolveImport(file, specifier, known);
+      if (resolved) imports.add(resolved);
+      else ambiguous = true;
+    }
+    // Un require o mock può caricare un modulo senza un import ES.
+    for (const match of source.matchAll(
+      /\b(?:require|(?:vi|vitest)\.(?:mock|doMock))\s*\(\s*["']([^"']+)["']/gu,
+    )) {
+      const specifier = match[1];
+      if (!specifier.startsWith(".") && !specifier.startsWith("~/")) continue;
+      const resolved = resolveImport(file, specifier, known);
+      if (resolved) imports.add(resolved);
+      else ambiguous = true;
+    }
+    for (const match of source.matchAll(
+      /new\s+URL\(\s*["'](\.[^"']+)["']\s*,\s*import\.meta\.url/gu,
+    )) {
+      const resolved = resolveImport(file, match[1], known);
+      if (resolved) imports.add(resolved);
+      else ambiguous = true;
+    }
+    graph.set(file, imports);
+  }
+  const closure = (entry) => {
+    const visited = new Set();
+    const queue = [entry];
+    while (queue.length) {
+      const file = queue.pop();
+      if (visited.has(file)) continue;
+      visited.add(file);
+      queue.push(...(graph.get(file) ?? []));
+    }
+    return visited;
+  };
+  const tests = suite
+    .filter(({ path: file }) => closure(file).has(target))
+    .map(({ path: file }) => file)
+    .sort();
+  if (ambiguous || tests.length === 0)
+    return {
+      files: files.filter(({ path: file }) => !file.endsWith(".md")),
+      tests: suite.map(({ path: file }) => file).sort(),
+      mode: "full",
+    };
+  const selected = new Set([
+    target,
+    ...tests.flatMap((file) => [...closure(file)]),
+    ...closure(target),
+  ]);
+  return {
+    files: files.filter(
+      ({ path: file }) =>
+        !file.endsWith(".md") &&
+        (selected.has(file) ||
+          (!/^(?:app|workers|e2e|placeholder|\.github)\//u.test(file) &&
+            !/^test\/.*\.(?:spec|unit)\.ts$/u.test(file)) ||
+          /^\.github\/workflows\/(?:ci|mutation|publish|qualify)\.yml$/u.test(file)),
+    ),
+    tests,
+    mode: "targeted",
+  };
+}
+
 /** Stryker confronta il testo dei singoli mutanti, non tutte le loro dipendenze.
  * Anche un helper nello stesso sorgente può cambiarne l'esito: il riuso richiede
  * tutti gli input identici, inclusi sorgente, test, fixture, setup e runtime.
@@ -57,21 +164,29 @@ export function identity(
     process.env.CI,
     process.env.ImageOS,
     process.env.ImageVersion,
+    availableParallelism(),
   ]),
 ) {
   const source = files.find(({ path: file }) => file === target)?.text;
   if (source === undefined) throw new Error(`Sorgente mutation inesistente: ${target}`);
+  const selected = mutationInputs(target, files);
   const context = hash(
     JSON.stringify([
       runtime,
       target,
-      files
-        .filter(({ path: file }) => !file.endsWith(".md"))
-        .sort((a, b) => a.path.localeCompare(b.path)),
+      selected.files.sort((a, b) => a.path.localeCompare(b.path)),
+      selected.tests,
+      selected.mode,
     ]),
   );
   const prefix = `mutation-${context}-`;
-  return { target, prefix, key: `${prefix}${hash(source)}` };
+  return {
+    target,
+    prefix,
+    key: `${prefix}${hash(source)}`,
+    tests: selected.tests,
+    mode: selected.mode,
+  };
 }
 
 function inputs() {
@@ -80,7 +195,10 @@ function inputs() {
   })
     .split("\n")
     .filter((file) => file && existsSync(file))
-    .map((file) => ({ path: file, text: readFileSync(file).toString("base64") }));
+    .map((file) => {
+      const content = readFileSync(file);
+      return { path: file, text: content.toString("utf8"), digest: hash(content) };
+    });
 }
 
 function directory(target) {
@@ -108,8 +226,12 @@ export function verifiedMutationOrigin(candidate, run, jobs, repositoryId, targe
     !candidate.expired &&
     origin?.repository_id === repositoryId &&
     origin.head_repository_id === repositoryId &&
-    run.path === ".github/workflows/ci.yml" &&
-    jobs.some((job) => job.name === `Mutation / ${target}` && job.conclusion === "success")
+    [".github/workflows/ci.yml", ".github/workflows/publish.yml"].includes(run.path) &&
+    jobs.some(
+      (job) =>
+        [`Mutation / ${target}`, `Qualifica candidato / Mutation / ${target}`].includes(job.name) &&
+        job.conclusion === "success",
+    )
   );
 }
 
@@ -147,7 +269,16 @@ function findVerified(expected) {
     console.log(`Mutation già verificata dalla run ${origin.id}: ${expected.target}.`);
     return;
   }
-  console.log(`Nessuna ricevuta mutation riusabile: ${expected.target}.`);
+  const reason =
+    candidates.length === 0
+      ? "input del modulo senza ricevuta"
+      : "origine, esito o scadenza non validi";
+  console.log(`Nessuna ricevuta mutation riusabile: ${expected.target}; ${reason}.`);
+  if (process.env.GITHUB_STEP_SUMMARY)
+    appendFileSync(
+      process.env.GITHUB_STEP_SUMMARY,
+      `\n${expected.target}: ${expected.mode}, ${expected.tests.length} file di test; ${reason}.\n`,
+    );
 }
 
 async function runTarget(target, files) {
@@ -169,14 +300,15 @@ async function runTarget(target, files) {
   rmSync(`${dir}/receipt.json`, { force: true });
   const config = {
     ...JSON.parse(readFileSync("stryker.config.json", "utf8")),
+    concurrency: Math.min(
+      JSON.parse(readFileSync("stryker.config.json", "utf8")).concurrency,
+      availableParallelism(),
+    ),
     mutate: [target],
     incremental,
     incrementalFile: `${dir}/incremental.json`,
     jsonReporter: { fileName: reportPath },
-    ...(file === "app/auth-route.server.ts" ||
-    file === "app/integrations/ebay/fulfillment.server.ts"
-      ? { vitest: { configFile: "vitest.unit.config.ts" } }
-      : {}),
+    vitest: { configFile: "vitest.mutation.config.ts" },
   };
   const configPath = `${dir}/stryker.json`;
   writeFileSync(configPath, JSON.stringify(config));
@@ -186,6 +318,11 @@ async function runTarget(target, files) {
   try {
     const child = spawn("pnpm", ["exec", "stryker", "run", configPath], {
       stdio: ["inherit", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        MUTATION_TARGET: file,
+        MUTATION_TEST_FILES: JSON.stringify(expected.tests),
+      },
     });
     for (const [stream, destination] of [
       [child.stdout, process.stdout],
@@ -216,6 +353,7 @@ async function runTarget(target, files) {
     reused: Number(log.match(/Result:\s*(\d+) of/u)?.[1] ?? 0),
     reportDigest: report ? hash(JSON.stringify(report)) : null,
     counts,
+    dryRun: log.match(/Initial test run succeeded\.[^\n]*/u)?.[0] ?? "",
   };
   writeFileSync(`${dir}/receipt.json`, JSON.stringify(receipt, null, 2));
   const summary = `${target}: ${receipt.seconds}s, ${receipt.reused} mutanti riutilizzati, ${JSON.stringify(counts)}, ${failures.length} problemi.\n`;

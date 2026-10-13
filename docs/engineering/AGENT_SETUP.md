@@ -32,6 +32,7 @@ Codex desktop può usare file/CLI locali e le connessioni effettivamente autoriz
 | `pnpm verify:full` | Gate applicativo, suite funzionale Chromium e tutte le pagine con la matrice completa Chromium/WebKit. Per candidato/release o modifiche trasversali. |
 | `pnpm test:mutation <file[:righe]>` | Stryker con runner Vitest sui soli file indicati; prove unitarie Node per il confine Auth e l'adapter Fulfillment, Cloudflare per gli altri moduli. Fallisce per sopravvissuti, timeout ed errori, ammette equivalenze motivate con `Stryker disable`. Report per modulo in `reports/mutation/`; riuso incrementale e ricevute descritti nella [procedura](RELEASE.md). |
 | Workflow `Pubblica` | Contratto [§34](../MASTER_PLAN.md#s34), candidato esatto, artefatto Production collaudato, migration, readback, tag e release; [procedura](RELEASE.md). Checkpoint e autorizzazione Production restano richiesti. |
+| `pnpm release:cycle` | Coordinamento e ripresa del ciclo autorizzato: stato e tempi delle run, qualifica finale della PR aggiornata, attesa di CI/merge/deploy, ricevuta e readback fresco, tag/release Production e pulizia dei branch riconciliati. Comandi ed effetti nella [procedura](RELEASE.md#ciclo-operativo); nessun effetto esterno implicito dal solo mandato locale. |
 
 La tabella descrive i comandi presenti e le loro responsabilità; prove in PR/CI e ricevute, qualifiche mancanti nelle [questioni aperte](../MASTER_PLAN.md#questioni-aperte). Node locale/CI non è il runtime Workers o Supabase. Librerie opzionali non si installano per riempire un catalogo.
 

@@ -14,6 +14,7 @@
     "format:check": "oxfmt --check .",
     "lint": "oxlint .",
     "postinstall": "cf workers types",
+    "release:cycle": "node scripts/release-cycle.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test --project chromium",
     "test:e2e:smoke": "E2E_BASE_URL=https://test.fiscalbay.it playwright test --project chromium --grep @smoke",

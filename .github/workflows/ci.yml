@@ -75,6 +75,17 @@ jobs:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
 
+      - name: Check final qualification base
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft != true
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          current="$(git ls-remote origin "refs/heads/${BASE_REF}" | cut -f1)"
+          node --input-type=module -e 'import { assertBase } from "./scripts/release-cycle.mjs"; assertBase(process.env.BASE_SHA, process.argv[1]);' "${current}"
+          git merge-base --is-ancestor "${BASE_SHA}" "${HEAD_SHA}"
+
       # Sul push il confronto parte dall'ultimo deploy test riuscito, non dal push precedente:
       # una run annullata da un push successivo o un deploy fallito restano nel diff.
       - name: Find last test deploy
@@ -197,6 +208,7 @@ jobs:
           echo "browsers=${BROWSERS//,/-}" >> "${GITHUB_OUTPUT}"
 
       - name: Restore browser cache
+        id: browsers
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
@@ -204,11 +216,20 @@ jobs:
           restore-keys: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-
 
       - name: Install browser for interaction tests
+        if: steps.browsers.outputs.cache-hit != 'true'
         env:
           BROWSERS: ${{ needs.verify.outputs.browsers }}
         run: |
           IFS=, read -ra browsers <<< "${BROWSERS}"
           pnpm exec playwright install --with-deps "${browsers[@]}"
+
+      - name: Install browser system dependencies
+        if: steps.browsers.outputs.cache-hit == 'true'
+        env:
+          BROWSERS: ${{ needs.verify.outputs.browsers }}
+        run: |
+          IFS=, read -ra browsers <<< "${BROWSERS}"
+          pnpm exec playwright install-deps "${browsers[@]}"
 
       - name: Check browser interactions before deploy
         env:
@@ -244,6 +265,17 @@ jobs:
     timeout-minutes: 5
 
     steps:
+      - name: Recheck final qualification base
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft != true
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.base_ref }}
+          REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          current="$(gh api "repos/${REPOSITORY}/git/ref/heads/${BASE_REF}" --jq '.object.sha')"
+          test "${current}" = "${BASE_SHA}"
+
       - name: Check job results
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}

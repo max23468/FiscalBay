@@ -6,7 +6,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { createHash, randomBytes } from "node:crypto";
 import { budgetKiB } from "./check-bundle-size.mjs";
-import { shardTests } from "./browser-tests.mjs";
+import { shardTests, assertCandidateReports } from "./browser-tests.mjs";
 import { classifyFile, plan as changePlan, gateCommands } from "./classify-changes.mjs";
 import { missingPages, missingSections, routePatterns } from "./verify-pages.mjs";
 import {
@@ -23,7 +23,23 @@ import {
 } from "./release.mjs";
 import { releaseNotes, assertBrowserEvidence } from "./release-notes.mjs";
 import { knownPagePath } from "../e2e/page-cases.ts";
-import { checkReceipt, evaluate, identity, verifiedMutationOrigin } from "./mutation.mjs";
+import {
+  checkReceipt,
+  evaluate,
+  identity,
+  mutationInputs,
+  verifiedMutationOrigin,
+} from "./mutation.mjs";
+import { verifiedBuildOrigin } from "./find-build.mjs";
+import {
+  assertBase,
+  runTimings,
+  assertCycleReceipt,
+  checkCycleJobs,
+  assertRemoteEvidence,
+  assertPublishedRelease,
+  squashIntegrated,
+} from "./release-cycle.mjs";
 import { lastDeployed } from "./find-deployed.mjs";
 import { compareEbayTax } from "./compare-ebay-tax.mjs";
 import { jsonObjects, summarize as summarizeInvocations } from "./watch-invocations.mjs";
@@ -381,8 +397,6 @@ describe("classificazione dei file modificati", () => {
       "verify:pages",
       "typecheck",
       "test",
-      "build:placeholder",
-      "build:live",
       "build",
     ]);
     for (const files of [["app/new-module.ts"], ["scripts/unknown.mjs"], []]) {
@@ -434,6 +448,20 @@ describe("classificazione dei file modificati", () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+
+  it("ricompila la pagina provvisoria solo per i suoi input o un perimetro completo", () => {
+    assert.equal(changePlan(["app/domain/orders.server.ts"]).placeholder, false);
+    assert.equal(changePlan(["test/orders.spec.ts"]).live, false);
+    for (const file of [
+      "placeholder/cloudflare.config.ts",
+      "package.json",
+      "pnpm-lock.yaml",
+      "scripts/unknown.mjs",
+      "new.bin",
+    ])
+      assert.equal(changePlan([file]).placeholder, true);
+    assert.equal(changePlan(["README.md"], [], true).placeholder, true);
   });
 
   it("esegue il gate completo con E2E per un file non classificato o un diff vuoto", () => {
@@ -922,6 +950,130 @@ describe("invocazioni osservate durante il collaudo remoto", () => {
 });
 
 describe("esito dei mutation test", () => {
+  it("firma sorgente completo, consumatori, fixture e strumenti senza invalidare per moduli estranei", () => {
+    const target = "app/domain/grants.server.ts";
+    const files = [
+      { path: target, text: 'import { value } from "./helper"; export const grant = () => value;' },
+      { path: "app/domain/helper.ts", text: "export const value = true;" },
+      { path: "test/grants.spec.ts", text: 'import { grant } from "../app/domain/grants.server";' },
+      { path: "test/setup.ts", text: "fixture" },
+      { path: "test/other.spec.ts", text: 'import { other } from "../app/other";' },
+      { path: "app/other.ts", text: "export const other = true;" },
+      { path: "scripts/mutation.mjs", text: "runner" },
+      { path: "pnpm-lock.yaml", text: "dependencies" },
+      { path: "migrations/example.sql", text: "CREATE TABLE example (id TEXT);" },
+      { path: "docs/MASTER_PLAN.md", text: "stato" },
+    ];
+    assert.equal(mutationInputs(target, files).mode, "targeted");
+    assert.deepEqual(mutationInputs(target, files).tests, ["test/grants.spec.ts"]);
+    const base = identity(target, files, "runtime");
+    for (const changed of [
+      target,
+      "app/domain/helper.ts",
+      "test/grants.spec.ts",
+      "test/setup.ts",
+      "scripts/mutation.mjs",
+      "pnpm-lock.yaml",
+      "migrations/example.sql",
+    ]) {
+      assert.notEqual(
+        identity(
+          target,
+          files.map((file) =>
+            file.path === changed ? { ...file, text: file.text + " changed" } : file,
+          ),
+          "runtime",
+        ).key,
+        base.key,
+        changed,
+      );
+    }
+    for (const changed of ["app/other.ts", "test/other.spec.ts", "docs/MASTER_PLAN.md"]) {
+      assert.equal(
+        identity(
+          target,
+          files.map((file) =>
+            file.path === changed ? { ...file, text: file.text + " changed" } : file,
+          ),
+          "runtime",
+        ).key,
+        base.key,
+        changed,
+      );
+    }
+    const newConsumer = {
+      path: "test/another.spec.ts",
+      text: 'import { grant } from "../app/domain/grants.server";',
+    };
+    assert.notEqual(identity(target, [...files, newConsumer], "runtime").key, base.key);
+    const indirectConsumer = {
+      path: "app/facade.ts",
+      text: 'export { grant } from "./domain/grants.server";',
+    };
+    assert.deepEqual(
+      mutationInputs(target, [
+        ...files,
+        indirectConsumer,
+        { path: "test/facade.spec.ts", text: 'import { grant } from "../app/facade";' },
+      ]).tests,
+      ["test/facade.spec.ts", "test/grants.spec.ts"],
+    );
+    assert.equal(
+      mutationInputs(
+        target,
+        files.filter((file) => file.path !== "app/domain/helper.ts"),
+      ).mode,
+      "full",
+    );
+    for (const text of [
+      "const module = await import(name);",
+      "const module = require(name);",
+      'const modules = import.meta.glob("./*.ts");',
+    ])
+      assert.equal(
+        mutationInputs(target, [...files, { path: "test/dynamic.spec.ts", text }]).mode,
+        "full",
+      );
+  });
+
+  it("conserva alias e mock locali nella firma mutation", () => {
+    const target = "app/domain/grants.server.ts";
+    const files = [
+      { path: target, text: 'import { value } from "~/helper";' },
+      { path: "app/helper.ts", text: "export const value = true;" },
+      { path: "test/grants.spec.ts", text: 'vi.mock("../app/domain/grants.server", () => ({}));' },
+    ];
+    assert.deepEqual(mutationInputs(target, files).tests, ["test/grants.spec.ts"]);
+    assert.ok(mutationInputs(target, files).files.some((file) => file.path === "app/helper.ts"));
+    assert.equal(
+      mutationInputs(target, [
+        ...files,
+        { path: "test/dynamic.spec.ts", text: "vi.mock(moduleName, () => ({}));" },
+      ]).mode,
+      "full",
+    );
+    assert.equal(
+      mutationInputs(target, [
+        ...files,
+        {
+          path: "tsconfig.json",
+          text: JSON.stringify({ compilerOptions: { paths: { "@/*": ["app/*"] } } }),
+        },
+      ]).mode,
+      "full",
+    );
+    const types = files.map((file) =>
+      file.path === target
+        ? {
+            ...file,
+            text: 'import type { Unknown } from "./+types/grants";\n// import type is unrelated to runtime imports\nimport { value } from "~/helper";',
+          }
+        : file,
+    );
+    assert.equal(mutationInputs(target, types).mode, "targeted");
+    assert.ok(mutationInputs(target, types).files.some((file) => file.path === "app/helper.ts"));
+  });
+
   it("allinea ID, nomi annidati e filtro del runner a Vitest 5", async () => {
     const runner = import.meta.resolve("@stryker-mutator/vitest-runner");
     const { collectTestName, toRawTestId } = await import(new URL("./test-helpers.js", runner));
@@ -1093,6 +1245,330 @@ describe("esito dei mutation test", () => {
       false,
     );
     assert.equal(verifiedMutationOrigin(candidate, run, [job], 1, "app/other.server.ts"), false);
+  });
+});
+
+describe("coordinamento e provenienza della pubblicazione", () => {
+  it("prova l'integrazione squash sul tree completo preservando differenze e lavoro aggiunto", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "cycle-git-"));
+    const run = (...args) => {
+      const result = spawnSync("git", args, { cwd: directory, encoding: "utf8" });
+      assert.equal(result.status, 0, result.stderr);
+      return result.stdout.trim();
+    };
+    try {
+      run("init", "-q", "--initial-branch=develop");
+      run("config", "user.name", "Synthetic test");
+      run("config", "user.email", "test@example.invalid");
+      writeFileSync(path.join(directory, "value.js"), "export const value=false;\n");
+      run("add", ".");
+      run("commit", "-qm", "base");
+      run("switch", "-c", "codex/feature");
+      writeFileSync(path.join(directory, "value.js"), "export const value=true;\n");
+      run("add", ".");
+      run("commit", "-qm", "feature");
+      const head = run("rev-parse", "HEAD");
+      run("switch", "develop");
+      writeFileSync(path.join(directory, "concurrent.js"), "export const other=true;\n");
+      run("add", ".");
+      run("commit", "-qm", "independent change");
+      run("merge", "--squash", "codex/feature");
+      run("commit", "-qm", "squash");
+      const merged = run("rev-parse", "HEAD");
+      assert.equal(squashIntegrated(head, merged, directory), true);
+      run("switch", "codex/feature");
+      writeFileSync(path.join(directory, "pending.js"), "export const pending=true;\n");
+      run("add", ".");
+      run("commit", "-qm", "not integrated");
+      assert.equal(squashIntegrated(run("rev-parse", "HEAD"), merged, directory), false);
+      run("switch", "develop");
+      writeFileSync(path.join(directory, "value.js"), "export const value = true;\n");
+      run("add", ".");
+      run("commit", "--amend", "--no-edit", "-q");
+      assert.equal(squashIntegrated(head, run("rev-parse", "HEAD"), directory), false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("esegue status in sola lettura, conserva modifiche e riconcilia una qualifica riusata", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "cycle-cli-"));
+    const calls = path.join(directory, "calls");
+    const at = (seconds) => new Date(seconds * 1000).toISOString();
+    const run = {
+      created_at: at(0),
+      updated_at: at(100),
+      run_attempt: 2,
+      status: "completed",
+      conclusion: "success",
+      html_url: "https://github.com/example/project/actions/runs/123",
+    };
+    const jobs = {
+      jobs: [
+        { conclusion: "success", started_at: at(5), completed_at: at(25) },
+        { conclusion: "success", started_at: at(10), completed_at: at(30) },
+      ],
+    };
+    const executable = `#!${process.execPath}\nconst fs = require("node:fs"); const args = process.argv.slice(2); fs.appendFileSync(process.env.CYCLE_CALLS, JSON.stringify(args) + "\\n"); if(args[0] === "repo") console.log(JSON.stringify({nameWithOwner:"example/project"})); else if(args.includes("--slurp")) console.log(${JSON.stringify(JSON.stringify([jobs]))}); else console.log(${JSON.stringify(JSON.stringify(run))});\n`;
+    try {
+      writeFileSync(path.join(directory, "gh"), executable, { mode: 0o700 });
+      const env = { ...process.env, PATH: `${directory}:${process.env.PATH}`, CYCLE_CALLS: calls };
+      const status = spawnSync(process.execPath, ["scripts/release-cycle.mjs", "status", "123"], {
+        encoding: "utf8",
+        env,
+      });
+      assert.equal(status.status, 0, status.stderr);
+      const output = JSON.parse(status.stdout);
+      assert.equal(output.activeSeconds, 25);
+      assert.equal(output.waitingSeconds, 75);
+      assert.ok(
+        readFileSync(calls, "utf8")
+          .split("\n")
+          .filter(Boolean)
+          .every((line) => ["repo", "api"].includes(JSON.parse(line)[0])),
+      );
+      const checkout = path.join(directory, "checkout");
+      mkdirSync(checkout);
+      assert.equal(spawnSync("git", ["init", "-q", checkout]).status, 0);
+      writeFileSync(path.join(checkout, "pending"), "owner work");
+      const pr = spawnSync(
+        process.execPath,
+        [path.resolve("scripts/release-cycle.mjs"), "pr", "123"],
+        { encoding: "utf8", env, cwd: checkout },
+      );
+      assert.notEqual(pr.status, 0);
+      assert.match(pr.stderr, /checkout pulito/u);
+      assert.equal(readFileSync(path.join(checkout, "pending"), "utf8"), "owner work");
+      assert.equal(readFileSync(calls, "utf8").includes('"merge"'), false);
+      const runGit = (...args) => {
+        const result = spawnSync("git", args, { cwd: checkout, encoding: "utf8" });
+        assert.equal(result.status, 0, result.stderr);
+      };
+      runGit("config", "user.name", "Synthetic test");
+      runGit("config", "user.email", "test@example.invalid");
+      runGit("add", ".");
+      runGit("commit", "-qm", "local source");
+      const sha = "a".repeat(40);
+      const tree = "b".repeat(40);
+      const proof = {
+        name: `candidate-${tree}`,
+        expired: false,
+        workflow_run: { id: 123, repository_id: 1, head_repository_id: 1 },
+      };
+      const cycleJobs = {
+        jobs: [
+          { name: "Distribuisci e verifica", conclusion: "skipped" },
+          { name: "Qualifica candidato / Candidate qualified", conclusion: "success" },
+        ],
+      };
+      const candidateGh = `#!${process.execPath}\nconst fs=require("node:fs");const a=process.argv.slice(2);fs.appendFileSync(process.env.CYCLE_CALLS,JSON.stringify(a)+"\\n");let value;if(a[0]==="repo")value={nameWithOwner:"example/project"};else if(a[0]==="run")value=[{databaseId:124,headSha:${JSON.stringify(sha)},status:"completed",conclusion:"success"}];else if(a[0]==="workflow")process.exit(99);else if(a.includes("--slurp"))value=${JSON.stringify([jobs])};else if(a[1].includes("git/ref/")){console.log(${JSON.stringify(sha)});process.exit(0);}else if(a[1].includes("git/commits/"))value={tree:{sha:${JSON.stringify(tree)}}};else if(a[1].includes("/artifacts?"))value={artifacts:[{...${JSON.stringify(proof)},expired:process.env.CANDIDATE_EXPIRED==="1"}]};else if(a[1].includes("/jobs?"))value=${JSON.stringify(cycleJobs)};else if(a[1].includes("/actions/runs/"))value={...${JSON.stringify(run)},path:".github/workflows/publish.yml"};else value={id:1};console.log(JSON.stringify(value));\n`;
+      writeFileSync(path.join(directory, "gh"), candidateGh, { mode: 0o700 });
+      writeFileSync(calls, "");
+      const candidate = (expired) =>
+        spawnSync(
+          process.execPath,
+          [path.resolve("scripts/release-cycle.mjs"), "candidate", "--sha", sha],
+          {
+            encoding: "utf8",
+            cwd: checkout,
+            env: { ...env, CANDIDATE_EXPIRED: expired ? "1" : "0" },
+          },
+        );
+      const reused = candidate(false);
+      assert.equal(reused.status, 0, reused.stderr);
+      assert.match(reused.stdout, /nessun nuovo dispatch/u);
+      assert.equal(readFileSync(calls, "utf8").includes('"workflow"'), false);
+      assert.equal(candidate(true).status, 1);
+      assert.ok(readFileSync(calls, "utf8").includes('"workflow","run","publish.yml"'));
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("certifica tutte le partizioni browser solo con prove coerenti e complete", () => {
+    const parts = ["source", "production"].flatMap((kind) =>
+      [1, 2, 3, 4].map((shard) => ({
+        kind,
+        shard,
+        attempt: 1,
+        report: {
+          sha: "commit",
+          status: "passed",
+          partial: false,
+          dirty: false,
+          environment: kind === "source" ? "local" : "production",
+          baseURL: "locale",
+          counts: { passed: 1 },
+          rows: [{ id: `${kind}-${shard}`, status: "passed" }],
+        },
+      })),
+    );
+    assert.doesNotThrow(() => assertCandidateReports(parts, "commit"));
+    assert.throws(() => assertCandidateReports(parts.slice(1), "commit"));
+    for (const change of [
+      { sha: "other" },
+      { partial: true },
+      { dirty: true },
+      { status: "failed" },
+      { counts: { passed: 0 } },
+      { rows: [] },
+      { counts: { passed: 2 } },
+      { rows: [{ id: "failed-row", status: "failed" }] },
+      { partial: undefined },
+    ]) {
+      const invalid = [
+        ...parts.slice(0, 7),
+        { ...parts[7], report: { ...parts[7].report, ...change } },
+      ];
+      assert.throws(() => assertCandidateReports(invalid, "commit"));
+    }
+    assert.throws(() =>
+      assertCandidateReports(
+        [...parts, { ...parts[0], attempt: 2, report: { ...parts[0].report, status: "failed" } }],
+        "commit",
+      ),
+    );
+    assert.throws(() =>
+      assertCandidateReports(
+        parts.map((part) =>
+          part.kind === "source"
+            ? { ...part, report: { ...part.report, rows: [{ id: "duplicate", status: "passed" }] } }
+            : part,
+        ),
+        "commit",
+      ),
+    );
+  });
+
+  it("rifiuta qualifiche su una base superata", () => {
+    const sha = "a".repeat(40);
+    assert.doesNotThrow(() => assertBase(sha, sha));
+    assert.throws(() => assertBase(sha, "b".repeat(40)), /base/u);
+    assert.throws(() => assertBase("", ""), /base/u);
+  });
+
+  it("non chiude un ciclo con browser parziali o un tag di un altro commit", () => {
+    const report = {
+      status: "passed",
+      partial: false,
+      dirty: false,
+      sha: "commit",
+      environment: "test",
+      baseURL: "https://test.fiscalbay.it",
+      counts: { passed: 1 },
+    };
+    assert.doesNotThrow(() => assertRemoteEvidence(report, "commit", "test"));
+    for (const change of [
+      { partial: true },
+      { dirty: true },
+      { sha: "other" },
+      { counts: { passed: 0 } },
+      { environment: "local" },
+    ])
+      assert.throws(() => assertRemoteEvidence({ ...report, ...change }, "commit", "test"));
+    const release = {
+      tagName: "v2.0.0",
+      isDraft: false,
+      url: "https://github.com/example/repo/releases/tag/v2.0.0",
+    };
+    assert.doesNotThrow(() => assertPublishedRelease(release, "commit", "commit", "2.0.0"));
+    assert.throws(() => assertPublishedRelease(release, "other", "commit", "2.0.0"));
+    assert.throws(() =>
+      assertPublishedRelease({ ...release, isDraft: true }, "commit", "commit", "2.0.0"),
+    );
+  });
+
+  it("misura una sola volta job paralleli e distingue la pausa fra tentativi", () => {
+    const at = (seconds) => new Date(seconds * 1000).toISOString();
+    const run = { created_at: at(0), updated_at: at(100), run_attempt: 2 };
+    const jobs = [
+      { conclusion: "success", started_at: at(5), completed_at: at(25) },
+      { conclusion: "success", started_at: at(10), completed_at: at(30) },
+      { conclusion: "success", started_at: at(80), completed_at: at(95) },
+      { conclusion: "skipped", started_at: at(0), completed_at: at(100) },
+      { conclusion: "success", started_at: at(90), completed_at: at(85) },
+    ];
+    assert.deepEqual(runTimings(run, jobs), {
+      attempts: 2,
+      elapsedSeconds: 100,
+      activeSeconds: 40,
+      waitingSeconds: 60,
+    });
+  });
+
+  it("richiede il deploy quando pertinente e rifiuta una ricevuta parziale o diversa", () => {
+    const gate = { name: "Node 26", conclusion: "success" };
+    const deploy = { name: "Deploy test", conclusion: "skipped" };
+    assert.equal(checkCycleJobs([gate, deploy], false), false);
+    assert.throws(() => checkCycleJobs([gate, deploy], true));
+    assert.equal(checkCycleJobs([gate, { ...deploy, conclusion: "success" }], true), true);
+    assert.throws(() => checkCycleJobs([{ ...gate, conclusion: "failure" }], false));
+    const receipt = {
+      sha: "commit",
+      environment: "test",
+      deployed: true,
+      readback: true,
+      digest: "digest",
+      version: "version",
+    };
+    assert.doesNotThrow(() => assertCycleReceipt(receipt, "commit", "test"));
+    for (const change of [
+      { sha: "other" },
+      { environment: "production" },
+      { readback: false },
+      { rolledBack: true },
+      { deployed: false },
+    ])
+      assert.throws(() => assertCycleReceipt({ ...receipt, ...change }, "commit", "test"));
+  });
+
+  it("riusa una qualifica completa anche dopo un errore del deploy, mai un artefatto grezzo", () => {
+    const artifact = { expired: false, workflow_run: { repository_id: 1, head_repository_id: 1 } };
+    const run = { path: ".github/workflows/publish.yml", conclusion: "failure" };
+    const job = { name: "Qualifica candidato / Candidate qualified", conclusion: "success" };
+    assert.equal(verifiedBuildOrigin(artifact, run, [job], 1, "candidate"), true);
+    for (const conclusion of ["failure", "cancelled", "skipped", "in_progress"])
+      assert.equal(
+        verifiedBuildOrigin(artifact, run, [{ ...job, conclusion }], 1, "candidate"),
+        false,
+      );
+    assert.equal(
+      verifiedBuildOrigin(artifact, run, [{ ...job, name: "production" }], 1, "candidate"),
+      false,
+    );
+    assert.equal(
+      verifiedBuildOrigin({ ...artifact, expired: true }, run, [job], 1, "candidate"),
+      false,
+    );
+    assert.equal(
+      verifiedBuildOrigin(
+        { ...artifact, workflow_run: { repository_id: 1, head_repository_id: 2 } },
+        run,
+        [job],
+        1,
+        "candidate",
+      ),
+      false,
+    );
+    assert.equal(
+      verifiedBuildOrigin(
+        artifact,
+        { ...run, path: ".github/workflows/ci.yml" },
+        [job],
+        1,
+        "candidate",
+      ),
+      false,
+    );
+    assert.equal(
+      verifiedBuildOrigin(
+        artifact,
+        { path: ".github/workflows/ci.yml", conclusion: "success" },
+        [],
+        1,
+      ),
+      true,
+    );
   });
 });
 
