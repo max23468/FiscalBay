@@ -18,11 +18,7 @@ import {
   readFulfillmentOrders,
 } from "../integrations/ebay/fulfillment.server";
 import { readItemImage, readTradingTaxIdentifiers } from "../integrations/ebay/trading.server";
-import {
-  openToken,
-  rejectCredentials,
-  UnreadableToken,
-} from "../integrations/ebay/seller-credentials.server";
+import { openToken, rejectCredentials } from "../integrations/ebay/seller-credentials.server";
 
 /**
  * Acquisizione degli ordini di un negozio, condivisa da collegamento e lavoro periodico:
@@ -575,8 +571,7 @@ export async function storeAccess(
         store.access_token,
       ),
     };
-  } catch (error) {
-    if (!(error instanceof UnreadableToken)) throw error;
+  } catch {
     await rejectCredentials(environment.DB, store.store_id, store.granted_at, now);
     throw new UpstreamError("credentials");
   }

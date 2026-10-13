@@ -87,30 +87,23 @@ export async function sealToken(
 }
 
 /**
- * Token salvato che non si apre con il segreto corrente, per esempio dopo una rotazione di
- * `BETTER_AUTH_SECRET`: il consenso non è più utilizzabile e il negozio va ricollegato.
+ * Decifra un token salvato. Fallisce soltanto per un token che non si apre con il segreto
+ * corrente (formato, cifratura o segreto diversi, per esempio dopo una rotazione di
+ * `BETTER_AUTH_SECRET`): il consenso non è più utilizzabile e il negozio va ricollegato.
  */
-export class UnreadableToken extends Error {}
-
 export async function openToken(
   secret: string,
   storeId: string,
   kind: TokenKind,
   value: string,
 ): Promise<string> {
-  if (!value.startsWith(sealedPrefix)) throw new UnreadableToken("unsupported_token_format");
-  const key = await tokenKey(secret);
-  let plain: ArrayBuffer;
-  try {
-    const bytes = fromBase64Url(value.slice(sealedPrefix.length));
-    plain = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: bytes.subarray(0, 12), additionalData: boundTo(storeId, kind) },
-      key,
-      bytes.subarray(12),
-    );
-  } catch {
-    throw new UnreadableToken("unreadable_token");
-  }
+  if (!value.startsWith(sealedPrefix)) throw new Error("unsupported_token_format");
+  const bytes = fromBase64Url(value.slice(sealedPrefix.length));
+  const plain = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: bytes.subarray(0, 12), additionalData: boundTo(storeId, kind) },
+    await tokenKey(secret),
+    bytes.subarray(12),
+  );
   return new TextDecoder().decode(plain);
 }
 
@@ -209,9 +202,8 @@ export async function refreshStoreToken(input: {
       "refresh",
       row.refresh_token,
     );
-  } catch (error) {
-    if (error instanceof UnreadableToken) return reject();
-    throw error;
+  } catch {
+    return reject();
   }
   let token: z.infer<typeof refreshSchema>;
   try {

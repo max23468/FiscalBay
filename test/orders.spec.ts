@@ -72,7 +72,6 @@ import {
   refreshExpiringTokens,
   refreshStoreToken,
   sealToken,
-  UnreadableToken,
 } from "../app/integrations/ebay/seller-credentials.server";
 import { UpstreamError, upstreamJson, upstreamText } from "../app/integrations/http.server";
 import {
@@ -3176,10 +3175,10 @@ describe("rinnovo dei token del negozio", () => {
       openToken(env.BETTER_AUTH_SECRET, "negozio", "access", value.slice(3)),
     ).rejects.toThrow("unsupported_token_format");
     // Formato, cifratura o segreto non validi sono lo stesso caso: il consenso non si usa più.
-    for (const unreadable of [value.slice(3), `${value}x`, "v1.!"])
+    for (const unreadable of [`${value}x`, "v1.!"])
       await expect(
         openToken(env.BETTER_AUTH_SECRET, "negozio", "access", unreadable),
-      ).rejects.toBeInstanceOf(UnreadableToken);
+      ).rejects.toThrow();
   });
 
   it("non rinnova senza credenziali né con una risposta senza token", async () => {
@@ -5631,6 +5630,37 @@ describe("client eBay e normalizzazione", () => {
         ).rejects.toMatchObject({ failure: "unavailable" });
         expect(await runs()).toEqual([]);
         expect(await state()).toMatchObject({ requested_at: minutes(0).toISOString() });
+      });
+
+      it("una lettura fallita serve la richiesta e un'attesa nota ferma l'acquisizione", async () => {
+        expect(await request(minutes(0))).toBe("queued");
+        const rejected = ebay({ fail: () => new Response(null, { status: 401 }) });
+        const read = (fetcher: typeof fetch, at: Date) =>
+          acquireOrders({
+            db: env.DB,
+            storeId: "s-a",
+            grantedAt,
+            access: access(fetcher),
+            now: at,
+            budget: { calls: 12, pages: 3 },
+          });
+        await expect(read(rejected, minutes(1))).rejects.toMatchObject({ failure: "credentials" });
+        expect(await state()).toMatchObject({ requested_at: null });
+        expect(await runs()).toEqual([
+          { started_at: minutes(1).toISOString(), ok: 0, new_orders: 0 },
+        ]);
+
+        await env.DB.prepare(
+          "INSERT INTO ebay_rate_limits (api_origin, until) VALUES ('https://api.ebay.com', ?)",
+        )
+          .bind(minutes(7).toISOString())
+          .run();
+        const fetcher = ebay();
+        await expect(read(fetcher, minutes(2))).rejects.toMatchObject({
+          failure: "rate_limited",
+          details: { retryAfter: 300 },
+        });
+        expect(fetcher).not.toHaveBeenCalled();
       });
 
       it("dopo una lettura non riuscita l'arretrato attende la cadenza del piano", async () => {
