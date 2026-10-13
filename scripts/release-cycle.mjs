@@ -560,7 +560,7 @@ async function main() {
     if (command === "pr") {
       if (!/^\d+$/u.test(number ?? "")) throw new Error("Numero PR non valido.");
       const fields =
-        "state,isDraft,headRefName,headRefOid,baseRefName,baseRefOid,mergeCommit,headRepository";
+        "state,isDraft,autoMergeRequest,headRefName,headRefOid,baseRefName,baseRefOid,mergeCommit,headRepository";
       let pr = json("pr", "view", number, "--repo", repository, "--json", fields);
       if (pr.baseRefName !== "develop" || pr.headRepository?.nameWithOwner !== repository)
         throw new Error(
@@ -571,7 +571,8 @@ async function main() {
       if (pr.state === "CLOSED") throw new Error("PR chiusa senza merge.");
       if (pr.state === "OPEN") {
         // Solo la qualifica finale viene coordinata; il lavoro in bozza resta indipendente.
-        gh("pr", "merge", number, "--disable-auto", "--repo", repository);
+        if (pr.autoMergeRequest)
+          gh("pr", "merge", number, "--disable-auto", "--repo", repository);
         if (!pr.isDraft) gh("pr", "ready", number, "--undo", "--repo", repository);
         const base = gh("api", `repos/${repository}/git/ref/heads/develop`, "--jq", ".object.sha");
         git("fetch", "origin", "develop", pr.headRefName);
