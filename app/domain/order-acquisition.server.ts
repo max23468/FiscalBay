@@ -18,7 +18,7 @@ import {
   readFulfillmentOrders,
 } from "../integrations/ebay/fulfillment.server";
 import { readItemImage, readTradingTaxIdentifiers } from "../integrations/ebay/trading.server";
-import { openToken } from "../integrations/ebay/seller-credentials.server";
+import { openToken, rejectCredentials } from "../integrations/ebay/seller-credentials.server";
 
 /**
  * Acquisizione degli ordini di un negozio, condivisa da collegamento e lavoro periodico:
@@ -548,22 +548,33 @@ export type ActiveStore = {
   ebay_environment: EbayEnvironment;
 };
 
-/** Accesso seller di un negozio attivo, con il token di accesso decifrato. */
+/**
+ * Accesso seller di un negozio attivo, con il token di accesso decifrato. Un token che non si
+ * apre più chiude il consenso, come un rifiuto di eBay: il negozio va ricollegato e il lavoro
+ * periodico non lo ritenta a ogni turno.
+ */
 export async function storeAccess(
   environment: Env,
   store: ActiveStore,
   fetcher: typeof fetch,
+  now: Date,
 ): Promise<EbayAccess> {
-  return {
-    fetcher,
-    configuration: ebayConfiguration(environment, store.ebay_environment),
-    accessToken: await openToken(
-      environment.BETTER_AUTH_SECRET,
-      store.store_id,
-      "access",
-      store.access_token,
-    ),
-  };
+  const configuration = ebayConfiguration(environment, store.ebay_environment);
+  try {
+    return {
+      fetcher,
+      configuration,
+      accessToken: await openToken(
+        environment.BETTER_AUTH_SECRET,
+        store.store_id,
+        "access",
+        store.access_token,
+      ),
+    };
+  } catch {
+    await rejectCredentials(environment.DB, store.store_id, store.granted_at, now);
+    throw new UpstreamError("credentials");
+  }
 }
 
 /**
@@ -596,7 +607,7 @@ export async function consumeOrderConfirmation(
     db: environment.DB,
     storeId: store.store_id,
     grantedAt: store.granted_at,
-    access: await storeAccess(environment, store, fetcher),
+    access: await storeAccess(environment, store, fetcher, now),
     now,
     // Stryker disable next-line ObjectLiteral: questo percorso usa al massimo 11 chiamate e nessuna pagina; rimuovere il budget non cambia l'esito di un singolo ordine.
     budget: { calls: 12, pages: 0 },

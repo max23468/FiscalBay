@@ -326,7 +326,7 @@ export async function consumeStoreSync(
         db: environment.DB,
         storeId: store.store_id,
         grantedAt: store.granted_at,
-        access: await storeAccess(environment, store, fetcher),
+        access: await storeAccess(environment, store, fetcher, now),
         now,
         budget: { ...storeBudget },
       });

@@ -86,6 +86,11 @@ export async function sealToken(
   return sealedPrefix + base64Url(bytes);
 }
 
+/**
+ * Decifra un token salvato. Fallisce soltanto per un token che non si apre con il segreto
+ * corrente (formato, cifratura o segreto diversi, per esempio dopo una rotazione di
+ * `BETTER_AUTH_SECRET`): il consenso non è più utilizzabile e il negozio va ricollegato.
+ */
 export async function openToken(
   secret: string,
   storeId: string,
@@ -100,6 +105,26 @@ export async function openToken(
     bytes.subarray(12),
   );
   return new TextDecoder().decode(plain);
+}
+
+/**
+ * Segna come rifiutato il consenso con cui è partita l'operazione: il negozio chiede di essere
+ * ricollegato e il lavoro periodico smette di usarlo. Un consenso già sostituito non cambia.
+ */
+export async function rejectCredentials(
+  db: D1Database,
+  storeId: string,
+  grantedAt: string,
+  now: Date,
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `UPDATE ebay_store_credentials SET rejected_at = ?
+        WHERE store_id = ? AND granted_at = ? AND rejected_at IS NULL`,
+    )
+    .bind(now.toISOString(), storeId, grantedAt)
+    .run();
+  return result.meta.changes === 1;
 }
 
 /** Registra un nuovo consenso: sostituisce i token precedenti e annulla un rifiuto registrato. */
@@ -163,23 +188,23 @@ export async function refreshStoreToken(input: {
   if (!row) return "missing";
   const configuration = ebayConfiguration(environment, row.ebay_environment);
 
-  const reject = async (): Promise<RefreshOutcome> => {
-    const result = await environment.DB.prepare(
-      `UPDATE ebay_store_credentials SET rejected_at = ?
-        WHERE store_id = ? AND granted_at = ? AND rejected_at IS NULL`,
-    )
-      .bind(now.toISOString(), storeId, row.granted_at)
-      .run();
-    return result.meta.changes === 1 ? "rejected" : "superseded";
-  };
+  const reject = async (): Promise<RefreshOutcome> =>
+    (await rejectCredentials(environment.DB, storeId, row.granted_at, now))
+      ? "rejected"
+      : "superseded";
   if (row.refresh_expires_at <= now.toISOString()) return reject();
 
-  const refreshToken = await openToken(
-    environment.BETTER_AUTH_SECRET,
-    storeId,
-    "refresh",
-    row.refresh_token,
-  );
+  let refreshToken: string;
+  try {
+    refreshToken = await openToken(
+      environment.BETTER_AUTH_SECRET,
+      storeId,
+      "refresh",
+      row.refresh_token,
+    );
+  } catch {
+    return reject();
+  }
   let token: z.infer<typeof refreshSchema>;
   try {
     token = await upstreamJson(input.fetcher, configuration.tokenUrl, refreshSchema, {
