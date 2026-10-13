@@ -1,8 +1,8 @@
 {
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "testRunner": "vitest",
-  "plugins_comment": "pnpm isola i pacchetti: il runner non si trova con la ricerca predefinita di Stryker.",
-  "plugins": ["./node_modules/@stryker-mutator/vitest-runner/dist/src/index.js"],
+  "plugins_comment": "Il pool Cloudflare usa il fallback nativo Stryker per ricreare l'ambiente dei mutanti statici.",
+  "plugins": ["./scripts/mutation-vitest.mjs"],
   "vitest": { "configFile": "vitest.cloudflare.config.ts" },
   "tsconfigFile_comment": "TypeScript 7 non espone l'API usata per riscrivere il tsconfig nella sandbox; i percorsi del progetto restano interni.",
   "tsconfigFile": "tsconfig.none.json",

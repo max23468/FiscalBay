@@ -18,8 +18,13 @@ import {
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { availableParallelism } from "node:os";
+import { availableParallelism, totalmem } from "node:os";
 import { importPattern, resolveImport } from "./verify-repo.mjs";
+
+export function mutationConcurrency(configured, cpu = availableParallelism(), memory = totalmem()) {
+  // Vitest e workerd convivono nello stesso runner: riservare 4 GiB per processo.
+  return Math.max(1, Math.min(configured, cpu, Math.floor(memory / (4 * 1024 ** 3))));
+}
 
 const accepted = new Set(["Killed", "Ignored"]);
 
@@ -182,6 +187,7 @@ export function identity(
     process.env.ImageOS,
     process.env.ImageVersion,
     availableParallelism(),
+    mutationConcurrency(Number.MAX_SAFE_INTEGER),
   ]),
 ) {
   const source = files.find(({ path: file }) => file === target)?.text;
@@ -317,9 +323,8 @@ async function runTarget(target, files) {
   rmSync(`${dir}/receipt.json`, { force: true });
   const config = {
     ...JSON.parse(readFileSync("stryker.config.json", "utf8")),
-    concurrency: Math.min(
+    concurrency: mutationConcurrency(
       JSON.parse(readFileSync("stryker.config.json", "utf8")).concurrency,
-      availableParallelism(),
     ),
     mutate: [target],
     incremental,

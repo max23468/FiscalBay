@@ -16,4 +16,11 @@ if (
 )
   throw new Error("Selezione dei test mutation assente o non valida.");
 
-export default { ...base, test: { ...base.test, include: files } };
+export default {
+  ...base,
+  test: {
+    ...base.test,
+    include: files,
+    fileParallelism: false,
+  },
+};
