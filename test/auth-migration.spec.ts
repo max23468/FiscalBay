@@ -145,7 +145,9 @@ it("conserva il rifiuto POST da origine estranea e del collegamento senza sessio
 });
 
 it("mantiene lo schema D1 allineato ai quattro metodi Auth", async () => {
-  const migration = await getMigrations(createAuthOptions(env));
+  const options = createAuthOptions(env);
+  expect(options.appName).toBe("FiscalBay");
+  const migration = await getMigrations(options);
   expect(migration.toBeCreated).toEqual([]);
   expect(migration.toBeAdded).toEqual([]);
   expect(migration.toBeAddedIndexes).toEqual([]);
