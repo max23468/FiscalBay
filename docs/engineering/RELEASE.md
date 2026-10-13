@@ -58,13 +58,14 @@ Il comando si esegue soltanto nel mandato corrispondente. `status` è in lettura
 pnpm release:cycle status <run>
 pnpm release:cycle pr <numero>
 pnpm release:cycle candidate --sha <sha-completo-su-main>
+pnpm release:cycle candidate --ref develop --sha <sha-completo-su-develop>
 pnpm release:cycle production --sha <sha-completo-su-main> --version <versione>
 pnpm release:cycle resume <run>
 ```
 
 `pr` gestisce una PR dello stesso repository verso `develop`: sospende il merge durante l'aggiornamento della base mediante merge, attende la nuova qualifica della revisione pronta, attiva automerge e segue il commit integrato. La CI rifiuta una base già superata prima dei job costosi e la rilegge prima di `Node 26`. Dopo il deploy, il comando verifica ricevuta e report remoti e rilegge il provider da un worktree temporaneo dello stesso commit e artefatto. Un deploy non richiesto dal diff non viene inventato. Una PR già integrata si riconcilia senza ripetere il merge.
 
-`candidate` avvia la prova sullo SHA corrente di `main`; `production` avvia il rilascio dello stesso candidato solo con i gate Production già richiesti. Una run già attiva o fallita indirizza alla ripresa, senza un nuovo dispatch; una prova riuscita può precedere il rilascio reale. `resume` rilegge branch e run, attende quella attiva o ripete soltanto i job falliti della run originale, conservandone gli input e le ricevute. Il provider viene confermato di nuovo dopo il successo; per Production si confrontano anche tag immutabile e release.
+`candidate` avvia la prova sullo SHA corrente di `main`, oppure di `develop` con `--ref develop`, senza promozione. `production` ammette soltanto `main` e avvia il rilascio dello stesso candidato solo con i gate Production già richiesti. Una run già attiva o fallita indirizza alla ripresa, senza un nuovo dispatch; una prova riuscita può precedere il rilascio reale. `resume` rilegge branch e run, attende quella attiva o ripete soltanto i job falliti della run originale, conservandone gli input e le ricevute. Il provider viene confermato di nuovo dopo un deploy riuscito; per Production si confrontano anche tag immutabile e release.
 
 La pulizia confronta gli SHA e ricostruisce con `git merge-tree` il tree completo atteso della PR squash: differenze anche di soli spazi, conflitti o nuovi commit impediscono l'eliminazione. Usa una lease sul branch remoto e preserva i riferimenti protetti. Riallinea la base con fast-forward, esamina anche branch temporanei precedenti, conserva lavoro diverso o branch usati da altri worktree e dichiara i residui. Stash e worktree non creati dal comando restano nell'inventario: il comando non ne presume ownership né assenza di processi o dati ignorati da conservare. Il worktree creato soltanto per il readback viene rimosso alla fine.
 
@@ -155,7 +156,7 @@ La qualifica del 12 ottobre 2026 ha rilevato nel grafico CPU nativo il marcatore
 
 Il workflow `Pubblica` accetta il commit completo su `main` e la versione presente in `CHANGELOG.md`. `scripts/release.mjs readiness` e i passi Production leggono dal Master Plan i [gate commerciale, ripristino e operativita](../MASTER_PLAN.md#pubblicazione-production): tutti devono essere `COMPLETATO`, ciascuno con prova, senza righe mancanti o duplicate. Restano richiesti i [checkpoint owner](../MASTER_PLAN.md#s00), la variabile `PRODUCTION_PUBLISH_ENABLED` e il via dell'environment Production. Nessuno di questi prerequisiti viene compilato o attivato dall'implementazione del workflow.
 
-Con `prova` attivo il workflow esegue soltanto la qualifica del candidato su `main`: gate completo o riuso dell'artefatto, catalogo completo in Chromium e WebKit, mutation, build Production e collaudo locale. Salta i checkpoint e, senza versione, il changelog; il job che distribuisce non parte e l'environment Production non viene usato. Serve a scoprire i difetti del workflow prima del via di M9.
+Con `prova` attivo il workflow esegue soltanto la qualifica del candidato su `main` o `develop`: gate completo o riuso dell'artefatto, catalogo completo in Chromium e WebKit, mutation, build Production e collaudo locale. Salta i checkpoint e, senza versione, il changelog; il job che distribuisce non parte e l'environment Production non viene usato. La prova su `develop` non promuove il branch e serve a scoprire i difetti del workflow prima del via di M9.
 
 La configurazione dell'environment richiede `CLOUDFLARE_ACCOUNT_ID`, `PRODUCTION_PUBLISH_ENABLED` e `OWNER_APPROVED_SHA` uguale al candidato autorizzato, oltre al segreto `CLOUDFLARE_API_TOKEN` e ai segreti runtime dichiarati come `secret` in `cloudflare.config.ts`. La CLI e il workflow non impostano questi valori né compilano automaticamente i checkpoint. Nel workflow CI il test usa `TEST_DEPLOY_ENABLED` e il segreto già previsto per l'account di collaudo.
 

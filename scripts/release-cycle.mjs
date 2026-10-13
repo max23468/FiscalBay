@@ -38,6 +38,12 @@ export function assertBase(expected, current) {
     throw new Error("La base della PR è avanzata: aggiornarla prima della qualifica finale.");
 }
 
+export function candidateRef(command, ref = "main") {
+  if (ref !== "main" && !(command === "candidate" && ref === "develop"))
+    throw new Error("Production richiede main; la sola prova ammette anche develop.");
+  return ref;
+}
+
 /** Tempo con almeno un job attivo, distinto da attese e intervalli fra tentativi. */
 export function runTimings(run, jobs, now = Date.now()) {
   const start = Date.parse(run.created_at);
@@ -461,6 +467,7 @@ async function main() {
     allowPositionals: true,
     options: {
       sha: { type: "string" },
+      ref: { type: "string" },
       version: { type: "string" },
       "reviewed-migrations": { type: "string", default: "" },
     },
@@ -614,9 +621,10 @@ async function main() {
       return;
     }
     if (!/^[0-9a-f]{40}$/u.test(values.sha ?? "")) throw new Error("SHA completo richiesto.");
+    const ref = candidateRef(command, values.ref);
     assertBase(
       values.sha,
-      gh("api", `repos/${repository}/git/ref/heads/main`, "--jq", ".object.sha"),
+      gh("api", `repos/${repository}/git/ref/heads/${ref}`, "--jq", ".object.sha"),
     );
     if (command === "production" && !values.version)
       throw new Error("Versione Production richiesta.");
@@ -628,7 +636,7 @@ async function main() {
       "--workflow",
       "publish.yml",
       "--branch",
-      "main",
+      ref,
       "--limit",
       "50",
       "--json",
@@ -671,7 +679,7 @@ async function main() {
       "--repo",
       repository,
       "--ref",
-      "main",
+      ref,
       "-f",
       `expected_sha=${values.sha}`,
       "-f",
@@ -685,7 +693,7 @@ async function main() {
       repository,
       "publish.yml",
       values.sha,
-      "main",
+      ref,
       ["workflow_dispatch"],
       since,
     );
