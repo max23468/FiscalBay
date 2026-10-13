@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -22,6 +22,46 @@ export function shardTests(listing, current, total) {
   return tests.filter((_, index) => index % total === current - 1);
 }
 
+export function assertCandidateReports(parts, sha) {
+  for (const kind of ["source", "production"]) {
+    const ids = new Set();
+    for (let shard = 1; shard <= 4; shard++) {
+      const part = parts
+        .filter((part) => part.kind === kind && part.shard === shard)
+        .sort((a, b) => b.attempt - a.attempt)[0];
+      const report = part?.report;
+      if (
+        !report ||
+        report.sha !== sha ||
+        report.status !== "passed" ||
+        report.partial !== false ||
+        report.dirty !== false ||
+        report.baseURL !== "locale" ||
+        report.environment !== (kind === "source" ? "local" : "production") ||
+        !(report.counts?.passed > 0) ||
+        !report.rows?.length
+      )
+        throw new Error(`Qualifica browser incompleta o diversa: ${kind} ${shard}.`);
+      for (const row of report.rows) {
+        if (!row.id || ids.has(row.id))
+          throw new Error("Partizione browser duplicata o priva di identità.");
+        if (
+          row.status !== "passed" &&
+          !(row.status === "skipped" && row.reason?.startsWith("Non applicabile:"))
+        )
+          throw new Error("Partizione con prove fallite o esclusioni non motivate.");
+        ids.add(row.id);
+      }
+      if (
+        report.counts.passed !== report.rows.filter((row) => row.status === "passed").length ||
+        (report.counts.skipped ?? 0) !==
+          report.rows.filter((row) => row.status === "skipped").length
+      )
+        throw new Error("Conteggi del collaudo incoerenti con le prove.");
+    }
+  }
+}
+
 function main() {
   const { values } = parseArgs({
     options: {
@@ -29,8 +69,31 @@ function main() {
       browsers: { type: "string", default: "chromium" },
       pages: { type: "boolean", default: false },
       shard: { type: "string" },
+      "check-evidence": { type: "string" },
     },
   });
+  if (values["check-evidence"]) {
+    const directory = values["check-evidence"];
+    const parts = readdirSync(directory, { recursive: true }).flatMap((file) => {
+      const match = file.match(
+        /candidate-browser-\d+-(\d+)-(source|production)-(\d+)\/browser\/\2-\3\.json$/u,
+      );
+      return match
+        ? [
+            {
+              attempt: Number(match[1]),
+              kind: match[2],
+              shard: Number(match[3]),
+              report: JSON.parse(readFileSync(path.join(directory, file), "utf8")),
+            },
+          ]
+        : [];
+    });
+    const sha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    assertCandidateReports(parts, sha);
+    console.log("Qualifica completa: otto partizioni browser coerenti, senza prove parziali.");
+    return;
+  }
   const browsers = values.browsers.split(",");
   if (browsers.some((browser) => !["chromium", "webkit"].includes(browser)))
     throw new Error("Browser non supportato.");

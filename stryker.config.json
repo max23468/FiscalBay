@@ -8,5 +8,5 @@
   "tsconfigFile": "tsconfig.none.json",
   "ignorePatterns": ["/.cloudflare", "/.wrangler", "/build", "/test-results", "/reports"],
   "reporters": ["clear-text", "progress", "json"],
-  "concurrency": 2
+  "concurrency": 4
 }

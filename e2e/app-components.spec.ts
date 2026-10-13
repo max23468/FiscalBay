@@ -1208,7 +1208,10 @@ for (const locale of ["it", "en"] as const) {
         await page
           .getByRole("tab", { name: locale === "it" ? "Articoli (3)" : "Items (3)", exact: true })
           .click();
-        const items = page.getByRole("tabpanel");
+        const items = page.getByRole("tabpanel", {
+          name: locale === "it" ? "Articoli (3)" : "Items (3)",
+          exact: true,
+        });
         await expect(
           items.getByText(locale === "it" ? "Senza SKU" : "No SKU", { exact: true }),
         ).toBeVisible();
@@ -1725,7 +1728,7 @@ for (const language of ["it", "en"] as const) {
     const it = language === "it";
     await page.goto(it ? "/accesso" : "/en/accesso");
     await page.waitForLoadState("networkidle");
-    const signIn = page.getByRole("tabpanel");
+    const signIn = page.getByRole("tabpanel", { name: it ? "Accedi" : "Sign in", exact: true });
     await signIn.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }).click();
     const email = signIn.getByRole("textbox", { name: "Email" });
     await expect(signIn.locator('label[for="email"] [aria-hidden="true"]')).toHaveText("*");
@@ -1742,7 +1745,10 @@ for (const language of ["it", "en"] as const) {
     await expect(email).not.toHaveAttribute("aria-invalid");
 
     await page.getByRole("tab", { name: it ? "Crea account" : "Create account" }).click();
-    const signUp = page.getByRole("tabpanel");
+    const signUp = page.getByRole("tabpanel", {
+      name: it ? "Crea account" : "Create account",
+      exact: true,
+    });
     const submit = signUp.getByRole("button", {
       name: it ? "Crea account" : "Create account",
       exact: true,

@@ -79,10 +79,10 @@ export function checkFixtures(files) {
   return errors;
 }
 
-const importPattern =
+export const importPattern =
   /(?:^|[\s;])(?:import|export)\s+(?:[\w*{}\s,$]+?\s+from\s+)?["']([^"']+)["']|\bimport\(\s*["']([^"']+)["']\s*\)/gu;
 
-function resolveImport(from, specifier, known) {
+export function resolveImport(from, specifier, known) {
   let target;
   if (specifier.startsWith("~/")) target = `app/${specifier.slice(2)}`;
   else if (specifier.startsWith(".")) target = path.posix.join(path.posix.dirname(from), specifier);

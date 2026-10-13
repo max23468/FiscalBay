@@ -30,7 +30,7 @@ const categories = [
       /^scripts\//u,
       /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|mise\.toml)$/u,
       /^tsconfig(?:\.\w+)?\.json$/u,
-      /^(?:vite|vitest(?:\.(?:unit|cloudflare))?|playwright|react-router|cloudflare)\.config\.ts$/u,
+      /^(?:vite|vitest(?:\.(?:unit|cloudflare|mutation))?|playwright|react-router|cloudflare)\.config\.ts$/u,
       /^(?:components\.json|doctor\.config\.json|stryker\.config\.json)$/u,
       /^(?:\.oxfmtrc\.json|\.gitignore|\.dev\.vars\.example)$/u,
     ],
@@ -40,10 +40,10 @@ const categories = [
 function toolingFile(file) {
   return (
     file.endsWith(".md") ||
-    /^scripts\/(?:verify-(?:copy|docs|repo|pages)|guardrails\.test|classify-changes|release(?:-notes)?|find-(?:build|deployed)|reset-test-account|watch-invocations)\.mjs$/u.test(
+    /^scripts\/(?:verify-(?:copy|docs|repo|pages)|guardrails\.test|classify-changes|release(?:-notes|-cycle)?|find-(?:build|deployed)|reset-test-account|watch-invocations)\.mjs$/u.test(
       file,
     ) ||
-    /^\.github\/(?:dependabot\.yml|workflows\/(?:ci|publish|promotion|mutation|react-doctor|actionlint|pr-title|dependency-review|dependabot-auto-merge)\.yml)$/u.test(
+    /^\.github\/(?:dependabot\.yml|workflows\/(?:ci|publish|qualify|promotion|mutation|react-doctor|actionlint|pr-title|dependency-review|dependabot-auto-merge)\.yml)$/u.test(
       file,
     ) ||
     /^(?:\.oxfmtrc\.json|doctor\.config\.json)$/u.test(file)
@@ -170,6 +170,17 @@ export function plan(files, sources = [], complete = false) {
       : "chromium"
     : "";
   const build = mode === "full" || mode === "targeted" || mode === "unit";
+  const placeholder =
+    complete ||
+    files.length === 0 ||
+    unclassified.length > 0 ||
+    files.some(
+      (file) =>
+        file.startsWith("placeholder/") ||
+        (file.startsWith("scripts/") && !toolingFile(file)) ||
+        /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|mise\.toml|patches\/)/u.test(file),
+    );
+  const live = build && (complete || mode !== "unit");
   const deploy =
     files.length === 0 ||
     unclassified.length > 0 ||
@@ -192,12 +203,14 @@ export function plan(files, sources = [], complete = false) {
     browserGrep,
     browsers,
     build,
+    placeholder,
+    live,
     deploy,
     doctor,
     promotionReuse: !files.some(
       (file) =>
         /^scripts\/(?:classify-changes|release(?:-notes)?|find-build)\.mjs$/u.test(file) ||
-        /^\.github\/workflows\/(?:ci|mutation|publish|promotion)\.yml$/u.test(file),
+        /^\.github\/workflows\/(?:ci|mutation|publish|qualify|promotion)\.yml$/u.test(file),
     ),
     mutation,
     reasons: [
@@ -206,6 +219,7 @@ export function plan(files, sources = [], complete = false) {
       ...routes.map((route) => `consumatore ${route}`),
       `browser ${e2e ? "richiesti dal perimetro applicativo" : "non richiesti"}`,
       `build ${build ? "richiesta dal gate applicativo" : "non richiesta"}`,
+      `build pagina provvisoria ${placeholder ? "richiesta dai suoi input o dal candidato completo" : "input invariati"}`,
       `deploy ${deploy ? "richiesto da runtime, configurazione o perimetro sconosciuto" : "nessun artefatto applicativo modificato"}`,
       ...files
         .filter((file) => !toolingFile(file) && classifyFile(file) !== "test")
@@ -215,7 +229,7 @@ export function plan(files, sources = [], complete = false) {
 }
 
 /** Sequenza del gate condivisa da locale e CI, senza browser o mutation. */
-export function gateCommands({ gate, doctor }) {
+export function gateCommands({ gate, doctor, placeholder, live }) {
   if (gate === "docs")
     return [
       ["node", ["scripts/verify-copy.mjs"]],
@@ -229,8 +243,8 @@ export function gateCommands({ gate, doctor }) {
           "verify:pages",
           "typecheck",
           "test",
-          "build:placeholder",
-          "build:live",
+          ...(placeholder ? ["build:placeholder"] : []),
+          ...(live ? ["build:live"] : []),
           "build",
         ];
   if (doctor) checks.push("doctor:react");
