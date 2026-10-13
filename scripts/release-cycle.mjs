@@ -571,8 +571,7 @@ async function main() {
       if (pr.state === "CLOSED") throw new Error("PR chiusa senza merge.");
       if (pr.state === "OPEN") {
         // Solo la qualifica finale viene coordinata; il lavoro in bozza resta indipendente.
-        if (pr.autoMergeRequest)
-          gh("pr", "merge", number, "--disable-auto", "--repo", repository);
+        if (pr.autoMergeRequest) gh("pr", "merge", number, "--disable-auto", "--repo", repository);
         if (!pr.isDraft) gh("pr", "ready", number, "--undo", "--repo", repository);
         const base = gh("api", `repos/${repository}/git/ref/heads/develop`, "--jq", ".object.sha");
         git("fetch", "origin", "develop", pr.headRefName);
