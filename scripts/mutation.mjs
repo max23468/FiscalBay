@@ -66,9 +66,13 @@ export function mutationInputs(target, files) {
       ambiguous = true;
     }
   }
-  for (const { path: file, text } of files.filter(({ path: file }) =>
-    /^(?:app|workers|test)\/.*\.[cm]?[jt]sx?$/u.test(file),
-  )) {
+  const sources = files.filter(
+    ({ path: file }) =>
+      /^(?:app|workers|test)\/.*\.[cm]?[jt]sx?$/u.test(file) ||
+      /^[^/]+\.config\.[cm]?[jt]s$/u.test(file),
+  );
+  const queued = new Set(sources.map((source) => source.path));
+  for (const { path: file, text } of sources) {
     const imports = new Set();
     // I tipi delle route sono generati e non eseguiti dal runner.
     const source = text.replace(
@@ -106,6 +110,12 @@ export function mutationInputs(target, files) {
       else ambiguous = true;
     }
     graph.set(file, imports);
+    for (const dependency of imports) {
+      if (!queued.has(dependency) && /\.[cm]?[jt]sx?$/u.test(dependency)) {
+        queued.add(dependency);
+        sources.push(known.get(dependency));
+      }
+    }
   }
   const closure = (entry) => {
     const visited = new Set();
@@ -132,6 +142,13 @@ export function mutationInputs(target, files) {
     target,
     ...tests.flatMap((file) => [...closure(file)]),
     ...closure(target),
+    ...files
+      .filter(
+        ({ path: file }) =>
+          (file.startsWith("test/") && !/\.(?:spec|unit)\.ts$/u.test(file)) ||
+          /^[^/]+\.config\.[cm]?[jt]s$/u.test(file),
+      )
+      .flatMap(({ path: file }) => [...closure(file)]),
   ]);
   return {
     files: files.filter(

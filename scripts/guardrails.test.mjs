@@ -1075,6 +1075,37 @@ describe("esito dei mutation test", () => {
     assert.ok(mutationInputs(target, types).files.some((file) => file.path === "app/helper.ts"));
   });
 
+  it("firma anche le dipendenze transitive del setup e dei file di configurazione", () => {
+    const target = "app/domain/grants.server.ts";
+    const files = [
+      { path: target, text: "export const grant=true;" },
+      { path: "test/grants.spec.ts", text: 'import {grant} from "../app/domain/grants.server";' },
+      { path: "test/apply-migrations.ts", text: 'import {seed} from "../app/seed";' },
+      { path: "app/seed.ts", text: 'export {fixture} from "./fixture";' },
+      { path: "app/fixture.ts", text: "export const fixture=true;" },
+      {
+        path: "vitest.unit.config.ts",
+        text: 'import {settings} from "./scripts/test-settings.mjs";',
+      },
+      { path: "scripts/test-settings.mjs", text: 'import {config} from "../app/config";' },
+      { path: "app/config.ts", text: "export const config=true;" },
+    ];
+    const base = identity(target, files, "runtime");
+    for (const path of ["app/seed.ts", "app/fixture.ts", "app/config.ts"]) {
+      assert.ok(mutationInputs(target, files).files.some((file) => file.path === path));
+      assert.notEqual(
+        identity(
+          target,
+          files.map((file) =>
+            file.path === path ? { ...file, text: file.text + " changed" } : file,
+          ),
+          "runtime",
+        ).key,
+        base.key,
+      );
+    }
+  });
+
   it("allinea ID, nomi annidati e filtro del runner a Vitest 5", async () => {
     const runner = import.meta.resolve("@stryker-mutator/vitest-runner");
     const { collectTestName, toRawTestId } = await import(new URL("./test-helpers.js", runner));
