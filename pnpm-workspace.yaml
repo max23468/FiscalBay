@@ -1,3 +1,7 @@
+packages:
+  - .
+  - placeholder
+
 # `workerd` scarica il binario della piattaforma ed `esbuild` i binding nativi:
 # senza approvazione esplicita pnpm interrompe l'installazione.
 allowBuilds:
@@ -22,3 +26,6 @@ patchedDependencies:
   # Backport della PR Stryker #6220, commit 4e7930409c221c99ea25f9ab2c961e4fd8485c9b.
   # Rimuovere quando il runner pubblicato allinea ID e copertura con i nomi di Vitest 5.
   "@stryker-mutator/vitest-runner@10.0.0": patches/@stryker-mutator__vitest-runner@10.0.0.patch
+  # cf beta.14 rifiuta --mode per React Router e confonde i framework dei pacchetti figli
+  # con quello della radice. Rimuovere quando una versione qualificata corregge entrambi.
+  cf@1.0.0-beta.14: patches/cf@1.0.0-beta.14.patch

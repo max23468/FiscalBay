@@ -41,6 +41,8 @@ Mutation Auth usa le prove del confine HTTP in Node, con SQLite reale per i limi
 
 Il deploy test richiede esplicitamente `Verify` e `Node 26` riusciti e una run non cancellata. Gli skip dei job browser e mutation per una build già qualificata non devono propagarsi al deploy tramite il controllo implicito `success()` di GitHub; restano obbligatori evento, branch, abilitazione e classificazione della modifica.
 
+I gate applicativi compilano prima con `pnpm build:live`, poi con `pnpm build`: entrambi gli ambienti devono funzionare e l'artefatto finale resta quello test. La pagina provvisoria già distribuita è separata dalla pipeline dell'app: `pnpm --dir placeholder exec cf build --mode live` ne prepara gli asset e lo script con `cloudflare.config.ts` e il bundler selezionato da `wrangler.config.ts`. Il manifest del pacchetto usa le stesse versioni fissate nella radice. La cartella si rimuove al primo `Pubblica` 2.0; la disponibilità del comando non autorizza un deploy Production.
+
 ## Tutte le pagine
 
 `e2e/page-cases.ts` dichiara route, parametri e ruoli. `pnpm verify:pages` confronta il catalogo con `app/routes.ts`: aggiungere una route senza scenario blocca il gate. I dati dei parametri dinamici e gli stati significativi si aggiungono nel catalogo; non si deducono tutti i possibili ordini o utenti da un crawler.
