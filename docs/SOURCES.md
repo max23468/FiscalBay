@@ -311,6 +311,7 @@ Le pagine OpenAI possono essere reindirizzate alla documentazione ufficiale corr
 - [Limiti D1](https://developers.cloudflare.com/d1/platform/limits/)
 - [D1 read replication e Sessions API](https://developers.cloudflare.com/d1/best-practices/read-replication/)
 - [Limiti e scadenza dei messaggi Queues](https://developers.cloudflare.com/queues/platform/limits/)
+- [Giurisdizione delle Queues](https://developers.cloudflare.com/queues/configuration/data-location/)
 - [Rate Limiting](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
 - [Turnstile, verifica lato server](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/)
 - [Workers Analytics Engine](https://developers.cloudflare.com/analytics/analytics-engine/)
