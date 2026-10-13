@@ -19,7 +19,7 @@ import { assertBrowserEvidence } from "./release-notes.mjs";
 import { verifiedBuildOrigin } from "./find-build.mjs";
 
 const execute = (command, args, options = {}) =>
-  execFileSync(command, args, { encoding: "utf8", ...options }).trim();
+  (execFileSync(command, args, { encoding: "utf8", ...options }) ?? "").trim();
 const git = (...args) => execute("git", args);
 const gh = (...args) => execute("gh", args);
 const json = (...args) => JSON.parse(gh(...args));
