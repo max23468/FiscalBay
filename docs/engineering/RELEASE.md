@@ -75,6 +75,14 @@ Prima della migration si ricontrolla il candidato remoto; un artefatto diverso d
 
 Il rollback automatico è ammesso soltanto senza nuove migration e con precedente versione identificata, configurazione e migration uguali. Altrimenti resta necessario un forward-fix o una compatibilità qualificata. Prima del rollback si rilegge la versione attuale: uno stato cambiato impedisce di sovrascrivere un altro deploy. Il rollback del codice non ripristina dati.
 
+### Qualifica sul provider test
+
+Le migration della CLI si provano su una D1 temporanea in UE, senza binding del Worker e senza dati dell'app. Si usano copie delle migration reali: un errore SQL deliberato in una copia deve fermare l'applicazione, lasciare registrate solo le migration precedenti e annullare le modifiche della migration fallita. Ripristinare la copia originale, ripetere `cf d1 migrations apply <id> --dir <cartella>` e confrontare il registro con i file; un'ulteriore ripetizione non deve applicare nulla. Eliminare la D1 temporanea e verificarne l'assenza. Questa prova qualifica il percorso CLI e la transazione, senza sostituire il collaudo di una futura migration sui dati applicativi o il recovery dei dati.
+
+Per la ripresa del deploy recuperare l'artefatto originale della CI su un checkout pulito dello stesso tree, poi eseguire `node scripts/release.mjs deploy --environment test`, prima senza ricevuta locale e poi con quella confermata. Identità, versione e deployment ID del provider devono restare invariati: lo script riconcilia il deploy esistente e salva il readback. La prova senza ricevuta non ricostruisce una versione precedente né autorizza automaticamente il rollback. La ripetizione del job `Deploy test` della stessa run copre anche il recupero della ricevuta conservata da GitHub e ripete il collaudo autenticato.
+
+Il rollback usa una ricevuta confermata con `rollbackCompatible: true` e deve terminare col readback della versione precedente. Prima della prova controllare anche che le risorse dei binding non siano state eliminate o ricreate dopo quella versione, in particolare le Queue: uguaglianza della configurazione Git e nomi uguali non rendono di nuovo distribuibili le vecchie versioni. Ripristinare quindi il candidato corrente tramite `deploy` con lo stesso artefatto originale, conservare la nuova ricevuta e ripetere il collaudo remoto. Rileggere branch e provider prima di ogni effetto; un avanzamento concorrente richiede riconciliazione, senza sovrascriverlo con il candidato della prova.
+
 <a id="dashboard-test"></a>
 ## Dashboard tecnica test
 
