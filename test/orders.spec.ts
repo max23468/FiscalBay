@@ -832,6 +832,30 @@ describe("modello ordini", () => {
       .run();
   });
 
+  it("conserva i campi noti e lascia mascherati quelli annidati mai acquisiti", async () => {
+    await recordOrderObservation(env.DB, target(), observation());
+    await recordOrderObservation(
+      env.DB,
+      target(),
+      observation({
+        lastModifiedTime: "2026-09-10T12:00:00Z",
+        buyer: {
+          username: "acquirente",
+          name: null,
+          billingAddress: { addressLine1: null, city: "Trento" },
+          shipTo: { name: null },
+          masked: ["name", "billingAddress.addressLine1", "shipTo.name"],
+        },
+      }),
+    );
+    expect(JSON.parse((await orders())[0]!.buyer_json as string)).toMatchObject({
+      name: "Mario Rossi",
+      billingAddress: { addressLine1: null, city: "Trento" },
+      shipTo: { name: null },
+      masked: ["billingAddress.addressLine1", "shipTo.name"],
+    });
+  });
+
   it("importa ordini multi-articolo in modo idempotente, senza versioni per la sola data", async () => {
     const created = await recordOrderObservation(env.DB, target(), observation());
     expect(created).toMatchObject({ outcome: "created", taxChanges: 0, issue: null });
