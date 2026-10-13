@@ -1,6 +1,10 @@
 name: Pubblica
 
 on:
+  # La prima prova registra il workflow prima della promozione sul branch predefinito.
+  push:
+    branches: [develop]
+    paths: [.github/workflows/publish.yml]
   workflow_dispatch:
     inputs:
       expected_sha:
@@ -51,9 +55,9 @@ jobs:
           node-version: 26.11.1
       - name: Check candidate
         env:
-          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          EXPECTED_SHA: ${{ inputs.expected_sha || github.sha }}
           VERSION: ${{ inputs.version }}
-          PROVA: ${{ inputs.prova }}
+          PROVA: ${{ github.event_name == 'push' || inputs.prova }}
         # La prova qualifica il candidato prima dei checkpoint: salta solo checkpoint e, senza
         # versione, il changelog; il job che distribuisce non parte.
         run: |
@@ -86,14 +90,14 @@ jobs:
     needs: plan
     uses: ./.github/workflows/qualify.yml
     with:
-      expected_sha: ${{ inputs.expected_sha }}
+      expected_sha: ${{ inputs.expected_sha || github.sha }}
       mutation_targets: ${{ needs.plan.outputs.mutation-matrix }}
       source_reuse: ${{ needs.plan.outputs.promotion-reuse == 'true' }}
 
   publish:
     name: Distribuisci e verifica
     needs: qualify
-    if: ${{ !inputs.prova && github.ref == 'refs/heads/main' && !cancelled() && needs.qualify.result == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.prova && github.ref == 'refs/heads/main' && !cancelled() && needs.qualify.result == 'success' }}
     environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 45
