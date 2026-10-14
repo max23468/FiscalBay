@@ -1,5 +1,9 @@
 #!/usr/bin/env node
-/** Coordinamento esplicito del ciclo: status legge; pr/candidate/production hanno effetti. */
+/**
+ * Coordinamento esplicito del ciclo: status legge; pr/cleanup/candidate/production hanno
+ * effetti. Il ciclo di una PR pulisce soltanto il proprio branch; i residui di cicli
+ * precedenti si riconciliano a lotti con cleanup e a ogni Production.
+ */
 import { execFileSync, spawn } from "node:child_process";
 import {
   mkdirSync,
@@ -473,9 +477,9 @@ async function main() {
     },
   });
   const [command, number] = positionals;
-  if (!["status", "pr", "candidate", "production", "resume"].includes(command))
+  if (!["status", "pr", "cleanup", "candidate", "production", "resume"].includes(command))
     throw new Error(
-      "Uso: release:cycle status <run> | pr <numero> | candidate --sha <sha> | production --sha <sha> --version <versione> | resume <run>.",
+      "Uso: release:cycle status <run> | pr <numero> | cleanup | candidate --sha <sha> | production --sha <sha> --version <versione> | resume <run>.",
     );
   const repository = json("repo", "view", "--json", "nameWithOwner").nameWithOwner;
   if (command === "status") {
@@ -501,6 +505,10 @@ async function main() {
   mkdirSync(directory);
   writeFileSync(path.join(directory, "owner.json"), JSON.stringify({ pid: process.pid }));
   try {
+    if (command === "cleanup") {
+      cleanupIntegrated(repository);
+      return;
+    }
     if (command === "resume") {
       if (!/^\d+$/u.test(number ?? "")) throw new Error("Run non valida.");
       let run = json("api", `repos/${repository}/actions/runs/${number}`);
@@ -614,10 +622,7 @@ async function main() {
       if (git("branch", "--show-current") === pr.headRefName && !git("status", "--porcelain"))
         git("merge", "--ff-only", pr.headRefOid);
       cleanup(pr);
-      cleanupIntegrated(repository);
       console.log("Merge, collaudo CI e pulizia del branch riconciliati.");
-      console.log(git("worktree", "list"));
-      console.log(git("for-each-ref", "--format=%(refname:short)", "refs/heads/codex"));
       return;
     }
     if (!/^[0-9a-f]{40}$/u.test(values.sha ?? "")) throw new Error("SHA completo richiesto.");

@@ -4,7 +4,9 @@
  * e fallisce per ogni mutante non ucciso. Timeout ed errori non valgono come
  * successo; un'equivalenza si motiva con un commento `Stryker disable` e resta
  * nel report come ignorata.
- * Uso: node scripts/mutation.mjs <file[:inizio-fine]>...
+ * Gli intervalli di una PR (`file:10-20,40-42`) non producono ricevute riusabili: il
+ * candidato qualifica sempre il modulo intero.
+ * Uso: node scripts/mutation.mjs <file[:inizio-fine[,inizio-fine]...]>...
  */
 import { execFileSync, spawn } from "node:child_process";
 import {
@@ -29,11 +31,12 @@ export function mutationConcurrency(configured, cpu = availableParallelism(), me
 const accepted = new Set(["Killed", "Ignored"]);
 
 /** Mutanti che fanno fallire la prova, dal report JSON di Stryker. */
-export function evaluate(report) {
+export function evaluate(report, ranged = false) {
   const mutants = Object.entries(report.files ?? {}).flatMap(([file, { mutants }]) =>
     mutants.map((mutant) => ({ file, ...mutant })),
   );
-  if (mutants.length === 0) return ["nessun mutante generato"];
+  // Righe cambiate senza codice mutabile (commenti, tipi) non hanno mutanti da uccidere.
+  if (mutants.length === 0) return ranged ? [] : ["nessun mutante generato"];
   return mutants
     .filter(
       ({ status, statusReason }) =>
@@ -304,12 +307,22 @@ function findVerified(expected) {
     );
 }
 
+/** Modulo e voci `mutate` di Stryker per un bersaglio intero o a intervalli. */
+export function parseTarget(target) {
+  const [file, lines] = target.split(":");
+  return {
+    file,
+    ranged: lines !== undefined,
+    mutate: lines === undefined ? [file] : lines.split(",").map((range) => `${file}:${range}`),
+  };
+}
+
 async function runTarget(target, files) {
-  const file = target.split(":")[0];
+  const { file, ranged, mutate } = parseTarget(target);
   const expected = identity(file, files);
   const dir = directory(file);
   mkdirSync(dir, { recursive: true });
-  const incremental = process.env.MUTATION_INCREMENTAL === "1" && target === file;
+  const incremental = process.env.MUTATION_INCREMENTAL === "1" && !ranged;
   const previous = `${dir}/context.json`;
   if (
     !incremental ||
@@ -326,7 +339,7 @@ async function runTarget(target, files) {
     concurrency: mutationConcurrency(
       JSON.parse(readFileSync("stryker.config.json", "utf8")).concurrency,
     ),
-    mutate: [target],
+    mutate,
     incremental,
     incrementalFile: `${dir}/incremental.json`,
     jsonReporter: { fileName: reportPath },
@@ -364,13 +377,17 @@ async function runTarget(target, files) {
   }
   writeFileSync(`${dir}/stryker.log`, log);
   const report = existsSync(reportPath) ? JSON.parse(readFileSync(reportPath, "utf8")) : undefined;
-  const failures = report ? evaluate(report) : ["report mutation assente"];
+  const failures = report
+    ? evaluate(report, ranged)
+    : ranged && !failure
+      ? []
+      : ["report mutation assente"];
   const mutants = Object.values(report?.files ?? {}).flatMap(({ mutants }) => mutants);
   const counts = {};
   for (const { status } of mutants) counts[status] = (counts[status] ?? 0) + 1;
   const receipt = {
     ...expected,
-    passed: !failure && failures.length === 0 && target === file,
+    passed: !failure && failures.length === 0 && !ranged,
     seconds: Math.round((Date.now() - start) / 1000),
     reused: Number(log.match(/Result:\s*(\d+) of/u)?.[1] ?? 0),
     reportDigest: report ? hash(JSON.stringify(report)) : null,
@@ -395,7 +412,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   }
   const files = inputs();
   if (targets[0].startsWith("--")) {
-    const [command, target] = targets;
+    const [command, requested] = targets;
+    const { file: target, ranged } = parseTarget(requested);
     const expected = identity(target, files);
     const dir = directory(target);
     output({
@@ -403,9 +421,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       "cache-key": expected.key,
       artifact: expected.key,
       directory: dir,
+      reusable: !ranged,
     });
-    if (command === "--find") findVerified(expected);
-    else if (command === "--check") {
+    if (command === "--find") {
+      if (ranged) console.log(`Intervalli di ${target}: nessuna ricevuta del modulo intero.`);
+      else findVerified(expected);
+    } else if (command === "--check") {
       checkReceipt(
         expected,
         JSON.parse(readFileSync(`${dir}/receipt.json`, "utf8")),

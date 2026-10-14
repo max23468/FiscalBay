@@ -7,10 +7,17 @@ import { describe, it } from "node:test";
 import { createHash, randomBytes } from "node:crypto";
 import { budgetKiB } from "./check-bundle-size.mjs";
 import { shardTests, assertCandidateReports } from "./browser-tests.mjs";
-import { classifyFile, plan as changePlan, gateCommands } from "./classify-changes.mjs";
+import {
+  changedLines,
+  classifyFile,
+  plan as changePlan,
+  gateCommands,
+} from "./classify-changes.mjs";
 import { missingPages, missingSections, routePatterns } from "./verify-pages.mjs";
 import {
+  declaredReview,
   migrationPlan,
+  reviewAdded,
   publish,
   productionReadiness,
   assertResume,
@@ -29,6 +36,7 @@ import {
   identity,
   mutationInputs,
   mutationConcurrency,
+  parseTarget,
   verifiedMutationOrigin,
 } from "./mutation.mjs";
 import { verifiedBuildOrigin } from "./find-build.mjs";
@@ -235,7 +243,7 @@ describe("classificazione dei file modificati", () => {
     assert.equal(changePlan(["app/new-module.ts"], files).mode, "full");
   });
 
-  it("limita le mutation ai moduli critici modificati e ai loro consumatori critici", () => {
+  it("limita le mutation ai moduli critici modificati e, nel candidato, ai consumatori critici", () => {
     const files = [
       { path: "app/i18n.ts", text: "" },
       { path: "app/domain/stores.server.ts", text: 'import { t } from "../i18n";' },
@@ -245,10 +253,45 @@ describe("classificazione dei file modificati", () => {
       },
     ];
     assert.deepEqual(changePlan(["app/i18n.ts"], files).mutation, []);
-    assert.deepEqual(changePlan(["app/domain/stores.server.ts"], files).mutation.sort(), [
+    assert.deepEqual(changePlan(["app/domain/stores.server.ts"], files).mutation, [
+      "app/domain/stores.server.ts",
+    ]);
+    assert.deepEqual(changePlan(["app/domain/stores.server.ts"], files, true).mutation.sort(), [
       "app/auth.server.ts",
       "app/domain/stores.server.ts",
     ]);
+  });
+
+  it("muta nelle PR le sole righe cambiate e nel candidato il modulo intero", () => {
+    const file = "app/domain/stores.server.ts";
+    assert.deepEqual(
+      changePlan([file], [], false, {
+        [file]: [
+          [3, 5],
+          [10, 12],
+        ],
+      }).mutation,
+      [`${file}:3-5,10-12`],
+    );
+    assert.deepEqual(changePlan([file], [], false, { [file]: [] }).mutation, []);
+    assert.deepEqual(changePlan([file], [], true, { [file]: [[3, 5]] }).mutation, [file]);
+  });
+
+  it("ricava le righe cambiate da un diff senza contesto", () => {
+    const diff = [
+      "@@ -10,2 +10,3 @@ a",
+      "@@ -20 +21 @@ b",
+      "@@ -40,3 +41,0 @@ c",
+      "@@ -60,0 +60,1 @@ d",
+    ].join("\n");
+    assert.deepEqual(changedLines(diff), [
+      [10, 12],
+      [21, 21],
+      [41, 42],
+      [60, 60],
+    ]);
+    assert.deepEqual(changedLines("@@ -1,1 +0,0 @@"), [[1, 1]]);
+    assert.deepEqual(changedLines("@@ -5 +5 @@\n@@ -8 +8,2 @@"), [[5, 9]]);
   });
 
   it("ripete mutation Auth quando cambiano le sue prove veloci o il loro runtime", () => {
@@ -680,6 +723,31 @@ describe("pubblicazione riprendibile", () => {
       /approvare/u,
     );
     assert.throws(() => migrationPlan(entries, ["a.sql"], "unapproved", approved), /approvare/u);
+  });
+
+  it("chiede nella PR il digest delle migration non additive aggiunte", () => {
+    const additive = { name: "a.sql", digest: "a", sql: "CREATE TABLE example (id TEXT);" };
+    const unsafe = { name: "b.sql", digest: "b", sql: "UPDATE example SET id = 1;" };
+    assert.equal(reviewAdded([additive], ""), "");
+    let digest;
+    try {
+      reviewAdded([additive, unsafe], "");
+    } catch (error) {
+      assert.match(error.message, /b\.sql/u);
+      digest = error.message.match(/reviewed-migrations: ([0-9a-f]{64})/u)[1];
+    }
+    // Lo stesso digest sblocca il deploy test quando restano pendenti le sole migration della PR.
+    assert.throws(() => migrationPlan([additive, unsafe], []), new RegExp(`Digest ${digest}`, "u"));
+    const body = `Descrizione\n\nreviewed-migrations: ${digest}\n`;
+    assert.equal(declaredReview(body), digest);
+    assert.equal(reviewAdded([additive, unsafe], body), digest);
+    assert.equal(migrationPlan([additive, unsafe], [], declaredReview(body)).pending.length, 2);
+    assert.throws(
+      () => reviewAdded([additive, { ...unsafe, digest: "changed" }], body),
+      /approvare prima del merge/u,
+    );
+    assert.equal(declaredReview(undefined), "");
+    assert.equal(declaredReview(`testo reviewed-migrations: ${digest}`), "");
   });
 
   it("recupera solo la ricevuta non scaduta del tentativo precedente della stessa run", () => {
@@ -1174,8 +1242,23 @@ describe("esito dei mutation test", () => {
     ]);
   });
 
-  it("fallisce se non viene generato alcun mutante", () => {
+  it("fallisce se non viene generato alcun mutante, salvo righe cambiate senza codice", () => {
     assert.deepEqual(evaluate({ files: {} }), ["nessun mutante generato"]);
+    assert.deepEqual(evaluate({ files: {} }, true), []);
+    assert.equal(evaluate(report(mutant("Survived")), true).length, 1);
+  });
+
+  it("traduce gli intervalli in voci Stryker senza ricevute del modulo intero", () => {
+    assert.deepEqual(parseTarget("app/grants.server.ts"), {
+      file: "app/grants.server.ts",
+      ranged: false,
+      mutate: ["app/grants.server.ts"],
+    });
+    assert.deepEqual(parseTarget("app/grants.server.ts:3-5,9-9"), {
+      file: "app/grants.server.ts",
+      ranged: true,
+      mutate: ["app/grants.server.ts:3-5", "app/grants.server.ts:9-9"],
+    });
   });
 
   it("riusa il contesto solo quando dipendenze, test, fixture, configurazione e runtime coincidono", () => {

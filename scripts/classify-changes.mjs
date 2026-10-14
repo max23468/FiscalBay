@@ -74,7 +74,29 @@ function consumers(files, graph) {
   return affected;
 }
 
-export function plan(files, sources = [], complete = false) {
+/**
+ * Righe del nuovo sorgente toccate da un diff `-U0`, unite se vicine. Una cancellazione segna
+ * le due righe che la circondano, dove un controllo rimosso cambia il comportamento.
+ */
+export function changedLines(diff) {
+  const ranges = [];
+  for (const match of diff.matchAll(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gmu)) {
+    const start = Number(match[1]);
+    const count = match[2] === undefined ? 1 : Number(match[2]);
+    const from = Math.max(1, start);
+    const to = count === 0 ? start + 1 : start + count - 1;
+    const last = ranges.at(-1);
+    if (last && from <= last[1] + 3) last[1] = Math.max(last[1], to);
+    else ranges.push([from, to]);
+  }
+  return ranges;
+}
+
+/**
+ * `ranges` associa a un file modificato le righe cambiate; un file senza voce (nuovo, non
+ * tracciato o confronto non disponibile) si qualifica per intero.
+ */
+export function plan(files, sources = [], complete = false, ranges = {}) {
   const unclassified = files.filter((file) => !classifyFile(file));
   const kinds = new Set(files.map(classifyFile));
   const docsOnly = kinds.size === 1 && kinds.has("documentation");
@@ -138,8 +160,10 @@ export function plan(files, sources = [], complete = false) {
           ...[...areas].map((area) => patterns[area]),
         ].join("|")
       : ".";
-  // I mutanti partono dai moduli critici modificati e risalgono ai consumatori critici:
-  // un modulo condiviso non critico non estende la campagna a tutti i domini.
+  // Nel candidato i mutanti partono dai moduli critici modificati e risalgono ai consumatori
+  // critici; un modulo condiviso non critico non estende la campagna a tutti i domini. PR e
+  // push qualificano soltanto le righe cambiate dei moduli critici toccati: il candidato
+  // ripete comunque l'intero modulo prima di Production.
   const critical = (file) =>
     (sources.length === 0 || graph.has(file)) &&
     /^app\/(?:auth(?:-route)?|domain\/(?:orders|order-import|order-acquisition|order-sync|quota|grants|cycles|sessions|sign-in-methods|registration|stores|export)|integrations\/(?:webhooks|stripe|ebay\/(?:notifications|seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
@@ -161,7 +185,13 @@ export function plan(files, sources = [], complete = false) {
     )
   )
     mutationInputs.push("app/auth-route.server.ts");
-  const mutation = [...consumers(mutationInputs, graph)].filter(critical);
+  const mutation = complete
+    ? [...consumers(mutationInputs, graph)].filter(critical)
+    : [...new Set(mutationInputs)]
+        .filter((file) => critical(file) && ranges[file]?.length !== 0)
+        .map((file) =>
+          ranges[file] ? `${file}:${ranges[file].map(([a, b]) => `${a}-${b}`).join(",")}` : file,
+        );
   const browsers = e2e
     ? mode === "full" ||
       areas.has("auth") ||
@@ -221,6 +251,7 @@ export function plan(files, sources = [], complete = false) {
       `build ${build ? "richiesta dal gate applicativo" : "non richiesta"}`,
       `build pagina provvisoria ${placeholder ? "richiesta dai suoi input o dal candidato completo" : "input invariati"}`,
       `deploy ${deploy ? "richiesto da runtime, configurazione o perimetro sconosciuto" : "nessun artefatto applicativo modificato"}`,
+      `mutation ${complete ? "sui moduli critici interi e i loro consumatori critici" : "sulle righe cambiate dei moduli critici toccati"}`,
       ...files
         .filter((file) => !toolingFile(file) && classifyFile(file) !== "test")
         .map((file) => `impatto applicativo o non classificato: ${file}`),
@@ -274,6 +305,22 @@ function localChanges() {
   ];
 }
 
+/** Righe cambiate dei moduli applicativi esistenti in entrambi i lati del confronto. */
+function changedRanges(files, base, head) {
+  const ranges = {};
+  for (const file of files.filter((item) => /^app\/.+\.server\.ts$/u.test(item))) {
+    try {
+      const diff = git("diff", "-U0", base, ...(head ? [head] : []), "--", file);
+      // Un file nuovo o rimosso non ha righe precedenti da confrontare: si qualifica intero.
+      if (/^(?:new|deleted) file mode/mu.test(diff) || !diff) continue;
+      ranges[file] = changedLines(diff);
+    } catch {
+      // Confronto non disponibile: il modulo resta intero.
+    }
+  }
+  return ranges;
+}
+
 function run(command, args, env = {}) {
   console.log(`\n$ ${command} ${args.join(" ")}`);
   execFileSync(command, args, { stdio: "inherit", env: { ...process.env, ...env } });
@@ -289,11 +336,19 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   const head = option("--head");
   // Base vuota, a zeri o non raggiungibile (avvio manuale, nuovo branch, storia riscritta):
   // il diff resta vuoto e il gate completo.
-  const files = !args.includes("--base") ? localChanges() : committedChanges(base, head);
+  const local = !args.includes("--base");
+  const files = local ? localChanges() : committedChanges(base, head);
   const sources = lines(git("ls-files", "--cached", "--others", "--exclude-standard"))
     .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file) && existsSync(file))
     .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
-  const result = plan(files, sources, args.includes("--complete"));
+  const complete = args.includes("--complete");
+  const ranges =
+    complete || files.length === 0
+      ? {}
+      : local
+        ? changedRanges(files, git("merge-base", "origin/develop", "HEAD").trim())
+        : changedRanges(files, base, head);
+  const result = plan(files, sources, complete, ranges);
 
   for (const file of files) console.log(`${classifyFile(file) ?? "non classificato"}: ${file}`);
   console.log(

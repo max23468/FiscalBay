@@ -7,6 +7,10 @@ on:
         description: Matrice JSON dei moduli critici da qualificare
         type: string
         required: true
+      fail-fast:
+        description: Annulla gli altri moduli al primo fallimento
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -18,8 +22,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
-      fail-fast: false
-      max-parallel: 4
+      # Nelle PR un modulo fallito annulla gli altri; il candidato conserva le ricevute riuscite.
+      fail-fast: ${{ inputs.fail-fast }}
+      max-parallel: 8
       matrix: ${{ fromJSON(inputs.targets) }}
     concurrency:
       group: mutation-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ matrix.target }}
@@ -56,7 +61,7 @@ jobs:
         if: steps.receipt.outputs.run-id != ''
         run: node scripts/mutation.mjs --check "${MUTATION_TARGET}"
       - name: Restore incremental results
-        if: steps.receipt.outputs.run-id == ''
+        if: steps.receipt.outputs.run-id == '' && steps.receipt.outputs.reusable == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -72,8 +77,9 @@ jobs:
         env:
           MUTATION_INCREMENTAL: "1"
         run: pnpm test:mutation "${MUTATION_TARGET}"
+      # Gli intervalli di una PR non certificano il modulo intero.
       - name: Preserve verified receipt
-        if: success() && steps.receipt.outputs.run-id == ''
+        if: success() && steps.receipt.outputs.run-id == '' && steps.receipt.outputs.reusable == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ steps.receipt.outputs.artifact }}
