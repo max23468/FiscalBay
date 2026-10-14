@@ -53,12 +53,9 @@ export function digestDirectory(directory) {
   return hash(JSON.stringify(files));
 }
 
-export function migrationPlan(migrations, applied, reviewed = "", approved) {
-  if (applied.some((name) => !migrations.some((migration) => migration.name === name)))
-    throw new Error("Schema remoto contiene migration assenti dal candidato.");
-  const pending = migrations.filter(({ name }) => !applied.includes(name));
-  const digest = hash(JSON.stringify(pending.map(({ name, digest }) => ({ name, digest }))));
-  const unsafe = pending.filter(({ sql }) => {
+/** Migration che toccano schema o dati esistenti: richiedono il digest approvato. */
+export function unsafeMigrations(pending) {
+  return pending.filter(({ sql }) => {
     // Azioni referenziali e nuove colonne non toccano dati esistenti: restano additive.
     const text = sql
       .replace(/--[^\n]*|\/\*[\s\S]*?\*\//gu, "")
@@ -66,6 +63,38 @@ export function migrationPlan(migrations, applied, reviewed = "", approved) {
       .replace(/\bALTER\s+TABLE\s+\S+\s+ADD\s+(?:COLUMN\s+)?(?!CONSTRAINT\b)/giu, "");
     return /\b(?:DROP|DELETE|UPDATE|INSERT|REPLACE|RENAME|TRIGGER|ALTER)\b/iu.test(text);
   });
+}
+
+const migrationDigest = (pending) =>
+  hash(JSON.stringify(pending.map(({ name, digest }) => ({ name, digest }))));
+
+/** Digest approvato nel corpo della PR con la riga `reviewed-migrations: <digest>`. */
+export function declaredReview(body) {
+  return body?.match(/^reviewed-migrations:\s*([0-9a-f]{64})\s*$/imu)?.[1] ?? "";
+}
+
+/**
+ * Le migration non additive aggiunte da una PR si approvano prima del merge: il digest
+ * coincide con quello del deploy test quando il test distribuisce già la base della PR.
+ */
+export function reviewAdded(added, body) {
+  const unsafe = unsafeMigrations(added);
+  if (!unsafe.length) return "";
+  const digest = migrationDigest(added);
+  if (declaredReview(body) !== digest)
+    throw new Error(
+      `Migration da approvare prima del merge: ${unsafe.map(({ name }) => name).join(", ")}. ` +
+        `Dopo l'esame aggiungere al corpo della PR la riga "reviewed-migrations: ${digest}".`,
+    );
+  return digest;
+}
+
+export function migrationPlan(migrations, applied, reviewed = "", approved) {
+  if (applied.some((name) => !migrations.some((migration) => migration.name === name)))
+    throw new Error("Schema remoto contiene migration assenti dal candidato.");
+  const pending = migrations.filter(({ name }) => !applied.includes(name));
+  const digest = migrationDigest(pending);
+  const unsafe = unsafeMigrations(pending);
   const resumed =
     approved &&
     reviewed === approved.digest &&
@@ -284,12 +313,39 @@ async function main() {
       "reviewed-migrations": { type: "string", default: "" },
       "expected-sha": { type: "string" },
       "receipt-prefix": { type: "string" },
+      base: { type: "string" },
     },
   });
   const environment = values.environment;
   const target = targets[environment];
   if (!target) throw new Error("Ambiente non supportato.");
   const command = positionals[0];
+  if (command === "review") {
+    if (!/^[0-9a-f]{40}$/u.test(values.base ?? "")) throw new Error("Base della PR richiesta.");
+    const added = git(
+      "diff",
+      "--name-only",
+      "--diff-filter=A",
+      values.base,
+      "HEAD",
+      "--",
+      "migrations",
+    )
+      .split("\n")
+      .filter((file) => file.endsWith(".sql"))
+      .map((file) => ({
+        name: path.basename(file),
+        digest: hash(readFileSync(file)),
+        sql: readFileSync(file, "utf8"),
+      }));
+    const digest = reviewAdded(added, process.env.PR_BODY);
+    console.log(
+      digest
+        ? `Migration non additive approvate nella PR: ${digest}.`
+        : "Nessuna migration non additiva aggiunta.",
+    );
+    return;
+  }
   if (command === "readiness") {
     productionReadiness(readFileSync("docs/MASTER_PLAN.md", "utf8"));
     return;
@@ -513,7 +569,8 @@ async function main() {
             sql: readFileSync(`migrations/${entry.name}`, "utf8"),
           })),
           names,
-          values["reviewed-migrations"],
+          // L'approvazione esplicita del dispatch prevale su quella della PR integrata.
+          values["reviewed-migrations"] || declaredReview(process.env.PR_BODY),
           receipt.migrationPlan,
         );
       },

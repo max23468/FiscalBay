@@ -1,8 +1,12 @@
+import { writableStore } from "./order-import.server";
 import {
-  recordOrderObservation,
-  writableStore,
-  type OrderObservation,
-} from "./order-import.server";
+  record,
+  spend,
+  NotWritable,
+  type AcquisitionBudget,
+  type Context,
+} from "./order-acquisition-context.server";
+import { readDetail, readDetails } from "./order-acquisition-details.server";
 import { UpstreamError } from "../integrations/http.server";
 import {
   ebayConfiguration,
@@ -13,11 +17,9 @@ import {
   buildCreationDateFilter,
   buildLastModifiedFilter,
   fulfillmentObservation,
-  fulfillmentTaxIdentifiers,
   readFulfillmentOrder,
   readFulfillmentOrders,
 } from "../integrations/ebay/fulfillment.server";
-import { readItemImage, readTradingTaxIdentifiers } from "../integrations/ebay/trading.server";
 import { openToken, rejectCredentials } from "../integrations/ebay/seller-credentials.server";
 
 /**
@@ -25,7 +27,8 @@ import { openToken, rejectCredentials } from "../integrations/ebay/seller-creden
  *
  * 1. recenti: ordini modificati dopo l'ultimo limite applicato, con una sovrapposizione;
  * 2. storico: ordini creati nella finestra fissata al primo avvio, dal più recente;
- * 3. dettaglio: dati fiscali e immagini di ogni versione Fulfillment non ancora letta.
+ * 3. dettaglio: dati fiscali e immagini di ogni versione Fulfillment non ancora letta,
+ *    in `order-acquisition-details.server.ts`.
  *
  * Ogni pagina si applica prima di salvarne il link `next`, e il limite dei recenti avanza
  * solo a passata conclusa: un'interruzione riprende dall'ultima pagina applicata e la rilegge
@@ -41,20 +44,12 @@ const overlapMilliseconds = 15 * 60_000;
 export const historyDays = 30;
 const dayMilliseconds = 86_400_000;
 const lockMilliseconds = 15 * 60_000;
-// Immagini lette per versione: sempre entro la quota di un negozio, così nessun ordine resta
-// in attesa per sempre. Le inserzioni oltre il limite restano senza immagine.
-const maxImagesPerDetail = 8;
-// Attese dopo il primo, secondo, terzo e quarto errore del dettaglio; il quinto chiude la versione.
-const detailRetryMinutes = [15, 60, 240, 960];
 // Attesa quando eBay limita senza Retry-After, e massimo rispettato: oltre un giorno il valore
 // non è credibile e la quota giornaliera si è comunque rinnovata.
 export const defaultRateLimitSeconds = 15 * 60;
 const maxRateLimitSeconds = 86_400;
 /** Letture dei recenti conservate per negozio nella schermata Negozi. */
 const keptRuns = 3;
-
-/** Chiamate a eBay e pagine di elenco ancora consentite; scalate durante l'esecuzione. */
-export type AcquisitionBudget = { calls: number; pages: number };
 
 export type AcquisitionResult =
   /** Recenti e storico applicati, nessun dettaglio leggibile in attesa. */
@@ -66,27 +61,6 @@ export type AcquisitionResult =
   /** Consenso cambiato, negozio in pausa o scollegato: nessuna scrittura. */
   | "not_writable";
 
-/** Il consenso con cui è partita l'esecuzione non vale più: si ferma senza scrivere. */
-class NotWritable extends Error {}
-
-type Context = {
-  db: D1Database;
-  storeId: string;
-  grantedAt: string;
-  access: EbayAccess;
-  at: string;
-  budget: AcquisitionBudget;
-  /** Ordini comparsi per la prima volta durante l'esecuzione. */
-  created: number;
-};
-
-function spend(budget: AcquisitionBudget, calls: number, pages = 0): boolean {
-  if (budget.calls < calls || budget.pages < pages) return false;
-  budget.calls -= calls;
-  budget.pages -= pages;
-  return true;
-}
-
 /** Scrittura dello stato del negozio, valida solo per il consenso con cui è partita. */
 async function saveState(ctx: Context, assignments: string, ...values: unknown[]) {
   const result = await ctx.db
@@ -97,17 +71,6 @@ async function saveState(ctx: Context, assignments: string, ...values: unknown[]
     .bind(ctx.storeId, ctx.grantedAt, ctx.at, ...values)
     .run();
   if (result.meta.changes === 0) throw new NotWritable();
-}
-
-async function record(ctx: Context, observation: OrderObservation) {
-  const result = await recordOrderObservation(
-    ctx.db,
-    { storeId: ctx.storeId, consentGrantedAt: ctx.grantedAt, observedAt: ctx.at },
-    observation,
-  );
-  if (result.outcome === "not_writable") throw new NotWritable();
-  if (result.outcome === "created") ctx.created += 1;
-  return result;
 }
 
 type Pass = {
@@ -193,192 +156,6 @@ function historyPass(ctx: Context, state: SyncRow): Pass {
     progress: (next, total) => saveState(ctx, "history_next = ?4, history_total = ?5", next, total),
     finish: () => saveState(ctx, "history_done_at = ?3, history_next = NULL, history_total = NULL"),
   };
-}
-
-/** Articoli con un ID d'inserzione che nel negozio non hanno ancora un'immagine. */
-async function listingsWithoutImage(
-  ctx: Context,
-  observation: OrderObservation,
-): Promise<Set<string>> {
-  const { results: known } = await ctx.db
-    .prepare(
-      `SELECT i.stable_key FROM order_items i JOIN orders o ON o.id = i.order_id
-        WHERE o.store_id = ?1 AND i.image_url IS NOT NULL
-          AND i.stable_key IN (SELECT value FROM json_each(?2))`,
-    )
-    .bind(ctx.storeId, JSON.stringify(observation.items.map((item) => item.stableKey)))
-    .all<{ stable_key: string }>();
-  const skip = new Set(known.map((row) => row.stable_key));
-  return new Set(
-    observation.items.flatMap((item) =>
-      item.legacyItemId && !(item.stableKey && skip.has(item.stableKey)) ? [item.legacyItemId] : [],
-    ),
-  );
-}
-
-/** Errori che riguardano eBay o il consenso, non il singolo ordine: fermano l'esecuzione. */
-const runFailures = new Set(["credentials", "rate_limited", "unavailable"]);
-
-type PendingDetail = {
-  external_order_id: string;
-  detail_attempts: number;
-  marketplace_id: string | null;
-};
-
-/** Rimanda il dettaglio dopo un errore del singolo ordine o, all'ultimo tentativo, lo chiude. */
-async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) {
-  if (error instanceof UpstreamError && runFailures.has(error.failure)) throw error;
-  const attempts = pending.detail_attempts + 1;
-  const delay = detailRetryMinutes[attempts - 1];
-  const code = error instanceof UpstreamError ? error.failure : "invalid_response";
-  const scope = `WHERE store_id = ?1 AND source = 'fulfillment' AND external_order_id = ?3
-                   AND ${writableStore}`;
-  const result = await ctx.db
-    .prepare(
-      delay === undefined
-        ? `UPDATE order_source_refs SET detail_for = last_modified_time, detail_error = ?4,
-                  detail_attempts = 0, detail_retry_at = NULL ${scope}`
-        : `UPDATE order_source_refs SET detail_error = ?4, detail_attempts = ?5,
-                  detail_retry_at = ?6 ${scope}`,
-    )
-    .bind(
-      ctx.storeId,
-      ctx.grantedAt,
-      pending.external_order_id,
-      code,
-      ...(delay === undefined
-        ? []
-        : [attempts, new Date(Date.parse(ctx.at) + delay * 60_000).toISOString()]),
-    )
-    .run();
-  if (result.meta.changes === 0) throw new NotWritable();
-}
-
-/**
- * Dettaglio di una versione dell'ordine: rilegge l'ordine, le immagini mancanti (un errore
- * lascia la riga senza immagine) e il CF Fulfillment sul marketplace italiano Production.
- * Negli altri casi Trading resta il fallback. Un'assenza non rimuove dati già osservati.
- * false se il budget non basta: la versione resta in attesa.
- */
-async function readDetail(ctx: Context, pending: PendingDetail): Promise<boolean> {
-  const qualifiedMarketplace =
-    ctx.access.configuration.apiOrigin === "https://api.ebay.com" &&
-    pending.marketplace_id === "EBAY_IT";
-  if (!spend(ctx.budget, qualifiedMarketplace ? 1 : 2)) return false;
-  let observation: OrderObservation;
-  try {
-    const payload = await readFulfillmentOrder(
-      ctx.access,
-      pending.external_order_id,
-      qualifiedMarketplace ? { marketplaceId: pending.marketplace_id! } : undefined,
-    );
-    observation = fulfillmentObservation(payload, ctx.at);
-    if (
-      observation.externalOrderId !== pending.external_order_id ||
-      (qualifiedMarketplace && observation.marketplaceId !== pending.marketplace_id)
-    )
-      throw new UpstreamError("invalid_response");
-    if (qualifiedMarketplace) {
-      // Un campo fiscale malformato non impedisce il fallback sulla seconda fonte.
-      let values: ReturnType<typeof fulfillmentTaxIdentifiers> | undefined;
-      try {
-        values = fulfillmentTaxIdentifiers(payload);
-      } catch {}
-      if (
-        values?.length === 1 &&
-        values[0]!.type === "CODICE_FISCALE" &&
-        (values[0]!.issuingCountry === null || values[0]!.issuingCountry === "IT")
-      )
-        observation = {
-          ...observation,
-          taxIdentifiers: { source: "ebay_fulfillment", complete: false, values },
-        };
-    }
-  } catch (error) {
-    await failDetail(ctx, pending, error);
-    return true;
-  }
-  const listings = [...(await listingsWithoutImage(ctx, observation))].slice(0, maxImagesPerDetail);
-  if (
-    !spend(
-      ctx.budget,
-      listings.length + (qualifiedMarketplace && !observation.taxIdentifiers ? 1 : 0),
-    )
-  )
-    return false;
-  const images = new Map(
-    await Promise.all(
-      listings.map(
-        async (id) =>
-          // Stryker disable next-line ArrowFunction: null e undefined lasciano la riga senza immagine.
-          [id, await readItemImage(ctx.access, id).catch(() => null)] as const,
-      ),
-    ),
-  );
-  observation = {
-    ...observation,
-    items: observation.items.map((item) => {
-      const imageUrl = item.legacyItemId ? images.get(item.legacyItemId) : null;
-      return imageUrl ? { ...item, imageUrl } : item;
-    }),
-  };
-  const trading = observation.taxIdentifiers
-    ? null
-    : await readTradingTaxIdentifiers(ctx.access, observation.externalOrderId)
-        .then((values) => ({ values }))
-        .catch((error: unknown) => ({ error }));
-  const result = await record(
-    ctx,
-    trading && "values" in trading
-      ? {
-          ...observation,
-          taxIdentifiers: {
-            source: "ebay_trading_get_orders",
-            complete: false,
-            values: trading.values,
-          },
-        }
-      : observation,
-  );
-  if (trading && "error" in trading) {
-    await failDetail(ctx, pending, trading.error);
-  } else if (result.outcome === "stale") {
-    // eBay ha restituito una versione più vecchia di quella già registrata: si riprova.
-    await failDetail(ctx, pending, new UpstreamError("invalid_response"));
-  } else {
-    // Una versione più recente registrata nel frattempo resta da leggere.
-    await ctx.db
-      .prepare(
-        `UPDATE order_source_refs SET detail_for = last_modified_time, detail_error = NULL,
-                detail_attempts = 0, detail_retry_at = NULL
-          WHERE store_id = ?1 AND source = 'fulfillment' AND external_order_id = ?3
-            AND last_modified_time <= ?4 AND ${writableStore}`,
-      )
-      .bind(ctx.storeId, ctx.grantedAt, pending.external_order_id, observation.lastModifiedTime)
-      .run();
-  }
-  return true;
-}
-
-/**
- * Versioni in attesa dalla più recente per data di modifica, quindi anche i cambiamenti di
- * ordini vecchi. Ogni dettaglio costa almeno una chiamata: una riga in più delle chiamate
- * rimaste basta a sapere se ne restano oltre il budget.
- */
-async function readDetails(ctx: Context): Promise<boolean> {
-  const { results } = await ctx.db
-    .prepare(
-      `SELECT r.external_order_id, r.detail_attempts, o.marketplace_id
-         FROM order_source_refs r JOIN orders o ON o.id = r.order_id
-        WHERE r.store_id = ?1 AND r.source = 'fulfillment'
-          AND r.detail_for IS NOT r.last_modified_time
-          AND (r.detail_retry_at IS NULL OR r.detail_retry_at <= ?2)
-        ORDER BY r.last_modified_time DESC LIMIT ?3`,
-    )
-    .bind(ctx.storeId, ctx.at, ctx.budget.calls + 1)
-    .all<PendingDetail>();
-  for (const pending of results) if (!(await readDetail(ctx, pending))) return false;
-  return true;
 }
 
 /** Secondi di attesa ancora chiesti da eBay per l'origine API; 0 se nessuno. */
