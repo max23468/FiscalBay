@@ -1,4 +1,4 @@
-name: Pubblica
+name: Promuovi
 
 on:
   # La prima prova registra il workflow prima della promozione sul branch predefinito.
