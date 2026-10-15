@@ -166,9 +166,10 @@ export function plan(files, sources = [], complete = false, ranges = {}) {
   // ripete comunque l'intero modulo prima di Production.
   const critical = (file) =>
     (sources.length === 0 || graph.has(file)) &&
-    /^app\/(?:auth(?:-route)?|domain\/(?:orders|order-import|order-acquisition|order-sync|quota|grants|cycles|sessions|sign-in-methods|registration|stores|export)|integrations\/(?:webhooks|stripe|ebay\/(?:notifications|seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
-      file,
-    );
+    (file === "app/tax-quality.ts" ||
+      /^app\/(?:auth(?:-route)?|domain\/(?:orders|order-import|order-acquisition|order-sync|quota|grants|cycles|sessions|sign-in-methods|registration|stores|export)|integrations\/(?:webhooks|stripe|ebay\/(?:notifications|seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
+        file,
+      ));
   const mutationInputs = files.filter(critical);
   if (
     files.some((file) =>

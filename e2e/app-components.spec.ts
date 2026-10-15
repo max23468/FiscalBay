@@ -11,6 +11,43 @@ test.describe("miglioramenti account e negozi", () => {
   for (const language of ["it", "en"] as const) {
     const prefix = language === "it" ? "" : "/en";
     const it = language === "it";
+    test(`ordini reali: qualità formale visibile e identificativo bloccato protetto ${language}`, async ({
+      page,
+      context,
+      baseURL,
+    }) => {
+      await context.addCookies([localCookie("member", baseURL!)]);
+      await page.goto(`${prefix}/app/ordini`);
+      await expect(
+        page.getByText(testAccount.taxCodes.unlocked, { exact: true }).first(),
+      ).toBeVisible();
+      await expect(
+        page
+          .getByText(
+            it
+              ? "Codice omocodico o nome non univoco: la corrispondenza con il nome non è verificabile."
+              : "Omocodia variant or ambiguous name: the code cannot be matched to the name.",
+          )
+          .first(),
+      ).toBeVisible();
+      expect(await page.content()).not.toContain(testAccount.taxCodes.locked);
+      // Come nell'anteprima il dato da sbloccare mostra il riquadro senza valore.
+      await expect(
+        page.getByText(it ? "Codice Fiscale da sbloccare" : "Codice Fiscale to unlock").first(),
+      ).toBeAttached();
+      await page
+        .getByRole("link", {
+          name: it
+            ? `Ordine ${testAccount.orders.unlocked}`
+            : `Order ${testAccount.orders.unlocked}`,
+          exact: true,
+        })
+        .click();
+      await expect(
+        page.getByRole("dialog").getByText(testAccount.taxCodes.unlocked, { exact: true }),
+      ).toBeVisible();
+      expect(await page.content()).not.toContain(testAccount.taxCodes.locked);
+    });
     test(`profilo: modifiche, uscita, attesa e salvataggio ${language}`, async ({ page }) => {
       await open(page, `${prefix}/anteprima/profilo`, "ordinario");
       const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
@@ -509,7 +546,15 @@ for (const language of ["it", "en"] as const) {
         const time = page.getByRole("combobox", {
           name: t("Orario del riepilogo", "Summary time"),
         });
+        // Lo switch resta disattivato finché il salvataggio non finisce: il nuovo clic aspetta.
+        const saved = page.waitForResponse(
+          (response) =>
+            response.request().method() === "POST" &&
+            new URLSearchParams(response.request().postData() ?? "").get("name") === "telegram",
+        );
         await enabled.uncheck();
+        await saved;
+        await expect(enabled).not.toHaveAttribute("data-disabled");
         await expect(enabled).not.toBeChecked();
         await expect(allOrders).toBeDisabled();
         await expect(digest).toBeDisabled();
@@ -627,7 +672,7 @@ for (const language of ["it", "en"] as const) {
           .check();
         await cancel.click();
         await expect(unlock).toBeFocused();
-        await expect(locked.getByText("BNCLCU75C12F205X")).toHaveCount(0);
+        await expect(locked.getByText("BNCLCU75C12F205G")).toHaveCount(0);
         await unlock.click();
         await expect(confirm.getByRole("checkbox")).not.toBeChecked();
         await confirm
@@ -636,7 +681,7 @@ for (const language of ["it", "en"] as const) {
           })
           .check();
         await confirm.getByRole("button", { name: t("Sblocca", "Unlock"), exact: true }).click();
-        await expect(locked.getByText("BNCLCU75C12F205X")).toBeVisible();
+        await expect(locked.getByText("BNCLCU75C12F205G")).toBeVisible();
         await page.reload();
         const restore = page.getByRole("button", {
           name: t("Riattiva conferma sblocco", "Restore unlock confirmation"),
@@ -649,7 +694,7 @@ for (const language of ["it", "en"] as const) {
           .click();
         await expect(page.getByRole("alertdialog")).toHaveCount(0);
         await expect(
-          page.getByRole("dialog").getByText("04567890123", { exact: true }),
+          page.getByRole("dialog").getByText("04567890126", { exact: true }),
         ).toBeVisible();
         await page
           .getByRole("dialog")
@@ -761,6 +806,27 @@ for (const language of ["it", "en"] as const) {
         await expect(page.getByRole("article").filter({ hasText: "05-55555-12121" })).toContainText(
           t("Da verificare", "Needs review"),
         );
+        // Valore letto in precedenza con l'ultima lettura non riuscita, dato nascosto o rimosso.
+        for (const [query, order, text] of [
+          [
+            "Ricci",
+            "25-30491-88120",
+            t("Ultima lettura da eBay non riuscita", "The latest read from eBay failed"),
+          ],
+          [
+            "Colombo",
+            "09-11873-20564",
+            t("eBay nasconde il Codice Fiscale", "eBay hides the tax code"),
+          ],
+          [
+            "Tecnoufficio",
+            "30-55012-90876",
+            t("eBay ha rimosso il Codice Fiscale", "eBay removed the tax code"),
+          ],
+        ] as const) {
+          await open(page, `${prefix}/anteprima/ordini?q=${query}`);
+          await expect(page.getByRole("article").filter({ hasText: order })).toContainText(text);
+        }
         await open(page, `${prefix}/anteprima/ordini/ord-03`, "dati-discordanti");
         await expect(
           page
@@ -1527,7 +1593,7 @@ test("copia fallita visibile e recupero con un nuovo tentativo", async ({ page }
   await copy.click();
   await expect(card.getByText(/^Copia non riuscita\./)).toBeVisible();
   await copy.click();
-  await expect(page.locator("html")).toHaveAttribute("data-copied", "RSSMRA80A41H501U");
+  await expect(page.locator("html")).toHaveAttribute("data-copied", "RSSMRA80A41H501Y");
   await expect(card.getByText(/^Copia non riuscita\./)).toHaveCount(0);
   await expect(copy).toHaveAttribute("data-state", "copied");
 });
@@ -1660,7 +1726,7 @@ test("movimento ridotto: dato intero e nuovi ordini senza animazione", async ({ 
     .getByRole("article", { name: "Ordine 05-55555-12121" })
     .getByRole("button", { name: "Sblocca ordine" })
     .click();
-  const value = page.getByText("BNCLCU75C12F205X", { exact: true });
+  const value = page.getByText("BNCLCU75C12F205G", { exact: true });
   await page.getByRole("alertdialog").getByRole("button", { name: "Sblocca", exact: true }).click();
   await expect(value).toBeVisible();
   await expect(value).toHaveCSS("animation-name", "none");

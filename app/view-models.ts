@@ -48,14 +48,21 @@ export interface TaxIdentifierView {
   updated?: boolean;
 }
 
+/**
+ * Condizione dell'ultima lettura quando resta mostrato un valore letto prima:
+ * lettura non riuscita, in corso, senza il dato o con il dato nascosto da eBay.
+ */
+export type FiscalNotice = "lastKnown" | "checking" | "notReturned" | "masked";
+
 export type FiscalView =
-  | { state: "available"; identifiers: TaxIdentifierView[] }
+  | { state: "available"; identifiers: TaxIdentifierView[]; notice?: FiscalNotice }
   /**
    * Prima dello sblocco arriva solo il nome del dato: Codice Fiscale, oppure
    * Partita IVA quando l'ordine riporta soltanto quella.
    */
   | { state: "locked"; shownAs: "CF" | "PIVA" }
-  | { state: "missing" }
+  /** Senza motivo eBay non riporta il dato; altrimenti lo nasconde o lo ha rimosso. */
+  | { state: "missing"; reason?: "masked" | "removed" }
   | { state: "checking" }
   | { state: "error" };
 

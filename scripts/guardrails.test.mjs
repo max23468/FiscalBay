@@ -276,6 +276,19 @@ describe("classificazione dei file modificati", () => {
     assert.deepEqual(changePlan([file], [], false, { [file]: [] }).mutation, []);
     assert.deepEqual(changePlan([file], [], true, { [file]: [[3, 5]] }).mutation, [file]);
   });
+  it("include il controllo fiscale fra i moduli critici e usa le sue prove unitarie", () => {
+    const target = "app/tax-quality.ts";
+    const files = [
+      { path: target, text: "export const taxQuality = () => true;" },
+      {
+        path: "test/ebay-adapters.unit.ts",
+        text: 'import { taxQuality } from "../app/tax-quality";',
+      },
+      { path: "test/orders.spec.ts", text: 'import { taxQuality } from "../app/tax-quality";' },
+    ];
+    assert.deepEqual(changePlan([target], files).mutation, [target]);
+    assert.deepEqual(mutationInputs(target, files).tests, ["test/ebay-adapters.unit.ts"]);
+  });
 
   it("ricava le righe cambiate da un diff senza contesto", () => {
     const diff = [

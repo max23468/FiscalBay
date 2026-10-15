@@ -193,12 +193,10 @@ export function parseTradingOrders(xml: string) {
         },
       );
       if (!items.length) throw new Error("missing_transactions");
-      for (const [, tax] of header.matchAll(
-        /<BuyerTaxIdentifier>([\s\S]*?)<\/BuyerTaxIdentifier>/gu,
-      )) {
-        if (!xmlField(tax!, "ID") || !xmlField(tax!, "Type"))
-          throw new Error("invalid_tax_identifier");
-      }
+      const taxBlocks = [
+        ...header.matchAll(/<BuyerTaxIdentifier>([\s\S]*?)<\/BuyerTaxIdentifier>/gu),
+      ];
+      const validTax = taxBlocks.every(([, tax]) => xmlField(tax!, "ID") && xmlField(tax!, "Type"));
       orders.push(
         orderObservationSchema.parse({
           source: "trading",
@@ -243,11 +241,20 @@ export function parseTradingOrders(xml: string) {
               : null,
           },
           items,
-          taxIdentifiers: {
-            source: "ebay_trading_get_orders",
-            complete: false,
-            values: mapTradingTaxIdentifiers(parseTradingOrderTaxIdentifiers(xml, id)),
-          },
+          taxIdentifiers: validTax
+            ? {
+                source: "ebay_trading_get_orders",
+                complete: false,
+                availability: taxBlocks.length ? "present" : "not_included",
+                values: mapTradingTaxIdentifiers(parseTradingOrderTaxIdentifiers(xml, id)),
+              }
+            : {
+                source: "ebay_trading_get_orders",
+                complete: false,
+                verification: "error",
+                availability: "not_included",
+                values: [],
+              },
         }),
       );
     } catch {
@@ -285,14 +292,24 @@ export async function readTradingTaxObservation(access: EbayAccess, orderId: str
       xmlField(order!, "OrderID") === orderId || xmlField(order!, "ExtendedOrderID") === orderId,
   );
   if (matching.length > 1) throw new UpstreamError("invalid_response");
-  for (const [, block] of (matching[0]?.[1] ?? "").matchAll(
+  if (matching.length === 0) return { orderFound: false, lastModifiedTime: undefined, values: [] };
+  const order = matching[0]![1]!;
+  for (const [, block] of order.matchAll(
     /<BuyerTaxIdentifier>([\s\S]*?)<\/BuyerTaxIdentifier>/gu,
   )) {
     if (!xmlField(block!, "ID") || !xmlField(block!, "Type"))
       throw new UpstreamError("invalid_response");
   }
   return {
-    orderFound: matching.length === 1,
+    orderFound: true,
+    lastModifiedTime: (() => {
+      const checkout = /<CheckoutStatus>([\s\S]*?)<\/CheckoutStatus>/u.exec(order)?.[1];
+      const value = checkout ? xmlField(checkout, "LastModifiedTime") : null;
+      if (value === null) return undefined;
+      const parsed = orderObservationSchema.shape.lastModifiedTime.safeParse(value);
+      if (!parsed.success) throw new UpstreamError("invalid_response");
+      return parsed.data;
+    })(),
     values: mapTradingTaxIdentifiers(parseTradingOrderTaxIdentifiers(xml, orderId)),
   };
 }

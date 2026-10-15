@@ -72,18 +72,18 @@ test("il dettaglio ha un URL, si chiude con Indietro e conserva i filtri", async
 
 test("lo sblocco rivela il dato solo dopo l'azione e aggiorna la quota", async ({ page }) => {
   await open(page);
-  expect(await page.content()).not.toContain("BNCLCU75C12F205X");
+  expect(await page.content()).not.toContain("BNCLCU75C12F205G");
   const card = page.getByRole("article", { name: "Ordine 05-55555-12121" });
   await expect(card).toContainText("Hai 2 sblocchi disponibili");
   await card.getByRole("button", { name: "Sblocca ordine" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Sblocca", exact: true }).click();
-  await expect(card.getByText("BNCLCU75C12F205X")).toBeVisible();
+  await expect(card.getByText("BNCLCU75C12F205G")).toBeVisible();
   await expect(page.getByRole("status").filter({ hasText: "Ordine sbloccato" })).toContainText(
     "Ti resta 1 sblocco in questo ciclo",
   );
   await page.reload();
   await expect(page.getByRole("article", { name: "Ordine 05-55555-12121" })).toContainText(
-    "BNCLCU75C12F205X",
+    "BNCLCU75C12F205G",
   );
   await page.getByRole("link", { name: "Carica altri" }).click();
   await expect(page.getByRole("article", { name: "Ordine 02-44519-70831" })).toContainText(
@@ -105,7 +105,7 @@ test("la selezione sblocca più ordini entro la quota", async ({ page }) => {
   await expect(page.getByRole("status").filter({ hasText: "2 ordini sbloccati." })).toBeVisible();
   await expect(page.getByRole("article")).toHaveCount(0);
   await page.goto("/anteprima/ordini?q=Conti");
-  await expect(page.getByText("04567890123")).toBeVisible();
+  await expect(page.getByText("04567890126")).toBeVisible();
 });
 
 for (const language of ["it", "en"] as const) {
@@ -158,7 +158,7 @@ for (const language of ["it", "en"] as const) {
             .click();
           expect((await unlocked).status()).toBe(200);
           await page.goto(`${base}/ordini?q=Conti`);
-          await expect(page.getByText("04567890123")).toBeVisible();
+          await expect(page.getByText("04567890126")).toBeVisible();
           await open(page, `${base}/impostazioni/piano`);
           await expect(
             page.getByText(language === "it" ? "4 di 5" : "4 of 5", { exact: true }),
@@ -377,7 +377,7 @@ test("con Premium nessun ordine resta da sbloccare e il piano a vita non si rinn
   await open(page);
   await chooseScenario(page, "Problema su un negozio");
   await expect(page.getByRole("button", { name: "Sblocca ordine" })).toHaveCount(0);
-  await expect(page.getByText("BNCLCU75C12F205X")).toBeVisible();
+  await expect(page.getByText("BNCLCU75C12F205G")).toBeVisible();
 
   await chooseScenario(page, "Premium a vita");
   await expect(page.getByText("Il carattere di controllo non corrisponde.")).toBeVisible();

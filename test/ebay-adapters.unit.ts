@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { taxQuality, taxComparisonKey, taxIdentifierType } from "../app/tax-quality";
+
 import {
   buildCreationDateFilter,
   buildLastModifiedFilter,
@@ -25,6 +27,142 @@ const configuration = ebayConfiguration(
   },
   "production",
 );
+
+describe("qualità formale degli identificativi", () => {
+  const cf = (value: string, names: Array<string | null> = ["Mario Rossi"]) =>
+    taxQuality({ type: "CODICE_FISCALE", issuingCountry: "IT", value }, names);
+  it.each([
+    ["RSSMRA80A01H501U", "valid"],
+    [" rssmra 80a01h501u ", "valid"],
+    ["RSSMRA80A01H501X", "checksum"],
+    ["RSSMRA80A00H501U", "format"],
+    ["RSSMRA80A32H501U", "format"],
+    ["RSSMRA80A40H501U", "format"],
+    ["RSSMRA80A72H501U", "format"],
+    ["RSSMRA80A81H501U", "format"],
+    ["RSSMRA80Z01H501U", "format"],
+    ["SPSNNA85T55F83", "format"],
+    ["1RSSMRA80A01H501U", "format"],
+    ["1RSSMRA80M01H501U", "format"],
+    ["RSSMRA80A01H501U1", "format"],
+    ["RSSMRA80A01H50MM", "unverifiable"],
+    ["RSSMRA80A01H50ML", "checksum"],
+    ["12345678903", "valid"],
+    ["RSSMRA80A31H501X", "valid"],
+    ["RSSMRA80A41H501Y", "valid"],
+    ["RSSMRA80A71H501B", "valid"],
+    ["RSSMRA80B29H501Q", "valid"],
+    ["RSSMRA81B29H501R", "format"],
+    ["RSSMRA80D31H501D", "format"],
+    ["RSSMRA80D30H501E", "valid"],
+    ["RSSMRA81B28H501P", "valid"],
+    ["RSSMRAU0A01H501R", "unverifiable"],
+    ["RSSMRA8LA01H501F", "unverifiable"],
+    ["RSSMRA80AL1H501F", "unverifiable"],
+    ["RSSMRA80A0MH501M", "unverifiable"],
+    ["RSSMRA80A01HR01P", "unverifiable"],
+    ["RSSMRA80A01H5L1F", "unverifiable"],
+  ])("classifica %s come %s senza correggerlo", (value, expected) => {
+    expect(cf(value)).toBe(expected);
+  });
+  it("verifica la tabella ufficiale delle lettere in posizione dispari", () => {
+    // Controlli del medesimo codice sintetico variando solo la prima lettera.
+    const checks = "NMRTVZBDFHOQEGXPSUYACWILKJ";
+    for (const [index, char] of Array.from("ABCDEFGHIJKLMNOPQRSTUVWXYZ").entries()) {
+      expect(cf(`${char}SSMRA80A01H501${checks[index]}`, [])).toBe("unverifiable");
+    }
+  });
+  it.each([
+    ["RSSCRS80A01H501C", "Christopher Rossi"],
+    ["RSSGNN80A01H501N", "Giovanni Rossi"],
+    ["AIXIOX80A01H501M", "Io Ai"],
+    ["BOXLAX80A01H501K", "Al Bo"],
+    ["DNGMRA80A01H501R", "Mario D’Angelo"],
+    ["DLCMRA80A01H501F", "Mario De-Luca"],
+  ])("verifica consonanti, vocali e completamento per %s", (value, name) => {
+    expect(cf(value, [name])).toBe("valid");
+  });
+  it.each([
+    [["Rossi Mario"], "valid"],
+    [["Mario  Rossi"], "valid"],
+    [["Mário Ròssi"], "valid"],
+    [["Mario Rossi c/o Destinatario diverso"], "valid"],
+    [["Mario Rossi C / O Destinatario"], "valid"],
+    [["Luigi Bianchi", "Mario Rossi"], "valid"],
+    [["Luigi Bianchi"], "name"],
+    [["Mario Luigi Rossi"], "unverifiable"],
+    [["Mario Luigi Rossi", "Luigi Bianchi"], "unverifiable"],
+    [[null], "unverifiable"],
+    [["Società 123"], "unverifiable"],
+    [["123Mario Rossi"], "unverifiable"],
+    [["Mario"], "unverifiable"],
+  ] as const)("confronta i nomi %s", (names, expected) => {
+    expect(cf("RSSMRA80A01H501U", [...names])).toBe(expected);
+  });
+  it("applica il controllo numerico solo ai tipi italiani riconosciuti", () => {
+    for (const [value, expected] of [
+      ["12345678903", "valid"],
+      ["12345678900", "checksum"],
+      ["123", "format"],
+      ["00000000000", "format"],
+      ["01234567897", "valid"],
+      ["x12345678903", "format"],
+      ["12345678903x", "format"],
+      ["RSSMRA80A01H501U", "format"],
+    ]) {
+      expect(taxQuality({ type: "VAT_ID", issuingCountry: "IT", value: value! }, [])).toBe(
+        expected,
+      );
+    }
+    for (const [type, issuingCountry] of [
+      ["VAT_ID", "ES"],
+      ["NIF", "IT"],
+      ["CODICE_FISCALE", "ES"],
+    ]) {
+      expect(
+        taxQuality({ type: type!, issuingCountry: issuingCountry!, value: "non-verificato" }, []),
+      ).toBe("unchecked");
+    }
+    expect(taxQuality({ type: "VATIN", issuingCountry: "IT", value: "12345678903" }, [])).toBe(
+      "valid",
+    );
+    expect(taxQuality({ type: "PartitaIVA", issuingCountry: "IT", value: "12345678903" }, [])).toBe(
+      "valid",
+    );
+    expect(
+      taxComparisonKey({
+        type: "CODICE_FISCALE",
+        issuingCountry: null,
+        value: " rssmra 80a01h501u ",
+      }),
+    ).toBe(
+      taxComparisonKey({ type: "CodiceFiscale", issuingCountry: null, value: "RSSMRA80A01H501U" }),
+    );
+    expect(taxComparisonKey({ type: "NIF", issuingCountry: "ES", value: " abc " })).toBe(
+      JSON.stringify(["NIF", "ES", "abc"]),
+    );
+    expect(
+      taxComparisonKey({
+        type: "CODICE_FISCALE",
+        issuingCountry: null,
+        value: " rssmra 80a01h501u ",
+      }),
+    ).toBe(JSON.stringify(["CF", null, "RSSMRA80A01H501U"]));
+  });
+  it.each([
+    ["CODICE_FISCALE", "IT", "CF"],
+    ["CodiceFiscale", null, "CF"],
+    ["VAT_ID", "IT", "PIVA"],
+    ["VATIN", "IT", "PIVA"],
+    ["PartitaIVA", null, "PIVA"],
+    ["VATIN", null, "OTHER"],
+    ["VAT_ID", null, "OTHER"],
+    ["NIF", "IT", "OTHER"],
+    ["CODICE_FISCALE", "ES", "OTHER"],
+  ])("mappa il tipo %s e Paese %s per la vista", (type, country, expected) => {
+    expect(taxIdentifierType(type!, country!)).toBe(expected);
+  });
+});
 
 describe("acquisti Trading", () => {
   const xml = `<GetOrdersResponse><Ack>Success</Ack><PaginationResult><TotalNumberOfEntries>1</TotalNumberOfEntries></PaginationResult>
@@ -98,10 +236,6 @@ describe("acquisti Trading", () => {
     xml.replace("123-456</OrderLineItemID>", "123-789</OrderLineItemID>"),
     xml.replace("<TransactionArray>", "<Broken>"),
     xml.replace("<CreatedTime>2026-09-01T10:00:00Z</CreatedTime>", ""),
-    xml.replace(
-      "</Order>",
-      "<BuyerTaxIdentifier><Type>CODICE_FISCALE</Type></BuyerTaxIdentifier></Order>",
-    ),
     xml.replace("6.25</TransactionPrice>", "6.251</TransactionPrice>"),
   ])("salta l'ordine incompleto senza scartare la pagina", (body) => {
     const page = body
@@ -114,6 +248,39 @@ describe("acquisti Trading", () => {
     expect(parseTradingOrders(page)).toMatchObject({
       skipped: 1,
       orders: [{ externalOrderId: "valido" }],
+    });
+  });
+  it("un identificativo malformato lascia importabile l'ordine", () => {
+    const result = parseTradingOrders(
+      xml.replace(
+        "</Order>",
+        "<BuyerTaxIdentifier>\n<Type>CODICE_FISCALE</Type>\n</BuyerTaxIdentifier></Order>",
+      ),
+    );
+    expect(result.skipped).toBe(0);
+    expect(result.orders).toHaveLength(1);
+    expect(result.orders[0]!.taxIdentifiers).toMatchObject({
+      verification: "error",
+      complete: false,
+      values: [],
+    });
+    expect(parseTradingOrders(xml).orders[0]!.taxIdentifiers).toMatchObject({
+      complete: false,
+      availability: "not_included",
+      verification: "completed",
+      values: [],
+    });
+    expect(
+      parseTradingOrders(
+        xml.replace(
+          "</Order>",
+          "<BuyerTaxIdentifier>\n<Type>CODICE_FISCALE</Type>\n<ID>SINTETICO</ID>\n</BuyerTaxIdentifier></Order>",
+        ),
+      ).orders[0]!.taxIdentifiers,
+    ).toMatchObject({
+      complete: false,
+      verification: "completed",
+      values: [{ type: "CODICE_FISCALE", value: "SINTETICO" }],
     });
   });
 });
@@ -451,6 +618,18 @@ describe("seconda osservazione fiscale Fulfillment", () => {
       orderFound: true,
       values: [],
     });
+    expect(
+      await read(
+        "<Order><OrderID>ordine</OrderID><CheckoutStatus>\n<LastModifiedTime>2026-09-10T12:00:00Z</LastModifiedTime>\n</CheckoutStatus></Order>",
+      ),
+    ).toMatchObject({ lastModifiedTime: "2026-09-10T12:00:00.000Z" });
+    for (const date of ["12", "non-data", "2026-09-10T12:00:00"]) {
+      await expect(
+        read(
+          `<Order><OrderID>ordine</OrderID><CheckoutStatus><LastModifiedTime>${date}</LastModifiedTime></CheckoutStatus></Order>`,
+        ),
+      ).rejects.toMatchObject({ failure: "invalid_response" });
+    }
     await expect(
       read(
         "<Order><OrderID>ordine</OrderID><BuyerTaxIdentifier><ID>SINTETICO</ID></BuyerTaxIdentifier></Order>",

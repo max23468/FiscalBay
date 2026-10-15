@@ -52,9 +52,11 @@ const hash = (value) => createHash("sha256").update(value).digest("hex");
 
 /** Conserva tutti i test consumatori e i loro input; import ambigui richiedono il completo. */
 export function mutationInputs(target, files) {
-  const unit = ["app/auth-route.server.ts", "app/integrations/ebay/fulfillment.server.ts"].includes(
-    target,
-  );
+  const unit = [
+    "app/auth-route.server.ts",
+    "app/integrations/ebay/fulfillment.server.ts",
+    "app/tax-quality.ts",
+  ].includes(target);
   const suite = files.filter(({ path: file }) =>
     unit ? file.endsWith(".unit.ts") : file.endsWith(".spec.ts") && file.startsWith("test/"),
   );

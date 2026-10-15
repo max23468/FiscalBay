@@ -108,8 +108,19 @@ const it = {
     email: "Email",
     notProvided: "Non riportato da eBay",
     notImported: "Dato non ancora acquisito",
-    fiscalUnchecked: "Disponibilità fiscale da verificare",
-    taxData: "Dati fiscali",
+    fiscalNotice: {
+      lastKnown:
+        "Ultima lettura da eBay non riuscita: resta mostrato il valore letto in precedenza.",
+      checking: "Nuova lettura da eBay in corso.",
+      notReturned:
+        "L’ultima lettura di eBay non riporta questo dato: resta mostrato il valore letto in precedenza.",
+      masked: "eBay ora nasconde questo dato: resta mostrato il valore letto in precedenza.",
+    },
+    missingReason: {
+      masked: "eBay nasconde il Codice Fiscale di questo ordine.",
+      removed: "eBay ha rimosso il Codice Fiscale da questo ordine.",
+    },
+    lastChanged: (date: string) => `Ultima modifica su eBay: ${date}`,
     orderLabel: (id: string) => `Ordine ${id}`,
     fiscal: {
       available: "Disponibile",
@@ -170,16 +181,18 @@ const it = {
     missingHint: "eBay non riporta il Codice Fiscale per questo ordine.",
     checkingHint: "Verifica del Codice Fiscale in corso.",
     errorHint: "Non siamo riusciti a recuperare il Codice Fiscale da eBay. Riprova tra poco.",
+    errorReadHint: "Non siamo riusciti a recuperare il Codice Fiscale da eBay.",
     errorHintEbayDown:
       "Non siamo riusciti a recuperare il Codice Fiscale da eBay. Potrai riprovare quando eBay torna a rispondere.",
     retry: "Riprova",
     retried: "Nuova lettura richiesta.",
     quality: {
-      format: "Il formato non corrisponde a un Codice Fiscale.",
+      format: "Il formato del codice non è valido.",
       checksum: "Il carattere di controllo non corrisponde.",
       name: "Le lettere del codice non corrispondono al nome dell’ordine.",
-      unverifiable: "Il nome non permette un controllo univoco del codice.",
-      unchecked: "Tipo estero: FiscalBay non ne verifica il formato.",
+      unverifiable:
+        "Codice omocodico o nome non univoco: la corrispondenza con il nome non è verificabile.",
+      unchecked: "FiscalBay non verifica il formato di questo tipo di identificativo.",
     },
     toVerify: "Da verificare",
     updated: "Aggiornato da eBay",
@@ -936,8 +949,18 @@ const en: AppCopy = {
     email: "Email",
     notProvided: "Not provided by eBay",
     notImported: "Data not yet imported",
-    fiscalUnchecked: "Tax identifier availability not yet checked",
-    taxData: "Tax identifiers",
+    fiscalNotice: {
+      lastKnown: "The latest read from eBay failed: the value read earlier is still shown.",
+      checking: "New read from eBay in progress.",
+      notReturned:
+        "eBay’s latest read does not include this value: the one read earlier is still shown.",
+      masked: "eBay now hides this value: the one read earlier is still shown.",
+    },
+    missingReason: {
+      masked: "eBay hides the tax code for this order.",
+      removed: "eBay removed the tax code from this order.",
+    },
+    lastChanged: (date) => `Last changed on eBay: ${date}`,
     orderLabel: (id) => `Order ${id}`,
     fiscal: {
       available: "Available",
@@ -998,16 +1021,17 @@ const en: AppCopy = {
     missingHint: "eBay does not provide the tax code for this order.",
     checkingHint: "Checking the tax code.",
     errorHint: "We could not get the tax code from eBay. Try again shortly.",
+    errorReadHint: "We could not get the tax code from eBay.",
     errorHintEbayDown:
       "We could not get the tax code from eBay. You can try again once eBay responds.",
     retry: "Try again",
     retried: "New read requested.",
     quality: {
-      format: "The format does not match an Italian tax code.",
+      format: "The code format is invalid.",
       checksum: "The check character does not match.",
       name: "The letters of the code do not match the name on the order.",
-      unverifiable: "The name does not allow an unambiguous check of the code.",
-      unchecked: "Foreign type: FiscalBay does not check its format.",
+      unverifiable: "Omocodia variant or ambiguous name: the code cannot be matched to the name.",
+      unchecked: "FiscalBay does not check the format of this identifier type.",
     },
     toVerify: "Needs review",
     updated: "Updated by eBay",

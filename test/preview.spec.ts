@@ -8,8 +8,35 @@ import {
   scenarioOptions,
 } from "../app/preview/scenarios.server";
 import { formatDate, formatRelative } from "../app/view-models";
+import { taxQuality } from "../app/tax-quality";
 
 describe("stato sintetico dell'anteprima", () => {
+  it("gli scenari UI usano gli stessi esiti formali degli identificativi importati", () => {
+    for (const id of scenarioIds) {
+      const scenario = loadScenario(id, "it", new Set(["ord-03", "ord-09"]));
+      for (const order of scenario.orders) {
+        if (order.fiscal.state !== "available") continue;
+        for (const identifier of order.fiscal.identifiers) {
+          expect(
+            taxQuality(
+              {
+                type:
+                  identifier.type === "CF"
+                    ? "CODICE_FISCALE"
+                    : identifier.type === "PIVA"
+                      ? "VAT_ID"
+                      : "OTHER",
+                issuingCountry: "IT",
+                value: identifier.value,
+              },
+              [order.buyerName, order.shipTo.name],
+            ),
+            `${id}/${order.id}`,
+          ).toBe(identifier.quality);
+        }
+      }
+    }
+  });
   it("conserva i tempi relativi e normalizza gli apostrofi delle implementazioni ICU", () => {
     const now = "2026-09-27T13:00:00.000Z";
     for (const [minutes, itText, enText] of [
@@ -66,7 +93,7 @@ describe("stato sintetico dell'anteprima", () => {
       );
       expect(after.orders.find((order) => order.id === "ord-09")?.fiscal).toMatchObject({
         state: "available",
-        identifiers: [{ type: "PIVA", value: "04567890123" }],
+        identifiers: [{ type: "PIVA", value: "04567890126" }],
       });
       expect(
         loadScenario("ordinario", language, new Set(["ord-09", "ord-09"])).account.quota?.used,

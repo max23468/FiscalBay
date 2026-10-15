@@ -67,12 +67,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import type { AppCopy } from "../app-copy";
 import { appHref, type AppLinks } from "../app-links";
 import { formatAmount, type Language } from "../i18n";
+import { taxIdentifierType } from "../tax-quality";
 import {
   formatDate,
   formatRelative,
   marketplaceLabel,
   type AccountView,
   type AddressView,
+  type FiscalNotice,
+  type FiscalView,
   type OrdersNotice,
   fiscalStates,
   paymentStatuses,
@@ -140,6 +143,8 @@ export function ImportedOrders({
   };
   const fields = (order: VisibleOrder, expanded = false) => (
     <div className="grid min-w-0 gap-4">
+      {/* Come nell'anteprima: nel dettaglio il Codice Fiscale sta in cima al pannello. */}
+      {expanded ? <ImportedFiscal order={order} t={t} language={language} expanded /> : null}
       {/* Come nell'anteprima: stato breve nella scheda, spiegazione nel dettaglio. */}
       {order.reconciliationIssue ? (
         expanded ? (
@@ -199,49 +204,9 @@ export function ImportedOrders({
           <p className="text-sm text-muted-foreground">{t.orders.notImported}</p>
         )}
       </div>
-      <div className="grid gap-2">
-        <p className="text-sm font-medium">{t.orders.taxData}</p>
-        <StatusBadge
-          tone={
-            order.fiscalState === "available"
-              ? "success"
-              : order.fiscalState === "locked"
-                ? "locked"
-                : "neutral"
-          }
-        >
-          {order.fiscalState === "unchecked"
-            ? t.orders.fiscalUnchecked
-            : t.orders.fiscal[order.fiscalState]}
-        </StatusBadge>
-        {order.taxIdentifiers.map((identifier) => {
-          const label =
-            identifier.type === "CODICE_FISCALE"
-              ? t.orders.identifier.CF
-              : identifier.type === "VAT_ID"
-                ? t.orders.identifier.PIVA
-                : identifier.type;
-          return (
-            <div key={`${identifier.type}:${identifier.value}`} className="grid gap-1">
-              <span className="text-sm text-muted-foreground">{label}</span>
-              <TaxCode
-                value={identifier.value}
-                labels={{
-                  copy: t.orders.copy(label, order.ebayOrderId),
-                  copied: t.orders.copied,
-                  copyFailed: t.orders.copyFailed,
-                  locked: t.orders.lockedLabel(label),
-                }}
-              />
-              {expanded ? (
-                <p className="text-sm text-muted-foreground">
-                  {t.order.source(formatDate(identifier.observedAt, language))}
-                </p>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
+      {expanded ? null : (
+        <ImportedFiscal order={order} t={t} language={language} expanded={false} />
+      )}
     </div>
   );
   return (
@@ -301,13 +266,125 @@ export function ImportedOrders({
             <div className="grid gap-4 px-4 pb-6">
               {fields(detail, true)}
               <p className="text-sm text-muted-foreground">
-                {t.orders.updated}: {formatDate(detail.lastModifiedTime, language)}
+                {t.orders.lastChanged(formatDate(detail.lastModifiedTime, language))}
               </p>
             </div>
           ) : null}
         </SheetContent>
       </Sheet>
     </>
+  );
+}
+
+/** Dato fiscale di un ordine importato nella forma dell'anteprima. */
+function importedFiscal(order: VisibleOrder): FiscalView | { state: "unchecked" } {
+  if (order.fiscalState === "available") {
+    const notice: FiscalNotice | null =
+      order.taxVerification === "error"
+        ? "lastKnown"
+        : order.taxVerification === "checking"
+          ? "checking"
+          : order.taxAvailability === "masked"
+            ? "masked"
+            : order.taxAvailability === "absent" || order.taxAvailability === "not_included"
+              ? "notReturned"
+              : null;
+    return {
+      state: "available",
+      identifiers: order.taxIdentifiers.map((identifier) => {
+        const type = taxIdentifierType(identifier.type, identifier.issuingCountry);
+        return {
+          type,
+          ...(type === "OTHER" ? { typeLabel: identifier.type } : {}),
+          value: identifier.value,
+          quality: identifier.quality,
+          updated: identifier.updated,
+        };
+      }),
+      ...(notice ? { notice } : {}),
+    };
+  }
+  if (order.fiscalState === "locked") return { state: "locked", shownAs: order.lockedShownAs };
+  if (order.fiscalState === "missing") {
+    const reason = order.taxAvailability;
+    return reason === "masked" || reason === "removed"
+      ? { state: "missing", reason }
+      : { state: "missing" };
+  }
+  return { state: order.fiscalState };
+}
+
+/**
+ * Riquadro e note del dato fiscale come nell'anteprima. Senza un'azione di nuova
+ * lettura per il singolo ordine l'errore non offre «Riprova».
+ */
+function ImportedFiscal({
+  order,
+  t,
+  language,
+  expanded,
+}: {
+  order: VisibleOrder;
+  t: AppCopy;
+  language: Language;
+  expanded: boolean;
+}) {
+  const fiscal = importedFiscal(order);
+  if (fiscal.state === "available") {
+    return (
+      <div className="grid content-start gap-3">
+        {fiscal.identifiers.map((identifier, index) => {
+          const name = identifierLabel(identifier, t);
+          return (
+            <div key={`${identifier.type}:${identifier.value}`} className="grid gap-1.5">
+              <CardLabel>{name}</CardLabel>
+              <TaxCode
+                value={identifier.value}
+                labels={taxCodeLabels(name, order.ebayOrderId, t)}
+                warning={
+                  identifier.quality !== "valid" && identifier.quality !== "unchecked"
+                    ? t.orders.toVerify
+                    : undefined
+                }
+              />
+              {expanded ? (
+                <p className="text-sm text-muted-foreground">
+                  {t.order.source(formatDate(order.taxIdentifiers[index]!.observedAt, language))}
+                </p>
+              ) : null}
+            </div>
+          );
+        })}
+        {/* Le note della scheda occupano due colonne: qui restano una sotto l'altra. */}
+        <div className="flex flex-col gap-1.5">
+          <AvailableNotes fiscal={fiscal} t={t} />
+        </div>
+      </div>
+    );
+  }
+  const label = t.orders.identifier[fiscal.state === "locked" ? fiscal.shownAs : "CF"];
+  return (
+    <div className="grid content-start gap-3">
+      <div className="grid gap-1.5">
+        <CardLabel>{label}</CardLabel>
+        {fiscal.state === "locked" ? (
+          <TaxCode value={null} labels={taxCodeLabels(label, order.ebayOrderId, t)} />
+        ) : (
+          <FiscalSlot
+            tone={fiscal.state === "unchecked" ? "neutral" : unavailableTone(fiscal.state)}
+          >
+            {fiscal.state === "unchecked" ? t.orders.notImported : t.orders.fiscal[fiscal.state]}
+          </FiscalSlot>
+        )}
+      </div>
+      {fiscal.state === "locked" || fiscal.state === "unchecked" ? null : (
+        <div className="flex flex-col gap-1.5">
+          <CardNote>
+            {fiscal.state === "error" ? t.orders.errorReadHint : unavailableHint(fiscal, false, t)}
+          </CardNote>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -474,7 +551,7 @@ function CardLabel({ children }: { children: string }) {
  * Spiegazione del dato fiscale. Nella scheda occupa tutta la larghezza sotto
  * acquirente e codice, così non allunga la colonna del codice.
  */
-function CardNote({ tone, children }: { tone?: "info"; children: React.ReactNode }) {
+function CardNote({ tone, children }: { tone?: "info" | "warning"; children: React.ReactNode }) {
   return (
     <p className="flex gap-1.5 text-sm leading-relaxed text-pretty text-muted-foreground sm:col-span-2">
       {tone ? <StatusIcon tone={tone} className="mt-1 size-3.5" /> : null}
@@ -518,6 +595,39 @@ function IdentifierNote({
       {prefix}
       {t.orders.updated}. {t.orders.updatedHint}
     </CardNote>
+  );
+}
+
+/** Condizione dell'ultima lettura accanto a un valore letto in precedenza. */
+function FiscalNoticeNote({ notice, t }: { notice: FiscalNotice; t: AppCopy }) {
+  return (
+    <CardNote tone={notice === "lastKnown" ? "warning" : "info"}>
+      {t.orders.fiscalNotice[notice]}
+    </CardNote>
+  );
+}
+
+/** Note di un dato disponibile: anomalie e modifiche per identificativo, poi l'ultima lettura. */
+function AvailableNotes({
+  fiscal,
+  t,
+}: {
+  fiscal: Extract<FiscalView, { state: "available" }>;
+  t: AppCopy;
+}) {
+  const several = fiscal.identifiers.length > 1;
+  return (
+    <>
+      {fiscal.identifiers.map((identifier) => (
+        <IdentifierNote
+          key={`note:${identifier.type}:${identifier.value}`}
+          identifier={identifier}
+          t={t}
+          prefix={several ? `${identifierLabel(identifier, t)}: ` : ""}
+        />
+      ))}
+      {fiscal.notice ? <FiscalNoticeNote notice={fiscal.notice} t={t} /> : null}
+    </>
   );
 }
 
@@ -623,8 +733,14 @@ function FiscalCodes({
   );
 }
 
-function unavailableHint(state: "missing" | "checking" | "error", ebayDown: boolean, t: AppCopy) {
-  if (state === "missing") return t.orders.missingHint;
+function unavailableHint(
+  fiscal: Extract<FiscalView, { state: "missing" | "checking" | "error" }>,
+  ebayDown: boolean,
+  t: AppCopy,
+) {
+  const { state } = fiscal;
+  if (state === "missing")
+    return fiscal.reason ? t.orders.missingReason[fiscal.reason] : t.orders.missingHint;
   if (state === "checking") return t.orders.checkingHint;
   return ebayDown ? t.orders.errorHintEbayDown : t.orders.errorHint;
 }
@@ -662,23 +778,13 @@ function FiscalNotes({
   compact: boolean;
 }) {
   const { fiscal } = order;
-  if (fiscal.state === "available") {
-    const several = fiscal.identifiers.length > 1;
-    return fiscal.identifiers.map((identifier) => (
-      <IdentifierNote
-        key={`note:${identifier.type}:${identifier.value}`}
-        identifier={identifier}
-        t={t}
-        prefix={several ? `${identifierLabel(identifier, t)}: ` : ""}
-      />
-    ));
-  }
+  if (fiscal.state === "available") return <AvailableNotes fiscal={fiscal} t={t} />;
   if (fiscal.state === "locked") {
     return <LockedNote t={t} language={language} account={account} compact={compact} />;
   }
   return (
     <>
-      <CardNote>{unavailableHint(fiscal.state, ebayDown, t)}</CardNote>
+      <CardNote>{unavailableHint(fiscal, ebayDown, t)}</CardNote>
       {compact && fiscal.state === "missing" && order.suggestion ? (
         <CardNote tone="info">
           {t.orders.suggestionFrom}{" "}
