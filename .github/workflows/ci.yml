@@ -35,7 +35,7 @@ jobs:
   # Gate locale, build e artefatto; prove browser e mutation girano in job propri.
   verify:
     name: Verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     concurrency:
       group: verify-${{ github.event.pull_request.number || github.ref }}
@@ -178,7 +178,7 @@ jobs:
     needs: verify
     # Una PR in bozza esegue soltanto `Verify`: le prove complete partono quando è pronta.
     if: needs.verify.outputs.e2e == 'true' && needs.verify.outputs.reused != 'true' && github.event.pull_request.draft != true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     concurrency:
       group: browser-${{ github.event.pull_request.number || github.ref }}-${{ matrix.shard }}
@@ -277,7 +277,7 @@ jobs:
     name: Node 26
     needs: [verify, browser, mutation]
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
 
     steps:
@@ -313,7 +313,7 @@ jobs:
     # I job browser e mutation saltati per il riuso non devono bloccare il deploy.
     # Gli esiti dei due gate restano obbligatori, anche dopo un fallimento o una cancellazione.
     if: ${{ !cancelled() && needs.verify.result == 'success' && needs.gate.result == 'success' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/develop' && vars.TEST_DEPLOY_ENABLED == 'true' && needs.verify.outputs.deploy == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     environment: test
     concurrency:

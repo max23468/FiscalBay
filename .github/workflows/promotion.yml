@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   align:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     steps:
       # `develop` richiede `Node 26` sul commit: il merge nasce su un branch temporaneo,
