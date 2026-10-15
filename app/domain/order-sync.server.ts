@@ -106,7 +106,8 @@ export async function dispatchStoreSyncs(environment: Env, now = new Date()): Pr
               -- Dopo una lettura non riuscita l'arretrato attende la cadenza del piano.
               (EXISTS (SELECT 1 FROM sync_runs sr WHERE sr.store_id = c.store_id
                           AND sr.started_at = ss.polled_at AND sr.ok = 1)
-               AND (ss.history_done_at IS NULL OR ss.recent_next IS NOT NULL OR EXISTS (
+               AND (ss.history_done_at IS NULL OR ss.recent_next IS NOT NULL
+                    OR ss.trading_end IS NOT NULL OR EXISTS (
                  SELECT 1 FROM order_source_refs r
                   WHERE r.store_id = c.store_id AND r.source = 'fulfillment'
                     AND r.detail_for IS NOT r.last_modified_time

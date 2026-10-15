@@ -200,6 +200,9 @@ const it = {
     quotaBody: (date: string) =>
       `Puoi consultare e cercare tutti gli ordini. Codice Fiscale e Partita IVA dei nuovi ordini restano da sbloccare fino al ${date}.`,
     quotaAction: "Passa a Premium",
+    reconciliationTitle: "Ordine da verificare",
+    reconciliationBody:
+      "Non è chiaro se gli articoli di questo ordine compaiono anche in un altro ordine eBay. Controllalo su eBay prima di usarne i dati.",
     storeIssueTitle: (store: string) => `${store}: collegamento scaduto`,
     storeIssueBody:
       "La sincronizzazione di questo negozio è sospesa. Gli altri negozi continuano. Ricollega il negozio.",
@@ -1025,6 +1028,9 @@ const en: AppCopy = {
     quotaBody: (date) =>
       `You can still view and search all orders. Codice Fiscale and Partita IVA of new orders stay locked until ${date}.`,
     quotaAction: "Upgrade to Premium",
+    reconciliationTitle: "Order needs review",
+    reconciliationBody:
+      "It is unclear whether the items in this order also appear in another eBay order. Check it on eBay before using its details.",
     storeIssueTitle: (store) => `${store}: connection expired`,
     storeIssueBody: "Syncing is paused for this store. Other stores continue. Reconnect the store.",
     storeIssueAction: "Open store",

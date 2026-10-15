@@ -140,6 +140,16 @@ export function ImportedOrders({
   };
   const fields = (order: VisibleOrder, expanded = false) => (
     <div className="grid min-w-0 gap-4">
+      {/* Come nell'anteprima: stato breve nella scheda, spiegazione nel dettaglio. */}
+      {order.reconciliationIssue ? (
+        expanded ? (
+          <StatusAlert tone="warning" title={t.orders.reconciliationTitle}>
+            {t.orders.reconciliationBody}
+          </StatusAlert>
+        ) : (
+          <StatusBadge tone="warning">{t.orders.toVerify}</StatusBadge>
+        )
+      ) : null}
       <dl className="grid gap-2 text-sm">
         {[
           [t.orders.store, order.storeName],
@@ -868,6 +878,9 @@ function OrderCard({
           <StatePill tone={shippingTone[order.shipping]}>
             {t.orders.shipping[order.shipping]}
           </StatePill>
+          {order.reconciliationIssue ? (
+            <StatePill tone="warning">{t.orders.toVerify}</StatePill>
+          ) : null}
         </p>
       </header>
       <div className="flex gap-3">
@@ -1040,6 +1053,11 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
         </TabsTrigger>
       </TabsList>
       <TabsContent value="details" className="grid gap-7">
+        {order.reconciliationIssue ? (
+          <StatusAlert tone="warning" title={t.orders.reconciliationTitle}>
+            {t.orders.reconciliationBody}
+          </StatusAlert>
+        ) : null}
         <section aria-labelledby="order-payment" className="grid gap-3">
           <h3 id="order-payment" className="text-sm font-semibold">
             {t.order.summary}

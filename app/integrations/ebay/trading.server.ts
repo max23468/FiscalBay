@@ -1,9 +1,11 @@
 import { UpstreamError, upstreamText } from "../http.server";
 import type { EbayAccess } from "./environment.server";
+import { orderObservationSchema, type OrderObservation } from "../../domain/order-import.server";
+import { parseMinor } from "../../money";
 
 /**
- * Trading resta circoscritto alle chiamate necessarie: `GetOrders` per gli identificativi
- * fiscali dell'acquirente e `GetItem` per l'immagine dell'articolo. Le risposte passano dal
+ * Trading resta circoscritto alle chiamate necessarie: `GetOrders` per gli acquisti prima del
+ * checkout, le identità di riga e i dati fiscali, `GetItem` per l'immagine. Le risposte passano dal
  * confine HTTP e vengono rifiutate prima del parsing se troppo grandi, con byte NUL o con
  * dichiarazioni `DOCTYPE`/`ENTITY`.
  */
@@ -119,6 +121,147 @@ async function tradingCall(access: EbayAccess, call: string, fields: string): Pr
   );
   tradingAck(xml);
   return xml;
+}
+
+/** Elenco Trading: include gli acquisti non ancora disponibili in Fulfillment. */
+export async function readTradingOrders(
+  access: EbayAccess,
+  input: { from: string; until: string; page: number },
+): Promise<{ orders: OrderObservation[]; total: number; more: boolean; skipped: number }> {
+  const from = new Date(input.from).toISOString();
+  const until = new Date(input.until).toISOString();
+  if (from > until || !Number.isSafeInteger(input.page) || input.page < 1)
+    throw new UpstreamError("invalid_response");
+  const xml = await tradingCall(
+    access,
+    "GetOrders",
+    `<DetailLevel>ReturnAll</DetailLevel><OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>` +
+      `<ModTimeFrom>${from}</ModTimeFrom><ModTimeTo>${until}</ModTimeTo>` +
+      `<Pagination><EntriesPerPage>25</EntriesPerPage><PageNumber>${input.page}</PageNumber></Pagination>`,
+  );
+  return parseTradingOrders(xml);
+}
+
+/** Campi strutturati soltanto: le transazioni non contaminano i campi dell'ordine. */
+export function parseTradingOrders(xml: string) {
+  tradingAck(xml);
+  const totalText = xmlField(xml, "TotalNumberOfEntries");
+  const moreText = xmlField(xml, "HasMoreOrders");
+  if (!totalText || !/^\d+$/u.test(totalText) || !["true", "false"].includes(moreText ?? ""))
+    throw new UpstreamError("invalid_response");
+  const orders: OrderObservation[] = [];
+  let entries = 0;
+  let skipped = 0;
+  for (const [, block] of xml.matchAll(/<Order>([\s\S]*?)<\/Order>/gu)) {
+    entries += 1;
+    // Un ordine illeggibile si salta: gli altri della pagina restano acquisibili.
+    try {
+      const transactions =
+        /<TransactionArray>([\s\S]*?)<\/TransactionArray>/u.exec(block!)?.[1] ?? "";
+      const header = block!.replace(/<TransactionArray>[\s\S]*?<\/TransactionArray>/gu, "");
+      const id = xmlField(header, "OrderID");
+      const status = xmlField(header, "OrderStatus");
+      const checkout = /<CheckoutStatus>([\s\S]*?)<\/CheckoutStatus>/u.exec(header)?.[1] ?? "";
+      const total = /<Total currencyID="([A-Z]{3})">([^<]+)<\/Total>/u.exec(header);
+      if (!id || !status || !total) throw new Error("invalid_order");
+      const paid = !!xmlField(header, "PaidTime") || status === "Completed";
+      const shipping = /<ShippingAddress>([\s\S]*?)<\/ShippingAddress>/u.exec(header)?.[1];
+      const items = [...transactions.matchAll(/<Transaction>([\s\S]*?)<\/Transaction>/gu)].map(
+        ([, transaction]) => {
+          const item = /<Item>([\s\S]*?)<\/Item>/u.exec(transaction!)?.[1] ?? "";
+          const itemId = xmlField(item, "ItemID");
+          const transactionId = xmlField(transaction!, "TransactionID");
+          const lineId = xmlField(transaction!, "OrderLineItemID");
+          const stableKey = itemId && transactionId ? `${itemId}-${transactionId}` : lineId;
+          if (lineId && stableKey !== lineId) throw new Error("conflicting_line_identity");
+          const quantity = Number(xmlField(transaction!, "QuantityPurchased"));
+          const price =
+            /<TransactionPrice currencyID="([A-Z]{3})">([^<]+)<\/TransactionPrice>/u.exec(
+              transaction!,
+            );
+          return {
+            lineItemId: lineId ?? stableKey,
+            stableKey,
+            legacyItemId: itemId,
+            title: xmlField(item, "Title") ?? "",
+            sku: xmlField(item, "SKU"),
+            quantity,
+            total: price
+              ? { minor: parseMinor(price[2]!, price[1]!) * quantity, currency: price[1]! }
+              : null,
+          };
+        },
+      );
+      if (!items.length) throw new Error("missing_transactions");
+      for (const [, tax] of header.matchAll(
+        /<BuyerTaxIdentifier>([\s\S]*?)<\/BuyerTaxIdentifier>/gu,
+      )) {
+        if (!xmlField(tax!, "ID") || !xmlField(tax!, "Type"))
+          throw new Error("invalid_tax_identifier");
+      }
+      orders.push(
+        orderObservationSchema.parse({
+          source: "trading",
+          externalOrderId: id,
+          provisional: !paid,
+          creationTime: xmlField(header, "CreatedTime"),
+          lastModifiedTime: xmlField(checkout, "LastModifiedTime"),
+          total: { minor: parseMinor(total[2]!, total[1]!), currency: total[1] },
+          paymentStatus: paid
+            ? "PAID"
+            : [
+                  "Active",
+                  "Incomplete",
+                  "InProcess",
+                  "Cancelled",
+                  "Canceled",
+                  "CancelPending",
+                ].includes(status)
+              ? "PENDING"
+              : status,
+          fulfillmentStatus: xmlField(header, "ShippedTime") ? "FULFILLED" : null,
+          cancelStatus:
+            ["Cancelled", "Canceled"].includes(status) ||
+            xmlField(header, "CancelStatus") === "CancelClosedWithRefund"
+              ? "CANCELED"
+              : xmlField(header, "CancelStatus"),
+          buyer: {
+            username: xmlField(header, "BuyerUserID"),
+            shipTo: shipping
+              ? {
+                  name: xmlField(shipping, "Name"),
+                  phone: xmlField(shipping, "Phone"),
+                  address: {
+                    addressLine1: xmlField(shipping, "Street1"),
+                    addressLine2: xmlField(shipping, "Street2"),
+                    city: xmlField(shipping, "CityName"),
+                    postalCode: xmlField(shipping, "PostalCode"),
+                    stateOrProvince: xmlField(shipping, "StateOrProvince"),
+                    countryCode: xmlField(shipping, "Country"),
+                  },
+                }
+              : null,
+          },
+          items,
+          taxIdentifiers: {
+            source: "ebay_trading_get_orders",
+            complete: false,
+            values: mapTradingTaxIdentifiers(parseTradingOrderTaxIdentifiers(xml, id)),
+          },
+        }),
+      );
+    } catch {
+      skipped += 1;
+    }
+  }
+  if (
+    !Number.isSafeInteger(Number(totalText)) ||
+    Number(totalText) < entries ||
+    new Set(orders.map((order) => order.externalOrderId)).size !== orders.length ||
+    (moreText === "true" && !entries)
+  )
+    throw new UpstreamError("invalid_response");
+  return { orders, total: Number(totalText), more: moreText === "true", skipped };
 }
 
 /** Identificativi fiscali dell'acquirente per un solo ordine, letti da `GetOrders`. */

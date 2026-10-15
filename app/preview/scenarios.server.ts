@@ -98,11 +98,13 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
   "dati-discordanti": {
     it: {
       name: "Dati discordanti",
-      focus: "Codice aggiornato da eBay, nome non coerente, omocodia e suggerimenti in conflitto.",
+      focus:
+        "Codice aggiornato da eBay, nome non coerente, omocodia, suggerimenti in conflitto e un ordine da verificare.",
     },
     en: {
       name: "Conflicting data",
-      focus: "Code updated by eBay, name mismatch, ambiguous codes and conflicting suggestions.",
+      focus:
+        "Code updated by eBay, name mismatch, ambiguous codes, conflicting suggestions and an order that needs review.",
     },
   },
   "primo-accesso": {
@@ -1115,6 +1117,7 @@ export function loadScenario(
               ...seed,
               fiscal: { state: "available", identifiers: [cf("MRNSRA90L41H50LV", "unverifiable")] },
             };
+          if (seed.id === "ord-03") return { ...seed, reconciliationIssue: true };
           if (seed.id === "ord-05") {
             return {
               ...seed,

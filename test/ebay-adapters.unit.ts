@@ -9,7 +9,11 @@ import {
   readFulfillmentOrder,
   readFulfillmentOrders,
 } from "../app/integrations/ebay/fulfillment.server";
-import { readTradingTaxObservation } from "../app/integrations/ebay/trading.server";
+import {
+  readTradingTaxObservation,
+  parseTradingOrders,
+  readTradingOrders,
+} from "../app/integrations/ebay/trading.server";
 import { ebayConfiguration } from "../app/integrations/ebay/environment.server";
 
 const configuration = ebayConfiguration(
@@ -21,6 +25,98 @@ const configuration = ebayConfiguration(
   },
   "production",
 );
+
+describe("acquisti Trading", () => {
+  const xml = `<GetOrdersResponse><Ack>Success</Ack><PaginationResult><TotalNumberOfEntries>1</TotalNumberOfEntries></PaginationResult>
+    <HasMoreOrders>false</HasMoreOrders><OrderArray><Order><OrderID>provvisorio</OrderID><OrderStatus>Active</OrderStatus>
+    <CreatedTime>2026-09-01T10:00:00Z</CreatedTime><CheckoutStatus><LastModifiedTime>2026-09-01T11:00:00Z</LastModifiedTime></CheckoutStatus>
+    <Total currencyID="EUR">12.50</Total><BuyerUserID>buyer</BuyerUserID>
+    <ShippingAddress><Name>Destinatario</Name><Street1>Via Sintetica</Street1><Country>IT</Country></ShippingAddress>
+    <TransactionArray><Transaction><Item><ItemID>123</ItemID><Title>Articolo &amp; altro</Title></Item>
+    <TransactionID>456</TransactionID><OrderLineItemID>123-456</OrderLineItemID><QuantityPurchased>2</QuantityPurchased><TransactionPrice currencyID="EUR">6.25</TransactionPrice></Transaction></TransactionArray>
+    </Order></OrderArray></GetOrdersResponse>`;
+  it("conserva identità, mancato pagamento e campi strutturati", async () => {
+    const result = parseTradingOrders(xml);
+    expect(result).toMatchObject({
+      total: 1,
+      more: false,
+      orders: [
+        {
+          provisional: true,
+          externalOrderId: "provvisorio",
+          paymentStatus: "PENDING",
+          total: { minor: 1250, currency: "EUR" },
+          buyer: { name: null, username: "buyer", shipTo: { name: "Destinatario" } },
+          items: [
+            { lineItemId: "123-456", stableKey: "123-456", title: "Articolo & altro", quantity: 2 },
+          ],
+        },
+      ],
+    });
+    expect(parseTradingOrders(xml.replace("Active", "Completed")).orders[0]).toMatchObject({
+      provisional: false,
+      paymentStatus: "PAID",
+    });
+    expect(parseTradingOrders(xml.replace("Active", "Cancelled")).orders[0]).toMatchObject({
+      provisional: true,
+      cancelStatus: "CANCELED",
+    });
+    expect(parseTradingOrders(xml).orders[0]!.items[0]!.total).toEqual({
+      minor: 1250,
+      currency: "EUR",
+    });
+    expect(parseTradingOrders(xml.replace("Active", "FutureStatus")).orders[0]!.paymentStatus).toBe(
+      "FutureStatus",
+    );
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(xml));
+    await readTradingOrders(
+      { configuration, fetcher, accessToken: "synthetic" },
+      {
+        from: "2026-09-01T00:00:00Z",
+        until: "2026-09-02T00:00:00Z",
+        page: 2,
+      },
+    );
+    expect(String(fetcher.mock.calls[0]![1]?.body)).toContain("<PageNumber>2</PageNumber>");
+    expect(String(fetcher.mock.calls[0]![1]?.body)).toContain(
+      "<ModTimeFrom>2026-09-01T00:00:00.000Z</ModTimeFrom>",
+    );
+  });
+  it.each([
+    xml.replace("<HasMoreOrders>false</HasMoreOrders>", ""),
+    xml.replace(
+      "<TotalNumberOfEntries>1</TotalNumberOfEntries>",
+      "<TotalNumberOfEntries>0</TotalNumberOfEntries>",
+    ),
+    xml.replace("</OrderArray>", xml.match(/<Order>[\s\S]*<\/Order>/u)![0] + "</OrderArray>"),
+  ])("rifiuta la pagina incompleta o contraddittoria", (body) => {
+    expect(() => parseTradingOrders(body)).toThrow();
+  });
+  it.each([
+    xml.replace("<QuantityPurchased>2</QuantityPurchased>", ""),
+    xml.replace('<Total currencyID="EUR">12.50</Total>', ""),
+    xml.replace("123-456</OrderLineItemID>", "123-789</OrderLineItemID>"),
+    xml.replace("<TransactionArray>", "<Broken>"),
+    xml.replace("<CreatedTime>2026-09-01T10:00:00Z</CreatedTime>", ""),
+    xml.replace(
+      "</Order>",
+      "<BuyerTaxIdentifier><Type>CODICE_FISCALE</Type></BuyerTaxIdentifier></Order>",
+    ),
+    xml.replace("6.25</TransactionPrice>", "6.251</TransactionPrice>"),
+  ])("salta l'ordine incompleto senza scartare la pagina", (body) => {
+    const page = body
+      .replace("<TotalNumberOfEntries>1<", "<TotalNumberOfEntries>2<")
+      .replace(
+        "</OrderArray>",
+        xml.match(/<Order>[\s\S]*<\/Order>/u)![0].replace(">provvisorio<", ">valido<") +
+          "</OrderArray>",
+      );
+    expect(parseTradingOrders(page)).toMatchObject({
+      skipped: 1,
+      orders: [{ externalOrderId: "valido" }],
+    });
+  });
+});
 
 describe("contratto Fulfillment senza persistenza", () => {
   const created = "2026-01-01T00:00:00.000Z";

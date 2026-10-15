@@ -1,4 +1,4 @@
-import { writableStore } from "./order-import.server";
+import { DuplicateLineIdentity, writableStore } from "./order-import.server";
 import {
   record,
   spend,
@@ -7,6 +7,7 @@ import {
   type Context,
 } from "./order-acquisition-context.server";
 import { readDetail, readDetails } from "./order-acquisition-details.server";
+import { logFailure } from "../errors";
 import { UpstreamError } from "../integrations/http.server";
 import {
   ebayConfiguration,
@@ -21,13 +22,16 @@ import {
   readFulfillmentOrders,
 } from "../integrations/ebay/fulfillment.server";
 import { openToken, rejectCredentials } from "../integrations/ebay/seller-credentials.server";
+import { readTradingOrders } from "../integrations/ebay/trading.server";
 
 /**
  * Acquisizione degli ordini di un negozio, condivisa da collegamento e lavoro periodico:
  *
  * 1. recenti: ordini modificati dopo l'ultimo limite applicato, con una sovrapposizione;
- * 2. storico: ordini creati nella finestra fissata al primo avvio, dal più recente;
- * 3. dettaglio: dati fiscali e immagini di ogni versione Fulfillment non ancora letta,
+ * 2. Trading: acquisti modificati, compresi quelli prima del checkout che Fulfillment non
+ *    espone, con pagina e limite propri; un suo errore non ferma i passi successivi;
+ * 3. storico: ordini creati nella finestra fissata al primo avvio, dal più recente;
+ * 4. dettaglio: dati fiscali e immagini di ogni versione Fulfillment non ancora letta,
  *    in `order-acquisition-details.server.ts`.
  *
  * Ogni pagina si applica prima di salvarne il link `next`, e il limite dei recenti avanza
@@ -123,7 +127,80 @@ type SyncRow = {
   history_next: string | null;
   history_total: number | null;
   history_done_at: string | null;
+  trading_cursor: string | null;
+  trading_end: string | null;
+  trading_page: number | null;
+  trading_total: number | null;
 };
+
+async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
+  const until = state.trading_end ?? ctx.at;
+  if (!state.trading_end && state.trading_cursor && state.trading_cursor >= ctx.at) return true;
+  // Trading accetta al massimo trenta giorni per intervallo di modifica.
+  const from = new Date(
+    Math.max(
+      Date.parse(until) - historyDays * dayMilliseconds,
+      Date.parse(state.trading_cursor ?? state.history_from) - overlapMilliseconds,
+    ),
+  ).toISOString();
+  let page = state.trading_page ?? 1;
+  let total = state.trading_total;
+  while (spend(ctx.budget, 1, 1)) {
+    const result = await readTradingOrders(ctx.access, { from, until, page });
+    let skipped = result.skipped;
+    await result.orders
+      .filter(
+        (observation) =>
+          Date.parse(observation.creationTime) >=
+          Date.parse(ctx.at) - historyDays * dayMilliseconds,
+      )
+      .reduce<Promise<unknown>>(
+        (previous, observation) =>
+          previous.then(() =>
+            record(ctx, observation).catch((error: unknown) => {
+              // Righe ripetute nello stesso acquisto: si salta l'ordine, non la pagina.
+              if (!(error instanceof DuplicateLineIdentity)) throw error;
+              skipped += 1;
+            }),
+          ),
+        Promise.resolve(),
+      );
+    if (skipped > 0)
+      logFailure({ error: new UpstreamError("invalid_response"), operation: "order_acquisition" });
+    if (page > 1 && result.total !== total) {
+      page = 1;
+    } else if (result.more) {
+      page += 1;
+    } else {
+      await saveState(
+        ctx,
+        "trading_cursor = ?4, trading_end = NULL, trading_page = NULL, trading_total = NULL",
+        until,
+      );
+      return true;
+    }
+    total = result.total;
+    await saveState(
+      ctx,
+      "trading_end = ?4, trading_page = ?5, trading_total = ?6",
+      until,
+      page,
+      total,
+    );
+  }
+  return false;
+}
+
+function tradingFailure(error: unknown): false {
+  if (
+    !(error instanceof UpstreamError) ||
+    error.failure === "credentials" ||
+    error.failure === "rate_limited"
+  )
+    throw error;
+  logFailure({ error, operation: "order_acquisition" });
+  return false;
+}
 
 function recentPass(ctx: Context, state: SyncRow): Pass {
   let end = state.recent_end;
@@ -254,7 +331,8 @@ export async function acquireOrders(input: {
          updated_at = excluded.updated_at
        WHERE sync_state.locked_until IS NULL OR sync_state.locked_until <= ?3
        RETURNING cursor, recent_end, recent_next, recent_total, history_from, history_until,
-                 history_next, history_total, history_done_at`,
+                 history_next, history_total, history_done_at,
+                 trading_cursor, trading_end, trading_page, trading_total`,
     )
     .bind(
       storeId,
@@ -298,11 +376,14 @@ export async function acquireOrders(input: {
     const recent = await runPass(ctx, recentPass(ctx, state));
     // Lettura dei recenti conclusa: l'ultima sincronizzazione del negozio.
     if (recent) await saveState(ctx, "last_success_at = ?3");
+    // Trading aggiunge gli acquisti prima del checkout: un suo errore lascia la passata da
+    // riprendere senza fermare storico e dettaglio. Credenziali e limite fermano tutto.
+    const trading = recent && (await runTradingPass(ctx, state).catch(tradingFailure));
     const history =
       recent && (!!state.history_done_at || (await runPass(ctx, historyPass(ctx, state))));
     const details = await readDetails(ctx);
     outcome = { ok: true, served: true };
-    return history && details ? "complete" : "budget";
+    return trading && history && details ? "complete" : "budget";
   } catch (error) {
     if (error instanceof NotWritable) return "not_writable";
     const limited = error instanceof UpstreamError && error.failure === "rate_limited";

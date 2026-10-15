@@ -110,6 +110,13 @@ export const orderObservationSchema = z.object({
 });
 export type OrderObservation = z.input<typeof orderObservationSchema>;
 
+/** Lo stesso acquisto riporta due volte la stessa riga: la lettura non si registra. */
+export class DuplicateLineIdentity extends Error {
+  constructor() {
+    super("duplicate_line_identity");
+  }
+}
+
 export type ReconciliationIssue =
   | "partial_overlap"
   | "missing_line_identity"
@@ -126,13 +133,14 @@ export type OrderObservationResult =
 
 type StoredOrder = {
   id: string;
+  ebay_order_id: string;
   is_provisional: number;
   last_modified_time: string;
   buyer_json: string | null;
   has_fulfillment: number;
 };
 
-const storedOrderColumns = `o.id, o.is_provisional, o.last_modified_time, o.buyer_json,
+const storedOrderColumns = `o.id, o.ebay_order_id, o.is_provisional, o.last_modified_time, o.buyer_json,
   EXISTS (SELECT 1 FROM order_source_refs r
            WHERE r.order_id = o.id AND r.source = 'fulfillment') AS has_fulfillment`;
 
@@ -175,10 +183,10 @@ function keepMaskedValues(buyer: BuyerSnapshot, stored: string | null): BuyerSna
  * Registra una lettura dell'ordine nello stesso negozio, con un UUID interno stabile.
  *
  * L'ordine si riconosce dall'identificativo esterno già visto (qualunque fonte) oppure, se è
- * nuovo, dall'insieme delle identità stabili delle righe: solo un candidato con le stesse
- * identità è lo stesso ordine, così un provvisorio diventa definitivo e un provvisorio
- * arrivato dopo il definitivo vi si aggancia. Sovrapposizioni parziali, righe senza identità
- * o più candidati creano un ordine distinto con l'anomalia registrata, senza unire nulla.
+ * nuovo, dalle identità stabili delle righe. Più provvisori con righe disgiunte interamente
+ * contenute nel definitivo confluiscono nello stesso UUID; gli originali conservano storico
+ * e grant. Un provvisorio tardivo interamente contenuto si aggancia al definitivo. Identità
+ * mancanti, sovrapposizioni parziali e candidati concorrenti restano anomalie esplicite.
  *
  * I campi dell'ordine appartengono a Fulfillment quando l'ha letto; un provvisorio non
  * sovrascrive mai un definitivo. Gli identificativi fiscali conservano la propria fonte e
@@ -191,6 +199,12 @@ export async function recordOrderObservation(
   input: OrderObservation,
 ): Promise<OrderObservationResult> {
   const observation = orderObservationSchema.parse(input);
+  if (
+    new Set(observation.items.map((item) => item.lineItemId)).size !== observation.items.length ||
+    new Set(observation.items.flatMap((item) => (item.stableKey ? [item.stableKey] : []))).size !==
+      observation.items.filter((item) => item.stableKey).length
+  )
+    throw new DuplicateLineIdentity();
   const scope = [target.storeId, target.consentGrantedAt] as const;
 
   const direct = await db
@@ -199,8 +213,10 @@ export async function recordOrderObservation(
               (SELECT last_modified_time FROM order_source_refs
                 WHERE store_id = ?1 AND source = ?2 AND external_order_id = ?3) AS source_modified
          FROM orders o
-        WHERE o.store_id = ?1 AND (o.ebay_order_id = ?3 OR o.id IN (
-          SELECT order_id FROM order_source_refs WHERE store_id = ?1 AND external_order_id = ?3))
+        WHERE o.store_id = ?1 AND o.merged_into IS NULL AND o.id IN (
+          SELECT COALESCE(original.merged_into, original.id) FROM orders original
+          WHERE original.store_id = ?1 AND (original.ebay_order_id = ?3 OR original.id IN (
+            SELECT order_id FROM order_source_refs WHERE store_id = ?1 AND external_order_id = ?3)))
         LIMIT 1`,
     )
     .bind(target.storeId, observation.source, observation.externalOrderId)
@@ -210,30 +226,55 @@ export async function recordOrderObservation(
   }
 
   let matched: StoredOrder | null = direct;
+  let absorbed: StoredOrder[] = [];
   const related: Array<[string, ReconciliationIssue]> = [];
-  const keys = observation.items.flatMap((item) => (item.stableKey ? [item.stableKey] : []));
-  if (!matched) {
+  const keys = observation.items.map((item) => item.stableKey);
+  const keySet = new Set<string | null>(keys);
+  {
     const { results: candidates } = await db
       .prepare(
         `SELECT ${storedOrderColumns},
-                (SELECT json_group_array(stable_key) FROM order_items WHERE order_id = o.id) AS keys
+                COALESCE(CASE WHEN ?4 = 'trading' THEN o.trading_line_keys END,
+                  (SELECT json_group_array(stable_key) FROM order_items WHERE order_id = o.id)) AS keys
            FROM orders o
-          WHERE o.store_id = ?1 AND o.id IN (
+          WHERE o.store_id = ?1 AND o.merged_into IS NULL AND o.id IS NOT ?3 AND (o.id IN (
             SELECT order_id FROM order_items
-             WHERE stable_key IN (SELECT value FROM json_each(?2)))`,
+             WHERE stable_key IN (SELECT value FROM json_each(?2))) OR EXISTS (
+               SELECT 1 FROM json_each(o.trading_line_keys) WHERE value IN (SELECT value FROM json_each(?2))))
+          ORDER BY o.creation_time, o.id`,
       )
-      .bind(target.storeId, JSON.stringify(keys))
+      .bind(target.storeId, JSON.stringify(keys), direct?.id ?? null, observation.source)
       .all<StoredOrder & { keys: string }>();
-    const missingIdentity = keys.length < observation.items.length;
+    const missingIdentity = observation.items.some((item) => item.stableKey === null);
     const parsed = candidates.map((candidate) => ({
       candidate,
       keys: JSON.parse(candidate.keys) as Array<string | null>,
     }));
     const only = parsed.length === 1 ? parsed[0]! : null;
+    const disjoint =
+      new Set(parsed.flatMap((entry) => entry.keys)).size ===
+      parsed.reduce((count, entry) => count + entry.keys.length, 0);
     if (
+      !missingIdentity &&
+      !observation.provisional &&
+      parsed.length > 0 &&
+      disjoint &&
+      parsed.every(
+        ({ candidate, keys: candidateKeys }) =>
+          candidate.is_provisional &&
+          candidateKeys.length > 0 &&
+          candidateKeys.every((key) => keySet.has(key)),
+      )
+    ) {
+      matched = direct ?? parsed[0]!.candidate;
+      absorbed = parsed.map(({ candidate }) => candidate).filter(({ id }) => id !== matched!.id);
+    } else if (
+      !direct &&
       only &&
       !missingIdentity &&
-      only.keys.length === keys.length &&
+      !only.keys.includes(null) &&
+      (only.keys.every((key) => keySet.has(key)) ||
+        (observation.provisional && !only.candidate.is_provisional)) &&
       keys.every(Set.prototype.has, new Set(only.keys))
     ) {
       matched = only.candidate;
@@ -310,6 +351,33 @@ export async function recordOrderObservation(
     );
   }
   const orderExists = `${writableStore} AND EXISTS (SELECT 1 FROM orders WHERE id = ?4)`;
+
+  for (const original of absorbed) {
+    // Conserva le osservazioni fiscali originali; copia solo i valori correnti sul definitivo.
+    statements.push(
+      db
+        .prepare(`INSERT OR IGNORE INTO tax_identifiers
+        (id, order_id, identifier_type, issuing_country, value, source, observed_at)
+        SELECT lower(hex(randomblob(16))), ?4, identifier_type, issuing_country, value, source, observed_at
+          FROM tax_identifiers WHERE order_id = ?3 AND removed_at IS NULL AND ${orderExists}`)
+        .bind(...scope, original.id, orderId),
+      db
+        .prepare(`UPDATE orders SET merged_into = ?4 WHERE merged_into = ?3 AND ${orderExists}`)
+        .bind(...scope, original.id, orderId),
+      db
+        .prepare(`UPDATE orders SET merged_into = ?4 WHERE id = ?3 AND ${orderExists}`)
+        .bind(...scope, original.id, orderId),
+      db
+        .prepare(`DELETE FROM order_reconciliation_issues
+        WHERE order_id IN (?3, ?4) AND related_order_id IN (?3, ?4) AND ${orderExists}`)
+        .bind(...scope, original.id, orderId),
+      db
+        .prepare(
+          `UPDATE order_source_refs SET order_id = ?4 WHERE order_id = ?3 AND ${orderExists}`,
+        )
+        .bind(...scope, original.id, orderId),
+    );
+  }
 
   if (ownsFields) {
     // ponytail: l'ordine fra lettura degli articoli e batch è garantito dalla sincronizzazione
@@ -415,7 +483,7 @@ export async function recordOrderObservation(
           ),
       );
     }
-    if (tax.complete) {
+    if (tax.complete && !(observation.provisional && matched && !matched.is_provisional)) {
       statements.push(
         db
           .prepare(
@@ -436,6 +504,25 @@ export async function recordOrderObservation(
     }
   }
   const taxEnd = statements.length;
+  if (
+    observation.source === "trading" &&
+    (ownsFields ||
+      (!observation.provisional && matched!.ebay_order_id === observation.externalOrderId))
+  ) {
+    statements.push(
+      db
+        .prepare(`UPDATE orders SET trading_line_keys = ?3 WHERE id = ?4
+      AND trading_line_keys IS NOT ?3 AND ${orderExists}`)
+        .bind(...scope, JSON.stringify(observation.items.map((item) => item.stableKey)), orderId),
+    );
+  } else if (ownsFields && matched?.is_provisional && !observation.provisional) {
+    // Le righe del definitivo sostituiscono l'insieme parziale del provvisorio promosso.
+    statements.push(
+      db
+        .prepare(`UPDATE orders SET trading_line_keys = NULL WHERE id = ?4 AND ${orderExists}`)
+        .bind(...scope, null, orderId),
+    );
+  }
   statements.push(
     db
       .prepare(

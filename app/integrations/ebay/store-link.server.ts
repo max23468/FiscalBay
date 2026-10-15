@@ -271,7 +271,7 @@ export async function completeStoreLink(input: {
     grantedAt: now,
     access: { fetcher, configuration, accessToken: token.access_token },
     now: issued,
-    budget: { calls: 8, pages: 2 },
+    budget: { calls: 8, pages: 3 },
   }).catch((error: unknown) => {
     logFailure({ request: input.request, error, operation: "store_link" });
   });
