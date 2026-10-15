@@ -288,7 +288,7 @@ const seeds: OrderSeed[] = [
     email: "acquisti@coop-valdinon.invalid",
     fiscal: {
       state: "available",
-      identifiers: [{ type: "PIVA", value: "01234567890", quality: "valid" }],
+      identifiers: [{ type: "PIVA", value: "01234567897", quality: "valid" }],
     },
   },
   {
@@ -313,7 +313,7 @@ const seeds: OrderSeed[] = [
     },
     phone: "+39 000 1000 002",
     email: "maria.rossi@esempio.invalid",
-    fiscal: { state: "available", identifiers: [cf("RSSMRA80A41H501U")] },
+    fiscal: { state: "available", identifiers: [cf("RSSMRA80A41H501Y")] },
     thumbnail: thumbnail(210),
   },
   {
@@ -339,7 +339,7 @@ const seeds: OrderSeed[] = [
     phone: null,
     email: "lucab75@esempio.invalid",
     fiscal: { state: "locked", shownAs: "CF" },
-    lockable: [cf("BNCLCU75C12F205X")],
+    lockable: [cf("BNCLCU75C12F205G")],
     thumbnail: thumbnail(30),
   },
   {
@@ -440,7 +440,7 @@ const seeds: OrderSeed[] = [
     },
     phone: "+39 000 1000 007",
     email: "ferrari.marco@esempio.invalid",
-    fiscal: { state: "available", identifiers: [cf("BNCGPP70L12F205K", "name")] },
+    fiscal: { state: "available", identifiers: [cf("BNCGPP70L12F205O", "name")] },
     thumbnail: thumbnail(120),
   },
   {
@@ -484,7 +484,7 @@ const seeds: OrderSeed[] = [
     phone: "+39 000 1000 009",
     email: "pconti@esempio.invalid",
     fiscal: { state: "locked", shownAs: "PIVA" },
-    lockable: [{ type: "PIVA", value: "04567890123", quality: "valid" }],
+    lockable: [{ type: "PIVA", value: "04567890126", quality: "valid" }],
   },
   {
     id: "ord-10",
@@ -511,8 +511,8 @@ const seeds: OrderSeed[] = [
     fiscal: {
       state: "available",
       identifiers: [
-        cf("GLLLNE82D45A794Q"),
-        { type: "PIVA", value: "03456789012", quality: "valid" },
+        cf("GLLLNE82D45A794P"),
+        { type: "PIVA", value: "03456789019", quality: "valid" },
       ],
     },
   },
@@ -562,7 +562,7 @@ const seeds: OrderSeed[] = [
     },
     phone: "+39 000 1000 012",
     email: "rricci@esempio.invalid",
-    fiscal: { state: "available", identifiers: [cf("RCCRRT77B10G702Z")] },
+    fiscal: { state: "available", identifiers: [cf("RCCRRT77B10G702J")] },
   },
   {
     id: "ord-13",
@@ -622,7 +622,7 @@ const seeds: OrderSeed[] = [
     email: "ordini@tecnoufficio.invalid",
     fiscal: {
       state: "available",
-      identifiers: [{ type: "PIVA", value: "09876543210", quality: "valid" }],
+      identifiers: [{ type: "PIVA", value: "09876543217", quality: "valid" }],
     },
   },
 ];
@@ -650,7 +650,7 @@ const incomingSeeds: OrderSeed[] = [
     },
     phone: "+39 000 1000 020",
     email: "gneri@esempio.invalid",
-    fiscal: { state: "available", identifiers: [cf("NREGGR80A01G337A")] },
+    fiscal: { state: "available", identifiers: [cf("NREGRG80A01G337P")] },
   },
   {
     id: "ord-21",
@@ -951,7 +951,7 @@ export function loadScenario(
             ? {
                 ...seed,
                 fiscal: { state: "locked", shownAs: "CF" },
-                lockable: [cf("RSSMRA80A41H501U")],
+                lockable: [cf("RSSMRA80A41H501Y")],
               }
             : seed,
         ),
@@ -1109,13 +1109,13 @@ export function loadScenario(
               ...seed,
               fiscal: {
                 state: "available",
-                identifiers: [{ ...cf("RSSMRA80A41H501U"), updated: true }],
+                identifiers: [{ ...cf("RSSMRA80A41H501Y"), updated: true }],
               },
             };
           if (seed.id === "ord-09")
             return {
               ...seed,
-              fiscal: { state: "available", identifiers: [cf("MRNSRA90L41H50LV", "unverifiable")] },
+              fiscal: { state: "available", identifiers: [cf("MRNSRA90L41H50LE", "unverifiable")] },
             };
           if (seed.id === "ord-03") return { ...seed, reconciliationIssue: true };
           if (seed.id === "ord-05") {

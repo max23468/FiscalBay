@@ -109,6 +109,15 @@ const it = {
     notProvided: "Non riportato da eBay",
     notImported: "Dato non ancora acquisito",
     fiscalUnchecked: "Disponibilità fiscale da verificare",
+    taxLastKnown: "Aggiornamento non riuscito: è mostrato l’ultimo dato noto.",
+    taxAvailability: {
+      absent:
+        "Nessun identificativo restituito nell’ultima verifica. Il dato già acquisito è conservato.",
+      masked: "Dato mascherato da eBay. L’eventuale valore già acquisito resta disponibile.",
+      not_included:
+        "L’ultima risposta eBay non include dati fiscali verificabili. L’ultimo stato noto è conservato.",
+      removed: "La fonte ha confermato la rimozione del proprio dato fiscale.",
+    },
     taxData: "Dati fiscali",
     orderLabel: (id: string) => `Ordine ${id}`,
     fiscal: {
@@ -175,11 +184,11 @@ const it = {
     retry: "Riprova",
     retried: "Nuova lettura richiesta.",
     quality: {
-      format: "Il formato non corrisponde a un Codice Fiscale.",
+      format: "Il formato dell’identificativo fiscale non è valido.",
       checksum: "Il carattere di controllo non corrisponde.",
       name: "Le lettere del codice non corrispondono al nome dell’ordine.",
-      unverifiable: "Il nome non permette un controllo univoco del codice.",
-      unchecked: "Tipo estero: FiscalBay non ne verifica il formato.",
+      unverifiable: "Omocodia o nome non univoco: coerenza non verificabile.",
+      unchecked: "FiscalBay non verifica il formato di questo tipo di identificativo.",
     },
     toVerify: "Da verificare",
     updated: "Aggiornato da eBay",
@@ -937,6 +946,14 @@ const en: AppCopy = {
     notProvided: "Not provided by eBay",
     notImported: "Data not yet imported",
     fiscalUnchecked: "Tax identifier availability not yet checked",
+    taxLastKnown: "Couldn’t update: the last known identifier is shown.",
+    taxAvailability: {
+      absent: "No identifier returned by the latest check. Previously acquired data is retained.",
+      masked: "eBay masked the identifier. A previously acquired value remains available.",
+      not_included:
+        "The latest eBay response does not include verifiable tax identifiers. The last known state is retained.",
+      removed: "The source confirmed removal of its tax identifier.",
+    },
     taxData: "Tax identifiers",
     orderLabel: (id) => `Order ${id}`,
     fiscal: {
@@ -1003,11 +1020,11 @@ const en: AppCopy = {
     retry: "Try again",
     retried: "New read requested.",
     quality: {
-      format: "The format does not match an Italian tax code.",
+      format: "The tax identifier format is invalid.",
       checksum: "The check character does not match.",
       name: "The letters of the code do not match the name on the order.",
-      unverifiable: "The name does not allow an unambiguous check of the code.",
-      unchecked: "Foreign type: FiscalBay does not check its format.",
+      unverifiable: "Homocody or ambiguous name: consistency cannot be verified.",
+      unchecked: "FiscalBay does not check the format of this identifier type.",
     },
     toVerify: "Needs review",
     updated: "Updated by eBay",

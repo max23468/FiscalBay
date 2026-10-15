@@ -6,7 +6,7 @@ import {
   fulfillmentTaxIdentifiers,
   readFulfillmentOrder,
 } from "../integrations/ebay/fulfillment.server";
-import { readItemImage, readTradingTaxIdentifiers } from "../integrations/ebay/trading.server";
+import { readItemImage, readTradingTaxObservation } from "../integrations/ebay/trading.server";
 
 /**
  * Dettaglio delle versioni Fulfillment non ancora lette: dati fiscali e immagini. Un errore
@@ -45,24 +45,30 @@ const runFailures = new Set(["credentials", "rate_limited", "unavailable"]);
 
 export type PendingDetail = {
   external_order_id: string;
+  last_modified_time: string;
   detail_attempts: number;
   marketplace_id: string | null;
 };
 
 /** Rimanda il dettaglio dopo un errore del singolo ordine o, all'ultimo tentativo, lo chiude. */
 async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) {
-  if (error instanceof UpstreamError && runFailures.has(error.failure)) throw error;
+  const code = error instanceof UpstreamError ? error.failure : "invalid_response";
+  const runFailure = runFailures.has(code);
   const attempts = pending.detail_attempts + 1;
   const delay = detailRetryMinutes[attempts - 1];
-  const code = error instanceof UpstreamError ? error.failure : "invalid_response";
   const scope = `WHERE store_id = ?1 AND source = 'fulfillment' AND external_order_id = ?3
+                   AND last_modified_time = ?7
+                   AND NOT EXISTS (SELECT 1 FROM order_tax_checks tc
+                     WHERE tc.order_id = order_source_refs.order_id AND tc.observed_at > ?8)
                    AND ${writableStore}`;
-  const result = await ctx.db
+  await ctx.db
     .prepare(
-      delay === undefined
-        ? `UPDATE order_source_refs SET detail_for = last_modified_time, detail_error = ?4,
+      runFailure
+        ? `UPDATE order_source_refs SET detail_error = ?4 ${scope}`
+        : delay === undefined
+          ? `UPDATE order_source_refs SET detail_for = last_modified_time, detail_error = ?4,
                   detail_attempts = 0, detail_retry_at = NULL ${scope}`
-        : `UPDATE order_source_refs SET detail_error = ?4, detail_attempts = ?5,
+          : `UPDATE order_source_refs SET detail_error = ?4, detail_attempts = ?5,
                   detail_retry_at = ?6 ${scope}`,
     )
     .bind(
@@ -70,12 +76,18 @@ async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) 
       ctx.grantedAt,
       pending.external_order_id,
       code,
-      ...(delay === undefined
-        ? []
-        : [attempts, new Date(Date.parse(ctx.at) + delay * 60_000).toISOString()]),
+      attempts,
+      delay === undefined ? null : new Date(Date.parse(ctx.at) + delay * 60_000).toISOString(),
+      pending.last_modified_time,
+      ctx.at,
     )
     .run();
-  if (result.meta.changes === 0) throw new NotWritable();
+  const writable = await ctx.db
+    .prepare(`SELECT 1 WHERE ${writableStore}`)
+    .bind(ctx.storeId, ctx.grantedAt)
+    .first();
+  if (!writable) throw new NotWritable();
+  if (runFailure) throw error;
 }
 
 /**
@@ -148,9 +160,9 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
   };
   const trading = observation.taxIdentifiers
     ? null
-    : await readTradingTaxIdentifiers(ctx.access, observation.externalOrderId)
-        .then((values) => ({ values }))
-        .catch((error: unknown) => ({ error }));
+    : await readTradingTaxObservation(ctx.access, observation.externalOrderId).catch(
+        (error: unknown) => ({ error }),
+      );
   const result = await record(
     ctx,
     trading && "values" in trading
@@ -160,12 +172,27 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
             source: "ebay_trading_get_orders",
             complete: false,
             values: trading.values,
+            availability: trading.orderFound ? "absent" : "not_included",
+            lastModifiedTime: trading.lastModifiedTime,
           },
         }
       : observation,
   );
   if (trading && "error" in trading) {
-    await failDetail(ctx, pending, trading.error);
+    await failDetail(
+      ctx,
+      result.outcome === "stale"
+        ? pending
+        : {
+            ...pending,
+            last_modified_time: observation.lastModifiedTime,
+            detail_attempts:
+              pending.last_modified_time === observation.lastModifiedTime
+                ? pending.detail_attempts
+                : 0,
+          },
+      trading.error,
+    );
   } else if (result.outcome === "stale") {
     // eBay ha restituito una versione più vecchia di quella già registrata: si riprova.
     await failDetail(ctx, pending, new UpstreamError("invalid_response"));
@@ -192,7 +219,7 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
 export async function readDetails(ctx: Context): Promise<boolean> {
   const { results } = await ctx.db
     .prepare(
-      `SELECT r.external_order_id, r.detail_attempts, o.marketplace_id
+      `SELECT r.external_order_id, r.last_modified_time, r.detail_attempts, o.marketplace_id
          FROM order_source_refs r JOIN orders o ON o.id = r.order_id
         WHERE r.store_id = ?1 AND r.source = 'fulfillment'
           AND r.detail_for IS NOT r.last_modified_time

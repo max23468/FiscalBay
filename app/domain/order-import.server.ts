@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { taxComparisonKey, taxIdentifierType } from "../tax-quality";
 
 /**
  * Le scritture di un'importazione valgono solo per il consenso con cui è partita: dopo uno
@@ -8,6 +9,12 @@ import { z } from "zod";
 export const writableStore = `EXISTS (SELECT 1 FROM ebay_store_credentials
    WHERE store_id = ?1 AND granted_at = ?2)
   AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses WHERE store_id = ?1)`;
+const consentWritableStore = writableStore;
+
+function staleObservation(): OrderObservationResult {
+  console.info(JSON.stringify({ event: "stale_order_observation", count: 1 }));
+  return { outcome: "stale" };
+}
 
 const text = z
   .string()
@@ -98,10 +105,13 @@ export const orderObservationSchema = z.object({
     .object({
       source: z.enum(["ebay_trading_get_orders", "ebay_fulfillment"]),
       complete: z.boolean(),
+      availability: z.enum(["present", "absent", "not_included", "masked", "removed"]).optional(),
+      verification: z.enum(["completed", "error"]).default("completed"),
+      lastModifiedTime: utc.optional(),
       values: z.array(
         z.object({
           type: z.string().min(1),
-          issuingCountry: z.string().nullable(),
+          issuingCountry: text,
           value: z.string().min(1),
         }),
       ),
@@ -156,8 +166,6 @@ type StoredItem = {
   image_url: string | null;
 };
 
-const separator = "\u001f";
-
 /**
  * Un campo mascherato non cancella il valore letto prima: lo snapshot lo conserva e il campo
  * resta in `masked` solo se non è mai stato fornito. Il contenitore è sempre presente, perché
@@ -199,6 +207,7 @@ export async function recordOrderObservation(
   input: OrderObservation,
 ): Promise<OrderObservationResult> {
   const observation = orderObservationSchema.parse(input);
+  const observedAt = utc.parse(target.observedAt);
   if (
     new Set(observation.items.map((item) => item.lineItemId)).size !== observation.items.length ||
     new Set(observation.items.flatMap((item) => (item.stableKey ? [item.stableKey] : []))).size !==
@@ -222,7 +231,7 @@ export async function recordOrderObservation(
     .bind(target.storeId, observation.source, observation.externalOrderId)
     .first<StoredOrder & { source_modified: string | null }>();
   if (direct?.source_modified && observation.lastModifiedTime < direct.source_modified) {
-    return { outcome: "stale" };
+    return staleObservation();
   }
 
   let matched: StoredOrder | null = direct;
@@ -293,6 +302,34 @@ export async function recordOrderObservation(
   }
 
   const orderId = matched?.id ?? crypto.randomUUID();
+  const tax = observation.taxIdentifiers;
+  // Le date Trading e Fulfillment non sono intercambiabili. Una risposta senza data può
+  // introdurre un dato, ma non sostituire una verifica con versione autorevole già nota.
+  const taxModified =
+    tax?.lastModifiedTime ??
+    (tax?.source ===
+    (observation.source === "fulfillment" ? "ebay_fulfillment" : "ebay_trading_get_orders")
+      ? observation.lastModifiedTime
+      : null);
+  // Il controllo si ripete nel batch, così vale anche se una risposta più recente arriva
+  // dopo le letture preparatorie. I valori interpolati sono letterali SQL escapati.
+  const literal = (value: string | null) =>
+    value === null ? "NULL" : `'${value.replaceAll("'", "''")}'`;
+  const fresh = `NOT EXISTS (SELECT 1 FROM order_source_refs WHERE store_id = ?1
+    AND source = ${literal(observation.source)}
+    AND external_order_id = ${literal(observation.externalOrderId)}
+    AND last_modified_time > ${literal(observation.lastModifiedTime)})`;
+  const freshTax = tax
+    ? `AND NOT EXISTS (SELECT 1 FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
+        WHERE (original.id IN (${[orderId, ...absorbed.map((order) => order.id)].map(literal).join(",")}) OR original.merged_into = ${literal(orderId)})
+        AND tc.source = ${literal(tax.source)} AND (
+          (tc.last_modified_time IS NOT NULL AND (${literal(taxModified)} IS NULL OR tc.last_modified_time > ${literal(taxModified)}))
+          OR (tc.last_modified_time IS ${literal(taxModified)} AND tc.observed_at > ${literal(observedAt)})))
+       AND NOT EXISTS (SELECT 1 FROM order_source_refs WHERE order_id = ${literal(orderId)}
+         AND source = ${literal(tax.source === "ebay_fulfillment" ? "fulfillment" : "trading")}
+         AND ${literal(taxModified)} IS NOT NULL AND last_modified_time > ${literal(taxModified)})`
+    : "";
+  const writableStore = `${consentWritableStore} AND ${fresh} ${freshTax}`;
   const buyer = keepMaskedValues(observation.buyer, matched?.buyer_json ?? null);
   // Fulfillment è la fonte dei campi dell'ordine e subentra sempre a un ordine letto solo da
   // Trading: le date delle due fonti non sono confrontabili. Un provvisorio non sostituisce il
@@ -319,7 +356,10 @@ export async function recordOrderObservation(
     JSON.stringify(buyer),
   ];
   // Il consenso si verifica nella stessa transazione delle scritture.
-  const statements = [db.prepare(`SELECT 1 AS ok WHERE ${writableStore}`).bind(...scope)];
+  const statements = [
+    db.prepare(`SELECT 1 AS ok WHERE ${consentWritableStore}`).bind(...scope),
+    db.prepare(`SELECT 1 AS ok WHERE ${writableStore}`).bind(...scope),
+  ];
   if (!matched) {
     statements.push(
       db
@@ -455,21 +495,32 @@ export async function recordOrderObservation(
   }
 
   const taxStart = statements.length;
-  const tax = observation.taxIdentifiers;
+  const taxSnapshot = db
+    .prepare(
+      `SELECT identifier_type AS type, issuing_country AS issuingCountry, value
+       FROM tax_identifiers WHERE order_id = ?4 AND removed_at IS NULL AND ${orderExists}`,
+    )
+    .bind(...scope, null, orderId);
   if (tax) {
-    const current = new Map(
-      tax.values.map((value) => [
-        [value.type, value.issuingCountry ?? "", value.value].join(separator),
-        value,
-      ]),
-    );
-    for (const value of current.values()) {
-      statements.push(
+    statements.push(taxSnapshot);
+    const current = new Map(tax.values.map((value) => [taxComparisonKey(value), value]));
+    const { results: stored } = await db
+      .prepare(
+        `SELECT id, identifier_type AS type, issuing_country AS issuingCountry, value
+         FROM tax_identifiers WHERE order_id = ? AND source = ? AND removed_at IS NULL`,
+      )
+      .bind(orderId, tax.source)
+      .all<{ id: string; type: string; issuingCountry: string | null; value: string }>();
+    const known = new Set(stored.map(taxComparisonKey));
+    const additions: D1PreparedStatement[] = [];
+    for (const [key, value] of current) {
+      if (known.has(key)) continue;
+      additions.push(
         db
           .prepare(
             `INSERT OR IGNORE INTO tax_identifiers
                (id, order_id, identifier_type, issuing_country, value, source, observed_at)
-             SELECT ?3, ?4, ?5, ?6, ?7, ?8, ?9 WHERE ${orderExists}`,
+             SELECT ?3, ?4, ?5, ?6, ?7, ?8, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE ${orderExists}`,
           )
           .bind(
             ...scope,
@@ -479,31 +530,62 @@ export async function recordOrderObservation(
             value.issuingCountry,
             value.value,
             tax.source,
-            target.observedAt,
           ),
       );
     }
-    if (tax.complete && !(observation.provisional && matched && !matched.is_provisional)) {
+    if (!(observation.provisional && matched && !matched.is_provisional)) {
+      // Un valore presente aggiorna quel tipo/Paese; l'omissione di un altro tipo non lo rimuove.
+      const group = (value: { type: string; issuingCountry: string | null }) => {
+        const kind = taxIdentifierType(value.type, value.issuingCountry);
+        return JSON.stringify([kind === "OTHER" ? value.type : kind, value.issuingCountry]);
+      };
+      const groups = new Set([...current.values()].map(group));
+      const removed = stored.filter(
+        (value) =>
+          !current.has(taxComparisonKey(value)) && (tax.complete || groups.has(group(value))),
+      );
       statements.push(
         db
           .prepare(
-            `UPDATE tax_identifiers SET removed_at = ?3
+            `UPDATE tax_identifiers SET removed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
               WHERE order_id = ?4 AND source = ?5 AND removed_at IS NULL
-                AND identifier_type || char(31) || COALESCE(issuing_country, '') || char(31) ||
-                    value NOT IN (SELECT value FROM json_each(?6))
+                AND id IN (SELECT value FROM json_each(?6))
                 AND ${writableStore}`,
           )
           .bind(
             ...scope,
-            target.observedAt,
+            null,
             orderId,
             tax.source,
-            JSON.stringify([...current.keys()]),
+            JSON.stringify(removed.map((value) => value.id)),
           ),
       );
     }
+    // Chiude la versione precedente prima di datare la nuova, nella stessa transazione.
+    statements.push(...additions);
   }
   const taxEnd = statements.length;
+  if (tax) {
+    statements.push(taxSnapshot);
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO order_tax_checks (order_id, source, last_modified_time, observed_at, availability, verification)
+       SELECT ?4, ?3, ?5, ?6, ?7, ?8 WHERE ${orderExists}
+       ON CONFLICT (order_id, source) DO UPDATE SET last_modified_time = excluded.last_modified_time,
+         observed_at = excluded.observed_at, availability = excluded.availability, verification = excluded.verification`,
+        )
+        .bind(
+          ...scope,
+          tax.source,
+          orderId,
+          taxModified,
+          observedAt,
+          tax.values.length ? "present" : tax.complete ? "removed" : (tax.availability ?? "absent"),
+          tax.verification,
+        ),
+    );
+  }
   if (
     observation.source === "trading" &&
     (ownsFields ||
@@ -556,13 +638,30 @@ export async function recordOrderObservation(
 
   const results = await db.batch(statements);
   if (results[0]!.results.length === 0) return { outcome: "not_writable" };
+  if (results[1]!.results.length === 0) return staleObservation();
   const changes = (from: number, to: number) =>
     results.slice(from, to).reduce((total, result) => total + result.meta.changes, 0);
+  const taxKeys = (index: number) =>
+    new Set(
+      results[index]!.results.map((row) => {
+        const value = row as { type: string; issuingCountry: string | null; value: string };
+        // CF coincidenti con Paese assente/IT sono lo stesso dato anche se cambia la fonte.
+        return taxComparisonKey(
+          taxIdentifierType(value.type, value.issuingCountry) === "CF"
+            ? { ...value, issuingCountry: "IT" }
+            : value,
+        );
+      }),
+    );
+  const beforeTax = tax ? taxKeys(taxStart) : new Set<string>();
+  const afterTax = tax ? taxKeys(taxEnd) : new Set<string>();
   return {
     // Ordine e articoli occupano le istruzioni fra il controllo del consenso e i dati fiscali.
-    outcome: !matched ? "created" : changes(1, taxStart) > 0 ? "updated" : "unchanged",
+    outcome: !matched ? "created" : changes(2, taxStart) > 0 ? "updated" : "unchanged",
     orderId,
-    taxChanges: changes(taxStart, taxEnd),
+    taxChanges:
+      [...beforeTax].filter((key) => !afterTax.has(key)).length +
+      [...afterTax].filter((key) => !beforeTax.has(key)).length,
     issue: related[0]?.[1] ?? null,
   };
 }

@@ -367,6 +367,7 @@ export async function acquireOrders(input: {
       await record(ctx, observation);
       return (await readDetail(ctx, {
         external_order_id: observation.externalOrderId,
+        last_modified_time: observation.lastModifiedTime,
         detail_attempts: 0,
         marketplace_id: observation.marketplaceId ?? null,
       }))

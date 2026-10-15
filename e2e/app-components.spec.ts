@@ -11,6 +11,39 @@ test.describe("miglioramenti account e negozi", () => {
   for (const language of ["it", "en"] as const) {
     const prefix = language === "it" ? "" : "/en";
     const it = language === "it";
+    test(`ordini reali: qualità formale visibile e identificativo bloccato protetto ${language}`, async ({
+      page,
+      context,
+      baseURL,
+    }) => {
+      await context.addCookies([localCookie("member", baseURL!)]);
+      await page.goto(`${prefix}/app/ordini`);
+      await expect(
+        page.getByText(testAccount.taxCodes.unlocked, { exact: true }).first(),
+      ).toBeVisible();
+      await expect(
+        page
+          .getByText(
+            it
+              ? "Omocodia o nome non univoco: coerenza non verificabile."
+              : "Homocody or ambiguous name: consistency cannot be verified.",
+          )
+          .first(),
+      ).toBeVisible();
+      expect(await page.content()).not.toContain(testAccount.taxCodes.locked);
+      await page
+        .getByRole("link", {
+          name: it
+            ? `Ordine ${testAccount.orders.unlocked}`
+            : `Order ${testAccount.orders.unlocked}`,
+          exact: true,
+        })
+        .click();
+      await expect(
+        page.getByRole("dialog").getByText(testAccount.taxCodes.unlocked, { exact: true }),
+      ).toBeVisible();
+      expect(await page.content()).not.toContain(testAccount.taxCodes.locked);
+    });
     test(`profilo: modifiche, uscita, attesa e salvataggio ${language}`, async ({ page }) => {
       await open(page, `${prefix}/anteprima/profilo`, "ordinario");
       const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
@@ -627,7 +660,7 @@ for (const language of ["it", "en"] as const) {
           .check();
         await cancel.click();
         await expect(unlock).toBeFocused();
-        await expect(locked.getByText("BNCLCU75C12F205X")).toHaveCount(0);
+        await expect(locked.getByText("BNCLCU75C12F205G")).toHaveCount(0);
         await unlock.click();
         await expect(confirm.getByRole("checkbox")).not.toBeChecked();
         await confirm
@@ -636,7 +669,7 @@ for (const language of ["it", "en"] as const) {
           })
           .check();
         await confirm.getByRole("button", { name: t("Sblocca", "Unlock"), exact: true }).click();
-        await expect(locked.getByText("BNCLCU75C12F205X")).toBeVisible();
+        await expect(locked.getByText("BNCLCU75C12F205G")).toBeVisible();
         await page.reload();
         const restore = page.getByRole("button", {
           name: t("Riattiva conferma sblocco", "Restore unlock confirmation"),
@@ -649,7 +682,7 @@ for (const language of ["it", "en"] as const) {
           .click();
         await expect(page.getByRole("alertdialog")).toHaveCount(0);
         await expect(
-          page.getByRole("dialog").getByText("04567890123", { exact: true }),
+          page.getByRole("dialog").getByText("04567890126", { exact: true }),
         ).toBeVisible();
         await page
           .getByRole("dialog")
@@ -1527,7 +1560,7 @@ test("copia fallita visibile e recupero con un nuovo tentativo", async ({ page }
   await copy.click();
   await expect(card.getByText(/^Copia non riuscita\./)).toBeVisible();
   await copy.click();
-  await expect(page.locator("html")).toHaveAttribute("data-copied", "RSSMRA80A41H501U");
+  await expect(page.locator("html")).toHaveAttribute("data-copied", "RSSMRA80A41H501Y");
   await expect(card.getByText(/^Copia non riuscita\./)).toHaveCount(0);
   await expect(copy).toHaveAttribute("data-state", "copied");
 });
@@ -1660,7 +1693,7 @@ test("movimento ridotto: dato intero e nuovi ordini senza animazione", async ({ 
     .getByRole("article", { name: "Ordine 05-55555-12121" })
     .getByRole("button", { name: "Sblocca ordine" })
     .click();
-  const value = page.getByText("BNCLCU75C12F205X", { exact: true });
+  const value = page.getByText("BNCLCU75C12F205G", { exact: true });
   await page.getByRole("alertdialog").getByRole("button", { name: "Sblocca", exact: true }).click();
   await expect(value).toBeVisible();
   await expect(value).toHaveCSS("animation-name", "none");

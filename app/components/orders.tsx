@@ -1,4 +1,5 @@
 import { cn } from "cn";
+import { taxIdentifierType } from "../tax-quality";
 import {
   Check,
   Clock,
@@ -207,25 +208,50 @@ export function ImportedOrders({
               ? "success"
               : order.fiscalState === "locked"
                 ? "locked"
-                : "neutral"
+                : order.fiscalState === "error"
+                  ? "danger"
+                  : order.fiscalState === "checking"
+                    ? "info"
+                    : "neutral"
           }
         >
           {order.fiscalState === "unchecked"
             ? t.orders.fiscalUnchecked
             : t.orders.fiscal[order.fiscalState]}
         </StatusBadge>
+        {order.taxVerification === "error" &&
+        ["available", "locked"].includes(order.fiscalState) ? (
+          <p className="text-sm text-warning">{t.orders.taxLastKnown}</p>
+        ) : null}
+        {order.taxVerification === "checking" &&
+        ["available", "locked"].includes(order.fiscalState) ? (
+          <p className="text-sm text-muted-foreground">{t.orders.fiscal.checking}</p>
+        ) : null}
+        {order.taxAvailability === "masked" ||
+        order.taxAvailability === "not_included" ||
+        (order.taxAvailability === "absent" &&
+          ["available", "locked"].includes(order.fiscalState)) ||
+        order.taxAvailability === "removed" ? (
+          <p className="text-sm text-muted-foreground">
+            {t.orders.taxAvailability[order.taxAvailability]}
+          </p>
+        ) : null}
         {order.taxIdentifiers.map((identifier) => {
-          const label =
-            identifier.type === "CODICE_FISCALE"
-              ? t.orders.identifier.CF
-              : identifier.type === "VAT_ID"
-                ? t.orders.identifier.PIVA
-                : identifier.type;
+          const kind = taxIdentifierType(identifier.type, identifier.issuingCountry);
+          const label = kind === "OTHER" ? identifier.type : t.orders.identifier[kind];
           return (
-            <div key={`${identifier.type}:${identifier.value}`} className="grid gap-1">
+            <div
+              key={`${identifier.source}:${identifier.type}:${identifier.issuingCountry}:${identifier.value}`}
+              className="grid gap-1"
+            >
               <span className="text-sm text-muted-foreground">{label}</span>
               <TaxCode
                 value={identifier.value}
+                warning={
+                  identifier.quality && identifier.quality !== "valid"
+                    ? t.orders.quality[identifier.quality]
+                    : undefined
+                }
                 labels={{
                   copy: t.orders.copy(label, order.ebayOrderId),
                   copied: t.orders.copied,
@@ -233,6 +259,9 @@ export function ImportedOrders({
                   locked: t.orders.lockedLabel(label),
                 }}
               />
+              {identifier.updated ? (
+                <span className="text-sm text-muted-foreground">{t.orders.updated}</span>
+              ) : null}
               {expanded ? (
                 <p className="text-sm text-muted-foreground">
                   {t.order.source(formatDate(identifier.observedAt, language))}

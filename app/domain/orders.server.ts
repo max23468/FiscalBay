@@ -1,4 +1,6 @@
 import { buyerSnapshotSchema } from "./order-import.server";
+import { taxComparisonKey, taxIdentifierType, taxQuality } from "../tax-quality";
+import type { TaxQuality } from "../view-models";
 
 export type PaymentState = "paid" | "unpaid" | "partially_refunded" | "refunded" | "unknown";
 export type ShippingState = "to_ship" | "in_progress" | "shipped" | "cancelled" | "unknown";
@@ -55,7 +57,11 @@ export type VisibleOrder = {
   totalMinor: number;
   storeName: string;
   summary: OrderSummary;
-  fiscalState: "available" | "locked" | "unchecked";
+  fiscalState: "available" | "locked" | "unchecked" | "checking" | "missing" | "error";
+  taxVerification: "unchecked" | "checking" | "completed" | "error";
+  taxAvailability: "unknown" | "present" | "absent" | "not_included" | "masked" | "removed";
+  taxCheckedAt: string | null;
+  firstTaxAvailableAt: string | null;
   reconciliationIssue: boolean;
   taxIdentifiers: Array<{
     type: string;
@@ -63,6 +69,8 @@ export type VisibleOrder = {
     value: string;
     source: string;
     observedAt: string;
+    quality: TaxQuality;
+    updated: boolean;
   }>;
 };
 
@@ -123,6 +131,16 @@ export async function listVisibleOrders(
        SELECT o.id, o.ebay_order_id, o.creation_time, o.last_modified_time,
               o.currency, o.total_minor, o.buyer_json, o.payment_status, o.fulfillment_status,
               o.cancel_status,
+              (SELECT json_object('availability', availability, 'at', observed_at, 'verification', verification)
+                 FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
+                WHERE original.id = o.id OR original.merged_into = o.id
+                ORDER BY tc.observed_at DESC, tc.source LIMIT 1) AS tax_check_json,
+              EXISTS (SELECT 1 FROM order_source_refs r WHERE r.order_id = o.id
+                AND r.detail_error IS NOT NULL) AS tax_error,
+              EXISTS (SELECT 1 FROM order_source_refs r WHERE r.order_id = o.id
+                AND r.source = 'fulfillment' AND r.detail_for IS NOT r.last_modified_time) AS tax_pending,
+              (SELECT MIN(t.observed_at) FROM tax_identifiers t JOIN orders original ON original.id = t.order_id
+                WHERE original.id = o.id OR original.merged_into = o.id) AS first_tax_available_at,
               (EXISTS (SELECT 1 FROM order_reconciliation_issues i
                 WHERE i.order_id = o.id OR i.related_order_id = o.id)
                OR EXISTS (SELECT 1 FROM order_items i WHERE i.order_id = o.id AND i.stable_key IS NULL)) AS reconciliation_issue,
@@ -134,6 +152,16 @@ export async function listVisibleOrders(
               EXISTS (SELECT 1 FROM tax_identifiers
                        WHERE order_id = o.id AND removed_at IS NULL) AS has_identifiers,
               g.id AS grant_id, ti.identifier_type,
+              EXISTS (SELECT 1 FROM tax_identifiers previous WHERE previous.order_id = o.id
+                AND previous.source = ti.source
+                AND (previous.identifier_type = ti.identifier_type OR
+                  ((ti.issuing_country IS NULL OR ti.issuing_country = 'IT')
+                    AND previous.identifier_type IN ('CODICE_FISCALE', 'CodiceFiscale')
+                    AND ti.identifier_type IN ('CODICE_FISCALE', 'CodiceFiscale')) OR
+                  (ti.issuing_country = 'IT' AND previous.identifier_type IN ('VAT_ID', 'VATIN', 'PartitaIVA')
+                    AND ti.identifier_type IN ('VAT_ID', 'VATIN', 'PartitaIVA')))
+                AND previous.issuing_country IS ti.issuing_country
+                AND previous.removed_at <= ti.observed_at) AS tax_updated,
               ti.issuing_country, ti.value, ti.source, ti.observed_at
          FROM visible_orders vo
          JOIN orders o ON o.id = vo.id
@@ -160,6 +188,11 @@ export async function listVisibleOrders(
       payment_status: string | null;
       fulfillment_status: string | null;
       cancel_status: string | null;
+      tax_check_json: string | null;
+      tax_error: number;
+      tax_pending: number;
+      first_tax_available_at: string | null;
+      tax_updated: number;
       reconciliation_issue: number;
       items_json: string;
       store_name: string;
@@ -174,6 +207,21 @@ export async function listVisibleOrders(
 
   const orders = new Map<string, VisibleOrder>();
   for (const row of result.results) {
+    const check = row.tax_check_json
+      ? (JSON.parse(row.tax_check_json) as {
+          availability: VisibleOrder["taxAvailability"];
+          at: string;
+          verification: "completed" | "error";
+        })
+      : null;
+    const verification =
+      row.tax_error || check?.verification === "error"
+        ? "error"
+        : row.tax_pending
+          ? "checking"
+          : check
+            ? "completed"
+            : "unchecked";
     const order = orders.get(row.id) ?? {
       id: row.id,
       ebayOrderId: row.ebay_order_id,
@@ -183,38 +231,67 @@ export async function listVisibleOrders(
       totalMinor: row.total_minor,
       storeName: row.store_name,
       summary: summaryOf(row),
-      fiscalState: row.has_identifiers ? (row.grant_id ? "available" : "locked") : "unchecked",
+      fiscalState: row.has_identifiers
+        ? row.grant_id
+          ? "available"
+          : "locked"
+        : verification === "completed"
+          ? ["absent", "removed"].includes(check!.availability)
+            ? "missing"
+            : "unchecked"
+          : verification,
+      taxVerification: verification,
+      taxAvailability: check?.availability ?? (row.has_identifiers ? "present" : "unknown"),
+      taxCheckedAt: check?.at ?? null,
+      firstTaxAvailableAt: row.first_tax_available_at,
       reconciliationIssue: !!row.reconciliation_issue,
       taxIdentifiers: [],
     };
     // Le colonne dell'identificativo sono tutte presenti o tutte assenti (join senza grant).
     if (row.identifier_type !== null) {
+      const buyer = row.buyer_json ? buyerSnapshotSchema.parse(JSON.parse(row.buyer_json)) : null;
       order.taxIdentifiers.push({
         type: row.identifier_type,
         issuingCountry: row.issuing_country,
         value: row.value!,
         source: row.source!,
         observedAt: row.observed_at!,
+        quality: taxQuality(
+          { type: row.identifier_type, issuingCountry: row.issuing_country, value: row.value! },
+          [buyer?.name, buyer?.shipTo?.name],
+        ),
+        updated: !!row.tax_updated,
       });
     }
     orders.set(row.id, order);
   }
   return [...orders.values()].map((order) => {
     const primary = new Map<string, VisibleOrder["taxIdentifiers"][number]>();
+    const cfKey = (tax: VisibleOrder["taxIdentifiers"][number]) =>
+      taxIdentifierType(tax.type, tax.issuingCountry) === "CF" &&
+      (tax.source === "ebay_trading_get_orders" || isFulfillmentCf(tax))
+        ? taxComparisonKey({ ...tax, issuingCountry: "IT" })
+        : null;
     for (const tax of order.taxIdentifiers) {
-      if (isFulfillmentCf(tax) && !primary.has(tax.value)) primary.set(tax.value, tax);
+      const key = cfKey(tax);
+      if (key === null) continue;
+      const previous = primary.get(key);
+      const updated = !!previous?.updated || tax.updated;
+      if (
+        !previous ||
+        (isFulfillmentCf(tax) && !isFulfillmentCf(previous)) ||
+        (tax.source === previous.source && tax.issuingCountry === "IT")
+      ) {
+        tax.updated = updated;
+        primary.set(key, tax);
+      } else previous.updated = updated;
     }
     return {
       ...order,
       // Le osservazioni restano nel database; la consultazione sceglie il CF più completo.
       taxIdentifiers: order.taxIdentifiers.filter((tax) => {
-        if (isFulfillmentCf(tax)) return primary.get(tax.value) === tax;
-        return !(
-          tax.source === "ebay_trading_get_orders" &&
-          ["CodiceFiscale", "CODICE_FISCALE"].includes(tax.type) &&
-          (tax.issuingCountry ?? "IT") === "IT" &&
-          primary.has(tax.value)
-        );
+        const key = cfKey(tax);
+        return key === null || primary.get(key) === tax;
       }),
     };
   });
