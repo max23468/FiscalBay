@@ -314,6 +314,7 @@ describe("percorso ordini", () => {
     ["CODICE_FISCALE", "IT", "CodiceFiscale", "ES", 2],
     ["CODICE_FISCALE", null, "CodiceFiscale", "ES", 2],
     ["VATIN", "IT", "CodiceFiscale", "IT", 2],
+    ["CodiceFiscale", "IT", "CodiceFiscale", "IT", 2],
     ["CODICE_FISCALE", "IT", "codice_fiscale", "IT", 2],
     ["CODICE_FISCALE", "IT", "CodiceFiscale", "IT", 2, "synthetic_fixture"],
     ["CODICE_FISCALE", "IT", "CODICE_FISCALE", "IT", 2, "ebay_fulfillment", "synthetic_fixture"],
@@ -6104,12 +6105,31 @@ describe("client eBay e normalizzazione", () => {
           "SELECT count(*) AS total FROM tax_identifiers WHERE source = 'ebay_fulfillment' AND removed_at IS NULL",
         ),
       ).toBe(1);
+      // Una lettura parziale senza Paese non dichiara rimosso il dato italiano precedente.
+      fetcher.orders[0] = order({
+        lastModifiedDate: "2026-09-02T03:30:00.000Z",
+        buyer: {
+          ...source.buyer,
+          taxIdentifier: { taxpayerId: "SENZA-PAESE", taxIdentifierType: "CODICE_FISCALE" },
+        },
+      });
+      await acquire(fetcher, "2026-09-02T04:00:00.000Z");
+      expect(
+        await env.DB.prepare(
+          "SELECT value, issuing_country FROM tax_identifiers WHERE source = 'ebay_fulfillment' AND removed_at IS NULL ORDER BY value",
+        ).all(),
+      ).toMatchObject({
+        results: [
+          { value: "ALTRO-SINTETICO", issuing_country: "IT" },
+          { value: "SENZA-PAESE", issuing_country: null },
+        ],
+      });
       fetcher.orders[0] = order({ lastModifiedDate: "2026-09-02T04:00:00.000Z" });
       await acquire(fetcher, "2026-09-02T05:00:00.000Z");
       expect(calls(fetcher, "GetOrders")).toBe(1);
       expect(
         await count("SELECT count(*) AS total FROM tax_identifiers WHERE removed_at IS NULL"),
-      ).toBe(2);
+      ).toBe(3);
     });
 
     it.each([
