@@ -127,7 +127,7 @@ async function tradingCall(access: EbayAccess, call: string, fields: string): Pr
 export async function readTradingOrders(
   access: EbayAccess,
   input: { from: string; until: string; page: number },
-): Promise<{ orders: OrderObservation[]; total: number; more: boolean }> {
+): Promise<{ orders: OrderObservation[]; total: number; more: boolean; skipped: number }> {
   const from = new Date(input.from).toISOString();
   const until = new Date(input.until).toISOString();
   if (from > until || !Number.isSafeInteger(input.page) || input.page < 1)
@@ -150,8 +150,12 @@ export function parseTradingOrders(xml: string) {
   if (!totalText || !/^\d+$/u.test(totalText) || !["true", "false"].includes(moreText ?? ""))
     throw new UpstreamError("invalid_response");
   const orders: OrderObservation[] = [];
-  try {
-    for (const [, block] of xml.matchAll(/<Order>([\s\S]*?)<\/Order>/gu)) {
+  let entries = 0;
+  let skipped = 0;
+  for (const [, block] of xml.matchAll(/<Order>([\s\S]*?)<\/Order>/gu)) {
+    entries += 1;
+    // Un ordine illeggibile si salta: gli altri della pagina restano acquisibili.
+    try {
       const transactions =
         /<TransactionArray>([\s\S]*?)<\/TransactionArray>/u.exec(block!)?.[1] ?? "";
       const header = block!.replace(/<TransactionArray>[\s\S]*?<\/TransactionArray>/gu, "");
@@ -246,18 +250,18 @@ export function parseTradingOrders(xml: string) {
           },
         }),
       );
+    } catch {
+      skipped += 1;
     }
-    if (
-      !Number.isSafeInteger(Number(totalText)) ||
-      Number(totalText) < orders.length ||
-      new Set(orders.map((order) => order.externalOrderId)).size !== orders.length ||
-      (moreText === "true" && !orders.length)
-    )
-      throw new Error("invalid_pagination");
-  } catch {
-    throw new UpstreamError("invalid_response");
   }
-  return { orders, total: Number(totalText), more: moreText === "true" };
+  if (
+    !Number.isSafeInteger(Number(totalText)) ||
+    Number(totalText) < entries ||
+    new Set(orders.map((order) => order.externalOrderId)).size !== orders.length ||
+    (moreText === "true" && !entries)
+  )
+    throw new UpstreamError("invalid_response");
+  return { orders, total: Number(totalText), more: moreText === "true", skipped };
 }
 
 /** Identificativi fiscali dell'acquirente per un solo ordine, letti da `GetOrders`. */

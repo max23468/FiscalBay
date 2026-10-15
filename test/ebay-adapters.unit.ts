@@ -84,22 +84,37 @@ describe("acquisti Trading", () => {
   });
   it.each([
     xml.replace("<HasMoreOrders>false</HasMoreOrders>", ""),
+    xml.replace(
+      "<TotalNumberOfEntries>1</TotalNumberOfEntries>",
+      "<TotalNumberOfEntries>0</TotalNumberOfEntries>",
+    ),
+    xml.replace("</OrderArray>", xml.match(/<Order>[\s\S]*<\/Order>/u)![0] + "</OrderArray>"),
+  ])("rifiuta la pagina incompleta o contraddittoria", (body) => {
+    expect(() => parseTradingOrders(body)).toThrow();
+  });
+  it.each([
     xml.replace("<QuantityPurchased>2</QuantityPurchased>", ""),
     xml.replace('<Total currencyID="EUR">12.50</Total>', ""),
     xml.replace("123-456</OrderLineItemID>", "123-789</OrderLineItemID>"),
     xml.replace("<TransactionArray>", "<Broken>"),
     xml.replace("<CreatedTime>2026-09-01T10:00:00Z</CreatedTime>", ""),
     xml.replace(
-      "<TotalNumberOfEntries>1</TotalNumberOfEntries>",
-      "<TotalNumberOfEntries>0</TotalNumberOfEntries>",
-    ),
-    xml.replace(
       "</Order>",
       "<BuyerTaxIdentifier><Type>CODICE_FISCALE</Type></BuyerTaxIdentifier></Order>",
     ),
     xml.replace("6.25</TransactionPrice>", "6.251</TransactionPrice>"),
-  ])("rifiuta la risposta incompleta o contraddittoria", (body) => {
-    expect(() => parseTradingOrders(body)).toThrow();
+  ])("salta l'ordine incompleto senza scartare la pagina", (body) => {
+    const page = body
+      .replace("<TotalNumberOfEntries>1<", "<TotalNumberOfEntries>2<")
+      .replace(
+        "</OrderArray>",
+        xml.match(/<Order>[\s\S]*<\/Order>/u)![0].replace(">provvisorio<", ">valido<") +
+          "</OrderArray>",
+      );
+    expect(parseTradingOrders(page)).toMatchObject({
+      skipped: 1,
+      orders: [{ externalOrderId: "valido" }],
+    });
   });
 });
 

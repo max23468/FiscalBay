@@ -1,4 +1,4 @@
-import { writableStore } from "./order-import.server";
+import { DuplicateLineIdentity, writableStore } from "./order-import.server";
 import {
   record,
   spend,
@@ -7,6 +7,7 @@ import {
   type Context,
 } from "./order-acquisition-context.server";
 import { readDetail, readDetails } from "./order-acquisition-details.server";
+import { logFailure } from "../errors";
 import { UpstreamError } from "../integrations/http.server";
 import {
   ebayConfiguration,
@@ -28,7 +29,7 @@ import { readTradingOrders } from "../integrations/ebay/trading.server";
  *
  * 1. recenti: ordini modificati dopo l'ultimo limite applicato, con una sovrapposizione;
  * 2. Trading: acquisti modificati, compresi quelli prima del checkout che Fulfillment non
- *    espone, con pagina e limite propri;
+ *    espone, con pagina e limite propri; un suo errore non ferma i passi successivi;
  * 3. storico: ordini creati nella finestra fissata al primo avvio, dal più recente;
  * 4. dettaglio: dati fiscali e immagini di ogni versione Fulfillment non ancora letta,
  *    in `order-acquisition-details.server.ts`.
@@ -146,6 +147,7 @@ async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
   let total = state.trading_total;
   while (spend(ctx.budget, 1, 1)) {
     const result = await readTradingOrders(ctx.access, { from, until, page });
+    let skipped = result.skipped;
     await result.orders
       .filter(
         (observation) =>
@@ -153,9 +155,18 @@ async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
           Date.parse(ctx.at) - historyDays * dayMilliseconds,
       )
       .reduce<Promise<unknown>>(
-        (previous, observation) => previous.then(() => record(ctx, observation)),
+        (previous, observation) =>
+          previous.then(() =>
+            record(ctx, observation).catch((error: unknown) => {
+              // Righe ripetute nello stesso acquisto: si salta l'ordine, non la pagina.
+              if (!(error instanceof DuplicateLineIdentity)) throw error;
+              skipped += 1;
+            }),
+          ),
         Promise.resolve(),
       );
+    if (skipped > 0)
+      logFailure({ error: new UpstreamError("invalid_response"), operation: "order_acquisition" });
     if (page > 1 && result.total !== total) {
       page = 1;
     } else if (result.more) {
@@ -177,6 +188,17 @@ async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
       total,
     );
   }
+  return false;
+}
+
+function tradingFailure(error: unknown): false {
+  if (
+    !(error instanceof UpstreamError) ||
+    error.failure === "credentials" ||
+    error.failure === "rate_limited"
+  )
+    throw error;
+  logFailure({ error, operation: "order_acquisition" });
   return false;
 }
 
@@ -352,14 +374,16 @@ export async function acquireOrders(input: {
         : "budget";
     }
     const recent = await runPass(ctx, recentPass(ctx, state));
-    const trading = recent && (await runTradingPass(ctx, state));
     // Lettura dei recenti conclusa: l'ultima sincronizzazione del negozio.
-    if (recent && trading) await saveState(ctx, "last_success_at = ?3");
+    if (recent) await saveState(ctx, "last_success_at = ?3");
+    // Trading aggiunge gli acquisti prima del checkout: un suo errore lascia la passata da
+    // riprendere senza fermare storico e dettaglio. Credenziali e limite fermano tutto.
+    const trading = recent && (await runTradingPass(ctx, state).catch(tradingFailure));
     const history =
-      trading && (!!state.history_done_at || (await runPass(ctx, historyPass(ctx, state))));
+      recent && (!!state.history_done_at || (await runPass(ctx, historyPass(ctx, state))));
     const details = await readDetails(ctx);
     outcome = { ok: true, served: true };
-    return history && details ? "complete" : "budget";
+    return trading && history && details ? "complete" : "budget";
   } catch (error) {
     if (error instanceof NotWritable) return "not_writable";
     const limited = error instanceof UpstreamError && error.failure === "rate_limited";

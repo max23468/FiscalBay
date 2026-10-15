@@ -110,6 +110,13 @@ export const orderObservationSchema = z.object({
 });
 export type OrderObservation = z.input<typeof orderObservationSchema>;
 
+/** Lo stesso acquisto riporta due volte la stessa riga: la lettura non si registra. */
+export class DuplicateLineIdentity extends Error {
+  constructor() {
+    super("duplicate_line_identity");
+  }
+}
+
 export type ReconciliationIssue =
   | "partial_overlap"
   | "missing_line_identity"
@@ -197,7 +204,7 @@ export async function recordOrderObservation(
     new Set(observation.items.flatMap((item) => (item.stableKey ? [item.stableKey] : []))).size !==
       observation.items.filter((item) => item.stableKey).length
   )
-    throw new Error("duplicate_line_identity");
+    throw new DuplicateLineIdentity();
   const scope = [target.storeId, target.consentGrantedAt] as const;
 
   const direct = await db
@@ -500,7 +507,7 @@ export async function recordOrderObservation(
   if (
     observation.source === "trading" &&
     (ownsFields ||
-      (!observation.provisional && matched?.ebay_order_id === observation.externalOrderId))
+      (!observation.provisional && matched!.ebay_order_id === observation.externalOrderId))
   ) {
     statements.push(
       db
