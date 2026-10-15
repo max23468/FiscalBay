@@ -4,6 +4,7 @@ import type {
   OrdersNotice,
   AccountView,
   DiagnosticsView,
+  FiscalNotice,
   NotificationView,
   OrderView,
   SessionView,
@@ -99,12 +100,12 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
     it: {
       name: "Dati discordanti",
       focus:
-        "Codice aggiornato da eBay, nome non coerente, omocodia, suggerimenti in conflitto e un ordine da verificare.",
+        "Codice aggiornato o nascosto da eBay, lettura non riuscita, nome non coerente, omocodia, suggerimenti in conflitto e un ordine da verificare.",
     },
     en: {
       name: "Conflicting data",
       focus:
-        "Code updated by eBay, name mismatch, ambiguous codes, conflicting suggestions and an order that needs review.",
+        "Code updated or hidden by eBay, failed read, name mismatch, ambiguous codes, conflicting suggestions and an order that needs review.",
     },
   },
   "primo-accesso": {
@@ -228,6 +229,14 @@ interface OrderSeed extends Omit<
   /** Valori presenti ma da sbloccare nel piano Free. */
   lockable?: TaxIdentifierView[];
 }
+
+/** Condizione dell'ultima lettura negli ordini dello scenario dei dati discordanti. */
+const readNotices: Partial<Record<string, FiscalNotice>> = {
+  "ord-01": "notReturned",
+  "ord-10": "masked",
+  "ord-12": "lastKnown",
+  "ord-13": "checking",
+};
 
 const cf = (value: string, quality: TaxIdentifierView["quality"] = "valid"): TaxIdentifierView => ({
   type: "CF",
@@ -1118,6 +1127,14 @@ export function loadScenario(
               fiscal: { state: "available", identifiers: [cf("MRNSRA90L41H50LE", "unverifiable")] },
             };
           if (seed.id === "ord-03") return { ...seed, reconciliationIssue: true };
+          // Valori letti in precedenza e condizione dell'ultima lettura.
+          const notice = readNotices[seed.id];
+          if (notice && seed.fiscal.state === "available")
+            return { ...seed, fiscal: { ...seed.fiscal, notice } };
+          if (seed.id === "ord-11")
+            return { ...seed, fiscal: { state: "missing", reason: "masked" } };
+          if (seed.id === "ord-14")
+            return { ...seed, fiscal: { state: "missing", reason: "removed" } };
           if (seed.id === "ord-05") {
             return {
               ...seed,

@@ -62,6 +62,8 @@ export type VisibleOrder = {
   taxAvailability: "unknown" | "present" | "absent" | "not_included" | "masked" | "removed";
   taxCheckedAt: string | null;
   firstTaxAvailableAt: string | null;
+  /** Nome del dato prima dello sblocco: Partita IVA solo se l'ordine ha soltanto quella. */
+  lockedShownAs: "CF" | "PIVA";
   reconciliationIssue: boolean;
   taxIdentifiers: Array<{
     type: string;
@@ -151,6 +153,10 @@ export async function listVisibleOrders(
                 CASE WHEN s.ebay_environment = 'sandbox' THEN ' (Sandbox)' ELSE '' END AS store_name,
               EXISTS (SELECT 1 FROM tax_identifiers
                        WHERE order_id = o.id AND removed_at IS NULL) AS has_identifiers,
+              NOT EXISTS (SELECT 1 FROM tax_identifiers
+                           WHERE order_id = o.id AND removed_at IS NULL
+                             AND NOT (identifier_type = 'PartitaIVA' AND (issuing_country IS NULL OR issuing_country = 'IT')
+                               OR identifier_type IN ('VAT_ID', 'VATIN') AND issuing_country = 'IT')) AS vat_only,
               g.id AS grant_id, ti.identifier_type,
               EXISTS (SELECT 1 FROM tax_identifiers previous WHERE previous.order_id = o.id
                 AND previous.source = ti.source
@@ -193,6 +199,7 @@ export async function listVisibleOrders(
       tax_pending: number;
       first_tax_available_at: string | null;
       tax_updated: number;
+      vat_only: number;
       reconciliation_issue: number;
       items_json: string;
       store_name: string;
@@ -236,14 +243,13 @@ export async function listVisibleOrders(
           ? "available"
           : "locked"
         : verification === "completed"
-          ? ["absent", "removed"].includes(check!.availability)
-            ? "missing"
-            : "unchecked"
+          ? "missing"
           : verification,
       taxVerification: verification,
       taxAvailability: check?.availability ?? (row.has_identifiers ? "present" : "unknown"),
       taxCheckedAt: check?.at ?? null,
       firstTaxAvailableAt: row.first_tax_available_at,
+      lockedShownAs: row.has_identifiers && row.vat_only ? "PIVA" : "CF",
       reconciliationIssue: !!row.reconciliation_issue,
       taxIdentifiers: [],
     };

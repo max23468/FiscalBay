@@ -25,12 +25,16 @@ test.describe("miglioramenti account e negozi", () => {
         page
           .getByText(
             it
-              ? "Omocodia o nome non univoco: coerenza non verificabile."
-              : "Homocody or ambiguous name: consistency cannot be verified.",
+              ? "Codice omocodico o nome non univoco: la corrispondenza con il nome non è verificabile."
+              : "Omocodia variant or ambiguous name: the code cannot be matched to the name.",
           )
           .first(),
       ).toBeVisible();
       expect(await page.content()).not.toContain(testAccount.taxCodes.locked);
+      // Come nell'anteprima il dato da sbloccare mostra il riquadro senza valore.
+      await expect(
+        page.getByText(it ? "Codice Fiscale da sbloccare" : "Codice Fiscale to unlock").first(),
+      ).toBeAttached();
       await page
         .getByRole("link", {
           name: it
@@ -794,6 +798,27 @@ for (const language of ["it", "en"] as const) {
         await expect(page.getByRole("article").filter({ hasText: "05-55555-12121" })).toContainText(
           t("Da verificare", "Needs review"),
         );
+        // Valore letto in precedenza con l'ultima lettura non riuscita, dato nascosto o rimosso.
+        for (const [query, order, text] of [
+          [
+            "Ricci",
+            "25-30491-88120",
+            t("Ultima lettura da eBay non riuscita", "The latest read from eBay failed"),
+          ],
+          [
+            "Colombo",
+            "09-11873-20564",
+            t("eBay nasconde il Codice Fiscale", "eBay hides the tax code"),
+          ],
+          [
+            "Tecnoufficio",
+            "30-55012-90876",
+            t("eBay ha rimosso il Codice Fiscale", "eBay removed the tax code"),
+          ],
+        ] as const) {
+          await open(page, `${prefix}/anteprima/ordini?q=${query}`);
+          await expect(page.getByRole("article").filter({ hasText: order })).toContainText(text);
+        }
         await open(page, `${prefix}/anteprima/ordini/ord-03`, "dati-discordanti");
         await expect(
           page

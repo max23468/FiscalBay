@@ -1679,7 +1679,7 @@ describe("modello ordini", () => {
         taxVerification: "completed",
         taxAvailability: availability,
         taxCheckedAt: now,
-        fiscalState: ["absent", "removed"].includes(availability) ? "missing" : "unchecked",
+        fiscalState: "missing",
       });
     }
     const withTax = observation({
@@ -1702,6 +1702,7 @@ describe("modello ordini", () => {
     expect(firstAvailable).not.toBe(now);
     expect(await view()).toMatchObject({
       fiscalState: "locked",
+      lockedShownAs: "CF",
       taxAvailability: "present",
       taxIdentifiers: [],
       firstTaxAvailableAt: firstAvailable,
@@ -1732,6 +1733,28 @@ describe("modello ordini", () => {
       removed_at: string;
     }>();
     expect(removed!.removed_at >= firstAvailable).toBe(true);
+  });
+
+  it("prima dello sblocco nomina la Partita IVA solo quando l'ordine ha soltanto quella", async () => {
+    const tax = (values: Array<{ type: string; issuingCountry: string; value: string }>) =>
+      observation({ taxIdentifiers: { source: "ebay_fulfillment", complete: false, values } });
+    await recordOrderObservation(
+      env.DB,
+      target(),
+      tax([{ type: "VAT_ID", issuingCountry: "IT", value: "12345678903" }]),
+    );
+    const view = async () => (await listVisibleOrders(env.DB, "u-a"))[0]!;
+    expect(await view()).toMatchObject({ fiscalState: "locked", lockedShownAs: "PIVA" });
+    expect(JSON.stringify(await view())).not.toContain("12345678903");
+    await recordOrderObservation(
+      env.DB,
+      target(),
+      tax([
+        { type: "VAT_ID", issuingCountry: "IT", value: "12345678903" },
+        { type: "CODICE_FISCALE", issuingCountry: "IT", value: "RSSMRA80A01H501U" },
+      ]),
+    );
+    expect(await view()).toMatchObject({ fiscalState: "locked", lockedShownAs: "CF" });
   });
 
   it("normalizza le riletture, aggiorna il tipo presente e conserva gli altri identificativi", async () => {
@@ -2249,7 +2272,7 @@ describe("modello ordini", () => {
       }),
     );
     expect((await listVisibleOrders(env.DB, "u-a"))[0]).toMatchObject({
-      fiscalState: "unchecked",
+      fiscalState: "missing",
       taxVerification: "completed",
       taxAvailability: "not_included",
     });

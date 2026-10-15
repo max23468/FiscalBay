@@ -108,17 +108,19 @@ const it = {
     email: "Email",
     notProvided: "Non riportato da eBay",
     notImported: "Dato non ancora acquisito",
-    fiscalUnchecked: "Disponibilità fiscale da verificare",
-    taxLastKnown: "Aggiornamento non riuscito: è mostrato l’ultimo dato noto.",
-    taxAvailability: {
-      absent:
-        "Nessun identificativo restituito nell’ultima verifica. Il dato già acquisito è conservato.",
-      masked: "Dato mascherato da eBay. L’eventuale valore già acquisito resta disponibile.",
-      not_included:
-        "L’ultima risposta eBay non include dati fiscali verificabili. L’ultimo stato noto è conservato.",
-      removed: "La fonte ha confermato la rimozione del proprio dato fiscale.",
+    fiscalNotice: {
+      lastKnown:
+        "Ultima lettura da eBay non riuscita: resta mostrato il valore letto in precedenza.",
+      checking: "Nuova lettura da eBay in corso.",
+      notReturned:
+        "L’ultima lettura di eBay non riporta questo dato: resta mostrato il valore letto in precedenza.",
+      masked: "eBay ora nasconde questo dato: resta mostrato il valore letto in precedenza.",
     },
-    taxData: "Dati fiscali",
+    missingReason: {
+      masked: "eBay nasconde il Codice Fiscale di questo ordine.",
+      removed: "eBay ha rimosso il Codice Fiscale da questo ordine.",
+    },
+    lastChanged: (date: string) => `Ultima modifica su eBay: ${date}`,
     orderLabel: (id: string) => `Ordine ${id}`,
     fiscal: {
       available: "Disponibile",
@@ -179,15 +181,17 @@ const it = {
     missingHint: "eBay non riporta il Codice Fiscale per questo ordine.",
     checkingHint: "Verifica del Codice Fiscale in corso.",
     errorHint: "Non siamo riusciti a recuperare il Codice Fiscale da eBay. Riprova tra poco.",
+    errorReadHint: "Non siamo riusciti a recuperare il Codice Fiscale da eBay.",
     errorHintEbayDown:
       "Non siamo riusciti a recuperare il Codice Fiscale da eBay. Potrai riprovare quando eBay torna a rispondere.",
     retry: "Riprova",
     retried: "Nuova lettura richiesta.",
     quality: {
-      format: "Il formato dell’identificativo fiscale non è valido.",
+      format: "Il formato del codice non è valido.",
       checksum: "Il carattere di controllo non corrisponde.",
       name: "Le lettere del codice non corrispondono al nome dell’ordine.",
-      unverifiable: "Omocodia o nome non univoco: coerenza non verificabile.",
+      unverifiable:
+        "Codice omocodico o nome non univoco: la corrispondenza con il nome non è verificabile.",
       unchecked: "FiscalBay non verifica il formato di questo tipo di identificativo.",
     },
     toVerify: "Da verificare",
@@ -945,16 +949,18 @@ const en: AppCopy = {
     email: "Email",
     notProvided: "Not provided by eBay",
     notImported: "Data not yet imported",
-    fiscalUnchecked: "Tax identifier availability not yet checked",
-    taxLastKnown: "Couldn’t update: the last known identifier is shown.",
-    taxAvailability: {
-      absent: "No identifier returned by the latest check. Previously acquired data is retained.",
-      masked: "eBay masked the identifier. A previously acquired value remains available.",
-      not_included:
-        "The latest eBay response does not include verifiable tax identifiers. The last known state is retained.",
-      removed: "The source confirmed removal of its tax identifier.",
+    fiscalNotice: {
+      lastKnown: "The latest read from eBay failed: the value read earlier is still shown.",
+      checking: "New read from eBay in progress.",
+      notReturned:
+        "eBay’s latest read does not include this value: the one read earlier is still shown.",
+      masked: "eBay now hides this value: the one read earlier is still shown.",
     },
-    taxData: "Tax identifiers",
+    missingReason: {
+      masked: "eBay hides the tax code for this order.",
+      removed: "eBay removed the tax code from this order.",
+    },
+    lastChanged: (date) => `Last changed on eBay: ${date}`,
     orderLabel: (id) => `Order ${id}`,
     fiscal: {
       available: "Available",
@@ -1015,15 +1021,16 @@ const en: AppCopy = {
     missingHint: "eBay does not provide the tax code for this order.",
     checkingHint: "Checking the tax code.",
     errorHint: "We could not get the tax code from eBay. Try again shortly.",
+    errorReadHint: "We could not get the tax code from eBay.",
     errorHintEbayDown:
       "We could not get the tax code from eBay. You can try again once eBay responds.",
     retry: "Try again",
     retried: "New read requested.",
     quality: {
-      format: "The tax identifier format is invalid.",
+      format: "The code format is invalid.",
       checksum: "The check character does not match.",
       name: "The letters of the code do not match the name on the order.",
-      unverifiable: "Homocody or ambiguous name: consistency cannot be verified.",
+      unverifiable: "Omocodia variant or ambiguous name: the code cannot be matched to the name.",
       unchecked: "FiscalBay does not check the format of this identifier type.",
     },
     toVerify: "Needs review",
