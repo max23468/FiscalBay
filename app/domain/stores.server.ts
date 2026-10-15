@@ -102,7 +102,8 @@ export async function listStores(
               ss.history_done_at, ss.locked_until > ?2 AS syncing,
               (SELECT group_concat(reason) FROM ebay_store_pauses p WHERE p.store_id = s.id)
                 AS pauses,
-              (SELECT COUNT(*) FROM orders o WHERE o.store_id = s.id) AS orders
+              (SELECT COUNT(*) FROM orders o WHERE o.store_id = s.id AND o.merged_into IS NULL
+                AND NOT (o.is_provisional = 1 AND o.cancel_status IS 'CANCELED')) AS orders
          FROM workspace_members wm
          JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
          LEFT JOIN ebay_store_credentials c ON c.store_id = s.id

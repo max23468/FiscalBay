@@ -56,6 +56,7 @@ export type VisibleOrder = {
   storeName: string;
   summary: OrderSummary;
   fiscalState: "available" | "locked" | "unchecked";
+  reconciliationIssue: boolean;
   taxIdentifiers: Array<{
     type: string;
     issuingCountry: string | null;
@@ -114,12 +115,17 @@ export async function listVisibleOrders(
            JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
            JOIN orders o ON o.store_id = s.id
           WHERE wm.user_id = ? AND s.ebay_environment = ? AND ${consultable}
+            AND o.merged_into IS NULL
+            AND NOT (o.is_provisional = 1 AND o.cancel_status IS 'CANCELED')
           ORDER BY o.last_modified_time DESC, o.id DESC
           LIMIT ?
        )
        SELECT o.id, o.ebay_order_id, o.creation_time, o.last_modified_time,
               o.currency, o.total_minor, o.buyer_json, o.payment_status, o.fulfillment_status,
               o.cancel_status,
+              (EXISTS (SELECT 1 FROM order_reconciliation_issues i
+                WHERE i.order_id = o.id OR i.related_order_id = o.id)
+               OR EXISTS (SELECT 1 FROM order_items i WHERE i.order_id = o.id AND i.stable_key IS NULL)) AS reconciliation_issue,
               (SELECT json_group_array(json_object('lineItemId', line_item_id, 'title', title,
                         'quantity', quantity, 'sku', sku))
                  FROM (SELECT * FROM order_items WHERE order_id = o.id ORDER BY rowid)) AS items_json,
@@ -133,7 +139,11 @@ export async function listVisibleOrders(
          JOIN orders o ON o.id = vo.id
          JOIN ebay_stores s ON s.id = o.store_id
          LEFT JOIN order_grants g
-           ON g.workspace_id = vo.workspace_id AND g.order_id = o.id
+           ON g.id = (SELECT granted.id FROM order_grants granted JOIN orders original
+             ON original.id = granted.order_id
+             WHERE granted.workspace_id = vo.workspace_id
+               AND (original.id = o.id OR original.merged_into = o.id)
+             ORDER BY granted.granted_at, granted.id LIMIT 1)
          LEFT JOIN tax_identifiers ti
            ON ti.order_id = o.id AND ti.removed_at IS NULL AND g.id IS NOT NULL
         ORDER BY o.last_modified_time DESC, o.id DESC, ti.identifier_type, ti.issuing_country DESC`,
@@ -150,6 +160,7 @@ export async function listVisibleOrders(
       payment_status: string | null;
       fulfillment_status: string | null;
       cancel_status: string | null;
+      reconciliation_issue: number;
       items_json: string;
       store_name: string;
       has_identifiers: number;
@@ -173,6 +184,7 @@ export async function listVisibleOrders(
       storeName: row.store_name,
       summary: summaryOf(row),
       fiscalState: row.has_identifiers ? (row.grant_id ? "available" : "locked") : "unchecked",
+      reconciliationIssue: !!row.reconciliation_issue,
       taxIdentifiers: [],
     };
     // Le colonne dell'identificativo sono tutte presenti o tutte assenti (join senza grant).
@@ -219,6 +231,18 @@ export async function grantFreeOrder(
     grantedAt: string;
   },
 ): Promise<void> {
+  // La rilettura autorizzata rende idempotente anche uno sblocco acquisito prima del merge.
+  const granted = () =>
+    db
+      .prepare(`SELECT g.id FROM workspace_members wm
+    JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
+    JOIN orders o ON o.store_id = s.id
+    JOIN orders original ON original.id = o.id OR original.merged_into = o.id
+    JOIN order_grants g ON g.order_id = original.id AND g.workspace_id = wm.workspace_id
+    WHERE wm.user_id = ? AND wm.workspace_id = ? AND o.id = ?
+      AND o.merged_into IS NULL AND ${consultable} LIMIT 1`)
+      .bind(userId, input.workspaceId, input.orderId)
+      .first();
   const result = await db
     .prepare(
       `INSERT INTO order_grants
@@ -230,11 +254,16 @@ export async function grantFreeOrder(
          JOIN free_cycles c ON c.workspace_id = wm.workspace_id
         WHERE wm.user_id = ? AND wm.workspace_id = ?
           AND o.id = ? AND c.id = ?
+          AND o.merged_into IS NULL
+          -- Un acquisto non ancora pagato può confluire in un ordine combinato: niente quota.
+          AND o.is_provisional = 0
+          AND NOT EXISTS (SELECT 1 FROM order_grants g JOIN orders original ON original.id = g.order_id
+            WHERE g.workspace_id = wm.workspace_id AND (original.id = o.id OR original.merged_into = o.id))
           AND EXISTS (SELECT 1 FROM tax_identifiers WHERE order_id = o.id AND removed_at IS NULL)
           AND ${consultable}
        RETURNING id`,
     )
     .bind(input.id, input.grantedAt, userId, input.workspaceId, input.orderId, input.cycleId)
     .first<{ id: string }>();
-  if (!result) throw new Error("order_not_available");
+  if (!result && !(await granted())) throw new Error("order_not_available");
 }

@@ -117,6 +117,8 @@ export interface OrderView {
   email: string | null;
   fiscal: FiscalView;
   suggestion?: SuggestionView;
+  /** Articoli non collegati con certezza agli altri acquisti eBay dello stesso ordine. */
+  reconciliationIssue?: boolean;
   thumbnail?: string;
   lastSyncedAt: string;
 }

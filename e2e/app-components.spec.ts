@@ -757,6 +757,17 @@ for (const language of ["it", "en"] as const) {
             ),
           ),
         ).toBeVisible();
+        await open(page, `${prefix}/anteprima/ordini`, "dati-discordanti");
+        await expect(page.getByRole("article").filter({ hasText: "05-55555-12121" })).toContainText(
+          t("Da verificare", "Needs review"),
+        );
+        await open(page, `${prefix}/anteprima/ordini/ord-03`, "dati-discordanti");
+        await expect(
+          page
+            .getByRole("dialog")
+            .getByRole("status")
+            .filter({ hasText: t("Ordine da verificare", "Order needs review") }),
+        ).toBeVisible();
         await open(page, `${prefix}/anteprima/ordini`, "ebay-non-disponibile");
         await expect(page.locator("main > div > header [role=status]")).toHaveClass(/text-warning/);
         await expect(

@@ -27,7 +27,7 @@ async function listingsWithoutImage(
   const { results: known } = await ctx.db
     .prepare(
       `SELECT i.stable_key FROM order_items i JOIN orders o ON o.id = i.order_id
-        WHERE o.store_id = ?1 AND i.image_url IS NOT NULL
+        WHERE o.store_id = ?1 AND o.merged_into IS NULL AND i.image_url IS NOT NULL
           AND i.stable_key IN (SELECT value FROM json_each(?2))`,
     )
     .bind(ctx.storeId, JSON.stringify(observation.items.map((item) => item.stableKey)))
