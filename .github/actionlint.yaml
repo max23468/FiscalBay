@@ -1,0 +1,5 @@
+# actionlint 1.7.12 non conosce ancora l'immagine GitHub `ubuntu-26.04`.
+# Rimuovere la dichiarazione quando actionlint la include fra le etichette native.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04

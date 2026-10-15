@@ -19,7 +19,7 @@ permissions:
 jobs:
   mutation:
     name: ${{ matrix.target }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     strategy:
       # Nelle PR un modulo fallito annulla gli altri; il candidato conserva le ricevute riuscite.

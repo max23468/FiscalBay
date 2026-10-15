@@ -39,7 +39,7 @@ concurrency:
 jobs:
   plan:
     name: Verifica candidato e pianifica
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     outputs:
       mutation: ${{ steps.plan.outputs.mutation }}
@@ -99,7 +99,7 @@ jobs:
     needs: qualify
     if: ${{ github.event_name == 'workflow_dispatch' && !inputs.prova && github.ref == 'refs/heads/main' && !cancelled() && needs.qualify.result == 'success' }}
     environment: production
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     permissions:
       contents: write

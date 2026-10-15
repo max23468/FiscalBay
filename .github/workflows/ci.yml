@@ -35,7 +35,7 @@ jobs:
   # Gate locale, build e artefatto; prove browser e mutation girano in job propri.
   verify:
     name: Verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     concurrency:
       group: verify-${{ github.event.pull_request.number || github.ref }}
@@ -178,7 +178,7 @@ jobs:
     needs: verify
     # Una PR in bozza esegue soltanto `Verify`: le prove complete partono quando è pronta.
     if: needs.verify.outputs.e2e == 'true' && needs.verify.outputs.reused != 'true' && github.event.pull_request.draft != true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     concurrency:
       group: browser-${{ github.event.pull_request.number || github.ref }}-${{ matrix.shard }}
@@ -219,16 +219,20 @@ jobs:
         env:
           BROWSERS: ${{ needs.verify.outputs.browsers }}
         run: |
-          echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
-          echo "browsers=${BROWSERS//,/-}" >> "${GITHUB_OUTPUT}"
+          # Le build dei browser dipendono dalle librerie dell'immagine: `runner.os` non distingue Ubuntu 24.04 da 26.04.
+          {
+            echo "version=$(node -p 'require("@playwright/test/package.json").version')"
+            echo "browsers=${BROWSERS//,/-}"
+            echo "image=${ImageOS}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Restore browser cache
         id: browsers
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.browsers }}
-          restore-keys: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-
+          key: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.browsers }}
+          restore-keys: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-
 
       - name: Install browser for interaction tests
         if: steps.browsers.outputs.cache-hit != 'true'
@@ -277,7 +281,7 @@ jobs:
     name: Node 26
     needs: [verify, browser, mutation]
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
 
     steps:
@@ -313,7 +317,7 @@ jobs:
     # I job browser e mutation saltati per il riuso non devono bloccare il deploy.
     # Gli esiti dei due gate restano obbligatori, anche dopo un fallimento o una cancellazione.
     if: ${{ !cancelled() && needs.verify.result == 'success' && needs.gate.result == 'success' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/develop' && vars.TEST_DEPLOY_ENABLED == 'true' && needs.verify.outputs.deploy == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     environment: test
     concurrency:
@@ -385,7 +389,9 @@ jobs:
       - name: Read Playwright version
         id: playwright
         if: needs.verify.outputs.e2e == 'true'
-        run: echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
+        run: |
+          echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
+          echo "image=${ImageOS}" >> "${GITHUB_OUTPUT}"
 
       - name: Restore browser cache
         id: browsers
@@ -393,8 +399,8 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
-          restore-keys: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-
+          key: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium
+          restore-keys: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-
 
       - name: Install browser for interaction tests
         if: needs.verify.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit != 'true'

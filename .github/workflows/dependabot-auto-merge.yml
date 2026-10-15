@@ -28,7 +28,7 @@ jobs:
   mark-candidate:
     name: Mark candidate
     if: github.event_name == 'pull_request_target' && github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.base.ref == 'develop' && !github.event.pull_request.draft
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Fetch Dependabot metadata
@@ -70,7 +70,7 @@ jobs:
   merge-after-ci:
     name: Merge after CI
     if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Merge eligible Dependabot PR
