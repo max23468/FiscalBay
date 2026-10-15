@@ -2006,6 +2006,50 @@ describe("modello ordini", () => {
       { type: "TIN", updated: true },
     ]);
   });
+  it("l'indicazione di modifica considera gli ordini assorbiti e il CF senza Paese", async () => {
+    const cf = (externalOrderId: string, issuingCountry: string | null, value: string) =>
+      observation({
+        externalOrderId,
+        items: [line(externalOrderId)],
+        taxIdentifiers: {
+          source: "ebay_fulfillment",
+          complete: false,
+          values: [{ type: "CODICE_FISCALE", issuingCountry, value }],
+        },
+      });
+    await recordOrderObservation(env.DB, target(), cf("D-1", "IT", "RSSMRA80A01H501U"));
+    await recordOrderObservation(env.DB, target(), cf("D-2", null, "RSSMRA80A41H501Y"));
+    const [kept, absorbed] = await orders();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE orders SET merged_into = ?1 WHERE id = ?2").bind(
+        kept!.id,
+        absorbed!.id,
+      ),
+      env.DB.prepare(
+        "INSERT INTO order_grants (id, workspace_id, order_id, source, granted_at) VALUES ('merged-updated', 'w-a', ?, 'admin', ?)",
+      ).bind(kept!.id, now),
+    ]);
+    const updated = async () =>
+      (await listVisibleOrders(env.DB, "u-a"))[0]!.taxIdentifiers.map(({ value, updated }) => [
+        value,
+        updated,
+      ]);
+    // Un CF ancora valido nell'ordine assorbito non è una modifica di eBay.
+    expect(await updated()).toEqual([["RSSMRA80A01H501U", false]]);
+    await env.DB.prepare(
+      "UPDATE tax_identifiers SET removed_at = '2026-09-01T00:00:00.000Z' WHERE order_id = ?",
+    )
+      .bind(absorbed!.id)
+      .run();
+    expect(await updated()).toEqual([["RSSMRA80A01H501U", true]]);
+    // Un altro tipo rimosso nell'ordine assorbito non riguarda il CF.
+    await env.DB.prepare(
+      "UPDATE tax_identifiers SET identifier_type = 'VAT_ID', issuing_country = 'IT' WHERE order_id = ?",
+    )
+      .bind(absorbed!.id)
+      .run();
+    expect(await updated()).toEqual([["RSSMRA80A01H501U", false]]);
+  });
   it("un'osservazione Trading coincidente non cancella l'indicazione di modifica Fulfillment", async () => {
     for (const value of ["PRECEDENTE", "RSSMRA80A01H501U"]) {
       await recordOrderObservation(

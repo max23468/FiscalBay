@@ -546,7 +546,15 @@ for (const language of ["it", "en"] as const) {
         const time = page.getByRole("combobox", {
           name: t("Orario del riepilogo", "Summary time"),
         });
+        // Lo switch resta disattivato finché il salvataggio non finisce: il nuovo clic aspetta.
+        const saved = page.waitForResponse(
+          (response) =>
+            response.request().method() === "POST" &&
+            new URLSearchParams(response.request().postData() ?? "").get("name") === "telegram",
+        );
         await enabled.uncheck();
+        await saved;
+        await expect(enabled).not.toHaveAttribute("data-disabled");
         await expect(enabled).not.toBeChecked();
         await expect(allOrders).toBeDisabled();
         await expect(digest).toBeDisabled();

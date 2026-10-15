@@ -84,6 +84,18 @@ function isFulfillmentCf(tax: VisibleOrder["taxIdentifiers"][number]): boolean {
   );
 }
 
+/**
+ * Tipo dell'identificativo come in `taxIdentifierType`: CF e Partita IVA italiani, anche
+ * con Paese omesso dove la fonte lo ammette; gli altri restano distinti per tipo e Paese.
+ */
+const taxKind = (table: string) => `CASE
+  WHEN ${table}.issuing_country IS NOT NULL AND ${table}.issuing_country <> 'IT'
+    THEN json_array(${table}.identifier_type, ${table}.issuing_country)
+  WHEN ${table}.identifier_type IN ('CODICE_FISCALE', 'CodiceFiscale') THEN 'CF'
+  WHEN ${table}.identifier_type = 'PartitaIVA'
+    OR (${table}.issuing_country = 'IT' AND ${table}.identifier_type IN ('VAT_ID', 'VATIN')) THEN 'PIVA'
+  ELSE json_array(${table}.identifier_type, ${table}.issuing_country) END`;
+
 // La pausa del piano esclude i dati del negozio; la pausa manuale li lascia consultabili.
 const consultable = `NOT EXISTS (
   SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = s.id AND p.reason = 'plan'
@@ -158,15 +170,11 @@ export async function listVisibleOrders(
                              AND NOT (identifier_type = 'PartitaIVA' AND (issuing_country IS NULL OR issuing_country = 'IT')
                                OR identifier_type IN ('VAT_ID', 'VATIN') AND issuing_country = 'IT')) AS vat_only,
               g.id AS grant_id, ti.identifier_type,
-              EXISTS (SELECT 1 FROM tax_identifiers previous WHERE previous.order_id = o.id
+              EXISTS (SELECT 1 FROM tax_identifiers previous
+                JOIN orders original ON original.id = previous.order_id
+                WHERE (original.id = o.id OR original.merged_into = o.id)
                 AND previous.source = ti.source
-                AND (previous.identifier_type = ti.identifier_type OR
-                  ((ti.issuing_country IS NULL OR ti.issuing_country = 'IT')
-                    AND previous.identifier_type IN ('CODICE_FISCALE', 'CodiceFiscale')
-                    AND ti.identifier_type IN ('CODICE_FISCALE', 'CodiceFiscale')) OR
-                  (ti.issuing_country = 'IT' AND previous.identifier_type IN ('VAT_ID', 'VATIN', 'PartitaIVA')
-                    AND ti.identifier_type IN ('VAT_ID', 'VATIN', 'PartitaIVA')))
-                AND previous.issuing_country IS ti.issuing_country
+                AND ${taxKind("previous")} = ${taxKind("ti")}
                 AND previous.removed_at <= ti.observed_at) AS tax_updated,
               ti.issuing_country, ti.value, ti.source, ti.observed_at
          FROM visible_orders vo
