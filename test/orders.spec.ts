@@ -964,7 +964,13 @@ describe("modello ordini", () => {
       lastModifiedTime: "2026-09-10T10:59:59Z",
       paymentStatus: "PENDING",
     });
-    expect(await recordOrderObservation(env.DB, target(), late)).toEqual({ outcome: "stale" });
+    const batch = vi.spyOn(env.DB, "batch");
+    try {
+      expect(await recordOrderObservation(env.DB, target(), late)).toEqual({ outcome: "stale" });
+      expect(batch).not.toHaveBeenCalled();
+    } finally {
+      batch.mockRestore();
+    }
     expect(await orders()).toMatchObject([{ payment_status: "PAID" }]);
   });
 
@@ -1362,6 +1368,12 @@ describe("modello ordini", () => {
       orderId: (first as { orderId: string }).orderId,
     });
     expect(await listVisibleOrders(env.DB, "u-a")).toHaveLength(2);
+    // Un nuovo alias Trading non può scegliere il primo fra due definitivi compatibili.
+    expect(await recordOrderObservation(env.DB, target(), provisional())).toMatchObject({
+      outcome: "created",
+      issue: "multiple_candidates",
+    });
+    expect(await listVisibleOrders(env.DB, "u-a")).toHaveLength(3);
   });
 
   it("non assorbe un gruppo misto di candidati provvisori e definitivi", async () => {
