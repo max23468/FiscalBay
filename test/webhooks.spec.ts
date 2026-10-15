@@ -1207,14 +1207,14 @@ it("verifica una consegna di prova eBay reale e la conferma senza effetti", asyn
       ? Response.json({ key: delivery.key })
       : Response.json({ access_token: "token-synthetic" }),
   );
-  const request = () =>
+  const request = (body = delivery.body) =>
     new Request("https://test.fiscalbay.it/webhooks/ebay", {
       method: "POST",
       headers: { "x-ebay-signature": delivery.signature, "content-type": "application/json" },
-      body: delivery.body,
+      body,
     });
   expect((await receiveWebhook(request(), environment, real, later))?.status).toBe(204);
-  const altered = new Request(request(), { body: JSON.stringify(JSON.parse(delivery.body)) });
+  const altered = request(JSON.stringify(JSON.parse(delivery.body)));
   expect((await receiveWebhook(altered, environment, real, later))?.status).toBe(412);
   expect(send).not.toHaveBeenCalled();
   const { results } = await env.DB.prepare("SELECT id FROM webhook_receipts").all();
