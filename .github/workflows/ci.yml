@@ -219,16 +219,20 @@ jobs:
         env:
           BROWSERS: ${{ needs.verify.outputs.browsers }}
         run: |
-          echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
-          echo "browsers=${BROWSERS//,/-}" >> "${GITHUB_OUTPUT}"
+          # Le build dei browser dipendono dalle librerie dell'immagine: `runner.os` non distingue Ubuntu 24.04 da 26.04.
+          {
+            echo "version=$(node -p 'require("@playwright/test/package.json").version')"
+            echo "browsers=${BROWSERS//,/-}"
+            echo "image=${ImageOS}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Restore browser cache
         id: browsers
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.browsers }}
-          restore-keys: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-
+          key: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.browsers }}
+          restore-keys: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-
 
       - name: Install browser for interaction tests
         if: steps.browsers.outputs.cache-hit != 'true'
@@ -385,7 +389,9 @@ jobs:
       - name: Read Playwright version
         id: playwright
         if: needs.verify.outputs.e2e == 'true'
-        run: echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
+        run: |
+          echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
+          echo "image=${ImageOS}" >> "${GITHUB_OUTPUT}"
 
       - name: Restore browser cache
         id: browsers
@@ -393,8 +399,8 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
-          restore-keys: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-
+          key: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium
+          restore-keys: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-
 
       - name: Install browser for interaction tests
         if: needs.verify.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit != 'true'
