@@ -1203,50 +1203,57 @@ describe("modello ordini", () => {
     },
   );
 
-  it("gli originali del combinato seguono la retention corrente senza perdere il grant", async () => {
-    const first = await recordOrderObservation(
-      env.DB,
-      target(),
-      provisional({ items: [line("k1")] }),
-    );
-    const second = await recordOrderObservation(
-      env.DB,
-      target(),
-      provisional({
-        externalOrderId: "P-2",
-        items: [line("k2")],
-        taxIdentifiers: {
-          source: "ebay_trading_get_orders",
-          complete: false,
-          values: [{ type: "CODICE_FISCALE", value: "SINTETICO" }],
-        },
-      }),
-    );
-    await env.DB.prepare(
-      "INSERT INTO order_grants (id, workspace_id, order_id, source, granted_at) VALUES ('merged-retention', 'w-a', ?, 'admin', ?)",
-    )
-      .bind((second as { orderId: string }).orderId, now)
-      .run();
-    await recordOrderObservation(env.DB, target(), observation());
-    await env.DB.prepare("UPDATE orders SET retention_until = ?1, purge_after = ?1 WHERE id = ?2")
-      .bind("2026-11-01T00:00:00.000Z", (first as { orderId: string }).orderId)
-      .run();
-    const at = new Date("2026-10-11T00:00:00.000Z");
-    await purgeExpiredRecords(env.DB, at);
-    expect((await listVisibleOrders(env.DB, "u-a", 50, "production", at))[0]!.fiscalState).toBe(
-      "available",
-    );
-    expect(await orders()).toHaveLength(2);
-    await purgeExpiredRecords(env.DB, new Date("2026-11-01T00:00:00.000Z"));
-    expect(await orders()).toEqual([]);
-    expect(
+  it.each([true, false])(
+    "gli originali del combinato seguono la retention corrente senza perdere il grant, primo più vecchio: %s",
+    async (firstOlder) => {
       await recordOrderObservation(
         env.DB,
         target(),
-        provisional({ externalOrderId: "P-2", items: [line("k2")] }),
-      ),
-    ).toEqual({ outcome: "stale" });
-  });
+        provisional({
+          items: [line("k1")],
+          creationTime: firstOlder ? "2026-09-09T10:00:00Z" : "2026-09-10T10:00:00Z",
+        }),
+      );
+      const second = await recordOrderObservation(
+        env.DB,
+        target(),
+        provisional({
+          externalOrderId: "P-2",
+          creationTime: firstOlder ? "2026-09-10T10:00:00Z" : "2026-09-09T10:00:00Z",
+          items: [line("k2")],
+          taxIdentifiers: {
+            source: "ebay_trading_get_orders",
+            complete: false,
+            values: [{ type: "CODICE_FISCALE", value: "SINTETICO" }],
+          },
+        }),
+      );
+      await env.DB.prepare(
+        "INSERT INTO order_grants (id, workspace_id, order_id, source, granted_at) VALUES ('merged-retention', 'w-a', ?, 'admin', ?)",
+      )
+        .bind((second as { orderId: string }).orderId, now)
+        .run();
+      const combined = await recordOrderObservation(env.DB, target(), observation());
+      await env.DB.prepare("UPDATE orders SET retention_until = ?1, purge_after = ?1 WHERE id = ?2")
+        .bind("2026-11-01T00:00:00.000Z", (combined as { orderId: string }).orderId)
+        .run();
+      const at = new Date("2026-10-11T00:00:00.000Z");
+      await purgeExpiredRecords(env.DB, at);
+      expect((await listVisibleOrders(env.DB, "u-a", 50, "production", at))[0]!.fiscalState).toBe(
+        "available",
+      );
+      expect(await orders()).toHaveLength(2);
+      await purgeExpiredRecords(env.DB, new Date("2026-11-01T00:00:00.000Z"));
+      expect(await orders()).toEqual([]);
+      expect(
+        await recordOrderObservation(
+          env.DB,
+          target(),
+          provisional({ externalOrderId: "P-2", items: [line("k2")] }),
+        ),
+      ).toEqual({ outcome: "stale" });
+    },
+  );
 
   it("conserva i campi noti e lascia mascherati quelli annidati mai acquisiti", async () => {
     await recordOrderObservation(env.DB, target(), observation());
