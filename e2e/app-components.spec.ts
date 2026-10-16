@@ -1,7 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { localCookie, localPassword } from "./local-account";
 import { testAccount } from "./test-account";
-import { executeLocal } from "../scripts/local-d1.mjs";
 
 test.describe("miglioramenti account e negozi", () => {
   test.skip(
@@ -55,118 +54,91 @@ test.describe("miglioramenti account e negozi", () => {
         context,
         baseURL,
       }) => {
-        // La CLI locale apre lo stesso file D1: prepara una lingua alla volta.
         for (const language of ["it", "en"] as const) {
           const it = language === "it";
           const prefix = it ? "" : "/en";
-          // Ogni lingua ha spazio e sessione propri: il test non cambia le fixture delle altre prove.
+          // Spazio, sessione e ordini bloccati propri di ogni lingua arrivano dal seed locale:
+          // la suite non scrive nel D1 mentre il server lo usa e non tocca le altre fixture.
           const id = `unlock-${language}`;
-          executeLocal(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM user WHERE id = '${id}';
-        INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt)
-          SELECT '${id}', name, '${id}@example.invalid', 1, createdAt, updatedAt FROM user WHERE id = '${testAccount.userId}';
-        INSERT INTO user_profiles SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
-          FROM user_profiles WHERE user_id = '${testAccount.userId}';
-        INSERT INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
-          FROM terms_acceptances WHERE user_id = '${testAccount.userId}';
-        INSERT INTO session (id, token, userId, expiresAt, createdAt, updatedAt)
-          SELECT '${id}', '${id}', '${id}', expiresAt, createdAt, updatedAt FROM session WHERE id = 'pages-member';
-        INSERT INTO workspaces VALUES ('${id}', 'Collaudo sblocco', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), NULL);
-        INSERT INTO workspace_members VALUES ('${id}', '${id}', 'owner');
-        INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
-          VALUES ('${id}', '${id}', '${id}', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 'Negozio sblocco');
-        INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor)
-          VALUES ('${id}', '${id}', '${id}', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 'EUR', 100);
-        INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at)
-          VALUES ('${id}', '${id}', 'VAT_ID', 'VALORE-SINTETICO-${language}', 'synthetic_fixture', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
-        INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor)
-          SELECT '${id}-' || value, '${id}', '${id}-' || value, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 'EUR', 100 FROM json_each('[2,3,4]');
-        INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at)
-          SELECT '${id}-' || value, '${id}-' || value, 'VAT_ID', 'VALORE-SINTETICO-${language}-' || value, 'synthetic_fixture', strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM json_each('[2,3,4]');`);
           await context.addCookies([localCookie("member", baseURL!, id)]);
-          try {
-            const errors: string[] = [];
-            page.on("pageerror", (error) => errors.push(error.message));
-            page.on("console", (message) => {
-              if (message.type() === "error") errors.push(message.text());
+          const errors: string[] = [];
+          page.on("pageerror", (error) => errors.push(error.message));
+          page.on("console", (message) => {
+            if (message.type() === "error") errors.push(message.text());
+          });
+          await page.setViewportSize({ width: it ? 1280 : 390, height: 900 });
+          await page.emulateMedia({
+            colorScheme: it ? "light" : "dark",
+            reducedMotion: "reduce",
+          });
+          await page.goto(`${prefix}/app/ordini`);
+          const card = (suffix = "") =>
+            page.locator('[data-slot="card"]').filter({
+              has: page.getByRole("link", {
+                name: `${it ? "Ordine" : "Order"} ${id}${suffix}`,
+                exact: true,
+              }),
             });
-            await page.setViewportSize({ width: it ? 1280 : 390, height: 900 });
-            await page.emulateMedia({
-              colorScheme: it ? "light" : "dark",
-              reducedMotion: "reduce",
-            });
-            await page.goto(`${prefix}/app/ordini`);
-            const card = (suffix = "") =>
-              page.locator('[data-slot="card"]').filter({
-                has: page.getByRole("link", {
-                  name: `${it ? "Ordine" : "Order"} ${id}${suffix}`,
-                  exact: true,
-                }),
-              });
-            const secret = `VALORE-SINTETICO-${language}`;
-            expect(await page.content()).not.toContain(secret);
-            await card()
-              .getByRole("button", { name: it ? "Sblocca ordine" : "Unlock order", exact: true })
-              .click();
-            const dialog = page.getByRole("alertdialog");
-            await page.screenshot({ path: `/tmp/fiscalbay-unlock-${language}.png` });
-            const skip = dialog.getByRole("checkbox", {
-              name: it ? "Non chiedermelo più" : "Don’t ask again",
-            });
-            await skip.check();
-            await dialog
-              .getByRole("button", { name: it ? "Annulla" : "Cancel", exact: true })
-              .click();
-            expect(await page.content()).not.toContain(secret);
-            await card()
-              .getByRole("button", { name: it ? "Sblocca ordine" : "Unlock order", exact: true })
-              .click();
-            await expect(skip).not.toBeChecked();
-            await skip.check();
-            await dialog
-              .getByRole("button", { name: it ? "Sblocca" : "Unlock", exact: true })
-              .click();
-            await expect(page.getByText(secret, { exact: true }).first()).toBeVisible();
-            await page.reload();
-            await expect(page.getByText(secret, { exact: true }).first()).toBeVisible();
-            await card("-2")
-              .getByRole("button", { name: it ? "Sblocca ordine" : "Unlock order", exact: true })
-              .click();
-            await expect(page.getByRole("alertdialog")).toHaveCount(0);
-            await expect(card("-2").getByText(`${secret}-2`, { exact: true })).toBeVisible();
-            await page
-              .getByRole("button", { name: it ? "Seleziona" : "Select", exact: true })
-              .click();
-            for (const suffix of ["-3", "-4"]) await card(suffix).getByRole("checkbox").check();
-            await page
-              .getByRole("button", { name: it ? "Sblocca 2" : "Unlock 2", exact: true })
-              .click();
-            await expect(dialog).toBeVisible();
-            await expect(dialog.getByRole("checkbox")).toHaveCount(0);
-            await dialog
-              .getByRole("button", { name: it ? "Sblocca" : "Unlock", exact: true })
-              .click();
-            await expect(card("-3").getByText(`${secret}-3`, { exact: true })).toBeVisible();
-            await expect(card("-4").getByText(`${secret}-4`, { exact: true })).toBeVisible();
-            const select = page.getByRole("button", {
-              name: it ? "Seleziona" : "Select",
-              exact: true,
-            });
-            await select.click();
-            await expect(select).toBeDisabled();
-            await page.screenshot({ path: `/tmp/fiscalbay-unlock-${language}-complete.png` });
-            await page.goto(`${prefix}/app/impostazioni/sicurezza`);
-            const restore = page.getByRole("button", {
-              name: it ? "Riattiva conferma sblocco" : "Restore unlock confirmation",
-            });
-            await expect(restore).toBeEnabled();
-            await restore.click();
-            await expect(restore).toBeDisabled();
-            expect(errors).toEqual([]);
-          } finally {
-            executeLocal(
-              `DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM user WHERE id = '${id}';`,
-            );
-          }
+          const secret = `VALORE-SINTETICO-${language}`;
+          expect(await page.content()).not.toContain(secret);
+          await card()
+            .getByRole("button", { name: it ? "Sblocca ordine" : "Unlock order", exact: true })
+            .click();
+          const dialog = page.getByRole("alertdialog");
+          await page.screenshot({ path: `/tmp/fiscalbay-unlock-${language}.png` });
+          const skip = dialog.getByRole("checkbox", {
+            name: it ? "Non chiedermelo più" : "Don’t ask again",
+          });
+          await skip.check();
+          await dialog
+            .getByRole("button", { name: it ? "Annulla" : "Cancel", exact: true })
+            .click();
+          expect(await page.content()).not.toContain(secret);
+          await card()
+            .getByRole("button", { name: it ? "Sblocca ordine" : "Unlock order", exact: true })
+            .click();
+          await expect(skip).not.toBeChecked();
+          await skip.check();
+          await dialog
+            .getByRole("button", { name: it ? "Sblocca" : "Unlock", exact: true })
+            .click();
+          await expect(page.getByText(secret, { exact: true }).first()).toBeVisible();
+          await page.reload();
+          await expect(page.getByText(secret, { exact: true }).first()).toBeVisible();
+          await card("-2")
+            .getByRole("button", { name: it ? "Sblocca ordine" : "Unlock order", exact: true })
+            .click();
+          await expect(page.getByRole("alertdialog")).toHaveCount(0);
+          await expect(card("-2").getByText(`${secret}-2`, { exact: true })).toBeVisible();
+          await page
+            .getByRole("button", { name: it ? "Seleziona" : "Select", exact: true })
+            .click();
+          for (const suffix of ["-3", "-4"]) await card(suffix).getByRole("checkbox").check();
+          await page
+            .getByRole("button", { name: it ? "Sblocca 2" : "Unlock 2", exact: true })
+            .click();
+          await expect(dialog).toBeVisible();
+          await expect(dialog.getByRole("checkbox")).toHaveCount(0);
+          await dialog
+            .getByRole("button", { name: it ? "Sblocca" : "Unlock", exact: true })
+            .click();
+          await expect(card("-3").getByText(`${secret}-3`, { exact: true })).toBeVisible();
+          await expect(card("-4").getByText(`${secret}-4`, { exact: true })).toBeVisible();
+          const select = page.getByRole("button", {
+            name: it ? "Seleziona" : "Select",
+            exact: true,
+          });
+          await select.click();
+          await expect(select).toBeDisabled();
+          await page.screenshot({ path: `/tmp/fiscalbay-unlock-${language}-complete.png` });
+          await page.goto(`${prefix}/app/impostazioni/sicurezza`);
+          const restore = page.getByRole("button", {
+            name: it ? "Riattiva conferma sblocco" : "Restore unlock confirmation",
+          });
+          await expect(restore).toBeEnabled();
+          await restore.click();
+          await expect(restore).toBeDisabled();
+          expect(errors).toEqual([]);
         }
       });
     test(`ordini: sblocco non riuscito senza consumo o preferenza salvata ${language}`, async ({

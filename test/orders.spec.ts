@@ -885,6 +885,22 @@ describe("percorso ordini", () => {
     ).toEqual({ source: "free_cycle", cycle_id: "c-a" });
   });
 
+  it("valuta le coperture all'istante del grant Free, non all'ora corrente", async () => {
+    await seed();
+    // La copertura inizia dopo l'istante del grant ma prima dell'ora reale della prova.
+    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+      VALUES ('later', 'w-a', 'premium', '2026-09-14T00:00:00.000Z', '2026-09-15T00:00:00.000Z')`).run();
+    await grantFreeOrder(
+      env.DB,
+      "u-a",
+      { id: "g-a", workspaceId: "w-a", orderId: "o-a", cycleId: "c-a", grantedAt: now },
+      new Date(now),
+    );
+    expect(await env.DB.prepare("SELECT used FROM free_cycles WHERE id = 'c-a'").first()).toEqual({
+      used: 1,
+    });
+  });
+
   it("usa la disponibilità storica effettiva anche per coperture future, senza diritti retroattivi", async () => {
     await seed();
     const starts = "2026-09-14T00:00:00.000Z";
@@ -1047,11 +1063,15 @@ describe("percorso ordini", () => {
         cycleId: "c-a",
         grantedAt: now,
       });
+    const canUnlock = async () =>
+      (await listVisibleOrders(env.DB, "u-a")).find((order) => order.id === "o-a")?.canUnlock;
+    expect(await canUnlock()).toBe(false);
     await expect(grant()).rejects.toThrow("order_not_available");
     expect(await env.DB.prepare("SELECT used FROM free_cycles WHERE id = 'c-a'").first()).toEqual({
       used: 0,
     });
     await env.DB.prepare("UPDATE orders SET is_provisional = 0 WHERE id = 'o-a'").run();
+    expect(await canUnlock()).toBe(true);
     await grant();
     expect(await env.DB.prepare("SELECT used FROM free_cycles WHERE id = 'c-a'").first()).toEqual({
       used: 1,

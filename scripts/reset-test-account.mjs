@@ -163,6 +163,29 @@ async function main() {
       statements.push(
         `INSERT OR REPLACE INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt", "passkeyVerified") VALUES ('pages-${role}', 'pages-${role}', '${role === "member" ? testAccount.userId : "collaudo-admin"}', '${expires}', '${now}', '${now}', ${role === "admin-granted" ? 1 : 0});`,
       );
+    // Prova di sblocco: un account per lingua con quattro ordini bloccati e quota intatta.
+    for (const id of ["unlock-it", "unlock-en"]) {
+      const value = `VALORE-SINTETICO-${id.slice(-2)}`;
+      statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
+      INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+        SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
+      INSERT INTO user_profiles SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
+        FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
+      INSERT INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
+        FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};
+      INSERT INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
+        VALUES ('${id}', '${id}', '${id}', '${expires}', '${now}', '${now}');
+      INSERT INTO workspaces VALUES ('${id}', 'Collaudo sblocco', '${now}', NULL);
+      INSERT INTO workspace_members VALUES ('${id}', '${id}', 'owner');
+      INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
+        VALUES ('${id}', '${id}', '${id}', '${now}', 'Negozio sblocco');
+      INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor)
+        SELECT '${id}' || suffix, '${id}', '${id}' || suffix, '${now}', '${now}', 'EUR', 100
+        FROM (SELECT '' AS suffix UNION ALL SELECT '-2' UNION ALL SELECT '-3' UNION ALL SELECT '-4');
+      INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at)
+        SELECT id, id, 'VAT_ID', '${value}' || substr(id, ${id.length + 1}), 'synthetic_fixture', '${now}'
+        FROM orders WHERE store_id = '${id}';`);
+    }
   }
   // Un solo batch di istruzioni SQL: nessun import di file, che sospende il database.
   const sql = statements.join("\n");
