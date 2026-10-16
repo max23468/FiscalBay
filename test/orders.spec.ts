@@ -3426,6 +3426,34 @@ describe("registrazione e verifica del contatto", () => {
 });
 
 describe("collegamento negozio eBay", () => {
+  it("collega l'identità stabile anche senza username e conserva il nome già noto al reconnect", async () => {
+    const owner = await verifiedSession("link.senza-nome@example.invalid");
+    const source = syntheticEbay();
+    const fetcher = vi.fn<typeof fetch>(async (input, init) =>
+      String(input).includes("/commerce/identity/v1/user/")
+        ? Response.json({ userId: "ebay-user-sintetico" })
+        : source(input, init),
+    );
+    const connect = async () => {
+      const initial = await beginStoreLink(owner.cookie);
+      return handleAuthRequest(
+        storeCallback(`state=${initial.searchParams.get("state")}&code=sintetico`, owner.cookie),
+        env,
+        fetcher,
+      );
+    };
+    expect((await connect()).headers.get("location")).toContain("negozio=collegato");
+    const [store] = await listStores(env.DB, owner.userId);
+    expect(store).toMatchObject({ name: "ebay-user-sintetico" });
+    await env.DB.prepare("UPDATE ebay_stores SET display_name = 'Nome noto' WHERE id = ?")
+      .bind(store!.id)
+      .run();
+    expect((await connect()).headers.get("location")).toContain("negozio=collegato");
+    expect(await listStores(env.DB, owner.userId)).toMatchObject([
+      { id: store!.id, name: "Nome noto" },
+    ]);
+  });
+
   it("ricollega solo il negozio scelto, senza salvare un consenso di un altro account", async () => {
     const owner = await verifiedSession("reconnect.esatto@example.invalid");
     const other = await verifiedSession("reconnect.estraneo@example.invalid");
@@ -5351,6 +5379,55 @@ describe("confine HTTP dei provider", () => {
         ),
       ),
     ).toEqual({ failure: "unavailable", code: "UPSTREAM_UNAVAILABLE" });
+  });
+
+  it("rifiuta Retry-After illeggibile e codici provider inadatti senza esporre il body", async () => {
+    const fetcher = (body: unknown) =>
+      vi.fn<typeof fetch>(async () => Response.json(body, { status: 400 }));
+    for (const body of [{ error: 123 }, { error: "NON-ESPORRE" }, { detail: "NON-ESPORRE" }]) {
+      expect(await failure(upstreamText(fetcher(body), url))).toEqual({
+        failure: "rejected",
+        code: "INVALID_REQUEST",
+        status: 400,
+        providerCode: undefined,
+      });
+    }
+    expect(
+      await failure(
+        upstreamText(
+          vi.fn<typeof fetch>(
+            async () =>
+              new Response(null, {
+                status: 429,
+                headers: { "retry-after": "non-data" },
+              }),
+          ),
+          url,
+        ),
+      ),
+    ).toEqual({
+      failure: "rate_limited",
+      code: "UPSTREAM_UNAVAILABLE",
+      status: 429,
+      retryAfter: undefined,
+    });
+  });
+
+  it("propaga l'annullamento del chiamante anche quando il timeout non è scaduto", async () => {
+    const controller = new AbortController();
+    const fetcher = vi.fn<typeof fetch>(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason));
+        }),
+    );
+    const pending = upstreamText(fetcher, url, { signal: controller.signal });
+    controller.abort();
+    expect(await failure(pending)).toEqual({
+      failure: "unavailable",
+      code: "UPSTREAM_UNAVAILABLE",
+    });
+    expect(fetcher.mock.calls[0]![1]!.signal!.aborted).toBe(true);
   });
 
   it("limita i byte anche senza Content-Length e interrompe una lettura troppo lunga", async () => {
