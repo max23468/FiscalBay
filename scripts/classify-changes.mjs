@@ -20,7 +20,7 @@ const governance = [
   /^docs\/engineering\//u,
 ];
 const categories = [
-  ["test", [/^test\//u, /^e2e\//u]],
+  ["test", [/^test\//u, /^e2e\//u, /^benchmarks\//u]],
   ["runtime", [/^app\//u, /^workers\//u, /^public\//u, /^migrations\//u, /^placeholder\//u]],
   [
     "tooling",
@@ -30,8 +30,8 @@ const categories = [
       /^scripts\//u,
       /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|mise\.toml)$/u,
       /^tsconfig(?:\.\w+)?\.json$/u,
-      /^(?:vite|vitest(?:\.(?:unit|cloudflare|mutation))?|playwright|react-router|cloudflare)\.config\.ts$/u,
-      /^(?:components\.json|doctor\.config\.json|stryker\.config\.json)$/u,
+      /^(?:vite|vitest(?:\.(?:unit|cloudflare|mutation|benchmark))?|playwright|react-router|cloudflare)\.config\.ts$/u,
+      /^(?:components\.json|doctor\.config\.json|stryker\.config\.json|knip\.json)$/u,
       /^(?:\.oxfmtrc\.json|\.gitignore|\.dev\.vars\.example)$/u,
     ],
   ],
@@ -40,13 +40,16 @@ const categories = [
 function toolingFile(file) {
   return (
     file.endsWith(".md") ||
-    /^scripts\/(?:verify-(?:copy|docs|repo|pages)|guardrails\.test|classify-changes|release(?:-notes|-cycle)?|find-(?:build|deployed)|reset-test-account|watch-invocations)\.mjs$/u.test(
+    /^scripts\/(?:verify-(?:copy|docs|repo|pages)|guardrails\.test|classify-changes|benchmark|coverage-report|release(?:-notes|-cycle)?|find-(?:build|deployed)|reset-test-account|watch-invocations)\.mjs$/u.test(
       file,
     ) ||
     /^\.github\/(?:dependabot\.yml|workflows\/(?:ci|publish|qualify|promotion|mutation|react-doctor|actionlint|pr-title|dependency-review|dependabot-auto-merge)\.yml)$/u.test(
       file,
     ) ||
-    /^(?:\.oxfmtrc\.json|doctor\.config\.json)$/u.test(file)
+    /^(?:\.oxfmtrc\.json|doctor\.config\.json|knip\.json|vitest\.benchmark\.config\.ts)$/u.test(
+      file,
+    ) ||
+    file.startsWith("benchmarks/")
   );
 }
 
@@ -101,7 +104,7 @@ export function plan(files, sources = [], complete = false, ranges = {}) {
   const kinds = new Set(files.map(classifyFile));
   const docsOnly = kinds.size === 1 && kinds.has("documentation");
   const toolsOnly = files.length > 0 && files.every(toolingFile);
-  const graph = importGraph(sources);
+  const graph = importGraph(sources, /^(?:app|workers|benchmarks)\/.+\.tsx?$/u);
   const affected = consumers(files, graph);
   const full =
     complete ||
@@ -225,6 +228,18 @@ export function plan(files, sources = [], complete = false, ranges = {}) {
     files.some((file) => classifyFile(file) === "tooling" && !toolingFile(file)) ||
     [...affected].some((file) => /^app\/.*\.tsx$/u.test(file)) ||
     files.some((file) => /^(?:package\.json|pnpm-lock\.yaml|doctor\.config\.json)$/u.test(file));
+  const benchmark =
+    complete ||
+    files.length === 0 ||
+    unclassified.length > 0 ||
+    files.some((file) =>
+      /^(?:benchmarks\/|scripts\/benchmark\.mjs$|vitest\.benchmark\.config\.ts$|tsconfig(?:\.\w+)?\.json$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|mise\.toml$|patches\/|\.github\/workflows\/(?:ci|qualify)\.yml$)/u.test(
+        file,
+      ),
+    ) ||
+    [...affected].some((file) => file.startsWith("benchmarks/")) ||
+    (kinds.has("runtime") &&
+      (sources.length === 0 || files.some((file) => file.startsWith("app/") && !graph.has(file))));
   return {
     gate: mode === "docs" ? "docs" : mode === "tooling" ? "tooling" : "full",
     e2e,
@@ -238,6 +253,7 @@ export function plan(files, sources = [], complete = false, ranges = {}) {
     live,
     deploy,
     doctor,
+    benchmark,
     promotionReuse: !files.some(
       (file) =>
         /^scripts\/(?:classify-changes|release(?:-notes)?|find-build)\.mjs$/u.test(file) ||
@@ -253,6 +269,7 @@ export function plan(files, sources = [], complete = false, ranges = {}) {
       `build pagina provvisoria ${placeholder ? "richiesta dai suoi input o dal candidato completo" : "input invariati"}`,
       `deploy ${deploy ? "richiesto da runtime, configurazione o perimetro sconosciuto" : "nessun artefatto applicativo modificato"}`,
       `mutation ${complete ? "sui moduli critici interi e i loro consumatori critici" : "sulle righe cambiate dei moduli critici toccati"}`,
+      `benchmark ${benchmark ? "richiesti dagli input dei percorsi misurati" : "input invariati"}`,
       ...files
         .filter((file) => !toolingFile(file) && classifyFile(file) !== "test")
         .map((file) => `impatto applicativo o non classificato: ${file}`),
@@ -261,7 +278,7 @@ export function plan(files, sources = [], complete = false, ranges = {}) {
 }
 
 /** Sequenza del gate condivisa da locale e CI, senza browser o mutation. */
-export function gateCommands({ gate, doctor, placeholder, live }) {
+export function gateCommands({ gate, doctor, placeholder, live, benchmark }) {
   if (gate === "docs")
     return [
       ["node", ["scripts/verify-copy.mjs"]],
@@ -274,12 +291,13 @@ export function gateCommands({ gate, doctor, placeholder, live }) {
           "verify:tooling",
           "verify:pages",
           "typecheck",
-          "test",
+          "test:coverage",
           ...(placeholder ? ["build:placeholder"] : []),
           ...(live ? ["build:live"] : []),
           "build",
         ];
   if (doctor) checks.push("doctor:react");
+  if (benchmark) checks.push("benchmark");
   return checks.map((check) => ["pnpm", [check]]);
 }
 
@@ -340,7 +358,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   const local = !args.includes("--base");
   const files = local ? localChanges() : committedChanges(base, head);
   const sources = lines(git("ls-files", "--cached", "--others", "--exclude-standard"))
-    .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file) && existsSync(file))
+    .filter((file) => /^(?:app|workers|benchmarks)\/.+\.tsx?$/u.test(file) && existsSync(file))
     .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
   const complete = args.includes("--complete");
   const ranges =
@@ -358,7 +376,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   if (args.includes("--github-output") && process.env.GITHUB_OUTPUT)
     appendFileSync(
       process.env.GITHUB_OUTPUT,
-      `gate=${result.gate}\ne2e=${result.e2e}\nbuild=${result.build}\ndeploy=${result.deploy}\ndoctor=${result.doctor}\npromotion-reuse=${result.promotionReuse}\nmode=${result.mode}\ngrep=${result.browserGrep}\nbrowsers=${result.browsers}\nmutation=${result.mutation.join(" ")}\nmutation-matrix=${JSON.stringify({ target: result.mutation })}\n`,
+      `gate=${result.gate}\ne2e=${result.e2e}\nbuild=${result.build}\ndeploy=${result.deploy}\ndoctor=${result.doctor}\nbenchmark=${result.benchmark}\npromotion-reuse=${result.promotionReuse}\nmode=${result.mode}\ngrep=${result.browserGrep}\nbrowsers=${result.browsers}\nmutation=${result.mutation.join(" ")}\nmutation-matrix=${JSON.stringify({ target: result.mutation })}\n`,
     );
   if (process.env.GITHUB_STEP_SUMMARY && !args.includes("--gate-only"))
     appendFileSync(
@@ -368,7 +386,16 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   if (args.includes("--json")) console.log(JSON.stringify(result));
 
   if (args.includes("--run")) {
-    for (const [command, arguments_] of gateCommands(result)) run(command, arguments_);
+    for (const [command, arguments_] of gateCommands(result))
+      run(
+        command,
+        arguments_,
+        arguments_[0] === "benchmark"
+          ? {
+              BENCHMARK_BASE_SHA: base || git("merge-base", "origin/develop", "HEAD").trim(),
+            }
+          : {},
+      );
     if (result.e2e && !args.includes("--gate-only"))
       run(
         "node",

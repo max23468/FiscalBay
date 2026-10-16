@@ -6,6 +6,8 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { createHash, randomBytes } from "node:crypto";
 import { budgetKiB } from "./check-bundle-size.mjs";
+import { coverageSummary } from "./coverage-report.mjs";
+import { benchmarkSummary, comparableDependencies } from "./benchmark.mjs";
 import { shardTests, assertCandidateReports } from "./browser-tests.mjs";
 import {
   changedLines,
@@ -71,6 +73,84 @@ const plan = (files) => {
   const { gate, e2e, unclassified } = changePlan(files);
   return { gate, e2e, unclassified };
 };
+
+describe("report di qualità", () => {
+  it("rifiuta copertura vuota, conteggi incoerenti e sorgenti omessi", () => {
+    const metric = { total: 10, covered: 4, pct: 40 };
+    const total = Object.fromEntries(
+      ["lines", "branches", "functions", "statements"].map((name) => [name, metric]),
+    );
+    assert.match(coverageSummary({ total }), /4 \/ 10/u);
+    assert.throws(() => coverageSummary({}), /Copertura incompleta/u);
+    assert.throws(
+      () => coverageSummary({ total: { ...total, lines: { ...metric, covered: 11 } } }),
+      /Copertura incompleta/u,
+    );
+    assert.throws(() => coverageSummary({ total }, ["app/missing.ts"]), /File assenti/u);
+    assert.doesNotThrow(() =>
+      coverageSummary({ total, [path.resolve("app/included.ts")]: {} }, ["app/included.ts"]),
+    );
+  });
+
+  it("confronta misure valide e rifiuta raccolte mancanti o incompatibili", () => {
+    assert.match(benchmarkSummary({ csv: [2, 3, 1] }, { csv: [1, 1, 1] }), /100\.0%/u);
+    assert.match(
+      benchmarkSummary({ csv: [1, 2, 3] }, undefined, "toolchain diversa"),
+      /toolchain diversa/u,
+    );
+    for (const samples of [{}, { csv: [] }, { csv: [NaN] }, { csv: [0] }])
+      assert.throws(() => benchmarkSummary(samples), /Misure benchmark/u);
+    assert.throws(() => benchmarkSummary({ csv: [1] }, { zip: [1] }), /Misure benchmark/u);
+    assert.throws(() => benchmarkSummary({ csv: [1] }, { csv: [Infinity] }), /Misure benchmark/u);
+    const base = {
+      dependencies: { a: "1", b: "2" },
+      devDependencies: { vitest: "5" },
+      engines: { node: "26" },
+    };
+    assert.equal(comparableDependencies(base, { ...base, dependencies: { b: "2", a: "1" } }), true);
+    assert.equal(comparableDependencies(base, { ...base, dependencies: { a: "2" } }), false);
+    assert.equal(
+      comparableDependencies(base, { ...base, devDependencies: { vitest: "6" } }),
+      false,
+    );
+    assert.equal(comparableDependencies(base, { ...base, engines: { node: "27" } }), false);
+  });
+
+  it("seleziona benchmark per consumatori, fixture e toolchain senza attivare deploy", () => {
+    for (const file of [
+      "benchmarks/orders.bench.ts",
+      "scripts/benchmark.mjs",
+      "vitest.benchmark.config.ts",
+      "knip.json",
+    ]) {
+      const result = changePlan([file]);
+      assert.equal(result.deploy, false);
+      assert.equal(result.build, false);
+      assert.equal(result.gate, "tooling");
+      assert.equal(result.benchmark, file !== "knip.json");
+    }
+    assert.equal(changePlan(["README.md"]).benchmark, false);
+    assert.equal(changePlan(["package.json"]).benchmark, true);
+    const sources = [
+      { path: "app/shared.ts", text: "export const value = 1;" },
+      {
+        path: "app/money.ts",
+        text: 'import { value } from "./shared"; export const money = value;',
+      },
+      {
+        path: "benchmarks/orders.bench.ts",
+        text: 'import { money } from "../app/money"; console.log(money);',
+      },
+    ];
+    assert.equal(changePlan(["app/shared.ts"], sources).benchmark, true);
+    assert.equal(changePlan(["test/orders.spec.ts"]).benchmark, false);
+    assert.ok(
+      gateCommands(changePlan(["test/orders.spec.ts"])).some(
+        ([, args]) => args[0] === "test:coverage",
+      ),
+    );
+  });
+});
 
 describe("sigle di piano", () => {
   it("ammette le sigle nella documentazione e nelle migration già applicate", () => {
@@ -456,7 +536,7 @@ describe("classificazione dei file modificati", () => {
       "verify:tooling",
       "verify:pages",
       "typecheck",
-      "test",
+      "test:coverage",
       "build",
     ]);
     for (const files of [["app/new-module.ts"], ["scripts/unknown.mjs"], []]) {
@@ -499,11 +579,12 @@ describe("classificazione dei file modificati", () => {
         "verify:tooling",
         "verify:pages",
         "typecheck",
-        "test",
+        "test:coverage",
         "build:placeholder",
         "build:live",
         "build",
         "doctor:react",
+        "benchmark",
       ]);
     } finally {
       rmSync(directory, { recursive: true, force: true });

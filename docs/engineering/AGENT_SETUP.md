@@ -23,6 +23,9 @@ Codex desktop può usare file/CLI locali e le connessioni effettivamente autoriz
 |---|---|
 | `pnpm format:check`, `pnpm lint`, `pnpm typecheck` | Oxfmt, Oxlint e compilatore; versione esatta nel lockfile/config, non copiata in più documenti. |
 | `pnpm test`, `pnpm test:e2e` | Vitest/Testing Library e Playwright sulla build locale prima del deploy, fixture controllate; accessibilità smoke dove pertinente. |
+| `pnpm quality:knip` | Genera i tipi delle route e controlla file, dipendenze, import ed esportazioni inutilizzati. Bloccante in `verify:tooling` e quindi in `Node 26`; ingressi ed eccezioni in [RELEASE](RELEASE.md#qualita-del-codice-e-prestazioni). |
+| `pnpm test:coverage` | Esegue le suite Vitest Node e Cloudflare una sola volta con Istanbul; report HTML, JSON e LCOV in `reports/coverage/`, sorgenti non eseguiti inclusi e controllo dei file mancanti. Nessuna soglia percentuale. |
+| `pnpm benchmark [--base <commit>]` | Nove misure su normalizzazione eBay, qualità formale, importi ed export sintetici; tre esecuzioni per versione, confronto informativo sullo stesso runner. Report e provenienza in `reports/benchmarks/`; senza base, sole misure correnti. |
 | `pnpm test:e2e:smoke` | Controllo Playwright breve sul dominio test dopo il deploy, senza avviare un server locale. Con `E2E_ACCOUNT_PASSWORD` entra anche nell'area riservata con l'account di collaudo `collaudo@example.invalid`, che `node scripts/reset-test-account.mjs` riporta prima a uno stato noto soltanto sulla D1 `fiscalbay-test`; password nel segreto dell'environment GitHub `test`. Il ripristino fallito salta le prove autenticate con un avviso, senza rollback. |
 | `pnpm build` | Artefatto del runtime selezionato, nessun deploy implicito. |
 | `pnpm verify` | Composizione dei gate applicabili; comandi e risultati realmente verificati. |
