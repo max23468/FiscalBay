@@ -77,11 +77,8 @@ export type VisibleOrder = {
 };
 
 function isFulfillmentCf(tax: VisibleOrder["taxIdentifiers"][number]): boolean {
-  return (
-    tax.source === "ebay_fulfillment" &&
-    tax.type === "CODICE_FISCALE" &&
-    (tax.issuingCountry ?? "IT") === "IT"
-  );
+  // cfKey qualifica già il Paese prima del confronto fra le fonti.
+  return tax.source === "ebay_fulfillment" && tax.type === "CODICE_FISCALE";
 }
 
 /**
