@@ -148,22 +148,17 @@ async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
   while (spend(ctx.budget, 1, 1)) {
     const result = await readTradingOrders(ctx.access, { from, until, page });
     let skipped = result.skipped;
-    await result.orders
-      .filter(
-        (observation) =>
-          Date.parse(observation.creationTime) > Date.parse(ctx.at) - historyDays * dayMilliseconds,
-      )
-      .reduce<Promise<unknown>>(
-        (previous, observation) =>
-          previous.then(() =>
-            record(ctx, observation).catch((error: unknown) => {
-              // Righe ripetute nello stesso acquisto: si salta l'ordine, non la pagina.
-              if (!(error instanceof DuplicateLineIdentity)) throw error;
-              skipped += 1;
-            }),
-          ),
-        Promise.resolve(),
-      );
+    await result.orders.reduce<Promise<unknown>>(
+      (previous, observation) =>
+        previous.then(() =>
+          record(ctx, observation).catch((error: unknown) => {
+            // Righe ripetute nello stesso acquisto: si salta l'ordine, non la pagina.
+            if (!(error instanceof DuplicateLineIdentity)) throw error;
+            skipped += 1;
+          }),
+        ),
+      Promise.resolve(),
+    );
     if (skipped > 0)
       logFailure({ error: new UpstreamError("invalid_response"), operation: "order_acquisition" });
     if (page > 1 && result.total !== total) {
@@ -360,9 +355,6 @@ export async function acquireOrders(input: {
       const observation = fulfillmentObservation(payload, at);
       if (observation.externalOrderId !== input.confirmedOrderId)
         throw new UpstreamError("invalid_response");
-      // Un evento tardivo non estende la finestra dello storico né ricrea dati scaduti.
-      if (Date.parse(observation.creationTime) <= now.getTime() - historyDays * dayMilliseconds)
-        return "complete";
       await record(ctx, observation);
       return (await readDetail(ctx, {
         external_order_id: observation.externalOrderId,

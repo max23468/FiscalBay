@@ -6549,11 +6549,12 @@ describe("client eBay e normalizzazione", () => {
       const failures = () =>
         logged.mock.calls.map(([line]) => JSON.parse(String(line)) as Record<string, string>);
 
-      // Primo avvio: dalla finestra dello storico, confine dei trenta giorni incluso.
+      // Alla scadenza esatta l'ordine è già fuori retention.
       responses = [
         () =>
           tradingPage(4, true, [
             tradingOrder("VECCHIO", "2026-08-02T23:59:59.999Z", ["1"]),
+            tradingOrder("SCADUTO", "2026-08-03T00:00:00.000Z", ["4"]),
             tradingOrder("LIMITE", "2026-08-03T00:00:00.001Z", ["2"]),
           ]),
         () =>
@@ -6607,6 +6608,28 @@ describe("client eBay e normalizzazione", () => {
         operation: "order_acquisition",
         failure: "unavailable",
       });
+      // Un ordine con scadenza esplicita resta aggiornabile oltre la finestra Free.
+      await env.DB.prepare("UPDATE orders SET retention_until = ?1, purge_after = ?1")
+        .bind("2027-09-01T00:00:00.000Z")
+        .run();
+      await env.DB.prepare(
+        "UPDATE sync_state SET trading_end = NULL, trading_page = NULL, trading_total = NULL",
+      ).run();
+      responses = [
+        () =>
+          tradingPage(1, false, [
+            tradingOrder("VALIDO", "2026-09-01T10:00:00Z", ["3"]).replace(
+              "2026-09-01T11:00:00Z",
+              "2026-10-03T00:00:00Z",
+            ),
+          ]),
+      ];
+      expect(await acquire(provider, "2026-10-03T00:00:00.000Z")).toBe("complete");
+      expect(
+        await env.DB.prepare(
+          "SELECT last_modified_time FROM order_source_refs WHERE external_order_id = 'VALIDO'",
+        ).first(),
+      ).toEqual({ last_modified_time: "2026-10-03T00:00:00.000Z" });
       logged.mockRestore();
     });
 

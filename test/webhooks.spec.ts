@@ -893,26 +893,66 @@ it("rifiuta eventi scaduti e riprende un negozio occupato senza avanzare il wate
   ).toBe(grantedAt);
 });
 
-it("un ordine fuori retention non viene ricreato e un ID diverso non viene importato", async () => {
-  await receive();
-  const row = (await receipt())!;
-  const work = batch({ receiptId: row.id });
-  const ancient = vi.fn<typeof fetch>(async () =>
-    Response.json({ ...order, creationDate: "2026-08-01T12:00:00.000Z" }),
+it.each([0, 1])(
+  "un ordine fuori retention da %s ms non viene ricreato e un ID diverso non viene importato",
+  async (elapsed) => {
+    await receive();
+    const row = (await receipt())!;
+    const work = batch({ receiptId: row.id });
+    const ancient = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        ...order,
+        creationDate: new Date(now.getTime() - 30 * 86_400_000 - elapsed).toISOString(),
+      }),
+    );
+    await consumeWebhooks(work.value, environment, ancient, now);
+    expect(work.message.ack).toHaveBeenCalledOnce();
+    expect(
+      (await env.DB.prepare("SELECT COUNT(*) AS n FROM orders").first<{ n: number }>())?.n,
+    ).toBe(0);
+    await env.DB.prepare("UPDATE webhook_receipts SET completed_at = NULL").run();
+    const mismatch = vi.fn<typeof fetch>(async () =>
+      Response.json({ ...order, orderId: "different-order" }),
+    );
+    const wrong = batch({ receiptId: row.id });
+    await consumeWebhooks(wrong.value, environment, mismatch, now);
+    expect(wrong.message.ack).not.toHaveBeenCalled();
+    expect(wrong.message.retry).toHaveBeenCalledWith({ delaySeconds: 30 });
+  },
+);
+
+it("la conferma aggiorna un ordine con retention esplicita oltre i trenta giorni", async () => {
+  expect(await acquire(fetcher)).toBe("complete");
+  await env.DB.prepare("UPDATE orders SET retention_until = ?1, purge_after = ?1")
+    .bind("2027-10-11T12:00:00.000Z")
+    .run();
+  const later = new Date("2026-11-12T12:00:00.000Z");
+  await env.DB.prepare("UPDATE ebay_store_credentials SET access_expires_at = ?")
+    .bind("2027-10-11T12:00:00.000Z")
+    .run();
+  vi.setSystemTime(later);
+  const updated = vi.fn<typeof fetch>(async () =>
+    Response.json({
+      ...order,
+      lastModifiedDate: later.toISOString(),
+      orderPaymentStatus: "FULLY_REFUNDED",
+    }),
   );
-  await consumeWebhooks(work.value, environment, ancient, now);
-  expect(work.message.ack).toHaveBeenCalledOnce();
-  expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM orders").first<{ n: number }>())?.n).toBe(
-    0,
+  await consumeOrderConfirmation(
+    environment,
+    {
+      storeId: "webhook-store",
+      grantedAt,
+      environment: "production",
+      orderId: order.orderId,
+      eventAt: later.toISOString(),
+    },
+    updated,
+    later,
   );
-  await env.DB.prepare("UPDATE webhook_receipts SET completed_at = NULL").run();
-  const mismatch = vi.fn<typeof fetch>(async () =>
-    Response.json({ ...order, orderId: "different-order" }),
-  );
-  const wrong = batch({ receiptId: row.id });
-  await consumeWebhooks(wrong.value, environment, mismatch, now);
-  expect(wrong.message.ack).not.toHaveBeenCalled();
-  expect(wrong.message.retry).toHaveBeenCalledWith({ delaySeconds: 30 });
+  expect(await env.DB.prepare("SELECT payment_status FROM orders").first()).toEqual({
+    payment_status: "FULLY_REFUNDED",
+  });
 });
 
 it("il challenge controlla dimensione, configurazione e metodi anche con Stripe", async () => {
