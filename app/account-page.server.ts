@@ -7,6 +7,7 @@ import { createAuth } from "./auth.server";
 import { registrationStatus } from "./domain/registration.server";
 import { listSignInMethods } from "./domain/sign-in-methods.server";
 import { listVisibleOrders } from "./domain/orders.server";
+import { orderAllowance, unlockConfirmation } from "./domain/grants.server";
 import { listStores } from "./domain/stores.server";
 import { errorResponse } from "./error-response";
 import { tracePhase } from "./errors";
@@ -75,7 +76,13 @@ export async function accountLoader(request: Request, place: "access" | "app") {
     needsAgreement: !status.termsAccepted,
     canLinkStore: session.user.emailVerified && complete,
     suggestedName: { firstName, lastName: lastName.join(" ") },
-    orders: complete ? await listVisibleOrders(env.DB, session.user.id, 50, ebayEnvironment) : [],
+    orders:
+      complete && session.user.emailVerified
+        ? await listVisibleOrders(env.DB, session.user.id, 50, ebayEnvironment)
+        : [],
+    allowance:
+      complete && session.user.emailVerified ? await orderAllowance(env.DB, session.user.id) : null,
+    confirmUnlock: await unlockConfirmation(env.DB, session.user.id),
     sandbox: sandboxAvailable(env),
     ebayEnvironment,
     // Senza ordini, un negozio già collegato cambia il messaggio: non va ricollegato.

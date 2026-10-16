@@ -35,6 +35,12 @@ import {
 } from "../app/domain/scheduled-work.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import {
+  orderAllowance,
+  unlockOrders,
+  unlockConfirmation,
+  restoreUnlockConfirmation,
+} from "../app/domain/grants.server";
+import {
   grantFreeOrder,
   listVisibleOrders,
   paymentState,
@@ -58,7 +64,7 @@ import {
 } from "../app/domain/registration.server";
 import { createAuth } from "../app/auth.server";
 import { handleAuthRequest } from "../app/auth-route.server";
-import { loader as loadHome } from "../app/routes/home";
+import { action as unlockAction, loader as loadHome } from "../app/routes/home";
 import { action as signIn, loader as loadAccess } from "../app/routes/sign-in";
 import { action as securityAction } from "../app/routes/security";
 import { headers as siteHeaders, loader as loadSite } from "../app/routes/site";
@@ -244,6 +250,38 @@ describe("percorso ordini", () => {
     } as Parameters<typeof loadHome>[0]);
     expect(authenticated.authenticated).toBe(true);
     expect(authenticated.orders.map(({ ebayOrderId }) => ebayOrderId)).toEqual(["ebay-a"]);
+    const guessed = await loadHome({
+      request: new Request("http://localhost:5173/app/ordini?q=RSSMRA80A01H501U", {
+        headers: { cookie: cookie! },
+      }),
+    } as Parameters<typeof loadHome>[0]);
+    expect(JSON.stringify(guessed)).not.toContain("RSSMRA80A01H501U");
+    expect(guessed.orders.map((order) => order.ebayOrderId)).toEqual(["ebay-a"]);
+    const unlockRequest = (ids: string, origin = "http://localhost:5173") =>
+      ({
+        request: new Request("http://localhost:5173/app/ordini", {
+          method: "POST",
+          headers: { cookie: cookie!, origin },
+          body: new URLSearchParams({ intent: "unlock", ids, skipConfirmation: "true" }),
+        }),
+      }) as Parameters<typeof unlockAction>[0];
+    const denied = await unlockAction(unlockRequest("o-b"));
+    expect(denied).toMatchObject({ init: { status: 409 }, data: { error: true, unlocked: [] } });
+    expect(await unlockConfirmation(env.DB, user!.id)).toBe(true);
+    await expect(
+      unlockAction(unlockRequest("o-a", "https://estraneo.invalid")),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(await unlockAction(unlockRequest("o-a"))).toEqual({ unlocked: ["o-a"], remaining: 0 });
+    expect(await unlockConfirmation(env.DB, user!.id)).toBe(false);
+    const restored = await securityAction({
+      request: new Request("http://localhost:5173/app/impostazioni/sicurezza", {
+        method: "POST",
+        headers: { cookie: cookie!, origin: "http://localhost:5173" },
+        body: new URLSearchParams({ intent: "unlock-confirmation" }),
+      }),
+    } as Parameters<typeof securityAction>[0]);
+    expect(restored).toMatchObject({ data: { ok: true } });
+    expect(await unlockConfirmation(env.DB, user!.id)).toBe(true);
   });
 
   it("conserva l'ultima osservazione anche per un ordine vecchio modificato nell'overlap", () => {
@@ -635,6 +673,327 @@ describe("percorso ordini", () => {
         source: "ebay_trading_get_orders",
       },
     ]);
+  });
+
+  it("sblocca il lotto atomicamente, conserva il consenso solo al successo e non ripete il consumo", async () => {
+    await seed();
+    await env.DB.prepare(`INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor)
+      VALUES ('o-a2', 's-a', 'secondo', ?1, ?1, 'EUR', 100)`)
+      .bind(now)
+      .run();
+    await env.DB.prepare(`INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at)
+      VALUES ('secondo', 'o-a2', 'VAT_ID', 'SINTETICO', 'synthetic_fixture', ?)`)
+      .bind(now)
+      .run();
+    expect(await unlockConfirmation(env.DB, "u-a")).toBe(true);
+    await expect(unlockOrders(env.DB, "u-a", ["o-a", "o-a2"], true)).rejects.toThrow(
+      "free_quota_exhausted",
+    );
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM order_grants").first()).toEqual({
+      n: 0,
+    });
+    expect((await orderAllowance(env.DB, "u-a"))?.remaining).toBe(1);
+    expect(await unlockConfirmation(env.DB, "u-a")).toBe(true);
+    expect(await unlockOrders(env.DB, "u-a", ["o-a"], true)).toEqual({
+      unlocked: ["o-a"],
+      remaining: 0,
+    });
+    expect(await unlockConfirmation(env.DB, "u-a")).toBe(false);
+    expect(await unlockConfirmation(env.DB, "u-b")).toBe(true);
+    await unlockOrders(env.DB, "u-a", ["o-a"]);
+    expect((await orderAllowance(env.DB, "u-a"))?.remaining).toBe(0);
+    await restoreUnlockConfirmation(env.DB, "u-a");
+    expect(await unlockConfirmation(env.DB, "u-a")).toBe(true);
+    await env.DB.prepare("UPDATE free_cycles SET quota = 2 WHERE id = 'c-a'").run();
+    await unlockOrders(env.DB, "u-a", ["o-a", "o-a2"], true);
+    expect(await unlockConfirmation(env.DB, "u-a")).toBe(true);
+    expect((await orderAllowance(env.DB, "u-a"))?.remaining).toBe(0);
+  });
+
+  it("rifiuta lotti estranei, ambiente errato, ordini non disponibili e preferenze forzate", async () => {
+    await seed();
+    for (const ids of [
+      [],
+      [""],
+      ["x".repeat(129)],
+      ["o-a", ""],
+      ["o-a", "x".repeat(129)],
+      Array(101).fill("o-a"),
+    ])
+      await expect(unlockOrders(env.DB, "u-a", ids, true)).rejects.toThrow(
+        "invalid_order_selection",
+      );
+    await expect(unlockOrders(env.DB, "nessuno", ["o-a"])).rejects.toThrow("order_not_available");
+    for (const ids of [
+      ["o-a", "o-b"],
+      ["o-a", "inesistente"],
+    ])
+      await expect(unlockOrders(env.DB, "u-a", ids, true)).rejects.toThrow();
+    await expect(unlockOrders(env.DB, "u-a", ["o-a"], true, "sandbox")).rejects.toThrow();
+    for (const change of [
+      "UPDATE orders SET is_provisional = 1 WHERE id = 'o-a'",
+      "UPDATE orders SET retention_until = '2026-09-12T00:00:00.000Z' WHERE id = 'o-a'",
+      "INSERT INTO ebay_store_pauses VALUES ('s-a', 'plan', '2026-09-13T20:00:00.000Z')",
+    ]) {
+      await env.DB.prepare(change).run();
+      await expect(unlockOrders(env.DB, "u-a", ["o-a"], true)).rejects.toThrow();
+      await env.DB.batch([
+        env.DB.prepare(
+          "UPDATE orders SET is_provisional = 0, retention_until = '2026-10-12T00:00:00.000Z' WHERE id = 'o-a'",
+        ),
+        env.DB.prepare("DELETE FROM ebay_store_pauses"),
+      ]);
+    }
+    await env.DB.prepare("UPDATE tax_identifiers SET removed_at = ? WHERE order_id = 'o-a'")
+      .bind(now)
+      .run();
+    await expect(unlockOrders(env.DB, "u-a", ["o-a"], true)).rejects.toThrow("order_not_available");
+    expect((await orderAllowance(env.DB, "u-a"))?.remaining).toBe(1);
+    expect(await unlockConfirmation(env.DB, "u-a")).toBe(true);
+    expect(JSON.stringify(await listVisibleOrders(env.DB, "u-b"))).not.toContain("RSSMRA");
+  });
+
+  it("accetta i limiti della selezione senza trasformare i duplicati in nuovi consumi o consenso singolo", async () => {
+    await seed();
+    const id = "x".repeat(128);
+    await env.DB.prepare(`INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor)
+      VALUES (?1, 's-a', ?1, ?2, ?2, 'EUR', 100)`)
+      .bind(id, now)
+      .run();
+    await env.DB.prepare(`INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at)
+      VALUES ('boundary', ?, 'VAT_ID', 'SINTETICO', 'synthetic_fixture', ?)`)
+      .bind(id, now)
+      .run();
+    expect(await unlockOrders(env.DB, "u-a", Array(100).fill(id), true)).toEqual({
+      unlocked: [id],
+      remaining: 0,
+    });
+    expect(await unlockConfirmation(env.DB, "u-a")).toBe(true);
+  });
+
+  it("materializza solo il ciclo necessario e conserva l'ancoraggio dopo la sostituzione dei negozi", async () => {
+    await seed();
+    await env.DB.prepare("DELETE FROM free_cycles").run();
+    const first = await orderAllowance(env.DB, "u-a");
+    expect(first).toMatchObject({
+      workspaceId: "w-a",
+      premium: false,
+      remaining: 5,
+      cycle: { used: 0, quota: 5, ends_at: "2026-09-20T20:00:00.000Z" },
+    });
+    expect((await orderAllowance(env.DB, "u-a"))?.cycle?.id).toBe(first?.cycle?.id);
+    const next = await orderAllowance(env.DB, "u-a", new Date("2026-09-20T20:00:00.000Z"));
+    expect(next?.cycle?.ends_at).toBe("2026-09-27T20:00:00.000Z");
+    expect(next?.cycle?.id).not.toBe(first?.cycle?.id);
+    await env.DB.prepare("DELETE FROM ebay_stores WHERE id = 's-a'").run();
+    await env.DB.prepare(`INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at)
+      VALUES ('replacement', 'w-a', 'replacement', '2026-09-21T00:00:00.000Z')`).run();
+    expect(
+      (await orderAllowance(env.DB, "u-a", new Date("2026-09-21T00:00:00.000Z")))?.cycle?.id,
+    ).toBe(next?.cycle?.id);
+    expect(await orderAllowance(env.DB, "u-a", new Date("2026-09-12T00:00:00.000Z"))).toMatchObject(
+      { cycle: null, remaining: 0 },
+    );
+    await env.DB.prepare(
+      "UPDATE workspaces SET free_cycle_anchor_at = NULL WHERE id = 'w-b'",
+    ).run();
+    await env.DB.prepare("DELETE FROM free_cycles WHERE workspace_id = 'w-b'").run();
+    expect(await orderAllowance(env.DB, "u-b")).toMatchObject({ cycle: null, remaining: 0 });
+    await env.DB.prepare("DELETE FROM free_cycles WHERE workspace_id = 'w-a'").run();
+    expect(
+      (await orderAllowance(env.DB, "u-a", new Date("2026-09-21T20:00:00.000Z")))?.cycle?.ends_at,
+    ).toBe("2026-09-27T20:00:00.000Z");
+  });
+
+  it("mantiene senza apertura i dati acquisiti in Premium, esclude quelli tardivi e rispetta le revoche indipendenti", async () => {
+    await seed();
+    const end = "2026-09-14T00:00:00.000Z";
+    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+      VALUES ('paid', 'w-a', 'premium', ?1, ?2), ('gift', 'w-a', 'admin', ?1, ?2)`)
+      .bind(now, end)
+      .run();
+    expect((await orderAllowance(env.DB, "u-a"))?.remaining).toBeNull();
+    const later = new Date("2026-09-14T00:01:00.000Z");
+    expect((await listVisibleOrders(env.DB, "u-a", 50, "production", later))[0]?.fiscalState).toBe(
+      "available",
+    );
+    expect((await orderAllowance(env.DB, "u-a", later))?.remaining).toBe(1);
+    await env.DB.prepare(`INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at)
+      VALUES ('later-identifier', 'o-a', 'VATIN', 'AGGIORNATO', 'synthetic_fixture', ?)`)
+      .bind(later.toISOString())
+      .run();
+    expect(
+      (await listVisibleOrders(env.DB, "u-a", 50, "production", later))[0]?.taxIdentifiers,
+    ).toHaveLength(3);
+    expect(
+      await env.DB.prepare("SELECT count(*) AS n FROM workspace_entitlements").first(),
+    ).toEqual({ n: 2 });
+    await unlockOrders(env.DB, "u-a", ["o-a"], false, "production", later);
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM order_grants").first()).toEqual({
+      n: 0,
+    });
+    await env.DB.prepare("UPDATE workspace_entitlements SET revoked_at = ? WHERE id = 'paid'")
+      .bind(end)
+      .run();
+    await expect(
+      env.DB.prepare(
+        "UPDATE workspace_entitlements SET workspace_id = 'w-b' WHERE id = 'gift'",
+      ).run(),
+    ).rejects.toThrow("immutable_entitlement");
+    expect((await listVisibleOrders(env.DB, "u-a", 50, "production", later))[0]?.fiscalState).toBe(
+      "available",
+    );
+    await env.DB.prepare("UPDATE workspace_entitlements SET revoked_at = ? WHERE id = 'gift'")
+      .bind(end)
+      .run();
+    expect(
+      (await listVisibleOrders(env.DB, "u-a", 50, "production", later))[0]?.taxIdentifiers,
+    ).toEqual([]);
+    await env.DB.prepare(`INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor)
+      VALUES ('late', 's-a', 'late', ?1, ?1, 'EUR', 100)`)
+      .bind(now)
+      .run();
+    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+      VALUES ('trial', 'w-a', 'trial', ?1, ?2)`)
+      .bind(now, end)
+      .run();
+    await env.DB.prepare(`INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at)
+      VALUES ('late-tax', 'late', 'VAT_ID', 'TARDIVO', 'synthetic_fixture', ?)`)
+      .bind(end)
+      .run();
+    expect(
+      (await listVisibleOrders(env.DB, "u-a", 50, "production", later)).find(
+        (o) => o.id === "late",
+      ),
+    ).toMatchObject({ fiscalState: "locked", taxIdentifiers: [] });
+    await unlockOrders(env.DB, "u-a", ["o-a"], false, "production", later);
+    expect((await orderAllowance(env.DB, "u-a", later))?.remaining).toBe(1);
+  });
+
+  it("non anticipa una copertura futura durante lo sblocco e consuma il credito Free corrente", async () => {
+    await seed();
+    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+      VALUES ('future', 'w-a', 'premium', '2026-09-14T00:00:00.000Z', '2026-09-15T00:00:00.000Z')`).run();
+    expect(await unlockOrders(env.DB, "u-a", ["o-a"], false, "production", new Date(now))).toEqual({
+      unlocked: ["o-a"],
+      remaining: 0,
+    });
+    expect(
+      await env.DB.prepare(
+        "SELECT source, cycle_id FROM order_grants WHERE order_id = 'o-a'",
+      ).first(),
+    ).toEqual({ source: "free_cycle", cycle_id: "c-a" });
+  });
+
+  it("usa la disponibilità storica effettiva anche per coperture future, senza diritti retroattivi", async () => {
+    await seed();
+    const starts = "2026-09-14T00:00:00.000Z";
+    const ends = "2026-09-15T00:00:00.000Z";
+    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+      VALUES ('scheduled', 'w-a', 'premium', ?, ?)`)
+      .bind(starts, ends)
+      .run();
+    expect((await listVisibleOrders(env.DB, "u-a"))[0]?.fiscalState).toBe("locked");
+    await env.DB.prepare("UPDATE tax_identifiers SET removed_at = ? WHERE order_id = 'o-a'")
+      .bind(now)
+      .run();
+    await env.DB.prepare(`INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at)
+      VALUES ('after-scheduled', 'o-a', 'VAT_ID', 'DOPO', 'synthetic_fixture', ?)`)
+      .bind(ends)
+      .run();
+    const later = new Date("2026-09-16T00:00:00.000Z");
+    expect((await listVisibleOrders(env.DB, "u-a", 50, "production", later))[0]?.fiscalState).toBe(
+      "locked",
+    );
+    await env.DB.prepare(`INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at, removed_at)
+      VALUES ('historical', 'o-a', 'VAT_ID', 'DURANTE', 'synthetic_fixture', '2026-09-14T01:00:00.000Z', '2026-09-14T02:00:00.000Z')`).run();
+    expect((await listVisibleOrders(env.DB, "u-a", 50, "production", later))[0]).toMatchObject({
+      fiscalState: "available",
+      taxIdentifiers: [expect.objectContaining({ value: "DOPO" })],
+    });
+    expect((await listVisibleOrders(env.DB, "u-b", 50, "production", later))[0]?.fiscalState).toBe(
+      "locked",
+    );
+    await unlockOrders(env.DB, "u-a", ["o-a"], false, "production", later);
+    expect((await orderAllowance(env.DB, "u-a", later))?.cycle?.used).toBe(0);
+  });
+
+  it("richiede coperture temporanee con una scadenza valida e lifetime senza scadenza", async () => {
+    await seed();
+    for (const [source, starts, ends] of [
+      ["premium", now, null],
+      ["trial", now, null],
+      ["admin", now, null],
+      ["lifetime", now, "2026-09-14T00:00:00.000Z"],
+      ["premium", "non-data", "2026-09-14T00:00:00.000Z"],
+      ["premium", now, "non-data"],
+      ["premium", now, now],
+    ])
+      await expect(
+        env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+      VALUES ('invalid', 'w-a', ?, ?, ?)`)
+          .bind(source, starts, ends)
+          .run(),
+      ).rejects.toThrow();
+  });
+
+  it("la revoca di una copertura non elimina uno sblocco Free indipendente", async () => {
+    await seed();
+    await unlockOrders(env.DB, "u-a", ["o-a"]);
+    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+      VALUES ('refunded', 'w-a', 'premium', ?, '2026-09-14T00:00:00.000Z')`)
+      .bind(now)
+      .run();
+    await env.DB.prepare("UPDATE workspace_entitlements SET revoked_at = ? WHERE id = 'refunded'")
+      .bind(now)
+      .run();
+    expect((await listVisibleOrders(env.DB, "u-a"))[0]?.fiscalState).toBe("available");
+    await expect(
+      env.DB.prepare(
+        "UPDATE workspace_entitlements SET revoked_at = NULL WHERE id = 'refunded'",
+      ).run(),
+    ).rejects.toThrow("immutable_entitlement");
+    expect((await orderAllowance(env.DB, "u-a"))?.remaining).toBe(0);
+  });
+
+  it("acquisisce durante la copertura tutti gli identificativi e conserva il diritto nel consolidamento", async () => {
+    await seed();
+    await env.DB.prepare("DELETE FROM tax_identifiers WHERE order_id = 'o-a'").run();
+    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+      VALUES ('live', 'w-a', 'lifetime', ?, NULL)`)
+      .bind(now)
+      .run();
+    await env.DB.prepare(`INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at)
+      VALUES ('during', 'o-a', 'VAT_ID', 'DURANTE', 'synthetic_fixture', ?)`)
+      .bind(now)
+      .run();
+    expect((await listVisibleOrders(env.DB, "u-a"))[0]?.fiscalState).toBe("available");
+    await env.DB.prepare(`INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor)
+      VALUES ('final', 's-a', 'final', ?1, ?1, 'EUR', 100)`)
+      .bind(now)
+      .run();
+    await env.DB.prepare("UPDATE orders SET merged_into = 'final' WHERE id = 'o-a'").run();
+    await env.DB.prepare(`INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at)
+      VALUES ('final-tax', 'final', 'VAT_ID', 'DURANTE', 'synthetic_fixture', ?)`)
+      .bind(now)
+      .run();
+    await unlockOrders(env.DB, "u-a", ["final"]);
+    expect(await unlockConfirmation(env.DB, "u-a")).toBe(true);
+    expect((await listVisibleOrders(env.DB, "u-a"))[0]).toMatchObject({
+      id: "final",
+      fiscalState: "available",
+    });
+    expect((await orderAllowance(env.DB, "u-a"))?.cycle?.used).toBe(0);
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM order_grants").first()).toEqual({
+      n: 0,
+    });
+    expect(
+      await env.DB.prepare("SELECT count(*) AS n FROM workspace_entitlements").first(),
+    ).toEqual({ n: 1 });
+    await unlockOrders(env.DB, "u-a", ["final", "final"]);
+    expect(
+      await env.DB.prepare("SELECT count(*) AS n FROM workspace_entitlements").first(),
+    ).toEqual({ n: 1 });
   });
 
   it("consuma la quota una sola volta con due sblocchi concorrenti", async () => {
@@ -1593,19 +1952,27 @@ describe("modello ordini", () => {
         grantedAt: now,
       }),
     ).rejects.toThrow("order_not_available");
-    // Uno sblocco già presente sul singolo acquisto resta valido per il combinato.
+    // Diritto storico precedente al divieto di sbloccare i provvisori, conservato dal consolidamento.
+    await env.DB.prepare("UPDATE orders SET is_provisional = 0 WHERE id = ?")
+      .bind(drafts[1]!)
+      .run();
     await env.DB.prepare(
       `INSERT INTO order_grants (id, workspace_id, order_id, cycle_id, source, granted_at)
        VALUES ('combined-grant', 'w-a', ?, 'combined-cycle', 'free_cycle', ?)`,
     )
       .bind(drafts[1]!, now)
       .run();
+    await env.DB.prepare("UPDATE orders SET is_provisional = 1 WHERE id = ?")
+      .bind(drafts[1]!)
+      .run();
     const result = await recordOrderObservation(env.DB, target(), observation());
-    expect(result).toMatchObject({ outcome: "updated", issue: null });
+    expect(result).toMatchObject({ outcome: "updated", issue: null, taxChanges: 0 });
     const orderId = (result as { orderId: string }).orderId;
     expect(orderId).toBe(drafts[0]);
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      await recordOrderObservation(env.DB, target(), observation());
+      expect(await recordOrderObservation(env.DB, target(), observation())).toMatchObject({
+        taxChanges: 0,
+      });
       await recordOrderObservation(
         env.DB,
         target(),

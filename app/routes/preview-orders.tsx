@@ -124,9 +124,20 @@ export async function action({ request }: Route.ActionArgs) {
   const quota = scenario.account.quota;
   const remaining = quota ? quota.limit - quota.used : null;
   if (ids.length === 0 || ids.some((id) => !scenario.lockedValues[id])) {
-    throw data(null, { status: 400 });
+    return data<UnlockResult>({ unlocked: [], remaining, error: true }, { status: 400 });
   }
-  if (remaining !== null && ids.length > remaining) throw data(null, { status: 409 });
+  if (remaining !== null && ids.length > remaining)
+    return data<UnlockResult>({ unlocked: [], remaining, error: true }, { status: 409 });
+  if (state.scenario === "sblocco-non-riuscito" && !state.saveFailed)
+    return data<UnlockResult>(
+      { unlocked: [], remaining, error: true },
+      {
+        status: 409,
+        headers: {
+          "Set-Cookie": await writePreviewState({ ...state, saveFailed: true }),
+        },
+      },
+    );
   const result: UnlockResult = {
     unlocked: ids,
     remaining: remaining === null ? null : remaining - ids.length,
@@ -136,7 +147,8 @@ export async function action({ request }: Route.ActionArgs) {
       "Set-Cookie": await writePreviewState({
         ...state,
         unlocked: [...state.unlocked, ...ids],
-        confirmUnlock: form.get("skipConfirmation") === "true" ? false : state.confirmUnlock,
+        confirmUnlock:
+          ids.length === 1 && form.get("skipConfirmation") === "true" ? false : state.confirmUnlock,
       }),
     },
   });

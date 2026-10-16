@@ -1,6 +1,8 @@
 import { env } from "cloudflare:workers";
 import { ShieldCheck } from "lucide-react";
-import { redirect } from "react-router";
+import { data, redirect } from "react-router";
+import { UnlockConfirmation } from "~/components/unlock-confirmation";
+import { restoreUnlockConfirmation, unlockConfirmation } from "../domain/grants.server";
 
 import { AccessNotice, AccountSecurity, AccountShell } from "~/components/account";
 import { PageTitle } from "~/components/icon-tile";
@@ -41,6 +43,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const now = new Date();
   return {
     language,
+    confirmUnlock: await unlockConfirmation(env.DB, session.user.id),
     userId: session.user.id,
     notice: accessNotice(url.searchParams, language),
     ...account,
@@ -63,6 +66,10 @@ export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const field = (name: string) => String(form.get(name) ?? "");
   const intent = field("intent");
+  if (intent === "unlock-confirmation") {
+    await restoreUnlockConfirmation(env.DB, session.user.id);
+    return data({ ok: true });
+  }
   const security = new URL(request.url).pathname;
   const notice = (value: string) => redirect(`${security}?accesso=${value}`, 303);
   const authError = `${localizedPath(language, "/auth/error")}?provider=`;
@@ -176,17 +183,22 @@ export default function Security({ loaderData }: Route.ComponentProps) {
           {t.shell.security}
         </PageTitle>
         <AccessNotice language={language} notice={loaderData.notice} />
-        <AccountSecurity
-          language={language}
-          email={loaderData.email}
-          methods={loaderData.methods}
-          sessions={loaderData.sessions}
-          now={loaderData.now}
-          passkeyBlock={loaderData.passkeyBlock}
-          recent={loaderData.recent}
-          passkeyRestriction={loaderData.passkeyRestriction}
-          pendingEmail={loaderData.pendingEmail}
-        />
+        {/* Come nell'anteprima la preferenza di sblocco apre la scheda Sicurezza. */}
+        <div className="grid gap-4 rounded-xl border bg-card p-5 md:p-6">
+          <UnlockConfirmation confirmed={loaderData.confirmUnlock} t={t} />
+          <AccountSecurity
+            className="grid gap-4"
+            language={language}
+            email={loaderData.email}
+            methods={loaderData.methods}
+            sessions={loaderData.sessions}
+            now={loaderData.now}
+            passkeyBlock={loaderData.passkeyBlock}
+            recent={loaderData.recent}
+            passkeyRestriction={loaderData.passkeyRestriction}
+            pendingEmail={loaderData.pendingEmail}
+          />
+        </div>
       </div>
     </AccountShell>
   );

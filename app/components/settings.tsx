@@ -21,6 +21,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Link, useLocation, useBlocker, useBeforeUnload } from "react-router";
 
 import { useAction } from "~/components/app-shell";
+import { UnlockConfirmation } from "~/components/unlock-confirmation";
 import { AccountSecurity } from "~/components/account";
 import { useFieldErrors } from "~/components/form-validation";
 import { IconTile, InitialsTile, PageTitle } from "~/components/icon-tile";
@@ -76,6 +77,7 @@ import {
 } from "../view-models";
 
 export interface SettingsPageData {
+  confirmUnlock: boolean;
   section: SettingsSection | null;
   account: AccountView;
   stores: StoreView[];
@@ -1077,7 +1079,12 @@ export function SettingsPage({
     piano: <PlanSection data={data} t={t} language={language} />,
     notifiche: <NotificationsSection data={data} t={t} links={links} />,
     esportazione: <ExportSection data={data} t={t} />,
-    sicurezza: <SecuritySection data={data} t={t} language={language} />,
+    sicurezza: (
+      <>
+        <UnlockConfirmation confirmed={data.confirmUnlock} t={t} />
+        <SecuritySection data={data} t={t} language={language} />
+      </>
+    ),
     aspetto: <AppearanceSection t={t} links={links} />,
     messaggio: <TemplateSection t={t} />,
     privacy: <PrivacySection t={t} />,

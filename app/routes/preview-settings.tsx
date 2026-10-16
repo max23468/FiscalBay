@@ -22,11 +22,12 @@ export function meta({ location, params }: Route.MetaArgs): Route.MetaDescriptor
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const { scenario } = await currentScenario(request);
+  const { scenario, state } = await currentScenario(request);
   if (params.sezione !== undefined && !isSection(params.sezione)) {
     throw data(null, { status: 404 });
   }
   const page: SettingsPageData = {
+    confirmUnlock: state.confirmUnlock !== false,
     section: params.sezione ?? null,
     account: scenario.account,
     stores: scenario.stores,

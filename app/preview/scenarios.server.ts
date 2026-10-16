@@ -21,6 +21,7 @@ import type {
 
 export const scenarioIds = [
   "ordinario",
+  "sblocco-non-riuscito",
   "quota-esaurita",
   "aggiornamento",
   "ebay-non-disponibile",
@@ -41,6 +42,17 @@ export function isScenarioId(value: unknown): value is ScenarioId {
 }
 
 const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: string }>> = {
+  "sblocco-non-riuscito": {
+    it: {
+      name: "Sblocco non riuscito",
+      focus:
+        "Il primo tentativo fallisce senza consumare quota o salvare la preferenza. Puoi riprovare.",
+    },
+    en: {
+      name: "Unlock failed",
+      focus: "The first attempt fails without using quota or saving the preference. You can retry.",
+    },
+  },
   ordinario: {
     it: {
       name: "Free, uso ordinario",
@@ -941,6 +953,7 @@ export function loadScenario(
   };
   switch (id) {
     case "ordinario":
+    case "sblocco-non-riuscito":
       scenario = {
         ...common,
         account: account(),
