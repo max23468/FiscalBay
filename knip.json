@@ -1,0 +1,19 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "cloudflare.config.ts",
+        "vitest.mutation.config.ts",
+        "vitest.benchmark.config.ts",
+        "benchmarks/**/*.bench.ts",
+        "app/components/ui/*.tsx"
+      ],
+      "ignoreDependencies": ["cloudflare"]
+    },
+    "placeholder": {
+      "entry": ["cloudflare.config.ts", "wrangler.config.ts", "worker.js"]
+    }
+  },
+  "ignoreExportsUsedInFile": true
+}

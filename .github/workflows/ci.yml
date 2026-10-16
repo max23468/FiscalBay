@@ -162,6 +162,17 @@ jobs:
         if: steps.detect.outputs.build == 'true' && !steps.reuse.outputs.run-id
         run: node scripts/release.mjs manifest --environment test
 
+      - name: Preserve coverage and benchmark reports
+        if: always() && steps.reuse.outputs.run-id == '' && steps.detect.outputs.gate != 'docs'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: quality-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            reports/coverage/
+            reports/benchmarks/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Upload verified build
         if: steps.detect.outputs.build == 'true' && !steps.reuse.outputs.run-id && github.event.pull_request.draft != true
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

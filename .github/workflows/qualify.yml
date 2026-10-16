@@ -85,6 +85,16 @@ jobs:
       - name: Qualify source
         if: steps.reuse.outputs.run-id == ''
         run: pnpm verify
+      - name: Preserve coverage and benchmark reports
+        if: always() && steps.reuse.outputs.run-id == ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: candidate-quality-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            reports/coverage/
+            reports/benchmarks/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Record source provenance
         if: steps.reuse.outputs.run-id == ''
         run: node scripts/release.mjs manifest --environment test

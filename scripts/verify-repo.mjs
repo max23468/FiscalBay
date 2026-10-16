@@ -59,7 +59,7 @@ export function checkPlanCodes(files) {
 /** Fixture e scenari sintetici usano soltanto host `.invalid` o del sistema. */
 export function checkFixtures(files) {
   const errors = [];
-  const scope = /^(?:test|e2e|app\/preview)\//u;
+  const scope = /^(?:test|e2e|benchmarks|app\/preview)\//u;
   for (const { path: file, text } of files) {
     if (!scope.test(file) || isAsset(file)) continue;
     for (const [index, line] of text.split("\n").entries()) {
@@ -101,11 +101,9 @@ export function resolveImport(from, specifier, known) {
 }
 
 /** Grafo degli import applicativi (`app/`, `workers/`) aciclico e moduli server raggiungibili. */
-export function importGraph(files) {
+export function importGraph(files, scope = /^(?:app|workers)\/.+\.tsx?$/u) {
   const sources = new Map(
-    files
-      .filter(({ path: file }) => /^(?:app|workers)\/.+\.tsx?$/u.test(file))
-      .map(({ path: file, text }) => [file, text]),
+    files.filter(({ path: file }) => scope.test(file)).map(({ path: file, text }) => [file, text]),
   );
   const graph = new Map();
   for (const [file, text] of sources) {
