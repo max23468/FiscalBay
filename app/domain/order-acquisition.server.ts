@@ -148,23 +148,17 @@ async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
   while (spend(ctx.budget, 1, 1)) {
     const result = await readTradingOrders(ctx.access, { from, until, page });
     let skipped = result.skipped;
-    await result.orders
-      .filter(
-        (observation) =>
-          Date.parse(observation.creationTime) >=
-          Date.parse(ctx.at) - historyDays * dayMilliseconds,
-      )
-      .reduce<Promise<unknown>>(
-        (previous, observation) =>
-          previous.then(() =>
-            record(ctx, observation).catch((error: unknown) => {
-              // Righe ripetute nello stesso acquisto: si salta l'ordine, non la pagina.
-              if (!(error instanceof DuplicateLineIdentity)) throw error;
-              skipped += 1;
-            }),
-          ),
-        Promise.resolve(),
-      );
+    await result.orders.reduce<Promise<unknown>>(
+      (previous, observation) =>
+        previous.then(() =>
+          record(ctx, observation).catch((error: unknown) => {
+            // Righe ripetute nello stesso acquisto: si salta l'ordine, non la pagina.
+            if (!(error instanceof DuplicateLineIdentity)) throw error;
+            skipped += 1;
+          }),
+        ),
+      Promise.resolve(),
+    );
     if (skipped > 0)
       logFailure({ error: new UpstreamError("invalid_response"), operation: "order_acquisition" });
     if (page > 1 && result.total !== total) {
@@ -361,9 +355,6 @@ export async function acquireOrders(input: {
       const observation = fulfillmentObservation(payload, at);
       if (observation.externalOrderId !== input.confirmedOrderId)
         throw new UpstreamError("invalid_response");
-      // Un evento tardivo non estende la finestra dello storico né ricrea dati scaduti.
-      if (Date.parse(observation.creationTime) < now.getTime() - historyDays * dayMilliseconds)
-        return "complete";
       await record(ctx, observation);
       return (await readDetail(ctx, {
         external_order_id: observation.externalOrderId,
@@ -457,8 +448,23 @@ export async function consumeOrderConfirmation(
     FROM ebay_store_credentials c JOIN ebay_stores s ON s.id = c.store_id
     WHERE s.id = ? AND c.granted_at = ? AND s.ebay_environment = ? AND s.disconnected_at IS NULL
       AND c.rejected_at IS NULL AND (s.data_deleted_at IS NULL OR s.data_deleted_at < ?)
+      AND NOT EXISTS (SELECT 1 FROM deleted_order_keys d
+        WHERE d.store_id = s.id AND d.kind = 'order' AND d.external_key = ?)
+      AND NOT EXISTS (SELECT 1 FROM orders o JOIN orders current ON current.id = COALESCE(o.merged_into, o.id)
+        WHERE o.store_id = s.id AND current.retention_until <= ?
+        AND (o.ebay_order_id = ? OR o.id IN (SELECT order_id FROM order_source_refs
+          WHERE store_id = s.id AND external_order_id = ?)))
       AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = s.id)`)
-      .bind(event.storeId, event.grantedAt, event.environment, event.eventAt)
+      .bind(
+        event.storeId,
+        event.grantedAt,
+        event.environment,
+        event.eventAt,
+        event.orderId,
+        now.toISOString(),
+        event.orderId,
+        event.orderId,
+      )
       .first<ActiveStore & { access_expires_at: string }>();
   if (!store) return;
   if (store.access_expires_at <= now.toISOString()) throw new UpstreamError("credentials");

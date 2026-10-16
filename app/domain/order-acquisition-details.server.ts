@@ -60,6 +60,8 @@ async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) 
                    AND last_modified_time = ?7
                    AND NOT EXISTS (SELECT 1 FROM order_tax_checks tc
                      WHERE tc.order_id = order_source_refs.order_id AND tc.observed_at > ?8)
+                   AND EXISTS (SELECT 1 FROM orders o WHERE o.id = order_source_refs.order_id
+                     AND o.retention_until > ?9)
                    AND ${writableStore}`;
   await ctx.db
     .prepare(
@@ -80,6 +82,7 @@ async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) 
       delay === undefined ? null : new Date(Date.parse(ctx.at) + delay * 60_000).toISOString(),
       pending.last_modified_time,
       ctx.at,
+      new Date(Math.max(Date.now(), Date.parse(ctx.at))).toISOString(),
     )
     .run();
   const writable = await ctx.db
@@ -97,6 +100,18 @@ async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) 
  * false se il budget non basta: la versione resta in attesa.
  */
 export async function readDetail(ctx: Context, pending: PendingDetail): Promise<boolean> {
+  const retained = await ctx.db
+    .prepare(`SELECT 1 FROM order_source_refs r
+    JOIN orders o ON o.id = r.order_id
+    WHERE r.store_id = ? AND r.source = 'fulfillment' AND r.external_order_id = ?
+      AND o.retention_until > ?`)
+    .bind(
+      ctx.storeId,
+      pending.external_order_id,
+      new Date(Math.max(Date.now(), Date.parse(ctx.at))).toISOString(),
+    )
+    .first();
+  if (!retained) return true;
   const qualifiedMarketplace =
     ctx.access.configuration.apiOrigin === "https://api.ebay.com" &&
     pending.marketplace_id === "EBAY_IT";
@@ -224,6 +239,7 @@ export async function readDetails(ctx: Context): Promise<boolean> {
         WHERE r.store_id = ?1 AND r.source = 'fulfillment'
           AND r.detail_for IS NOT r.last_modified_time
           AND (r.detail_retry_at IS NULL OR r.detail_retry_at <= ?2)
+          AND o.retention_until > ?2
         ORDER BY r.last_modified_time DESC LIMIT ?3`,
     )
     .bind(ctx.storeId, ctx.at, ctx.budget.calls + 1)

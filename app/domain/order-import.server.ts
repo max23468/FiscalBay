@@ -237,6 +237,7 @@ export async function recordOrderObservation(
   let matched: StoredOrder | null = direct;
   let absorbed: StoredOrder[] = [];
   const related: Array<[string, ReconciliationIssue]> = [];
+  let overlappingIds: string[];
   const keys = observation.items.map((item) => item.stableKey);
   const keySet = new Set<string | null>(keys);
   {
@@ -254,6 +255,7 @@ export async function recordOrderObservation(
       )
       .bind(target.storeId, JSON.stringify(keys), direct?.id ?? null, observation.source)
       .all<StoredOrder & { keys: string }>();
+    overlappingIds = candidates.map(({ id }) => id);
     const missingIdentity = observation.items.some((item) => item.stableKey === null);
     const parsed = candidates.map((candidate) => ({
       candidate,
@@ -302,6 +304,29 @@ export async function recordOrderObservation(
   }
 
   const orderId = matched?.id ?? crypto.randomUUID();
+  // Fulfillment è la fonte dei campi dell'ordine e subentra sempre a un ordine letto solo da
+  // Trading: le date delle due fonti non sono confrontabili. Un provvisorio non sostituisce il
+  // definitivo e una lettura più vecchia della stessa fonte aggancia soltanto il riferimento.
+  const takeover = observation.source === "fulfillment" && !!matched && !matched.has_fulfillment;
+  const ownsFields =
+    !matched ||
+    (!(observation.provisional && !matched.is_provisional) &&
+      (takeover ||
+        ((observation.source === "fulfillment" || !matched.has_fulfillment) &&
+          observation.lastModifiedTime >= matched.last_modified_time)));
+  // La sincronizzazione serializza gli articoli del negozio; questa è l'ultima lettura
+  // preparatoria, prima di fissare l'istante con cui autorizzare le scritture.
+  const { results: stored } =
+    ownsFields && matched
+      ? await db
+          .prepare(
+            `SELECT id, line_item_id, stable_key, sku, title, quantity, total_minor, currency,
+                  image_url
+             FROM order_items WHERE order_id = ?`,
+          )
+          .bind(orderId)
+          .all<StoredItem>()
+      : { results: [] as StoredItem[] };
   const tax = observation.taxIdentifiers;
   // Le date Trading e Fulfillment non sono intercambiabili. Una risposta senza data può
   // introdurre un dato, ma non sostituire una verifica con versione autorevole già nota.
@@ -329,19 +354,20 @@ export async function recordOrderObservation(
          AND source = ${literal(tax.source === "ebay_fulfillment" ? "fulfillment" : "trading")}
          AND ${literal(taxModified)} IS NOT NULL AND last_modified_time > ${literal(taxModified)})`
     : "";
-  const writableStore = `${consentWritableStore} AND ${fresh} ${freshTax}`;
+  // Si controlla l'istante finale: un job iniziato prima della scadenza non la prolunga.
+  const at = new Date(Math.max(Date.now(), Date.parse(observedAt))).toISOString();
+  const retained = `EXISTS (SELECT 1 FROM ebay_stores s WHERE s.id = ?1
+      AND (s.orders_deleted_through IS NULL OR s.orders_deleted_through < ${literal(observation.creationTime)}))
+    AND NOT EXISTS (SELECT 1 FROM deleted_order_keys d WHERE d.store_id = ?1
+      AND ((d.kind = 'order' AND d.external_key = ${literal(observation.externalOrderId)})
+        OR (d.kind = 'line' AND d.external_key IN (SELECT value FROM json_each(${literal(JSON.stringify(keys))})))))
+    AND NOT EXISTS (SELECT 1 FROM orders WHERE id IN (SELECT value FROM json_each(${literal(JSON.stringify(overlappingIds))}))
+      AND retention_until <= ${literal(at)})
+    AND CASE WHEN EXISTS (SELECT 1 FROM orders WHERE id = ${literal(orderId)})
+      THEN EXISTS (SELECT 1 FROM orders WHERE id = ${literal(orderId)} AND retention_until > ${literal(at)})
+      ELSE strftime('%Y-%m-%dT%H:%M:%fZ', ${literal(observation.creationTime)}, '+30 days') > ${literal(at)} END`;
+  const writableStore = `${consentWritableStore} AND ${retained} AND ${fresh} ${freshTax}`;
   const buyer = keepMaskedValues(observation.buyer, matched?.buyer_json ?? null);
-  // Fulfillment è la fonte dei campi dell'ordine e subentra sempre a un ordine letto solo da
-  // Trading: le date delle due fonti non sono confrontabili. Un provvisorio non sostituisce il
-  // definitivo e una lettura più vecchia della stessa fonte aggancia soltanto il riferimento.
-  const takeover = observation.source === "fulfillment" && !!matched && !matched.has_fulfillment;
-  const ownsFields =
-    !matched ||
-    (!(observation.provisional && !matched.is_provisional) &&
-      (takeover ||
-        ((observation.source === "fulfillment" || !matched.has_fulfillment) &&
-          observation.lastModifiedTime >= matched.last_modified_time)));
-
   const orderValues = [
     observation.externalOrderId,
     observation.creationTime,
@@ -420,18 +446,6 @@ export async function recordOrderObservation(
   }
 
   if (ownsFields) {
-    // ponytail: l'ordine fra lettura degli articoli e batch è garantito dalla sincronizzazione
-    // serializzata per negozio; con scritture concorrenti servirebbe una versione dell'ordine.
-    const { results: stored } = matched
-      ? await db
-          .prepare(
-            `SELECT id, line_item_id, stable_key, sku, title, quantity, total_minor, currency,
-                    image_url
-               FROM order_items WHERE order_id = ?`,
-          )
-          .bind(orderId)
-          .all<StoredItem>()
-      : { results: [] as StoredItem[] };
     const kept = new Set<string>();
     const upserts: D1PreparedStatement[] = [];
     for (const item of observation.items) {

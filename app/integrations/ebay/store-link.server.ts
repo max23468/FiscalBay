@@ -282,8 +282,8 @@ export async function completeStoreLink(input: {
  * Associa l'account eBay al primo spazio dell'utente con una sola istruzione: l'identificativo
  * stabile è unico, quindi lo stesso negozio non entra in due spazi neppure con richieste
  * concorrenti. Un nuovo username aggiorna il negozio esistente e il ricollegamento lo riattiva,
- * anche dopo uno scollegamento o un'eliminazione dei dati: gli ordini letti da quel momento
- * sono nuovi e si possono eliminare di nuovo. null se appartiene ad altri.
+ * anche dopo uno scollegamento o un'eliminazione dei dati. Il limite di cancellazione resta:
+ * si importano soltanto acquisti successivi, senza ripristinare gli eliminati. null se appartiene ad altri.
  */
 async function linkStore(
   db: D1Database,
