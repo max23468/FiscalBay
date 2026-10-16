@@ -147,7 +147,10 @@ const it = {
       `Hai selezionato ${count} ordini da sbloccare, ma hai ${remaining} ${plural(remaining, "sblocco disponibile", "sblocchi disponibili")} in questo ciclo. Riduci la selezione.`,
     unlockConfirm: "Sblocca",
     dontAskUnlock: "Non chiedermelo più",
+    unlockFailed: "Sblocco non riuscito. Controlla gli ordini e gli sblocchi rimasti, poi riprova.",
     restoreUnlockConfirmation: "Riattiva conferma sblocco",
+    unlockConfirmationHint:
+      "Chiedi conferma prima di usare uno sblocco per un singolo ordine. Lo sblocco multiplo richiede sempre conferma.",
     cancel: "Annulla",
     unlocked: (remaining: number | null) =>
       remaining === null
@@ -987,7 +990,10 @@ const en: AppCopy = {
       `You selected ${count} orders to unlock, but you have ${remaining} ${plural(remaining, "unlock", "unlocks")} left this cycle. Reduce the selection.`,
     unlockConfirm: "Unlock",
     dontAskUnlock: "Don’t ask again",
+    unlockFailed: "Unlock failed. Check the orders and remaining unlocks, then try again.",
     restoreUnlockConfirmation: "Restore unlock confirmation",
+    unlockConfirmationHint:
+      "Ask for confirmation before using an unlock for a single order. Bulk unlocking always requires confirmation.",
     cancel: "Cancel",
     unlocked: (remaining) =>
       remaining === null

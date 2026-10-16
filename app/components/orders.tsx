@@ -117,6 +117,7 @@ export interface OrdersPageData {
 export interface UnlockResult {
   unlocked: string[];
   remaining: number | null;
+  error?: boolean;
 }
 
 /** Ordini importati: solo valori persistenti e identificativi già autorizzati dal server. */
@@ -124,11 +125,27 @@ export function ImportedOrders({
   orders,
   language,
   t,
+  remaining,
+  cycleEndsAt,
+  confirmUnlock,
 }: {
   orders: VisibleOrder[];
   language: Language;
   t: AppCopy;
+  remaining: number | null;
+  cycleEndsAt: string | null;
+  confirmUnlock: boolean;
 }) {
+  const location = useLocation();
+  const unlock = useUnlock(`${location.pathname}${location.search}`, t);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [selecting, setSelecting] = useState(false);
+  const selectedIds = new Set(selected);
+  const lockedIds = new Set(
+    orders
+      .filter((order) => order.fiscalState === "locked" && order.canUnlock)
+      .map((order) => order.id),
+  );
   const [params, setParams] = useSearchParams();
   const detail = orders.find((order) => order.id === params.get("ordine"));
   const href = (id: string) => {
@@ -207,13 +224,63 @@ export function ImportedOrders({
       {expanded ? null : (
         <ImportedFiscal order={order} t={t} language={language} expanded={false} />
       )}
+      {order.fiscalState === "locked" && order.canUnlock ? (
+        remaining === 0 ? (
+          // Come nell'anteprima l'avviso di pagina spiega l'esaurimento; la scheda resta breve.
+          <div>
+            <CardNote>
+              {cycleEndsAt
+                ? t.orders.lockedUntil(formatDate(cycleEndsAt, language, "date"))
+                : t.orders.fiscal.locked}
+            </CardNote>
+          </div>
+        ) : (
+          <div className="flex flex-col items-start gap-3">
+            <UnlockButton
+              order={{ id: order.id, ebayOrderId: order.ebayOrderId }}
+              t={t}
+              unlocking={unlock.pending.has(order.id)}
+              onUnlock={unlock.submit}
+              remaining={remaining}
+              confirmUnlock={confirmUnlock}
+            />
+            {remaining === null ? null : <CardNote>{t.orders.lockedHint(remaining)}</CardNote>}
+          </div>
+        )
+      ) : null}
     </div>
   );
   return (
     <>
+      {remaining === 0 && cycleEndsAt && lockedIds.size > 0 ? (
+        <StatusAlert tone="warning" title={t.orders.quotaTitle}>
+          {t.orders.quotaBody(formatDate(cycleEndsAt, language))}
+        </StatusAlert>
+      ) : null}
+      <div className="flex justify-end">
+        <Button
+          variant={selecting ? "secondary" : "outline"}
+          aria-pressed={selecting}
+          disabled={lockedIds.size === 0 && !selecting}
+          focusableWhenDisabled
+          onClick={() => {
+            setSelecting(!selecting);
+            setSelected([]);
+          }}
+        >
+          <ListChecks aria-hidden="true" data-icon="inline-start" />
+          {t.orders.select}
+        </Button>
+      </div>
       <section className="grid gap-4 sm:grid-cols-2" aria-label={t.access.list}>
         {orders.map((order) => (
-          <Card key={order.id}>
+          <Card
+            key={order.id}
+            className={cn(
+              "transition-[border-color] duration-(--duration-quick)",
+              selectedIds.has(order.id) && "border-ring",
+            )}
+          >
             <CardHeader>
               <CardTitle className="flex flex-wrap justify-between gap-3">
                 <h2 className="min-w-0 break-words">
@@ -225,9 +292,26 @@ export function ImportedOrders({
                     {t.orders.orderLabel(order.ebayOrderId)}
                   </Link>
                 </h2>
-                <strong className="font-code">
-                  {formatAmount(order.totalMinor, order.currency, language)}
-                </strong>
+                {/* Come nell'anteprima la casella di selezione segue l'importo. */}
+                <div className="flex shrink-0 items-center gap-2.5">
+                  <strong className="font-code">
+                    {formatAmount(order.totalMinor, order.currency, language)}
+                  </strong>
+                  {selecting && lockedIds.has(order.id) ? (
+                    <Checkbox
+                      aria-label={t.orders.selectOrder(order.ebayOrderId)}
+                      checked={selectedIds.has(order.id)}
+                      disabled={unlock.pending.size > 0}
+                      onCheckedChange={(checked) =>
+                        setSelected((current) =>
+                          checked
+                            ? [...current, order.id]
+                            : current.filter((id) => id !== order.id),
+                        )
+                      }
+                    />
+                  ) : null}
+                </div>
               </CardTitle>
               <CardDescription>{formatDate(order.creationTime, language)}</CardDescription>
             </CardHeader>
@@ -245,6 +329,23 @@ export function ImportedOrders({
           </Card>
         ))}
       </section>
+      {selected.length ? (
+        <SelectionBar
+          t={t}
+          selected={selected}
+          lockedSelected={selected.filter((id) => lockedIds.has(id))}
+          remaining={remaining}
+          onUnlock={(ids) => {
+            unlock.submit(ids);
+            setSelected([]);
+          }}
+          onCancel={() => {
+            setSelected([]);
+            setSelecting(false);
+          }}
+          exportable={false}
+        />
+      ) : null}
       <Sheet
         open={!!detail}
         onOpenChange={(open) => {
@@ -423,7 +524,7 @@ function UnlockButton({
   remaining,
   confirmUnlock = true,
 }: {
-  order: OrderView;
+  order: Pick<OrderView, "id" | "ebayOrderId">;
   t: AppCopy;
   unlocking: boolean;
   onUnlock: (ids: string[], skipConfirmation?: boolean) => void;
@@ -1503,6 +1604,7 @@ function SelectionBar({
   remaining,
   onUnlock,
   onCancel,
+  exportable = true,
 }: {
   t: AppCopy;
   selected: string[];
@@ -1510,6 +1612,7 @@ function SelectionBar({
   remaining: number | null;
   onUnlock: (ids: string[]) => void;
   onCancel: () => void;
+  exportable?: boolean;
 }) {
   const action = useAction();
   const count = lockedSelected.length;
@@ -1570,13 +1673,15 @@ function SelectionBar({
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <Button
-            variant="outline"
-            disabled={selected.length === 0}
-            onClick={() => action.run("export", { ids: selected.join(",") })}
-          >
-            {t.orders.exportSelected}
-          </Button>
+          {exportable ? (
+            <Button
+              variant="outline"
+              disabled={selected.length === 0}
+              onClick={() => action.run("export", { ids: selected.join(",") })}
+            >
+              {t.orders.exportSelected}
+            </Button>
+          ) : null}
           <Button variant="ghost" onClick={onCancel}>
             {t.orders.cancelSelection}
           </Button>
@@ -1877,6 +1982,10 @@ function useUnlock(unlockAction: string, t: AppCopy) {
     const result = fetcher.data;
     if (fetcher.state !== "idle" || !result || handled.current === result) return;
     handled.current = result;
+    if (result.error) {
+      notify(t.orders.unlockFailed);
+      return;
+    }
     notify(
       result.unlocked.length === 1
         ? t.orders.unlocked(result.remaining)

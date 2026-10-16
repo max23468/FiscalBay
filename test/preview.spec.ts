@@ -101,8 +101,8 @@ describe("stato sintetico dell'anteprima", () => {
       expect(loadScenario("ordinario", language, new Set()).account.quota?.used).toBe(3);
     });
 
-    it(`mantiene calendario e contatori coerenti nei dodici scenari, ${language}`, () => {
-      expect(scenarioIds).toHaveLength(12);
+    it(`mantiene calendario e contatori coerenti negli scenari, ${language}`, () => {
+      expect(scenarioIds).toContain("sblocco-non-riuscito");
       for (const id of scenarioIds) {
         const scenario = loadScenario(id, language, new Set());
         expect(scenario.now).toBe(previewNow);

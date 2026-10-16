@@ -18,8 +18,7 @@ export async function seedLocalAccount() {
   });
 }
 
-export function localCookie(role: PageRole, baseURL: string) {
-  const token = `pages-${role}`;
+export function localCookie(role: PageRole, baseURL: string, token = `pages-${role}`) {
   return {
     name: `${new URL(baseURL).protocol === "https:" ? "__Secure-" : ""}better-auth.session_token`,
     value: encodeURIComponent(

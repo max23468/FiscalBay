@@ -1,7 +1,8 @@
 import { cn } from "cn";
+import { env } from "cloudflare:workers";
 import { ClipboardList, Copy, KeyRound, LogOut, Plus, Store } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate, useLocation } from "react-router";
+import { data, useNavigate, useLocation, type ShouldRevalidateFunctionArgs } from "react-router";
 
 import { AccessNotice, AccountShell } from "~/components/account";
 import { EbayEnvironmentField, type EbayEnvironment } from "~/components/ebay-environment";
@@ -29,6 +30,9 @@ import { Input } from "~/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { accountLoader } from "../account-page.server";
+import { assertSameOrigin, requireAccountArea } from "../account-area.server";
+import { unlockOrders } from "../domain/grants.server";
+import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import { accessPath, appBase, ordersPath, storeLinkPath, securityReturnPath } from "../app-links";
 import { passkeyFailure, type PasskeyFailure } from "../passkey-error";
 import { appCopy } from "../app-copy";
@@ -54,6 +58,43 @@ export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescri
 
 export function loader({ request }: Route.LoaderArgs) {
   return accountLoader(request, "app");
+}
+
+/** Anche un conflitto di quota rilegge lo stato corrente per aggiornare i controlli. */
+export function shouldRevalidate({
+  formMethod,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  return formMethod ? true : defaultShouldRevalidate;
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  assertSameOrigin(request);
+  const { session } = await requireAccountArea(request);
+  const form = await request.formData();
+  const environment =
+    new URL(request.url).searchParams.get("environment") === "sandbox" ? "sandbox" : "production";
+  if (form.get("intent") !== "unlock" || (environment === "sandbox" && !sandboxAvailable(env)))
+    return data({ unlocked: [], remaining: null, error: true }, { status: 400 });
+  try {
+    return await unlockOrders(
+      env.DB,
+      session.user.id,
+      String(form.get("ids") ?? "").split(","),
+      form.get("skipConfirmation") === "true",
+      environment,
+    );
+  } catch (error) {
+    // Le violazioni del dominio non espongono ordine, quota altrui o testo SQL.
+    if (
+      !(error instanceof Error) ||
+      !/invalid_order_selection|order_not_available|order_not_in_workspace|free_quota_exhausted|tax_data_unavailable|invalid_grant_cycle|order_already_granted_or_merged|NOT NULL constraint failed|UNIQUE constraint failed/u.test(
+        error.message,
+      )
+    )
+      throw error;
+    return data({ unlocked: [], remaining: null, error: true }, { status: 409 });
+  }
 }
 
 type AccessCopy = (typeof appCopy)[Language]["access"];
@@ -877,6 +918,19 @@ function EnvironmentSelect({ language, value }: { language: Language; value: Eba
 
 type SignedIn = Extract<Awaited<ReturnType<typeof loader>>, { authenticated: true }>;
 
+function OrderList({ loaderData }: { loaderData: SignedIn }) {
+  return (
+    <ImportedOrders
+      orders={loaderData.orders}
+      language={loaderData.language}
+      t={appCopy[loaderData.language]}
+      remaining={loaderData.allowance ? loaderData.allowance.remaining : 0}
+      cycleEndsAt={loaderData.allowance?.cycle?.ends_at ?? null}
+      confirmUnlock={loaderData.confirmUnlock}
+    />
+  );
+}
+
 /** Pagina Ordini dell'area reale, dentro la shell condivisa. */
 function OrdersPage({
   loaderData,
@@ -958,7 +1012,7 @@ function OrdersPage({
             }
           />
         ) : (
-          <ImportedOrders orders={loaderData.orders} language={language} t={appCopy[language]} />
+          <OrderList loaderData={loaderData} />
         )}
       </div>
     </AccountShell>

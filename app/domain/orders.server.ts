@@ -1,6 +1,7 @@
 import { buyerSnapshotSchema } from "./order-import.server";
 import { taxComparisonKey, taxIdentifierType, taxQuality } from "../tax-quality";
 import type { TaxQuality } from "../view-models";
+import { orderAccessSql } from "./grants.server";
 
 export type PaymentState = "paid" | "unpaid" | "partially_refunded" | "refunded" | "unknown";
 export type ShippingState = "to_ship" | "in_progress" | "shipped" | "cancelled" | "unknown";
@@ -65,6 +66,7 @@ export type VisibleOrder = {
   /** Nome del dato prima dello sblocco: Partita IVA solo se l'ordine ha soltanto quella. */
   lockedShownAs: "CF" | "PIVA";
   reconciliationIssue: boolean;
+  canUnlock: boolean;
   taxIdentifiers: Array<{
     type: string;
     issuingCountry: string | null;
@@ -143,7 +145,7 @@ export async function listVisibleOrders(
        )
        SELECT o.id, o.ebay_order_id, o.creation_time, o.last_modified_time,
               o.currency, o.total_minor, o.buyer_json, o.payment_status, o.fulfillment_status,
-              o.cancel_status,
+              o.cancel_status, o.is_provisional,
               (SELECT json_object('availability', availability, 'at', observed_at, 'verification', verification)
                  FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
                 WHERE original.id = o.id OR original.merged_into = o.id
@@ -168,7 +170,7 @@ export async function listVisibleOrders(
                            WHERE order_id = o.id AND removed_at IS NULL
                              AND NOT (identifier_type = 'PartitaIVA' AND (issuing_country IS NULL OR issuing_country = 'IT')
                                OR identifier_type IN ('VAT_ID', 'VATIN') AND issuing_country = 'IT')) AS vat_only,
-              g.id AS grant_id, ti.identifier_type,
+              ${orderAccessSql("o.id", "vo.workspace_id", "?5")} AS grant_id, ti.identifier_type,
               EXISTS (SELECT 1 FROM tax_identifiers previous
                 JOIN orders original ON original.id = previous.order_id
                 WHERE (original.id = o.id OR original.merged_into = o.id)
@@ -179,16 +181,9 @@ export async function listVisibleOrders(
          FROM visible_orders vo
          JOIN orders o ON o.id = vo.id
          JOIN ebay_stores s ON s.id = o.store_id
-         LEFT JOIN order_grants g
-           ON g.id = (SELECT granted.id FROM order_grants granted JOIN orders original
-             ON original.id = granted.order_id
-             WHERE granted.workspace_id = vo.workspace_id
-               AND (original.id = o.id OR original.merged_into = o.id)
-               AND granted.revoked_at IS NULL
-               AND (granted.expires_at IS NULL OR granted.expires_at > ?)
-             ORDER BY granted.granted_at, granted.id LIMIT 1)
          LEFT JOIN tax_identifiers ti
-           ON ti.order_id = o.id AND ti.removed_at IS NULL AND g.id IS NOT NULL
+           ON ti.order_id = o.id AND ti.removed_at IS NULL
+             AND ${orderAccessSql("o.id", "vo.workspace_id", "?5")}
         ORDER BY o.last_modified_time DESC, o.id DESC, ti.identifier_type, ti.issuing_country DESC`,
     )
     .bind(userId, ebayEnvironment, now.toISOString(), limit, now.toISOString())
@@ -210,10 +205,11 @@ export async function listVisibleOrders(
       tax_updated: number;
       vat_only: number;
       reconciliation_issue: number;
+      is_provisional: number;
       items_json: string;
       store_name: string;
       has_identifiers: number;
-      grant_id: string | null;
+      grant_id: number;
       identifier_type: string | null;
       issuing_country: string | null;
       value: string | null;
@@ -260,6 +256,7 @@ export async function listVisibleOrders(
       firstTaxAvailableAt: row.first_tax_available_at,
       lockedShownAs: row.has_identifiers && row.vat_only ? "PIVA" : "CF",
       reconciliationIssue: !!row.reconciliation_issue,
+      canUnlock: !row.is_provisional,
       taxIdentifiers: [],
     };
     // Le colonne dell'identificativo sono tutte presenti o tutte assenti (join senza grant).
@@ -328,15 +325,13 @@ export async function grantFreeOrder(
   // La rilettura autorizzata rende idempotente anche uno sblocco acquisito prima del merge.
   const granted = () =>
     db
-      .prepare(`SELECT g.id FROM workspace_members wm
+      .prepare(`SELECT o.id FROM workspace_members wm
     JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
     JOIN orders o ON o.store_id = s.id
-    JOIN orders original ON original.id = o.id OR original.merged_into = o.id
-    JOIN order_grants g ON g.order_id = original.id AND g.workspace_id = wm.workspace_id
     WHERE wm.user_id = ? AND wm.workspace_id = ? AND o.id = ?
       AND o.merged_into IS NULL AND ${consultable}
       AND s.data_deleted_at IS NULL AND o.retention_until > ?
-      AND g.revoked_at IS NULL AND (g.expires_at IS NULL OR g.expires_at > ?) LIMIT 1`)
+      AND ${orderAccessSql("o.id", "wm.workspace_id", "?5")} LIMIT 1`)
       .bind(userId, input.workspaceId, input.orderId, at, at)
       .first();
   const result = await db
@@ -353,11 +348,12 @@ export async function grantFreeOrder(
           AND o.merged_into IS NULL
           -- Un acquisto non ancora pagato può confluire in un ordine combinato: niente quota.
           AND o.is_provisional = 0
+          AND NOT ${orderAccessSql("o.id", "wm.workspace_id", "?7")}
           AND NOT EXISTS (SELECT 1 FROM order_grants g JOIN orders original ON original.id = g.order_id
             WHERE g.workspace_id = wm.workspace_id AND (original.id = o.id OR original.merged_into = o.id))
           AND EXISTS (SELECT 1 FROM tax_identifiers WHERE order_id = o.id AND removed_at IS NULL)
           AND ${consultable}
-          AND s.data_deleted_at IS NULL AND o.retention_until > ?
+          AND s.data_deleted_at IS NULL AND o.retention_until > ?7
        RETURNING id`,
     )
     .bind(input.id, input.grantedAt, userId, input.workspaceId, input.orderId, input.cycleId, at)

@@ -48,6 +48,129 @@ test.describe("miglioramenti account e negozi", () => {
       ).toBeVisible();
       expect(await page.content()).not.toContain(testAccount.taxCodes.locked);
     });
+    if (language === "it")
+      test("ordini reali: sblocco confermato, quota e ripristino nelle impostazioni IT/EN", async ({
+        page,
+        context,
+        baseURL,
+      }) => {
+        for (const language of ["it", "en"] as const) {
+          const it = language === "it";
+          const prefix = it ? "" : "/en";
+          // Spazio, sessione e ordini bloccati propri di ogni lingua arrivano dal seed locale:
+          // la suite non scrive nel D1 mentre il server lo usa e non tocca le altre fixture.
+          const id = `unlock-${language}`;
+          await context.addCookies([localCookie("member", baseURL!, id)]);
+          const errors: string[] = [];
+          page.on("pageerror", (error) => errors.push(error.message));
+          page.on("console", (message) => {
+            if (message.type() === "error") errors.push(message.text());
+          });
+          await page.setViewportSize({ width: it ? 1280 : 390, height: 900 });
+          await page.emulateMedia({
+            colorScheme: it ? "light" : "dark",
+            reducedMotion: "reduce",
+          });
+          await page.goto(`${prefix}/app/ordini`);
+          const card = (suffix = "") =>
+            page.locator('[data-slot="card"]').filter({
+              has: page.getByRole("link", {
+                name: `${it ? "Ordine" : "Order"} ${id}${suffix}`,
+                exact: true,
+              }),
+            });
+          const secret = `VALORE-SINTETICO-${language}`;
+          expect(await page.content()).not.toContain(secret);
+          await card()
+            .getByRole("button", { name: it ? "Sblocca ordine" : "Unlock order", exact: true })
+            .click();
+          const dialog = page.getByRole("alertdialog");
+          await page.screenshot({ path: `/tmp/fiscalbay-unlock-${language}.png` });
+          const skip = dialog.getByRole("checkbox", {
+            name: it ? "Non chiedermelo più" : "Don’t ask again",
+          });
+          await skip.check();
+          await dialog
+            .getByRole("button", { name: it ? "Annulla" : "Cancel", exact: true })
+            .click();
+          expect(await page.content()).not.toContain(secret);
+          await card()
+            .getByRole("button", { name: it ? "Sblocca ordine" : "Unlock order", exact: true })
+            .click();
+          await expect(skip).not.toBeChecked();
+          await skip.check();
+          await dialog
+            .getByRole("button", { name: it ? "Sblocca" : "Unlock", exact: true })
+            .click();
+          await expect(page.getByText(secret, { exact: true }).first()).toBeVisible();
+          await page.reload();
+          await expect(page.getByText(secret, { exact: true }).first()).toBeVisible();
+          await card("-2")
+            .getByRole("button", { name: it ? "Sblocca ordine" : "Unlock order", exact: true })
+            .click();
+          await expect(page.getByRole("alertdialog")).toHaveCount(0);
+          await expect(card("-2").getByText(`${secret}-2`, { exact: true })).toBeVisible();
+          await page
+            .getByRole("button", { name: it ? "Seleziona" : "Select", exact: true })
+            .click();
+          for (const suffix of ["-3", "-4"]) await card(suffix).getByRole("checkbox").check();
+          await page
+            .getByRole("button", { name: it ? "Sblocca 2" : "Unlock 2", exact: true })
+            .click();
+          await expect(dialog).toBeVisible();
+          await expect(dialog.getByRole("checkbox")).toHaveCount(0);
+          await dialog
+            .getByRole("button", { name: it ? "Sblocca" : "Unlock", exact: true })
+            .click();
+          await expect(card("-3").getByText(`${secret}-3`, { exact: true })).toBeVisible();
+          await expect(card("-4").getByText(`${secret}-4`, { exact: true })).toBeVisible();
+          const select = page.getByRole("button", {
+            name: it ? "Seleziona" : "Select",
+            exact: true,
+          });
+          await select.click();
+          await expect(select).toBeDisabled();
+          await page.screenshot({ path: `/tmp/fiscalbay-unlock-${language}-complete.png` });
+          await page.goto(`${prefix}/app/impostazioni/sicurezza`);
+          const restore = page.getByRole("button", {
+            name: it ? "Riattiva conferma sblocco" : "Restore unlock confirmation",
+          });
+          await expect(restore).toBeEnabled();
+          await restore.click();
+          await expect(restore).toBeDisabled();
+          expect(errors).toEqual([]);
+        }
+      });
+    test(`ordini: sblocco non riuscito senza consumo o preferenza salvata ${language}`, async ({
+      page,
+    }) => {
+      await open(page, `${prefix}/anteprima/ordini`, "sblocco-non-riuscito");
+      const order = page.getByRole("article", {
+        name: `${it ? "Ordine" : "Order"} 05-55555-12121`,
+      });
+      const unlock = order.getByRole("button", {
+        name: it ? "Sblocca ordine" : "Unlock order",
+        exact: true,
+      });
+      const dialog = page.getByRole("alertdialog");
+      await unlock.click();
+      await dialog.getByRole("checkbox").check();
+      await dialog.getByRole("button", { name: it ? "Sblocca" : "Unlock", exact: true }).click();
+      await expect(
+        page.getByText(
+          it
+            ? "Sblocco non riuscito. Controlla gli ordini e gli sblocchi rimasti, poi riprova."
+            : "Unlock failed. Check the orders and remaining unlocks, then try again.",
+        ),
+      ).toBeVisible();
+      expect(await page.content()).not.toContain("BNCLCU75C12F205G");
+      await page.reload();
+      await unlock.click();
+      await expect(dialog.getByRole("checkbox")).not.toBeChecked();
+      await expect(dialog).toContainText(it ? "1 sblocco" : "1 unlock");
+      await dialog.getByRole("button", { name: it ? "Sblocca" : "Unlock", exact: true }).click();
+      await expect(order.getByText("BNCLCU75C12F205G")).toBeVisible();
+    });
     test(`profilo: modifiche, uscita, attesa e salvataggio ${language}`, async ({ page }) => {
       await open(page, `${prefix}/anteprima/profilo`, "ordinario");
       const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
