@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import Stripe from "stripe";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   receiveWebhook,
   consumeWebhooks,
@@ -226,7 +226,7 @@ it("l'acquisizione puntuale distingue budget, completamento e risposta incoerent
   ).rejects.toMatchObject({ failure: "invalid_response" });
 });
 
-it.each([0, 1, -1])("la finestra dell'ordine include il limite esatto: %s ms", async (offset) => {
+it.each([0, 1, -1])("la finestra dell'ordine esclude la scadenza esatta: %s ms", async (offset) => {
   const source = vi.fn<typeof fetch>(async (input, init) =>
     String(input).includes("/sell/fulfillment/")
       ? Response.json({
@@ -237,7 +237,7 @@ it.each([0, 1, -1])("la finestra dell'ordine include il limite esatto: %s ms", a
   );
   expect(await acquire(source)).toBe("complete");
   expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM orders").first<{ n: number }>())?.n).toBe(
-    offset < 0 ? 0 : 1,
+    offset <= 0 ? 0 : 1,
   );
 });
 
@@ -274,6 +274,7 @@ async function receipt() {
 }
 
 beforeEach(async () => {
+  vi.setSystemTime(now);
   vi.clearAllMocks();
   send.mockResolvedValue(undefined);
   await env.DB.batch([
@@ -296,6 +297,8 @@ beforeEach(async () => {
     )
     .run();
 });
+
+afterEach(() => vi.useRealTimers());
 
 it("la coda smista richieste di sincronizzazione, compiti e riferimenti dei webhook", async () => {
   const sync = { body: { syncStore: "webhook-store" }, ack: vi.fn(), retry: vi.fn(), attempts: 1 };
@@ -654,6 +657,25 @@ it("la retention è effettiva anche se la pulizia non è partita", async () => {
   await purgeExpiredRecords(env.DB, after);
   expect(await receipt()).toBeNull();
 });
+
+it.each(["scadenza", "cancellazione"])(
+  "una ricevuta pendente non rilegge eBay dopo %s dell'ordine",
+  async (mode) => {
+    await acquire(fetcher);
+    await receive();
+    const row = (await receipt())!;
+    if (mode === "scadenza") {
+      await env.DB.prepare("UPDATE orders SET retention_until = ?1, purge_after = ?1")
+        .bind(now.toISOString())
+        .run();
+    } else await env.DB.prepare("DELETE FROM orders").run();
+    const work = batch({ receiptId: row.id });
+    fetcher.mockClear();
+    await consumeWebhooks(work.value, environment, fetcher, now);
+    expect(work.message.ack).toHaveBeenCalledOnce();
+    expect(fetcher).not.toHaveBeenCalled();
+  },
+);
 
 it("limita i recuperi delle chiavi pubbliche e non accetta una chiave non verificabile", async () => {
   const failed = vi.fn<typeof fetch>(async () => new Response(null, { status: 503 }));

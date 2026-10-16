@@ -103,6 +103,7 @@ export async function listStores(
               (SELECT group_concat(reason) FROM ebay_store_pauses p WHERE p.store_id = s.id)
                 AS pauses,
               (SELECT COUNT(*) FROM orders o WHERE o.store_id = s.id AND o.merged_into IS NULL
+                AND o.retention_until > ?2
                 AND NOT (o.is_provisional = 1 AND o.cancel_status IS 'CANCELED')) AS orders
          FROM workspace_members wm
          JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
@@ -272,7 +273,12 @@ export async function deleteStoreData(
     db.prepare("DELETE FROM orders WHERE store_id = ?").bind(storeId),
     db.prepare("DELETE FROM sync_state WHERE store_id = ?").bind(storeId),
     db.prepare("DELETE FROM sync_runs WHERE store_id = ?").bind(storeId),
-    db.prepare("UPDATE ebay_stores SET data_deleted_at = ? WHERE id = ?").bind(at, storeId),
+    db
+      .prepare(
+        `UPDATE ebay_stores SET data_deleted_at = ?1,
+          orders_deleted_through = MAX(COALESCE(orders_deleted_through, ?1), ?1) WHERE id = ?2`,
+      )
+      .bind(at, storeId),
   ]);
   return "done";
 }

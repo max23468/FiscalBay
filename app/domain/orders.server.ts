@@ -124,6 +124,7 @@ export async function listVisibleOrders(
   userId: string,
   requestedLimit = 50,
   ebayEnvironment: "production" | "sandbox" = "production",
+  now = new Date(),
 ): Promise<VisibleOrder[]> {
   const limit = Math.max(1, Math.min(100, Math.trunc(requestedLimit)));
   const result = await db
@@ -134,6 +135,7 @@ export async function listVisibleOrders(
            JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
            JOIN orders o ON o.store_id = s.id
           WHERE wm.user_id = ? AND s.ebay_environment = ? AND ${consultable}
+            AND s.data_deleted_at IS NULL AND o.retention_until > ?
             AND o.merged_into IS NULL
             AND NOT (o.is_provisional = 1 AND o.cancel_status IS 'CANCELED')
           ORDER BY o.last_modified_time DESC, o.id DESC
@@ -182,12 +184,14 @@ export async function listVisibleOrders(
              ON original.id = granted.order_id
              WHERE granted.workspace_id = vo.workspace_id
                AND (original.id = o.id OR original.merged_into = o.id)
+               AND granted.revoked_at IS NULL
+               AND (granted.expires_at IS NULL OR granted.expires_at > ?)
              ORDER BY granted.granted_at, granted.id LIMIT 1)
          LEFT JOIN tax_identifiers ti
            ON ti.order_id = o.id AND ti.removed_at IS NULL AND g.id IS NOT NULL
         ORDER BY o.last_modified_time DESC, o.id DESC, ti.identifier_type, ti.issuing_country DESC`,
     )
-    .bind(userId, ebayEnvironment, limit)
+    .bind(userId, ebayEnvironment, now.toISOString(), limit, now.toISOString())
     .all<{
       id: string;
       ebay_order_id: string;
@@ -318,7 +322,9 @@ export async function grantFreeOrder(
     cycleId: string;
     grantedAt: string;
   },
+  now = new Date(),
 ): Promise<void> {
+  const at = now.toISOString();
   // La rilettura autorizzata rende idempotente anche uno sblocco acquisito prima del merge.
   const granted = () =>
     db
@@ -328,8 +334,10 @@ export async function grantFreeOrder(
     JOIN orders original ON original.id = o.id OR original.merged_into = o.id
     JOIN order_grants g ON g.order_id = original.id AND g.workspace_id = wm.workspace_id
     WHERE wm.user_id = ? AND wm.workspace_id = ? AND o.id = ?
-      AND o.merged_into IS NULL AND ${consultable} LIMIT 1`)
-      .bind(userId, input.workspaceId, input.orderId)
+      AND o.merged_into IS NULL AND ${consultable}
+      AND s.data_deleted_at IS NULL AND o.retention_until > ?
+      AND g.revoked_at IS NULL AND (g.expires_at IS NULL OR g.expires_at > ?) LIMIT 1`)
+      .bind(userId, input.workspaceId, input.orderId, at, at)
       .first();
   const result = await db
     .prepare(
@@ -349,9 +357,10 @@ export async function grantFreeOrder(
             WHERE g.workspace_id = wm.workspace_id AND (original.id = o.id OR original.merged_into = o.id))
           AND EXISTS (SELECT 1 FROM tax_identifiers WHERE order_id = o.id AND removed_at IS NULL)
           AND ${consultable}
+          AND s.data_deleted_at IS NULL AND o.retention_until > ?
        RETURNING id`,
     )
-    .bind(input.id, input.grantedAt, userId, input.workspaceId, input.orderId, input.cycleId)
+    .bind(input.id, input.grantedAt, userId, input.workspaceId, input.orderId, input.cycleId, at)
     .first<{ id: string }>();
   if (!result && !(await granted())) throw new Error("order_not_available");
 }

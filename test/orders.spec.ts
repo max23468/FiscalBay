@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { z } from "zod";
 // Gli stessi contratti degli adapter girano anche nel runtime Worker, usato dai job fiscali.
 import "./ebay-adapters.unit";
@@ -99,6 +99,7 @@ const syntheticProfile = {
 } as const;
 
 beforeEach(async () => {
+  vi.setSystemTime(new Date(now));
   await env.DB.batch([
     env.DB.prepare("DELETE FROM ebay_store_link_sessions"),
     env.DB.prepare("DELETE FROM ebay_store_credentials"),
@@ -114,6 +115,16 @@ beforeEach(async () => {
     env.DB.prepare("DELETE FROM workspaces"),
   ]);
 });
+
+afterEach(() => vi.useRealTimers());
+
+/** Riparte da fixture nuove; una cancellazione applicativa conserva invece i marker. */
+async function resetOrderFixtures() {
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM orders"),
+    env.DB.prepare("DELETE FROM deleted_order_keys"),
+  ]);
+}
 
 /** Messaggio della coda con conferma e nuovo tentativo osservabili. */
 function queueMessage(body: unknown, attempts = 1) {
@@ -868,7 +879,7 @@ describe("modello ordini", () => {
   beforeEach(async () => {
     await env.DB.prepare("DELETE FROM ebay_store_pauses").run();
     await seed();
-    await env.DB.prepare("DELETE FROM orders").run();
+    await resetOrderFixtures();
     await env.DB.prepare(
       `INSERT INTO ebay_store_credentials
          (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
@@ -876,6 +887,365 @@ describe("modello ordini", () => {
     )
       .bind(now, grantedAt)
       .run();
+  });
+
+  it("nega l'accesso alla scadenza anche senza pulizia e non rinnova il grant", async () => {
+    const result = await recordOrderObservation(
+      env.DB,
+      target(),
+      observation({
+        taxIdentifiers: {
+          source: "ebay_fulfillment",
+          complete: false,
+          values: [{ type: "CODICE_FISCALE", value: "RSSMRA80A01H501U" }],
+        },
+      }),
+    );
+    const id = (result as { orderId: string }).orderId;
+    const grant = {
+      id: "retained-grant",
+      workspaceId: "w-a",
+      orderId: id,
+      cycleId: "c-a",
+      grantedAt: now,
+    };
+    await grantFreeOrder(env.DB, "u-a", grant);
+    const expiry = new Date("2026-10-10T10:00:00.000Z");
+    for (const offset of [-1, 0, 1]) {
+      const at = new Date(expiry.getTime() + offset);
+      const visible = await listVisibleOrders(env.DB, "u-a", 50, "production", at);
+      expect(visible).toHaveLength(offset < 0 ? 1 : 0);
+      expect((await listStores(env.DB, "u-a", at))[0]!.importedOrders).toBe(offset < 0 ? 1 : 0);
+      if (offset >= 0)
+        await expect(grantFreeOrder(env.DB, "u-a", grant, at)).rejects.toThrow(
+          "order_not_available",
+        );
+    }
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM tax_identifiers").first()).toEqual({
+      n: 1,
+    });
+    expect(await env.DB.prepare("SELECT used FROM free_cycles WHERE id = 'c-a'").first()).toEqual({
+      used: 1,
+    });
+  });
+
+  it.each(["expires_at", "revoked_at"])(
+    "un grant con %s non espone valori e non consuma altra quota",
+    async (column) => {
+      const result = await recordOrderObservation(
+        env.DB,
+        target(),
+        observation({
+          taxIdentifiers: {
+            source: "ebay_fulfillment",
+            complete: false,
+            values: [{ type: "CODICE_FISCALE", value: "RSSMRA80A01H501U" }],
+          },
+        }),
+      );
+      const input = {
+        id: "limited-grant",
+        workspaceId: "w-a",
+        orderId: (result as { orderId: string }).orderId,
+        cycleId: "c-a",
+        grantedAt: now,
+      };
+      await grantFreeOrder(env.DB, "u-a", input);
+      const expiry = new Date(Date.parse(now) + 1000);
+      await env.DB.prepare(`UPDATE order_grants SET ${column} = ?`)
+        .bind(expiry.toISOString())
+        .run();
+      if (column === "expires_at") {
+        expect(
+          (
+            await listVisibleOrders(env.DB, "u-a", 50, "production", new Date(expiry.getTime() - 1))
+          )[0]!.taxIdentifiers,
+        ).toHaveLength(1);
+      }
+      for (const offset of [0, 1]) {
+        const at = new Date(expiry.getTime() + offset);
+        const visible = await listVisibleOrders(env.DB, "u-a", 50, "production", at);
+        expect(visible[0]!.taxIdentifiers).toEqual([]);
+        expect(JSON.stringify(visible)).not.toContain("RSSMRA80A01H501U");
+        await expect(grantFreeOrder(env.DB, "u-a", input, at)).rejects.toThrow(
+          "order_not_available",
+        );
+      }
+      expect(await env.DB.prepare("SELECT used FROM free_cycles WHERE id = 'c-a'").first()).toEqual(
+        { used: 1 },
+      );
+    },
+  );
+
+  it("la pulizia elimina tutte le copie dell'ordine e il replay non le ricrea", async () => {
+    const value = observation({
+      taxIdentifiers: {
+        source: "ebay_fulfillment",
+        complete: true,
+        values: [{ type: "CODICE_FISCALE", value: "RSSMRA80A01H501U" }],
+      },
+    });
+    const first = await recordOrderObservation(env.DB, target(), value);
+    const id = (first as { orderId: string }).orderId;
+    await grantFreeOrder(env.DB, "u-a", {
+      id: "purged-grant",
+      workspaceId: "w-a",
+      orderId: id,
+      cycleId: "c-a",
+      grantedAt: now,
+    });
+    const expiry = new Date("2026-10-10T10:00:00.000Z");
+    await purgeExpiredRecords(env.DB, new Date(expiry.getTime() - 1));
+    expect(await orders()).toHaveLength(1);
+    await purgeExpiredRecords(env.DB, expiry);
+    await purgeExpiredRecords(env.DB, expiry);
+    for (const table of [
+      "orders",
+      "order_items",
+      "tax_identifiers",
+      "order_tax_checks",
+      "order_source_refs",
+      "order_grants",
+      "order_reconciliation_issues",
+    ]) {
+      expect(await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first(), table).toEqual({
+        n: 0,
+      });
+    }
+    // Anche una data successiva e un nuovo identificativo esterno non aggirano il marker.
+    expect(await recordOrderObservation(env.DB, target(), value)).toEqual({ outcome: "stale" });
+    expect(
+      await recordOrderObservation(env.DB, target(), {
+        ...value,
+        externalOrderId: "nuovo-id",
+        creationTime: now,
+      }),
+    ).toEqual({ outcome: "stale" });
+    expect(await orders()).toEqual([]);
+    expect((await recordOrderObservation(env.DB, target("s-b"), value)).outcome).toBe("created");
+    expect(await env.DB.prepare("SELECT used FROM free_cycles WHERE id = 'c-a'").first()).toEqual({
+      used: 1,
+    });
+  });
+
+  it("una risposta iniziata prima della scadenza non aggiorna buyer e dati fiscali dopo", async () => {
+    await recordOrderObservation(env.DB, target(), observation());
+    vi.setSystemTime(new Date("2026-10-10T10:00:00.000Z"));
+    expect(
+      await recordOrderObservation(
+        env.DB,
+        target(),
+        observation({
+          buyer: { name: "Tardivo" },
+          taxIdentifiers: {
+            source: "ebay_fulfillment",
+            complete: false,
+            values: [{ type: "CODICE_FISCALE", value: "TARDIVO" }],
+          },
+        }),
+      ),
+    ).toEqual({ outcome: "stale" });
+    expect((await orders())[0]!.buyer_json).toContain("Mario Rossi");
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM tax_identifiers").first()).toEqual({
+      n: 0,
+    });
+  });
+
+  it("rilegge il tempo dopo l'ultima lettura preparatoria, prima di autorizzare il batch", async () => {
+    await recordOrderObservation(env.DB, target(), observation());
+    const expiry = new Date("2026-10-10T10:00:00.000Z");
+    vi.setSystemTime(new Date(expiry.getTime() - 1));
+    const prepare = env.DB.prepare.bind(env.DB);
+    const intercepted = vi.spyOn(env.DB, "prepare").mockImplementation((sql) => {
+      const statement = prepare(sql);
+      if (!sql.includes("FROM order_items WHERE order_id = ?")) return statement;
+      statement.bind = (...values: unknown[]) => {
+        const bound = prepare(sql).bind(...values);
+        const all = bound.all.bind(bound);
+        bound.all = async <T>() => {
+          const rows = await all<T>();
+          vi.setSystemTime(expiry);
+          return rows;
+        };
+        return bound;
+      };
+      return statement;
+    });
+    try {
+      expect(
+        await recordOrderObservation(env.DB, target(), observation({ buyer: { name: "Tardivo" } })),
+      ).toEqual({ outcome: "stale" });
+      expect((await orders())[0]!.buyer_json).toContain("Mario Rossi");
+    } finally {
+      intercepted.mockRestore();
+    }
+  });
+
+  it("un orologio arretrato non riapre un ordine già scaduto all'inizio dell'osservazione", async () => {
+    await recordOrderObservation(env.DB, target(), observation());
+    const expiry = "2026-10-10T10:00:00.000Z";
+    vi.setSystemTime(new Date(Date.parse(expiry) - 1));
+    expect(
+      await recordOrderObservation(
+        env.DB,
+        target("s-a", expiry),
+        observation({ buyer: { name: "Tardivo" } }),
+      ),
+    ).toEqual({ outcome: "stale" });
+    expect((await orders())[0]!.buyer_json).toContain("Mario Rossi");
+  });
+
+  it("conserva la grace senza consultazione e la cancellazione richiesta prevale", async () => {
+    const result = await recordOrderObservation(env.DB, target(), observation());
+    const id = (result as { orderId: string }).orderId;
+    // Scadenza Premium esplicita di un anno, separata dal grant e dalla pulizia fisica.
+    await env.DB.prepare("UPDATE orders SET retention_until = ?1, purge_after = ?1 WHERE id = ?2")
+      .bind("2027-09-10T10:00:00.000Z", id)
+      .run();
+    expect(
+      await listVisibleOrders(
+        env.DB,
+        "u-a",
+        50,
+        "production",
+        new Date("2027-09-10T09:59:59.999Z"),
+      ),
+    ).toHaveLength(1);
+    const downgrade = "2026-10-01T00:00:00.000Z";
+    await env.DB.prepare("UPDATE orders SET retention_until = ?1, purge_after = ?2 WHERE id = ?3")
+      .bind(downgrade, "2026-10-31T00:00:00.000Z", id)
+      .run();
+    const at = new Date(downgrade);
+    expect(await listVisibleOrders(env.DB, "u-a", 50, "production", at)).toEqual([]);
+    await purgeExpiredRecords(env.DB, at);
+    expect(await orders()).toHaveLength(1);
+    expect(await deleteStoreData(env.DB, "u-a", "s-a", "e-a", at)).toBe("done");
+    expect(await orders()).toEqual([]);
+    // Il ricollegamento conserva il limite di cancellazione anche per ordini mai importati.
+    await env.DB.batch([
+      env.DB.prepare("UPDATE ebay_stores SET disconnected_at = NULL, data_deleted_at = NULL"),
+      env.DB.prepare(
+        "INSERT INTO ebay_store_credentials (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at) VALUES ('s-a', 'a', ?1, 'r', ?1, ?2)",
+      ).bind("2027-01-01T00:00:00.000Z", grantedAt),
+    ]);
+    expect(
+      await recordOrderObservation(
+        env.DB,
+        target(),
+        observation({ externalOrderId: "mai-importato", items: [line("mai-vista")] }),
+      ),
+    ).toEqual({ outcome: "stale" });
+    expect(
+      (
+        await recordOrderObservation(
+          env.DB,
+          target(),
+          observation({
+            externalOrderId: "nuovo",
+            creationTime: "2026-10-01T00:00:00.001Z",
+            items: [line("nuova")],
+          }),
+        )
+      ).outcome,
+    ).toBe("created");
+  });
+
+  it("una cancellazione tra lettura e batch vince anche su una risposta già pronta", async () => {
+    await recordOrderObservation(env.DB, target(), observation());
+    const execute = env.DB.batch.bind(env.DB);
+    const batch = vi.spyOn(env.DB, "batch").mockImplementationOnce(async (statements) => {
+      await execute([env.DB.prepare("DELETE FROM orders")]);
+      return execute(statements);
+    });
+    try {
+      expect(await recordOrderObservation(env.DB, target(), observation())).toEqual({
+        outcome: "stale",
+      });
+      expect(await orders()).toEqual([]);
+    } finally {
+      batch.mockRestore();
+    }
+  });
+
+  it.each(["scadenza", "cancellazione"])(
+    "un dettaglio pendente si ferma prima di eBay dopo %s",
+    async (mode) => {
+      await recordOrderObservation(env.DB, target(), observation());
+      if (mode === "scadenza") vi.setSystemTime(new Date("2026-10-10T10:00:00.000Z"));
+      else await env.DB.prepare("DELETE FROM orders").run();
+      const fetcher = vi.fn<typeof fetch>();
+      const budget = { calls: 12, pages: 1 };
+      expect(
+        await readDetail(
+          {
+            db: env.DB,
+            storeId: "s-a",
+            grantedAt,
+            access: {
+              configuration: ebayConfiguration(env, "production"),
+              fetcher,
+              accessToken: "sintetico",
+            },
+            at: now,
+            budget,
+            created: 0,
+          },
+          {
+            external_order_id: "D-1",
+            last_modified_time: "2026-09-10T11:00:00.000Z",
+            detail_attempts: 0,
+            marketplace_id: null,
+          },
+        ),
+      ).toBe(true);
+      expect(fetcher).not.toHaveBeenCalled();
+      expect(budget).toEqual({ calls: 12, pages: 1 });
+    },
+  );
+
+  it("gli originali del combinato seguono la retention corrente senza perdere il grant", async () => {
+    const first = await recordOrderObservation(
+      env.DB,
+      target(),
+      provisional({ items: [line("k1")] }),
+    );
+    const second = await recordOrderObservation(
+      env.DB,
+      target(),
+      provisional({
+        externalOrderId: "P-2",
+        items: [line("k2")],
+        taxIdentifiers: {
+          source: "ebay_trading_get_orders",
+          complete: false,
+          values: [{ type: "CODICE_FISCALE", value: "SINTETICO" }],
+        },
+      }),
+    );
+    await env.DB.prepare(
+      "INSERT INTO order_grants (id, workspace_id, order_id, source, granted_at) VALUES ('merged-retention', 'w-a', ?, 'admin', ?)",
+    )
+      .bind((second as { orderId: string }).orderId, now)
+      .run();
+    await recordOrderObservation(env.DB, target(), observation());
+    await env.DB.prepare("UPDATE orders SET retention_until = ?1, purge_after = ?1 WHERE id = ?2")
+      .bind("2026-11-01T00:00:00.000Z", (first as { orderId: string }).orderId)
+      .run();
+    const at = new Date("2026-10-11T00:00:00.000Z");
+    await purgeExpiredRecords(env.DB, at);
+    expect((await listVisibleOrders(env.DB, "u-a", 50, "production", at))[0]!.fiscalState).toBe(
+      "available",
+    );
+    expect(await orders()).toHaveLength(2);
+    await purgeExpiredRecords(env.DB, new Date("2026-11-01T00:00:00.000Z"));
+    expect(await orders()).toEqual([]);
+    expect(
+      await recordOrderObservation(
+        env.DB,
+        target(),
+        provisional({ externalOrderId: "P-2", items: [line("k2")] }),
+      ),
+    ).toEqual({ outcome: "stale" });
   });
 
   it("conserva i campi noti e lascia mascherati quelli annidati mai acquisiti", async () => {
@@ -1510,7 +1880,7 @@ describe("modello ordini", () => {
       issue: "multiple_candidates",
     });
     expect(await listVisibleOrders(env.DB, "u-a")).toHaveLength(3);
-    await env.DB.prepare("DELETE FROM orders").run();
+    await resetOrderFixtures();
     await recordOrderObservation(env.DB, target(), provisional({ items: [line("k1")] }));
     await recordOrderObservation(
       env.DB,
@@ -1586,7 +1956,7 @@ describe("modello ordini", () => {
       [[line("k1")], "partial_overlap"],
       [[line("k1"), line(null, "senza")], "missing_line_identity"],
     ] as const) {
-      await env.DB.prepare("DELETE FROM orders").run();
+      await resetOrderFixtures();
       await recordOrderObservation(env.DB, target(), observation());
       expect(
         await recordOrderObservation(
@@ -1596,7 +1966,7 @@ describe("modello ordini", () => {
         ),
       ).toMatchObject({ outcome: "created", issue });
     }
-    await env.DB.prepare("DELETE FROM orders").run();
+    await resetOrderFixtures();
     await recordOrderObservation(env.DB, target(), observation());
     await recordOrderObservation(
       env.DB,
@@ -2242,7 +2612,7 @@ describe("modello ordini", () => {
 
   it("conserva la versione della fonte senza usare quella dell'altra API", async () => {
     for (const source of ["fulfillment", "trading"] as const) {
-      await env.DB.prepare("DELETE FROM orders").run();
+      await resetOrderFixtures();
       const taxSource = source === "fulfillment" ? "ebay_fulfillment" : "ebay_trading_get_orders";
       await recordOrderObservation(
         env.DB,
@@ -2252,7 +2622,7 @@ describe("modello ordini", () => {
       expect(
         await env.DB.prepare("SELECT last_modified_time FROM order_tax_checks").first(),
       ).toEqual({ last_modified_time: "2026-09-10T11:00:00.000Z" });
-      await env.DB.prepare("DELETE FROM orders").run();
+      await resetOrderFixtures();
       await recordOrderObservation(
         env.DB,
         target(),
@@ -4650,6 +5020,7 @@ describe("pulizia dei dati tecnici scaduti", () => {
 });
 
 describe("pausa, ricollegamento e scollegamento dei negozi", () => {
+  beforeEach(() => vi.useRealTimers());
   it.each([
     ["profilo", profileClientAction],
     ["negozi", storesClientAction],
@@ -4771,7 +5142,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         targetMinutes: 30,
         // La lettura del collegamento è la prima fra gli ultimi aggiornamenti.
         recent: [{ at: expect.any(String), ok: true, newOrders: 1 }],
-        importedOrders: 1,
+        importedOrders: 0,
         // Al collegamento l'unico ordine dello storico completa l'importazione.
         history: { days: 30, done: true },
         reminder: null,
@@ -4871,7 +5242,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     expect(await refreshExpiringTokens(env, refresh)).toEqual([]);
 
     // Ricollegare un negozio in pausa rinnova il consenso senza leggere ordini.
-    await env.DB.prepare("DELETE FROM orders").run();
+    await resetOrderFixtures();
     const ebay = syntheticEbay();
     await linkThroughEbay(seller.cookie, ebay);
     expect(ebay.mock.calls.map(([input]) => new URL(String(input)).pathname)).toEqual([
@@ -4951,7 +5322,6 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       .run();
     expect(await count("sync_state")).toBe(1);
     expect(await count("sync_runs")).toBe(1);
-    const before = await env.DB.prepare("SELECT id FROM orders").first<{ id: string }>();
 
     expect(await deleteStoreData(env.DB, seller.userId, seller.storeId, "altro nome")).toBe(
       "invalid",
@@ -4981,16 +5351,14 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     ).toEqual({ disconnected: 1, deleted: 1 });
     expect(await listStores(env.DB, seller.userId)).toEqual([]);
 
-    // Ricollegare ritrova il negozio: l'ordine riletto da eBay è nuovo e il vecchio sblocco
-    // non torna, mentre la quota consumata resta consumata.
+    // Ricollegare ritrova il negozio senza ripristinare l'ordine eliminato o la quota.
     await linkThroughEbay(seller.cookie);
     expect(await count("ebay_stores")).toBe(1);
     const orders = await listVisibleOrders(env.DB, seller.userId);
-    expect(orders).toMatchObject([{ fiscalState: "locked" }]);
-    expect(orders[0]!.id).not.toBe(before!.id);
+    expect(orders).toEqual([]);
     expect(await quotaUsed()).toBe(1);
 
-    // Gli ordini riletti non risultano eliminati: scollegando di nuovo si possono eliminare.
+    // Il negozio ricollegato resta utilizzabile per i nuovi ordini.
     expect((await listStores(env.DB, seller.userId))[0]).toMatchObject({
       id: seller.storeId,
       connection: "active",
@@ -5814,8 +6182,9 @@ describe("client eBay e normalizzazione", () => {
       fetcher: typeof fetch,
       at = "2026-09-02T00:00:00.000Z",
       budget = { calls: 1_000, pages: 100 },
-    ) =>
-      acquireOrders({
+    ) => {
+      vi.setSystemTime(new Date(at));
+      return acquireOrders({
         db: env.DB,
         storeId: "s-a",
         grantedAt,
@@ -5823,6 +6192,7 @@ describe("client eBay e normalizzazione", () => {
         now: new Date(at),
         budget,
       });
+    };
     const syncState = () =>
       env.DB.prepare(
         `SELECT cursor, recent_next, history_from, history_until, history_next, history_done_at,
@@ -6003,7 +6373,7 @@ describe("client eBay e normalizzazione", () => {
         () =>
           tradingPage(4, true, [
             tradingOrder("VECCHIO", "2026-08-02T23:59:59.999Z", ["1"]),
-            tradingOrder("LIMITE", "2026-08-03T00:00:00.000Z", ["2"]),
+            tradingOrder("LIMITE", "2026-08-03T00:00:00.001Z", ["2"]),
           ]),
         () =>
           tradingPage(4, false, [
@@ -6032,7 +6402,7 @@ describe("client eBay e normalizzazione", () => {
       // Totale cambiato a metà: la passata ricomincia dalla prima pagina.
       responses = [
         () => tradingPage(2, true, [tradingOrder("VALIDO", "2026-09-01T10:00:00Z", ["3"])]),
-        () => tradingPage(3, true, [tradingOrder("LIMITE", "2026-08-03T00:00:00.000Z", ["2"])]),
+        () => tradingPage(3, true, [tradingOrder("LIMITE", "2026-08-03T00:00:00.001Z", ["2"])]),
         () => tradingPage(3, false, [tradingOrder("VALIDO", "2026-09-01T10:00:00Z", ["3"])]),
       ];
       expect(await acquire(provider, "2026-09-02T01:00:00.000Z")).toBe("complete");
@@ -6376,8 +6746,8 @@ describe("client eBay e normalizzazione", () => {
 
     it("ricomincia la passata se l'elenco cambia sotto la paginazione, senza saltare ordini", async () => {
       await acquire(ebay({ orders: [] }));
-      // Ordini creati prima dello storico ma modificati dopo l'ultimo limite dei recenti.
-      const orders = series("12-recente", 60, "2026-07-01T00:00:00.000Z").map((item, index) => ({
+      // Ordini ancora conservabili, modificati dopo l'ultimo limite dei recenti.
+      const orders = series("12-recente", 60, "2026-09-01T00:00:00.000Z").map((item, index) => ({
         ...item,
         lastModifiedDate: new Date(Date.parse("2026-09-02T00:30:00.000Z") + index).toISOString(),
       }));
@@ -6599,7 +6969,7 @@ describe("client eBay e normalizzazione", () => {
       // Recenti incompleti: nessuna ultima sincronizzazione e lo storico aspetta.
       await reset();
       await acquire(ebay({ orders: [] }));
-      const recent = series("12-recenti", 30, "2026-07-01T00:00:00.000Z").map((item) => ({
+      const recent = series("12-recenti", 30, "2026-09-01T00:00:00.000Z").map((item) => ({
         ...item,
         lastModifiedDate: "2026-09-02T00:30:00.000Z",
       }));
@@ -6654,6 +7024,7 @@ describe("client eBay e normalizzazione", () => {
 
       await env.DB.batch([
         env.DB.prepare("DELETE FROM orders"),
+        env.DB.prepare("DELETE FROM deleted_order_keys"),
         env.DB.prepare("DELETE FROM sync_state"),
       ]);
       // Due pagine, il dettaglio e tre delle otto immagini necessarie: l'ordine si legge una
@@ -6735,6 +7106,7 @@ describe("client eBay e normalizzazione", () => {
       for (const fail of [undefined, () => new Response(null, { status: 404 })]) {
         await env.DB.batch([
           env.DB.prepare("DELETE FROM orders"),
+          env.DB.prepare("DELETE FROM deleted_order_keys"),
           env.DB.prepare("DELETE FROM sync_state"),
           env.DB.prepare("UPDATE ebay_store_credentials SET granted_at = ?").bind(grantedAt),
         ]);
@@ -7756,6 +8128,9 @@ describe("client eBay e normalizzazione", () => {
 
     it("una rilettura con dati mascherati non cancella quelli già acquisiti", async () => {
       await acquire(ebay());
+      await env.DB.prepare("UPDATE orders SET retention_until = ?1, purge_after = ?1")
+        .bind("2027-09-01T08:00:00.000Z")
+        .run();
       const masked = order({
         lastModifiedDate: "2026-12-01T09:00:00.000Z",
         orderPaymentStatus: "FULLY_REFUNDED",
@@ -7814,6 +8189,7 @@ describe("client eBay e normalizzazione", () => {
       // Un campo assente anche nella lettura precedente resta mascherato, senza valore.
       await env.DB.batch([
         env.DB.prepare("DELETE FROM orders"),
+        env.DB.prepare("DELETE FROM deleted_order_keys"),
         env.DB.prepare("DELETE FROM sync_state"),
       ]);
       await acquire(
@@ -7829,6 +8205,9 @@ describe("client eBay e normalizzazione", () => {
           ],
         }),
       );
+      await env.DB.prepare("UPDATE orders SET retention_until = ?1, purge_after = ?1")
+        .bind("2027-09-01T08:00:00.000Z")
+        .run();
       await acquire(ebay({ orders: [masked] }), "2026-12-02T00:00:00.000Z");
       expect(
         JSON.parse(
@@ -7849,32 +8228,16 @@ describe("client eBay e normalizzazione", () => {
         ],
       });
 
-      // Senza una lettura precedente il campo resta mascherato, non inventato.
+      // Senza una lettura precedente il piano Free non importa l'ordine fuori finestra.
       await env.DB.batch([
         env.DB.prepare("DELETE FROM orders"),
+        env.DB.prepare("DELETE FROM deleted_order_keys"),
         env.DB.prepare("DELETE FROM sync_state"),
       ]);
       // Un ordine creato prima dello storico arriva dai recenti, dopo il primo avvio.
       await acquire(ebay({ orders: [] }), "2026-12-01T00:00:00.000Z");
       await acquire(ebay({ orders: [masked] }), "2026-12-02T00:00:00.000Z");
-      expect(
-        JSON.parse(
-          (await env.DB.prepare("SELECT buyer_json FROM orders").first<{ buyer_json: string }>())!
-            .buyer_json,
-        ),
-      ).toMatchObject({
-        name: null,
-        email: null,
-        masked: [
-          "email",
-          "name",
-          "phone",
-          "billingAddress.addressLine1",
-          "shipTo.name",
-          "shipTo.phone",
-          "shipTo.address.addressLine1",
-        ],
-      });
+      expect(await env.DB.prepare("SELECT buyer_json FROM orders").first()).toBeNull();
     });
 
     it("classifica gli ordini non pagati senza rappresentarli come incassati", async () => {
