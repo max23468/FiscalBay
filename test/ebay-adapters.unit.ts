@@ -15,6 +15,8 @@ import {
   readTradingTaxObservation,
   parseTradingOrders,
   readTradingOrders,
+  tradingAck,
+  parseTradingOrderTaxIdentifiers,
 } from "../app/integrations/ebay/trading.server";
 import { ebayConfiguration } from "../app/integrations/ebay/environment.server";
 
@@ -222,6 +224,11 @@ describe("acquisti Trading", () => {
   });
   it.each([
     xml.replace("<HasMoreOrders>false</HasMoreOrders>", ""),
+    xml.replace("<TotalNumberOfEntries>1<", "<TotalNumberOfEntries>9007199254740992<"),
+    xml.replace("<TotalNumberOfEntries>1<", "<TotalNumberOfEntries>NaN<"),
+    xml
+      .replace(/<Order>[\s\S]*<\/Order>/u, "")
+      .replace("<HasMoreOrders>false<", "<HasMoreOrders>true<"),
     xml.replace(
       "<TotalNumberOfEntries>1</TotalNumberOfEntries>",
       "<TotalNumberOfEntries>0</TotalNumberOfEntries>",
@@ -232,6 +239,8 @@ describe("acquisti Trading", () => {
   });
   it.each([
     xml.replace("<QuantityPurchased>2</QuantityPurchased>", ""),
+    xml.replace("<OrderStatus>Active</OrderStatus>", ""),
+    xml.replace(/<CheckoutStatus>[\s\S]*?<\/CheckoutStatus>/u, ""),
     xml.replace('<Total currencyID="EUR">12.50</Total>', ""),
     xml.replace("123-456</OrderLineItemID>", "123-789</OrderLineItemID>"),
     xml.replace("<TransactionArray>", "<Broken>"),
@@ -249,6 +258,132 @@ describe("acquisti Trading", () => {
       skipped: 1,
       orders: [{ externalOrderId: "valido" }],
     });
+  });
+  it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    "rifiuta la pagina richiesta non valida %s prima di chiamare eBay",
+    async (page) => {
+      const fetcher = vi.fn<typeof fetch>();
+      await expect(
+        readTradingOrders(
+          { configuration, fetcher, accessToken: "synthetic" },
+          {
+            from: "2026-09-01T00:00:00Z",
+            until: "2026-09-02T00:00:00Z",
+            page,
+          },
+        ),
+      ).rejects.toMatchObject({ failure: "invalid_response" });
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
+  it("rifiuta un intervallo invertito prima di chiamare eBay", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    await expect(
+      readTradingOrders(
+        { configuration, fetcher, accessToken: "synthetic" },
+        {
+          from: "2026-09-02T00:00:00Z",
+          until: "2026-09-01T00:00:00Z",
+          page: 1,
+        },
+      ),
+    ).rejects.toMatchObject({ failure: "invalid_response" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it("accetta un intervallo con estremi uguali senza perderne gli ordini", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(xml));
+    const at = "2026-09-01T00:00:00Z";
+    expect(
+      await readTradingOrders(
+        { configuration, fetcher, accessToken: "synthetic" },
+        {
+          from: at,
+          until: at,
+          page: 1,
+        },
+      ),
+    ).toMatchObject({
+      total: 1,
+      more: false,
+      skipped: 0,
+      orders: [{ externalOrderId: "provvisorio" }],
+    });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(String(fetcher.mock.calls[0]![1]?.body)).toContain(
+      "<ModTimeFrom>2026-09-01T00:00:00.000Z</ModTimeFrom><ModTimeTo>2026-09-01T00:00:00.000Z</ModTimeTo>",
+    );
+  });
+  it.each([
+    ["&#65;&#x1F600;&#1114111;", "A😀\u{10ffff}"],
+    ["&#0;&#x0;&#1114112;&#x110000;", "&#0;&#x0;&#1114112;&#x110000;"],
+  ])(
+    "decodifica i riferimenti numerici validi senza alterare quelli fuori intervallo: %s",
+    (encoded, decoded) => {
+      const result = parseTradingOrders(xml.replace("Articolo &amp; altro", encoded));
+      expect(result.skipped).toBe(0);
+      expect(result.orders[0]!.items[0]!.title).toBe(decoded);
+    },
+  );
+  it.each([
+    ["<Item><ItemID>123</ItemID><Title>Articolo &amp; altro</Title></Item>", "", null],
+    [
+      "<ItemID>123</ItemID><Title>Articolo &amp; altro</Title>",
+      "<Title>Articolo &amp; altro</Title>",
+      null,
+    ],
+    ["<TransactionID>456</TransactionID>", "", "123"],
+    ["<OrderLineItemID>123-456</OrderLineItemID>", "", "123"],
+  ])(
+    "conserva l'identità di riga disponibile quando manca %s",
+    (field, replacement, legacyItemId) => {
+      const result = parseTradingOrders(xml.replace(field!, replacement!));
+      expect(result.skipped).toBe(0);
+      expect(result.orders[0]!.items[0]).toMatchObject({
+        lineItemId: "123-456",
+        stableKey: "123-456",
+        legacyItemId,
+      });
+    },
+  );
+  it("conserva le assenze facoltative senza inventare titolo, prezzo o indirizzo", () => {
+    const result = parseTradingOrders(
+      xml
+        .replace(/<ShippingAddress>[\s\S]*?<\/ShippingAddress>/u, "")
+        .replace(/<Title>[\s\S]*?<\/Title>/u, "")
+        .replace(/<TransactionPrice[^>]*>[\s\S]*?<\/TransactionPrice>/u, "")
+        .replace("</Order>", "<ShippedTime>2026-09-02T00:00:00Z</ShippedTime></Order>"),
+    );
+    expect(result.skipped).toBe(0);
+    expect(result.orders[0]).toMatchObject({
+      fulfillmentStatus: "FULFILLED",
+      buyer: { shipTo: null },
+      items: [{ title: "", total: null }],
+    });
+  });
+  it("non recupera un'identità di riga assente da un altro campo dell'ordine", () => {
+    const result = parseTradingOrders(
+      xml
+        .replace(/<ItemID>[^<]*<\/ItemID>/u, "")
+        .replace(/<OrderLineItemID>[^<]*<\/OrderLineItemID>/u, ""),
+    );
+    expect(result).toMatchObject({ orders: [], skipped: 1 });
+  });
+  it("classifica come rifiuto l'errore Trading senza codice senza esporne il messaggio", () => {
+    expect(() =>
+      tradingAck("<Ack>Failure</Ack><Errors><ShortMessage>NON-ESPORRE</ShortMessage></Errors>"),
+    ).toThrow(
+      expect.objectContaining({ failure: "rejected", details: { providerCode: undefined } }),
+    );
+  });
+  it("ignora identificativi fiscali incompleti nel parser senza attribuirli ad altri ordini", () => {
+    expect(
+      parseTradingOrderTaxIdentifiers(
+        "<Ack>Success</Ack><Order><OrderID>richiesto</OrderID>" +
+          "<BuyerTaxIdentifier><Type>CODICE_FISCALE</Type></BuyerTaxIdentifier></Order>" +
+          "<Order><OrderID>altro</OrderID><BuyerTaxIdentifier><ID>SINTETICO</ID><Type>VAT_ID</Type></BuyerTaxIdentifier></Order>",
+        "richiesto",
+      ),
+    ).toEqual([]);
   });
   it("un identificativo malformato lascia importabile l'ordine", () => {
     const result = parseTradingOrders(

@@ -15,6 +15,12 @@ import { acquireOrders, consumeOrderConfirmation } from "../app/domain/order-acq
 import { ebayConfiguration } from "../app/integrations/ebay/environment.server";
 import delivery from "./ebay-order-notification.json";
 
+const router = vi.hoisted(() => ({ handle: vi.fn(), create: vi.fn() }));
+vi.mock("react-router", async (original) => ({
+  ...(await original<typeof import("react-router")>()),
+  createRequestHandler: router.create,
+}));
+
 const now = new Date("2026-10-11T12:00:00.000Z");
 const grantedAt = "2026-10-10T12:00:00.000Z";
 const pair = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
@@ -276,6 +282,7 @@ async function receipt() {
 beforeEach(async () => {
   vi.setSystemTime(now);
   vi.clearAllMocks();
+  router.create.mockReturnValue(router.handle);
   send.mockResolvedValue(undefined);
   await env.DB.batch([
     env.DB.prepare("DELETE FROM webhook_receipts"),
@@ -352,6 +359,111 @@ it("il Worker intercetta il webhook prima di caricare la build React Router", as
       )
     )?.status,
   ).toBe(412);
+  expect(router.create).not.toHaveBeenCalled();
+  expect(router.handle).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["https://test.fiscalbay.it", "/", "noindex, nofollow", undefined],
+  ["https://fiscalbay.it", "/en/privacy", null, undefined],
+  ["https://fiscalbay.it", "/app/ordini", "noindex, nofollow", "synthetic-version"],
+  ["https://fiscalbay.it", "/", null, "synthetic-version"],
+])(
+  "il Worker inoltra la richiesta e applica gli header per %s%s",
+  async (origin, path, robots, version) => {
+    router.handle.mockResolvedValue(new Response("pagina sintetica", { status: 201 }));
+    const response = await worker.fetch(
+      new Request(`${origin}${path}`, {
+        method: "POST",
+        body: "campo=sintetico",
+        headers: { cookie: "session=synthetic", "x-correlation-id": "forged" },
+      }),
+      {
+        ...environment,
+        APP_ORIGIN: origin,
+        VERSION_METADATA: version ? { id: version } : undefined,
+      } as Env,
+    );
+    expect(response.status).toBe(201);
+    expect(await response.text()).toBe("pagina sintetica");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("x-robots-tag")).toBe(robots);
+    expect(response.headers.get("x-fiscalbay-version")).toBe(version ?? null);
+    expect(router.handle).toHaveBeenCalledOnce();
+    const forwarded = router.handle.mock.calls[0]![0] as Request;
+    expect(forwarded.url).toBe(`${origin}${path}`);
+    expect(forwarded.method).toBe("POST");
+    expect(await forwarded.text()).toBe("campo=sintetico");
+    expect(forwarded.headers.get("cookie")).toBe("session=synthetic");
+    const correlation = response.headers.get("x-correlation-id");
+    expect(correlation).toMatch(/^[\da-f-]{36}$/u);
+    expect(correlation).not.toBe("forged");
+    expect(forwarded.headers.get("x-correlation-id")).toBe(correlation);
+  },
+);
+
+it("il Worker conserva cache e redirect dichiarati dal router anche con header immutabili", async () => {
+  router.handle.mockResolvedValue(Response.redirect("https://test.fiscalbay.it/accesso", 303));
+  const request = new Request("https://test.fiscalbay.it/app/ordini");
+  const redirect = await worker.fetch(request, environment);
+  expect(redirect.status).toBe(303);
+  expect(redirect.headers.get("location")).toBe("https://test.fiscalbay.it/accesso");
+  expect(redirect.headers.get("cache-control")).toBe("no-store");
+  router.handle.mockResolvedValue(
+    new Response("pubblico", {
+      headers: { "cache-control": "public, max-age=60" },
+    }),
+  );
+  expect((await worker.fetch(request, environment)).headers.get("cache-control")).toBe(
+    "public, max-age=60",
+  );
+});
+
+it("il Worker risponde all'errore del router con 500 correlato e senza dettagli riservati", async () => {
+  router.handle.mockRejectedValue(new Error("NON-ESPORRE"));
+  const response = await worker.fetch(
+    new Request("https://test.fiscalbay.it/app/ordini"),
+    environment,
+  );
+  expect(response.status).toBe(500);
+  expect(await response.text()).toBe("");
+  const forwarded = router.handle.mock.calls[0]![0] as Request;
+  expect(response.headers.get("x-correlation-id")).toBe(forwarded.headers.get("x-correlation-id"));
+  expect(response.headers.get("x-correlation-id")).toMatch(/^[\da-f-]{36}$/u);
+});
+
+it("la coda senza webhook chiude le sole sincronizzazioni senza riprovare messaggi inesistenti", async () => {
+  const sync = { body: { syncStore: "webhook-store" }, ack: vi.fn(), retry: vi.fn(), attempts: 1 };
+  await worker.queue(
+    { messages: [sync] } as unknown as MessageBatch<unknown>,
+    environment,
+    {} as ExecutionContext,
+  );
+  expect(sync.ack).toHaveBeenCalledOnce();
+  expect(sync.retry).not.toHaveBeenCalled();
+  await worker.queue(
+    { messages: [] } as unknown as MessageBatch<unknown>,
+    environment,
+    {} as ExecutionContext,
+  );
+  expect(send).not.toHaveBeenCalled();
+});
+
+it("il cron del Worker accoda i turni dell'orario pianificato, anche se eseguito in ritardo", async () => {
+  await env.DB.prepare("DELETE FROM scheduled_tasks").run();
+  const sendBatch = vi.fn<Queue["sendBatch"]>().mockResolvedValue(undefined);
+  await worker.scheduled(
+    { scheduledTime: now.getTime() } as ScheduledController,
+    { ...environment, WEBHOOK_QUEUE: { send, sendBatch } } as Env,
+    {} as ExecutionContext,
+  );
+  expect(sendBatch).toHaveBeenNthCalledWith(1, [
+    { body: { task: "maintenance", slot: "2026-10-11T00:00:00.000Z" } },
+    { body: { task: "token_refresh", slot: now.toISOString() } },
+  ]);
+  expect(sendBatch).toHaveBeenNthCalledWith(2, [{ body: { syncStore: "webhook-store" } }]);
+  expect(sendBatch).toHaveBeenCalledTimes(2);
+  expect(fetcher).not.toHaveBeenCalled();
 });
 
 it("risponde al challenge usando l'endpoint configurato e il token custodito", async () => {
