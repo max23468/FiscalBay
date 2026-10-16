@@ -1051,6 +1051,64 @@ describe("modello ordini", () => {
     });
   });
 
+  it("una sovrapposizione parziale con un ordine scaduto non crea un nuovo alias consultabile", async () => {
+    await recordOrderObservation(env.DB, target(), observation());
+    await env.DB.prepare("UPDATE orders SET retention_until = ?1, purge_after = ?2")
+      .bind(now, "2026-10-10T10:00:00.000Z")
+      .run();
+    expect(
+      await recordOrderObservation(
+        env.DB,
+        target(),
+        observation({
+          externalOrderId: "alias-parziale",
+          items: [line("k1"), line("k3")],
+          taxIdentifiers: {
+            source: "ebay_fulfillment",
+            complete: false,
+            values: [{ type: "CODICE_FISCALE", value: "NON-ESPORRE" }],
+          },
+        }),
+      ),
+    ).toEqual({ outcome: "stale" });
+    expect(await orders()).toHaveLength(1);
+    expect(await listVisibleOrders(env.DB, "u-a")).toEqual([]);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM tax_identifiers").first()).toEqual({
+      n: 0,
+    });
+  });
+
+  it.each(["ordine nuovo", "fonte fiscale"])(
+    "non legge articoli non necessari per %s",
+    async (mode) => {
+      if (mode === "fonte fiscale") await recordOrderObservation(env.DB, target(), observation());
+      const prepared = vi.spyOn(env.DB, "prepare");
+      try {
+        const result = await recordOrderObservation(
+          env.DB,
+          target(),
+          observation({
+            source: mode === "fonte fiscale" ? "trading" : "fulfillment",
+            taxIdentifiers: {
+              source: "ebay_trading_get_orders",
+              complete: false,
+              values: [{ type: "CODICE_FISCALE", value: "SINTETICO" }],
+            },
+          }),
+        );
+        expect(result).toMatchObject({
+          outcome: mode === "ordine nuovo" ? "created" : "unchanged",
+          taxChanges: 1,
+        });
+        expect(
+          prepared.mock.calls.some(([sql]) => /^\s*SELECT id, line_item_id, stable_key/u.test(sql)),
+        ).toBe(false);
+      } finally {
+        prepared.mockRestore();
+      }
+    },
+  );
+
   it("rilegge il tempo dopo l'ultima lettura preparatoria, prima di autorizzare il batch", async () => {
     await recordOrderObservation(env.DB, target(), observation());
     const expiry = new Date("2026-10-10T10:00:00.000Z");
@@ -1202,6 +1260,45 @@ describe("modello ordini", () => {
       expect(budget).toEqual({ calls: 12, pages: 1 });
     },
   );
+
+  it("un errore arrivato dopo la scadenza non riapre il retry del dettaglio", async () => {
+    await recordOrderObservation(env.DB, target(), observation());
+    const expiry = new Date("2026-10-10T10:00:00.000Z");
+    vi.setSystemTime(new Date(expiry.getTime() - 1));
+    const fetcher = vi.fn<typeof fetch>(async () => {
+      vi.setSystemTime(expiry);
+      return new Response("non-json");
+    });
+    expect(
+      await readDetail(
+        {
+          db: env.DB,
+          storeId: "s-a",
+          grantedAt,
+          access: {
+            configuration: ebayConfiguration(env, "production"),
+            fetcher,
+            accessToken: "sintetico",
+          },
+          at: now,
+          budget: { calls: 12, pages: 1 },
+          created: 0,
+        },
+        {
+          external_order_id: "D-1",
+          last_modified_time: "2026-09-10T11:00:00.000Z",
+          detail_attempts: 0,
+          marketplace_id: null,
+        },
+      ),
+    ).toBe(true);
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(
+      await env.DB.prepare(
+        "SELECT detail_error, detail_attempts, detail_retry_at FROM order_source_refs",
+      ).first(),
+    ).toEqual({ detail_error: null, detail_attempts: 0, detail_retry_at: null });
+  });
 
   it.each([true, false])(
     "gli originali del combinato seguono la retention corrente senza perdere il grant, primo più vecchio: %s",

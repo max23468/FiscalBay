@@ -237,7 +237,7 @@ export async function recordOrderObservation(
   let matched: StoredOrder | null = direct;
   let absorbed: StoredOrder[] = [];
   const related: Array<[string, ReconciliationIssue]> = [];
-  const overlappingIds: string[] = [];
+  let overlappingIds: string[];
   const keys = observation.items.map((item) => item.stableKey);
   const keySet = new Set<string | null>(keys);
   {
@@ -255,7 +255,7 @@ export async function recordOrderObservation(
       )
       .bind(target.storeId, JSON.stringify(keys), direct?.id ?? null, observation.source)
       .all<StoredOrder & { keys: string }>();
-    overlappingIds.push(...candidates.map(({ id }) => id));
+    overlappingIds = candidates.map(({ id }) => id);
     const missingIdentity = observation.items.some((item) => item.stableKey === null);
     const parsed = candidates.map((candidate) => ({
       candidate,
