@@ -177,6 +177,11 @@ describe("acquisti Trading", () => {
     </Order></OrderArray></GetOrdersResponse>`;
   it("conserva identità, mancato pagamento e campi strutturati", async () => {
     const result = parseTradingOrders(xml);
+    expect(
+      parseTradingOrders(
+        xml.replace("<BuyerUserID>", "<EIASToken>stable-buyer</EIASToken><BuyerUserID>"),
+      ).orders[0],
+    ).toMatchObject({ buyerEiasToken: "stable-buyer" });
     expect(result).toMatchObject({
       total: 1,
       more: false,
@@ -753,6 +758,11 @@ describe("seconda osservazione fiscale Fulfillment", () => {
       orderFound: true,
       values: [],
     });
+    expect(
+      await read(
+        "<Order><OrderID>ordine</OrderID><EIASToken>buyer-stabile</EIASToken><TransactionArray><Transaction><EIASToken>estraneo</EIASToken></Transaction></TransactionArray></Order>",
+      ),
+    ).toMatchObject({ buyerEiasToken: "buyer-stabile" });
     expect(
       await read(
         "<Order><OrderID>ordine</OrderID><CheckoutStatus>\n<LastModifiedTime>2026-09-10T12:00:00Z</LastModifiedTime>\n</CheckoutStatus></Order>",

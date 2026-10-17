@@ -200,6 +200,7 @@ export function parseTradingOrders(xml: string) {
       orders.push(
         orderObservationSchema.parse({
           source: "trading",
+          buyerEiasToken: xmlField(header, "EIASToken") || undefined,
           externalOrderId: id,
           provisional: !paid,
           creationTime: xmlField(header, "CreatedTime"),
@@ -302,6 +303,11 @@ export async function readTradingTaxObservation(access: EbayAccess, orderId: str
   }
   return {
     orderFound: true,
+    buyerEiasToken:
+      xmlField(
+        order.replace(/<TransactionArray>[\s\S]*?<\/TransactionArray>/gu, ""),
+        "EIASToken",
+      ) || undefined,
     lastModifiedTime: (() => {
       const checkout = /<CheckoutStatus>([\s\S]*?)<\/CheckoutStatus>/u.exec(order)?.[1];
       const value = checkout ? xmlField(checkout, "LastModifiedTime") : null;

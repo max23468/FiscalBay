@@ -101,6 +101,10 @@ export interface SuggestionView {
   sourceDate: string;
   /** Precedenti con codici diversi: si propone il più recente con un avviso. */
   conflict: boolean;
+  identifier?: TaxIdentifierView;
+  issuingCountry?: string | null;
+  sourceStore?: string;
+  source?: string;
 }
 
 export interface OrderView {

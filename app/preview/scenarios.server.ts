@@ -1155,6 +1155,10 @@ export function loadScenario(
                 value: "DSNGNN70E20A662P",
                 sourceOrder: "03-88120-44391",
                 sourceDate: "2026-08-02T10:00:00Z",
+                sourceStore: premiumStores[0]!.name,
+                source: "ebay_trading_get_orders",
+                issuingCountry: "IT",
+                identifier: cf("DSNGNN70E20A662P"),
                 conflict: true,
               },
             };

@@ -77,6 +77,8 @@ export type BuyerSnapshot = z.output<typeof buyerSnapshotSchema>;
  */
 export const orderObservationSchema = z.object({
   source: z.enum(["fulfillment", "trading"]),
+  /** Identità stabile dal solo campo EIASToken dell'ordine Trading, mai dallo username. */
+  buyerEiasToken: z.string().trim().min(1).max(2048).nullish(),
   externalOrderId: z.string().min(1),
   provisional: z.boolean(),
   creationTime: utc,
@@ -417,6 +419,14 @@ export async function recordOrderObservation(
     );
   }
   const orderExists = `${writableStore} AND EXISTS (SELECT 1 FROM orders WHERE id = ?4)`;
+  if (observation.buyerEiasToken !== undefined) {
+    statements.push(
+      db
+        .prepare(`UPDATE orders SET buyer_eias_token = ?4
+        WHERE id = ?3 AND buyer_eias_token IS NOT ?4 AND ${writableStore}`)
+        .bind(...scope, orderId, observation.buyerEiasToken),
+    );
+  }
 
   for (const original of absorbed) {
     // Conserva le osservazioni fiscali originali; copia solo i valori correnti sul definitivo.

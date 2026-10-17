@@ -183,6 +183,7 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
     trading && "values" in trading
       ? {
           ...observation,
+          buyerEiasToken: trading.buyerEiasToken,
           taxIdentifiers: {
             source: "ebay_trading_get_orders",
             complete: false,

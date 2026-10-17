@@ -205,6 +205,16 @@ const it = {
     suggestionCheck: "Controlla che valga anche per questo ordine.",
     suggestionHint: (order: string, date: string) => `Dall’ordine ${order} del ${date}.`,
     suggestionConflict: "Gli ordini precedenti riportano codici diversi: questo è il più recente.",
+    suggestionStatus: {
+      identity_missing:
+        "Identità stabile dell’acquirente non disponibile: nessun collegamento automatico con i precedenti.",
+      none: "Nessun precedente autorizzato con dati fiscali utilizzabili.",
+      ambiguous:
+        "I precedenti più recenti non permettono una scelta univoca per uno o più identificativi: nessun valore proposto per quei dati.",
+    },
+    messageLanguage: "Lingua del messaggio",
+    messageText: "Testo per l’acquirente",
+    messageCopyFailed: "Copia non riuscita. Seleziona e copia il testo del messaggio.",
     requestMessage: "Copia messaggio per l’acquirente",
     requestCopied: "Messaggio copiato. Invialo all’acquirente dai tuoi canali.",
     syncedAgo: (time: string) => `Aggiornato ${time}`,
@@ -1047,6 +1057,16 @@ const en: AppCopy = {
     suggestionCheck: "Check that it also applies to this order.",
     suggestionHint: (order, date) => `From order ${order} on ${date}.`,
     suggestionConflict: "Previous orders show different codes: this is the most recent.",
+    suggestionStatus: {
+      identity_missing:
+        "Stable buyer identity unavailable: previous orders cannot be linked automatically.",
+      none: "No authorised previous orders with usable tax data.",
+      ambiguous:
+        "The most recent orders do not identify a unique value for one or more identifiers: no value is suggested for those identifiers.",
+    },
+    messageLanguage: "Message language",
+    messageText: "Text for the buyer",
+    messageCopyFailed: "Copy failed. Select and copy the message text.",
     requestMessage: "Copy message for the buyer",
     requestCopied: "Message copied. Send it to the buyer through your own channels.",
     syncedAgo: (time) => `Updated ${time}`,

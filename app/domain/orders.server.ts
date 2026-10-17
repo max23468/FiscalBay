@@ -2,6 +2,8 @@ import { buyerSnapshotSchema } from "./order-import.server";
 import { taxComparisonKey, taxIdentifierType, taxQuality } from "../tax-quality";
 import type { TaxQuality } from "../view-models";
 import { orderAccessSql } from "./grants.server";
+import { orderSuggestions } from "./order-suggestions.server";
+import type { SuggestionView } from "../view-models";
 
 export type PaymentState = "paid" | "unpaid" | "partially_refunded" | "refunded" | "unknown";
 export type ShippingState = "to_ship" | "in_progress" | "shipped" | "cancelled" | "unknown";
@@ -67,6 +69,8 @@ export type VisibleOrder = {
   lockedShownAs: "CF" | "PIVA";
   reconciliationIssue: boolean;
   canUnlock: boolean;
+  suggestions?: SuggestionView[];
+  suggestionStatus?: "identity_missing" | "none" | "ambiguous";
   taxIdentifiers: Array<{
     type: string;
     issuingCountry: string | null;
@@ -277,7 +281,7 @@ export async function listVisibleOrders(
     }
     orders.set(row.id, order);
   }
-  return [...orders.values()].map((order) => {
+  const visible = [...orders.values()].map((order) => {
     const primary = new Map<string, VisibleOrder["taxIdentifiers"][number]>();
     const cfKey = (tax: VisibleOrder["taxIdentifiers"][number]) =>
       taxIdentifierType(tax.type, tax.issuingCountry) === "CF" &&
@@ -307,6 +311,14 @@ export async function listVisibleOrders(
       }),
     };
   });
+  const suggestions = await orderSuggestions(
+    db,
+    userId,
+    visible.filter((order) => order.fiscalState === "missing").map((order) => order.id),
+    ebayEnvironment,
+    new Date(Math.max(now.getTime(), Date.now())),
+  );
+  return visible.map((order) => ({ ...order, ...suggestions.get(order.id) }));
 }
 
 export async function grantFreeOrder(

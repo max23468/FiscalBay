@@ -50,9 +50,40 @@ anche i dettagli e i retry pendenti.
 | Checkpoint e letture sync | Cursori, date, contatori ed esiti minimizzati; nessun ordine o identificativo fiscale serializzato. |
 | Buyer e storico fiscale | Legati all'ordine tramite FK, senza anagrafica globale o snapshot indipendente. |
 | Elenco, dettaglio e conteggi | Filtro server sulla scadenza, applicato prima di limite e risposta; i valori revocati non entrano nella risposta. |
-| Suggerimenti e ricerca dedicata | Ancora da integrare nei task competenti: dovranno riusare il termine della fonte e il grant corrente, senza copie che ne prolunghino la vita. |
+| Suggerimenti | Calcolati a ogni lettura dai valori correnti di ordini autorizzati e non scaduti, senza cache o copie persistenti; il piano Premium deve essere attivo. Identità stabile conservata soltanto sull'ordine. |
+| Ricerca dedicata | Ancora da integrare: dovrà riusare il termine della fonte e il grant corrente, senza copie che ne prolunghino la vita. |
 | Export | Generatori puri già presenti, senza file server o download autenticati: il percorso futuro deve rileggere autorizzazione e scadenza prima di generazione e download. |
 
 Un restore deve riapplicare marker, limite di cancellazione e revoche successivi
 allo snapshot prima di riaprire accessi e job, secondo il contratto recovery del
 Master Plan. I test locali non provano l'erasure nelle copie native del provider.
+
+<a id="identita-e-suggerimenti"></a>
+## Identità e suggerimenti
+
+`orders.buyer_eias_token` conserva il solo `Order.EIASToken` delle letture Trading
+già previste. eBay lo documenta come stabile anche dopo il cambio dello username
+([GetOrders](https://developer.ebay.com/Devzone/xml/docs/reference/ebay/GetOrders.html)).
+Non è un token di accesso. Non vengono interrogati altri endpoint del buyer,
+creati buyer globali o usati nome, username, email e indirizzo per collegare ordini.
+Il campo non viene restituito al browser e viene eliminato con l'ordine. La sua
+assenza nelle letture Fulfillment non cancella un'identità già acquisita; una
+nuova identità autorevole invalida immediatamente il collegamento precedente.
+
+Il suggerimento è riservato a Premium attivo, fra ordini dello stesso spazio e
+ambiente eBay. Ogni fonte deve essere consultabile, non assorbita, ancora entro
+retention e con diritto fiscale valido. Le fonti in pausa per piano sono escluse.
+Si usa soltanto il valore fiscale corrente; la modifica, rimozione o cancellazione
+della fonte cambia il risultato alla lettura successiva, anche senza pulizia fisica.
+Il confronto riguarda identificativi dello stesso tipo e Paese, appartenenti al
+buyer; per CF e P.IVA italiani si normalizzano gli alias e il Paese implicito.
+Si sceglie il precedente per data dell'ordine, mai per importazione o sync.
+Parità fra ordini e valori discordanti nell'ultima fonte non producono una scelta
+arbitraria: quel gruppo resta senza valore e mostra l'ambiguità. Altri precedenti
+discordanti dello stesso gruppo producono un avviso accanto al valore più recente.
+
+Il suggerimento riporta ordine, data, negozio e fonte eBay e non cambia lo stato
+fiscale dell'ordine corrente. Il modello IT/EN si può modificare e copiare nel
+dettaglio dei dati mancanti, anche in Free. La modifica resta nel pannello aperto;
+non salva dati fiscali e non invia messaggi. Le preferenze persistenti dei template
+restano nel percorso Impostazioni previsto dal piano.

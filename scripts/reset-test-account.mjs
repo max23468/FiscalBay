@@ -163,8 +163,8 @@ async function main() {
       statements.push(
         `INSERT OR REPLACE INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt", "passkeyVerified") VALUES ('pages-${role}', 'pages-${role}', '${role === "member" ? testAccount.userId : "collaudo-admin"}', '${expires}', '${now}', '${now}', ${role === "admin-granted" ? 1 : 0});`,
       );
-    // Prova di sblocco: un account per lingua con quattro ordini bloccati e quota intatta.
-    for (const id of ["unlock-it", "unlock-en"]) {
+    // Account separati per lingua e flusso: le prove non alterano fixture concorrenti.
+    for (const id of ["unlock-it", "unlock-en", "suggestions-it", "suggestions-en"]) {
       const value = `VALORE-SINTETICO-${id.slice(-2)}`;
       statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
       INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
@@ -185,6 +185,21 @@ async function main() {
       INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at)
         SELECT id, id, 'VAT_ID', '${value}' || substr(id, ${id.length + 1}), 'synthetic_fixture', '${now}'
         FROM orders WHERE store_id = '${id}';`);
+      if (id.startsWith("suggestions-")) {
+        const sourceDate = new Date(Date.now() - day).toISOString();
+        const olderDate = new Date(Date.now() - 2 * day).toISOString();
+        statements.push(`DELETE FROM tax_identifiers WHERE order_id IN ('${id}', '${id}-2', '${id}-3');
+        UPDATE orders SET buyer_eias_token = 'synthetic-stable-buyer' WHERE store_id = '${id}';
+        UPDATE orders SET creation_time = '${sourceDate}' WHERE id = '${id}-2';
+        UPDATE orders SET creation_time = '${olderDate}' WHERE id = '${id}-3';
+        INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+          VALUES ('${id}', '${id}', 'premium', '${olderDate}', '${expires}');
+        INSERT INTO tax_identifiers (id, order_id, identifier_type, issuing_country, value, source, observed_at)
+          VALUES ('${id}-cf', '${id}-2', 'CODICE_FISCALE', 'IT', 'RSSMRA80A01H501U', 'ebay_trading_get_orders', '${now}'),
+                 ('${id}-old', '${id}-3', 'CODICE_FISCALE', 'IT', 'BNCLGU80A01H501Z', 'ebay_trading_get_orders', '${now}');
+        INSERT INTO order_tax_checks (order_id, source, observed_at, availability)
+          VALUES ('${id}', 'ebay_fulfillment', '${now}', 'absent');`);
+      }
     }
   }
   // Un solo batch di istruzioni SQL: nessun import di file, che sospende il database.
