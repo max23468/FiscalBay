@@ -1691,6 +1691,8 @@ Un solo albero di componenti per la pagina Ordini: area reale e anteprima la ren
 
 Prezzo della riga (D165): prezzo unitario quando l'importo di riga diviso per la quantità è esatto nell'esponente della valuta, altrimenti importo di riga; mai centesimi arrotondati.
 
+Mostrare e copiare CF e P.IVA italiani nella forma derivata normalizzata, senza spazi e in maiuscolo, nelle schede e nel dettaglio condivisi con l'anteprima. Conservare valore originale, fonte e qualità formale; la formattazione non corregge un identificativo errato né cambia autorizzazione o quota. Provare valori minuscoli, spazi, zeri iniziali, più identificativi e tipi esteri, senza applicare a questi ultimi regole italiane. L'export di M6-01/M6-02 conserva i valori originali secondo [§12](#s12); Telegram applica la forma derivata in [M5-10](#m5-10).
+
 <a id="m4-02"></a>
 #### M4-02 · Ricerca e filtri
 
@@ -1749,6 +1751,8 @@ Implementare stati vuoti reali, passaggi riprendibili, prerequisiti funzionali s
 
 Riusare gli scenari sintetici di M1-07/M3-05 nelle prove IT/EN e mobile. Con eBay lento o indisponibile, gli ordini persistiti autorizzati restano utilizzabili con timestamp e avanzamento locale, senza skeleton globale né azioni autorizzate da stato obsoleto.
 
+Con quota esaurita mostrare l'azione contestuale verso Piano prevista dal [§20](#s20), mantenendo consultabili i dati non fiscali autorizzati. **Per chiudere:** M5-02/M5-03 per la destinazione commerciale effettiva, senza collegamenti a pagine assenti o attivazioni automatiche del trial.
+
 **Criterio di completamento:** Prima sincronizzazione e disponibilità fiscale sono distinte; nessun dato demo spacciato per reale, nessun blocco globale quando parti sicure funzionano.
 
 <a id="m4-08"></a>
@@ -1790,6 +1794,8 @@ Integrato da CF Ready e Hub Fatture: i confini si confrontano sull'istante UTC e
 **Stato:** Da completare · **Prerequisiti:** M5-01 · **Contratto:** [§6](#s06)
 
 Implementare trial interno di 14 giorni scelto dopo la prima sync, senza ripartenze o pause. Distinguere origine dei diritti e acquisizione automatica dei dati durante Premium. Trial attivo con giorni residui negli scenari dell'anteprima ([§35](#s35)).
+
+Nell'area reale proporre il trial con un'azione discreta dopo la prima sync riuscita, anche con zero ordini, soltanto se disponibile. Mostrare il tempo residuo senza un riquadro permanente invasivo e renderlo più evidente vicino alla scadenza, secondo [§20](#s20). Provare disponibilità, attivazione volontaria, trial già usato e scadenza nelle due lingue e nell'anteprima.
 
 **Criterio di completamento:** Il trial da solo non crea abbonamento o addebito. Dati mai aperti e tardivi seguono Q568; la prova non scorre mentre il servizio è in attesa.
 
@@ -1847,6 +1853,8 @@ Prove client Link/Portal e comunicazioni distinguono sandbox e live; i casi non 
 
 Da M2-06, per decisione owner del 2026-10-05: scelta del negozio attivo nel Free (D155), pausa del piano per gli altri negozi con la ragione `plan` già prevista da `ebay_store_pauses`, vincolo di sostituzione ogni 90 giorni non spostato dal ricollegamento ed eccezioni assistite motivate e registrate in audit, senza reset di quota, prova o ciclo.
 
+Applicare il downgrade anche alla conservazione: negozi eccedenti e ordini fuori dalla finestra Free diventano subito non consultabili né aggiornabili, restano conservati per 30 giorni transitori ove consentito e poi vengono eliminati secondo [§6.4](#s06) e [§30](#s30). Integrare i termini di accesso e pulizia già disponibili da M3-08 con lo storico di [M5-13](#m5-13), senza cancellare diritti acquisiti ancora validi né rinviare eliminazioni obbligatorie. Provare scadenza con pulizia sospesa, ritorno a Premium prima e dopo la cancellazione e lavori pendenti, senza ripristinare dati eliminati.
+
 <a id="m5-07"></a>
 #### M5-07 · Lifetime e concessioni
 
@@ -1899,6 +1907,8 @@ Gestire nuovo ordine in verifica, dato successivamente disponibile, cambi/rimozi
 
 **Criterio di completamento:** CF autorizzato leggibile; riepilogo singolo di completamento import senza messaggi per ogni ordine storico; niente indirizzo/email buyer standard, duplicati da ripresa o arretrato volontariamente disabilitato. Correzioni/rimozioni pertinenti non soppresse dal filtro «solo fiscali»; nessuna garanzia exactly-once esterna.
 
+Usare per CF e P.IVA italiani la stessa forma derivata di visualizzazione e copia definita in [M4-01](#m4-01), preservando gli originali persistiti e distinguendo tipi esteri e valori rimossi. Provare minuscole, spazi e zeri iniziali anche nei messaggi suddivisi e nei digest.
+
 <a id="m5-11"></a>
 #### M5-11 · Ammissione, inattività e costo
 
@@ -1911,13 +1921,24 @@ Implementare inattività Free 30+7 giorni, riattivazione autonoma, waitlist manu
 <a id="m5-12"></a>
 #### M5-12 · Configurazione live sotto checkpoint
 
-**Stato:** Da completare · **Prerequisiti:** M5-03..M5-11 · **Contratto:** [§33](#s33) · [§37](#s37)
+**Stato:** Da completare · **Prerequisiti:** M5-03..M5-11, M5-13 · **Contratto:** [§33](#s33) · [§37](#s37)
 
 Dopo il checkpoint owner, configurare branding, webhook, catalogo, coperture e metodi live, separandoli dal test. Non eseguire incassi indiscriminati.
 
 **Criterio di completamento:** Target live riletti e coerenti con Managed Payments; nessun oggetto test riutilizzato come live. Evidenza minima con dati sensibili protetti.
 
 Configurare contatto supporto realmente ricevibile e alert di richieste a scadenza. Nessuna migrazione automatica di ID test. Prima di agganciare il bot live, fermare il poller 1.x concorrente; prove con incasso reale restano sotto gate finale autorizzato.
+
+<a id="m5-13"></a>
+#### M5-13 · Storico e conservazione Premium
+
+**Stato:** Da completare · **Prerequisiti:** M3-03, M3-08, M5-02 · **Contratto:** [§4](#s04) · [§11](#s11) · [§30](#s30)
+
+Estendere a un anno la finestra di acquisizione, consultazione e conservazione per Premium, trial e lifetime, integrando import e termini di retention esistenti. All'attivazione riprendere il backfill del periodo aggiuntivo recuperabile, mantenendo prioritari i recenti e mostrando il periodo effettivamente acquisito. Non promettere dati fiscali oltre la finestra qualificata della fonte e non ricreare dati eliminati.
+
+Gestire estensioni oltre l'anno soltanto su richiesta valutata, dopo verifica del periodo recuperabile, consenso e approvazione dell'eventuale costo una tantum secondo §11; nessun diritto illimitato implicito. Il ritorno al Free e i 30 giorni transitori si integrano in [M5-06](#m5-06).
+
+**Criterio di completamento:** Confini di 30 giorni/un anno coerenti fra import, elenco, dettaglio, ricerca e pulizia; provare attivazione e scadenza dei diversi diritti, backfill interrotto e ripreso, estensione concessa e replay dopo cancellazione. Con pulizia sospesa nessun accesso oltre la finestra effettiva. **Per chiudere:** M4-02 per la ricerca e M5-06 per il downgrade; M6-03 verifica le stesse finestre negli export.
 
 <a id="m6"></a>
 ### M6 · Export, admin e supporto
@@ -1972,6 +1993,8 @@ Salva e trasmette i file tramite lo storage di [M6-10](#m6-10).
 
 Completare liste utenti/spazi/negozi, diritti e incassi, grant, promo, prezzi, configurazioni, retry, pause e revisione antiabuso. Comunicazioni di servizio o manutenzione per la campanella, con titolo, testo IT/EN e periodo di validità.
 
+Includere il trasferimento assistito di un negozio fra spazi previsto dal [§8](#s08), dopo verifica, conferma e audit dell'operazione. Rileggere appartenenza e autorizzazioni al momento dell'esecuzione, invalidare accessi e lavori pendenti incompatibili e mantenere un solo spazio proprietario. Nessun trasferimento automatico di storico, login o pagamenti né reset di trial, quota o vincoli Free. Provare richieste concorrenti, replay e accesso negato dal vecchio spazio, senza esporre dati dell'altro spazio.
+
 Ogni anomalia espone gravità, conseguenza e azione contestuale; raggruppare duplicati e verificare permessi/stato aggiornato all'esecuzione. Provare rientro effettivo e isolamento del problema a un negozio, senza payload buyer nella console ordinaria.
 
 **Criterio di completamento:** MFA e autorizzazione per operazione, nessuna impersonazione o vista fiscale ordinaria; azioni auditate senza reset surrettizi dei benefici.
@@ -1991,6 +2014,8 @@ Configurare flag tipizzati, soglie di attenzione, efficacia temporale delle modi
 **Stato:** Da completare · **Prerequisiti:** M1-08, M4-06 · **Contratto:** [§14](#s14) · [§24](#s24)
 
 Qualificare info/supporto iCloud e noreply transazionale, template Auth/servizio IT/EN, form/FAQ, consenso/revoca e gestione mancata consegna.
+
+Integrare anche la proposta separata del consenso marketing dopo l'onboarding prevista dal [§14](#s14), facoltativa, non preselezionata e senza bloccare il servizio. Provare proposta, mancata adesione, prova della scelta e revoca dalle impostazioni nelle due lingue; il consenso non abilita campagne o nuovi fornitori senza il mandato previsto.
 
 Integrare il riepilogo diagnostico visibile e allowlistato del §14. Provare isolamento fra spazi, assenza di CF/token/payload e invio del form anche con diagnostica indisponibile; includere il riepilogo nella gestione della retention del supporto. Il form usa Rate Limiting di [M7-09](#m7-09) e Turnstile di [M7-10](#m7-10).
 
