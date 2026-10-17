@@ -11,6 +11,127 @@ test.describe("miglioramenti account e negozi", () => {
   for (const language of ["it", "en"] as const) {
     const prefix = language === "it" ? "" : "/en";
     const it = language === "it";
+    test(`ordini reali: suggerimenti e testo modificabile copiabile ${language}`, async ({
+      page,
+      context,
+      baseURL,
+    }) => {
+      const errors: string[] = [];
+      const posts: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      page.on("console", (message) => {
+        if (message.type() === "error") errors.push(message.text());
+      });
+      page.on("request", (request) => {
+        if (request.method() === "POST") posts.push(request.url());
+      });
+      await context.addCookies([localCookie("member", baseURL!, `suggestions-${language}`)]);
+      await page.setViewportSize({ width: it ? 390 : 1280, height: 900 });
+      await page.addInitScript(() => {
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: {
+            writeText: async (value: string) => {
+              (window as Window & { copiedText?: string }).copiedText = value;
+            },
+          },
+        });
+      });
+      await page.goto(`${prefix}/app/ordini?ordine=suggestions-${language}`);
+      const dialog = page.getByRole("dialog");
+      await expect(
+        dialog.getByText(
+          it ? "Suggerimento da un ordine precedente" : "Suggestion from a previous order",
+        ),
+      ).toBeVisible();
+      await expect(dialog.getByText(/eBay Trading/)).toBeVisible();
+      await expect(
+        dialog.getByText(
+          it
+            ? /Gli ordini precedenti riportano codici diversi/
+            : /Previous orders show different codes/,
+        ),
+      ).toBeVisible();
+      await expect(dialog.getByText(new RegExp(`suggestions-${language}-2`))).toBeVisible();
+      await page.screenshot({ path: `/tmp/fiscalbay-suggestions-${language}.png` });
+      const message = dialog.getByLabel(it ? "Testo per l’acquirente" : "Text for the buyer");
+      await expect(message).toHaveValue(new RegExp(`suggestions-${language}`));
+      await dialog
+        .getByRole("combobox", { name: it ? "Lingua del messaggio" : "Message language" })
+        .click();
+      await page.getByRole("option", { name: it ? "English" : "Italiano", exact: true }).click();
+      await expect(message).toHaveValue(it ? /^Hello/ : /^Buongiorno/);
+      await message.fill(`Richiesta modificata suggestions-${language}`);
+      await dialog
+        .getByRole("button", {
+          name: it ? "Copia messaggio per l’acquirente" : "Copy message for the buyer",
+        })
+        .click();
+      expect(
+        await page.evaluate(() => (window as Window & { copiedText?: string }).copiedText),
+      ).toBe(`Richiesta modificata suggestions-${language}`);
+      await expect(
+        dialog.getByRole("status").filter({ hasText: it ? /Messaggio copiato/ : /Message copied/ }),
+      ).toBeVisible();
+      await page.evaluate(() =>
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: {
+            writeText: async () => {
+              throw new Error("denied");
+            },
+          },
+        }),
+      );
+      await dialog
+        .getByRole("button", {
+          name: it ? "Copia messaggio per l’acquirente" : "Copy message for the buyer",
+        })
+        .click();
+      await expect(
+        dialog.getByRole("status").filter({ hasText: it ? /Copia non riuscita/ : /Copy failed/ }),
+      ).toBeVisible();
+      expect(posts).toEqual([]);
+      expect(errors).toEqual([]);
+      await dialog.getByRole("button", { name: it ? "Chiudi" : "Close", exact: true }).click();
+      const card = page.locator('[data-slot="card"]').filter({
+        has: page.getByRole("heading", {
+          name: `${it ? "Ordine" : "Order"} suggestions-${language}`,
+          exact: true,
+        }),
+      });
+      await expect(
+        card.getByText(it ? /Da un ordine precedente:/ : /From a previous order:/),
+      ).toBeVisible();
+      await expect(card.getByText("RSSMRA80A01H501U", { exact: true })).toBeVisible();
+    });
+    test(`anteprima: suggerimento e messaggio coerenti con gli ordini reali ${language}`, async ({
+      page,
+    }) => {
+      await open(page, `${prefix}/anteprima/ordini/ord-05`, "dati-discordanti");
+      const dialog = page.getByRole("dialog");
+      await expect(
+        dialog.getByText(
+          it ? "Suggerimento da un ordine precedente" : "Suggestion from a previous order",
+        ),
+      ).toBeVisible();
+      await expect(dialog.getByText("DSNGNN70E20A662P", { exact: true })).toBeVisible();
+      await expect(dialog.getByText(/eBay Trading/)).toBeVisible();
+      await expect(
+        dialog.getByText(
+          it
+            ? /Gli ordini precedenti riportano codici diversi/
+            : /Previous orders show different codes/,
+        ),
+      ).toBeVisible();
+      await dialog
+        .getByRole("combobox", { name: it ? "Lingua del messaggio" : "Message language" })
+        .click();
+      await page.getByRole("option", { name: it ? "English" : "Italiano", exact: true }).click();
+      await expect(
+        dialog.getByLabel(it ? "Testo per l’acquirente" : "Text for the buyer"),
+      ).toHaveValue(it ? /^Hello/ : /^Buongiorno/);
+    });
     test(`ordini reali: qualità formale visibile e identificativo bloccato protetto ${language}`, async ({
       page,
       context,

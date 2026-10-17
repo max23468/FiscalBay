@@ -63,10 +63,11 @@ import {
 } from "~/components/ui/sheet";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Spinner } from "~/components/ui/spinner";
+import { Textarea } from "~/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import type { AppCopy } from "../app-copy";
 import { appHref, type AppLinks } from "../app-links";
-import { formatAmount, type Language } from "../i18n";
+import { formatAmount, languages, languageNames, type Language } from "../i18n";
 import { taxIdentifierType } from "../tax-quality";
 import {
   formatDate,
@@ -85,6 +86,7 @@ import {
   type PaymentStatus,
   type ShippingStatus,
   type TaxIdentifierView,
+  type SuggestionView,
 } from "../view-models";
 
 export interface OrdersPageData {
@@ -485,6 +487,198 @@ function ImportedFiscal({
           </CardNote>
         </div>
       )}
+      <ImportedMissingHelp order={order} expanded={expanded} t={t} language={language} />
+    </div>
+  );
+}
+
+function ImportedMissingHelp({
+  order,
+  expanded,
+  t,
+  language,
+}: {
+  order: VisibleOrder;
+  expanded: boolean;
+  t: AppCopy;
+  language: Language;
+}) {
+  if (order.fiscalState !== "missing") return null;
+  if (expanded)
+    return (
+      <MissingOrderHelp
+        key={order.id}
+        order={order.ebayOrderId}
+        suggestions={order.suggestions ?? []}
+        status={order.suggestionStatus}
+        t={t}
+        language={language}
+      />
+    );
+  if (!order.suggestions?.length) return null;
+  return <SuggestionSummary suggestions={order.suggestions} t={t} />;
+}
+
+function SuggestionSummary({ suggestions, t }: { suggestions: SuggestionView[]; t: AppCopy }) {
+  return (
+    <>
+      {suggestions.map((suggestion) => (
+        <CardNote
+          key={`${suggestion.sourceOrder}:${suggestion.identifier?.typeLabel}:${suggestion.issuingCountry}:${suggestion.value}`}
+          tone={suggestion.conflict ? "warning" : "info"}
+        >
+          {t.orders.suggestionFrom}{" "}
+          {suggestions.length > 1 && suggestion.identifier
+            ? `${identifierLabel(suggestion.identifier, t)}: `
+            : ""}
+          <span className="font-code text-foreground">{suggestion.value}</span>.{" "}
+          {suggestion.conflict ? t.orders.suggestionConflict : t.orders.suggestionCheck}
+        </CardNote>
+      ))}
+    </>
+  );
+}
+
+const messageLanguages = languages.map((value) => ({ value, label: languageNames[value] }));
+
+/** Solo testo locale e copia esplicita: nessuna modifica all'ordine o messaggistica integrata. */
+function MissingOrderHelp({
+  order,
+  suggestions,
+  status,
+  t,
+  language,
+  template,
+}: {
+  order: string;
+  suggestions: SuggestionView[];
+  status?: VisibleOrder["suggestionStatus"];
+  t: AppCopy;
+  language: Language;
+  template?: string;
+}) {
+  // La lingua della pagina inizializza il messaggio; poi decide il merchant.
+  const [messageLanguage, setMessageLanguage] = useState<Language>(() => language);
+  const defaultMessage = (code: Language) =>
+    (code === language && template
+      ? template
+      : code === "it"
+        ? t.settings.templateDefaultIt
+        : t.settings.templateDefaultEn
+    ).replaceAll("{ordine}", order);
+  const [message, setMessage] = useState(() => defaultMessage(language));
+  const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
+  const fieldId = useId();
+  return (
+    <div className="grid min-w-0 gap-3">
+      {suggestions.map((suggestion) => {
+        const identifier = suggestion.identifier ?? {
+          type: "CF" as const,
+          value: suggestion.value,
+          quality: "unchecked" as const,
+        };
+        const label = identifierLabel(identifier, t);
+        return (
+          <div
+            key={`${identifier.type}:${suggestion.issuingCountry}:${suggestion.value}`}
+            className="grid gap-2 rounded-lg border bg-card p-3"
+          >
+            <p className="text-sm font-medium">{t.orders.suggestion}</p>
+            <CardLabel>
+              {`${label}${suggestion.issuingCountry ? ` (${suggestion.issuingCountry})` : ""}`}
+            </CardLabel>
+            <TaxCode value={suggestion.value} labels={taxCodeLabels(label, order, t)} />
+            <p className="text-sm text-muted-foreground">
+              {t.orders.suggestionHint(
+                suggestion.sourceOrder,
+                formatDate(suggestion.sourceDate, language, "date"),
+              )}
+            </p>
+            {suggestion.sourceStore ? (
+              <p className="text-sm break-words">
+                {t.orders.store}: {suggestion.sourceStore}
+              </p>
+            ) : null}
+            {suggestion.source ? (
+              <p className="text-xs text-muted-foreground">
+                eBay {suggestion.source === "ebay_fulfillment" ? "Fulfillment" : "Trading"}
+              </p>
+            ) : null}
+            {suggestion.conflict ? (
+              <StatusAlert tone="warning" title={t.orders.toVerify}>
+                {t.orders.suggestionConflict}
+              </StatusAlert>
+            ) : null}
+            <p className="text-sm text-muted-foreground">{t.orders.suggestionCheck}</p>
+          </div>
+        );
+      })}
+      {status ? (
+        <p className="text-sm text-muted-foreground" role="status">
+          {t.orders.suggestionStatus[status]}
+        </p>
+      ) : null}
+      <Field>
+        <FieldLabel htmlFor={`${fieldId}-language`}>{t.orders.messageLanguage}</FieldLabel>
+        <Select
+          items={messageLanguages}
+          value={messageLanguage}
+          onValueChange={(code) => {
+            if (code !== "it" && code !== "en") return;
+            setMessageLanguage(code);
+            setMessage(defaultMessage(code));
+            setCopied("idle");
+          }}
+        >
+          <SelectTrigger id={`${fieldId}-language`} className="w-full min-w-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {messageLanguages.map(({ value, label }) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field>
+        <FieldLabel htmlFor={fieldId}>{t.orders.messageText}</FieldLabel>
+        <Textarea
+          id={fieldId}
+          rows={6}
+          value={message}
+          lang={messageLanguage}
+          onChange={(event) => {
+            setMessage(event.target.value);
+            setCopied("idle");
+          }}
+        />
+      </Field>
+      <p className="text-xs text-muted-foreground">{t.settings.templateIntro}</p>
+      <Button
+        variant="outline"
+        className="w-fit"
+        disabled={!message.trim()}
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(message);
+            setCopied("copied");
+          } catch {
+            setCopied("failed");
+          }
+        }}
+      >
+        <MessageSquareText aria-hidden="true" data-icon="inline-start" />
+        {t.orders.requestMessage}
+      </Button>
+      <p role="status" className="text-sm">
+        {copied === "copied"
+          ? t.orders.requestCopied
+          : copied === "failed"
+            ? t.orders.messageCopyFailed
+            : ""}
+      </p>
     </div>
   );
 }
@@ -887,11 +1081,7 @@ function FiscalNotes({
     <>
       <CardNote>{unavailableHint(fiscal, ebayDown, t)}</CardNote>
       {compact && fiscal.state === "missing" && order.suggestion ? (
-        <CardNote tone="info">
-          {t.orders.suggestionFrom}{" "}
-          <span className="font-code text-foreground">{order.suggestion.value}</span>.{" "}
-          {t.orders.suggestionCheck}
-        </CardNote>
+        <SuggestionSummary suggestions={[order.suggestion]} t={t} />
       ) : null}
     </>
   );
@@ -1190,7 +1380,6 @@ function FiscalDetail({
 }: Pick<FiscalProps, "order" | "t" | "language" | "account" | "ebayDown"> & {
   template: string;
 }) {
-  const notify = useNotice();
   return (
     <>
       <FiscalNotes
@@ -1202,45 +1391,14 @@ function FiscalDetail({
         compact={false}
       />
       {order.fiscal.state === "missing" ? (
-        <div className="grid gap-3">
-          {order.suggestion ? (
-            <div className="grid gap-2 rounded-lg border bg-card p-3">
-              <p className="text-xs font-medium text-muted-foreground">{t.orders.suggestion}</p>
-              <TaxCode
-                value={order.suggestion.value}
-                labels={taxCodeLabels(t.orders.identifier.CF, order.ebayOrderId, t)}
-              />
-              <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
-                {t.orders.suggestionHint(
-                  order.suggestion.sourceOrder,
-                  formatDate(order.suggestion.sourceDate, language, "date"),
-                )}
-              </p>
-              {order.suggestion.conflict ? (
-                <StatusAlert tone="warning" title={t.orders.toVerify}>
-                  {t.orders.suggestionConflict}
-                </StatusAlert>
-              ) : null}
-            </div>
-          ) : null}
-          <Button
-            variant="outline"
-            className="w-fit"
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(
-                  template.replaceAll("{ordine}", order.ebayOrderId),
-                );
-                notify(t.orders.requestCopied);
-              } catch {
-                notify(t.orders.copyFailed);
-              }
-            }}
-          >
-            <MessageSquareText aria-hidden="true" data-icon="inline-start" />
-            {t.orders.requestMessage}
-          </Button>
-        </div>
+        <MissingOrderHelp
+          key={order.id}
+          order={order.ebayOrderId}
+          suggestions={order.suggestion ? [order.suggestion] : []}
+          t={t}
+          language={language}
+          template={template}
+        />
       ) : null}
       <p className="text-xs text-muted-foreground">
         {t.order.source(formatDate(order.lastSyncedAt, language))}
