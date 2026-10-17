@@ -46,7 +46,11 @@ import {
   paymentState,
   shippingState,
 } from "../app/domain/orders.server";
-import { recordOrderObservation, type OrderObservation } from "../app/domain/order-import.server";
+import {
+  recordOrderObservation,
+  orderObservationSchema,
+  type OrderObservation,
+} from "../app/domain/order-import.server";
 import { orderSuggestions } from "../app/domain/order-suggestions.server";
 import {
   deleteStoreData,
@@ -1309,6 +1313,79 @@ describe("modello ordini", () => {
     }
     const read = (id: string, user = "u-a", at = new Date(now)) =>
       orderSuggestions(env.DB, user, [id], "production", at);
+
+    it("accetta soltanto identità testuali non vuote entro il limite, senza alterare il token opaco", () => {
+      for (const buyerEiasToken of ["", "  ", "x".repeat(2049), 42, {}]) {
+        expect(() => orderObservationSchema.parse({ ...observation(), buyerEiasToken })).toThrow();
+      }
+      for (const buyerEiasToken of [undefined, null, "x", "x".repeat(2048), "MiXeD-Token"]) {
+        expect(
+          orderObservationSchema.parse({ ...observation(), buyerEiasToken }).buyerEiasToken,
+        ).toBe(buyerEiasToken);
+      }
+      expect(
+        orderObservationSchema.parse({ ...observation(), buyerEiasToken: " token " })
+          .buyerEiasToken,
+      ).toBe("token");
+    });
+
+    it("il payload non aggiunge suggerimenti ai dati già disponibili o ancora da verificare", async () => {
+      await premium();
+      const previous = await imported("previous", "2026-09-10T00:00:00.000Z", [
+        cf("RSSMRA80A01H501U"),
+      ]);
+      const available = await imported("available", "2026-09-11T00:00:00.000Z", [
+        cf("BNCLGU80A01H501Z"),
+      ]);
+      const unchecked = await imported("unchecked", "2026-09-12T00:00:00.000Z", [], {
+        taxIdentifiers: undefined,
+      });
+      const visible = await listVisibleOrders(env.DB, "u-a");
+      expect(visible.find((order) => order.id === available)!.fiscalState).toBe("available");
+      expect(visible.find((order) => order.id === unchecked)!.fiscalState).toBe("unchecked");
+      for (const id of [previous, available, unchecked]) {
+        const order = visible.find((item) => item.id === id)!;
+        expect(order).not.toHaveProperty("suggestions");
+        expect(order).not.toHaveProperty("suggestionStatus");
+      }
+    });
+
+    it("una fonte scaduta durante la lettura dell'elenco non entra nel suggerimento", async () => {
+      await premium();
+      const source = await imported("previous", "2026-09-11T00:00:00.000Z", [
+        cf("RSSMRA80A01H501U"),
+      ]);
+      const current = await imported("current", "2026-09-13T00:00:00.000Z");
+      const expiry = new Date(Date.parse(now) + 1);
+      await env.DB.prepare("UPDATE orders SET retention_until = ?1, purge_after = ?1 WHERE id = ?2")
+        .bind(expiry.toISOString(), source)
+        .run();
+      const prepare = env.DB.prepare.bind(env.DB);
+      const intercepted = vi.spyOn(env.DB, "prepare").mockImplementation((sql) => {
+        const statement = prepare(sql);
+        if (!sql.includes("WITH visible_orders")) return statement;
+        statement.bind = (...values: unknown[]) => {
+          const bound = prepare(sql).bind(...values);
+          const all = bound.all.bind(bound);
+          bound.all = async <T>() => {
+            const rows = await all<T>();
+            vi.setSystemTime(expiry);
+            return rows;
+          };
+          return bound;
+        };
+        return statement;
+      });
+      try {
+        const visible = await listVisibleOrders(env.DB, "u-a", 50, "production", new Date(now));
+        expect(visible.find((order) => order.id === current)!.suggestions).toEqual([]);
+        expect(
+          await env.DB.prepare("SELECT id FROM orders WHERE id = ?").bind(source).first(),
+        ).not.toBeNull();
+      } finally {
+        intercepted.mockRestore();
+      }
+    });
 
     it("usa data ordine, identità stabile e fonte corrente, con conflitti omogenei e provenienza", async () => {
       await premium();
