@@ -340,7 +340,8 @@ test("negozi con problema e conferma forte dell'eliminazione", async ({ page }) 
 test("il salvataggio automatico fallito ripristina il valore", async ({ page }) => {
   await open(page);
   await chooseScenario(page, "Premium, più negozi");
-  await page.goto("/anteprima/impostazioni/notifiche");
+  // Un clic prima dell'idratazione non chiama il salvataggio.
+  await open(page, "/anteprima/impostazioni/notifiche");
   await expect(page.locator("#settings-notifiche")).toBeInViewport();
   const toggle = page.getByRole("switch", { name: "Invia notifiche degli ordini" });
   await expect(toggle).toBeChecked();
