@@ -197,7 +197,8 @@ const it = {
         "Codice omocodico o nome non univoco: la corrispondenza con il nome non è verificabile.",
       unchecked: "FiscalBay non verifica il formato di questo tipo di identificativo.",
     },
-    toVerify: "Da verificare",
+    codeToCheck: "Codice da controllare",
+    differentCodes: "Codici diversi",
     updated: "Aggiornato da eBay",
     updatedHint: "eBay ha modificato questo dato dopo la prima lettura.",
     suggestion: "Suggerimento da un ordine precedente",
@@ -1049,7 +1050,8 @@ const en: AppCopy = {
       unverifiable: "Omocodia variant or ambiguous name: the code cannot be matched to the name.",
       unchecked: "FiscalBay does not check the format of this identifier type.",
     },
-    toVerify: "Needs review",
+    codeToCheck: "Check code",
+    differentCodes: "Different codes",
     updated: "Updated by eBay",
     updatedHint: "eBay changed this value after it was first read.",
     suggestion: "Suggestion from a previous order",
@@ -1078,7 +1080,7 @@ const en: AppCopy = {
     quotaBody: (date) =>
       `You can still view and search all orders. Codice Fiscale and Partita IVA of new orders stay locked until ${date}.`,
     quotaAction: "Upgrade to Premium",
-    reconciliationTitle: "Order needs review",
+    reconciliationTitle: "Order to check",
     reconciliationBody:
       "It is unclear whether the items in this order also appear in another eBay order. Check it on eBay before using its details.",
     storeIssueTitle: (store) => `${store}: connection expired`,

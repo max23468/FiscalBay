@@ -1,6 +1,9 @@
 import { DuplicateLineIdentity, writableStore } from "./order-import.server";
 import {
+  limitKey,
+  rateLimitWait,
   record,
+  recordRateLimit,
   spend,
   NotWritable,
   type AcquisitionBudget,
@@ -29,7 +32,8 @@ import { readTradingOrders } from "../integrations/ebay/trading.server";
  *
  * 1. recenti: ordini modificati dopo l'ultimo limite applicato, con una sovrapposizione;
  * 2. Trading: acquisti modificati, compresi quelli prima del checkout che Fulfillment non
- *    espone, con pagina e limite propri; un suo errore non ferma i passi successivi;
+ *    espone, con pagina e limite propri, al massimo ogni due ore salvo collegamento e richieste
+ *    manuali; un suo errore, anche il limite della sua quota, non ferma i passi successivi;
  * 3. storico: ordini creati nella finestra fissata al primo avvio, dal più recente;
  * 4. dettaglio: dati fiscali e immagini di ogni versione Fulfillment non ancora letta,
  *    in `order-acquisition-details.server.ts`.
@@ -48,10 +52,9 @@ const overlapMilliseconds = 15 * 60_000;
 export const historyDays = 30;
 const dayMilliseconds = 86_400_000;
 const lockMilliseconds = 15 * 60_000;
-// Attesa quando eBay limita senza Retry-After, e massimo rispettato: oltre un giorno il valore
-// non è credibile e la quota giornaliera si è comunque rinnovata.
-export const defaultRateLimitSeconds = 15 * 60;
-const maxRateLimitSeconds = 86_400;
+// Acquisti prima del pagamento e ordini combinati cambiano di rado: la lettura Trading periodica
+// ogni due ore tiene la quota `GetOrders` del keyset lontana dal limite anche con molti negozi.
+const tradingIntervalMilliseconds = 2 * 60 * 60_000;
 /** Letture dei recenti conservate per negozio nella schermata Negozi. */
 const keptRuns = 3;
 
@@ -131,11 +134,26 @@ type SyncRow = {
   trading_end: string | null;
   trading_page: number | null;
   trading_total: number | null;
+  requested_at: string | null;
 };
+
+/** Chiave dell'attesa della quota `GetOrders`, distinta da quella di Fulfillment. */
+function ordersLimit(ctx: Context) {
+  return limitKey(ctx.access.configuration.apiOrigin, "GetOrders");
+}
 
 async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
   const until = state.trading_end ?? ctx.at;
-  if (!state.trading_end && state.trading_cursor && state.trading_cursor >= ctx.at) return true;
+  // Una passata già iniziata prosegue; altrimenti si rilegge al collegamento, su richiesta
+  // manuale o quando l'ultima passata conclusa ha due ore.
+  if (
+    !state.trading_end &&
+    state.trading_cursor &&
+    state.requested_at === null &&
+    Date.parse(state.trading_cursor) > Date.parse(ctx.at) - tradingIntervalMilliseconds
+  )
+    return true;
+  if ((await rateLimitWait(ctx.db, ordersLimit(ctx), new Date(ctx.at))) > 0) return false;
   // Trading accetta al massimo trenta giorni per intervallo di modifica.
   const from = new Date(
     Math.max(
@@ -185,13 +203,13 @@ async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
   return false;
 }
 
-function tradingFailure(error: unknown): false {
-  if (
-    !(error instanceof UpstreamError) ||
-    error.failure === "credentials" ||
-    error.failure === "rate_limited"
-  )
-    throw error;
+async function tradingFailure(ctx: Context, error: unknown): Promise<false> {
+  if (!(error instanceof UpstreamError) || error.failure === "credentials") throw error;
+  // La quota `GetOrders` esaurita sospende soltanto Trading: Fulfillment continua.
+  if (error.failure === "rate_limited") {
+    if (!error.details.limit) throw error;
+    await recordRateLimit(ctx.db, ordersLimit(ctx), error, new Date(ctx.at));
+  }
   logFailure({ error, operation: "order_acquisition" });
   return false;
 }
@@ -227,30 +245,6 @@ function historyPass(ctx: Context, state: SyncRow): Pass {
     progress: (next, total) => saveState(ctx, "history_next = ?4, history_total = ?5", next, total),
     finish: () => saveState(ctx, "history_done_at = ?3, history_next = NULL, history_total = NULL"),
   };
-}
-
-/** Secondi di attesa ancora chiesti da eBay per l'origine API; 0 se nessuno. */
-export async function rateLimitWait(db: D1Database, apiOrigin: string, now: Date): Promise<number> {
-  const row = await db
-    .prepare("SELECT until FROM ebay_rate_limits WHERE api_origin = ? AND until > ?")
-    .bind(apiOrigin, now.toISOString())
-    .first<{ until: string }>();
-  return row ? Math.ceil((Date.parse(row.until) - now.getTime()) / 1000) : 0;
-}
-
-/** Registra l'attesa chiesta da eBay; un'attesa già più lunga resta. */
-async function recordRateLimit(db: D1Database, apiOrigin: string, error: UpstreamError, now: Date) {
-  const seconds = Math.min(
-    maxRateLimitSeconds,
-    error.details.retryAfter ?? defaultRateLimitSeconds,
-  );
-  await db
-    .prepare(
-      `INSERT INTO ebay_rate_limits (api_origin, until) VALUES (?, ?)
-       ON CONFLICT(api_origin) DO UPDATE SET until = MAX(until, excluded.until)`,
-    )
-    .bind(apiOrigin, new Date(now.getTime() + seconds * 1000).toISOString())
-    .run();
 }
 
 /**
@@ -326,7 +320,7 @@ export async function acquireOrders(input: {
        WHERE sync_state.locked_until IS NULL OR sync_state.locked_until <= ?3
        RETURNING cursor, recent_end, recent_next, recent_total, history_from, history_until,
                  history_next, history_total, history_done_at,
-                 trading_cursor, trading_end, trading_page, trading_total`,
+                 trading_cursor, trading_end, trading_page, trading_total, requested_at`,
     )
     .bind(
       storeId,
@@ -369,8 +363,11 @@ export async function acquireOrders(input: {
     // Lettura dei recenti conclusa: l'ultima sincronizzazione del negozio.
     if (recent) await saveState(ctx, "last_success_at = ?3");
     // Trading aggiunge gli acquisti prima del checkout: un suo errore lascia la passata da
-    // riprendere senza fermare storico e dettaglio. Credenziali e limite fermano tutto.
-    const trading = recent && (await runTradingPass(ctx, state).catch(tradingFailure));
+    // riprendere senza fermare storico e dettaglio. Le credenziali fermano tutto; la quota
+    // Trading esaurita sospende soltanto Trading.
+    const trading =
+      recent &&
+      (await runTradingPass(ctx, state).catch((error: unknown) => tradingFailure(ctx, error)));
     const history =
       recent && (!!state.history_done_at || (await runPass(ctx, historyPass(ctx, state))));
     const details = await readDetails(ctx);
@@ -379,7 +376,7 @@ export async function acquireOrders(input: {
   } catch (error) {
     if (error instanceof NotWritable) return "not_writable";
     const limited = error instanceof UpstreamError && error.failure === "rate_limited";
-    if (limited) await recordRateLimit(db, apiOrigin, error, now);
+    if (limited) await recordRateLimit(db, limitKey(apiOrigin, error.details.limit), error, now);
     if (poll) outcome = { ok: false, served: !limited };
     throw error;
   } finally {

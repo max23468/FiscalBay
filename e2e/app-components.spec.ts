@@ -1075,10 +1075,13 @@ for (const language of ["it", "en"] as const) {
         expect(await noPageOverflow(page)).toBe(true);
         await page.setViewportSize({ width, height: 844 });
         await open(page, `${prefix}/anteprima/ordini`, "ordinario");
-        const warning = page.getByText("SPSNNA85T55F83", { exact: true }).locator("..");
-        await expect(warning).toContainText(t("Da verificare", "Needs review"));
-        await expect(warning).toHaveClass(/bg-warning-surface/);
-        await expect(warning.getByRole("button", { name: /^Copia |^Copy / })).toBeVisible();
+        // Riquadro ambra senza etichetta ripetuta: una sola nota sotto il codice spiega il controllo.
+        const code = page.getByText("SPSNNA85T55F83", { exact: true }).locator("..");
+        await expect(code).toHaveClass(/bg-warning-surface/);
+        await expect(code).not.toContainText(t("Codice da controllare", "Check code"));
+        await expect(code.getByRole("button", { name: /^Copia |^Copy / })).toBeVisible();
+        const card = page.getByRole("article").filter({ hasText: "SPSNNA85T55F83" });
+        await expect(card.getByText(t("Codice da controllare", "Check code"))).toHaveCount(1);
         await page.screenshot({ path: test.info().outputPath("elenco.png"), fullPage: true });
         await open(page, `${prefix}/anteprima/ordini?q=zzzz`, "ordinario");
         const clear = page.getByRole("link", {
@@ -1107,7 +1110,7 @@ for (const language of ["it", "en"] as const) {
         ).toBeVisible();
         await open(page, `${prefix}/anteprima/ordini`, "dati-discordanti");
         await expect(page.getByRole("article").filter({ hasText: "05-55555-12121" })).toContainText(
-          t("Da verificare", "Needs review"),
+          t("Ordine da verificare", "Order to check"),
         );
         // Valore letto in precedenza con l'ultima lettura non riuscita, dato nascosto o rimosso.
         for (const [query, order, text] of [
@@ -1135,7 +1138,7 @@ for (const language of ["it", "en"] as const) {
           page
             .getByRole("dialog")
             .getByRole("status")
-            .filter({ hasText: t("Ordine da verificare", "Order needs review") }),
+            .filter({ hasText: t("Ordine da verificare", "Order to check") }),
         ).toBeVisible();
         await open(page, `${prefix}/anteprima/ordini`, "ebay-non-disponibile");
         await expect(page.locator("main > div > header [role=status]")).toHaveClass(/text-warning/);

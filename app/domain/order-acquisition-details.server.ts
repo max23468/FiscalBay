@@ -1,5 +1,13 @@
 import { writableStore, type OrderObservation } from "./order-import.server";
-import { record, spend, NotWritable, type Context } from "./order-acquisition-context.server";
+import {
+  limitKey,
+  rateLimitWait,
+  record,
+  recordRateLimit,
+  spend,
+  NotWritable,
+  type Context,
+} from "./order-acquisition-context.server";
 import { UpstreamError } from "../integrations/http.server";
 import {
   fulfillmentObservation,
@@ -42,6 +50,19 @@ async function listingsWithoutImage(
 
 /** Errori che riguardano eBay o il consenso, non il singolo ordine: fermano l'esecuzione. */
 const runFailures = new Set(["credentials", "rate_limited", "unavailable"]);
+
+/** Limite della quota di una singola chiamata Trading: sospende quella chiamata, non la lettura. */
+function callLimit(error: unknown): error is UpstreamError {
+  return (
+    error instanceof UpstreamError && error.failure === "rate_limited" && !!error.details.limit
+  );
+}
+
+/** Attesa ancora in corso per la quota di una chiamata Trading. */
+async function callLimited(ctx: Context, call: string) {
+  const key = limitKey(ctx.access.configuration.apiOrigin, call);
+  return (await rateLimitWait(ctx.db, key, new Date(ctx.at))) > 0;
+}
 
 export type PendingDetail = {
   external_order_id: string;
@@ -90,7 +111,9 @@ async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) 
     .bind(ctx.storeId, ctx.grantedAt)
     .first();
   if (!writable) throw new NotWritable();
-  if (runFailure) throw error;
+  // Con la quota di una chiamata esaurita la versione resta in attesa senza consumare
+  // tentativi, e la lettura prosegue con gli altri ordini.
+  if (runFailure && !callLimit(error)) throw error;
 }
 
 /**
@@ -149,7 +172,10 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
     await failDetail(ctx, pending, error);
     return true;
   }
-  const listings = [...(await listingsWithoutImage(ctx, observation))].slice(0, maxImagesPerDetail);
+  // Con la quota `GetItem` esaurita le righe restano senza immagine, come dopo un errore.
+  const listings = (await callLimited(ctx, "GetItem"))
+    ? []
+    : [...(await listingsWithoutImage(ctx, observation))].slice(0, maxImagesPerDetail);
   if (
     !spend(
       ctx.budget,
@@ -160,8 +186,18 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
   const images = new Map(
     await Promise.all(
       listings.map(async (id) => {
-        const image = await readItemImage(ctx.access, id).catch((error: unknown) => {
-          // Un'immagine non disponibile non blocca l'ordine; credenziali e quota fermano le letture.
+        const image = await readItemImage(ctx.access, id).catch(async (error: unknown) => {
+          // Un'immagine non disponibile non blocca l'ordine; credenziali e limite dell'origine
+          // fermano le letture, la quota `GetItem` esaurita sospende soltanto le immagini.
+          if (callLimit(error)) {
+            await recordRateLimit(
+              ctx.db,
+              limitKey(ctx.access.configuration.apiOrigin, "GetItem"),
+              error,
+              new Date(ctx.at),
+            );
+            return null;
+          }
           if (
             error instanceof UpstreamError &&
             (error.failure === "credentials" || error.failure === "rate_limited")
@@ -182,9 +218,20 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
   };
   const trading = observation.taxIdentifiers
     ? null
-    : await readTradingTaxObservation(ctx.access, observation.externalOrderId).catch(
-        (error: unknown) => ({ error }),
-      );
+    : (await callLimited(ctx, "GetOrders"))
+      ? { error: new UpstreamError("rate_limited", { limit: "GetOrders" }) }
+      : await readTradingTaxObservation(ctx.access, observation.externalOrderId).catch(
+          async (error: unknown) => {
+            if (callLimit(error))
+              await recordRateLimit(
+                ctx.db,
+                limitKey(ctx.access.configuration.apiOrigin, "GetOrders"),
+                error,
+                new Date(ctx.at),
+              );
+            return { error };
+          },
+        );
   const result = await record(
     ctx,
     trading && "values" in trading

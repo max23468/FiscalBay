@@ -171,7 +171,7 @@ export function ImportedOrders({
             {t.orders.reconciliationBody}
           </StatusAlert>
         ) : (
-          <StatusBadge tone="warning">{t.orders.toVerify}</StatusBadge>
+          <StatusBadge tone="warning">{t.orders.reconciliationTitle}</StatusBadge>
         )
       ) : null}
       <dl className="grid gap-2 text-sm">
@@ -444,11 +444,7 @@ function ImportedFiscal({
               <TaxCode
                 value={identifier.value}
                 labels={taxCodeLabels(name, order.ebayOrderId, t)}
-                warning={
-                  identifier.quality !== "valid" && identifier.quality !== "unchecked"
-                    ? t.orders.toVerify
-                    : undefined
-                }
+                warning={identifier.quality !== "valid" && identifier.quality !== "unchecked"}
               />
               {expanded ? (
                 <p className="text-sm text-muted-foreground">
@@ -605,7 +601,7 @@ function MissingOrderHelp({
               </p>
             ) : null}
             {suggestion.conflict ? (
-              <StatusAlert tone="warning" title={t.orders.toVerify}>
+              <StatusAlert tone="warning" title={t.orders.differentCodes}>
                 {t.orders.suggestionConflict}
               </StatusAlert>
             ) : null}
@@ -868,7 +864,7 @@ function IdentifierNote({
   if (quality !== "valid" && quality !== "unchecked") {
     return (
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm leading-relaxed text-pretty sm:col-span-2">
-        <StatusBadge tone="warning">{t.orders.toVerify}</StatusBadge>
+        <StatusBadge tone="warning">{t.orders.codeToCheck}</StatusBadge>
         <span className="text-muted-foreground">
           {prefix}
           {t.orders.quality[quality]}
@@ -971,12 +967,8 @@ function FiscalCodes({
               <TaxCode
                 value={identifier.value}
                 labels={taxCodeLabels(name, order.ebayOrderId, t)}
+                warning={identifier.quality !== "valid" && identifier.quality !== "unchecked"}
                 reveal={revealed}
-                warning={
-                  identifier.quality !== "valid" && identifier.quality !== "unchecked"
-                    ? t.orders.toVerify
-                    : undefined
-                }
               />
             </div>
           );
@@ -1276,7 +1268,7 @@ function OrderCard({
             {t.orders.shipping[order.shipping]}
           </StatePill>
           {order.reconciliationIssue ? (
-            <StatePill tone="warning">{t.orders.toVerify}</StatePill>
+            <StatePill tone="warning">{t.orders.reconciliationTitle}</StatePill>
           ) : null}
         </p>
       </header>

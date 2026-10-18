@@ -2,12 +2,11 @@ import { z } from "zod";
 
 import {
   acquireOrders,
-  defaultRateLimitSeconds,
   historyDays,
-  rateLimitWait,
   storeAccess,
   type ActiveStore,
 } from "./order-acquisition.server";
+import { defaultRateLimitSeconds, rateLimitWait } from "./order-acquisition-context.server";
 import { writableStore } from "./order-import.server";
 import { logFailure } from "../errors";
 import { UpstreamError } from "../integrations/http.server";
@@ -131,7 +130,10 @@ export async function dispatchStoreSyncs(environment: Env, now = new Date()): Pr
       dispatchLimit,
       stale,
     ),
-    environment.DB.prepare("SELECT api_origin FROM ebay_rate_limits WHERE until > ?").bind(at),
+    // Solo le attese dell'origine API: una quota Trading esaurita non ferma le letture.
+    environment.DB.prepare(
+      "SELECT api_origin FROM ebay_rate_limits WHERE until > ? AND instr(api_origin, '#') = 0",
+    ).bind(at),
   ]);
   // Origini API in attesa. Un ambiente non configurato (undefined) si accoda comunque: il
   // consumer registra l'errore e il negozio passa il turno.

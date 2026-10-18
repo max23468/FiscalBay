@@ -99,7 +99,18 @@ export function tradingAck(xml: string): void {
   throw new UpstreamError("rejected", { providerCode });
 }
 
+/** Ogni chiamata Trading ha la propria quota giornaliera: il limite porta il nome della chiamata. */
 async function tradingCall(access: EbayAccess, call: string, fields: string): Promise<string> {
+  try {
+    return await tradingRequest(access, call, fields);
+  } catch (error) {
+    if (error instanceof UpstreamError && error.failure === "rate_limited")
+      throw new UpstreamError("rate_limited", { ...error.details, limit: call });
+    throw error;
+  }
+}
+
+async function tradingRequest(access: EbayAccess, call: string, fields: string): Promise<string> {
   const xml = await upstreamText(
     access.fetcher,
     access.configuration.tradingUrl,
