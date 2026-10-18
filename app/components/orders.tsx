@@ -570,7 +570,7 @@ function MissingOrderHelp({
   const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
   const fieldId = useId();
   return (
-    <div className="grid min-w-0 gap-3">
+    <div className="grid min-w-0 grid-cols-1 gap-3">
       {suggestions.map((suggestion) => {
         const identifier = suggestion.identifier ?? {
           type: "CF" as const,
@@ -658,7 +658,7 @@ function MissingOrderHelp({
       <p className="text-xs text-muted-foreground">{t.settings.templateIntro}</p>
       <Button
         variant="outline"
-        className="w-fit"
+        className="h-auto min-h-9 w-fit max-w-full whitespace-normal"
         disabled={!message.trim()}
         onClick={async () => {
           try {
@@ -1381,7 +1381,7 @@ function FiscalDetail({
   template: string;
 }) {
   return (
-    <>
+    <div className="flex min-w-0 flex-col gap-3">
       <FiscalNotes
         order={order}
         t={t}
@@ -1403,7 +1403,7 @@ function FiscalDetail({
       <p className="text-xs text-muted-foreground">
         {t.order.source(formatDate(order.lastSyncedAt, language))}
       </p>
-    </>
+    </div>
   );
 }
 
