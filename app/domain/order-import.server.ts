@@ -530,11 +530,12 @@ export async function recordOrderObservation(
     const current = new Map(tax.values.map((value) => [taxComparisonKey(value), value]));
     const { results: stored } = await db
       .prepare(
-        `SELECT id, identifier_type AS type, issuing_country AS issuingCountry, value
-         FROM tax_identifiers WHERE order_id = ? AND source = ? AND removed_at IS NULL`,
+        `SELECT identifier_type AS type, issuing_country AS issuingCountry, value
+         FROM tax_identifiers WHERE order_id IN (SELECT value FROM json_each(?))
+           AND source = ? AND removed_at IS NULL`,
       )
-      .bind(orderId, tax.source)
-      .all<{ id: string; type: string; issuingCountry: string | null; value: string }>();
+      .bind(JSON.stringify([orderId, ...absorbed.map((order) => order.id)]), tax.source)
+      .all<{ type: string; issuingCountry: string | null; value: string }>();
     const known = new Set(stored.map(taxComparisonKey));
     const additions: D1PreparedStatement[] = [];
     for (const [key, value] of current) {
@@ -573,7 +574,8 @@ export async function recordOrderObservation(
           .prepare(
             `UPDATE tax_identifiers SET removed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
               WHERE order_id = ?4 AND source = ?5 AND removed_at IS NULL
-                AND id IN (SELECT value FROM json_each(?6))
+                AND json_array(identifier_type, issuing_country, value) IN
+                  (SELECT value FROM json_each(?6))
                 AND ${writableStore}`,
           )
           .bind(
@@ -581,7 +583,12 @@ export async function recordOrderObservation(
             null,
             orderId,
             tax.source,
-            JSON.stringify(removed.map((value) => value.id)),
+            // Le copie assorbite hanno nuovi ID, ma conservano tipo, Paese e valore originali.
+            JSON.stringify(
+              removed.map((value) =>
+                JSON.stringify([value.type, value.issuingCountry, value.value]),
+              ),
+            ),
           ),
       );
     }

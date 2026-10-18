@@ -1948,6 +1948,43 @@ test("pannello di dettaglio scorrevole con chiusura raggiungibile", async ({ pag
   await expect(page).toHaveURL(/\/anteprima\/ordini$/u);
 });
 
+test("messaggio per l'acquirente a larghezza piena e fonte in fondo al dettaglio", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const language of ["it", "en"]) {
+    const prefix = language === "it" ? "" : "/en";
+    await open(page, `${prefix}/anteprima/ordini/ord-05`, "ordinario");
+    const dialog = page.getByRole("dialog");
+    const source = dialog.getByText(language === "it" ? /^Fonte: eBay/ : /^Source: eBay/);
+    const copy = dialog.getByRole("button", {
+      name: language === "it" ? "Copia messaggio per l’acquirente" : "Copy message for the buyer",
+    });
+    const message = dialog.getByRole("textbox");
+    for (const width of [320, 390, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(async () => {
+        const boxes = await Promise.all([
+          source.boundingBox(),
+          copy.boundingBox(),
+          message.boundingBox(),
+        ]);
+        expect(boxes.every(Boolean)).toBe(true);
+        const [provenance, button, textarea] = boxes as Array<{
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+        }>;
+        expect(provenance!.y).toBeGreaterThanOrEqual(button!.y + button!.height);
+        expect(Math.abs(provenance!.x - textarea!.x)).toBeLessThan(2);
+        expect(Math.abs(provenance!.width - textarea!.width)).toBeLessThan(2);
+      }).toPass();
+      expect(await noPageOverflow(page)).toBe(true);
+    }
+  }
+});
+
 test("geometria dei codici e delle colonne fiscali da 320 a 1280 px", async ({ page }) => {
   await open(page, "/anteprima/ordini");
   for (const width of [320, 375, 640, 768, 1024, 1280]) {

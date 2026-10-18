@@ -2293,6 +2293,75 @@ describe("modello ordini", () => {
     ]);
   });
 
+  it.each([false, true])(
+    "sostituisce i CF dei provvisori assorbiti con il valore corrente, lettura completa: %s",
+    async (complete) => {
+      for (const [key, value] of [
+        ["k1", "CF-PRECEDENTE-A"],
+        ["k2", "CF-PRECEDENTE-B"],
+      ] as const) {
+        await recordOrderObservation(
+          env.DB,
+          target(),
+          provisional({
+            externalOrderId: `P-${key}`,
+            items: [line(key)],
+            taxIdentifiers: {
+              source: "ebay_trading_get_orders",
+              complete: false,
+              values: [{ type: "CODICE_FISCALE", issuingCountry: "IT", value }],
+            },
+          }),
+        );
+      }
+      const result = await recordOrderObservation(
+        env.DB,
+        target(),
+        observation({
+          source: "trading",
+          taxIdentifiers: {
+            source: "ebay_trading_get_orders",
+            complete,
+            values: [{ type: "CODICE_FISCALE", issuingCountry: "IT", value: "CF-CORRENTE" }],
+          },
+        }),
+      );
+      const id = (result as { orderId: string }).orderId;
+      expect(
+        (
+          await env.DB.prepare(
+            "SELECT value FROM tax_identifiers WHERE order_id = ? AND removed_at IS NULL",
+          )
+            .bind(id)
+            .all()
+        ).results,
+      ).toEqual([{ value: "CF-CORRENTE" }]);
+      expect(
+        (
+          await env.DB.prepare(
+            "SELECT value FROM tax_identifiers WHERE order_id = ? AND removed_at IS NOT NULL ORDER BY value",
+          )
+            .bind(id)
+            .all()
+        ).results,
+      ).toEqual([{ value: "CF-PRECEDENTE-A" }, { value: "CF-PRECEDENTE-B" }]);
+      expect(
+        await recordOrderObservation(
+          env.DB,
+          target(),
+          observation({
+            source: "trading",
+            taxIdentifiers: {
+              source: "ebay_trading_get_orders",
+              complete,
+              values: [{ type: "CODICE_FISCALE", issuingCountry: "IT", value: "CF-CORRENTE" }],
+            },
+          }),
+        ),
+      ).toMatchObject({ taxChanges: 0 });
+    },
+  );
+
   it("consolida più acquisti, conserva grant e quota anche al replay e con righe rinominate", async () => {
     const drafts: string[] = [];
     for (const key of ["k1", "k2"]) {
@@ -8021,6 +8090,32 @@ describe("client eBay e normalizzazione", () => {
       ).toEqual({ detail_for: null, detail_attempts: 0 });
     });
 
+    it.each([
+      [429, "rate_limited"],
+      [401, "credentials"],
+    ] as const)(
+      "ferma l'acquisizione anche quando GetItem risponde %s",
+      async (status, failure) => {
+        const provider = ebay({
+          getItem: () => new Response(null, { status, headers: { "Retry-After": "3600" } }),
+        });
+        await expect(acquire(provider)).rejects.toMatchObject({ failure });
+        expect(calls(provider, "GetOrders")).toBe(0);
+        if (status === 429) {
+          expect(
+            await env.DB.prepare(
+              "SELECT until FROM ebay_rate_limits WHERE api_origin = 'https://api.ebay.com'",
+            ).first(),
+          ).toEqual({ until: "2026-09-02T01:00:00.000Z" });
+          const next = ebay();
+          await expect(acquire(next, "2026-09-02T00:10:00.000Z")).rejects.toMatchObject({
+            failure: "rate_limited",
+          });
+          expect(next).not.toHaveBeenCalled();
+        }
+      },
+    );
+
     it("distingue gli errori del dettaglio che fermano l'esecuzione da quelli dell'ordine", async () => {
       const detail = () =>
         env.DB.prepare(
@@ -9015,6 +9110,53 @@ describe("client eBay e normalizzazione", () => {
           expect(await remaining()).toBe(1);
           // Un turno concluso non si riaccoda nello stesso giorno.
           expect(await dispatchTasks(cron, minutes(180))).toEqual(["token_refresh"]);
+        });
+
+        it("serializza due consegne dello stesso compito e riprende una lease scaduta", async () => {
+          await dispatchTasks(cron, minutes(0));
+          const body = { task: "maintenance", slot: minutes(0).toISOString() };
+          let entered!: () => void;
+          let release!: () => void;
+          const started = new Promise<void>((resolve) => {
+            entered = resolve;
+          });
+          const blocked = new Promise<void>((resolve) => {
+            release = resolve;
+          });
+          const original = env.DB.batch.bind(env.DB);
+          const batch = vi.spyOn(env.DB, "batch").mockImplementation(async (statements) => {
+            entered();
+            await blocked;
+            return original(statements);
+          });
+          const first = queueMessage(body);
+          const running = consumeTask(first, env, fetch, minutes(1));
+          try {
+            await started;
+            const duplicate = queueMessage(body);
+            await consumeTask(duplicate, env, fetch, minutes(1));
+            expect(duplicate.retry).toHaveBeenCalledWith({ delaySeconds: 60 });
+            expect(duplicate.ack).not.toHaveBeenCalled();
+            expect(batch).toHaveBeenCalledOnce();
+          } finally {
+            release();
+            await running;
+            batch.mockRestore();
+          }
+          expect(first.ack).toHaveBeenCalledOnce();
+          await env.DB.prepare(
+            "UPDATE scheduled_tasks SET done_at = NULL, lease = 'interrupted', locked_until = ? WHERE task = 'maintenance'",
+          )
+            .bind(minutes(2).toISOString())
+            .run();
+          const resumed = queueMessage(body);
+          await consumeTask(resumed, env, fetch, minutes(3));
+          expect(resumed.ack).toHaveBeenCalledOnce();
+          expect(
+            await env.DB.prepare(
+              "SELECT lease, locked_until, done_at FROM scheduled_tasks WHERE task = 'maintenance'",
+            ).first(),
+          ).toEqual({ lease: null, locked_until: null, done_at: minutes(3).toISOString() });
         });
 
         it("fra trigger sovrapposti uno solo accoda il turno di un compito", async () => {

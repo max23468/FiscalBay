@@ -21,6 +21,7 @@ import { recoverWebhookIngress } from "../integrations/webhooks.server";
 
 const minute = 60_000;
 const staleMilliseconds = 60 * minute;
+const leaseMilliseconds = 15 * minute;
 
 const tasks = {
   // Sessioni, link, ricevute e altri dati tecnici scaduti: la pulizia fisica resta entro un
@@ -68,10 +69,11 @@ export async function dispatchTasks(environment: Env, now: Date): Promise<Schedu
       environment.DB.prepare(
         `INSERT INTO scheduled_tasks (task, slot, queued_at) VALUES (?1, ?2, ?3)
          ON CONFLICT(task) DO UPDATE SET slot = excluded.slot, queued_at = excluded.queued_at,
-                                         done_at = NULL
-         WHERE scheduled_tasks.slot < excluded.slot
+                                         done_at = NULL, lease = NULL, locked_until = NULL
+         WHERE (scheduled_tasks.locked_until IS NULL OR scheduled_tasks.locked_until <= ?3)
+           AND (scheduled_tasks.slot < excluded.slot
             OR (scheduled_tasks.slot = excluded.slot AND scheduled_tasks.done_at IS NULL
-                AND (scheduled_tasks.queued_at IS NULL OR scheduled_tasks.queued_at <= ?4))
+                AND (scheduled_tasks.queued_at IS NULL OR scheduled_tasks.queued_at <= ?4)))
          RETURNING task, slot`,
       ).bind(task, taskSlot(task, now), at, stale),
     ),
@@ -105,24 +107,40 @@ export async function consumeTask(
   now = new Date(),
 ): Promise<void> {
   const { task, slot } = taskMessageSchema.parse(message.body);
+  const at = now.toISOString();
+  const lease = crypto.randomUUID();
   const pending = await environment.DB.prepare(
-    "SELECT 1 FROM scheduled_tasks WHERE task = ? AND slot = ? AND done_at IS NULL",
+    `UPDATE scheduled_tasks SET lease = ?3, locked_until = ?4
+      WHERE task = ?1 AND slot = ?2 AND done_at IS NULL
+        AND (locked_until IS NULL OR locked_until <= ?5) RETURNING task`,
   )
-    .bind(task, slot)
+    .bind(task, slot, lease, new Date(now.getTime() + leaseMilliseconds).toISOString(), at)
     .first();
   if (!pending) {
-    message.ack();
+    const busy = await environment.DB.prepare(
+      "SELECT 1 FROM scheduled_tasks WHERE task = ? AND slot = ? AND done_at IS NULL",
+    )
+      .bind(task, slot)
+      .first();
+    if (busy) message.retry({ delaySeconds: 60 });
+    else message.ack();
     return;
   }
   try {
     await tasks[task].run(environment, fetcher, now);
     await environment.DB.prepare(
-      "UPDATE scheduled_tasks SET done_at = ? WHERE task = ? AND slot = ? AND done_at IS NULL",
+      `UPDATE scheduled_tasks SET done_at = ?, lease = NULL, locked_until = NULL
+        WHERE task = ? AND slot = ? AND lease = ? AND done_at IS NULL`,
     )
-      .bind(now.toISOString(), task, slot)
+      .bind(at, task, slot, lease)
       .run();
     message.ack();
   } catch (error) {
+    await environment.DB.prepare(
+      "UPDATE scheduled_tasks SET lease = NULL, locked_until = NULL WHERE task = ? AND slot = ? AND lease = ?",
+    )
+      .bind(task, slot, lease)
+      .run();
     logFailure({ error, operation: task });
     message.retry({ delaySeconds: Math.min(3600, 30 * 2 ** (message.attempts - 1)) });
   }

@@ -159,11 +159,18 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
     return false;
   const images = new Map(
     await Promise.all(
-      listings.map(
-        async (id) =>
-          // Stryker disable next-line ArrowFunction: null e undefined lasciano la riga senza immagine.
-          [id, await readItemImage(ctx.access, id).catch(() => null)] as const,
-      ),
+      listings.map(async (id) => {
+        const image = await readItemImage(ctx.access, id).catch((error: unknown) => {
+          // Un'immagine non disponibile non blocca l'ordine; credenziali e quota fermano le letture.
+          if (
+            error instanceof UpstreamError &&
+            (error.failure === "credentials" || error.failure === "rate_limited")
+          )
+            throw error;
+          return null;
+        });
+        return [id, image] as const;
+      }),
     ),
   );
   observation = {
