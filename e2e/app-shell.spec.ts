@@ -259,7 +259,10 @@ test("con gli sblocchi esauriti gli ordini restano consultabili", async ({ page 
   );
 });
 
-test("la ricerca della top bar suggerisce e apre l'elenco filtrato", async ({ page }) => {
+test("la ricerca della top bar suggerisce e apre l'elenco filtrato", async ({
+  page,
+  browserName,
+}) => {
   await open(page);
   const search = page.getByRole("searchbox", { name: "Cerca ordini" });
   await search.fill("carburatore");
@@ -270,6 +273,21 @@ test("la ricerca della top bar suggerisce e apre l'elenco filtrato", async ({ pa
   await expect(
     page.getByRole("region", { name: "Elenco ordini" }).getByRole("article"),
   ).toHaveCount(1);
+  await search.fill("");
+  await search.fill("carburatore");
+  await suggestion.click();
+  await expect(page).toHaveURL(/\/ordini\/ord-\d+\?q=carburatore$/u);
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await search.fill("Conti");
+  const keyboardSuggestion = page.getByRole("search").getByRole("link", { name: /Conti/ });
+  await expect(keyboardSuggestion).toBeVisible();
+  await search.press(browserName === "webkit" ? "Alt+Tab" : "Tab");
+  await expect(keyboardSuggestion).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/ordini\/ord-\d+\?q=Conti$/u);
+  await expect(page.getByRole("dialog")).toContainText("Conti");
 });
 
 test("negozi con problema e conferma forte dell'eliminazione", async ({ page }) => {

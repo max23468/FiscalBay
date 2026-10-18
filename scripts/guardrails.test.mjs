@@ -8,7 +8,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { budgetKiB } from "./check-bundle-size.mjs";
 import { coverageSummary } from "./coverage-report.mjs";
 import { benchmarkSummary, comparableDependencies } from "./benchmark.mjs";
-import { shardTests, assertCandidateReports } from "./browser-tests.mjs";
+import { shardTests, listedTestIds, assertCandidateReports } from "./browser-tests.mjs";
 import {
   changedLines,
   classifyFile,
@@ -31,7 +31,7 @@ import {
   retryReadback,
 } from "./release.mjs";
 import { releaseNotes, assertBrowserEvidence } from "./release-notes.mjs";
-import { knownPagePath } from "../e2e/page-cases.ts";
+import { expectedPageError, knownPagePath } from "../e2e/page-cases.ts";
 import {
   checkReceipt,
   evaluate,
@@ -622,6 +622,23 @@ describe("classificazione dei file modificati", () => {
 });
 
 describe("catalogo delle pagine", () => {
+  it("ignora errori HTTP attesi solo del documento corrente o dei suoi dati", () => {
+    const page = new URL("https://test.example.invalid/non-esiste?x=1");
+    const message = "Failed to load resource: the server responded with a status of 404";
+    for (const resource of [page.href, `${page.origin}/non-esiste.data?x=2`])
+      assert.equal(expectedPageError(message, resource, 404, page), true);
+    for (const [text, resource, status] of [
+      [message, page.href, 200],
+      [message, "https://external.example.invalid/non-esiste", 404],
+      [message, `${page.origin}/non-esiste.data-other`, 404],
+      [message, "", 404],
+      [message, "not a URL", 404],
+      ["Failed to load resource: status of 500", page.href, 404],
+      [message, page.href, 500],
+    ])
+      assert.equal(expectedPageError(text, resource, status, page), false);
+  });
+
   it("rifiuta collegamenti a route assenti ma ammette parametri opzionali e endpoint", () => {
     for (const pathname of [
       "/",
@@ -1676,8 +1693,39 @@ describe("coordinamento e provenienza della pubblicazione", () => {
         },
       })),
     );
-    assert.doesNotThrow(() => assertCandidateReports(parts, "commit"));
-    assert.throws(() => assertCandidateReports(parts.slice(1), "commit"));
+    const expected = Object.fromEntries(
+      ["source", "production"].map((kind) => [
+        kind,
+        [1, 2, 3, 4].map((shard) => `${kind}-${shard}`),
+      ]),
+    );
+    assert.doesNotThrow(() => assertCandidateReports(parts, "commit", expected));
+    assert.throws(
+      () =>
+        assertCandidateReports(parts, "commit", {
+          ...expected,
+          source: [...expected.source, "source-omitted"],
+        }),
+      /inventario/u,
+    );
+    assert.throws(
+      () =>
+        assertCandidateReports(parts, "commit", {
+          ...expected,
+          production: expected.production.slice(1),
+        }),
+      /inventario/u,
+    );
+    assert.throws(
+      () =>
+        assertCandidateReports(parts, "commit", {
+          ...expected,
+          production: ["production-unknown", ...expected.production.slice(1)],
+        }),
+      /inventario/u,
+    );
+    assert.throws(() => assertCandidateReports(parts, "commit"), /inventario/u);
+    assert.throws(() => assertCandidateReports(parts.slice(1), "commit", expected));
     for (const change of [
       { sha: "other" },
       { partial: true },
@@ -1693,12 +1741,13 @@ describe("coordinamento e provenienza della pubblicazione", () => {
         ...parts.slice(0, 7),
         { ...parts[7], report: { ...parts[7].report, ...change } },
       ];
-      assert.throws(() => assertCandidateReports(invalid, "commit"));
+      assert.throws(() => assertCandidateReports(invalid, "commit", expected));
     }
     assert.throws(() =>
       assertCandidateReports(
         [...parts, { ...parts[0], attempt: 2, report: { ...parts[0].report, status: "failed" } }],
         "commit",
+        expected,
       ),
     );
     assert.throws(() =>
@@ -1709,6 +1758,7 @@ describe("coordinamento e provenienza della pubblicazione", () => {
             : part,
         ),
         "commit",
+        expected,
       ),
     );
   });
@@ -1893,6 +1943,33 @@ describe("copia locale dell'artefatto", () => {
 });
 
 describe("prove browser divise fra macchine", () => {
+  it("raccoglie ogni scenario funzionale in Chromium e WebKit", () => {
+    const result = spawnSync(
+      "pnpm",
+      ["exec", "playwright", "test", "--list", "--reporter", "json"],
+      {
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+        env: { ...process.env, E2E_BASE_URL: "", E2E_PRODUCTION: "", E2E_MATRIX: "single" },
+      },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    const scenarios = new Map();
+    const visit = (suite) => {
+      for (const spec of suite.specs ?? []) {
+        const key = `${spec.file}:${spec.line}:${spec.column}:${spec.title}`;
+        const projects = scenarios.get(key) ?? new Set();
+        for (const test of spec.tests) projects.add(test.projectName);
+        scenarios.set(key, projects);
+      }
+      for (const child of suite.suites ?? []) visit(child);
+    };
+    visit(JSON.parse(result.stdout));
+    assert.ok(scenarios.size > 0);
+    for (const [scenario, projects] of scenarios)
+      assert.deepEqual([...projects].sort(), ["chromium", "webkit"], scenario);
+  });
+
   const listing = {
     suites: [
       {
@@ -1923,6 +2000,20 @@ describe("prove browser divise fra macchine", () => {
       "[webkit] › lente.spec.ts › gruppo › d",
       "[chromium] › rapide.spec.ts › f",
     ]);
+  });
+
+  it("ricava le identità dall'inventario JSON Playwright anche nei gruppi annidati", () => {
+    assert.deepEqual(
+      listedTestIds({
+        suites: [
+          {
+            specs: [{ id: "chromium-a", tests: [{ projectName: "chromium" }] }],
+            suites: [{ specs: [{ id: "webkit-b", tests: [{ projectName: "webkit" }] }] }],
+          },
+        ],
+      }),
+      ["chromium-a", "webkit-b"],
+    );
   });
 });
 

@@ -22,8 +22,19 @@ export function shardTests(listing, current, total) {
   return tests.filter((_, index) => index % total === current - 1);
 }
 
-export function assertCandidateReports(parts, sha) {
+export function listedTestIds(listing) {
+  const visit = (suite) => [
+    ...(suite.specs ?? []).flatMap((spec) => spec.tests.map(() => spec.id)),
+    ...(suite.suites ?? []).flatMap(visit),
+  ];
+  return visit(listing);
+}
+
+export function assertCandidateReports(parts, sha, expected) {
   for (const kind of ["source", "production"]) {
+    const inventory = new Set(expected?.[kind]);
+    if (!inventory.size || inventory.has(undefined) || inventory.size !== expected[kind].length)
+      throw new Error(`Qualifica browser senza inventario valido: ${kind}.`);
     const ids = new Set();
     for (let shard = 1; shard <= 4; shard++) {
       const part = parts
@@ -59,6 +70,8 @@ export function assertCandidateReports(parts, sha) {
       )
         throw new Error("Conteggi del collaudo incoerenti con le prove.");
     }
+    if (ids.size !== inventory.size || [...ids].some((id) => !inventory.has(id)))
+      throw new Error(`Qualifica browser diversa dall'inventario atteso: ${kind}.`);
   }
 }
 
@@ -90,7 +103,43 @@ function main() {
         : [];
     });
     const sha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-    assertCandidateReports(parts, sha);
+    const expected = Object.fromEntries(
+      ["source", "production"].map((kind) => [
+        kind,
+        listedTestIds(
+          JSON.parse(
+            execFileSync(
+              "pnpm",
+              [
+                "exec",
+                "playwright",
+                "test",
+                ...(kind === "production" ? ["e2e/pages.spec.ts"] : []),
+                "--list",
+                "--reporter",
+                "json",
+                "--project",
+                "chromium",
+                "--project",
+                "webkit",
+              ],
+              {
+                encoding: "utf8",
+                maxBuffer: 64 * 1024 * 1024,
+                stdio: ["ignore", "pipe", "inherit"],
+                env: {
+                  ...process.env,
+                  E2E_BASE_URL: "",
+                  E2E_MATRIX: "full",
+                  E2E_PRODUCTION: kind === "production" ? "1" : "",
+                },
+              },
+            ),
+          ),
+        ),
+      ]),
+    );
+    assertCandidateReports(parts, sha, expected);
     console.log("Qualifica completa: otto partizioni browser coerenti, senza prove parziali.");
     return;
   }

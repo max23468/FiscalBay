@@ -15,6 +15,16 @@ export interface PageCase {
   remote?: boolean;
 }
 
+export function expectedPageError(text: string, resource: string, status: number, page: URL) {
+  if (status < 400 || !text.includes(`${status}`) || !URL.canParse(resource)) return false;
+  const location = new URL(resource);
+  const dataPath = `${page.pathname.replace(/\/$/u, "")}.data`;
+  return (
+    location.origin === page.origin &&
+    (location.pathname === page.pathname || location.pathname === dataPath)
+  );
+}
+
 export function knownPagePath(pathname: string) {
   return pageCases.some(({ pattern }) => {
     if (pattern === "*") return false;

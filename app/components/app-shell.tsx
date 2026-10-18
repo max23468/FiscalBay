@@ -422,6 +422,10 @@ function GlobalSearch({
                 <li key={item.id}>
                   <Link
                     to={`${ordersHref}/${item.id}?q=${encodeURIComponent(trimmed)}`}
+                    // Safari sfoca il campo prima del click senza focalizzare il link.
+                    onMouseDown={(event) => {
+                      if (event.button === 0) event.preventDefault();
+                    }}
                     onClick={() => {
                       setOpen(false);
                       onNavigate?.();
@@ -441,6 +445,9 @@ function GlobalSearch({
           {results.total > 0 ? (
             <Link
               to={allHref}
+              onMouseDown={(event) => {
+                if (event.button === 0) event.preventDefault();
+              }}
               onClick={() => {
                 setOpen(false);
                 onNavigate?.();

@@ -19,7 +19,7 @@
     "test:coverage": "vitest run --coverage && node scripts/coverage-report.mjs",
     "quality:knip": "react-router typegen && knip",
     "benchmark": "node scripts/benchmark.mjs",
-    "test:e2e": "playwright test --project chromium",
+    "test:e2e": "playwright test",
     "test:e2e:smoke": "E2E_BASE_URL=https://test.fiscalbay.it playwright test --project chromium --grep @smoke",
     "test:pages": "E2E_MATRIX=full node scripts/browser-tests.mjs --pages --browsers chromium,webkit",
     "test:mutation": "node scripts/mutation.mjs",
