@@ -246,11 +246,8 @@ describe("acquisizione con il client", () => {
     expect(await listVisibleOrders(env.DB, "u-a")).toHaveLength(1);
   });
 
-  it.each([
-    ["931", "credentials"],
-    ["518", "rate_limited"],
-  ])("ferma l'esecuzione per l'errore Trading %s", async (code, failure) => {
-    const provider = ebay({
+  const tradingFailure = (code: string) =>
+    ebay({
       orders: [],
       fail: (_, init) =>
         String(init?.body).includes("<ModTimeFrom>")
@@ -259,7 +256,59 @@ describe("acquisizione con il client", () => {
             )
           : undefined,
     });
-    await expect(acquire(provider)).rejects.toMatchObject({ failure });
+  const tradingPasses = (fetcher: ReturnType<typeof ebay>) =>
+    fetcher.mock.calls.filter(([, init]) => String(init?.body).includes("<ModTimeFrom>")).length;
+
+  it("ferma l'esecuzione per le credenziali rifiutate da Trading", async () => {
+    await expect(acquire(tradingFailure("931"))).rejects.toMatchObject({
+      failure: "credentials",
+    });
+  });
+
+  it("con la quota GetOrders esaurita sospende soltanto Trading", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const limited = tradingFailure("518");
+    expect(await acquire(limited)).toBe("budget");
+    expect(await syncState()).toMatchObject({ last_success_at: "2026-09-02T00:00:00.000Z" });
+    expect(
+      await env.DB.prepare("SELECT api_origin, until FROM ebay_rate_limits").all(),
+    ).toMatchObject({
+      results: [
+        { api_origin: "https://api.ebay.com#GetOrders", until: "2026-09-02T00:15:00.000Z" },
+      ],
+    });
+    // Anche una richiesta manuale attende la quota Trading, mentre Fulfillment prosegue.
+    await env.DB.prepare("UPDATE sync_state SET requested_at = '2026-09-02T00:09:00.000Z'").run();
+    const next = ebay({ orders: [] });
+    expect(await acquire(next, "2026-09-02T00:10:00.000Z")).toBe("budget");
+    expect(tradingPasses(next)).toBe(0);
+    expect(next).toHaveBeenCalled();
+    expect(await syncState()).toMatchObject({ last_success_at: "2026-09-02T00:10:00.000Z" });
+    logged.mockRestore();
+  });
+
+  it("legge Trading ogni due ore, subito al collegamento e su richiesta manuale", async () => {
+    const page = () =>
+      new Response(
+        `<GetOrdersResponse><Ack>Success</Ack><PaginationResult><TotalNumberOfEntries>0</TotalNumberOfEntries></PaginationResult>` +
+          `<HasMoreOrders>false</HasMoreOrders><OrderArray></OrderArray></GetOrdersResponse>`,
+      );
+    const provider = ebay({
+      orders: [],
+      fail: (_, init) => (String(init?.body).includes("<ModTimeFrom>") ? page() : undefined),
+    });
+    expect(await acquire(provider)).toBe("complete");
+    expect(tradingPasses(provider)).toBe(1);
+    expect(await acquire(provider, "2026-09-02T01:00:00.000Z")).toBe("complete");
+    expect(tradingPasses(provider)).toBe(1);
+    // A metà intervallo la richiesta manuale legge Trading subito e riparte da lì.
+    await env.DB.prepare("UPDATE sync_state SET requested_at = '2026-09-02T01:20:00.000Z'").run();
+    expect(await acquire(provider, "2026-09-02T01:30:00.000Z")).toBe("complete");
+    expect(tradingPasses(provider)).toBe(2);
+    expect(await acquire(provider, "2026-09-02T03:29:59.999Z")).toBe("complete");
+    expect(tradingPasses(provider)).toBe(2);
+    expect(await acquire(provider, "2026-09-02T03:30:00.000Z")).toBe("complete");
+    expect(tradingPasses(provider)).toBe(3);
   });
 
   it("legge Trading nella finestra dello storico, salta l'ordine illeggibile e ricomincia se il totale cambia", async () => {
@@ -335,7 +384,7 @@ describe("acquisizione con il client", () => {
       () => tradingPage(3, true, [tradingOrder("LIMITE", "2026-08-03T00:00:00.001Z", ["2"])]),
       () => tradingPage(3, false, [tradingOrder("VALIDO", "2026-09-01T10:00:00Z", ["3"])]),
     ];
-    expect(await acquire(provider, "2026-09-02T01:00:00.000Z")).toBe("complete");
+    expect(await acquire(provider, "2026-09-02T02:00:00.000Z")).toBe("complete");
     expect(requested.slice(2).map((body) => field(body, "PageNumber"))).toEqual(["1", "2", "1"]);
     expect(field(requested[2]!, "ModTimeFrom")).toBe("2026-09-01T23:45:00.000Z");
 
@@ -343,7 +392,7 @@ describe("acquisizione con il client", () => {
     responses = [
       () => tradingPage(2, true, [tradingOrder("VALIDO", "2026-09-01T10:00:00Z", ["3"])]),
     ];
-    expect(await acquire(provider, "2026-09-02T02:00:00.000Z", { calls: 2, pages: 2 })).toBe(
+    expect(await acquire(provider, "2026-09-02T04:00:00.000Z", { calls: 2, pages: 2 })).toBe(
       "budget",
     );
 
@@ -764,13 +813,16 @@ describe("acquisizione con il client", () => {
       }),
     );
     const fetcher = ebay({ orders });
-    expect(await acquire(fetcher, "2026-09-02T00:30:00.000Z", { ...small })).toBe("budget");
-    // Prima i recenti, poi una sola pagina dello storico: il nuovo ordine non attende lo storico.
+    expect(await acquire(fetcher, "2026-09-02T00:30:00.000Z", { calls: 2, pages: 2 })).toBe(
+      "budget",
+    );
+    // Prima i recenti, poi una sola pagina dello storico: il nuovo ordine non attende lo
+    // storico. Trading, letto da meno di due ore, non usa il budget.
     expect(
       fetcher.mock.calls.map(
         ([input]) => new URL(String(input)).searchParams.get("filter")?.split(":")[0],
       ),
-    ).toEqual(["lastmodifieddate", undefined, "creationdate"]);
+    ).toEqual(["lastmodifieddate", "creationdate"]);
     expect(
       await env.DB.prepare(
         "SELECT 1 AS found FROM orders WHERE ebay_order_id = '12-nuovo'",
@@ -1029,27 +1081,58 @@ describe("acquisizione con il client", () => {
     ).toEqual({ detail_for: null, detail_attempts: 0 });
   });
 
-  it.each([
-    [429, "rate_limited"],
-    [401, "credentials"],
-  ] as const)("ferma l'acquisizione anche quando GetItem risponde %s", async (status, failure) => {
-    const provider = ebay({
-      getItem: () => new Response(null, { status, headers: { "Retry-After": "3600" } }),
-    });
-    await expect(acquire(provider)).rejects.toMatchObject({ failure });
+  it("ferma l'acquisizione quando GetItem rifiuta le credenziali", async () => {
+    const provider = ebay({ getItem: () => new Response(null, { status: 401 }) });
+    await expect(acquire(provider)).rejects.toMatchObject({ failure: "credentials" });
     expect(calls(provider, "GetOrders")).toBe(0);
-    if (status === 429) {
-      expect(
-        await env.DB.prepare(
-          "SELECT until FROM ebay_rate_limits WHERE api_origin = 'https://api.ebay.com'",
-        ).first(),
-      ).toEqual({ until: "2026-09-02T01:00:00.000Z" });
-      const next = ebay();
-      await expect(acquire(next, "2026-09-02T00:10:00.000Z")).rejects.toMatchObject({
-        failure: "rate_limited",
-      });
-      expect(next).not.toHaveBeenCalled();
-    }
+  });
+
+  it("con la quota GetOrders già in attesa rimanda la lettura fiscale senza chiamare Trading", async () => {
+    const detail = () =>
+      env.DB.prepare(
+        "SELECT detail_for, detail_error, detail_attempts FROM order_source_refs",
+      ).first();
+    await env.DB.prepare(
+      "INSERT INTO ebay_rate_limits (api_origin, until) VALUES ('https://api.ebay.com#GetOrders', ?)",
+    )
+      .bind("2026-09-02T00:15:00.000Z")
+      .run();
+    const limited = ebay();
+    expect(await acquire(limited)).toBe("budget");
+    expect(limited.mock.calls.some(([, init]) => String(init?.body).includes("GetOrders"))).toBe(
+      false,
+    );
+    expect(await detail()).toEqual({
+      detail_for: null,
+      detail_error: "rate_limited",
+      detail_attempts: 0,
+    });
+    // Alla scadenza dell'attesa la lettura fiscale riparte e chiude la versione.
+    const resumed = ebay();
+    expect(await acquire(resumed, "2026-09-02T00:15:00.000Z")).toBe("complete");
+    expect(calls(resumed, "GetOrders")).toBe(1);
+    expect(await detail()).toMatchObject({ detail_error: null, detail_attempts: 0 });
+    expect((await detail())!.detail_for).not.toBeNull();
+  });
+
+  it("con la quota GetItem esaurita lascia le righe senza immagine e prosegue", async () => {
+    const provider = ebay({
+      getItem: () => new Response(null, { status: 429, headers: { "Retry-After": "3600" } }),
+    });
+    expect(await acquire(provider)).toBe("complete");
+    expect(
+      await env.DB.prepare("SELECT api_origin, until FROM ebay_rate_limits").all(),
+    ).toMatchObject({
+      results: [{ api_origin: "https://api.ebay.com#GetItem", until: "2026-09-02T01:00:00.000Z" }],
+    });
+    expect(await count("SELECT COUNT(*) AS total FROM order_items WHERE image_url IS NULL")).toBe(
+      await count("SELECT COUNT(*) AS total FROM order_items"),
+    );
+    // Durante l'attesa una nuova versione dell'ordine non richiama GetItem.
+    const next = ebay({ orders: [order({ lastModifiedDate: "2026-09-02T00:05:00.000Z" })] });
+    expect(await acquire(next, "2026-09-02T00:10:00.000Z")).toBe("complete");
+    expect(next).toHaveBeenCalled();
+    expect(calls(next, "GetItem")).toBe(0);
   });
 
   it("distingue gli errori del dettaglio che fermano l'esecuzione da quelli dell'ordine", async () => {
@@ -1061,7 +1144,6 @@ describe("acquisizione con il client", () => {
     for (const [status, failure] of [
       [503, "unavailable"],
       [401, "credentials"],
-      [429, "rate_limited"],
     ] as const) {
       await expect(
         acquire(ebay({ trading: () => new Response(null, { status }) })),
@@ -1069,11 +1151,18 @@ describe("acquisizione con il client", () => {
       expect(await detail()).toEqual({ ...pending, detail_error: failure });
       expect((await listVisibleOrders(env.DB, "u-a"))[0]?.taxVerification).toBe("error");
     }
-    // Il limite vale per tutto il keyset: senza Retry-After si attende il valore prudente.
+    // La quota GetOrders esaurita lascia il dettaglio in attesa senza consumare tentativi né
+    // fermare la lettura; senza Retry-After si attende il valore prudente.
+    expect(await acquire(ebay({ trading: () => new Response(null, { status: 429 }) }))).toBe(
+      "complete",
+    );
+    expect(await detail()).toEqual({ ...pending, detail_error: "rate_limited" });
     expect(
       await env.DB.prepare("SELECT api_origin, until FROM ebay_rate_limits").all(),
     ).toMatchObject({
-      results: [{ api_origin: "https://api.ebay.com", until: "2026-09-02T00:15:00.000Z" }],
+      results: [
+        { api_origin: "https://api.ebay.com#GetOrders", until: "2026-09-02T00:15:00.000Z" },
+      ],
     });
     await env.DB.prepare("DELETE FROM ebay_rate_limits").run();
 
@@ -1580,8 +1669,10 @@ describe("acquisizione con il client", () => {
             grantedAt,
           )
           .run();
+      // La quota esaurita di una sola chiamata Trading non ferma le letture dell'origine.
       await env.DB.prepare(
-        "INSERT INTO ebay_rate_limits (api_origin, until) VALUES ('https://api.ebay.com', ?)",
+        `INSERT INTO ebay_rate_limits (api_origin, until)
+         VALUES ('https://api.ebay.com', ?1), ('https://api.sandbox.ebay.com#GetOrders', ?1)`,
       )
         .bind(minutes(15).toISOString())
         .run();

@@ -36,7 +36,8 @@ export function TaxCode({
   reveal?: boolean;
   size?: keyof typeof sizes;
   className?: string;
-  warning?: string;
+  /** Anomalia formale: riquadro e copia ambra; la spiegazione sta nella nota sotto il codice. */
+  warning?: boolean;
 }) {
   if (value === null) {
     return (
@@ -77,10 +78,7 @@ export function TaxCode({
       >
         {value}
       </span>
-      <CopyButton value={value} labels={labels} warning={!!warning} />
-      {warning ? (
-        <span className="basis-full text-xs font-medium text-warning">{warning}</span>
-      ) : null}
+      <CopyButton value={value} labels={labels} warning={warning} />
     </span>
   );
 }
@@ -88,11 +86,11 @@ export function TaxCode({
 function CopyButton({
   value,
   labels,
-  warning,
+  warning = false,
 }: {
   value: string;
   labels: Labels;
-  warning: boolean;
+  warning?: boolean;
 }) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);

@@ -200,7 +200,7 @@ describe("client eBay e normalizzazione", () => {
     for (const [body, expected] of [
       [tradingError("931"), { failure: "credentials", providerCode: "931" }],
       [tradingError("21916984"), { failure: "credentials", providerCode: "21916984" }],
-      [tradingError("518"), { failure: "rate_limited", providerCode: "518" }],
+      [tradingError("518"), { failure: "rate_limited", providerCode: "518", limit: "GetItem" }],
       [tradingError("10007", "SystemError"), { failure: "unavailable", providerCode: "10007" }],
       [tradingError("37"), { failure: "rejected", providerCode: "37" }],
       [ack("<Ack>Sconosciuto</Ack>"), { failure: "invalid_response" }],

@@ -25,7 +25,13 @@ const failureCodes: Record<UpstreamFailure, ErrorCode> = {
 export class UpstreamError extends ApplicationError {
   constructor(
     readonly failure: UpstreamFailure,
-    readonly details: { status?: number; retryAfter?: number; providerCode?: string } = {},
+    readonly details: {
+      status?: number;
+      retryAfter?: number;
+      providerCode?: string;
+      /** Quota propria della chiamata che ha raggiunto il limite, se diversa dall'origine API. */
+      limit?: string;
+    } = {},
   ) {
     super(failureCodes[failure]);
     this.name = "UpstreamError";
