@@ -174,24 +174,21 @@ async function workspaceFor(
   now: string,
   language: Language,
 ): Promise<string> {
-  const existing = await db
-    .prepare(
-      "SELECT workspace_id FROM workspace_members WHERE user_id = ? ORDER BY workspace_id LIMIT 1",
-    )
-    .bind(userId)
-    .first<{ workspace_id: string }>();
-  if (existing) return existing.workspace_id;
-
   const workspaceId = crypto.randomUUID();
-  await db.batch([
+  const results = await db.batch<{ workspace_id: string }>([
     db
-      .prepare("INSERT INTO workspaces (id, name, created_at) VALUES (?, ?, ?)")
-      .bind(workspaceId, workspaceNames[language], now),
+      .prepare(`INSERT INTO workspaces (id, name, created_at)
+        SELECT ?1, ?2, ?3 WHERE NOT EXISTS (
+          SELECT 1 FROM workspace_members WHERE user_id = ?4)`)
+      .bind(workspaceId, workspaceNames[language], now, userId),
     db
-      .prepare("INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'owner')")
+      .prepare(`INSERT INTO workspace_members (workspace_id, user_id, role)
+        SELECT ?1, ?2, 'owner' WHERE NOT EXISTS (
+          SELECT 1 FROM workspace_members WHERE user_id = ?2)`)
       .bind(workspaceId, userId),
+    db.prepare("SELECT workspace_id FROM workspace_members WHERE user_id = ?").bind(userId),
   ]);
-  return workspaceId;
+  return results[2]!.results[0]!.workspace_id;
 }
 
 export async function completeStoreLink(input: {
@@ -241,7 +238,7 @@ export async function completeStoreLink(input: {
   }
 
   // Lo state porta la lingua in cui il merchant ha avviato il collegamento.
-  const language: Language = search.get("state")!.startsWith("en_") ? "en" : "it";
+  const language: Language = search.get("state")!.split(/[-_]/u, 1)[0] === "en" ? "en" : "it";
   const storeId = await linkStore(environment.DB, link.userId, identity, now, {
     ebayEnvironment: link.ebayEnvironment,
     language,

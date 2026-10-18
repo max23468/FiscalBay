@@ -6,8 +6,6 @@ import {
   buildLastModifiedFilter,
   fulfillmentObservation,
   fulfillmentTaxIdentifiers,
-  mergeFulfillmentOrders,
-  parseFulfillmentPage,
   readFulfillmentOrder,
   readFulfillmentOrders,
 } from "../app/integrations/ebay/fulfillment.server";
@@ -594,24 +592,24 @@ describe("contratto Fulfillment senza persistenza", () => {
     ).toEqual(["email", "name", "phone", "shipTo.name", "shipTo.phone"]);
   });
 
-  it("valida le pagine e deduplica gli ordini conservando l'ultima lettura", () => {
-    expect(parseFulfillmentPage({ total: 0 })).toEqual({ total: 0, orders: [] });
+  it("valida la pagina restituita dal provider prima di usarla", async () => {
+    const page = (payload: unknown) =>
+      readFulfillmentOrders(
+        {
+          configuration,
+          accessToken: "token-sintetico",
+          fetcher: async () => Response.json(payload),
+        },
+        { limit: 25, filter: "" },
+      );
+    expect(await page({ total: 0 })).toEqual({ total: 0, orders: [] });
     for (const invalid of [
       { total: -1 },
+      { orders: [] },
       { total: 0, orders: [{ orderId: "" }] },
       { total: 0, next: {} },
     ])
-      expect(() => parseFulfillmentPage(invalid)).toThrow();
-    expect(mergeFulfillmentOrders([])).toEqual([]);
-    expect(
-      mergeFulfillmentOrders([
-        parseFulfillmentPage({
-          total: 2,
-          orders: [{ orderId: "uno", marker: "prima" }, { orderId: "due" }],
-        }),
-        parseFulfillmentPage({ total: 1, orders: [{ orderId: "uno", marker: "ultima" }] }),
-      ]),
-    ).toEqual([{ orderId: "uno", marker: "ultima" }, { orderId: "due" }]);
+      await expect(page(invalid)).rejects.toMatchObject({ failure: "invalid_response" });
   });
 
   it("costruisce filtri UTC con overlap e rifiuta intervalli invalidi", () => {
