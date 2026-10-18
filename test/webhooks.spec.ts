@@ -46,7 +46,7 @@ const send = vi.fn<Queue["send"]>().mockResolvedValue(undefined);
 const environment = {
   ...env,
   APP_ORIGIN: "https://test.fiscalbay.it",
-  WEBHOOK_QUEUE: { send },
+  WORK_QUEUE: { send },
 } as Env;
 const fetcher = vi.fn<typeof fetch>(async (input, init) => {
   const url = String(input);
@@ -454,7 +454,7 @@ it("il cron del Worker accoda i turni dell'orario pianificato, anche se eseguito
   const sendBatch = vi.fn<Queue["sendBatch"]>().mockResolvedValue(undefined);
   await worker.scheduled(
     { scheduledTime: now.getTime() } as ScheduledController,
-    { ...environment, WEBHOOK_QUEUE: { send, sendBatch } } as Env,
+    { ...environment, WORK_QUEUE: { send, sendBatch } } as Env,
     {} as ExecutionContext,
   );
   expect(sendBatch).toHaveBeenNthCalledWith(1, [

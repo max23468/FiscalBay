@@ -1,4 +1,5 @@
 import { syncMinutes } from "./order-sync.server";
+import { dayMilliseconds } from "../time";
 
 /**
  * Collegamento dei negozi: stato derivato da scollegamento, consenso e pause, separato
@@ -46,7 +47,6 @@ export type StoreStatus = {
 
 export type StoreActionResult = "done" | "not_found" | "invalid";
 
-const dayMilliseconds = 24 * 60 * 60 * 1000;
 const expiringNoticeMilliseconds = 30 * dayMilliseconds;
 const expiredReminderMilliseconds = 30 * dayMilliseconds;
 

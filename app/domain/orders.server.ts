@@ -2,6 +2,7 @@ import { buyerSnapshotSchema } from "./order-import.server";
 import { taxComparisonKey, taxIdentifierType, taxQuality } from "../tax-quality";
 import type { TaxQuality } from "../view-models";
 import { orderAccessSql } from "./grants.server";
+import { consultableStore } from "./store-state.server";
 import { orderSuggestions } from "./order-suggestions.server";
 import type { SuggestionView } from "../view-models";
 
@@ -99,11 +100,6 @@ const taxKind = (table: string) => `CASE
     OR (${table}.issuing_country = 'IT' AND ${table}.identifier_type IN ('VAT_ID', 'VATIN')) THEN 'PIVA'
   ELSE json_array(${table}.identifier_type, ${table}.issuing_country) END`;
 
-// La pausa del piano esclude i dati del negozio; la pausa manuale li lascia consultabili.
-const consultable = `NOT EXISTS (
-  SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = s.id AND p.reason = 'plan'
-)`;
-
 function summaryOf(row: {
   buyer_json: string | null;
   payment_status: string | null;
@@ -140,8 +136,8 @@ export async function listVisibleOrders(
            FROM workspace_members wm
            JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
            JOIN orders o ON o.store_id = s.id
-          WHERE wm.user_id = ? AND s.ebay_environment = ? AND ${consultable}
-            AND s.data_deleted_at IS NULL AND o.retention_until > ?
+          WHERE wm.user_id = ? AND s.ebay_environment = ? AND ${consultableStore("s")}
+            AND o.retention_until > ?
             AND o.merged_into IS NULL
             AND NOT (o.is_provisional = 1 AND o.cancel_status IS 'CANCELED')
           ORDER BY o.last_modified_time DESC, o.id DESC

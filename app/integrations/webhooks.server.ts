@@ -211,7 +211,7 @@ export async function receiveWebhook(
 }
 
 async function enqueueReceipt(env: Env, receiptId: string, now: Date) {
-  await env.WEBHOOK_QUEUE.send({ receiptId });
+  await env.WORK_QUEUE.send({ receiptId });
   await env.DB.prepare("UPDATE webhook_receipts SET queued_at = ? WHERE id = ?")
     .bind(now.toISOString(), receiptId)
     .run();

@@ -1,15 +1,6 @@
 import { z } from "zod";
 import { taxComparisonKey, taxIdentifierType } from "../tax-quality";
-
-/**
- * Le scritture di un'importazione valgono solo per il consenso con cui è partita: dopo uno
- * scollegamento, un'eliminazione dei dati, un nuovo consenso o una pausa non scrivono nulla.
- * Parametri: ?1 negozio, ?2 data del consenso.
- */
-export const writableStore = `EXISTS (SELECT 1 FROM ebay_store_credentials
-   WHERE store_id = ?1 AND granted_at = ?2 AND rejected_at IS NULL)
-  AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses WHERE store_id = ?1)`;
-const consentWritableStore = writableStore;
+import { writableStore } from "./store-state.server";
 
 function staleObservation(): OrderObservationResult {
   console.info(JSON.stringify({ event: "stale_order_observation", count: 1 }));
@@ -190,6 +181,362 @@ function keepMaskedValues(buyer: BuyerSnapshot, stored: string | null): BuyerSna
 }
 
 /**
+ * Istante con cui si controllano le scadenze di un lavoro: mai prima del suo inizio, così un
+ * job iniziato prima della scadenza non la prolunga.
+ */
+export function deadlineCheckAt(startedAt: string): string {
+  return new Date(Math.max(Date.now(), Date.parse(startedAt))).toISOString();
+}
+
+type Observation = z.output<typeof orderObservationSchema>;
+
+type DirectMatch = StoredOrder & { source_modified: string | null };
+
+/**
+ * Ordine già noto con lo stesso identificativo esterno, da qualunque fonte, e data dell'ultima
+ * lettura applicata per la fonte dell'osservazione.
+ */
+function findDirect(db: D1Database, storeId: string, observation: Observation) {
+  return db
+    .prepare(
+      `SELECT ${storedOrderColumns},
+              (SELECT last_modified_time FROM order_source_refs
+                WHERE store_id = ?1 AND source = ?2 AND external_order_id = ?3) AS source_modified
+         FROM orders o
+        WHERE o.store_id = ?1 AND o.merged_into IS NULL AND o.id IN (
+          SELECT COALESCE(original.merged_into, original.id) FROM orders original
+          WHERE original.store_id = ?1 AND (original.ebay_order_id = ?3 OR original.id IN (
+            SELECT order_id FROM order_source_refs WHERE store_id = ?1 AND external_order_id = ?3)))
+        LIMIT 1`,
+    )
+    .bind(storeId, observation.source, observation.externalOrderId)
+    .first<DirectMatch>();
+}
+
+type Match = {
+  /** Ordine a cui si applica la lettura; null per un ordine nuovo. */
+  matched: StoredOrder | null;
+  /** Provvisori che confluiscono nell'ordine abbinato. */
+  absorbed: StoredOrder[];
+  /** Ordini sovrapposti non abbinati, con l'anomalia da registrare. */
+  related: Array<[string, ReconciliationIssue]>;
+  /** Ordini che condividono almeno un'identità di riga con la lettura. */
+  overlappingIds: string[];
+};
+
+/** Abbina la lettura agli ordini del negozio che ne condividono le identità di riga. */
+async function matchOrder(
+  db: D1Database,
+  storeId: string,
+  observation: Observation,
+  direct: StoredOrder | null,
+): Promise<Match> {
+  const keys = observation.items.map((item) => item.stableKey);
+  const keySet = new Set<string | null>(keys);
+  const { results: candidates } = await db
+    .prepare(
+      `SELECT ${storedOrderColumns},
+              COALESCE(CASE WHEN ?4 = 'trading' THEN o.trading_line_keys END,
+                (SELECT json_group_array(stable_key) FROM order_items WHERE order_id = o.id)) AS keys
+         FROM orders o
+        WHERE o.store_id = ?1 AND o.merged_into IS NULL AND o.id IS NOT ?3 AND (o.id IN (
+          SELECT order_id FROM order_items
+           WHERE stable_key IN (SELECT value FROM json_each(?2))) OR EXISTS (
+             SELECT 1 FROM json_each(o.trading_line_keys) WHERE value IN (SELECT value FROM json_each(?2))))
+        ORDER BY o.creation_time, o.id`,
+    )
+    .bind(storeId, JSON.stringify(keys), direct?.id ?? null, observation.source)
+    .all<StoredOrder & { keys: string }>();
+  const overlappingIds = candidates.map(({ id }) => id);
+  const missingIdentity = observation.items.some((item) => item.stableKey === null);
+  const parsed = candidates.map((candidate) => ({
+    candidate,
+    keys: JSON.parse(candidate.keys) as Array<string | null>,
+  }));
+  const only = parsed.length === 1 ? parsed[0]! : null;
+  const disjoint =
+    new Set(parsed.flatMap((entry) => entry.keys)).size ===
+    parsed.reduce((count, entry) => count + entry.keys.length, 0);
+  if (
+    !missingIdentity &&
+    !observation.provisional &&
+    parsed.length > 0 &&
+    disjoint &&
+    parsed.every(
+      ({ candidate, keys: candidateKeys }) =>
+        candidate.is_provisional &&
+        candidateKeys.length > 0 &&
+        candidateKeys.every((key) => keySet.has(key)),
+    )
+  ) {
+    const matched = direct ?? parsed[0]!.candidate;
+    return {
+      matched,
+      absorbed: parsed.map(({ candidate }) => candidate).filter(({ id }) => id !== matched.id),
+      related: [],
+      overlappingIds,
+    };
+  }
+  if (
+    !direct &&
+    only &&
+    !missingIdentity &&
+    !only.keys.includes(null) &&
+    (only.keys.every((key) => keySet.has(key)) ||
+      (observation.provisional && !only.candidate.is_provisional)) &&
+    keys.every(Set.prototype.has, new Set(only.keys))
+  ) {
+    return { matched: only.candidate, absorbed: [], related: [], overlappingIds };
+  }
+  return {
+    matched: direct,
+    absorbed: [],
+    related: parsed.map(({ candidate, keys: candidateKeys }) => [
+      candidate.id,
+      parsed.length > 1
+        ? "multiple_candidates"
+        : missingIdentity || candidateKeys.includes(null)
+          ? "missing_line_identity"
+          : "partial_overlap",
+    ]),
+    overlappingIds,
+  };
+}
+
+/**
+ * Fulfillment è la fonte dei campi dell'ordine e subentra sempre a un ordine letto solo da
+ * Trading: le date delle due fonti non sono confrontabili. Un provvisorio non sostituisce il
+ * definitivo e una lettura più vecchia della stessa fonte aggancia soltanto il riferimento.
+ */
+function fieldOwnership(observation: Observation, matched: StoredOrder | null) {
+  const takeover = observation.source === "fulfillment" && !!matched && !matched.has_fulfillment;
+  const ownsFields =
+    !matched ||
+    (!(observation.provisional && !matched.is_provisional) &&
+      (takeover ||
+        ((observation.source === "fulfillment" || !matched.has_fulfillment) &&
+          observation.lastModifiedTime >= matched.last_modified_time)));
+  return { takeover, ownsFields };
+}
+
+/**
+ * Versione dei dati fiscali. Le date Trading e Fulfillment non sono intercambiabili: una
+ * risposta senza data può introdurre un dato, ma non sostituire una verifica con versione
+ * autorevole già nota.
+ */
+function taxVersion(observation: Observation): string | null {
+  const tax = observation.taxIdentifiers;
+  return (
+    tax?.lastModifiedTime ??
+    (tax?.source ===
+    (observation.source === "fulfillment" ? "ebay_fulfillment" : "ebay_trading_get_orders")
+      ? observation.lastModifiedTime
+      : null)
+  );
+}
+
+/** Letterale SQL escapato, per le condizioni che non possono usare parametri. */
+const literal = (value: string | null) =>
+  value === null ? "NULL" : `'${value.replaceAll("'", "''")}'`;
+
+/**
+ * Condizione di ogni scrittura: consenso, retention e dati eliminati, e assenza di una lettura
+ * più recente della stessa fonte o degli stessi dati fiscali. Si ripete nel batch, così vale
+ * anche se una risposta più recente arriva dopo le letture preparatorie.
+ */
+function writeGuard(input: {
+  observation: Observation;
+  orderId: string;
+  absorbedIds: string[];
+  overlappingIds: string[];
+  taxModified: string | null;
+  observedAt: string;
+}): string {
+  const { observation, orderId, taxModified, observedAt } = input;
+  const tax = observation.taxIdentifiers;
+  const keys = observation.items.map((item) => item.stableKey);
+  const fresh = `NOT EXISTS (SELECT 1 FROM order_source_refs WHERE store_id = ?1
+    AND source = ${literal(observation.source)}
+    AND external_order_id = ${literal(observation.externalOrderId)}
+    AND last_modified_time > ${literal(observation.lastModifiedTime)})`;
+  const freshTax = tax
+    ? `AND NOT EXISTS (SELECT 1 FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
+        WHERE (original.id IN (${[orderId, ...input.absorbedIds].map(literal).join(",")}) OR original.merged_into = ${literal(orderId)})
+        AND tc.source = ${literal(tax.source)} AND (
+          (tc.last_modified_time IS NOT NULL AND (${literal(taxModified)} IS NULL OR tc.last_modified_time > ${literal(taxModified)}))
+          OR (tc.last_modified_time IS ${literal(taxModified)} AND tc.observed_at > ${literal(observedAt)})))
+       AND NOT EXISTS (SELECT 1 FROM order_source_refs WHERE order_id = ${literal(orderId)}
+         AND source = ${literal(tax.source === "ebay_fulfillment" ? "fulfillment" : "trading")}
+         AND ${literal(taxModified)} IS NOT NULL AND last_modified_time > ${literal(taxModified)})`
+    : "";
+  const at = deadlineCheckAt(observedAt);
+  const retained = `EXISTS (SELECT 1 FROM ebay_stores s WHERE s.id = ?1
+      AND (s.orders_deleted_through IS NULL OR s.orders_deleted_through < ${literal(observation.creationTime)}))
+    AND NOT EXISTS (SELECT 1 FROM deleted_order_keys d WHERE d.store_id = ?1
+      AND ((d.kind = 'order' AND d.external_key = ${literal(observation.externalOrderId)})
+        OR (d.kind = 'line' AND d.external_key IN (SELECT value FROM json_each(${literal(JSON.stringify(keys))})))))
+    AND NOT EXISTS (SELECT 1 FROM orders WHERE id IN (SELECT value FROM json_each(${literal(JSON.stringify(input.overlappingIds))}))
+      AND retention_until <= ${literal(at)})
+    AND CASE WHEN EXISTS (SELECT 1 FROM orders WHERE id = ${literal(orderId)})
+      THEN EXISTS (SELECT 1 FROM orders WHERE id = ${literal(orderId)} AND retention_until > ${literal(at)})
+      ELSE strftime('%Y-%m-%dT%H:%M:%fZ', ${literal(observation.creationTime)}, '+30 days') > ${literal(at)} END`;
+  return `${writableStore} AND ${retained} AND ${fresh} ${freshTax}`;
+}
+
+/**
+ * Articoli dell'ordine: aggiorna quelli cambiati, aggiunge i nuovi e rimuove gli assenti. Le
+ * identità stabili si confrontano fra loro; altrimenti vale l'ID riga della fonte.
+ * Parametri: ?1 negozio, ?2 consenso; `orderExists` usa ?4 come ordine.
+ */
+function itemStatements(
+  db: D1Database,
+  scope: readonly [string, string],
+  orderId: string,
+  items: Observation["items"],
+  stored: StoredItem[],
+  guards: { guarded: string; orderExists: string },
+): D1PreparedStatement[] {
+  const kept = new Set<string>();
+  const upserts: D1PreparedStatement[] = [];
+  for (const item of items) {
+    const existing = stored.find(
+      (row) =>
+        !kept.has(row.id) &&
+        (item.stableKey && row.stable_key
+          ? row.stable_key === item.stableKey
+          : row.line_item_id === item.lineItemId),
+    );
+    const values = [
+      item.lineItemId,
+      item.stableKey,
+      item.sku,
+      item.title,
+      item.quantity,
+      item.total?.minor ?? null,
+      item.total?.currency ?? null,
+      item.imageUrl ?? existing?.image_url ?? null,
+    ];
+    if (existing) {
+      kept.add(existing.id);
+      const current = [
+        existing.line_item_id,
+        existing.stable_key,
+        existing.sku,
+        existing.title,
+        existing.quantity,
+        existing.total_minor,
+        existing.currency,
+        existing.image_url,
+      ];
+      if (values.every((value, index) => value === current[index])) continue;
+    }
+    upserts.push(
+      db
+        .prepare(
+          `INSERT INTO order_items
+             (id, order_id, line_item_id, stable_key, sku, title, quantity, total_minor, currency,
+              image_url)
+           SELECT ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12 WHERE ${guards.orderExists}
+           ON CONFLICT (id) DO UPDATE SET line_item_id = excluded.line_item_id,
+             stable_key = excluded.stable_key, sku = excluded.sku, title = excluded.title,
+             quantity = excluded.quantity, total_minor = excluded.total_minor,
+             currency = excluded.currency, image_url = excluded.image_url`,
+        )
+        .bind(...scope, existing?.id ?? crypto.randomUUID(), orderId, ...values),
+    );
+  }
+  const removed = stored.filter((row) => !kept.has(row.id)).map((row) => row.id);
+  return [
+    db
+      .prepare(
+        `DELETE FROM order_items
+          WHERE order_id = ?3 AND id IN (SELECT value FROM json_each(?4)) AND ${guards.guarded}`,
+      )
+      .bind(...scope, orderId, JSON.stringify(removed)),
+    ...upserts,
+  ];
+}
+
+/**
+ * Variazioni degli identificativi fiscali della fonte: chiude i valori sostituiti, poi aggiunge
+ * i nuovi, nella stessa transazione. Un valore presente aggiorna quel tipo/Paese; l'omissione
+ * di un altro tipo non lo rimuove, salvo una lettura completa. Un provvisorio non rimuove i
+ * valori di un definitivo.
+ */
+async function taxStatements(
+  db: D1Database,
+  scope: readonly [string, string],
+  orderId: string,
+  absorbedIds: string[],
+  observation: Observation,
+  matched: StoredOrder | null,
+  guards: { guarded: string; orderExists: string },
+): Promise<D1PreparedStatement[]> {
+  const tax = observation.taxIdentifiers!;
+  const current = new Map(tax.values.map((value) => [taxComparisonKey(value), value]));
+  const { results: stored } = await db
+    .prepare(
+      `SELECT identifier_type AS type, issuing_country AS issuingCountry, value
+       FROM tax_identifiers WHERE order_id IN (SELECT value FROM json_each(?))
+         AND source = ? AND removed_at IS NULL`,
+    )
+    .bind(JSON.stringify([orderId, ...absorbedIds]), tax.source)
+    .all<{ type: string; issuingCountry: string | null; value: string }>();
+  const known = new Set(stored.map(taxComparisonKey));
+  const additions: D1PreparedStatement[] = [];
+  for (const [key, value] of current) {
+    if (known.has(key)) continue;
+    additions.push(
+      db
+        .prepare(
+          `INSERT OR IGNORE INTO tax_identifiers
+             (id, order_id, identifier_type, issuing_country, value, source, observed_at)
+           SELECT ?3, ?4, ?5, ?6, ?7, ?8, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE ${guards.orderExists}`,
+        )
+        .bind(
+          ...scope,
+          crypto.randomUUID(),
+          orderId,
+          value.type,
+          value.issuingCountry,
+          value.value,
+          tax.source,
+        ),
+    );
+  }
+  if (observation.provisional && matched && !matched.is_provisional) return additions;
+  const group = (value: { type: string; issuingCountry: string | null }) => {
+    const kind = taxIdentifierType(value.type, value.issuingCountry);
+    return JSON.stringify([kind === "OTHER" ? value.type : kind, value.issuingCountry]);
+  };
+  const groups = new Set([...current.values()].map(group));
+  const removed = stored.filter(
+    (value) => !current.has(taxComparisonKey(value)) && (tax.complete || groups.has(group(value))),
+  );
+  return [
+    db
+      .prepare(
+        `UPDATE tax_identifiers SET removed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+          WHERE order_id = ?4 AND source = ?5 AND removed_at IS NULL
+            AND json_array(identifier_type, issuing_country, value) IN
+              (SELECT value FROM json_each(?6))
+            AND ${guards.guarded}`,
+      )
+      .bind(
+        ...scope,
+        null,
+        orderId,
+        tax.source,
+        // Le copie assorbite hanno nuovi ID, ma conservano tipo, Paese e valore originali.
+        JSON.stringify(
+          removed.map((value) => JSON.stringify([value.type, value.issuingCountry, value.value])),
+        ),
+      ),
+    ...additions,
+  ];
+}
+
+/**
  * Registra una lettura dell'ordine nello stesso negozio, con un UUID interno stabile.
  *
  * L'ordine si riconosce dall'identificativo esterno già visto (qualunque fonte) oppure, se è
@@ -218,104 +565,19 @@ export async function recordOrderObservation(
     throw new DuplicateLineIdentity();
   const scope = [target.storeId, target.consentGrantedAt] as const;
 
-  const direct = await db
-    .prepare(
-      `SELECT ${storedOrderColumns},
-              (SELECT last_modified_time FROM order_source_refs
-                WHERE store_id = ?1 AND source = ?2 AND external_order_id = ?3) AS source_modified
-         FROM orders o
-        WHERE o.store_id = ?1 AND o.merged_into IS NULL AND o.id IN (
-          SELECT COALESCE(original.merged_into, original.id) FROM orders original
-          WHERE original.store_id = ?1 AND (original.ebay_order_id = ?3 OR original.id IN (
-            SELECT order_id FROM order_source_refs WHERE store_id = ?1 AND external_order_id = ?3)))
-        LIMIT 1`,
-    )
-    .bind(target.storeId, observation.source, observation.externalOrderId)
-    .first<StoredOrder & { source_modified: string | null }>();
+  const direct = await findDirect(db, target.storeId, observation);
   if (direct?.source_modified && observation.lastModifiedTime < direct.source_modified) {
     return staleObservation();
   }
-
-  let matched: StoredOrder | null = direct;
-  let absorbed: StoredOrder[] = [];
-  const related: Array<[string, ReconciliationIssue]> = [];
-  let overlappingIds: string[];
-  const keys = observation.items.map((item) => item.stableKey);
-  const keySet = new Set<string | null>(keys);
-  {
-    const { results: candidates } = await db
-      .prepare(
-        `SELECT ${storedOrderColumns},
-                COALESCE(CASE WHEN ?4 = 'trading' THEN o.trading_line_keys END,
-                  (SELECT json_group_array(stable_key) FROM order_items WHERE order_id = o.id)) AS keys
-           FROM orders o
-          WHERE o.store_id = ?1 AND o.merged_into IS NULL AND o.id IS NOT ?3 AND (o.id IN (
-            SELECT order_id FROM order_items
-             WHERE stable_key IN (SELECT value FROM json_each(?2))) OR EXISTS (
-               SELECT 1 FROM json_each(o.trading_line_keys) WHERE value IN (SELECT value FROM json_each(?2))))
-          ORDER BY o.creation_time, o.id`,
-      )
-      .bind(target.storeId, JSON.stringify(keys), direct?.id ?? null, observation.source)
-      .all<StoredOrder & { keys: string }>();
-    overlappingIds = candidates.map(({ id }) => id);
-    const missingIdentity = observation.items.some((item) => item.stableKey === null);
-    const parsed = candidates.map((candidate) => ({
-      candidate,
-      keys: JSON.parse(candidate.keys) as Array<string | null>,
-    }));
-    const only = parsed.length === 1 ? parsed[0]! : null;
-    const disjoint =
-      new Set(parsed.flatMap((entry) => entry.keys)).size ===
-      parsed.reduce((count, entry) => count + entry.keys.length, 0);
-    if (
-      !missingIdentity &&
-      !observation.provisional &&
-      parsed.length > 0 &&
-      disjoint &&
-      parsed.every(
-        ({ candidate, keys: candidateKeys }) =>
-          candidate.is_provisional &&
-          candidateKeys.length > 0 &&
-          candidateKeys.every((key) => keySet.has(key)),
-      )
-    ) {
-      matched = direct ?? parsed[0]!.candidate;
-      absorbed = parsed.map(({ candidate }) => candidate).filter(({ id }) => id !== matched!.id);
-    } else if (
-      !direct &&
-      only &&
-      !missingIdentity &&
-      !only.keys.includes(null) &&
-      (only.keys.every((key) => keySet.has(key)) ||
-        (observation.provisional && !only.candidate.is_provisional)) &&
-      keys.every(Set.prototype.has, new Set(only.keys))
-    ) {
-      matched = only.candidate;
-    } else {
-      for (const { candidate, keys: candidateKeys } of parsed) {
-        related.push([
-          candidate.id,
-          parsed.length > 1
-            ? "multiple_candidates"
-            : missingIdentity || candidateKeys.includes(null)
-              ? "missing_line_identity"
-              : "partial_overlap",
-        ]);
-      }
-    }
-  }
-
+  const { matched, absorbed, related, overlappingIds } = await matchOrder(
+    db,
+    target.storeId,
+    observation,
+    direct,
+  );
+  const absorbedIds = absorbed.map((order) => order.id);
   const orderId = matched?.id ?? crypto.randomUUID();
-  // Fulfillment è la fonte dei campi dell'ordine e subentra sempre a un ordine letto solo da
-  // Trading: le date delle due fonti non sono confrontabili. Un provvisorio non sostituisce il
-  // definitivo e una lettura più vecchia della stessa fonte aggancia soltanto il riferimento.
-  const takeover = observation.source === "fulfillment" && !!matched && !matched.has_fulfillment;
-  const ownsFields =
-    !matched ||
-    (!(observation.provisional && !matched.is_provisional) &&
-      (takeover ||
-        ((observation.source === "fulfillment" || !matched.has_fulfillment) &&
-          observation.lastModifiedTime >= matched.last_modified_time)));
+  const { takeover, ownsFields } = fieldOwnership(observation, matched);
   // La sincronizzazione serializza gli articoli del negozio; questa è l'ultima lettura
   // preparatoria, prima di fissare l'istante con cui autorizzare le scritture.
   const { results: stored } =
@@ -330,45 +592,17 @@ export async function recordOrderObservation(
           .all<StoredItem>()
       : { results: [] as StoredItem[] };
   const tax = observation.taxIdentifiers;
-  // Le date Trading e Fulfillment non sono intercambiabili. Una risposta senza data può
-  // introdurre un dato, ma non sostituire una verifica con versione autorevole già nota.
-  const taxModified =
-    tax?.lastModifiedTime ??
-    (tax?.source ===
-    (observation.source === "fulfillment" ? "ebay_fulfillment" : "ebay_trading_get_orders")
-      ? observation.lastModifiedTime
-      : null);
-  // Il controllo si ripete nel batch, così vale anche se una risposta più recente arriva
-  // dopo le letture preparatorie. I valori interpolati sono letterali SQL escapati.
-  const literal = (value: string | null) =>
-    value === null ? "NULL" : `'${value.replaceAll("'", "''")}'`;
-  const fresh = `NOT EXISTS (SELECT 1 FROM order_source_refs WHERE store_id = ?1
-    AND source = ${literal(observation.source)}
-    AND external_order_id = ${literal(observation.externalOrderId)}
-    AND last_modified_time > ${literal(observation.lastModifiedTime)})`;
-  const freshTax = tax
-    ? `AND NOT EXISTS (SELECT 1 FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
-        WHERE (original.id IN (${[orderId, ...absorbed.map((order) => order.id)].map(literal).join(",")}) OR original.merged_into = ${literal(orderId)})
-        AND tc.source = ${literal(tax.source)} AND (
-          (tc.last_modified_time IS NOT NULL AND (${literal(taxModified)} IS NULL OR tc.last_modified_time > ${literal(taxModified)}))
-          OR (tc.last_modified_time IS ${literal(taxModified)} AND tc.observed_at > ${literal(observedAt)})))
-       AND NOT EXISTS (SELECT 1 FROM order_source_refs WHERE order_id = ${literal(orderId)}
-         AND source = ${literal(tax.source === "ebay_fulfillment" ? "fulfillment" : "trading")}
-         AND ${literal(taxModified)} IS NOT NULL AND last_modified_time > ${literal(taxModified)})`
-    : "";
-  // Si controlla l'istante finale: un job iniziato prima della scadenza non la prolunga.
-  const at = new Date(Math.max(Date.now(), Date.parse(observedAt))).toISOString();
-  const retained = `EXISTS (SELECT 1 FROM ebay_stores s WHERE s.id = ?1
-      AND (s.orders_deleted_through IS NULL OR s.orders_deleted_through < ${literal(observation.creationTime)}))
-    AND NOT EXISTS (SELECT 1 FROM deleted_order_keys d WHERE d.store_id = ?1
-      AND ((d.kind = 'order' AND d.external_key = ${literal(observation.externalOrderId)})
-        OR (d.kind = 'line' AND d.external_key IN (SELECT value FROM json_each(${literal(JSON.stringify(keys))})))))
-    AND NOT EXISTS (SELECT 1 FROM orders WHERE id IN (SELECT value FROM json_each(${literal(JSON.stringify(overlappingIds))}))
-      AND retention_until <= ${literal(at)})
-    AND CASE WHEN EXISTS (SELECT 1 FROM orders WHERE id = ${literal(orderId)})
-      THEN EXISTS (SELECT 1 FROM orders WHERE id = ${literal(orderId)} AND retention_until > ${literal(at)})
-      ELSE strftime('%Y-%m-%dT%H:%M:%fZ', ${literal(observation.creationTime)}, '+30 days') > ${literal(at)} END`;
-  const writableStore = `${consentWritableStore} AND ${retained} AND ${fresh} ${freshTax}`;
+  const taxModified = taxVersion(observation);
+  const guarded = writeGuard({
+    observation,
+    orderId,
+    absorbedIds,
+    overlappingIds,
+    taxModified,
+    observedAt,
+  });
+  const orderExists = `${guarded} AND EXISTS (SELECT 1 FROM orders WHERE id = ?4)`;
+  const guards = { guarded, orderExists };
   const buyer = keepMaskedValues(observation.buyer, matched?.buyer_json ?? null);
   const orderValues = [
     observation.externalOrderId,
@@ -383,33 +617,38 @@ export async function recordOrderObservation(
     observation.cancelStatus,
     JSON.stringify(buyer),
   ];
+
+  const statements: D1PreparedStatement[] = [];
+  /** Accoda le istruzioni e restituisce la posizione della prima nel batch. */
+  const add = (...added: D1PreparedStatement[]) => statements.push(...added) - added.length;
   // Il consenso si verifica nella stessa transazione delle scritture.
-  const statements = [
-    db.prepare(`SELECT 1 AS ok WHERE ${consentWritableStore}`).bind(...scope),
-    db.prepare(`SELECT 1 AS ok WHERE ${writableStore}`).bind(...scope),
-  ];
+  const consentCheck = add(db.prepare(`SELECT 1 AS ok WHERE ${writableStore}`).bind(...scope));
+  const guardCheck = add(db.prepare(`SELECT 1 AS ok WHERE ${guarded}`).bind(...scope));
+
+  // Ordine e articoli: le loro modifiche distinguono «updated» da «unchanged».
+  const orderWrites = statements.length;
   if (!matched) {
-    statements.push(
+    add(
       db
         .prepare(
           `INSERT INTO orders
              (id, store_id, ebay_order_id, creation_time, last_modified_time, currency,
               total_minor, is_provisional, marketplace_id, payment_status, fulfillment_status,
               cancel_status, buyer_json)
-           SELECT ?3, ?1, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14 WHERE ${writableStore}`,
+           SELECT ?3, ?1, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14 WHERE ${guarded}`,
         )
         .bind(...scope, orderId, ...orderValues),
     );
   } else if (ownsFields) {
     // La sola data di modifica non è una variazione dell'ordine.
-    statements.push(
+    add(
       db
         .prepare(
           `UPDATE orders SET ebay_order_id = ?4, creation_time = ?5, last_modified_time = ?6,
                   currency = ?7, total_minor = ?8, is_provisional = ?9, marketplace_id = ?10,
                   payment_status = ?11, fulfillment_status = ?12, cancel_status = ?13,
                   buyer_json = ?14
-            WHERE id = ?3 AND (?15 OR last_modified_time <= ?6) AND ${writableStore}
+            WHERE id = ?3 AND (?15 OR last_modified_time <= ?6) AND ${guarded}
               AND (ebay_order_id IS NOT ?4 OR creation_time IS NOT ?5 OR currency IS NOT ?7
                 OR total_minor IS NOT ?8 OR is_provisional IS NOT ?9 OR marketplace_id IS NOT ?10
                 OR payment_status IS NOT ?11 OR fulfillment_status IS NOT ?12
@@ -418,19 +657,17 @@ export async function recordOrderObservation(
         .bind(...scope, orderId, ...orderValues, takeover ? 1 : 0),
     );
   }
-  const orderExists = `${writableStore} AND EXISTS (SELECT 1 FROM orders WHERE id = ?4)`;
   if (observation.buyerEiasToken !== undefined) {
-    statements.push(
+    add(
       db
         .prepare(`UPDATE orders SET buyer_eias_token = ?4
-        WHERE id = ?3 AND buyer_eias_token IS NOT ?4 AND ${writableStore}`)
+        WHERE id = ?3 AND buyer_eias_token IS NOT ?4 AND ${guarded}`)
         .bind(...scope, orderId, observation.buyerEiasToken),
     );
   }
-
   for (const original of absorbed) {
     // Conserva le osservazioni fiscali originali; copia solo i valori correnti sul definitivo.
-    statements.push(
+    add(
       db
         .prepare(`INSERT OR IGNORE INTO tax_identifiers
         (id, order_id, identifier_type, issuing_country, value, source, observed_at)
@@ -454,151 +691,22 @@ export async function recordOrderObservation(
         .bind(...scope, original.id, orderId),
     );
   }
+  if (ownsFields) add(...itemStatements(db, scope, orderId, observation.items, stored, guards));
+  const orderWritesEnd = statements.length;
 
-  if (ownsFields) {
-    const kept = new Set<string>();
-    const upserts: D1PreparedStatement[] = [];
-    for (const item of observation.items) {
-      // Le identità stabili si confrontano fra loro; altrimenti vale l'ID riga della fonte.
-      const existing = stored.find(
-        (row) =>
-          !kept.has(row.id) &&
-          (item.stableKey && row.stable_key
-            ? row.stable_key === item.stableKey
-            : row.line_item_id === item.lineItemId),
-      );
-      const values = [
-        item.lineItemId,
-        item.stableKey,
-        item.sku,
-        item.title,
-        item.quantity,
-        item.total?.minor ?? null,
-        item.total?.currency ?? null,
-        item.imageUrl ?? existing?.image_url ?? null,
-      ];
-      if (existing) {
-        kept.add(existing.id);
-        const current = [
-          existing.line_item_id,
-          existing.stable_key,
-          existing.sku,
-          existing.title,
-          existing.quantity,
-          existing.total_minor,
-          existing.currency,
-          existing.image_url,
-        ];
-        if (values.every((value, index) => value === current[index])) continue;
-      }
-      upserts.push(
-        db
-          .prepare(
-            `INSERT INTO order_items
-               (id, order_id, line_item_id, stable_key, sku, title, quantity, total_minor, currency,
-                image_url)
-             SELECT ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12 WHERE ${orderExists}
-             ON CONFLICT (id) DO UPDATE SET line_item_id = excluded.line_item_id,
-               stable_key = excluded.stable_key, sku = excluded.sku, title = excluded.title,
-               quantity = excluded.quantity, total_minor = excluded.total_minor,
-               currency = excluded.currency, image_url = excluded.image_url`,
-          )
-          .bind(...scope, existing?.id ?? crypto.randomUUID(), orderId, ...values),
-      );
-    }
-    const removed = stored.filter((row) => !kept.has(row.id)).map((row) => row.id);
-    statements.push(
-      db
-        .prepare(
-          `DELETE FROM order_items
-            WHERE order_id = ?3 AND id IN (SELECT value FROM json_each(?4)) AND ${writableStore}`,
-        )
-        .bind(...scope, orderId, JSON.stringify(removed)),
-      ...upserts,
-    );
-  }
-
-  const taxStart = statements.length;
+  // Identificativi correnti prima e dopo le variazioni, per contare quelle effettive.
   const taxSnapshot = db
     .prepare(
       `SELECT identifier_type AS type, issuing_country AS issuingCountry, value
        FROM tax_identifiers WHERE order_id = ?4 AND removed_at IS NULL AND ${orderExists}`,
     )
     .bind(...scope, null, orderId);
+  let taxSnapshots: { before: number; after: number } | null = null;
   if (tax) {
-    statements.push(taxSnapshot);
-    const current = new Map(tax.values.map((value) => [taxComparisonKey(value), value]));
-    const { results: stored } = await db
-      .prepare(
-        `SELECT identifier_type AS type, issuing_country AS issuingCountry, value
-         FROM tax_identifiers WHERE order_id IN (SELECT value FROM json_each(?))
-           AND source = ? AND removed_at IS NULL`,
-      )
-      .bind(JSON.stringify([orderId, ...absorbed.map((order) => order.id)]), tax.source)
-      .all<{ type: string; issuingCountry: string | null; value: string }>();
-    const known = new Set(stored.map(taxComparisonKey));
-    const additions: D1PreparedStatement[] = [];
-    for (const [key, value] of current) {
-      if (known.has(key)) continue;
-      additions.push(
-        db
-          .prepare(
-            `INSERT OR IGNORE INTO tax_identifiers
-               (id, order_id, identifier_type, issuing_country, value, source, observed_at)
-             SELECT ?3, ?4, ?5, ?6, ?7, ?8, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE ${orderExists}`,
-          )
-          .bind(
-            ...scope,
-            crypto.randomUUID(),
-            orderId,
-            value.type,
-            value.issuingCountry,
-            value.value,
-            tax.source,
-          ),
-      );
-    }
-    if (!(observation.provisional && matched && !matched.is_provisional)) {
-      // Un valore presente aggiorna quel tipo/Paese; l'omissione di un altro tipo non lo rimuove.
-      const group = (value: { type: string; issuingCountry: string | null }) => {
-        const kind = taxIdentifierType(value.type, value.issuingCountry);
-        return JSON.stringify([kind === "OTHER" ? value.type : kind, value.issuingCountry]);
-      };
-      const groups = new Set([...current.values()].map(group));
-      const removed = stored.filter(
-        (value) =>
-          !current.has(taxComparisonKey(value)) && (tax.complete || groups.has(group(value))),
-      );
-      statements.push(
-        db
-          .prepare(
-            `UPDATE tax_identifiers SET removed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-              WHERE order_id = ?4 AND source = ?5 AND removed_at IS NULL
-                AND json_array(identifier_type, issuing_country, value) IN
-                  (SELECT value FROM json_each(?6))
-                AND ${writableStore}`,
-          )
-          .bind(
-            ...scope,
-            null,
-            orderId,
-            tax.source,
-            // Le copie assorbite hanno nuovi ID, ma conservano tipo, Paese e valore originali.
-            JSON.stringify(
-              removed.map((value) =>
-                JSON.stringify([value.type, value.issuingCountry, value.value]),
-              ),
-            ),
-          ),
-      );
-    }
-    // Chiude la versione precedente prima di datare la nuova, nella stessa transazione.
-    statements.push(...additions);
-  }
-  const taxEnd = statements.length;
-  if (tax) {
-    statements.push(taxSnapshot);
-    statements.push(
+    const before = add(taxSnapshot);
+    add(...(await taxStatements(db, scope, orderId, absorbedIds, observation, matched, guards)));
+    taxSnapshots = { before, after: add(taxSnapshot) };
+    add(
       db
         .prepare(
           `INSERT INTO order_tax_checks (order_id, source, last_modified_time, observed_at, availability, verification)
@@ -622,7 +730,7 @@ export async function recordOrderObservation(
     (ownsFields ||
       (!observation.provisional && matched!.ebay_order_id === observation.externalOrderId))
   ) {
-    statements.push(
+    add(
       db
         .prepare(`UPDATE orders SET trading_line_keys = ?3 WHERE id = ?4
       AND trading_line_keys IS NOT ?3 AND ${orderExists}`)
@@ -630,13 +738,13 @@ export async function recordOrderObservation(
     );
   } else if (ownsFields && matched?.is_provisional && !observation.provisional) {
     // Le righe del definitivo sostituiscono l'insieme parziale del provvisorio promosso.
-    statements.push(
+    add(
       db
         .prepare(`UPDATE orders SET trading_line_keys = NULL WHERE id = ?4 AND ${orderExists}`)
         .bind(...scope, null, orderId),
     );
   }
-  statements.push(
+  add(
     db
       .prepare(
         `INSERT INTO order_source_refs
@@ -654,9 +762,8 @@ export async function recordOrderObservation(
         observation.lastModifiedTime,
       ),
   );
-
   for (const [relatedOrderId, kind] of related) {
-    statements.push(
+    add(
       db
         .prepare(
           `INSERT OR IGNORE INTO order_reconciliation_issues
@@ -668,10 +775,11 @@ export async function recordOrderObservation(
   }
 
   const results = await db.batch(statements);
-  if (results[0]!.results.length === 0) return { outcome: "not_writable" };
-  if (results[1]!.results.length === 0) return staleObservation();
-  const changes = (from: number, to: number) =>
-    results.slice(from, to).reduce((total, result) => total + result.meta.changes, 0);
+  if (results[consentCheck]!.results.length === 0) return { outcome: "not_writable" };
+  if (results[guardCheck]!.results.length === 0) return staleObservation();
+  const orderChanges = results
+    .slice(orderWrites, orderWritesEnd)
+    .reduce((total, result) => total + result.meta.changes, 0);
   const taxKeys = (index: number) =>
     new Set(
       results[index]!.results.map((row) => {
@@ -684,11 +792,10 @@ export async function recordOrderObservation(
         );
       }),
     );
-  const beforeTax = tax ? taxKeys(taxStart) : new Set<string>();
-  const afterTax = tax ? taxKeys(taxEnd) : new Set<string>();
+  const beforeTax = taxSnapshots ? taxKeys(taxSnapshots.before) : new Set<string>();
+  const afterTax = taxSnapshots ? taxKeys(taxSnapshots.after) : new Set<string>();
   return {
-    // Ordine e articoli occupano le istruzioni fra il controllo del consenso e i dati fiscali.
-    outcome: !matched ? "created" : changes(2, taxStart) > 0 ? "updated" : "unchanged",
+    outcome: !matched ? "created" : orderChanges > 0 ? "updated" : "unchanged",
     orderId,
     taxChanges:
       [...beforeTax].filter((key) => !afterTax.has(key)).length +

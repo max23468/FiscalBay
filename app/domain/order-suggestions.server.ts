@@ -1,4 +1,5 @@
 import { orderAccessSql } from "./grants.server";
+import { consultableStore } from "./store-state.server";
 import { taxComparisonKey, taxIdentifierType, taxQuality } from "../tax-quality";
 import type { SuggestionView } from "../view-models";
 
@@ -23,8 +24,7 @@ export async function orderSuggestions(
       JOIN workspace_members wm ON wm.workspace_id = s.workspace_id
      WHERE wm.user_id = ?1 AND s.ebay_environment = ?2
        AND o.id IN (SELECT value FROM json_each(?3))
-       AND o.merged_into IS NULL AND o.retention_until > ?4 AND s.data_deleted_at IS NULL
-       AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = s.id AND p.reason = 'plan')
+       AND o.merged_into IS NULL AND o.retention_until > ?4 AND ${consultableStore("s")}
        AND EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = s.workspace_id
          AND e.revoked_at IS NULL AND julianday(e.starts_at) <= julianday(?4)
          AND (e.ends_at IS NULL OR julianday(e.ends_at) > julianday(?4)))
@@ -39,8 +39,7 @@ export async function orderSuggestions(
       AND NOT (o.is_provisional = 1 AND o.cancel_status IS 'CANCELED')
       AND EXISTS (SELECT 1 FROM ebay_stores allowed WHERE allowed.id = o.store_id
         AND allowed.workspace_id = target.workspace_id AND allowed.ebay_environment = ?2
-        AND allowed.data_deleted_at IS NULL
-        AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = allowed.id AND p.reason = 'plan'))
+        AND ${consultableStore("allowed")})
       AND ${orderAccessSql("o.id", "target.workspace_id", "?4")}
     LEFT JOIN ebay_stores s ON s.id = o.store_id
     LEFT JOIN tax_identifiers t ON t.order_id = o.id AND t.removed_at IS NULL
