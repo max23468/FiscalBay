@@ -173,20 +173,7 @@ const fulfillmentPageSchema = z.looseObject({
   next: z.string().optional(),
 });
 
-export type FulfillmentOrder = z.infer<typeof fulfillmentOrderSchema>;
 export type FulfillmentPage = z.infer<typeof fulfillmentPageSchema>;
-
-export function parseFulfillmentPage(payload: unknown): FulfillmentPage {
-  return fulfillmentPageSchema.parse(payload);
-}
-
-export function mergeFulfillmentOrders(pages: ReadonlyArray<FulfillmentPage>): FulfillmentOrder[] {
-  const orders = new Map<string, FulfillmentOrder>();
-  for (const page of pages) {
-    for (const order of page.orders) orders.set(order.orderId, order);
-  }
-  return [...orders.values()];
-}
 
 export function buildLastModifiedFilter(
   checkpoint: Date,

@@ -272,14 +272,6 @@ export function parseTradingOrders(xml: string) {
   return { orders, total: Number(totalText), more: moreText === "true", skipped };
 }
 
-/** Identificativi fiscali dell'acquirente per un solo ordine, letti da `GetOrders`. */
-export async function readTradingTaxIdentifiers(
-  access: EbayAccess,
-  orderId: string,
-): Promise<EbayTaxIdentifierObservation[]> {
-  return (await readTradingTaxObservation(access, orderId)).values;
-}
-
 /** Distingue ordine non restituito e ordine presente senza identificativi. */
 export async function readTradingTaxObservation(access: EbayAccess, orderId: string) {
   const xml = await tradingCall(
