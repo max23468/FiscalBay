@@ -421,14 +421,27 @@ test.describe("miglioramenti account e negozi", () => {
       );
       await expect(input).toHaveValue(testAccount.stores.paused);
       await dialog.getByRole("button", { name: it ? "Annulla" : "Cancel", exact: true }).click();
-      await page.goto(`${prefix}/app/profilo`);
+      let continueHydration = () => {};
+      const hydration = new Promise<void>((resolve) => {
+        continueHydration = resolve;
+      });
+      await page.route("**/assets/profile-main-*.js", async (route) => {
+        await hydration;
+        await route.continue();
+      });
+      const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
+      try {
+        await page.goto(`${prefix}/app/profilo`, { waitUntil: "commit" });
+        await expect(first).toBeDisabled();
+      } finally {
+        continueHydration();
+      }
       await page.route("**/app/profilo.data*", async (route) => {
         if (route.request().method() !== "POST") return route.continue();
         const form = new URLSearchParams(route.request().postData()!);
         form.set("nome", "");
         await route.continue({ postData: form.toString() });
       });
-      const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
       await first.fill("Valore da conservare");
       await page.getByRole("button", { name: it ? "Salva" : "Save", exact: true }).click();
       await expect(

@@ -1378,7 +1378,7 @@ export function ProfilePage({
               name="nome"
               autoComplete="given-name"
               defaultValue={profile.firstName}
-              disabled={action.pending}
+              disabled={!v.ready || action.pending}
               maxLength={100}
               required
               {...v.control("nome", "profile-name-hint")}
@@ -1397,7 +1397,7 @@ export function ProfilePage({
               maxLength={100}
               required
               defaultValue={profile.lastName}
-              disabled={action.pending}
+              disabled={!v.ready || action.pending}
               {...v.control("cognome")}
             />
             {v.error("cognome")}
@@ -1414,7 +1414,7 @@ export function ProfilePage({
                 maxLength={200}
                 required
                 defaultValue={profile.companyName ?? ""}
-                disabled={action.pending}
+                disabled={!v.ready || action.pending}
                 {...v.control("ragione_sociale")}
               />
               {v.error("ragione_sociale")}

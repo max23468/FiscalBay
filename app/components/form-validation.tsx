@@ -40,6 +40,7 @@ export function useFieldErrors(copy: ValidationCopy) {
   const errorId = (name: string) => `${id}-${name}-error`;
 
   return {
+    ready,
     form: {
       noValidate: ready,
       /** Riconvalida un campo già segnalato mentre lo si corregge. */
