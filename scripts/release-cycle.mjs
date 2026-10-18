@@ -377,7 +377,8 @@ export function squashIntegrated(branchSha, mergeSha, cwd = process.cwd()) {
   }
 }
 
-function cleanup(pr) {
+export function cleanup(pr, cwd = process.cwd()) {
+  const git = (...args) => execute("git", args, { cwd });
   const branch = pr.headRefName;
   if (
     ["main", "develop", "legacy/1.x"].includes(branch) ||
@@ -385,16 +386,25 @@ function cleanup(pr) {
   )
     throw new Error("Riferimento protetto: conservato.");
   const local = git("for-each-ref", "--format=%(objectname)", `refs/heads/${branch}`);
-  if ((local && local !== pr.headRefOid) || !squashIntegrated(pr.headRefOid, pr.mergeCommit.oid))
+  if (
+    (local && local !== pr.headRefOid) ||
+    !squashIntegrated(pr.headRefOid, pr.mergeCommit.oid, cwd)
+  )
     throw new Error("Branch locale con contenuto non riconciliato: conservato.");
-  const worktrees = git("worktree", "list", "--porcelain");
+  const worktrees = git("worktree", "list", "--porcelain").split("\n");
   const current = git("branch", "--show-current");
-  if (current !== branch && worktrees.split("\n").includes(`branch refs/heads/${branch}`))
+  if (current !== branch && worktrees.includes(`branch refs/heads/${branch}`))
     throw new Error("Branch ancora usato in un altro worktree: conservato.");
   if (current === branch) {
     if (git("status", "--porcelain")) throw new Error("Checkout modificato: pulizia sospesa.");
-    git("switch", pr.baseRefName);
-    git("merge", "--ff-only", `origin/${pr.baseRefName}`);
+    // In un worktree dedicato la base è spesso attiva nel checkout principale e git
+    // rifiuta di attivarla due volte: il worktree resta staccato sulla base remota.
+    if (worktrees.includes(`branch refs/heads/${pr.baseRefName}`))
+      git("switch", "--detach", `origin/${pr.baseRefName}`);
+    else {
+      git("switch", pr.baseRefName);
+      git("merge", "--ff-only", `origin/${pr.baseRefName}`);
+    }
   }
   const remote = git("ls-remote", "origin", `refs/heads/${branch}`).split(/\s/u)[0];
   if (remote) {
