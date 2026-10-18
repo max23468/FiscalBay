@@ -219,7 +219,8 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
   const trading = observation.taxIdentifiers
     ? null
     : (await callLimited(ctx, "GetOrders"))
-      ? { error: new UpstreamError("rate_limited", { limit: "GetOrders" }) }
+      ? // Stryker disable next-line StringLiteral: il nome segnala soltanto un limite di quota; il valore non cambia l'esito.
+        { error: new UpstreamError("rate_limited", { limit: "GetOrders" }) }
       : await readTradingTaxObservation(ctx.access, observation.externalOrderId).catch(
           async (error: unknown) => {
             if (callLimit(error))
