@@ -7,8 +7,10 @@ import { expect, test, type Page } from "@playwright/test";
 
 async function open(page: Page, path = "/anteprima/ordini") {
   await page.goto(path);
-  // Il selettore di scenario è interattivo solo dopo l'idratazione.
   await expect(page.getByRole("combobox", { name: /Scenario/ })).toBeEnabled({ timeout: 20_000 });
+  await expect(
+    page.getByRole("searchbox", { name: /Cerca ordini|Search orders/u, includeHidden: true }),
+  ).toBeEnabled();
   await page.waitForLoadState("networkidle");
 }
 
@@ -263,8 +265,22 @@ test("la ricerca della top bar suggerisce e apre l'elenco filtrato", async ({
   page,
   browserName,
 }) => {
-  await open(page);
   const search = page.getByRole("searchbox", { name: "Cerca ordini" });
+  let continueHydration = () => {};
+  const hydration = new Promise<void>((resolve) => {
+    continueHydration = resolve;
+  });
+  await page.route("**/assets/app-shell-*.js", async (route) => {
+    await hydration;
+    await route.continue();
+  });
+  try {
+    await page.goto("/anteprima/ordini", { waitUntil: "commit" });
+    await expect(search).toBeDisabled();
+  } finally {
+    continueHydration();
+  }
+  await expect(search).toBeEnabled();
   await search.fill("carburatore");
   const suggestion = page.getByRole("search").getByRole("link", { name: /Maria Rossi/ });
   await expect(suggestion).toBeVisible();
@@ -325,6 +341,7 @@ test("il salvataggio automatico fallito ripristina il valore", async ({ page }) 
   await open(page);
   await chooseScenario(page, "Premium, più negozi");
   await page.goto("/anteprima/impostazioni/notifiche");
+  await expect(page.locator("#settings-notifiche")).toBeInViewport();
   const toggle = page.getByRole("switch", { name: "Invia notifiche degli ordini" });
   await expect(toggle).toBeChecked();
   await toggle.click();

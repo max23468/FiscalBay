@@ -645,14 +645,16 @@ async function open(page: Page, path: string, scenario?: string) {
   await page.goto(path);
   // Con un pannello aperto il resto della pagina è inerte: si attende il controllo per id.
   await expect(page.locator("#preview-scenario")).toBeEnabled({ timeout: 20_000 });
+  await expect(
+    page.getByRole("searchbox", { name: /Cerca ordini|Search orders/u, includeHidden: true }),
+  ).toBeEnabled();
   await page.waitForLoadState("networkidle");
-  // Le impostazioni allineano la sezione nel primo frame dopo la navigazione.
-  await page.evaluate(async () => {
-    await document.fonts.ready;
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-    );
-  });
+  await page.evaluate(() => document.fonts.ready);
+  const section = /\/impostazioni\/([^/?#]+)/u.exec(path)?.[1];
+  if (section) {
+    // La route deve avere allineato davvero la sezione, anche con hydration differita.
+    await expect(page.locator(`#settings-${section}`)).toBeInViewport({ ratio: 1 });
+  }
 }
 
 const noPageOverflow = (page: Page) =>
@@ -864,6 +866,7 @@ for (const language of ["it", "en"] as const) {
         await expect(page.locator("#preview-scenario")).toBeEnabled({ timeout: 20_000 });
         await page.waitForLoadState("networkidle");
         if (width >= 768) {
+          await expect(page.locator("#settings-aspetto")).toBeInViewport({ ratio: 1 });
           await page
             .locator("#settings-privacy")
             .evaluate((el) => window.scrollBy(0, el.getBoundingClientRect().top - 210));
@@ -930,6 +933,8 @@ for (const language of ["it", "en"] as const) {
       test(`ordini: conferme, stati e dettaglio ${language} ${colorScheme} a ${width} px`, async ({
         page,
       }) => {
+        // Comprende oltre venti navigazioni, conferme, pannelli e screenshot.
+        test.setTimeout(90_000);
         await page.setViewportSize({ width, height: 844 });
         await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
         const prefix = language === "it" ? "" : "/en";
