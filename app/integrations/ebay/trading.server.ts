@@ -143,6 +143,45 @@ export async function readTradingOrders(
 }
 
 /** Campi strutturati soltanto: le transazioni non contaminano i campi dell'ordine. */
+/** Blocchi `<Order>` di una risposta GetOrders. */
+function orderBlocks(xml: string): string[] {
+  return [...xml.matchAll(/<Order>([\s\S]*?)<\/Order>/gu)].map(([, block]) => block!);
+}
+
+/** Il blocco senza le transazioni: qui stanno i campi dell'ordine e dell'acquirente. */
+function orderHeader(block: string): string {
+  return block.replace(/<TransactionArray>[\s\S]*?<\/TransactionArray>/gu, "");
+}
+
+function isOrder(block: string, orderId: string): boolean {
+  return xmlField(block, "OrderID") === orderId || xmlField(block, "ExtendedOrderID") === orderId;
+}
+
+/** Data di modifica dell'acquisto, dallo stato del checkout; null se assente. */
+function checkoutModified(block: string): string | null {
+  const checkout = /<CheckoutStatus>([\s\S]*?)<\/CheckoutStatus>/u.exec(block)?.[1];
+  return checkout ? xmlField(checkout, "LastModifiedTime") : null;
+}
+
+/** Identificativi fiscali del blocco, nell'ordine della fonte; null per uno senza ID o tipo. */
+function taxIdentifierEntries(block: string): Array<TradingTaxIdentifier | null> {
+  return [...block.matchAll(/<BuyerTaxIdentifier>([\s\S]*?)<\/BuyerTaxIdentifier>/gu)].map(
+    ([, tax]) => {
+      const id = xmlField(tax!, "ID");
+      const type = xmlField(tax!, "Type");
+      if (!id || !type) return null;
+      const attributes = [...tax!.matchAll(/<Attribute name="([^"]*)">([^<]*)<\/Attribute>/gu)].map(
+        ([, name, value]) => ({ name: xmlText(name!), value: xmlText(value!) }),
+      );
+      return { id, type, attributes };
+    },
+  );
+}
+
+function completeTaxIdentifiers(block: string): TradingTaxIdentifier[] {
+  return taxIdentifierEntries(block).filter((entry) => entry !== null);
+}
+
 export function parseTradingOrders(xml: string) {
   tradingAck(xml);
   const totalText = xmlField(xml, "TotalNumberOfEntries");
@@ -152,16 +191,15 @@ export function parseTradingOrders(xml: string) {
   const orders: OrderObservation[] = [];
   let entries = 0;
   let skipped = 0;
-  for (const [, block] of xml.matchAll(/<Order>([\s\S]*?)<\/Order>/gu)) {
+  for (const block of orderBlocks(xml)) {
     entries += 1;
     // Un ordine illeggibile si salta: gli altri della pagina restano acquisibili.
     try {
       const transactions =
-        /<TransactionArray>([\s\S]*?)<\/TransactionArray>/u.exec(block!)?.[1] ?? "";
-      const header = block!.replace(/<TransactionArray>[\s\S]*?<\/TransactionArray>/gu, "");
+        /<TransactionArray>([\s\S]*?)<\/TransactionArray>/u.exec(block)?.[1] ?? "";
+      const header = orderHeader(block);
       const id = xmlField(header, "OrderID");
       const status = xmlField(header, "OrderStatus");
-      const checkout = /<CheckoutStatus>([\s\S]*?)<\/CheckoutStatus>/u.exec(header)?.[1] ?? "";
       const total = /<Total currencyID="([A-Z]{3})">([^<]+)<\/Total>/u.exec(header);
       if (!id || !status || !total) throw new Error("invalid_order");
       const paid = !!xmlField(header, "PaidTime") || status === "Completed";
@@ -193,10 +231,7 @@ export function parseTradingOrders(xml: string) {
         },
       );
       if (!items.length) throw new Error("missing_transactions");
-      const taxBlocks = [
-        ...header.matchAll(/<BuyerTaxIdentifier>([\s\S]*?)<\/BuyerTaxIdentifier>/gu),
-      ];
-      const validTax = taxBlocks.every(([, tax]) => xmlField(tax!, "ID") && xmlField(tax!, "Type"));
+      const taxEntries = taxIdentifierEntries(header);
       orders.push(
         orderObservationSchema.parse({
           source: "trading",
@@ -204,7 +239,7 @@ export function parseTradingOrders(xml: string) {
           externalOrderId: id,
           provisional: !paid,
           creationTime: xmlField(header, "CreatedTime"),
-          lastModifiedTime: xmlField(checkout, "LastModifiedTime"),
+          lastModifiedTime: checkoutModified(header),
           total: { minor: parseMinor(total[2]!, total[1]!), currency: total[1] },
           paymentStatus: paid
             ? "PAID"
@@ -242,12 +277,12 @@ export function parseTradingOrders(xml: string) {
               : null,
           },
           items,
-          taxIdentifiers: validTax
+          taxIdentifiers: !taxEntries.includes(null)
             ? {
                 source: "ebay_trading_get_orders",
                 complete: false,
-                availability: taxBlocks.length ? "present" : "not_included",
-                values: mapTradingTaxIdentifiers(parseTradingOrderTaxIdentifiers(xml, id)),
+                availability: taxEntries.length ? "present" : "not_included",
+                values: mapTradingTaxIdentifiers(completeTaxIdentifiers(block)),
               }
             : {
                 source: "ebay_trading_get_orders",
@@ -280,35 +315,21 @@ export async function readTradingTaxObservation(access: EbayAccess, orderId: str
     "<DetailLevel>ReturnAll</DetailLevel><OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>" +
       `<OrderIDArray><OrderID>${escapeXml(orderId)}</OrderID></OrderIDArray>`,
   );
-  const matching = [...xml.matchAll(/<Order>([\s\S]*?)<\/Order>/gu)].filter(
-    ([, order]) =>
-      xmlField(order!, "OrderID") === orderId || xmlField(order!, "ExtendedOrderID") === orderId,
-  );
+  const matching = orderBlocks(xml).filter((block) => isOrder(block, orderId));
   if (matching.length > 1) throw new UpstreamError("invalid_response");
   if (matching.length === 0) return { orderFound: false, lastModifiedTime: undefined, values: [] };
-  const order = matching[0]![1]!;
-  for (const [, block] of order.matchAll(
-    /<BuyerTaxIdentifier>([\s\S]*?)<\/BuyerTaxIdentifier>/gu,
-  )) {
-    if (!xmlField(block!, "ID") || !xmlField(block!, "Type"))
-      throw new UpstreamError("invalid_response");
-  }
+  const order = matching[0]!;
+  const identifiers = taxIdentifierEntries(order);
+  if (identifiers.includes(null)) throw new UpstreamError("invalid_response");
+  const modified = checkoutModified(order);
+  const parsed =
+    modified === null ? null : orderObservationSchema.shape.lastModifiedTime.safeParse(modified);
+  if (parsed && !parsed.success) throw new UpstreamError("invalid_response");
   return {
     orderFound: true,
-    buyerEiasToken:
-      xmlField(
-        order.replace(/<TransactionArray>[\s\S]*?<\/TransactionArray>/gu, ""),
-        "EIASToken",
-      ) || undefined,
-    lastModifiedTime: (() => {
-      const checkout = /<CheckoutStatus>([\s\S]*?)<\/CheckoutStatus>/u.exec(order)?.[1];
-      const value = checkout ? xmlField(checkout, "LastModifiedTime") : null;
-      if (value === null) return undefined;
-      const parsed = orderObservationSchema.shape.lastModifiedTime.safeParse(value);
-      if (!parsed.success) throw new UpstreamError("invalid_response");
-      return parsed.data;
-    })(),
-    values: mapTradingTaxIdentifiers(parseTradingOrderTaxIdentifiers(xml, orderId)),
+    buyerEiasToken: xmlField(orderHeader(order), "EIASToken") || undefined,
+    lastModifiedTime: parsed?.data,
+    values: mapTradingTaxIdentifiers(completeTaxIdentifiers(order)),
   };
 }
 
@@ -317,27 +338,9 @@ export function parseTradingOrderTaxIdentifiers(
   orderId: string,
 ): TradingTaxIdentifier[] {
   tradingAck(xml);
-  const identifiers: TradingTaxIdentifier[] = [];
-  for (const [, order] of xml.matchAll(/<Order>([\s\S]*?)<\/Order>/gu)) {
-    if (
-      xmlField(order!, "OrderID") !== orderId &&
-      xmlField(order!, "ExtendedOrderID") !== orderId
-    ) {
-      continue;
-    }
-    for (const [, block] of order!.matchAll(
-      /<BuyerTaxIdentifier>([\s\S]*?)<\/BuyerTaxIdentifier>/gu,
-    )) {
-      const id = xmlField(block!, "ID");
-      const type = xmlField(block!, "Type");
-      if (!id || !type) continue;
-      const attributes = [
-        ...block!.matchAll(/<Attribute name="([^"]*)">([^<]*)<\/Attribute>/gu),
-      ].map(([, name, value]) => ({ name: xmlText(name!), value: xmlText(value!) }));
-      identifiers.push({ id, type, attributes });
-    }
-  }
-  return identifiers;
+  return orderBlocks(xml)
+    .filter((block) => isOrder(block, orderId))
+    .flatMap(completeTaxIdentifiers);
 }
 
 export function mapTradingTaxIdentifiers(

@@ -1,3 +1,5 @@
+import { consultableStore } from "./store-state.server";
+
 /** Predicato condiviso: nessun valore fiscale entra nel risultato prima dell'autorizzazione. */
 export function orderAccessSql(order: string, workspace: string, at: string) {
   return `(EXISTS (SELECT 1 FROM order_grants g JOIN orders original ON original.id = g.order_id
@@ -103,8 +105,7 @@ export async function unlockOrders(
         WHERE o.id = ?3 AND s.workspace_id = ?2 AND s.ebay_environment = ?6
           AND EXISTS (SELECT 1 FROM workspace_members wm WHERE wm.workspace_id = ?2 AND wm.user_id = ?7)
           AND EXISTS (SELECT 1 FROM tax_identifiers t WHERE t.order_id = o.id AND t.removed_at IS NULL)
-          AND o.merged_into IS NULL AND s.data_deleted_at IS NULL AND o.retention_until > ?4
-          AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = s.id AND p.reason = 'plan')
+          AND o.merged_into IS NULL AND o.retention_until > ?4 AND ${consultableStore("s")}
           AND ${access})`)
         .bind(
           crypto.randomUUID(),

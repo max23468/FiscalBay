@@ -6,6 +6,7 @@ import {
   type OrderObservation,
 } from "../../domain/order-import.server";
 import { parseMinor } from "../../money";
+import { dayMilliseconds } from "../../time";
 import { upstreamJson } from "../http.server";
 import { ebayApiUrl, type EbayAccess } from "./environment.server";
 
@@ -41,7 +42,6 @@ type FulfillmentOrderDetail = {
 
 const money = ({ value, currency }: Amount) => ({ minor: parseMinor(value, currency), currency });
 
-const day = 86_400_000;
 // eBay smette di restituire email dopo 14 giorni e nome, telefono e prima riga dell'indirizzo
 // dopo 90: oltre quelle età un campo assente è mascherato, non rimosso.
 const emailDays = 14;
@@ -57,7 +57,7 @@ function maskedFields(
   shipTo: Contact | undefined,
   observedAt: string,
 ): MaskedBuyerField[] {
-  const age = (Date.parse(observedAt) - Date.parse(order.creationDate)) / day;
+  const age = (Date.parse(observedAt) - Date.parse(order.creationDate)) / dayMilliseconds;
   // Un campo annidato conta solo se eBay ha fornito il contenitore che lo racchiude.
   const fields: Array<[MaskedBuyerField, unknown, number, unknown]> = [
     ["email", registration?.email, emailDays, true],

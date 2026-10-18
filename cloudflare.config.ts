@@ -55,7 +55,9 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
     ...secrets,
     DB: bindings.d1(target.database),
     AUTH_EMAIL: bindings.sendEmail({ allowedSenderAddresses: ["noreply@fiscalbay.it"] }),
-    WEBHOOK_QUEUE: bindings.queue({ name: target.queue }),
+    // Una sola coda per webhook, letture dei negozi e compiti periodici; la risorsa conserva il
+    // nome con cui è nata.
+    WORK_QUEUE: bindings.queue({ name: target.queue }),
     VERSION_METADATA: bindings.versionMetadata(),
   },
 });

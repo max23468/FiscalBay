@@ -81,7 +81,7 @@ export async function dispatchTasks(environment: Env, now: Date): Promise<Schedu
   const claimed = claims.flatMap(({ results }) => results);
   if (claimed.length === 0) return [];
   try {
-    await environment.WEBHOOK_QUEUE.sendBatch(claimed.map((body) => ({ body })));
+    await environment.WORK_QUEUE.sendBatch(claimed.map((body) => ({ body })));
   } catch (error) {
     // Il turno resta da accodare: lo riprende il prossimo trigger dello stesso periodo.
     await environment.DB.batch(

@@ -3,12 +3,12 @@ import { z } from "zod";
 import {
   acquireOrders,
   defaultRateLimitSeconds,
-  historyDays,
+  historyStart,
   rateLimitWait,
   storeAccess,
   type ActiveStore,
 } from "./order-acquisition.server";
-import { writableStore } from "./order-import.server";
+import { activeStore, writableStore } from "./store-state.server";
 import { logFailure } from "../errors";
 import { UpstreamError } from "../integrations/http.server";
 import { ebayConfiguration } from "../integrations/ebay/environment.server";
@@ -39,7 +39,6 @@ const dispatchLimit = 100;
 // Un turno accodato senza esito entro questo tempo si considera perso e si ripropone.
 const dispatchStaleMilliseconds = 60 * 60_000;
 const tokenMarginMilliseconds = 5 * 60_000;
-const dayMilliseconds = 86_400_000;
 
 export type SyncCandidate = {
   plan: SyncPlan;
@@ -115,8 +114,7 @@ export async function dispatchStoreSyncs(environment: Env, now = new Date()): Pr
          FROM ebay_store_credentials c
          JOIN ebay_stores s ON s.id = c.store_id
          LEFT JOIN sync_state ss ON ss.store_id = c.store_id
-        WHERE c.rejected_at IS NULL AND c.access_expires_at > ?2 AND s.disconnected_at IS NULL
-          AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = c.store_id)
+        WHERE ${activeStore("c", "s")} AND c.access_expires_at > ?2
           AND (ss.polled_at IS NULL OR ss.requested_at IS NOT NULL OR ss.polled_at <= ?3)
           AND (ss.dispatched_at IS NULL OR ss.dispatched_at <= ?5)
         ORDER BY ss.polled_at IS NOT NULL, ss.polled_at, c.store_id
@@ -169,7 +167,7 @@ export async function dispatchStoreSyncs(environment: Env, now = new Date()): Pr
   const claimed = claims.flatMap(({ results }) => results.map((row) => row.store_id));
   if (claimed.length === 0) return [];
   try {
-    await environment.WEBHOOK_QUEUE.sendBatch(
+    await environment.WORK_QUEUE.sendBatch(
       claimed.map((storeId) => ({ body: { syncStore: storeId } })),
     );
   } catch (error) {
@@ -264,19 +262,14 @@ export async function requestStoreSync(
               history_next = NULL, history_total = NULL, updated_at = ?3
         WHERE store_id = ?1 AND history_done_at IS NOT NULL AND ${writableStore}`,
     )
-      .bind(
-        storeId,
-        store.granted_at,
-        at,
-        new Date(now.getTime() - historyDays * dayMilliseconds).toISOString(),
-      )
+      .bind(storeId, store.granted_at, at, historyStart(now))
       .run();
   }
   const apiOrigin = ebayConfiguration(environment, store.ebay_environment).apiOrigin;
   if ((await rateLimitWait(environment.DB, apiOrigin, now)) > 0) return "limited";
   if (request.requested_at !== at) return "merged";
   try {
-    await environment.WEBHOOK_QUEUE.send({ syncStore: storeId });
+    await environment.WORK_QUEUE.send({ syncStore: storeId });
   } catch (error) {
     // La richiesta è già registrata: il cron la riprende alla prossima esecuzione.
     logFailure({ error, operation: "order_acquisition" });
@@ -304,8 +297,7 @@ export async function consumeStoreSync(
        JOIN ebay_stores s ON s.id = c.store_id
        JOIN sync_state ss ON ss.store_id = c.store_id
       WHERE c.store_id = ?1 AND (ss.requested_at IS NOT NULL OR ss.dispatched_at IS NOT NULL)
-        AND c.rejected_at IS NULL AND c.access_expires_at > ?2 AND s.disconnected_at IS NULL
-        AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = c.store_id)`,
+        AND ${activeStore("c", "s")} AND c.access_expires_at > ?2`,
   )
     .bind(syncStore, new Date(now.getTime() + tokenMarginMilliseconds).toISOString())
     .first<ActiveStore>();

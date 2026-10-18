@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { unpausedStore } from "../../domain/store-state.server";
 import { logFailure } from "../../errors";
 import { UpstreamError, upstreamJson } from "../http.server";
 
@@ -264,7 +265,7 @@ export async function refreshExpiringTokens(
       `SELECT c.store_id, c.access_expires_at FROM ebay_store_credentials c
         WHERE c.rejected_at IS NULL AND c.access_expires_at <= ?1
           AND (?2 IS NULL OR (c.access_expires_at, c.store_id) > (?2, ?3))
-          AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = c.store_id)
+          AND ${unpausedStore("c.store_id")}
         ORDER BY c.access_expires_at, c.store_id LIMIT ?4`,
     )
       .bind(threshold, ...cursor, refreshBatch)

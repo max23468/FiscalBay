@@ -133,7 +133,7 @@ describe("acquisizione con il client", () => {
   const cronTurn = async (environment: Env, fetcher: typeof fetch, at: Date) => {
     const sendBatch = vi.fn<Queue["sendBatch"]>(async () => {});
     const stores = await dispatchStoreSyncs(
-      { ...environment, WEBHOOK_QUEUE: { sendBatch } } as unknown as Env,
+      { ...environment, WORK_QUEUE: { sendBatch } } as unknown as Env,
       at,
     );
     for (const storeId of stores)
@@ -1262,7 +1262,7 @@ describe("acquisizione con il client", () => {
     const start = Date.parse("2026-09-02T00:00:00.000Z");
     const minutes = (value: number) => new Date(start + value * 60_000);
     const send = vi.fn<Queue["send"]>();
-    const queued = { ...env, WEBHOOK_QUEUE: { send } } as Env;
+    const queued = { ...env, WORK_QUEUE: { send } } as Env;
     const message = () => {
       const ack = vi.fn();
       const retry = vi.fn();
@@ -1838,7 +1838,7 @@ describe("acquisizione con il client", () => {
 
     describe("smistamento del cron", () => {
       const sendBatch = vi.fn<Queue["sendBatch"]>();
-      const cron = { ...env, WEBHOOK_QUEUE: { send, sendBatch } } as unknown as Env;
+      const cron = { ...env, WORK_QUEUE: { send, sendBatch } } as unknown as Env;
 
       beforeEach(async () => {
         sendBatch.mockReset();

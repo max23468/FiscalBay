@@ -766,7 +766,6 @@ const it = {
     sendEmailLink: "Invia il link",
     setPassword: "Imposta password",
     passkeySignIn: "Accedi con passkey",
-    passkeySecurity: "Sicurezza",
     passkeyRecovery: "Accedi con impronta, volto o blocco schermo del dispositivo.",
     passkeyEmpty: "Nessuna passkey aggiunta.",
     passkeyErrors: {
@@ -1599,7 +1598,6 @@ const en: AppCopy = {
     sendEmailLink: "Send the link",
     setPassword: "Set password",
     passkeySignIn: "Sign in with a passkey",
-    passkeySecurity: "Security",
     passkeyRecovery: "Sign in with your fingerprint, face or device screen lock.",
     passkeyEmpty: "No passkeys added.",
     passkeyErrors: {
