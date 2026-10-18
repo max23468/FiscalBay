@@ -561,7 +561,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
 
   it("chiede letture e reimportazione dalla schermata con l'esito della richiesta", async () => {
     const seller = await linkedSeller("letture-schermata@example.invalid");
-    const send = vi.spyOn(env.WEBHOOK_QUEUE, "send").mockResolvedValue(undefined);
+    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(undefined);
     try {
       expect(
         await storeForm(seller.cookie, { intent: "store-sync", store: seller.storeId }),

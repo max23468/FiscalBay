@@ -1310,8 +1310,9 @@ test("sicurezza nell'anteprima senza JavaScript resta simulata", async ({ browse
     await expect(page.getByRole("button", { name: "Cambia password", exact: true })).toBeVisible();
     await expect(page.locator('form[action="/accesso"]')).toHaveCount(0);
     await page.getByRole("button", { name: "Cambia password", exact: true }).click();
+    // Il pulsante resta visibile anche prima dell'invio: si attende la richiesta registrata.
+    await expect.poll(() => posts).toEqual(["/anteprima/impostazioni/sicurezza"]);
     await expect(page.getByRole("button", { name: "Cambia password", exact: true })).toBeVisible();
-    expect(posts).toEqual(["/anteprima/impostazioni/sicurezza"]);
     await expect(page).toHaveURL(/\/anteprima\/impostazioni\/sicurezza$/);
   } finally {
     await context.close();

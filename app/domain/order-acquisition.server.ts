@@ -1,4 +1,5 @@
-import { DuplicateLineIdentity, writableStore } from "./order-import.server";
+import { DuplicateLineIdentity } from "./order-import.server";
+import { activeStore, writableStore } from "./store-state.server";
 import {
   limitKey,
   rateLimitWait,
@@ -9,8 +10,9 @@ import {
   type AcquisitionBudget,
   type Context,
 } from "./order-acquisition-context.server";
-import { readDetail, readDetails } from "./order-acquisition-details.server";
+import { readDetail, readDetails, stopsReads } from "./order-acquisition-details.server";
 import { logFailure } from "../errors";
+import { dayMilliseconds } from "../time";
 import { UpstreamError } from "../integrations/http.server";
 import {
   ebayConfiguration,
@@ -50,7 +52,11 @@ const pageSize = 25;
 const overlapMilliseconds = 15 * 60_000;
 /** Finestra dello storico del piano Free. */
 export const historyDays = 30;
-const dayMilliseconds = 86_400_000;
+
+/** Inizio della finestra dello storico per un'importazione che parte all'istante indicato. */
+export function historyStart(now: Date): string {
+  return new Date(now.getTime() - historyDays * dayMilliseconds).toISOString();
+}
 const lockMilliseconds = 15 * 60_000;
 // Acquisti prima del pagamento e ordini combinati cambiano di rado: la lettura Trading periodica
 // ogni due ore tiene la quota `GetOrders` del keyset lontana dal limite anche con molti negozi.
@@ -204,12 +210,11 @@ async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
 }
 
 async function tradingFailure(ctx: Context, error: unknown): Promise<false> {
-  if (!(error instanceof UpstreamError) || error.failure === "credentials") throw error;
+  if (!(error instanceof UpstreamError)) throw error;
   // La quota `GetOrders` esaurita sospende soltanto Trading: Fulfillment continua.
-  if (error.failure === "rate_limited") {
-    if (!error.details.limit) throw error;
+  if (error.details.limit !== undefined)
     await recordRateLimit(ctx.db, ordersLimit(ctx), error, new Date(ctx.at));
-  }
+  else if (stopsReads(error)) throw error;
   logFailure({ error, operation: "order_acquisition" });
   return false;
 }
@@ -322,14 +327,7 @@ export async function acquireOrders(input: {
                  history_next, history_total, history_done_at,
                  trading_cursor, trading_end, trading_page, trading_total, requested_at`,
     )
-    .bind(
-      storeId,
-      grantedAt,
-      at,
-      new Date(now.getTime() - historyDays * dayMilliseconds).toISOString(),
-      lock,
-      poll ? at : null,
-    )
+    .bind(storeId, grantedAt, at, historyStart(now), lock, poll ? at : null)
     .first<SyncRow>();
   if (!state) {
     const writable = await db
@@ -443,15 +441,14 @@ export async function consumeOrderConfirmation(
   const store =
     await environment.DB.prepare(`SELECT c.store_id, c.access_token, c.granted_at, c.access_expires_at, s.ebay_environment
     FROM ebay_store_credentials c JOIN ebay_stores s ON s.id = c.store_id
-    WHERE s.id = ? AND c.granted_at = ? AND s.ebay_environment = ? AND s.disconnected_at IS NULL
-      AND c.rejected_at IS NULL AND (s.data_deleted_at IS NULL OR s.data_deleted_at < ?)
+    WHERE s.id = ? AND c.granted_at = ? AND s.ebay_environment = ? AND ${activeStore("c", "s")}
+      AND (s.data_deleted_at IS NULL OR s.data_deleted_at < ?)
       AND NOT EXISTS (SELECT 1 FROM deleted_order_keys d
         WHERE d.store_id = s.id AND d.kind = 'order' AND d.external_key = ?)
       AND NOT EXISTS (SELECT 1 FROM orders o JOIN orders current ON current.id = COALESCE(o.merged_into, o.id)
         WHERE o.store_id = s.id AND current.retention_until <= ?
         AND (o.ebay_order_id = ? OR o.id IN (SELECT order_id FROM order_source_refs
-          WHERE store_id = s.id AND external_order_id = ?)))
-      AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = s.id)`)
+          WHERE store_id = s.id AND external_order_id = ?)))`)
       .bind(
         event.storeId,
         event.grantedAt,

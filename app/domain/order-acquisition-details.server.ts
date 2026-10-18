@@ -1,4 +1,5 @@
-import { writableStore, type OrderObservation } from "./order-import.server";
+import { deadlineCheckAt, type OrderObservation } from "./order-import.server";
+import { writableStore } from "./store-state.server";
 import {
   limitKey,
   rateLimitWait,
@@ -48,8 +49,13 @@ async function listingsWithoutImage(
   );
 }
 
-/** Errori che riguardano eBay o il consenso, non il singolo ordine: fermano l'esecuzione. */
-const runFailures = new Set(["credentials", "rate_limited", "unavailable"]);
+/** Credenziali rifiutate o limite di eBay: nessuna lettura successiva può riuscire. */
+export function stopsReads(error: unknown): error is UpstreamError {
+  return (
+    error instanceof UpstreamError &&
+    (error.failure === "credentials" || error.failure === "rate_limited")
+  );
+}
 
 /**
  * Limite della quota di una singola chiamata Trading: sospende quella chiamata, non la lettura.
@@ -75,7 +81,8 @@ export type PendingDetail = {
 /** Rimanda il dettaglio dopo un errore del singolo ordine o, all'ultimo tentativo, lo chiude. */
 async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) {
   const code = error instanceof UpstreamError ? error.failure : "invalid_response";
-  const runFailure = runFailures.has(code);
+  // Anche eBay non disponibile riguarda l'esecuzione, non il singolo ordine.
+  const runFailure = stopsReads(error) || code === "unavailable";
   const attempts = pending.detail_attempts + 1;
   const delay = detailRetryMinutes[attempts - 1];
   const scope = `WHERE store_id = ?1 AND source = 'fulfillment' AND external_order_id = ?3
@@ -104,7 +111,7 @@ async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) 
       delay === undefined ? null : new Date(Date.parse(ctx.at) + delay * 60_000).toISOString(),
       pending.last_modified_time,
       ctx.at,
-      new Date(Math.max(Date.now(), Date.parse(ctx.at))).toISOString(),
+      deadlineCheckAt(ctx.at),
     )
     .run();
   const writable = await ctx.db
@@ -129,11 +136,7 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
     JOIN orders o ON o.id = r.order_id
     WHERE r.store_id = ? AND r.source = 'fulfillment' AND r.external_order_id = ?
       AND o.retention_until > ?`)
-    .bind(
-      ctx.storeId,
-      pending.external_order_id,
-      new Date(Math.max(Date.now(), Date.parse(ctx.at))).toISOString(),
-    )
+    .bind(ctx.storeId, pending.external_order_id, deadlineCheckAt(ctx.at))
     .first();
   if (!retained) return true;
   const qualifiedMarketplace =
@@ -199,11 +202,7 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
             );
             return null;
           }
-          if (
-            error instanceof UpstreamError &&
-            (error.failure === "credentials" || error.failure === "rate_limited")
-          )
-            throw error;
+          if (stopsReads(error)) throw error;
           return null;
         });
         return [id, image] as const;

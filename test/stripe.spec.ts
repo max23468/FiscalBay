@@ -131,7 +131,7 @@ describe("Stripe Managed Payments", () => {
     const verified = await verifyStripeEvent(body, signature, secret);
     expect(verified).toEqual(event);
     const send = vi.fn().mockResolvedValue(undefined);
-    const environment = { ...env, WEBHOOK_QUEUE: { send } } as Env;
+    const environment = { ...env, WORK_QUEUE: { send } } as Env;
     const request = () =>
       new Request("https://test.fiscalbay.it/webhooks/stripe", {
         method: "POST",
