@@ -51,11 +51,12 @@ async function listingsWithoutImage(
 /** Errori che riguardano eBay o il consenso, non il singolo ordine: fermano l'esecuzione. */
 const runFailures = new Set(["credentials", "rate_limited", "unavailable"]);
 
-/** Limite della quota di una singola chiamata Trading: sospende quella chiamata, non la lettura. */
+/**
+ * Limite della quota di una singola chiamata Trading: sospende quella chiamata, non la lettura.
+ * Solo un limite di frequenza porta il nome della chiamata.
+ */
 function callLimit(error: unknown): error is UpstreamError {
-  return (
-    error instanceof UpstreamError && error.failure === "rate_limited" && !!error.details.limit
-  );
+  return error instanceof UpstreamError && error.details.limit !== undefined;
 }
 
 /** Attesa ancora in corso per la quota di una chiamata Trading. */

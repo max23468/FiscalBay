@@ -1086,6 +1086,34 @@ describe("acquisizione con il client", () => {
     expect(calls(provider, "GetOrders")).toBe(0);
   });
 
+  it("con la quota GetOrders già in attesa rimanda la lettura fiscale senza chiamare Trading", async () => {
+    const detail = () =>
+      env.DB.prepare(
+        "SELECT detail_for, detail_error, detail_attempts FROM order_source_refs",
+      ).first();
+    await env.DB.prepare(
+      "INSERT INTO ebay_rate_limits (api_origin, until) VALUES ('https://api.ebay.com#GetOrders', ?)",
+    )
+      .bind("2026-09-02T00:15:00.000Z")
+      .run();
+    const limited = ebay();
+    expect(await acquire(limited)).toBe("budget");
+    expect(limited.mock.calls.some(([, init]) => String(init?.body).includes("GetOrders"))).toBe(
+      false,
+    );
+    expect(await detail()).toEqual({
+      detail_for: null,
+      detail_error: "rate_limited",
+      detail_attempts: 0,
+    });
+    // Alla scadenza dell'attesa la lettura fiscale riparte e chiude la versione.
+    const resumed = ebay();
+    expect(await acquire(resumed, "2026-09-02T00:15:00.000Z")).toBe("complete");
+    expect(calls(resumed, "GetOrders")).toBe(1);
+    expect(await detail()).toMatchObject({ detail_error: null, detail_attempts: 0 });
+    expect((await detail())!.detail_for).not.toBeNull();
+  });
+
   it("con la quota GetItem esaurita lascia le righe senza immagine e prosegue", async () => {
     const provider = ebay({
       getItem: () => new Response(null, { status: 429, headers: { "Retry-After": "3600" } }),
