@@ -862,10 +862,13 @@ for (const language of ["it", "en"] as const) {
         await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
         await page.reload();
         await expect(page.locator("html")).not.toHaveAttribute("data-theme", "dark");
-        // Lo scroll aggiorna la voce attiva solo dopo l'idratazione.
-        await expect(page.locator("#preview-scenario")).toBeEnabled({ timeout: 20_000 });
         await page.waitForLoadState("networkidle");
         if (width >= 768) {
+          // L'indicatore nasce nel layout effect, poi il frame allinea la route ripristinata.
+          await expect(page.locator('main nav li[aria-hidden="true"]')).toBeVisible();
+          await page.evaluate(
+            () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+          );
           await expect(page.locator("#settings-aspetto")).toBeInViewport({ ratio: 1 });
           await page
             .locator("#settings-privacy")
