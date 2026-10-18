@@ -7848,6 +7848,45 @@ describe("client eBay e normalizzazione", () => {
       expect(await count("SELECT COUNT(*) AS total FROM tax_identifiers")).toBe(1);
     });
 
+    it.each([false, true])(
+      "ferma l'acquisizione con consenso rifiutato, risposta già in corso: %s",
+      async (inFlight) => {
+        const rejectedAt = "2026-09-02T00:00:00.000Z";
+        const reject = () =>
+          env.DB.prepare("UPDATE ebay_store_credentials SET rejected_at = ? WHERE store_id = 's-a'")
+            .bind(rejectedAt)
+            .run();
+        if (!inFlight) await reject();
+        const fetcher = ebay({
+          orders: [order({ lastModifiedDate: rejectedAt })],
+          before: async () => {
+            if (inFlight) await reject();
+          },
+        });
+
+        expect(await acquire(fetcher)).toBe("not_writable");
+        expect(fetcher).toHaveBeenCalledTimes(inFlight ? 1 : 0);
+        for (const table of [
+          "orders",
+          "order_items",
+          "tax_identifiers",
+          "order_source_refs",
+          "sync_runs",
+        ])
+          expect(await count(`SELECT COUNT(*) AS total FROM ${table}`)).toBe(0);
+        if (inFlight)
+          expect(await syncState()).toMatchObject({
+            cursor: rejectedAt,
+            recent_next: null,
+            history_next: null,
+            history_done_at: null,
+            last_success_at: null,
+            locked_until: null,
+          });
+        else expect(await syncState()).toBeNull();
+      },
+    );
+
     it("non sovrappone due esecuzioni e non scrive senza il consenso con cui è partita", async () => {
       const fetcher = ebay();
       await env.DB.prepare(
@@ -8131,7 +8170,7 @@ describe("client eBay e normalizzazione", () => {
               "SELECT store_id, polled_at FROM sync_state ORDER BY store_id",
             ).all<{
               store_id: string;
-              polled_at: string;
+              polled_at: string | null;
             }>()
           ).results.map(({ store_id, polled_at }) => [store_id, polled_at]),
         );
@@ -8154,10 +8193,10 @@ describe("client eBay e normalizzazione", () => {
           "credentials",
           "credentials",
         ]);
-        // Anche i tentativi falliti passano il turno.
+        // C passa il turno; B chiude il consenso prima di acquisire e non scrive il checkpoint.
         expect(await attempted()).toEqual({
           "s-a": "2026-09-02T00:00:00.000Z",
-          "s-b": "2026-09-02T00:00:00.000Z",
+          "s-b": null,
           "s-c": "2026-09-02T00:00:00.000Z",
           "s-d": "2026-09-02T00:00:00.000Z",
         });
@@ -8180,7 +8219,7 @@ describe("client eBay e normalizzazione", () => {
         await cronTurn(env, later, new Date("2026-09-02T01:00:00.000Z"));
         expect(Object.keys(perStore(later)).sort()).toEqual(["token-s-a", "token-s-d"]);
         expect(await attempted()).toMatchObject({
-          "s-b": "2026-09-02T00:00:00.000Z",
+          "s-b": null,
           "s-d": "2026-09-02T01:00:00.000Z",
         });
         expect(logged()).toBe(2);

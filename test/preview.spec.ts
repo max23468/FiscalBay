@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { describe, expect, it, vi } from "vitest";
 
 import { appCopy } from "../app/app-copy";
@@ -9,8 +10,33 @@ import {
 } from "../app/preview/scenarios.server";
 import { formatDate, formatRelative } from "../app/view-models";
 import { taxQuality } from "../app/tax-quality";
+import { readPreviewState, writePreviewState } from "../app/preview/state.server";
 
 describe("stato sintetico dell'anteprima", () => {
+  it("conserva lo stato sui cookie HTTP locali e mantiene Secure sul dominio HTTPS", async () => {
+    const previous = env.APP_ORIGIN;
+    const state = { scenario: "dati-discordanti", unlocked: ["ord-03"], saveFailed: true } as const;
+    try {
+      for (const [origin, secure] of [
+        ["http://localhost:5186", false],
+        ["https://test.fiscalbay.it", true],
+      ] as const) {
+        Object.assign(env, { APP_ORIGIN: origin });
+        const cookie = await writePreviewState({ ...state, unlocked: [...state.unlocked] });
+        expect(/; Secure(?:;|$)/u.test(cookie)).toBe(secure);
+        expect(cookie).toContain("; HttpOnly");
+        expect(cookie).toContain("; SameSite=Lax");
+        expect(
+          await readPreviewState(
+            new Request(origin, { headers: { cookie: cookie.split(";")[0]! } }),
+          ),
+        ).toMatchObject(state);
+      }
+    } finally {
+      Object.assign(env, { APP_ORIGIN: previous });
+    }
+  });
+
   it("gli scenari UI usano gli stessi esiti formali degli identificativi importati", () => {
     for (const id of scenarioIds) {
       const scenario = loadScenario(id, "it", new Set(["ord-03", "ord-09"]));

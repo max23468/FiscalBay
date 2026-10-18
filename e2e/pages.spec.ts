@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { type BrowserContext, expect, test } from "@playwright/test";
-import { localCookie } from "./local-account";
-import { pageCases, knownPagePath } from "./page-cases";
+import { useLocalAccount } from "./local-account";
+import { pageCases, knownPagePath, expectedPageError } from "./page-cases";
 import { testAccount } from "./test-account";
 
 const remote = Boolean(process.env.E2E_BASE_URL);
@@ -87,43 +87,7 @@ for (const scenario of scenarios) {
         await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
         if (scenario.role !== "anonymous") {
           if (!remote) {
-            const cookie = localCookie(scenario.role, baseURL!);
-            const origin = new URL(baseURL!).origin;
-            // Il browser non accetta un Cookie iniettato né, in WebKit Linux, un cookie Secure
-            // su http: le richieste applicative passano dal client HTTP con la sessione.
-            // Gli asset pubblici restano al browser, senza il proxy Auth e le sue connessioni.
-            // Le richieste che seguono un redirect non tornano dal gestore e arriverebbero senza
-            // sessione: per le navigazioni il redirect diventa una navigazione del documento,
-            // che torna dal gestore. WebKit non conserva i cookie delle risposte intercettate:
-            // quelli impostati dal server (come la scelta di visita) restano qui.
-            const jar = new Map<string, string>([[cookie.name, cookie.value]]);
-            await context.route(
-              (url) => url.origin === origin && !url.pathname.startsWith("/assets/"),
-              async (route) => {
-                const request = route.request();
-                const response = await route.fetch({
-                  headers: {
-                    ...request.headers(),
-                    cookie: [...jar].map(([name, value]) => `${name}=${value}`).join("; "),
-                  },
-                  maxRedirects: 0,
-                });
-                for (const { name, value } of response.headersArray()) {
-                  if (name.toLowerCase() !== "set-cookie") continue;
-                  const [pair = ""] = value.split(";");
-                  const [key = "", ...rest] = pair.split("=");
-                  if (/max-age=0/iu.test(value)) jar.delete(key.trim());
-                  else jar.set(key.trim(), rest.join("="));
-                }
-                const location = response.headers().location;
-                if (!location || !request.isNavigationRequest()) return route.fulfill({ response });
-                return route.fulfill({
-                  status: 200,
-                  headers: { "content-type": "text/html" },
-                  body: `<script>location.replace(${JSON.stringify(location)})</script>`,
-                });
-              },
-            );
+            await useLocalAccount(context, scenario.role, baseURL!);
           } else if (remoteSession) {
             await context.addCookies(remoteSession);
           } else {
@@ -172,23 +136,9 @@ for (const scenario of scenarios) {
         page.on("pageerror", (error) => errors.push(error.message));
         page.on("console", (message) => {
           if (message.type() !== "error") return;
-          const resource = message.location().url;
-          const expectedError =
-            expectedStatus >= 400 &&
-            message.text().includes(`${expectedStatus}`) &&
-            (resource === ownPage.href || resource.startsWith(`${ownPage.origin}${ownData}`));
-          if (!expectedError && !message.text().includes("404")) errors.push(message.text());
+          if (!expectedPageError(message.text(), message.location().url, expectedStatus, ownPage))
+            errors.push(message.text());
         });
-        // La scoperta delle route riparte dopo ogni cambiamento del DOM: se la prova naviga
-        // mentre `/__manifest` è in corso, il browser interrompe la richiesta e la registra in
-        // console, insieme all'errore di React Router (WebKit la descrive come controllo di
-        // accesso e non sempre emette `requestfailed`). Si escludono soltanto questi messaggi:
-        // una risposta HTTP di errore del manifest resta intercettata dal controllo sulle
-        // risorse, e una versione cambiata fa ricaricare la pagina al router.
-        const discoveryMessage = (error: string) =>
-          error.startsWith("Failed to fetch manifest patches") ||
-          /\/__manifest\?\S* due to access control checks\.?$/u.test(error);
-        const unexpectedErrors = () => errors.filter((error) => !discoveryMessage(error));
         // Tornando su una pagina 404 il router richiede di nuovo i suoi dati con lo stesso esito.
         page.on("response", (response) => {
           const url = new URL(response.url());
@@ -330,7 +280,7 @@ for (const scenario of scenarios) {
               "Navigazione interna non applicabile: pagina iniziale, collegamento iniziale assente o coperto da un pannello modale.",
           });
         }
-        expect(unexpectedErrors()).toEqual([]);
+        expect(errors).toEqual([]);
         checked("JavaScript, idratazione e risorse senza errori");
       },
     );

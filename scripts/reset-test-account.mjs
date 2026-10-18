@@ -163,9 +163,12 @@ async function main() {
       statements.push(
         `INSERT OR REPLACE INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt", "passkeyVerified") VALUES ('pages-${role}', 'pages-${role}', '${role === "member" ? testAccount.userId : "collaudo-admin"}', '${expires}', '${now}', '${now}', ${role === "admin-granted" ? 1 : 0});`,
       );
-    // Account separati per lingua e flusso: le prove non alterano fixture concorrenti.
-    for (const id of ["unlock-it", "unlock-en", "suggestions-it", "suggestions-en"]) {
-      const value = `VALORE-SINTETICO-${id.slice(-2)}`;
+    // Account separati per lingua, browser e flusso: le prove non alterano fixture concorrenti.
+    const unlockAccounts = ["chromium", "webkit"].flatMap((browser) =>
+      ["it", "en"].map((language) => `unlock-${language}-${browser}`),
+    );
+    for (const id of [...unlockAccounts, "suggestions-it", "suggestions-en"]) {
+      const value = `VALORE-SINTETICO-${id.split("-")[1]}`;
       statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
       INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
         SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
@@ -200,6 +203,25 @@ async function main() {
         INSERT INTO order_tax_checks (order_id, source, observed_at, availability)
           VALUES ('${id}', 'ebay_fulfillment', '${now}', 'absent');`);
       }
+    }
+    for (const browser of ["chromium", "webkit"]) {
+      const id = `passkey-${browser}`;
+      statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
+      INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+        SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
+      INSERT INTO user_profiles SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
+        FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
+      INSERT INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
+        FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};
+      INSERT INTO workspaces (id, name, created_at) VALUES ('${id}', 'Collaudo passkey', '${now}');
+      INSERT INTO workspace_members VALUES ('${id}', '${id}', 'owner');
+      INSERT INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
+        VALUES ('${id}', '${id}', '${id}', '${expires}', '${now}', '${now}');
+      INSERT INTO "account" (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt")
+        SELECT '${id}', '${id}', 'credential', '${id}', password, "createdAt", "updatedAt"
+        FROM "account" WHERE "userId" = ${quote(testAccount.userId)} AND "providerId" = 'credential';
+      INSERT INTO passkey (id, name, "publicKey", "userId", "credentialID", counter, "deviceType", "backedUp", "createdAt")
+        VALUES ('${id}', 'Chiave browser sintetica', 'synthetic-not-for-authentication', '${id}', '${id}', 0, 'singleDevice', 0, '${now}');`);
     }
   }
   // Un solo batch di istruzioni SQL: nessun import di file, che sospende il database.

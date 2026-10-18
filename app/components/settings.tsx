@@ -1101,16 +1101,10 @@ export function SettingsPage({
   // Usa solo riferimenti e setter stabili: vale anche nell'effetto di apertura.
   const goTo = (id: SettingsSection, behavior: ScrollBehavior) => {
     if (!window.matchMedia(wideQuery).matches) return;
-    setActive(id);
-    following.current = true;
     clearTimeout(release.current);
-    const done = () => {
-      following.current = false;
-      window.removeEventListener("scrollend", done);
-      spy();
-    };
-    window.addEventListener("scrollend", done);
-    release.current = setTimeout(done, 1000);
+    setActive(id);
+    following.current = behavior === "smooth";
+    if (following.current) release.current = setTimeout(finishFollowing, 1000);
     sections.current[id]?.scrollIntoView({ behavior, block: "start" });
   };
 
@@ -1126,7 +1120,13 @@ export function SettingsPage({
     setActive(atBottom ? settingsSections[settingsSections.length - 1] : next);
   };
 
-  useEffect(() => {
+  const finishFollowing = () => {
+    following.current = false;
+    clearTimeout(release.current);
+    spy();
+  };
+
+  useLayoutEffect(() => {
     // Dopo il ripristino dello scroll della route, riallinea anche il cambio lingua.
     const frame = requestAnimationFrame(() => {
       if (data.section) goTo(data.section, "instant");
@@ -1134,11 +1134,14 @@ export function SettingsPage({
     });
     window.addEventListener("scroll", spy, { passive: true });
     window.addEventListener("resize", spy);
+    window.addEventListener("scrollend", finishFollowing);
     return () => {
       window.removeEventListener("scroll", spy);
       window.removeEventListener("resize", spy);
+      window.removeEventListener("scrollend", finishFollowing);
       cancelAnimationFrame(frame);
       clearTimeout(release.current);
+      following.current = false;
     };
     // Apertura e cambio lingua; i clic fra categorie scorrono dal menu.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1375,7 +1378,7 @@ export function ProfilePage({
               name="nome"
               autoComplete="given-name"
               defaultValue={profile.firstName}
-              disabled={action.pending}
+              disabled={!v.ready || action.pending}
               maxLength={100}
               required
               {...v.control("nome", "profile-name-hint")}
@@ -1394,7 +1397,7 @@ export function ProfilePage({
               maxLength={100}
               required
               defaultValue={profile.lastName}
-              disabled={action.pending}
+              disabled={!v.ready || action.pending}
               {...v.control("cognome")}
             />
             {v.error("cognome")}
@@ -1411,7 +1414,7 @@ export function ProfilePage({
                 maxLength={200}
                 required
                 defaultValue={profile.companyName ?? ""}
-                disabled={action.pending}
+                disabled={!v.ready || action.pending}
                 {...v.control("ragione_sociale")}
               />
               {v.error("ragione_sociale")}

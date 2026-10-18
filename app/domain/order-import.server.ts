@@ -7,7 +7,7 @@ import { taxComparisonKey, taxIdentifierType } from "../tax-quality";
  * Parametri: ?1 negozio, ?2 data del consenso.
  */
 export const writableStore = `EXISTS (SELECT 1 FROM ebay_store_credentials
-   WHERE store_id = ?1 AND granted_at = ?2)
+   WHERE store_id = ?1 AND granted_at = ?2 AND rejected_at IS NULL)
   AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses WHERE store_id = ?1)`;
 const consentWritableStore = writableStore;
 

@@ -20,6 +20,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { Link, NavLink, useFetcher, useLocation, useNavigate } from "react-router";
 
@@ -57,6 +58,7 @@ export interface SearchSuggestion {
 }
 
 const NoticeContext = createContext<(message: string) => void>(() => {});
+const subscribeNever = () => () => {};
 
 /** Conferma breve di un'azione, annunciata anche ai lettori di schermo. */
 export function useNotice() {
@@ -347,6 +349,11 @@ function GlobalSearch({
     if (urlQuery !== null) setQuery(urlQuery);
   }
   const [open, setOpen] = useState(false);
+  const ready = useSyncExternalStore(
+    subscribeNever,
+    () => true,
+    () => false,
+  );
   const id = useId();
   const trimmed = query.trim();
   const results = useMemo(
@@ -395,6 +402,8 @@ function GlobalSearch({
           id={`${id}-input`}
           type="search"
           name="q"
+          // Prima dell'idratazione un input controllato perderebbe il testo già inserito.
+          disabled={!ready}
           autoComplete="off"
           // oxlint-disable-next-line jsx-a11y/no-autofocus -- apertura esplicita della ricerca su mobile
           autoFocus={autoFocus}
@@ -422,6 +431,10 @@ function GlobalSearch({
                 <li key={item.id}>
                   <Link
                     to={`${ordersHref}/${item.id}?q=${encodeURIComponent(trimmed)}`}
+                    // Safari sfoca il campo prima del click senza focalizzare il link.
+                    onMouseDown={(event) => {
+                      if (event.button === 0) event.preventDefault();
+                    }}
                     onClick={() => {
                       setOpen(false);
                       onNavigate?.();
@@ -441,6 +454,9 @@ function GlobalSearch({
           {results.total > 0 ? (
             <Link
               to={allHref}
+              onMouseDown={(event) => {
+                if (event.button === 0) event.preventDefault();
+              }}
               onClick={() => {
                 setOpen(false);
                 onNavigate?.();

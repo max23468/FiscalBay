@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
-import { localCookie, localPassword } from "./local-account";
+import { useLocalAccount, localPassword } from "./local-account";
 import { testAccount } from "./test-account";
+
+test.afterEach(async ({ context }) => context.unrouteAll({ behavior: "ignoreErrors" }));
 
 test.describe("miglioramenti account e negozi", () => {
   test.skip(
@@ -25,7 +27,7 @@ test.describe("miglioramenti account e negozi", () => {
       page.on("request", (request) => {
         if (request.method() === "POST") posts.push(request.url());
       });
-      await context.addCookies([localCookie("member", baseURL!, `suggestions-${language}`)]);
+      await useLocalAccount(context, "member", baseURL!, `suggestions-${language}`);
       await page.setViewportSize({ width: it ? 390 : 1280, height: 900 });
       await page.addInitScript(() => {
         Object.defineProperty(navigator, "clipboard", {
@@ -137,7 +139,7 @@ test.describe("miglioramenti account e negozi", () => {
       context,
       baseURL,
     }) => {
-      await context.addCookies([localCookie("member", baseURL!)]);
+      await useLocalAccount(context, "member", baseURL!);
       await page.goto(`${prefix}/app/ordini`);
       await expect(
         page.getByText(testAccount.taxCodes.unlocked, { exact: true }).first(),
@@ -174,14 +176,15 @@ test.describe("miglioramenti account e negozi", () => {
         page,
         context,
         baseURL,
+        browserName,
       }) => {
         for (const language of ["it", "en"] as const) {
           const it = language === "it";
           const prefix = it ? "" : "/en";
           // Spazio, sessione e ordini bloccati propri di ogni lingua arrivano dal seed locale:
           // la suite non scrive nel D1 mentre il server lo usa e non tocca le altre fixture.
-          const id = `unlock-${language}`;
-          await context.addCookies([localCookie("member", baseURL!, id)]);
+          const id = `unlock-${language}-${browserName}`;
+          await useLocalAccount(context, "member", baseURL!, id);
           const errors: string[] = [];
           page.on("pageerror", (error) => errors.push(error.message));
           page.on("console", (message) => {
@@ -379,7 +382,7 @@ test.describe("miglioramenti account e negozi", () => {
       context,
       baseURL,
     }) => {
-      await context.addCookies([localCookie("member", baseURL!)]);
+      await useLocalAccount(context, "member", baseURL!);
       await page.goto(`${prefix}/app/negozi/${testAccount.stores.paused}`);
       await page
         .getByRole("button", {
@@ -418,14 +421,27 @@ test.describe("miglioramenti account e negozi", () => {
       );
       await expect(input).toHaveValue(testAccount.stores.paused);
       await dialog.getByRole("button", { name: it ? "Annulla" : "Cancel", exact: true }).click();
-      await page.goto(`${prefix}/app/profilo`);
+      let continueHydration = () => {};
+      const hydration = new Promise<void>((resolve) => {
+        continueHydration = resolve;
+      });
+      await page.route("**/assets/profile-main-*.js", async (route) => {
+        await hydration;
+        await route.continue();
+      });
+      const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
+      try {
+        await page.goto(`${prefix}/app/profilo`, { waitUntil: "commit" });
+        await expect(first).toBeDisabled();
+      } finally {
+        continueHydration();
+      }
       await page.route("**/app/profilo.data*", async (route) => {
         if (route.request().method() !== "POST") return route.continue();
         const form = new URLSearchParams(route.request().postData()!);
         form.set("nome", "");
         await route.continue({ postData: form.toString() });
       });
-      const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
       await first.fill("Valore da conservare");
       await page.getByRole("button", { name: it ? "Salva" : "Save", exact: true }).click();
       await expect(
@@ -479,12 +495,17 @@ test.describe("miglioramenti account e negozi", () => {
     });
   }
 
-  test("passkey: nome, rinomina, rimozione e unico metodo visibili nella pagina reale", async ({
+  test("passkey: registrazione con autenticatore virtuale", async ({
     page,
     context,
     baseURL,
+    browserName,
   }) => {
-    await context.addCookies([localCookie("member", baseURL!)]);
+    test.skip(
+      browserName !== "chromium",
+      "Non applicabile: autenticatore virtuale CDP disponibile soltanto in Chromium.",
+    );
+    await useLocalAccount(context, "member", baseURL!);
     const cdp = await context.newCDPSession(page);
     await cdp.send("WebAuthn.enable");
     await cdp.send("WebAuthn.addVirtualAuthenticator", {
@@ -505,6 +526,27 @@ test.describe("miglioramenti account e negozi", () => {
       .getByRole("textbox", { name: "Nome della passkey", exact: true })
       .fill("Chiave browser sintetica");
     await page.getByRole("button", { name: "Aggiungi passkey", exact: true }).click();
+    const row = methods.getByRole("group", { name: /Chiave browser sintetica/ });
+    await expect(row).toBeVisible();
+    // La registrazione ricarica il documento: i controlli richiedono l'idratazione successiva.
+    await page.waitForLoadState("networkidle");
+    await row.getByRole("button", { name: "Rimuovi", exact: true }).click();
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Rimuovi", exact: true })
+      .click();
+    await expect(row).toHaveCount(0);
+  });
+
+  test("passkey: nome, rinomina, rimozione e unico metodo visibili nella pagina reale", async ({
+    page,
+    context,
+    baseURL,
+    browserName,
+  }) => {
+    await useLocalAccount(context, "member", baseURL!, `passkey-${browserName}`);
+    await page.goto("/app/impostazioni/sicurezza");
+    const methods = page.locator('section[aria-labelledby="security-methods"]');
     const row = methods.getByRole("group", { name: /Chiave browser sintetica/ });
     await expect(row).toBeVisible();
     await page.waitForLoadState("networkidle");
@@ -558,6 +600,7 @@ test.describe("miglioramenti account e negozi", () => {
       await form.getByRole("textbox", { name: "Email", exact: true }).fill(testAccount.email);
       await form.getByRole("textbox", { name: "Password", exact: true }).fill(localPassword);
       await form.getByRole("button", { name: "Accedi", exact: true }).click();
+      await expect(page).toHaveURL(/\/app\/ordini$/u);
       await page.goto("/app/impostazioni/sicurezza");
       await expect(page.getByRole("heading", { name: "Sicurezza", exact: true })).toBeVisible();
       await expect(page.getByText(/^Sessione aperta il/).first()).toBeVisible();
@@ -605,6 +648,7 @@ test.describe("miglioramenti account e negozi", () => {
  */
 
 async function open(page: Page, path: string, scenario?: string) {
+  await page.bringToFront();
   if (scenario) {
     await page.request.post("/anteprima", {
       form: { scenario, redirectTo: "/anteprima/ordini" },
@@ -614,7 +658,16 @@ async function open(page: Page, path: string, scenario?: string) {
   await page.goto(path);
   // Con un pannello aperto il resto della pagina è inerte: si attende il controllo per id.
   await expect(page.locator("#preview-scenario")).toBeEnabled({ timeout: 20_000 });
+  await expect(
+    page.getByRole("searchbox", { name: /Cerca ordini|Search orders/u, includeHidden: true }),
+  ).toBeEnabled();
   await page.waitForLoadState("networkidle");
+  await page.evaluate(() => document.fonts.ready);
+  const section = /\/impostazioni\/([^/?#]+)/u.exec(path)?.[1];
+  if (section) {
+    // La route deve avere allineato davvero la sezione, anche con hydration differita.
+    await expect(page.locator(`#settings-${section}`)).toBeInViewport({ ratio: 1 });
+  }
 }
 
 const noPageOverflow = (page: Page) =>
@@ -822,10 +875,14 @@ for (const language of ["it", "en"] as const) {
         await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
         await page.reload();
         await expect(page.locator("html")).not.toHaveAttribute("data-theme", "dark");
-        // Lo scroll aggiorna la voce attiva solo dopo l'idratazione.
-        await expect(page.locator("#preview-scenario")).toBeEnabled({ timeout: 20_000 });
         await page.waitForLoadState("networkidle");
         if (width >= 768) {
+          // L'indicatore nasce nel layout effect, poi il frame allinea la route ripristinata.
+          await expect(page.locator('main nav li[aria-hidden="true"]')).toBeVisible();
+          await page.evaluate(
+            () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+          );
+          await expect(page.locator("#settings-aspetto")).toBeInViewport({ ratio: 1 });
           await page
             .locator("#settings-privacy")
             .evaluate((el) => window.scrollBy(0, el.getBoundingClientRect().top - 210));
@@ -892,6 +949,8 @@ for (const language of ["it", "en"] as const) {
       test(`ordini: conferme, stati e dettaglio ${language} ${colorScheme} a ${width} px`, async ({
         page,
       }) => {
+        // Comprende oltre venti navigazioni, conferme, pannelli e screenshot.
+        test.setTimeout(90_000);
         await page.setViewportSize({ width, height: 844 });
         await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
         const prefix = language === "it" ? "" : "/en";

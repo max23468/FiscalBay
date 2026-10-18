@@ -56,7 +56,7 @@ export async function readPreviewState(request: Request): Promise<PreviewState> 
 }
 
 export function writePreviewState(state: PreviewState) {
-  return previewCookie.serialize(state);
+  return previewCookie.serialize(state, { secure: env.APP_ORIGIN.startsWith("https:") });
 }
 
 /** Scenario corrente nella lingua della richiesta. */
