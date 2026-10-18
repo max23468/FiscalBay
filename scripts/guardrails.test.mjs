@@ -52,6 +52,7 @@ import {
   assertRemoteEvidence,
   assertPublishedRelease,
   squashIntegrated,
+  cleanup,
   effectiveProductionVariable,
 } from "./release-cycle.mjs";
 import { lastDeployed } from "./find-deployed.mjs";
@@ -1566,6 +1567,57 @@ describe("coordinamento e provenienza della pubblicazione", () => {
       run("add", ".");
       run("commit", "--amend", "--no-edit", "-q");
       assert.equal(squashIntegrated(head, run("rev-parse", "HEAD"), directory), false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("pulisce da un worktree dedicato mentre la base è attiva nel checkout principale", () => {
+    const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "cycle-worktree-")));
+    const origin = path.join(directory, "origin.git");
+    const main = path.join(directory, "main");
+    const dedicated = path.join(directory, "dedicated");
+    const run = (cwd, ...args) => {
+      const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+      assert.equal(result.status, 0, result.stderr);
+      return result.stdout.trim();
+    };
+    try {
+      run(directory, "init", "-q", "--bare", "--initial-branch=develop", origin);
+      run(directory, "clone", "-q", origin, main);
+      run(main, "config", "user.name", "Synthetic test");
+      run(main, "config", "user.email", "test@example.invalid");
+      writeFileSync(path.join(main, "value.js"), "export const value=false;\n");
+      run(main, "add", ".");
+      run(main, "commit", "-qm", "base");
+      run(main, "push", "-q", "origin", "develop");
+      run(main, "worktree", "add", "-q", "-b", "codex/feature", dedicated);
+      writeFileSync(path.join(dedicated, "value.js"), "export const value=true;\n");
+      run(dedicated, "add", ".");
+      run(dedicated, "commit", "-qm", "feature");
+      run(dedicated, "push", "-q", "origin", "codex/feature");
+      const head = run(dedicated, "rev-parse", "HEAD");
+      run(main, "merge", "--squash", "codex/feature");
+      run(main, "commit", "-qm", "squash");
+      run(main, "push", "-q", "origin", "develop");
+      const merged = run(main, "rev-parse", "HEAD");
+      run(dedicated, "fetch", "-q", "origin", "develop");
+      const pr = {
+        headRefName: "codex/feature",
+        headRefOid: head,
+        baseRefName: "develop",
+        mergeCommit: { oid: merged },
+      };
+      writeFileSync(path.join(dedicated, "pending.js"), "export const pending=true;\n");
+      assert.throws(() => cleanup(pr, dedicated), /Checkout modificato/u);
+      assert.equal(run(dedicated, "branch", "--show-current"), "codex/feature");
+      rmSync(path.join(dedicated, "pending.js"));
+      cleanup(pr, dedicated);
+      assert.equal(run(dedicated, "branch", "--show-current"), "");
+      assert.equal(run(dedicated, "rev-parse", "HEAD"), merged);
+      assert.equal(run(main, "branch", "--show-current"), "develop");
+      assert.equal(run(main, "for-each-ref", "refs/heads/codex/feature"), "");
+      assert.equal(run(main, "ls-remote", "origin", "refs/heads/codex/feature"), "");
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
