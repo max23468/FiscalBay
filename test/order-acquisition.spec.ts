@@ -299,14 +299,15 @@ describe("acquisizione con il client", () => {
     });
     expect(await acquire(provider)).toBe("complete");
     expect(tradingPasses(provider)).toBe(1);
-    expect(await acquire(provider, "2026-09-02T01:59:59.999Z")).toBe("complete");
+    expect(await acquire(provider, "2026-09-02T01:00:00.000Z")).toBe("complete");
     expect(tradingPasses(provider)).toBe(1);
-    await env.DB.prepare("UPDATE sync_state SET requested_at = '2026-09-02T01:00:00.000Z'").run();
-    expect(await acquire(provider, "2026-09-02T02:00:00.000Z")).toBe("complete");
+    // A metà intervallo la richiesta manuale legge Trading subito e riparte da lì.
+    await env.DB.prepare("UPDATE sync_state SET requested_at = '2026-09-02T01:20:00.000Z'").run();
+    expect(await acquire(provider, "2026-09-02T01:30:00.000Z")).toBe("complete");
     expect(tradingPasses(provider)).toBe(2);
-    expect(await acquire(provider, "2026-09-02T03:59:59.999Z")).toBe("complete");
+    expect(await acquire(provider, "2026-09-02T03:29:59.999Z")).toBe("complete");
     expect(tradingPasses(provider)).toBe(2);
-    expect(await acquire(provider, "2026-09-02T04:00:00.000Z")).toBe("complete");
+    expect(await acquire(provider, "2026-09-02T03:30:00.000Z")).toBe("complete");
     expect(tradingPasses(provider)).toBe(3);
   });
 
