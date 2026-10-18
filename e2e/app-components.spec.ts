@@ -587,6 +587,7 @@ test.describe("miglioramenti account e negozi", () => {
       await form.getByRole("textbox", { name: "Email", exact: true }).fill(testAccount.email);
       await form.getByRole("textbox", { name: "Password", exact: true }).fill(localPassword);
       await form.getByRole("button", { name: "Accedi", exact: true }).click();
+      await expect(page).toHaveURL(/\/app\/ordini$/u);
       await page.goto("/app/impostazioni/sicurezza");
       await expect(page.getByRole("heading", { name: "Sicurezza", exact: true })).toBeVisible();
       await expect(page.getByText(/^Sessione aperta il/).first()).toBeVisible();
@@ -634,6 +635,7 @@ test.describe("miglioramenti account e negozi", () => {
  */
 
 async function open(page: Page, path: string, scenario?: string) {
+  await page.bringToFront();
   if (scenario) {
     await page.request.post("/anteprima", {
       form: { scenario, redirectTo: "/anteprima/ordini" },
@@ -644,6 +646,13 @@ async function open(page: Page, path: string, scenario?: string) {
   // Con un pannello aperto il resto della pagina è inerte: si attende il controllo per id.
   await expect(page.locator("#preview-scenario")).toBeEnabled({ timeout: 20_000 });
   await page.waitForLoadState("networkidle");
+  // Le impostazioni allineano la sezione nel primo frame dopo la navigazione.
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+  });
 }
 
 const noPageOverflow = (page: Page) =>
