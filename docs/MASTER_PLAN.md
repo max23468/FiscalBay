@@ -971,7 +971,13 @@ La copertura Vitest usa Istanbul nelle suite Node e Cloudflare e include anche i
 
 Mantenere scenari sintetici riusati da test di dominio e prove UI: CF assente, bloccato, formalmente invalido o con omocodia, quota esaurita, fonte in errore, dato modificato e suggerimenti discordanti. Le prove formali non certificano l'identità. Gli scenari vivono nei test o in superfici di sviluppo/test non disponibili in Production; nessuna demo mischiata agli ordini reali, nessun simulatore pubblico aggiunto allo scope.
 
-L'anteprima è il riferimento visivo dell'area reale (D176). Ogni nuovo stato dell'interfaccia entra negli scenari dell'anteprima nello stesso task che lo realizza, con le stesse parti dell'area reale; il task non si chiude se area reale e anteprima divergono. Un elemento dell'anteprima che il piano non prevede si toglie dall'anteprima, non si realizza per inerzia (M7-08).
+L'anteprima resta disponibile sul test come riferimento visivo dell'area reale e per verificare graficamente stati rari, errori e superfici non raggiungibili con l'account corrente (D176, D179). Usa gli stessi componenti di prodotto, alimentati da scenari sintetici separati dai dati effettivi, con selezione degli stati e verifica IT/EN, temi e responsive. Ogni nuovo stato approvato entra negli scenari nello stesso task che lo realizza; il task non si chiude se area reale e anteprima divergono. L'anteprima rimane esclusa dalla Production: route, loader e azioni rispondono 404 anche con richieste dirette. Un elemento che il piano non prevede si elimina, senza trasformarlo in un nuovo requisito.
+
+M4 integra nell'app reale interfaccia, preferenze e stati approvati; M5/M6 completano i servizi pertinenti. Ogni task aggiunge o trasferisce le prove funzionali sulle route reali, riusando componenti e fixture utili, e rimuove viste provvisorie, componenti duplicati e codice senza consumatori. Le azioni simulate e il cookie dell'anteprima restano confinati ai dati sintetici: non attestano persistenza, permessi, quota o funzionamento dei provider. Nessun salvataggio simulato viene presentato come riuscito nell'app reale.
+
+Per le prove dei percorsi reali riusare fixture D1 e sessioni sintetiche locali, attraversando loader e azioni applicative senza bypass Auth. Ritardi, indisponibilità, risposta persa e clipboard negata si riproducono con gli strumenti di test esistenti; le prove della sola risposta UI restano distinte da quelle degli effetti server. Usare date coerenti nelle fixture e tempo controllato nei test di dominio. Conservare catalogo pagine, prove IT/EN, chiaro/scuro, smartphone/tablet/desktop, tastiera, focus, contrasto e movimento ridotto sui percorsi reali, oltre alle prove grafiche nell'anteprima. Le verifiche su dispositivi e provider reali restano ai gate competenti. Nessun secondo simulatore o nuova infrastruttura dedicata.
+
+M4-08 verifica la baseline visiva e il trasferimento delle prove disponibili; M7-08 chiude l'integrazione end-to-end e la pulizia prima della RC, conservando l'anteprima sul test e verificandone l'esclusione dalla Production. Restano i componenti di prodotto, le fixture riusabili, l'anteprima tabellare dell'export e il server locale della build.
 
 Mutation test mirati verificano che i test intercettino errori su ultimo credito, isolamento degli spazi, scadenza dei grant e revoca del grant rimborsato. Qualificare e fissare il tool di sviluppo compatibile con la toolchain scelta quando viene introdotto; nessuna nuova dipendenza runtime. Eseguire i domini interessati dal diff e quelli dipendenti; mutanti non equivalenti sopravvissuti sulle invarianti critiche richiedono correzione, timeout/errori non valgono come esito verde. Motivare eventuali equivalenze, senza percentuali arbitrarie o campagne sull'intera applicazione a ogni modifica.
 
@@ -1066,7 +1072,7 @@ Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o
 | Ambito | Pendenza e condizione di chiusura |
 |---|---|
 | Distribuzione delle correzioni finali M3 | Pubblicazione sul test autorizzata dall'owner il 18 ottobre 2026. Il ciclo della PR applica la migration additiva `0027_scheduled_task_claims.sql` e riconcilia artefatto, schema, consumer e dettaglio Ordini; ricevuta e readback attestano l'esito. Nessuna di queste prove sostituisce il manifest merchant di M8. |
-| Allineamento anteprima | D176: togliere «Consegnato» da schede e filtro dell'anteprima e aggiungere gli stati del vocabolario del [§9](#s09) (rimborsato in parte, spedito in parte, stato eBay non previsto). Si chiude con [M4-01](#m4-01) o con una PR di codice precedente; gli stati da disegnare restano nei task assegnati da [§35](#s35). |
+| Integrazione dell'anteprima nell'app reale | D176/D179: [M4](#m4) integra interfaccia e preferenze, elimina «Consegnato» e include gli stati parziali e sconosciuti del [§9](#s09); [M5](#m5)/[M6](#m6) completano servizi e stati pertinenti. Ogni task verifica i percorsi reali secondo [§35](#s35). [M7-08](#m7-08) chiude integrazione, copertura e rimozione del codice superfluo prima della RC, mantenendo scenari grafici sul test ed esclusione dalla Production. |
 | Qualifica del ciclo | D172 integrata con [#337](https://github.com/max23468/FiscalBay/pull/337): controllo della base, automerge, riuso dell'artefatto fra PR e merge, deploy test e readback provider qualificati. La prima qualifica senza promozione su `develop` ha superato le due build e le otto partizioni browser, ma ha bloccato la certificazione per superstiti e timeout mutation; con D173 un test bloccato da un mutante cade sul timeout di Vitest prima di quello di Stryker, che dipendeva dal carico. Completare il collaudo delle correzioni di copertura e del runner Cloudflare, poi verificare certificazione `candidate-<tree>`, riuso delle ricevute e ripresa sullo stesso candidato. [M7-06](#m7-06) e i checkpoint Production restano aperti. |
 | Ingresso webhook | [M3-11](#m3-11) qualificato sul test. Sottoscrivere `ORDER_CONFIRMATION` di un negozio Production soltanto con il test merchant; Stripe resta senza `STRIPE_WEBHOOK_SECRET` (503) fino a [M5-05](#m5-05). |
 | Pubblicazione | Percorsi `cf` qualificati sul provider test: migration su D1 temporanea in UE con errore e ripresa, ripresa senza ricevuta e fra tentativi CI, rollback compatibile e ripristino del candidato secondo [RELEASE](engineering/RELEASE.md#qualifica-sul-provider-test). Prove e collaudo remoto nella [run di #335](https://github.com/max23468/FiscalBay/actions/runs/38357985449/attempts/2). Le nuove migration sui dati applicativi si collaudano nella PR che le introduce; il recovery dei dati resta distinto. Modalità `prova` del workflow Production ancora da eseguire sul candidato autorizzato; creare `CHANGELOG.md` prima della pubblicazione reale. Il riuso mutation è stato osservato in [#298](https://github.com/max23468/FiscalBay/pull/298); resta la riconciliazione del deploy successivo. |
@@ -1677,6 +1683,8 @@ La scadenza nativa di Queue/DLQ segue [§11](#s11): provare anche un messaggio a
 
 **Accettazione:** ricerca e conteggi solo su valori fiscali accessibili, senza CF/P.IVA in URL, referrer o log edge e senza inferenza dei valori bloccati; query server senza caricamento dell'intero storico nel browser. Cursori stabili, selezioni rivalidate, solo negozio e ordinamento ricordati fra sessioni. Pannello con URL, ritorno/focus/tastiera e contesto conservato; sblocco multiplo/export mai impliciti. Impostazioni con inventario completo, modifiche non salvate protette, lingua/tema persistenti, errore mai mostrato come successo. Onboarding riprendibile senza wizard bloccante; ordini autorizzati disponibili durante outage eBay, prima sync distinta dalla disponibilità fiscale. Integrare misure Auth/D1/eBay/browser allowlistate, controlli visivi e a11y in IT/EN, chiaro/scuro, smartphone/tablet/desktop e movimento ridotto (§17–§22, §31).
 
+L'integrazione trasferisce nell'app reale le sole funzioni e gli stati approvati dell'anteprima. Questa resta sul test per le verifiche grafiche; i task applicativi mantengono componenti condivisi e provano i percorsi reali secondo §35. La chiusura end-to-end e la pulizia del codice superfluo confluiscono in M7-08, senza dismettere l'anteprima.
+
 <a id="m4-01"></a>
 #### M4-01 · Pagina Ordini definitiva
 
@@ -1693,6 +1701,8 @@ Integrato da CF Ready e Hub Fatture: mostrare la qualità formale calcolata in M
 Un solo albero di componenti per la pagina Ordini: area reale e anteprima la rendono con le stesse parti, alimentate da dati persistiti autorizzati o da scenari sintetici. La vista ridotta degli ordini importati, con le sue etichette locali di pagamento e spedizione, si rimuove a favore di quelle condivise, secondo il vocabolario del [§9](#s09). Gli ordini letti prima della verifica fiscale (stato «Dato non ancora acquisito», presenti solo sul test) si rileggono una volta e lo stato si elimina, senza aggiungerlo all'anteprima. Accesso e Ordini smettono di condividere pagina e loader: login, registrazione, reset, passkey e completamento del profilo diventano una pagina propria, e il loader Ordini carica soltanto i dati dell'area autenticata. Riscrivendo i componenti Ordini, separarli per area (scheda, dettaglio, barra strumenti e selezione). Il task non si chiude se area reale e anteprima divergono.
 
 Prezzo della riga (D165): prezzo unitario quando l'importo di riga diviso per la quantità è esatto nell'esponente della valuta, altrimenti importo di riga; mai centesimi arrotondati.
+
+Ricerca, paginazione e sblocco usano i contratti reali, senza trasferire le logiche simulate dell'anteprima. Aggiungere o trasferire le prove funzionali sulle route autenticate nello stesso intervento, conservando gli scenari grafici sul test (§35).
 
 Mostrare e copiare CF e P.IVA italiani nella forma derivata normalizzata, senza spazi e in maiuscolo, nelle schede e nel dettaglio condivisi con l'anteprima. Conservare valore originale, fonte e qualità formale; la formattazione non corregge un identificativo errato né cambia autorizzazione o quota. Provare valori minuscoli, spazi, zeri iniziali, più identificativi e tipi esteri, senza applicare a questi ultimi regole italiane. L'export di M6-01/M6-02 conserva i valori originali secondo [§12](#s12); Telegram applica la forma derivata in [M5-10](#m5-10).
 
@@ -1741,9 +1751,11 @@ Aggiungere modalità Seleziona, barra contestuale sticky, sblocco multiplo ed Es
 
 Completare tutte le categorie e opzioni delle impostazioni. Autosalvataggio per scelte semplici, Salva per testi; profilo separato e popover notifiche selettivo, senza pagina dedicata 2.0. Come in M4-01, un solo albero di componenti per Impostazioni reali e anteprima. La campanella riceve problemi dei negozi (M2/M3), quota e rinnovi (M5) e comunicazioni di servizio o manutenzione scritte dalla console di M6-04.
 
-**Criterio di completamento:** Inventario delle preferenze coperto; modifiche non salvate protette, errori non presentati come successi, lingua e tema coerenti.
+**Criterio di completamento:** Inventario delle preferenze coperto; modifiche non salvate protette, errori non presentati come successi, lingua e tema persistenti e coerenti dopo ricarica e nuovo accesso. Prove sui percorsi reali secondo §35 e scenari grafici mantenuti sul test.
 
 Le schermate dei servizi M5/M6 possono essere verificate su contratti/fixture in questa milestone, ma la loro integrazione rimane un requisito tracciato: niente impostazione «salvata» che in realtà non governa alcun servizio.
+
+Integrare le route reali con una sola fonte persistente per ogni preferenza e con i dati effettivi di Profilo e Sicurezza, conservando le integrazioni Auth e Negozi già disponibili. Spostare nei soli scenari sintetici passkey, sessioni e valori dimostrativi; rimuovere rami duplicati e comportamenti simulati dai percorsi reali. I servizi M5/M6 completano gli stessi componenti nei rispettivi task, senza ricostruire le schermate.
 
 <a id="m4-07"></a>
 #### M4-07 · Onboarding e degradazione
@@ -1763,7 +1775,7 @@ Con quota esaurita mostrare l'azione contestuale verso Piano prevista dal [§20]
 
 **Stato:** Da completare · **Prerequisiti:** M4-01..M4-07 · **Contratto:** [§22](#s22) · [§35](#s35)
 
-Verificare desktop, tablet e smartphone, IT/EN, chiaro/scuro, tastiera, focus, contrasto e movimento ridotto con gli asset approvati. Comprende gli stati aggiunti all'anteprima dopo il checkpoint M1, senza riaprirlo.
+Verificare desktop, tablet e smartphone, IT/EN, chiaro/scuro, tastiera, focus, contrasto e movimento ridotto con gli asset approvati. Comprende gli stati aggiunti all'anteprima dopo il checkpoint M1, senza riaprirlo. Verificare gli stessi componenti sulle route reali e nell'anteprima test secondo §35; trasferire le prove funzionali disponibili senza perdere gli scenari per la verifica grafica manuale.
 
 **Criterio di completamento:** E2E e controlli visivi mirati superati; nessuna dichiarazione di certificazione WCAG o supporto browser non provati.
 
@@ -2265,7 +2277,9 @@ Le funzioni non si dichiarano complete dal solo toggle della dashboard: report n
 
 Riesaminare tutte le funzioni, i diritti, le schermate, i dispositivi, gli errori e i rinvii rispetto al piano; eliminare aggiunte accidentali dei mockup.
 
-**Criterio di completamento:** Matrice di accettazione coperta, P3 espliciti, zero P1/P2. Piano ed evidenze distinguono lavoro concluso e futuro.
+**Per chiudere:** integrazione dei flussi approvati di Ordini, Negozi, Profilo e Impostazioni nei task competenti di M4/M5/M6, compresi billing, Telegram, export, supporto, comunicazioni e cancellazione; prove dei percorsi reali secondo §35.
+
+**Criterio di completamento:** Matrice di accettazione coperta, P3 espliciti, zero P1/P2. Funzioni e stati approvati integrati e verificati nell'app reale prima della RC; viste provvisorie, componenti duplicati, valori dimostrativi nei percorsi reali e codice senza consumatori rimossi. Anteprima conservata sul test con scenari selezionabili, gli stessi componenti di prodotto e copertura grafica di stati rari, errori, IT/EN, temi e dispositivi; route, loader e azioni a 404 in Production. Catalogo pagine, prove browser e documentazione coerenti, senza un secondo simulatore e senza perdere fixture o prove utili. Piano ed evidenze distinguono lavoro concluso e futuro.
 
 Distinguere criteri già provati e casi live finali assegnati a M9-01. La readiness per RC non è una certificazione di compliance o un PASS delle transazioni non ancora osservate.
 
