@@ -23,3 +23,8 @@ export function taxCodeLabels(label: string, order: string, t: AppCopy) {
 export function remainingUnlocks(account: OrdersAccount) {
   return account.quota ? Math.max(account.quota.limit - account.quota.used, 0) : null;
 }
+
+/** Pagina dell'ordine nel Seller Hub di eBay. */
+export function ebayOrderHref(ebayOrderId: string) {
+  return `https://www.ebay.it/sh/ord/details?orderid=${encodeURIComponent(ebayOrderId)}`;
+}

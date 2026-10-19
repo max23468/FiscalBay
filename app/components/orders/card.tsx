@@ -13,6 +13,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLinkItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import type { AppCopy } from "../../app-copy";
@@ -25,10 +26,12 @@ import {
   type OrderView,
 } from "../../view-models";
 import { FiscalCodes, FiscalNotes, type FiscalProps } from "./fiscal";
+import { ebayOrderHref } from "./labels";
 import { buyerLabel, paymentLabel, shippingLabel, type PillTone } from "./status";
 
 /** Azioni secondarie disponibili nella pagina: eBay ed esportazione del singolo ordine. */
 export interface SecondaryActions {
+  /** Solo per i negozi eBay reali: per la Sandbox non esiste un indirizzo verificato. */
   openOnEbay: boolean;
   exportable: boolean;
 }
@@ -163,9 +166,13 @@ function OrderMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {actions.openOnEbay ? (
-          <DropdownMenuItem onClick={() => action.run("open-on-ebay", { order: order.id })}>
+          <DropdownMenuLinkItem
+            href={ebayOrderHref(order.ebayOrderId)}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             {t.orders.openOnEbay}
-          </DropdownMenuItem>
+          </DropdownMenuLinkItem>
         ) : null}
         {actions.exportable ? (
           <DropdownMenuItem onClick={() => action.run("export", { ids: order.id })}>
