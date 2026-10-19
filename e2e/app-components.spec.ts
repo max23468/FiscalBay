@@ -193,6 +193,8 @@ test.describe("miglioramenti account e negozi", () => {
         baseURL,
         browserName,
       }) => {
+        // Due lingue nello stesso test: su WebKit in CI supera i 30 secondi predefiniti.
+        test.setTimeout(60_000);
         for (const language of ["it", "en"] as const) {
           const it = language === "it";
           const prefix = it ? "" : "/en";
