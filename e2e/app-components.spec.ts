@@ -1049,7 +1049,10 @@ for (const language of ["it", "en"] as const) {
           .click();
         await expect(
           page.getByRole("menuitem", { name: t("Apri su eBay", "Open on eBay") }),
-        ).toHaveAttribute("href", "https://www.ebay.it/sh/ord/details?orderid=19-00001-99999");
+        ).toHaveAttribute(
+          "href",
+          /^https:\/\/www\.ebay\.it\/sh\/ord\/details\?orderid=19-00001-99999$/,
+        );
         await page.keyboard.press("Escape");
         if (width === 390)
           await page.getByRole("button", { name: t("Filtri", "Filters"), exact: true }).click();
