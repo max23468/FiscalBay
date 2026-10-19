@@ -160,11 +160,13 @@ export type OrderCriteria = {
   tokens?: string[];
 };
 
+// Stryker disable next-line StringLiteral: un altro separatore rende la query invalida e le prove falliscono subito; sotto Stryker il worker supera invece il timeout.
+const clauseSeparator = " ";
+
 const caseOf = (column: string, states: Record<string, string>) =>
   `CASE ${column} ${Object.entries(states)
     .map(([original, state]) => `WHEN '${original}' THEN '${state}'`)
-    // Stryker disable next-line StringLiteral: un altro separatore rende la query invalida e le prove falliscono subito; sotto Stryker il worker supera invece il timeout.
-    .join(" ")} END`;
+    .join(clauseSeparator)} END`;
 
 /** Stato normalizzato in SQL dalle stesse tabelle di `paymentState` e `shippingState`. */
 const paymentSql = caseOf("o.payment_status", paymentStates);
