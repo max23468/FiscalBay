@@ -42,7 +42,7 @@ La scelta del candidato porta al checkpoint di fine M0: motivazioni, costi, capa
 
 ### Eseguire il candidato locale
 
-Usare Node 26.11.1 e pnpm 12.10.1 indicati in `mise.toml` e `package.json`. L’installazione e i gate locali non creano risorse remote:
+Usare Node 26.12.0 e pnpm 12.14.0 indicati in `mise.toml` e `package.json`. L’installazione e i gate locali non creano risorse remote:
 
 ```sh
 pnpm install --frozen-lockfile
