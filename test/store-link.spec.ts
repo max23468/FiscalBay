@@ -4,7 +4,7 @@ import { parseTradingOrderTaxIdentifiers } from "../app/integrations/ebay/tradin
 import { listVisibleOrders } from "../app/domain/orders.server";
 import { deleteStoreData, listStores } from "../app/domain/stores.server";
 import { handleAuthRequest } from "../app/auth-route.server";
-import { loader as loadHome } from "../app/routes/home";
+import { loader as loadHome } from "../app/routes/orders";
 import { action as signIn } from "../app/routes/sign-in";
 import { action as startStoreLink, loader as loadStoreLink } from "../app/routes/store-link";
 import { loader as loadStores } from "../app/routes/stores";
@@ -451,31 +451,32 @@ describe("collegamento negozio eBay", () => {
     ]);
 
     const home = await loadHome({
+      params: {},
       request: new Request("http://localhost:5173/app/ordini?negozio=collegato", {
         headers: { cookie },
       }),
     } as Parameters<typeof loadHome>[0]);
     expect(home.notice).toEqual({ text: "Negozio eBay collegato.", tone: "success" });
-    expect(home.orders[0]).toMatchObject({ storeName: "venditore", fiscalState: "locked" });
-    expect(home.orders[0]?.summary).toEqual({
-      buyer: { username: "acquirente-sintetico" },
-      orderPaymentStatus: "PAID",
-      orderFulfillmentStatus: "NOT_STARTED",
-      payment: "paid",
-      shipping: "to_ship",
-      lineItems: [
-        {
-          lineItemId: "riga-sintetica",
-          title: "Articolo sintetico",
-          quantity: 2,
-          sku: "SKU-SINTETICO",
-        },
-      ],
-    });
-    expect(JSON.stringify(home.orders)).not.toContain("NON-ESPORRE");
-    expect(
-      home.orders.map(({ ebayOrderId, taxIdentifiers }) => [ebayOrderId, taxIdentifiers]),
-    ).toEqual([[syntheticOrderId, []]]);
+    // La pagina reale riceve la vista condivisa con l'anteprima, senza il valore da sbloccare.
+    expect(home.page.orders).toMatchObject([
+      {
+        ebayOrderId: syntheticOrderId,
+        storeName: "venditore",
+        buyerUsername: "acquirente-sintetico",
+        payment: { status: "paid" },
+        shipping: { status: "to_ship" },
+        fiscal: { state: "locked", shownAs: "CF" },
+        items: [
+          {
+            id: "riga-sintetica",
+            title: "Articolo sintetico",
+            quantity: 2,
+            sku: "SKU-SINTETICO",
+          },
+        ],
+      },
+    ]);
+    expect(JSON.stringify(home)).not.toContain("NON-ESPORRE");
 
     // Il callback duplicato riceve lo stesso esito senza un secondo scambio del codice;
     // replicato da un altro utente non rivela nulla.
@@ -779,7 +780,7 @@ describe("collegamento negozio eBay", () => {
       }),
     } as Parameters<typeof startStoreLink>[0])) as Response;
     expect(blockedSandbox.status).toBe(403);
-    expect((await homeFor(cookie)).storeLinked).toBe(false);
+    expect((await homeFor(cookie)).page?.view).toBe("no-store");
     expect((await beginStoreLink(cookie)).hostname).toBe("auth.ebay.com");
   });
 
@@ -868,6 +869,7 @@ describe("collegamento negozio eBay", () => {
     expect(stores.results).toEqual([{ user_id: owner.userId, display_name: "venditore" }]);
     // L'esito è un testo generico: nessun dato dell'altro account FiscalBay.
     const home = await loadHome({
+      params: {},
       request: new Request("http://localhost:5173/app/ordini?negozio=altro-spazio", {
         headers: { cookie: other.cookie },
       }),
@@ -946,9 +948,9 @@ describe("collegamento negozio eBay", () => {
       // Senza ordini importati la pagina non chiede di collegare un negozio già collegato.
       await env.DB.prepare("DELETE FROM orders").run();
       const home = await homeFor(cookie);
-      expect({ orders: home.orders, storeLinked: home.storeLinked }).toEqual({
+      expect({ orders: home.page?.orders, view: home.page?.view }).toEqual({
         orders: [],
-        storeLinked: true,
+        view: "empty",
       });
     },
   );

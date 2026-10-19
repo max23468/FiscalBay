@@ -125,6 +125,11 @@ for (const scenario of scenarios) {
             checked("HTTP e robots.txt");
             return;
           }
+          if (scenario.path.endsWith("/page-timing")) {
+            expect(response.headers().allow).toBe("POST");
+            checked("HTTP e metodo ammesso");
+            return;
+          }
           expect(await response.json()).toBeNull();
           checked("HTTP e contratto JSON anonimo");
           return;
@@ -240,7 +245,7 @@ for (const scenario of scenarios) {
           await expect(page.getByRole("button", { name: /passkey/i })).toBeVisible();
           checked("secondo fattore richiesto per admin");
         }
-        if (scenario.role === "member" && scenario.area === "orders") {
+        if (scenario.role === "member" && scenario.area === "orders" && scenario.status === 200) {
           await expect(page.getByText(testAccount.taxCodes.unlocked).first()).toBeVisible();
           expect(await page.content()).not.toContain(testAccount.taxCodes.locked);
           checked("dato sbloccato presente e dato bloccato assente dall'HTML");

@@ -8,6 +8,16 @@ export function taxIdentifierType(type: string, country: string | null): TaxIden
     : "OTHER";
 }
 
+/**
+ * Forma mostrata e copiata: CF e Partita IVA italiani senza spazi e in maiuscolo, gli altri tipi
+ * come forniti. Non corregge un valore errato; l'originale resta quello della fonte.
+ */
+export function displayTaxValue(identifier: { type: TaxIdentifierType; value: string }) {
+  return identifier.type === "OTHER"
+    ? identifier.value
+    : identifier.value.replace(/\s/gu, "").toUpperCase();
+}
+
 /** Normalizzazione per il confronto; il valore originale rimane quello della fonte. */
 export function taxComparisonKey(tax: {
   type: string;

@@ -98,16 +98,14 @@ const it = {
     },
     shipping: {
       to_ship: "Da spedire",
-      in_progress: "Spedizione in corso",
+      in_progress: "Spedito in parte",
       shipped: "Spedito",
-      delivered: "Consegnato",
       cancelled: "Annullato",
     },
     billingAddress: "Indirizzo di fatturazione",
     phone: "Telefono",
     email: "Email",
     notProvided: "Non riportato da eBay",
-    notImported: "Dato non ancora acquisito",
     fiscalNotice: {
       lastKnown:
         "Ultima lettura da eBay non riuscita: resta mostrato il valore letto in precedenza.",
@@ -126,7 +124,7 @@ const it = {
       available: "Disponibile",
       locked: "Da sbloccare",
       missing: "Non disponibile su eBay",
-      checking: "In verifica",
+      checking: "Verifica in corso",
       error: "Aggiornamento non riuscito",
     },
     select: "Seleziona",
@@ -181,6 +179,11 @@ const it = {
     lockedExhausted: (date: string) =>
       `Hai usato tutti gli sblocchi di questo ciclo. Il prossimo inizia il ${date}.`,
     lockedUntil: (date: string) => `Sblocco disponibile dal ${date}.`,
+    lockedHold: {
+      checking: "Nuova verifica da eBay in corso: lo sblocco torna disponibile al termine.",
+      provisional:
+        "Acquisto non ancora pagato: lo sblocco è disponibile quando eBay conferma l’ordine.",
+    },
     missingHint: "eBay non riporta il Codice Fiscale per questo ordine.",
     checkingHint: "Verifica del Codice Fiscale in corso.",
     errorHint: "Non siamo riusciti a recuperare il Codice Fiscale da eBay. Riprova tra poco.",
@@ -234,6 +237,9 @@ const it = {
     storeIssueBody:
       "La sincronizzazione di questo negozio è sospesa. Gli altri negozi continuano. Ricollega il negozio.",
     storeIssueAction: "Apri il negozio",
+    consentExpiringTitle: (store: string) => `${store}: autorizzazione in scadenza`,
+    consentExpiringBody: (date: string) =>
+      `L’autorizzazione eBay scade il ${date}. Ricollega il negozio entro quella data per non interrompere la sincronizzazione.`,
     importingStatus: (count: number) =>
       `Importazione in corso: ${count} ${plural(count, "ordine", "ordini")} finora`,
     firstUseTitle: "Nessun negozio collegato",
@@ -246,6 +252,9 @@ const it = {
     stepStore: "Negozio eBay collegato",
     stepSync: "Prima sincronizzazione",
     noOrdersTitle: "Nessun ordine negli ultimi 30 giorni",
+    firstSyncTitle: "Prima sincronizzazione in corso",
+    firstSyncBody: (store: string) =>
+      `${store} è collegato. Gli ordini compariranno qui man mano che vengono importati.`,
     noOrdersBody: (store: string, time: string) =>
       `${store} è collegato e aggiornato al ${time}. I nuovi ordini compariranno qui.`,
     openStore: "Apri il negozio",
@@ -275,6 +284,7 @@ const it = {
     sku: "SKU",
     noSku: "Senza SKU",
     price: "Prezzo unitario",
+    lineAmount: "Importo della riga",
   },
   stores: {
     title: "Negozi eBay",
@@ -724,9 +734,7 @@ const it = {
   },
   /** Pagina minima di accesso e ordini, finché le route reali non usano la shell. */
   access: {
-    title: "Ordini",
     description: "Ordini eBay disponibili in FiscalBay",
-    intro: "Trova e gestisci il Codice Fiscale dei tuoi ordini eBay.",
     headline: "Il Codice Fiscale dei tuoi ordini eBay, in un posto solo.",
     features: [
       {
@@ -794,11 +802,6 @@ const it = {
     passwordRecoverySend: "Invia il link",
     passwordRecoveryConfirm: "Salva nuova password",
     signOut: "Esci",
-    linkStore: "Collega negozio eBay",
-    reconnectStore: "Ricollega negozio",
-    consentExpiringTitle: (store: string) => `${store}: autorizzazione in scadenza`,
-    consentExpiringBody: (date: string) =>
-      `L’autorizzazione eBay scade il ${date}. Ricollega il negozio entro quella data per non interrompere la sincronizzazione.`,
     signOutSignIn: "Esci e accedi di nuovo",
     terms: {
       before: "Accetto i ",
@@ -816,13 +819,6 @@ const it = {
     verifyBody: (email: string) =>
       `Abbiamo inviato un link a ${email}. Serve per collegare un negozio eBay. Intanto puoi esplorare FiscalBay.`,
     verifyResend: "Invia di nuovo il link",
-    noOrders: "Nessun ordine",
-    noOrdersBody: "Collega un negozio eBay per importare gli ordini disponibili.",
-    noImportedOrders: "Nessun ordine importato",
-    noImportedOrdersBody: "Il negozio eBay è collegato. Gli ordini importati compariranno qui.",
-    noOrdersVerifyBody:
-      "Dopo la conferma dell’indirizzo email potrai collegare un negozio eBay e importare gli ordini.",
-    list: "Ordini qualificati",
     storeNotices: {
       collegato: "Negozio eBay collegato.",
       eliminato: "Negozio eliminato da FiscalBay.",
@@ -952,16 +948,14 @@ const en: AppCopy = {
     },
     shipping: {
       to_ship: "To ship",
-      in_progress: "Fulfillment in progress",
+      in_progress: "Partially shipped",
       shipped: "Shipped",
-      delivered: "Delivered",
       cancelled: "Cancelled",
     },
     billingAddress: "Billing address",
     phone: "Phone",
     email: "Email",
     notProvided: "Not provided by eBay",
-    notImported: "Data not yet imported",
     fiscalNotice: {
       lastKnown: "The latest read from eBay failed: the value read earlier is still shown.",
       checking: "New read from eBay in progress.",
@@ -979,7 +973,7 @@ const en: AppCopy = {
       available: "Available",
       locked: "To unlock",
       missing: "Not available on eBay",
-      checking: "Checking",
+      checking: "Verification in progress",
       error: "Couldn’t update",
     },
     select: "Select",
@@ -1034,6 +1028,10 @@ const en: AppCopy = {
     lockedExhausted: (date) =>
       `You have used all the unlocks for this cycle. The next one starts on ${date}.`,
     lockedUntil: (date) => `Unlocking available from ${date}.`,
+    lockedHold: {
+      checking: "eBay is verifying this order again: unlocking is available once it finishes.",
+      provisional: "Purchase not paid yet: unlocking is available once eBay confirms the order.",
+    },
     missingHint: "eBay does not provide the tax code for this order.",
     checkingHint: "Checking the tax code.",
     errorHint: "We could not get the tax code from eBay. Try again shortly.",
@@ -1085,6 +1083,9 @@ const en: AppCopy = {
     storeIssueTitle: (store) => `${store}: connection expired`,
     storeIssueBody: "Syncing is paused for this store. Other stores continue. Reconnect the store.",
     storeIssueAction: "Open store",
+    consentExpiringTitle: (store) => `${store}: authorisation expiring`,
+    consentExpiringBody: (date) =>
+      `The eBay authorisation expires on ${date}. Reconnect the store by then to keep syncing.`,
     importingStatus: (count) => `Importing: ${count} ${plural(count, "order", "orders")} so far`,
     firstUseTitle: "No store connected",
     firstUseBody: "Connect your eBay store to view orders and available tax codes.",
@@ -1095,6 +1096,9 @@ const en: AppCopy = {
     stepStore: "eBay store connected",
     stepSync: "First sync",
     noOrdersTitle: "No orders in the last 30 days",
+    firstSyncTitle: "First sync in progress",
+    firstSyncBody: (store) =>
+      `${store} is connected. Orders will appear here as they are imported.`,
     noOrdersBody: (store, time) =>
       `${store} is connected and up to date as of ${time}. New orders will appear here.`,
     openStore: "Open store",
@@ -1124,6 +1128,7 @@ const en: AppCopy = {
     sku: "SKU",
     noSku: "No SKU",
     price: "Unit price",
+    lineAmount: "Line amount",
   },
   stores: {
     title: "eBay stores",
@@ -1557,9 +1562,7 @@ const en: AppCopy = {
     support: "Support",
   },
   access: {
-    title: "Orders",
     description: "eBay orders available in FiscalBay",
-    intro: "Find and manage the Italian tax code in your eBay orders.",
     headline: "The Codice Fiscale of your eBay orders, in one place.",
     features: [
       {
@@ -1627,11 +1630,6 @@ const en: AppCopy = {
     passwordRecoverySend: "Send link",
     passwordRecoveryConfirm: "Save new password",
     signOut: "Sign out",
-    linkStore: "Connect eBay store",
-    reconnectStore: "Reconnect store",
-    consentExpiringTitle: (store) => `${store}: authorisation expiring`,
-    consentExpiringBody: (date) =>
-      `The eBay authorisation expires on ${date}. Reconnect the store by then to keep syncing.`,
     signOutSignIn: "Sign out and sign in again",
     terms: {
       before: "I accept the ",
@@ -1649,13 +1647,6 @@ const en: AppCopy = {
     verifyBody: (email: string) =>
       `We sent a link to ${email}. You need it to connect an eBay store. Meanwhile, you can explore FiscalBay.`,
     verifyResend: "Send the link again",
-    noOrders: "No orders",
-    noOrdersBody: "Connect an eBay store to import available orders.",
-    noImportedOrders: "No imported orders",
-    noImportedOrdersBody: "Your eBay store is connected. Imported orders will appear here.",
-    noOrdersVerifyBody:
-      "Once your email address is confirmed, you can connect an eBay store and import orders.",
-    list: "Qualified orders",
     storeNotices: {
       collegato: "eBay store connected.",
       eliminato: "Store deleted from FiscalBay.",

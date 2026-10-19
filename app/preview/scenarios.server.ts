@@ -7,8 +7,11 @@ import type {
   FiscalNotice,
   NotificationView,
   OrderView,
+  PaymentStatus,
   SessionView,
+  ShippingStatus,
   StoreView,
+  SuggestionView,
   TaxIdentifierView,
 } from "../view-models";
 
@@ -235,9 +238,21 @@ type StoreKey = keyof typeof stores;
 
 interface OrderSeed extends Omit<
   OrderView,
-  "storeId" | "storeName" | "marketplace" | "lastSyncedAt"
+  | "storeId"
+  | "storeName"
+  | "marketplace"
+  | "lastSyncedAt"
+  | "payment"
+  | "shipping"
+  | "items"
+  | "suggestions"
 > {
   store: StoreKey;
+  /** Stato normalizzato, oppure codice eBay non previsto. */
+  payment: PaymentStatus | { code: string };
+  shipping: ShippingStatus | { code: string };
+  items: Array<Omit<OrderView["items"][number], "currency">>;
+  suggestion?: SuggestionView;
   /** Valori presenti ma da sbloccare nel piano Free. */
   lockable?: TaxIdentifierView[];
 }
@@ -256,6 +271,7 @@ const cf = (value: string, quality: TaxIdentifierView["quality"] = "valid"): Tax
   quality,
 });
 
+/** Riga con prezzo unitario: l'importo della riga è prezzo per quantità. */
 const item = (
   id: string,
   title: string,
@@ -265,7 +281,7 @@ const item = (
 ) => ({
   id,
   title,
-  priceMinor,
+  totalMinor: priceMinor * quantity,
   quantity,
   sku,
 });
@@ -293,8 +309,16 @@ const seeds: OrderSeed[] = [
       ),
       item("it-01b", "Custodia protettiva e accessori", 14_500, 1, "CUS-12"),
       item("it-01c", "Nastro inchiostrato bicolore compatibile", 2_450, 4, null),
+      // Prezzo di lotto: l'importo non si divide in centesimi esatti per la quantità.
+      {
+        id: "it-01d",
+        title: "Molle di ricambio assortite",
+        totalMinor: 1_000,
+        quantity: 3,
+        sku: null,
+      },
     ],
-    totalMinor: 124_900,
+    totalMinor: 125_900,
     currency: "EUR",
     payment: "paid",
     shipping: "to_ship",
@@ -324,7 +348,7 @@ const seeds: OrderSeed[] = [
     totalMinor: 4_990,
     currency: "EUR",
     payment: "paid",
-    shipping: "delivered",
+    shipping: "shipped",
     billingAddress: {
       line: "Via Appia Nuova 120",
       postalCode: "00183",
@@ -427,7 +451,7 @@ const seeds: OrderSeed[] = [
     totalMinor: 2_300,
     currency: "EUR",
     payment: "paid",
-    shipping: "shipped",
+    shipping: "in_progress",
     billingAddress: {
       line: "Via Toledo 210",
       postalCode: "80134",
@@ -572,8 +596,8 @@ const seeds: OrderSeed[] = [
     items: [item("it-12a", "Sella biposto", 3_000, 1, "SEL-02")],
     totalMinor: 3_000,
     currency: "EUR",
-    payment: "refunded",
-    shipping: "delivered",
+    payment: "partially_refunded",
+    shipping: "shipped",
     billingAddress: {
       line: "Lungarno Pacinotti 3",
       postalCode: "56126",
@@ -597,7 +621,8 @@ const seeds: OrderSeed[] = [
     totalMinor: 6_400,
     currency: "EUR",
     payment: "paid",
-    shipping: "shipped",
+    // Stato eBay non previsto: compare con il codice originale.
+    shipping: { code: "ON_HOLD" },
     billingAddress: {
       line: "Leopoldstraße 20",
       postalCode: "80802",
@@ -723,10 +748,14 @@ function storeView(key: StoreKey, overrides: Partial<StoreView> = {}): StoreView
 }
 
 function toOrder(seed: OrderSeed, storeList: StoreView[]): OrderView {
-  const { store, lockable: _lockable, ...order } = seed;
+  const { store, lockable: _lockable, payment, shipping, suggestion, ...order } = seed;
   const view = storeList.find((candidate) => candidate.id === stores[store].id);
   return {
     ...order,
+    items: order.items.map((line) => ({ ...line, currency: order.currency })),
+    payment: typeof payment === "string" ? { status: payment } : { status: null, ...payment },
+    shipping: typeof shipping === "string" ? { status: shipping } : { status: null, ...shipping },
+    suggestions: suggestion ? [suggestion] : [],
     storeId: stores[store].id,
     storeName: stores[store].name,
     marketplace: stores[store].marketplace,

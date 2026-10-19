@@ -7,6 +7,7 @@ import { accessPath, ordersPath } from "./app-links";
 import { errorResponse } from "./error-response";
 import { tracePhase } from "./errors";
 import { languageFromPath, localizedPath, type Language } from "./i18n";
+import { measure } from "./observability.server";
 
 export type AccountArea = {
   language: Language;
@@ -16,31 +17,46 @@ export type AccountArea = {
   account: { name: string; email: string };
 };
 
+/** Sessione corrente, misurata nella fase Auth. */
+export async function currentSession(request: Request) {
+  return measure("auth", "session", async () => {
+    const auth = createAuth(env);
+    await auth.$context;
+    tracePhase(request, "auth-context");
+    const session = await auth.api.getSession({ headers: request.headers });
+    tracePhase(request, "session");
+    return session;
+  });
+}
+
 /**
- * Pagine dell'area riservata oltre agli ordini: richiedono sessione, email confermata e
- * registrazione completa. Altrimenti l'accesso o gli Ordini mostrano il passo che manca,
- * conservando l'esito eventualmente arrivato nell'indirizzo.
+ * Area riservata: richiede sessione e registrazione completa, altrimenti l'accesso mostra il
+ * passo che manca. Le pagine oltre agli Ordini richiedono anche l'email confermata; senza, gli
+ * Ordini spiegano come proseguire. L'esito eventualmente arrivato nell'indirizzo resta.
  */
-export async function requireAccountArea(request: Request): Promise<AccountArea> {
+export async function requireAccountArea(
+  request: Request,
+  options: { unverified?: boolean } = {},
+): Promise<AccountArea> {
   const url = new URL(request.url);
   const language = languageFromPath(url.pathname);
-  const auth = createAuth(env);
-  await auth.$context;
-  tracePhase(request, "auth-context");
-  const session = await auth.api.getSession({ headers: request.headers });
-  tracePhase(request, "session");
-  const status = session ? await registrationStatus(env.DB, session.user.id) : null;
+  const session = await currentSession(request);
+  const status = session
+    ? await measure("d1", "registration", () => registrationStatus(env.DB, session.user.id))
+    : null;
   tracePhase(request, "registration");
-  if (!session?.user.emailVerified || !status?.profile || !status.termsAccepted) {
-    throw redirect(`${localizedPath(language, session ? ordersPath : accessPath)}${url.search}`, {
-      headers: { "cache-control": "no-store" },
-    });
+  const complete = !!status?.profile && status.termsAccepted;
+  if (!session || !complete || (!session.user.emailVerified && !options.unverified)) {
+    throw redirect(
+      `${localizedPath(language, session && complete ? ordersPath : accessPath)}${url.search}`,
+      { headers: { "cache-control": "no-store" } },
+    );
   }
-  const { firstName, lastName } = status.profile;
+  const { firstName, lastName } = status!.profile!;
   return {
     language,
     session,
-    profile: status.profile,
+    profile: status!.profile!,
     account: { name: `${firstName} ${lastName}`, email: session.user.email },
   };
 }

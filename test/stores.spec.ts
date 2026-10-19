@@ -218,19 +218,13 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       .bind(new Date().toISOString())
       .run();
     const home = await homeFor(seller.cookie);
-    expect(home.authenticated && home.reminders).toEqual([
-      {
-        id: seller.storeId,
-        name: "venditore",
-        ebayEnvironment: "production",
-        kind: "expired",
-        at: expect.any(String),
-      },
+    expect(!home.notFound && home.page.notices).toEqual([
+      { kind: "store-issue", storeId: seller.storeId, storeName: "venditore" },
     ]);
     // Ricollegare lo stesso account eBay toglie l'invito.
     await linkThroughEbay(seller.cookie);
     const after = await homeFor(seller.cookie);
-    expect(after.authenticated && after.reminders).toEqual([]);
+    expect(!after.notFound && after.page.notices).toEqual([]);
   });
 
   it("la pausa manuale ferma letture e rinnovi, lascia i dati e si distingue da quella del piano", async () => {

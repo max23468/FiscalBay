@@ -14,7 +14,7 @@ import { loader as loadLegal } from "../app/routes/legal";
 import { action as startStoreLink } from "../app/routes/store-link";
 import { now, resetDatabase } from "./database-fixtures";
 import { syntheticProfile, verifiedSession, sessionCookie, profileOf } from "./account-fixtures";
-import { accessForm, securityForm, homeFor } from "./account-route-fixtures";
+import { accessFor, accessForm, securityForm, homeFor } from "./account-route-fixtures";
 import { beginStoreLink, storeLinkSessions } from "./store-link-fixtures";
 
 beforeEach(resetDatabase);
@@ -194,12 +194,9 @@ describe("registrazione e verifica del contatto", () => {
     const cookie = sessionCookie(await accessForm("/accesso", { email, password }));
     expect(cookie).toContain("session_token");
     expect(await homeFor(cookie)).toMatchObject({
-      authenticated: true,
-      email,
-      emailVerified: false,
-      needsProfile: false,
-      needsAgreement: false,
-      orders: [],
+      account: { email },
+      verified: false,
+      page: { view: "no-store", orders: [], connectHref: null },
     });
     const link = (await startStoreLink({
       request: new Request("http://localhost:5173/app/negozi/collega", {
@@ -220,7 +217,7 @@ describe("registrazione e verifica del contatto", () => {
     );
     expect(verified.headers.get("location")).toBe("/en/app/ordini");
     const verifiedCookie = sessionCookie(verified);
-    expect(await homeFor(verifiedCookie)).toMatchObject({ emailVerified: true });
+    expect(await homeFor(verifiedCookie)).toMatchObject({ verified: true });
     send.mockRestore();
   });
 
@@ -280,11 +277,15 @@ describe("registrazione e verifica del contatto", () => {
     await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?').bind(user!.id).run();
     const cookie = sessionCookie(await accessForm("/accesso", { email, password }));
 
-    expect(await homeFor(cookie)).toMatchObject({
+    // Gli Ordini rimandano all'accesso, che chiede ciò che manca.
+    await expect(homeFor(cookie)).rejects.toSatisfy(
+      (response: Response) => response.headers.get("location") === "/accesso",
+    );
+    expect(await accessFor(cookie)).toMatchObject({
+      authenticated: true,
       needsProfile: true,
       needsAgreement: true,
       suggestedName: { firstName: "Luca", lastName: "De Santis" },
-      orders: [],
     });
     // Anche uno username eBay con spazi non prova nome e cognome della persona.
     await env.DB.prepare(
@@ -292,7 +293,7 @@ describe("registrazione e verifica del contatto", () => {
     )
       .bind("ebay-profilo", "ebay-profilo", "ebay", user!.id, now, now)
       .run();
-    expect(await homeFor(cookie)).toMatchObject({
+    expect(await accessFor(cookie)).toMatchObject({
       needsProfile: true,
       suggestedName: { firstName: "", lastName: "" },
     });
@@ -302,15 +303,15 @@ describe("registrazione e verifica del contatto", () => {
         headers: { cookie, origin: "http://localhost:5173" },
       }),
     } as Parameters<typeof startStoreLink>[0])) as Response;
-    expect(blocked.headers.get("location")).toBe("/app/ordini");
+    expect(blocked.headers.get("location")).toBe("/accesso");
     expect(await storeLinkSessions()).toBe(0);
 
     const complete = (fields: Record<string, string>) =>
       accessForm("/accesso", { intent: "completa", ...fields }, cookie).then((response) =>
         response.headers.get("location"),
       );
-    expect(await complete({ termini: "on" })).toBe("/app/ordini?accesso=dati");
-    expect(await complete({ ...person, marketing: "on" })).toBe("/app/ordini?accesso=termini");
+    expect(await complete({ termini: "on" })).toBe("/accesso?accesso=dati");
+    expect(await complete({ ...person, marketing: "on" })).toBe("/accesso?accesso=termini");
     expect(await agreements(user!.id)).toEqual({ terms: [], marketing: [] });
     expect(await complete({ ...person, termini: "on", marketing: "on" })).toBe("/app/ordini");
     expect(await profileOf(user!.id)).toMatchObject({ first_name: "Mario", last_name: "Rossi" });
@@ -325,10 +326,12 @@ describe("registrazione e verifica del contatto", () => {
       marketing: [{ granted: 1, text_version: legalVersions.marketing, language: "it" }],
     });
     expect(await homeFor(cookie)).toMatchObject({
-      needsProfile: false,
-      needsAgreement: false,
-      emailVerified: true,
+      verified: true,
+      account: { name: "Mario Rossi" },
     });
+    await expect(accessFor(cookie)).rejects.toSatisfy(
+      (response: Response) => response.headers.get("location") === "/app/ordini",
+    );
     expect((await beginStoreLink(cookie)).hostname).toBe("auth.ebay.com");
 
     // Le registrazioni precedenti usavano l'email come nome: non va proposta come nome.
@@ -341,9 +344,8 @@ describe("registrazione e verifica del contatto", () => {
       }),
     );
     const legacy = sessionCookie(await accessForm("/accesso", { email: legacyEmail, password }));
-    expect(await homeFor(legacy)).toMatchObject({
+    expect(await accessFor(legacy)).toMatchObject({
       needsProfile: true,
-      canLinkStore: false,
       suggestedName: { firstName: "", lastName: "" },
     });
   });

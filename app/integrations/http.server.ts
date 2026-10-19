@@ -1,6 +1,7 @@
 import type { z } from "zod";
 
 import { ApplicationError, type ErrorCode } from "../errors";
+import { measure } from "../observability.server";
 
 /**
  * Confine minimo delle chiamate ai provider: timeout sull'intera lettura, limite dei byte anche
@@ -90,12 +91,24 @@ function providerCode(text: string): string | undefined {
   }
 }
 
-/** Esegue la richiesta e restituisce il testo di una risposta 2xx entro tempo e dimensione. */
-export async function upstreamText(
+/**
+ * Esegue la richiesta e restituisce il testo di una risposta 2xx entro tempo e dimensione. Ogni
+ * provider raggiunto da qui è eBay: la durata rientra nella sua fase.
+ */
+export function upstreamText(
   fetcher: typeof fetch,
   url: string,
   init: RequestInit = {},
   options: UpstreamOptions = {},
+): Promise<string> {
+  return measure("ebay", "request", () => readUpstream(fetcher, url, init, options));
+}
+
+async function readUpstream(
+  fetcher: typeof fetch,
+  url: string,
+  init: RequestInit,
+  options: UpstreamOptions,
 ): Promise<string> {
   const timeout = AbortSignal.timeout(options.timeoutMs ?? defaultTimeoutMs);
   const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;

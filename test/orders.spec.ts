@@ -14,11 +14,14 @@ import {
 import { listVisibleOrders } from "../app/domain/orders.server";
 import { completeRegistration } from "../app/domain/registration.server";
 import { createAuth } from "../app/auth.server";
-import { action as unlockAction, loader as loadHome } from "../app/routes/home";
+import { action as unlockAction, loader as loadHome } from "../app/routes/orders";
 import { loader as loadAccess } from "../app/routes/sign-in";
 import { action as securityAction } from "../app/routes/security";
 import { now, resetDatabase, seed } from "./database-fixtures";
-import { syntheticProfile } from "./account-fixtures";
+import { syntheticProfile, verifiedSession } from "./account-fixtures";
+import { displayTaxValue } from "../app/tax-quality";
+import { itemPrice } from "../app/view-models";
+import { settle } from "../app/settle.server";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
@@ -29,6 +32,7 @@ describe("percorso ordini", () => {
 
     // Senza sessione gli Ordini rimandano all'accesso, che mostra i moduli.
     const anonymous = await loadHome({
+      params: {},
       request: new Request("http://localhost:5173/app/ordini?accesso=errore"),
     } as Parameters<typeof loadHome>[0]).catch((response: Response) => response);
     expect((anonymous as Response).headers.get("location")).toBe("/accesso?accesso=errore");
@@ -40,7 +44,6 @@ describe("percorso ordini", () => {
       authenticated: false,
       language: "it",
       notice: null,
-      orders: [],
       resetToken: null,
       tab: "accedi",
     });
@@ -90,17 +93,20 @@ describe("percorso ordini", () => {
     expect(cookie).toBeTruthy();
 
     const authenticated = await loadHome({
+      params: {},
       request: new Request("http://localhost:5173/app/ordini", { headers: { cookie: cookie! } }),
     } as Parameters<typeof loadHome>[0]);
-    expect(authenticated.authenticated).toBe(true);
-    expect(authenticated.orders.map(({ ebayOrderId }) => ebayOrderId)).toEqual(["ebay-a"]);
+    expect(authenticated.verified).toBe(true);
+    expect(authenticated.page?.orders.map(({ ebayOrderId }) => ebayOrderId)).toEqual(["ebay-a"]);
     const guessed = await loadHome({
+      params: {},
       request: new Request("http://localhost:5173/app/ordini?q=RSSMRA80A01H501U", {
         headers: { cookie: cookie! },
       }),
     } as Parameters<typeof loadHome>[0]);
     expect(JSON.stringify(guessed)).not.toContain("RSSMRA80A01H501U");
-    expect(guessed.orders.map((order) => order.ebayOrderId)).toEqual(["ebay-a"]);
+    // La ricerca considera solo i valori autorizzati: un codice da sbloccare non trova l'ordine.
+    expect(guessed.page?.orders).toEqual([]);
     const unlockRequest = (ids: string, origin = "http://localhost:5173") =>
       ({
         request: new Request("http://localhost:5173/app/ordini", {
@@ -274,14 +280,30 @@ describe("percorso ordini", () => {
       ).first(),
     ).toEqual({ total: 8 });
     expect(ownerOrders[0]?.summary).toEqual({
-      buyer: { username: null },
+      buyer: null,
       orderPaymentStatus: null,
       orderFulfillmentStatus: null,
       payment: null,
       shipping: null,
       lineItems: [
-        { lineItemId: "line-a1", title: "Articolo A", quantity: 1, sku: "SKU-A" },
-        { lineItemId: "line-a2", title: "Articolo B", quantity: 2, sku: null },
+        {
+          lineItemId: "line-a1",
+          title: "Articolo A",
+          quantity: 1,
+          sku: "SKU-A",
+          totalMinor: 999,
+          currency: "EUR",
+          imageUrl: null,
+        },
+        {
+          lineItemId: "line-a2",
+          title: "Articolo B",
+          quantity: 2,
+          sku: null,
+          totalMinor: 300,
+          currency: "EUR",
+          imageUrl: null,
+        },
       ],
     });
     expect(otherTenantOrders[0]).toMatchObject({ storeName: "e-b", fiscalState: "locked" });
@@ -293,7 +315,8 @@ describe("percorso ordini", () => {
     expect(before[0]?.fiscalState).toBe("locked");
     expect(JSON.stringify(before)).not.toContain("RSSMRA80A01H501U");
     await env.DB.prepare("DELETE FROM tax_identifiers WHERE order_id = 'o-a'").run();
-    expect((await listVisibleOrders(env.DB, "u-a"))[0]?.fiscalState).toBe("unchecked");
+    // Senza controllo fiscale né lettura in attesa la verifica non è riuscita: si riprova.
+    expect((await listVisibleOrders(env.DB, "u-a"))[0]?.fiscalState).toBe("error");
   });
 
   it("la lettura Fulfillment conserva solo i campi del modello, con importi esatti", () => {
@@ -967,5 +990,334 @@ describe("percorso ordini", () => {
     expect(
       await env.DB.prepare("SELECT COUNT(*) AS total FROM lifetime_allocations").first(),
     ).toEqual({ total: 1 });
+  });
+});
+
+describe("pagina Ordini reale", () => {
+  const origin = "http://localhost:5173";
+
+  /** Proprietario dello spazio A, con la sessione aperta. */
+  async function owner() {
+    await seed();
+    const session = await verifiedSession("pagina-ordini@example.invalid");
+    await env.DB.prepare("UPDATE workspace_members SET user_id = ? WHERE workspace_id = 'w-a'")
+      .bind(session.userId)
+      .run();
+    return session;
+  }
+
+  function ordersPage(cookie: string, path = "/app/ordini", params: { ordine?: string } = {}) {
+    return loadHome({
+      params,
+      request: new Request(`${origin}${path}`, { headers: { cookie } }),
+    } as Parameters<typeof loadHome>[0]);
+  }
+
+  function ordersAction(cookie: string, fields: Record<string, string>) {
+    return unlockAction({
+      request: new Request(`${origin}/app/ordini`, {
+        method: "POST",
+        headers: { cookie, origin },
+        body: new URLSearchParams(fields),
+      }),
+    } as Parameters<typeof unlockAction>[0]);
+  }
+
+  async function withCredentials() {
+    await env.DB.prepare(
+      `INSERT INTO ebay_store_credentials (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
+       VALUES ('s-a', 'a', '2026-09-14T00:00:00.000Z', 'r', '2027-09-13T00:00:00.000Z', ?)`,
+    )
+      .bind(now)
+      .run();
+  }
+
+  it("rende gli ordini persistiti nella vista dell'anteprima, con stati, prezzi e contatti", async () => {
+    const { cookie } = await owner();
+    await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE orders SET marketplace_id = 'EBAY_IT', payment_status = 'PARTIALLY_REFUNDED',
+                fulfillment_status = 'IN_PROGRESS', buyer_json = ? WHERE id = 'o-a'`,
+      ).bind(
+        JSON.stringify({
+          username: "acquirente-sintetico",
+          name: "Maria Rossi",
+          email: "maria@example.invalid",
+          phone: "+39 000 0000000",
+          billingAddress: {
+            addressLine1: "Via Roma 1",
+            addressLine2: "Scala B",
+            city: "Trento",
+            postalCode: "38122",
+            stateOrProvince: "TN",
+            countryCode: "IT",
+          },
+          shipTo: {
+            name: "Maria Rossi c/o Ufficio",
+            phone: null,
+            address: {
+              addressLine1: "Via Verdi 2",
+              addressLine2: null,
+              city: "Rovereto",
+              postalCode: "38068",
+              stateOrProvince: "TN",
+              countryCode: "IT",
+            },
+          },
+        }),
+      ),
+      env.DB.prepare(
+        "UPDATE order_items SET image_url = 'https://i.ebayimg.com/images/sintetica.jpg' WHERE id = 'i-a2'",
+      ),
+    ]);
+    const result = await ordersPage(cookie);
+    expect(result.notFound).toBe(false);
+    const [order] = result.page!.orders;
+    expect(order).toMatchObject({
+      id: "o-a",
+      ebayOrderId: "ebay-a",
+      storeId: "s-a",
+      marketplace: "EBAY_IT",
+      buyerName: "Maria Rossi",
+      buyerUsername: "acquirente-sintetico",
+      shipTo: { name: "Maria Rossi c/o Ufficio", locality: "Rovereto (TN)", country: "IT" },
+      payment: { status: "partially_refunded" },
+      shipping: { status: "in_progress" },
+      billingAddress: {
+        line: "Via Roma 1, Scala B",
+        postalCode: "38122",
+        city: "Trento",
+        province: "TN",
+        countryCode: "IT",
+      },
+      phone: "+39 000 0000000",
+      email: "maria@example.invalid",
+      thumbnail: "https://i.ebayimg.com/images/sintetica.jpg",
+      items: [
+        { id: "line-a1", totalMinor: 999, quantity: 1, currency: "EUR" },
+        { id: "line-a2", totalMinor: 300, quantity: 2, currency: "EUR" },
+      ],
+      // Nessuna lettura in attesa né controllo registrato: la lettura risulta da riprovare.
+      fiscal: { state: "locked", shownAs: "CF" },
+    });
+    // Il valore da sbloccare non arriva mai al browser, neppure nella vista condivisa.
+    expect(JSON.stringify(result)).not.toContain("RSSMRA80A01H501U");
+    expect(result.page).toMatchObject({
+      view: "list",
+      exportable: false,
+      openOnEbay: false,
+      settings: false,
+      account: { plan: "free", quota: { used: 0, limit: 1 } },
+    });
+
+    // Uno stato eBay non previsto compare con il suo codice; uno stato assente resta tale.
+    await env.DB.prepare(
+      "UPDATE orders SET payment_status = 'AWAITING_REVIEW', fulfillment_status = NULL WHERE id = 'o-a'",
+    ).run();
+    const unknown = (await ordersPage(cookie)).page!.orders[0]!;
+    expect(unknown.payment).toEqual({ status: null, code: "AWAITING_REVIEW" });
+    expect(unknown.shipping).toEqual({ status: null, code: null });
+    // Uno stato non previsto resta fuori dai filtri.
+    expect((await ordersPage(cookie, "/app/ordini?pagamento=paid")).page!.orders).toEqual([]);
+  });
+
+  it("mostra il prezzo unitario solo quando la divisione è esatta, altrimenti l'importo della riga", () => {
+    const line = (totalMinor: number | null, quantity: number) => ({
+      id: "riga",
+      title: "Articolo",
+      sku: null,
+      quantity,
+      totalMinor,
+      currency: "EUR",
+    });
+    expect(itemPrice(line(999, 1))).toEqual({ minor: 999, unit: true });
+    expect(itemPrice(line(300, 2))).toEqual({ minor: 150, unit: true });
+    expect(itemPrice(line(1000, 3))).toEqual({ minor: 1000, unit: false });
+    expect(itemPrice(line(0, 4))).toEqual({ minor: 0, unit: true });
+    expect(itemPrice(line(null, 2))).toBeNull();
+  });
+
+  it("apre il dettaglio dall'indirizzo solo per un ordine consultabile dello spazio", async () => {
+    const { cookie } = await owner();
+    const opened = await ordersPage(cookie, "/app/ordini/o-a", { ordine: "o-a" });
+    expect(opened.page?.detail).toMatchObject({ id: "o-a", ebayOrderId: "ebay-a" });
+    // Un ordine di un altro spazio, inesistente o scaduto risponde allo stesso modo.
+    for (const ordine of ["o-b", "inesistente", "x".repeat(65)]) {
+      const missing = await ordersPage(cookie, `/app/ordini/${ordine}`, { ordine });
+      expect(missing).toMatchObject({ data: { notFound: true }, init: { status: 404 } });
+      expect(JSON.stringify(missing)).not.toContain("ebay-b");
+    }
+    await env.DB.prepare("UPDATE orders SET retention_until = ? WHERE id = 'o-a'").bind(now).run();
+    expect(await ordersPage(cookie, "/app/ordini/o-a", { ordine: "o-a" })).toMatchObject({
+      data: { notFound: true },
+    });
+  });
+
+  it("filtra sul server con i soli valori autorizzati, anche nella forma normalizzata", async () => {
+    const { cookie, userId } = await owner();
+    await env.DB.prepare(
+      "UPDATE tax_identifiers SET value = ' rss mra80a01h501u' WHERE id = 't-a1'",
+    ).run();
+    // Prima dello sblocco il codice non trova l'ordine e il filtro lo indica da sbloccare.
+    expect((await ordersPage(cookie, "/app/ordini?q=RSSMRA80A01H501U")).page!.orders).toEqual([]);
+    expect(
+      (await ordersPage(cookie, "/app/ordini?fiscale=locked")).page!.orders.map(({ id }) => id),
+    ).toEqual(["o-a"]);
+    await unlockOrders(env.DB, userId, ["o-a"]);
+    const found = await ordersPage(cookie, "/app/ordini?q=RSSMRA80A01H501U");
+    expect(found.page!.orders.map(({ id }) => id)).toEqual(["o-a"]);
+    // L'originale resta quello della fonte; la forma derivata è solo per mostrare e copiare.
+    const [order] = found.page!.orders;
+    expect(order!.fiscal).toMatchObject({
+      state: "available",
+      identifiers: expect.arrayContaining([
+        expect.objectContaining({ type: "CF", value: " rss mra80a01h501u" }),
+      ]),
+    });
+    expect((await ordersPage(cookie, "/app/ordini?fiscale=locked")).page!.orders).toEqual([]);
+    // L'esito del collegamento nell'indirizzo non diventa un filtro per negozio.
+    expect(
+      (await ordersPage(cookie, "/app/ordini?negozio=collegato")).page!.orders.map(({ id }) => id),
+    ).toEqual(["o-a"]);
+    expect((await ordersPage(cookie, "/app/ordini?negozio=s-b")).page!.orders).toEqual([]);
+  });
+
+  it("forma derivata di CF e Partita IVA italiani senza toccare i tipi esteri", () => {
+    expect(displayTaxValue({ type: "CF", value: " rss mra80a01h501u " })).toBe("RSSMRA80A01H501U");
+    expect(displayTaxValue({ type: "PIVA", value: "0123 4567 890" })).toBe("01234567890");
+    expect(displayTaxValue({ type: "PIVA", value: "00000000000" })).toBe("00000000000");
+    // Un valore errato resta errato: la forma derivata non lo corregge.
+    expect(displayTaxValue({ type: "CF", value: "rss-mra" })).toBe("RSS-MRA");
+    expect(displayTaxValue({ type: "OTHER", value: " es b123 456 " })).toBe(" es b123 456 ");
+  });
+
+  it("«Riprova» rilegge soltanto un ordine dello spazio con lettura non riuscita", async () => {
+    const { cookie } = await owner();
+    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(undefined);
+    // Con dati da sbloccare la lettura non è da riprovare.
+    expect(await ordersAction(cookie, { intent: "retry", order: "o-a" })).toMatchObject({
+      init: { status: 409 },
+    });
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM tax_identifiers WHERE order_id = 'o-a'"),
+      env.DB.prepare(
+        `INSERT INTO order_source_refs (store_id, source, external_order_id, order_id, last_modified_time,
+           detail_for, detail_error, detail_attempts)
+         VALUES ('s-a', 'fulfillment', 'ebay-a', 'o-a', ?1, ?1, 'unavailable', 5)`,
+      ).bind(now),
+    ]);
+    // Senza un consenso valido la lettura non si può richiedere e nulla cambia.
+    expect(await ordersAction(cookie, { intent: "retry", order: "o-a" })).toMatchObject({
+      init: { status: 409 },
+    });
+    await withCredentials();
+    expect(await ordersAction(cookie, { intent: "retry", order: "o-a" })).toEqual({
+      ok: true,
+      notice: "Nuova lettura richiesta.",
+    });
+    expect(send).toHaveBeenCalledWith({ syncStore: "s-a" });
+    expect(
+      await env.DB.prepare(
+        "SELECT detail_for, detail_error, detail_attempts FROM order_source_refs WHERE order_id = 'o-a'",
+      ).first(),
+    ).toEqual({ detail_for: null, detail_error: null, detail_attempts: 0 });
+    // L'ordine torna in verifica finché la nuova lettura non si conclude.
+    expect((await ordersPage(cookie)).page!.orders[0]!.fiscal).toEqual({ state: "checking" });
+    // Un ordine di un altro spazio non si rilegge.
+    expect(await ordersAction(cookie, { intent: "retry", order: "o-b" })).toMatchObject({
+      init: { status: 409 },
+    });
+    send.mockRestore();
+  });
+
+  it("mostra subito l'ultimo stato e conferma nella stessa risposta la verifica in corso", async () => {
+    const { cookie } = await owner();
+    await env.DB.prepare(
+      `INSERT INTO order_source_refs (store_id, source, external_order_id, order_id, last_modified_time)
+       VALUES ('s-a', 'fulfillment', 'ebay-a', 'o-a', ?)`,
+    )
+      .bind(now)
+      .run();
+    const result = await ordersPage(cookie);
+    // Lo sblocco resta sospeso durante la verifica, senza attendere eBay.
+    expect(result.page!.orders[0]!.fiscal).toEqual({
+      state: "locked",
+      shownAs: "CF",
+      hold: "checking",
+    });
+    expect(result.confirmation).toBeInstanceOf(Promise);
+    await env.DB.batch([
+      env.DB.prepare("UPDATE order_source_refs SET detail_for = last_modified_time"),
+      env.DB.prepare(
+        `INSERT INTO order_tax_checks (order_id, source, last_modified_time, observed_at, availability)
+         VALUES ('o-a', 'ebay_trading_get_orders', ?1, ?1, 'present')`,
+      ).bind(now),
+    ]);
+    const confirmed = await result.confirmation!;
+    expect(confirmed.map(({ id, fiscal }) => ({ id, fiscal }))).toEqual([
+      { id: "o-a", fiscal: { state: "locked", shownAs: "CF" } },
+    ]);
+    expect(JSON.stringify(confirmed)).not.toContain("RSSMRA80A01H501U");
+    // Senza verifiche in corso non resta nulla da confermare.
+    expect((await ordersPage(cookie)).confirmation).toBeUndefined();
+  });
+
+  it("l'attesa della conferma si ferma alla scadenza con l'ultima lettura", async () => {
+    let reads = 0;
+    const read = async () => ++reads;
+    expect(await settle(read, (value) => value === 2, { timeoutMs: 1_000, intervalMs: 10 })).toBe(
+      2,
+    );
+    reads = 0;
+    // Un'altra attesa supererebbe la scadenza: resta l'ultima lettura, non confermata.
+    expect(await settle(read, () => false, { timeoutMs: 15, intervalMs: 20 })).toBe(1);
+  });
+
+  it("rilegge una volta gli ordini mai verificati", async () => {
+    await seed();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor, is_provisional)
+         VALUES ('o-t', 's-a', 'trading-a', ?1, ?1, 'EUR', 100, 1)`,
+      ).bind(now),
+      env.DB.prepare(
+        `INSERT INTO order_source_refs (store_id, source, external_order_id, order_id, last_modified_time, detail_for, detail_error)
+         VALUES ('s-a', 'fulfillment', 'ebay-a', 'o-a', ?1, ?1, NULL),
+                ('s-b', 'fulfillment', 'ebay-b', 'o-b', ?1, ?1, NULL),
+                ('s-a', 'trading', 'trading-a', 'o-t', ?1, NULL, NULL)`,
+      ).bind(now),
+      env.DB.prepare(
+        `INSERT INTO order_tax_checks (order_id, source, last_modified_time, observed_at, availability)
+         VALUES ('o-b', 'ebay_trading_get_orders', ?1, ?1, 'present')`,
+      ).bind(now),
+      env.DB.prepare(
+        `INSERT INTO sync_state (store_id, updated_at, history_from, trading_cursor)
+         VALUES ('s-a', ?1, ?1, ?1), ('s-b', ?1, ?1, ?1)`,
+      ).bind(now),
+    ]);
+    const migration = env.TEST_MIGRATIONS.find(
+      ({ name }) => name === "0028_order_tax_recheck.sql",
+    )!;
+    await env.DB.batch(migration.queries.map((query) => env.DB.prepare(query)));
+    expect(
+      (
+        await env.DB.prepare(
+          "SELECT order_id, detail_for FROM order_source_refs WHERE source = 'fulfillment' ORDER BY order_id",
+        ).all()
+      ).results,
+    ).toEqual([
+      { order_id: "o-a", detail_for: null },
+      { order_id: "o-b", detail_for: now },
+    ]);
+    expect(
+      (
+        await env.DB.prepare(
+          "SELECT store_id, trading_cursor FROM sync_state ORDER BY store_id",
+        ).all()
+      ).results,
+    ).toEqual([
+      { store_id: "s-a", trading_cursor: null },
+      { store_id: "s-b", trading_cursor: now },
+    ]);
   });
 });

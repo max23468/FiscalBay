@@ -418,9 +418,11 @@ function PlanSection({
                 style={{ width: `${Math.min(quota.used / quota.limit, 1) * 100}%` }}
               />
             </div>
-            <p className="text-sm text-muted-foreground">
-              {t.settings.cycleEnds(formatDate(quota.cycleEndsAt, language))}
-            </p>
+            {quota.cycleEndsAt ? (
+              <p className="text-sm text-muted-foreground">
+                {t.settings.cycleEnds(formatDate(quota.cycleEndsAt, language))}
+              </p>
+            ) : null}
           </div>
         ) : null}
       </Group>

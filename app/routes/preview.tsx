@@ -45,11 +45,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     searchIndex: scenario.orders.map((order) => ({
       id: order.id,
       ebayOrderId: order.ebayOrderId,
-      buyerName: order.buyerName,
+      buyerName: order.buyerName ?? order.buyerUsername ?? "",
       detail: order.items[0]?.title ?? "",
       text: [
         order.ebayOrderId,
-        order.buyerName,
+        order.buyerName ?? "",
         ...order.items.flatMap((item) => [item.title, item.sku ?? ""]),
         ...(order.fiscal.state === "available"
           ? order.fiscal.identifiers.map((id) => id.value)

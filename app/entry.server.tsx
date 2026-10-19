@@ -3,6 +3,7 @@ import { isRouteErrorResponse, ServerRouter } from "react-router";
 import { isbot } from "isbot";
 import { renderToReadableStream } from "react-dom/server";
 import { logFailure } from "./errors";
+import { measure } from "./observability.server";
 
 export const streamTimeout = 5_000;
 
@@ -24,15 +25,15 @@ export default async function handleRequest(
   let shellRendered = false;
   const userAgent = request.headers.get("user-agent");
 
-  const body = await renderToReadableStream(
-    <ServerRouter context={routerContext} url={request.url} />,
-    {
+  // La fase di rendering arriva fino alla shell; il resto della pagina prosegue in streaming.
+  const body = await measure("render", "document", () =>
+    renderToReadableStream(<ServerRouter context={routerContext} url={request.url} />, {
       signal: AbortSignal.timeout(streamTimeout + 1000),
       onError(_error: unknown) {
         responseStatusCode = 500;
         if (shellRendered) logFailure({ request, code: "INTERNAL_ERROR", operation: "render" });
       },
-    },
+    }),
   );
   shellRendered = true;
 

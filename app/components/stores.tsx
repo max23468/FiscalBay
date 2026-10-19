@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { useAction } from "~/components/app-shell";
+import { useConfirmed } from "~/components/confirmation";
 import { LedgerIndicator } from "~/components/brand";
 import { EmptyState } from "~/components/empty-state";
 import { IconTile, InitialsTile, PageTitle } from "~/components/icon-tile";
@@ -60,6 +61,7 @@ import {
 import type { AppCopy } from "../app-copy";
 import { appHref, type AppLinks } from "../app-links";
 import type { Language } from "../i18n";
+import { usePageTiming } from "../page-timing";
 import {
   formatDate,
   formatRelative,
@@ -252,7 +254,7 @@ function ReadActions({ store, ebayDown, t }: { store: StoreView; ebayDown: boole
         <Button
           variant="outline"
           className="justify-start"
-          disabled={ebayDown || store.connection !== "active"}
+          disabled={ebayDown || store.syncing || store.connection !== "active"}
           onClick={() => run("store-sync")}
         >
           <RefreshCw aria-hidden="true" data-icon="inline-start" />
@@ -262,7 +264,7 @@ function ReadActions({ store, ebayDown, t }: { store: StoreView; ebayDown: boole
       <Button
         variant="outline"
         className="justify-start"
-        disabled={ebayDown || needsReconnect || store.connection !== "active"}
+        disabled={ebayDown || store.syncing || needsReconnect || store.connection !== "active"}
         onClick={() => run("store-reimport")}
       >
         <History aria-hidden="true" data-icon="inline-start" />
@@ -513,11 +515,11 @@ function StoreDetail({
         </StatusAlert>
       ) : null}
       {!store.issue && store.consentExpiring && store.consentExpiresAt ? (
-        <StatusAlert tone="info" title={t.access.consentExpiringTitle(store.name)}>
+        <StatusAlert tone="info" title={t.orders.consentExpiringTitle(store.name)}>
           <span className="grid justify-items-start gap-3">
             {(store.connection === "paused"
               ? t.stores.consentExpiringPaused
-              : t.access.consentExpiringBody)(
+              : t.orders.consentExpiringBody)(
               formatDate(store.consentExpiresAt, links.language, "date"),
             )}
             <ReconnectButton
@@ -706,17 +708,27 @@ function NotificationsSection({
 
 /** Negozi eBay: lista leggera, dettaglio e azioni nel pannello con URL proprio. */
 export function StoresPage({
-  data,
+  data: saved,
   t,
   links,
   notice,
+  confirmation,
 }: {
   data: StoresPageData;
   t: AppCopy;
   links: AppLinks;
   /** Esito del collegamento eBay appena concluso, sotto il titolo. */
   notice?: React.ReactNode;
+  /**
+   * Stato confermato dei negozi in lettura, nella stessa risposta: fino ad allora restano
+   * l'ultimo stato salvato e le letture a richiesta sospese.
+   */
+  confirmation?: Promise<StoreView[]>;
 }) {
+  const stores = useConfirmed(saved.stores, confirmation);
+  const [detail] = useConfirmed(saved.detail ? [saved.detail] : [], confirmation);
+  const data = { ...saved, stores, detail: detail ?? null };
+  usePageTiming("stores");
   // «Già collegato a un altro account» è l'esito di un tentativo, non uno stato della pagina.
   const [attempted, setAttempted] = useState(false);
   const premium = data.account.plan === "premium";

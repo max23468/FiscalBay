@@ -101,13 +101,11 @@ describe("stato sintetico dell'anteprima", () => {
         }
       }
     });
-    it(`il prezzo unitario e le quantità dell'ordine con più articoli compongono il totale, ${language}`, () => {
+    it(`gli importi delle righe dell'ordine con più articoli compongono il totale, ${language}`, () => {
       const order = loadScenario("ordinario", language, new Set()).orders.find(
         (order) => order.id === "ord-01",
       )!;
-      expect(order.items.reduce((sum, item) => sum + item.priceMinor * item.quantity, 0)).toBe(
-        order.totalMinor,
-      );
+      expect(order.items.reduce((sum, item) => sum + item.totalMinor!, 0)).toBe(order.totalMinor);
     });
     it(`deriva la diagnostica dalla quota aggiornata, ${language}`, () => {
       const before = loadScenario("ordinario", language, new Set());

@@ -1,10 +1,18 @@
-import { buyerSnapshotSchema } from "./order-import.server";
+import { buyerSnapshotSchema, type BuyerSnapshot } from "./order-import.server";
 import { taxComparisonKey, taxIdentifierType, taxQuality } from "../tax-quality";
-import type { TaxQuality } from "../view-models";
+import type {
+  FiscalNotice,
+  FiscalView,
+  OrderView,
+  PaymentStatus,
+  ShippingStatus,
+  SourceStatus,
+  SuggestionView,
+  TaxQuality,
+} from "../view-models";
 import { orderAccessSql } from "./grants.server";
 import { consultableStore } from "./store-state.server";
 import { orderSuggestions } from "./order-suggestions.server";
-import type { SuggestionView } from "../view-models";
 
 export type PaymentState = "paid" | "unpaid" | "partially_refunded" | "refunded" | "unknown";
 export type ShippingState = "to_ship" | "in_progress" | "shipped" | "cancelled" | "unknown";
@@ -44,12 +52,20 @@ export function shippingState(
  * fonte non li ha forniti.
  */
 export type OrderSummary = {
-  buyer: { username: string | null };
+  buyer: BuyerSnapshot | null;
   orderPaymentStatus: string | null;
   orderFulfillmentStatus: string | null;
   payment: PaymentState | null;
   shipping: ShippingState | null;
-  lineItems: Array<{ lineItemId: string; title: string; quantity: number; sku: string | null }>;
+  lineItems: Array<{
+    lineItemId: string;
+    title: string;
+    quantity: number;
+    sku: string | null;
+    totalMinor: number | null;
+    currency: string | null;
+    imageUrl: string | null;
+  }>;
 };
 
 export type VisibleOrder = {
@@ -59,9 +75,15 @@ export type VisibleOrder = {
   lastModifiedTime: string;
   currency: string;
   totalMinor: number;
+  storeId: string;
   storeName: string;
+  marketplaceId: string | null;
   summary: OrderSummary;
-  fiscalState: "available" | "locked" | "unchecked" | "checking" | "missing" | "error";
+  /**
+   * Un ordine senza controllo fiscale e senza lettura in attesa non è stato verificato:
+   * risulta una lettura non riuscita, da riprovare.
+   */
+  fiscalState: "available" | "locked" | "checking" | "missing" | "error";
   taxVerification: "unchecked" | "checking" | "completed" | "error";
   taxAvailability: "unknown" | "present" | "absent" | "not_included" | "masked" | "removed";
   taxCheckedAt: string | null;
@@ -108,11 +130,7 @@ function summaryOf(row: {
   items_json: string;
 }): OrderSummary {
   return {
-    buyer: {
-      username: row.buyer_json
-        ? buyerSnapshotSchema.parse(JSON.parse(row.buyer_json)).username
-        : null,
-    },
+    buyer: row.buyer_json ? buyerSnapshotSchema.parse(JSON.parse(row.buyer_json)) : null,
     orderPaymentStatus: row.payment_status,
     orderFulfillmentStatus: row.fulfillment_status,
     payment: paymentState(row.payment_status),
@@ -121,12 +139,17 @@ function summaryOf(row: {
   };
 }
 
+/**
+ * Ordini consultabili dello spazio dell'utente, dal più recente per data ordine. Con `ids` si
+ * leggono soltanto quelli indicati, con gli stessi controlli di spazio, negozio e conservazione.
+ */
 export async function listVisibleOrders(
   db: D1Database,
   userId: string,
   requestedLimit = 50,
   ebayEnvironment: "production" | "sandbox" = "production",
   now = new Date(),
+  filter: { ids?: string[] } = {},
 ): Promise<VisibleOrder[]> {
   const limit = Math.max(1, Math.min(100, Math.trunc(requestedLimit)));
   const result = await db
@@ -136,16 +159,17 @@ export async function listVisibleOrders(
            FROM workspace_members wm
            JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
            JOIN orders o ON o.store_id = s.id
-          WHERE wm.user_id = ? AND s.ebay_environment = ? AND ${consultableStore("s")}
-            AND o.retention_until > ?
+          WHERE wm.user_id = ?1 AND s.ebay_environment = ?2 AND ${consultableStore("s")}
+            AND o.retention_until > ?3
             AND o.merged_into IS NULL
             AND NOT (o.is_provisional = 1 AND o.cancel_status IS 'CANCELED')
-          ORDER BY o.last_modified_time DESC, o.id DESC
-          LIMIT ?
+            AND (?6 IS NULL OR o.id IN (SELECT value FROM json_each(?6)))
+          ORDER BY o.creation_time DESC, o.id DESC
+          LIMIT ?4
        )
        SELECT o.id, o.ebay_order_id, o.creation_time, o.last_modified_time,
               o.currency, o.total_minor, o.buyer_json, o.payment_status, o.fulfillment_status,
-              o.cancel_status, o.is_provisional,
+              o.cancel_status, o.is_provisional, o.store_id, o.marketplace_id,
               (SELECT json_object('availability', availability, 'at', observed_at, 'verification', verification)
                  FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
                 WHERE original.id = o.id OR original.merged_into = o.id
@@ -160,7 +184,8 @@ export async function listVisibleOrders(
                 WHERE i.order_id = o.id OR i.related_order_id = o.id)
                OR EXISTS (SELECT 1 FROM order_items i WHERE i.order_id = o.id AND i.stable_key IS NULL)) AS reconciliation_issue,
               (SELECT json_group_array(json_object('lineItemId', line_item_id, 'title', title,
-                        'quantity', quantity, 'sku', sku))
+                        'quantity', quantity, 'sku', sku, 'totalMinor', total_minor,
+                        'currency', currency, 'imageUrl', image_url))
                  FROM (SELECT * FROM order_items WHERE order_id = o.id ORDER BY rowid)) AS items_json,
               COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id) ||
                 CASE WHEN s.ebay_environment = 'sandbox' THEN ' (Sandbox)' ELSE '' END AS store_name,
@@ -184,9 +209,16 @@ export async function listVisibleOrders(
          LEFT JOIN tax_identifiers ti
            ON ti.order_id = o.id AND ti.removed_at IS NULL
              AND ${orderAccessSql("o.id", "vo.workspace_id", "?5")}
-        ORDER BY o.last_modified_time DESC, o.id DESC, ti.identifier_type, ti.issuing_country DESC`,
+        ORDER BY o.creation_time DESC, o.id DESC, ti.identifier_type, ti.issuing_country DESC`,
     )
-    .bind(userId, ebayEnvironment, now.toISOString(), limit, now.toISOString())
+    .bind(
+      userId,
+      ebayEnvironment,
+      now.toISOString(),
+      limit,
+      now.toISOString(),
+      filter.ids ? JSON.stringify(filter.ids) : null,
+    )
     .all<{
       id: string;
       ebay_order_id: string;
@@ -206,6 +238,8 @@ export async function listVisibleOrders(
       vat_only: number;
       reconciliation_issue: number;
       is_provisional: number;
+      store_id: string;
+      marketplace_id: string | null;
       items_json: string;
       store_name: string;
       has_identifiers: number;
@@ -241,7 +275,9 @@ export async function listVisibleOrders(
       lastModifiedTime: row.last_modified_time,
       currency: row.currency,
       totalMinor: row.total_minor,
+      storeId: row.store_id,
       storeName: row.store_name,
+      marketplaceId: row.marketplace_id,
       summary: summaryOf(row),
       fiscalState: row.has_identifiers
         ? row.grant_id
@@ -249,7 +285,9 @@ export async function listVisibleOrders(
           : "locked"
         : verification === "completed"
           ? "missing"
-          : verification,
+          : verification === "unchecked"
+            ? "error"
+            : verification,
       taxVerification: verification,
       taxAvailability: check?.availability ?? (row.has_identifiers ? "present" : "unknown"),
       taxCheckedAt: check?.at ?? null,
@@ -261,7 +299,7 @@ export async function listVisibleOrders(
     };
     // Le colonne dell'identificativo sono tutte presenti o tutte assenti (join senza grant).
     if (row.identifier_type !== null) {
-      const buyer = row.buyer_json ? buyerSnapshotSchema.parse(JSON.parse(row.buyer_json)) : null;
+      const { buyer } = order.summary;
       order.taxIdentifiers.push({
         type: row.identifier_type,
         issuingCountry: row.issuing_country,
@@ -315,4 +353,129 @@ export async function listVisibleOrders(
     new Date(Math.max(now.getTime(), Date.now())),
   );
   return visible.map((order) => ({ ...order, ...suggestions.get(order.id) }));
+}
+
+/** Dato fiscale nella forma della pagina Ordini: valori presenti soltanto se autorizzati. */
+function fiscalView(order: VisibleOrder): FiscalView {
+  if (order.fiscalState === "available") {
+    const notice: FiscalNotice | null =
+      order.taxVerification === "error"
+        ? "lastKnown"
+        : order.taxVerification === "checking"
+          ? "checking"
+          : order.taxAvailability === "masked"
+            ? "masked"
+            : order.taxAvailability === "absent" || order.taxAvailability === "not_included"
+              ? "notReturned"
+              : null;
+    return {
+      state: "available",
+      identifiers: order.taxIdentifiers.map((identifier) => {
+        const type = taxIdentifierType(identifier.type, identifier.issuingCountry);
+        return {
+          type,
+          ...(type === "OTHER" ? { typeLabel: identifier.type } : {}),
+          value: identifier.value,
+          quality: identifier.quality,
+          updated: identifier.updated,
+        };
+      }),
+      ...(notice ? { notice } : {}),
+    };
+  }
+  if (order.fiscalState === "locked") {
+    // Durante una nuova verifica, o prima dell'ordine definitivo, lo sblocco resta sospeso.
+    const hold = !order.canUnlock
+      ? "provisional"
+      : order.taxVerification === "checking"
+        ? "checking"
+        : undefined;
+    return { state: "locked", shownAs: order.lockedShownAs, ...(hold ? { hold } : {}) };
+  }
+  if (order.fiscalState === "missing") {
+    const reason = order.taxAvailability;
+    return reason === "masked" || reason === "removed"
+      ? { state: "missing", reason }
+      : { state: "missing" };
+  }
+  return { state: order.fiscalState };
+}
+
+function sourceStatus<Status extends string>(
+  status: Status | "unknown" | null,
+  code: string | null,
+): SourceStatus<Status> {
+  return status === null || status === "unknown"
+    ? { status: null, code: status === null ? null : code }
+    : { status };
+}
+
+/** Luogo di consegna sintetico: città, provincia tra parentesi. */
+function locality(address: NonNullable<BuyerSnapshot["shipTo"]>["address"]) {
+  if (!address?.city) return null;
+  return address.stateOrProvince ? `${address.city} (${address.stateOrProvince})` : address.city;
+}
+
+/**
+ * Ordine persistito nella vista condivisa con l'anteprima. Prima riga d'indirizzo e località
+ * compongono l'indirizzo di fatturazione; un dato non fornito da eBay resta null.
+ */
+export function orderView(order: VisibleOrder): OrderView {
+  const buyer = order.summary.buyer;
+  const billing = buyer?.billingAddress;
+  const shipTo = buyer?.shipTo;
+  const line = [billing?.addressLine1, billing?.addressLine2].filter(Boolean).join(", ");
+  // La miniatura è la prima immagine d'inserzione disponibile fra gli articoli.
+  const thumbnail = order.summary.lineItems.find((item) => item.imageUrl)?.imageUrl;
+  return {
+    id: order.id,
+    ebayOrderId: order.ebayOrderId,
+    createdAt: order.creationTime,
+    storeId: order.storeId,
+    storeName: order.storeName,
+    marketplace: order.marketplaceId,
+    buyerName: buyer?.name ?? null,
+    buyerUsername: buyer?.username ?? null,
+    shipTo: shipTo
+      ? {
+          name: shipTo.name,
+          locality: locality(shipTo.address),
+          country: shipTo.address?.countryCode ?? null,
+        }
+      : null,
+    items: order.summary.lineItems.map((item) => ({
+      id: item.lineItemId,
+      title: item.title,
+      sku: item.sku,
+      quantity: item.quantity,
+      // Un importo in un'altra valuta non si mostra come se fosse nella valuta dell'ordine.
+      totalMinor: item.currency === order.currency ? item.totalMinor : null,
+      currency: order.currency,
+    })),
+    totalMinor: order.totalMinor,
+    currency: order.currency,
+    payment: sourceStatus<PaymentStatus>(order.summary.payment, order.summary.orderPaymentStatus),
+    shipping: sourceStatus<ShippingStatus>(
+      order.summary.shipping,
+      order.summary.orderFulfillmentStatus,
+    ),
+    billingAddress:
+      billing && line && billing.city && billing.countryCode
+        ? {
+            line,
+            postalCode: billing.postalCode ?? "",
+            city: billing.city,
+            province: billing.stateOrProvince,
+            countryCode: billing.countryCode,
+          }
+        : null,
+    phone: buyer?.phone ?? shipTo?.phone ?? null,
+    email: buyer?.email ?? null,
+    fiscal: fiscalView(order),
+    suggestions: order.suggestions ?? [],
+    ...(order.suggestionStatus ? { suggestionStatus: order.suggestionStatus } : {}),
+    ...(order.reconciliationIssue ? { reconciliationIssue: true } : {}),
+    ...(thumbnail ? { thumbnail } : {}),
+    lastSyncedAt: order.taxCheckedAt,
+  };
 }

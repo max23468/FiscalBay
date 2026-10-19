@@ -56,9 +56,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   const language = languageFromPath(new URL(request.url).pathname);
   const status = await eligibility(request);
   if ("blocked" in status) {
-    if (status.blocked === "session") return redirect(localizedPath(language, accessPath), noStore);
-    const base = localizedPath(language, ordersPath);
-    return redirect(status.blocked === "email" ? `${base}?negozio=accesso` : base, noStore);
+    // Senza sessione o con la registrazione da completare decide l'accesso.
+    if (status.blocked !== "email") return redirect(localizedPath(language, accessPath), noStore);
+    return redirect(`${localizedPath(language, ordersPath)}?negozio=accesso`, noStore);
   }
   const search = new URL(request.url).searchParams;
   if (search.get("environment") === "sandbox" && !sandboxAvailable(env)) {
@@ -93,7 +93,12 @@ export async function action({ request }: Route.ActionArgs) {
   }
   const status = await eligibility(request);
   if ("blocked" in status) {
-    return redirect(status.blocked === "registration" ? base : `${base}?negozio=accesso`, 303);
+    return redirect(
+      status.blocked === "registration"
+        ? localizedPath(language, accessPath)
+        : `${base}?negozio=accesso`,
+      303,
+    );
   }
   const form = request.body ? await request.formData() : new FormData();
   const ebayEnvironment = form.get("environment") ?? "production";
