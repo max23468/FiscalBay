@@ -147,7 +147,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       .map((store): OrdersNotice =>
         store.kind === "expired"
           ? { kind: "store-issue", storeId: store.id, storeName: store.name }
-          : { kind: "consent-expiring", storeId: store.id, storeName: store.name, at: store.at },
+          : {
+              kind: "consent-expiring",
+              storeId: store.id,
+              storeName: store.name,
+              at: store.at,
+              ebayEnvironment,
+            },
       ),
     ...(!premium && cycle && allowance?.remaining === 0 && facets.locked
       ? [{ kind: "quota" as const, until: cycle.ends_at }]

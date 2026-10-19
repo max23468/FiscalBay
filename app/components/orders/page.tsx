@@ -242,13 +242,15 @@ function OrdersNotices({
               >
                 <span className="grid justify-items-start gap-3">
                   {t.orders.consentExpiringBody(formatDate(notice.at, language, "date"))}
-                  <Link
-                    to={appHref(links, `negozi/${notice.storeId}`)}
+                  {/* Il consenso è ancora valido: il ricollegamento parte subito dalla
+                      schermata preparatoria, fuori dalle route dell'app. */}
+                  <a
+                    href={`${appHref(links, "negozi/collega")}?ricollega=${encodeURIComponent(notice.storeId)}&environment=${notice.ebayEnvironment}`}
                     data-slot="button"
                     className={buttonVariants({ variant: "outline", size: "sm" })}
                   >
-                    {t.orders.storeIssueAction}
-                  </Link>
+                    {t.orders.reconnectStore}
+                  </a>
                 </span>
               </StatusAlert>
             );
