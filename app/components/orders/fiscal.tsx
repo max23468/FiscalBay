@@ -33,6 +33,7 @@ import type { AppCopy } from "../../app-copy";
 import { languages, languageNames, type Language } from "../../i18n";
 import { displayTaxValue } from "../../tax-quality";
 import {
+  countryName,
   formatDate,
   type FiscalNotice,
   type FiscalView,
@@ -348,10 +349,14 @@ function unavailableHint(
   fiscal: Extract<FiscalView, { state: "missing" | "checking" | "error" }>,
   ebayDown: boolean,
   t: AppCopy,
+  language: Language,
 ) {
   const { state } = fiscal;
-  if (state === "missing")
+  if (state === "missing") {
+    if (fiscal.reason === "foreign")
+      return t.orders.missingReason.foreign(countryName(fiscal.country, language));
     return fiscal.reason ? t.orders.missingReason[fiscal.reason] : t.orders.missingHint;
+  }
   if (state === "checking") return t.orders.checkingHint;
   return ebayDown ? t.orders.errorHintEbayDown : t.orders.errorHint;
 }
@@ -435,7 +440,7 @@ export function FiscalNotes({
   }
   return (
     <>
-      <CardNote>{unavailableHint(fiscal, ebayDown, t)}</CardNote>
+      <CardNote>{unavailableHint(fiscal, ebayDown, t, language)}</CardNote>
       {compact && fiscal.state === "missing" && order.suggestions.length > 0 ? (
         <SuggestionSummary suggestions={order.suggestions} t={t} />
       ) : null}

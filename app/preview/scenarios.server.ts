@@ -583,7 +583,7 @@ const seeds: OrderSeed[] = [
     },
     phone: null,
     email: "fra.colombo@esempio.invalid",
-    fiscal: { state: "missing" },
+    fiscal: { state: "missing", reason: "unpaid" },
   },
   {
     id: "ord-12",

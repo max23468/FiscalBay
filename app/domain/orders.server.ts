@@ -542,8 +542,12 @@ function fiscalView(order: VisibleOrder): FiscalView {
   }
   if (order.fiscalState === "missing") {
     const reason = order.taxAvailability;
-    return reason === "masked" || reason === "removed"
-      ? { state: "missing", reason }
+    if (reason === "masked" || reason === "removed") return { state: "missing", reason };
+    // I dati dell'acquirente arrivano con il pagamento.
+    if (!order.canUnlock) return { state: "missing", reason: "unpaid" };
+    const country = order.summary.buyer?.billingAddress?.countryCode;
+    return country && country !== "IT"
+      ? { state: "missing", reason: "foreign", country }
       : { state: "missing" };
   }
   return { state: order.fiscalState };

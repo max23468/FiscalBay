@@ -117,6 +117,8 @@ const it = {
     missingReason: {
       masked: "eBay nasconde il Codice Fiscale di questo ordine.",
       removed: "eBay ha rimosso il Codice Fiscale da questo ordine.",
+      unpaid: "Ordine non ancora pagato.",
+      foreign: (country: string) => `Acquirente estero (${country}).`,
     },
     lastChanged: (date: string) => `Ultima modifica su eBay: ${date}`,
     orderLabel: (id: string) => `Ordine ${id}`,
@@ -967,6 +969,8 @@ const en: AppCopy = {
     missingReason: {
       masked: "eBay hides the tax code for this order.",
       removed: "eBay removed the tax code from this order.",
+      unpaid: "Order not paid yet.",
+      foreign: (country) => `Foreign buyer (${country}).`,
     },
     lastChanged: (date) => `Last changed on eBay: ${date}`,
     orderLabel: (id) => `Order ${id}`,

@@ -1589,6 +1589,26 @@ describe("vista condivisa e criteri degli ordini", () => {
     expect(view({ fiscalState: "missing", taxAvailability: "absent" }).fiscal).toEqual({
       state: "missing",
     });
+    // Senza dato, l'ordine non pagato e l'acquirente estero hanno un motivo proprio.
+    const billedIn = (countryCode: string) =>
+      ({
+        ...base.summary,
+        buyer: { billingAddress: { countryCode } },
+      }) as VisibleOrder["summary"];
+    const missing = { fiscalState: "missing", taxAvailability: "not_included" } as const;
+    expect(view({ ...missing, canUnlock: false, summary: billedIn("ES") }).fiscal).toEqual({
+      state: "missing",
+      reason: "unpaid",
+    });
+    expect(view({ ...missing, summary: billedIn("ES") }).fiscal).toEqual({
+      state: "missing",
+      reason: "foreign",
+      country: "ES",
+    });
+    expect(view({ ...missing, summary: billedIn("IT") }).fiscal).toEqual({ state: "missing" });
+    expect(
+      view({ fiscalState: "missing", taxAvailability: "masked", summary: billedIn("ES") }).fiscal,
+    ).toEqual({ state: "missing", reason: "masked" });
     expect(view({ fiscalState: "checking" }).fiscal).toEqual({ state: "checking" });
     expect(view({ fiscalState: "error" }).fiscal).toEqual({ state: "error" });
   });
