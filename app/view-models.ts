@@ -70,17 +70,14 @@ export type FiscalView =
   | {
       state: "locked";
       shownAs: "CF" | "PIVA";
-      /**
-       * Sblocco sospeso: una nuova verifica eBay è in corso, oppure l'acquisto non è ancora
-       * l'ordine definitivo.
-       */
-      hold?: "checking" | "provisional";
+      /** Sblocco sospeso mentre è in corso una nuova verifica eBay. */
+      hold?: "checking";
     }
   /**
-   * Senza motivo eBay non riporta il dato. Altrimenti lo nasconde o lo ha rimosso, l'ordine
-   * non è ancora pagato oppure l'acquirente ha la fatturazione in un altro Paese.
+   * Senza motivo eBay non riporta il dato. Altrimenti lo nasconde o lo ha rimosso, oppure
+   * l'acquirente ha la fatturazione in un altro Paese.
    */
-  | { state: "missing"; reason?: "masked" | "removed" | "unpaid" }
+  | { state: "missing"; reason?: "masked" | "removed" }
   | { state: "missing"; reason: "foreign"; country: string }
   | { state: "checking" }
   | { state: "error" };

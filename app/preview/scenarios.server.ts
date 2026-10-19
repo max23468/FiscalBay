@@ -583,7 +583,7 @@ const seeds: OrderSeed[] = [
     },
     phone: null,
     email: "fra.colombo@esempio.invalid",
-    fiscal: { state: "missing", reason: "unpaid" },
+    fiscal: { state: "missing" },
   },
   {
     id: "ord-12",
@@ -1192,6 +1192,22 @@ export function loadScenario(
               },
             };
           }
+          // Acquirente estero: eBay non riporta il Codice Fiscale.
+          if (seed.id === "ord-06")
+            return {
+              ...seed,
+              shipTo: { name: "Lucía Martín", locality: "Madrid", country: "ES" },
+              buyerName: "Lucía Martín",
+              buyerUsername: "lmartin_es",
+              billingAddress: {
+                line: "Calle Mayor 10",
+                postalCode: "28013",
+                city: "Madrid",
+                province: null,
+                countryCode: "ES",
+              },
+              fiscal: { state: "missing", reason: "foreign", country: "ES" },
+            };
           return seed;
         }),
         premium: true,

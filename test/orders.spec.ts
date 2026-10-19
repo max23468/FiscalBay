@@ -860,19 +860,19 @@ describe("percorso ordini", () => {
     expect(cycle).toEqual({ used: 1, quota: 1 });
   });
 
-  it("non sblocca un acquisto non pagato finché non diventa definitivo", async () => {
+  it("nasconde e non sblocca un acquisto non pagato finché non diventa definitivo", async () => {
     await seed();
     await env.DB.prepare("UPDATE orders SET is_provisional = 1 WHERE id = 'o-a'").run();
     const grant = () => unlockOrders(env.DB, "u-a", ["o-a"]);
-    const canUnlock = async () =>
-      (await listVisibleOrders(env.DB, "u-a")).find((order) => order.id === "o-a")?.canUnlock;
-    expect(await canUnlock()).toBe(false);
+    const visible = async () =>
+      (await listVisibleOrders(env.DB, "u-a")).some((order) => order.id === "o-a");
+    expect(await visible()).toBe(false);
     await expect(grant()).rejects.toThrow("order_not_available");
     expect(await env.DB.prepare("SELECT used FROM free_cycles WHERE id = 'c-a'").first()).toEqual({
       used: 0,
     });
     await env.DB.prepare("UPDATE orders SET is_provisional = 0 WHERE id = 'o-a'").run();
-    expect(await canUnlock()).toBe(true);
+    expect(await visible()).toBe(true);
     await grant();
     expect(await env.DB.prepare("SELECT used FROM free_cycles WHERE id = 'c-a'").first()).toEqual({
       used: 1,
@@ -1512,7 +1512,6 @@ describe("vista condivisa e criteri degli ordini", () => {
     firstTaxAvailableAt: null,
     lockedShownAs: "CF",
     reconciliationIssue: false,
-    canUnlock: true,
     taxIdentifiers: [],
   };
   const view = (order: Partial<VisibleOrder>) => orderView({ ...base, ...order });
@@ -1564,15 +1563,8 @@ describe("vista condivisa e criteri degli ordini", () => {
     });
   });
 
-  it("sospende lo sblocco prima dell'ordine definitivo o durante una nuova verifica", () => {
+  it("sospende lo sblocco durante una nuova verifica", () => {
     expect(view({}).fiscal).toEqual({ state: "locked", shownAs: "CF" });
-    expect(
-      view({ lockedShownAs: "PIVA", canUnlock: false, taxVerification: "checking" }).fiscal,
-    ).toEqual({
-      state: "locked",
-      shownAs: "PIVA",
-      hold: "provisional",
-    });
     expect(view({ taxVerification: "checking" }).fiscal).toEqual({
       state: "locked",
       shownAs: "CF",
@@ -1589,17 +1581,13 @@ describe("vista condivisa e criteri degli ordini", () => {
     expect(view({ fiscalState: "missing", taxAvailability: "absent" }).fiscal).toEqual({
       state: "missing",
     });
-    // Senza dato, l'ordine non pagato e l'acquirente estero hanno un motivo proprio.
+    // Senza dato, l'acquirente estero ha un motivo proprio.
     const billedIn = (countryCode: string) =>
       ({
         ...base.summary,
         buyer: { billingAddress: { countryCode } },
       }) as VisibleOrder["summary"];
     const missing = { fiscalState: "missing", taxAvailability: "not_included" } as const;
-    expect(view({ ...missing, canUnlock: false, summary: billedIn("ES") }).fiscal).toEqual({
-      state: "missing",
-      reason: "unpaid",
-    });
     expect(view({ ...missing, summary: billedIn("ES") }).fiscal).toEqual({
       state: "missing",
       reason: "foreign",
