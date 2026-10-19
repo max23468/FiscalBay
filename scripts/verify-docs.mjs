@@ -51,6 +51,8 @@ function walk(dir) {
     const p = path.join(dir, item.name);
     if (skipped.has(item.name) || relative(p) === "docs/archive" || item.isSymbolicLink())
       return [];
+    // Un checkout annidato conserva istruzioni e documenti propri.
+    if (item.isDirectory() && fs.existsSync(path.join(p, ".git"))) return [];
     return item.isDirectory() ? walk(p) : item.isFile() && p.endsWith(".md") ? [p] : [];
   });
 }

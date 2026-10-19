@@ -1014,6 +1014,28 @@ describe("pubblicazione riprendibile", () => {
 });
 
 describe("integrità dei documenti", () => {
+  it("esclude repository e worktree annidati dalla scansione", () => {
+    const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "docs-nested-")));
+    try {
+      writeFileSync(path.join(directory, "README.md"), "# Piano\n");
+      for (const name of ["repository", "worktree"]) {
+        const nested = path.join(directory, ".claude", "worktrees", name);
+        mkdirSync(nested, { recursive: true });
+        if (name === "repository") mkdirSync(path.join(nested, ".git"));
+        else writeFileSync(path.join(nested, ".git"), "gitdir: /tmp/example.invalid\n");
+        writeFileSync(path.join(nested, "README.md"), "[Assente](mancante.md)\n");
+      }
+      const result = spawnSync(
+        process.execPath,
+        ["scripts/verify-docs.mjs", "--root", directory, "--json"],
+        { encoding: "utf8" },
+      );
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(JSON.parse(result.stdout).stats.markdown_files, 1);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
   it("verifica link, tabelle e decisioni senza un tracker separato", () => {
     const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "docs-")));
     const check = (text) => {
