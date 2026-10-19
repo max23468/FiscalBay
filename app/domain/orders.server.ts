@@ -99,7 +99,6 @@ export type VisibleOrder = {
   /** Nome del dato prima dello sblocco: Partita IVA solo se l'ordine ha soltanto quella. */
   lockedShownAs: "CF" | "PIVA";
   reconciliationIssue: boolean;
-  canUnlock: boolean;
   suggestions?: SuggestionView[];
   suggestionStatus?: "identity_missing" | "none" | "ambiguous";
   taxIdentifiers: Array<{
@@ -211,7 +210,7 @@ const visibleOrdersSql = `FROM workspace_members wm
   WHERE wm.user_id = ?1 AND s.ebay_environment = ?2 AND ${consultableStore("s")}
     AND o.retention_until > ?3
     AND o.merged_into IS NULL
-    AND NOT (o.is_provisional = 1 AND o.cancel_status IS 'CANCELED')
+    AND o.is_provisional = 0
     AND (?6 IS NULL OR o.id IN (SELECT value FROM json_each(?6)))
     AND (?7 IS NULL OR o.store_id = ?7)
     AND (?8 IS NULL OR o.marketplace_id = ?8)
@@ -315,7 +314,7 @@ export async function listVisibleOrders(
        )
        SELECT o.id, o.ebay_order_id, o.creation_time, o.last_modified_time,
               o.currency, o.total_minor, o.buyer_json, o.payment_status, o.fulfillment_status,
-              o.cancel_status, o.is_provisional, o.store_id, o.marketplace_id,
+              o.cancel_status, o.store_id, o.marketplace_id,
               (SELECT json_object('availability', availability, 'at', observed_at, 'verification', verification)
                  FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
                 WHERE original.id = o.id OR original.merged_into = o.id
@@ -385,7 +384,6 @@ export async function listVisibleOrders(
       tax_updated: number;
       vat_only: number;
       reconciliation_issue: number;
-      is_provisional: number;
       store_id: string;
       marketplace_id: string | null;
       items_json: string;
@@ -442,7 +440,6 @@ export async function listVisibleOrders(
       firstTaxAvailableAt: row.first_tax_available_at,
       lockedShownAs: row.has_identifiers && row.vat_only ? "PIVA" : "CF",
       reconciliationIssue: !!row.reconciliation_issue,
-      canUnlock: !row.is_provisional,
       taxIdentifiers: [],
     };
     // Le colonne dell'identificativo sono tutte presenti o tutte assenti (join senza grant).
@@ -532,19 +529,16 @@ function fiscalView(order: VisibleOrder): FiscalView {
     };
   }
   if (order.fiscalState === "locked") {
-    // Durante una nuova verifica, o prima dell'ordine definitivo, lo sblocco resta sospeso.
-    const hold = !order.canUnlock
-      ? "provisional"
-      : order.taxVerification === "checking"
-        ? "checking"
-        : undefined;
-    return { state: "locked", shownAs: order.lockedShownAs, ...(hold ? { hold } : {}) };
+    // Durante una nuova verifica lo sblocco resta sospeso.
+    return {
+      state: "locked",
+      shownAs: order.lockedShownAs,
+      ...(order.taxVerification === "checking" ? { hold: "checking" as const } : {}),
+    };
   }
   if (order.fiscalState === "missing") {
     const reason = order.taxAvailability;
     if (reason === "masked" || reason === "removed") return { state: "missing", reason };
-    // I dati dell'acquirente arrivano con il pagamento.
-    if (!order.canUnlock) return { state: "missing", reason: "unpaid" };
     const country = order.summary.buyer?.billingAddress?.countryCode;
     return country && country !== "IT"
       ? { state: "missing", reason: "foreign", country }

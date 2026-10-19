@@ -104,7 +104,7 @@ export async function listStores(
                 AS pauses,
               (SELECT COUNT(*) FROM orders o WHERE o.store_id = s.id AND o.merged_into IS NULL
                 AND o.retention_until > ?2
-                AND NOT (o.is_provisional = 1 AND o.cancel_status IS 'CANCELED')) AS orders
+                AND o.is_provisional = 0) AS orders
          FROM workspace_members wm
          JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
          LEFT JOIN ebay_store_credentials c ON c.store_id = s.id

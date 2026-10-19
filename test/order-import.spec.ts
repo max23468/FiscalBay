@@ -62,6 +62,14 @@ describe("modello ordini", () => {
       .all()
       .then(({ results }) => results);
 
+  // Ordini non assorbiti, provvisori compresi: le viste mostrano soltanto i definitivi.
+  const current = () =>
+    env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM orders WHERE store_id = 's-a' AND merged_into IS NULL",
+    )
+      .first<{ n: number }>()
+      .then((row) => row!.n);
+
   beforeEach(async () => {
     await env.DB.prepare("DELETE FROM ebay_store_pauses").run();
     await seed();
@@ -1389,7 +1397,7 @@ describe("modello ordini", () => {
     expect(
       await recordOrderObservation(env.DB, target(), provisional({ items: [line("k1")] })),
     ).toMatchObject({ outcome: "created", issue: "missing_line_identity" });
-    expect(await listVisibleOrders(env.DB, "u-a")).toHaveLength(2);
+    expect(await current()).toBe(2);
   });
 
   it("mantiene gli UUID distinti quando due definitivi già noti diventano candidati identici", async () => {
@@ -1411,7 +1419,7 @@ describe("modello ordini", () => {
       outcome: "created",
       issue: "multiple_candidates",
     });
-    expect(await listVisibleOrders(env.DB, "u-a")).toHaveLength(3);
+    expect(await current()).toBe(3);
   });
 
   it("non assorbe un gruppo misto di candidati provvisori e definitivi", async () => {
@@ -1425,7 +1433,7 @@ describe("modello ordini", () => {
       outcome: "created",
       issue: "multiple_candidates",
     });
-    expect(await listVisibleOrders(env.DB, "u-a")).toHaveLength(3);
+    expect(await current()).toBe(3);
     expect(
       (await env.DB.prepare("SELECT id FROM orders WHERE merged_into IS NOT NULL").all()).results,
     ).toHaveLength(0);
@@ -1437,7 +1445,7 @@ describe("modello ordini", () => {
     expect(
       await recordOrderObservation(env.DB, target(), observation({ source: "trading" })),
     ).toMatchObject({ outcome: "created", issue: "partial_overlap" });
-    expect(await listVisibleOrders(env.DB, "u-a")).toHaveLength(2);
+    expect(await current()).toBe(2);
   });
 
   it("un alias Trading più vecchio non sostituisce le identità del definitivo corrente", async () => {
@@ -1508,7 +1516,7 @@ describe("modello ordini", () => {
     const final = observation({ items: [line("nuova1"), line("nuova2")] });
     const result = await recordOrderObservation(env.DB, target(), final);
     const orderId = (result as { orderId: string }).orderId;
-    expect(await listVisibleOrders(env.DB, "u-a")).toHaveLength(2);
+    expect(await current()).toBe(2);
     await recordOrderObservation(env.DB, target(), observation({ source: "trading" }));
     expect(await listVisibleOrders(env.DB, "u-a")).toHaveLength(1);
     await recordOrderObservation(env.DB, target(), final);
@@ -1534,7 +1542,7 @@ describe("modello ordini", () => {
       outcome: "created",
       issue,
     });
-    expect(await listVisibleOrders(env.DB, "u-a")).toHaveLength(2);
+    expect(await current()).toBe(2);
   });
 
   it("non consolida provvisori sovrapposti né trasferisce diritti dopo la revoca del consenso", async () => {
@@ -1547,7 +1555,7 @@ describe("modello ordini", () => {
     expect(await recordOrderObservation(env.DB, target(), observation())).toMatchObject({
       issue: "multiple_candidates",
     });
-    expect(await listVisibleOrders(env.DB, "u-a")).toHaveLength(3);
+    expect(await current()).toBe(3);
     await resetOrderFixtures();
     await recordOrderObservation(env.DB, target(), provisional({ items: [line("k1")] }));
     await recordOrderObservation(
@@ -1559,11 +1567,8 @@ describe("modello ordini", () => {
     expect(await recordOrderObservation(env.DB, target(), observation())).toEqual({
       outcome: "not_writable",
     });
-    expect(await orders()).toHaveLength(2);
-    expect((await listVisibleOrders(env.DB, "u-a")).map((o) => o.ebayOrderId).sort()).toEqual([
-      "P-1",
-      "P-2",
-    ]);
+    expect(await orders()).toMatchObject([{ ebay_order_id: "P-1" }, { ebay_order_id: "P-2" }]);
+    expect(await current()).toBe(2);
   });
 
   it("non riconcilia righe di negozi diversi", async () => {
@@ -2349,6 +2354,8 @@ describe("modello ordini", () => {
         },
       }),
     );
+    // Le viste mostrano soltanto ordini definitivi.
+    await env.DB.prepare("UPDATE orders SET is_provisional = 0").run();
     expect((await listVisibleOrders(env.DB, "u-a"))[0]).toMatchObject({
       fiscalState: "error",
       taxVerification: "error",

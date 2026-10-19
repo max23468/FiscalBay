@@ -117,7 +117,6 @@ const it = {
     missingReason: {
       masked: "eBay nasconde il Codice Fiscale di questo ordine.",
       removed: "eBay ha rimosso il Codice Fiscale da questo ordine.",
-      unpaid: "Ordine non ancora pagato.",
       foreign: (country: string) => `Acquirente estero (${country}).`,
     },
     lastChanged: (date: string) => `Ultima modifica su eBay: ${date}`,
@@ -183,8 +182,6 @@ const it = {
     lockedUntil: (date: string) => `Sblocco disponibile dal ${date}.`,
     lockedHold: {
       checking: "Nuova verifica da eBay in corso: lo sblocco torna disponibile al termine.",
-      provisional:
-        "Acquisto non ancora pagato: lo sblocco è disponibile quando eBay conferma l’ordine.",
     },
     missingHint: "eBay non riporta il Codice Fiscale per questo ordine.",
     checkingHint: "Verifica del Codice Fiscale in corso.",
@@ -969,7 +966,6 @@ const en: AppCopy = {
     missingReason: {
       masked: "eBay hides the tax code for this order.",
       removed: "eBay removed the tax code from this order.",
-      unpaid: "Order not paid yet.",
       foreign: (country) => `Foreign buyer (${country}).`,
     },
     lastChanged: (date) => `Last changed on eBay: ${date}`,
@@ -1035,7 +1031,6 @@ const en: AppCopy = {
     lockedUntil: (date) => `Unlocking available from ${date}.`,
     lockedHold: {
       checking: "eBay is verifying this order again: unlocking is available once it finishes.",
-      provisional: "Purchase not paid yet: unlocking is available once eBay confirms the order.",
     },
     missingHint: "eBay does not provide the tax code for this order.",
     checkingHint: "Checking the tax code.",

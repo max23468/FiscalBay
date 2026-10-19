@@ -303,11 +303,13 @@ Il negozio mostra ultima sync riuscita e frequenza target, non un countdown prec
 
 Acquisire ordini pagati e non pagati quando disponibili via API; mantenere annullati/rimborsati nello storico, con stati originali e normalizzati. Non rappresentare come incassato un ordine non pagato. Copertura di ogni fonte da qualificare: Fulfillment non prova da sola disponibilità di ogni acquisto incompleto. [S06](SOURCES.md#s06)
 
+Gli acquisti non ancora pagati visti prima del checkout (provvisori) restano registrati per il consolidamento ma escono da elenco, dettaglio, conteggi e suggerimenti; uno mai pagato non torna nelle viste. Le viste mostrano soltanto ordini definitivi (D180). Un ordine definitivo senza Codice Fiscale indica l'acquirente estero quando l'indirizzo di fatturazione è fuori Italia, senza dedurre una regola di eBay.
+
 Vocabolario normalizzato unico per area reale, anteprima, filtri ed export (D176). Pagamento: pagato, non pagato, rimborsato, rimborsato in parte. Spedizione: da spedire, spedito in parte (`IN_PROGRESS` di Fulfillment, una parte degli articoli spedita), spedito, annullato. Uno stato eBay non previsto si mostra con il codice originale in tono neutro e resta fuori dai filtri. Nessuno stato «consegnato»: le fonti eBay adottate non lo forniscono e il tracciamento della consegna resta fuori dalla 2.0.
 
 Ordine identificato da UUID interno e unicità `(ebay_account_id, external_order_id)`. Identificativi alternativi Trading/REST separati e riconciliati solo con prova; evitare duplicare ordini multi-articolo o cambiare chiave se eBay aggiorna un ID provvisorio.
 
-**Ordini combinati e identità della riga.** Quando l'acquirente paga insieme più acquisti, eBay può creare un ordine definitivo con un ID nuovo e, al pagamento, cambiare anche gli identificativi delle righe; gli acquisti prima del checkout compaiono soltanto in Trading. L'identità stabile di riga (`OrderLineItemID`/`lineItemId` con `legacyItemId`) collega provvisori e ordine definitivo. Il consolidamento avviene solo quando tutte le righe di ogni provvisorio appartengono allo stesso ordine definitivo; sovrapposizioni parziali, righe senza identità stabile o più candidati bloccano il consolidamento e restano visibili come anomalia, senza indovinare. Grant, quota e sblocchi seguono il consolidamento: un ordine riemesso con ID nuovo non consuma una seconda quota e non perde un diritto già acquisito sui dati fiscali delle stesse righe. Un provvisorio assorbito o annullato esce dalle viste correnti senza cancellare lo storico dovuto.
+**Ordini combinati e identità della riga.** Quando l'acquirente paga insieme più acquisti, eBay può creare un ordine definitivo con un ID nuovo e, al pagamento, cambiare anche gli identificativi delle righe; gli acquisti prima del checkout compaiono soltanto in Trading. L'identità stabile di riga (`OrderLineItemID`/`lineItemId` con `legacyItemId`) collega provvisori e ordine definitivo. Il consolidamento avviene solo quando tutte le righe di ogni provvisorio appartengono allo stesso ordine definitivo; sovrapposizioni parziali, righe senza identità stabile o più candidati bloccano il consolidamento senza indovinare e compaiono come anomalia sugli ordini definitivi coinvolti; fra soli provvisori non generano avvisi (D180). Grant, quota e sblocchi seguono il consolidamento: un ordine riemesso con ID nuovo non consuma una seconda quota e non perde un diritto già acquisito sui dati fiscali delle stesse righe. Un provvisorio resta fuori dalle viste correnti, assorbito o no, senza cancellare lo storico dovuto.
 
 La riconciliazione resta circoscritta allo stesso negozio, conserva l'UUID interno e la deduplica delle notifiche e viene provata anche con arrivo invertito delle fonti. Nessuna unione per nome, importo o sola somiglianza.
 
@@ -1719,6 +1721,8 @@ Mostrare e copiare CF e P.IVA italiani nella forma derivata normalizzata, senza 
 
 Unificare ricerca rapida e pagina risultati; implementare filtri per negozi, marketplace, date, stati e situazione fiscale. Interrogare soltanto valori fiscali accessibili.
 
+Il filtro «Non pagato» può rendere consultabili gli acquisti provvisori, esclusi dalle viste predefinite (D180); senza quel filtro restano nascosti. La situazione fiscale distingue l'acquirente estero dal dato non riportato da eBay.
+
 **Criterio di completamento:** Query e conteggi non rivelano dati bloccati; indicizzazione e filtri server non richiedono di caricare tutto lo storico nel browser.
 
 Per query CF/P.IVA preservare stato della vista senza mettere il valore in URL, referrer o log edge. Nessuna inferenza di identificativi bloccati attraverso conteggi o risultati parziali.
@@ -1913,7 +1917,7 @@ Integrare bot privato e bot test separato, token monouso, cambio chat, preferenz
 
 **Criterio di completamento:** Nessuna notifica alla vecchia chat o ad altri spazi; default rispettati e login web indipendente da Telegram.
 
-I job rileggono il diritto Premium e le preferenze al momento dell’invio. Collegamento, cambio chat e disattivazione invalidano le consegne incompatibili già accodate. La route reale dei Negozi (M2-07) passa oggi `notifications: null`: qui riceve lo stato per negozio.
+Le notifiche riguardano soltanto ordini definitivi: un acquisto provvisorio non genera messaggi finché non diventa definitivo (D180). I job rileggono il diritto Premium e le preferenze al momento dell’invio. Collegamento, cambio chat e disattivazione invalidano le consegne incompatibili già accodate. La route reale dei Negozi (M2-07) passa oggi `notifications: null`: qui riceve lo stato per negozio.
 
 Integrato da CF Ready e Hub Fatture: il webhook Telegram entra dall'ingresso Worker di M3-11, già compreso nel prerequisito M3.
 
@@ -1979,7 +1983,7 @@ Console e Control Center owner sulle stesse query aggregate, senza impersonazion
 
 **Per chiudere:** M4-05, M5-05; integrazione UI e diritti reali verificata, non solo generatore con fixture.
 
-Implementare CSV standard per ordine/articolo, tipi e campi fiscali, ambito da filtri o selezione, opzione soli dati accessibili e motivo dei campi vuoti.
+Implementare CSV standard per ordine/articolo, tipi e campi fiscali, ambito da filtri o selezione, opzione soli dati accessibili e motivo dei campi vuoti, compreso l'acquirente estero. L'export comprende soltanto ordini definitivi, salvo il filtro «Non pagato» di M4-02 (D180).
 
 **Criterio di completamento:** CSV con valori sorgente integri, escaping e istruzioni di import colonne testuali; nessuna promessa di conservare zeri al doppio clic. Più identificativi non moltiplicano righe/importi, dati bloccati assenti, formule in input neutralizzate.
 
