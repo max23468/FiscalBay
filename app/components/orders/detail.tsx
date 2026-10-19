@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from "react-router";
 import { useAction } from "~/components/app-shell";
 import { StatusAlert } from "~/components/status";
 import { Button } from "~/components/ui/button";
+import { buttonVariants } from "~/components/ui/button-variants";
 import {
   Sheet,
   SheetContent,
@@ -31,6 +32,7 @@ import {
   type FiscalProps,
   type OrdersAccount,
 } from "./fiscal";
+import { ebayOrderHref } from "./labels";
 import { buyerLabel, paymentLabel, shippingLabel } from "./status";
 
 /**
@@ -305,13 +307,14 @@ export function OrderSheet({
           {actions.openOnEbay || actions.exportable ? (
             <div className="flex flex-wrap gap-2 px-4">
               {actions.openOnEbay ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => action.run("open-on-ebay", { order: shown.id })}
+                <a
+                  href={ebayOrderHref(shown.ebayOrderId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
                 >
                   {t.orders.openOnEbay}
-                </Button>
+                </a>
               ) : null}
               {actions.exportable ? (
                 <Button

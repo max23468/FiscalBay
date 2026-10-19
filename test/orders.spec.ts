@@ -1112,7 +1112,8 @@ describe("pagina Ordini reale", () => {
     expect(result.page).toMatchObject({
       view: "list",
       exportable: false,
-      openOnEbay: false,
+      // Negozio eBay reale: l'ordine si apre nel Seller Hub.
+      openOnEbay: true,
       settings: false,
       account: { plan: "free", quota: { used: 0, limit: 1 } },
     });

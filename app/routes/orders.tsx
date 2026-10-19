@@ -208,7 +208,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     confirmUnlock,
     settings: false,
     exportable: false,
-    openOnEbay: false,
+    openOnEbay: ebayEnvironment === "production",
     connectHref: verified
       ? `${localizedPath(language, storeLinkPath)}?environment=${ebayEnvironment}`
       : null,

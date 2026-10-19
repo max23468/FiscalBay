@@ -1041,6 +1041,16 @@ for (const language of ["it", "en"] as const) {
         ).toHaveCount(0);
         await page.reload();
         await expect(failed).toContainText(t("Verifica in corso", "Verification in progress"));
+        // Nel menu della scheda «Apri su eBay» è un collegamento al Seller Hub.
+        await failed
+          .getByRole("button", {
+            name: t("Altre azioni per l’ordine", "More actions for order") + " 19-00001-99999",
+          })
+          .click();
+        await expect(
+          page.getByRole("menuitem", { name: t("Apri su eBay", "Open on eBay") }),
+        ).toHaveAttribute("href", "https://www.ebay.it/sh/ord/details?orderid=19-00001-99999");
+        await page.keyboard.press("Escape");
         if (width === 390)
           await page.getByRole("button", { name: t("Filtri", "Filters"), exact: true }).click();
         const period = page.getByRole("combobox", { name: t("Periodo", "Period"), exact: true });
@@ -1062,9 +1072,13 @@ for (const language of ["it", "en"] as const) {
         await open(page, `${prefix}/anteprima/ordini/ord-01`, "ordinario");
         const dialog = page.getByRole("dialog");
         await expect(dialog).toHaveCSS("outline-style", "none");
-        await expect(
-          dialog.getByRole("button", { name: t("Apri su eBay", "Open on eBay") }),
-        ).toBeVisible();
+        const ebay = dialog.getByRole("link", { name: t("Apri su eBay", "Open on eBay") });
+        await expect(ebay).toBeVisible();
+        await expect(ebay).toHaveAttribute(
+          "href",
+          /^https:\/\/www\.ebay\.it\/sh\/ord\/details\?orderid=\d{2}-\d{5}-\d{5}$/,
+        );
+        await expect(ebay).toHaveAttribute("target", "_blank");
         await expect(
           dialog.getByRole("button", { name: t("Esporta ordine", "Export order") }),
         ).toBeVisible();
