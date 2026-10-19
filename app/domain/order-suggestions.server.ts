@@ -36,7 +36,7 @@ export async function orderSuggestions(
     LEFT JOIN orders o ON o.buyer_eias_token = target.buyer_eias_token
       AND o.id <> target.id AND o.creation_time < target.creation_time
       AND o.merged_into IS NULL AND o.retention_until > ?4
-      AND NOT (o.is_provisional = 1 AND o.cancel_status IS 'CANCELED')
+      AND o.is_provisional = 0
       AND EXISTS (SELECT 1 FROM ebay_stores allowed WHERE allowed.id = o.store_id
         AND allowed.workspace_id = target.workspace_id AND allowed.ebay_environment = ?2
         AND ${consultableStore("allowed")})

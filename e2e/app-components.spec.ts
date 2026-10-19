@@ -1158,6 +1158,11 @@ for (const language of ["it", "en"] as const) {
             "30-55012-90876",
             t("eBay ha rimosso il Codice Fiscale", "eBay removed the tax code"),
           ],
+          [
+            "08-33110-45672",
+            "08-33110-45672",
+            t("Acquirente estero (Spagna)", "Foreign buyer (Spain)"),
+          ],
         ] as const) {
           await open(page, `${prefix}/anteprima/ordini?q=${query}`);
           await expect(page.getByRole("article").filter({ hasText: order })).toContainText(text);

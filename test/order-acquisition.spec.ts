@@ -215,10 +215,18 @@ describe("acquisizione con il client", () => {
     expect(
       await env.DB.prepare("SELECT trading_cursor, trading_page FROM sync_state").first(),
     ).toEqual({ trading_cursor: "2026-09-02T00:00:00.000Z", trading_page: null });
-    expect((await listVisibleOrders(env.DB, "u-a")).map((o) => o.summary.payment)).toEqual([
-      "unpaid",
-      "unpaid",
+    // I due acquisti prima del checkout restano fuori dalle viste fino al definitivo.
+    expect(
+      (
+        await env.DB.prepare(
+          "SELECT payment_status, is_provisional FROM orders WHERE merged_into IS NULL",
+        ).all()
+      ).results,
+    ).toEqual([
+      { payment_status: "PENDING", is_provisional: 1 },
+      { payment_status: "PENDING", is_provisional: 1 },
     ]);
+    expect(await listVisibleOrders(env.DB, "u-a")).toEqual([]);
     await recordOrderObservation(
       env.DB,
       { storeId: "s-a", consentGrantedAt: grantedAt, observedAt: now },
