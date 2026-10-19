@@ -76,8 +76,12 @@ export type FiscalView =
        */
       hold?: "checking" | "provisional";
     }
-  /** Senza motivo eBay non riporta il dato; altrimenti lo nasconde o lo ha rimosso. */
-  | { state: "missing"; reason?: "masked" | "removed" }
+  /**
+   * Senza motivo eBay non riporta il dato. Altrimenti lo nasconde o lo ha rimosso, l'ordine
+   * non è ancora pagato oppure l'acquirente ha la fatturazione in un altro Paese.
+   */
+  | { state: "missing"; reason?: "masked" | "removed" | "unpaid" }
+  | { state: "missing"; reason: "foreign"; country: string }
   | { state: "checking" }
   | { state: "error" };
 
