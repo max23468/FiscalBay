@@ -11,7 +11,13 @@ import {
   unlockConfirmation,
   restoreUnlockConfirmation,
 } from "../app/domain/grants.server";
-import { listVisibleOrders } from "../app/domain/orders.server";
+import {
+  listVisibleOrders,
+  orderCriteria,
+  orderView,
+  visibleOrderFacets,
+  type VisibleOrder,
+} from "../app/domain/orders.server";
 import { completeRegistration } from "../app/domain/registration.server";
 import { createAuth } from "../app/auth.server";
 import { action as unlockAction, loader as loadHome } from "../app/routes/orders";
@@ -1176,6 +1182,14 @@ describe("pagina Ordini reale", () => {
       ]),
     });
     expect((await ordersPage(cookie, "/app/ordini?fiscale=locked")).page!.orders).toEqual([]);
+    // Filtro e ricerca valutano l'accesso all'istante della richiesta, come la vista.
+    await env.DB.prepare("UPDATE order_grants SET expires_at = ? WHERE order_id = 'o-a'")
+      .bind(new Date(Date.parse(now) + 60_000).toISOString())
+      .run();
+    expect(
+      (await ordersPage(cookie, "/app/ordini?fiscale=available")).page!.orders.map(({ id }) => id),
+    ).toEqual(["o-a"]);
+    expect((await ordersPage(cookie, "/app/ordini?q=RSSMRA80A01H501U")).page!.total).toBe(1);
     // L'esito del collegamento nell'indirizzo non diventa un filtro per negozio.
     expect(
       (await ordersPage(cookie, "/app/ordini?negozio=collegato")).page!.orders.map(({ id }) => id),
@@ -1469,5 +1483,329 @@ describe("pagina Ordini reale", () => {
       { store_id: "s-a", trading_cursor: null },
       { store_id: "s-b", trading_cursor: now },
     ]);
+  });
+});
+
+describe("vista condivisa e criteri degli ordini", () => {
+  const base: VisibleOrder = {
+    id: "o",
+    ebayOrderId: "12-00000-00000",
+    creationTime: now,
+    lastModifiedTime: now,
+    currency: "EUR",
+    totalMinor: 1000,
+    storeId: "s",
+    storeName: "Negozio",
+    marketplaceId: null,
+    summary: {
+      buyer: null,
+      orderPaymentStatus: null,
+      orderFulfillmentStatus: null,
+      payment: null,
+      shipping: null,
+      lineItems: [],
+    },
+    fiscalState: "locked",
+    taxVerification: "completed",
+    taxAvailability: "present",
+    taxCheckedAt: null,
+    firstTaxAvailableAt: null,
+    lockedShownAs: "CF",
+    reconciliationIssue: false,
+    canUnlock: true,
+    taxIdentifiers: [],
+  };
+  const view = (order: Partial<VisibleOrder>) => orderView({ ...base, ...order });
+  const cf = {
+    type: "CODICE_FISCALE",
+    issuingCountry: null,
+    value: "RSSMRA80A01H501U",
+    source: "ebay_fulfillment",
+    observedAt: now,
+    quality: "valid" as const,
+    updated: false,
+  };
+
+  it("riporta la condizione dell'ultima lettura accanto a un valore disponibile", () => {
+    const available = (
+      taxVerification: VisibleOrder["taxVerification"],
+      taxAvailability: VisibleOrder["taxAvailability"],
+    ) =>
+      view({ fiscalState: "available", taxVerification, taxAvailability, taxIdentifiers: [cf] })
+        .fiscal;
+    const identifier = { type: "CF", value: "RSSMRA80A01H501U", quality: "valid", updated: false };
+    expect(available("completed", "present")).toEqual({
+      state: "available",
+      identifiers: [identifier],
+    });
+    expect(available("error", "present")).toMatchObject({ notice: "lastKnown" });
+    expect(available("checking", "masked")).toMatchObject({ notice: "checking" });
+    expect(available("completed", "masked")).toMatchObject({ notice: "masked" });
+    expect(available("completed", "absent")).toMatchObject({ notice: "notReturned" });
+    expect(available("completed", "not_included")).toMatchObject({ notice: "notReturned" });
+    expect(available("completed", "removed")).not.toHaveProperty("notice");
+    // Un tipo estero conserva il nome originale; quelli italiani no.
+    expect(
+      view({
+        fiscalState: "available",
+        taxIdentifiers: [{ ...cf, type: "NIF", issuingCountry: "ES", quality: "unchecked" }],
+      }).fiscal,
+    ).toEqual({
+      state: "available",
+      identifiers: [
+        {
+          type: "OTHER",
+          typeLabel: "NIF",
+          value: "RSSMRA80A01H501U",
+          quality: "unchecked",
+          updated: false,
+        },
+      ],
+    });
+  });
+
+  it("sospende lo sblocco prima dell'ordine definitivo o durante una nuova verifica", () => {
+    expect(view({}).fiscal).toEqual({ state: "locked", shownAs: "CF" });
+    expect(
+      view({ lockedShownAs: "PIVA", canUnlock: false, taxVerification: "checking" }).fiscal,
+    ).toEqual({
+      state: "locked",
+      shownAs: "PIVA",
+      hold: "provisional",
+    });
+    expect(view({ taxVerification: "checking" }).fiscal).toEqual({
+      state: "locked",
+      shownAs: "CF",
+      hold: "checking",
+    });
+    expect(view({ fiscalState: "missing", taxAvailability: "masked" }).fiscal).toEqual({
+      state: "missing",
+      reason: "masked",
+    });
+    expect(view({ fiscalState: "missing", taxAvailability: "removed" }).fiscal).toEqual({
+      state: "missing",
+      reason: "removed",
+    });
+    expect(view({ fiscalState: "missing", taxAvailability: "absent" }).fiscal).toEqual({
+      state: "missing",
+    });
+    expect(view({ fiscalState: "checking" }).fiscal).toEqual({ state: "checking" });
+    expect(view({ fiscalState: "error" }).fiscal).toEqual({ state: "error" });
+  });
+
+  it("compone stati, contatti, indirizzi e righe senza inventare dati assenti", () => {
+    const address = {
+      addressLine1: "Via Roma 1",
+      addressLine2: null,
+      city: "Trento",
+      postalCode: null,
+      stateOrProvince: null,
+      countryCode: "IT",
+    };
+    const summary = (changes: Partial<VisibleOrder["summary"]>) => ({
+      ...base.summary,
+      ...changes,
+    });
+    const buyer = (changes: object) =>
+      ({
+        username: null,
+        name: null,
+        email: null,
+        phone: null,
+        billingAddress: null,
+        shipTo: null,
+        ...changes,
+      }) as VisibleOrder["summary"]["buyer"];
+    const empty = view({});
+    expect(empty).toMatchObject({
+      buyerName: null,
+      buyerUsername: null,
+      shipTo: null,
+      billingAddress: null,
+      phone: null,
+      email: null,
+      payment: { status: null, code: null },
+      shipping: { status: null, code: null },
+      suggestions: [],
+      lastSyncedAt: null,
+    });
+    expect(empty).not.toHaveProperty("suggestionStatus");
+    expect(empty).not.toHaveProperty("reconciliationIssue");
+    expect(empty).not.toHaveProperty("thumbnail");
+    const order = view({
+      reconciliationIssue: true,
+      suggestions: [],
+      suggestionStatus: "none",
+      summary: summary({
+        payment: "unknown",
+        orderPaymentStatus: "AWAITING",
+        shipping: "shipped",
+        orderFulfillmentStatus: "FULFILLED",
+        buyer: buyer({
+          billingAddress: address,
+          shipTo: { name: "Mario", phone: "+39 1", address: { ...address, city: "Rovereto" } },
+        }),
+        lineItems: [
+          {
+            lineItemId: "a",
+            title: "A",
+            quantity: 2,
+            sku: null,
+            totalMinor: 300,
+            currency: "USD",
+            imageUrl: null,
+          },
+          {
+            lineItemId: "b",
+            title: "B",
+            quantity: 1,
+            sku: "S",
+            totalMinor: 200,
+            currency: "EUR",
+            imageUrl: "https://i.ebayimg.com/b.jpg",
+          },
+        ],
+      }),
+    });
+    expect(order).toMatchObject({
+      payment: { status: null, code: "AWAITING" },
+      shipping: { status: "shipped" },
+      shipTo: { name: "Mario", locality: "Rovereto", country: "IT" },
+      // Senza seconda riga né CAP: nessun separatore o valore inventato.
+      billingAddress: {
+        line: "Via Roma 1",
+        postalCode: "",
+        city: "Trento",
+        province: null,
+        countryCode: "IT",
+      },
+      // Senza telefono dell'acquirente vale quello del destinatario.
+      phone: "+39 1",
+      reconciliationIssue: true,
+      suggestionStatus: "none",
+      thumbnail: "https://i.ebayimg.com/b.jpg",
+      // Un importo in un'altra valuta non si mostra come se fosse in euro.
+      items: [
+        { id: "a", totalMinor: null, currency: "EUR" },
+        { id: "b", totalMinor: 200, currency: "EUR" },
+      ],
+    });
+    expect(order.shipping).toEqual({ status: "shipped" });
+    // Indirizzo senza città o Paese, o senza righe: nessun indirizzo di fatturazione.
+    for (const billing of [
+      { ...address, city: null },
+      { ...address, countryCode: null },
+      { ...address, addressLine1: null },
+    ])
+      expect(
+        view({ summary: summary({ buyer: buyer({ billingAddress: billing }) }) }).billingAddress,
+      ).toBeNull();
+    expect(
+      view({
+        summary: summary({
+          buyer: buyer({
+            billingAddress: { ...address, addressLine1: null, addressLine2: "Scala B" },
+          }),
+        }),
+      }).billingAddress,
+    ).toMatchObject({ line: "Scala B" });
+    expect(
+      view({
+        summary: summary({ buyer: buyer({ shipTo: { name: null, phone: null, address: null } }) }),
+      }).shipTo,
+    ).toEqual({ name: null, locality: null, country: null });
+    expect(
+      view({
+        summary: summary({
+          buyer: buyer({
+            shipTo: { name: null, phone: null, address: { ...address, city: null } },
+          }),
+        }),
+      }).shipTo,
+    ).toEqual({ name: null, locality: null, country: "IT" });
+    expect(
+      view({
+        summary: summary({
+          buyer: buyer({
+            shipTo: { name: null, phone: null, address: { ...address, stateOrProvince: "TN" } },
+          }),
+        }),
+      }).shipTo?.locality,
+    ).toBe("Trento (TN)");
+  });
+
+  it("legge i criteri dell'indirizzo con i soli valori previsti", () => {
+    const at = new Date(now);
+    const criteria = (query: string, plan: "free" | "premium" = "free") =>
+      orderCriteria(new URLSearchParams(query), at, plan);
+    expect(criteria("")).toEqual({
+      storeId: undefined,
+      marketplace: undefined,
+      since: undefined,
+      payment: undefined,
+      shipping: undefined,
+      fiscal: undefined,
+      tokens: undefined,
+    });
+    expect(
+      criteria(
+        "negozio=s-a&marketplace=EBAY_IT&periodo=7&pagamento=paid&spedizione=in_progress&fiscale=locked",
+      ),
+    ).toEqual({
+      storeId: "s-a",
+      marketplace: "EBAY_IT",
+      since: new Date(at.getTime() - 7 * 86_400_000).toISOString(),
+      payment: "paid",
+      shipping: "in_progress",
+      fiscal: "locked",
+      tokens: undefined,
+    });
+    expect(criteria("periodo=30").since).toBe(
+      new Date(at.getTime() - 30 * 86_400_000).toISOString(),
+    );
+    // Il periodo di 90 giorni è un'opzione Premium; un valore sconosciuto vale come «Tutti».
+    expect(criteria("periodo=90").since).toBeUndefined();
+    for (const days of [7, 30])
+      expect(criteria(`periodo=${days}`, "premium").since).toBe(
+        new Date(at.getTime() - days * 86_400_000).toISOString(),
+      );
+    expect(criteria("periodo=90", "premium").since).toBe(
+      new Date(at.getTime() - 90 * 86_400_000).toISOString(),
+    );
+    expect(criteria("periodo=1&pagamento=delivered&spedizione=x&fiscale=x")).toMatchObject({
+      since: undefined,
+      payment: undefined,
+      shipping: undefined,
+      fiscal: undefined,
+    });
+    // Ricerca in minuscolo divisa sugli spazi, al massimo dieci parole.
+    expect(criteria("q=%20Giulia%09%20SKU-A%20%20").tokens).toEqual(["giulia", "sku-a"]);
+    expect(criteria("q=%20%20").tokens).toBeUndefined();
+    expect(
+      criteria(`q=${Array.from({ length: 12 }, (_, i) => `p${i}`).join("%20")}`).tokens,
+    ).toHaveLength(10);
+    // Identificativi oltre 64 caratteri non filtrano.
+    expect(criteria(`negozio=${"x".repeat(64)}`).storeId).toBe("x".repeat(64));
+    expect(criteria(`negozio=${"x".repeat(65)}&marketplace=`).storeId).toBeUndefined();
+    expect(criteria("marketplace=").marketplace).toBeUndefined();
+  });
+
+  it("conta i dati dell'intero elenco, anche senza ordini", async () => {
+    await seed();
+    const at = new Date(now);
+    expect(await visibleOrderFacets(env.DB, "u-a", "production", at)).toEqual({
+      total: 1,
+      marketplaces: [],
+      locked: true,
+    });
+    await unlockOrders(env.DB, "u-a", ["o-a"]);
+    expect(await visibleOrderFacets(env.DB, "u-a", "production", at)).toMatchObject({
+      locked: false,
+    });
+    expect(await visibleOrderFacets(env.DB, "nessuno", "production", at)).toEqual({
+      total: 0,
+      marketplaces: [],
+      locked: false,
+    });
   });
 });

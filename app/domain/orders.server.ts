@@ -163,6 +163,7 @@ export type OrderCriteria = {
 const caseOf = (column: string, states: Record<string, string>) =>
   `CASE ${column} ${Object.entries(states)
     .map(([original, state]) => `WHEN '${original}' THEN '${state}'`)
+    // Stryker disable next-line StringLiteral: un altro separatore rende la query invalida e le prove falliscono subito; sotto Stryker il worker supera invece il timeout.
     .join(" ")} END`;
 
 /** Stato normalizzato in SQL dalle stesse tabelle di `paymentState` e `shippingState`. */
@@ -252,11 +253,12 @@ export async function countVisibleOrders(
   now: Date,
   criteria: OrderCriteria = {},
 ): Promise<number> {
+  // Un aggregato restituisce sempre una riga, anche senza ordini.
   const row = await db
     .prepare(`SELECT count(*) AS total ${visibleOrdersSql}`)
     .bind(...visibleOrdersParams(userId, ebayEnvironment, now, 0, undefined, criteria))
     .first<{ total: number }>();
-  return row?.total ?? 0;
+  return row!.total;
 }
 
 /**
@@ -278,15 +280,13 @@ export async function visibleOrderFacets(
          ${visibleOrdersSql}`,
     )
     .bind(...visibleOrdersParams(userId, ebayEnvironment, now, 0, undefined, {}))
-    .first<{ total: number; marketplaces: string | null; locked: number | null }>();
+    .first<{ total: number; marketplaces: string; locked: number | null }>();
+  // Un aggregato restituisce sempre una riga; senza ordini l'elenco è vuoto e `locked` è null.
+  const { total, marketplaces, locked } = row!;
   return {
-    total: row?.total ?? 0,
-    marketplaces: z
-      .array(z.string())
-      .catch([])
-      .parse(JSON.parse(row?.marketplaces ?? "[]"))
-      .sort(),
-    locked: !!row?.locked,
+    total,
+    marketplaces: z.array(z.string()).parse(JSON.parse(marketplaces)).sort(),
+    locked: locked === 1,
   };
 }
 
@@ -552,7 +552,8 @@ function sourceStatus<Status extends string>(
   code: string | null,
 ): SourceStatus<Status> {
   return status === null || status === "unknown"
-    ? { status: null, code: status === null ? null : code }
+    ? // Senza stato normalizzato manca anche il codice originale.
+      { status: null, code }
     : { status };
 }
 
@@ -640,12 +641,7 @@ export function orderCriteria(
     return values.find((candidate) => candidate === value);
   };
   const days = known("periodo", plan === "premium" ? ["7", "30", "90"] : ["7", "30"]);
-  const tokens = (search.get("q") ?? "")
-    .trim()
-    .toLowerCase()
-    .split(/\s+/u)
-    .filter(Boolean)
-    .slice(0, 10);
+  const tokens = (search.get("q") ?? "").toLowerCase().split(/\s/u).filter(Boolean).slice(0, 10);
   const value = (name: string) => {
     const raw = search.get(name);
     return raw && raw.length <= 64 ? raw : undefined;
