@@ -1,16 +1,16 @@
 import { data, isRouteErrorResponse, useOutletContext } from "react-router";
 
-import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders";
+import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
 import { NotFoundState } from "~/components/not-found";
 import { appHref } from "../app-links";
 import { appCopy } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
 import { currentScenario, simulateAction, writePreviewState } from "../preview/state.server";
+import { ordersPageSize } from "../order-list";
+import { displayTaxValue } from "../tax-quality";
 import { fiscalStates, paymentStatuses, shippingStatuses, type OrderView } from "../view-models";
 import type { PreviewContext } from "./preview";
 import type { Route } from "./+types/preview-orders";
-
-const pageSize = 6;
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
@@ -26,14 +26,21 @@ function known(params: URLSearchParams, name: string, values: readonly string[])
   return value && values.includes(value) ? value : null;
 }
 
-function matches(order: OrderView, params: URLSearchParams, now: string) {
+/**
+ * Criteri dell'URL sugli scenari sintetici: la ricerca considera soltanto i valori fiscali
+ * disponibili, mai quelli da sbloccare. L'area reale filtra con la query del dominio.
+ */
+function matchesOrder(order: OrderView, params: URLSearchParams, now: string) {
   const query = params.get("q")?.trim().toLocaleLowerCase();
   if (query) {
     const text = [
       order.ebayOrderId,
-      order.buyerName,
+      order.buyerName ?? "",
+      order.buyerUsername ?? "",
       ...order.items.flatMap((item) => [item.title, item.sku ?? ""]),
-      ...(order.fiscal.state === "available" ? order.fiscal.identifiers.map((id) => id.value) : []),
+      ...(order.fiscal.state === "available"
+        ? order.fiscal.identifiers.flatMap((id) => [id.value, displayTaxValue(id)])
+        : []),
     ]
       .join(" ")
       .toLocaleLowerCase();
@@ -44,9 +51,9 @@ function matches(order: OrderView, params: URLSearchParams, now: string) {
   const marketplace = params.get("marketplace");
   if (marketplace && order.marketplace !== marketplace) return false;
   const payment = known(params, "pagamento", paymentStatuses);
-  if (payment && order.payment !== payment) return false;
+  if (payment && order.payment.status !== payment) return false;
   const shipping = known(params, "spedizione", shippingStatuses);
-  if (shipping && order.shipping !== shipping) return false;
+  if (shipping && order.shipping.status !== shipping) return false;
   const fiscal = known(params, "fiscale", fiscalStates);
   if (fiscal && order.fiscal.state !== fiscal) return false;
   const days = Number(known(params, "periodo", ["7", "30", "90"]));
@@ -59,36 +66,57 @@ function matches(order: OrderView, params: URLSearchParams, now: string) {
   return true;
 }
 
-export async function loader({ request, params }: Route.LoaderArgs) {
-  const { language, scenario, state } = await currentScenario(request);
-  const url = new URL(request.url);
-  const search = url.searchParams;
-  const filtered = scenario.orders
-    .filter((order) => matches(order, search, scenario.now))
+/**
+ * Ordini che corrispondono ai criteri, dal più recente, fino alla pagina indicata da `mostra`;
+ * `nextHref` riceve la query della pagina successiva.
+ */
+function orderPage(
+  orders: OrderView[],
+  search: URLSearchParams,
+  now: string,
+  href: (query: URLSearchParams) => string,
+) {
+  const filtered = orders
+    .filter((order) => matchesOrder(order, search, now))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
   const shown = Math.max(Number(search.get("mostra")) || 1, 1);
   const next = new URLSearchParams(search);
   next.set("mostra", String(shown + 1));
+  return {
+    orders: filtered.slice(0, shown * ordersPageSize),
+    total: filtered.length,
+    nextHref: filtered.length > shown * ordersPageSize ? href(next) : null,
+  };
+}
+
+export async function loader({ request, params }: Route.LoaderArgs) {
+  const { language, scenario, state } = await currentScenario(request);
+  const search = new URL(request.url).searchParams;
+  const page = orderPage(
+    scenario.orders,
+    search,
+    scenario.now,
+    (query) => `${localizedPath(language, "/anteprima/ordini")}?${query.toString()}`,
+  );
   const detail = params.ordine
     ? ([...scenario.orders, ...scenario.incoming].find((order) => order.id === params.ordine) ??
       null)
     : null;
   if (params.ordine && !detail) throw data(null, { status: 404 });
   const vintage = scenario.stores[0];
-  const page: OrdersPageData = {
+  const pageData: OrdersPageData = {
     view: scenario.view,
-    orders: filtered.slice(0, shown * pageSize),
+    ...page,
     incoming: scenario.incoming,
-    total: filtered.length,
-    nextHref:
-      filtered.length > shown * pageSize
-        ? `${localizedPath(language, "/anteprima/ordini")}?${next.toString()}`
-        : null,
     detail,
     stores: scenario.stores
       .filter((store) => store.pauseReason !== "plan")
       .map((store) => ({ id: store.id, name: store.name })),
-    marketplaces: [...new Set(scenario.orders.map((order) => order.marketplace))],
+    marketplaces: [
+      ...new Set(
+        scenario.orders.flatMap((order) => (order.marketplace ? [order.marketplace] : [])),
+      ),
+    ],
     account: scenario.account,
     notices: scenario.notices,
     sync: {
@@ -102,8 +130,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       appCopy[language].settings[language === "it" ? "templateDefaultIt" : "templateDefaultEn"],
     now: scenario.now,
     confirmUnlock: state.confirmUnlock !== false,
+    settings: true,
+    exportable: true,
+    openOnEbay: true,
   };
-  return page;
+  return pageData;
 }
 
 /**

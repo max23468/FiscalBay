@@ -21,6 +21,8 @@ import { requestStoreSync, type SyncRequestResult } from "../domain/order-sync.s
 import { languageFromPath, localizedPath } from "../i18n";
 import type { ActionResult, StoreView } from "../view-models";
 import { logFailure } from "../errors";
+import { describeRequest, measure } from "../observability.server";
+import { settle } from "../settle.server";
 import type { Route } from "./+types/stores";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
@@ -71,7 +73,11 @@ function storeView(store: StoreStatus): StoreView {
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { language, session, account } = await requireAccountArea(request);
-  const stores = (await listStores(env.DB, session.user.id)).map(storeView);
+  const read = () =>
+    measure("d1", "stores", () => listStores(env.DB, session.user.id)).then((stores) =>
+      stores.map(storeView),
+    );
+  const stores = await read();
   const detail = params.negozio
     ? (stores.find((store) => store.id === params.negozio) ?? null)
     : null;
@@ -95,7 +101,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       settings: false,
     },
   };
-  return data(payload, { status: payload.notFound ? 404 : 200 });
+  const syncing = stores.filter((store) => store.syncing).length;
+  describeRequest({ page: "stores", stores: stores.length, syncing });
+  return data(
+    {
+      ...payload,
+      // Lo stato dei negozi in lettura si conferma nella stessa risposta, entro l'attesa.
+      confirmation:
+        syncing > 0
+          ? settle(read, (current) => !current.some((store) => store.syncing)).catch(() => [])
+          : undefined,
+    },
+    { status: payload.notFound ? 404 : 200 },
+  );
 }
 
 const storeActions: Record<
@@ -191,6 +209,7 @@ export default function Stores({ loaderData }: Route.ComponentProps) {
       ) : (
         <StoresPage
           data={page}
+          confirmation={loaderData.confirmation}
           t={t}
           links={links}
           notice={<AccessNotice language={language} notice={notice} />}

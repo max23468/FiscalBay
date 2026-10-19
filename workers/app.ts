@@ -2,6 +2,7 @@ import type { createRequestHandler } from "react-router";
 import { receiveWebhook, consumeWebhooks } from "../app/integrations/webhooks.server";
 import { indexable } from "../app/app-links";
 import { correlateResponse, correlationHeader, logFailure, tracePhase } from "../app/errors";
+import { withPhaseTimings } from "../app/observability.server";
 import { consumeStoreSync, isSyncMessage } from "../app/domain/order-sync.server";
 import {
   consumeTask,
@@ -22,7 +23,7 @@ async function loadRequestHandler() {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const webhook = await receiveWebhook(request, env);
     if (webhook) return webhook;
     requestHandler ??= await loadRequestHandler();
@@ -32,7 +33,8 @@ export default {
     const correlatedRequest = new Request(request, { headers });
     try {
       tracePhase(correlatedRequest, "start");
-      const response = await requestHandler(correlatedRequest);
+      const handler = requestHandler;
+      const response = await withPhaseTimings(() => handler(correlatedRequest), ctx?.tracing);
       tracePhase(correlatedRequest, "response");
       const correlated = correlateResponse(response, id);
       // Quasi ogni pagina dipende dalla sessione: nessuna cache conserva una risposta del

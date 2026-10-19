@@ -29,6 +29,7 @@ export type OrdersNotice =
   | { kind: "ebay-down"; at: string }
   | { kind: "quota"; until: string }
   | { kind: "store-issue"; storeId: string; storeName: string }
+  | { kind: "consent-expiring"; storeId: string; storeName: string; at: string }
   | { kind: "importing"; count: number };
 
 export type Plan = "free" | "premium";
@@ -60,7 +61,15 @@ export type FiscalView =
    * Prima dello sblocco arriva solo il nome del dato: Codice Fiscale, oppure
    * Partita IVA quando l'ordine riporta soltanto quella.
    */
-  | { state: "locked"; shownAs: "CF" | "PIVA" }
+  | {
+      state: "locked";
+      shownAs: "CF" | "PIVA";
+      /**
+       * Sblocco sospeso: una nuova verifica eBay è in corso, oppure l'acquisto non è ancora
+       * l'ordine definitivo.
+       */
+      hold?: "checking" | "provisional";
+    }
   /** Senza motivo eBay non riporta il dato; altrimenti lo nasconde o lo ha rimosso. */
   | { state: "missing"; reason?: "masked" | "removed" }
   | { state: "checking" }
@@ -70,14 +79,34 @@ export type FiscalState = FiscalView["state"];
 
 export const fiscalStates: FiscalState[] = ["available", "locked", "missing", "checking", "error"];
 
-export type PaymentStatus = "paid" | "unpaid" | "refunded";
+/**
+ * Vocabolario normalizzato unico per area reale, anteprima e filtri. Uno stato eBay non
+ * previsto non ha una forma normalizzata: si mostra con il codice originale e resta fuori dai
+ * filtri.
+ */
+export type PaymentStatus = "paid" | "unpaid" | "partially_refunded" | "refunded";
 
-export const paymentStatuses: PaymentStatus[] = ["paid", "unpaid", "refunded"];
+export const paymentStatuses: PaymentStatus[] = [
+  "paid",
+  "unpaid",
+  "partially_refunded",
+  "refunded",
+];
 
-/** Stato di evasione; un ordine annullato non viene spedito. */
-export type ShippingStatus = "to_ship" | "shipped" | "delivered" | "cancelled";
+/** Stato di evasione; `in_progress` indica una parte degli articoli spedita. */
+export type ShippingStatus = "to_ship" | "in_progress" | "shipped" | "cancelled";
 
-export const shippingStatuses: ShippingStatus[] = ["to_ship", "shipped", "delivered", "cancelled"];
+export const shippingStatuses: ShippingStatus[] = [
+  "to_ship",
+  "in_progress",
+  "shipped",
+  "cancelled",
+];
+
+/** Stato normalizzato, oppure codice originale eBay; entrambi null se la fonte non lo riporta. */
+export type SourceStatus<Status extends string> =
+  | { status: Status; code?: undefined }
+  | { status: null; code: string | null };
 
 export interface AddressView {
   line: string;
@@ -92,7 +121,20 @@ export interface OrderItemView {
   title: string;
   sku: string | null;
   quantity: number;
-  priceMinor: number;
+  /** Importo della riga come fornito da eBay; null se la fonte non lo riporta. */
+  totalMinor: number | null;
+  currency: string;
+}
+
+/**
+ * Prezzo da mostrare per una riga: unitario quando l'importo diviso per la quantità è esatto
+ * nell'esponente della valuta, altrimenti l'importo della riga. Mai centesimi arrotondati.
+ */
+export function itemPrice(item: OrderItemView): { minor: number; unit: boolean } | null {
+  if (item.totalMinor === null) return null;
+  return item.totalMinor % item.quantity === 0
+    ? { minor: item.totalMinor / item.quantity, unit: true }
+    : { minor: item.totalMinor, unit: false };
 }
 
 export interface SuggestionView {
@@ -113,25 +155,30 @@ export interface OrderView {
   createdAt: string;
   storeId: string;
   storeName: string;
-  marketplace: string;
-  buyerName: string;
-  buyerUsername: string;
-  shipTo: { name: string; locality: string; country: string };
+  /** Marketplace dell'ordine, quando la fonte lo riporta. */
+  marketplace: string | null;
+  buyerName: string | null;
+  buyerUsername: string | null;
+  shipTo: { name: string | null; locality: string | null; country: string | null } | null;
   items: OrderItemView[];
   totalMinor: number;
   currency: string;
-  payment: PaymentStatus;
-  shipping: ShippingStatus;
+  payment: SourceStatus<PaymentStatus>;
+  shipping: SourceStatus<ShippingStatus>;
   /** Indirizzo di fatturazione dell'acquirente; non è un dato fiscale da sbloccare. */
   billingAddress: AddressView | null;
   phone: string | null;
   email: string | null;
   fiscal: FiscalView;
-  suggestion?: SuggestionView;
+  /** Suggerimenti Premium da ordini precedenti, uno per identificativo. */
+  suggestions: SuggestionView[];
+  /** Perché nessun suggerimento è proposto, quando il motivo è noto. */
+  suggestionStatus?: "identity_missing" | "none" | "ambiguous";
   /** Articoli non collegati con certezza agli altri acquisti eBay dello stesso ordine. */
   reconciliationIssue?: boolean;
   thumbnail?: string;
-  lastSyncedAt: string;
+  /** Ultima lettura dei dati fiscali da eBay; null se non ancora avvenuta. */
+  lastSyncedAt: string | null;
 }
 
 export type ConnectionState = "active" | "paused" | "reconnect_required" | "error" | "disconnected";
@@ -193,8 +240,8 @@ export interface AccountView {
   email: string;
   plan: Plan;
   trialAvailable: boolean;
-  /** Sblocchi del ciclo Free in corso. */
-  quota?: { used: number; limit: number; cycleEndsAt: string };
+  /** Sblocchi del ciclo Free in corso; senza ciclo avviato nessuno sblocco è disponibile. */
+  quota?: { used: number; limit: number; cycleEndsAt: string | null };
   premium?: { period: "monthly" | "annual" | "lifetime"; renewsAt: string | null };
 }
 

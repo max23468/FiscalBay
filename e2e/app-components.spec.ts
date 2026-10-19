@@ -39,7 +39,7 @@ test.describe("miglioramenti account e negozi", () => {
           },
         });
       });
-      await page.goto(`${prefix}/app/ordini?ordine=suggestions-${language}`);
+      await page.goto(`${prefix}/app/ordini/suggestions-${language}`);
       const dialog = page.getByRole("dialog");
       await expect(
         dialog.getByText(
@@ -96,11 +96,9 @@ test.describe("miglioramenti account e negozi", () => {
       expect(posts).toEqual([]);
       expect(errors).toEqual([]);
       await dialog.getByRole("button", { name: it ? "Chiudi" : "Close", exact: true }).click();
-      const card = page.locator('[data-slot="card"]').filter({
-        has: page.getByRole("heading", {
-          name: `${it ? "Ordine" : "Order"} suggestions-${language}`,
-          exact: true,
-        }),
+      const card = page.getByRole("article", {
+        name: `${it ? "Ordine" : "Order"} suggestions-${language}`,
+        exact: true,
       });
       await expect(
         card.getByText(it ? /Da un ordine precedente:/ : /From a previous order:/),
@@ -197,11 +195,9 @@ test.describe("miglioramenti account e negozi", () => {
           });
           await page.goto(`${prefix}/app/ordini`);
           const card = (suffix = "") =>
-            page.locator('[data-slot="card"]').filter({
-              has: page.getByRole("link", {
-                name: `${it ? "Ordine" : "Order"} ${id}${suffix}`,
-                exact: true,
-              }),
+            page.getByRole("article", {
+              name: `${it ? "Ordine" : "Order"} ${id}${suffix}`,
+              exact: true,
             });
           const secret = `VALORE-SINTETICO-${language}`;
           expect(await page.content()).not.toContain(secret);
@@ -252,7 +248,7 @@ test.describe("miglioramenti account e negozi", () => {
             name: it ? "Seleziona" : "Select",
             exact: true,
           });
-          await select.click();
+          // Lo sblocco chiude la selezione; senza altro da sbloccare né export non si riapre.
           await expect(select).toBeDisabled();
           await page.screenshot({ path: `/tmp/fiscalbay-unlock-${language}-complete.png` });
           await page.goto(`${prefix}/app/impostazioni/sicurezza`);
@@ -1021,13 +1017,13 @@ for (const language of ["it", "en"] as const) {
             response.url().includes("/ordini.data") && response.request().method() === "POST",
         );
         await failed.getByRole("button", { name: t("Riprova", "Try again"), exact: true }).click();
-        await expect(failed).toContainText(t("In verifica", "Checking"));
+        await expect(failed).toContainText(t("Verifica in corso", "Verification in progress"));
         expect((await retried).status()).toBe(200);
         await expect(
           failed.getByRole("button", { name: t("Riprova", "Try again"), exact: true }),
         ).toHaveCount(0);
         await page.reload();
-        await expect(failed).toContainText(t("In verifica", "Checking"));
+        await expect(failed).toContainText(t("Verifica in corso", "Verification in progress"));
         if (width === 390)
           await page.getByRole("button", { name: t("Filtri", "Filters"), exact: true }).click();
         const period = page.getByRole("combobox", { name: t("Periodo", "Period"), exact: true });
@@ -1059,7 +1055,9 @@ for (const language of ["it", "en"] as const) {
         const headerY = (await header.boundingBox())!.y;
         await dialog.getByRole("tab", { name: /Articoli|Items/ }).click();
         await expect(dialog).toContainText(t("Prezzo unitario", "Unit price"));
-        await expect(dialog.locator("li .lucide-package")).toHaveCount(3);
+        // Un prezzo di lotto non divisibile in centesimi esatti resta l'importo della riga.
+        await expect(dialog).toContainText(t("Importo della riga", "Line amount"));
+        await expect(dialog.locator("li .lucide-package")).toHaveCount(4);
         await dialog
           .locator("[data-slot=sheet-header] + div")
           .evaluate((el) => (el.scrollTop = el.scrollHeight));
@@ -1590,14 +1588,14 @@ for (const locale of ["it", "en"] as const) {
         ).toBeVisible();
         await open(page, `${prefix}/ordini/ord-01`);
         await page
-          .getByRole("tab", { name: locale === "it" ? "Articoli (3)" : "Items (3)", exact: true })
+          .getByRole("tab", { name: locale === "it" ? "Articoli (4)" : "Items (4)", exact: true })
           .click();
         const items = page.getByRole("tabpanel", {
-          name: locale === "it" ? "Articoli (3)" : "Items (3)",
+          name: locale === "it" ? "Articoli (4)" : "Items (4)",
           exact: true,
         });
         await expect(
-          items.getByText(locale === "it" ? "Senza SKU" : "No SKU", { exact: true }),
+          items.getByText(locale === "it" ? "Senza SKU" : "No SKU", { exact: true }).first(),
         ).toBeVisible();
         await expect(items).not.toContainText(locale === "it" ? "SKU: Senza SKU" : "SKU: No SKU");
         await expect(items).toContainText("MSC-OL-44");

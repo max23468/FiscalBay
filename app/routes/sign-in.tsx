@@ -1,20 +1,14 @@
 import { cn } from "cn";
 import { env } from "cloudflare:workers";
-import { ClipboardList, Copy, KeyRound, LogOut, Plus, Store } from "lucide-react";
+import { ClipboardList, Copy, KeyRound, LogOut, Store } from "lucide-react";
 import { useEffect, useState } from "react";
-import { data, useNavigate, useLocation, type ShouldRevalidateFunctionArgs } from "react-router";
+import { redirect, useLocation } from "react-router";
 
-import { AccessNotice, AccountShell } from "~/components/account";
-import { EbayEnvironmentField, type EbayEnvironment } from "~/components/ebay-environment";
-import { EmptyState } from "~/components/empty-state";
-import { PageTitle } from "~/components/icon-tile";
+import { AccessNotice, VerifyEmail } from "~/components/account";
 import { Logo } from "~/components/standalone-page";
 import { useFieldErrors, type FieldErrors } from "~/components/form-validation";
 import { LanguageSwitch } from "~/components/language-switch";
-import { StatusAlert } from "~/components/status";
-import { ImportedOrders, StoreIssueAlert } from "~/components/orders";
 import { Button } from "~/components/ui/button";
-import { buttonVariants } from "~/components/ui/button-variants";
 import { Checkbox } from "~/components/ui/checkbox";
 import {
   Field,
@@ -29,72 +23,166 @@ import {
 import { Input } from "~/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import { accountLoader } from "../account-page.server";
-import { assertSameOrigin, requireAccountArea } from "../account-area.server";
-import { unlockOrders } from "../domain/grants.server";
-import { sandboxAvailable } from "../integrations/ebay/environment.server";
-import { accessPath, appBase, ordersPath, storeLinkPath, securityReturnPath } from "../app-links";
-import { passkeyFailure, type PasskeyFailure } from "../passkey-error";
+import { createAuth } from "../auth.server";
+import { forwardToAuth, redirectWithCookies } from "../auth-route.server";
+import {
+  completeRegistration,
+  parseProfile,
+  registrationStatus,
+} from "../domain/registration.server";
+import { accessPath, ordersPath, visitCookie, securityReturnPath } from "../app-links";
+import { accessLoader } from "../account-page.server";
 import { appCopy } from "../app-copy";
+import { errorResponse } from "../error-response";
+import { tracePhase } from "../errors";
+import { passkeyFailure, type PasskeyFailure } from "../passkey-error";
 import { languageFromPath, localizedPath, type Language } from "../i18n";
-import { formatDate } from "../view-models";
-import type { Route } from "./+types/home";
+import type { Route } from "./+types/sign-in";
 
 export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   const language = languageFromPath(location.pathname);
   const { access } = appCopy[language];
-  // Senza sessione la pagina è l'accesso, non ancora l'elenco degli ordini.
-  const title =
-    loaderData && "resetToken" in loaderData && loaderData.resetToken
+  const title = loaderData?.authenticated
+    ? access.agreementTitle
+    : loaderData?.resetToken
       ? access.passwordResetTitle
-      : loaderData?.authenticated
-        ? access.title
-        : access.signIn;
-  return [
-    { title: `FiscalBay | ${title}` },
-    { name: "description", content: appCopy[language].access.description },
-  ];
+      : access.signIn;
+  return [{ title: `FiscalBay | ${title}` }, { name: "description", content: access.description }];
 }
 
 export function loader({ request }: Route.LoaderArgs) {
-  return accountLoader(request, "app");
-}
-
-/** Anche un conflitto di quota rilegge lo stato corrente per aggiornare i controlli. */
-export function shouldRevalidate({
-  formMethod,
-  defaultShouldRevalidate,
-}: ShouldRevalidateFunctionArgs) {
-  return formMethod ? true : defaultShouldRevalidate;
+  return accessLoader(request);
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  assertSameOrigin(request);
-  const { session } = await requireAccountArea(request);
-  const form = await request.formData();
-  const environment =
-    new URL(request.url).searchParams.get("environment") === "sandbox" ? "sandbox" : "production";
-  if (form.get("intent") !== "unlock" || (environment === "sandbox" && !sandboxAvailable(env)))
-    return data({ unlocked: [], remaining: null, error: true }, { status: 400 });
-  try {
-    return await unlockOrders(
-      env.DB,
-      session.user.id,
-      String(form.get("ids") ?? "").split(","),
-      form.get("skipConfirmation") === "true",
-      environment,
-    );
-  } catch (error) {
-    // Le violazioni del dominio non espongono ordine, quota altrui o testo SQL.
-    if (
-      !(error instanceof Error) ||
-      !/invalid_order_selection|order_not_available|order_not_in_workspace|free_quota_exhausted|tax_data_unavailable|invalid_grant_cycle|order_already_granted_or_merged|NOT NULL constraint failed|UNIQUE constraint failed/u.test(
-        error.message,
-      )
-    )
-      throw error;
-    return data({ unlocked: [], remaining: null, error: true }, { status: 409 });
+  const language = languageFromPath(new URL(request.url).pathname);
+  // Con la sessione si torna agli Ordini, senza all'accesso: ciascuna pagina rimanda all'altra
+  // se il caso non è il suo, conservando l'esito.
+  const base = localizedPath(language, ordersPath);
+  const access = localizedPath(language, accessPath);
+  if (request.headers.get("origin") !== new URL(env.APP_ORIGIN).origin) {
+    return errorResponse(request, "FORBIDDEN");
   }
+  const form = await request.formData();
+  tracePhase(request, "form");
+  const field = (name: string) => String(form.get(name) ?? "");
+  const intent = field("intent");
+  const returnTo = securityReturnPath(language, field("returnTo"));
+  const destination = returnTo ?? base;
+  const accessReturn = returnTo ? `${access}?${new URLSearchParams({ returnTo })}` : access;
+  const notice = (value: string, page = access) => {
+    const query = new URLSearchParams({ accesso: value });
+    if (returnTo) query.set("returnTo", returnTo);
+    return redirect(`${page}?${query}`, 303);
+  };
+  const forward = (path: string, body?: Record<string, unknown>) =>
+    forwardToAuth(env, request, path, body);
+
+  // Dopo l'uscita la radice torna a essere il sito pubblico, senza la scelta di visita.
+  if (intent === "esci") {
+    const response = redirectWithCookies(localizedPath(language), await forward("/sign-out"));
+    response.headers.append("set-cookie", `${visitCookie}=; Path=/; Max-Age=0`);
+    return response;
+  }
+
+  if (intent === "google" || intent === "ebay") {
+    const response = await forward("/sign-in/social", {
+      provider: intent,
+      callbackURL: destination,
+      errorCallbackURL: `${localizedPath(language, "/auth/error")}?${new URLSearchParams({ provider: intent, ...(returnTo ? { returnTo } : {}) })}`,
+    });
+    if (!response.ok) return notice(response.status === 429 ? "troppi-tentativi" : "errore");
+    const { url } = await response.clone().json<{ url: string }>();
+    return redirectWithCookies(url, response);
+  }
+
+  if (intent === "recupera-password") {
+    const response = await forward("/request-password-reset", {
+      email: field("email"),
+      redirectTo: `${new URL(env.APP_ORIGIN).origin}${accessReturn}`,
+    });
+    return notice(
+      response.status === 429 ? "troppi-tentativi" : response.ok ? "recupero-inviato" : "errore",
+    );
+  }
+
+  if (intent === "reimposta-password") {
+    const token = field("token");
+    if (!token || token.length > 512) return notice("recupero-scaduto");
+    const response = await forward("/reset-password", {
+      token,
+      newPassword: field("password"),
+    });
+    return notice(response.ok ? "password-reimpostata" : "recupero-scaduto");
+  }
+
+  if (intent === "registrati") {
+    // Profilo e Termini obbligatori, marketing facoltativo: nessuna scelta vale se non inviata.
+    const profile = parseProfile(form);
+    if (!profile) return notice("dati");
+    if (field("termini") !== "on") return notice("termini");
+    const response = await forward("/sign-up/email", {
+      email: field("email"),
+      password: field("password"),
+      name: `${profile.firstName} ${profile.lastName}`,
+      callbackURL: base,
+    });
+    if (!response.ok) {
+      return notice(response.status === 429 ? "troppi-tentativi" : "registrazione");
+    }
+    // Per un indirizzo già registrato Better Auth risponde con un utente fittizio, senza
+    // sessione: profilo e Termini si salvano solo per l'account appena creato. La sessione
+    // nasce dal link di conferma, quindi la risposta è la stessa nei due casi.
+    const { user } = await response.clone().json<{ user: { id: string } }>();
+    const created = await env.DB.prepare('SELECT 1 FROM "user" WHERE "id" = ?')
+      .bind(user.id)
+      .first();
+    if (created) {
+      await completeRegistration(env.DB, {
+        userId: user.id,
+        language,
+        now: new Date(),
+        profile,
+        agreement: { marketing: field("marketing") === "on" },
+      });
+    }
+    return notice("registrato");
+  }
+
+  if (intent === "verifica" || intent === "completa") {
+    const session = await createAuth(env).api.getSession({ headers: request.headers });
+    if (!session) return notice("errore");
+    if (intent === "verifica") {
+      if (session.user.emailVerified) return redirect(base, 303);
+      const response = await forward("/send-verification-email", {
+        email: session.user.email,
+        callbackURL: base,
+      });
+      if (response.status === 429) return notice("troppi-tentativi", base);
+      return notice(response.ok ? "verifica-inviata" : "errore", base);
+    }
+    // Chi è entrato con Google o prima di una nuova versione dei Termini completa qui ciò che manca.
+    const status = await registrationStatus(env.DB, session.user.id);
+    const profile = status.profile ? undefined : parseProfile(form);
+    // Gli errori del completamento restano sull'accesso, dove il passaggio si ripete.
+    if (profile === null) return notice("dati");
+    if (!status.termsAccepted && field("termini") !== "on") return notice("termini");
+    await completeRegistration(env.DB, {
+      userId: session.user.id,
+      language,
+      now: new Date(),
+      profile,
+      agreement: status.termsAccepted ? undefined : { marketing: field("marketing") === "on" },
+    });
+    return redirect(base, 303);
+  }
+
+  const response = await forward("/sign-in/email", {
+    email: field("email"),
+    password: field("password"),
+  });
+  if (response.ok) return redirectWithCookies(destination, response);
+  return notice(response.status === 429 ? "troppi-tentativi" : "errore");
 }
 
 type AccessCopy = (typeof appCopy)[Language]["access"];
@@ -689,52 +777,6 @@ function SignOutForm({ t, language }: { t: AccessCopy; language: Language }) {
   );
 }
 
-/** Avviso di verifica dell'email, finché l'indirizzo non è confermato. */
-function VerifyEmail({
-  t,
-  language,
-  email,
-  emailVerified,
-}: {
-  t: AccessCopy;
-  language: Language;
-  email: string;
-  emailVerified: boolean;
-}) {
-  return emailVerified ? null : (
-    <StatusAlert tone="warning" title={t.verifyTitle}>
-      <p>{t.verifyBody(email)}</p>
-      <form method="post" action={localizedPath(language, "/accesso")} className="mt-2">
-        <Button type="submit" variant="outline" size="sm" name="intent" value="verifica">
-          {t.verifyResend}
-        </Button>
-      </form>
-    </StatusAlert>
-  );
-}
-
-/** Apre la schermata preparatoria: il passaggio a eBay parte solo da lì. */
-function LinkStore({
-  t,
-  language,
-  ebayEnvironment = "production",
-}: {
-  t: AccessCopy;
-  language: Language;
-  ebayEnvironment?: "production" | "sandbox";
-}) {
-  return (
-    <a
-      href={`${localizedPath(language, storeLinkPath)}?environment=${ebayEnvironment}`}
-      data-slot="button"
-      className={cn(buttonVariants(), "w-fit")}
-    >
-      <Plus aria-hidden="true" data-icon="inline-start" />
-      {t.linkStore}
-    </a>
-  );
-}
-
 const featureIcons = [
   { Icon: ClipboardList, className: "text-brand-sky" },
   { Icon: Copy, className: "text-[#f5c451]" },
@@ -821,200 +863,67 @@ function accessHeading(loaderData: Awaited<ReturnType<typeof loader>>, t: Access
   return loaderData.resetToken ? t.passwordResetTitle : t.choose;
 }
 
-export default function Home({ loaderData }: Route.ComponentProps) {
+/** Accesso, registrazione e completamento: marchio a sinistra, form a destra. */
+export default function SignIn({ loaderData }: Route.ComponentProps) {
   const { language, notice } = loaderData;
   const t = appCopy[language].access;
   const remembered = useRemembered(notice !== null && errorTones.has(notice.tone));
-  const noticeAlert = <AccessNotice language={language} notice={notice} />;
-
-  // Accesso, registrazione e completamento: marchio a sinistra, form a destra.
-  if (!loaderData.authenticated || loaderData.needsProfile || loaderData.needsAgreement) {
-    return (
-      <div className="grid min-h-dvh lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-        <BrandPanel t={t} />
-        <main className="flex flex-col px-4 py-4 sm:px-8 lg:px-12">
-          <header className="flex items-center justify-between gap-4">
-            <Logo className="h-7 w-auto lg:invisible" />
-            <LanguageSwitch
-              label={t.language}
-              current={language}
-              hrefFor={(code) =>
-                localizedPath(code, loaderData.authenticated ? ordersPath : accessPath)
-              }
-              reloadDocument
-            />
-          </header>
-          <div
-            className={cn(
-              "mx-auto grid w-full flex-1 gap-4 py-4 sm:max-w-md",
-              !loaderData.authenticated && loaderData.resetToken
-                ? "content-start lg:content-center"
-                : "content-center",
-            )}
-          >
-            <div className="grid gap-2 lg:hidden">
-              <p className="text-2xl font-semibold text-balance">{t.headline}</p>
-            </div>
-            <h1 className="sr-only">{accessHeading(loaderData, t)}</h1>
-            {noticeAlert}
-            {loaderData.authenticated ? (
-              <VerifyEmail
-                t={t}
-                language={language}
-                email={loaderData.email}
-                emailVerified={loaderData.emailVerified}
-              />
-            ) : null}
-            <div className={cn("rounded-2xl border bg-card p-4 shadow-sm sm:p-5", rise)}>
-              <p className="mb-3 text-sm text-muted-foreground">{t.requiredFields}</p>
-              <AccessPanel
-                loaderData={loaderData}
-                t={t}
-                language={language}
-                remembered={remembered}
-              />
-            </div>
-            <nav
-              aria-label={appCopy[language].legal.navigation}
-              className="flex justify-center gap-4 text-sm text-muted-foreground"
-            >
-              <a
-                href={localizedPath(language, "/termini")}
-                className="underline underline-offset-4"
-              >
-                {t.terms.terms}
-              </a>
-              <a
-                href={localizedPath(language, "/privacy")}
-                className="underline underline-offset-4"
-              >
-                {t.terms.privacy}
-              </a>
-            </nav>
-            {loaderData.authenticated ? <SignOutForm t={t} language={language} /> : null}
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  return <OrdersPage loaderData={loaderData} noticeAlert={noticeAlert} />;
-}
-
-/** Ambiente eBay degli ordini mostrati, sul solo dominio di test: lo stesso campo dei filtri. */
-function EnvironmentSelect({ language, value }: { language: Language; value: EbayEnvironment }) {
-  const navigate = useNavigate();
   return (
-    <EbayEnvironmentField
-      language={language}
-      className="sm:max-w-sm"
-      value={value}
-      onValueChange={(next) =>
-        void navigate(`${localizedPath(language, ordersPath)}?environment=${next}`)
-      }
-    />
-  );
-}
-
-type SignedIn = Extract<Awaited<ReturnType<typeof loader>>, { authenticated: true }>;
-
-function OrderList({ loaderData }: { loaderData: SignedIn }) {
-  return (
-    <ImportedOrders
-      orders={loaderData.orders}
-      language={loaderData.language}
-      t={appCopy[loaderData.language]}
-      remaining={loaderData.allowance ? loaderData.allowance.remaining : 0}
-      cycleEndsAt={loaderData.allowance?.cycle?.ends_at ?? null}
-      confirmUnlock={loaderData.confirmUnlock}
-    />
-  );
-}
-
-/** Pagina Ordini dell'area reale, dentro la shell condivisa. */
-function OrdersPage({
-  loaderData,
-  noticeAlert,
-}: {
-  loaderData: SignedIn;
-  noticeAlert: React.ReactNode;
-}) {
-  const { language } = loaderData;
-  const t = appCopy[language].access;
-  return (
-    <AccountShell
-      language={language}
-      account={{ name: loaderData.name, email: loaderData.email }}
-      security={loaderData.emailVerified}
-    >
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-        <header className="flex flex-wrap items-end justify-between gap-4">
-          <PageTitle
-            icon={ClipboardList}
-            tone="blue"
-            description={<p className="text-sm text-muted-foreground">{t.intro}</p>}
-          >
-            {t.title}
-          </PageTitle>
-          {loaderData.canLinkStore && loaderData.orders.length > 0 ? (
-            <LinkStore t={t} language={language} ebayEnvironment={loaderData.ebayEnvironment} />
-          ) : null}
-        </header>
-        {noticeAlert}
-        <VerifyEmail
-          t={t}
-          language={language}
-          email={loaderData.email}
-          emailVerified={loaderData.emailVerified}
-        />
-        {loaderData.sandbox && (
-          <EnvironmentSelect language={language} value={loaderData.ebayEnvironment} />
-        )}
-        {loaderData.reminders.map((store) =>
-          // Come nell'anteprima, il collegamento scaduto porta al pannello del negozio.
-          store.kind === "expired" ? (
-            <StoreIssueAlert
-              key={store.id}
-              storeId={store.id}
-              storeName={store.name}
-              t={appCopy[language]}
-              links={{ language, base: appBase }}
-            />
-          ) : (
-            <StatusAlert key={store.id} tone="info" title={t.consentExpiringTitle(store.name)}>
-              <span className="grid justify-items-start gap-3">
-                {t.consentExpiringBody(formatDate(store.at, language, "date"))}
-                <a
-                  href={`${localizedPath(language, storeLinkPath)}?ricollega=${encodeURIComponent(store.id)}&environment=${store.ebayEnvironment}`}
-                  data-slot="button"
-                  className={buttonVariants({ variant: "outline", size: "sm" })}
-                >
-                  {t.reconnectStore}
-                </a>
-              </span>
-            </StatusAlert>
-          ),
-        )}
-        {loaderData.orders.length === 0 ? (
-          <EmptyState
-            title={loaderData.storeLinked ? t.noImportedOrders : t.noOrders}
-            description={
-              loaderData.storeLinked
-                ? t.noImportedOrdersBody
-                : loaderData.canLinkStore
-                  ? t.noOrdersBody
-                  : t.noOrdersVerifyBody
-            }
-            action={
-              loaderData.canLinkStore ? (
-                <LinkStore t={t} language={language} ebayEnvironment={loaderData.ebayEnvironment} />
-              ) : undefined
-            }
+    <div className="grid min-h-dvh lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+      <BrandPanel t={t} />
+      <main className="flex flex-col px-4 py-4 sm:px-8 lg:px-12">
+        <header className="flex items-center justify-between gap-4">
+          <Logo className="h-7 w-auto lg:invisible" />
+          <LanguageSwitch
+            label={t.language}
+            current={language}
+            hrefFor={(code) => localizedPath(code, accessPath)}
+            reloadDocument
           />
-        ) : (
-          <OrderList loaderData={loaderData} />
-        )}
-      </div>
-    </AccountShell>
+        </header>
+        <div
+          className={cn(
+            "mx-auto grid w-full flex-1 gap-4 py-4 sm:max-w-md",
+            !loaderData.authenticated && loaderData.resetToken
+              ? "content-start lg:content-center"
+              : "content-center",
+          )}
+        >
+          <div className="grid gap-2 lg:hidden">
+            <p className="text-2xl font-semibold text-balance">{t.headline}</p>
+          </div>
+          <h1 className="sr-only">{accessHeading(loaderData, t)}</h1>
+          <AccessNotice language={language} notice={notice} />
+          {loaderData.authenticated ? (
+            <VerifyEmail
+              language={language}
+              email={loaderData.email}
+              verified={loaderData.emailVerified}
+            />
+          ) : null}
+          <div className={cn("rounded-2xl border bg-card p-4 shadow-sm sm:p-5", rise)}>
+            <p className="mb-3 text-sm text-muted-foreground">{t.requiredFields}</p>
+            <AccessPanel
+              loaderData={loaderData}
+              t={t}
+              language={language}
+              remembered={remembered}
+            />
+          </div>
+          <nav
+            aria-label={appCopy[language].legal.navigation}
+            className="flex justify-center gap-4 text-sm text-muted-foreground"
+          >
+            <a href={localizedPath(language, "/termini")} className="underline underline-offset-4">
+              {t.terms.terms}
+            </a>
+            <a href={localizedPath(language, "/privacy")} className="underline underline-offset-4">
+              {t.terms.privacy}
+            </a>
+          </nav>
+          {loaderData.authenticated ? <SignOutForm t={t} language={language} /> : null}
+        </div>
+      </main>
+    </div>
   );
 }

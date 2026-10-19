@@ -75,8 +75,16 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
     make("/accesso", "auth", { remote: !prefix }),
     make("/accesso?token=synthetic-reset-token", "auth", { pattern: access }),
     make("/accesso", "auth", { role: "member", redirect: orders }),
-    make("/app/ordini", "orders", { redirect: access }),
-    make("/app/ordini", "orders", { role: "member", remote: true }),
+    make("/app/ordini", "orders", { pattern: `${orders}/:ordine?`, redirect: access }),
+    // Un ordine inesistente o di un altro spazio risponde 404 dentro la shell.
+    ...["", "/non-esiste"].map((suffix) =>
+      make(`/app/ordini${suffix}`, "orders", {
+        role: "member",
+        pattern: `${orders}/:ordine?`,
+        status: suffix ? 404 : 200,
+        remote: !suffix,
+      }),
+    ),
     make("/auth/error", "auth", { remote: !prefix }),
     ...["email_not_found", "account_not_linked", "account_already_linked_to_different_user"].map(
       (error) =>
@@ -150,6 +158,8 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
             remote: true,
           }),
           make("/robots.txt", "public", { endpoint: true, remote: true }),
+          // Riceve soltanto i report del browser: una lettura risponde senza contenuto.
+          make("/api/v1/page-timing", "public", { endpoint: true, status: 405 }),
         ]),
   ];
 });

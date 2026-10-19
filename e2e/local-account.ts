@@ -42,8 +42,13 @@ export async function useLocalAccount(
   await context.addCookies([cookie]);
   const origin = new URL(baseURL).origin;
   const jar = new Map<string, string>([[cookie.name, cookie.value]]);
+  // Il report delle misure non usa la sessione e Playwright con WebKit non inoltra il corpo
+  // dei beacon intercettati: resta fuori dall'instradamento.
   await context.route(
-    (url) => url.origin === origin && !url.pathname.startsWith("/assets/"),
+    (url) =>
+      url.origin === origin &&
+      !url.pathname.startsWith("/assets/") &&
+      url.pathname !== "/api/v1/page-timing",
     async (route) => {
       const request = route.request();
       const response = await route.fetch({

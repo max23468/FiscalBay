@@ -1053,7 +1053,8 @@ describe("Collegamento e modifica dell'identità", () => {
       intent: "collega-metodo",
       metodo: "google",
     });
-    expect(fromApp.headers.get("location")).toBe("/app/ordini");
+    // Senza profilo e Termini decide la pagina di accesso, che chiede ciò che manca.
+    expect(fromApp.headers.get("location")).toBe("/accesso");
     const direct = await googleCallback(
       environment,
       await post(

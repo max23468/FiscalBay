@@ -1,5 +1,5 @@
-import { loader as loadHome } from "../app/routes/home";
-import { action as signIn } from "../app/routes/sign-in";
+import { loader as loadHome } from "../app/routes/orders";
+import { action as signIn, loader as loadAccess } from "../app/routes/sign-in";
 import { action as securityAction } from "../app/routes/security";
 
 export function accessForm(path: string, fields: Record<string, string>, cookie?: string) {
@@ -30,6 +30,14 @@ export function securityForm(path: string, fields: Record<string, string>, cooki
 
 export async function homeFor(cookie: string) {
   return loadHome({
+    params: {},
     request: new Request("http://localhost:5173/app/ordini", { headers: { cookie } }),
   } as Parameters<typeof loadHome>[0]);
+}
+
+/** Pagina di accesso con la sessione: completamento del profilo, oppure il redirect lanciato. */
+export async function accessFor(cookie: string) {
+  return loadAccess({
+    request: new Request("http://localhost:5173/accesso", { headers: { cookie } }),
+  } as Parameters<typeof loadAccess>[0]);
 }

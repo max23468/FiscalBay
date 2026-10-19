@@ -360,3 +360,34 @@ export async function consumeStoreSync(
     .run();
   message.ack();
 }
+
+/**
+ * «Riprova» di un ordine la cui lettura fiscale non è riuscita: soltanto un ordine consultabile
+ * dello spazio dell'utente, e soltanto se la lettura del negozio si può richiedere. Il dettaglio
+ * Fulfillment torna da leggere; un ordine noto solo a Trading si rilegge con la passata Trading
+ * del negozio.
+ */
+export async function requestOrderRead(
+  environment: Env,
+  userId: string,
+  order: { id: string; storeId: string },
+  now = new Date(),
+): Promise<SyncRequestResult> {
+  const requested = await requestStoreSync(environment, userId, order.storeId, {}, now);
+  if (requested === "not_found" || requested === "invalid") return requested;
+  await environment.DB.batch([
+    environment.DB.prepare(
+      `UPDATE order_source_refs SET detail_for = NULL, detail_attempts = 0,
+              detail_retry_at = NULL, detail_error = NULL
+        WHERE order_id = ?1 AND store_id = ?2 AND source = 'fulfillment'`,
+    ).bind(order.id, order.storeId),
+    environment.DB.prepare(
+      `UPDATE sync_state SET trading_cursor = NULL, trading_end = NULL, trading_page = NULL,
+              trading_total = NULL
+        WHERE store_id = ?2 AND history_from IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM order_source_refs
+                           WHERE order_id = ?1 AND source = 'fulfillment')`,
+    ).bind(order.id, order.storeId),
+  ]);
+  return requested;
+}

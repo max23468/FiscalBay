@@ -144,7 +144,8 @@ describe("modello ordini", () => {
       });
       const visible = await listVisibleOrders(env.DB, "u-a");
       expect(visible.find((order) => order.id === available)!.fiscalState).toBe("available");
-      expect(visible.find((order) => order.id === unchecked)!.fiscalState).toBe("unchecked");
+      // Senza controllo né lettura in attesa la verifica risulta non riuscita, da riprovare.
+      expect(visible.find((order) => order.id === unchecked)!.fiscalState).toBe("error");
       for (const id of [previous, available, unchecked]) {
         const order = visible.find((item) => item.id === id)!;
         expect(order).not.toHaveProperty("suggestions");

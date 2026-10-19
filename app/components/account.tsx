@@ -700,6 +700,29 @@ function SignInAgain({ language, inSecurity }: { language: Language; inSecurity:
   );
 }
 
+/** Avviso di verifica dell'email, finché l'indirizzo non è confermato. */
+export function VerifyEmail({
+  language,
+  email,
+  verified,
+}: {
+  language: Language;
+  email: string;
+  verified: boolean;
+}) {
+  const t = appCopy[language].access;
+  return verified ? null : (
+    <StatusAlert tone="warning" title={t.verifyTitle}>
+      <p>{t.verifyBody(email)}</p>
+      <form method="post" action={localizedPath(language, accessPath)} className="mt-2">
+        <Button type="submit" variant="outline" size="sm" name="intent" value="verifica">
+          {t.verifyResend}
+        </Button>
+      </form>
+    </StatusAlert>
+  );
+}
+
 export function AccessNotice({
   language,
   notice,
