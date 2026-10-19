@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { taxQuality, taxComparisonKey, taxIdentifierType } from "../app/tax-quality";
+import {
+  displayTaxValue,
+  taxQuality,
+  taxComparisonKey,
+  taxIdentifierType,
+} from "../app/tax-quality";
 
 import {
   buildCreationDateFilter,
@@ -781,5 +786,17 @@ describe("seconda osservazione fiscale Fulfillment", () => {
     await expect(read("<Order><OrderID>ordine</OrderID></Order>".repeat(2))).rejects.toMatchObject({
       failure: "invalid_response",
     });
+  });
+});
+
+describe("forma mostrata degli identificativi fiscali", () => {
+  it("toglie ogni spazio e porta in maiuscolo soltanto CF e Partita IVA italiani", () => {
+    expect(displayTaxValue({ type: "CF", value: " rss mra80a01h501u " })).toBe("RSSMRA80A01H501U");
+    expect(displayTaxValue({ type: "CF", value: "rss\tmra\n80a01" })).toBe("RSSMRA80A01");
+    expect(displayTaxValue({ type: "PIVA", value: "0123 4567 890" })).toBe("01234567890");
+    expect(displayTaxValue({ type: "PIVA", value: "00000000000" })).toBe("00000000000");
+    // Un valore errato resta errato: la forma derivata non lo corregge.
+    expect(displayTaxValue({ type: "CF", value: "rss-mra" })).toBe("RSS-MRA");
+    expect(displayTaxValue({ type: "OTHER", value: " es b123 456 " })).toBe(" es b123 456 ");
   });
 });

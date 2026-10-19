@@ -22,6 +22,7 @@ import { syntheticProfile, verifiedSession } from "./account-fixtures";
 import { displayTaxValue } from "../app/tax-quality";
 import { itemPrice } from "../app/view-models";
 import { settle } from "../app/settle.server";
+import { requestOrderRead } from "../app/domain/order-sync.server";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
@@ -1321,6 +1322,61 @@ describe("pagina Ordini reale", () => {
     expect(await ordersAction(cookie, { intent: "retry", order: "o-b" })).toMatchObject({
       init: { status: 409 },
     });
+    send.mockRestore();
+  });
+
+  it("la nuova lettura di un ordine noto solo a Trading riparte dalla passata Trading", async () => {
+    const { userId } = await owner();
+    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(undefined);
+    await withCredentials();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO order_source_refs (store_id, source, external_order_id, order_id, last_modified_time)
+         VALUES ('s-a', 'trading', 'ebay-a', 'o-a', ?1)`,
+      ).bind(now),
+      env.DB.prepare(
+        `INSERT INTO sync_state (store_id, updated_at, history_from, trading_cursor, trading_end, trading_page, trading_total)
+         VALUES ('s-a', ?1, ?1, ?1, ?1, 2, 40), ('s-b', ?1, ?1, ?1, NULL, NULL, NULL)`,
+      ).bind(now),
+    ]);
+    const tradingState = () =>
+      env.DB.prepare(
+        "SELECT store_id, trading_cursor, trading_end, trading_page, trading_total FROM sync_state ORDER BY store_id",
+      ).all();
+    // Il negozio di un altro spazio non si rilegge e il suo cursore resta.
+    expect(await requestOrderRead(env, userId, { id: "o-b", storeId: "s-b" })).toBe("not_found");
+    expect(await requestOrderRead(env, userId, { id: "o-a", storeId: "s-a" })).toBe("queued");
+    expect((await tradingState()).results).toEqual([
+      {
+        store_id: "s-a",
+        trading_cursor: null,
+        trading_end: null,
+        trading_page: null,
+        trading_total: null,
+      },
+      {
+        store_id: "s-b",
+        trading_cursor: now,
+        trading_end: null,
+        trading_page: null,
+        trading_total: null,
+      },
+    ]);
+    // Con un riferimento Fulfillment rilegge il dettaglio, non l'intera passata Trading.
+    await env.DB.batch([
+      env.DB.prepare("UPDATE sync_state SET trading_cursor = ?1, requested_at = NULL").bind(now),
+      env.DB.prepare(
+        `INSERT INTO order_source_refs (store_id, source, external_order_id, order_id, last_modified_time, detail_for)
+         VALUES ('s-a', 'fulfillment', 'ebay-a', 'o-a', ?1, ?1)`,
+      ).bind(now),
+    ]);
+    expect(await requestOrderRead(env, userId, { id: "o-a", storeId: "s-a" })).toBe("queued");
+    expect((await tradingState()).results[0]).toMatchObject({ trading_cursor: now });
+    expect(
+      await env.DB.prepare(
+        "SELECT detail_for FROM order_source_refs WHERE source = 'fulfillment'",
+      ).first(),
+    ).toEqual({ detail_for: null });
     send.mockRestore();
   });
 
