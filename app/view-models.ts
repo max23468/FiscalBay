@@ -29,7 +29,13 @@ export type OrdersNotice =
   | { kind: "ebay-down"; at: string }
   | { kind: "quota"; until: string }
   | { kind: "store-issue"; storeId: string; storeName: string }
-  | { kind: "consent-expiring"; storeId: string; storeName: string; at: string }
+  | {
+      kind: "consent-expiring";
+      storeId: string;
+      storeName: string;
+      at: string;
+      ebayEnvironment: "production" | "sandbox";
+    }
   | { kind: "importing"; count: number };
 
 export type Plan = "free" | "premium";

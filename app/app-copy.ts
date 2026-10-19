@@ -237,6 +237,7 @@ const it = {
     storeIssueBody:
       "La sincronizzazione di questo negozio è sospesa. Gli altri negozi continuano. Ricollega il negozio.",
     storeIssueAction: "Apri il negozio",
+    reconnectStore: "Ricollega negozio",
     consentExpiringTitle: (store: string) => `${store}: autorizzazione in scadenza`,
     consentExpiringBody: (date: string) =>
       `L’autorizzazione eBay scade il ${date}. Ricollega il negozio entro quella data per non interrompere la sincronizzazione.`,
@@ -1083,6 +1084,7 @@ const en: AppCopy = {
     storeIssueTitle: (store) => `${store}: connection expired`,
     storeIssueBody: "Syncing is paused for this store. Other stores continue. Reconnect the store.",
     storeIssueAction: "Open store",
+    reconnectStore: "Reconnect store",
     consentExpiringTitle: (store) => `${store}: authorisation expiring`,
     consentExpiringBody: (date) =>
       `The eBay authorisation expires on ${date}. Reconnect the store by then to keep syncing.`,

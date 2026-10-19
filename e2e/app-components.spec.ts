@@ -139,6 +139,23 @@ test.describe("miglioramenti account e negozi", () => {
     }) => {
       await useLocalAccount(context, "member", baseURL!);
       await page.goto(`${prefix}/app/ordini`);
+      // Come nel collaudo remoto: il consenso in scadenza si ricollega subito, lo scaduto apre
+      // il pannello del negozio.
+      await expect(
+        page
+          .getByRole("status")
+          .filter({ hasText: testAccount.stores.expiring })
+          .getByRole("link", { name: it ? "Ricollega negozio" : "Reconnect store" }),
+      ).toHaveAttribute(
+        "href",
+        `${prefix}/app/negozi/collega?ricollega=${testAccount.stores.expiring}&environment=production`,
+      );
+      await expect(
+        page
+          .getByRole("status")
+          .filter({ hasText: testAccount.stores.expired })
+          .getByRole("link", { name: it ? "Apri il negozio" : "Open store" }),
+      ).toHaveAttribute("href", `${prefix}/app/negozi/${testAccount.stores.expired}`);
       await expect(
         page.getByText(testAccount.taxCodes.unlocked, { exact: true }).first(),
       ).toBeVisible();
