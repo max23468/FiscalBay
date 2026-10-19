@@ -1182,6 +1182,100 @@ describe("pagina Ordini reale", () => {
     expect((await ordersPage(cookie, "/app/ordini?negozio=s-b")).page!.orders).toEqual([]);
   });
 
+  it("filtri, ricerca, conteggio e «Carica altri» usano la query reale sullo spazio", async () => {
+    const { cookie, userId } = await owner();
+    const day = 86_400_000;
+    // Ordini sintetici di A con stati diversi; o-b resta di un altro spazio.
+    const extra = [
+      ["x-paid", "PAID", "FULFILLED", null, "EBAY_IT", 1],
+      ["x-unpaid", "PENDING", "NOT_STARTED", null, "EBAY_DE", 2],
+      ["x-partial", "PARTIALLY_REFUNDED", "IN_PROGRESS", null, "EBAY_IT", 3],
+      ["x-refunded", "FULLY_REFUNDED", "NOT_STARTED", "CANCELED", "EBAY_IT", 10],
+      ["x-unknown", "AWAITING_REVIEW", "NOT_STARTED", null, null, 15],
+      ["x-checking", "PAID", "NOT_STARTED", null, "EBAY_IT", 20],
+      ["x-missing", "PAID", "NOT_STARTED", null, "EBAY_IT", 25],
+    ] as const;
+    await env.DB.batch([
+      ...extra.map(([id, payment, fulfillment, cancel, marketplace, age]) =>
+        env.DB.prepare(
+          `INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time, currency,
+             total_minor, payment_status, fulfillment_status, cancel_status, marketplace_id, buyer_json)
+           VALUES (?1, 's-a', ?1, ?2, ?2, 'EUR', 100, ?3, ?4, ?5, ?6, ?7)`,
+        ).bind(
+          id,
+          new Date(Date.parse(now) - age * day).toISOString(),
+          payment,
+          fulfillment,
+          cancel,
+          marketplace,
+          JSON.stringify({
+            username: `utente-${id}`,
+            name: id === "x-paid" ? "Giulia Verdi" : null,
+          }),
+        ),
+      ),
+      env.DB.prepare(
+        `INSERT INTO order_items (id, order_id, line_item_id, sku, title, quantity, total_minor, currency)
+         VALUES ('i-x', 'x-paid', 'l-x', 'SKU-RICERCA', 'Lampada da tavolo', 1, 100, 'EUR')`,
+      ),
+      env.DB.prepare(
+        `INSERT INTO order_source_refs (store_id, source, external_order_id, order_id, last_modified_time)
+         VALUES ('s-a', 'fulfillment', 'x-checking', 'x-checking', ?1)`,
+      ).bind(now),
+      env.DB.prepare(
+        `INSERT INTO order_tax_checks (order_id, source, observed_at, availability)
+         VALUES ('x-missing', 'ebay_fulfillment', ?1, 'absent'), ('x-paid', 'ebay_fulfillment', ?1, 'absent')`,
+      ).bind(now),
+    ]);
+    const ids = async (query: string) =>
+      (await ordersPage(cookie, `/app/ordini?${query}`)).page!.orders.map(({ id }) => id);
+    const all = (await ordersPage(cookie, "/app/ordini?mostra=2")).page!;
+    expect(all.total).toBe(8);
+    expect(all.marketplaces).toEqual(["EBAY_DE", "EBAY_IT"]);
+    // Lo stato fiscale filtrato in SQL coincide con quello della vista per ogni ordine.
+    for (const order of all.orders)
+      expect(await ids(`fiscale=${order.fiscal.state}&mostra=2`)).toContain(order.id);
+    expect(Object.fromEntries(all.orders.map((order) => [order.id, order.fiscal.state]))).toEqual({
+      "o-a": "locked",
+      "x-paid": "missing",
+      "x-unpaid": "error",
+      "x-partial": "error",
+      "x-refunded": "error",
+      "x-unknown": "error",
+      "x-checking": "checking",
+      "x-missing": "missing",
+    });
+    expect(await ids("pagamento=paid")).toEqual(["x-paid", "x-checking", "x-missing"]);
+    expect(await ids("pagamento=unpaid")).toEqual(["x-unpaid"]);
+    expect(await ids("pagamento=partially_refunded")).toEqual(["x-partial"]);
+    expect(await ids("pagamento=refunded")).toEqual(["x-refunded"]);
+    expect(await ids("spedizione=cancelled")).toEqual(["x-refunded"]);
+    expect(await ids("spedizione=in_progress")).toEqual(["x-partial"]);
+    expect(await ids("spedizione=shipped")).toEqual(["x-paid"]);
+    expect(await ids("marketplace=EBAY_DE")).toEqual(["x-unpaid"]);
+    expect(await ids("periodo=7")).toEqual(["o-a", "x-paid", "x-unpaid", "x-partial"]);
+    // In Free il periodo di 90 giorni vale come «Tutti», come nell'interfaccia.
+    expect((await ordersPage(cookie, "/app/ordini?periodo=90")).page!.total).toBe(8);
+    expect(await ids("pagamento=sconosciuto&negozio=s-a&fiscale=missing")).toEqual([
+      "x-paid",
+      "x-missing",
+    ]);
+    // La ricerca combina le parole su numero, acquirente, articoli e SKU.
+    expect(await ids("q=giulia%20sku-ricerca")).toEqual(["x-paid"]);
+    expect(await ids("q=LAMPADA")).toEqual(["x-paid"]);
+    expect(await ids("q=utente-x-unpaid")).toEqual(["x-unpaid"]);
+    expect(await ids("q=ebay-b")).toEqual([]);
+    // «Carica altri» amplia la pagina letta dal server finché restano ordini.
+    const first = (await ordersPage(cookie)).page!;
+    expect({ shown: first.orders.length, total: first.total }).toEqual({ shown: 6, total: 8 });
+    expect(first.nextHref).toBe("/app/ordini?mostra=2");
+    expect(all.nextHref).toBeNull();
+    const filtered = (await ordersPage(cookie, "/app/ordini?pagamento=paid&negozio=collegato"))
+      .page!;
+    expect(filtered).toMatchObject({ total: 3, nextHref: null });
+    void userId;
+  });
+
   it("forma derivata di CF e Partita IVA italiani senza toccare i tipi esteri", () => {
     expect(displayTaxValue({ type: "CF", value: " rss mra80a01h501u " })).toBe("RSSMRA80A01H501U");
     expect(displayTaxValue({ type: "PIVA", value: "0123 4567 890" })).toBe("01234567890");

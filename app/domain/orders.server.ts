@@ -1,16 +1,24 @@
+import { z } from "zod";
+
 import { buyerSnapshotSchema, type BuyerSnapshot } from "./order-import.server";
 import { taxComparisonKey, taxIdentifierType, taxQuality } from "../tax-quality";
-import type {
-  FiscalNotice,
-  FiscalView,
-  OrderView,
-  PaymentStatus,
-  ShippingStatus,
-  SourceStatus,
-  SuggestionView,
-  TaxQuality,
+import {
+  fiscalStates,
+  paymentStatuses,
+  shippingStatuses,
+  type FiscalNotice,
+  type FiscalView,
+  type OrderView,
+  type PaymentStatus,
+  type ShippingStatus,
+  type SourceStatus,
+  type SuggestionView,
+  type TaxQuality,
 } from "../view-models";
 import { orderAccessSql } from "./grants.server";
+
+/** Ordini letti al massimo in una richiesta: oltre servono i cursori dell'elenco. */
+export const maxListedOrders = 300;
 import { consultableStore } from "./store-state.server";
 import { orderSuggestions } from "./order-suggestions.server";
 
@@ -139,9 +147,153 @@ function summaryOf(row: {
   };
 }
 
+/** Criteri dell'elenco, già validati: un valore assente non filtra. */
+export type OrderCriteria = {
+  storeId?: string;
+  marketplace?: string;
+  /** Ordini creati da questo istante in poi. */
+  since?: string;
+  payment?: PaymentStatus;
+  shipping?: ShippingStatus;
+  fiscal?: FiscalView["state"];
+  /** Parole cercate, in minuscolo: ognuna deve comparire nei dati consultabili dell'ordine. */
+  tokens?: string[];
+};
+
+const caseOf = (column: string, states: Record<string, string>) =>
+  `CASE ${column} ${Object.entries(states)
+    .map(([original, state]) => `WHEN '${original}' THEN '${state}'`)
+    .join(" ")} END`;
+
+/** Stato normalizzato in SQL dalle stesse tabelle di `paymentState` e `shippingState`. */
+const paymentSql = caseOf("o.payment_status", paymentStates);
+const shippingSql = `CASE WHEN o.cancel_status = 'CANCELED' THEN 'cancelled'
+  ELSE ${caseOf("o.fulfillment_status", shippingStates)} END`;
+
+/** Accesso ai valori fiscali dell'ordine all'istante ?3, nello spazio della riga. */
+const accessSql = orderAccessSql("o.id", "wm.workspace_id", "?3");
+
 /**
- * Ordini consultabili dello spazio dell'utente, dal più recente per data ordine. Con `ids` si
- * leggono soltanto quelli indicati, con gli stessi controlli di spazio, negozio e conservazione.
+ * Stato fiscale come in `listVisibleOrders`: identificativi autorizzati o da sbloccare, poi
+ * lettura non riuscita, in corso, conclusa senza dato o mai conclusa (da riprovare).
+ */
+const fiscalSql = `CASE
+  WHEN EXISTS (SELECT 1 FROM tax_identifiers WHERE order_id = o.id AND removed_at IS NULL)
+    THEN CASE WHEN ${accessSql} THEN 'available' ELSE 'locked' END
+  WHEN EXISTS (SELECT 1 FROM order_source_refs r WHERE r.order_id = o.id AND r.detail_error IS NOT NULL)
+    OR (SELECT tc.verification FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
+         WHERE original.id = o.id OR original.merged_into = o.id
+         ORDER BY tc.observed_at DESC, tc.source LIMIT 1) = 'error' THEN 'error'
+  WHEN EXISTS (SELECT 1 FROM order_source_refs r WHERE r.order_id = o.id
+    AND r.source = 'fulfillment' AND r.detail_for IS NOT r.last_modified_time) THEN 'checking'
+  WHEN EXISTS (SELECT 1 FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
+         WHERE original.id = o.id OR original.merged_into = o.id) THEN 'missing'
+  ELSE 'error' END`;
+
+/** Testo cercabile: numero, acquirente, articoli e soli valori fiscali autorizzati. */
+const searchSql = `lower(o.ebay_order_id || ' ' || COALESCE(json_extract(o.buyer_json, '$.name'), '')
+  || ' ' || COALESCE(json_extract(o.buyer_json, '$.username'), '') || ' '
+  || COALESCE((SELECT group_concat(title || ' ' || COALESCE(sku, ''), ' ')
+       FROM order_items WHERE order_id = o.id), '') || ' '
+  || CASE WHEN ${accessSql} THEN COALESCE((SELECT group_concat(value || ' ' || replace(value, ' ', ''), ' ')
+       FROM tax_identifiers WHERE order_id = o.id AND removed_at IS NULL), '') ELSE '' END)`;
+
+/**
+ * Ordini consultabili dello spazio: utente ?1, ambiente ?2, istante ?3, ID ?6 e criteri da ?7.
+ * Ogni percorso (elenco, conteggio, facet) applica gli stessi controlli di negozio e conservazione.
+ */
+const visibleOrdersSql = `FROM workspace_members wm
+   JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
+   JOIN orders o ON o.store_id = s.id
+  WHERE wm.user_id = ?1 AND s.ebay_environment = ?2 AND ${consultableStore("s")}
+    AND o.retention_until > ?3
+    AND o.merged_into IS NULL
+    AND NOT (o.is_provisional = 1 AND o.cancel_status IS 'CANCELED')
+    AND (?6 IS NULL OR o.id IN (SELECT value FROM json_each(?6)))
+    AND (?7 IS NULL OR o.store_id = ?7)
+    AND (?8 IS NULL OR o.marketplace_id = ?8)
+    AND (?9 IS NULL OR o.creation_time >= ?9)
+    AND (?10 IS NULL OR ${paymentSql} = ?10)
+    AND (?11 IS NULL OR ${shippingSql} = ?11)
+    AND (?12 IS NULL OR ${fiscalSql} = ?12)
+    AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(?13, '[]')) token
+                     WHERE instr(${searchSql}, token.value) = 0)`;
+
+function visibleOrdersParams(
+  userId: string,
+  ebayEnvironment: "production" | "sandbox",
+  now: Date,
+  limit: number,
+  ids: string[] | undefined,
+  criteria: OrderCriteria,
+) {
+  return [
+    userId,
+    ebayEnvironment,
+    now.toISOString(),
+    limit,
+    now.toISOString(),
+    ids ? JSON.stringify(ids) : null,
+    criteria.storeId ?? null,
+    criteria.marketplace ?? null,
+    criteria.since ?? null,
+    criteria.payment ?? null,
+    criteria.shipping ?? null,
+    criteria.fiscal ?? null,
+    criteria.tokens?.length ? JSON.stringify(criteria.tokens) : null,
+  ];
+}
+
+/** Ordini che soddisfano i criteri, senza leggerli. */
+export async function countVisibleOrders(
+  db: D1Database,
+  userId: string,
+  ebayEnvironment: "production" | "sandbox",
+  now: Date,
+  criteria: OrderCriteria = {},
+): Promise<number> {
+  const row = await db
+    .prepare(`SELECT count(*) AS total ${visibleOrdersSql}`)
+    .bind(...visibleOrdersParams(userId, ebayEnvironment, now, 0, undefined, criteria))
+    .first<{ total: number }>();
+  return row?.total ?? 0;
+}
+
+/**
+ * Dati dell'intero elenco consultabile, indipendenti dai criteri: quanti ordini esistono, i
+ * marketplace da offrire fra i filtri e se qualche ordine ha un dato da sbloccare.
+ */
+export async function visibleOrderFacets(
+  db: D1Database,
+  userId: string,
+  ebayEnvironment: "production" | "sandbox",
+  now: Date,
+): Promise<{ total: number; marketplaces: string[]; locked: boolean }> {
+  const row = await db
+    .prepare(
+      `SELECT count(*) AS total,
+              json_group_array(DISTINCT o.marketplace_id) FILTER (WHERE o.marketplace_id IS NOT NULL)
+                AS marketplaces,
+              MAX(${fiscalSql} = 'locked') AS locked
+         ${visibleOrdersSql}`,
+    )
+    .bind(...visibleOrdersParams(userId, ebayEnvironment, now, 0, undefined, {}))
+    .first<{ total: number; marketplaces: string | null; locked: number | null }>();
+  return {
+    total: row?.total ?? 0,
+    marketplaces: z
+      .array(z.string())
+      .catch([])
+      .parse(JSON.parse(row?.marketplaces ?? "[]"))
+      .sort(),
+    locked: !!row?.locked,
+  };
+}
+
+/**
+ * Ordini consultabili dello spazio dell'utente, dal più recente per data ordine, fino a `limit`.
+ * Con `ids` si leggono soltanto quelli indicati; i criteri filtrano nella stessa query, con gli
+ * stessi controlli di spazio, negozio e conservazione.
  */
 export async function listVisibleOrders(
   db: D1Database,
@@ -149,21 +301,13 @@ export async function listVisibleOrders(
   requestedLimit = 50,
   ebayEnvironment: "production" | "sandbox" = "production",
   now = new Date(),
-  filter: { ids?: string[] } = {},
+  filter: { ids?: string[]; criteria?: OrderCriteria } = {},
 ): Promise<VisibleOrder[]> {
-  const limit = Math.max(1, Math.min(100, Math.trunc(requestedLimit)));
+  const limit = Math.max(1, Math.min(maxListedOrders, Math.trunc(requestedLimit)));
   const result = await db
     .prepare(
       `WITH visible_orders AS (
-         SELECT o.id, wm.workspace_id
-           FROM workspace_members wm
-           JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
-           JOIN orders o ON o.store_id = s.id
-          WHERE wm.user_id = ?1 AND s.ebay_environment = ?2 AND ${consultableStore("s")}
-            AND o.retention_until > ?3
-            AND o.merged_into IS NULL
-            AND NOT (o.is_provisional = 1 AND o.cancel_status IS 'CANCELED')
-            AND (?6 IS NULL OR o.id IN (SELECT value FROM json_each(?6)))
+         SELECT o.id, wm.workspace_id ${visibleOrdersSql}
           ORDER BY o.creation_time DESC, o.id DESC
           LIMIT ?4
        )
@@ -212,12 +356,14 @@ export async function listVisibleOrders(
         ORDER BY o.creation_time DESC, o.id DESC, ti.identifier_type, ti.issuing_country DESC`,
     )
     .bind(
-      userId,
-      ebayEnvironment,
-      now.toISOString(),
-      limit,
-      now.toISOString(),
-      filter.ids ? JSON.stringify(filter.ids) : null,
+      ...visibleOrdersParams(
+        userId,
+        ebayEnvironment,
+        now,
+        limit,
+        filter.ids,
+        filter.criteria ?? {},
+      ),
     )
     .all<{
       id: string;
@@ -477,5 +623,40 @@ export function orderView(order: VisibleOrder): OrderView {
     ...(order.reconciliationIssue ? { reconciliationIssue: true } : {}),
     ...(thumbnail ? { thumbnail } : {}),
     lastSyncedAt: order.taxCheckedAt,
+  };
+}
+
+/**
+ * Criteri dell'elenco dall'indirizzo: un valore sconosciuto, o un'opzione del piano Premium in
+ * Free, vale come «Tutti». La ricerca diventa un elenco di parole in minuscolo.
+ */
+export function orderCriteria(
+  search: URLSearchParams,
+  now: Date,
+  plan: "free" | "premium",
+): OrderCriteria {
+  const known = <Value extends string>(name: string, values: readonly Value[]) => {
+    const value = search.get(name);
+    return values.find((candidate) => candidate === value);
+  };
+  const days = known("periodo", plan === "premium" ? ["7", "30", "90"] : ["7", "30"]);
+  const tokens = (search.get("q") ?? "")
+    .trim()
+    .toLowerCase()
+    .split(/\s+/u)
+    .filter(Boolean)
+    .slice(0, 10);
+  const value = (name: string) => {
+    const raw = search.get(name);
+    return raw && raw.length <= 64 ? raw : undefined;
+  };
+  return {
+    storeId: value("negozio"),
+    marketplace: value("marketplace"),
+    since: days ? new Date(now.getTime() - Number(days) * 86_400_000).toISOString() : undefined,
+    payment: known("pagamento", paymentStatuses),
+    shipping: known("spedizione", shippingStatuses),
+    fiscal: known("fiscale", fiscalStates),
+    tokens: tokens.length ? tokens : undefined,
   };
 }

@@ -16,14 +16,21 @@ import {
   unlockOrders,
 } from "../domain/grants.server";
 import { requestOrderRead } from "../domain/order-sync.server";
-import { listVisibleOrders, orderView } from "../domain/orders.server";
+import {
+  countVisibleOrders,
+  listVisibleOrders,
+  maxListedOrders,
+  orderCriteria,
+  orderView,
+  visibleOrderFacets,
+} from "../domain/orders.server";
 import { listStores } from "../domain/stores.server";
 import { errorResponse } from "../error-response";
 import { logFailure } from "../errors";
 import { languageFromPath, localizedPath, type Language } from "../i18n";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import { describeRequest, measure } from "../observability.server";
-import { orderPage } from "../order-list";
+import { ordersPageSize } from "../order-list";
 import { settle } from "../settle.server";
 import type { ActionResult, OrderView, OrdersNotice } from "../view-models";
 import type { Route } from "./+types/orders";
@@ -36,9 +43,6 @@ export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
 export function headers(): HeadersInit {
   return { "cache-control": "no-store" };
 }
-
-/** Ordini caricati al massimo per richiesta, prima di filtri e «Carica altri». */
-const loadedOrders = 100;
 
 /** Una verifica fiscale ancora in corso: lo sblocco resta sospeso finché non è confermata. */
 function verifying(order: OrderView) {
@@ -72,18 +76,44 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const verified = session.user.emailVerified;
   const now = new Date();
   const requested = params.ordine && params.ordine.length <= 64 ? params.ordine : null;
-  const read = (ids?: string[]) =>
-    measure("d1", "orders", () =>
-      listVisibleOrders(env.DB, userId, ids ? ids.length : loadedOrders, ebayEnvironment, now, {
-        ids,
-      }),
-    ).then((orders) => orders.map(orderView));
-  const [orders, detailOrders, stores, allowance, confirmUnlock] = await Promise.all([
-    verified ? read() : [],
-    verified && requested ? read([requested]) : [],
+  const [stores, allowance, confirmUnlock] = await Promise.all([
     verified ? measure("d1", "stores", () => listStores(env.DB, userId)) : [],
     verified ? measure("d1", "allowance", () => orderAllowance(env.DB, userId, now)) : null,
     unlockConfirmation(env.DB, userId),
+  ]);
+  const premium = !!allowance?.premium;
+  // `negozio` porta anche l'esito del collegamento di un negozio, che non è un filtro.
+  const query = new URLSearchParams(search);
+  if (Object.hasOwn(appCopy[language].access.storeNotices, query.get("negozio") ?? ""))
+    query.delete("negozio");
+  const criteria = orderCriteria(query, now, premium ? "premium" : "free");
+  // «Carica altri» amplia la pagina letta dal server, entro il massimo di una richiesta.
+  const shown = Math.min(
+    Math.max(Math.trunc(Number(query.get("mostra"))) || 1, 1),
+    Math.floor(maxListedOrders / ordersPageSize),
+  );
+  const read = (ids?: string[]) =>
+    measure("d1", "orders", () =>
+      listVisibleOrders(
+        env.DB,
+        userId,
+        ids ? ids.length : shown * ordersPageSize,
+        ebayEnvironment,
+        now,
+        ids ? { ids } : { criteria },
+      ),
+    ).then((orders) => orders.map(orderView));
+  const [orders, total, facets, detailOrders] = await Promise.all([
+    verified ? read() : [],
+    verified
+      ? measure("d1", "orders", () =>
+          countVisibleOrders(env.DB, userId, ebayEnvironment, now, criteria),
+        )
+      : 0,
+    verified
+      ? measure("d1", "orders", () => visibleOrderFacets(env.DB, userId, ebayEnvironment, now))
+      : { total: 0, marketplaces: [], locked: false },
+    verified && requested ? read([requested]) : [],
   ]);
   const notice = accessNotice(search, language);
   const detail = detailOrders[0] ?? null;
@@ -96,18 +126,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
   const environmentStores = stores.filter((store) => store.ebayEnvironment === ebayEnvironment);
   const linked = environmentStores.filter((store) => store.connection !== "disconnected");
-  // `negozio` porta anche l'esito del collegamento di un negozio, che non è un filtro.
-  const criteria = new URLSearchParams(search);
-  if (Object.hasOwn(appCopy[language].access.storeNotices, criteria.get("negozio") ?? ""))
-    criteria.delete("negozio");
-  const page = orderPage(
+  const next = new URLSearchParams(query);
+  next.set("mostra", String(shown + 1));
+  const page = {
     orders,
-    criteria,
-    now.toISOString(),
-    (query) => `${localizedPath(language, ordersPath)}?${query}`,
-  );
+    total,
+    nextHref:
+      total > orders.length && shown * ordersPageSize < maxListedOrders
+        ? `${localizedPath(language, ordersPath)}?${next}`
+        : null,
+  };
   const cycle = allowance?.cycle ?? null;
-  const premium = !!allowance?.premium;
   const notices: OrdersNotice[] = [
     // Prima i collegamenti già scaduti, poi quelli in scadenza.
     ...environmentStores
@@ -120,10 +149,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           ? { kind: "store-issue", storeId: store.id, storeName: store.name }
           : { kind: "consent-expiring", storeId: store.id, storeName: store.name, at: store.at },
       ),
-    ...(!premium &&
-    cycle &&
-    allowance?.remaining === 0 &&
-    orders.some((order) => order.fiscal.state === "locked")
+    ...(!premium && cycle && allowance?.remaining === 0 && facets.locked
       ? [{ kind: "quota" as const, until: cycle.ends_at }]
       : []),
     ...(environmentStores.some((store) => store.history?.done === false)
@@ -141,16 +167,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     .sort()
     .at(-1);
   const pageData: OrdersPageData = {
-    view: orders.length > 0 ? "list" : linked.length > 0 ? "empty" : "no-store",
+    view: facets.total > 0 ? "list" : linked.length > 0 ? "empty" : "no-store",
     ...page,
     incoming: [],
     detail,
     stores: environmentStores
       .filter((store) => !store.pauseReasons.includes("plan"))
       .map((store) => ({ id: store.id, name: store.name })),
-    marketplaces: [
-      ...new Set(orders.flatMap((order) => (order.marketplace ? [order.marketplace] : []))),
-    ],
+    marketplaces: facets.marketplaces,
     account: {
       plan: premium ? "premium" : "free",
       // Prima del primo collegamento nessun ciclo è avviato e nessuno sblocco è disponibile.

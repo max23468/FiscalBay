@@ -80,6 +80,7 @@ export function usePageTiming(page: TimedPage) {
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", hidden);
       send();
+      observer?.disconnect();
     };
   }, [page]);
 }
