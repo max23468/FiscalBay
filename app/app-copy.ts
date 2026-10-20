@@ -176,6 +176,7 @@ const it = {
     copy: (label: string, order: string) => `Copia ${label}: ordine ${order}`,
     copied: "Copiato negli appunti",
     copyFailed: "Copia non riuscita. Riprova oppure seleziona e copia il codice.",
+    contactCopyFailed: "Copia non riuscita. Riprova oppure seleziona e copia il testo.",
     lockedLabel: (label: string) => `${label} da sbloccare`,
     lockedHint: (remaining: number) =>
       `Hai ${remaining} ${plural(remaining, "sblocco disponibile", "sblocchi disponibili")} in questo ciclo. Questo ordine ne usa uno.`,
@@ -223,6 +224,8 @@ const it = {
     messageCopyFailed: "Copia non riuscita. Seleziona e copia il testo del messaggio.",
     requestMessage: "Copia messaggio per l’acquirente",
     requestCopied: "Messaggio copiato. Invialo all’acquirente dai tuoi canali.",
+    requestEmail: "Scrivi all’acquirente via email",
+    requestEmailSubject: (order: string) => `Ordine eBay ${order}: Codice Fiscale per la fattura`,
     syncedAgo: (time: string) => `Aggiornato ${time}`,
     refreshingTitle: "Aggiornamento in corso",
     ebayDownTitle: "eBay non risponde",
@@ -1028,6 +1031,7 @@ const en: AppCopy = {
     copy: (label, order) => `Copy ${label}: order ${order}`,
     copied: "Copied to clipboard",
     copyFailed: "Copy failed. Try again, or select and copy the code.",
+    contactCopyFailed: "Copy failed. Try again, or select and copy the text.",
     lockedLabel: (label) => `${label} to unlock`,
     lockedHint: (remaining) =>
       `You have ${remaining} ${plural(remaining, "unlock", "unlocks")} left this cycle. This order uses one.`,
@@ -1074,6 +1078,8 @@ const en: AppCopy = {
     messageCopyFailed: "Copy failed. Select and copy the message text.",
     requestMessage: "Copy message for the buyer",
     requestCopied: "Message copied. Send it to the buyer through your own channels.",
+    requestEmail: "Email the buyer",
+    requestEmailSubject: (order) => `eBay order ${order}: tax code for the invoice`,
     syncedAgo: (time) => `Updated ${time}`,
     refreshingTitle: "Updating",
     ebayDownTitle: "eBay is not responding",

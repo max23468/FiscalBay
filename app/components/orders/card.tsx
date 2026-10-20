@@ -23,8 +23,10 @@ import {
   formatDate,
   marketplaceLabel,
   type AddressView,
+  type ContactsView,
   type OrderView,
 } from "../../view-models";
+import { CopyButton } from "~/components/tax-code";
 import { FiscalCodes, FiscalNotes, type FiscalProps } from "./fiscal";
 import { ebayOrderHref } from "./labels";
 import { buyerLabel, paymentLabel, shippingLabel, type PillTone } from "./status";
@@ -49,30 +51,118 @@ const coarseTarget =
 const enterStep = 40;
 const maxEnterSteps = 6;
 
-export function AddressLines({ address, language }: { address: AddressView; language: Language }) {
+/** Righe dell'indirizzo, già nella forma mostrata dal modello di vista. */
+function addressRows(address: AddressView, language: Language) {
   const province = address.province ? ` (${address.province})` : "";
+  return [
+    address.line,
+    `${address.postalCode} ${address.city}${province}`.trim(),
+    countryName(address.countryCode, language),
+  ];
+}
+
+export function AddressLines({
+  address,
+  language,
+  copy,
+}: {
+  address: AddressView;
+  language: Language;
+  /** Etichette del pulsante Copia; senza, l'indirizzo è soltanto mostrato. */
+  copy?: CopyLabels;
+}) {
+  const [line, locality, country] = addressRows(address, language);
   return (
-    <>
-      <span className="block">{address.line}</span>
-      <span className="block">
-        {address.postalCode} {address.city}
-        {province}, {countryName(address.countryCode, language)}
+    <span className="inline-flex max-w-full items-start gap-1">
+      <span className="min-w-0">
+        <span className="block">{line}</span>
+        <span className="block">
+          {locality}, {country}
+        </span>
       </span>
-    </>
+      {copy ? (
+        <CopyButton
+          value={addressRows(address, language).join("\n")}
+          labels={copy}
+          tone="neutral"
+        />
+      ) : null}
+    </span>
   );
 }
 
-export function EmailAddress({ email }: { email: string }) {
+export type CopyLabels = { copy: string; copied: string; copyFailed: string };
+
+const contactLink =
+  "rounded-sm underline decoration-muted-foreground/40 underline-offset-4 outline-none hover:decoration-current focus-visible:ring-2 focus-visible:ring-ring";
+
+/**
+ * Telefono nella forma internazionale, da toccare per chiamare; un numero non riconosciuto
+ * resta com'è e non diventa un collegamento.
+ */
+export function PhoneNumber({
+  phone,
+  view,
+  copy,
+}: {
+  phone: string;
+  view: ContactsView["phone"];
+  copy?: CopyLabels;
+}) {
+  if (!view) return <span className="font-code break-words">{phone}</span>;
+  return (
+    <span className="inline-flex max-w-full items-center gap-1">
+      <a href={`tel:${view.international}`} className={cn("font-code", contactLink)}>
+        {view.display}
+      </a>
+      {copy ? <CopyButton value={view.international} labels={copy} tone="neutral" /> : null}
+    </span>
+  );
+}
+
+/** Email da aprire nel programma di posta; una forma non riconosciuta resta testo. */
+export function EmailLink({
+  email,
+  view,
+  copy,
+}: {
+  email: string;
+  view: ContactsView["email"];
+  copy?: CopyLabels;
+}) {
+  if (!view) return <EmailAddress email={email} />;
+  return (
+    <span className="inline-flex max-w-full items-center gap-1">
+      <a
+        href={`mailto:${view.address}`}
+        className="group/email min-w-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {/* Le parti in blocco non ereditano la sottolineatura del collegamento. */}
+        <EmailAddress
+          email={view.address}
+          className="underline decoration-muted-foreground/40 underline-offset-4 group-hover/email:decoration-current"
+        />
+      </a>
+      {copy ? <CopyButton value={view.address} labels={copy} tone="neutral" /> : null}
+    </span>
+  );
+}
+
+function EmailAddress({ email, className }: { email: string; className?: string }) {
   const separator = email.lastIndexOf("@");
   const local = separator < 0 ? email : email.slice(0, separator);
   const domain = separator < 0 ? null : email.slice(separator);
   return (
     <>
-      <span className="inline-block max-w-full [overflow-wrap:anywhere]">{local}</span>
+      <span className={cn("inline-block max-w-full [overflow-wrap:anywhere]", className)}>
+        {local}
+      </span>
       {domain === null ? null : (
         <>
           <wbr />
-          <span className="inline-block max-w-full [overflow-wrap:anywhere]">{domain}</span>
+          <span className={cn("inline-block max-w-full [overflow-wrap:anywhere]", className)}>
+            {domain}
+          </span>
         </>
       )}
     </>
@@ -120,8 +210,8 @@ function BuyerContacts({
       <div className="grid content-start gap-0.5">
         <dt className="text-xs font-medium text-muted-foreground">{t.orders.billingAddress}</dt>
         <dd className="text-pretty">
-          {order.billingAddress ? (
-            <AddressLines address={order.billingAddress} language={language} />
+          {order.contacts.billingAddress ? (
+            <AddressLines address={order.contacts.billingAddress} language={language} />
           ) : (
             missing
           )}
@@ -129,11 +219,15 @@ function BuyerContacts({
       </div>
       <div className="grid content-start gap-0.5">
         <dt className="text-xs font-medium text-muted-foreground">{t.orders.phone}</dt>
-        <dd className="font-code">{order.phone ?? missing}</dd>
+        <dd>
+          {order.phone ? <PhoneNumber phone={order.phone} view={order.contacts.phone} /> : missing}
+        </dd>
       </div>
       <div className="grid min-w-0 content-start gap-0.5 sm:col-span-2">
         <dt className="text-xs font-medium text-muted-foreground">{t.orders.email}</dt>
-        <dd>{order.email ? <EmailAddress email={order.email} /> : missing}</dd>
+        <dd>
+          {order.email ? <EmailLink email={order.email} view={order.contacts.email} /> : missing}
+        </dd>
       </div>
     </dl>
   );

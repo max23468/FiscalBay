@@ -19,6 +19,15 @@ export function taxCodeLabels(label: string, order: string, t: AppCopy) {
   };
 }
 
+/** Etichette del pulsante Copia di un contatto, con il nome del dato e dell'ordine. */
+export function contactCopyLabels(label: string, order: string, t: AppCopy) {
+  return {
+    copy: t.orders.copy(label.toLowerCase(), order),
+    copied: t.orders.copied,
+    copyFailed: t.orders.contactCopyFailed,
+  };
+}
+
 /** Sblocchi rimasti nel ciclo; null senza limite (Premium). */
 export function remainingUnlocks(account: OrdersAccount) {
   return account.quota ? Math.max(account.quota.limit - account.quota.used, 0) : null;

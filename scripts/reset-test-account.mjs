@@ -193,6 +193,22 @@ async function main() {
         const olderDate = new Date(Date.now() - 2 * day).toISOString();
         statements.push(`DELETE FROM tax_identifiers WHERE order_id IN ('${id}', '${id}-2', '${id}-3');
         UPDATE orders SET buyer_eias_token = 'synthetic-stable-buyer' WHERE store_id = '${id}';
+        UPDATE orders SET buyer_json = ${quote(
+          JSON.stringify({
+            username: "acquirente-collaudo",
+            name: "Acquirente Collaudo",
+            email: "Acquirente.Collaudo@Example.INVALID",
+            phone: "333 000 1000",
+            billingAddress: {
+              addressLine1: "VIA DEL CORSO 1",
+              city: "ROMA",
+              postalCode: "00186",
+              stateOrProvince: "RM",
+              countryCode: "IT",
+            },
+            shipTo: null,
+          }),
+        )} WHERE id = '${id}';
         UPDATE orders SET creation_time = '${sourceDate}' WHERE id = '${id}-2';
         UPDATE orders SET creation_time = '${olderDate}' WHERE id = '${id}-3';
         INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
