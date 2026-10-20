@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import features from "../app/components/orders/motion-features";
 import {
   buildLastModifiedFilter,
   fulfillmentObservation,
@@ -2084,5 +2085,13 @@ describe("vista condivisa e criteri degli ordini", () => {
       marketplaces: [],
       locked: false,
     });
+  });
+});
+
+describe("animazioni della lista ordini", () => {
+  it("caricano dopo la pagina anche il riordino delle schede", () => {
+    // `layout="position"` sulle schede richiede le funzioni di layout, assenti nel set minimo.
+    expect(features).toHaveProperty("layout");
+    expect(features).toHaveProperty("animation");
   });
 });

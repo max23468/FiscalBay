@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import { Check, ClipboardList, Clock, Plus } from "lucide-react";
-import { domMax, LazyMotion, MotionConfig } from "motion/react";
+import { LazyMotion, MotionConfig } from "motion/react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Link, useFetcher, useLocation, useSearchParams } from "react-router";
 
@@ -70,6 +70,14 @@ export interface UnlockResult {
   remaining: number | null;
   error?: boolean;
 }
+
+// Le animazioni sono un complemento: se il modulo non arriva, per esempio perché si lascia
+// la pagina mentre si carica, le schede restano ferme senza un errore non gestito.
+const loadMotionFeatures = () =>
+  import("./motion-features").then(
+    (module) => module.default,
+    () => new Promise<never>(() => {}),
+  );
 
 function isEbayDown(data: OrdersPageData) {
   return data.notices.some((notice) => notice.kind === "ebay-down");
@@ -586,7 +594,7 @@ function OrdersList({
         <NoResults criteria={criteria} onlySearch={onlySearch} href={ordersHref} t={t} />
       ) : (
         <>
-          <LazyMotion features={domMax} strict>
+          <LazyMotion features={loadMotionFeatures} strict>
             <MotionConfig
               reducedMotion="user"
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}

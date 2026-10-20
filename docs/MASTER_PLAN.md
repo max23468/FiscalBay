@@ -559,7 +559,7 @@ Accessibilità baseline obbligatoria 2.0: tastiera, focus visibile/gestito, etic
 
 Token semantici, dominio, naming e contratti condivisibili con Expo; implementazioni visuali web-specifiche ammesse. Componenti HTML/CSS non diventano nativi per il solo uso di React. Non introdurre WebView come sostituto della futura esperienza nativa né dipendenze Expo nel runtime 2.0. [S17](SOURCES.md#s17)
 
-**Prestazioni percepite.** La build fallisce se il JavaScript client supera un budget gzip dichiarato nel repository (valore iniziale 350 KiB, rivedibile solo con motivazione); il budget entra insieme al design system. Le pagine che dipendono da una verifica remota lenta mostrano subito l'ultimo stato salvato con un'indicazione di verifica in corso e azioni sensibili disabilitate, poi lo sostituiscono con lo stato confermato in streaming; se la verifica fallisce compaiono avviso e «Riprova». Non si attende il provider prima di inviare l'HTML e non si presenta come confermato un dato ancora in verifica. Dati sensibili bloccati restano esclusi anche dallo stato provvisorio.
+**Prestazioni percepite.** La build fallisce se il JavaScript iniziale di una pagina supera il budget gzip della sua classe, dichiarato nel repository e rivedibile solo con motivazione: 170 KiB per sito, documenti legali ed errori, 280 KiB per area riservata, accesso, amministrazione e anteprima (D182). Conta ciò che il browser carica all'apertura della pagina; gli import dinamici successivi al primo disegno e il totale di tutti i file restano informativi. Le pagine che dipendono da una verifica remota lenta mostrano subito l'ultimo stato salvato con un'indicazione di verifica in corso e azioni sensibili disabilitate, poi lo sostituiscono con lo stato confermato in streaming; se la verifica fallisce compaiono avviso e «Riprova». Non si attende il provider prima di inviare l'HTML e non si presenta come confermato un dato ancora in verifica. Dati sensibili bloccati restano esclusi anche dallo stato provvisorio.
 
 <a id="s23"></a>
 ## 23. Sito pubblico, contenuti e SEO
@@ -1354,7 +1354,7 @@ Aggiungere alla build il controllo del JavaScript client entro il budget gzip di
 
 **Criterio di completamento:** Un bundle oltre budget fa fallire la build; un deploy test con p95 oltre soglia o con errori fallisce e ripristina la versione precedente, provato almeno una volta con soglia forzata. Ricevuta con p95, numero di eventi e versione.
 
-**Limite:** il controllo CPU al deploy test è stato rimosso con D158; resta bloccante il budget del bundle client.
+**Limite:** il controllo CPU al deploy test è stato rimosso con D158; resta bloccante il budget del bundle client, misurato per pagina dal D182 invece che sul totale iniziale di 350 KiB.
 
 <a id="m2"></a>
 ### M2 · Account, Auth e Negozi eBay
