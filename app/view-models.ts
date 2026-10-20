@@ -143,6 +143,13 @@ export interface AddressView {
   countryCode: string;
 }
 
+/** Contatti dell'acquirente nella forma mostrata; null dove la forma non è riconosciuta. */
+export interface ContactsView {
+  phone: { display: string; international: string } | null;
+  email: { address: string; relay: boolean } | null;
+  billingAddress: AddressView | null;
+}
+
 export interface OrderItemView {
   id: string;
   title: string;
@@ -196,6 +203,8 @@ export interface OrderView {
   billingAddress: AddressView | null;
   phone: string | null;
   email: string | null;
+  /** Telefono, email e indirizzo nella forma mostrata; gli originali restano qui sopra. */
+  contacts: ContactsView;
   fiscal: FiscalView;
   /** Suggerimenti Premium da ordini precedenti, uno per identificativo. */
   suggestions: SuggestionView[];

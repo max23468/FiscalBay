@@ -58,12 +58,62 @@ test.describe("miglioramenti account e negozi", () => {
       await page.screenshot({ path: `/tmp/fiscalbay-suggestions-${language}.png` });
       const message = dialog.getByLabel(it ? "Testo per l’acquirente" : "Text for the buyer");
       await expect(message).toHaveValue(new RegExp(`suggestions-${language}`));
+      // Contatti formattati e utilizzabili; l'originale di eBay resta nel database.
+      await expect(dialog.getByText("Via del Corso 1", { exact: true })).toBeVisible();
+      await expect(dialog.getByRole("link", { name: "+39 333 000 1000" })).toHaveAttribute(
+        "href",
+        "tel:+393330001000",
+      );
+      await expect(
+        dialog.locator('a[href="mailto:Acquirente.Collaudo@example.invalid"]'),
+      ).toHaveText("Acquirente.Collaudo@example.invalid");
+      await dialog
+        .getByRole("button", {
+          name: it
+            ? `Copia telefono: ordine suggestions-${language}`
+            : `Copy phone: order suggestions-${language}`,
+        })
+        .click();
+      expect(
+        await page.evaluate(() => (window as Window & { copiedText?: string }).copiedText),
+      ).toBe("+393330001000");
+      await dialog
+        .getByRole("button", {
+          name: it
+            ? `Copia indirizzo di fatturazione: ordine suggestions-${language}`
+            : `Copy billing address: order suggestions-${language}`,
+        })
+        .click();
+      expect(
+        await page.evaluate(() => (window as Window & { copiedText?: string }).copiedText),
+      ).toBe(`Via del Corso 1\n00186 Roma (RM)\n${it ? "Italia" : "Italy"}`);
+      // La richiesta si apre come email già compilata nel programma di posta.
+      const request = dialog.getByRole("link", {
+        name: it ? "Scrivi all’acquirente via email" : "Email the buyer",
+      });
+      const requestHref = new URL((await request.getAttribute("href"))!);
+      expect(requestHref.protocol).toBe("mailto:");
+      expect(requestHref.pathname).toBe("Acquirente.Collaudo@example.invalid");
+      expect(requestHref.searchParams.get("subject")).toBe(
+        it
+          ? `Ordine eBay suggestions-${language}: Codice Fiscale per la fattura`
+          : `eBay order suggestions-${language}: tax code for the invoice`,
+      );
+      expect(requestHref.searchParams.get("body")).toBe(await message.inputValue());
       await dialog
         .getByRole("combobox", { name: it ? "Lingua del messaggio" : "Message language" })
         .click();
       await page.getByRole("option", { name: it ? "English" : "Italiano", exact: true }).click();
       await expect(message).toHaveValue(it ? /^Hello/ : /^Buongiorno/);
       await message.fill(`Richiesta modificata suggestions-${language}`);
+      // Oggetto nella lingua scelta e testo modificato anche nell'email.
+      const edited = new URL((await request.getAttribute("href"))!);
+      expect(edited.searchParams.get("subject")).toBe(
+        it
+          ? `eBay order suggestions-${language}: tax code for the invoice`
+          : `Ordine eBay suggestions-${language}: Codice Fiscale per la fattura`,
+      );
+      expect(edited.searchParams.get("body")).toBe(`Richiesta modificata suggestions-${language}`);
       await dialog
         .getByRole("button", {
           name: it ? "Copia messaggio per l’acquirente" : "Copy message for the buyer",

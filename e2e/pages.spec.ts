@@ -291,9 +291,15 @@ for (const scenario of scenarios) {
           // resta fuori dall'indirizzo.
           const searchFor = async (query: string) => {
             const search = page.getByRole("searchbox", { name: /Cerca ordini|Search orders/u });
-            // Sugli schermi stretti il campo si apre dal pulsante della barra.
-            if (!(await search.isVisible()))
-              await page.getByRole("button", { name: /^(Cerca ordini|Search orders)$/u }).click();
+            // Sugli schermi stretti il campo si apre dal pulsante della barra: un tocco arrivato
+            // prima dell'idratazione non apre il foglio, quindi si ripete finché il campo è pronto.
+            await expect(async () => {
+              if (!(await search.isVisible()))
+                await page
+                  .getByRole("button", { name: /^(Cerca ordini|Search orders)$/u })
+                  .click({ timeout: 2_000 });
+              await expect(search).toBeEditable({ timeout: 2_000 });
+            }).toPass({ timeout: 20_000 });
             await search.fill(query);
             await search.press("Enter");
           };

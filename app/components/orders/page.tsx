@@ -71,7 +71,13 @@ export interface UnlockResult {
   error?: boolean;
 }
 
-const loadMotionFeatures = () => import("./motion-features").then((module) => module.default);
+// Le animazioni sono un complemento: se il modulo non arriva, per esempio perché si lascia
+// la pagina mentre si carica, le schede restano ferme senza un errore non gestito.
+const loadMotionFeatures = () =>
+  import("./motion-features").then(
+    (module) => module.default,
+    () => new Promise<never>(() => {}),
+  );
 
 function isEbayDown(data: OrdersPageData) {
   return data.notices.some((notice) => notice.kind === "ebay-down");
