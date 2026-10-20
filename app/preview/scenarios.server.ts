@@ -82,11 +82,12 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
     it: {
       name: "Aggiornamento in corso",
       focus:
-        "Indicatore locale, ordini consultabili e nuovi ordini inseriti subito in cima alla lista.",
+        "Indicatore locale, ordini consultabili, nuovi ordini inseriti subito in cima alla lista e sblocco sospeso fino al pagamento.",
     },
     en: {
       name: "Update in progress",
-      focus: "Local indicator, orders still available, new orders added at the top of the list.",
+      focus:
+        "Local indicator, orders still available, new orders added at the top of the list and unlocking on hold until payment.",
     },
   },
   "ebay-non-disponibile": {
@@ -1026,7 +1027,12 @@ export function loadScenario(
         ...common,
         account: account(),
         stores: [storeView("vintage", { syncing: true }), freeStores[1]!],
-        seeds: freeSeeds,
+        // Un acquisto non ancora pagato con il dato presente: lo sblocco attende il pagamento.
+        seeds: freeSeeds.map((seed) =>
+          seed.id === "ord-08"
+            ? { ...seed, fiscal: { state: "locked", shownAs: "CF", hold: "unpaid" } }
+            : seed,
+        ),
         premium: false,
         syncRunning: true,
         incoming: incomingSeeds.map((seed) => toOrder(seed, freeStores)),

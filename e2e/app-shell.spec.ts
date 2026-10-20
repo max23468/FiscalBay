@@ -14,6 +14,16 @@ async function open(page: Page, path = "/anteprima/ordini") {
   await page.waitForLoadState("networkidle");
 }
 
+/** Elenco con la ricerca: la query va nel corpo e l'indirizzo riceve la sua forma cifrata. */
+async function searched(page: Page, query: string, base = "/anteprima") {
+  const response = await page.request.post(`${base}/ricerca`, {
+    form: { q: query },
+    maxRedirects: 0,
+  });
+  expect(response.status()).toBe(303);
+  return response.headers().location!;
+}
+
 async function chooseScenario(page: Page, name: string) {
   await page.getByRole("combobox", { name: /Scenario/ }).click();
   await page.getByRole("option", { name, exact: true }).click();
@@ -106,7 +116,7 @@ test("la selezione sblocca più ordini entro la quota", async ({ page }) => {
   // Il filtro «Da sbloccare» esclude gli ordini appena sbloccati.
   await expect(page.getByRole("status").filter({ hasText: "2 ordini sbloccati." })).toBeVisible();
   await expect(page.getByRole("article")).toHaveCount(0);
-  await page.goto("/anteprima/ordini?q=Conti");
+  await page.goto(await searched(page, "Conti"));
   await expect(page.getByText("04567890126")).toBeVisible();
 });
 
@@ -159,7 +169,7 @@ for (const language of ["it", "en"] as const) {
             .getByRole("button", { name: language === "it" ? "Sblocca" : "Unlock", exact: true })
             .click();
           expect((await unlocked).status()).toBe(200);
-          await page.goto(`${base}/ordini?q=Conti`);
+          await page.goto(await searched(page, "Conti", base));
           await expect(page.getByText("04567890126")).toBeVisible();
           await open(page, `${base}/impostazioni/piano`);
           await expect(
@@ -285,14 +295,17 @@ test("la ricerca della top bar suggerisce e apre l'elenco filtrato", async ({
   const suggestion = page.getByRole("search").getByRole("link", { name: /Maria Rossi/ });
   await expect(suggestion).toBeVisible();
   await page.getByRole("link", { name: "Vedi tutti i risultati (1)" }).click();
-  await expect(page).toHaveURL(/\?q=carburatore$/u);
+  // L'indirizzo conserva la ricerca soltanto cifrata.
+  await expect(page).toHaveURL(/\/anteprima\/ordini\?ricerca=[\w-]+$/u);
+  expect(page.url()).not.toContain("carburatore");
+  await expect(search).toHaveValue("carburatore");
   await expect(
     page.getByRole("region", { name: "Elenco ordini" }).getByRole("article"),
   ).toHaveCount(1);
   await search.fill("");
   await search.fill("carburatore");
   await suggestion.click();
-  await expect(page).toHaveURL(/\/ordini\/ord-\d+\?q=carburatore$/u);
+  await expect(page).toHaveURL(/\/ordini\/ord-\d+\?ricerca=[\w-]+$/u);
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toBeHidden();
@@ -302,7 +315,7 @@ test("la ricerca della top bar suggerisce e apre l'elenco filtrato", async ({
   await search.press(browserName === "webkit" ? "Alt+Tab" : "Tab");
   await expect(keyboardSuggestion).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/ordini\/ord-\d+\?q=Conti$/u);
+  await expect(page).toHaveURL(/\/ordini\/ord-\d+\?ricerca=[\w-]+$/u);
   await expect(page.getByRole("dialog")).toContainText("Conti");
 });
 
@@ -437,7 +450,7 @@ test("stati vuoti, ricerca e indirizzi inesistenti restano dentro l'app", async 
   await expect(page.getByRole("combobox", { name: "Pagamento" })).toContainText("Tutti");
   await expect(page.getByText("12 ordini")).toBeVisible();
 
-  await open(page, "/anteprima/ordini?q=zzzz");
+  await open(page, await searched(page, "zzzz"));
   await expect(page.getByRole("searchbox").first()).toHaveValue("zzzz");
   await expect(page.getByText("Nessun ordine corrisponde alla ricerca.")).toBeVisible();
   await expect(page.getByRole("link", { name: "Cancella ricerca" })).toBeVisible();
@@ -463,6 +476,12 @@ test("stati coerenti: aggiornamento, eBay fermo e collegamento già usato", asyn
   await expect(
     page.getByRole("main").getByText("Aggiornamento in corso", { exact: true }),
   ).toHaveCount(1);
+  // Un acquisto non ancora pagato non si sblocca finché non è pagato.
+  await open(page, await searched(page, "14-20983-11275"));
+  const unpaid = page.getByRole("article", { name: "Ordine 14-20983-11275" });
+  await expect(unpaid).toContainText("Acquisto non ancora pagato");
+  await expect(unpaid.getByRole("button", { name: "Sblocca ordine" })).toHaveCount(0);
+  await open(page);
 
   await chooseScenario(page, "eBay non risponde");
   await expect(

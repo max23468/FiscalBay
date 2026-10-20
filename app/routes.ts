@@ -26,6 +26,7 @@ export default [
   route("en/admin", "routes/admin.tsx", { id: "admin-en" }),
   route("api/auth/*", "routes/auth.ts"),
   route("api/v1/page-timing", "routes/page-timing.ts"),
+  route("api/v1/orders/search", "routes/order-search.ts"),
   ...preview("anteprima", ""),
   ...preview("en/anteprima", "-en"),
 ] satisfies RouteConfig;
@@ -33,6 +34,7 @@ export default [
 /** Anteprima con scenari sintetici delle schermate dell'app, assente in Production. */
 function preview(path: string, suffix: string) {
   return [
+    route(`${path}/ricerca`, "routes/preview-search.ts", { id: `preview-search${suffix}` }),
     route(path, "routes/preview.tsx", { id: `preview${suffix}` }, [
       route("ordini/:ordine?", "routes/preview-orders.tsx", { id: `preview-orders${suffix}` }),
       route("negozi/:negozio?", "routes/preview-stores.tsx", { id: `preview-stores${suffix}` }),

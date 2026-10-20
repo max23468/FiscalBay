@@ -116,7 +116,8 @@ for (const scenario of scenarios) {
         }
         if (scenario.endpoint) {
           const response = await context.request.get(scenario.path);
-          expect(response.status()).toBe(scenario.status);
+          // L'anteprima non esiste in Production, nemmeno con i suoi endpoint.
+          expect(response.status()).toBe(production && scenario.preview ? 404 : scenario.status);
           if (scenario.path.endsWith("/robots.txt")) {
             // In produzione chiude l'area riservata, altrove tutto il dominio.
             expect(await response.text()).toMatch(
@@ -125,7 +126,7 @@ for (const scenario of scenarios) {
             checked("HTTP e robots.txt");
             return;
           }
-          if (scenario.path.endsWith("/page-timing")) {
+          if (response.status() === 405) {
             expect(response.headers().allow).toBe("POST");
             checked("HTTP e metodo ammesso");
             return;
@@ -284,6 +285,26 @@ for (const scenario of scenarios) {
             description:
               "Navigazione interna non applicabile: pagina iniziale, collegamento iniziale assente o coperto da un pannello modale.",
           });
+        }
+        if (scenario.role === "member" && scenario.area === "orders" && scenario.status === 200) {
+          // La barra superiore trova il codice sbloccato e non quello da sbloccare; la query
+          // resta fuori dall'indirizzo.
+          const searchFor = async (query: string) => {
+            const search = page.getByRole("searchbox", { name: /Cerca ordini|Search orders/u });
+            // Sugli schermi stretti il campo si apre dal pulsante della barra.
+            if (!(await search.isVisible()))
+              await page.getByRole("button", { name: /^(Cerca ordini|Search orders)$/u }).click();
+            await search.fill(query);
+            await search.press("Enter");
+          };
+          await searchFor(testAccount.taxCodes.unlocked);
+          await expect(page).toHaveURL(/\/app\/ordini\?ricerca=[\w-]+$/u);
+          expect(page.url()).not.toContain(testAccount.taxCodes.unlocked);
+          await expect(page.getByText(testAccount.taxCodes.unlocked).first()).toBeVisible();
+          await searchFor(testAccount.taxCodes.locked);
+          await expect(page.getByRole("article")).toHaveCount(0);
+          expect(page.url()).not.toContain(testAccount.taxCodes.locked);
+          checked("ricerca sui soli valori autorizzati, query fuori dall'indirizzo");
         }
         expect(errors).toEqual([]);
         checked("JavaScript, idratazione e risorse senza errori");

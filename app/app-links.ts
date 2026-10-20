@@ -19,6 +19,9 @@ export const accessPath = "/accesso";
 
 export const ordersPath = `${appBase}/ordini`;
 
+/** Ricerca ordini della barra superiore: riceve la query nel corpo, mai nell'indirizzo. */
+export const orderSearchPath = "/api/v1/orders/search";
+
 /** Pagina reale di Sicurezza; le Impostazioni complete la ospiteranno fra le categorie. */
 export const securityPath = `${appBase}/impostazioni/sicurezza`;
 

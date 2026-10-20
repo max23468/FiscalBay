@@ -694,12 +694,13 @@ describe("collegamento negozio eBay", () => {
     const first = (await beginStoreLink(cookie)).searchParams.get("state");
     await handleAuthRequest(storeCallback(`state=${first}&code=uno`, cookie), env, syntheticEbay());
     const second = (await beginStoreLink(cookie)).searchParams.get("state");
+    const modified = new Date(Date.now() - 60_000).toISOString();
     await handleAuthRequest(
       storeCallback(`state=${second}&code=due`, cookie),
       env,
       // Una nuova versione dell'ordine rilegge Trading, che non riporta più l'identificativo.
       syntheticEbay({
-        lastModifiedDate: "2026-09-21T11:00:00.000Z",
+        lastModifiedDate: modified,
         trading: () =>
           new Response(
             '<GetOrdersResponse xmlns="urn:ebay:apis:eBLBaseComponents"><Ack>Success</Ack>' +
@@ -713,7 +714,7 @@ describe("collegamento negozio eBay", () => {
         .then(({ results }) => results),
     ).toEqual([{ value: "SYNTHETIC&ID", removed_at: null }]);
     expect(await env.DB.prepare("SELECT detail_for FROM order_source_refs").first()).toEqual({
-      detail_for: "2026-09-21T11:00:00.000Z",
+      detail_for: modified,
     });
   });
 

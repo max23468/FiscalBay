@@ -148,6 +148,8 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
       }),
     ),
     preview("/profilo", "profile"),
+    // Riceve soltanto ricerche: una lettura risponde senza contenuto.
+    preview("/ricerca", "orders", { endpoint: true, status: 405 }),
     make("/pagina-inesistente", "public", { status: 404, pattern: "*", remote: !prefix }),
     ...(prefix
       ? []
@@ -160,6 +162,7 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
           make("/robots.txt", "public", { endpoint: true, remote: true }),
           // Riceve soltanto i report del browser: una lettura risponde senza contenuto.
           make("/api/v1/page-timing", "public", { endpoint: true, status: 405 }),
+          make("/api/v1/orders/search", "orders", { endpoint: true, status: 405 }),
         ]),
   ];
 });

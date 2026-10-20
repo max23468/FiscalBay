@@ -27,7 +27,14 @@ import { passkeyFailure, type PasskeyFailure } from "../passkey-error";
 import type { AccessNoticeView } from "../access-notice";
 import { appCopy } from "../app-copy";
 import { deviceName } from "../device-name";
-import { accessPath, appBase, appHref, securityPath, visitParam } from "../app-links";
+import {
+  accessPath,
+  appBase,
+  appHref,
+  orderSearchPath,
+  securityPath,
+  visitParam,
+} from "../app-links";
 import { languageNames, localizedPath, type Language } from "../i18n";
 import { formatDate, formatRelative } from "../view-models";
 
@@ -780,17 +787,22 @@ export function AccountShell({
   language,
   account,
   security,
+  searchQuery = null,
   children,
 }: {
   language: Language;
   account: { name: string; email: string };
-  /** Dopo la conferma dell'email: navigazione, Profilo e Sicurezza. */
+  /** Dopo la conferma dell'email: navigazione, ricerca ordini, Profilo e Sicurezza. */
   security: boolean;
+  /** Ricerca attiva della pagina Ordini; null nelle altre pagine. */
+  searchQuery?: string | null;
   children: React.ReactNode;
 }) {
   const t = appCopy[language];
   const submit = useSubmit();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  // La ricerca resta nell'ambiente eBay mostrato, che sul test può essere la Sandbox.
+  const sandbox = new URLSearchParams(search).get("environment") === "sandbox";
   const other: Language = language === "it" ? "en" : "it";
   const bare = pathname.replace(/^\/en(?=\/|$)/u, "") || "/";
   const links = { language, base: appBase };
@@ -808,6 +820,14 @@ export function AccountShell({
           : []
       }
       home={appHref(links, "ordini")}
+      search={
+        security
+          ? {
+              action: `${orderSearchPath}${sandbox ? "?environment=sandbox" : ""}`,
+              query: searchQuery,
+            }
+          : undefined
+      }
       menu={[
         ...(security
           ? [

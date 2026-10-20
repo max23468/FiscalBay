@@ -30,6 +30,9 @@ export function syntheticEbay(
     userId?: string;
   } = {},
 ) {
+  // Ordine di ieri rispetto all'orologio reale: resta nella finestra di conservazione di 30
+  // giorni in qualunque giorno girino le prove.
+  const created = Date.now() - 86_400_000;
   return vi.fn<typeof fetch>(async (input, init) => {
     const url = String(input);
     if (url.endsWith("/identity/v1/oauth2/token")) {
@@ -70,8 +73,8 @@ export function syntheticEbay(
       orders: [
         {
           orderId: options.orderId ?? syntheticOrderId,
-          creationDate: "2026-09-20T10:00:00.000Z",
-          lastModifiedDate: options.lastModifiedDate ?? "2026-09-20T11:00:00.000Z",
+          creationDate: new Date(created).toISOString(),
+          lastModifiedDate: options.lastModifiedDate ?? new Date(created + 3_600_000).toISOString(),
           pricingSummary: { total: { value: "12.5", currency: "EUR" } },
           buyer: { username: "acquirente-sintetico", taxIdentifier: { value: "NON-ESPORRE" } },
           orderPaymentStatus: "PAID",

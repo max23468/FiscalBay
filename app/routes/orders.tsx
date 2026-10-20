@@ -6,7 +6,11 @@ import { EbayEnvironmentField, type EbayEnvironment } from "~/components/ebay-en
 import { NotFoundState } from "~/components/not-found";
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
 import { accessNotice } from "../access-notice";
-import { assertSameOrigin, requireAccountArea } from "../account-area.server";
+import {
+  assertSameOrigin,
+  requestedEbayEnvironment,
+  requireAccountArea,
+} from "../account-area.server";
 import { appCopy } from "../app-copy";
 import { appBase, ordersPath, storeLinkPath, type AppLinks } from "../app-links";
 import {
@@ -25,12 +29,12 @@ import {
   visibleOrderFacets,
 } from "../domain/orders.server";
 import { listStores } from "../domain/stores.server";
-import { errorResponse } from "../error-response";
 import { logFailure } from "../errors";
 import { languageFromPath, localizedPath, type Language } from "../i18n";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import { describeRequest, measure } from "../observability.server";
 import { ordersPageSize } from "../order-list";
+import { accountSearchScope, openSearch } from "../order-search.server";
 import { settle } from "../settle.server";
 import type { ActionResult, OrderView, OrdersNotice } from "../view-models";
 import type { Route } from "./+types/orders";
@@ -54,14 +58,6 @@ function verifying(order: OrderView) {
   );
 }
 
-function ebayEnvironmentOf(request: Request): EbayEnvironment {
-  const environment =
-    new URL(request.url).searchParams.get("environment") === "sandbox" ? "sandbox" : "production";
-  if (environment === "sandbox" && !sandboxAvailable(env))
-    throw errorResponse(request, "FORBIDDEN");
-  return environment;
-}
-
 /**
  * Ordini persistiti e autorizzati dello spazio, senza attendere eBay: sessione, diritti e
  * conservazione sono verificati qui, prima della risposta. Gli ordini ancora in verifica
@@ -71,7 +67,7 @@ function ebayEnvironmentOf(request: Request): EbayEnvironment {
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { language, session, account } = await requireAccountArea(request, { unverified: true });
   const search = new URL(request.url).searchParams;
-  const ebayEnvironment = ebayEnvironmentOf(request);
+  const ebayEnvironment = requestedEbayEnvironment(request);
   const userId = session.user.id;
   const verified = session.user.emailVerified;
   const now = new Date();
@@ -86,7 +82,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const query = new URLSearchParams(search);
   if (Object.hasOwn(appCopy[language].access.storeNotices, query.get("negozio") ?? ""))
     query.delete("negozio");
-  const criteria = orderCriteria(query, now, premium ? "premium" : "free");
+  // La ricerca arriva cifrata e legata alla sessione: fuori da essa si dimentica.
+  const searchText = await openSearch(env.BETTER_AUTH_SECRET, accountSearchScope(session), query);
+  const criteria = orderCriteria(query, now, premium ? "premium" : "free", searchText);
+  // Con «Non pagato» anche dettaglio e conferma leggono gli acquisti non pagati (D180).
+  const provisional = criteria.payment === "unpaid";
   // «Carica altri» amplia la pagina letta dal server, entro il massimo di una richiesta.
   const shown = Math.min(
     Math.max(Math.trunc(Number(query.get("mostra"))) || 1, 1),
@@ -100,7 +100,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         ids ? ids.length : shown * ordersPageSize,
         ebayEnvironment,
         now,
-        ids ? { ids } : { criteria },
+        ids ? { ids, provisional } : { criteria },
       ),
     ).then((orders) => orders.map(orderView));
   const [orders, total, facets, detailOrders] = await Promise.all([
@@ -175,6 +175,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const pageData: OrdersPageData = {
     view: facets.total > 0 ? "list" : linked.length > 0 ? "empty" : "no-store",
     ...page,
+    search: searchText,
     incoming: [],
     detail,
     stores: environmentStores
@@ -261,13 +262,15 @@ export async function action({ request }: Route.ActionArgs) {
     await restoreUnlockConfirmation(env.DB, session.user.id);
     return { ok: true } satisfies ActionResult;
   }
-  const environment = ebayEnvironmentOf(request);
+  const environment = requestedEbayEnvironment(request);
   if (intent === "retry") {
     const id = String(form.get("order") ?? "");
     const [order] =
       id && id.length <= 64
-        ? await listVisibleOrders(env.DB, session.user.id, 1, environment, new Date(), {
+        ? // Anche un acquisto non pagato, che il filtro «Non pagato» mostra con il suo stato.
+          await listVisibleOrders(env.DB, session.user.id, 1, environment, new Date(), {
             ids: [id],
+            provisional: true,
           })
         : [];
     if (!order || order.fiscalState !== "error")
@@ -329,7 +332,12 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
     </>
   );
   return (
-    <AccountShell language={language} account={account} security={loaderData.verified}>
+    <AccountShell
+      language={language}
+      account={account}
+      security={loaderData.verified}
+      searchQuery={loaderData.notFound ? "" : (loaderData.page.search ?? "")}
+    >
       {loaderData.notFound ? (
         <NotFoundState kind="order" t={t} links={links} />
       ) : (

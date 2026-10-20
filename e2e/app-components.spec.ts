@@ -685,6 +685,16 @@ async function open(page: Page, path: string, scenario?: string) {
   }
 }
 
+/** Elenco con la ricerca: la query va nel corpo e l'indirizzo riceve la sua forma cifrata. */
+async function searched(page: Page, query: string, base = "/anteprima") {
+  const response = await page.request.post(`${base}/ricerca`, {
+    form: { q: query },
+    maxRedirects: 0,
+  });
+  expect(response.status()).toBe(303);
+  return response.headers().location!;
+}
+
 const noPageOverflow = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
 
@@ -1064,11 +1074,16 @@ for (const language of ["it", "en"] as const) {
         await expect(
           menu.getByText(t("Disponibile con Premium", "Available with Premium")),
         ).toBeVisible();
+        // Il menu è largo quanto la voce più lunga, mai meno del campo, e resta entro il
+        // margine laterale di 16 px.
         await expect
-          .poll(async () =>
-            Math.abs((await menu.boundingBox())!.width - (await period.boundingBox())!.width),
-          )
-          .toBeLessThan(2);
+          .poll(async () => {
+            const [box, field] = [(await menu.boundingBox())!, (await period.boundingBox())!];
+            return (
+              box.width >= field.width - 1 && box.x >= 15.5 && box.x + box.width <= width - 15.5
+            );
+          })
+          .toBe(true);
         expect((await menu.boundingBox())!.y).toBeGreaterThanOrEqual(
           (await period.boundingBox())!.y + (await period.boundingBox())!.height,
         );
@@ -1117,7 +1132,7 @@ for (const language of ["it", "en"] as const) {
         const card = page.getByRole("article").filter({ hasText: "SPSNNA85T55F83" });
         await expect(card.getByText(t("Codice da controllare", "Check code"))).toHaveCount(1);
         await page.screenshot({ path: test.info().outputPath("elenco.png"), fullPage: true });
-        await open(page, `${prefix}/anteprima/ordini?q=zzzz`, "ordinario");
+        await open(page, await searched(page, "zzzz", `${prefix}/anteprima`), "ordinario");
         const clear = page.getByRole("link", {
           name: t("Cancella ricerca", "Clear search"),
           exact: true,
@@ -1169,7 +1184,7 @@ for (const language of ["it", "en"] as const) {
             t("Acquirente estero (Spagna)", "Foreign buyer (Spain)"),
           ],
         ] as const) {
-          await open(page, `${prefix}/anteprima/ordini?q=${query}`);
+          await open(page, await searched(page, query, `${prefix}/anteprima`));
           await expect(page.getByRole("article").filter({ hasText: order })).toContainText(text);
         }
         await open(page, `${prefix}/anteprima/ordini/ord-03`, "dati-discordanti");

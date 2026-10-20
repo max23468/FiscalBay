@@ -45,6 +45,7 @@ const it = {
     searchPlaceholder: "Ordine, acquirente, articolo o SKU",
     searchSeeAll: (count: number) => `Vedi tutti i risultati (${count})`,
     searchEmpty: "Nessun ordine corrisponde alla ricerca.",
+    searchFailed: "Ricerca non riuscita. Riprova.",
     searchSummary: (count: number) =>
       count === 0
         ? "Nessun suggerimento"
@@ -125,6 +126,7 @@ const it = {
       available: "Disponibile",
       locked: "Da sbloccare",
       missing: "Non disponibile su eBay",
+      foreign: "Acquirente estero",
       checking: "Verifica in corso",
       error: "Aggiornamento non riuscito",
     },
@@ -182,6 +184,7 @@ const it = {
     lockedUntil: (date: string) => `Sblocco disponibile dal ${date}.`,
     lockedHold: {
       checking: "Nuova verifica da eBay in corso: lo sblocco torna disponibile al termine.",
+      unpaid: "Acquisto non ancora pagato: lo sblocco è disponibile dopo il pagamento.",
     },
     missingHint: "eBay non riporta il Codice Fiscale per questo ordine.",
     checkingHint: "Verifica del Codice Fiscale in corso.",
@@ -897,6 +900,7 @@ const en: AppCopy = {
     searchPlaceholder: "Order, buyer, item or SKU",
     searchSeeAll: (count) => `See all results (${count})`,
     searchEmpty: "No orders match your search.",
+    searchFailed: "Search failed. Try again.",
     searchSummary: (count) =>
       count === 0 ? "No suggestions" : `${count} ${plural(count, "suggestion", "suggestions")}`,
     notifications: "Notifications",
@@ -974,6 +978,7 @@ const en: AppCopy = {
       available: "Available",
       locked: "To unlock",
       missing: "Not available on eBay",
+      foreign: "Foreign buyer",
       checking: "Verification in progress",
       error: "Couldn’t update",
     },
@@ -1031,6 +1036,7 @@ const en: AppCopy = {
     lockedUntil: (date) => `Unlocking available from ${date}.`,
     lockedHold: {
       checking: "eBay is verifying this order again: unlocking is available once it finishes.",
+      unpaid: "This purchase isn’t paid yet: unlocking is available once it’s paid.",
     },
     missingHint: "eBay does not provide the tax code for this order.",
     checkingHint: "Checking the tax code.",
