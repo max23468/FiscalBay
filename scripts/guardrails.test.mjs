@@ -1970,15 +1970,55 @@ describe("coordinamento e provenienza della pubblicazione", () => {
 });
 
 describe("budget del JavaScript client", () => {
-  const run = (bytes) => {
+  // KiB di ogni file della build sintetica; `lazy` non è nel manifest, come un import dinamico.
+  const run = ({ entry = 10, site = 10, orders = 10, lazy = 0 }) => {
     const directory = mkdtempSync(path.join(tmpdir(), "bundle-"));
+    mkdirSync(path.join(directory, "assets"));
     // Byte casuali: gzip non li comprime, quindi la dimensione misurata è nota.
-    writeFileSync(path.join(directory, "entry.js"), randomBytes(bytes));
+    for (const [name, kib] of Object.entries({ entry, site, orders, lazy }))
+      writeFileSync(path.join(directory, "assets", `${name}.js`), randomBytes(kib * 1024));
+    const route = (id, routePath, parentId, module) => ({
+      id,
+      path: routePath,
+      parentId,
+      hasDefaultExport: true,
+      module,
+      imports: [],
+    });
+    const manifest = {
+      entry: { module: "/assets/entry.js", imports: [] },
+      routes: {
+        root: { ...route("root", "", undefined, "/assets/entry.js"), parentId: undefined },
+        site: route("site", undefined, "root", "/assets/site.js"),
+        orders: route("orders", "en/app/ordini/:ordine?", "root", "/assets/orders.js"),
+      },
+    };
+    writeFileSync(
+      path.join(directory, "assets", "manifest-abc.js"),
+      `window.__reactRouterManifest=${JSON.stringify(manifest)};`,
+    );
     return spawnSync(process.execPath, ["scripts/check-bundle-size.mjs", directory]).status;
   };
 
-  it("accetta un bundle entro budget", () => assert.equal(run(100 * 1024), 0));
-  it("fa fallire la build oltre budget", () => assert.equal(run((budgetKiB + 10) * 1024), 1));
+  it("accetta pagine entro le soglie della loro classe", () =>
+    assert.equal(
+      run({ entry: 100, site: budgetKiB.public - 110, orders: budgetKiB.app - 110 }),
+      0,
+    ));
+  it("fa fallire una pagina pubblica oltre la sua soglia", () =>
+    assert.equal(run({ entry: 100, site: budgetKiB.public - 90 }), 1));
+  it("fa fallire una pagina riservata oltre la sua soglia", () =>
+    assert.equal(run({ entry: 100, orders: budgetKiB.app - 90 }), 1));
+  it("ignora per il budget i file caricati dopo e il totale della build", () =>
+    assert.equal(run({ entry: 100, lazy: budgetKiB.app + 10 }), 0));
+  it("fallisce senza manifest", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "bundle-"));
+    writeFileSync(path.join(directory, "entry.js"), randomBytes(1024));
+    assert.equal(
+      spawnSync(process.execPath, ["scripts/check-bundle-size.mjs", directory]).status,
+      1,
+    );
+  });
 });
 
 describe("copia locale dell'artefatto", () => {
