@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { unpausedStore } from "../../domain/store-state.server";
 import { logFailure } from "../../errors";
+import { seal, unseal } from "../../sealed.server";
 import { UpstreamError, upstreamJson } from "../http.server";
 
 import { ebayConfiguration, type EbayEnvironment } from "./environment.server";
@@ -16,7 +17,7 @@ export type SellerTokens = {
 type TokenKind = "access" | "refresh";
 
 const sealedPrefix = "v1.";
-const keyInfo = new TextEncoder().encode("fiscalbay/ebay-seller-token/v1");
+const keyInfo = "fiscalbay/ebay-seller-token/v1";
 // Il token di accesso vale due ore: il rinnovo parte quando ne restano meno di quaranta minuti,
 // così più esecuzioni del cron, una ogni dieci minuti, cadono prima della scadenza.
 const refreshMarginMilliseconds = 40 * 60 * 1000;
@@ -28,63 +29,14 @@ const refreshSchema = z.looseObject({
   expires_in: z.number().int().positive(),
 });
 
-export function base64Url(bytes: Uint8Array): string {
-  // Stryker disable Regex: in base64 «=» compare solo come riempimento finale.
-  return btoa(String.fromCharCode(...bytes))
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replace(/=+$/u, "");
-  // Stryker restore Regex
-}
-
-function fromBase64Url(value: string): Uint8Array<ArrayBuffer> {
-  const binary = atob(value.replaceAll("-", "+").replaceAll("_", "/"));
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
-}
-
-/** Chiave AES dedicata, derivata dal segreto server: non coincide con le chiavi di Better Auth. */
-async function tokenKey(secret: string): Promise<CryptoKey> {
-  const material = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    "HKDF",
-    false,
-    ["deriveKey"],
-  );
-  // Stryker disable BooleanLiteral: la chiave non viene mai esportata, estraibile o no.
-  return crypto.subtle.deriveKey(
-    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: keyInfo },
-    material,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["encrypt", "decrypt"],
-  );
-  // Stryker restore BooleanLiteral
-}
-
 // Negozio e tipo entrano nei dati autenticati: un token copiato su un'altra riga non si apre.
-function boundTo(storeId: string, kind: TokenKind): Uint8Array<ArrayBuffer> {
-  return new TextEncoder().encode(`${storeId}:${kind}`);
-}
-
 export async function sealToken(
   secret: string,
   storeId: string,
   kind: TokenKind,
   token: string,
 ): Promise<string> {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const sealed = new Uint8Array(
-    await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv, additionalData: boundTo(storeId, kind) },
-      await tokenKey(secret),
-      new TextEncoder().encode(token),
-    ),
-  );
-  const bytes = new Uint8Array(iv.byteLength + sealed.byteLength);
-  bytes.set(iv);
-  bytes.set(sealed, iv.byteLength);
-  return sealedPrefix + base64Url(bytes);
+  return sealedPrefix + (await seal(secret, keyInfo, `${storeId}:${kind}`, token));
 }
 
 /**
@@ -99,13 +51,7 @@ export async function openToken(
   value: string,
 ): Promise<string> {
   if (!value.startsWith(sealedPrefix)) throw new Error("unsupported_token_format");
-  const bytes = fromBase64Url(value.slice(sealedPrefix.length));
-  const plain = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: bytes.subarray(0, 12), additionalData: boundTo(storeId, kind) },
-    await tokenKey(secret),
-    bytes.subarray(12),
-  );
-  return new TextDecoder().decode(plain);
+  return unseal(secret, keyInfo, `${storeId}:${kind}`, value.slice(sealedPrefix.length));
 }
 
 /**

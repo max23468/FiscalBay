@@ -15,6 +15,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { Spinner } from "~/components/ui/spinner";
 import type { AppCopy } from "../../app-copy";
 import { appHref, type AppLinks } from "../../app-links";
+import { searchParam } from "../../order-search";
 import { usePageTiming } from "../../page-timing";
 import type { Language } from "../../i18n";
 import { formatDate, formatRelative, type OrdersNotice, type OrderView } from "../../view-models";
@@ -34,6 +35,8 @@ export interface OrdersPageData extends SecondaryActions {
   incoming: OrderView[];
   total: number;
   nextHref: string | null;
+  /** Ricerca attiva, decifrata dal server: nell'indirizzo resta soltanto in forma cifrata. */
+  search: string | null;
   /** Ordine aperto nel pannello, anche se fuori dalla pagina caricata. */
   detail: OrderView | null;
   stores: Array<{ id: string; name: string }>;
@@ -555,7 +558,8 @@ function OrdersList({
     .map((order) => order.id);
   const criteria = new URLSearchParams(location.search);
   criteria.delete("mostra");
-  const onlySearch = criteria.has("q") && [...criteria.keys()].every((key) => key === "q");
+  const onlySearch =
+    criteria.has(searchParam) && [...criteria.keys()].every((key) => key === searchParam);
   return (
     <>
       <OrdersToolbar
@@ -570,7 +574,7 @@ function OrdersList({
         selectRef={selectRef}
         onToggleSelect={() => (selecting ? stopSelecting() : setSelecting(true))}
       />
-      <SearchChip t={t} clearable={orders.length > 0 || !onlySearch} />
+      <SearchChip t={t} query={data.search} clearable={orders.length > 0 || !onlySearch} />
       {data.incoming.length > 0 && !showIncoming ? (
         <div className="flex justify-center">
           <Button variant="secondary" onClick={() => setShowIncoming(true)}>

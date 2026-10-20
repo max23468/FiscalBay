@@ -3,7 +3,8 @@ import { logFailure } from "../../errors";
 import type { Language } from "../../i18n";
 import { upstreamJson } from "../http.server";
 import { acquireOrders } from "../../domain/order-acquisition.server";
-import { base64Url, saveStoreCredentials } from "./seller-credentials.server";
+import { base64Url } from "../../sealed.server";
+import { saveStoreCredentials } from "./seller-credentials.server";
 import { ebayConfiguration, type EbayEnvironment } from "./environment.server";
 
 // Il collegamento del negozio non chiede l'email: resta separato dal login eBay.

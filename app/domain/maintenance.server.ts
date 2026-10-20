@@ -1,3 +1,5 @@
+import { orderSearchText } from "../order-search";
+
 /**
  * Pulizia periodica degli ordini e dei dati tecnici scaduti, eseguita dal consumer
  * del compito giornaliero. L'accesso è già negato prima della cancellazione fisica.
@@ -16,4 +18,53 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
     db.prepare("DELETE FROM ebay_store_link_sessions WHERE expires_at <= ?").bind(at),
     db.prepare("DELETE FROM account_email_changes WHERE expires_at <= ?").bind(at),
   ]);
+}
+
+/** Ordini indicizzati per lettura; il limite complessivo resta nel budget del compito. */
+const searchBatch = 200;
+const searchBatches = 25;
+
+/**
+ * Calcola il testo cercabile degli ordini che ancora non l'hanno, cioè quelli presenti prima
+ * dell'indicizzazione: le letture successive lo mantengono. Restituisce quanti ne ha scritti;
+ * gli eventuali residui restano al turno seguente.
+ */
+export async function indexOrderSearch(db: D1Database): Promise<number> {
+  let indexed = 0;
+  for (let batch = 0; batch < searchBatches; batch++) {
+    const { results } = await db
+      .prepare(
+        `SELECT o.id, o.ebay_order_id, json_extract(o.buyer_json, '$.name') AS buyer_name,
+                json_extract(o.buyer_json, '$.username') AS buyer_username,
+                (SELECT json_group_array(json_object('title', title, 'sku', sku))
+                   FROM (SELECT title, sku FROM order_items WHERE order_id = o.id ORDER BY rowid))
+                  AS items_json
+           FROM orders o WHERE o.search_text IS NULL LIMIT ?`,
+      )
+      .bind(searchBatch)
+      .all<{
+        id: string;
+        ebay_order_id: string;
+        buyer_name: string | null;
+        buyer_username: string | null;
+        items_json: string;
+      }>();
+    if (results.length === 0) break;
+    await db.batch(
+      results.map((row) =>
+        db.prepare("UPDATE orders SET search_text = ? WHERE id = ? AND search_text IS NULL").bind(
+          orderSearchText({
+            ebayOrderId: row.ebay_order_id,
+            buyerName: row.buyer_name,
+            buyerUsername: row.buyer_username,
+            items: JSON.parse(row.items_json) as Array<{ title: string; sku: string | null }>,
+          }),
+          row.id,
+        ),
+      ),
+    );
+    indexed += results.length;
+    if (results.length < searchBatch) break;
+  }
+  return indexed;
 }

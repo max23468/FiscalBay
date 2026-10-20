@@ -15,8 +15,9 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import type { AppCopy } from "../../app-copy";
+import { searchParam } from "../../order-search";
 import {
-  fiscalStates,
+  fiscalSituations,
   marketplaceLabel,
   paymentStatuses,
   shippingStatuses,
@@ -56,9 +57,23 @@ function FilterSelect({
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <Select items={items} value={current} onValueChange={(next) => onChange(name, next ?? "")}>
         <SelectTrigger id={id} className="w-full min-w-0">
-          <SelectValue />
+          {/* Un valore più lungo del campo si tronca con i puntini; il menu lo mostra intero. */}
+          <SelectValue className="min-w-0">
+            {(selected: string) => (
+              <span className="truncate">
+                {items.find((item) => item.value === selected)?.label ?? allLabel}
+              </span>
+            )}
+          </SelectValue>
         </SelectTrigger>
-        <SelectContent className="min-w-0">
+        {/*
+          Largo quanto la voce più lunga, mai meno del campo, fino a 24rem ed entro il margine
+          laterale della pagina: un nome di negozio molto lungo va a capo.
+        */}
+        <SelectContent
+          collisionPadding={16}
+          className="w-max max-w-[min(var(--available-width),24rem)] min-w-(--anchor-width)"
+        >
           {items.map((item) => (
             <SelectItem key={item.value} value={item.value} disabled={item.premium}>
               {item.label}
@@ -149,7 +164,8 @@ export function OrdersToolbar({
       <div
         id="orders-filters"
         className={cn(
-          "grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 md:flex-1 md:grid-cols-3 xl:grid-cols-6",
+          // Due colonne anche su smartphone: i filtri aperti lasciano in vista i primi risultati.
+          "grid grid-cols-2 gap-3 md:flex-1 md:grid-cols-3 xl:grid-cols-6",
           !filtersOpen && "max-md:hidden",
         )}
       >
@@ -216,7 +232,10 @@ export function OrdersToolbar({
           label={t.orders.fiscalStatus}
           name="fiscale"
           value={params.get("fiscale") ?? ""}
-          options={fiscalStates.map((state) => ({ value: state, label: t.orders.fiscal[state] }))}
+          options={fiscalSituations.map((situation) => ({
+            value: situation,
+            label: t.orders.fiscal[situation],
+          }))}
           allLabel={t.orders.all}
           premiumLabel={t.orders.premiumOption}
           onChange={change}
@@ -227,10 +246,17 @@ export function OrdersToolbar({
 }
 
 /** Ricerca attiva, con la possibilità di toglierla quando non lascerebbe la pagina vuota. */
-export function SearchChip({ t, clearable = true }: { t: AppCopy; clearable?: boolean }) {
+export function SearchChip({
+  t,
+  query,
+  clearable = true,
+}: {
+  t: AppCopy;
+  query: string | null;
+  clearable?: boolean;
+}) {
   const location = useLocation();
   const navigate = useNavigate();
-  const query = new URLSearchParams(location.search).get("q");
   if (!query) return null;
   return (
     <p className="-mt-2 flex items-center gap-2 text-sm">
@@ -242,7 +268,8 @@ export function SearchChip({ t, clearable = true }: { t: AppCopy; clearable?: bo
           aria-label={t.orders.clearSearch}
           onClick={() => {
             const next = new URLSearchParams(location.search);
-            next.delete("q");
+            next.delete(searchParam);
+            next.delete("mostra");
             void navigate({ search: next.toString() }, { preventScrollReset: true });
           }}
         >

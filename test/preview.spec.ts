@@ -11,6 +11,9 @@ import {
 import { formatDate, formatRelative } from "../app/view-models";
 import { taxQuality } from "../app/tax-quality";
 import { readPreviewState, writePreviewState } from "../app/preview/state.server";
+import { action as previewSearch } from "../app/routes/preview-search";
+import { loader as previewOrders } from "../app/routes/preview-orders";
+import type { SearchResults } from "../app/components/app-shell";
 
 describe("stato sintetico dell'anteprima", () => {
   it("conserva lo stato sui cookie HTTP locali e mantiene Secure sul dominio HTTPS", async () => {
@@ -179,4 +182,38 @@ describe("stato sintetico dell'anteprima", () => {
       expect(t.legal.version("2026-10-03")).not.toMatch(/Bozza|Draft/);
     });
   }
+});
+
+describe("ricerca dell'anteprima", () => {
+  const search = (query: string, json = true, path = "/anteprima/ricerca") =>
+    previewSearch({
+      request: new Request(`http://localhost:5173${path}`, {
+        method: "POST",
+        headers: json ? { accept: "application/json" } : {},
+        body: new URLSearchParams({ q: query }),
+      }),
+    } as Parameters<typeof previewSearch>[0]);
+
+  it("suggerisce dagli scenari con le regole dell'area reale e cifra la ricerca", async () => {
+    // «SOCIETA» trova «Società»: maiuscole e accenti non contano.
+    const accents = (await (await search("SOCIETA")).json()) as SearchResults;
+    expect(accents.items.map((item) => item.id)).toEqual(["ord-01"]);
+    const found = (await (await search("rossi")).json()) as SearchResults;
+    expect(found.href).toMatch(/^\/anteprima\/ordini\?ricerca=[\w-]+$/u);
+    expect(found.items.length).toBeGreaterThan(0);
+    expect(found.items.every((item) => item.href.startsWith("/anteprima/ordini/ord-"))).toBe(true);
+    // Un valore da sbloccare non trova l'ordine; uno disponibile sì, anche normalizzato.
+    expect(((await (await search("BNCLCU75C12F205G")).json()) as SearchResults).total).toBe(0);
+    const english = (await (
+      await search("rossi", true, "/en/anteprima/ricerca")
+    ).json()) as SearchResults;
+    expect(english.href).toMatch(/^\/en\/anteprima\/ordini\?ricerca=/u);
+    const submitted = await search("rossi", false);
+    expect(submitted.status).toBe(303);
+    const listed = await previewOrders({
+      request: new Request(`http://localhost:5173${submitted.headers.get("location")}`),
+      params: {},
+    } as Parameters<typeof previewOrders>[0]);
+    expect(listed).toMatchObject({ search: "rossi", total: found.total });
+  });
 });

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { orderSearchText } from "../order-search";
 import { taxComparisonKey, taxIdentifierType } from "../tax-quality";
 import { writableStore } from "./store-state.server";
 
@@ -693,6 +694,21 @@ export async function recordOrderObservation(
   }
   if (ownsFields) add(...itemStatements(db, scope, orderId, observation.items, stored, guards));
   const orderWritesEnd = statements.length;
+  if (ownsFields) {
+    // Testo cercabile dagli stessi campi appena scritti: derivato, non è una variazione.
+    const searchText = orderSearchText({
+      ebayOrderId: observation.externalOrderId,
+      buyerName: buyer.name,
+      buyerUsername: buyer.username,
+      items: observation.items,
+    });
+    add(
+      db
+        .prepare(`UPDATE orders SET search_text = ?3 WHERE id = ?4
+      AND search_text IS NOT ?3 AND ${orderExists}`)
+        .bind(...scope, searchText, orderId),
+    );
+  }
 
   // Identificativi correnti prima e dopo le variazioni, per contare quelle effettive.
   const taxSnapshot = db

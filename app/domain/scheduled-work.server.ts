@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { purgeExpiredRecords } from "./maintenance.server";
+import { indexOrderSearch, purgeExpiredRecords } from "./maintenance.server";
 import { dispatchStoreSyncs } from "./order-sync.server";
 import { logFailure } from "../errors";
 import { refreshExpiringTokens } from "../integrations/ebay/seller-credentials.server";
@@ -25,11 +25,14 @@ const leaseMilliseconds = 15 * minute;
 
 const tasks = {
   // Sessioni, link, ricevute e altri dati tecnici scaduti: la pulizia fisica resta entro un
-  // giorno dalla scadenza, mentre le letture rifiutano già i dati scaduti.
+  // giorno dalla scadenza, mentre le letture rifiutano già i dati scaduti. Poi il testo
+  // cercabile degli ordini che non l'hanno ancora.
   maintenance: {
     period: 24 * 60 * minute,
-    run: (environment: Env, _fetcher: typeof fetch, now: Date) =>
-      purgeExpiredRecords(environment.DB, now),
+    run: async (environment: Env, _fetcher: typeof fetch, now: Date) => {
+      await purgeExpiredRecords(environment.DB, now);
+      await indexOrderSearch(environment.DB);
+    },
   },
   // Rinnovo anticipato dei token di accesso dei negozi, prima che servano a una lettura.
   token_refresh: {

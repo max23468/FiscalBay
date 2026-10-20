@@ -957,6 +957,44 @@ describe("modello ordini", () => {
     expect(await orders()).toMatchObject([{ ebay_order_id: "D-1", payment_status: "PAID" }]);
   });
 
+  it("mantiene il testo cercabile dagli ultimi campi scritti, senza contarlo come variazione", async () => {
+    const searchText = () =>
+      env.DB.prepare("SELECT search_text FROM orders WHERE ebay_order_id = 'D-1'")
+        .first<{ search_text: string }>()
+        .then((row) => row!.search_text);
+    const created = await recordOrderObservation(
+      env.DB,
+      target(),
+      observation({ buyer: { username: "zoe_b", name: "ZOË Bäcker" } }),
+    );
+    expect(created).toMatchObject({ outcome: "created" });
+    expect(await searchText()).toBe("d-1 zoe backer zoe_b articolo k1  articolo k2 ");
+    // Il testo indicato da un'indicizzazione precedente si riallinea senza variare l'ordine.
+    await env.DB.prepare("UPDATE orders SET search_text = NULL").run();
+    expect(
+      await recordOrderObservation(
+        env.DB,
+        target(),
+        observation({ buyer: { username: "zoe_b", name: "ZOË Bäcker" } }),
+      ),
+    ).toMatchObject({ outcome: "unchanged" });
+    expect(await searchText()).toBe("d-1 zoe backer zoe_b articolo k1  articolo k2 ");
+    const renamed = observation({
+      lastModifiedTime: "2026-09-10T12:00:00Z",
+      buyer: { username: "zoe_b", name: "ZOË Bäcker" },
+      items: [{ ...line("k1"), title: "Lámpara ÉLITE", sku: "LMP-1" }],
+    });
+    expect((await recordOrderObservation(env.DB, target(), renamed)).outcome).toBe("updated");
+    expect(await searchText()).toBe("d-1 zoe backer zoe_b lampara elite lmp-1");
+    // Un provvisorio non sovrascrive i campi del definitivo, né il suo testo.
+    await recordOrderObservation(
+      env.DB,
+      target(),
+      provisional({ externalOrderId: "D-1", items: [line("k1")], buyer: { username: "altro" } }),
+    );
+    expect(await searchText()).toBe("d-1 zoe backer zoe_b lampara elite lmp-1");
+  });
+
   it("scarta la lettura tardiva della stessa fonte prima di scrivere", async () => {
     await recordOrderObservation(env.DB, target(), observation());
     const late = observation({

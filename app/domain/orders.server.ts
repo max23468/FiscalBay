@@ -1,12 +1,14 @@
 import { z } from "zod";
 
 import { buyerSnapshotSchema, type BuyerSnapshot } from "./order-import.server";
+import { searchTokens } from "../order-search";
 import { taxComparisonKey, taxIdentifierType, taxQuality } from "../tax-quality";
 import {
-  fiscalStates,
+  fiscalSituations,
   paymentStatuses,
   shippingStatuses,
   type FiscalNotice,
+  type FiscalSituation,
   type FiscalView,
   type OrderView,
   type PaymentStatus,
@@ -86,6 +88,8 @@ export type VisibleOrder = {
   storeId: string;
   storeName: string;
   marketplaceId: string | null;
+  /** Acquisto non ancora pagato, consultabile soltanto con il filtro «Non pagato» (D180). */
+  provisional: boolean;
   summary: OrderSummary;
   /**
    * Un ordine senza controllo fiscale e senza lettura in attesa non è stato verificato:
@@ -154,8 +158,8 @@ export type OrderCriteria = {
   since?: string;
   payment?: PaymentStatus;
   shipping?: ShippingStatus;
-  fiscal?: FiscalView["state"];
-  /** Parole cercate, in minuscolo: ognuna deve comparire nei dati consultabili dell'ordine. */
+  fiscal?: FiscalSituation;
+  /** Parole cercate nella forma di confronto: ognuna deve comparire nei dati consultabili. */
   tokens?: string[];
 };
 
@@ -175,34 +179,54 @@ const shippingSql = `CASE WHEN o.cancel_status = 'CANCELED' THEN 'cancelled'
 /** Accesso ai valori fiscali dell'ordine all'istante ?3, nello spazio della riga. */
 const accessSql = orderAccessSql("o.id", "wm.workspace_id", "?3");
 
+/** Colonna dell'ultima verifica fiscale dell'ordine, anche degli acquisti confluiti. */
+const latestCheckSql = (column: "availability" | "verification") =>
+  `(SELECT tc.${column} FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
+     WHERE original.id = o.id OR original.merged_into = o.id
+     ORDER BY tc.observed_at DESC, tc.source LIMIT 1)`;
+
 /**
- * Stato fiscale come in `listVisibleOrders`: identificativi autorizzati o da sbloccare, poi
- * lettura non riuscita, in corso, conclusa senza dato o mai conclusa (da riprovare).
+ * Situazione fiscale come in `listVisibleOrders` e `fiscalView`: identificativi autorizzati o
+ * da sbloccare, poi lettura non riuscita, in corso, conclusa senza dato (acquirente con
+ * fatturazione estera o dato non riportato da eBay) o mai conclusa (da riprovare).
  */
 const fiscalSql = `CASE
   WHEN EXISTS (SELECT 1 FROM tax_identifiers WHERE order_id = o.id AND removed_at IS NULL)
     THEN CASE WHEN ${accessSql} THEN 'available' ELSE 'locked' END
   WHEN EXISTS (SELECT 1 FROM order_source_refs r WHERE r.order_id = o.id AND r.detail_error IS NOT NULL)
-    OR (SELECT tc.verification FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
-         WHERE original.id = o.id OR original.merged_into = o.id
-         ORDER BY tc.observed_at DESC, tc.source LIMIT 1) = 'error' THEN 'error'
+    OR ${latestCheckSql("verification")} = 'error' THEN 'error'
   WHEN EXISTS (SELECT 1 FROM order_source_refs r WHERE r.order_id = o.id
     AND r.source = 'fulfillment' AND r.detail_for IS NOT r.last_modified_time) THEN 'checking'
   WHEN EXISTS (SELECT 1 FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
-         WHERE original.id = o.id OR original.merged_into = o.id) THEN 'missing'
+         WHERE original.id = o.id OR original.merged_into = o.id)
+    THEN CASE WHEN ${latestCheckSql("availability")} NOT IN ('masked', 'removed')
+      AND json_extract(o.buyer_json, '$.billingAddress.countryCode') NOT IN ('', 'IT')
+      THEN 'foreign' ELSE 'missing' END
   ELSE 'error' END`;
 
-/** Testo cercabile: numero, acquirente, articoli e soli valori fiscali autorizzati. */
-const searchSql = `lower(o.ebay_order_id || ' ' || COALESCE(json_extract(o.buyer_json, '$.name'), '')
+/**
+ * Testo cercabile di un ordine che la manutenzione non ha ancora indicizzato: le stesse parti
+ * di `orderSearchText`, con le sole minuscole ASCII di SQLite.
+ */
+const unindexedSearchSql = `lower(o.ebay_order_id || ' ' || COALESCE(json_extract(o.buyer_json, '$.name'), '')
   || ' ' || COALESCE(json_extract(o.buyer_json, '$.username'), '') || ' '
   || COALESCE((SELECT group_concat(title || ' ' || COALESCE(sku, ''), ' ')
-       FROM order_items WHERE order_id = o.id), '') || ' '
-  || CASE WHEN ${accessSql} THEN COALESCE((SELECT group_concat(value || ' ' || replace(value, ' ', ''), ' ')
-       FROM tax_identifiers WHERE order_id = o.id AND removed_at IS NULL), '') ELSE '' END)`;
+       FROM order_items WHERE order_id = o.id), ''))`;
 
 /**
- * Ordini consultabili dello spazio: utente ?1, ambiente ?2, istante ?3, ID ?6 e criteri da ?7.
- * Ogni percorso (elenco, conteggio, facet) applica gli stessi controlli di negozio e conservazione.
+ * La parola `token.value` manca dall'ordine: né nel testo cercabile né, se autorizzati, nei
+ * valori fiscali, confrontati anche senza spazi. Un valore da sbloccare non trova l'ordine.
+ */
+const tokenMissingSql = `instr(COALESCE(o.search_text, ${unindexedSearchSql}), token.value) = 0
+  AND NOT (${accessSql} AND EXISTS (SELECT 1 FROM tax_identifiers t
+    WHERE t.order_id = o.id AND t.removed_at IS NULL
+      AND instr(lower(t.value || ' ' || replace(t.value, ' ', '')), token.value) > 0))`;
+
+/**
+ * Ordini consultabili dello spazio: utente ?1, ambiente ?2, istante ?3, ID ?6, criteri da ?7 e
+ * acquisti non pagati ?14. Ogni percorso (elenco, conteggio, facet, suggerimenti) applica gli
+ * stessi controlli di negozio e conservazione. Un acquisto non pagato resta fuori, salvo con
+ * il filtro «Non pagato» o quando l'elenco lo mostra (D180).
  */
 const visibleOrdersSql = `FROM workspace_members wm
    JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
@@ -210,7 +234,7 @@ const visibleOrdersSql = `FROM workspace_members wm
   WHERE wm.user_id = ?1 AND s.ebay_environment = ?2 AND ${consultableStore("s")}
     AND o.retention_until > ?3
     AND o.merged_into IS NULL
-    AND o.is_provisional = 0
+    AND (o.is_provisional = 0 OR ?10 = 'unpaid' OR ?14 = 1)
     AND (?6 IS NULL OR o.id IN (SELECT value FROM json_each(?6)))
     AND (?7 IS NULL OR o.store_id = ?7)
     AND (?8 IS NULL OR o.marketplace_id = ?8)
@@ -218,8 +242,7 @@ const visibleOrdersSql = `FROM workspace_members wm
     AND (?10 IS NULL OR ${paymentSql} = ?10)
     AND (?11 IS NULL OR ${shippingSql} = ?11)
     AND (?12 IS NULL OR ${fiscalSql} = ?12)
-    AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(?13, '[]')) token
-                     WHERE instr(${searchSql}, token.value) = 0)`;
+    AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(?13, '[]')) token WHERE ${tokenMissingSql})`;
 
 function visibleOrdersParams(
   userId: string,
@@ -228,6 +251,7 @@ function visibleOrdersParams(
   limit: number,
   ids: string[] | undefined,
   criteria: OrderCriteria,
+  provisional = false,
 ) {
   return [
     userId,
@@ -243,6 +267,7 @@ function visibleOrdersParams(
     criteria.shipping ?? null,
     criteria.fiscal ?? null,
     criteria.tokens?.length ? JSON.stringify(criteria.tokens) : null,
+    provisional ? 1 : 0,
   ];
 }
 
@@ -291,10 +316,59 @@ export async function visibleOrderFacets(
   };
 }
 
+/** Ordine proposto dalla ricerca della barra superiore, con i soli dati non fiscali. */
+export type OrderSearchMatch = {
+  id: string;
+  ebayOrderId: string;
+  buyerName: string;
+  detail: string;
+};
+
+/**
+ * Primi ordini della ricerca e loro numero, con lo stesso filtro dell'elenco: la barra
+ * superiore propone ciò che «Vedi tutti» mostra, senza leggere gli ordini completi.
+ */
+export async function searchVisibleOrders(
+  db: D1Database,
+  userId: string,
+  ebayEnvironment: "production" | "sandbox",
+  now: Date,
+  tokens: string[],
+  limit = 5,
+): Promise<{ items: OrderSearchMatch[]; total: number }> {
+  const criteria = { tokens };
+  const [result, total] = await Promise.all([
+    db
+      .prepare(
+        `SELECT o.id, o.ebay_order_id,
+                COALESCE(json_extract(o.buyer_json, '$.name'), json_extract(o.buyer_json, '$.username'), '')
+                  AS buyer_name,
+                COALESCE((SELECT title FROM order_items WHERE order_id = o.id ORDER BY rowid LIMIT 1), '')
+                  AS detail
+           ${visibleOrdersSql}
+          ORDER BY o.creation_time DESC, o.id DESC
+          LIMIT ?4`,
+      )
+      .bind(...visibleOrdersParams(userId, ebayEnvironment, now, limit, undefined, criteria))
+      .all<{ id: string; ebay_order_id: string; buyer_name: string; detail: string }>(),
+    countVisibleOrders(db, userId, ebayEnvironment, now, criteria),
+  ]);
+  return {
+    items: result.results.map((row) => ({
+      id: row.id,
+      ebayOrderId: row.ebay_order_id,
+      buyerName: row.buyer_name,
+      detail: row.detail,
+    })),
+    total,
+  };
+}
+
 /**
  * Ordini consultabili dello spazio dell'utente, dal più recente per data ordine, fino a `limit`.
  * Con `ids` si leggono soltanto quelli indicati; i criteri filtrano nella stessa query, con gli
- * stessi controlli di spazio, negozio e conservazione.
+ * stessi controlli di spazio, negozio e conservazione. `provisional` ammette anche gli acquisti
+ * non pagati, come il filtro «Non pagato».
  */
 export async function listVisibleOrders(
   db: D1Database,
@@ -302,7 +376,7 @@ export async function listVisibleOrders(
   requestedLimit = 50,
   ebayEnvironment: "production" | "sandbox" = "production",
   now = new Date(),
-  filter: { ids?: string[]; criteria?: OrderCriteria } = {},
+  filter: { ids?: string[]; criteria?: OrderCriteria; provisional?: boolean } = {},
 ): Promise<VisibleOrder[]> {
   const limit = Math.max(1, Math.min(maxListedOrders, Math.trunc(requestedLimit)));
   const result = await db
@@ -314,7 +388,7 @@ export async function listVisibleOrders(
        )
        SELECT o.id, o.ebay_order_id, o.creation_time, o.last_modified_time,
               o.currency, o.total_minor, o.buyer_json, o.payment_status, o.fulfillment_status,
-              o.cancel_status, o.store_id, o.marketplace_id,
+              o.cancel_status, o.store_id, o.marketplace_id, o.is_provisional,
               (SELECT json_object('availability', availability, 'at', observed_at, 'verification', verification)
                  FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
                 WHERE original.id = o.id OR original.merged_into = o.id
@@ -364,6 +438,7 @@ export async function listVisibleOrders(
         limit,
         filter.ids,
         filter.criteria ?? {},
+        filter.provisional,
       ),
     )
     .all<{
@@ -386,6 +461,7 @@ export async function listVisibleOrders(
       reconciliation_issue: number;
       store_id: string;
       marketplace_id: string | null;
+      is_provisional: number;
       items_json: string;
       store_name: string;
       has_identifiers: number;
@@ -424,6 +500,7 @@ export async function listVisibleOrders(
       storeId: row.store_id,
       storeName: row.store_name,
       marketplaceId: row.marketplace_id,
+      provisional: row.is_provisional === 1,
       summary: summaryOf(row),
       fiscalState: row.has_identifiers
         ? row.grant_id
@@ -493,7 +570,10 @@ export async function listVisibleOrders(
   const suggestions = await orderSuggestions(
     db,
     userId,
-    visible.filter((order) => order.fiscalState === "missing").map((order) => order.id),
+    // Un acquisto non pagato non riceve suggerimenti (D180).
+    visible
+      .filter((order) => order.fiscalState === "missing" && !order.provisional)
+      .map((order) => order.id),
     ebayEnvironment,
     new Date(Math.max(now.getTime(), Date.now())),
   );
@@ -529,12 +609,13 @@ function fiscalView(order: VisibleOrder): FiscalView {
     };
   }
   if (order.fiscalState === "locked") {
-    // Durante una nuova verifica lo sblocco resta sospeso.
-    return {
-      state: "locked",
-      shownAs: order.lockedShownAs,
-      ...(order.taxVerification === "checking" ? { hold: "checking" as const } : {}),
-    };
+    // Lo sblocco resta sospeso finché l'acquisto non è pagato (D174) o durante una nuova verifica.
+    const hold = order.provisional
+      ? ("unpaid" as const)
+      : order.taxVerification === "checking"
+        ? ("checking" as const)
+        : null;
+    return { state: "locked", shownAs: order.lockedShownAs, ...(hold ? { hold } : {}) };
   }
   if (order.fiscalState === "missing") {
     const reason = order.taxAvailability;
@@ -629,19 +710,20 @@ export function orderView(order: VisibleOrder): OrderView {
 
 /**
  * Criteri dell'elenco dall'indirizzo: un valore sconosciuto, o un'opzione del piano Premium in
- * Free, vale come «Tutti». La ricerca diventa un elenco di parole in minuscolo.
+ * Free, vale come «Tutti». La ricerca, già decifrata, diventa un elenco di parole.
  */
 export function orderCriteria(
   search: URLSearchParams,
   now: Date,
   plan: "free" | "premium",
+  query: string | null = null,
 ): OrderCriteria {
   const known = <Value extends string>(name: string, values: readonly Value[]) => {
     const value = search.get(name);
     return values.find((candidate) => candidate === value);
   };
   const days = known("periodo", plan === "premium" ? ["7", "30", "90"] : ["7", "30"]);
-  const tokens = (search.get("q") ?? "").toLowerCase().split(/\s/u).filter(Boolean).slice(0, 10);
+  const tokens = searchTokens(query);
   const value = (name: string) => {
     const raw = search.get(name);
     return raw && raw.length <= 64 ? raw : undefined;
@@ -652,7 +734,7 @@ export function orderCriteria(
     since: days ? new Date(now.getTime() - Number(days) * 86_400_000).toISOString() : undefined,
     payment: known("pagamento", paymentStatuses),
     shipping: known("spedizione", shippingStatuses),
-    fiscal: known("fiscale", fiscalStates),
+    fiscal: known("fiscale", fiscalSituations),
     tokens: tokens.length ? tokens : undefined,
   };
 }

@@ -5,6 +5,7 @@ import { createAuth } from "./auth.server";
 import { registrationStatus, type Profile } from "./domain/registration.server";
 import { accessPath, ordersPath } from "./app-links";
 import { errorResponse } from "./error-response";
+import { sandboxAvailable, type EbayEnvironment } from "./integrations/ebay/environment.server";
 import { tracePhase } from "./errors";
 import { languageFromPath, localizedPath, type Language } from "./i18n";
 import { measure } from "./observability.server";
@@ -66,4 +67,13 @@ export function assertSameOrigin(request: Request) {
   if (request.headers.get("origin") !== new URL(env.APP_ORIGIN).origin) {
     throw errorResponse(request, "FORBIDDEN");
   }
+}
+
+/** Ambiente eBay richiesto dall'indirizzo; la Sandbox esiste soltanto dove è abilitata. */
+export function requestedEbayEnvironment(request: Request): EbayEnvironment {
+  const environment =
+    new URL(request.url).searchParams.get("environment") === "sandbox" ? "sandbox" : "production";
+  if (environment === "sandbox" && !sandboxAvailable(env))
+    throw errorResponse(request, "FORBIDDEN");
+  return environment;
 }

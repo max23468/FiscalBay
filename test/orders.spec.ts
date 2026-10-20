@@ -19,19 +19,48 @@ import {
   type VisibleOrder,
 } from "../app/domain/orders.server";
 import { completeRegistration } from "../app/domain/registration.server";
+import { indexOrderSearch } from "../app/domain/maintenance.server";
 import { createAuth } from "../app/auth.server";
 import { action as unlockAction, loader as loadHome } from "../app/routes/orders";
+import { action as orderSearch } from "../app/routes/order-search";
+import type { SearchResults } from "../app/components/app-shell";
 import { loader as loadAccess } from "../app/routes/sign-in";
 import { action as securityAction } from "../app/routes/security";
 import { now, resetDatabase, seed } from "./database-fixtures";
 import { syntheticProfile, verifiedSession } from "./account-fixtures";
 import { displayTaxValue } from "../app/tax-quality";
-import { itemPrice } from "../app/view-models";
+import { fiscalSituation, itemPrice } from "../app/view-models";
 import { settle } from "../app/settle.server";
 import { requestOrderRead } from "../app/domain/order-sync.server";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
+
+/** Ricerca della barra superiore come la invia il browser: query nel corpo, mai nell'URL. */
+function searchRequest(
+  cookie: string | null,
+  query: string,
+  options: { origin?: string; json?: boolean; environment?: string } = {},
+) {
+  return orderSearch({
+    request: new Request(
+      `http://localhost:5173/api/v1/orders/search${options.environment ? `?environment=${options.environment}` : ""}`,
+      {
+        method: "POST",
+        headers: {
+          ...(cookie ? { cookie } : {}),
+          origin: options.origin ?? "http://localhost:5173",
+          ...(options.json === false ? {} : { accept: "application/json" }),
+        },
+        body: new URLSearchParams({ q: query, language: "it" }),
+      },
+    ),
+  } as Parameters<typeof orderSearch>[0]);
+}
+
+async function searchOrders(cookie: string, query: string): Promise<SearchResults> {
+  return (await (await searchRequest(cookie, query)).json()) as SearchResults;
+}
 
 describe("percorso ordini", () => {
   it("lega la pagina ordini alla sessione e al tenant senza consenso eBay", async () => {
@@ -105,15 +134,18 @@ describe("percorso ordini", () => {
     } as Parameters<typeof loadHome>[0]);
     expect(authenticated.verified).toBe(true);
     expect(authenticated.page?.orders.map(({ ebayOrderId }) => ebayOrderId)).toEqual(["ebay-a"]);
+    // La ricerca considera solo i valori autorizzati: un codice da sbloccare non trova l'ordine,
+    // né fra i suggerimenti né nell'elenco, e non compare nell'indirizzo.
+    const guess = await searchOrders(cookie!, "RSSMRA80A01H501U");
+    expect(guess).toMatchObject({ items: [], total: 0 });
+    expect(guess.href).not.toContain("RSSMRA80A01H501U");
     const guessed = await loadHome({
       params: {},
-      request: new Request("http://localhost:5173/app/ordini?q=RSSMRA80A01H501U", {
+      request: new Request(`http://localhost:5173${guess.href}`, {
         headers: { cookie: cookie! },
       }),
     } as Parameters<typeof loadHome>[0]);
-    expect(JSON.stringify(guessed)).not.toContain("RSSMRA80A01H501U");
-    // La ricerca considera solo i valori autorizzati: un codice da sbloccare non trova l'ordine.
-    expect(guessed.page?.orders).toEqual([]);
+    expect(guessed.page).toMatchObject({ search: "RSSMRA80A01H501U", orders: [], total: 0 });
     const unlockRequest = (ids: string, origin = "http://localhost:5173") =>
       ({
         request: new Request("http://localhost:5173/app/ordini", {
@@ -1020,6 +1052,12 @@ describe("pagina Ordini reale", () => {
     } as Parameters<typeof loadHome>[0]);
   }
 
+  /** Elenco con la ricerca indicata, dall'indirizzo che restituisce la barra superiore. */
+  async function searchedPage(cookie: string, query: string, params = "") {
+    const { href } = await searchOrders(cookie, query);
+    return ordersPage(cookie, params ? `${href}&${params}` : href);
+  }
+
   function ordersAction(cookie: string, fields: Record<string, string>) {
     return unlockAction({
       request: new Request(`${origin}/app/ordini`, {
@@ -1167,12 +1205,12 @@ describe("pagina Ordini reale", () => {
       "UPDATE tax_identifiers SET value = ' rss mra80a01h501u' WHERE id = 't-a1'",
     ).run();
     // Prima dello sblocco il codice non trova l'ordine e il filtro lo indica da sbloccare.
-    expect((await ordersPage(cookie, "/app/ordini?q=RSSMRA80A01H501U")).page!.orders).toEqual([]);
+    expect((await searchedPage(cookie, "RSSMRA80A01H501U")).page!.orders).toEqual([]);
     expect(
       (await ordersPage(cookie, "/app/ordini?fiscale=locked")).page!.orders.map(({ id }) => id),
     ).toEqual(["o-a"]);
     await unlockOrders(env.DB, userId, ["o-a"]);
-    const found = await ordersPage(cookie, "/app/ordini?q=RSSMRA80A01H501U");
+    const found = await searchedPage(cookie, "RSSMRA80A01H501U");
     expect(found.page!.orders.map(({ id }) => id)).toEqual(["o-a"]);
     // L'originale resta quello della fonte; la forma derivata è solo per mostrare e copiare.
     const [order] = found.page!.orders;
@@ -1190,7 +1228,7 @@ describe("pagina Ordini reale", () => {
     expect(
       (await ordersPage(cookie, "/app/ordini?fiscale=available")).page!.orders.map(({ id }) => id),
     ).toEqual(["o-a"]);
-    expect((await ordersPage(cookie, "/app/ordini?q=RSSMRA80A01H501U")).page!.total).toBe(1);
+    expect((await searchedPage(cookie, "RSSMRA80A01H501U")).page!.total).toBe(1);
     // L'esito del collegamento nell'indirizzo non diventa un filtro per negozio.
     expect(
       (await ordersPage(cookie, "/app/ordini?negozio=collegato")).page!.orders.map(({ id }) => id),
@@ -1250,7 +1288,7 @@ describe("pagina Ordini reale", () => {
     expect(all.marketplaces).toEqual(["EBAY_DE", "EBAY_IT"]);
     // Lo stato fiscale filtrato in SQL coincide con quello della vista per ogni ordine.
     for (const order of all.orders)
-      expect(await ids(`fiscale=${order.fiscal.state}&mostra=2`)).toContain(order.id);
+      expect(await ids(`fiscale=${fiscalSituation(order.fiscal)}&mostra=2`)).toContain(order.id);
     expect(Object.fromEntries(all.orders.map((order) => [order.id, order.fiscal.state]))).toEqual({
       "o-a": "locked",
       "x-paid": "missing",
@@ -1277,10 +1315,19 @@ describe("pagina Ordini reale", () => {
       "x-missing",
     ]);
     // La ricerca combina le parole su numero, acquirente, articoli e SKU.
-    expect(await ids("q=giulia%20sku-ricerca")).toEqual(["x-paid"]);
-    expect(await ids("q=LAMPADA")).toEqual(["x-paid"]);
-    expect(await ids("q=utente-x-unpaid")).toEqual(["x-unpaid"]);
-    expect(await ids("q=ebay-b")).toEqual([]);
+    const searched = async (query: string, params = "") =>
+      (await searchedPage(cookie, query, params)).page!.orders.map(({ id }) => id);
+    expect(await searched("giulia sku-ricerca")).toEqual(["x-paid"]);
+    expect(await searched("LAMPADA")).toEqual(["x-paid"]);
+    expect(await searched("utente-x-unpaid")).toEqual(["x-unpaid"]);
+    expect(await searched("ebay-b")).toEqual([]);
+    // La ricerca si combina con i filtri e una query nell'indirizzo non filtra.
+    expect(await searched("utente", "pagamento=paid")).toEqual([
+      "x-paid",
+      "x-checking",
+      "x-missing",
+    ]);
+    expect((await ordersPage(cookie, "/app/ordini?q=lampada")).page!.total).toBe(8);
     // «Carica altri» amplia la pagina letta dal server finché restano ordini.
     const first = (await ordersPage(cookie)).page!;
     expect({ shown: first.orders.length, total: first.total }).toEqual({ shown: 6, total: 8 });
@@ -1290,6 +1337,171 @@ describe("pagina Ordini reale", () => {
       .page!;
     expect(filtered).toMatchObject({ total: 3, nextHref: null });
     void userId;
+  });
+
+  it("la barra superiore cerca con la query nel corpo e l'elenco la riceve cifrata", async () => {
+    const { cookie, userId } = await owner();
+    await expect(
+      searchRequest(cookie, "articolo", { origin: "https://estraneo.invalid" }),
+    ).rejects.toMatchObject({ status: 403 });
+    // Senza sessione la richiesta del browser riceve un errore, il modulo l'accesso.
+    const anonymous = await searchRequest(null, "articolo");
+    expect(anonymous.status).toBe(401);
+    expect(await anonymous.json()).toMatchObject({ code: "AUTH_REQUIRED" });
+    await expect(searchRequest(null, "articolo", { json: false })).rejects.toMatchObject({
+      status: 302,
+    });
+
+    const found = await searchOrders(cookie, "  ARTICOLO a  ");
+    expect(found.href).toMatch(/^\/app\/ordini\?ricerca=[\w-]+$/u);
+    expect(found).toEqual({
+      items: [
+        {
+          id: "o-a",
+          ebayOrderId: "ebay-a",
+          buyerName: "",
+          detail: "Articolo A",
+          href: `/app/ordini/o-a${found.href.slice("/app/ordini".length)}`,
+        },
+      ],
+      total: 1,
+      href: found.href,
+    });
+    // Un modulo inviato senza JavaScript apre l'elenco; la query non è mai nell'indirizzo.
+    const submitted = await searchRequest(cookie, "ARTICOLO a", { json: false });
+    expect(submitted.status).toBe(303);
+    expect(submitted.headers.get("location")).toMatch(/^\/app\/ordini\?ricerca=[\w-]+$/u);
+    expect(submitted.headers.get("location")?.toLowerCase()).not.toContain("articolo");
+    expect(await searchOrders(cookie, "   ")).toEqual({ items: [], total: 0, href: "/app/ordini" });
+
+    // L'elenco decifra la ricerca della propria sessione e la conserva con filtri e pagine.
+    const listed = (await ordersPage(cookie, `${found.href}&fiscale=locked`)).page!;
+    expect(listed).toMatchObject({ search: "ARTICOLO a", total: 1 });
+    // Alterata, oppure in un'altra sessione dello stesso utente, la ricerca si dimentica.
+    expect((await ordersPage(cookie, `${found.href}x`)).page!.search).toBeNull();
+    const signIn = await createAuth(env).handler(
+      new Request("http://localhost:5173/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: "pagina-ordini@example.invalid",
+          password: "Una-password-negozio-molto-lunga",
+        }),
+      }),
+    );
+    const other = (await ordersPage(signIn.headers.get("set-cookie")!, found.href)).page!;
+    expect(other).toMatchObject({ search: null, total: 1 });
+    void userId;
+  });
+
+  it("confronta maiuscole e accenti di ogni alfabeto dopo l'indicizzazione", async () => {
+    const { cookie } = await owner();
+    await env.DB.prepare("UPDATE orders SET buyer_json = ? WHERE id = 'o-a'")
+      .bind(JSON.stringify({ name: "ÖZTÜRK Lucía", username: "oz_lucia" }))
+      .run();
+    // Prima dell'indicizzazione valgono le sole minuscole ASCII di SQLite.
+    expect((await searchOrders(cookie, "öztürk")).total).toBe(0);
+    expect((await searchOrders(cookie, "oz_lucia")).total).toBe(1);
+    expect(await indexOrderSearch(env.DB)).toBeGreaterThan(0);
+    expect(await indexOrderSearch(env.DB)).toBe(0);
+    const row = await env.DB.prepare("SELECT search_text FROM orders WHERE id = 'o-a'").first();
+    expect(row).toEqual({
+      search_text: "ebay-a ozturk lucia oz_lucia articolo a sku-a articolo b ",
+    });
+    for (const query of ["Öztürk", "ozturk LUCÍA", "lucia sku-a"])
+      expect((await searchOrders(cookie, query)).total).toBe(1);
+    expect((await searchedPage(cookie, "ÖZTÜRK")).page!.orders.map(({ id }) => id)).toEqual([
+      "o-a",
+    ]);
+  });
+
+  it("«Non pagato» mostra anche gli acquisti provvisori, senza sblocco né suggerimenti", async () => {
+    const { cookie } = await owner();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time, currency,
+           total_minor, is_provisional, payment_status, buyer_json)
+         VALUES ('x-prov', 's-a', 'x-prov', ?1, ?1, 'EUR', 100, 1, 'PENDING', '{"username":"carrello"}')`,
+      ).bind(now),
+      env.DB.prepare(
+        `INSERT INTO tax_identifiers (id, order_id, identifier_type, issuing_country, value, source, observed_at)
+         VALUES ('t-prov', 'x-prov', 'CODICE_FISCALE', 'IT', 'VRDGLI80A41H501X', 'ebay_trading_get_orders', ?1)`,
+      ).bind(now),
+    ]);
+    const ids = async (query: string) =>
+      (await ordersPage(cookie, `/app/ordini?${query}`)).page!.orders.map(({ id }) => id);
+    expect(await ids("")).toEqual(["o-a"]);
+    expect((await ordersPage(cookie)).page!.total).toBe(1);
+    expect(await ids("pagamento=unpaid")).toEqual(["x-prov"]);
+    expect((await searchOrders(cookie, "carrello")).total).toBe(0);
+    // Il dettaglio si apre dal filtro; lo sblocco attende il pagamento.
+    const opened = await ordersPage(cookie, "/app/ordini/x-prov?pagamento=unpaid", {
+      ordine: "x-prov",
+    });
+    expect(opened.page!.detail).toMatchObject({
+      id: "x-prov",
+      fiscal: { state: "locked", shownAs: "CF", hold: "unpaid" },
+      suggestions: [],
+    });
+    expect(await ordersPage(cookie, "/app/ordini/x-prov", { ordine: "x-prov" })).toMatchObject({
+      init: { status: 404 },
+    });
+    // Una lettura non riuscita dell'acquisto si può riprovare dal filtro che lo mostra.
+    await env.DB.prepare("DELETE FROM tax_identifiers WHERE order_id = 'x-prov'").run();
+    await withCredentials();
+    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(undefined);
+    try {
+      expect(await ordersAction(cookie, { intent: "retry", order: "x-prov" })).toEqual({
+        ok: true,
+        notice: "Nuova lettura richiesta.",
+      });
+    } finally {
+      send.mockRestore();
+    }
+  });
+
+  it("distingue l'acquirente estero dal dato non riportato da eBay", async () => {
+    const { cookie } = await owner();
+    const buyer = (country: string) =>
+      JSON.stringify({
+        name: "Lucía Martín",
+        billingAddress: { addressLine1: "Calle Mayor 10", city: "Madrid", countryCode: country },
+      });
+    await env.DB.batch(
+      [
+        ["x-es", buyer("ES"), "absent"],
+        ["x-es-masked", buyer("ES"), "masked"],
+        ["x-it", buyer("IT"), "absent"],
+        ["x-none", "{}", "not_included"],
+      ].flatMap(([id, json, availability], index) => [
+        env.DB.prepare(
+          `INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time, currency,
+             total_minor, payment_status, buyer_json)
+           VALUES (?1, 's-a', ?1, ?2, ?2, 'EUR', 100, 'PAID', ?3)`,
+        ).bind(id, new Date(Date.parse(now) - (index + 1) * 60_000).toISOString(), json),
+        env.DB.prepare(
+          `INSERT INTO order_tax_checks (order_id, source, observed_at, availability)
+           VALUES (?1, 'ebay_fulfillment', ?2, ?3)`,
+        ).bind(id, now, availability),
+      ]),
+    );
+    const page = async (query: string) => (await ordersPage(cookie, `/app/ordini?${query}`)).page!;
+    expect((await page("fiscale=foreign")).orders.map(({ id }) => id)).toEqual(["x-es"]);
+    expect((await page("fiscale=missing")).orders.map(({ id }) => id)).toEqual([
+      "x-es-masked",
+      "x-it",
+      "x-none",
+    ]);
+    const all = await page("mostra=2");
+    expect(
+      Object.fromEntries(all.orders.map((order) => [order.id, fiscalSituation(order.fiscal)])),
+    ).toEqual({
+      "o-a": "locked",
+      "x-es": "foreign",
+      "x-es-masked": "missing",
+      "x-it": "missing",
+      "x-none": "missing",
+    });
   });
 
   it("forma derivata di CF e Partita IVA italiani senza toccare i tipi esteri", () => {
@@ -1745,8 +1957,8 @@ describe("vista condivisa e criteri degli ordini", () => {
 
   it("legge i criteri dell'indirizzo con i soli valori previsti", () => {
     const at = new Date(now);
-    const criteria = (query: string, plan: "free" | "premium" = "free") =>
-      orderCriteria(new URLSearchParams(query), at, plan);
+    const criteria = (query: string, plan: "free" | "premium" = "free", search?: string) =>
+      orderCriteria(new URLSearchParams(query), at, plan, search);
     expect(criteria("")).toEqual({
       storeId: undefined,
       marketplace: undefined,
@@ -1787,12 +1999,16 @@ describe("vista condivisa e criteri degli ordini", () => {
       shipping: undefined,
       fiscal: undefined,
     });
-    // Ricerca in minuscolo divisa sugli spazi, al massimo dieci parole.
-    expect(criteria("q=%20Giulia%09%20SKU-A%20%20").tokens).toEqual(["giulia", "sku-a"]);
-    expect(criteria("q=%20%20").tokens).toBeUndefined();
+    // Ricerca già decifrata, divisa sugli spazi nella forma di confronto, al massimo dieci
+    // parole; una query nell'indirizzo non conta.
+    expect(criteria("", "free", " Giulia\t SKU-A  ").tokens).toEqual(["giulia", "sku-a"]);
+    expect(criteria("", "free", "ÖZTÜRK Lucía").tokens).toEqual(["ozturk", "lucia"]);
+    expect(criteria("q=giulia").tokens).toBeUndefined();
+    expect(criteria("", "free", "   ").tokens).toBeUndefined();
     expect(
-      criteria(`q=${Array.from({ length: 12 }, (_, i) => `p${i}`).join("%20")}`).tokens,
+      criteria("", "free", Array.from({ length: 12 }, (_, i) => `p${i}`).join(" ")).tokens,
     ).toHaveLength(10);
+    expect(criteria("fiscale=foreign").fiscal).toBe("foreign");
     // Identificativi oltre 64 caratteri non filtrano.
     expect(criteria(`negozio=${"x".repeat(64)}`).storeId).toBe("x".repeat(64));
     expect(criteria(`negozio=${"x".repeat(65)}&marketplace=`).storeId).toBeUndefined();

@@ -70,8 +70,11 @@ export type FiscalView =
   | {
       state: "locked";
       shownAs: "CF" | "PIVA";
-      /** Sblocco sospeso mentre è in corso una nuova verifica eBay. */
-      hold?: "checking";
+      /**
+       * Sblocco sospeso mentre è in corso una nuova verifica eBay, oppure finché l'acquisto non
+       * è pagato (D174).
+       */
+      hold?: "checking" | "unpaid";
     }
   /**
    * Senza motivo eBay non riporta il dato. Altrimenti lo nasconde o lo ha rimosso, oppure
@@ -84,7 +87,24 @@ export type FiscalView =
 
 export type FiscalState = FiscalView["state"];
 
-export const fiscalStates: FiscalState[] = ["available", "locked", "missing", "checking", "error"];
+/**
+ * Situazione fiscale dei filtri: lo stato, con l'acquirente dalla fatturazione estera distinto
+ * dal dato non riportato da eBay.
+ */
+export type FiscalSituation = FiscalState | "foreign";
+
+export const fiscalSituations: FiscalSituation[] = [
+  "available",
+  "locked",
+  "missing",
+  "foreign",
+  "checking",
+  "error",
+];
+
+export function fiscalSituation(fiscal: FiscalView): FiscalSituation {
+  return fiscal.state === "missing" && fiscal.reason === "foreign" ? "foreign" : fiscal.state;
+}
 
 /**
  * Vocabolario normalizzato unico per area reale, anteprima e filtri. Uno stato eBay non

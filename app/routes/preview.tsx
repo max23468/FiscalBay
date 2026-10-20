@@ -1,7 +1,7 @@
-import { useCallback } from "react";
-import { Outlet, redirect, useLocation, useSubmit } from "react-router";
+import { Outlet, redirect, useLocation, useMatches, useSubmit } from "react-router";
 
-import { AppShell, type SearchSuggestion } from "~/components/app-shell";
+import { AppShell } from "~/components/app-shell";
+import type { OrdersPageData } from "~/components/orders/page";
 import {
   Select,
   SelectContent,
@@ -41,23 +41,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     account: scenario.account,
     notifications: scenario.notifications,
     now: scenario.now,
-    // Indice di ricerca con i soli dati già accessibili: nessun valore da sbloccare.
-    searchIndex: scenario.orders.map((order) => ({
-      id: order.id,
-      ebayOrderId: order.ebayOrderId,
-      buyerName: order.buyerName ?? order.buyerUsername ?? "",
-      detail: order.items[0]?.title ?? "",
-      text: [
-        order.ebayOrderId,
-        order.buyerName ?? "",
-        ...order.items.flatMap((item) => [item.title, item.sku ?? ""]),
-        ...(order.fiscal.state === "available"
-          ? order.fiscal.identifiers.map((id) => id.value)
-          : []),
-      ]
-        .join(" ")
-        .toLocaleLowerCase(),
-    })),
   };
 }
 
@@ -139,22 +122,11 @@ function ScenarioBar({
 }
 
 export default function Preview({ loaderData }: Route.ComponentProps) {
-  const { language, searchIndex } = loaderData;
+  const { language } = loaderData;
   const t = appCopy[language];
   const links: AppLinks = { language, base };
-  const suggest = useCallback(
-    (query: string) => {
-      const tokens = query.toLocaleLowerCase().split(/\s+/u).filter(Boolean);
-      const matches = searchIndex.filter((entry) =>
-        tokens.every((token) => entry.text.includes(token)),
-      );
-      const items: SearchSuggestion[] = matches
-        .slice(0, 5)
-        .map(({ text: _text, ...entry }) => entry);
-      return { items, total: matches.length };
-    },
-    [searchIndex],
-  );
+  // Su Ordini il campo mostra la ricerca attiva, decifrata dal loader della pagina.
+  const orders = useMatches().find((match) => match.id.startsWith("preview-orders"));
   return (
     <AppShell
       links={links}
@@ -162,7 +134,10 @@ export default function Preview({ loaderData }: Route.ComponentProps) {
       account={loaderData.account}
       notifications={loaderData.notifications}
       now={loaderData.now}
-      suggest={suggest}
+      search={{
+        action: localizedPath(language, `${base}/ricerca`),
+        query: orders ? ((orders.loaderData as OrdersPageData | undefined)?.search ?? "") : null,
+      }}
       onSignOut={(notify) => notify(t.preview.signOut)}
       before={
         <ScenarioBar
