@@ -1,3 +1,4 @@
+import { contactsView } from "../contact";
 import type { Language } from "../i18n";
 import { formatDate } from "../view-models";
 import type {
@@ -116,12 +117,12 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
     it: {
       name: "Dati discordanti",
       focus:
-        "Codice aggiornato o nascosto da eBay, lettura non riuscita, nome non coerente, omocodia, suggerimenti in conflitto e un ordine da verificare.",
+        "Codice aggiornato o nascosto da eBay, lettura non riuscita, nome non coerente, omocodia, suggerimenti in conflitto, un ordine da verificare e contatti in forme diverse.",
     },
     en: {
       name: "Conflicting data",
       focus:
-        "Code updated or hidden by eBay, failed read, name mismatch, ambiguous codes, conflicting suggestions and an order that needs review.",
+        "Code updated or hidden by eBay, failed read, name mismatch, ambiguous codes, conflicting suggestions, an order that needs review and contacts in different forms.",
     },
   },
   "primo-accesso": {
@@ -247,6 +248,7 @@ interface OrderSeed extends Omit<
   | "shipping"
   | "items"
   | "suggestions"
+  | "contacts"
 > {
   store: StoreKey;
   /** Stato normalizzato, oppure codice eBay non previsto. */
@@ -753,6 +755,7 @@ function toOrder(seed: OrderSeed, storeList: StoreView[]): OrderView {
   const view = storeList.find((candidate) => candidate.id === stores[store].id);
   return {
     ...order,
+    contacts: contactsView(order),
     items: order.items.map((line) => ({ ...line, currency: order.currency })),
     payment: typeof payment === "string" ? { status: payment } : { status: null, ...payment },
     shipping: typeof shipping === "string" ? { status: shipping } : { status: null, ...shipping },
@@ -1169,9 +1172,18 @@ export function loadScenario(
                 identifiers: [{ ...cf("RSSMRA80A41H501Y"), updated: true }],
               },
             };
+          // Indirizzo tutto in maiuscolo e cellulare senza prefisso, come possono arrivare da eBay.
           if (seed.id === "ord-09")
             return {
               ...seed,
+              billingAddress: {
+                line: "VIA DELL'ORTO 12B",
+                postalCode: "26866",
+                city: "SANT'ANGELO LODIGIANO",
+                province: "LO",
+                countryCode: "IT",
+              },
+              phone: "333 000 1009",
               fiscal: { state: "available", identifiers: [cf("MRNSRA90L41H50LE", "unverifiable")] },
             };
           if (seed.id === "ord-03") return { ...seed, reconciliationIssue: true };
@@ -1181,8 +1193,14 @@ export function loadScenario(
             return { ...seed, fiscal: { ...seed.fiscal, notice } };
           if (seed.id === "ord-11")
             return { ...seed, fiscal: { state: "missing", reason: "masked" } };
+          // Alias eBay e numero non riconoscibile: niente email precompilata né collegamento.
           if (seed.id === "ord-14")
-            return { ...seed, fiscal: { state: "missing", reason: "removed" } };
+            return {
+              ...seed,
+              phone: "interno 14",
+              email: "c3f0a1b2@members.ebay.invalid",
+              fiscal: { state: "missing", reason: "removed" },
+            };
           if (seed.id === "ord-05") {
             return {
               ...seed,

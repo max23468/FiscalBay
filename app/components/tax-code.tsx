@@ -78,19 +78,26 @@ export function TaxCode({
       >
         {value}
       </span>
-      <CopyButton value={value} labels={labels} warning={warning} />
+      <CopyButton value={value} labels={labels} tone={warning ? "warning" : "info"} />
     </span>
   );
 }
 
-function CopyButton({
+const copyTones = {
+  info: "text-info hover:bg-info/10 hover:text-info",
+  warning: "text-warning hover:bg-warning/10 hover:text-warning",
+  neutral: "text-muted-foreground hover:bg-muted hover:text-foreground",
+};
+
+/** Copia del valore con conferma breve; `neutral` per i dati non fiscali, come i contatti. */
+export function CopyButton({
   value,
   labels,
-  warning = false,
+  tone = "info",
 }: {
   value: string;
-  labels: Labels;
-  warning?: boolean;
+  labels: Pick<Labels, "copy" | "copied" | "copyFailed">;
+  tone?: keyof typeof copyTones;
 }) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -118,12 +125,7 @@ function CopyButton({
         aria-label={labels.copy}
         data-state={state}
         onClick={copy}
-        className={cn(
-          "group/copy",
-          warning
-            ? "text-warning hover:bg-warning/10 hover:text-warning"
-            : "text-info hover:bg-info/10 hover:text-info",
-        )}
+        className={cn("group/copy", copyTones[tone])}
       >
         <span className="relative size-4">
           <Copy

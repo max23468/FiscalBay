@@ -24,7 +24,7 @@ import {
   marketplaceLabel,
   type OrderView,
 } from "../../view-models";
-import { AddressLines, EmailAddress, ItemThumbnail, type SecondaryActions } from "./card";
+import { AddressLines, EmailLink, ItemThumbnail, PhoneNumber, type SecondaryActions } from "./card";
 import {
   FiscalCodes,
   FiscalNotes,
@@ -32,7 +32,7 @@ import {
   type FiscalProps,
   type OrdersAccount,
 } from "./fiscal";
-import { ebayOrderHref } from "./labels";
+import { contactCopyLabels, ebayOrderHref } from "./labels";
 import { buyerLabel, paymentLabel, shippingLabel } from "./status";
 
 /**
@@ -167,8 +167,12 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
             <div className={row}>
               <dt className="text-muted-foreground">{t.orders.billingAddress}</dt>
               <dd className="text-pretty">
-                {order.billingAddress ? (
-                  <AddressLines address={order.billingAddress} language={language} />
+                {order.contacts.billingAddress ? (
+                  <AddressLines
+                    address={order.contacts.billingAddress}
+                    language={language}
+                    copy={contactCopyLabels(t.orders.billingAddress, order.ebayOrderId, t)}
+                  />
                 ) : (
                   missing
                 )}
@@ -176,13 +180,31 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
             </div>
             <div className={row}>
               <dt className="text-muted-foreground">{t.orders.phone}</dt>
-              <dd className="font-code">
-                {order.phone ?? <span className="font-sans">{missing}</span>}
+              <dd>
+                {order.phone ? (
+                  <PhoneNumber
+                    phone={order.phone}
+                    view={order.contacts.phone}
+                    copy={contactCopyLabels(t.orders.phone, order.ebayOrderId, t)}
+                  />
+                ) : (
+                  missing
+                )}
               </dd>
             </div>
             <div className={row}>
               <dt className="text-muted-foreground">{t.orders.email}</dt>
-              <dd>{order.email ? <EmailAddress email={order.email} /> : missing}</dd>
+              <dd>
+                {order.email ? (
+                  <EmailLink
+                    email={order.email}
+                    view={order.contacts.email}
+                    copy={contactCopyLabels(t.orders.email, order.ebayOrderId, t)}
+                  />
+                ) : (
+                  missing
+                )}
+              </dd>
             </div>
             <div className={row}>
               <dt className="text-muted-foreground">{t.order.recipient}</dt>

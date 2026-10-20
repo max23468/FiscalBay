@@ -30,6 +30,7 @@ import { now, resetDatabase, seed } from "./database-fixtures";
 import { syntheticProfile, verifiedSession } from "./account-fixtures";
 import { displayTaxValue } from "../app/tax-quality";
 import { fiscalSituation, itemPrice } from "../app/view-models";
+import { addressCase, emailView, phoneView } from "../app/contact";
 import { settle } from "../app/settle.server";
 import { requestOrderRead } from "../app/domain/order-sync.server";
 
@@ -1953,6 +1954,57 @@ describe("vista condivisa e criteri degli ordini", () => {
         }),
       }).shipTo?.locality,
     ).toBe("Trento (TN)");
+  });
+
+  it("formatta telefono, email e indirizzo senza correggere il dato di eBay", () => {
+    // Telefono: prefisso dal Paese quando manca, cellulari italiani raggruppati.
+    expect(phoneView("3331234567", "IT")).toEqual({
+      display: "+39 333 123 4567",
+      international: "+393331234567",
+    });
+    expect(phoneView("0039 333.123.4567", null)?.international).toBe("+393331234567");
+    expect(phoneView("+39 (0)2 1234 5678", null)).toEqual({
+      display: "+39 02 1234 5678",
+      international: "+390212345678",
+    });
+    // In Italia lo zero del fisso resta; altrove si toglie quello nazionale.
+    expect(phoneView("02 1234567", "IT")?.international).toBe("+39021234567");
+    expect(phoneView("030 1234567", "DE")).toEqual({
+      display: "+49 301234567",
+      international: "+49301234567",
+    });
+    expect(phoneView("+49 000 1000013", null)?.display).toBe("+49 000 1000013");
+    // Un valore non riconosciuto non diventa un collegamento.
+    for (const [raw, country] of [
+      ["interno 14", "IT"],
+      ["3331234567", null],
+      ["3331234567", "JP"],
+      ["+12345", null],
+      ["+0123456789", null],
+    ] as const)
+      expect(phoneView(raw, country)).toBeNull();
+    // Email: dominio in minuscolo, alias eBay riconosciuto.
+    expect(emailView("  Mario.Rossi@Esempio.INVALID ")).toEqual({
+      address: "Mario.Rossi@esempio.invalid",
+      relay: false,
+    });
+    expect(emailView("c3f0a1b2@members.ebay.invalid")).toEqual({
+      address: "c3f0a1b2@members.ebay.invalid",
+      relay: true,
+    });
+    expect(emailView("acquisti@notebay.invalid")?.relay).toBe(false);
+    for (const raw of ["mario rossi@esempio.invalid", "@esempio.invalid", "mario@", "mario"])
+      expect(emailView(raw)).toBeNull();
+    // Indirizzo: solo il testo tutto maiuscolo riceve le iniziali.
+    expect(addressCase("VIA DELL'ORTO 12B")).toBe("Via dell'Orto 12B");
+    expect(addressCase("SANT'ANGELO LODIGIANO")).toBe("Sant'Angelo Lodigiano");
+    expect(addressCase("VIA XX SETTEMBRE 14, C/O ROSSI SNC")).toBe(
+      "Via XX Settembre 14, c/o Rossi SNC",
+    );
+    expect(addressCase("PIAZZA DI SPAGNA E DEI MILLE")).toBe("Piazza di Spagna e dei Mille");
+    expect(addressCase("DI FRONTE ALLA STAZIONE")).toBe("Di Fronte Alla Stazione");
+    expect(addressCase("Via del Corso 1")).toBe("Via del Corso 1");
+    expect(addressCase("12345")).toBe("12345");
   });
 
   it("legge i criteri dell'indirizzo con i soli valori previsti", () => {

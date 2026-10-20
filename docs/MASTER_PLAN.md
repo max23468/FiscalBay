@@ -469,7 +469,7 @@ Un utente autenticato che visita la root viene indirizzato all'app. Dal menu ava
 
 Home dopo login = Ordini, non dashboard separata. Tutte le funzioni comprese nel piano sono utilizzabili anche dal browser smartphone, inclusi collegamenti, piano, impostazioni ed esportazioni: nessun obbligo di computer introdotto per comodità implementativa. Griglia a densità intermedia, **due schede per riga desktop/tablet landscape, una portrait/mobile**; con drawer e viewport insufficienti non comprimere sotto leggibilità. Nessuna personalizzazione delle schede nella 2.0.
 
-Scheda: ID e data, negozio, buyer con indirizzo di fatturazione completo e Paese, telefono ed email quando eBay li fornisce (D144), miniatura quando fornita/utilizzabile, uno/due articoli sintetici e quantità/altri articoli, importo+valuta, stato del pagamento e della spedizione secondo il vocabolario del [§9](#s09), stato fiscale. `Sblocca` per dato presente ancora bloccato; `Copia` soltanto per dati accessibili; dettaglio e menu secondario (apri ordine eBay, export singolo). Nessun pulsante Copia ingannevole su dato assente/errore, né modifica locale «Segna sbloccato».
+Scheda: ID e data, negozio, buyer con indirizzo di fatturazione completo e Paese, telefono ed email quando eBay li fornisce (D144), miniatura quando fornita/utilizzabile, uno/due articoli sintetici e quantità/altri articoli, importo+valuta, stato del pagamento e della spedizione secondo il vocabolario del [§9](#s09), stato fiscale. `Sblocca` per dato presente ancora bloccato; `Copia` soltanto per dati accessibili; telefono ed email come collegamenti e contatti copiabili nel dettaglio (D181); dettaglio e menu secondario (apri ordine eBay, export singolo). Nessun pulsante Copia ingannevole su dato assente/errore, né modifica locale «Segna sbloccato».
 
 Ricerca su ID, buyer, titolo, SKU, valori fiscali **autorizzati**. Top bar con suggerimenti + «Vedi tutti», stesso motore della pagina. Filtri negozi, marketplace, date, stato ordine e stato fiscale, combinabili; ordinamento iniziale data ordine decrescente. Ricerca/filtri/scroll/selezione conservati nei passaggi dettaglio/export; nuova sessione ricorda negozio e ordinamento, non query temporanee dimenticate. Filtri salvati nelle 2.x Premium.
 
@@ -1057,7 +1057,7 @@ Ogni milestone elenca in coda i propri task (D164) con codice `Mx-yy`, stato (`D
 | [M1](#m1) | Completata | Fondazioni, ambienti, logo, design system e prototipo approvati entro il 2026-09-28; fonti tecniche in codice/test/config e [design system](brand/DESIGN_SYSTEM.md). Cutover repository in [#163](https://github.com/max23468/FiscalBay/pull/163); la dismissione remota 1.x resta aperta. |
 | [M2](#m2) | Completata | Account, quattro login, sessioni/MFA admin, OAuth seller, pause/scollegamento, Negozi/Profilo e routing collaudati sul test il 2026-10-06, compreso il primo rinnovo dei token dal cron. Login/linking eBay reali in M8 (D160), cancellazione account in M6 (D163). Riferimenti: [#229](https://github.com/max23468/FiscalBay/pull/229), [#241](https://github.com/max23468/FiscalBay/pull/241), [#245](https://github.com/max23468/FiscalBay/pull/245), [#269](https://github.com/max23468/FiscalBay/pull/269), [#270](https://github.com/max23468/FiscalBay/pull/270), [#296](https://github.com/max23468/FiscalBay/pull/296). |
 | [M3](#m3) | Completata | Modello ordini, client eBay, import paginato, controllo fiscale, quota e diritti per ordine, retention, suggerimenti e template IT/EN implementati e verificati. Precedenza Fulfillment approvata e integrata ([#318](https://github.com/max23468/FiscalBay/pull/318)); ingresso eventi, cadenze e smistamento qualificati sul test ([#322](https://github.com/max23468/FiscalBay/pull/322), [#325](https://github.com/max23468/FiscalBay/pull/325), [#331](https://github.com/max23468/FiscalBay/pull/331)). Ordini combinati chiusi con limite ([#345](https://github.com/max23468/FiscalBay/pull/345)). Audit finale corretto e qualificato in locale: valori fiscali dopo consolidamento, errori immagini eBay, concorrenza dei compiti periodici e disposizione del template. Distribuzione delle correzioni finali ancora da eseguire, come nelle questioni aperte; ordini combinati reali e consegna attribuita eBay Production restano nel test merchant M8. |
-| [M4](#m4) | In corso | Pagina Ordini definitiva sullo stesso albero di componenti dell'anteprima, con accesso separato e misure per fase ([M4-01](#m4-01)); ricerca rapida e filtri reali, con la query fuori dall'indirizzo ([M4-02](#m4-02)). Contesto di navigazione, preferenze persistenti, campanella e onboarding da integrare nei percorsi reali. |
+| [M4](#m4) | In corso | Pagina Ordini definitiva sullo stesso albero di componenti dell'anteprima, con accesso separato e misure per fase ([M4-01](#m4-01)); ricerca rapida e filtri reali, con la query fuori dall'indirizzo ([M4-02](#m4-02)); contatti dell'acquirente formattati, cliccabili e copiabili ([M4-09](#m4-09)). Contesto di navigazione, preferenze persistenti, campanella e onboarding da integrare nei percorsi reali. |
 | [M5](#m5) | Da completare | Stripe e generatori di diritti qualificati preliminarmente; billing reale, ciclo commerciale e Telegram da integrare. Checkpoint live in attesa. |
 | [M6](#m6) | Da completare | Generatori export e sito pubblico minimo disponibili; export autenticato, cancellazione account, console, supporto, sito completo e KPI da integrare. |
 | [M7](#m7) | Da completare | Tooling di pubblicazione e prove locali disponibili; qualifiche remote, hardening, legali, capacità e recovery readiness da chiudere. |
@@ -1751,6 +1751,19 @@ Realizzare il pannello con URL su desktop e la vista completa mobile, Dettagli/A
 
 **Criterio di completamento:** Link diretto, ritorno e ricarica funzionano; ricerca e selezione rimangono, con focus e tastiera corretti.
 
+<a id="m4-09"></a>
+#### M4-09 · Contatti dell'acquirente
+
+**Stato:** Completato · **Prerequisiti:** M4-01 · **Contratto:** [§17](#s17) · [D181](DECISION_REGISTER.md)
+
+Mostrare telefono, email e indirizzo di fatturazione in una forma derivata e renderli utilizzabili, senza modificare i valori di eBay (D181).
+
+**Criterio di completamento:** Collegamenti soltanto per valori riconosciuti; dati mascherati, alias eBay e forme non riconosciute restano testo. Stessi componenti nell'area reale e nell'anteprima.
+
+**Completato:** il telefono si mostra in forma internazionale, con il prefisso del Paese di fatturazione quando manca e i cellulari italiani raggruppati; un numero già diviso in gruppi conserva quelli della fonte, uno non riconosciuto resta testo. L'email ha il dominio in minuscolo. Gli indirizzi scritti tutto in maiuscolo ricevono le iniziali maiuscole, con particelle, sigle societarie, numeri romani, civici e «c/o» conservati. In scheda telefono ed email sono collegamenti `tel:` e `mailto:`; nel dettaglio anche Copia per i tre dati, con il telefono in forma internazionale e l'indirizzo su più righe. La richiesta del Codice Fiscale offre «Scrivi all'acquirente via email» con oggetto e testo già compilati nella lingua scelta, soltanto per un indirizzo reale e mai per un alias eBay. La formattazione è un modulo puro condiviso; lo scenario «Dati discordanti» mostra indirizzo in maiuscolo, cellulare senza prefisso, numero non riconosciuto e alias eBay.
+
+**Limiti residui:** i gruppi del telefono sono calcolati soltanto per i cellulari italiani; gli altri numeri senza separatori mostrano prefisso e numero nazionale. Il prefisso dedotto dal Paese copre i Paesi europei più frequenti, Stati Uniti, Canada e Australia; per gli altri un numero senza prefisso resta testo.
+
 <a id="m4-05"></a>
 #### M4-05 · Multiselezione ed export entrypoint
 
@@ -1789,7 +1802,7 @@ Con quota esaurita mostrare l'azione contestuale verso Piano prevista dal [§20]
 <a id="m4-08"></a>
 #### M4-08 · Review visiva e a11y baseline
 
-**Stato:** Da completare · **Prerequisiti:** M4-01..M4-07 · **Contratto:** [§22](#s22) · [§35](#s35)
+**Stato:** Da completare · **Prerequisiti:** M4-01..M4-07, M4-09 · **Contratto:** [§22](#s22) · [§35](#s35)
 
 Verificare desktop, tablet e smartphone, IT/EN, chiaro/scuro, tastiera, focus, contrasto e movimento ridotto con gli asset approvati. Comprende gli stati aggiunti all'anteprima dopo il checkpoint M1, senza riaprirlo. Verificare gli stessi componenti sulle route reali e nell'anteprima test secondo §35; trasferire le prove funzionali disponibili senza perdere gli scenari per la verifica grafica manuale.
 

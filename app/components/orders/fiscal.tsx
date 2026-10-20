@@ -1,4 +1,4 @@
-import { MessageSquareText } from "lucide-react";
+import { Mail, MessageSquareText } from "lucide-react";
 import { useId, useRef, useState } from "react";
 
 import { useAction } from "~/components/app-shell";
@@ -17,6 +17,7 @@ import {
   AlertDialogTrigger,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
+import { buttonVariants } from "~/components/ui/button-variants";
 import { Checkbox } from "~/components/ui/checkbox";
 import { Field, FieldLabel } from "~/components/ui/field";
 import {
@@ -29,7 +30,7 @@ import {
 import { Spinner } from "~/components/ui/spinner";
 import { Textarea } from "~/components/ui/textarea";
 import { cn } from "cn";
-import type { AppCopy } from "../../app-copy";
+import { appCopy, type AppCopy } from "../../app-copy";
 import { languages, languageNames, type Language } from "../../i18n";
 import { displayTaxValue } from "../../tax-quality";
 import {
@@ -457,7 +458,7 @@ export function MissingOrderHelp({
   language,
   template,
 }: {
-  order: Pick<OrderView, "ebayOrderId" | "suggestions" | "suggestionStatus">;
+  order: Pick<OrderView, "ebayOrderId" | "contacts" | "suggestions" | "suggestionStatus">;
   t: AppCopy;
   language: Language;
   template?: string;
@@ -474,6 +475,10 @@ export function MissingOrderHelp({
   const [message, setMessage] = useState(() => defaultMessage(language));
   const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
   const fieldId = useId();
+  // Un alias eBay passa dalla messaggistica eBay, dove non si chiedono dati personali.
+  const { email } = order.contacts;
+  // L'oggetto segue la lingua del messaggio.
+  const subject = appCopy[messageLanguage].orders.requestEmailSubject(order.ebayOrderId);
   return (
     <div className="grid min-w-0 grid-cols-1 gap-3">
       {order.suggestions.map((suggestion) => {
@@ -576,6 +581,19 @@ export function MissingOrderHelp({
         <MessageSquareText aria-hidden="true" data-icon="inline-start" />
         {t.orders.requestMessage}
       </Button>
+      {email && !email.relay && message.trim() ? (
+        <a
+          href={`mailto:${email.address}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`}
+          data-slot="button"
+          className={cn(
+            buttonVariants({ variant: "outline" }),
+            "h-auto min-h-9 w-fit max-w-full whitespace-normal",
+          )}
+        >
+          <Mail aria-hidden="true" data-icon="inline-start" />
+          {t.orders.requestEmail}
+        </a>
+      ) : null}
       <p role="status" className="text-sm">
         {copied === "copied"
           ? t.orders.requestCopied

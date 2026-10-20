@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { buyerSnapshotSchema, type BuyerSnapshot } from "./order-import.server";
+import { contactsView } from "../contact";
 import { searchTokens } from "../order-search";
 import { taxComparisonKey, taxIdentifierType, taxQuality } from "../tax-quality";
 import {
@@ -655,7 +656,7 @@ export function orderView(order: VisibleOrder): OrderView {
   const line = [billing?.addressLine1, billing?.addressLine2].filter(Boolean).join(", ");
   // La miniatura è la prima immagine d'inserzione disponibile fra gli articoli.
   const thumbnail = order.summary.lineItems.find((item) => item.imageUrl)?.imageUrl;
-  return {
+  const view: Omit<OrderView, "contacts"> = {
     id: order.id,
     ebayOrderId: order.ebayOrderId,
     createdAt: order.creationTime,
@@ -706,6 +707,7 @@ export function orderView(order: VisibleOrder): OrderView {
     ...(thumbnail ? { thumbnail } : {}),
     lastSyncedAt: order.taxCheckedAt,
   };
+  return { ...view, contacts: contactsView(view) };
 }
 
 /**

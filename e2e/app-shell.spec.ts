@@ -503,3 +503,33 @@ test("stati coerenti: aggiornamento, eBay fermo e collegamento già usato", asyn
   await page.getByRole("button", { name: "Collega negozio eBay" }).click();
   await expect(page.getByText("Negozio già collegato a un altro account")).toBeVisible();
 });
+
+test("contatti dell'acquirente formattati, cliccabili e mai verso un alias eBay", async ({
+  page,
+}) => {
+  await page.request.post("/anteprima", {
+    form: { scenario: "dati-discordanti", redirectTo: "/anteprima/ordini" },
+    maxRedirects: 0,
+  });
+  // Indirizzo tutto in maiuscolo e cellulare senza prefisso.
+  await page.goto("/anteprima/ordini/ord-09");
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Via dell'Orto 12B", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("26866 Sant'Angelo Lodigiano (LO), Italia")).toBeVisible();
+  await expect(dialog.getByRole("link", { name: "+39 333 000 1009" })).toHaveAttribute(
+    "href",
+    "tel:+393330001009",
+  );
+  // Dato fiscale mancante con un indirizzo reale: email già compilata.
+  await page.goto("/anteprima/ordini/ord-11");
+  await expect(
+    page.getByRole("dialog").getByRole("link", { name: "Scrivi all’acquirente via email" }),
+  ).toHaveAttribute("href", /^mailto:fra\.colombo@esempio\.invalid\?subject=/u);
+  // Alias eBay e numero non riconoscibile: niente email precompilata né chiamata.
+  await page.goto("/anteprima/ordini/ord-14");
+  const alias = page.getByRole("dialog");
+  await expect(alias.getByText("interno 14", { exact: true })).toBeVisible();
+  await expect(alias.locator('a[href^="tel:"]')).toHaveCount(0);
+  await expect(alias.getByRole("link", { name: "Scrivi all’acquirente via email" })).toHaveCount(0);
+  await expect(alias.getByRole("button", { name: /^Copia messaggio/u })).toBeVisible();
+});
