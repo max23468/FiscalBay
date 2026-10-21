@@ -662,6 +662,7 @@ function OrdersList({
           <Link
             to={freshHref}
             replace
+            preventScrollReset
             data-slot="button"
             className={buttonVariants({ variant: "secondary" })}
           >
