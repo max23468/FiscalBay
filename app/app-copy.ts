@@ -674,6 +674,10 @@ const it = {
   },
   authError: {
     title: "Accesso non completato",
+    registrationRestricted: {
+      title: "Registrazione riservata",
+      body: "Ambiente di test riservato. La registrazione richiede un’autorizzazione preventiva.",
+    },
     body: "Riprova con il metodo di accesso che usi di solito.",
     back: "Torna a FiscalBay",
     support: "Contatta il supporto",
@@ -764,6 +768,8 @@ const it = {
     signInBody: "Entra con email e password, Google, eBay o passkey.",
     signUp: "Crea account",
     signUpBody: "Bastano pochi dati per iniziare.",
+    registrationRestricted:
+      "Ambiente di test riservato. La registrazione richiede un’autorizzazione preventiva.",
     firstName: "Nome",
     requiredFields: "* Campo obbligatorio.",
     lastName: "Cognome",
@@ -857,6 +863,8 @@ const it = {
       registrato:
         "Controlla la posta: ti abbiamo inviato un link per confermare l’indirizzo email e accedere.",
       registrazione: "Account non creato. Controlla l’indirizzo email e la password.",
+      autorizzazione:
+        "Ambiente di test riservato. La registrazione richiede un’autorizzazione preventiva.",
       termini: "Per continuare accetta i Termini di servizio.",
       dati: "Indica nome, cognome e, per un’azienda, la ragione sociale.",
       "troppi-tentativi": "Troppi tentativi. Riprova tra qualche minuto.",
@@ -1511,6 +1519,10 @@ const en: AppCopy = {
   },
   authError: {
     title: "Sign in incomplete",
+    registrationRestricted: {
+      title: "Registration restricted",
+      body: "Private test environment. Registration requires prior approval.",
+    },
     body: "Try again with the sign-in method you usually use.",
     back: "Back to FiscalBay",
     support: "Contact support",
@@ -1599,6 +1611,7 @@ const en: AppCopy = {
     signInBody: "Use your email and password, Google, eBay or a passkey.",
     signUp: "Create account",
     signUpBody: "It only takes a few details to get started.",
+    registrationRestricted: "Private test environment. Registration requires prior approval.",
     firstName: "First name",
     requiredFields: "* Required field.",
     lastName: "Last name",
@@ -1690,6 +1703,7 @@ const en: AppCopy = {
       errore: "Could not complete the operation. Check your email and password.",
       registrato: "Check your inbox: we sent you a link to confirm your email address and sign in.",
       registrazione: "Account not created. Check your email address and password.",
+      autorizzazione: "Private test environment. Registration requires prior approval.",
       termini: "To continue, accept the Terms of service.",
       dati: "Enter your first and last name and, for a business, the company name.",
       "troppi-tentativi": "Too many attempts. Try again in a few minutes.",

@@ -1,6 +1,11 @@
 import { passkey } from "@better-auth/passkey";
 import { betterAuth, type Auth, type BetterAuthOptions } from "better-auth";
-import { getAuthoritativeSessionFromCtx, getOAuthState } from "better-auth/api";
+import {
+  APIError,
+  createAuthMiddleware,
+  getAuthoritativeSessionFromCtx,
+  getOAuthState,
+} from "better-auth/api";
 import { genericOAuth } from "better-auth/plugins";
 import { z } from "zod";
 
@@ -43,6 +48,25 @@ export const sessionPolicy = {
 // finché è in corso.
 const userVerifiedRequests = new WeakSet<Request>();
 
+function requireRegistrationApproval(environment: Env, email: string) {
+  if (environment.REGISTRATION_MODE === "open") return;
+  // Un elenco assente, vuoto o non valido chiude le nuove registrazioni.
+  let emails: string[] = [];
+  try {
+    emails = z
+      .array(z.string().trim().email())
+      .parse(JSON.parse(environment.REGISTRATION_ALLOWED_EMAILS ?? "[]"));
+  } catch {
+    // Non registrare il contenuto della configurazione privata.
+  }
+  if (!emails.some((allowed) => allowed.toLowerCase() === email.trim().toLowerCase())) {
+    throw new APIError("FORBIDDEN", {
+      code: "registration_approval_required",
+      message: "Registration requires approval.",
+    });
+  }
+}
+
 export function createAuthOptions(environment: Env): BetterAuthOptions {
   const appOrigin = new URL(environment.APP_ORIGIN);
 
@@ -69,6 +93,15 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
       errorURL: "/auth/error",
     },
     logger: { disabled: true },
+    hooks: {
+      before: createAuthMiddleware(async (context) => {
+        // Anche il tentativo su un account esistente riceve lo stesso rifiuto: il filtro
+        // non deve rivelare se un indirizzo fuori elenco è già registrato.
+        if (context.path === "/sign-up/email" && typeof context.body?.email === "string") {
+          requireRegistrationApproval(environment, context.body.email);
+        }
+      }),
+    },
     session: {
       ...sessionPolicy,
       // Ogni richiesta rilegge la sessione da D1: logout e revoche valgono subito.
@@ -78,6 +111,14 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
       },
     },
     databaseHooks: {
+      user: {
+        create: {
+          before: async (user) => {
+            // Include i callback OAuth; non modifica accessi e collegamenti esistenti.
+            requireRegistrationApproval(environment, user.email);
+          },
+        },
+      },
       account: {
         create: {
           // Google o eBay aggiunti a un account che aveva già un accesso: il titolare ne riceve

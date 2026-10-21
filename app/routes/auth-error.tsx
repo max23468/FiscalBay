@@ -18,6 +18,7 @@ function messageFor(
   provider: string | null,
 ): { title: string; body: string } {
   if (error === "email_not_found") return t.ebayWithoutEmail;
+  if (error === "registration_approval_required") return t.registrationRestricted;
   if (error === "account_not_linked") return t.accountNotLinked;
   if (error === "account_already_linked_to_different_user")
     return {

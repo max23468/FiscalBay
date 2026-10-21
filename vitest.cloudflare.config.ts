@@ -8,6 +8,8 @@ export default defineConfig({
       miniflare: {
         bindings: {
           APP_ORIGIN: "http://localhost:5173",
+          REGISTRATION_MODE: "open",
+          REGISTRATION_ALLOWED_EMAILS: "[]",
           BETTER_AUTH_SECRET: "fiscalbay-test-secret-at-least-32-bytes",
           GOOGLE_CLIENT_ID: "google-test-client",
           GOOGLE_CLIENT_SECRET: "google-test-secret",

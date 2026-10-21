@@ -155,6 +155,70 @@ it("mantiene lo schema D1 allineato ai quattro metodi Auth", async () => {
   expect(migration.unsafeChanges).toEqual([]);
 });
 
+it.each([undefined, "[]", "", "non-json", "{}", '["non-email"]', '["ok@example.invalid", 1]'])(
+  "rifiuta nuove registrazioni con elenco vuoto o non valido: %s",
+  async (list) => {
+    const email = `rifiuto-${crypto.randomUUID()}@example.invalid`;
+    const send = vi.fn(async () => ({}));
+    const environment = {
+      ...env,
+      REGISTRATION_MODE: "approval",
+      REGISTRATION_ALLOWED_EMAILS: list,
+      AUTH_EMAIL: { send },
+    } as Env;
+    const response = await createAuth(environment).handler(
+      new Request("http://localhost:5173/api/auth/sign-up/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, name: "Sintetico", password: "Password-sintetica-123!" }),
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "registration_approval_required" });
+    expect(response.headers.getSetCookie()).toEqual([]);
+    expect(
+      await env.DB.prepare('SELECT id FROM "user" WHERE email = ?').bind(email).first(),
+    ).toBeNull();
+    expect(send).not.toHaveBeenCalled();
+  },
+);
+
+it("autorizza solo email esatte, conserva il login e non rivela gli account fuori elenco", async () => {
+  const email = "approvato@example.invalid";
+  const environment = {
+    ...env,
+    REGISTRATION_MODE: "approval",
+    REGISTRATION_ALLOWED_EMAILS: '[" Approvato@Example.Invalid "]',
+    AUTH_EMAIL: { send: vi.fn(async () => ({})) },
+  } as Env;
+  const signup = (target: Env, address: string) =>
+    createAuth(target).handler(
+      new Request("http://localhost:5173/api/auth/sign-up/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: address,
+          name: "Approvato",
+          password: "Password-sintetica-123!",
+        }),
+      }),
+    );
+  expect((await signup(environment, email)).status).toBe(200);
+  const closed = { ...environment, REGISTRATION_ALLOWED_EMAILS: "[]" };
+  for (const address of [email, "approvato+alias@example.invalid", "altro@example.invalid"]) {
+    const denied = await signup(closed, address);
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({ code: "registration_approval_required" });
+  }
+  expect(await passwordSession(closed, email, "Password-sintetica-123!")).toContain(
+    "session_token",
+  );
+  // Nemmeno un alias dello stesso indirizzo o un altro utente sul dominio sono autorizzati.
+  for (const address of ["approvato+alias@example.invalid", "altro@example.invalid"]) {
+    expect((await signup(environment, address)).status).toBe(403);
+  }
+});
+
 describe("Better Auth su Workers e D1", () => {
   it("non accoda le query D1 dietro una richiesta rimasta sospesa", async () => {
     // Una richiesta annullata dal browser lascia la sua query D1 senza risposta: con l'istanza
@@ -600,80 +664,108 @@ describe("Better Auth su Workers e D1", () => {
     },
   );
 
-  it("registra un account eBay business nuovo con email non verificata e invia la conferma", async () => {
-    const send = vi.fn(async () => ({ messageId: "synthetic" }));
-    const environment = { ...env, AUTH_EMAIL: { send } } as Env;
-    const start = await createAuth(environment).handler(
-      new Request("http://localhost:5173/api/auth/sign-in/social", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ provider: "ebay", callbackURL: "/" }),
-      }),
-    );
-    const state = new URL((await start.json<{ url: string }>()).url).searchParams.get("state");
-    const cookie = start.headers
-      .getSetCookie()
-      .map((value) => value.split(";")[0])
-      .join("; ");
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const url = input instanceof Request ? input.url : String(input);
-      if (url.endsWith("/identity/v1/oauth2/token")) {
-        return Response.json({ access_token: "sintetico", token_type: "Bearer", expires_in: 7200 });
-      }
-      return Response.json({
-        userId: "ebay-business-sintetico",
-        username: "venditore-business",
-        businessAccount: { email: "business@example.invalid" },
+  it.each([true, false])(
+    "applica l'autorizzazione alla registrazione eBay business: %s",
+    async (allowed) => {
+      const email = allowed ? "business@example.invalid" : "business-negato@example.invalid";
+      const accountId = allowed ? "ebay-business-sintetico" : "ebay-business-negato";
+      const send = vi.fn(async () => ({ messageId: "synthetic" }));
+      const environment = {
+        ...env,
+        REGISTRATION_MODE: "approval",
+        REGISTRATION_ALLOWED_EMAILS: allowed ? '["business@example.invalid"]' : "[]",
+        AUTH_EMAIL: { send },
+      } as Env;
+      const start = await createAuth(environment).handler(
+        new Request("http://localhost:5173/api/auth/sign-in/social", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ provider: "ebay", callbackURL: "/" }),
+        }),
+      );
+      const state = new URL((await start.json<{ url: string }>()).url).searchParams.get("state");
+      const cookie = start.headers
+        .getSetCookie()
+        .map((value) => value.split(";")[0])
+        .join("; ");
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url.endsWith("/identity/v1/oauth2/token")) {
+          return Response.json({
+            access_token: "sintetico",
+            token_type: "Bearer",
+            expires_in: 7200,
+          });
+        }
+        return Response.json({
+          userId: accountId,
+          username: "venditore-business",
+          businessAccount: { email },
+        });
       });
-    });
 
-    const response = await handleAuthRequest(
-      new Request(`http://localhost:5173/api/auth/callback/ebay?code=synthetic&state=${state}`, {
-        headers: { cookie },
-      }),
-      environment,
-    );
-    // Il profilo si legge da Identity con il token di accesso appena ottenuto.
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://apiz.ebay.com/commerce/identity/v1/user/",
-      expect.objectContaining({ headers: { Authorization: "Bearer sintetico" } }),
-    );
-    fetchMock.mockRestore();
+      const response = await handleAuthRequest(
+        new Request(`http://localhost:5173/api/auth/callback/ebay?code=synthetic&state=${state}`, {
+          headers: { cookie },
+        }),
+        environment,
+      );
+      // Il profilo si legge da Identity con il token di accesso appena ottenuto.
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://apiz.ebay.com/commerce/identity/v1/user/",
+        expect.objectContaining({ headers: { Authorization: "Bearer sintetico" } }),
+      );
+      fetchMock.mockRestore();
 
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("/");
-    const user = await env.DB.prepare(
-      'SELECT u.email, u."emailVerified", a."accountId" FROM "user" u JOIN "account" a ON a."userId" = u.id WHERE a."providerId" = ?',
-    )
-      .bind("ebay")
-      .first<{ email: string; emailVerified: number; accountId: string }>();
-    expect(user).toEqual({
-      email: "business@example.invalid",
-      emailVerified: 0,
-      accountId: "ebay-business-sintetico",
-    });
-    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
-    expect(send.mock.calls[0]?.[0]).toMatchObject({ to: "business@example.invalid" });
-    const account = await env.DB.prepare('SELECT id FROM "account" WHERE "accountId" = ?')
-      .bind("ebay-business-sintetico")
-      .first<{ id: string }>();
-    const removal = await createAuth(environment).handler(
-      new Request("http://localhost:5173/api/auth/unlink-account", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          origin: "http://localhost:5173",
-          cookie: response.headers
-            .getSetCookie()
-            .map((value) => value.split(";")[0])
-            .join("; "),
-        },
-        body: JSON.stringify({ accountId: account!.id }),
-      }),
-    );
-    expect(removal.status).toBe(400);
-    expect(await removal.json()).toMatchObject({ code: "FAILED_TO_UNLINK_LAST_ACCOUNT" });
-  });
+      expect(response.status).toBe(302);
+      if (!allowed) {
+        expect(response.headers.get("location")).toContain("registration_approval_required");
+        expect(response.headers.getSetCookie().join(";")).not.toContain("session_token");
+        expect(
+          await env.DB.prepare('SELECT id FROM "user" WHERE email = ?').bind(email).first(),
+        ).toBeNull();
+        expect(
+          await env.DB.prepare('SELECT id FROM "account" WHERE "accountId" = ?')
+            .bind(accountId)
+            .first(),
+        ).toBeNull();
+        expect(send).not.toHaveBeenCalled();
+        return;
+      }
+      expect(response.headers.get("location")).toBe("/");
+      const user = await env.DB.prepare(
+        'SELECT u.email, u."emailVerified", a."accountId" FROM "user" u JOIN "account" a ON a."userId" = u.id WHERE a."providerId" = ?',
+      )
+        .bind("ebay")
+        .first<{ email: string; emailVerified: number; accountId: string }>();
+      expect(user).toEqual({
+        email: "business@example.invalid",
+        emailVerified: 0,
+        accountId: "ebay-business-sintetico",
+      });
+      await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+      expect(send.mock.calls[0]?.[0]).toMatchObject({ to: "business@example.invalid" });
+      const account = await env.DB.prepare('SELECT id FROM "account" WHERE "accountId" = ?')
+        .bind("ebay-business-sintetico")
+        .first<{ id: string }>();
+      const removal = await createAuth(environment).handler(
+        new Request("http://localhost:5173/api/auth/unlink-account", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: "http://localhost:5173",
+            cookie: response.headers
+              .getSetCookie()
+              .map((value) => value.split(";")[0])
+              .join("; "),
+          },
+          body: JSON.stringify({ accountId: account!.id }),
+        }),
+      );
+      expect(removal.status).toBe(400);
+      expect(await removal.json()).toMatchObject({ code: "FAILED_TO_UNLINK_LAST_ACCOUNT" });
+    },
+  );
 
   it("chiude il login eBay senza account se Identity non risponde o risponde fuori schema", async () => {
     const ebayAccounts = () =>
@@ -1034,6 +1126,47 @@ describe("Collegamento e modifica dell'identità", () => {
       fetchMock.mockRestore();
     }
   }
+
+  it.each([true, false])("applica l'autorizzazione al callback Google: %s", async (allowed) => {
+    const email = `google-approvazione-${allowed}@gmail.com`;
+    const send = vi.fn(async () => ({}));
+    const environment = {
+      ...withEmail(send),
+      REGISTRATION_MODE: "approval",
+      REGISTRATION_ALLOWED_EMAILS: allowed ? JSON.stringify([email.toUpperCase()]) : "[]",
+    };
+    const result = await googleCallback(
+      environment,
+      await post(environment, "sign-in/social", { provider: "google", callbackURL: "/" }),
+      { sub: `google-approvazione-${allowed}`, email, email_verified: true },
+    );
+    const user = await env.DB.prepare('SELECT id FROM "user" WHERE email = ?')
+      .bind(email)
+      .first<{ id: string }>();
+    if (allowed) {
+      expect(result.headers.get("location")).toBe("/");
+      expect(user).not.toBeNull();
+      expect(await googleAccounts(user!.id)).toEqual([`google-approvazione-${allowed}`]);
+      // La rimozione dalla lista non impedisce accessi successivi con il metodo già collegato.
+      const closed = { ...environment, REGISTRATION_ALLOWED_EMAILS: "[]" };
+      const again = await googleCallback(
+        closed,
+        await post(closed, "sign-in/social", { provider: "google", callbackURL: "/" }),
+        { sub: `google-approvazione-${allowed}`, email, email_verified: true },
+      );
+      expect(again.headers.get("location")).toBe("/");
+    } else {
+      expect(result.headers.get("location")).toContain("registration_approval_required");
+      expect(result.headers.getSetCookie().join(";")).not.toContain("session_token");
+      expect(user).toBeNull();
+      expect(
+        await env.DB.prepare('SELECT id FROM "account" WHERE "accountId" = ?')
+          .bind(`google-approvazione-${allowed}`)
+          .first(),
+      ).toBeNull();
+      expect(send).not.toHaveBeenCalled();
+    }
+  });
 
   it("non lascia un metodo proprio a chi registra in anticipo l'email di un altro", async () => {
     const environment = withEmail();

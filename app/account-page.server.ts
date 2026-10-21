@@ -25,6 +25,7 @@ export async function accessLoader(request: Request) {
   if (!session || search.has("token")) {
     return {
       authenticated: false as const,
+      registrationRestricted: env.REGISTRATION_MODE !== "open",
       language,
       notice,
       resetToken: search.get("token") || null,
