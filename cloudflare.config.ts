@@ -14,6 +14,7 @@ export const databases = {
 };
 
 const secrets = {
+  REGISTRATION_ALLOWED_EMAILS: bindings.secret(),
   BETTER_AUTH_SECRET: bindings.secret(),
   GOOGLE_CLIENT_ID: bindings.secret(),
   GOOGLE_CLIENT_SECRET: bindings.secret(),
@@ -72,6 +73,7 @@ export default defineConfig((ctx) => ({
           database: databases.live,
           vars: {
             APP_ORIGIN: bindings.text("https://fiscalbay.it"),
+            REGISTRATION_MODE: bindings.text("open"),
             EBAY_SANDBOX_ENABLED: bindings.text("false"),
             STRIPE_PRICE_MONTHLY: bindings.text(""),
             STRIPE_PRICE_ANNUAL: bindings.text(""),
@@ -85,6 +87,7 @@ export default defineConfig((ctx) => ({
           database: databases.test,
           vars: {
             APP_ORIGIN: bindings.text("https://test.fiscalbay.it"),
+            REGISTRATION_MODE: bindings.text("approval"),
             EBAY_SANDBOX_ENABLED: bindings.text("true"),
             STRIPE_PRICE_MONTHLY: bindings.text("price_1UHlnnJP7SSN14Zph79bnCQu"),
             STRIPE_PRICE_ANNUAL: bindings.text("price_1UHlnnJP7SSN14Zpc0f7vZkS"),

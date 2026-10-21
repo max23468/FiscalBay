@@ -80,6 +80,7 @@ describe("percorso ordini", () => {
       } as Parameters<typeof loadAccess>[0]),
     ).toEqual({
       authenticated: false,
+      registrationRestricted: false,
       language: "it",
       notice: null,
       resetToken: null,

@@ -11,7 +11,9 @@ import {
 import { createAuth } from "../app/auth.server";
 import { handleAuthRequest } from "../app/auth-route.server";
 import { loader as loadLegal } from "../app/routes/legal";
+import { loader as loadAccess } from "../app/routes/sign-in";
 import { action as startStoreLink } from "../app/routes/store-link";
+import { accessNotice } from "../app/access-notice";
 import { now, resetDatabase } from "./database-fixtures";
 import { syntheticProfile, verifiedSession, sessionCookie, profileOf } from "./account-fixtures";
 import { accessFor, accessForm, securityForm, homeFor } from "./account-route-fixtures";
@@ -19,6 +21,52 @@ import { beginStoreLink, storeLinkSessions } from "./store-link-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
+
+it("mostra l'autorizzazione preventiva in entrambe le lingue senza creare profili o inviare email", async () => {
+  const person = { tipo: "privato", nome: "Mario", cognome: "Rossi" };
+  const password = "Una-password-registrazione-lunga";
+  const mode = env.REGISTRATION_MODE;
+  const list = env.REGISTRATION_ALLOWED_EMAILS;
+  const send = vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });
+  try {
+    env.REGISTRATION_MODE = "approval";
+    env.REGISTRATION_ALLOWED_EMAILS = "[]";
+    for (const language of ["it", "en"] as const) {
+      const prefix = language === "it" ? "" : "/en";
+      const page = await loadAccess({
+        request: new Request(`http://localhost:5173${prefix}/accesso`),
+      } as Parameters<typeof loadAccess>[0]);
+      expect(page).toMatchObject({ registrationRestricted: true });
+      const response = await accessForm(`${prefix}/accesso`, {
+        intent: "registrati",
+        ...person,
+        email: "non-invitato@example.invalid",
+        password,
+        termini: "on",
+      });
+      expect(response.status).toBe(303);
+      expect(response.headers.get("location")).toBe(`${prefix}/accesso?accesso=autorizzazione`);
+      expect(response.headers.getSetCookie()).toEqual([]);
+      expect(accessNotice(new URLSearchParams("accesso=autorizzazione"), language)).toEqual({
+        tone: "warning",
+        text:
+          language === "it"
+            ? "Ambiente di test riservato. La registrazione richiede un’autorizzazione preventiva."
+            : "Private test environment. Registration requires prior approval.",
+      });
+    }
+    expect(
+      await env.DB.prepare('SELECT id FROM "user" WHERE email = ?')
+        .bind("non-invitato@example.invalid")
+        .first(),
+    ).toBeNull();
+    expect(send).not.toHaveBeenCalled();
+  } finally {
+    env.REGISTRATION_MODE = mode;
+    env.REGISTRATION_ALLOWED_EMAILS = list;
+    send.mockRestore();
+  }
+});
 
 async function agreements(userId: string) {
   const terms = await env.DB.prepare(

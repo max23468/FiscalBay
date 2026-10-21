@@ -128,6 +128,10 @@ export async function action({ request }: Route.ActionArgs) {
       callbackURL: base,
     });
     if (!response.ok) {
+      if (response.status === 403) {
+        const error = await response.clone().json<{ code?: string }>();
+        if (error.code === "registration_approval_required") return notice("autorizzazione");
+      }
       return notice(response.status === 429 ? "troppi-tentativi" : "registrazione");
     }
     // Per un indirizzo già registrato Better Auth risponde con un utente fittizio, senza
@@ -506,11 +510,13 @@ function AccessForms({
   language,
   remembered,
   initialTab,
+  signUpBody,
 }: {
   t: AccessCopy;
   language: Language;
   remembered: Remembered | null;
   initialTab: string;
+  signUpBody: string;
 }) {
   const [tab, setTab] = useState(initialTab);
   const [recovering, setRecovering] = useState(false);
@@ -602,7 +608,7 @@ function AccessForms({
         <SignInAlternatives t={t} language={language} recovering={recovering} />
       </TabsContent>
       <TabsContent value="registrati" keepMounted className={cn("grid gap-5", rise)}>
-        <p className="text-muted-foreground">{t.signUpBody}</p>
+        <p className="text-muted-foreground">{signUpBody}</p>
         <form
           key={restored ? "restored" : "empty"}
           method="post"
@@ -854,7 +860,13 @@ function AccessPanel({
     return <ResetPassword t={t} language={language} token={loaderData.resetToken} />;
   }
   return (
-    <AccessForms t={t} language={language} remembered={remembered} initialTab={loaderData.tab} />
+    <AccessForms
+      t={t}
+      language={language}
+      remembered={remembered}
+      initialTab={loaderData.tab}
+      signUpBody={loaderData.registrationRestricted ? t.registrationRestricted : t.signUpBody}
+    />
   );
 }
 

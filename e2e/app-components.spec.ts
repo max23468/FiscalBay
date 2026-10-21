@@ -1762,11 +1762,28 @@ for (const language of ["it", "en"] as const) {
         const title = language === "it" ? "Scegli una nuova password" : "Choose a new password";
         const back = language === "it" ? "Torna ad accedere" : "Back to sign in";
         try {
-          for (const error of ["", "account_already_linked_to_different_user"]) {
+          for (const error of [
+            "",
+            "account_already_linked_to_different_user",
+            "registration_approval_required",
+          ]) {
             await page.goto(`${prefix}/auth/error?error=${error}`);
             await expect(
               page.getByRole("link", { name: new RegExp(supportAddress) }),
             ).toHaveAttribute("href", `mailto:${supportAddress}`);
+            if (error === "registration_approval_required") {
+              await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+                language === "it" ? "Registrazione riservata" : "Registration restricted",
+              );
+              await expect(
+                page.getByText(
+                  language === "it"
+                    ? "Ambiente di test riservato. La registrazione richiede un’autorizzazione preventiva."
+                    : "Private test environment. Registration requires prior approval.",
+                  { exact: true },
+                ),
+              ).toBeVisible();
+            }
           }
           await testInfo.attach("errore-pubblico", {
             body: await page.screenshot({

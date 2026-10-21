@@ -96,6 +96,8 @@ Nel contesto privato segnare disponibilità, owner, fonte e blocco; nelle questi
 
 ### Ambienti
 
+Registrazioni test: `REGISTRATION_MODE=approval`; il secret `REGISTRATION_ALLOWED_EMAILS` contiene un array JSON di indirizzi esatti, per esempio `["tester@example.invalid"]`. Confronto senza distinzione fra maiuscole e minuscole, senza equivalenze fra alias o domini. Lista assente, `[]` o formato non valido bloccano la creazione degli utenti; non revocano account esistenti. Custodire l'elenco fuori da checkout e directory distribuibili e caricarlo solo sul Worker `fiscalbay-test` con `pnpm exec cf workers secrets update`, verificando prima schema e custodia. Nessun indirizzo reale in Git o nei log. Production usa `REGISTRATION_MODE=open`; le prove Vitest su fixture usano esplicitamente `open`. Il collaudo browser locale e dopo il deploy usa l'account sintetico predisposto direttamente nella D1 test da `scripts/reset-test-account.mjs`: non richiede registrazione pubblica né inserimento nella lista. La pubblicazione della modifica e la configurazione remota richiedono il normale ciclo `Pubblica`.
+
 Locale per fixture e prove isolate; `test.fiscalbay.it` per collaudo separato, bot test e Stripe test; `fiscalbay.it` per Production qualificata. Callback, cookie, sessioni, database e credenziali non si confondono. Una lettura eBay Production controllata, necessaria quando Sandbox è insufficiente, resta una prova su dati reali con finalità/retention autorizzate: non autorizza una copia generale di Production. Regione, costi e continuità del test sono scelti in M0, non presumendo un secondo ambiente sempre acceso a pagamento.
 
 <a id="custodia"></a>

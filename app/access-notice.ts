@@ -5,6 +5,7 @@ import type { Language } from "./i18n";
 const noticeTones: Record<string, "success" | "info" | "warning" | "danger"> = {
   errore: "danger",
   registrazione: "danger",
+  autorizzazione: "warning",
   termini: "warning",
   dati: "warning",
   "troppi-tentativi": "warning",
