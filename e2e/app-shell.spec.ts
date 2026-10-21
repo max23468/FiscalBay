@@ -35,7 +35,7 @@ test(
   { tag: "@smoke" },
   async ({ page }) => {
     await open(page, "/anteprima");
-    await expect(page).toHaveURL(/\/anteprima\/ordini$/u);
+    await expect(page).toHaveURL(/\/anteprima\/ordini(?:[?&]vista=[0-9a-z]+)?$/u);
     await expect(page).toHaveTitle("FiscalBay | Ordini");
     const nav = page.getByRole("navigation", { name: "Navigazione principale" });
     await expect(nav.getByRole("link")).toHaveText(["Ordini", "Negozi eBay", "Impostazioni"]);
@@ -67,19 +67,21 @@ test("il dettaglio ha un URL, si chiude con Indietro e conserva i filtri", async
   const first = list.getByRole("article").first();
   const buyer = (await first.getByRole("heading", { level: 2 }).textContent()) ?? "";
   await first.getByRole("link", { name: "Dettaglio" }).click();
-  await expect(page).toHaveURL(/\/anteprima\/ordini\/ord-\d+\?fiscale=available$/u);
+  await expect(page).toHaveURL(
+    /\/anteprima\/ordini\/ord-\d+\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$/u,
+  );
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText(buyer);
   await dialog.getByRole("tab", { name: /Articoli/ }).click();
   await expect(dialog.getByRole("tabpanel", { name: /Articoli/ })).toContainText("SKU");
   await page.goBack();
   await expect(dialog).toBeHidden();
-  await expect(page).toHaveURL(/\/anteprima\/ordini\?fiscale=available$/u);
+  await expect(page).toHaveURL(/\/anteprima\/ordini\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$/u);
   await first.getByRole("link", { name: "Dettaglio" }).click();
   await expect(dialog).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
-  await expect(page).toHaveURL(/\?fiscale=available$/u);
+  await expect(page).toHaveURL(/\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$/u);
 });
 
 test("lo sblocco rivela il dato solo dopo l'azione e aggiorna la quota", async ({ page }) => {
@@ -296,7 +298,7 @@ test("la ricerca della top bar suggerisce e apre l'elenco filtrato", async ({
   await expect(suggestion).toBeVisible();
   await page.getByRole("link", { name: "Vedi tutti i risultati (1)" }).click();
   // L'indirizzo conserva la ricerca soltanto cifrata.
-  await expect(page).toHaveURL(/\/anteprima\/ordini\?ricerca=[\w-]+$/u);
+  await expect(page).toHaveURL(/\/anteprima\/ordini\?ricerca=[\w-]+(?:[?&]vista=[0-9a-z]+)?$/u);
   expect(page.url()).not.toContain("carburatore");
   await expect(search).toHaveValue("carburatore");
   await expect(
@@ -305,7 +307,7 @@ test("la ricerca della top bar suggerisce e apre l'elenco filtrato", async ({
   await search.fill("");
   await search.fill("carburatore");
   await suggestion.click();
-  await expect(page).toHaveURL(/\/ordini\/ord-\d+\?ricerca=[\w-]+$/u);
+  await expect(page).toHaveURL(/\/ordini\/ord-\d+\?ricerca=[\w-]+(?:[?&]vista=[0-9a-z]+)?$/u);
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toBeHidden();
@@ -315,7 +317,7 @@ test("la ricerca della top bar suggerisce e apre l'elenco filtrato", async ({
   await search.press(browserName === "webkit" ? "Alt+Tab" : "Tab");
   await expect(keyboardSuggestion).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/ordini\/ord-\d+\?ricerca=[\w-]+$/u);
+  await expect(page).toHaveURL(/\/ordini\/ord-\d+\?ricerca=[\w-]+(?:[?&]vista=[0-9a-z]+)?$/u);
   await expect(page.getByRole("dialog")).toContainText("Conti");
 });
 
@@ -444,7 +446,7 @@ test("stati vuoti, ricerca e indirizzi inesistenti restano dentro l'app", async 
   await expect(page.getByRole("heading", { level: 1, name: "Ordine non trovato" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Navigazione principale" })).toBeVisible();
   await page.getByRole("link", { name: "Torna agli ordini" }).click();
-  await expect(page).toHaveURL(/\/anteprima\/ordini$/u);
+  await expect(page).toHaveURL(/\/anteprima\/ordini(?:[?&]vista=[0-9a-z]+)?$/u);
 
   await open(page, "/anteprima/ordini?pagamento=sconosciuto");
   await expect(page.getByRole("combobox", { name: "Pagamento" })).toContainText("Tutti");

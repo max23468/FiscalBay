@@ -1334,12 +1334,111 @@ describe("pagina Ordini reale", () => {
     // «Carica altri» amplia la pagina letta dal server finché restano ordini.
     const first = (await ordersPage(cookie)).page!;
     expect({ shown: first.orders.length, total: first.total }).toEqual({ shown: 6, total: 8 });
-    expect(first.nextHref).toBe("/app/ordini?mostra=2");
+    expect(first.nextHref).toBe(`/app/ordini?mostra=2&vista=${first.snapshot}`);
     expect(all.nextHref).toBeNull();
     const filtered = (await ordersPage(cookie, "/app/ordini?pagamento=paid&negozio=collegato"))
       .page!;
     expect(filtered).toMatchObject({ total: 3, nextHref: null });
     void userId;
+  });
+
+  it("«Carica altri» resta sull'istantanea e i nuovi ordini entrano soltanto in cima", async () => {
+    const { cookie } = await owner();
+    const day = 86_400_000;
+    const insert = (id: string, age: number, listedAt: string | null) =>
+      env.DB.prepare(
+        `INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time, currency,
+           total_minor, payment_status, listed_at)
+         VALUES (?1, 's-a', ?1, ?2, ?2, 'EUR', 100, 'PAID', ?3)`,
+      ).bind(id, new Date(Date.parse(now) - age * day).toISOString(), listedAt);
+    // Ordini letti prima che l'ingresso negli elenchi fosse registrato: valgono come presenti.
+    await env.DB.batch([1, 2, 3, 4, 5, 6, 7].map((age) => insert(`x-${age}`, age + 0.5, null)));
+    const listed = async (path: string) => (await ordersPage(cookie, path)).page!;
+    const first = await listed("/app/ordini");
+    expect(first).toMatchObject({ total: 8, incoming: 0, freshHref: null, limited: false });
+    expect(first.snapshot).toMatch(/^[0-9a-z]+$/u);
+    const opened = new Date(Number.parseInt(first.snapshot, 36));
+    // Dopo l'apertura arrivano un ordine recente e uno vecchio, letti dallo storico.
+    vi.setSystemTime(opened.getTime() + 60_000);
+    const later = new Date(opened.getTime() + 1).toISOString();
+    await env.DB.batch([insert("x-nuovo", 0, later), insert("x-storico", 3, later)]);
+    // La pagina successiva continua dall'istantanea: nessun ordine si inserisce fra i già letti.
+    const second = await listed(first.nextHref!);
+    expect(second.orders.map(({ id }) => id)).toEqual([
+      "o-a",
+      "x-1",
+      "x-2",
+      "x-3",
+      "x-4",
+      "x-5",
+      "x-6",
+      "x-7",
+    ]);
+    expect(second).toMatchObject({
+      total: 8,
+      snapshot: first.snapshot,
+      nextHref: null,
+      incoming: 2,
+      // La nuova istantanea conserva le pagine caricate.
+      freshHref: "/app/ordini?mostra=2",
+    });
+    // Anche i filtri contano i nuovi ordini con gli stessi criteri.
+    expect(await listed(`/app/ordini?periodo=7&vista=${first.snapshot}`)).toMatchObject({
+      total: 7,
+      incoming: 2,
+    });
+    expect(await listed(`/app/ordini?pagamento=unpaid&vista=${first.snapshot}`)).toMatchObject({
+      incoming: 0,
+      freshHref: null,
+    });
+    // Il dettaglio di un ordine nuovo si apre anche sull'istantanea precedente.
+    expect(
+      (
+        await ordersPage(cookie, `/app/ordini/x-nuovo?vista=${first.snapshot}`, {
+          ordine: "x-nuovo",
+        })
+      ).page!.detail?.id,
+    ).toBe("x-nuovo");
+    const fresh = await listed(second.freshHref!);
+    expect(fresh.orders.map(({ id }) => id).slice(0, 5)).toEqual([
+      "x-nuovo",
+      "o-a",
+      "x-1",
+      "x-2",
+      "x-storico",
+    ]);
+    expect(fresh).toMatchObject({ total: 10, incoming: 0 });
+    expect(fresh.snapshot > first.snapshot).toBe(true);
+    // Un cursore alterato o futuro non va oltre l'istante della richiesta.
+    expect(await listed("/app/ordini?vista=zzzzzzzzzz")).toMatchObject({ total: 10, incoming: 0 });
+    expect(await listed("/app/ordini?vista=..")).toMatchObject({ total: 10, incoming: 0 });
+  });
+
+  it("un nuovo accesso riapre soltanto il negozio ricordato, se ancora fra i filtri", async () => {
+    const { cookie } = await owner();
+    const remembered = `${cookie}; fiscalbay-negozio=s-c`;
+    const entry = (sessionCookie: string, path = "/app/ordini") =>
+      ordersPage(sessionCookie, path).catch((response: Response) => response);
+    // Con un solo negozio il filtro non compare: il negozio ricordato non si applica.
+    expect(await entry(remembered)).toMatchObject({ page: expect.any(Object) });
+    await env.DB.prepare(
+      "INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at) VALUES ('s-c', 'w-a', 'e-c', ?)",
+    )
+      .bind(now)
+      .run();
+    const redirected = (await entry(remembered)) as Response;
+    expect(redirected.status).toBe(302);
+    expect(redirected.headers.get("location")).toBe("/app/ordini?negozio=s-c");
+    // Con un indirizzo già scelto, o un negozio di un altro spazio, l'elenco resta com'è.
+    expect(await entry(remembered, "/app/ordini?periodo=7")).toMatchObject({
+      page: expect.any(Object),
+    });
+    expect(await entry(`${cookie}; fiscalbay-negozio=s-b`)).toMatchObject({
+      page: expect.any(Object),
+    });
+    expect(await entry(`${cookie}; fiscalbay-negozio=%E0%A4%A`)).toMatchObject({
+      page: expect.any(Object),
+    });
   });
 
   it("la barra superiore cerca con la query nel corpo e l'elenco la riceve cifrata", async () => {

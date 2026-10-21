@@ -217,3 +217,39 @@ describe("ricerca dell'anteprima", () => {
     expect(listed).toMatchObject({ search: "rossi", total: found.total });
   });
 });
+
+describe("elenco ordini dell'anteprima", () => {
+  const list = async (path: string, scenario: "aggiornamento" | "ordinario") => {
+    const cookie = (await writePreviewState({ scenario, unlocked: [] })).split(";")[0]!;
+    return previewOrders({
+      request: new Request(`http://localhost:5173${path}`, { headers: { cookie } }),
+      params: {},
+    } as Parameters<typeof previewOrders>[0]) as Promise<{
+      orders: Array<{ id: string }>;
+      total: number;
+      incoming: number;
+      snapshot: string;
+      nextHref: string | null;
+      freshHref: string | null;
+    }>;
+  };
+
+  it("conta gli ordini in arrivo e li mostra in cima con la nuova istantanea", async () => {
+    const opened = await list("/anteprima/ordini", "aggiornamento");
+    expect(opened.incoming).toBeGreaterThan(0);
+    expect(opened.orders.map(({ id }) => id)).not.toContain("ord-20");
+    // «Carica altri» resta sull'istantanea e non porta gli ordini in arrivo.
+    expect(opened.nextHref).toBe(`/anteprima/ordini?mostra=2&vista=${opened.snapshot}`);
+    const more = await list(opened.nextHref!, "aggiornamento");
+    expect(more).toMatchObject({ incoming: opened.incoming, total: opened.total });
+    const fresh = await list(opened.freshHref!, "aggiornamento");
+    expect(fresh.orders.slice(0, opened.incoming).map(({ id }) => id)).toContain("ord-20");
+    expect(fresh).toMatchObject({ incoming: 0, freshHref: null });
+    expect(fresh.total).toBe(opened.total + opened.incoming);
+    // Uno scenario senza ordini in arrivo non ha l'indicatore.
+    expect(await list("/anteprima/ordini", "ordinario")).toMatchObject({
+      incoming: 0,
+      freshHref: null,
+    });
+  });
+});

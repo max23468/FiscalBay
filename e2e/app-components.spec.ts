@@ -665,7 +665,7 @@ test.describe("miglioramenti account e negozi", () => {
       await form.getByRole("textbox", { name: "Email", exact: true }).fill(testAccount.email);
       await form.getByRole("textbox", { name: "Password", exact: true }).fill(localPassword);
       await form.getByRole("button", { name: "Accedi", exact: true }).click();
-      await expect(page).toHaveURL(/\/app\/ordini$/u);
+      await expect(page).toHaveURL(/\/app\/ordini(?:[?&]vista=[0-9a-z]+)?$/u);
       await page.goto("/app/impostazioni/sicurezza");
       await expect(page.getByRole("heading", { name: "Sicurezza", exact: true })).toBeVisible();
       await expect(page.getByText(/^Sessione aperta il/).first()).toBeVisible();
@@ -2070,7 +2070,8 @@ test("pannello di dettaglio scorrevole con chiusura raggiungibile", async ({ pag
   await expect(close).toBeInViewport({ ratio: 1 });
   await close.click();
   await expect(dialog).toBeHidden();
-  await expect(page).toHaveURL(/\/anteprima\/ordini$/u);
+  // L'elenco conserva la sua istantanea.
+  await expect(page).toHaveURL(/\/anteprima\/ordini\?vista=[0-9a-z]+$/u);
 });
 
 test("messaggio per l'acquirente a larghezza piena e fonte in fondo al dettaglio", async ({
@@ -2210,6 +2211,42 @@ test("movimento ridotto: dato intero e nuovi ordini senza animazione", async ({ 
       incoming.evaluate((e) => e.getAnimations().filter((a) => a.playState === "running").length),
     )
     .toBe(0);
+});
+
+test("un nuovo accesso ricorda soltanto il negozio, l'istantanea resta su «Carica altri»", async ({
+  page,
+}) => {
+  await open(page, "/anteprima/ordini?periodo=30", "premium");
+  await expect(page).toHaveURL(/periodo=30&vista=[0-9a-z]+$/u);
+  const vista = new URL(page.url()).searchParams.get("vista");
+  const firstLabel = () =>
+    page
+      .getByRole("article")
+      .first()
+      .evaluate(
+        (card) => document.getElementById(card.getAttribute("aria-labelledby")!)?.textContent,
+      );
+  const before = await firstLabel();
+  await page.getByRole("link", { name: "Carica altri" }).click();
+  await expect(page).toHaveURL(new RegExp(`mostra=2&vista=${vista}$`, "u"));
+  expect(await firstLabel()).toBe(before);
+  const store = page.getByRole("combobox", { name: "Negozio", exact: true });
+  await store.click();
+  await page.getByRole("option", { name: /magazzino secondario/u }).click();
+  await expect(page).toHaveURL(/negozio=[^&]+/u);
+  // Il nuovo filtro apre un elenco nuovo, con un'altra istantanea e senza pagine caricate.
+  await expect(page).not.toHaveURL(/mostra=/u);
+  // L'ingresso dagli Ordini senza parametri riapre il negozio, non il periodo.
+  await page.goto("/anteprima/ordini");
+  await expect(page).toHaveURL(/\/anteprima\/ordini\?negozio=[^&]+&vista=[0-9a-z]+$/u);
+  await expect(store).toContainText("magazzino secondario");
+  await expect(page.getByRole("combobox", { name: "Periodo", exact: true })).toContainText("Tutti");
+  // «Reimposta filtri» lo dimentica.
+  await page.goto(`/anteprima/ordini?periodo=7&pagamento=refunded&vista=${vista}`);
+  await page.getByRole("link", { name: "Reimposta filtri" }).click();
+  await expect(page).toHaveURL(/\/anteprima\/ordini\?vista=[0-9a-z]+$/u);
+  await page.goto("/anteprima/ordini");
+  await expect(page).toHaveURL(/\/anteprima\/ordini\?vista=[0-9a-z]+$/u);
 });
 
 const notice = (page: Page) => page.locator('[role="status"][aria-live="polite"] > p');

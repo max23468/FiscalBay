@@ -1054,11 +1054,27 @@ describe("modello ordini", () => {
     )
       .bind(orderId, now)
       .run();
+    // L'acquisto entra negli elenchi quando è letto e di nuovo quando risulta pagato.
+    const listedAt = () =>
+      env.DB.prepare("SELECT listed_at FROM orders WHERE id = ?")
+        .bind(orderId)
+        .first<string>("listed_at");
+    expect(await listedAt()).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u);
+    await env.DB.prepare("UPDATE orders SET listed_at = '2026-01-01T00:00:00.000Z'").run();
 
     expect(await recordOrderObservation(env.DB, target(), observation())).toMatchObject({
       outcome: "updated",
       orderId,
     });
+    const promoted = await listedAt();
+    expect(promoted! > "2026-01-01T00:00:00.000Z").toBe(true);
+    // Una modifica successiva del definitivo non lo fa rientrare.
+    await recordOrderObservation(
+      env.DB,
+      target(),
+      observation({ lastModifiedTime: "2026-09-12T08:00:00Z", fulfillmentStatus: "FULFILLED" }),
+    );
+    expect(await listedAt()).toBe(promoted);
     expect(await orders()).toMatchObject([
       { id: orderId, ebay_order_id: "D-1", is_provisional: 0, payment_status: "PAID" },
     ]);

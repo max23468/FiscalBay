@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { data, useNavigate, type ShouldRevalidateFunctionArgs } from "react-router";
+import { data, redirect, useNavigate, type ShouldRevalidateFunctionArgs } from "react-router";
 
 import { AccessNotice, AccountShell, VerifyEmail } from "~/components/account";
 import { EbayEnvironmentField, type EbayEnvironment } from "~/components/ebay-environment";
@@ -25,6 +25,7 @@ import {
   listVisibleOrders,
   maxListedOrders,
   orderCriteria,
+  type OrderCriteria,
   orderView,
   visibleOrderFacets,
 } from "../domain/orders.server";
@@ -33,7 +34,15 @@ import { logFailure } from "../errors";
 import { languageFromPath, localizedPath, type Language } from "../i18n";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import { describeRequest, measure } from "../observability.server";
-import { ordersPageSize } from "../order-list";
+import {
+  ordersPageSize,
+  pagesParam,
+  rememberedStore,
+  snapshotCursor,
+  snapshotInstant,
+  snapshotOnlyAdded,
+  snapshotParam,
+} from "../order-list";
 import { accountSearchScope, openSearch } from "../order-search.server";
 import { settle } from "../settle.server";
 import type { ActionResult, OrderView, OrdersNotice } from "../view-models";
@@ -78,18 +87,39 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     unlockConfirmation(env.DB, userId),
   ]);
   const premium = !!allowance?.premium;
+  const environmentStores = stores.filter((store) => store.ebayEnvironment === ebayEnvironment);
+  const filterStores = environmentStores
+    .filter((store) => !store.pauseReasons.includes("plan"))
+    .map((store) => ({ id: store.id, name: store.name }));
+  // Un nuovo accesso agli Ordini riapre il negozio scelto l'ultima volta, visibile nei filtri.
+  const remembered =
+    search.size === 0 && !params.ordine
+      ? rememberedStore(
+          request.headers.get("cookie"),
+          filterStores.map((store) => store.id),
+        )
+      : null;
+  if (remembered)
+    throw redirect(
+      `${localizedPath(language, ordersPath)}?negozio=${encodeURIComponent(remembered)}`,
+    );
   // `negozio` porta anche l'esito del collegamento di un negozio, che non è un filtro.
   const query = new URLSearchParams(search);
   if (Object.hasOwn(appCopy[language].access.storeNotices, query.get("negozio") ?? ""))
     query.delete("negozio");
   // La ricerca arriva cifrata e legata alla sessione: fuori da essa si dimentica.
   const searchText = await openSearch(env.BETTER_AUTH_SECRET, accountSearchScope(session), query);
-  const criteria = orderCriteria(query, now, premium ? "premium" : "free", searchText);
+  // L'istantanea dell'elenco aperto: un ordine arrivato dopo non entra fra quelli già letti.
+  // Senza istantanea l'elenco si apre adesso e non ha ancora nuovi ordini.
+  const opened = snapshotInstant(query.get(snapshotParam));
+  const snapshot = new Date(Math.min(opened?.getTime() ?? now.getTime(), now.getTime()));
+  const filters = orderCriteria(query, now, premium ? "premium" : "free", searchText);
+  const criteria = { ...filters, listedBefore: snapshot.toISOString() };
   // Con «Non pagato» anche dettaglio e conferma leggono gli acquisti non pagati (D180).
   const provisional = criteria.payment === "unpaid";
   // «Carica altri» amplia la pagina letta dal server, entro il massimo di una richiesta.
   const shown = Math.min(
-    Math.max(Math.trunc(Number(query.get("mostra"))) || 1, 1),
+    Math.max(Math.trunc(Number(query.get(pagesParam))) || 1, 1),
     Math.floor(maxListedOrders / ordersPageSize),
   );
   const read = (ids?: string[]) =>
@@ -103,13 +133,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         ids ? { ids, provisional } : { criteria },
       ),
     ).then((orders) => orders.map(orderView));
-  const [orders, total, facets, detailOrders] = await Promise.all([
-    verified ? read() : [],
+  const count = (counted: OrderCriteria) =>
     verified
       ? measure("d1", "orders", () =>
-          countVisibleOrders(env.DB, userId, ebayEnvironment, now, criteria),
+          countVisibleOrders(env.DB, userId, ebayEnvironment, now, counted),
         )
-      : 0,
+      : 0;
+  const [orders, total, incoming, facets, detailOrders] = await Promise.all([
+    verified ? read() : [],
+    count(criteria),
+    opened ? count({ ...filters, listedAfter: snapshot.toISOString() }) : 0,
     verified
       ? measure("d1", "orders", () => visibleOrderFacets(env.DB, userId, ebayEnvironment, now))
       : { total: 0, marketplaces: [], locked: false },
@@ -124,17 +157,24 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       { status: 404 },
     );
   }
-  const environmentStores = stores.filter((store) => store.ebayEnvironment === ebayEnvironment);
   const linked = environmentStores.filter((store) => store.connection !== "disconnected");
+  const path = localizedPath(language, ordersPath);
+  const cursor = snapshotCursor(snapshot);
   const next = new URLSearchParams(query);
-  next.set("mostra", String(shown + 1));
+  next.set(pagesParam, String(shown + 1));
+  next.set(snapshotParam, cursor);
+  // I nuovi ordini entrano con una nuova istantanea, conservando le pagine già caricate.
+  const fresh = new URLSearchParams(query);
+  fresh.delete(snapshotParam);
+  const more = total > orders.length;
   const page = {
     orders,
     total,
-    nextHref:
-      total > orders.length && shown * ordersPageSize < maxListedOrders
-        ? `${localizedPath(language, ordersPath)}?${next}`
-        : null,
+    snapshot: cursor,
+    nextHref: more && shown * ordersPageSize < maxListedOrders ? `${path}?${next}` : null,
+    limited: more && shown * ordersPageSize >= maxListedOrders,
+    incoming,
+    freshHref: incoming > 0 ? `${path}${fresh.size ? `?${fresh}` : ""}` : null,
   };
   const cycle = allowance?.cycle ?? null;
   const notices: OrdersNotice[] = [
@@ -176,11 +216,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     view: facets.total > 0 ? "list" : linked.length > 0 ? "empty" : "no-store",
     ...page,
     search: searchText,
-    incoming: [],
     detail,
-    stores: environmentStores
-      .filter((store) => !store.pauseReasons.includes("plan"))
-      .map((store) => ({ id: store.id, name: store.name })),
+    stores: filterStores,
     marketplaces: facets.marketplaces,
     account: {
       plan: premium ? "premium" : "free",
@@ -237,12 +274,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
-/** Anche un conflitto di quota rilegge lo stato corrente per aggiornare i controlli. */
+/**
+ * Anche un conflitto di quota rilegge lo stato corrente per aggiornare i controlli; l'istantanea
+ * aggiunta all'indirizzo è quella della risposta già mostrata.
+ */
 export function shouldRevalidate({
   formMethod,
+  currentUrl,
+  nextUrl,
   defaultShouldRevalidate,
 }: ShouldRevalidateFunctionArgs) {
-  return formMethod ? true : defaultShouldRevalidate;
+  if (formMethod) return true;
+  return snapshotOnlyAdded(currentUrl, nextUrl) ? false : defaultShouldRevalidate;
 }
 
 const unlockFailures =
