@@ -8,6 +8,7 @@ import {
   useLocation,
   useRouteLoaderData,
   useRevalidator,
+  type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import { useEffect } from "react";
 
@@ -20,6 +21,7 @@ import { buttonVariants } from "./components/ui/button-variants";
 import { correlationId } from "./errors";
 import { appCopy } from "./app-copy";
 import { languageFromPath, localizedPath } from "./i18n";
+import { snapshotOnlyAdded } from "./order-list";
 import "./app.css";
 
 export const links: Route.LinksFunction = () => [
@@ -33,6 +35,15 @@ export function loader({ request }: Route.LoaderArgs) {
     language: languageFromPath(new URL(request.url).pathname),
     correlationId: correlationId(request),
   };
+}
+
+/** L'istantanea aggiunta all'elenco Ordini non cambia lingua né pagina: nessuna nuova lettura. */
+export function shouldRevalidate({
+  currentUrl,
+  nextUrl,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  return snapshotOnlyAdded(currentUrl, nextUrl) ? false : defaultShouldRevalidate;
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
