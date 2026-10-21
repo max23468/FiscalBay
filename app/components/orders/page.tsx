@@ -2,7 +2,14 @@ import { cn } from "cn";
 import { Check, ClipboardList, Clock, Plus } from "lucide-react";
 import { LazyMotion, MotionConfig } from "motion/react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import { Link, useFetcher, useLocation, useSearchParams } from "react-router";
+import {
+  Link,
+  useFetcher,
+  useLocation,
+  useNavigate,
+  useNavigation,
+  useSearchParams,
+} from "react-router";
 
 import { useAction, useNotice } from "~/components/app-shell";
 import { useConfirmed } from "~/components/confirmation";
@@ -15,6 +22,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { Spinner } from "~/components/ui/spinner";
 import type { AppCopy } from "../../app-copy";
 import { appHref, type AppLinks } from "../../app-links";
+import { pagesParam, rememberStore, snapshotParam } from "../../order-list";
 import { searchParam } from "../../order-search";
 import { usePageTiming } from "../../page-timing";
 import type { Language } from "../../i18n";
@@ -32,9 +40,16 @@ import { OrdersToolbar, SearchChip } from "./toolbar";
 export interface OrdersPageData extends SecondaryActions {
   view: "list" | "no-store" | "loading" | "empty";
   orders: OrderView[];
-  incoming: OrderView[];
   total: number;
   nextHref: string | null;
+  /** Gli ordini consultabili superano quelli leggibili in una richiesta: servono i filtri. */
+  limited: boolean;
+  /** Istantanea dell'elenco, come cursore opaco: l'indirizzo la conserva. */
+  snapshot: string;
+  /** Ordini arrivati dopo l'istantanea, che entrano soltanto in cima. */
+  incoming: number;
+  /** Elenco con una nuova istantanea, che comprende i nuovi ordini. */
+  freshHref: string | null;
   /** Ricerca attiva, decifrata dal server: nell'indirizzo resta soltanto in forma cifrata. */
   search: string | null;
   /** Ordine aperto nel pannello, anche se fuori dalla pagina caricata. */
@@ -454,11 +469,13 @@ function LoadMore({ data, t }: { data: OrdersPageData; t: AppCopy }) {
         </Link>
       ) : (
         <p className="text-sm text-muted-foreground">
-          {importingNotice(data)
-            ? t.orders.importMore
-            : ["7", "30", "90"].includes(params.get("periodo") ?? "")
-              ? t.orders.allShown
-              : t.orders.allShownAll}
+          {data.limited
+            ? t.orders.listLimit
+            : importingNotice(data)
+              ? t.orders.importMore
+              : ["7", "30", "90"].includes(params.get("periodo") ?? "")
+                ? t.orders.allShown
+                : t.orders.allShownAll}
         </p>
       )}
     </div>
@@ -496,6 +513,8 @@ function NoResults({
           <Link
             to={href}
             preventScrollReset
+            // Anche il negozio ricordato si azzera, altrimenti il nuovo accesso lo riapplica.
+            onClick={onlySearch ? undefined : () => rememberStore(null)}
             data-slot="button"
             className={buttonVariants({ variant: "outline" })}
           >
@@ -505,6 +524,76 @@ function NoResults({
       }
     />
   );
+}
+
+/**
+ * L'indirizzo conserva l'istantanea dell'elenco, così ricarica, dettaglio e Indietro ritrovano
+ * gli stessi ordini nello stesso ordine. I nuovi ordini entrano subito se l'utente è in cima
+ * alla lista e non sta selezionando; altrimenti resta l'indicatore, così nulla si sposta mentre
+ * legge.
+ */
+function useListSnapshot(data: OrdersPageData, selecting: boolean) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [params, setParams] = useSearchParams();
+  const { snapshot, freshHref } = data;
+  const synced = params.get(snapshotParam) === snapshot;
+  // Durante un'altra navigazione, per esempio Indietro, la sostituzione prenderebbe il posto
+  // della pagina di destinazione: si attende il router inattivo e l'indirizzo del browser
+  // ancora uguale all'elenco mostrato.
+  const idle = useNavigation().state === "idle";
+  const shown = `${location.pathname}${location.search}`;
+  const current = () => `${window.location.pathname}${window.location.search}` === shown;
+  useEffect(() => {
+    if (synced || !idle || !current()) return;
+    const next = new URLSearchParams(params);
+    next.set(snapshotParam, snapshot);
+    setParams(next, { replace: true, preventScrollReset: true });
+  });
+  const insertAtTop = useEffectEvent(() => {
+    if (freshHref && window.scrollY < topThreshold && !selecting && current())
+      void navigate(freshHref, { replace: true, preventScrollReset: true });
+  });
+  // Si parte dall'indirizzo con l'istantanea: la nuova la cambia o la toglie, mai la aggiunge,
+  // e quindi rilegge sempre l'elenco.
+  const ready = synced && idle && freshHref !== null;
+  useEffect(() => {
+    if (!ready) return;
+    insertAtTop();
+    window.addEventListener("scroll", insertAtTop, { passive: true });
+    return () => window.removeEventListener("scroll", insertAtTop);
+  }, [ready, freshHref]);
+}
+
+/**
+ * Ordini entrati con una nuova istantanea, a criteri invariati, sopra quelli già mostrati:
+ * compaiono come nuovi. Un nuovo filtro o una nuova ricerca non ne introducono.
+ */
+function useNewOrders(orders: OrderView[], snapshot: string, criteria: string) {
+  const [list, setList] = useState(() => ({
+    snapshot,
+    criteria,
+    seen: new Set(orders.map((order) => order.id)),
+    added: new Set<string>(),
+  }));
+  if (
+    list.snapshot === snapshot &&
+    list.criteria === criteria &&
+    orders.every((order) => list.seen.has(order.id))
+  )
+    return list.added;
+  const added = new Set(list.added);
+  if (list.snapshot !== snapshot && list.criteria === criteria) {
+    const firstSeen = orders.findIndex((order) => list.seen.has(order.id));
+    for (const order of firstSeen < 0 ? [] : orders.slice(0, firstSeen)) added.add(order.id);
+  }
+  setList({
+    snapshot,
+    criteria,
+    seen: new Set([...list.seen, ...orders.map((order) => order.id)]),
+    added,
+  });
+  return added;
 }
 
 function OrdersList({
@@ -526,19 +615,8 @@ function OrdersList({
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const selectRef = useRef<HTMLButtonElement>(null);
-  const [showIncoming, setShowIncoming] = useState(false);
-  // Nuovi ordini: inseriti subito se l'utente è in cima alla lista e non sta
-  // selezionando; altrimenti resta l'indicatore, così nulla si sposta mentre legge.
-  const hasIncoming = data.incoming.length > 0;
-  const insertAtTop = useEffectEvent(() => {
-    if (window.scrollY < topThreshold && !selecting) setShowIncoming(true);
-  });
-  useEffect(() => {
-    if (!hasIncoming) return;
-    insertAtTop();
-    window.addEventListener("scroll", insertAtTop, { passive: true });
-    return () => window.removeEventListener("scroll", insertAtTop);
-  }, [hasIncoming]);
+  const { freshHref } = data;
+  useListSnapshot(data, selecting);
   const stopSelecting = () => {
     setSelecting(false);
     setSelected(new Set());
@@ -549,23 +627,19 @@ function OrdersList({
     unlock.submit(ids, skipConfirmation);
   };
   const ordersHref = appHref(links, "ordini");
-  // La lista resta dal più recente anche quando i nuovi ordini arrivano in un ordine diverso.
-  const orders = showIncoming
-    ? [...[...data.incoming].sort((a, b) => b.createdAt.localeCompare(a.createdAt)), ...listed]
-    : listed;
-  const incomingIds = new Set(data.incoming.map((order) => order.id));
-  // Ogni scheda riceve la sua posizione d'ingresso la prima volta che compare e la
+  const orders = listed;
+  const criteria = new URLSearchParams(location.search);
+  criteria.delete(pagesParam);
+  criteria.delete(snapshotParam);
+  const newIds = useNewOrders(orders, data.snapshot, criteria.toString());
+  // Ogni altra scheda riceve la sua posizione d'ingresso la prima volta che compare e la
   // conserva: con «Carica altri» entrano soltanto le nuove, dalla prima in giù.
   const enterIndexes = useRef(new Map<string, number>()).current;
-  const entering = orders.filter(
-    (order) => !enterIndexes.has(order.id) && !incomingIds.has(order.id),
-  );
+  const entering = orders.filter((order) => !enterIndexes.has(order.id) && !newIds.has(order.id));
   entering.forEach((order, index) => enterIndexes.set(order.id, index));
-  const lockedSelected = orders
-    .filter((order) => selected.has(order.id) && unlockable(order))
-    .map((order) => order.id);
-  const criteria = new URLSearchParams(location.search);
-  criteria.delete("mostra");
+  // La selezione vale soltanto per gli ordini ancora presenti e consultabili nell'elenco.
+  const visibleSelected = orders.filter((order) => selected.has(order.id));
+  const lockedSelected = visibleSelected.filter(unlockable).map((order) => order.id);
   const onlySearch =
     criteria.has(searchParam) && [...criteria.keys()].every((key) => key === searchParam);
   return (
@@ -583,11 +657,17 @@ function OrdersList({
         onToggleSelect={() => (selecting ? stopSelecting() : setSelecting(true))}
       />
       <SearchChip t={t} query={data.search} clearable={orders.length > 0 || !onlySearch} />
-      {data.incoming.length > 0 && !showIncoming ? (
+      {freshHref ? (
         <div className="flex justify-center">
-          <Button variant="secondary" onClick={() => setShowIncoming(true)}>
-            {t.orders.newOrders(data.incoming.length)} · {t.orders.showNew}
-          </Button>
+          <Link
+            to={freshHref}
+            replace
+            preventScrollReset
+            data-slot="button"
+            className={buttonVariants({ variant: "secondary" })}
+          >
+            {t.orders.newOrders(data.incoming)} · {t.orders.showNew}
+          </Link>
         </div>
       ) : null}
       {orders.length === 0 ? (
@@ -623,7 +703,7 @@ function OrdersList({
                     unlocking={unlock.pending.has(order.id)}
                     onUnlock={submit}
                     confirmUnlock={data.confirmUnlock}
-                    isNew={showIncoming && incomingIds.has(order.id)}
+                    isNew={newIds.has(order.id)}
                     enterIndex={enterIndexes.get(order.id)}
                     actions={data}
                   />
@@ -637,7 +717,7 @@ function OrdersList({
       {selecting ? (
         <SelectionBar
           t={t}
-          selected={[...selected]}
+          selected={visibleSelected.map((order) => order.id)}
           lockedSelected={lockedSelected}
           remaining={remainingUnlocks(data.account)}
           onUnlock={submit}

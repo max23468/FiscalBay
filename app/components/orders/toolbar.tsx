@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import type { AppCopy } from "../../app-copy";
+import { rememberStore, withoutListPosition } from "../../order-list";
 import { searchParam } from "../../order-search";
 import {
   fiscalSituations,
@@ -118,11 +119,12 @@ export function OrdersToolbar({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filterKeys = ["negozio", "marketplace", "periodo", "pagamento", "spedizione", "fiscale"];
   const active = filterKeys.filter((key) => params.get(key)).length;
+  // Un filtro diverso apre un nuovo elenco, dall'inizio e con una nuova istantanea.
   const change = (name: string, value: string) => {
-    const next = new URLSearchParams(params);
+    const next = withoutListPosition(params);
     if (value) next.set(name, value);
     else next.delete(name);
-    next.delete("mostra");
+    if (name === "negozio") rememberStore(value || null);
     setParams(next, { preventScrollReset: true });
   };
   return (
@@ -267,9 +269,8 @@ export function SearchChip({
           size="icon-sm"
           aria-label={t.orders.clearSearch}
           onClick={() => {
-            const next = new URLSearchParams(location.search);
+            const next = withoutListPosition(new URLSearchParams(location.search));
             next.delete(searchParam);
-            next.delete("mostra");
             void navigate({ search: next.toString() }, { preventScrollReset: true });
           }}
         >

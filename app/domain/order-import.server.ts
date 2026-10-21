@@ -628,6 +628,8 @@ export async function recordOrderObservation(
 
   // Ordine e articoli: le loro modifiche distinguono «updated» da «unchanged».
   const orderWrites = statements.length;
+  // Istante d'ingresso negli elenchi, con l'orologio del Worker che apre l'elenco.
+  const listedAt = new Date().toISOString();
   if (!matched) {
     add(
       db
@@ -635,17 +637,19 @@ export async function recordOrderObservation(
           `INSERT INTO orders
              (id, store_id, ebay_order_id, creation_time, last_modified_time, currency,
               total_minor, is_provisional, marketplace_id, payment_status, fulfillment_status,
-              cancel_status, buyer_json)
-           SELECT ?3, ?1, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14 WHERE ${guarded}`,
+              cancel_status, buyer_json, listed_at)
+           SELECT ?3, ?1, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15 WHERE ${guarded}`,
         )
-        .bind(...scope, orderId, ...orderValues),
+        .bind(...scope, orderId, ...orderValues, listedAt),
     );
   } else if (ownsFields) {
-    // La sola data di modifica non è una variazione dell'ordine.
+    // La sola data di modifica non è una variazione dell'ordine. Un acquisto provvisorio
+    // pagato entra negli elenchi in quel momento.
     add(
       db
         .prepare(
-          `UPDATE orders SET ebay_order_id = ?4, creation_time = ?5, last_modified_time = ?6,
+          `UPDATE orders SET listed_at = CASE WHEN is_provisional = 1 AND ?9 = 0 THEN ?16
+                    ELSE listed_at END, ebay_order_id = ?4, creation_time = ?5, last_modified_time = ?6,
                   currency = ?7, total_minor = ?8, is_provisional = ?9, marketplace_id = ?10,
                   payment_status = ?11, fulfillment_status = ?12, cancel_status = ?13,
                   buyer_json = ?14
@@ -655,7 +659,7 @@ export async function recordOrderObservation(
                 OR payment_status IS NOT ?11 OR fulfillment_status IS NOT ?12
                 OR cancel_status IS NOT ?13 OR buyer_json IS NOT ?14)`,
         )
-        .bind(...scope, orderId, ...orderValues, takeover ? 1 : 0),
+        .bind(...scope, orderId, ...orderValues, takeover ? 1 : 0, listedAt),
     );
   }
   if (observation.buyerEiasToken !== undefined) {

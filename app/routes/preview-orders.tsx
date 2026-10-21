@@ -1,11 +1,18 @@
 import { env } from "cloudflare:workers";
-import { data, isRouteErrorResponse, useOutletContext } from "react-router";
+import {
+  data,
+  isRouteErrorResponse,
+  redirect,
+  useOutletContext,
+  type ShouldRevalidateFunctionArgs,
+} from "react-router";
 
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
 import { NotFoundState } from "~/components/not-found";
 import { appHref } from "../app-links";
 import { appCopy } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
+import { rememberedStore, snapshotOnlyAdded } from "../order-list";
 import { openSearch } from "../order-search.server";
 import { previewOrderPage, previewSearchScope } from "../preview/order-list.server";
 import { currentScenario, simulateAction, writePreviewState } from "../preview/state.server";
@@ -23,9 +30,25 @@ export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { language, scenario, state } = await currentScenario(request);
   const search = new URL(request.url).searchParams;
+  const stores = scenario.stores
+    .filter((store) => store.pauseReason !== "plan")
+    .map((store) => ({ id: store.id, name: store.name }));
+  // Come nell'area reale, un nuovo accesso riapre il negozio scelto l'ultima volta.
+  const remembered =
+    search.size === 0 && !params.ordine
+      ? rememberedStore(
+          request.headers.get("cookie"),
+          stores.map((store) => store.id),
+        )
+      : null;
+  if (remembered)
+    throw redirect(
+      `${localizedPath(language, "/anteprima/ordini")}?negozio=${encodeURIComponent(remembered)}`,
+    );
   const query = await openSearch(env.BETTER_AUTH_SECRET, previewSearchScope, search);
   const page = previewOrderPage(
     scenario.orders,
+    scenario.incoming,
     search,
     query,
     scenario.now,
@@ -41,11 +64,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     view: scenario.view,
     ...page,
     search: query,
-    incoming: scenario.incoming,
     detail,
-    stores: scenario.stores
-      .filter((store) => store.pauseReason !== "plan")
-      .map((store) => ({ id: store.id, name: store.name })),
+    stores,
     marketplaces: [
       ...new Set(
         scenario.orders.flatMap((order) => (order.marketplace ? [order.marketplace] : [])),
@@ -69,6 +89,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     openOnEbay: true,
   };
   return pageData;
+}
+
+/** L'istantanea aggiunta all'indirizzo è quella della risposta già mostrata. */
+export function shouldRevalidate({
+  currentUrl,
+  nextUrl,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  return snapshotOnlyAdded(currentUrl, nextUrl) ? false : defaultShouldRevalidate;
 }
 
 /**

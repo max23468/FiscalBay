@@ -1,4 +1,11 @@
-import { Outlet, redirect, useLocation, useMatches, useSubmit } from "react-router";
+import {
+  Outlet,
+  redirect,
+  useLocation,
+  useMatches,
+  useSubmit,
+  type ShouldRevalidateFunctionArgs,
+} from "react-router";
 
 import { AppShell } from "~/components/app-shell";
 import type { OrdersPageData } from "~/components/orders/page";
@@ -12,6 +19,7 @@ import {
 import { appCopy, type AppCopy } from "../app-copy";
 import type { AppLinks } from "../app-links";
 import { localizedPath, type Language } from "../i18n";
+import { snapshotOnlyAdded } from "../order-list";
 import { isScenarioId, scenarioOptions } from "../preview/scenarios.server";
 import {
   currentScenario,
@@ -42,6 +50,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     notifications: scenario.notifications,
     now: scenario.now,
   };
+}
+
+/** L'istantanea aggiunta all'elenco Ordini non cambia scenario né notifiche. */
+export function shouldRevalidate({
+  currentUrl,
+  nextUrl,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  return snapshotOnlyAdded(currentUrl, nextUrl) ? false : defaultShouldRevalidate;
 }
 
 export async function action({ request }: Route.ActionArgs) {

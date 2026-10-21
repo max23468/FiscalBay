@@ -73,7 +73,7 @@ test(
     await page.getByRole("link", { name: "Vai all’app" }).click();
     await expect(page).toHaveTitle("FiscalBay | Ordini");
     await page.goto("/en");
-    await expect(page).toHaveURL(/\/en\/app\/ordini$/u);
+    await expect(page).toHaveURL(/\/en\/app\/ordini(?:[?&]vista=[0-9a-z]+)?$/u);
     await expect(page).toHaveTitle("FiscalBay | Orders");
     await expect(page.getByText(`${stores.expired}: connection expired`)).toBeVisible();
     expect(await page.content()).not.toContain(taxCodes.locked);

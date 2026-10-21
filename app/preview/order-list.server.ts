@@ -1,4 +1,10 @@
-import { ordersPageSize } from "../order-list";
+import {
+  ordersPageSize,
+  pagesParam,
+  snapshotCursor,
+  snapshotInstant,
+  snapshotParam,
+} from "../order-list";
 import { orderSearchText, searchFold, searchTokens } from "../order-search";
 import { displayTaxValue } from "../tax-quality";
 import {
@@ -58,28 +64,46 @@ function matchesOrder(order: OrderView, params: URLSearchParams, now: string, to
 const newestFirst = (a: OrderView, b: OrderView) =>
   b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id);
 
+/** Gli ordini in arrivo degli scenari entrano negli elenchi subito dopo l'apertura. */
+const arrivalDelay = 1_000;
+
 /**
  * Ordini che corrispondono ai criteri e alla ricerca, dal più recente, fino alla pagina
- * indicata da `mostra`; `nextHref` riceve la query della pagina successiva.
+ * indicata da `mostra`, con le regole dell'istantanea dell'area reale: gli ordini in arrivo
+ * restano fuori finché l'istantanea non li comprende e intanto si contano. `href` riceve la
+ * query delle pagine successive e della nuova istantanea.
  */
 export function previewOrderPage(
   orders: OrderView[],
+  incoming: OrderView[],
   search: URLSearchParams,
   query: string | null,
   now: string,
   href: (query: URLSearchParams) => string,
 ) {
   const tokens = searchTokens(query);
-  const filtered = orders
-    .filter((order) => matchesOrder(order, search, now, tokens))
-    .sort(newestFirst);
-  const shown = Math.max(Number(search.get("mostra")) || 1, 1);
+  const matching = (list: OrderView[]) =>
+    list.filter((order) => matchesOrder(order, search, now, tokens));
+  const arrival = new Date(new Date(now).getTime() + arrivalDelay);
+  const snapshot = snapshotInstant(search.get(snapshotParam)) ?? new Date(now);
+  const arrived = snapshot >= arrival;
+  const filtered = matching(arrived ? [...orders, ...incoming] : orders).sort(newestFirst);
+  const waiting = arrived ? 0 : matching(incoming).length;
+  const shown = Math.max(Number(search.get(pagesParam)) || 1, 1);
+  const cursor = snapshotCursor(snapshot);
   const next = new URLSearchParams(search);
-  next.set("mostra", String(shown + 1));
+  next.set(pagesParam, String(shown + 1));
+  next.set(snapshotParam, cursor);
+  const fresh = new URLSearchParams(search);
+  fresh.set(snapshotParam, snapshotCursor(arrival));
   return {
     orders: filtered.slice(0, shown * ordersPageSize),
     total: filtered.length,
+    snapshot: cursor,
     nextHref: filtered.length > shown * ordersPageSize ? href(next) : null,
+    limited: false,
+    incoming: waiting,
+    freshHref: waiting > 0 ? href(fresh) : null,
   };
 }
 

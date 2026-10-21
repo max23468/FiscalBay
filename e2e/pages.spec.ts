@@ -265,15 +265,19 @@ for (const scenario of scenarios) {
         const homeLink = page.locator(`a[href="${home}"]`).first();
         // Un pannello modale aperto dalla route (dettaglio del negozio) copre i collegamenti sotto.
         const modal = await page.getByRole("dialog").isVisible();
+        // Gli Ordini aggiungono all'indirizzo soltanto l'istantanea dell'elenco.
+        const atHome = (url: URL) =>
+          url.pathname === new URL(home, baseURL!).pathname &&
+          [...url.searchParams.keys()].every((key) => key === "vista");
         if (!modal && (await homeLink.isVisible()) && new URL(before).pathname !== home) {
           await homeLink.click();
-          await expect(page).toHaveURL(new URL(home, baseURL!).href);
+          await expect(page).toHaveURL(atHome);
           await page.waitForLoadState("networkidle");
           await page.goBack();
           await expect(page).toHaveURL(before);
           await page.waitForLoadState("networkidle");
           await page.goForward();
-          await expect(page).toHaveURL(new URL(home, baseURL!).href);
+          await expect(page).toHaveURL(atHome);
           await page.waitForLoadState("networkidle");
           await page.goBack();
           await expect(page).toHaveURL(before);
@@ -304,7 +308,7 @@ for (const scenario of scenarios) {
             await search.press("Enter");
           };
           await searchFor(testAccount.taxCodes.unlocked);
-          await expect(page).toHaveURL(/\/app\/ordini\?ricerca=[\w-]+$/u);
+          await expect(page).toHaveURL(/\/app\/ordini\?ricerca=[\w-]+(?:[?&]vista=[0-9a-z]+)?$/u);
           expect(page.url()).not.toContain(testAccount.taxCodes.unlocked);
           await expect(page.getByText(testAccount.taxCodes.unlocked).first()).toBeVisible();
           await searchFor(testAccount.taxCodes.locked);

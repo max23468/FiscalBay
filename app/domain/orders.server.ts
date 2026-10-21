@@ -162,6 +162,10 @@ export type OrderCriteria = {
   fiscal?: FiscalSituation;
   /** Parole cercate nella forma di confronto: ognuna deve comparire nei dati consultabili. */
   tokens?: string[];
+  /** Ordini entrati negli elenchi fino a questo istante: l'istantanea dell'elenco aperto. */
+  listedBefore?: string;
+  /** Ordini entrati negli elenchi dopo questo istante: i nuovi rispetto all'istantanea. */
+  listedAfter?: string;
 };
 
 // Stryker disable next-line StringLiteral: un altro separatore rende la query invalida e le prove falliscono subito; sotto Stryker il worker supera invece il timeout.
@@ -224,8 +228,9 @@ const tokenMissingSql = `instr(COALESCE(o.search_text, ${unindexedSearchSql}), t
       AND instr(lower(t.value || ' ' || replace(t.value, ' ', '')), token.value) > 0))`;
 
 /**
- * Ordini consultabili dello spazio: utente ?1, ambiente ?2, istante ?3, ID ?6, criteri da ?7 e
- * acquisti non pagati ?14. Ogni percorso (elenco, conteggio, facet, suggerimenti) applica gli
+ * Ordini consultabili dello spazio: utente ?1, ambiente ?2, istante ?3, ID ?6, criteri da ?7,
+ * acquisti non pagati ?14 e istantanea da ?15. Un ordine senza istante d'ingresso negli elenchi
+ * è stato letto prima che venisse registrato e vale come già presente. Ogni percorso (elenco, conteggio, facet, suggerimenti) applica gli
  * stessi controlli di negozio e conservazione. Un acquisto non pagato resta fuori, salvo con
  * il filtro «Non pagato» o quando l'elenco lo mostra (D180).
  */
@@ -243,7 +248,9 @@ const visibleOrdersSql = `FROM workspace_members wm
     AND (?10 IS NULL OR ${paymentSql} = ?10)
     AND (?11 IS NULL OR ${shippingSql} = ?11)
     AND (?12 IS NULL OR ${fiscalSql} = ?12)
-    AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(?13, '[]')) token WHERE ${tokenMissingSql})`;
+    AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(?13, '[]')) token WHERE ${tokenMissingSql})
+    AND (?15 IS NULL OR o.listed_at IS NULL OR o.listed_at <= ?15)
+    AND (?16 IS NULL OR o.listed_at > ?16)`;
 
 function visibleOrdersParams(
   userId: string,
@@ -269,6 +276,8 @@ function visibleOrdersParams(
     criteria.fiscal ?? null,
     criteria.tokens?.length ? JSON.stringify(criteria.tokens) : null,
     provisional ? 1 : 0,
+    criteria.listedBefore ?? null,
+    criteria.listedAfter ?? null,
   ];
 }
 
