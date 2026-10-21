@@ -45,7 +45,14 @@ async function main() {
   // Rilegge provider e branch subito prima del tag, senza ridistribuire una versione confermata.
   execFileSync(
     process.execPath,
-    ["scripts/release.mjs", "confirm", "--environment", "production", "--expected-sha", sha],
+    [
+      "scripts/release/release.mjs",
+      "confirm",
+      "--environment",
+      "production",
+      "--expected-sha",
+      sha,
+    ],
     { stdio: "inherit" },
   );
   const repo = process.env.GH_REPO;

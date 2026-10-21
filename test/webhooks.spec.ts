@@ -13,7 +13,7 @@ import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import worker from "../workers/app";
 import { acquireOrders, consumeOrderConfirmation } from "../app/domain/order-acquisition.server";
 import { ebayConfiguration } from "../app/integrations/ebay/environment.server";
-import delivery from "./ebay-order-notification.json";
+import delivery from "./fixtures/ebay-order-notification.json";
 
 const router = vi.hoisted(() => ({ handle: vi.fn(), create: vi.fn() }));
 vi.mock("react-router", async (original) => ({

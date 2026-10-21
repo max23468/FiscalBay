@@ -13,8 +13,8 @@ import { searchVisibleOrders } from "../domain/orders.server";
 import { errorResponse } from "../error-response";
 import { localizedPath } from "../i18n";
 import { measure } from "../observability.server";
-import { searchQuery, searchTokens } from "../order-search";
-import { accountSearchScope, searchHref } from "../order-search.server";
+import { searchQuery, searchTokens } from "../orders/order-search";
+import { accountSearchScope, searchHref } from "../orders/order-search.server";
 import type { Route } from "./+types/order-search";
 
 /** Il percorso riceve soltanto ricerche: una lettura non ha contenuto. */

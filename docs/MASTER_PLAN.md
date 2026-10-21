@@ -2472,7 +2472,7 @@ Nei primi giorni sorvegliare registrazioni, sync, Stripe, code, quote, errori e 
 <a id="pubblicazione-production"></a>
 ### Gate per la pubblicazione Production
 
-Prima di `Promuovi` devono risultare chiusi preflight commerciale, restore conclusivo e checklist operativa sul candidato. Le righe seguenti riportano l'esito di [M9-01](#m9-01), [M9-02](#m9-02) e [M9-03](#m9-03); `scripts/release.mjs` le legge sia prima del workflow reale sia prima degli effetti Production. Una riga `COMPLETATO` richiede un riferimento alla prova applicabile; righe mancanti, duplicate, prive di prova o con altro stato bloccano il ciclo. Non modificare i nomi dei tre gate senza aggiornare lo script e i suoi test. Il via owner riferito al commit, la variabile di abilitazione e il gate dell'environment restano controlli separati obbligatori.
+Prima di `Promuovi` devono risultare chiusi preflight commerciale, restore conclusivo e checklist operativa sul candidato. Le righe seguenti riportano l'esito di [M9-01](#m9-01), [M9-02](#m9-02) e [M9-03](#m9-03); `scripts/release/release.mjs` le legge sia prima del workflow reale sia prima degli effetti Production. Una riga `COMPLETATO` richiede un riferimento alla prova applicabile; righe mancanti, duplicate, prive di prova o con altro stato bloccano il ciclo. Non modificare i nomi dei tre gate senza aggiornare lo script e i suoi test. Il via owner riferito al commit, la variabile di abilitazione e il gate dell'environment restano controlli separati obbligatori.
 
 | Gate | Stato | Prova |
 |---|---|---|

@@ -18,9 +18,9 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
-import { plan } from "./classify-changes.mjs";
+import { plan } from "../classify-changes.mjs";
 import { assertBrowserEvidence } from "./release-notes.mjs";
-import { verifiedBuildOrigin } from "./find-build.mjs";
+import { verifiedBuildOrigin } from "../find-build.mjs";
 
 const execute = (command, args, options = {}) =>
   (execFileSync(command, args, { encoding: "utf8", ...options }) ?? "").trim();
@@ -331,7 +331,7 @@ function readback(repository, run, environment) {
     executeHere(
       process.execPath,
       [
-        "scripts/release.mjs",
+        "scripts/release/release.mjs",
         "confirm",
         "--environment",
         environment,

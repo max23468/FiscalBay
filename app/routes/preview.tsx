@@ -19,7 +19,7 @@ import {
 import { appCopy, type AppCopy } from "../app-copy";
 import type { AppLinks } from "../app-links";
 import { localizedPath, type Language } from "../i18n";
-import { snapshotOnlyAdded } from "../order-list";
+import { snapshotOnlyAdded } from "../orders/order-list";
 import { isScenarioId, scenarioOptions } from "../preview/scenarios.server";
 import {
   currentScenario,

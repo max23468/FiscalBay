@@ -1,5 +1,5 @@
 import { sessionPolicy } from "../auth.server";
-import { deviceName } from "../device-name";
+import { deviceName } from "../account/device-name";
 import type { Language } from "../i18n";
 
 /** Campi della sessione Better Auth usati qui, compresi quelli aggiunti da FiscalBay. */

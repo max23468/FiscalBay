@@ -29,8 +29,8 @@ import {
   readReceipt,
   releaseIdentity,
   retryReadback,
-} from "./release.mjs";
-import { releaseNotes, assertBrowserEvidence } from "./release-notes.mjs";
+} from "./release/release.mjs";
+import { releaseNotes, assertBrowserEvidence } from "./release/release-notes.mjs";
 import { expectedPageError, knownPagePath } from "../e2e/page-cases.ts";
 import {
   checkReceipt,
@@ -54,7 +54,7 @@ import {
   squashIntegrated,
   cleanup,
   effectiveProductionVariable,
-} from "./release-cycle.mjs";
+} from "./release/release-cycle.mjs";
 import { lastDeployed } from "./find-deployed.mjs";
 import { compareEbayTax } from "./compare-ebay-tax.mjs";
 import { jsonObjects, summarize as summarizeInvocations } from "./watch-invocations.mjs";
@@ -453,7 +453,7 @@ describe("classificazione dei file modificati", () => {
       "AGENTS.md",
       "docs/MASTER_PLAN.md",
       "docs/engineering/RELEASE.md",
-      "scripts/release.mjs",
+      "scripts/release/release.mjs",
       "scripts/classify-changes.mjs",
       "scripts/guardrails.test.mjs",
       ".github/workflows/ci.yml",
@@ -499,7 +499,7 @@ describe("classificazione dei file modificati", () => {
     assert.equal(candidate.deploy, false);
     assert.equal(changePlan(["doctor.config.json"]).doctor, true);
     assert.equal(changePlan(["docs/MASTER_PLAN.md"]).promotionReuse, true);
-    assert.equal(changePlan(["scripts/release.mjs"]).promotionReuse, false);
+    assert.equal(changePlan(["scripts/release/release.mjs"]).promotionReuse, false);
   });
 
   it("espone alla CI tutti i controlli quando il confronto non identifica modifiche", () => {
@@ -531,7 +531,7 @@ describe("classificazione dei file modificati", () => {
   it("applica React Doctor nel gate e riserva browser e mutation ai job separati", () => {
     const commands = (files, sources = [], complete = false) =>
       gateCommands(changePlan(files, sources, complete)).map(([, args]) => args[0]);
-    assert.deepEqual(commands(["scripts/release.mjs"]), ["verify:tooling"]);
+    assert.deepEqual(commands(["scripts/release/release.mjs"]), ["verify:tooling"]);
     assert.deepEqual(commands(["doctor.config.json"]), ["verify:tooling", "doctor:react"]);
     assert.deepEqual(commands(["test/orders.spec.ts"]), [
       "verify:tooling",
@@ -544,7 +544,7 @@ describe("classificazione dei file modificati", () => {
       assert.equal(changePlan(files).doctor, true);
       assert.ok(commands(files).includes("doctor:react"));
     }
-    assert.ok(commands(["scripts/release.mjs"], [], true).includes("doctor:react"));
+    assert.ok(commands(["scripts/release/release.mjs"], [], true).includes("doctor:react"));
 
     const directory = mkdtempSync(path.join(tmpdir(), "gate-run-"));
     const log = path.join(directory, "commands");
@@ -1677,10 +1677,14 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     try {
       writeFileSync(path.join(directory, "gh"), executable, { mode: 0o700 });
       const env = { ...process.env, PATH: `${directory}:${process.env.PATH}`, CYCLE_CALLS: calls };
-      const status = spawnSync(process.execPath, ["scripts/release-cycle.mjs", "status", "123"], {
-        encoding: "utf8",
-        env,
-      });
+      const status = spawnSync(
+        process.execPath,
+        ["scripts/release/release-cycle.mjs", "status", "123"],
+        {
+          encoding: "utf8",
+          env,
+        },
+      );
       assert.equal(status.status, 0, status.stderr);
       const output = JSON.parse(status.stdout);
       assert.equal(output.activeSeconds, 25);
@@ -1697,7 +1701,7 @@ describe("coordinamento e provenienza della pubblicazione", () => {
       writeFileSync(path.join(checkout, "pending"), "owner work");
       const pr = spawnSync(
         process.execPath,
-        [path.resolve("scripts/release-cycle.mjs"), "pr", "123"],
+        [path.resolve("scripts/release/release-cycle.mjs"), "pr", "123"],
         { encoding: "utf8", env, cwd: checkout },
       );
       assert.notEqual(pr.status, 0);
@@ -1731,7 +1735,7 @@ describe("coordinamento e provenienza della pubblicazione", () => {
       const candidate = (expired) =>
         spawnSync(
           process.execPath,
-          [path.resolve("scripts/release-cycle.mjs"), "candidate", "--sha", sha],
+          [path.resolve("scripts/release/release-cycle.mjs"), "candidate", "--sha", sha],
           {
             encoding: "utf8",
             cwd: checkout,

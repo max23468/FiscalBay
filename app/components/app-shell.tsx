@@ -42,7 +42,7 @@ import logoUrl from "../../docs/brand/logo/fiscalbay-logo.svg?url";
 import type { AppCopy } from "../app-copy";
 import { appHref, type AppLinks } from "../app-links";
 import { localizedPath, type Language } from "../i18n";
-import { maxSearchLength, minSuggestionLength } from "../order-search";
+import { maxSearchLength, minSuggestionLength } from "../orders/order-search";
 import {
   formatRelative,
   type AccountView,

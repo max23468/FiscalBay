@@ -4,8 +4,8 @@ import {
   snapshotCursor,
   snapshotInstant,
   snapshotParam,
-} from "../order-list";
-import { orderSearchText, searchFold, searchTokens } from "../order-search";
+} from "../orders/order-list";
+import { orderSearchText, searchFold, searchTokens } from "../orders/order-search";
 import { displayTaxValue } from "../tax-quality";
 import {
   fiscalSituation,

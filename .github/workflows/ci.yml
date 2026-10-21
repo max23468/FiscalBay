@@ -85,7 +85,7 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           current="$(git ls-remote origin "refs/heads/${BASE_REF}" | cut -f1)"
-          node --input-type=module -e 'import { assertBase } from "./scripts/release-cycle.mjs"; assertBase(process.env.BASE_SHA, process.argv[1]);' "${current}"
+          node --input-type=module -e 'import { assertBase } from "./scripts/release/release-cycle.mjs"; assertBase(process.env.BASE_SHA, process.argv[1]);' "${current}"
           git merge-base --is-ancestor "${BASE_SHA}" "${HEAD_SHA}"
 
       # Sul push il confronto parte dall'ultimo deploy test riuscito, non dal push precedente:
@@ -148,7 +148,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           PR_BODY="$(gh api "repos/${REPOSITORY}/pulls/${NUMBER}" --jq '.body // ""')" \
-            node scripts/release.mjs review --base "${BASE_SHA}"
+            node scripts/release/release.mjs review --base "${BASE_SHA}"
 
       - name: Run selected CI gate
         if: steps.reuse.outputs.run-id == ''
@@ -160,7 +160,7 @@ jobs:
 
       - name: Record build provenance
         if: steps.detect.outputs.build == 'true' && !steps.reuse.outputs.run-id
-        run: node scripts/release.mjs manifest --environment test
+        run: node scripts/release/release.mjs manifest --environment test
 
       - name: Preserve coverage and benchmark reports
         if: always() && steps.reuse.outputs.run-id == '' && steps.detect.outputs.gate != 'docs'
@@ -366,7 +366,7 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Verify artifact provenance
-        run: node scripts/release.mjs verify --environment test
+        run: node scripts/release/release.mjs verify --environment test
 
       - name: Check commit still on develop
         env:
@@ -379,7 +379,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: node scripts/release.mjs restore --environment test --receipt-prefix deployed
+        run: node scripts/release/release.mjs restore --environment test --receipt-prefix deployed
 
       # Senza un digest nel dispatch vale quello approvato nella PR integrata.
       - name: Deploy verified artifact
@@ -392,7 +392,7 @@ jobs:
           VERIFIED_SHA: ${{ github.sha }}
         run: |
           PR_BODY="$(gh api "repos/${REPOSITORY}/commits/${VERIFIED_SHA}/pulls" --jq '.[0].body // ""')" \
-            node scripts/release.mjs deploy --environment test --reviewed-migrations "${REVIEWED_MIGRATIONS}"
+            node scripts/release/release.mjs deploy --environment test --reviewed-migrations "${REVIEWED_MIGRATIONS}"
 
       - name: Check test endpoint
         run: curl --fail --silent --show-error --max-time 20 --output /dev/null https://test.fiscalbay.it/
@@ -472,7 +472,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          node scripts/release.mjs rollback --environment test
+          node scripts/release/release.mjs rollback --environment test
 
       - name: Upload deployed evidence
         if: always()

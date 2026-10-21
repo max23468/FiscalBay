@@ -100,6 +100,14 @@ Aggiornare il piano nella stessa PR quando cambiano requisiti, checkpoint, stato
 
 ## 3. Mappa dei documenti e manutenzione
 
+L'applicazione è in `app/`: `orders/` raccoglie i moduli di elenco e ricerca,
+`account/` quelli per passkey e dispositivi, `domain/` le operazioni server e
+`integrations/` i client esterni. Le route restano in `routes/` e l'interfaccia
+in `components/`. I test applicativi sono in `test/`, con dati e helper di
+preparazione in `test/fixtures/`; le prove browser sono in `e2e/`. Gli script
+di pubblicazione sono in `scripts/release/`. Screenshot e audit storici restano
+in `docs/archive/`.
+
 | Documento                                      | Consultarlo per                                                          |
 | ---------------------------------------------- | ------------------------------------------------------------------------ |
 | [AGENTS.md](AGENTS.md)                         | Regole operative e confini del mandato                                   |

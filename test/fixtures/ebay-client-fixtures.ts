@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { vi } from "vitest";
-import { UpstreamError } from "../app/integrations/http.server";
-import { ebayConfiguration } from "../app/integrations/ebay/environment.server";
+import { UpstreamError } from "../../app/integrations/http.server";
+import { ebayConfiguration } from "../../app/integrations/ebay/environment.server";
 
 export const configuration = ebayConfiguration(env, "production");
 export const access = (fetcher: typeof fetch) => ({

@@ -13,7 +13,7 @@ import { action as signInAction, loader as signInLoader } from "../app/routes/si
 import { action as storeLinkAction, loader as storeLinkLoader } from "../app/routes/store-link";
 import { pendingEmailChange } from "../app/domain/email-change.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-import { passkeyFailure } from "../app/passkey-error";
+import { passkeyFailure } from "../app/account/passkey-error";
 import { hashPassword, verifyPassword } from "../app/password.server";
 import { securityReturnPath } from "../app/app-links";
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { orderSearchText } from "../order-search";
+import { orderSearchText } from "../orders/order-search";
 import { taxComparisonKey, taxIdentifierType } from "../tax-quality";
 import { writableStore } from "./store-state.server";
 
