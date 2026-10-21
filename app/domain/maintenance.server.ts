@@ -1,4 +1,4 @@
-import { orderSearchText } from "../order-search";
+import { orderSearchText } from "../orders/order-search";
 
 /**
  * Pulizia periodica degli ordini e dei dati tecnici scaduti, eseguita dal consumer

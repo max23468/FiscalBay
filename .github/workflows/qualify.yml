@@ -97,7 +97,7 @@ jobs:
           retention-days: 7
       - name: Record source provenance
         if: steps.reuse.outputs.run-id == ''
-        run: node scripts/release.mjs manifest --environment test
+        run: node scripts/release/release.mjs manifest --environment test
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.reuse.outputs.run-id == ''
         with:
@@ -128,7 +128,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:live
-      - run: node scripts/release.mjs manifest --environment production
+      - run: node scripts/release/release.mjs manifest --environment production
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: production-${{ github.run_id }}-${{ github.run_attempt }}
@@ -172,7 +172,7 @@ jobs:
         run: |
           environment="test"
           if [ "${KIND}" = production ]; then environment="production"; fi
-          node scripts/release.mjs verify --environment "${environment}"
+          node scripts/release/release.mjs verify --environment "${environment}"
       - name: Read Playwright version
         id: playwright
         run: |
@@ -243,7 +243,7 @@ jobs:
           path: .cloudflare/output/
           run-id: ${{ needs.select.outputs.run-id || github.run_id }}
           github-token: ${{ github.token }}
-      - run: node scripts/release.mjs verify --environment production
+      - run: node scripts/release/release.mjs verify --environment production
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: needs.select.outputs.run-id == ''
         with:

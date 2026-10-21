@@ -12,7 +12,7 @@ import {
 import { orderSuggestions } from "../app/domain/order-suggestions.server";
 import { deleteStoreData, listStores } from "../app/domain/stores.server";
 import { ebayConfiguration } from "../app/integrations/ebay/environment.server";
-import { now, resetDatabase, resetOrderFixtures, seed } from "./database-fixtures";
+import { now, resetDatabase, resetOrderFixtures, seed } from "./fixtures/database-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());

@@ -14,10 +14,15 @@ import { loader as loadLegal } from "../app/routes/legal";
 import { loader as loadAccess } from "../app/routes/sign-in";
 import { action as startStoreLink } from "../app/routes/store-link";
 import { accessNotice } from "../app/access-notice";
-import { now, resetDatabase } from "./database-fixtures";
-import { syntheticProfile, verifiedSession, sessionCookie, profileOf } from "./account-fixtures";
-import { accessFor, accessForm, securityForm, homeFor } from "./account-route-fixtures";
-import { beginStoreLink, storeLinkSessions } from "./store-link-fixtures";
+import { now, resetDatabase } from "./fixtures/database-fixtures";
+import {
+  syntheticProfile,
+  verifiedSession,
+  sessionCookie,
+  profileOf,
+} from "./fixtures/account-fixtures";
+import { accessFor, accessForm, securityForm, homeFor } from "./fixtures/account-route-fixtures";
+import { beginStoreLink, storeLinkSessions } from "./fixtures/store-link-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());

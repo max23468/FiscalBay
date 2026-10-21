@@ -16,11 +16,11 @@ import {
   completeStoreLink,
 } from "../app/integrations/ebay/store-link.server";
 import { ebayConfiguration, sandboxAvailable } from "../app/integrations/ebay/environment.server";
-import { now, resetDatabase } from "./database-fixtures";
-import { syntheticOrderId, syntheticTradingXml, syntheticEbay } from "./ebay-fixtures";
-import { verifiedSession } from "./account-fixtures";
-import { homeFor } from "./account-route-fixtures";
-import { beginStoreLink, storeCallback, storeLinkSessions } from "./store-link-fixtures";
+import { now, resetDatabase } from "./fixtures/database-fixtures";
+import { syntheticOrderId, syntheticTradingXml, syntheticEbay } from "./fixtures/ebay-fixtures";
+import { verifiedSession } from "./fixtures/account-fixtures";
+import { homeFor } from "./fixtures/account-route-fixtures";
+import { beginStoreLink, storeCallback, storeLinkSessions } from "./fixtures/store-link-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());

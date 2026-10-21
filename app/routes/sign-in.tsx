@@ -35,7 +35,7 @@ import { accessLoader } from "../account-page.server";
 import { appCopy } from "../app-copy";
 import { errorResponse } from "../error-response";
 import { tracePhase } from "../errors";
-import { passkeyFailure, type PasskeyFailure } from "../passkey-error";
+import { passkeyFailure, type PasskeyFailure } from "../account/passkey-error";
 import { languageFromPath, localizedPath, type Language } from "../i18n";
 import type { Route } from "./+types/sign-in";
 
@@ -431,7 +431,7 @@ function PasskeyButton({ t, language }: { t: AccessCopy; language: Language }) {
               setError("unsupported");
               return;
             }
-            const { authClient } = await import("../passkey-client");
+            const { authClient } = await import("../account/passkey-client");
             const result = await authClient.signIn.passkey();
             if (result.error) setError(passkeyFailure(result.error));
             else window.location.assign(target ?? localizedPath(language, ordersPath));

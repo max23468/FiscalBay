@@ -14,7 +14,7 @@ import {
 } from "../app/integrations/ebay/trading.server";
 import { paymentState, shippingState } from "../app/domain/orders.server";
 import { UpstreamError } from "../app/integrations/http.server";
-import { resetDatabase } from "./database-fixtures";
+import { resetDatabase } from "./fixtures/database-fixtures";
 import {
   access,
   failure,
@@ -23,7 +23,7 @@ import {
   ack,
   tradingError,
   order,
-} from "./ebay-client-fixtures";
+} from "./fixtures/ebay-client-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());

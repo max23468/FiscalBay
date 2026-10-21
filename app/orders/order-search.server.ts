@@ -1,5 +1,5 @@
 import { searchParam, searchQuery } from "./order-search";
-import { seal, unseal } from "./sealed.server";
+import { seal, unseal } from "../sealed.server";
 
 /**
  * La ricerca attiva resta nell'indirizzo cifrata, così dettaglio, Indietro e ricarica la

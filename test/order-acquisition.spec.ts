@@ -16,10 +16,10 @@ import { listVisibleOrders } from "../app/domain/orders.server";
 import { recordOrderObservation } from "../app/domain/order-import.server";
 import { listStores } from "../app/domain/stores.server";
 import { sealToken } from "../app/integrations/ebay/seller-credentials.server";
-import { now, resetDatabase, seed } from "./database-fixtures";
-import { queueMessage } from "./queue-fixture";
-import { emptyTradingOrders } from "./ebay-fixtures";
-import { access, ack, order } from "./ebay-client-fixtures";
+import { now, resetDatabase, seed } from "./fixtures/database-fixtures";
+import { queueMessage } from "./fixtures/queue-fixture";
+import { emptyTradingOrders } from "./fixtures/ebay-fixtures";
+import { access, ack, order } from "./fixtures/ebay-client-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());

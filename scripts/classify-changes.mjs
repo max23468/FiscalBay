@@ -40,7 +40,7 @@ const categories = [
 function toolingFile(file) {
   return (
     file.endsWith(".md") ||
-    /^scripts\/(?:verify-(?:copy|docs|repo|pages)|guardrails\.test|classify-changes|benchmark|coverage-report|release(?:-notes|-cycle)?|find-(?:build|deployed)|reset-test-account|watch-invocations)\.mjs$/u.test(
+    /^scripts\/(?:verify-(?:copy|docs|repo|pages)|guardrails\.test|classify-changes|benchmark|coverage-report|release\/release(?:-notes|-cycle)?|find-(?:build|deployed)|reset-test-account|watch-invocations)\.mjs$/u.test(
       file,
     ) ||
     /^\.github\/(?:dependabot\.yml|workflows\/(?:ci|publish|qualify|promotion|mutation|react-doctor|actionlint|pr-title|dependency-review|dependabot-auto-merge)\.yml)$/u.test(
@@ -256,7 +256,7 @@ export function plan(files, sources = [], complete = false, ranges = {}) {
     benchmark,
     promotionReuse: !files.some(
       (file) =>
-        /^scripts\/(?:classify-changes|release(?:-notes)?|find-build)\.mjs$/u.test(file) ||
+        /^scripts\/(?:classify-changes|release\/release(?:-notes)?|find-build)\.mjs$/u.test(file) ||
         /^\.github\/workflows\/(?:ci|mutation|publish|qualify|promotion)\.yml$/u.test(file),
     ),
     mutation,

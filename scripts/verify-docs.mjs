@@ -9,7 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { productionReadiness } from "./release.mjs";
+import { productionReadiness } from "./release/release.mjs";
 
 let root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 let assets = false,

@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { buyerSnapshotSchema, type BuyerSnapshot } from "./order-import.server";
 import { contactsView } from "../contact";
-import { searchTokens } from "../order-search";
+import { searchTokens } from "../orders/order-search";
 import { taxComparisonKey, taxIdentifierType, taxQuality } from "../tax-quality";
 import {
   fiscalSituations,
