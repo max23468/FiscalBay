@@ -174,7 +174,10 @@ it.each([undefined, "[]", "", "non-json", "{}", '["non-email"]', '["ok@example.i
       }),
     );
     expect(response.status).toBe(403);
-    expect(await response.json()).toMatchObject({ code: "registration_approval_required" });
+    expect(await response.json()).toMatchObject({
+      code: "registration_approval_required",
+      message: "Registration requires approval.",
+    });
     expect(response.headers.getSetCookie()).toEqual([]);
     expect(
       await env.DB.prepare('SELECT id FROM "user" WHERE email = ?').bind(email).first(),
@@ -203,7 +206,7 @@ it("autorizza solo email esatte, conserva il login e non rivela gli account fuor
         }),
       }),
     );
-  expect((await signup(environment, email)).status).toBe(200);
+  expect((await signup(environment, email.toUpperCase())).status).toBe(200);
   const closed = { ...environment, REGISTRATION_ALLOWED_EMAILS: "[]" };
   for (const address of [email, "approvato+alias@example.invalid", "altro@example.invalid"]) {
     const denied = await signup(closed, address);

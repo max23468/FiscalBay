@@ -51,15 +51,15 @@ const userVerifiedRequests = new WeakSet<Request>();
 function requireRegistrationApproval(environment: Env, email: string) {
   if (environment.REGISTRATION_MODE === "open") return;
   // Un elenco assente, vuoto o non valido chiude le nuove registrazioni.
-  let emails: string[] = [];
+  let emails: string[] | undefined;
   try {
     emails = z
       .array(z.string().trim().email())
-      .parse(JSON.parse(environment.REGISTRATION_ALLOWED_EMAILS ?? "[]"));
+      .parse(JSON.parse(environment.REGISTRATION_ALLOWED_EMAILS));
   } catch {
     // Non registrare il contenuto della configurazione privata.
   }
-  if (!emails.some((allowed) => allowed.toLowerCase() === email.trim().toLowerCase())) {
+  if (!emails?.some((allowed) => allowed.toLowerCase() === email.toLowerCase())) {
     throw new APIError("FORBIDDEN", {
       code: "registration_approval_required",
       message: "Registration requires approval.",
