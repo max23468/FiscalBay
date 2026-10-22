@@ -106,6 +106,9 @@ const it = {
     phone: "Telefono",
     email: "Email",
     notProvided: "Non riportato da eBay",
+    maskedContact: "Mascherato da eBay",
+    billingData: "Dati di fatturazione",
+    copyBillingData: "Copia dati di fatturazione",
     fiscalNotice: {
       lastKnown:
         "Ultima lettura da eBay non riuscita: resta mostrato il valore letto in precedenza.",
@@ -198,8 +201,7 @@ const it = {
       format: "Il formato del codice non è valido.",
       checksum: "Il carattere di controllo non corrisponde.",
       name: "Le lettere del codice non corrispondono al nome dell’ordine.",
-      unverifiable:
-        "Codice omocodico o nome non univoco: la corrispondenza con il nome non è verificabile.",
+      unverifiable: "Non possiamo verificare che il codice corrisponda al nome dell’acquirente.",
       unchecked: "FiscalBay non verifica il formato di questo tipo di identificativo.",
     },
     codeToCheck: "Codice da controllare",
@@ -978,6 +980,9 @@ const en: AppCopy = {
     phone: "Phone",
     email: "Email",
     notProvided: "Not provided by eBay",
+    maskedContact: "Masked by eBay",
+    billingData: "Billing details",
+    copyBillingData: "Copy billing details",
     fiscalNotice: {
       lastKnown: "The latest read from eBay failed: the value read earlier is still shown.",
       checking: "New read from eBay in progress.",
@@ -1069,7 +1074,7 @@ const en: AppCopy = {
       format: "The code format is invalid.",
       checksum: "The check character does not match.",
       name: "The letters of the code do not match the name on the order.",
-      unverifiable: "Omocodia variant or ambiguous name: the code cannot be matched to the name.",
+      unverifiable: "We cannot verify that the code matches the buyer’s name.",
       unchecked: "FiscalBay does not check the format of this identifier type.",
     },
     codeToCheck: "Check code",

@@ -1,5 +1,39 @@
 import type { AppCopy } from "../../app-copy";
-import type { AccountView, TaxIdentifierView } from "../../view-models";
+import { buyerNameView } from "../../contact";
+import type { Language } from "../../i18n";
+import {
+  addressRows,
+  type AccountView,
+  type OrderView,
+  type TaxIdentifierView,
+} from "../../view-models";
+
+/** Solo valori già autorizzati dal server; suggerimenti e identificativi bloccati esclusi. */
+export function billingCopyText(order: OrderView, language: Language, t: AppCopy): string {
+  const name = order.maskedContacts?.includes("name") ? null : buyerNameView(order.buyerName);
+  const address = order.contacts.billingAddress
+    ? addressRows(order.contacts.billingAddress, language)
+    : [];
+  const identifiers =
+    order.fiscal.state === "available"
+      ? order.fiscal.identifiers
+          .filter((identifier) => identifier.value.trim())
+          .map((identifier) => {
+            const label = identifierLabel(identifier, t);
+            return label ? `${label}: ${identifier.value}` : identifier.value;
+          })
+      : [];
+  return [name, ...address, ...identifiers].filter(Boolean).join("\n");
+}
+
+/** Un'assenza mascherata è distinta solo quando la fonte lo dichiara. */
+export function missingContact(
+  order: OrderView,
+  field: NonNullable<OrderView["maskedContacts"]>[number],
+  t: AppCopy,
+): string {
+  return order.maskedContacts?.includes(field) ? t.orders.maskedContact : t.orders.notProvided;
+}
 
 /** Piano e sblocchi del ciclo: tutto ciò che la pagina Ordini usa dell'account. */
 export type OrdersAccount = Pick<AccountView, "plan" | "quota">;

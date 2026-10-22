@@ -1,4 +1,5 @@
 import type { AppCopy } from "../../app-copy";
+import { buyerNameView } from "../../contact";
 import type { OrderView, PaymentStatus, ShippingStatus, SourceStatus } from "../../view-models";
 
 export type PillTone = "success" | "warning" | "info" | "neutral";
@@ -41,5 +42,9 @@ export function shippingLabel(order: OrderView, t: AppCopy) {
 
 /** Nome dell'acquirente; senza nome, lo username eBay. */
 export function buyerLabel(order: OrderView, t: AppCopy) {
-  return order.buyerName ?? order.buyerUsername ?? t.orders.notProvided;
+  return (
+    buyerNameView(order.buyerName) ??
+    order.buyerUsername ??
+    (order.maskedContacts?.includes("name") ? t.orders.maskedContact : t.orders.notProvided)
+  );
 }
