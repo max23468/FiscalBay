@@ -1,9 +1,14 @@
+import { env } from "cloudflare:workers";
 import { data, isRouteErrorResponse, useOutletContext } from "react-router";
 
-import { SettingsPage, type SettingsPageData } from "~/components/settings";
+import { SettingsPage, type ExportContext, type SettingsPageData } from "~/components/settings";
 import { NotFoundState } from "~/components/not-found";
 import { appCopy } from "../app-copy";
-import { languageFromPath } from "../i18n";
+import { languageFromPath, localizedPath } from "../i18n";
+import { exportReturnHref, exportScope } from "../orders/export-scope";
+import { snapshotParam } from "../orders/order-list";
+import { openSearch } from "../orders/order-search.server";
+import { previewListing, previewSearchScope } from "../preview/order-list.server";
 import { currentScenario, simulateAction } from "../preview/state.server";
 import { settingsSections, type SettingsSection } from "../view-models";
 import type { PreviewContext } from "./preview";
@@ -22,9 +27,43 @@ export function meta({ location, params }: Route.MetaArgs): Route.MetaDescriptor
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const { scenario, state } = await currentScenario(request);
+  const { scenario, state, language } = await currentScenario(request);
   if (params.sezione !== undefined && !isSection(params.sezione)) {
     throw data(null, { status: 404 });
+  }
+  // Ambito ricevuto dagli Ordini, contato con le regole del loro elenco: ordini presenti e,
+  // per i filtri, la stessa istantanea e la stessa ricerca.
+  const query = new URL(request.url).searchParams;
+  const scope = params.sezione === "esportazione" ? exportScope(query) : null;
+  let estimate = scenario.orders;
+  let exportContext: ExportContext | null = null;
+  if (scope) {
+    const listed = [...scenario.orders, ...scenario.incoming];
+    if (scope.kind === "orders") {
+      const ids = new Set(scope.ids);
+      estimate = listed.filter((order) => ids.has(order.id));
+    } else {
+      const search = await openSearch(env.BETTER_AUTH_SECRET, previewSearchScope, query);
+      estimate = previewListing(
+        scenario.orders,
+        scenario.incoming,
+        query,
+        search,
+        scenario.now,
+      ).filtered;
+    }
+    exportContext = {
+      kind: scope.kind,
+      order:
+        scope.kind === "orders" && scope.ids.length === 1
+          ? (estimate[0]?.ebayOrderId ?? null)
+          : null,
+      filtered:
+        scope.kind === "filtered" &&
+        [...scope.criteria.keys()].some((key) => key !== snapshotParam),
+      returnHref: exportReturnHref(localizedPath(language, "/anteprima/ordini"), query),
+      query: query.toString(),
+    };
   }
   const page: SettingsPageData = {
     confirmUnlock: state.confirmUnlock !== false,
@@ -35,9 +74,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     diagnostics: scenario.diagnostics,
     telegramChat: scenario.telegramChat,
     exportEstimate: {
-      orders: scenario.orders.length,
-      locked: scenario.orders.filter((order) => order.fiscal.state === "locked").length,
+      orders: estimate.length,
+      locked: estimate.filter((order) => order.fiscal.state === "locked").length,
     },
+    exportContext,
     now: scenario.now,
   };
   return page;

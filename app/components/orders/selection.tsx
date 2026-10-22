@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 
-import { useAction } from "~/components/app-shell";
 import { UnlockIcon } from "~/components/icons";
 import {
   AlertDialog,
@@ -24,7 +23,7 @@ export function SelectionBar({
   remaining,
   onUnlock,
   onCancel,
-  exportable,
+  onExport,
 }: {
   t: AppCopy;
   selected: string[];
@@ -32,9 +31,9 @@ export function SelectionBar({
   remaining: number | null;
   onUnlock: (ids: string[]) => void;
   onCancel: () => void;
-  exportable: boolean;
+  /** Apre l'esportazione degli ordini selezionati; assente se la sezione non esiste. */
+  onExport?: () => void;
 }) {
-  const action = useAction();
   const count = lockedSelected.length;
   const exceeds = remaining !== null && count > remaining;
   const bar = useRef<HTMLDivElement>(null);
@@ -93,12 +92,8 @@ export function SelectionBar({
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          {exportable ? (
-            <Button
-              variant="outline"
-              disabled={selected.length === 0}
-              onClick={() => action.run("export", { ids: selected.join(",") })}
-            >
+          {onExport ? (
+            <Button variant="outline" disabled={selected.length === 0} onClick={onExport}>
               {t.orders.exportSelected}
             </Button>
           ) : null}

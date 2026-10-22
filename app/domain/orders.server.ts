@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { buyerSnapshotSchema, type BuyerSnapshot } from "./order-import.server";
 import { contactsView } from "../contact";
+import { maxListedOrders } from "../orders/order-list";
 import { searchTokens } from "../orders/order-search";
 import { taxComparisonKey, taxIdentifierType, taxQuality } from "../tax-quality";
 import {
@@ -19,9 +20,6 @@ import {
   type TaxQuality,
 } from "../view-models";
 import { orderAccessSql } from "./grants.server";
-
-/** Ordini letti al massimo in una richiesta: oltre servono i cursori dell'elenco. */
-export const maxListedOrders = 300;
 import { consultableStore } from "./store-state.server";
 import { orderSuggestions } from "./order-suggestions.server";
 

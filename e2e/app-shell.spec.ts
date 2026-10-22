@@ -177,6 +177,55 @@ test("la selezione sblocca più ordini entro la quota", async ({ page }) => {
   await expect(page.getByText("04567890126")).toBeVisible();
 });
 
+test("Esporta porta la selezione con conteggio esplicito e la ritrova al ritorno", async ({
+  page,
+}) => {
+  await open(page, "/anteprima/ordini?fiscale=locked");
+  await page.getByRole("button", { name: "Seleziona" }).click();
+  for (const id of ["05-55555-12121", "02-44519-70831"])
+    await page.getByRole("checkbox", { name: `Seleziona l’ordine ${id}` }).click();
+  const bar = page.getByRole("button", { name: "Esporta", exact: true });
+  await bar.click();
+  await expect(page).toHaveURL(/\/anteprima\/impostazioni\/esportazione\?.*ordini=/u);
+  const section = page.locator("main");
+  await expect(section).toContainText("Ordini selezionati nella pagina Ordini.");
+  await expect(section).toContainText(
+    "2 ordini. Per 2 ordini da sbloccare il Codice Fiscale resta vuoto.",
+  );
+  // Il periodo è già nei filtri degli Ordini; il file nasce soltanto da «Crea file».
+  await expect(page.getByRole("combobox", { name: "Periodo" })).toHaveCount(0);
+  await page.goBack();
+  for (const id of ["05-55555-12121", "02-44519-70831"])
+    await expect(page.getByRole("checkbox", { name: `Seleziona l’ordine ${id}` })).toBeChecked();
+  await expect(page.getByText("2 selezionati")).toBeVisible();
+  await bar.click();
+  await page.getByRole("link", { name: "Torna agli ordini" }).click();
+  await expect(page).toHaveURL(/\/anteprima\/ordini\?fiscale=locked&vista=[0-9a-z]+$/u);
+  await expect(page.getByText("2 selezionati")).toBeVisible();
+  await page.getByRole("button", { name: "Annulla", exact: true }).click();
+  await page.reload();
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
+});
+
+test("Esporta senza selezione usa l'elenco filtrato e il menu il solo ordine", async ({ page }) => {
+  await open(page, "/anteprima/ordini?fiscale=locked");
+  const total = (await page.getByText(/^\d+ ordin[eio] · Dal più recente$/u).innerText()).split(
+    " ",
+  )[0];
+  await page.getByRole("link", { name: "Esporta", exact: true }).click();
+  const section = page.locator("main");
+  await expect(section).toContainText("Ordini dell’elenco con i filtri e la ricerca attivi.");
+  await expect(section).toContainText(`${total} ordini.`);
+  await page.getByRole("button", { name: "Crea file" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "nessun file creato" })).toBeVisible();
+  await page.getByRole("link", { name: "Torna agli ordini" }).click();
+  await expect(page).toHaveURL(/\/anteprima\/ordini\?fiscale=locked&vista=[0-9a-z]+$/u);
+  await page.getByRole("button", { name: "Altre azioni per l’ordine 05-55555-12121" }).click();
+  await page.getByRole("menuitem", { name: "Esporta ordine" }).click();
+  await expect(section).toContainText("Ordine 05-55555-12121.");
+  await expect(section).toContainText("1 ordine. Per 1 ordine da sbloccare");
+});
+
 for (const language of ["it", "en"] as const) {
   for (const colorScheme of ["light", "dark"] as const) {
     for (const width of [390, 768, 1280]) {

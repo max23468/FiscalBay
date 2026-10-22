@@ -167,7 +167,6 @@ const it = {
     moreActions: (id: string) => `Altre azioni per l’ordine ${id}`,
     openOnEbay: "Apri su eBay",
     exportOrder: "Esporta ordine",
-    exportNotice: "Anteprima: l’esportazione non crea file.",
     items: (count: number) => `${count} ${plural(count, "articolo", "articoli")}`,
     itemsMore: (count: number) => `+ ${count} ${plural(count, "altro articolo", "altri articoli")}`,
     quantity: "Quantità",
@@ -494,6 +493,15 @@ const it = {
       locked === 0
         ? `Circa ${orders} ordini.`
         : `Circa ${orders} ordini. Per ${locked} ${plural(locked, "ordine da sbloccare", "ordini da sbloccare")} il Codice Fiscale resta vuoto.`,
+    exportCount: (orders: number, locked: number) =>
+      orders === 0
+        ? "Nessun ordine da esportare: gli ordini scelti non sono più disponibili."
+        : `${orders} ${plural(orders, "ordine", "ordini")}.${locked === 0 ? "" : ` Per ${locked} ${plural(locked, "ordine da sbloccare", "ordini da sbloccare")} il Codice Fiscale resta vuoto.`}`,
+    exportContextSelection: "Ordini selezionati nella pagina Ordini.",
+    exportContextOrder: (id: string) => `Ordine ${id}.`,
+    exportContextFiltered: "Ordini dell’elenco con i filtri e la ricerca attivi.",
+    exportContextAll: "Tutti gli ordini dell’elenco.",
+    exportContextBack: "Torna agli ordini",
     exportCreate: "Crea file",
     exportCreated: "Anteprima: nessun file creato. Il file reale resta scaricabile per 24 ore.",
     exportSaveConfig: "Salva configurazione",
@@ -1031,7 +1039,6 @@ const en: AppCopy = {
     moreActions: (id) => `More actions for order ${id}`,
     openOnEbay: "Open on eBay",
     exportOrder: "Export order",
-    exportNotice: "Preview: exporting does not create a file.",
     items: (count) => `${count} ${plural(count, "item", "items")}`,
     itemsMore: (count) => `+ ${count} more ${plural(count, "item", "items")}`,
     quantity: "Quantity",
@@ -1345,6 +1352,15 @@ const en: AppCopy = {
       locked === 0
         ? `About ${orders} orders.`
         : `About ${orders} orders. For ${locked} ${plural(locked, "order", "orders")} to unlock, the tax code stays empty.`,
+    exportCount: (orders, locked) =>
+      orders === 0
+        ? "No orders to export: the chosen orders are no longer available."
+        : `${orders} ${plural(orders, "order", "orders")}.${locked === 0 ? "" : ` For ${locked} ${plural(locked, "order", "orders")} to unlock, the tax code stays empty.`}`,
+    exportContextSelection: "Orders selected on the Orders page.",
+    exportContextOrder: (id) => `Order ${id}.`,
+    exportContextFiltered: "Orders in the list with the active filters and search.",
+    exportContextAll: "All orders in the list.",
+    exportContextBack: "Back to orders",
     exportCreate: "Create file",
     exportCreated: "Preview: no file created. A real file stays available for 24 hours.",
     exportSaveConfig: "Save configuration",

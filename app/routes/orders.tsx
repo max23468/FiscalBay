@@ -23,7 +23,6 @@ import { requestOrderRead } from "../domain/order-sync.server";
 import {
   countVisibleOrders,
   listVisibleOrders,
-  maxListedOrders,
   orderCriteria,
   type OrderCriteria,
   orderView,
@@ -35,6 +34,7 @@ import { languageFromPath, localizedPath, type Language } from "../i18n";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import { describeRequest, measure } from "../observability.server";
 import {
+  maxListedOrders,
   ordersPageSize,
   pagesParam,
   rememberedStore,

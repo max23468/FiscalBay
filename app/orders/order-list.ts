@@ -1,6 +1,9 @@
 /** Ordini mostrati per ogni «Carica altri», nell'area reale e nell'anteprima. */
 export const ordersPageSize = 6;
 
+/** Ordini letti al massimo in una richiesta: oltre servono ricerca o filtri. */
+export const maxListedOrders = 300;
+
 /** Pagine dell'elenco già caricate con «Carica altri». */
 export const pagesParam = "mostra";
 

@@ -1185,7 +1185,7 @@ for (const language of ["it", "en"] as const) {
         );
         await expect(ebay).toHaveAttribute("target", "_blank");
         await expect(
-          dialog.getByRole("button", { name: t("Esporta ordine", "Export order") }),
+          dialog.getByRole("link", { name: t("Esporta ordine", "Export order") }),
         ).toBeVisible();
         const header = dialog.locator('[data-slot="sheet-header"]');
         const headerY = (await header.boundingBox())!.y;
@@ -2309,7 +2309,11 @@ for (const width of [390, 1280]) {
     await open(page, "/anteprima/ordini", "ordinario");
     await page.getByRole("button", { name: "Seleziona", exact: true }).click();
     await page.getByRole("checkbox", { name: "Seleziona l’ordine 05-55555-12121" }).click();
-    await page.getByRole("button", { name: "Esporta", exact: true }).click();
+    // Anche durante la selezione «Riprova» risponde con un avviso breve.
+    await page
+      .getByRole("article", { name: "Ordine 19-00001-99999" })
+      .getByRole("button", { name: "Riprova", exact: true })
+      .click();
     await expect(notice(page)).toBeVisible();
     const bar = page
       .getByRole("button", { name: "Esporta", exact: true })

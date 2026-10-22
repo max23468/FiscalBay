@@ -4,7 +4,6 @@ import { m } from "motion/react";
 import { useId } from "react";
 import { Link } from "react-router";
 
-import { useAction } from "~/components/app-shell";
 import { dotTones, toneFor } from "~/components/tile-tone";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -12,7 +11,6 @@ import { Checkbox } from "~/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLinkItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
@@ -35,6 +33,7 @@ import { buyerLabel, paymentLabel, shippingLabel, type PillTone } from "./status
 export interface SecondaryActions {
   /** Solo per i negozi eBay reali: per la Sandbox non esiste un indirizzo verificato. */
   openOnEbay: boolean;
+  /** Esiste la sezione Esportazione, che riceve selezione, filtri e ricerca degli Ordini. */
   exportable: boolean;
 }
 
@@ -238,13 +237,14 @@ function OrderMenu({
   order,
   t,
   actions,
+  exportHref,
 }: {
   order: OrderView;
   t: AppCopy;
   actions: SecondaryActions;
+  exportHref: string | null;
 }) {
-  const action = useAction();
-  if (!actions.openOnEbay && !actions.exportable) return null;
+  if (!actions.openOnEbay && !exportHref) return null;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -268,10 +268,10 @@ function OrderMenu({
             {t.orders.openOnEbay}
           </DropdownMenuLinkItem>
         ) : null}
-        {actions.exportable ? (
-          <DropdownMenuItem onClick={() => action.run("export", { ids: order.id })}>
+        {exportHref ? (
+          <DropdownMenuLinkItem render={<Link to={exportHref} />}>
             {t.orders.exportOrder}
-          </DropdownMenuItem>
+          </DropdownMenuLinkItem>
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
@@ -295,8 +295,11 @@ export function OrderCard({
   confirmUnlock,
   enterIndex,
   actions,
+  exportHref,
 }: FiscalProps & {
   detailHref: string;
+  /** Esportazione del solo ordine, con il contesto dell'elenco; null se non disponibile. */
+  exportHref: string | null;
   selecting: boolean;
   selected: boolean;
   onSelect: (selected: boolean) => void;
@@ -360,7 +363,7 @@ export function OrderCard({
                 className="mx-1.5"
               />
             ) : (
-              <OrderMenu order={order} t={t} actions={actions} />
+              <OrderMenu order={order} t={t} actions={actions} exportHref={exportHref} />
             )}
           </div>
         </div>
