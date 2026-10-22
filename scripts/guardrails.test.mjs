@@ -7,7 +7,7 @@ import { describe, it } from "node:test";
 import { createHash, randomBytes } from "node:crypto";
 import { budgetKiB } from "./check-bundle-size.mjs";
 import { coverageSummary } from "./coverage-report.mjs";
-import { benchmarkSummary, comparableDependencies } from "./benchmark.mjs";
+import { benchmarkSummary, comparableDependencies, extractBenchmarkSources } from "./benchmark.mjs";
 import { shardTests, listedTestIds, assertCandidateReports } from "./browser-tests.mjs";
 import {
   changedLines,
@@ -78,6 +78,31 @@ const plan = (files) => {
 };
 
 describe("report di qualità", () => {
+  it("estrae i sorgenti benchmark oltre un MiB senza il buffer stdout", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "benchmark-sources-"));
+    try {
+      const repository = path.join(directory, "repository");
+      const output = path.join(directory, "output");
+      mkdirSync(path.join(repository, "app"), { recursive: true });
+      mkdirSync(output);
+      const source = "x".repeat(2 * 1024 * 1024);
+      writeFileSync(path.join(repository, "app/source.txt"), source);
+      const git = (...args) => {
+        const result = spawnSync("git", args, { cwd: repository, encoding: "utf8" });
+        assert.equal(result.status, 0, result.stderr);
+        return result.stdout.trim();
+      };
+      git("init", "-q");
+      git("add", "app");
+      const tree = git("write-tree");
+      extractBenchmarkSources(repository, tree, output);
+      assert.equal(readFileSync(path.join(output, "app/source.txt"), "utf8"), source);
+      assert.throws(() => readFileSync(path.join(output, "sources.tar")), { code: "ENOENT" });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("rifiuta copertura vuota, conteggi incoerenti e sorgenti omessi", () => {
     const metric = { total: 10, covered: 4, pct: 40 };
     const total = Object.fromEntries(
