@@ -1128,7 +1128,6 @@ describe("pagina Ordini reale", () => {
       id: "o-a",
       ebayOrderId: "ebay-a",
       storeId: "s-a",
-      marketplace: "EBAY_IT",
       buyerName: "Maria Rossi",
       buyerUsername: "acquirente-sintetico",
       shipTo: { name: "Maria Rossi c/o Ufficio", locality: "Rovereto (TN)", country: "IT" },
@@ -1291,7 +1290,6 @@ describe("pagina Ordini reale", () => {
       (await ordersPage(cookie, `/app/ordini?${query}`)).page!.orders.map(({ id }) => id);
     const all = (await ordersPage(cookie, "/app/ordini?mostra=2")).page!;
     expect(all.total).toBe(8);
-    expect(all.marketplaces).toEqual(["EBAY_DE", "EBAY_IT"]);
     // Lo stato fiscale filtrato in SQL coincide con quello della vista per ogni ordine.
     for (const order of all.orders)
       expect(await ids(`fiscale=${fiscalSituation(order.fiscal)}&mostra=2`)).toContain(order.id);
@@ -1312,7 +1310,8 @@ describe("pagina Ordini reale", () => {
     expect(await ids("spedizione=cancelled")).toEqual(["x-refunded"]);
     expect(await ids("spedizione=in_progress")).toEqual(["x-partial"]);
     expect(await ids("spedizione=shipped")).toEqual(["x-paid"]);
-    expect(await ids("marketplace=EBAY_DE")).toEqual(["x-unpaid"]);
+    // Il marketplace non è un filtro: il parametro non restringe l'elenco.
+    expect(await ids("marketplace=EBAY_DE&mostra=2")).toHaveLength(8);
     expect(await ids("periodo=7")).toEqual(["o-a", "x-paid", "x-unpaid", "x-partial"]);
     // In Free il periodo di 90 giorni vale come «Tutti», come nell'interfaccia.
     expect((await ordersPage(cookie, "/app/ordini?periodo=90")).page!.total).toBe(8);
@@ -2308,7 +2307,6 @@ describe("vista condivisa e criteri degli ordini", () => {
       orderCriteria(new URLSearchParams(query), at, plan, search);
     expect(criteria("")).toEqual({
       storeId: undefined,
-      marketplace: undefined,
       since: undefined,
       payment: undefined,
       shipping: undefined,
@@ -2316,12 +2314,9 @@ describe("vista condivisa e criteri degli ordini", () => {
       tokens: undefined,
     });
     expect(
-      criteria(
-        "negozio=s-a&marketplace=EBAY_IT&periodo=7&pagamento=paid&spedizione=in_progress&fiscale=locked",
-      ),
+      criteria("negozio=s-a&periodo=7&pagamento=paid&spedizione=in_progress&fiscale=locked"),
     ).toEqual({
       storeId: "s-a",
-      marketplace: "EBAY_IT",
       since: new Date(at.getTime() - 7 * 86_400_000).toISOString(),
       payment: "paid",
       shipping: "in_progress",
@@ -2358,8 +2353,8 @@ describe("vista condivisa e criteri degli ordini", () => {
     expect(criteria("fiscale=foreign").fiscal).toBe("foreign");
     // Identificativi oltre 64 caratteri non filtrano.
     expect(criteria(`negozio=${"x".repeat(64)}`).storeId).toBe("x".repeat(64));
-    expect(criteria(`negozio=${"x".repeat(65)}&marketplace=`).storeId).toBeUndefined();
-    expect(criteria("marketplace=").marketplace).toBeUndefined();
+    expect(criteria(`negozio=${"x".repeat(65)}`).storeId).toBeUndefined();
+    expect(criteria("marketplace=EBAY_IT")).not.toHaveProperty("marketplace");
   });
 
   it("conta i dati dell'intero elenco, anche senza ordini", async () => {
@@ -2367,7 +2362,6 @@ describe("vista condivisa e criteri degli ordini", () => {
     const at = new Date(now);
     expect(await visibleOrderFacets(env.DB, "u-a", "production", at)).toEqual({
       total: 1,
-      marketplaces: [],
       locked: true,
     });
     await unlockOrders(env.DB, "u-a", ["o-a"]);
@@ -2376,7 +2370,6 @@ describe("vista condivisa e criteri degli ordini", () => {
     });
     expect(await visibleOrderFacets(env.DB, "nessuno", "production", at)).toEqual({
       total: 0,
-      marketplaces: [],
       locked: false,
     });
   });

@@ -43,8 +43,6 @@ function matchesOrder(order: OrderView, params: URLSearchParams, now: string, to
   if (!matchesSearch(order, tokens)) return false;
   const store = params.get("negozio");
   if (store && order.storeId !== store) return false;
-  const marketplace = params.get("marketplace");
-  if (marketplace && order.marketplace !== marketplace) return false;
   const payment = known(params, "pagamento", paymentStatuses);
   if (payment && order.payment.status !== payment) return false;
   const shipping = known(params, "spedizione", shippingStatuses);

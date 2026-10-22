@@ -45,6 +45,8 @@ import { verifiedBuildOrigin } from "./find-build.mjs";
 import { strykerPlugins as mutationPlugins } from "./mutation-vitest.mjs";
 import {
   assertBase,
+  waitUpdatedHead,
+  expectedRun,
   candidateRef,
   runTimings,
   assertCycleReceipt,
@@ -1871,6 +1873,60 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     assert.doesNotThrow(() => assertBase(sha, sha));
     assert.throws(() => assertBase(sha, "b".repeat(40)), /base/u);
     assert.throws(() => assertBase("", ""), /base/u);
+  });
+
+  it("segue la run più recente sul commit atteso, non quella annullata", () => {
+    const sha = "a".repeat(40);
+    const run = (databaseId, createdAt, extra = {}) => ({
+      databaseId,
+      headSha: sha,
+      event: "pull_request",
+      createdAt,
+      ...extra,
+    });
+    // L'aggiornamento della base e il ritorno da bozza avviano due run sullo stesso commit.
+    const runs = [
+      run(1, "2026-10-22T13:47:38Z"),
+      run(2, "2026-10-22T13:47:41Z"),
+      run(3, "2026-10-22T13:50:00Z", { headSha: "b".repeat(40) }),
+      run(4, "2026-10-22T13:51:00Z", { event: "push" }),
+      run(5, "2026-10-22T13:40:00Z"),
+    ];
+    const since = Date.parse("2026-10-22T13:47:30Z");
+    assert.equal(expectedRun(runs, sha, ["pull_request"], since)?.databaseId, 2);
+    assert.equal(expectedRun(runs, sha, ["pull_request"], since, new Set([2]))?.databaseId, 1);
+    assert.equal(expectedRun(runs, sha, ["pull_request"], since, new Set([1, 2])), undefined);
+  });
+
+  it("dopo l'aggiornamento della base attende la nuova testa della PR", async () => {
+    const [old, merged] = ["a".repeat(40), "c".repeat(40)];
+    // GitHub risponde prima di creare il merge: le prime letture mostrano ancora la testa vecchia.
+    const heads = [old, old, merged];
+    const reads = [];
+    const pr = await waitUpdatedHead(
+      () => {
+        const head = heads[Math.min(reads.length, heads.length - 1)];
+        reads.push(head);
+        return { headRefOid: head };
+      },
+      old,
+      (head) => head === merged,
+      5,
+      0,
+    );
+    assert.equal(pr.headRefOid, merged);
+    assert.deepEqual(reads, [old, old, merged]);
+    // Una testa cambiata ma senza la base non basta; senza aggiornamento il ciclo si ferma.
+    await assert.rejects(
+      waitUpdatedHead(
+        () => ({ headRefOid: merged }),
+        old,
+        () => false,
+        3,
+        0,
+      ),
+      /non aggiornata/u,
+    );
   });
 
   it("non chiude un ciclo con browser parziali o un tag di un altro commit", () => {

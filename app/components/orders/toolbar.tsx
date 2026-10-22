@@ -18,13 +18,7 @@ import {
 import type { AppCopy } from "../../app-copy";
 import { rememberStore, withoutListPosition } from "../../orders/order-list";
 import { searchParam } from "../../orders/order-search";
-import {
-  fiscalSituations,
-  marketplaceLabel,
-  paymentStatuses,
-  shippingStatuses,
-  type Plan,
-} from "../../view-models";
+import { fiscalSituations, paymentStatuses, shippingStatuses, type Plan } from "../../view-models";
 
 interface FilterOption {
   value: string;
@@ -41,6 +35,7 @@ function FilterSelect({
   allLabel,
   premiumLabel,
   onChange,
+  fit = true,
 }: {
   label: string;
   name: string;
@@ -49,21 +44,47 @@ function FilterSelect({
   allLabel: string;
   premiumLabel: string;
   onChange: (name: string, value: string) => void;
+  /**
+   * Da desktop il campo parte dalla larghezza della sua voce più lunga. Senza, per i nomi dei
+   * negozi, parte da 8rem e un nome lungo si tronca con i puntini.
+   */
+  fit?: boolean;
 }) {
   const id = useId();
   const items: FilterOption[] = [{ value: "", label: allLabel }, ...options];
   // Un valore sconosciuto nell'URL vale come «Tutti», come fa il server.
   const current = items.some((item) => item.value === value && !item.premium) ? value : "";
   return (
-    <Field>
+    <Field
+      className={cn(
+        "lg:w-auto lg:max-w-64 lg:min-w-0",
+        fit ? "lg:flex-[1_1_auto]" : "lg:flex-[1_1_8rem]",
+      )}
+    >
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <Select items={items} value={current} onValueChange={(next) => onChange(name, next ?? "")}>
         <SelectTrigger id={id} className="w-full min-w-0">
-          {/* Un valore più lungo del campo si tronca con i puntini; il menu lo mostra intero. */}
+          {/*
+            Un valore più lungo del campo si tronca con i puntini e il menu lo mostra intero. Da
+            desktop le voci invisibili nella stessa cella danno al campo la larghezza di partenza.
+          */}
           <SelectValue className="min-w-0">
             {(selected: string) => (
-              <span className="truncate">
-                {items.find((item) => item.value === selected)?.label ?? allLabel}
+              <span className="grid min-w-0 grid-cols-[minmax(0,1fr)]">
+                <span className="truncate [grid-area:1/1]">
+                  {items.find((item) => item.value === selected)?.label ?? allLabel}
+                </span>
+                {fit
+                  ? items.map((item) => (
+                      <span
+                        key={item.value}
+                        aria-hidden="true"
+                        className="invisible hidden h-0 [grid-area:1/1] lg:block"
+                      >
+                        {item.label}
+                      </span>
+                    ))
+                  : null}
               </span>
             )}
           </SelectValue>
@@ -134,7 +155,6 @@ export function OrdersToolbar({
   empty,
   exportHref,
   stores,
-  marketplaces,
   plan,
   confirmUnlock,
   t,
@@ -149,7 +169,6 @@ export function OrdersToolbar({
    */
   exportHref?: string | null;
   stores: Array<{ id: string; name: string }>;
-  marketplaces: string[];
   plan: Plan;
   confirmUnlock?: boolean;
   t: AppCopy;
@@ -160,7 +179,7 @@ export function OrdersToolbar({
   const action = useAction();
   const [params, setParams] = useSearchParams();
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const filterKeys = ["negozio", "marketplace", "periodo", "pagamento", "spedizione", "fiscale"];
+  const filterKeys = ["negozio", "periodo", "pagamento", "spedizione", "fiscale"];
   const active = filterKeys.filter((key) => params.get(key)).length;
   // Un filtro diverso apre un nuovo elenco, dall'inizio e con una nuova istantanea.
   const change = (name: string, value: string) => {
@@ -211,7 +230,9 @@ export function OrdersToolbar({
         id="orders-filters"
         className={cn(
           // Due colonne anche su smartphone: i filtri aperti lasciano in vista i primi risultati.
-          "grid grid-cols-2 gap-3 md:flex-1 md:grid-cols-3 xl:grid-cols-6",
+          // Da desktop una sola riga: ogni filtro parte dalla larghezza della sua voce più lunga
+          // e, se lo spazio non basta, tutti si restringono in proporzione.
+          "grid grid-cols-2 gap-3 md:flex-1 md:grid-cols-3 lg:flex",
           !filtersOpen && "max-md:hidden",
         )}
       >
@@ -221,17 +242,7 @@ export function OrdersToolbar({
             name="negozio"
             value={params.get("negozio") ?? ""}
             options={stores.map((store) => ({ value: store.id, label: store.name }))}
-            allLabel={t.orders.all}
-            premiumLabel={t.orders.premiumOption}
-            onChange={change}
-          />
-        ) : null}
-        {marketplaces.length > 1 ? (
-          <FilterSelect
-            label={t.orders.marketplace}
-            name="marketplace"
-            value={params.get("marketplace") ?? ""}
-            options={marketplaces.map((id) => ({ value: id, label: marketplaceLabel(id) }))}
+            fit={false}
             allLabel={t.orders.all}
             premiumLabel={t.orders.premiumOption}
             onChange={change}
