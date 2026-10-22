@@ -200,7 +200,10 @@ test.describe("miglioramenti account e negozi", () => {
       expect(copied).toContain("Codice Fiscale: MRNSRA90L41H50LE");
       await expect(copy).toHaveAttribute("data-state", "copied");
       await page.screenshot({ path: testInfo.outputPath("billing-details.png") });
-      await expect(dialog.locator("time")).not.toContainText(/Europe\/Rome|GMT/u);
+      await expect(dialog.locator("time")).not.toHaveCount(0);
+      for (const time of await dialog.locator("time").all()) {
+        await expect(time).not.toContainText(/Europe\/Rome|GMT/u);
+      }
       await expect(
         dialog.getByText(
           it
