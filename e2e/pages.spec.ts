@@ -174,6 +174,8 @@ for (const scenario of scenarios) {
           scenario.path.startsWith("/en") ? "en" : "it",
         );
         await expect(page.locator("vite-error-overlay")).toHaveCount(0);
+        const modal = scenario.dialog && !(production && scenario.preview);
+        if (modal) await expect(page.getByRole("dialog")).toBeVisible();
         checked("titolo, contenuto e lingua");
         await page.evaluate(() => document.fonts.ready);
         expect(
@@ -257,14 +259,15 @@ for (const scenario of scenarios) {
         const reload = await page.reload();
         expect(reload?.status()).toBe(expectedStatus);
         await expect(page.locator("main")).toBeVisible();
+        if (modal) await expect(page.getByRole("dialog")).toBeVisible();
         checked("ricarica");
         await page.waitForLoadState("networkidle");
         // Con la sessione la radice porta agli Ordini: la pagina iniziale è quella dell'app.
         const prefix = scenario.path.startsWith("/en") ? "/en" : "";
         const home = scenario.role === "anonymous" ? prefix || "/" : `${prefix}/app/ordini`;
         const homeLink = page.locator(`a[href="${home}"]`).first();
-        // Un pannello modale aperto dalla route (dettaglio del negozio) copre i collegamenti sotto.
-        const modal = await page.getByRole("dialog").isVisible();
+        // I pannelli dichiarati dal catalogo coprono i collegamenti sotto: l'assenza prima
+        // dell'idratazione non rende navigabile il logo.
         // Gli Ordini aggiungono all'indirizzo soltanto l'istantanea dell'elenco.
         const atHome = (url: URL) =>
           url.pathname === new URL(home, baseURL!).pathname &&
