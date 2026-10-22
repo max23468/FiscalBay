@@ -67,8 +67,8 @@ jobs:
             test "${GITHUB_REF}" = refs/heads/main
           fi
           test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
-          if [ "${PROVA}" != true ]; then node scripts/release.mjs readiness; fi
-          if [ "${PROVA}" != true ] || [ -n "${VERSION}" ]; then node scripts/release-notes.mjs "${VERSION}"; fi
+          if [ "${PROVA}" != true ]; then node scripts/release/release.mjs readiness; fi
+          if [ "${PROVA}" != true ] || [ -n "${VERSION}" ]; then node scripts/release/release-notes.mjs "${VERSION}"; fi
       - name: Read last published reference
         id: base
         env:
@@ -127,7 +127,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: node scripts/release.mjs restore --environment production --receipt-prefix release-receipt
+        run: node scripts/release/release.mjs restore --environment production --receipt-prefix release-receipt
 
       - name: Deploy or resume confirmed deployment
         id: deploy
@@ -138,7 +138,7 @@ jobs:
           OWNER_APPROVED_SHA: ${{ vars.OWNER_APPROVED_SHA }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
           REVIEWED_MIGRATIONS: ${{ inputs.reviewed_migrations }}
-        run: node scripts/release.mjs deploy --environment production --expected-sha "${EXPECTED_SHA}" --reviewed-migrations "${REVIEWED_MIGRATIONS}"
+        run: node scripts/release/release.mjs deploy --environment production --expected-sha "${EXPECTED_SHA}" --reviewed-migrations "${REVIEWED_MIGRATIONS}"
       - run: pnpm exec playwright install --with-deps chromium webkit
       - name: Check Production public pages and preview exclusion
         env:
@@ -155,7 +155,7 @@ jobs:
           PRODUCTION_PUBLISH_ENABLED: ${{ vars.PRODUCTION_PUBLISH_ENABLED }}
           OWNER_APPROVED_SHA: ${{ vars.OWNER_APPROVED_SHA }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
-        run: node scripts/release.mjs rollback --environment production --expected-sha "${EXPECTED_SHA}"
+        run: node scripts/release/release.mjs rollback --environment production --expected-sha "${EXPECTED_SHA}"
       - name: Create immutable tag and release
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -166,7 +166,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           VERSION: ${{ inputs.version }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
-        run: node scripts/release-notes.mjs "${VERSION}" --publish "${EXPECTED_SHA}"
+        run: node scripts/release/release-notes.mjs "${VERSION}" --publish "${EXPECTED_SHA}"
       - name: Preserve release receipt
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

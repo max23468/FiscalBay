@@ -1,11 +1,12 @@
 import { cn } from "cn";
-import { ListChecks, SlidersHorizontal, X } from "lucide-react";
+import { FileSpreadsheet, ListChecks, SlidersHorizontal, X } from "lucide-react";
 import { useId, useState } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { useAction } from "~/components/app-shell";
 import { StatusIcon } from "~/components/status";
 import { Button } from "~/components/ui/button";
+import { buttonVariants } from "~/components/ui/button-variants";
 import { Field, FieldLabel } from "~/components/ui/field";
 import {
   Select,
@@ -15,8 +16,8 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import type { AppCopy } from "../../app-copy";
-import { rememberStore, withoutListPosition } from "../../order-list";
-import { searchParam } from "../../order-search";
+import { rememberStore, withoutListPosition } from "../../orders/order-list";
+import { searchParam } from "../../orders/order-search";
 import {
   fiscalSituations,
   marketplaceLabel,
@@ -92,9 +93,46 @@ function FilterSelect({
   );
 }
 
-/** Filtri dell'elenco nell'URL, modalità Seleziona e ripristino della conferma di sblocco. */
+/**
+ * Esportazione dell'elenco filtrato, disattivata con l'elenco vuoto. Durante la selezione
+ * esporta la barra contestuale.
+ */
+function ExportListButton({
+  href,
+  selecting,
+  t,
+}: {
+  href: string | null | undefined;
+  selecting: boolean;
+  t: AppCopy;
+}) {
+  if (href === undefined || selecting) return null;
+  const content = (
+    <>
+      <FileSpreadsheet aria-hidden="true" data-icon="inline-start" />
+      {t.orders.exportSelected}
+    </>
+  );
+  if (href === null)
+    return (
+      <Button variant="outline" disabled focusableWhenDisabled>
+        {content}
+      </Button>
+    );
+  return (
+    <Link to={href} data-slot="button" className={buttonVariants({ variant: "outline" })}>
+      {content}
+    </Link>
+  );
+}
+
+/**
+ * Filtri dell'elenco nell'URL, modalità Seleziona, esportazione dell'elenco filtrato e
+ * ripristino della conferma di sblocco.
+ */
 export function OrdersToolbar({
   empty,
+  exportHref,
   stores,
   marketplaces,
   plan,
@@ -105,6 +143,11 @@ export function OrdersToolbar({
   selectRef,
 }: {
   empty: boolean;
+  /**
+   * Esportazione degli ordini dell'elenco, con filtri e ricerca: null con l'elenco vuoto,
+   * assente se la sezione non esiste. Durante la selezione esporta la barra contestuale.
+   */
+  exportHref?: string | null;
   stores: Array<{ id: string; name: string }>;
   marketplaces: string[];
   plan: Plan;
@@ -162,6 +205,7 @@ export function OrdersToolbar({
           <ListChecks aria-hidden="true" data-icon="inline-start" />
           {t.orders.select}
         </Button>
+        <ExportListButton href={exportHref} selecting={selecting} t={t} />
       </div>
       <div
         id="orders-filters"

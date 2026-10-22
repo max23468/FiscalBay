@@ -22,8 +22,15 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { Spinner } from "~/components/ui/spinner";
 import type { AppCopy } from "../../app-copy";
 import { appHref, type AppLinks } from "../../app-links";
-import { pagesParam, rememberStore, snapshotParam } from "../../order-list";
-import { searchParam } from "../../order-search";
+import {
+  exportHref,
+  exportSection,
+  exportedSelection,
+  forgetExportedSelection,
+  keepExportedSelection,
+} from "../../orders/export-scope";
+import { pagesParam, rememberStore, snapshotParam } from "../../orders/order-list";
+import { searchParam } from "../../orders/order-search";
 import { usePageTiming } from "../../page-timing";
 import type { Language } from "../../i18n";
 import { formatDate, formatRelative, type OrdersNotice, type OrderView } from "../../view-models";
@@ -529,10 +536,10 @@ function NoResults({
 /**
  * L'indirizzo conserva l'istantanea dell'elenco, così ricarica, dettaglio e Indietro ritrovano
  * gli stessi ordini nello stesso ordine. I nuovi ordini entrano subito se l'utente è in cima
- * alla lista e non sta selezionando; altrimenti resta l'indicatore, così nulla si sposta mentre
- * legge.
+ * alla lista e non sta selezionando né leggendo un dettaglio (`held`); altrimenti resta
+ * l'indicatore, così nulla si sposta mentre legge e il pannello aperto non si chiude.
  */
-function useListSnapshot(data: OrdersPageData, selecting: boolean) {
+function useListSnapshot(data: OrdersPageData, held: boolean) {
   const navigate = useNavigate();
   const location = useLocation();
   const [params, setParams] = useSearchParams();
@@ -551,7 +558,7 @@ function useListSnapshot(data: OrdersPageData, selecting: boolean) {
     setParams(next, { replace: true, preventScrollReset: true });
   });
   const insertAtTop = useEffectEvent(() => {
-    if (freshHref && window.scrollY < topThreshold && !selecting && current())
+    if (freshHref && window.scrollY < topThreshold && !held && current())
       void navigate(freshHref, { replace: true, preventScrollReset: true });
   });
   // Si parte dall'indirizzo con l'istantanea: la nuova la cambia o la toglie, mai la aggiunge,
@@ -611,17 +618,34 @@ function OrdersList({
 }) {
   const { language } = links;
   const location = useLocation();
+  const navigate = useNavigate();
   const ebayDown = isEbayDown(data);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const selectRef = useRef<HTMLButtonElement>(null);
   const { freshHref } = data;
-  useListSnapshot(data, selecting);
+  useListSnapshot(data, selecting || data.detail !== null);
+  // L'esportazione riceve l'intero contesto dell'elenco; la selezione, se c'è, prevale.
+  // L'istantanea mostrata dà lo stesso conteggio dell'elenco, anche prima che l'indirizzo la
+  // riceva, e identifica l'elenco a cui la selezione esportata ritorna.
+  const listParams = new URLSearchParams(location.search);
+  listParams.set(snapshotParam, data.snapshot);
+  const listHref = `${location.pathname}?${listParams}`;
+  useEffect(() => {
+    const ids = exportedSelection(listHref);
+    if (!ids) return;
+    setSelecting(true);
+    setSelected(new Set(ids));
+  }, [listHref]);
   const stopSelecting = () => {
+    forgetExportedSelection();
     setSelecting(false);
     setSelected(new Set());
     selectRef.current?.focus();
   };
+  const exportPath = appHref(links, exportSection);
+  const exportOrders = (ids?: string[]) =>
+    data.exportable ? exportHref(exportPath, listParams, ids) : null;
   const submit = (ids: string[], skipConfirmation = false) => {
     stopSelecting();
     unlock.submit(ids, skipConfirmation);
@@ -647,6 +671,7 @@ function OrdersList({
       <OrdersToolbar
         // Senza esportazione la selezione serve soltanto allo sblocco.
         empty={data.total === 0 || (!data.exportable && !orders.some(unlockable))}
+        exportHref={data.exportable ? (data.total > 0 ? exportOrders() : null) : undefined}
         stores={data.stores}
         marketplaces={data.marketplaces}
         plan={data.account.plan}
@@ -706,6 +731,7 @@ function OrdersList({
                     isNew={newIds.has(order.id)}
                     enterIndex={enterIndexes.get(order.id)}
                     actions={data}
+                    exportHref={exportOrders([order.id])}
                   />
                 ))}
               </section>
@@ -722,7 +748,15 @@ function OrdersList({
           remaining={remainingUnlocks(data.account)}
           onUnlock={submit}
           onCancel={stopSelecting}
-          exportable={data.exportable}
+          onExport={
+            data.exportable
+              ? () => {
+                  const ids = visibleSelected.map((order) => order.id);
+                  keepExportedSelection(listHref, ids);
+                  void navigate(exportOrders(ids)!);
+                }
+              : undefined
+          }
         />
       ) : null}
     </>

@@ -1061,7 +1061,7 @@ Ogni milestone elenca in coda i propri task (D164) con codice `Mx-yy`, stato (`D
 | [M1](#m1) | Completata | Fondazioni, ambienti, logo, design system e prototipo approvati entro il 2026-09-28; fonti tecniche in codice/test/config e [design system](brand/DESIGN_SYSTEM.md). Cutover repository in [#163](https://github.com/max23468/FiscalBay/pull/163); la dismissione remota 1.x resta aperta. |
 | [M2](#m2) | Completata | Account, quattro login, sessioni/MFA admin, OAuth seller, pause/scollegamento, Negozi/Profilo e routing collaudati sul test il 2026-10-06, compreso il primo rinnovo dei token dal cron. Login/linking eBay reali in M8 (D160), cancellazione account in M6 (D163). Riferimenti: [#229](https://github.com/max23468/FiscalBay/pull/229), [#241](https://github.com/max23468/FiscalBay/pull/241), [#245](https://github.com/max23468/FiscalBay/pull/245), [#269](https://github.com/max23468/FiscalBay/pull/269), [#270](https://github.com/max23468/FiscalBay/pull/270), [#296](https://github.com/max23468/FiscalBay/pull/296). |
 | [M3](#m3) | Completata | Modello ordini, client eBay, import paginato, controllo fiscale, quota e diritti per ordine, retention, suggerimenti e template IT/EN implementati e verificati. Precedenza Fulfillment approvata e integrata ([#318](https://github.com/max23468/FiscalBay/pull/318)); ingresso eventi, cadenze e smistamento qualificati sul test ([#322](https://github.com/max23468/FiscalBay/pull/322), [#325](https://github.com/max23468/FiscalBay/pull/325), [#331](https://github.com/max23468/FiscalBay/pull/331)). Ordini combinati chiusi con limite ([#345](https://github.com/max23468/FiscalBay/pull/345)). Audit finale corretto e qualificato in locale: valori fiscali dopo consolidamento, errori immagini eBay, concorrenza dei compiti periodici e disposizione del template. Distribuzione delle correzioni finali ancora da eseguire, come nelle questioni aperte; ordini combinati reali e consegna attribuita eBay Production restano nel test merchant M8. |
-| [M4](#m4) | In corso | Pagina Ordini definitiva sullo stesso albero di componenti dell'anteprima, con accesso separato e misure per fase ([M4-01](#m4-01)); ricerca rapida e filtri reali, con la query fuori dall'indirizzo ([M4-02](#m4-02)); contatti dell'acquirente formattati, cliccabili e copiabili ([M4-09](#m4-09)); elenco stabile con istantanea, nuovi ordini soltanto in cima e negozio ricordato ([M4-03](#m4-03)). Pannello, selezione multipla, preferenze persistenti, campanella e onboarding da integrare nei percorsi reali. |
+| [M4](#m4) | In corso | Pagina Ordini definitiva sullo stesso albero di componenti dell'anteprima, con accesso separato e misure per fase ([M4-01](#m4-01)); ricerca rapida e filtri reali, con la query fuori dall'indirizzo ([M4-02](#m4-02)); contatti dell'acquirente formattati, cliccabili e copiabili ([M4-09](#m4-09)); elenco stabile con istantanea, nuovi ordini soltanto in cima e negozio ricordato ([M4-03](#m4-03)); pannello del dettaglio con indirizzo proprio, cronologia e focus coerenti ([M4-04](#m4-04)); selezione multipla con sblocco confermato ed Esporta con selezione, filtri e ricerca ([M4-05](#m4-05)). Preferenze persistenti, campanella e onboarding da integrare nei percorsi reali; Esporta compare nell'area reale con [M6-01](#m6-01). |
 | [M5](#m5) | Da completare | Stripe e generatori di diritti qualificati preliminarmente; billing reale, ciclo commerciale e Telegram da integrare. Checkpoint live in attesa. |
 | [M6](#m6) | Da completare | Generatori export e sito pubblico minimo disponibili; export autenticato, cancellazione account, console, supporto, sito completo e KPI da integrare. |
 | [M7](#m7) | Da completare | Tooling di pubblicazione e prove locali disponibili; qualifiche remote, hardening, legali, capacità e recovery readiness da chiudere. |
@@ -1753,11 +1753,15 @@ Implementare ordinamento recente, cursori stabili e conservazione del contesto d
 <a id="m4-04"></a>
 #### M4-04 · Drawer e articoli
 
-**Stato:** Da completare · **Prerequisiti:** M4-01 · **Contratto:** [§17](#s17)
+**Stato:** Completato · **Prerequisiti:** M4-01 · **Contratto:** [§17](#s17)
 
 Realizzare il pannello con URL su desktop e la vista completa mobile, Dettagli/Articoli e ultimo aggiornamento, senza cronologia.
 
 **Criterio di completamento:** Link diretto, ritorno e ricarica funzionano; ricerca e selezione rimangono, con focus e tastiera corretti.
+
+**Completato:** il dettaglio è un pannello laterale su `/app/ordini/:id` con i criteri dell'elenco nell'indirizzo, a tutto schermo sotto i 640px, con le schede Dettagli e Articoli e senza cronologia. Dettagli chiude con la sezione Aggiornamento, che mostra l'ultima modifica dell'ordine su eBay; la lettura dei dati fiscali resta indicata come fonte nel riquadro fiscale. Aperto da una scheda, chiuderlo con X, Esc o Indietro torna alla voce dell'elenco senza aggiungerne una, quindi Indietro non lo riapre; da un collegamento diretto, anche dopo una ricarica, la chiusura sostituisce il dettaglio con l'elenco. Ricerca, filtri, pagine caricate, posizione e selezione restano; con il pannello aperto i nuovi ordini non entrano in cima, così il pannello non si chiude. All'apertura il focus va sul pannello; alla chiusura torna sul titolo della scheda dell'ordine, se è fra quelle caricate, in tutti i browser. Stessi componenti nell'area reale e nell'anteprima.
+
+**Limiti residui:** un ordine aperto con un collegamento diretto ma fuori dalle pagine caricate non ha una scheda su cui riportare il focus, che segue il comportamento predefinito del dialogo.
 
 <a id="m4-09"></a>
 #### M4-09 · Contatti dell'acquirente
@@ -1775,11 +1779,15 @@ Mostrare telefono, email e indirizzo di fatturazione in una forma derivata e ren
 <a id="m4-05"></a>
 #### M4-05 · Multiselezione ed export entrypoint
 
-**Stato:** Da completare · **Prerequisiti:** M4-03 · **Contratto:** [§12](#s12) · [§17](#s17)
+**Stato:** Completato · **Prerequisiti:** M4-03 · **Contratto:** [§12](#s12) · [§17](#s17)
 
 Aggiungere modalità Seleziona, barra contestuale sticky, sblocco multiplo ed Esporta, con conteggi coerenti e conferma.
 
 **Criterio di completamento:** Nessun addebito, sblocco o file generato implicitamente. Ordini assenti o già sbloccati non consumano nuovi recuperi; autorizzazioni rilette.
+
+**Completato:** «Seleziona» mostra le caselle e la barra contestuale fissa con gli ordini selezionati e quelli da sbloccare; contano soltanto gli ordini ancora presenti nell'elenco, e la selezione resta con dettaglio, «Carica altri» e Indietro. Lo sblocco multiplo chiede sempre conferma con il numero di ordini e gli sblocchi che resteranno, e si disattiva se la selezione supera la quota invece di sceglierne una parte. Sul server il lotto è un solo commit che rilegge appartenenza, conservazione, diritti e quota: un ordine già sbloccato non consuma, un ordine assente o non più disponibile annulla il lotto senza consumi. Esporta porta alla sezione Esportazione delle Impostazioni il contesto degli Ordini: la selezione se presente, altrimenti l'elenco con filtri, ricerca cifrata e istantanea; dal menu della scheda e dal dettaglio il solo ordine. La sezione dichiara l'ambito e il numero esatto di ordini, contati con le regole dell'elenco e indicando quelli il cui dato resta vuoto perché da sbloccare; il periodo arriva dai filtri e il file nasce soltanto da «Crea file». «Torna agli ordini» e Indietro riaprono lo stesso elenco con la selezione esportata. Stessi componenti nell'area reale e nell'anteprima.
+
+**Limiti residui:** nell'area reale Esporta non compare finché [M6-01](#m6-01) non crea il file e la sezione Esportazione reale, che riceve lo stesso ambito e lo conta con la query D1 dell'elenco; nell'anteprima «Crea file» resta simulato. La selezione esportata si ritrova soltanto nella stessa scheda del browser e per lo stesso elenco, istantanea compresa.
 
 <a id="m4-06"></a>
 #### M4-06 · Impostazioni e campanella
@@ -2474,7 +2482,7 @@ Nei primi giorni sorvegliare registrazioni, sync, Stripe, code, quote, errori e 
 <a id="pubblicazione-production"></a>
 ### Gate per la pubblicazione Production
 
-Prima di `Promuovi` devono risultare chiusi preflight commerciale, restore conclusivo e checklist operativa sul candidato. Le righe seguenti riportano l'esito di [M9-01](#m9-01), [M9-02](#m9-02) e [M9-03](#m9-03); `scripts/release.mjs` le legge sia prima del workflow reale sia prima degli effetti Production. Una riga `COMPLETATO` richiede un riferimento alla prova applicabile; righe mancanti, duplicate, prive di prova o con altro stato bloccano il ciclo. Non modificare i nomi dei tre gate senza aggiornare lo script e i suoi test. Il via owner riferito al commit, la variabile di abilitazione e il gate dell'environment restano controlli separati obbligatori.
+Prima di `Promuovi` devono risultare chiusi preflight commerciale, restore conclusivo e checklist operativa sul candidato. Le righe seguenti riportano l'esito di [M9-01](#m9-01), [M9-02](#m9-02) e [M9-03](#m9-03); `scripts/release/release.mjs` le legge sia prima del workflow reale sia prima degli effetti Production. Una riga `COMPLETATO` richiede un riferimento alla prova applicabile; righe mancanti, duplicate, prive di prova o con altro stato bloccano il ciclo. Non modificare i nomi dei tre gate senza aggiornare lo script e i suoi test. Il via owner riferito al commit, la variabile di abilitazione e il gate dell'environment restano controlli separati obbligatori.
 
 | Gate | Stato | Prova |
 |---|---|---|

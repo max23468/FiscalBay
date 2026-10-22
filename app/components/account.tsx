@@ -23,10 +23,10 @@ import { Spinner } from "~/components/ui/spinner";
 import type { ActiveSession } from "../domain/sessions.server";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
 import type { PendingEmailChange } from "../domain/email-change.server";
-import { passkeyFailure, type PasskeyFailure } from "../passkey-error";
+import { passkeyFailure, type PasskeyFailure } from "../account/passkey-error";
 import type { AccessNoticeView } from "../access-notice";
 import { appCopy } from "../app-copy";
-import { deviceName } from "../device-name";
+import { deviceName } from "../account/device-name";
 import {
   accessPath,
   appBase,
@@ -431,7 +431,7 @@ function AddPasskey({
         setError("unsupported");
         return;
       }
-      const { authClient } = await import("../passkey-client");
+      const { authClient } = await import("../account/passkey-client");
       const result = await authClient.passkey.addPasskey({
         name: name.trim() || deviceName(navigator.userAgent, language),
       });

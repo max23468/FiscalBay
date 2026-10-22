@@ -21,7 +21,7 @@ import { buttonVariants } from "./components/ui/button-variants";
 import { correlationId } from "./errors";
 import { appCopy } from "./app-copy";
 import { languageFromPath, localizedPath } from "./i18n";
-import { snapshotOnlyAdded } from "./order-list";
+import { snapshotOnlyAdded } from "./orders/order-list";
 import "./app.css";
 
 export const links: Route.LinksFunction = () => [

@@ -4,8 +4,8 @@ import {
   snapshotCursor,
   snapshotInstant,
   snapshotParam,
-} from "../order-list";
-import { orderSearchText, searchFold, searchTokens } from "../order-search";
+} from "../orders/order-list";
+import { orderSearchText, searchFold, searchTokens } from "../orders/order-search";
 import { displayTaxValue } from "../tax-quality";
 import {
   fiscalSituation,
@@ -81,14 +81,13 @@ export function previewOrderPage(
   now: string,
   href: (query: URLSearchParams) => string,
 ) {
-  const tokens = searchTokens(query);
-  const matching = (list: OrderView[]) =>
-    list.filter((order) => matchesOrder(order, search, now, tokens));
-  const arrival = new Date(new Date(now).getTime() + arrivalDelay);
-  const snapshot = snapshotInstant(search.get(snapshotParam)) ?? new Date(now);
-  const arrived = snapshot >= arrival;
-  const filtered = matching(arrived ? [...orders, ...incoming] : orders).sort(newestFirst);
-  const waiting = arrived ? 0 : matching(incoming).length;
+  const { filtered, waiting, snapshot, arrival } = previewListing(
+    orders,
+    incoming,
+    search,
+    query,
+    now,
+  );
   const shown = Math.max(Number(search.get(pagesParam)) || 1, 1);
   const cursor = snapshotCursor(snapshot);
   const next = new URLSearchParams(search);
@@ -104,6 +103,31 @@ export function previewOrderPage(
     limited: false,
     incoming: waiting,
     freshHref: waiting > 0 ? href(fresh) : null,
+  };
+}
+
+/**
+ * Ordini dell'elenco con i criteri e l'istantanea dell'indirizzo, dal più recente, e ordini in
+ * arrivo che l'istantanea non comprende ancora.
+ */
+export function previewListing(
+  orders: OrderView[],
+  incoming: OrderView[],
+  search: URLSearchParams,
+  query: string | null,
+  now: string,
+) {
+  const tokens = searchTokens(query);
+  const matching = (list: OrderView[]) =>
+    list.filter((order) => matchesOrder(order, search, now, tokens));
+  const arrival = new Date(new Date(now).getTime() + arrivalDelay);
+  const snapshot = snapshotInstant(search.get(snapshotParam)) ?? new Date(now);
+  const arrived = snapshot >= arrival;
+  return {
+    filtered: matching(arrived ? [...orders, ...incoming] : orders).sort(newestFirst),
+    waiting: arrived ? 0 : matching(incoming).length,
+    snapshot,
+    arrival,
   };
 }
 

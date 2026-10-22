@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { headers as siteHeaders, loader as loadSite } from "../app/routes/site";
 import { loader as loadRobots } from "../app/routes/robots";
 import { indexable } from "../app/app-links";
-import { resetDatabase } from "./database-fixtures";
-import { verifiedSession } from "./account-fixtures";
-import { accessForm } from "./account-route-fixtures";
+import { resetDatabase } from "./fixtures/database-fixtures";
+import { verifiedSession } from "./fixtures/account-fixtures";
+import { accessForm } from "./fixtures/account-route-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());

@@ -23,7 +23,6 @@ import { requestOrderRead } from "../domain/order-sync.server";
 import {
   countVisibleOrders,
   listVisibleOrders,
-  maxListedOrders,
   orderCriteria,
   type OrderCriteria,
   orderView,
@@ -35,6 +34,7 @@ import { languageFromPath, localizedPath, type Language } from "../i18n";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import { describeRequest, measure } from "../observability.server";
 import {
+  maxListedOrders,
   ordersPageSize,
   pagesParam,
   rememberedStore,
@@ -42,8 +42,8 @@ import {
   snapshotInstant,
   snapshotOnlyAdded,
   snapshotParam,
-} from "../order-list";
-import { accountSearchScope, openSearch } from "../order-search.server";
+} from "../orders/order-list";
+import { accountSearchScope, openSearch } from "../orders/order-search.server";
 import { settle } from "../settle.server";
 import type { ActionResult, OrderView, OrdersNotice } from "../view-models";
 import type { Route } from "./+types/orders";

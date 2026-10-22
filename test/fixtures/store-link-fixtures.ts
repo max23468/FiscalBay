@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { expect } from "vitest";
-import { action as startStoreLink } from "../app/routes/store-link";
+import { action as startStoreLink } from "../../app/routes/store-link";
 
 export async function beginStoreLink(cookie: string): Promise<URL> {
   const response = (await startStoreLink({

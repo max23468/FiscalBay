@@ -1,4 +1,4 @@
-import type { Language } from "./i18n";
+import type { Language } from "../i18n";
 
 const browsers: Array<[RegExp, string]> = [
   [/Edg(A|iOS)?\//u, "Edge"],

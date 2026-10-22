@@ -14,7 +14,7 @@
     "format:check": "oxfmt --check .",
     "lint": "oxlint .",
     "postinstall": "cf workers types",
-    "release:cycle": "node scripts/release-cycle.mjs",
+    "release:cycle": "node scripts/release/release-cycle.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage && node scripts/coverage-report.mjs",
     "quality:knip": "react-router typegen && knip",

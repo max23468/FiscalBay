@@ -3,8 +3,8 @@ import { redirect } from "react-router";
 
 import type { SearchResults } from "~/components/app-shell";
 import { localizedPath } from "../i18n";
-import { searchQuery } from "../order-search";
-import { searchHref } from "../order-search.server";
+import { searchQuery } from "../orders/order-search";
+import { searchHref } from "../orders/order-search.server";
 import { previewSearchMatches, previewSearchScope } from "../preview/order-list.server";
 import { assertPreviewAvailable, currentScenario } from "../preview/state.server";
 import type { Route } from "./+types/preview-search";

@@ -1,11 +1,9 @@
 import { cn } from "cn";
 import { useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 
-import { useAction } from "~/components/app-shell";
 import { StatusAlert } from "~/components/status";
 import { CopyButton } from "~/components/tax-code";
-import { Button } from "~/components/ui/button";
 import { buttonVariants } from "~/components/ui/button-variants";
 import {
   Sheet,
@@ -19,6 +17,7 @@ import type { AppCopy } from "../../app-copy";
 import { appHref, type AppLinks } from "../../app-links";
 import { formatAmount, type Language } from "../../i18n";
 import { buyerNameView, contactText } from "../../contact";
+import { exportHref, exportSection } from "../../orders/export-scope";
 import {
   countryName,
   formatDate,
@@ -34,7 +33,14 @@ import {
   type FiscalProps,
   type OrdersAccount,
 } from "./fiscal";
-import { billingCopyText, contactCopyLabels, ebayOrderHref, missingContact } from "./labels";
+import {
+  billingCopyText,
+  contactCopyLabels,
+  ebayOrderHref,
+  fromListState,
+  missingContact,
+  orderLinkSelector,
+} from "./labels";
 import { buyerLabel, paymentLabel, shippingLabel } from "./status";
 
 /**
@@ -252,6 +258,19 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
             </div>
           </dl>
         </section>
+        <section aria-labelledby="order-update" className="grid gap-3 border-t pt-5">
+          <h3 id="order-update" className="text-sm font-semibold">
+            {t.order.update}
+          </h3>
+          <dl className="grid gap-3 text-sm">
+            <div className={row}>
+              <dt className="text-muted-foreground">{t.order.updatedOnEbay}</dt>
+              <dd>
+                <time dateTime={order.updatedAt}>{formatDate(order.updatedAt, language)}</time>
+              </dd>
+            </div>
+          </dl>
+        </section>
       </TabsContent>
       <TabsContent value="items">
         <ul className="grid divide-y border-y">
@@ -287,7 +306,16 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
   );
 }
 
-/** Pannello del dettaglio con indirizzo proprio; chiuderlo torna all'elenco con gli stessi criteri. */
+function openedFromList(state: unknown) {
+  return (state as Partial<typeof fromListState> | null)?.fromList === true;
+}
+
+/**
+ * Pannello del dettaglio con indirizzo proprio; chiuderlo torna all'elenco con gli stessi
+ * criteri. Aperto dall'elenco, la chiusura torna alla sua voce della cronologia, così Indietro
+ * non riapre il pannello; da un collegamento diretto o dopo una ricarica senza quella voce
+ * sostituisce il dettaglio con l'elenco.
+ */
 export function OrderSheet({
   detail,
   account,
@@ -316,7 +344,6 @@ export function OrderSheet({
   const { language } = links;
   const location = useLocation();
   const navigate = useNavigate();
-  const action = useAction();
   // Il pannello conserva l'ultimo ordine durante l'animazione di chiusura.
   const [shown, setShown] = useState(detail);
   if (detail && detail !== shown) setShown(detail);
@@ -327,9 +354,12 @@ export function OrderSheet({
       open={detail !== null}
       onOpenChange={(open) => {
         if (!open) {
-          void navigate(`${appHref(links, "ordini")}${location.search}`, {
-            preventScrollReset: true,
-          });
+          if (openedFromList(location.state)) void navigate(-1);
+          else
+            void navigate(`${appHref(links, "ordini")}${location.search}`, {
+              replace: true,
+              preventScrollReset: true,
+            });
         }
       }}
     >
@@ -337,6 +367,9 @@ export function OrderSheet({
         <SheetContent
           ref={panel}
           initialFocus={panel}
+          // Il focus torna sulla scheda dell'ordine, se è fra quelle caricate, anche da un
+          // collegamento diretto o quando il browser non dà il focus al link cliccato.
+          finalFocus={() => document.querySelector<HTMLElement>(orderLinkSelector(shown.id))}
           closeLabel={t.shell.close}
           className="sm:max-w-lg outline-none"
           header={
@@ -361,13 +394,17 @@ export function OrderSheet({
                 </a>
               ) : null}
               {actions.exportable ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => action.run("export", { ids: shown.id })}
+                <Link
+                  to={exportHref(
+                    appHref(links, exportSection),
+                    new URLSearchParams(location.search),
+                    [shown.id],
+                  )}
+                  data-slot="button"
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
                 >
                   {t.orders.exportOrder}
-                </Button>
+                </Link>
               ) : null}
             </div>
           ) : null}

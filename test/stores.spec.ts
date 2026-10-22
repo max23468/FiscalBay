@@ -24,11 +24,11 @@ import {
   refreshExpiringTokens,
   refreshStoreToken,
 } from "../app/integrations/ebay/seller-credentials.server";
-import { now, resetDatabase, resetOrderFixtures } from "./database-fixtures";
-import { syntheticEbay } from "./ebay-fixtures";
-import { syntheticProfile, verifiedSession, profileOf } from "./account-fixtures";
-import { homeFor } from "./account-route-fixtures";
-import { beginStoreLink, storeCallback } from "./store-link-fixtures";
+import { now, resetDatabase, resetOrderFixtures } from "./fixtures/database-fixtures";
+import { syntheticEbay } from "./fixtures/ebay-fixtures";
+import { syntheticProfile, verifiedSession, profileOf } from "./fixtures/account-fixtures";
+import { homeFor } from "./fixtures/account-route-fixtures";
+import { beginStoreLink, storeCallback } from "./fixtures/store-link-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());

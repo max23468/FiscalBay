@@ -71,7 +71,7 @@ function PasskeyConfirm({ language, unverified }: { language: Language; unverifi
           setError(false);
           setRetried(true);
           try {
-            const { authClient } = await import("../passkey-client");
+            const { authClient } = await import("../account/passkey-client");
             const result = await authClient.signIn.passkey();
             if (result.error) setError(true);
             else window.location.replace(`${localizedPath(language, "/admin")}?${confirmedParam}`);

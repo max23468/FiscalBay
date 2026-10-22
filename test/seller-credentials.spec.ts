@@ -8,10 +8,10 @@ import {
   sealToken,
 } from "../app/integrations/ebay/seller-credentials.server";
 import { UpstreamError } from "../app/integrations/http.server";
-import { resetDatabase } from "./database-fixtures";
-import { syntheticEbay } from "./ebay-fixtures";
-import { verifiedSession } from "./account-fixtures";
-import { beginStoreLink, storeCallback } from "./store-link-fixtures";
+import { resetDatabase } from "./fixtures/database-fixtures";
+import { syntheticEbay } from "./fixtures/ebay-fixtures";
+import { verifiedSession } from "./fixtures/account-fixtures";
+import { beginStoreLink, storeCallback } from "./fixtures/store-link-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());

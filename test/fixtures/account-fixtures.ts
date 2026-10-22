@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 
-import { completeRegistration } from "../app/domain/registration.server";
-import { createAuth } from "../app/auth.server";
+import { completeRegistration } from "../../app/domain/registration.server";
+import { createAuth } from "../../app/auth.server";
 
 import { now } from "./database-fixtures";
 
