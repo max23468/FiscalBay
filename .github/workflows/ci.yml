@@ -245,21 +245,50 @@ jobs:
           key: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.browsers }}
           restore-keys: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-
 
+      # Le librerie di sistema dei browser sono circa 140 MB a ogni run: dal mirror del runner
+      # richiedevano da pochi secondi a oltre venti minuti.
+      - name: Restore system packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/apt-archives
+          key: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.browsers }}
+          restore-keys: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-
+
       - name: Install browser for interaction tests
         if: steps.browsers.outputs.cache-hit != 'true'
         env:
           BROWSERS: ${{ needs.verify.outputs.browsers }}
         run: |
+          # I pacchetti già scaricati restano in /var/cache/apt/archives: apt scarica soltanto quelli
+          # mancanti o aggiornati, e il passo non dipende più dalla velocità del mirror del runner.
+          echo 'APT::Keep-Downloaded-Packages "true";' | sudo tee /etc/apt/apt.conf.d/99-keep-downloaded > /dev/null
+          if compgen -G "${HOME}/.cache/apt-archives/*.deb" > /dev/null; then
+            sudo cp "${HOME}"/.cache/apt-archives/*.deb /var/cache/apt/archives/
+          fi
           IFS=, read -ra browsers <<< "${BROWSERS}"
           pnpm exec playwright install --with-deps "${browsers[@]}"
+          mkdir -p "${HOME}/.cache/apt-archives"
+          if compgen -G "/var/cache/apt/archives/*.deb" > /dev/null; then
+            cp /var/cache/apt/archives/*.deb "${HOME}/.cache/apt-archives/"
+          fi
 
       - name: Install browser system dependencies
         if: steps.browsers.outputs.cache-hit == 'true'
         env:
           BROWSERS: ${{ needs.verify.outputs.browsers }}
         run: |
+          # I pacchetti già scaricati restano in /var/cache/apt/archives: apt scarica soltanto quelli
+          # mancanti o aggiornati, e il passo non dipende più dalla velocità del mirror del runner.
+          echo 'APT::Keep-Downloaded-Packages "true";' | sudo tee /etc/apt/apt.conf.d/99-keep-downloaded > /dev/null
+          if compgen -G "${HOME}/.cache/apt-archives/*.deb" > /dev/null; then
+            sudo cp "${HOME}"/.cache/apt-archives/*.deb /var/cache/apt/archives/
+          fi
           IFS=, read -ra browsers <<< "${BROWSERS}"
           pnpm exec playwright install-deps "${browsers[@]}"
+          mkdir -p "${HOME}/.cache/apt-archives"
+          if compgen -G "/var/cache/apt/archives/*.deb" > /dev/null; then
+            cp /var/cache/apt/archives/*.deb "${HOME}/.cache/apt-archives/"
+          fi
 
       - name: Check browser interactions before deploy
         env:
@@ -413,13 +442,43 @@ jobs:
           key: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium
           restore-keys: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-
 
+      - name: Restore system packages
+        if: needs.verify.outputs.e2e == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/apt-archives
+          key: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium
+          restore-keys: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-
+
       - name: Install browser for interaction tests
         if: needs.verify.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
+        run: |
+          # I pacchetti già scaricati restano in /var/cache/apt/archives: apt scarica soltanto quelli
+          # mancanti o aggiornati, e il passo non dipende più dalla velocità del mirror del runner.
+          echo 'APT::Keep-Downloaded-Packages "true";' | sudo tee /etc/apt/apt.conf.d/99-keep-downloaded > /dev/null
+          if compgen -G "${HOME}/.cache/apt-archives/*.deb" > /dev/null; then
+            sudo cp "${HOME}"/.cache/apt-archives/*.deb /var/cache/apt/archives/
+          fi
+          pnpm exec playwright install --with-deps chromium
+          mkdir -p "${HOME}/.cache/apt-archives"
+          if compgen -G "/var/cache/apt/archives/*.deb" > /dev/null; then
+            cp /var/cache/apt/archives/*.deb "${HOME}/.cache/apt-archives/"
+          fi
 
       - name: Install browser system dependencies
         if: needs.verify.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
+        run: |
+          # I pacchetti già scaricati restano in /var/cache/apt/archives: apt scarica soltanto quelli
+          # mancanti o aggiornati, e il passo non dipende più dalla velocità del mirror del runner.
+          echo 'APT::Keep-Downloaded-Packages "true";' | sudo tee /etc/apt/apt.conf.d/99-keep-downloaded > /dev/null
+          if compgen -G "${HOME}/.cache/apt-archives/*.deb" > /dev/null; then
+            sudo cp "${HOME}"/.cache/apt-archives/*.deb /var/cache/apt/archives/
+          fi
+          pnpm exec playwright install-deps chromium
+          mkdir -p "${HOME}/.cache/apt-archives"
+          if compgen -G "/var/cache/apt/archives/*.deb" > /dev/null; then
+            cp /var/cache/apt/archives/*.deb "${HOME}/.cache/apt-archives/"
+          fi
 
       # L'account di collaudo torna a uno stato noto prima delle prove autenticate. Se il
       # ripristino non riesce (permessi del token, D1 non raggiungibile) le prove autenticate
