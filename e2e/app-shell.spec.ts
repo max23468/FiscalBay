@@ -637,6 +637,9 @@ test("contatti dell'acquirente formattati, cliccabili e mai verso un alias eBay"
   const alias = page.getByRole("dialog");
   await expect(alias.getByText("interno 14", { exact: true })).toBeVisible();
   await expect(alias.locator('a[href^="tel:"]')).toHaveCount(0);
+  await expect(alias.getByText("c3f0a1b2@members.ebay.invalid", { exact: true })).toBeVisible();
+  await expect(alias.locator('a[href^="mailto:"]')).toHaveCount(0);
+  await expect(alias.getByRole("button", { name: /^Copia email:/u })).toHaveCount(0);
   await expect(alias.getByRole("link", { name: "Scrivi all’acquirente via email" })).toHaveCount(0);
   await expect(alias.getByRole("button", { name: /^Copia messaggio/u })).toBeVisible();
 });
