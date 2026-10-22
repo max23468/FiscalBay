@@ -25,7 +25,12 @@ test.describe("miglioramenti account e negozi", () => {
         if (message.type() === "error") errors.push(message.text());
       });
       page.on("request", (request) => {
-        if (request.method() === "POST") posts.push(request.url());
+        // Le misure della pagina partono da sole dopo 10 secondi: non sono un'azione della prova.
+        if (
+          request.method() === "POST" &&
+          new URL(request.url()).pathname !== "/api/v1/page-timing"
+        )
+          posts.push(request.url());
       });
       await useLocalAccount(context, "member", baseURL!, `suggestions-${language}`);
       await page.setViewportSize({ width: it ? 390 : 1280, height: 900 });
@@ -244,6 +249,10 @@ test.describe("miglioramenti account e negozi", () => {
       }) => {
         await useLocalAccount(context, "member", baseURL!);
         await page.goto("/app/ordini");
+        // Un clic prima dell'idratazione andrebbe perso: la ricerca si attiva con la pagina.
+        await expect(
+          page.getByRole("searchbox", { name: "Cerca ordini", includeHidden: true }),
+        ).toBeEnabled();
         const title = page.getByRole("link", {
           name: `Ordine ${testAccount.orders.unlocked}`,
           exact: true,
