@@ -16,6 +16,16 @@ import { arch, cpus, platform, tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+export function extractBenchmarkSources(root, reference, directory) {
+  const archive = path.join(directory, "sources.tar");
+  try {
+    execFileSync("git", ["archive", "--output", archive, reference, "app"], { cwd: root });
+    execFileSync("tar", ["-x", "-f", archive, "-C", directory]);
+  } finally {
+    rmSync(archive, { force: true });
+  }
+}
+
 export function comparableDependencies(base, head) {
   const sorted = (dependencies) =>
     Object.entries(dependencies ?? {}).sort(([a], [b]) => a.localeCompare(b));
@@ -142,9 +152,7 @@ function main() {
       } else {
         // Il solo sorgente applicativo viene dalla base; il test prestazionale resta identico.
         temporary = mkdtempSync(path.join(tmpdir(), "fiscalbay-benchmark-"));
-        execFileSync("tar", ["-x", "-C", temporary], {
-          input: execFileSync("git", ["archive", manifest.base, "app"], { cwd: root }),
-        });
+        extractBenchmarkSources(root, manifest.base, temporary);
         for (const file of ["package.json", "vitest.benchmark.config.ts", ...configs, "benchmarks"])
           cpSync(path.join(root, file), path.join(temporary, file), { recursive: true });
         symlinkSync(path.join(root, "node_modules"), path.join(temporary, "node_modules"), "dir");
