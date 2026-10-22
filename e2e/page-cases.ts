@@ -11,6 +11,8 @@ export interface PageCase {
   redirect?: string;
   preview?: boolean;
   endpoint?: boolean;
+  /** Pannello modale aperto dalla route dopo l'idratazione. */
+  dialog?: boolean;
   /** Visitata anche dopo il deploy test: prova ambiente, D1, sessione e segreti. */
   remote?: boolean;
 }
@@ -117,6 +119,7 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
         pattern: `${prefix}/app/negozi/:negozio?`,
         status: suffix === "/non-esiste" ? 404 : 200,
         remote: !prefix && suffix !== "/non-esiste",
+        dialog: suffix === `/${testAccount.stores.active}`,
       }),
     ),
     make("/app/profilo", "profile", { redirect: access }),
@@ -133,12 +136,14 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
         pattern: `${prefix}/anteprima/ordini/:ordine?`,
         status: suffix === "/non-esiste" ? 404 : 200,
         remote: !prefix && !suffix,
+        dialog: suffix === "/ord-02",
       }),
     ),
     ...["", "/neg-vintage", "/non-esiste"].map((suffix) =>
       preview(`/negozi${suffix}`, "stores", {
         pattern: `${prefix}/anteprima/negozi/:negozio?`,
         status: suffix === "/non-esiste" ? 404 : 200,
+        dialog: suffix === "/neg-vintage",
       }),
     ),
     ...["", ...settings.map((section) => `/${section}`), "/non-esiste"].map((suffix) =>
