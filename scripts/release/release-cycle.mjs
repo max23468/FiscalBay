@@ -219,6 +219,23 @@ function summary(repository, runId) {
   return run;
 }
 
+/**
+ * Run più recente del workflow sul commit atteso, esclusi gli eventi estranei e le run già
+ * annullate da una successiva: il ritorno della PR da bozza a pronta avvia una nuova run che
+ * annulla, per concorrenza, quella avviata dall'aggiornamento della base.
+ */
+export function expectedRun(runs, sha, events, since, cancelled = new Set()) {
+  return runs
+    .filter(
+      (item) =>
+        item.headSha === sha &&
+        events.includes(item.event) &&
+        Date.parse(item.createdAt) >= since &&
+        !cancelled.has(item.databaseId),
+    )
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
+}
+
 async function waitRun(
   repository,
   workflow,
@@ -227,6 +244,7 @@ async function waitRun(
   events = ["push", "workflow_dispatch"],
   since = 0,
 ) {
+  const cancelled = new Set();
   for (let attempt = 0; attempt < 12; attempt++) {
     const runs = json(
       "run",
@@ -242,10 +260,7 @@ async function waitRun(
       "--json",
       "databaseId,headSha,event,status,conclusion,createdAt",
     );
-    const run = runs.find(
-      (item) =>
-        item.headSha === sha && events.includes(item.event) && Date.parse(item.createdAt) >= since,
-    );
+    const run = expectedRun(runs, sha, events, since, cancelled);
     if (run) {
       if (run.status !== "completed")
         await watch([
@@ -257,8 +272,22 @@ async function waitRun(
           "--exit-status",
           "--interval",
           "30",
-        ]);
+        ]).catch(() => {
+          /* L'esito si rilegge sotto, compreso l'annullamento per una run successiva. */
+        });
       const result = summary(repository, run.databaseId);
+      // Il monitoraggio interrotto, per esempio dalla rete, lascia la run in corso: si riprende.
+      if (result.status !== "completed") {
+        attempt = -1;
+        await pause(10000);
+        continue;
+      }
+      if (result.conclusion === "cancelled") {
+        // Una run successiva sullo stesso commit la sostituisce: si segue quella.
+        cancelled.add(run.databaseId);
+        attempt = -1;
+        continue;
+      }
       if (result.conclusion !== "success")
         throw new Error(`Run ${run.databaseId} non riuscita: riconciliare prima della ripresa.`);
       return result;
