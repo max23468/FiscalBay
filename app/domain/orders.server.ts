@@ -715,6 +715,7 @@ export function orderView(order: VisibleOrder): OrderView {
     ...(order.reconciliationIssue ? { reconciliationIssue: true } : {}),
     ...(thumbnail ? { thumbnail } : {}),
     lastSyncedAt: order.taxCheckedAt,
+    updatedAt: order.lastModifiedTime,
   };
   return { ...view, contacts: contactsView(view) };
 }

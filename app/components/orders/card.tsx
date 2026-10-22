@@ -28,7 +28,7 @@ import {
 } from "../../view-models";
 import { CopyButton } from "~/components/tax-code";
 import { FiscalCodes, FiscalNotes, type FiscalProps } from "./fiscal";
-import { ebayOrderHref } from "./labels";
+import { ebayOrderHref, fromListState } from "./labels";
 import { buyerLabel, paymentLabel, shippingLabel, type PillTone } from "./status";
 
 /** Azioni secondarie disponibili nella pagina: eBay ed esportazione del singolo ordine. */
@@ -337,7 +337,9 @@ export function OrderCard({
           <h2 id={titleId} className="min-w-0 text-[0.9375rem] leading-snug font-semibold">
             <Link
               to={detailHref}
+              state={fromListState}
               preventScrollReset
+              data-order-link={order.id}
               className={cn(
                 "rounded-sm break-words outline-none hover:underline hover:underline-offset-4 focus-visible:ring-3 focus-visible:ring-ring",
                 coarseTarget,
@@ -445,6 +447,7 @@ export function OrderCard({
       <footer className="flex justify-end">
         <Link
           to={detailHref}
+          state={fromListState}
           preventScrollReset
           className={cn(
             "inline-flex items-center gap-0.5 rounded-sm text-xs font-medium text-foreground underline decoration-border underline-offset-4 outline-none hover:decoration-foreground focus-visible:ring-3 focus-visible:ring-ring",

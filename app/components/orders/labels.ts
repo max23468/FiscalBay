@@ -37,3 +37,11 @@ export function remainingUnlocks(account: OrdersAccount) {
 export function ebayOrderHref(ebayOrderId: string) {
   return `https://www.ebay.it/sh/ord/details?orderid=${encodeURIComponent(ebayOrderId)}`;
 }
+
+/** Stato della navigazione dall'elenco al dettaglio: chiudere il pannello torna indietro. */
+export const fromListState = { fromList: true } as const;
+
+/** Collegamento al dettaglio nella scheda, che riceve il focus quando il pannello si chiude. */
+export function orderLinkSelector(id: string) {
+  return `[data-order-link="${CSS.escape(id)}"]`;
+}

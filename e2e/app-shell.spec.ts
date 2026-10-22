@@ -77,11 +77,66 @@ test("il dettaglio ha un URL, si chiude con Indietro e conserva i filtri", async
   await page.goBack();
   await expect(dialog).toBeHidden();
   await expect(page).toHaveURL(/\/anteprima\/ordini\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$/u);
-  await first.getByRole("link", { name: "Dettaglio" }).click();
+  const entries = await page.evaluate(() => history.length);
+  const details = first.getByRole("link", { name: "Dettaglio" });
+  await details.click();
   await expect(dialog).toBeVisible();
+  await expect(dialog).toBeFocused();
+  await expect(dialog.getByText("Ultima modifica su eBay")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await expect(page).toHaveURL(/\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$/u);
+  // La chiusura torna alla voce dell'elenco, senza aggiungerne una: Indietro non riapre il
+  // pannello. Il dettaglio aperto ha preso il posto della voce in avanti lasciata da Indietro.
+  await expect(first.getByRole("heading", { level: 2 }).getByRole("link")).toBeFocused();
+  expect(await page.evaluate(() => history.length)).toBe(entries);
+});
+
+test("il collegamento diretto al dettaglio regge ricarica e chiusura", async ({ page }) => {
+  await open(page, "/anteprima/ordini?fiscale=available");
+  const first = page.getByRole("region", { name: "Elenco ordini" }).getByRole("article").first();
+  const title = first.getByRole("heading", { level: 2 }).getByRole("link");
+  const href = (await title.getAttribute("href"))!;
+  // Con il pannello aperto il resto della pagina è inerte: si attende il dialogo.
+  await page.goto(href);
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await page.reload();
+  await expect(dialog).toBeVisible();
+  const entries = await page.evaluate(() => history.length);
+  await dialog.getByRole("button", { name: "Chiudi", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page).toHaveURL(/\/anteprima\/ordini\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$/u);
+  // Senza una voce dell'elenco il dettaglio è sostituito e il focus va sulla sua scheda.
+  expect(await page.evaluate(() => history.length)).toBe(entries);
+  await expect(title).toBeFocused();
+});
+
+test("il dettaglio conserva selezione e posizione dell'elenco", async ({ page }) => {
+  await open(page, "/anteprima/ordini?fiscale=locked");
+  await page.getByRole("button", { name: "Seleziona" }).click();
+  const checkbox = page.getByRole("checkbox", { name: "Seleziona l’ordine 02-44519-70831" });
+  await checkbox.click();
+  const card = page.getByRole("article", { name: "Ordine 02-44519-70831" });
+  await card.scrollIntoViewIfNeeded();
+  const scroll = await page.evaluate(() => window.scrollY);
+  await card.getByRole("link", { name: "Dettaglio" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await page.goBack();
+  await expect(dialog).toBeHidden();
+  await expect(checkbox).toBeChecked();
+  expect(await page.evaluate(() => window.scrollY)).toBe(scroll);
+});
+
+test("su smartphone il dettaglio occupa tutto lo schermo", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 740 });
+  await open(page);
+  await page.getByRole("article").first().getByRole("link", { name: "Dettaglio" }).click();
+  // Si attende la fine dell'ingresso, che trasla il pannello.
+  await expect
+    .poll(() => page.getByRole("dialog").boundingBox())
+    .toMatchObject({ x: 0, y: 0, width: 375, height: 740 });
 });
 
 test("lo sblocco rivela il dato solo dopo l'azione e aggiorna la quota", async ({ page }) => {
