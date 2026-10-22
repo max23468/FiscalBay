@@ -144,7 +144,7 @@ export function EmailLink({
   view: ContactsView["email"];
   copy?: CopyLabels;
 }) {
-  if (!view || view.relay) return <EmailAddress email={view?.address ?? email} />;
+  if (!view) return <EmailAddress email={email} />;
   return (
     <span className="inline-flex max-w-full flex-wrap items-center gap-1">
       <a

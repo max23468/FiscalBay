@@ -1770,7 +1770,7 @@ Realizzare il pannello con URL su desktop e la vista completa mobile, Dettagli/A
 
 Mostrare telefono, email e indirizzo di fatturazione in una forma derivata e renderli utilizzabili, senza modificare i valori di eBay (D181).
 
-**Criterio di completamento:** Collegamenti soltanto per valori riconosciuti; dati mascherati, alias eBay e forme non riconosciute restano testo. Stessi componenti nell'area reale e nell'anteprima.
+**Criterio di completamento:** Collegamenti soltanto per valori riconosciuti, inclusi gli alias email eBay, copiabili nel dettaglio. Dati mascherati e forme non riconosciute restano testo. Il collegamento all'alias apre una nuova email senza oggetto o richiesta fiscale precompilati. Stessi componenti nell'area reale e nell'anteprima.
 
 **Completato:** il telefono si mostra in forma internazionale, con il prefisso del Paese di fatturazione quando manca e i cellulari italiani raggruppati; un numero già diviso in gruppi conserva quelli della fonte, uno non riconosciuto resta testo. L'email ha il dominio in minuscolo. Gli indirizzi scritti tutto in maiuscolo ricevono le iniziali maiuscole, con particelle, sigle societarie, numeri romani, civici e «c/o» conservati. In scheda telefono ed email sono collegamenti `tel:` e `mailto:`; nel dettaglio anche Copia per i tre dati, con il telefono in forma internazionale e l'indirizzo su più righe. La richiesta del Codice Fiscale offre «Scrivi all'acquirente via email» con oggetto e testo già compilati nella lingua scelta, soltanto per un indirizzo reale e mai per un alias eBay. La formattazione è un modulo puro condiviso; lo scenario «Dati discordanti» mostra indirizzo in maiuscolo, cellulare senza prefisso, numero non riconosciuto e alias eBay.
 
