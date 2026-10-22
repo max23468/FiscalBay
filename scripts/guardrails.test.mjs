@@ -45,6 +45,7 @@ import { verifiedBuildOrigin } from "./find-build.mjs";
 import { strykerPlugins as mutationPlugins } from "./mutation-vitest.mjs";
 import {
   assertBase,
+  waitUpdatedHead,
   candidateRef,
   runTimings,
   assertCycleReceipt,
@@ -1846,6 +1847,37 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     assert.doesNotThrow(() => assertBase(sha, sha));
     assert.throws(() => assertBase(sha, "b".repeat(40)), /base/u);
     assert.throws(() => assertBase("", ""), /base/u);
+  });
+
+  it("dopo l'aggiornamento della base attende la nuova testa della PR", async () => {
+    const [old, merged] = ["a".repeat(40), "c".repeat(40)];
+    // GitHub risponde prima di creare il merge: le prime letture mostrano ancora la testa vecchia.
+    const heads = [old, old, merged];
+    const reads = [];
+    const pr = await waitUpdatedHead(
+      () => {
+        const head = heads[Math.min(reads.length, heads.length - 1)];
+        reads.push(head);
+        return { headRefOid: head };
+      },
+      old,
+      (head) => head === merged,
+      5,
+      0,
+    );
+    assert.equal(pr.headRefOid, merged);
+    assert.deepEqual(reads, [old, old, merged]);
+    // Una testa cambiata ma senza la base non basta; senza aggiornamento il ciclo si ferma.
+    await assert.rejects(
+      waitUpdatedHead(
+        () => ({ headRefOid: merged }),
+        old,
+        () => false,
+        3,
+        0,
+      ),
+      /non aggiornata/u,
+    );
   });
 
   it("non chiude un ciclo con browser parziali o un tag di un altro commit", () => {

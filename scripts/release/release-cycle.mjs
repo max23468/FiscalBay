@@ -42,6 +42,20 @@ export function assertBase(expected, current) {
     throw new Error("La base della PR è avanzata: aggiornarla prima della qualifica finale.");
 }
 
+/**
+ * `gh pr update-branch` risponde prima che GitHub crei il merge con la base: la PR va riletta
+ * finché la sua testa cambia e contiene la base, altrimenti il ciclo attenderebbe la run sul
+ * commit precedente.
+ */
+export async function waitUpdatedHead(read, previous, contains, attempts = 30, delay = 2000) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const pr = read();
+    if (pr.headRefOid !== previous && contains(pr.headRefOid)) return pr;
+    await pause(delay);
+  }
+  throw new Error("Base della PR non aggiornata da GitHub: nessun rilancio automatico.");
+}
+
 export function candidateRef(command, ref = "main") {
   if (ref !== "main" && !(command === "candidate" && ref === "develop"))
     throw new Error("Production richiede main; la sola prova ammette anche develop.");
@@ -592,8 +606,20 @@ async function main() {
         } catch {
           /* Base da aggiornare. */
         }
-        if (!current) gh("pr", "update-branch", number, "--repo", repository);
-        pr = json("pr", "view", number, "--repo", repository, "--json", fields);
+        const read = () => json("pr", "view", number, "--repo", repository, "--json", fields);
+        if (current) pr = read();
+        else {
+          gh("pr", "update-branch", number, "--repo", repository);
+          pr = await waitUpdatedHead(read, pr.headRefOid, (head) => {
+            try {
+              git("fetch", "origin", pr.headRefName);
+              git("merge-base", "--is-ancestor", base, head);
+              return true;
+            } catch {
+              return false;
+            }
+          });
+        }
         const expectedHead = pr.headRefOid;
         const since = Date.now() - 1000;
         gh("pr", "ready", number, "--repo", repository);
