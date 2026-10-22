@@ -1951,6 +1951,7 @@ describe("vista condivisa e criteri degli ordini", () => {
       shipping: { status: null, code: null },
       suggestions: [],
       lastSyncedAt: null,
+      updatedAt: now,
     });
     expect(empty).not.toHaveProperty("suggestionStatus");
     expect(empty).not.toHaveProperty("reconciliationIssue");

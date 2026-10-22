@@ -244,6 +244,7 @@ interface OrderSeed extends Omit<
   | "storeName"
   | "marketplace"
   | "lastSyncedAt"
+  | "updatedAt"
   | "payment"
   | "shipping"
   | "items"
@@ -255,6 +256,8 @@ interface OrderSeed extends Omit<
   payment: PaymentStatus | { code: string };
   shipping: ShippingStatus | { code: string };
   items: Array<Omit<OrderView["items"][number], "currency">>;
+  /** Ultima modifica su eBay; senza, quella della creazione. */
+  updatedAt?: string;
   suggestion?: SuggestionView;
   /** Valori presenti ma da sbloccare nel piano Free. */
   lockable?: TaxIdentifierView[];
@@ -343,6 +346,7 @@ const seeds: OrderSeed[] = [
     id: "ord-02",
     ebayOrderId: "27-10293-84756",
     createdAt: minutesAgo(95),
+    updatedAt: minutesAgo(25),
     store: "vintage",
     buyerName: "Maria Rossi",
     buyerUsername: "maria.rossi80",
@@ -538,6 +542,7 @@ const seeds: OrderSeed[] = [
     id: "ord-10",
     ebayOrderId: "11-60325-94410",
     createdAt: minutesAgo(2_600),
+    updatedAt: minutesAgo(1_300),
     store: "vintage",
     buyerName: "Elena Galli",
     buyerUsername: "elena.galli",
@@ -592,6 +597,7 @@ const seeds: OrderSeed[] = [
     id: "ord-12",
     ebayOrderId: "25-30491-88120",
     createdAt: minutesAgo(4_800),
+    updatedAt: minutesAgo(3_100),
     store: "vintage",
     buyerName: "Roberto Ricci",
     buyerUsername: "rricci",
@@ -751,7 +757,7 @@ function storeView(key: StoreKey, overrides: Partial<StoreView> = {}): StoreView
 }
 
 function toOrder(seed: OrderSeed, storeList: StoreView[]): OrderView {
-  const { store, lockable: _lockable, payment, shipping, suggestion, ...order } = seed;
+  const { store, lockable: _lockable, payment, shipping, suggestion, updatedAt, ...order } = seed;
   const view = storeList.find((candidate) => candidate.id === stores[store].id);
   return {
     ...order,
@@ -764,6 +770,7 @@ function toOrder(seed: OrderSeed, storeList: StoreView[]): OrderView {
     storeName: stores[store].name,
     marketplace: stores[store].marketplace,
     lastSyncedAt: view?.lastSyncAt ?? minutesAgo(5),
+    updatedAt: updatedAt ?? order.createdAt,
   };
 }
 

@@ -215,6 +215,8 @@ export interface OrderView {
   thumbnail?: string;
   /** Ultima lettura dei dati fiscali da eBay; null se non ancora avvenuta. */
   lastSyncedAt: string | null;
+  /** Ultima modifica dell'ordine su eBay, secondo la fonte. */
+  updatedAt: string;
 }
 
 export type ConnectionState = "active" | "paused" | "reconnect_required" | "error" | "disconnected";

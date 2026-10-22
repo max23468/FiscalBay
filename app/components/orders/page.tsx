@@ -529,10 +529,10 @@ function NoResults({
 /**
  * L'indirizzo conserva l'istantanea dell'elenco, così ricarica, dettaglio e Indietro ritrovano
  * gli stessi ordini nello stesso ordine. I nuovi ordini entrano subito se l'utente è in cima
- * alla lista e non sta selezionando; altrimenti resta l'indicatore, così nulla si sposta mentre
- * legge.
+ * alla lista e non sta selezionando né leggendo un dettaglio (`held`); altrimenti resta
+ * l'indicatore, così nulla si sposta mentre legge e il pannello aperto non si chiude.
  */
-function useListSnapshot(data: OrdersPageData, selecting: boolean) {
+function useListSnapshot(data: OrdersPageData, held: boolean) {
   const navigate = useNavigate();
   const location = useLocation();
   const [params, setParams] = useSearchParams();
@@ -551,7 +551,7 @@ function useListSnapshot(data: OrdersPageData, selecting: boolean) {
     setParams(next, { replace: true, preventScrollReset: true });
   });
   const insertAtTop = useEffectEvent(() => {
-    if (freshHref && window.scrollY < topThreshold && !selecting && current())
+    if (freshHref && window.scrollY < topThreshold && !held && current())
       void navigate(freshHref, { replace: true, preventScrollReset: true });
   });
   // Si parte dall'indirizzo con l'istantanea: la nuova la cambia o la toglie, mai la aggiunge,
@@ -616,7 +616,7 @@ function OrdersList({
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const selectRef = useRef<HTMLButtonElement>(null);
   const { freshHref } = data;
-  useListSnapshot(data, selecting);
+  useListSnapshot(data, selecting || data.detail !== null);
   const stopSelecting = () => {
     setSelecting(false);
     setSelected(new Set());
