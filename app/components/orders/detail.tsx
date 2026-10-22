@@ -1,10 +1,8 @@
 import { cn } from "cn";
 import { useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 
-import { useAction } from "~/components/app-shell";
 import { StatusAlert } from "~/components/status";
-import { Button } from "~/components/ui/button";
 import { buttonVariants } from "~/components/ui/button-variants";
 import {
   Sheet,
@@ -17,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import type { AppCopy } from "../../app-copy";
 import { appHref, type AppLinks } from "../../app-links";
 import { formatAmount, type Language } from "../../i18n";
+import { exportHref, exportSection } from "../../orders/export-scope";
 import {
   countryName,
   formatDate,
@@ -316,7 +315,6 @@ export function OrderSheet({
   const { language } = links;
   const location = useLocation();
   const navigate = useNavigate();
-  const action = useAction();
   // Il pannello conserva l'ultimo ordine durante l'animazione di chiusura.
   const [shown, setShown] = useState(detail);
   if (detail && detail !== shown) setShown(detail);
@@ -367,13 +365,17 @@ export function OrderSheet({
                 </a>
               ) : null}
               {actions.exportable ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => action.run("export", { ids: shown.id })}
+                <Link
+                  to={exportHref(
+                    appHref(links, exportSection),
+                    new URLSearchParams(location.search),
+                    [shown.id],
+                  )}
+                  data-slot="button"
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
                 >
                   {t.orders.exportOrder}
-                </Button>
+                </Link>
               ) : null}
             </div>
           ) : null}
