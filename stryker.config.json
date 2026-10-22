@@ -6,7 +6,14 @@
   "vitest": { "configFile": "vitest.cloudflare.config.ts" },
   "tsconfigFile_comment": "TypeScript 7 non espone l'API usata per riscrivere il tsconfig nella sandbox; i percorsi del progetto restano interni.",
   "tsconfigFile": "tsconfig.none.json",
-  "ignorePatterns": ["/.cloudflare", "/.wrangler", "/build", "/test-results", "/reports"],
+  "ignorePatterns": [
+    "/.cloudflare",
+    "/.wrangler",
+    "/build",
+    "/test-results",
+    "/reports",
+    "/.claude/worktrees"
+  ],
   "reporters": ["clear-text", "progress", "json"],
   "concurrency": 4,
   "timeoutMS_comment": "Oltre i 5 secondi di Vitest: un test bloccato da un mutante fallisce sempre per il proprio timeout invece di competere con quello di Stryker sotto carico.",

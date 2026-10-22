@@ -101,12 +101,17 @@ describe("errors, locale and redacted logs", () => {
     );
     expect(formatAmount(12345, "EUR", "it")).toContain("123,45");
     expect(formatAmount(12345, "EUR", "en")).toContain("123.45");
-    expect(formatAmount(124900, "EUR", "it")).toContain("1249,00");
+    expect(formatAmount(124900, "EUR", "it")).toContain("1.249,00");
     expect(formatAmount(1234560, "EUR", "it")).toContain("12.345,60");
     expect(formatAmount(124900, "EUR", "en")).toContain("1,249.00");
     // L'esponente segue la valuta: lo yen non ha decimali, il dinaro kuwaitiano tre.
     expect(formatAmount(1000, "JPY", "en")).toContain("1,000");
     expect(formatAmount(1000, "JPY", "en")).not.toContain(".");
+    for (const currency of ["USD", "CAD", "AUD"]) {
+      expect(formatAmount(123456, currency, "it")).toContain(currency);
+      expect(formatAmount(123456, currency, "en")).toContain(currency);
+    }
+    expect(formatAmount(1234, "KWD", "it")).toContain("1,234");
     expect(parseMinor("12.5", "EUR")).toBe(1250);
     expect(parseMinor("1.234", "KWD")).toBe(1234);
     expect(parseMinor("12.500", "EUR")).toBe(1250);

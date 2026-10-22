@@ -203,6 +203,8 @@ export interface OrderView {
   billingAddress: AddressView | null;
   phone: string | null;
   email: string | null;
+  /** Assenze dichiarate mascherate dalla fonte, senza deduzioni dal testo. */
+  maskedContacts?: ("name" | "phone" | "email" | "billingAddress" | "recipient")[];
   /** Telefono, email e indirizzo nella forma mostrata; gli originali restano qui sopra. */
   contacts: ContactsView;
   fiscal: FiscalView;
@@ -348,7 +350,19 @@ export function formatDate(
 
 /** Nome del Paese nella lingua dell'interfaccia, dal codice ISO. */
 export function countryName(code: string, language: Language): string {
-  return new Intl.DisplayNames(locales[language], { type: "region" }).of(code) ?? code;
+  return /^[A-Z]{2}$/u.test(code)
+    ? (new Intl.DisplayNames(locales[language], { type: "region" }).of(code) ?? code)
+    : code;
+}
+
+/** Stesse righe per la lettura e la copia, senza separatori per campi assenti. */
+export function addressRows(address: AddressView, language: Language): string[] {
+  const province = address.province ? `(${address.province})` : "";
+  return [
+    address.line,
+    [address.postalCode, address.city, province].filter(Boolean).join(" "),
+    countryName(address.countryCode, language),
+  ].filter(Boolean);
 }
 
 /** Tempo relativo rispetto a un istante fornito dal server, stabile fra server e browser. */

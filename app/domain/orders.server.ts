@@ -696,17 +696,39 @@ export function orderView(order: VisibleOrder): OrderView {
       order.summary.orderFulfillmentStatus,
     ),
     billingAddress:
-      billing && line && billing.city && billing.countryCode
+      billing &&
+      [line, billing.city, billing.postalCode, billing.stateOrProvince, billing.countryCode].some(
+        (value) => value?.trim(),
+      )
         ? {
             line,
             postalCode: billing.postalCode ?? "",
-            city: billing.city,
+            city: billing.city ?? "",
             province: billing.stateOrProvince,
-            countryCode: billing.countryCode,
+            countryCode: billing.countryCode ?? "",
           }
         : null,
     phone: buyer?.phone ?? shipTo?.phone ?? null,
     email: buyer?.email ?? null,
+    ...(buyer?.masked?.length
+      ? {
+          maskedContacts: [
+            ...(!buyer.name && buyer.masked.includes("name") ? ["name" as const] : []),
+            ...(!buyer.email && buyer.masked.includes("email") ? ["email" as const] : []),
+            ...(!buyer.phone &&
+            !shipTo?.phone &&
+            (buyer.masked.includes("phone") || buyer.masked.includes("shipTo.phone"))
+              ? ["phone" as const]
+              : []),
+            ...(!billing?.addressLine1 && buyer.masked.includes("billingAddress.addressLine1")
+              ? ["billingAddress" as const]
+              : []),
+            ...(!shipTo?.name && buyer.masked.includes("shipTo.name")
+              ? ["recipient" as const]
+              : []),
+          ],
+        }
+      : {}),
     fiscal: fiscalView(order),
     suggestions: order.suggestions ?? [],
     ...(order.suggestionStatus ? { suggestionStatus: order.suggestionStatus } : {}),
