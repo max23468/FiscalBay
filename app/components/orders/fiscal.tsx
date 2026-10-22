@@ -439,9 +439,14 @@ export function FiscalNotes({
       <LockedNote fiscal={fiscal} t={t} language={language} account={account} compact={compact} />
     );
   }
+  // Lo stato è già nel riquadro: nella scheda aggiungi solo cause o attese specifiche.
+  const showHint =
+    !compact ||
+    (fiscal.state === "missing" && Boolean(fiscal.reason)) ||
+    (fiscal.state === "error" && ebayDown);
   return (
     <>
-      <CardNote>{unavailableHint(fiscal, ebayDown, t, language)}</CardNote>
+      {showHint ? <CardNote>{unavailableHint(fiscal, ebayDown, t, language)}</CardNote> : null}
       {compact && fiscal.state === "missing" && order.suggestions.length > 0 ? (
         <SuggestionSummary suggestions={order.suggestions} t={t} />
       ) : null}

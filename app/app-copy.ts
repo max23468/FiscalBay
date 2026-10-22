@@ -319,8 +319,7 @@ const it = {
     notificationsHeld: "Sospese",
     notificationsHeldHint: "Sospese finché la sincronizzazione non riprende",
     notificationsFree: "Le notifiche Telegram dei nuovi ordini sono disponibili con Premium.",
-    freeLimit:
-      "Con il piano Free hai un negozio attivo e puoi sostituirlo ogni 90 giorni. Gli altri sono in pausa per il piano: i loro ordini non sono consultabili. La pausa manuale del negozio scelto conserva invece l’accesso agli ordini già importati.",
+    freeLimit: "Il piano Free include un solo negozio attivo.",
     open: (name: string) => `Apri ${name}`,
     sectionConnection: "Collegamento",
     sectionSync: "Sincronizzazione",
@@ -345,7 +344,6 @@ const it = {
         ? "Riuscito, nessun nuovo ordine"
         : `Riuscito, ${count} ${plural(count, "nuovo ordine", "nuovi ordini")}`,
     recentFailed: "Non riuscito",
-    notificationsShortcut: "Le notifiche dei negozi si impostano in Impostazioni.",
     notificationsLink: "Apri le notifiche",
     syncNow: "Sincronizza ordini recenti",
     reimport: "Reimporta storico",
@@ -385,8 +383,6 @@ const it = {
     elsewhereBody:
       "Questo negozio eBay è collegato a un altro account FiscalBay. Accedi con quell’account oppure contatta l’assistenza.",
     ebayDown: "eBay non risponde: sincronizzazione e ricollegamento sono sospesi.",
-    planScope: (plan: string) =>
-      `Il piano ${plan} è del tuo spazio FiscalBay e vale per tutti i negozi collegati.`,
     requested: {
       queued: "Sincronizzazione richiesta: i nuovi ordini compaiono appena eBay risponde.",
       merged: "Sincronizzazione già richiesta: parte appena possibile.",
@@ -552,7 +548,6 @@ const it = {
     themeNote: "Nell’anteprima la scelta si azzera alla ricarica completa della pagina.",
     language: "Lingua",
     timeZone: "Fuso orario",
-    timeZoneHint: "Usato per date, cicli e orari delle notifiche.",
     timeZones: {
       "Europe/Rome": "Roma (Italia)",
       "Europe/London": "Londra (Regno Unito)",
@@ -775,7 +770,6 @@ const it = {
     email: "Email",
     password: "Password",
     signIn: "Accedi",
-    signInBody: "Entra con email e password, Google, eBay o passkey.",
     signUp: "Crea account",
     signUpBody: "Bastano pochi dati per iniziare.",
     registrationRestricted:
@@ -1189,8 +1183,7 @@ const en: AppCopy = {
     notificationsHeld: "Paused",
     notificationsHeldHint: "Paused until sync resumes",
     notificationsFree: "Telegram notifications for new orders are available with Premium.",
-    freeLimit:
-      "On the Free plan you have one active store, which you can replace every 90 days. Other stores are paused by the plan and their orders are unavailable. Manually pausing the chosen store keeps imported orders available.",
+    freeLimit: "The Free plan includes one active store.",
     open: (name) => `Open ${name}`,
     sectionConnection: "Connection",
     sectionSync: "Sync",
@@ -1215,7 +1208,6 @@ const en: AppCopy = {
         ? "Succeeded, no new orders"
         : `Succeeded, ${count} new ${plural(count, "order", "orders")}`,
     recentFailed: "Failed",
-    notificationsShortcut: "Store notifications are set in Settings.",
     notificationsLink: "Open notifications",
     syncNow: "Sync recent orders",
     reimport: "Re-import history",
@@ -1255,8 +1247,6 @@ const en: AppCopy = {
     elsewhereBody:
       "This eBay store is connected to another FiscalBay account. Sign in with that account or contact support.",
     ebayDown: "eBay is not responding: syncing and reconnecting are paused.",
-    planScope: (plan: string) =>
-      `The ${plan} plan belongs to your FiscalBay space and covers all connected stores.`,
     requested: {
       queued: "Sync requested: new orders appear as soon as eBay responds.",
       merged: "Sync already requested: it starts as soon as possible.",
@@ -1411,7 +1401,6 @@ const en: AppCopy = {
     themeNote: "In the preview, the choice resets on a full page reload.",
     language: "Language",
     timeZone: "Time zone",
-    timeZoneHint: "Used for dates, cycles and notification times.",
     timeZones: {
       "Europe/Rome": "Rome (Italy)",
       "Europe/London": "London (United Kingdom)",
@@ -1629,7 +1618,6 @@ const en: AppCopy = {
     email: "Email",
     password: "Password",
     signIn: "Sign in",
-    signInBody: "Use your email and password, Google, eBay or a passkey.",
     signUp: "Create account",
     signUpBody: "It only takes a few details to get started.",
     registrationRestricted: "Private test environment. Registration requires prior approval.",

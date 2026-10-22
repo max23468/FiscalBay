@@ -542,9 +542,7 @@ function AccessForms({
         <TabsTrigger value="registrati">{t.signUp}</TabsTrigger>
       </TabsList>
       <TabsContent value="accedi" keepMounted className={cn("grid gap-3", rise)}>
-        <p className="text-muted-foreground">
-          {recovering ? t.passwordRecoveryBody : t.signInBody}
-        </p>
+        {recovering ? <p className="text-muted-foreground">{t.passwordRecoveryBody}</p> : null}
         <form
           key={restored ? "restored" : "empty"}
           method="post"

@@ -693,7 +693,6 @@ function NotificationsSection({
       )}
       {settings ? (
         <p className="text-sm text-muted-foreground">
-          {t.stores.notificationsShortcut}{" "}
           <Link
             to={appHref(links, "impostazioni/notifiche")}
             className="font-medium text-foreground underline underline-offset-4 hover:text-muted-foreground"
@@ -736,17 +735,7 @@ export function StoresPage({
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
-        <PageTitle
-          icon={Store}
-          tone="teal"
-          description={
-            data.stores.length > 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {t.stores.planScope(premium ? t.settings.premium : t.settings.free)}
-              </p>
-            ) : undefined
-          }
-        >
+        <PageTitle icon={Store} tone="teal">
           {t.stores.title}
         </PageTitle>
         {data.stores.length > 0 ? connect : null}
@@ -821,15 +810,11 @@ function StoreSheet({ data, t, links }: { data: StoresPageData; t: AppCopy; link
 
 /** Limiti del Free validi per tutto lo spazio, sopra l'elenco. */
 function FreeNotes({ stores, t }: { stores: StoreView[]; t: AppCopy }) {
+  if (!stores.some((store) => store.pauseReason === "plan")) return null;
   return (
-    <div className="grid gap-2">
-      {stores.some((store) => store.pauseReason === "plan") ? (
-        <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
-          {t.stores.freeLimit}
-        </p>
-      ) : null}
-      <PremiumNote>{t.stores.notificationsFree}</PremiumNote>
-    </div>
+    <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
+      {t.stores.freeLimit}
+    </p>
   );
 }
 
