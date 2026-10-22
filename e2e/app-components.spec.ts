@@ -237,6 +237,41 @@ test.describe("miglioramenti account e negozi", () => {
       expect(await page.content()).not.toContain(testAccount.taxCodes.locked);
     });
     if (language === "it")
+      test("ordini reali: il dettaglio regge chiusura, collegamento diretto e ricarica come nell'anteprima", async ({
+        page,
+        context,
+        baseURL,
+      }) => {
+        await useLocalAccount(context, "member", baseURL!);
+        await page.goto("/app/ordini");
+        const title = page.getByRole("link", {
+          name: `Ordine ${testAccount.orders.unlocked}`,
+          exact: true,
+        });
+        const entries = await page.evaluate(() => history.length);
+        await title.click();
+        const dialog = page.getByRole("dialog");
+        await expect(dialog).toBeFocused();
+        await expect(dialog.getByText("Ultima modifica su eBay")).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(dialog).toBeHidden();
+        await expect(page).toHaveURL(/\/app\/ordini(?:\?vista=[0-9a-z]+)?$/u);
+        // Chiuso, il dettaglio lascia soltanto la voce in avanti: Indietro non lo riapre.
+        expect(await page.evaluate(() => history.length)).toBe(entries + 1);
+        await expect(title).toBeFocused();
+        const href = (await title.getAttribute("href"))!;
+        await page.goto(href);
+        await expect(dialog).toBeVisible();
+        await page.reload();
+        await expect(dialog).toBeVisible();
+        const direct = await page.evaluate(() => history.length);
+        await dialog.getByRole("button", { name: "Chiudi", exact: true }).click();
+        await expect(dialog).toBeHidden();
+        await expect(page).toHaveURL(/\/app\/ordini(?:\?vista=[0-9a-z]+)?$/u);
+        expect(await page.evaluate(() => history.length)).toBe(direct);
+        await expect(title).toBeFocused();
+      });
+    if (language === "it")
       test("ordini reali: sblocco confermato, quota e ripristino nelle impostazioni IT/EN", async ({
         page,
         context,
