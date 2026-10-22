@@ -62,7 +62,6 @@ export interface OrdersPageData extends SecondaryActions {
   /** Ordine aperto nel pannello, anche se fuori dalla pagina caricata. */
   detail: OrderView | null;
   stores: Array<{ id: string; name: string }>;
-  marketplaces: string[];
   account: OrdersAccount;
   notices: OrdersNotice[];
   sync: {
@@ -373,7 +372,7 @@ function LoadingGrid({ t }: { t: AppCopy }) {
       {/* Stessa riga dei filtri dell'elenco, così i dati non spostano la pagina. */}
       <div
         aria-hidden="true"
-        className="hidden gap-3 md:grid md:grid-cols-[repeat(4,minmax(0,1fr))_auto]"
+        className="hidden gap-3 md:grid md:grid-cols-[repeat(4,minmax(0,12rem))_1fr]"
       >
         {[0, 1, 2, 3].map((index) => (
           <div key={index} className="grid gap-2">
@@ -673,7 +672,6 @@ function OrdersList({
         empty={data.total === 0 || (!data.exportable && !orders.some(unlockable))}
         exportHref={data.exportable ? (data.total > 0 ? exportOrders() : null) : undefined}
         stores={data.stores}
-        marketplaces={data.marketplaces}
         plan={data.account.plan}
         confirmUnlock={data.confirmUnlock}
         t={t}

@@ -1,5 +1,3 @@
-import { z } from "zod";
-
 import { buyerSnapshotSchema, type BuyerSnapshot } from "./order-import.server";
 import { contactsView } from "../contact";
 import { maxListedOrders } from "../orders/order-list";
@@ -152,7 +150,6 @@ function summaryOf(row: {
 /** Criteri dell'elenco, già validati: un valore assente non filtra. */
 export type OrderCriteria = {
   storeId?: string;
-  marketplace?: string;
   /** Ordini creati da questo istante in poi. */
   since?: string;
   payment?: PaymentStatus;
@@ -227,7 +224,7 @@ const tokenMissingSql = `instr(COALESCE(o.search_text, ${unindexedSearchSql}), t
 
 /**
  * Ordini consultabili dello spazio: utente ?1, ambiente ?2, istante ?3, ID ?6, criteri da ?7,
- * acquisti non pagati ?14 e istantanea da ?15. Un ordine senza istante d'ingresso negli elenchi
+ * acquisti non pagati ?13 e istantanea da ?14. Un ordine senza istante d'ingresso negli elenchi
  * è stato letto prima che venisse registrato e vale come già presente. Ogni percorso (elenco, conteggio, facet, suggerimenti) applica gli
  * stessi controlli di negozio e conservazione. Un acquisto non pagato resta fuori, salvo con
  * il filtro «Non pagato» o quando l'elenco lo mostra (D180).
@@ -238,17 +235,16 @@ const visibleOrdersSql = `FROM workspace_members wm
   WHERE wm.user_id = ?1 AND s.ebay_environment = ?2 AND ${consultableStore("s")}
     AND o.retention_until > ?3
     AND o.merged_into IS NULL
-    AND (o.is_provisional = 0 OR ?10 = 'unpaid' OR ?14 = 1)
+    AND (o.is_provisional = 0 OR ?9 = 'unpaid' OR ?13 = 1)
     AND (?6 IS NULL OR o.id IN (SELECT value FROM json_each(?6)))
     AND (?7 IS NULL OR o.store_id = ?7)
-    AND (?8 IS NULL OR o.marketplace_id = ?8)
-    AND (?9 IS NULL OR o.creation_time >= ?9)
-    AND (?10 IS NULL OR ${paymentSql} = ?10)
-    AND (?11 IS NULL OR ${shippingSql} = ?11)
-    AND (?12 IS NULL OR ${fiscalSql} = ?12)
-    AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(?13, '[]')) token WHERE ${tokenMissingSql})
-    AND (?15 IS NULL OR o.listed_at IS NULL OR o.listed_at <= ?15)
-    AND (?16 IS NULL OR o.listed_at > ?16)`;
+    AND (?8 IS NULL OR o.creation_time >= ?8)
+    AND (?9 IS NULL OR ${paymentSql} = ?9)
+    AND (?10 IS NULL OR ${shippingSql} = ?10)
+    AND (?11 IS NULL OR ${fiscalSql} = ?11)
+    AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(?12, '[]')) token WHERE ${tokenMissingSql})
+    AND (?14 IS NULL OR o.listed_at IS NULL OR o.listed_at <= ?14)
+    AND (?15 IS NULL OR o.listed_at > ?15)`;
 
 function visibleOrdersParams(
   userId: string,
@@ -267,7 +263,6 @@ function visibleOrdersParams(
     now.toISOString(),
     ids ? JSON.stringify(ids) : null,
     criteria.storeId ?? null,
-    criteria.marketplace ?? null,
     criteria.since ?? null,
     criteria.payment ?? null,
     criteria.shipping ?? null,
@@ -296,32 +291,22 @@ export async function countVisibleOrders(
 }
 
 /**
- * Dati dell'intero elenco consultabile, indipendenti dai criteri: quanti ordini esistono, i
- * marketplace da offrire fra i filtri e se qualche ordine ha un dato da sbloccare.
+ * Dati dell'intero elenco consultabile, indipendenti dai criteri: quanti ordini esistono e se
+ * qualche ordine ha un dato da sbloccare.
  */
 export async function visibleOrderFacets(
   db: D1Database,
   userId: string,
   ebayEnvironment: "production" | "sandbox",
   now: Date,
-): Promise<{ total: number; marketplaces: string[]; locked: boolean }> {
+): Promise<{ total: number; locked: boolean }> {
   const row = await db
-    .prepare(
-      `SELECT count(*) AS total,
-              json_group_array(DISTINCT o.marketplace_id) FILTER (WHERE o.marketplace_id IS NOT NULL)
-                AS marketplaces,
-              MAX(${fiscalSql} = 'locked') AS locked
-         ${visibleOrdersSql}`,
-    )
+    .prepare(`SELECT count(*) AS total, MAX(${fiscalSql} = 'locked') AS locked ${visibleOrdersSql}`)
     .bind(...visibleOrdersParams(userId, ebayEnvironment, now, 0, undefined, {}))
-    .first<{ total: number; marketplaces: string; locked: number | null }>();
-  // Un aggregato restituisce sempre una riga; senza ordini l'elenco è vuoto e `locked` è null.
-  const { total, marketplaces, locked } = row!;
-  return {
-    total,
-    marketplaces: z.array(z.string()).parse(JSON.parse(marketplaces)).sort(),
-    locked: locked === 1,
-  };
+    .first<{ total: number; locked: number | null }>();
+  // Un aggregato restituisce sempre una riga; senza ordini `locked` è null.
+  const { total, locked } = row!;
+  return { total, locked: locked === 1 };
 }
 
 /** Ordine proposto dalla ricerca della barra superiore, con i soli dati non fiscali. */
@@ -740,7 +725,6 @@ export function orderCriteria(
   };
   return {
     storeId: value("negozio"),
-    marketplace: value("marketplace"),
     since: days ? new Date(now.getTime() - Number(days) * 86_400_000).toISOString() : undefined,
     payment: known("pagamento", paymentStatuses),
     shipping: known("spedizione", shippingStatuses),

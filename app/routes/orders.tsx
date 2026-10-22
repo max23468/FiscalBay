@@ -145,7 +145,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     opened ? count({ ...filters, listedAfter: snapshot.toISOString() }) : 0,
     verified
       ? measure("d1", "orders", () => visibleOrderFacets(env.DB, userId, ebayEnvironment, now))
-      : { total: 0, marketplaces: [], locked: false },
+      : { total: 0, locked: false },
     verified && requested ? read([requested]) : [],
   ]);
   const notice = accessNotice(search, language);
@@ -218,7 +218,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     search: searchText,
     detail,
     stores: filterStores,
-    marketplaces: facets.marketplaces,
     account: {
       plan: premium ? "premium" : "free",
       // Prima del primo collegamento nessun ciclo è avviato e nessuno sblocco è disponibile.

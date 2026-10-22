@@ -66,11 +66,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     search: query,
     detail,
     stores,
-    marketplaces: [
-      ...new Set(
-        scenario.orders.flatMap((order) => (order.marketplace ? [order.marketplace] : [])),
-      ),
-    ],
     account: scenario.account,
     notices: scenario.notices,
     sync: {
