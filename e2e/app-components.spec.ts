@@ -87,6 +87,20 @@ test.describe("miglioramenti account e negozi", () => {
       expect(
         await page.evaluate(() => (window as Window & { copiedText?: string }).copiedText),
       ).toBe(`Via del Corso 1\n00186 Roma (RM)\n${it ? "Italia" : "Italy"}`);
+      // La copia aggregata attraversa il loader reale, senza includere il suggerimento fiscale.
+      await dialog
+        .getByRole("button", {
+          name: it ? "Copia dati di fatturazione" : "Copy billing details",
+          exact: true,
+        })
+        .click();
+      const billing = await page.evaluate(
+        () => (window as Window & { copiedText?: string }).copiedText,
+      );
+      expect(billing).toContain(`Via del Corso 1\n00186 Roma (RM)\n${it ? "Italia" : "Italy"}`);
+      expect(billing).not.toContain("RSSMRA80A01H501U");
+      expect(billing).not.toContain("Acquirente.Collaudo@example.invalid");
+      expect(billing).not.toContain("+39");
       // La richiesta si apre come email già compilata nel programma di posta.
       const request = dialog.getByRole("link", {
         name: it ? "Scrivi all’acquirente via email" : "Email the buyer",
@@ -155,6 +169,102 @@ test.describe("miglioramenti account e negozi", () => {
       ).toBeVisible();
       await expect(card.getByText("RSSMRA80A01H501U", { exact: true })).toBeVisible();
     });
+    test(`fatturazione copiabile, campi mascherati e testi lunghi ${language}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width: it ? 390 : 1280, height: 900 });
+      await page.addInitScript(() => {
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: {
+            writeText: async (value: string) => {
+              (window as Window & { copiedText?: string }).copiedText = value;
+            },
+          },
+        });
+      });
+      await open(page, `${prefix}/anteprima/ordini/ord-09`, "dati-discordanti");
+      const dialog = page.getByRole("dialog");
+      const copy = dialog.getByRole("button", {
+        name: it ? "Copia dati di fatturazione" : "Copy billing details",
+        exact: true,
+      });
+      await copy.focus();
+      await page.keyboard.press("Enter");
+      const copied = await page.evaluate(
+        () => (window as Window & { copiedText?: string }).copiedText,
+      );
+      expect(copied).toContain(
+        `Via dell'Orto 12B\n26866 Sant'Angelo Lodigiano (LO)\n${it ? "Italia" : "Italy"}`,
+      );
+      expect(copied).toContain("Codice Fiscale: MRNSRA90L41H50LE");
+      await expect(copy).toHaveAttribute("data-state", "copied");
+      await page.screenshot({ path: testInfo.outputPath("billing-details.png") });
+      await expect(dialog.locator("time")).not.toContainText(/Europe\/Rome|GMT/u);
+      await expect(
+        dialog.getByText(
+          it
+            ? "Non possiamo verificare che il codice corrisponda al nome dell’acquirente."
+            : "We cannot verify that the code matches the buyer’s name.",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await page.evaluate(() =>
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: {
+            writeText: async () => {
+              throw new Error("denied");
+            },
+          },
+        }),
+      );
+      await copy.click();
+      await expect(
+        dialog.getByRole("status").filter({ hasText: it ? /Copia non riuscita/ : /Copy failed/ }),
+      ).toBeVisible();
+
+      await open(page, `${prefix}/anteprima/ordini/ord-03`, "dati-discordanti");
+      await expect(
+        dialog.getByText(it ? "Mascherato da eBay" : "Masked by eBay", { exact: true }),
+      ).toHaveCount(5);
+      await expect(
+        dialog.getByRole("button", {
+          name: it ? "Copia dati di fatturazione" : "Copy billing details",
+          exact: true,
+        }),
+      ).toHaveCount(0);
+      await expect(dialog.locator('a[href^="tel:"], a[href^="mailto:"]')).toHaveCount(0);
+
+      await open(page, `${prefix}/anteprima/ordini/ord-02`, "dati-discordanti");
+      await expect(
+        dialog.getByRole("definition").filter({ hasText: /^Maria Rossi$/u }),
+      ).toBeVisible();
+      await expect.poll(() => noPageOverflow(page)).toBe(true);
+      expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+        true,
+      );
+      const addressLine = `Via ${"esempio".repeat(40).replace(/^e/u, "E")} 12B`;
+      await expect(dialog.getByText(addressLine, { exact: true })).toBeVisible();
+      await page.evaluate(() =>
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: {
+            writeText: async (value: string) => {
+              (window as Window & { copiedText?: string }).copiedText = value;
+            },
+          },
+        }),
+      );
+      await copy.click();
+      const block = await page.evaluate(
+        () => (window as Window & { copiedText?: string }).copiedText,
+      );
+      expect(block).toBe(
+        `Maria Rossi\n${addressLine}\n00100 Roma (RM)\n${it ? "Italia" : "Italy"}\nCodice Fiscale: RSSMRA80A41H501Y`,
+      );
+      await page.screenshot({ path: testInfo.outputPath("billing-long-text.png") });
+    });
     test(`anteprima: suggerimento e messaggio coerenti con gli ordini reali ${language}`, async ({
       page,
     }) => {
@@ -213,8 +323,8 @@ test.describe("miglioramenti account e negozi", () => {
         page
           .getByText(
             it
-              ? "Codice omocodico o nome non univoco: la corrispondenza con il nome non è verificabile."
-              : "Omocodia variant or ambiguous name: the code cannot be matched to the name.",
+              ? "Non possiamo verificare che il codice corrisponda al nome dell’acquirente."
+              : "We cannot verify that the code matches the buyer’s name.",
           )
           .first(),
       ).toBeVisible();

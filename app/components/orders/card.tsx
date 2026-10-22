@@ -19,7 +19,7 @@ import {
 import type { AppCopy } from "../../app-copy";
 import { formatAmount, type Language } from "../../i18n";
 import {
-  countryName,
+  addressRows,
   formatDate,
   marketplaceLabel,
   type AddressView,
@@ -28,7 +28,7 @@ import {
 } from "../../view-models";
 import { CopyButton } from "~/components/tax-code";
 import { FiscalCodes, FiscalNotes, type FiscalProps } from "./fiscal";
-import { ebayOrderHref } from "./labels";
+import { ebayOrderHref, missingContact } from "./labels";
 import { buyerLabel, paymentLabel, shippingLabel, type PillTone } from "./status";
 
 /** Azioni secondarie disponibili nella pagina: eBay ed esportazione del singolo ordine. */
@@ -51,17 +51,7 @@ const coarseTarget =
 const enterStep = 40;
 const maxEnterSteps = 6;
 
-/** Righe dell'indirizzo, già nella forma mostrata dal modello di vista. */
-function addressRows(address: AddressView, language: Language) {
-  const province = address.province ? ` (${address.province})` : "";
-  return [
-    address.line,
-    `${address.postalCode} ${address.city}${province}`.trim(),
-    countryName(address.countryCode, language),
-  ];
-}
-
-export function AddressLines({
+function AddressLines({
   address,
   language,
   copy,
@@ -71,27 +61,49 @@ export function AddressLines({
   /** Etichette del pulsante Copia; senza, l'indirizzo è soltanto mostrato. */
   copy?: CopyLabels;
 }) {
-  const [line, locality, country] = addressRows(address, language);
+  const rows = addressRows(address, language);
+  const [first, second, third] = rows;
   return (
-    <span className="inline-flex max-w-full items-start gap-1">
-      <span className="min-w-0">
-        <span className="block">{line}</span>
-        <span className="block">
-          {locality}, {country}
-        </span>
+    <span className="inline-flex max-w-full flex-wrap items-start gap-1">
+      <span className="min-w-0 [overflow-wrap:anywhere]">
+        {first ? <span className="block">{first}</span> : null}
+        {second ? <span className="block">{second}</span> : null}
+        {third ? <span className="block">{third}</span> : null}
       </span>
-      {copy ? (
-        <CopyButton
-          value={addressRows(address, language).join("\n")}
-          labels={copy}
-          tone="neutral"
-        />
-      ) : null}
+      {copy ? <CopyButton value={rows.join("\n")} labels={copy} tone="neutral" /> : null}
     </span>
   );
 }
 
 export type CopyLabels = { copy: string; copied: string; copyFailed: string };
+
+/** Indirizzo anche parziale; l'assenza della via mascherata resta esplicita. */
+export function BuyerAddress({
+  order,
+  t,
+  language,
+  copy,
+}: {
+  order: OrderView;
+  t: AppCopy;
+  language: Language;
+  copy?: CopyLabels;
+}) {
+  const address = order.contacts.billingAddress;
+  const masked = order.maskedContacts?.includes("billingAddress");
+  if (!address)
+    return (
+      <span className="text-muted-foreground">{missingContact(order, "billingAddress", t)}</span>
+    );
+  return (
+    <>
+      <AddressLines address={address} language={language} copy={masked ? undefined : copy} />
+      {masked ? (
+        <span className="block text-muted-foreground">{t.orders.maskedContact}</span>
+      ) : null}
+    </>
+  );
+}
 
 const contactLink =
   "rounded-sm underline decoration-muted-foreground/40 underline-offset-4 outline-none hover:decoration-current focus-visible:ring-2 focus-visible:ring-ring";
@@ -109,10 +121,13 @@ export function PhoneNumber({
   view: ContactsView["phone"];
   copy?: CopyLabels;
 }) {
-  if (!view) return <span className="font-code break-words">{phone}</span>;
+  if (!view) return <span className="font-code [overflow-wrap:anywhere]">{phone}</span>;
   return (
-    <span className="inline-flex max-w-full items-center gap-1">
-      <a href={`tel:${view.international}`} className={cn("font-code", contactLink)}>
+    <span className="inline-flex max-w-full flex-wrap items-center gap-1">
+      <a
+        href={`tel:${view.international}`}
+        className={cn("font-code min-w-0 [overflow-wrap:anywhere]", contactLink)}
+      >
         {view.display}
       </a>
       {copy ? <CopyButton value={view.international} labels={copy} tone="neutral" /> : null}
@@ -132,7 +147,7 @@ export function EmailLink({
 }) {
   if (!view) return <EmailAddress email={email} />;
   return (
-    <span className="inline-flex max-w-full items-center gap-1">
+    <span className="inline-flex max-w-full flex-wrap items-center gap-1">
       <a
         href={`mailto:${view.address}`}
         className="group/email min-w-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -204,29 +219,32 @@ function BuyerContacts({
   t: AppCopy;
   language: Language;
 }) {
-  const missing = <span className="text-muted-foreground">{t.orders.notProvided}</span>;
   return (
     <dl className="grid gap-x-4 gap-y-2 text-sm leading-snug sm:col-span-2 sm:grid-cols-subgrid">
       <div className="grid content-start gap-0.5">
         <dt className="text-xs font-medium text-muted-foreground">{t.orders.billingAddress}</dt>
-        <dd className="text-pretty">
-          {order.contacts.billingAddress ? (
-            <AddressLines address={order.contacts.billingAddress} language={language} />
-          ) : (
-            missing
-          )}
+        <dd className="min-w-0 text-pretty [overflow-wrap:anywhere]">
+          <BuyerAddress order={order} t={t} language={language} />
         </dd>
       </div>
       <div className="grid content-start gap-0.5">
         <dt className="text-xs font-medium text-muted-foreground">{t.orders.phone}</dt>
-        <dd>
-          {order.phone ? <PhoneNumber phone={order.phone} view={order.contacts.phone} /> : missing}
+        <dd className="min-w-0 [overflow-wrap:anywhere]">
+          {order.phone ? (
+            <PhoneNumber phone={order.phone} view={order.contacts.phone} />
+          ) : (
+            <span className="text-muted-foreground">{missingContact(order, "phone", t)}</span>
+          )}
         </dd>
       </div>
       <div className="grid min-w-0 content-start gap-0.5 sm:col-span-2">
         <dt className="text-xs font-medium text-muted-foreground">{t.orders.email}</dt>
         <dd>
-          {order.email ? <EmailLink email={order.email} view={order.contacts.email} /> : missing}
+          {order.email ? (
+            <EmailLink email={order.email} view={order.contacts.email} />
+          ) : (
+            <span className="text-muted-foreground">{missingContact(order, "email", t)}</span>
+          )}
         </dd>
       </div>
     </dl>
@@ -416,7 +434,7 @@ export function OrderCard({
       <div className="grid content-start gap-x-4 gap-y-3 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_14.5rem]">
         <p className="grid min-w-0 content-start gap-1.5">
           <span className="text-xs font-medium text-muted-foreground">{t.order.buyer}</span>
-          <span className="text-sm leading-snug font-medium text-pretty break-words sm:min-h-10">
+          <span className="text-sm leading-snug font-medium text-pretty [overflow-wrap:anywhere] sm:min-h-10">
             {buyerLabel(order, t)}
           </span>
         </p>

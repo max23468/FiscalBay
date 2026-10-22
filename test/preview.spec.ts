@@ -58,7 +58,7 @@ describe("stato sintetico dell'anteprima", () => {
                 issuingCountry: "IT",
                 value: identifier.value,
               },
-              [order.buyerName, order.shipTo.name],
+              [order.buyerName, order.shipTo?.name],
             ),
             `${id}/${order.id}`,
           ).toBe(identifier.quality);

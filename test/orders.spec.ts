@@ -30,8 +30,10 @@ import { action as securityAction } from "../app/routes/security";
 import { now, resetDatabase, seed } from "./database-fixtures";
 import { syntheticProfile, verifiedSession } from "./account-fixtures";
 import { displayTaxValue } from "../app/tax-quality";
-import { fiscalSituation, itemPrice } from "../app/view-models";
-import { addressCase, emailView, phoneView } from "../app/contact";
+import { addressRows, fiscalSituation, itemPrice } from "../app/view-models";
+import { addressCase, buyerNameView, contactsView, emailView, phoneView } from "../app/contact";
+import { billingCopyText, missingContact } from "../app/components/orders/labels";
+import { appCopy } from "../app/app-copy";
 import { settle } from "../app/settle.server";
 import { requestOrderRead } from "../app/domain/order-sync.server";
 
@@ -2014,7 +2016,7 @@ describe("vista condivisa e criteri degli ordini", () => {
       ],
     });
     expect(order.shipping).toEqual({ status: "shipped" });
-    // Indirizzo senza città o Paese, o senza righe: nessun indirizzo di fatturazione.
+    // Un indirizzo parziale conserva i campi disponibili senza dedurre quelli assenti.
     for (const billing of [
       { ...address, city: null },
       { ...address, countryCode: null },
@@ -2022,7 +2024,23 @@ describe("vista condivisa e criteri degli ordini", () => {
     ])
       expect(
         view({ summary: summary({ buyer: buyer({ billingAddress: billing }) }) }).billingAddress,
-      ).toBeNull();
+      ).not.toBeNull();
+    expect(
+      view({
+        summary: summary({
+          buyer: buyer({ billingAddress: { ...address, city: null, countryCode: null } }),
+        }),
+      }).billingAddress,
+    ).toMatchObject({ line: "Via Roma 1", city: "", countryCode: "" });
+    expect(
+      view({
+        summary: summary({
+          buyer: buyer({
+            billingAddress: { ...address, addressLine1: "  ", city: " ", countryCode: "  " },
+          }),
+        }),
+      }).billingAddress,
+    ).toBeNull();
     expect(
       view({
         summary: summary({
@@ -2096,16 +2114,190 @@ describe("vista condivisa e criteri degli ordini", () => {
     expect(emailView("acquisti@notebay.invalid")?.relay).toBe(false);
     for (const raw of ["mario rossi@esempio.invalid", "@esempio.invalid", "mario@", "mario"])
       expect(emailView(raw)).toBeNull();
-    // Indirizzo: solo il testo tutto maiuscolo riceve le iniziali.
+    // Indirizzo: maiuscolo e minuscolo uniformi, grafia mista ed estera conservate.
     expect(addressCase("VIA DELL'ORTO 12B")).toBe("Via dell'Orto 12B");
     expect(addressCase("SANT'ANGELO LODIGIANO")).toBe("Sant'Angelo Lodigiano");
     expect(addressCase("VIA XX SETTEMBRE 14, C/O ROSSI SNC")).toBe(
       "Via XX Settembre 14, c/o Rossi SNC",
     );
     expect(addressCase("PIAZZA DI SPAGNA E DEI MILLE")).toBe("Piazza di Spagna e dei Mille");
-    expect(addressCase("DI FRONTE ALLA STAZIONE")).toBe("Di Fronte Alla Stazione");
+    expect(addressCase("DI FRONTE ALLA STAZIONE")).toBe("Di Fronte alla Stazione");
     expect(addressCase("Via del Corso 1")).toBe("Via del Corso 1");
     expect(addressCase("12345")).toBe("12345");
+    expect(addressCase("  via   dell’orto 12B ")).toBe("Via dell’Orto 12B");
+    expect(addressCase("via xx settembre 14, c/o rossi snc")).toBe(
+      "Via XX Settembre 14, c/o Rossi SNC",
+    );
+    expect(addressCase("via alla stazione 12a")).toBe("Via alla Stazione 12a");
+    expect(addressCase("Via McDonald 12B")).toBe("Via McDonald 12B");
+    expect(addressCase("HAUPTSTRASSE 12", "DE")).toBe("HAUPTSTRASSE 12");
+    expect(addressCase("ΑΘΗΝΑ", "GR")).toBe("ΑΘΗΝΑ");
+    for (const name of ["ACME SRL", "eBay Italia", "McDonald", "MARIO ROSSI", "mario rossi"])
+      expect(buyerNameView(`  ${name}  `)).toBe(name);
+    expect(buyerNameView(" Mario\n Rossi ")).toBe("Mario Rossi");
+    expect(buyerNameView("  ")).toBeNull();
+    expect(buyerNameView(null)).toBeNull();
+    for (const raw of ["333..1234567", "333***4567", "1234567", "+44 (0)20 1234 5678"])
+      expect(phoneView(raw, "IT")).toBeNull();
+    expect(emailView("mario@rossi@example.invalid")).toBeNull();
+    expect(emailView("m***@example.invalid")).toBeNull();
+    const original = {
+      phone: "3331234567",
+      email: null,
+      shipTo: null,
+      billingAddress: {
+        line: "  via roma 12B  ",
+        postalCode: " 00100 ",
+        city: " roma ",
+        province: " rm ",
+        countryCode: " it ",
+      },
+    };
+    const formatted = contactsView(original);
+    expect(addressRows(formatted.billingAddress!, "it")).toEqual([
+      "Via Roma 12B",
+      "00100 Roma (RM)",
+      "Italia",
+    ]);
+    expect(original.billingAddress.line).toBe("  via roma 12B  ");
+    const foreign = contactsView({
+      ...original,
+      billingAddress: {
+        ...original.billingAddress,
+        line: "  Calle   Mayor 1 ",
+        city: "Madrid",
+        province: "Comunidad de Madrid",
+        countryCode: "ES",
+      },
+    });
+    expect(foreign.billingAddress?.province).toBe("Comunidad de Madrid");
+    expect(
+      addressRows(
+        {
+          ...formatted.billingAddress!,
+          line: "",
+          city: "",
+          province: null,
+          countryCode: "",
+          postalCode: "00100",
+        },
+        "en",
+      ),
+    ).toEqual(["00100"]);
+  });
+
+  it("distingue campi mascherati e assenti e copia soltanto i dati fiscali accessibili", () => {
+    const masked = view({
+      summary: {
+        ...base.summary,
+        buyer: {
+          username: null,
+          name: null,
+          phone: null,
+          email: null,
+          billingAddress: null,
+          shipTo: null,
+          masked: ["name", "phone", "email", "billingAddress.addressLine1", "shipTo.name"],
+        },
+      },
+    });
+    expect(masked.maskedContacts).toEqual([
+      "name",
+      "email",
+      "phone",
+      "billingAddress",
+      "recipient",
+    ]);
+    expect(missingContact(masked, "email", appCopy.it)).toBe("Mascherato da eBay");
+    expect(missingContact(view({}), "email", appCopy.en)).toBe("Not provided by eBay");
+    expect(billingCopyText(masked, "it", appCopy.it)).toBe("");
+    const onlyEmailMasked = view({
+      summary: {
+        ...base.summary,
+        buyer: {
+          ...base.summary.buyer!,
+          name: null,
+          phone: null,
+          email: null,
+          shipTo: null,
+          masked: ["email"],
+        },
+      },
+    });
+    expect(onlyEmailMasked.maskedContacts).toEqual(["email"]);
+    const recipientPhoneMasked = view({
+      summary: {
+        ...base.summary,
+        buyer: {
+          ...base.summary.buyer!,
+          phone: null,
+          shipTo: { name: "Mario", phone: null, address: null },
+          masked: ["shipTo.phone"],
+        },
+      },
+    });
+    expect(recipientPhoneMasked.maskedContacts).toEqual(["phone"]);
+    const historical = view({
+      summary: {
+        ...base.summary,
+        buyer: {
+          ...base.summary.buyer!,
+          name: "Mario Rossi",
+          phone: null,
+          email: "buyer@example.invalid",
+          masked: ["name", "email", "phone", "shipTo.name"],
+          shipTo: { name: "Mario", phone: "3331234567", address: null },
+        },
+      },
+    });
+    expect(historical.maskedContacts).toEqual([]);
+    const order = {
+      ...historical,
+      buyerName: "  Mario   Rossi  ",
+      contacts: {
+        ...historical.contacts,
+        billingAddress: {
+          line: "Via Roma 1",
+          postalCode: "00100",
+          city: "Roma",
+          province: "RM",
+          countryCode: "IT",
+        },
+      },
+    };
+    const prefix = "Mario Rossi\nVia Roma 1\n00100 Roma (RM)\nItalia";
+    expect(billingCopyText(order, "it", appCopy.it)).toBe(prefix);
+    for (const state of ["checking", "error", "missing"] as const)
+      expect(billingCopyText({ ...order, fiscal: { state } }, "it", appCopy.it)).toBe(prefix);
+    const available = {
+      ...order,
+      fiscal: {
+        state: "available" as const,
+        identifiers: [
+          { type: "CF" as const, value: "RSSMRA80A01H501U", quality: "valid" as const },
+          { type: "PIVA" as const, value: "12345678901", quality: "unchecked" as const },
+          {
+            type: "OTHER" as const,
+            typeLabel: "NIF",
+            value: "123X",
+            quality: "unchecked" as const,
+          },
+        ],
+      },
+    };
+    expect(billingCopyText(available, "it", appCopy.it)).toBe(
+      `${prefix}\nCodice Fiscale: RSSMRA80A01H501U\nPartita IVA: 12345678901\nNIF: 123X`,
+    );
+    expect(billingCopyText(available, "en", appCopy.en)).toContain(
+      "Italy\nCodice Fiscale: RSSMRA80A01H501U",
+    );
+    expect(
+      billingCopyText(
+        { ...order, buyerName: null, contacts: { ...order.contacts, billingAddress: null } },
+        "it",
+        appCopy.it,
+      ),
+    ).toBe("");
   });
 
   it("legge i criteri dell'indirizzo con i soli valori previsti", () => {

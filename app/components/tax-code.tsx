@@ -70,7 +70,7 @@ export function TaxCode({
     >
       <span
         className={cn(
-          "font-code whitespace-nowrap font-semibold",
+          "font-code min-w-0 [overflow-wrap:anywhere] font-semibold",
           warning ? "text-warning" : "text-info",
           reveal &&
             "inline-block animate-[value-reveal_var(--duration-quick)_ease-out_both] motion-reduce:animate-none",
@@ -94,10 +94,13 @@ export function CopyButton({
   value,
   labels,
   tone = "info",
+  text,
 }: {
   value: string;
   labels: Pick<Labels, "copy" | "copied" | "copyFailed">;
   tone?: keyof typeof copyTones;
+  /** Testo visibile per le azioni di copia di un blocco di dati. */
+  text?: string;
 }) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -120,8 +123,8 @@ export function CopyButton({
     <>
       <Button
         type="button"
-        variant="ghost"
-        size="icon-sm"
+        variant={text ? "outline" : "ghost"}
+        size={text ? "sm" : "icon-sm"}
         aria-label={labels.copy}
         data-state={state}
         onClick={copy}
@@ -137,6 +140,7 @@ export function CopyButton({
             className="absolute inset-0 scale-25 text-success opacity-0 blur-[2px] transition-[opacity,scale,filter] duration-(--duration-fast) ease-in-out group-data-[state=copied]/copy:scale-100 group-data-[state=copied]/copy:opacity-100 group-data-[state=copied]/copy:blur-none"
           />
         </span>
+        {text}
       </Button>
       <span
         role="status"

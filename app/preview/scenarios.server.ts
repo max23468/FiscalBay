@@ -117,7 +117,7 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
     it: {
       name: "Dati discordanti",
       focus:
-        "Codice aggiornato o nascosto da eBay, lettura non riuscita, nome non coerente, omocodia, suggerimenti in conflitto, un ordine da verificare e contatti in forme diverse.",
+        "Codice aggiornato o nascosto da eBay, lettura non riuscita, nome non coerente o non verificabile, suggerimenti in conflitto, un ordine da verificare e contatti in forme diverse.",
     },
     en: {
       name: "Conflicting data",
@@ -1167,6 +1167,14 @@ export function loadScenario(
           if (seed.id === "ord-02")
             return {
               ...seed,
+              buyerName: "  Maria   Rossi  ",
+              billingAddress: {
+                line: `via ${"esempio".repeat(40)} 12B`,
+                city: "roma",
+                postalCode: "00100",
+                province: "rm",
+                countryCode: "IT",
+              },
               fiscal: {
                 state: "available",
                 identifiers: [{ ...cf("RSSMRA80A41H501Y"), updated: true }],
@@ -1186,7 +1194,19 @@ export function loadScenario(
               phone: "333 000 1009",
               fiscal: { state: "available", identifiers: [cf("MRNSRA90L41H50LE", "unverifiable")] },
             };
-          if (seed.id === "ord-03") return { ...seed, reconciliationIssue: true };
+          if (seed.id === "ord-03")
+            return {
+              ...seed,
+              reconciliationIssue: true,
+              buyerName: null,
+              buyerUsername: null,
+              phone: null,
+              email: null,
+              billingAddress: null,
+              shipTo: null,
+              maskedContacts: ["name", "phone", "email", "billingAddress", "recipient"],
+              fiscal: { state: "missing", reason: "masked" },
+            };
           // Valori letti in precedenza e condizione dell'ultima lettura.
           const notice = readNotices[seed.id];
           if (notice && seed.fiscal.state === "available")

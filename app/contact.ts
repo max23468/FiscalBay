@@ -63,19 +63,24 @@ export interface PhoneView {
  * numero con lettere, troppo corto o di un Paese senza prefisso noto resta null.
  */
 export function phoneView(raw: string, country: string | null): PhoneView | null {
+  // Asterischi e punti di mascheramento non sono separatori di un numero.
+  if (/[.*•…]{2,}/u.test(raw)) return null;
   const compact = raw.trim().replace(/[\s.\-()/]/gu, "");
   if (!/^\+?\d+$/u.test(compact)) return null;
   let digits: string;
   if (compact.startsWith("+")) digits = compact.slice(1);
   else if (compact.startsWith("00")) digits = compact.slice(2);
   else {
-    const code = country ? callingCodes[country.toUpperCase()] : undefined;
+    const code = country ? callingCodes[country.trim().toUpperCase()] : undefined;
     if (!code) return null;
+    if (code === "39" && !/^(?:0\d{5,10}|3\d{8,9})$/u.test(compact)) return null;
     digits = code + (keepsLeadingZero.has(code) ? compact : compact.replace(/^0/u, ""));
   }
   if (digits.length < 8 || digits.length > 15 || digits.startsWith("0")) return null;
   const code = knownCodes.find((candidate) => digits.startsWith(candidate));
   const national = code ? digits.slice(code.length) : null;
+  // Il prefisso opzionale «(0)» estero è ambiguo: non costruire una chiamata diversa.
+  if (/\(0\)/u.test(raw) && code && !keepsLeadingZero.has(code)) return null;
   const international = `+${digits}`;
   // Cellulari italiani a dieci cifre: 333 123 4567.
   if (code === "39" && national && /^3\d{9}$/u.test(national))
@@ -109,9 +114,9 @@ export interface EmailView {
 export function emailView(raw: string): EmailView | null {
   const value = raw.trim();
   const separator = value.lastIndexOf("@");
-  if (separator < 1 || /\s/u.test(value)) return null;
+  if (separator < 1 || /[\s@*•…]/u.test(value.slice(0, separator))) return null;
   const domain = value.slice(separator + 1).toLowerCase();
-  if (!/^[^@]+\.[a-z]{2,}$/u.test(domain)) return null;
+  if (!/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/u.test(domain)) return null;
   return {
     address: `${value.slice(0, separator)}@${domain}`,
     relay: /(?:^|\.)ebay\.[a-z.]+$/u.test(domain),
@@ -119,7 +124,25 @@ export function emailView(raw: string): EmailView | null {
 }
 
 /** Parole che restano minuscole dentro un indirizzo, salvo all'inizio. */
-const lowerWords = new Set(["di", "del", "dello", "della", "dei", "degli", "delle", "e", "ed"]);
+const lowerWords = new Set([
+  "di",
+  "del",
+  "dello",
+  "della",
+  "dei",
+  "degli",
+  "delle",
+  "da",
+  "dal",
+  "dalla",
+  "alla",
+  "alle",
+  "al",
+  "ai",
+  "agli",
+  "e",
+  "ed",
+]);
 /** Sigle che restano maiuscole. */
 const upperWords = new Set(["snc", "srl", "srls", "spa", "sas", "ss", "sp", "sr", "km"]);
 const romanNumeral = /^[ivxlcdm]+$/u;
@@ -128,13 +151,27 @@ function capitalize(part: string) {
   return part.charAt(0).toUpperCase() + part.slice(1);
 }
 
+/** Spazi uniformi nella sola presentazione, anche per nomi e ragioni sociali. */
+export function contactText(text: string): string {
+  return text.replace(/\s+/gu, " ").trim();
+}
+
 /**
- * Testo scritto tutto in maiuscolo con l'iniziale maiuscola per parola («VIA DELL'ORTO 12B» →
- * «Via dell'Orto 12B»). Un testo che contiene già minuscole resta com'è; parole con cifre,
- * sigle note, numeri romani e «c/o» conservano la loro forma.
+ * La fonte non distingue persone e aziende: preservare la grafia del nome, incluse sigle e
+ * marchi. Non dedurre nome/cognome né usare identificativi fiscali per correggerli.
  */
-export function addressCase(text: string): string {
-  if (!/\p{Lu}/u.test(text) || /\p{Ll}/u.test(text)) return text;
+export function buyerNameView(name: string | null): string | null {
+  return name ? contactText(name) || null : null;
+}
+
+/**
+ * Indirizzo italiano tutto maiuscolo o minuscolo con iniziali leggibili. La grafia mista e
+ * quella estera restano intatte; sigle, numeri romani e civici non perdono informazioni.
+ */
+export function addressCase(raw: string, country = "IT"): string {
+  const text = contactText(raw);
+  const words = text.replace(/\S*\d\S*|\bc\/o\b/giu, "");
+  if (country !== "IT" || (/\p{Lu}/u.test(words) && /\p{Ll}/u.test(words))) return text;
   return text
     .split(/(\s+)/u)
     .map((word, index) => {
@@ -143,8 +180,8 @@ export function addressCase(text: string): string {
       const bare = lower.replace(/[.,;]+$/u, "");
       if (bare === "c/o") return lower;
       if (index > 0 && lowerWords.has(bare)) return lower;
-      if (upperWords.has(bare.replaceAll(".", ""))) return word;
-      if (romanNumeral.test(bare) && !lowerWords.has(bare)) return word;
+      if (upperWords.has(bare.replaceAll(".", ""))) return word.toUpperCase();
+      if (romanNumeral.test(bare) && !lowerWords.has(bare)) return word.toUpperCase();
       // Apostrofi e trattini separano parti con la propria iniziale: Sant'Angelo, Dell'Orto.
       return lower
         .split(/(['’-])/u)
@@ -169,17 +206,22 @@ export function contactsView(order: {
   shipTo: { country: string | null } | null;
 }): ContactsView {
   const address = order.billingAddress;
+  const country = address ? contactText(address.countryCode).toUpperCase() : "";
   return {
-    phone: order.phone
-      ? phoneView(order.phone, address?.countryCode ?? order.shipTo?.country ?? null)
-      : null,
+    phone: order.phone ? phoneView(order.phone, country || order.shipTo?.country || null) : null,
     email: order.email ? emailView(order.email) : null,
     billingAddress: address
       ? {
           ...address,
-          line: addressCase(address.line.replace(/\s+/gu, " ").trim()),
-          city: addressCase(address.city.replace(/\s+/gu, " ").trim()),
-          province: address.province?.trim().toUpperCase() || null,
+          line: addressCase(address.line, country),
+          city: addressCase(address.city, country),
+          postalCode: contactText(address.postalCode),
+          countryCode: country,
+          province: address.province
+            ? country === "IT" && /^[a-z]{2}$/iu.test(address.province.trim())
+              ? address.province.trim().toUpperCase()
+              : contactText(address.province) || null
+            : null,
         }
       : null,
   };

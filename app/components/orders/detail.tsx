@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router";
 
 import { useAction } from "~/components/app-shell";
 import { StatusAlert } from "~/components/status";
+import { CopyButton } from "~/components/tax-code";
 import { Button } from "~/components/ui/button";
 import { buttonVariants } from "~/components/ui/button-variants";
 import {
@@ -17,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import type { AppCopy } from "../../app-copy";
 import { appHref, type AppLinks } from "../../app-links";
 import { formatAmount, type Language } from "../../i18n";
+import { buyerNameView, contactText } from "../../contact";
 import {
   countryName,
   formatDate,
@@ -24,7 +26,7 @@ import {
   marketplaceLabel,
   type OrderView,
 } from "../../view-models";
-import { AddressLines, EmailLink, ItemThumbnail, PhoneNumber, type SecondaryActions } from "./card";
+import { BuyerAddress, EmailLink, ItemThumbnail, PhoneNumber, type SecondaryActions } from "./card";
 import {
   FiscalCodes,
   FiscalNotes,
@@ -32,7 +34,7 @@ import {
   type FiscalProps,
   type OrdersAccount,
 } from "./fiscal";
-import { contactCopyLabels, ebayOrderHref } from "./labels";
+import { billingCopyText, contactCopyLabels, ebayOrderHref, missingContact } from "./labels";
 import { buyerLabel, paymentLabel, shippingLabel } from "./status";
 
 /**
@@ -99,9 +101,30 @@ function ItemPrice({
   );
 }
 
+function Recipient({ order, t, language }: { order: OrderView; t: AppCopy; language: Language }) {
+  const recipient = order.shipTo;
+  if (!recipient)
+    return <span className="text-muted-foreground">{missingContact(order, "recipient", t)}</span>;
+  const locality = [
+    recipient.locality ? contactText(recipient.locality) : null,
+    recipient.country ? countryName(recipient.country, language) : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return (
+    <>
+      <span className="block">
+        {buyerNameView(recipient.name) ?? missingContact(order, "recipient", t)}
+      </span>
+      {locality ? <span className="block">{locality}</span> : null}
+    </>
+  );
+}
+
 function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; language: Language }) {
-  const row = "grid gap-0.5";
+  const row = "grid min-w-0 gap-0.5 [overflow-wrap:anywhere]";
   const missing = <span className="text-muted-foreground">{t.orders.notProvided}</span>;
+  const billing = billingCopyText(order, language, t);
   return (
     <Tabs defaultValue="details" className="gap-0 px-4 pb-6">
       <TabsList variant="line" className="sticky top-0 z-10 mb-5 bg-popover">
@@ -137,7 +160,9 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
             </div>
             <div className={row}>
               <dt className="text-muted-foreground">{t.order.created}</dt>
-              <dd>{formatDate(order.createdAt, language)}</dd>
+              <dd>
+                <time dateTime={order.createdAt}>{formatDate(order.createdAt, language)}</time>
+              </dd>
             </div>
             {order.marketplace ? (
               <div className={row}>
@@ -152,13 +177,29 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
           </dl>
         </section>
         <section aria-labelledby="order-buyer" className="grid gap-3 border-t pt-5">
-          <h3 id="order-buyer" className="text-sm font-semibold">
-            {t.order.buyer}
-          </h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 id="order-buyer" className="text-sm font-semibold">
+              {t.order.buyer}
+            </h3>
+            {billing ? (
+              <CopyButton
+                key={order.id}
+                value={billing}
+                labels={{
+                  ...contactCopyLabels(t.orders.billingData, order.ebayOrderId, t),
+                  copy: t.orders.copyBillingData,
+                }}
+                tone="neutral"
+                text={t.orders.copyBillingData}
+              />
+            ) : null}
+          </div>
           <dl className="grid gap-3 text-sm">
             <div className={row}>
               <dt className="text-muted-foreground">{t.profile.name}</dt>
-              <dd className="text-pretty break-words">{order.buyerName ?? missing}</dd>
+              <dd className="text-pretty [overflow-wrap:anywhere]">
+                {buyerNameView(order.buyerName) ?? missingContact(order, "name", t)}
+              </dd>
             </div>
             <div className={row}>
               <dt className="text-muted-foreground">{t.order.username}</dt>
@@ -167,15 +208,12 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
             <div className={row}>
               <dt className="text-muted-foreground">{t.orders.billingAddress}</dt>
               <dd className="text-pretty">
-                {order.contacts.billingAddress ? (
-                  <AddressLines
-                    address={order.contacts.billingAddress}
-                    language={language}
-                    copy={contactCopyLabels(t.orders.billingAddress, order.ebayOrderId, t)}
-                  />
-                ) : (
-                  missing
-                )}
+                <BuyerAddress
+                  order={order}
+                  t={t}
+                  language={language}
+                  copy={contactCopyLabels(t.orders.billingAddress, order.ebayOrderId, t)}
+                />
               </dd>
             </div>
             <div className={row}>
@@ -188,7 +226,7 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
                     copy={contactCopyLabels(t.orders.phone, order.ebayOrderId, t)}
                   />
                 ) : (
-                  missing
+                  <span className="text-muted-foreground">{missingContact(order, "phone", t)}</span>
                 )}
               </dd>
             </div>
@@ -202,30 +240,14 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
                     copy={contactCopyLabels(t.orders.email, order.ebayOrderId, t)}
                   />
                 ) : (
-                  missing
+                  <span className="text-muted-foreground">{missingContact(order, "email", t)}</span>
                 )}
               </dd>
             </div>
             <div className={row}>
               <dt className="text-muted-foreground">{t.order.recipient}</dt>
               <dd className="text-pretty break-words">
-                {order.shipTo ? (
-                  <>
-                    <span className="block">{order.shipTo.name ?? t.orders.notProvided}</span>
-                    {order.shipTo.locality || order.shipTo.country ? (
-                      <span className="block">
-                        {[
-                          order.shipTo.locality,
-                          order.shipTo.country ? countryName(order.shipTo.country, language) : null,
-                        ]
-                          .filter(Boolean)
-                          .join(", ")}
-                      </span>
-                    ) : null}
-                  </>
-                ) : (
-                  missing
-                )}
+                <Recipient order={order} t={t} language={language} />
               </dd>
             </div>
           </dl>
@@ -238,7 +260,7 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
               <div className="flex items-start gap-3">
                 {/* La miniatura dell'ordine appartiene all'articolo solo se è l'unico. */}
                 <ItemThumbnail src={order.items.length === 1 ? order.thumbnail : undefined} />
-                <p className="min-w-0 leading-relaxed text-pretty break-words font-medium">
+                <p className="min-w-0 leading-relaxed text-pretty [overflow-wrap:anywhere] font-medium">
                   {item.title}
                 </p>
               </div>
@@ -320,7 +342,7 @@ export function OrderSheet({
           header={
             <SheetHeader>
               <SheetTitle className="break-words">{t.order.title(shown.ebayOrderId)}</SheetTitle>
-              <SheetDescription className="text-pretty break-words">
+              <SheetDescription className="text-pretty [overflow-wrap:anywhere]">
                 {formatDate(shown.createdAt, language)} · {buyerLabel(shown, t)}
               </SheetDescription>
             </SheetHeader>
