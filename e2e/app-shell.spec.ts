@@ -610,9 +610,19 @@ test("stati coerenti: aggiornamento, eBay fermo e collegamento già usato", asyn
   await expect(page.getByText("Negozio già collegato a un altro account")).toBeVisible();
 });
 
-test("contatti dell'acquirente formattati, cliccabili e mai verso un alias eBay", async ({
+test("contatti cliccabili e copiabili, senza richiesta fiscale precompilata agli alias eBay", async ({
   page,
 }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          (window as Window & { copiedText?: string }).copiedText = value;
+        },
+      },
+    });
+  });
   await page.request.post("/anteprima", {
     form: { scenario: "dati-discordanti", redirectTo: "/anteprima/ordini" },
     maxRedirects: 0,
@@ -638,8 +648,15 @@ test("contatti dell'acquirente formattati, cliccabili e mai verso un alias eBay"
   await expect(alias.getByText("interno 14", { exact: true })).toBeVisible();
   await expect(alias.locator('a[href^="tel:"]')).toHaveCount(0);
   await expect(alias.getByText("c3f0a1b2@members.ebay.invalid", { exact: true })).toBeVisible();
-  await expect(alias.locator('a[href^="mailto:"]')).toHaveCount(0);
-  await expect(alias.getByRole("button", { name: /^Copia email:/u })).toHaveCount(0);
+  await expect(
+    alias.getByRole("link", { name: /^c3f0a1b2\s*@members\.ebay\.invalid$/u }),
+  ).toHaveAttribute("href", "mailto:c3f0a1b2@members.ebay.invalid");
+  const copyEmail = alias.getByRole("button", { name: /^Copia email:/u });
+  await copyEmail.click();
+  await expect(copyEmail).toHaveAttribute("data-state", "copied");
+  expect(await page.evaluate(() => (window as Window & { copiedText?: string }).copiedText)).toBe(
+    "c3f0a1b2@members.ebay.invalid",
+  );
   await expect(alias.getByRole("link", { name: "Scrivi all’acquirente via email" })).toHaveCount(0);
   await expect(alias.getByRole("button", { name: /^Copia messaggio/u })).toBeVisible();
 });
