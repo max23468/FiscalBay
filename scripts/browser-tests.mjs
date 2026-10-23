@@ -78,7 +78,9 @@ export function assertCandidateReports(parts, sha, expected) {
 /** Il mirror Azure dei runner può bloccare APT anche con i pacchetti in cache. */
 export function prepareBrowserSystem(directory = "/etc/apt") {
   const fragments = path.join(directory, "sources.list.d");
+  // I runner GitHub leggono l'host da apt-mirrors.txt tramite `mirror+file:`.
   const sources = [
+    path.join(directory, "apt-mirrors.txt"),
     path.join(directory, "sources.list"),
     ...(existsSync(fragments)
       ? readdirSync(fragments)

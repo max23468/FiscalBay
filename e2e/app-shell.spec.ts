@@ -143,7 +143,9 @@ test("lo sblocco rivela il dato solo dopo l'azione e aggiorna la quota", async (
   await open(page);
   expect(await page.content()).not.toContain("BNCLCU75C12F205G");
   const card = page.getByRole("article", { name: "Ordine 05-55555-12121" });
-  await expect(card).toContainText("Hai 2 sblocchi disponibili");
+  await expect(
+    page.getByText("2 sblocchi disponibili in questo ciclo.", { exact: true }),
+  ).toHaveCount(1);
   await card.getByRole("button", { name: "Sblocca ordine" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Sblocca", exact: true }).click();
   await expect(card.getByText("BNCLCU75C12F205G")).toBeVisible();
@@ -155,9 +157,10 @@ test("lo sblocco rivela il dato solo dopo l'azione e aggiorna la quota", async (
     "BNCLCU75C12F205G",
   );
   await page.getByRole("link", { name: "Carica altri" }).click();
-  await expect(page.getByRole("article", { name: "Ordine 02-44519-70831" })).toContainText(
-    "Hai 1 sblocco disponibile",
-  );
+  await expect(page.getByRole("article", { name: "Ordine 02-44519-70831" })).toBeVisible();
+  await expect(
+    page.getByText("1 sblocco disponibile in questo ciclo.", { exact: true }),
+  ).toHaveCount(1);
 });
 
 test("la selezione sblocca più ordini entro la quota", async ({ page }) => {
@@ -558,7 +561,7 @@ test("stati vuoti, ricerca e indirizzi inesistenti restano dentro l'app", async 
 
   await open(page, await searched(page, "zzzz"));
   await expect(page.getByRole("searchbox").first()).toHaveValue("zzzz");
-  await expect(page.getByText("Nessun ordine corrisponde alla ricerca.")).toBeVisible();
+  await expect(page.getByText("Prova un’altra ricerca.", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Cancella ricerca" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Seleziona" })).toBeDisabled();
 

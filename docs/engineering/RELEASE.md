@@ -107,7 +107,7 @@ Ogni visita registra route, risposta/percorso attesi, controlli effettivamente c
 
 Le prove locali usano due worker, quattro per ciascuna macchina in CI, quelle remote uno. Ogni caso ha un limite di 60 secondi per visita, audit, ricarica e navigazione; non è una soglia di velocità della pagina. La durata effettiva di ciascun caso entra nel report JSON. Il gate non applica retry automatici per nascondere un errore.
 
-Prima di installare le dipendenze browser, i workflow eseguono `node scripts/browser-tests.mjs --prepare-system` con privilegi sul runner: le sole sorgenti Ubuntu del mirror Azure passano all'archivio ufficiale in HTTPS, conservando distribuzione, componenti e chiavi di firma. La cache dei pacchetti riduce i download, mentre APT installa le librerie nel sistema di ogni job.
+Prima di installare le dipendenze browser, i workflow eseguono `node scripts/browser-tests.mjs --prepare-system` con privilegi sul runner: le sole sorgenti Ubuntu del mirror Azure, compreso l'elenco `apt-mirrors.txt` letto dai runner, passano all'archivio ufficiale in HTTPS, conservando distribuzione, componenti e chiavi di firma. La cache dei pacchetti riduce i download, mentre APT installa le librerie nel sistema di ogni job.
 
 ## Artefatto e readback
 

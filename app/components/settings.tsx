@@ -1435,10 +1435,9 @@ export function ProfilePage({
               disabled={!v.ready || action.pending}
               maxLength={100}
               required
-              {...v.control("nome", "profile-name-hint")}
+              {...v.control("nome")}
             />
             {v.error("nome")}
-            <FieldDescription id="profile-name-hint">{t.profile.nameHint}</FieldDescription>
           </Field>
           <Field>
             <FieldLabel htmlFor="profile-last-name" required>
@@ -1526,7 +1525,6 @@ export function ProfilePage({
           <span className="break-all">{account.email}</span>
         </p>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">{t.profile.security}</p>
           <Link
             to={appHref(links, "impostazioni/sicurezza")}
             data-slot="button"

@@ -552,7 +552,6 @@ type SectionProps = { store: StoreView; t: AppCopy; language: Language };
 
 function ConnectionSection({ store, now, t, language }: SectionProps & { now: string }) {
   const status = connectionStatus(store, t);
-  const needsReconnect = store.issue !== undefined;
   const expired =
     store.connection === "reconnect_required" ||
     (store.consentExpiresAt !== null && store.consentExpiresAt <= now);
@@ -594,13 +593,6 @@ function ConnectionSection({ store, now, t, language }: SectionProps & { now: st
           </div>
         ) : null}
       </dl>
-      {/* Con il consenso in scadenza l'avviso in cima al pannello chiede già di ricollegare. */}
-      {needsReconnect ||
-      expired ||
-      store.consentExpiring ||
-      store.connection === "disconnected" ? null : (
-        <p className="text-sm text-muted-foreground">{t.stores.consentHint}</p>
-      )}
     </section>
   );
 }
@@ -617,15 +609,13 @@ function SyncSection({ store, data, t, language }: SectionProps & { data: Stores
           <LastSync store={store} t={t} now={data.now} language={language} slot={false} />
         </li>
         <li className="text-muted-foreground">{syncDescription(store, data.ebayDown, t)}</li>
-        {store.historyDays === null ? null : (
+        {store.historyDays === null ? null : !store.importing && store.lastSyncAt ? (
+          <li className="text-muted-foreground">{t.stores.importDone(store.historyDays)}</li>
+        ) : (
           <>
             <li className="text-muted-foreground">{t.stores.history(store.historyDays)}</li>
             <li className="text-muted-foreground">
-              {store.importing
-                ? t.stores.importRunning
-                : store.lastSyncAt
-                  ? t.stores.importDone
-                  : t.stores.importNotStarted}
+              {store.importing ? t.stores.importRunning : t.stores.importNotStarted}
             </li>
           </>
         )}
