@@ -2160,9 +2160,18 @@ describe("prove browser divise fra macchine", () => {
         ubuntu,
         "Types: deb\nURIs: https://azure.archive.ubuntu.com/ubuntu/\nSuites: resolute-updates\nComponents: main\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n",
       );
+      const mirrors = path.join(directory, "apt-mirrors.txt");
+      writeFileSync(
+        mirrors,
+        "http://azure.archive.ubuntu.com/ubuntu/\tpriority:1\nhttps://security.ubuntu.com/ubuntu/\tpriority:3\n",
+      );
       const unrelated = "deb https://packages.example.invalid/repository stable main\n";
       writeFileSync(other, unrelated);
-      assert.equal(prepareBrowserSystem(directory), 2);
+      assert.equal(prepareBrowserSystem(directory), 3);
+      assert.equal(
+        readFileSync(mirrors, "utf8"),
+        "https://archive.ubuntu.com/ubuntu/\tpriority:1\nhttps://security.ubuntu.com/ubuntu/\tpriority:3\n",
+      );
       assert.equal(
         readFileSync(legacy, "utf8"),
         "deb https://archive.ubuntu.com/ubuntu resolute main\n",
