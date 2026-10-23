@@ -9,11 +9,7 @@ import { assertSameOrigin, requireAccountArea, shellData } from "../account-area
 import { appCopy } from "../app-copy";
 import { appBase, type AppLinks } from "../app-links";
 import { pendingEmailChange } from "../domain/email-change.server";
-import {
-  orderAllowance,
-  restoreUnlockConfirmation,
-  unlockConfirmation,
-} from "../domain/grants.server";
+import { orderAllowance, setUnlockConfirmation, unlockConfirmation } from "../domain/grants.server";
 import {
   marketingConsent,
   messageTemplates,
@@ -169,15 +165,15 @@ export async function action({ request }: Route.ActionArgs) {
   const failed = (status: number, notice: string) =>
     data<ActionResult>({ ok: false, notice }, { status });
   try {
-    if (intent === "unlock-confirmation") {
-      await restoreUnlockConfirmation(env.DB, userId);
-      return { ok: true } satisfies ActionResult;
-    }
     if (intent === "save") {
       const name = String(form.get("name") ?? "");
       const value = String(form.get("value") ?? "");
       if (name === "marketing" && (value === "true" || value === "false")) {
         await recordMarketingConsent(env.DB, userId, value === "true", language);
+        return { ok: true } satisfies ActionResult;
+      }
+      if (name === "unlock-confirmation" && (value === "true" || value === "false")) {
+        await setUnlockConfirmation(env.DB, userId, value === "true");
         return { ok: true } satisfies ActionResult;
       }
       const change = parsePreference(name, value);

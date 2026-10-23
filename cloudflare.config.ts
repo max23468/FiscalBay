@@ -88,7 +88,8 @@ export default defineConfig((ctx) => ({
           vars: {
             APP_ORIGIN: bindings.text("https://test.fiscalbay.it"),
             REGISTRATION_MODE: bindings.text("approval"),
-            EBAY_SANDBOX_ENABLED: bindings.text("true"),
+            // Spenta su richiesta dell'owner finché non la riattiva: segreti e dati restano.
+            EBAY_SANDBOX_ENABLED: bindings.text("false"),
             STRIPE_PRICE_MONTHLY: bindings.text("price_1UHlnnJP7SSN14Zph79bnCQu"),
             STRIPE_PRICE_ANNUAL: bindings.text("price_1UHlnnJP7SSN14Zpc0f7vZkS"),
             STRIPE_PRICE_LIFETIME: bindings.text("price_1UHlngJP7SSN14ZpuFWGNO5w"),

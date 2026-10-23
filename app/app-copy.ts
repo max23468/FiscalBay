@@ -165,8 +165,6 @@ const it = {
     dontAskUnlock: "Non chiedermelo più",
     unlockFailed: "Sblocco non riuscito. Controlla gli ordini e gli sblocchi rimasti, poi riprova.",
     restoreUnlockConfirmation: "Riattiva conferma sblocco",
-    unlockConfirmationHint:
-      "Chiedi conferma prima di usare uno sblocco per un singolo ordine. Lo sblocco multiplo richiede sempre conferma.",
     cancel: "Annulla",
     unlocked: (remaining: number | null) =>
       remaining === null
@@ -445,6 +443,8 @@ const it = {
     save: "Salva",
     // Piano e pagamenti
     currentPlan: "Piano attuale",
+    unlockConfirmation: "Chiedi conferma prima di sbloccare un ordine",
+    unlockConfirmationHint: "Lo sblocco di più ordini chiede sempre conferma.",
     free: "Free",
     premium: "Premium",
     freeSummary: "Un negozio attivo, ultimi 30 giorni di ordini, CSV.",
@@ -1067,8 +1067,6 @@ const en: AppCopy = {
     dontAskUnlock: "Don’t ask again",
     unlockFailed: "Unlock failed. Check the orders and remaining unlocks, then try again.",
     restoreUnlockConfirmation: "Restore unlock confirmation",
-    unlockConfirmationHint:
-      "Ask for confirmation before using an unlock for a single order. Bulk unlocking always requires confirmation.",
     cancel: "Cancel",
     unlocked: (remaining) =>
       remaining === null
@@ -1337,6 +1335,8 @@ const en: AppCopy = {
     saveFailed: "Change not saved. The setting has been restored: try again.",
     save: "Save",
     currentPlan: "Current plan",
+    unlockConfirmation: "Ask before unlocking an order",
+    unlockConfirmationHint: "Unlocking several orders always asks for confirmation.",
     free: "Free",
     premium: "Premium",
     freeSummary: "One active store, the last 30 days of orders, CSV.",

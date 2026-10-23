@@ -477,21 +477,23 @@ test.describe("miglioramenti account e negozi", () => {
           // Lo sblocco chiude la selezione; senza altro da sbloccare né export non si riapre.
           await expect(select).toBeDisabled();
           await page.screenshot({ path: `/tmp/fiscalbay-unlock-${language}-complete.png` });
-          await page.goto(`${prefix}/app/impostazioni/sicurezza`);
-          const restore = page.getByRole("button", {
-            name: it ? "Riattiva conferma sblocco" : "Restore unlock confirmation",
+          await page.goto(`${prefix}/app/impostazioni/piano`);
+          const confirmation = page.getByRole("switch", {
+            name: it
+              ? "Chiedi conferma prima di sbloccare un ordine"
+              : "Ask before unlocking an order",
           });
-          await expect(restore).toBeEnabled();
-          // Il pulsante si disattiva già durante l'invio: si attende anche la rilettura della
-          // pagina, che una navigazione successiva altrimenti annullerebbe.
+          await expect(confirmation).not.toBeChecked();
+          // Si attende anche la rilettura della pagina, che una navigazione successiva
+          // altrimenti annullerebbe.
           const revalidated = page.waitForResponse(
             (response) =>
               response.request().method() === "GET" &&
-              response.url().includes("/impostazioni/sicurezza.data"),
+              response.url().includes("/impostazioni/piano.data"),
           );
-          await restore.click();
+          await confirmation.click();
           await revalidated;
-          await expect(restore).toBeDisabled();
+          await expect(confirmation).toBeChecked();
           expect(errors).toEqual([]);
         }
       });
@@ -793,9 +795,12 @@ test.describe("miglioramenti account e negozi", () => {
     const methods = page.locator('section[aria-labelledby="security-methods"]');
     await expect(methods.getByText("Questo è il tuo unico metodo", { exact: false })).toBeVisible();
     await expect(methods.getByRole("button", { name: "Rimuovi", exact: true })).toBeDisabled();
-    await page
-      .getByRole("textbox", { name: "Nome della passkey", exact: true })
-      .fill("Chiave browser sintetica");
+    // Il nome si chiede solo dopo la scelta di aggiungere una passkey, già compilato.
+    const name = page.getByRole("textbox", { name: "Nome della passkey", exact: true });
+    await expect(name).toHaveCount(0);
+    await page.getByRole("button", { name: "Aggiungi passkey", exact: true }).click();
+    await expect(name).not.toHaveValue("");
+    await name.fill("Chiave browser sintetica");
     await page.getByRole("button", { name: "Aggiungi passkey", exact: true }).click();
     const row = methods.getByRole("group", { name: /Chiave browser sintetica/ });
     await expect(row).toBeVisible();
@@ -1820,9 +1825,13 @@ for (const language of ["it", "en"] as const) {
         .click();
       await expect.poll(() => posts.length).toBe(before + 1);
       expect(posts.at(-1)!.fields.get("intent")).toBe("cambia-email");
-      await page
-        .getByRole("button", { name: it ? "Aggiungi passkey" : "Add passkey", exact: true })
-        .click();
+      const addPasskey = page.getByRole("button", {
+        name: it ? "Aggiungi passkey" : "Add passkey",
+        exact: true,
+      });
+      await addPasskey.click();
+      expect(posts).toHaveLength(before + 1);
+      await addPasskey.click();
       await expect.poll(() => posts.length).toBe(before + 2);
       expect(posts.at(-1)!.fields.get("intent")).toBe("passkey-add");
       expect(

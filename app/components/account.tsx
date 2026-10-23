@@ -431,50 +431,94 @@ function AddPasskey({
       setPending(false);
     }
   };
-  return (
-    <div className="grid w-full gap-2">
-      {!onAction ? (
-        <Field>
-          <FieldLabel htmlFor={id}>{settings.passkeyName}</FieldLabel>
-          <Input
-            id={id}
-            aria-describedby={`${id}-hint`}
-            maxLength={80}
-            value={name}
-            disabled={pending}
-            onChange={(event) => setName(event.target.value)}
-          />
-          <FieldDescription id={`${id}-hint`}>{settings.passkeyNameHint}</FieldDescription>
-        </Field>
-      ) : null}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="w-fit"
-        disabled={pending}
-        focusableWhenDisabled
-        aria-busy={pending || undefined}
-        onClick={() => guard("passkey-add", () => void add())}
-      >
-        {pending ? (
-          <Spinner
-            label={settings.addPasskey}
-            aria-hidden="true"
-            role={undefined}
-            data-icon="inline-start"
-          />
-        ) : (
+  const opener = useRef<HTMLButtonElement>(null);
+  const [naming, setNaming] = useState(false);
+  const failure = error ? (
+    <p role="alert" className="text-sm text-danger">
+      {t.passkeyErrors[error]}
+    </p>
+  ) : null;
+  // Il nome si chiede soltanto dopo la scelta di aggiungere una passkey, già compilato.
+  if (!naming)
+    return (
+      <div className="grid w-full gap-2">
+        <Button
+          ref={opener}
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-fit"
+          onClick={() =>
+            guard("passkey-add", () => {
+              setName(deviceName(navigator.userAgent, language));
+              setError(null);
+              setNaming(true);
+            })
+          }
+        >
           <KeyRound aria-hidden="true" data-icon="inline-start" />
-        )}
-        {settings.addPasskey}
-      </Button>
-      {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {t.passkeyErrors[error]}
-        </p>
-      ) : null}
-    </div>
+          {settings.addPasskey}
+        </Button>
+        {failure}
+      </div>
+    );
+  return (
+    <form
+      className="grid w-full gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void add();
+      }}
+    >
+      <Field>
+        <FieldLabel htmlFor={id}>{settings.passkeyName}</FieldLabel>
+        <Input
+          id={id}
+          aria-describedby={`${id}-hint`}
+          maxLength={80}
+          value={name}
+          autoFocus
+          disabled={pending}
+          onChange={(event) => setName(event.target.value)}
+        />
+        <FieldDescription id={`${id}-hint`}>{settings.passkeyNameHint}</FieldDescription>
+      </Field>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="submit"
+          size="sm"
+          disabled={pending}
+          focusableWhenDisabled
+          aria-busy={pending || undefined}
+        >
+          {pending ? (
+            <Spinner
+              label={settings.addPasskey}
+              aria-hidden="true"
+              role={undefined}
+              data-icon="inline-start"
+            />
+          ) : (
+            <KeyRound aria-hidden="true" data-icon="inline-start" />
+          )}
+          {settings.addPasskey}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={pending}
+          onClick={() => {
+            // Chiudendo il campo il focus torna al pulsante che l'ha aperto.
+            flushSync(() => setNaming(false));
+            opener.current?.focus();
+          }}
+        >
+          {appCopy[language].orders.cancel}
+        </Button>
+      </div>
+      {failure}
+    </form>
   );
 }
 

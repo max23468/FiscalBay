@@ -169,15 +169,21 @@ describe("percorso ordini", () => {
     ).rejects.toMatchObject({ status: 403 });
     expect(await unlockAction(unlockRequest("o-a"))).toEqual({ unlocked: ["o-a"], remaining: 0 });
     expect(await unlockConfirmation(env.DB, user!.id)).toBe(false);
-    const restored = await securityAction({
-      request: new Request("http://localhost:5173/app/impostazioni/sicurezza", {
-        method: "POST",
-        headers: { cookie: cookie!, origin: "http://localhost:5173" },
-        body: new URLSearchParams({ intent: "unlock-confirmation" }),
-      }),
-    } as Parameters<typeof securityAction>[0]);
-    expect(restored).toEqual({ ok: true });
+    // In Piano e pagamenti la conferma si riattiva e si disattiva dallo stesso interruttore.
+    const toggle = (value: string) =>
+      securityAction({
+        request: new Request("http://localhost:5173/app/impostazioni/piano", {
+          method: "POST",
+          headers: { cookie: cookie!, origin: "http://localhost:5173" },
+          body: new URLSearchParams({ intent: "save", name: "unlock-confirmation", value }),
+        }),
+      } as Parameters<typeof securityAction>[0]);
+    expect(await toggle("true")).toEqual({ ok: true });
     expect(await unlockConfirmation(env.DB, user!.id)).toBe(true);
+    expect(await toggle("false")).toEqual({ ok: true });
+    expect(await unlockConfirmation(env.DB, user!.id)).toBe(false);
+    expect(await toggle("forse")).toMatchObject({ init: { status: 400 } });
+    expect(await unlockConfirmation(env.DB, user!.id)).toBe(false);
   });
 
   it("costruisce il filtro incrementale e rifiuta intervalli invalidi", () => {
@@ -1469,14 +1475,14 @@ describe("pagina Ordini reale", () => {
     const { cookie } = await owner();
     await withCredentials();
     const synced = "2026-09-13T21:00:00.000Z";
-    /** Letture dei recenti del negozio, dalla più recente; l'ultima riuscita è `synced`. */
-    const reads = async (store: string, outcomes: boolean[]) => {
+    /** Letture dei recenti del negozio, dalla più recente, e ultima lettura riuscita. */
+    const reads = async (store: string, outcomes: boolean[], success: string | null = synced) => {
       await env.DB.prepare("DELETE FROM sync_runs WHERE store_id = ?").bind(store).run();
       await env.DB.batch([
         env.DB.prepare(
-          `INSERT INTO sync_state (store_id, last_success_at, updated_at) VALUES (?1, ?2, ?2)
+          `INSERT INTO sync_state (store_id, last_success_at, updated_at) VALUES (?1, ?2, ?3)
            ON CONFLICT(store_id) DO UPDATE SET last_success_at = excluded.last_success_at`,
-        ).bind(store, synced),
+        ).bind(store, success, now),
         ...outcomes.map((ok, index) =>
           env.DB.prepare(
             "INSERT INTO sync_runs (store_id, started_at, ok, new_orders) VALUES (?, ?, ?, 0)",
@@ -1554,10 +1560,22 @@ describe("pagina Ordini reale", () => {
       .run();
     expect(await notices()).toEqual([{ kind: "ebay-down", at: synced }]);
 
-    // La prima lettura riuscita chiude il problema, anche nella campanella.
+    // La prima lettura riuscita chiude il problema, anche nella campanella. Le letture fallite
+    // di un negozio poi messo in pausa non lo segnalano.
     await reads("s-a", [true, false, false]);
+    await reads("s-c", [false, false]);
     expect(await notices()).toEqual([]);
     expect(await bell()).toEqual([]);
+
+    // Con più negozi fermi vale l'aggiornamento riuscito più recente; senza nessuno, nessun orario.
+    await env.DB.prepare("DELETE FROM ebay_store_pauses WHERE store_id = 's-c'").run();
+    await reads("s-a", [false, false]);
+    await reads("s-c", [false, false], "2026-09-13T20:30:00.000Z");
+    expect(await notices()).toEqual([{ kind: "ebay-down", at: synced }]);
+    await reads("s-a", [false, false], null);
+    await reads("s-c", [false, false], null);
+    expect(await notices()).toEqual([{ kind: "ebay-down", at: null }]);
+    expect(await bell()).toEqual(["ebay-down:never"]);
   });
 
   it("la barra superiore cerca con la query nel corpo e l'elenco la riceve cifrata", async () => {
