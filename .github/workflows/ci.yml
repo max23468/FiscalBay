@@ -245,8 +245,10 @@ jobs:
           key: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.browsers }}
           restore-keys: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-
 
-      # Le librerie di sistema dei browser sono circa 140 MB a ogni run: dal mirror del runner
-      # richiedevano da pochi secondi a oltre venti minuti.
+      - name: Prepare browser system packages
+        run: sudo "$(command -v node)" scripts/browser-tests.mjs --prepare-system
+
+      # La cache riduce i download; i pacchetti mancanti arrivano dall'archivio Ubuntu.
       - name: Restore system packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -260,7 +262,7 @@ jobs:
           BROWSERS: ${{ needs.verify.outputs.browsers }}
         run: |
           # I pacchetti già scaricati restano in /var/cache/apt/archives: apt scarica soltanto quelli
-          # mancanti o aggiornati, e il passo non dipende più dalla velocità del mirror del runner.
+          # mancanti o aggiornati dall'archivio Ubuntu.
           echo 'APT::Keep-Downloaded-Packages "true";' | sudo tee /etc/apt/apt.conf.d/99-keep-downloaded > /dev/null
           if compgen -G "${HOME}/.cache/apt-archives/*.deb" > /dev/null; then
             sudo cp "${HOME}"/.cache/apt-archives/*.deb /var/cache/apt/archives/
@@ -278,7 +280,7 @@ jobs:
           BROWSERS: ${{ needs.verify.outputs.browsers }}
         run: |
           # I pacchetti già scaricati restano in /var/cache/apt/archives: apt scarica soltanto quelli
-          # mancanti o aggiornati, e il passo non dipende più dalla velocità del mirror del runner.
+          # mancanti o aggiornati dall'archivio Ubuntu.
           echo 'APT::Keep-Downloaded-Packages "true";' | sudo tee /etc/apt/apt.conf.d/99-keep-downloaded > /dev/null
           if compgen -G "${HOME}/.cache/apt-archives/*.deb" > /dev/null; then
             sudo cp "${HOME}"/.cache/apt-archives/*.deb /var/cache/apt/archives/
@@ -450,11 +452,15 @@ jobs:
           key: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium
           restore-keys: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-
 
+      - name: Prepare browser system packages
+        if: needs.verify.outputs.e2e == 'true'
+        run: sudo "$(command -v node)" scripts/browser-tests.mjs --prepare-system
+
       - name: Install browser for interaction tests
         if: needs.verify.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit != 'true'
         run: |
           # I pacchetti già scaricati restano in /var/cache/apt/archives: apt scarica soltanto quelli
-          # mancanti o aggiornati, e il passo non dipende più dalla velocità del mirror del runner.
+          # mancanti o aggiornati dall'archivio Ubuntu.
           echo 'APT::Keep-Downloaded-Packages "true";' | sudo tee /etc/apt/apt.conf.d/99-keep-downloaded > /dev/null
           if compgen -G "${HOME}/.cache/apt-archives/*.deb" > /dev/null; then
             sudo cp "${HOME}"/.cache/apt-archives/*.deb /var/cache/apt/archives/
@@ -469,7 +475,7 @@ jobs:
         if: needs.verify.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit == 'true'
         run: |
           # I pacchetti già scaricati restano in /var/cache/apt/archives: apt scarica soltanto quelli
-          # mancanti o aggiornati, e il passo non dipende più dalla velocità del mirror del runner.
+          # mancanti o aggiornati dall'archivio Ubuntu.
           echo 'APT::Keep-Downloaded-Packages "true";' | sudo tee /etc/apt/apt.conf.d/99-keep-downloaded > /dev/null
           if compgen -G "${HOME}/.cache/apt-archives/*.deb" > /dev/null; then
             sudo cp "${HOME}"/.cache/apt-archives/*.deb /var/cache/apt/archives/

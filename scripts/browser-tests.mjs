@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -75,6 +75,32 @@ export function assertCandidateReports(parts, sha, expected) {
   }
 }
 
+/** Il mirror Azure dei runner può bloccare APT anche con i pacchetti in cache. */
+export function prepareBrowserSystem(directory = "/etc/apt") {
+  const fragments = path.join(directory, "sources.list.d");
+  const sources = [
+    path.join(directory, "sources.list"),
+    ...(existsSync(fragments)
+      ? readdirSync(fragments)
+          .filter((name) => /\.(?:sources|list)$/u.test(name))
+          .map((name) => path.join(fragments, name))
+      : []),
+  ].filter((file) => existsSync(file));
+  if (sources.length === 0) throw new Error("Sorgenti APT non disponibili.");
+  let changed = 0;
+  for (const file of sources) {
+    const before = readFileSync(file, "utf8");
+    const after = before.replace(
+      /https?:\/\/azure\.archive\.ubuntu\.com(?=\/ubuntu(?:\/|\s|$))/gu,
+      "https://archive.ubuntu.com",
+    );
+    if (before === after) continue;
+    writeFileSync(file, after);
+    changed++;
+  }
+  return changed;
+}
+
 function main() {
   const { values } = parseArgs({
     options: {
@@ -83,8 +109,13 @@ function main() {
       pages: { type: "boolean", default: false },
       shard: { type: "string" },
       "check-evidence": { type: "string" },
+      "prepare-system": { type: "boolean", default: false },
     },
   });
+  if (values["prepare-system"]) {
+    console.log(`APT: ${prepareBrowserSystem()} sorgenti aggiornate all'archivio Ubuntu.`);
+    return;
+  }
   if (values["check-evidence"]) {
     const directory = values["check-evidence"];
     const parts = readdirSync(directory, { recursive: true }).flatMap((file) => {

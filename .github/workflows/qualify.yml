@@ -183,6 +183,8 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium-webkit
+      - name: Prepare browser system packages
+        run: sudo "$(command -v node)" scripts/browser-tests.mjs --prepare-system
       - run: pnpm exec playwright install --with-deps chromium webkit
         if: steps.browsers.outputs.cache-hit != 'true'
       - run: pnpm exec playwright install-deps chromium webkit
