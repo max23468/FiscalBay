@@ -311,11 +311,15 @@ for (const scenario of scenarios) {
             await search.press("Enter");
           };
           await searchFor(testAccount.taxCodes.unlocked);
-          await expect(page).toHaveURL(/\/app\/ordini\?ricerca=[\w-]+(?:[?&]vista=[0-9a-z]+)?$/u);
+          // L'indirizzo cambia dopo due richieste in sequenza, la ricerca e i dati dell'elenco:
+          // sul dominio remoto possono superare insieme i 5 secondi predefiniti.
+          await expect(page).toHaveURL(/\/app\/ordini\?ricerca=[\w-]+(?:[?&]vista=[0-9a-z]+)?$/u, {
+            timeout: 15_000,
+          });
           expect(page.url()).not.toContain(testAccount.taxCodes.unlocked);
           await expect(page.getByText(testAccount.taxCodes.unlocked).first()).toBeVisible();
           await searchFor(testAccount.taxCodes.locked);
-          await expect(page.getByRole("article")).toHaveCount(0);
+          await expect(page.getByRole("article")).toHaveCount(0, { timeout: 15_000 });
           expect(page.url()).not.toContain(testAccount.taxCodes.locked);
           checked("ricerca sui soli valori autorizzati, query fuori dall'indirizzo");
         }
