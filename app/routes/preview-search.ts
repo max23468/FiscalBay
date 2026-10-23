@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { redirect } from "react-router";
 
 import type { SearchResults } from "~/components/app-shell";
+import { buyerNameView } from "../contact";
 import { localizedPath } from "../i18n";
 import { searchQuery } from "../orders/order-search";
 import { searchHref } from "../orders/order-search.server";
@@ -37,7 +38,7 @@ export async function action({ request }: Route.ActionArgs) {
       items: matches.slice(0, 5).map((order) => ({
         id: order.id,
         ebayOrderId: order.ebayOrderId,
-        buyerName: order.buyerName ?? order.buyerUsername ?? "",
+        buyerName: buyerNameView(order.buyerName) ?? order.buyerUsername ?? "",
         detail: order.items[0]?.title ?? "",
         href: `${path}/${order.id}${search}`,
       })),
