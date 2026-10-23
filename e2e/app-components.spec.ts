@@ -2763,3 +2763,105 @@ test("lingue con il proprio nome nelle Impostazioni inglesi", async ({ page }) =
     "it",
   );
 });
+
+for (const language of ["it", "en"] as const) {
+  test(`onboarding e degradazione nell'anteprima ${language}`, async ({ page }) => {
+    const prefix = language === "it" ? "" : "/en";
+    const t = <Text>(it: Text, en: Text) => (language === "it" ? it : en);
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    // Un solo negozio con le letture ferme: avviso con l'ultimo aggiornamento e campanella.
+    await open(page, `${prefix}/anteprima/ordini`, "negozio-scaduto");
+    const failed = page.getByRole("status").filter({
+      hasText: t(
+        "Vintage Garage Italia: aggiornamento non riuscito",
+        "Vintage Garage Italia: update failed",
+      ),
+    });
+    await expect(
+      failed.getByRole("link", { name: t("Apri il negozio", "Open store") }),
+    ).toHaveAttribute("href", `${prefix}/anteprima/negozi/neg-vintage`);
+    await expect(page.getByRole("article").first()).toBeVisible();
+    // Collegato e senza ordini: il periodo letto, senza errori inventati.
+    await open(page, `${prefix}/anteprima/ordini`, "nessun-ordine");
+    await expect(
+      page.getByRole("heading", {
+        name: t("Nessun ordine negli ultimi 30 giorni", "No orders in the last 30 days"),
+      }),
+    ).toBeVisible();
+    // Prima sincronizzazione: nessun errore, importazione in corso e primi passi.
+    await open(page, `${prefix}/anteprima/ordini`, "prima-sincronizzazione");
+    await expect(
+      page.getByRole("heading", {
+        name: t("Prima sincronizzazione in corso", "First sync in progress"),
+      }),
+    ).toBeVisible();
+    await expect(page.locator('[aria-current="step"]')).toContainText(
+      t("Prima sincronizzazione", "First sync"),
+    );
+    // eBay non risponde: un solo avviso nella campanella e Riprova sospesa anche sul server.
+    await open(page, `${prefix}/anteprima/ordini`, "ebay-non-disponibile");
+    await page.getByRole("button", { name: t(/^Notifiche/u, /^Notifications/u) }).click();
+    await expect(
+      page
+        .getByRole("dialog", { name: t("Notifiche", "Notifications") })
+        .getByText(t("eBay non risponde", "eBay is not responding"), { exact: true }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    // Primo accesso: primi passi dal punto raggiunto, senza wizard.
+    await open(page, `${prefix}/anteprima/ordini`, "primo-accesso");
+    await expect(page.locator('[aria-current="step"]')).toContainText(
+      t("Negozio eBay collegato", "eBay store connected"),
+    );
+    // Auth o database non disponibili: nessun dato e soltanto Riprova, su ogni pagina.
+    await open(page, `${prefix}/anteprima/ordini`, "servizio-non-disponibile");
+    for (const section of ["ordini", "negozi", "impostazioni", "profilo"]) {
+      await page.goto(`${prefix}/anteprima/${section}`);
+      await expect(
+        page.getByRole("heading", {
+          level: 1,
+          name: t("Servizio non disponibile", "Service unavailable"),
+        }),
+      ).toBeVisible();
+      await expect(page.getByRole("link", { name: t("Riprova", "Try again") })).toHaveAttribute(
+        "href",
+        `${prefix}/anteprima/${section}`,
+      );
+      await expect(page.getByRole("article")).toHaveCount(0);
+    }
+    await open(page, `${prefix}/anteprima/ordini`, "ordinario");
+    expect(errors).toEqual([]);
+  });
+}
+
+test.describe("caricamento degli Ordini reali", () => {
+  test.skip(
+    Boolean(process.env.E2E_BASE_URL),
+    "Prove con dati sintetici soltanto sul database locale.",
+  );
+
+  test("da un'altra sezione compare lo scheletro dell'elenco, non la pagina precedente", async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    await useLocalAccount(context, "member", baseURL!);
+    await page.goto("/app/negozi");
+    await expect(
+      page.getByRole("searchbox", { name: "Cerca ordini", includeHidden: true }),
+    ).toBeEnabled();
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route(/\/app\/ordini\.data/u, async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.getByRole("link", { name: "Ordini", exact: true }).first().click();
+    const grid = page.locator('[aria-busy="true"]');
+    await expect(grid).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Ordini" })).toBeVisible();
+    release();
+    await expect(grid).toBeHidden();
+    await expect(page.getByRole("article").first()).toBeVisible();
+  });
+});

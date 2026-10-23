@@ -1,9 +1,38 @@
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 
 import { EmptyState } from "~/components/empty-state";
 import { buttonVariants } from "~/components/ui/button-variants";
 import type { AppCopy } from "../app-copy";
 import { appHref, type AppLinks } from "../app-links";
+
+/**
+ * Auth o database non rispondono: nessun dato letto e nessuna promessa, soltanto Riprova.
+ * Nell'area reale la pagina d'errore non ha la shell, perché la sessione non è leggibile;
+ * l'anteprima mostra lo stesso stato dentro la shell, per poter cambiare scenario.
+ */
+export function UnavailableState({ t }: { t: AppCopy }) {
+  const { pathname, search } = useLocation();
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
+      <EmptyState
+        variant="connection"
+        headingLevel={1}
+        className="rounded-xl border bg-card px-5"
+        title={t.errors.unavailableTitle}
+        description={t.errors.unavailable}
+        action={
+          <a
+            href={`${pathname}${search}`}
+            data-slot="button"
+            className={buttonVariants({ variant: "outline" })}
+          >
+            {t.errors.retry}
+          </a>
+        }
+      />
+    </div>
+  );
+}
 
 /**
  * Indirizzo dell'app che non corrisponde a un ordine, a un negozio o a una

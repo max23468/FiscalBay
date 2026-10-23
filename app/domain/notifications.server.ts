@@ -2,13 +2,13 @@ import { appCopy } from "../app-copy";
 import type { Language } from "../i18n";
 import { formatDate, type NotificationView } from "../view-models";
 import { notificationWindowMilliseconds } from "./notification-reads.server";
-import type { StoreStatus } from "./stores.server";
+import { ebayOutage, readsFailing, type StoreStatus } from "./stores.server";
 
 /**
  * Notifiche della campanella, derivate dallo stato corrente: un problema risolto esce dalla
- * campanella. Oggi le fonti sono i collegamenti dei negozi scaduti o in scadenza; ogni notifica
- * ha un identificativo stabile per problema, così la lettura vale finché il problema resta lo
- * stesso.
+ * campanella. Oggi le fonti sono i collegamenti dei negozi scaduti o in scadenza e le letture
+ * che non riescono: di un negozio, oppure di tutti quando eBay non risponde; ogni notifica ha un identificativo stabile per problema, così
+ * la lettura vale finché il problema resta lo stesso.
  */
 export async function listNotifications(
   db: D1Database,
@@ -20,7 +20,7 @@ export async function listNotifications(
 ): Promise<NotificationView[]> {
   const t = appCopy[language].shell.storeNotifications;
   const since = now.getTime() - notificationWindowMilliseconds;
-  const items = stores.flatMap((store): NotificationView[] => {
+  const reminder = (store: StoreStatus): NotificationView[] => {
     if (!store.reminder) return [];
     const expired = store.reminder.kind === "expired";
     // Un consenso in scadenza si segnala da trenta giorni prima: è l'inizio dell'avviso.
@@ -41,7 +41,33 @@ export async function listNotifications(
         href: `negozi/${encodeURIComponent(store.id)}`,
       },
     ];
-  });
+  };
+  // Le letture ferme in tutti i negozi attivi sono un solo problema di eBay, non uno per negozio.
+  // Ogni problema resta lo stesso fino alla prossima lettura riuscita e parte dalla prima delle
+  // due letture fallite che lo segnalano.
+  const outage = ebayOutage(stores);
+  const failing = stores.filter(readsFailing);
+  const reads: NotificationView[] = outage
+    ? [
+        {
+          id: `ebay-down:${outage.lastSyncAt ?? "never"}`,
+          tone: "warning",
+          title: t.ebayDownTitle,
+          body: t.ebayDownBody,
+          at: failing.map((store) => store.recent[1]!.at).sort()[0]!,
+          read: false,
+        },
+      ]
+    : failing.map((store): NotificationView => ({
+        id: `store-read-failed:${store.id}:${store.lastSyncAt ?? "never"}`,
+        tone: "warning",
+        title: t.readFailedTitle,
+        body: t.readFailedBody(store.name),
+        at: store.recent[1]!.at,
+        read: false,
+        href: `negozi/${encodeURIComponent(store.id)}`,
+      }));
+  const items = [...stores.flatMap(reminder), ...reads];
   if (items.length === 0) return [];
   const { results } = await db
     .prepare(

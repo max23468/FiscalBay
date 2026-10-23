@@ -8,7 +8,7 @@ import {
 } from "react-router";
 
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
-import { NotFoundState } from "~/components/not-found";
+import { NotFoundState, UnavailableState } from "~/components/not-found";
 import { appHref } from "../app-links";
 import { appCopy } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
@@ -16,7 +16,12 @@ import { defaultTemplate } from "../preferences";
 import { rememberedStore, snapshotOnlyAdded } from "../orders/order-list";
 import { openSearch } from "../orders/order-search.server";
 import { previewOrderPage, previewSearchScope } from "../preview/order-list.server";
-import { currentScenario, simulateAction, writePreviewState } from "../preview/state.server";
+import {
+  currentScenario,
+  pageScenario,
+  simulateAction,
+  writePreviewState,
+} from "../preview/state.server";
 import type { PreviewContext } from "./preview";
 import type { Route } from "./+types/preview-orders";
 
@@ -29,7 +34,7 @@ export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const { language, scenario, state } = await currentScenario(request);
+  const { language, scenario, state } = await pageScenario(request);
   const search = new URL(request.url).searchParams;
   const stores = scenario.stores
     .filter((store) => store.pauseReason !== "plan")
@@ -74,6 +79,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       lastAt: vintage?.lastSyncAt ?? null,
       storeId: vintage?.id ?? null,
       storeName: vintage?.name ?? null,
+      historyDays: vintage?.historyDays ?? 30,
     },
     onboarding: scenario.onboarding,
     messageTemplates: { it: defaultTemplate("it"), en: defaultTemplate("en") },
@@ -153,6 +159,7 @@ export default function PreviewOrders({ loaderData }: Route.ComponentProps) {
 /** Un indirizzo inesistente resta dentro l'app, con la strada per tornare all'elenco. */
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const { t, links } = useOutletContext<PreviewContext>();
+  if (isRouteErrorResponse(error) && error.status === 503) return <UnavailableState t={t} />;
   if (!isRouteErrorResponse(error) || error.status !== 404) throw error;
   return <NotFoundState kind="order" t={t} links={links} />;
 }

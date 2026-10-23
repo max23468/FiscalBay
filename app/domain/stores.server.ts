@@ -47,6 +47,26 @@ export type StoreStatus = {
 
 export type StoreActionResult = "done" | "not_found" | "invalid";
 
+/**
+ * Le letture di un negozio attivo non riescono: le ultime due sono fallite, quindi un errore
+ * isolato, che la lettura successiva supera, non basta.
+ */
+export function readsFailing(store: StoreStatus) {
+  const [last, previous] = store.recent;
+  return store.connection === "active" && !!previous && !last!.ok && !previous.ok;
+}
+
+/**
+ * eBay non risponde: le letture di tutti i negozi attivi non riescono. Riporta l'ultima lettura
+ * riuscita fra quei negozi, null se nessuno è mai stato letto; null senza indisponibilità.
+ */
+export function ebayOutage(stores: StoreStatus[]): { lastSyncAt: string | null } | null {
+  const active = stores.filter((store) => store.connection === "active");
+  if (active.length === 0 || !active.every(readsFailing)) return null;
+  const synced = active.flatMap((store) => (store.lastSyncAt ? [store.lastSyncAt] : []));
+  return { lastSyncAt: synced.sort().at(-1) ?? null };
+}
+
 const expiringNoticeMilliseconds = 30 * dayMilliseconds;
 const expiredReminderMilliseconds = 30 * dayMilliseconds;
 

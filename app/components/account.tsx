@@ -11,9 +11,10 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { useFetcher, useLocation, useRevalidator, useSubmit } from "react-router";
+import { useFetcher, useLocation, useNavigation, useRevalidator, useSubmit } from "react-router";
 
 import { AppShell } from "~/components/app-shell";
+import { OrdersLoading } from "~/components/orders/loading";
 import { useFieldErrors } from "~/components/form-validation";
 import { StatusAlert } from "~/components/status";
 import {
@@ -990,6 +991,14 @@ export function AccountShell({
   const sandbox = new URLSearchParams(search).get("environment") === "sandbox";
   const other: Language = language === "it" ? "en" : "it";
   const links = { language, base: appBase };
+  // Verso gli Ordini da un'altra sezione la pagina precedente lascia subito il posto allo
+  // scheletro dell'elenco; dentro gli Ordini i dati mostrati restano durante la lettura.
+  const navigation = useNavigation();
+  const ordersList = appHref(links, "ordini");
+  const loadingOrders =
+    navigation.state === "loading" &&
+    navigation.location.pathname === ordersList &&
+    !pathname.startsWith(ordersList);
   return (
     <AppShell
       links={links}
@@ -1066,7 +1075,7 @@ export function AccountShell({
         )
       }
     >
-      {children}
+      {loadingOrders ? <OrdersLoading t={t} /> : children}
     </AppShell>
   );
 }

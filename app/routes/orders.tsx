@@ -20,6 +20,7 @@ import {
   unlockConfirmation,
   unlockOrders,
 } from "../domain/grants.server";
+import { historyDays } from "../domain/order-acquisition.server";
 import { requestOrderRead } from "../domain/order-sync.server";
 import { messageTemplates } from "../domain/preferences.server";
 import {
@@ -30,7 +31,7 @@ import {
   orderView,
   visibleOrderFacets,
 } from "../domain/orders.server";
-import { listStores } from "../domain/stores.server";
+import { ebayOutage, listStores, readsFailing } from "../domain/stores.server";
 import { logFailure } from "../errors";
 import { languageFromPath, localizedPath, type Language } from "../i18n";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
@@ -188,7 +189,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     freshHref: incoming > 0 ? `${path}${fresh.size ? `?${fresh}` : ""}` : null,
   };
   const cycle = allowance?.cycle ?? null;
+  const outage = ebayOutage(environmentStores);
   const notices: OrdersNotice[] = [
+    ...(outage ? [{ kind: "ebay-down" as const, at: outage.lastSyncAt }] : []),
     // Prima i collegamenti già scaduti, poi quelli in scadenza.
     ...environmentStores
       .flatMap((store) =>
@@ -206,6 +209,23 @@ export async function loader({ request, params }: Route.LoaderArgs) {
               ebayEnvironment,
             },
       ),
+    // Senza un'indisponibilità generale, un negozio con le letture ferme lo dice se i suoi
+    // ordini sono nella vista; altrimenti restano Negozi e campanella.
+    ...(outage
+      ? []
+      : environmentStores
+          .filter(
+            (store) =>
+              readsFailing(store) &&
+              store.lastSyncAt !== null &&
+              (!filters.storeId || filters.storeId === store.id),
+          )
+          .map((store): OrdersNotice => ({
+            kind: "store-read-failed",
+            storeId: store.id,
+            storeName: store.name,
+            at: store.lastSyncAt!,
+          }))),
     ...(!premium && cycle && allowance?.remaining === 0 && facets.locked
       ? [{ kind: "quota" as const, until: cycle.ends_at }]
       : []),
@@ -242,6 +262,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       lastAt: lastSync ?? null,
       storeId: linked[0]?.id ?? null,
       storeName: linked[0]?.name ?? null,
+      // Periodo letto dal primo avvio; prima vale quello che la lettura userà.
+      historyDays: linked[0]?.history?.days ?? historyDays,
     },
     onboarding: [
       { label: "stepAccount", done: true },
@@ -327,6 +349,10 @@ export async function action({ request }: Route.ActionArgs) {
         : [];
     if (!order || order.fiscalState !== "error")
       return data<ActionResult>({ ok: false, notice: t.stores.failed }, { status: 409 });
+    // Con eBay che non risponde la nuova lettura resta sospesa, come il pulsante.
+    const stores = await listStores(env.DB, session.user.id);
+    if (ebayOutage(stores.filter((store) => store.ebayEnvironment === environment)))
+      return data<ActionResult>({ ok: false, notice: t.stores.ebayDown }, { status: 409 });
     let requested;
     try {
       requested = await requestOrderRead(env, session.user.id, order);

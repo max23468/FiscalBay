@@ -27,6 +27,7 @@ import { action as orderSearch } from "../app/routes/order-search";
 import type { SearchResults } from "../app/components/app-shell";
 import { loader as loadAccess } from "../app/routes/sign-in";
 import { action as securityAction } from "../app/routes/settings";
+import { loader as loadStores } from "../app/routes/stores";
 import { now, resetDatabase, seed } from "./fixtures/database-fixtures";
 import { syntheticProfile, verifiedSession } from "./fixtures/account-fixtures";
 import { displayTaxValue } from "../app/tax-quality";
@@ -1441,6 +1442,122 @@ describe("pagina Ordini reale", () => {
     expect(await entry(`${cookie}; fiscalbay-negozio=%E0%A4%A`)).toMatchObject({
       page: expect.any(Object),
     });
+  });
+
+  it("con Auth o database non disponibili risponde 503 senza dati", async () => {
+    const { cookie } = await owner();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const prepare = vi.spyOn(env.DB, "prepare").mockImplementation(() => {
+      throw new Error("D1_ERROR: unavailable");
+    });
+    try {
+      expect(await ordersPage(cookie).catch((error: unknown) => error)).toMatchObject({
+        data: null,
+        init: { status: 503, headers: { "retry-after": "60" } },
+      });
+      expect(JSON.parse(String(log.mock.calls[0]![0]))).toMatchObject({
+        code: "UPSTREAM_UNAVAILABLE",
+        operation: "route",
+      });
+    } finally {
+      prepare.mockRestore();
+      log.mockRestore();
+    }
+  });
+
+  it("con le letture ferme segnala eBay o il solo negozio, con l'ultimo aggiornamento", async () => {
+    const { cookie } = await owner();
+    await withCredentials();
+    const synced = "2026-09-13T21:00:00.000Z";
+    /** Letture dei recenti del negozio, dalla più recente; l'ultima riuscita è `synced`. */
+    const reads = async (store: string, outcomes: boolean[]) => {
+      await env.DB.prepare("DELETE FROM sync_runs WHERE store_id = ?").bind(store).run();
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO sync_state (store_id, last_success_at, updated_at) VALUES (?1, ?2, ?2)
+           ON CONFLICT(store_id) DO UPDATE SET last_success_at = excluded.last_success_at`,
+        ).bind(store, synced),
+        ...outcomes.map((ok, index) =>
+          env.DB.prepare(
+            "INSERT INTO sync_runs (store_id, started_at, ok, new_orders) VALUES (?, ?, ?, 0)",
+          ).bind(store, `2026-09-14T0${9 - index}:00:00.000Z`, ok ? 1 : 0),
+        ),
+      ]);
+    };
+    const notices = async (path = "/app/ordini") =>
+      (await ordersPage(cookie, path)).page!.notices.filter(
+        (notice) => notice.kind === "ebay-down" || notice.kind === "store-read-failed",
+      );
+    const bell = async () =>
+      ((await ordersPage(cookie)).shell.notifications ?? []).map((item) => item.id);
+    const storesDown = async () =>
+      (
+        await loadStores({
+          request: new Request(`${origin}/app/negozi`, { headers: { cookie } }),
+          params: {},
+        } as Parameters<typeof loadStores>[0])
+      ).data.page.ebayDown;
+
+    // Un errore isolato non basta: la lettura successiva di solito riesce.
+    await reads("s-a", [false, true]);
+    expect(await notices()).toEqual([]);
+    expect(await bell()).toEqual([]);
+    expect(await storesDown()).toBe(false);
+
+    // Tutti i negozi attivi non riescono a leggere: eBay non risponde.
+    await reads("s-a", [false, false, true]);
+    expect(await notices()).toEqual([{ kind: "ebay-down", at: synced }]);
+    expect(await storesDown()).toBe(true);
+    // Un solo problema nella campanella, come nell'anteprima, e la nuova lettura resta sospesa.
+    expect(await bell()).toEqual([`ebay-down:${synced}`]);
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM tax_identifiers WHERE order_id = 'o-a'"),
+      env.DB.prepare(
+        `INSERT INTO order_source_refs (store_id, source, external_order_id, order_id, last_modified_time,
+           detail_for, detail_error, detail_attempts)
+         VALUES ('s-a', 'fulfillment', 'ebay-a', 'o-a', ?1, ?1, 'unavailable', 5)`,
+      ).bind(now),
+    ]);
+    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(undefined);
+    expect(await ordersAction(cookie, { intent: "retry", order: "o-a" })).toMatchObject({
+      data: { ok: false, notice: appCopy.it.stores.ebayDown },
+      init: { status: 409 },
+    });
+    expect(send).not.toHaveBeenCalled();
+    send.mockRestore();
+
+    // Con un altro negozio che legge, il problema resta del solo negozio, finché è nella vista.
+    await env.DB.prepare(
+      "INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at) VALUES ('s-c', 'w-a', 'e-c', ?)",
+    )
+      .bind(now)
+      .run();
+    await env.DB.prepare(
+      `INSERT INTO ebay_store_credentials (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
+       VALUES ('s-c', 'a', '2026-09-14T00:00:00.000Z', 'r', '2027-09-13T00:00:00.000Z', ?)`,
+    )
+      .bind(now)
+      .run();
+    await reads("s-c", [true, true]);
+    const failed = { kind: "store-read-failed", storeId: "s-a", storeName: "e-a", at: synced };
+    expect(await notices()).toEqual([failed]);
+    expect(await notices("/app/ordini?negozio=s-a")).toEqual([failed]);
+    expect(await notices("/app/ordini?negozio=s-c")).toEqual([]);
+    expect(await storesDown()).toBe(false);
+    expect(await bell()).toEqual([`store-read-failed:s-a:${synced}`]);
+
+    // Un negozio in pausa non legge eBay: non conta per l'indisponibilità né per gli avvisi.
+    await env.DB.prepare(
+      "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-c', 'manual', ?)",
+    )
+      .bind(now)
+      .run();
+    expect(await notices()).toEqual([{ kind: "ebay-down", at: synced }]);
+
+    // La prima lettura riuscita chiude il problema, anche nella campanella.
+    await reads("s-a", [true, false, false]);
+    expect(await notices()).toEqual([]);
+    expect(await bell()).toEqual([]);
   });
 
   it("la barra superiore cerca con la query nel corpo e l'elenco la riceve cifrata", async () => {

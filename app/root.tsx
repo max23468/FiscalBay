@@ -14,7 +14,7 @@ import {
 import { useEffect } from "react";
 
 import { cn } from "cn";
-import { CircleAlert, FileQuestion } from "lucide-react";
+import { CircleAlert, CloudOff, FileQuestion } from "lucide-react";
 
 import type { Route } from "./+types/root";
 import { StandalonePage } from "./components/standalone-page";
@@ -100,29 +100,42 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const language =
     useRouteLoaderData<typeof loader>("root")?.language ?? languageFromPath(location.pathname);
   const reference = useRouteLoaderData<typeof loader>("root")?.correlationId;
-  const notFound = isRouteErrorResponse(error) && error.status === 404;
   const t = appCopy[language].errors;
-
-  const title = notFound ? t.notFoundTitle : t.title;
+  const status = isRouteErrorResponse(error) ? error.status : 500;
+  const home = { href: localizedPath(language), label: t.home };
+  const page =
+    status === 404
+      ? {
+          icon: FileQuestion,
+          tone: "neutral" as const,
+          title: t.notFoundTitle,
+          body: t.notFound,
+          home,
+        }
+      : status === 503
+        ? // Auth o database non rispondono: la stessa pagina si riapre appena tornano disponibili.
+          {
+            icon: CloudOff,
+            tone: "amber" as const,
+            title: t.unavailableTitle,
+            body: t.unavailable,
+            home: { href: `${location.pathname}${location.search}`, label: t.retry },
+          }
+        : { icon: CircleAlert, tone: "rose" as const, title: t.title, body: t.unexpected, home };
   return (
     <StandalonePage
-      icon={notFound ? FileQuestion : CircleAlert}
-      tone={notFound ? "neutral" : "rose"}
-      title={title}
+      icon={page.icon}
+      tone={page.tone}
+      title={page.title}
       homeHref={localizedPath(language)}
     >
-      <title>{`FiscalBay | ${title}`}</title>
-      <p className="leading-relaxed text-pretty text-muted-foreground">
-        {notFound ? t.notFound : t.unexpected}
-      </p>
-      {!notFound && reference ? (
+      <title>{`FiscalBay | ${page.title}`}</title>
+      <p className="leading-relaxed text-pretty text-muted-foreground">{page.body}</p>
+      {status !== 404 && reference ? (
         <p className="font-code text-xs text-muted-foreground">{t.reference(reference)}</p>
       ) : null}
-      <a
-        href={localizedPath(language)}
-        className={cn(buttonVariants({ variant: "outline" }), "w-fit")}
-      >
-        {t.home}
+      <a href={page.home.href} className={cn(buttonVariants({ variant: "outline" }), "w-fit")}>
+        {page.home.label}
       </a>
     </StandalonePage>
   );

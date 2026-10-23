@@ -26,7 +26,10 @@ export interface ActionResult {
 }
 
 export type OrdersNotice =
-  | { kind: "ebay-down"; at: string }
+  /** `at`: ultimo aggiornamento riuscito, null se gli ordini non sono mai stati letti. */
+  | { kind: "ebay-down"; at: string | null }
+  /** Letture di un solo negozio non riuscite: i suoi ordini sono fermi all'istante `at`. */
+  | { kind: "store-read-failed"; storeId: string; storeName: string; at: string }
   | { kind: "quota"; until: string }
   | { kind: "store-issue"; storeId: string; storeName: string }
   | {

@@ -63,6 +63,11 @@ const it = {
       expiringTitle: "Autorizzazione in scadenza",
       expiringBody: (store: string, date: string) =>
         `${store}: l’autorizzazione eBay scade il ${date}. Ricollega il negozio entro quella data.`,
+      ebayDownTitle: "eBay non risponde",
+      ebayDownBody: "La sincronizzazione riprenderà appena eBay torna disponibile.",
+      readFailedTitle: "Aggiornamento non riuscito",
+      readFailedBody: (store: string) =>
+        `${store}: le ultime letture da eBay non sono riuscite. FiscalBay riprova automaticamente.`,
     },
     account: "Account",
     profile: "Profilo",
@@ -242,6 +247,11 @@ const it = {
     ebayDownTitle: "eBay non risponde",
     ebayDownBody: (time: string) =>
       `Gli ordini sono aggiornati al ${time}. Sincronizzazione e ricollegamento tornano disponibili quando eBay risponde.`,
+    ebayDownNeverBody:
+      "Gli ordini compariranno appena eBay risponde. Sincronizzazione e ricollegamento tornano disponibili in quel momento.",
+    storeReadFailedTitle: (store: string) => `${store}: aggiornamento non riuscito`,
+    storeReadFailedBody: (time: string) =>
+      `Gli ordini di questo negozio sono aggiornati al ${time}. Gli altri negozi continuano e FiscalBay riprova automaticamente.`,
     quotaTitle: "Sblocchi esauriti per questo ciclo",
     quotaBody: (date: string) =>
       `Puoi consultare e cercare tutti gli ordini. Codice Fiscale e Partita IVA dei nuovi ordini restano da sbloccare fino al ${date}.`,
@@ -268,7 +278,7 @@ const it = {
     stepEmail: "Email verificata",
     stepStore: "Negozio eBay collegato",
     stepSync: "Prima sincronizzazione",
-    noOrdersTitle: "Nessun ordine negli ultimi 30 giorni",
+    noOrdersTitle: (days: number) => `Nessun ordine negli ultimi ${days} giorni`,
     firstSyncTitle: "Prima sincronizzazione in corso",
     firstSyncBody: (store: string) =>
       `${store} è collegato. Gli ordini compariranno qui man mano che vengono importati.`,
@@ -668,6 +678,10 @@ const it = {
     notFound: "Controlla l’indirizzo oppure torna a FiscalBay per continuare.",
     home: "Torna a FiscalBay",
     unexpected: "Si è verificato un errore inatteso. Riprova più tardi.",
+    unavailableTitle: "Servizio non disponibile",
+    unavailable:
+      "In questo momento FiscalBay non riesce a leggere i dati dell’account. Riprova tra qualche minuto.",
+    retry: "Riprova",
     unconfirmed:
       "Non è stato possibile confermare l’esito. Ricarica la pagina per verificare lo stato prima di riprovare.",
     reference: (id: string) => `Riferimento: ${id}`,
@@ -952,6 +966,11 @@ const en: AppCopy = {
       expiringTitle: "Authorisation expiring",
       expiringBody: (store, date) =>
         `${store}: the eBay authorisation expires on ${date}. Reconnect the store by then.`,
+      ebayDownTitle: "eBay is not responding",
+      ebayDownBody: "Syncing will resume as soon as eBay is available again.",
+      readFailedTitle: "Update failed",
+      readFailedBody: (store) =>
+        `${store}: the latest reads from eBay failed. FiscalBay retries automatically.`,
     },
     account: "Account",
     profile: "Profile",
@@ -1130,6 +1149,11 @@ const en: AppCopy = {
     ebayDownTitle: "eBay is not responding",
     ebayDownBody: (time) =>
       `Orders are up to date as of ${time}. Syncing and reconnecting will be available again when eBay responds.`,
+    ebayDownNeverBody:
+      "Orders will appear as soon as eBay responds. Syncing and reconnecting will be available again then.",
+    storeReadFailedTitle: (store) => `${store}: update failed`,
+    storeReadFailedBody: (time) =>
+      `Orders from this store are up to date as of ${time}. Other stores continue and FiscalBay retries automatically.`,
     quotaTitle: "No unlocks left this cycle",
     quotaBody: (date) =>
       `You can still view and search all orders. Codice Fiscale and Partita IVA of new orders stay locked until ${date}.`,
@@ -1153,7 +1177,7 @@ const en: AppCopy = {
     stepEmail: "Email verified",
     stepStore: "eBay store connected",
     stepSync: "First sync",
-    noOrdersTitle: "No orders in the last 30 days",
+    noOrdersTitle: (days) => `No orders in the last ${days} days`,
     firstSyncTitle: "First sync in progress",
     firstSyncBody: (store) =>
       `${store} is connected. Orders will appear here as they are imported.`,
@@ -1539,6 +1563,9 @@ const en: AppCopy = {
     notFound: "Check the address or return to FiscalBay to continue.",
     home: "Back to FiscalBay",
     unexpected: "An unexpected error occurred. Try again later.",
+    unavailableTitle: "Service unavailable",
+    unavailable: "FiscalBay cannot read your account data right now. Try again in a few minutes.",
+    retry: "Try again",
     unconfirmed:
       "The outcome could not be confirmed. Reload the page to check its state before trying again.",
     reference: (id) => `Reference: ${id}`,
