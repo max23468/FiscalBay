@@ -49,10 +49,10 @@ test(
     await expect(page.getByText(taxCodes.unlocked).first()).toBeVisible();
     expect(await page.content()).not.toContain(taxCodes.locked);
 
-    // Negozi: elenco con il piano dello spazio e pannello aperto da link diretto, senza azioni.
+    // Negozi: elenco riconoscibile e pannello aperto da link diretto, senza azioni.
     await page.getByRole("link", { name: "Negozi eBay" }).first().click();
     await expect(page).toHaveTitle("FiscalBay | Negozi eBay");
-    await expect(page.getByText("Il piano Free è del tuo spazio FiscalBay")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Negozi eBay", exact: true })).toBeVisible();
     for (const name of Object.values(stores)) {
       await expect(page.getByRole("table").getByText(name, { exact: true })).toBeVisible();
     }

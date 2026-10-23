@@ -918,7 +918,20 @@ for (const language of ["it", "en"] as const) {
         page.on("pageerror", (error) => errors.push(error.message));
         await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
         await page.setViewportSize({ width, height: 844 });
-        await open(page, `${prefix}/anteprima/negozi/neg-outlet`, "ordinario");
+        await open(page, `${prefix}/anteprima/negozi`, "ordinario");
+        await expect(
+          page.getByText(
+            t(
+              "Il piano Free include un solo negozio attivo.",
+              "The Free plan includes one active store.",
+            ),
+            { exact: true },
+          ),
+        ).toBeVisible();
+        await expect(page.locator("main")).not.toContainText(
+          t("Le notifiche Telegram dei nuovi ordini", "Telegram notifications for new orders"),
+        );
+        await page.getByRole("link", { name: /Outlet ricambi/u }).click();
         const panel = page.getByRole("dialog");
         await expect(panel.locator("#store-sync + ul")).not.toContainText(
           t("Aggiornamento previsto", "Expected update"),
@@ -2313,6 +2326,17 @@ test("stati senza valore senza Copia, sblocco e Premium distinti", async ({ page
   const locked = page.getByRole("article", { name: "Ordine 05-55555-12121" });
   await expect(locked.locator(".icon-unlock")).toHaveCount(2);
   await expect(locked.locator(".lucide-crown")).toHaveCount(0);
+  const missing = page.getByRole("article", { name: "Ordine 31-77421-10058" });
+  await expect(missing).toContainText("Non disponibile su eBay");
+  await expect(missing).not.toContainText("eBay non riporta il Codice Fiscale per questo ordine.");
+  const failed = page.getByRole("article", { name: "Ordine 19-00001-99999" });
+  await expect(failed).toContainText("Aggiornamento non riuscito");
+  await expect(failed.getByRole("button", { name: "Riprova", exact: true })).toBeEnabled();
+  await expect(failed).not.toContainText("Non siamo riusciti a recuperare il Codice Fiscale");
+  await missing.getByRole("link", { name: "Dettaglio", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText(
+    "eBay non riporta il Codice Fiscale per questo ordine.",
+  );
   await open(page, "/anteprima/impostazioni/esportazione");
   await expect(page.getByText("Premium", { exact: true }).locator("svg")).toHaveClass(
     /lucide-crown/,

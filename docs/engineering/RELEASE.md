@@ -107,6 +107,8 @@ Ogni visita registra route, risposta/percorso attesi, controlli effettivamente c
 
 Le prove locali usano due worker, quattro per ciascuna macchina in CI, quelle remote uno. Ogni caso ha un limite di 60 secondi per visita, audit, ricarica e navigazione; non è una soglia di velocità della pagina. La durata effettiva di ciascun caso entra nel report JSON. Il gate non applica retry automatici per nascondere un errore.
 
+Prima di installare le dipendenze browser, i workflow eseguono `node scripts/browser-tests.mjs --prepare-system` con privilegi sul runner: le sole sorgenti Ubuntu del mirror Azure passano all'archivio ufficiale in HTTPS, conservando distribuzione, componenti e chiavi di firma. La cache dei pacchetti riduce i download, mentre APT installa le librerie nel sistema di ogni job.
+
 ## Artefatto e readback
 
 `node scripts/release/release.mjs manifest --environment test` registra commit, tree, SHA256 dell'artefatto, configurazione, lockfile, toolchain e hash delle migration. `verify` controlla gli stessi input prima della distribuzione. Un merge può cambiare commit conservando il tree. Il deploy rifiuta un candidato superato sul branch remoto e registra l'identità completa nelle annotazioni della versione Cloudflare.

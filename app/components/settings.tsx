@@ -826,7 +826,6 @@ function AppearanceSection({ t, links }: { t: AppCopy; links: AppLinks }) {
       <Group>
         <SimpleSelect
           label={t.settings.timeZone}
-          hint={t.settings.timeZoneHint}
           items={[
             "Europe/Rome",
             "Europe/London",

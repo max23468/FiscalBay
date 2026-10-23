@@ -8,7 +8,12 @@ import { createHash, randomBytes } from "node:crypto";
 import { budgetKiB } from "./check-bundle-size.mjs";
 import { coverageSummary } from "./coverage-report.mjs";
 import { benchmarkSummary, comparableDependencies, extractBenchmarkSources } from "./benchmark.mjs";
-import { shardTests, listedTestIds, assertCandidateReports } from "./browser-tests.mjs";
+import {
+  shardTests,
+  listedTestIds,
+  assertCandidateReports,
+  prepareBrowserSystem,
+} from "./browser-tests.mjs";
 import {
   changedLines,
   classifyFile,
@@ -2142,6 +2147,36 @@ describe("copia locale dell'artefatto", () => {
 });
 
 describe("prove browser divise fra macchine", () => {
+  it("usa l'archivio Ubuntu per APT e conserva gli altri repository", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "browser-system-"));
+    try {
+      const fragments = path.join(directory, "sources.list.d");
+      mkdirSync(fragments);
+      const legacy = path.join(directory, "sources.list");
+      const ubuntu = path.join(fragments, "ubuntu.sources");
+      const other = path.join(fragments, "other.list");
+      writeFileSync(legacy, "deb http://azure.archive.ubuntu.com/ubuntu resolute main\n");
+      writeFileSync(
+        ubuntu,
+        "Types: deb\nURIs: https://azure.archive.ubuntu.com/ubuntu/\nSuites: resolute-updates\nComponents: main\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n",
+      );
+      const unrelated = "deb https://packages.example.invalid/repository stable main\n";
+      writeFileSync(other, unrelated);
+      assert.equal(prepareBrowserSystem(directory), 2);
+      assert.equal(
+        readFileSync(legacy, "utf8"),
+        "deb https://archive.ubuntu.com/ubuntu resolute main\n",
+      );
+      assert.equal(
+        readFileSync(ubuntu, "utf8"),
+        "Types: deb\nURIs: https://archive.ubuntu.com/ubuntu/\nSuites: resolute-updates\nComponents: main\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n",
+      );
+      assert.equal(readFileSync(other, "utf8"), unrelated);
+      assert.equal(prepareBrowserSystem(directory), 0);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
   it("raccoglie ogni scenario funzionale in Chromium e WebKit", () => {
     const result = spawnSync(
       "pnpm",
