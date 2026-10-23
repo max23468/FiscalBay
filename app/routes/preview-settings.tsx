@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { data, isRouteErrorResponse, useOutletContext } from "react-router";
 
 import { SettingsPage, type ExportContext, type SettingsPageData } from "~/components/settings";
-import { NotFoundState } from "~/components/not-found";
+import { NotFoundState, UnavailableState } from "~/components/not-found";
 import { appCopy } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
 import { defaultDisplay, defaultTemplate } from "../preferences";
@@ -10,7 +10,7 @@ import { exportReturnHref, exportScope } from "../orders/export-scope";
 import { snapshotParam } from "../orders/order-list";
 import { openSearch } from "../orders/order-search.server";
 import { previewListing, previewSearchScope } from "../preview/order-list.server";
-import { currentScenario, simulateAction } from "../preview/state.server";
+import { pageScenario, simulateAction } from "../preview/state.server";
 import { settingsSections, type SettingsSection } from "../view-models";
 import type { PreviewContext } from "./preview";
 import type { Route } from "./+types/preview-settings";
@@ -28,7 +28,7 @@ export function meta({ location, params }: Route.MetaArgs): Route.MetaDescriptor
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const { scenario, state, language } = await currentScenario(request);
+  const { scenario, state, language } = await pageScenario(request);
   if (params.sezione !== undefined && !isSection(params.sezione)) {
     throw data(null, { status: 404 });
   }
@@ -113,6 +113,7 @@ export default function PreviewSettings({ loaderData }: Route.ComponentProps) {
 /** Un indirizzo inesistente resta dentro l'app, con la strada per tornare all'elenco. */
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const { t, links } = useOutletContext<PreviewContext>();
+  if (isRouteErrorResponse(error) && error.status === 503) return <UnavailableState t={t} />;
   if (!isRouteErrorResponse(error) || error.status !== 404) throw error;
   return <NotFoundState kind="page" t={t} links={links} />;
 }

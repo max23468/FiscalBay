@@ -73,8 +73,9 @@ separatamente Sandbox, senza mescolare le due fonti nello stesso elenco.
 Nel keyset Sandbox configurare il RuName con callback accettato e rifiutato
 `https://test.fiscalbay.it/api/auth/callback/ebay`, mantenendo i soli scope base,
 `commerce.identity.readonly` e `sell.fulfillment.readonly`. Custodire i valori dei segreti nel
-Worker test, mai nel repository. Il flag è abilitato nella configurazione test e disabilitato
-in Production; la scelta resta nascosta finché mancano i segreti. Verificare il callback prima
+Worker test, mai nel repository. Il flag è disabilitato in Production e, dal 24 ottobre 2026,
+anche nella configurazione test, finché l'owner non chiede di riattivarlo; la scelta resta
+nascosta anche finché mancano i segreti. Verificare il callback prima
 di configurare i segreti. Nessuna configurazione
 Sandbox richiede di cambiare il keyset Production.
 

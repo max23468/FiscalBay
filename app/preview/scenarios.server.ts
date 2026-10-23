@@ -1,3 +1,4 @@
+import { appCopy } from "../app-copy";
 import { contactsView } from "../contact";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
 import type { Language } from "../i18n";
@@ -33,9 +34,11 @@ export const scenarioIds = [
   "negozio-scaduto",
   "dati-discordanti",
   "primo-accesso",
+  "prima-sincronizzazione",
   "importazione",
   "nessun-ordine",
   "caricamento",
+  "servizio-non-disponibile",
   "premium",
   "premium-a-vita",
 ] as const;
@@ -106,12 +109,12 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
     it: {
       name: "Problema su un negozio",
       focus:
-        "Premium con quattro negozi: uno da ricollegare, uno con autorizzazione incompleta, uno non verificabile.",
+        "Premium con quattro negozi: uno con l’aggiornamento non riuscito, uno da ricollegare, uno con autorizzazione incompleta, uno non verificabile.",
     },
     en: {
       name: "Problem with one store",
       focus:
-        "Premium with four stores: one to reconnect, one with incomplete authorisation, one that cannot be verified.",
+        "Premium with four stores: one whose update failed, one to reconnect, one with incomplete authorisation, one that cannot be verified.",
     },
   },
   "dati-discordanti": {
@@ -138,6 +141,17 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
         "No store and getting started. In Stores the simulated connection is already used by another account.",
     },
   },
+  "prima-sincronizzazione": {
+    it: {
+      name: "Prima sincronizzazione",
+      focus:
+        "Negozio appena collegato, nessun ordine ancora letto e primi passi dal punto raggiunto.",
+    },
+    en: {
+      name: "First sync",
+      focus: "Store just connected, no orders read yet and getting started from the current step.",
+    },
+  },
   importazione: {
     it: {
       name: "Importazione iniziale",
@@ -161,6 +175,16 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
   caricamento: {
     it: { name: "Caricamento", focus: "Scheletro aderente al layout delle schede." },
     en: { name: "Loading", focus: "Skeleton matching the card layout." },
+  },
+  "servizio-non-disponibile": {
+    it: {
+      name: "Servizio non disponibile",
+      focus: "Accesso o database non rispondono: nessun dato mostrato, soltanto Riprova.",
+    },
+    en: {
+      name: "Service unavailable",
+      focus: "Sign-in or database not responding: no data shown, only Try again.",
+    },
   },
   premium: {
     it: {
@@ -786,6 +810,8 @@ export interface Scenario {
   notices: OrdersNotice[];
   syncRunning: boolean;
   ebayDown: boolean;
+  /** Auth o database non rispondono: le pagine non mostrano dati. */
+  unavailable: boolean;
   elsewhere: boolean;
   notifications: NotificationView[];
   sessions: SessionView[];
@@ -846,14 +872,25 @@ const text = {
       body: "You have used the 5 unlocks for this cycle. The next one starts on 2 October.",
     },
   },
+  // Gli stessi testi della campanella reale.
   ebayDown: {
     it: {
-      title: "eBay non risponde",
-      body: "La sincronizzazione riprenderà appena eBay torna disponibile.",
+      title: appCopy.it.shell.storeNotifications.ebayDownTitle,
+      body: appCopy.it.shell.storeNotifications.ebayDownBody,
     },
     en: {
-      title: "eBay is not responding",
-      body: "Syncing will resume as soon as eBay is available again.",
+      title: appCopy.en.shell.storeNotifications.ebayDownTitle,
+      body: appCopy.en.shell.storeNotifications.ebayDownBody,
+    },
+  },
+  readFailed: {
+    it: {
+      title: appCopy.it.shell.storeNotifications.readFailedTitle,
+      body: appCopy.it.shell.storeNotifications.readFailedBody(stores.vintage.name),
+    },
+    en: {
+      title: appCopy.en.shell.storeNotifications.readFailedTitle,
+      body: appCopy.en.shell.storeNotifications.readFailedBody(stores.vintage.name),
     },
   },
   expired: {
@@ -932,6 +969,7 @@ export function loadScenario(
     notices: [] as OrdersNotice[],
     syncRunning: false,
     ebayDown: false,
+    unavailable: false,
     elsewhere: false,
     sessions: sessions(language),
     signInMethods: {
@@ -1061,7 +1099,7 @@ export function loadScenario(
         ebayDown: true,
         notices: [{ kind: "ebay-down", at: minutesAgo(125) }],
         notifications: [
-          note("ebayDown", { id: "n-ebay", tone: "warning", at: minutesAgo(60), read: false }),
+          note("ebayDown", { id: "n-ebay", tone: "warning", at: minutesAgo(35), read: false }),
           ...common.notifications,
         ],
         diagnostics: diagnostics({
@@ -1076,10 +1114,17 @@ export function loadScenario(
     case "negozio-scaduto": {
       const troubled = [
         // Consenso ancora valido che scade fra dodici giorni: il pannello invita a ricollegare.
+        // Le ultime due letture non sono riuscite: gli ordini restano quelli di 70 minuti fa.
         {
           ...premiumStores[0]!,
           consentExpiresAt: minutesAgo(-12 * 24 * 60),
           consentExpiring: true,
+          lastSyncAt: minutesAgo(70),
+          recent: [
+            { at: minutesAgo(10), ok: false, newOrders: 0 },
+            { at: minutesAgo(40), ok: false, newOrders: 0 },
+            { at: minutesAgo(70), ok: true, newOrders: 1 },
+          ],
         },
         storeView("outlet", {
           connection: "reconnect_required",
@@ -1126,8 +1171,41 @@ export function loadScenario(
         telegramChat: "Magazzino Vintage",
         notices: [
           { kind: "store-issue", storeId: stores.outlet.id, storeName: stores.outlet.name },
+          {
+            kind: "consent-expiring",
+            storeId: stores.vintage.id,
+            storeName: stores.vintage.name,
+            at: troubled[0]!.consentExpiresAt!,
+            ebayEnvironment: "production",
+          },
+          {
+            kind: "store-read-failed",
+            storeId: stores.vintage.id,
+            storeName: stores.vintage.name,
+            at: minutesAgo(70),
+          },
         ],
         notifications: [
+          // Come nell'area reale, il consenso in scadenza si segnala da trenta giorni prima.
+          {
+            id: "n-expiring",
+            tone: "warning",
+            title: appCopy[language].shell.storeNotifications.expiringTitle,
+            body: appCopy[language].shell.storeNotifications.expiringBody(
+              stores.vintage.name,
+              formatDate(troubled[0]!.consentExpiresAt!, language, "date"),
+            ),
+            at: minutesAgo(18 * 24 * 60),
+            read: false,
+            href: `negozi/${stores.vintage.id}`,
+          },
+          note("readFailed", {
+            id: "n-read-failed",
+            tone: "warning",
+            at: minutesAgo(40),
+            read: false,
+            href: `negozi/${stores.vintage.id}`,
+          }),
           note("expired", {
             id: "n-expired",
             tone: "warning",
@@ -1278,6 +1356,38 @@ export function loadScenario(
         }),
       };
       break;
+    case "prima-sincronizzazione":
+      // Come nell'area reale appena dopo il collegamento: lettura avviata, nessun ordine letto.
+      scenario = {
+        ...common,
+        account: account({ quota: { used: 0, limit: 5, cycleEndsAt: "2026-10-04T12:55:00Z" } }),
+        stores: [
+          storeView("vintage", {
+            syncing: true,
+            importing: true,
+            importedOrders: 0,
+            lastSyncAt: null,
+            connectedAt: minutesAgo(1),
+            recent: [],
+          }),
+        ],
+        seeds: [],
+        premium: false,
+        syncRunning: true,
+        view: "empty",
+        notices: [{ kind: "importing", count: 0 }],
+        onboarding: [
+          { label: "stepAccount", done: true },
+          { label: "stepEmail", done: true },
+          { label: "stepStore", done: true },
+          { label: "stepSync", done: false },
+        ],
+        notifications: [],
+        diagnostics: diagnostics({
+          syncPhase: language === "it" ? "Prima sincronizzazione" : "First sync",
+        }),
+      };
+      break;
     case "importazione":
       scenario = {
         ...common,
@@ -1319,6 +1429,18 @@ export function loadScenario(
         seeds: [],
         premium: false,
         view: "loading",
+        diagnostics: diagnostics(),
+      };
+      break;
+    case "servizio-non-disponibile":
+      scenario = {
+        ...common,
+        account: account(),
+        stores: [],
+        seeds: [],
+        premium: false,
+        unavailable: true,
+        notifications: [],
         diagnostics: diagnostics(),
       };
       break;

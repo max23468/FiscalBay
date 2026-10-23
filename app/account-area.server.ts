@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { redirect } from "react-router";
+import { data, redirect } from "react-router";
 
 import { createAuth } from "./auth.server";
 import { listNotifications } from "./domain/notifications.server";
@@ -9,7 +9,7 @@ import { listStores, type StoreStatus } from "./domain/stores.server";
 import { accessPath, ordersPath } from "./app-links";
 import { errorResponse } from "./error-response";
 import { sandboxAvailable, type EbayEnvironment } from "./integrations/ebay/environment.server";
-import { tracePhase } from "./errors";
+import { logFailure, tracePhase } from "./errors";
 import { languageFromPath, localizedPath, type Language } from "./i18n";
 import { measure } from "./observability.server";
 import { detectedTimeZone, effectiveTimeZone, type ShellData } from "./preferences";
@@ -38,6 +38,31 @@ export async function currentSession(request: Request) {
 }
 
 /**
+ * Sessione, registrazione e preferenze. Se Auth o il database non rispondono la pagina non
+ * promette dati che non ha letto: risponde 503 con la sola indicazione di riprovare.
+ */
+async function readAccount(request: Request) {
+  try {
+    const session = await currentSession(request);
+    const [status, preferences] = session
+      ? await measure("d1", "registration", () =>
+          Promise.all([
+            registrationStatus(env.DB, session.user.id),
+            readPreferences(env.DB, session.user.id),
+          ]),
+        )
+      : [null, null];
+    return { session, status, preferences };
+  } catch (error) {
+    logFailure({ request, code: "UPSTREAM_UNAVAILABLE", error, operation: "route" });
+    throw data(null, {
+      status: 503,
+      headers: { "cache-control": "no-store", "retry-after": "60" },
+    });
+  }
+}
+
+/**
  * Area riservata: richiede sessione e registrazione completa, altrimenti l'accesso mostra il
  * passo che manca. Le pagine oltre agli Ordini richiedono anche l'email confermata; senza, gli
  * Ordini spiegano come proseguire. L'esito eventualmente arrivato nell'indirizzo resta.
@@ -48,15 +73,7 @@ export async function requireAccountArea(
 ): Promise<AccountArea> {
   const url = new URL(request.url);
   const language = languageFromPath(url.pathname);
-  const session = await currentSession(request);
-  const [status, preferences] = session
-    ? await measure("d1", "registration", () =>
-        Promise.all([
-          registrationStatus(env.DB, session.user.id),
-          readPreferences(env.DB, session.user.id),
-        ]),
-      )
-    : [null, null];
+  const { session, status, preferences } = await readAccount(request);
   tracePhase(request, "registration");
   const complete = !!status?.profile && status.termsAccepted;
   if (!session || !complete || (!session.user.emailVerified && !options.unverified)) {

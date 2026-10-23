@@ -77,6 +77,17 @@ export async function currentScenario(request: Request) {
   };
 }
 
+/**
+ * Scenario di una pagina dell'anteprima. Con Auth o database non disponibili la pagina risponde
+ * come quella reale, con un 503 senza dati.
+ */
+export async function pageScenario(request: Request) {
+  const current = await currentScenario(request);
+  if (current.scenario.unavailable)
+    throw data(null, { status: 503, headers: { "cache-control": "no-store" } });
+  return current;
+}
+
 /** Azioni senza effetto dell'anteprima: la risposta ha la forma di quelle reali. */
 const notices: Record<string, (t: AppCopy) => string | undefined> = {
   "export-create": (t) => t.settings.exportCreated,
@@ -101,11 +112,10 @@ export async function simulateAction(request: Request, form: FormData) {
     );
   if (intent === "retry") {
     const id = String(form.get("order") ?? "");
-    if (
-      scenario.notices.some((notice) => notice.kind === "ebay-down") ||
-      !scenario.orders.some((order) => order.id === id && order.fiscal.state === "error")
-    )
-      return data<ActionResult>({ ok: false }, { status: 409 });
+    if (!scenario.orders.some((order) => order.id === id && order.fiscal.state === "error"))
+      return data<ActionResult>({ ok: false, notice: t.stores.failed }, { status: 409 });
+    if (scenario.notices.some((notice) => notice.kind === "ebay-down"))
+      return data<ActionResult>({ ok: false, notice: t.stores.ebayDown }, { status: 409 });
     return data<ActionResult>(
       { ok: true, notice: t.orders.retried },
       {

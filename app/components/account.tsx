@@ -11,9 +11,10 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { useFetcher, useLocation, useRevalidator, useSubmit } from "react-router";
+import { useFetcher, useLocation, useNavigation, useRevalidator, useSubmit } from "react-router";
 
 import { AppShell } from "~/components/app-shell";
+import { OrdersLoading } from "~/components/orders/loading";
 import { useFieldErrors } from "~/components/form-validation";
 import { StatusAlert } from "~/components/status";
 import {
@@ -430,50 +431,94 @@ function AddPasskey({
       setPending(false);
     }
   };
-  return (
-    <div className="grid w-full gap-2">
-      {!onAction ? (
-        <Field>
-          <FieldLabel htmlFor={id}>{settings.passkeyName}</FieldLabel>
-          <Input
-            id={id}
-            aria-describedby={`${id}-hint`}
-            maxLength={80}
-            value={name}
-            disabled={pending}
-            onChange={(event) => setName(event.target.value)}
-          />
-          <FieldDescription id={`${id}-hint`}>{settings.passkeyNameHint}</FieldDescription>
-        </Field>
-      ) : null}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="w-fit"
-        disabled={pending}
-        focusableWhenDisabled
-        aria-busy={pending || undefined}
-        onClick={() => guard("passkey-add", () => void add())}
-      >
-        {pending ? (
-          <Spinner
-            label={settings.addPasskey}
-            aria-hidden="true"
-            role={undefined}
-            data-icon="inline-start"
-          />
-        ) : (
+  const opener = useRef<HTMLButtonElement>(null);
+  const [naming, setNaming] = useState(false);
+  const failure = error ? (
+    <p role="alert" className="text-sm text-danger">
+      {t.passkeyErrors[error]}
+    </p>
+  ) : null;
+  // Il nome si chiede soltanto dopo la scelta di aggiungere una passkey, già compilato.
+  if (!naming)
+    return (
+      <div className="grid w-full gap-2">
+        <Button
+          ref={opener}
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-fit"
+          onClick={() =>
+            guard("passkey-add", () => {
+              setName(deviceName(navigator.userAgent, language));
+              setError(null);
+              setNaming(true);
+            })
+          }
+        >
           <KeyRound aria-hidden="true" data-icon="inline-start" />
-        )}
-        {settings.addPasskey}
-      </Button>
-      {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {t.passkeyErrors[error]}
-        </p>
-      ) : null}
-    </div>
+          {settings.addPasskey}
+        </Button>
+        {failure}
+      </div>
+    );
+  return (
+    <form
+      className="grid w-full gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void add();
+      }}
+    >
+      <Field>
+        <FieldLabel htmlFor={id}>{settings.passkeyName}</FieldLabel>
+        <Input
+          id={id}
+          aria-describedby={`${id}-hint`}
+          maxLength={80}
+          value={name}
+          autoFocus
+          disabled={pending}
+          onChange={(event) => setName(event.target.value)}
+        />
+        <FieldDescription id={`${id}-hint`}>{settings.passkeyNameHint}</FieldDescription>
+      </Field>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="submit"
+          size="sm"
+          disabled={pending}
+          focusableWhenDisabled
+          aria-busy={pending || undefined}
+        >
+          {pending ? (
+            <Spinner
+              label={settings.addPasskey}
+              aria-hidden="true"
+              role={undefined}
+              data-icon="inline-start"
+            />
+          ) : (
+            <KeyRound aria-hidden="true" data-icon="inline-start" />
+          )}
+          {settings.addPasskey}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={pending}
+          onClick={() => {
+            // Chiudendo il campo il focus torna al pulsante che l'ha aperto.
+            flushSync(() => setNaming(false));
+            opener.current?.focus();
+          }}
+        >
+          {appCopy[language].orders.cancel}
+        </Button>
+      </div>
+      {failure}
+    </form>
   );
 }
 
@@ -990,6 +1035,14 @@ export function AccountShell({
   const sandbox = new URLSearchParams(search).get("environment") === "sandbox";
   const other: Language = language === "it" ? "en" : "it";
   const links = { language, base: appBase };
+  // Verso gli Ordini da un'altra sezione la pagina precedente lascia subito il posto allo
+  // scheletro dell'elenco; dentro gli Ordini i dati mostrati restano durante la lettura.
+  const navigation = useNavigation();
+  const ordersList = appHref(links, "ordini");
+  const loadingOrders =
+    navigation.state === "loading" &&
+    navigation.location.pathname === ordersList &&
+    !pathname.startsWith(ordersList);
   return (
     <AppShell
       links={links}
@@ -1066,7 +1119,7 @@ export function AccountShell({
         )
       }
     >
-      {children}
+      {loadingOrders ? <OrdersLoading t={t} /> : children}
     </AppShell>
   );
 }

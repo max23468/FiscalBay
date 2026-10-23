@@ -28,6 +28,16 @@ export async function restoreUnlockConfirmation(db: D1Database, userId: string) 
   await db.prepare("DELETE FROM unlock_preferences WHERE user_id = ?").bind(userId).run();
 }
 
+/** Conferma prima dello sblocco di un singolo ordine; senza riga vale attiva. */
+export async function setUnlockConfirmation(db: D1Database, userId: string, confirm: boolean) {
+  if (confirm) return restoreUnlockConfirmation(db, userId);
+  await db
+    .prepare(`INSERT INTO unlock_preferences VALUES (?, 0)
+      ON CONFLICT(user_id) DO UPDATE SET confirm_unlock = 0`)
+    .bind(userId)
+    .run();
+}
+
 /** Cicli su tempo UTC, fissati al primo collegamento riuscito e mai alla riconnessione. */
 export async function orderAllowance(db: D1Database, userId: string, now = new Date()) {
   const at = now.toISOString();

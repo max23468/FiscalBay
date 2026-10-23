@@ -22,7 +22,6 @@ import { Form, Link, useLocation, useBlocker, useBeforeUnload } from "react-rout
 
 import { useAction } from "~/components/app-shell";
 import { useHydrated } from "~/components/hydrated";
-import { UnlockConfirmation } from "~/components/unlock-confirmation";
 import { AccessNotice, AccountSecurity } from "~/components/account";
 import { useFieldErrors } from "~/components/form-validation";
 import { IconTile, InitialsTile, PageTitle } from "~/components/icon-tile";
@@ -389,16 +388,23 @@ function Group({
   title,
   children,
   className,
+  separated = true,
 }: {
   title?: string;
   children: React.ReactNode;
   className?: string;
+  /** Linea sopra il gruppo; senza, quando il gruppo precedente finisce già con una linea. */
+  separated?: boolean;
 }) {
   const id = useId();
   return (
     <section
       aria-labelledby={title ? id : undefined}
-      className={cn("grid gap-4 border-t pt-6 first:border-t-0 first:pt-0", className)}
+      className={cn(
+        "grid gap-4",
+        separated && "border-t pt-6 first:border-t-0 first:pt-0",
+        className,
+      )}
     >
       {title ? (
         <h3 id={id} className="text-base font-semibold">
@@ -509,6 +515,14 @@ function PlanSection({
             ) : null}
           </div>
         ) : null}
+        {/* La conferma protegge gli sblocchi del ciclo: sta accanto al loro conteggio. */}
+        <AutoSwitch
+          name="unlock-confirmation"
+          label={t.settings.unlockConfirmation}
+          description={t.settings.unlockConfirmationHint}
+          initial={data.confirmUnlock}
+          t={t}
+        />
       </Group>
       {/* Prova, acquisto e negozio attivo del Free dipendono dai pagamenti. */}
       {billing && data.stores.length > 1 ? (
@@ -1274,7 +1288,8 @@ function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
   return (
     <>
       <Group title={t.settings.faq}>
-        <div className="grid divide-y border-t">
+        {/* Elenco chiuso da una linea anche in fondo, come in Dati e privacy. */}
+        <div className="grid divide-y border-y">
           {t.settings.faqItems.map((item) => (
             <details key={item.q} className="group py-1 text-sm">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-sm py-2 font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
@@ -1292,7 +1307,7 @@ function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
       {data.services.support && data.diagnostics ? (
         <SupportForm data={data} diagnostics={data.diagnostics} t={t} />
       ) : (
-        <Group title={t.settings.contact}>
+        <Group title={t.settings.contact} separated={false}>
           <p className="text-sm text-muted-foreground">
             {t.settings.supportWrite}{" "}
             <a href="mailto:supporto@fiscalbay.it" className="underline underline-offset-4">
@@ -1331,7 +1346,7 @@ function SupportForm({
   ] as const;
   return (
     <>
-      <Group title={t.settings.contact} className="scroll-mt-20">
+      <Group title={t.settings.contact} className="scroll-mt-20" separated={false}>
         <form
           noValidate
           className="grid gap-5"
@@ -1459,12 +1474,7 @@ export function SettingsPage({
     piano: <PlanSection data={data} t={t} language={language} />,
     notifiche: <NotificationsSection data={data} t={t} links={links} />,
     esportazione: <ExportSection data={data} t={t} />,
-    sicurezza: (
-      <>
-        <UnlockConfirmation confirmed={data.confirmUnlock} t={t} />
-        <SecuritySection data={data} language={language} />
-      </>
-    ),
+    sicurezza: <SecuritySection data={data} language={language} />,
     aspetto: <AppearanceSection data={data} t={t} links={links} />,
     messaggio: <TemplateSection data={data} t={t} />,
     privacy: <PrivacySection data={data} t={t} links={links} />,

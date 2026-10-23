@@ -18,7 +18,6 @@ import { PageTitle } from "~/components/icon-tile";
 import { StatusAlert, StatusIcon } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import { buttonVariants } from "~/components/ui/button-variants";
-import { Skeleton } from "~/components/ui/skeleton";
 import { Spinner } from "~/components/ui/spinner";
 import type { AppCopy } from "../../app-copy";
 import { appHref, type AppLinks } from "../../app-links";
@@ -36,6 +35,7 @@ import type { Language } from "../../i18n";
 import { formatDate, formatRelative, type OrdersNotice, type OrderView } from "../../view-models";
 import { OrderCard, type SecondaryActions } from "./card";
 import { OrderSheet } from "./detail";
+import { LoadingGrid, LoadingHeader } from "./loading";
 import { remainingUnlocks, type OrdersAccount } from "./labels";
 import { SelectionBar } from "./selection";
 import { OrdersToolbar, SearchChip } from "./toolbar";
@@ -70,6 +70,8 @@ export interface OrdersPageData extends SecondaryActions {
     lastAt: string | null;
     storeId: string | null;
     storeName: string | null;
+    /** Giorni dello storico letto: il periodo di cui un elenco vuoto dà conto. */
+    historyDays: number;
   };
   onboarding: Array<{
     label: "stepAccount" | "stepEmail" | "stepStore" | "stepSync";
@@ -120,7 +122,7 @@ function OrdersHeader({
   language: Language;
 }) {
   // Durante il caricamento lo stato dell'aggiornamento non è ancora noto.
-  const loading = data.view === "loading";
+  if (data.view === "loading") return <LoadingHeader t={t} />;
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
       <PageTitle
@@ -132,14 +134,12 @@ function OrdersHeader({
               {t.orders.count(data.total)}
               {data.total > 0 ? ` · ${t.orders.sortedBy}` : null}
             </p>
-          ) : loading ? (
-            <Skeleton aria-hidden="true" className="h-4 w-36" />
           ) : null
         }
       >
         {t.orders.title}
       </PageTitle>
-      {loading ? null : <SyncStatus data={data} t={t} language={language} />}
+      <SyncStatus data={data} t={t} language={language} />
     </header>
   );
 }
@@ -237,7 +237,28 @@ function OrdersNotices({
           case "ebay-down":
             return (
               <StatusAlert key={notice.kind} tone="warning" title={t.orders.ebayDownTitle}>
-                {t.orders.ebayDownBody(formatDate(notice.at, language, "dateTime", zone))}
+                {notice.at
+                  ? t.orders.ebayDownBody(formatDate(notice.at, language, "dateTime", zone))
+                  : t.orders.ebayDownNeverBody}
+              </StatusAlert>
+            );
+          case "store-read-failed":
+            return (
+              <StatusAlert
+                key={`${notice.kind}:${notice.storeId}`}
+                tone="warning"
+                title={t.orders.storeReadFailedTitle(notice.storeName)}
+              >
+                <span className="grid justify-items-start gap-3">
+                  {t.orders.storeReadFailedBody(formatDate(notice.at, language, "dateTime", zone))}
+                  <Link
+                    to={appHref(links, `negozi/${notice.storeId}`)}
+                    data-slot="button"
+                    className={buttonVariants({ variant: "outline", size: "sm" })}
+                  >
+                    {t.orders.openStore}
+                  </Link>
+                </span>
               </StatusAlert>
             );
           case "quota":
@@ -318,113 +339,55 @@ function ConnectAction({ data, t }: { data: OrdersPageData; t: AppCopy }) {
   return <Button onClick={() => action.run("store-connect")}>{content}</Button>;
 }
 
-function FirstUse({ data, t }: { data: OrdersPageData; t: AppCopy }) {
+/** Primi passi: compaiono finché la prima sincronizzazione non è conclusa, dal punto raggiunto. */
+function OnboardingSteps({ data, t }: { data: OrdersPageData; t: AppCopy }) {
   const current = data.onboarding.findIndex((step) => !step.done);
+  return (
+    <section aria-labelledby="onboarding" className="grid gap-2 border-t pt-4">
+      <h3 id="onboarding" className="text-xs font-medium text-muted-foreground">
+        {t.orders.steps}
+      </h3>
+      <ol className="grid gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
+        {data.onboarding.map((step, index) => (
+          <li
+            key={step.label}
+            aria-current={index === current ? "step" : undefined}
+            className={cn(
+              "flex items-center gap-2",
+              !step.done && index !== current && "text-muted-foreground",
+              index === current && "font-medium",
+            )}
+          >
+            {step.done ? (
+              <Check aria-hidden="true" className="size-4 text-success" />
+            ) : (
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "font-code grid size-4 place-items-center rounded-full text-[0.625rem]",
+                  index === current ? "bg-primary text-primary-foreground" : "border",
+                )}
+              >
+                {index + 1}
+              </span>
+            )}
+            {t.orders[step.label]}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function FirstUse({ data, t }: { data: OrdersPageData; t: AppCopy }) {
   return (
     <EmptyState
       title={t.orders.firstUseTitle}
       description={t.orders.firstUseBody}
       action={<ConnectAction data={data} t={t} />}
     >
-      <section aria-labelledby="onboarding" className="grid gap-2 border-t pt-4">
-        <h3 id="onboarding" className="text-xs font-medium text-muted-foreground">
-          {t.orders.steps}
-        </h3>
-        <ol className="grid gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
-          {data.onboarding.map((step, index) => (
-            <li
-              key={step.label}
-              aria-current={index === current ? "step" : undefined}
-              className={cn(
-                "flex items-center gap-2",
-                !step.done && index !== current && "text-muted-foreground",
-                index === current && "font-medium",
-              )}
-            >
-              {step.done ? (
-                <Check aria-hidden="true" className="size-4 text-success" />
-              ) : (
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "font-code grid size-4 place-items-center rounded-full text-[0.625rem]",
-                    index === current ? "bg-primary text-primary-foreground" : "border",
-                  )}
-                >
-                  {index + 1}
-                </span>
-              )}
-              {t.orders[step.label]}
-            </li>
-          ))}
-        </ol>
-      </section>
+      <OnboardingSteps data={data} t={t} />
     </EmptyState>
-  );
-}
-
-function LoadingGrid({ t }: { t: AppCopy }) {
-  return (
-    <div
-      aria-busy="true"
-      className="grid gap-6 [&_[data-slot=skeleton]]:bg-border dark:[&_[data-slot=skeleton]]:bg-muted"
-    >
-      <span className="sr-only" role="status">
-        {t.orders.loading}
-      </span>
-      {/* Stessa riga dei filtri dell'elenco, così i dati non spostano la pagina. */}
-      <div
-        aria-hidden="true"
-        className="hidden gap-3 md:grid md:grid-cols-[repeat(4,minmax(0,12rem))_1fr]"
-      >
-        {[0, 1, 2, 3].map((index) => (
-          <div key={index} className="grid gap-2">
-            <Skeleton className="h-4 w-20" />
-            <Skeleton className="h-9 w-full" />
-          </div>
-        ))}
-        <Skeleton className="h-9 w-28 self-end justify-self-end" />
-      </div>
-      <div className="grid gap-3 lg:grid-cols-2">
-        {[0, 1, 2, 3].map((index) => (
-          <div key={index} aria-hidden="true" className="grid gap-3 rounded-xl border bg-card p-4">
-            <div className="grid gap-1.5">
-              <div className="flex justify-between gap-3">
-                <Skeleton className="h-4 w-44" />
-                <Skeleton className="h-4 w-16" />
-              </div>
-              <Skeleton className="h-3 w-64 max-w-full" />
-            </div>
-            <div className="flex gap-3">
-              <Skeleton className="size-10 shrink-0" />
-              <div className="grid flex-1 content-start gap-1.5">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-1/2" />
-              </div>
-            </div>
-            <div className="grid gap-3 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_14rem]">
-              <div className="grid content-start gap-2">
-                <Skeleton className="h-3 w-20" />
-                <Skeleton className="h-4 w-36" />
-              </div>
-              <div className="grid content-start gap-2">
-                <Skeleton className="h-3 w-24" />
-                <Skeleton className="h-10 w-56 max-w-full" />
-              </div>
-              <div className="grid content-start gap-2">
-                <Skeleton className="h-3 w-24" />
-                <Skeleton className="h-4 w-40" />
-              </div>
-              <div className="grid content-start gap-2">
-                <Skeleton className="h-3 w-16" />
-                <Skeleton className="h-4 w-32" />
-              </div>
-            </div>
-            <Skeleton className="h-3 w-16 justify-self-end" />
-          </div>
-        ))}
-      </div>
-    </div>
   );
 }
 
@@ -775,7 +738,9 @@ function NoOrders({ data, t, links }: { data: OrdersPageData; t: AppCopy; links:
   return (
     <EmptyState
       variant="all-clear"
-      title={data.sync.lastAt ? t.orders.noOrdersTitle : t.orders.firstSyncTitle}
+      title={
+        data.sync.lastAt ? t.orders.noOrdersTitle(data.sync.historyDays) : t.orders.firstSyncTitle
+      }
       description={
         data.sync.lastAt
           ? t.orders.noOrdersBody(
@@ -795,7 +760,9 @@ function NoOrders({ data, t, links }: { data: OrdersPageData; t: AppCopy; links:
           </Link>
         ) : undefined
       }
-    />
+    >
+      {data.sync.lastAt ? null : <OnboardingSteps data={data} t={t} />}
+    </EmptyState>
   );
 }
 

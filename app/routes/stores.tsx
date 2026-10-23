@@ -11,6 +11,7 @@ import { appBase, storeLinkPath, type AppLinks } from "../app-links";
 import {
   deleteStoreData,
   disconnectStore,
+  ebayOutage,
   listStores,
   pauseStore,
   resumeStore,
@@ -98,7 +99,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       // Finché non esistono gli abbonamenti ogni spazio usa il piano Free.
       account: { plan: "free" as const },
       now: now.toISOString(),
-      ebayDown: false,
+      // Con eBay che non risponde restano sospese soltanto le azioni che lo chiamano.
+      ebayDown: ebayOutage(statuses) !== null,
       elsewhere: false,
       connectHref: localizedPath(language, storeLinkPath),
       // Notifiche, piano e supporto non hanno ancora una pagina reale.

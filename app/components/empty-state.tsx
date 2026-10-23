@@ -47,7 +47,7 @@ export function EmptyState({
           <Unplug aria-hidden="true" className="mt-0.5 size-5 justify-self-center text-warning" />
         )}
         <div className="grid min-w-0 gap-1">
-          <h2 className="text-sm font-medium">{title}</h2>
+          <Heading className="text-sm font-medium">{title}</Heading>
           <p className="text-sm leading-relaxed text-pretty text-muted-foreground">{description}</p>
         </div>
         {action ? <div className="col-start-2 sm:col-start-3 sm:row-start-1">{action}</div> : null}
