@@ -256,45 +256,31 @@ jobs:
           key: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.browsers }}
           restore-keys: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-
 
-      - name: Install browser for interaction tests
-        if: steps.browsers.outputs.cache-hit != 'true'
-        env:
-          BROWSERS: ${{ needs.verify.outputs.browsers }}
-        run: |
-          # I pacchetti già scaricati restano in /var/cache/apt/archives: apt scarica soltanto quelli
-          # mancanti o aggiornati dall'archivio Ubuntu.
-          echo 'APT::Keep-Downloaded-Packages "true";' | sudo tee /etc/apt/apt.conf.d/99-keep-downloaded > /dev/null
-          if compgen -G "${HOME}/.cache/apt-archives/*.deb" > /dev/null; then
-            sudo cp "${HOME}"/.cache/apt-archives/*.deb /var/cache/apt/archives/
-          fi
-          IFS=, read -ra browsers <<< "${BROWSERS}"
-          pnpm exec playwright install --with-deps "${browsers[@]}"
-          mkdir -p "${HOME}/.cache/apt-archives"
-          if compgen -G "/var/cache/apt/archives/*.deb" > /dev/null; then
-            cp /var/cache/apt/archives/*.deb "${HOME}/.cache/apt-archives/"
-          fi
-
+      # Un archivio lento non deve occupare il job fino al timeout: il passo si interrompe e si
+      # ripete una volta, ripartendo dai pacchetti già scaricati.
       - name: Install browser system dependencies
-        if: steps.browsers.outputs.cache-hit == 'true'
+        id: system
+        timeout-minutes: 5
+        continue-on-error: true
         env:
           BROWSERS: ${{ needs.verify.outputs.browsers }}
-        run: |
-          # I pacchetti già scaricati restano in /var/cache/apt/archives: apt scarica soltanto quelli
-          # mancanti o aggiornati dall'archivio Ubuntu.
-          echo 'APT::Keep-Downloaded-Packages "true";' | sudo tee /etc/apt/apt.conf.d/99-keep-downloaded > /dev/null
-          if compgen -G "${HOME}/.cache/apt-archives/*.deb" > /dev/null; then
-            sudo cp "${HOME}"/.cache/apt-archives/*.deb /var/cache/apt/archives/
-          fi
-          IFS=, read -ra browsers <<< "${BROWSERS}"
-          pnpm exec playwright install-deps "${browsers[@]}"
-          mkdir -p "${HOME}/.cache/apt-archives"
-          if compgen -G "/var/cache/apt/archives/*.deb" > /dev/null; then
-            cp /var/cache/apt/archives/*.deb "${HOME}/.cache/apt-archives/"
-          fi
+          BROWSER_CACHE_HIT: ${{ steps.browsers.outputs.cache-hit }}
+        run: node scripts/browser-tests.mjs --install-system --browsers "${BROWSERS}"
 
+      - name: Retry browser system dependencies
+        if: steps.system.outcome == 'failure'
+        timeout-minutes: 5
+        env:
+          BROWSERS: ${{ needs.verify.outputs.browsers }}
+          BROWSER_CACHE_HIT: ${{ steps.browsers.outputs.cache-hit }}
+        run: node scripts/browser-tests.mjs --install-system --browsers "${BROWSERS}"
+
+      # Una prova che riesce alla ripetizione resta nel report con un avviso; due fallimenti
+      # bloccano ancora il gate.
       - name: Check browser interactions before deploy
         env:
           E2E_PREBUILT: "1"
+          E2E_RETRIES: "1"
           BROWSER_GREP: ${{ needs.verify.outputs.grep }}
           BROWSERS: ${{ needs.verify.outputs.browsers }}
           SHARD: ${{ matrix.shard }}/4
@@ -352,6 +338,85 @@ jobs:
                 ;;
             esac
           done
+
+  # Le PR leggono soltanto le cache del proprio ambito e di `develop`. Senza questa copia ogni
+  # nuova PR riscarica dall'archivio Ubuntu i pacchetti di WebKit, salvati solo nell'ambito
+  # della PR precedente. Con le cache già presenti il job si chiude dopo la ricerca.
+  browser-cache:
+    name: Browser cache
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # La versione è fissata nel manifest: la ricerca non richiede l'installazione delle dipendenze.
+      - name: Read Playwright version
+        id: playwright
+        run: |
+          {
+            echo "version=$(node -p 'require("./package.json").devDependencies["@playwright/test"]')"
+            echo "image=${ImageOS}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Look up browser cache
+        id: browsers
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium-webkit
+          lookup-only: true
+
+      - name: Look up system packages
+        id: packages
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/apt-archives
+          key: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium-webkit
+          lookup-only: true
+
+      - name: Set up pnpm
+        if: steps.browsers.outputs.cache-hit != 'true' || steps.packages.outputs.cache-hit != 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 12.14.0
+
+      - name: Set up Node
+        if: steps.browsers.outputs.cache-hit != 'true' || steps.packages.outputs.cache-hit != 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.12.0
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.browsers.outputs.cache-hit != 'true' || steps.packages.outputs.cache-hit != 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare browser system packages
+        if: steps.browsers.outputs.cache-hit != 'true' || steps.packages.outputs.cache-hit != 'true'
+        run: sudo "$(command -v node)" scripts/browser-tests.mjs --prepare-system
+
+      - name: Install browsers and system packages
+        if: steps.browsers.outputs.cache-hit != 'true' || steps.packages.outputs.cache-hit != 'true'
+        run: node scripts/browser-tests.mjs --install-system --browsers chromium,webkit
+
+      - name: Save browser cache
+        if: steps.browsers.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium-webkit
+
+      - name: Save system packages
+        if: steps.packages.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/apt-archives
+          key: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium-webkit
 
   deploy-test:
     name: Deploy test
@@ -456,35 +521,21 @@ jobs:
         if: needs.verify.outputs.e2e == 'true'
         run: sudo "$(command -v node)" scripts/browser-tests.mjs --prepare-system
 
-      - name: Install browser for interaction tests
-        if: needs.verify.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit != 'true'
-        run: |
-          # I pacchetti già scaricati restano in /var/cache/apt/archives: apt scarica soltanto quelli
-          # mancanti o aggiornati dall'archivio Ubuntu.
-          echo 'APT::Keep-Downloaded-Packages "true";' | sudo tee /etc/apt/apt.conf.d/99-keep-downloaded > /dev/null
-          if compgen -G "${HOME}/.cache/apt-archives/*.deb" > /dev/null; then
-            sudo cp "${HOME}"/.cache/apt-archives/*.deb /var/cache/apt/archives/
-          fi
-          pnpm exec playwright install --with-deps chromium
-          mkdir -p "${HOME}/.cache/apt-archives"
-          if compgen -G "/var/cache/apt/archives/*.deb" > /dev/null; then
-            cp /var/cache/apt/archives/*.deb "${HOME}/.cache/apt-archives/"
-          fi
-
       - name: Install browser system dependencies
-        if: needs.verify.outputs.e2e == 'true' && steps.browsers.outputs.cache-hit == 'true'
-        run: |
-          # I pacchetti già scaricati restano in /var/cache/apt/archives: apt scarica soltanto quelli
-          # mancanti o aggiornati dall'archivio Ubuntu.
-          echo 'APT::Keep-Downloaded-Packages "true";' | sudo tee /etc/apt/apt.conf.d/99-keep-downloaded > /dev/null
-          if compgen -G "${HOME}/.cache/apt-archives/*.deb" > /dev/null; then
-            sudo cp "${HOME}"/.cache/apt-archives/*.deb /var/cache/apt/archives/
-          fi
-          pnpm exec playwright install-deps chromium
-          mkdir -p "${HOME}/.cache/apt-archives"
-          if compgen -G "/var/cache/apt/archives/*.deb" > /dev/null; then
-            cp /var/cache/apt/archives/*.deb "${HOME}/.cache/apt-archives/"
-          fi
+        id: system
+        if: needs.verify.outputs.e2e == 'true'
+        timeout-minutes: 5
+        continue-on-error: true
+        env:
+          BROWSER_CACHE_HIT: ${{ steps.browsers.outputs.cache-hit }}
+        run: node scripts/browser-tests.mjs --install-system --browsers chromium
+
+      - name: Retry browser system dependencies
+        if: needs.verify.outputs.e2e == 'true' && steps.system.outcome == 'failure'
+        timeout-minutes: 5
+        env:
+          BROWSER_CACHE_HIT: ${{ steps.browsers.outputs.cache-hit }}
+        run: node scripts/browser-tests.mjs --install-system --browsers chromium
 
       # L'account di collaudo torna a uno stato noto prima delle prove autenticate. Se il
       # ripristino non riesce (permessi del token, D1 non raggiungibile) le prove autenticate
