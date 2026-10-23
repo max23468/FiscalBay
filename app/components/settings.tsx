@@ -17,7 +17,7 @@ import {
   SunMoon,
   User,
 } from "lucide-react";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Form, Link, useLocation, useBlocker, useBeforeUnload } from "react-router";
 
 import { useAction } from "~/components/app-shell";
@@ -854,6 +854,8 @@ function SecuritySection({ data, language }: { data: SettingsPageData; language:
   );
 }
 
+const subscribeNever = () => () => {};
+
 /** Tema sul documento: `data-theme` impone chiaro o scuro, senza attributo segue il sistema. */
 function applyTheme(theme: Theme) {
   const root = document.documentElement;
@@ -1078,6 +1080,12 @@ function TemplateSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
   );
   const blocker = useUnsavedGuard(dirty);
   const empty = languages.some((code) => !draft[code].trim());
+  // Prima dell'idratazione il campo controllato perderebbe il testo già scritto.
+  const ready = useSyncExternalStore(
+    subscribeNever,
+    () => true,
+    () => false,
+  );
   return (
     <div className="grid gap-4">
       <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
@@ -1111,7 +1119,7 @@ function TemplateSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
                   required
                   maxLength={maxTemplateLength}
                   value={draft[code]}
-                  disabled={action.pending}
+                  disabled={!ready || action.pending}
                   onChange={(event) => {
                     const value = event.currentTarget.value;
                     setDraft((current) => ({ ...current, [code]: value }));
