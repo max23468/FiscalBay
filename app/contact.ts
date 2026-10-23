@@ -157,11 +157,20 @@ export function contactText(text: string): string {
 }
 
 /**
- * La fonte non distingue persone e aziende: preservare la grafia del nome, incluse sigle e
- * marchi. Non dedurre nome/cognome né usare identificativi fiscali per correggerli.
+ * Iniziali maiuscole per nomi tutti maiuscoli o minuscoli, anche dopo apostrofi e trattini.
+ * Conservare grafia mista, mascheramenti e ragioni sociali con sigle riconoscibili.
+ * Non dedurre nome/cognome né usare identificativi fiscali per correggerli.
  */
 export function buyerNameView(name: string | null): string | null {
-  return name ? contactText(name) || null : null;
+  const text = name ? contactText(name) : "";
+  if (!text) return null;
+  if (
+    (/\p{Lu}/u.test(text) && /\p{Ll}/u.test(text)) ||
+    /[\d*•…]/u.test(text) ||
+    /(?:^|\s)(?:s\.?r\.?l\.?s?\.?|s\.?p\.?a\.?|s\.?n\.?c\.?|s\.?a\.?s\.?)(?:\s|$)/iu.test(text)
+  )
+    return text;
+  return text.toLowerCase().replace(/\p{L}[\p{L}\p{M}]*/gu, capitalize);
 }
 
 /**

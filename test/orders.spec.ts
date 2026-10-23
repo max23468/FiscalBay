@@ -1478,6 +1478,20 @@ describe("pagina Ordini reale", () => {
     expect(submitted.headers.get("location")?.toLowerCase()).not.toContain("articolo");
     expect(await searchOrders(cookie, "   ")).toEqual({ items: [], total: 0, href: "/app/ordini" });
 
+    // La presentazione del nome non riscrive la fonte né cambia lo username di ripiego.
+    for (const [buyer, display] of [
+      [{ name: "  MARIO ROSSI  ", username: "BUYER_TEST" }, "Mario Rossi"],
+      [{ name: null, username: "BUYER_TEST" }, "BUYER_TEST"],
+    ] as const) {
+      await env.DB.prepare("UPDATE orders SET buyer_json = ? WHERE id = 'o-a'")
+        .bind(JSON.stringify(buyer))
+        .run();
+      expect((await searchOrders(cookie, "articolo a")).items[0]?.buyerName).toBe(display);
+      expect(
+        await env.DB.prepare("SELECT buyer_json FROM orders WHERE id = 'o-a'").first("buyer_json"),
+      ).toBe(JSON.stringify(buyer));
+    }
+
     // L'elenco decifra la ricerca della propria sessione e la conserva con filtri e pagine.
     const listed = (await ordersPage(cookie, `${found.href}&fiscale=locked`)).page!;
     expect(listed).toMatchObject({ search: "ARTICOLO a", total: 1 });
@@ -2133,8 +2147,34 @@ describe("vista condivisa e criteri degli ordini", () => {
     expect(addressCase("Via McDonald 12B")).toBe("Via McDonald 12B");
     expect(addressCase("HAUPTSTRASSE 12", "DE")).toBe("HAUPTSTRASSE 12");
     expect(addressCase("ΑΘΗΝΑ", "GR")).toBe("ΑΘΗΝΑ");
-    for (const name of ["ACME SRL", "eBay Italia", "McDonald", "MARIO ROSSI", "mario rossi"])
+    for (const name of [
+      "ACME SRL",
+      "ACME S.R.L.",
+      "ACME SPA",
+      "ACME SNC",
+      "ACME SAS",
+      "ACME SRLS",
+      "eBay Italia",
+      "McDonald",
+      "Maria de la Cruz",
+      "M*** R***",
+      "M••• R•••",
+      "M… R…",
+      "ROSSI 123",
+    ])
       expect(buyerNameView(`  ${name}  `)).toBe(name);
+    for (const [raw, formatted] of [
+      ["MARIO ROSSI", "Mario Rossi"],
+      ["mario rossi", "Mario Rossi"],
+      ["  MARIO\n  DI ROSA  ", "Mario Di Rosa"],
+      ["MARIA DELL'ORTO", "Maria Dell'Orto"],
+      ["anna d’angelo", "Anna D’Angelo"],
+      ["JEAN-PIERRE DUPONT", "Jean-Pierre Dupont"],
+      ["JOSÉ ÁLVAREZ", "José Álvarez"],
+      ["li wei", "Li Wei"],
+      ["LUCA DE LUCA", "Luca De Luca"],
+    ])
+      expect(buyerNameView(raw!)).toBe(formatted);
     expect(buyerNameView(" Mario\n Rossi ")).toBe("Mario Rossi");
     expect(buyerNameView("  ")).toBeNull();
     expect(buyerNameView(null)).toBeNull();
@@ -2254,7 +2294,7 @@ describe("vista condivisa e criteri degli ordini", () => {
     expect(historical.maskedContacts).toEqual([]);
     const order = {
       ...historical,
-      buyerName: "  Mario   Rossi  ",
+      buyerName: "  MARIO   ROSSI  ",
       contacts: {
         ...historical.contacts,
         billingAddress: {
