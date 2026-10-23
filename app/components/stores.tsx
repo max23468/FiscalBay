@@ -107,6 +107,28 @@ function marketplaceText(store: StoreView) {
   return store.marketplace ? marketplaceLabel(store.marketplace) : null;
 }
 
+/** Logo del negozio eBay; senza logo, o se non si carica, le iniziali del nome. */
+function StoreTile({ store, size = "md" }: { store: StoreView; size?: "md" | "lg" }) {
+  const [failed, setFailed] = useState<string | null>(null);
+  if (!store.logoUrl || failed === store.logoUrl)
+    return <InitialsTile name={store.name} size={size} />;
+  return (
+    <img
+      src={store.logoUrl}
+      alt=""
+      width={size === "lg" ? 44 : 36}
+      height={size === "lg" ? 44 : 36}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(store.logoUrl!)}
+      className={cn(
+        "shrink-0 border bg-white object-contain",
+        size === "lg" ? "size-11 rounded-xl" : "size-9 rounded-lg",
+      )}
+    />
+  );
+}
+
 /** Account e marketplace sotto il nome, senza ripetere il nome quando coincide. */
 function StoreSubtitle({ store }: { store: StoreView }) {
   const account = store.username !== store.name ? store.username : null;
@@ -785,7 +807,7 @@ function StoreSheet({ data, t, links }: { data: StoresPageData; t: AppCopy; link
           className="sm:max-w-lg"
         >
           <SheetHeader className="flex-row items-center gap-3">
-            <InitialsTile name={shownDetail.name} size="lg" />
+            <StoreTile store={shownDetail} size="lg" />
             <span className="grid min-w-0 gap-1">
               <SheetTitle className="text-pretty wrap-anywhere">{shownDetail.name}</SheetTitle>
               {hasSubtitle(shownDetail) ? (
@@ -888,7 +910,7 @@ function StoreTable({ stores, premium, now, t, links }: ListProps) {
                     preventScrollReset
                     className="flex items-center gap-3 rounded-sm outline-none after:absolute after:inset-0 focus-visible:ring-3 focus-visible:ring-ring"
                   >
-                    <InitialsTile name={store.name} />
+                    <StoreTile store={store} />
                     <span className="grid min-w-0 gap-0.5">
                       <span className="font-medium text-pretty wrap-anywhere hover:underline hover:underline-offset-4">
                         {store.name}
@@ -944,7 +966,7 @@ function StoreList({ stores, premium, now, t, links }: ListProps) {
               preventScrollReset
               className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 py-4 outline-none focus-visible:ring-3 focus-visible:ring-ring"
             >
-              <InitialsTile name={store.name} />
+              <StoreTile store={store} />
               <span className="grid min-w-0 gap-1">
                 <span className="font-medium text-pretty wrap-anywhere">{store.name}</span>
                 {store.username !== store.name ? (

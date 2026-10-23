@@ -236,6 +236,8 @@ export interface StoreView {
   id: string;
   name: string;
   username: string;
+  /** Logo del negozio eBay, se il venditore ne ha uno. */
+  logoUrl?: string | null;
   /** Marketplace prevalente, quando noto. */
   marketplace: string | null;
   /** Negozio dell'ambiente Sandbox di eBay, disponibile solo sul test. */

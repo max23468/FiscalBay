@@ -5,7 +5,8 @@ import { parseMinor } from "../../money";
 
 /**
  * Trading resta circoscritto alle chiamate necessarie: `GetOrders` per gli acquisti prima del
- * checkout, le identità di riga e i dati fiscali, `GetItem` per l'immagine. Le risposte passano dal
+ * checkout, le identità di riga e i dati fiscali, `GetItem` per l'immagine, `GetStore` per nome
+ * e logo del negozio. Le risposte passano dal
  * confine HTTP e vengono rifiutate prima del parsing se troppo grandi, con byte NUL o con
  * dichiarazioni `DOCTYPE`/`ENTITY`.
  */
@@ -407,4 +408,37 @@ export async function readItemImage(
   return parseItemImage(
     await tradingCall(access, "GetItem", `<ItemID>${escapeXml(legacyItemId)}</ItemID>`),
   );
+}
+
+export type StoreProfile = { name: string | null; logoUrl: string | null };
+
+/**
+ * Nome e logo del negozio in una risposta `GetStore`. Categorie, logo e tema hanno elementi
+ * `Name` propri: si tolgono prima di leggere il nome del negozio.
+ */
+export function parseStoreProfile(xml: string): StoreProfile {
+  tradingAck(xml);
+  const store = /<Store>([\s\S]*)<\/Store>/u.exec(xml)?.[1] ?? "";
+  const logo = /<Logo>([\s\S]*?)<\/Logo>/u.exec(store)?.[1] ?? "";
+  const own = store.replace(/<(CustomCategories|Logo|Theme)>[\s\S]*?<\/\1>/gu, "");
+  const name = xmlField(own, "Name");
+  const logoUrl = xmlField(logo, "URL");
+  return {
+    name: name && name.length <= 200 ? name : null,
+    logoUrl: logoUrl ? qualifiedImageUrl(logoUrl) : null,
+  };
+}
+
+/**
+ * Negozio eBay dell'utente del token. Chi non ha un negozio riceve un rifiuto da eBay: vale come
+ * profilo vuoto, non come errore della lettura.
+ */
+export async function readStoreProfile(access: EbayAccess): Promise<StoreProfile> {
+  try {
+    return parseStoreProfile(await tradingCall(access, "GetStore", "<LevelLimit>1</LevelLimit>"));
+  } catch (error) {
+    if (error instanceof UpstreamError && error.failure === "rejected")
+      return { name: null, logoUrl: null };
+    throw error;
+  }
 }

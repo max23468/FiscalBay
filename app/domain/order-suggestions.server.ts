@@ -30,7 +30,7 @@ export async function orderSuggestions(
          AND (e.ends_at IS NULL OR julianday(e.ends_at) > julianday(?4)))
   ) SELECT target.id AS target_id, target.buyer_eias_token,
       o.id AS source_id, o.ebay_order_id, o.creation_time,
-      COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id) AS store_name,
+      COALESCE(s.store_name, s.display_name, s.ebay_account_id, s.ebay_user_id) AS store_name,
       t.identifier_type, t.issuing_country, t.value, t.source
     FROM targets target
     LEFT JOIN orders o ON o.buyer_eias_token = target.buyer_eias_token

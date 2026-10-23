@@ -11,6 +11,7 @@ import {
   type Context,
 } from "./order-acquisition-context.server";
 import { readDetail, readDetails, stopsReads } from "./order-acquisition-details.server";
+import { refreshStoreProfile } from "./store-profile.server";
 import { logFailure } from "../errors";
 import { dayMilliseconds } from "../time";
 import { UpstreamError } from "../integrations/http.server";
@@ -39,6 +40,8 @@ import { readTradingOrders } from "../integrations/ebay/trading.server";
  * 3. storico: ordini creati nella finestra fissata al primo avvio, dal più recente;
  * 4. dettaglio: dati fiscali e immagini di ogni versione Fulfillment non ancora letta,
  *    in `order-acquisition-details.server.ts`.
+ *
+ * Dopo i recenti, al massimo una volta a settimana, si rileggono nome e logo del negozio eBay.
  *
  * Ogni pagina si applica prima di salvarne il link `next`, e il limite dei recenti avanza
  * solo a passata conclusa: un'interruzione riprende dall'ultima pagina applicata e la rilegge
@@ -360,6 +363,7 @@ export async function acquireOrders(input: {
     const recent = await runPass(ctx, recentPass(ctx, state));
     // Lettura dei recenti conclusa: l'ultima sincronizzazione del negozio.
     if (recent) await saveState(ctx, "last_success_at = ?3");
+    if (recent) await refreshStoreProfile(ctx);
     // Trading aggiunge gli acquisti prima del checkout: un suo errore lascia la passata da
     // riprendere senza fermare storico e dettaglio. Le credenziali fermano tutto; la quota
     // Trading esaurita sospende soltanto Trading.

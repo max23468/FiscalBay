@@ -405,7 +405,7 @@ export async function listVisibleOrders(
                         'quantity', quantity, 'sku', sku, 'totalMinor', total_minor,
                         'currency', currency, 'imageUrl', image_url))
                  FROM (SELECT * FROM order_items WHERE order_id = o.id ORDER BY rowid)) AS items_json,
-              COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id) ||
+              COALESCE(s.store_name, s.display_name, s.ebay_account_id, s.ebay_user_id) ||
                 CASE WHEN s.ebay_environment = 'sandbox' THEN ' (Sandbox)' ELSE '' END AS store_name,
               EXISTS (SELECT 1 FROM tax_identifiers
                        WHERE order_id = o.id AND removed_at IS NULL) AS has_identifiers,

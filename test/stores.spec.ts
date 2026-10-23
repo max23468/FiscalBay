@@ -149,6 +149,8 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       {
         id: seller.storeId,
         name: "venditore",
+        username: "venditore",
+        logoUrl: null,
         ebayEnvironment: "production",
         connection: "active",
         pauseReasons: [],

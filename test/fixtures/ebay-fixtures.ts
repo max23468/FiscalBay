@@ -18,10 +18,24 @@ export const syntheticTradingXml = `<?xml version="1.0" encoding="UTF-8"?>
   </OrderArray>
 </GetOrdersResponse>`;
 
+export const syntheticStoreLogo = "https://i.ebayimg.com/00/s/MTAwWDEwMA==/z/logo/$_1.png";
+export const syntheticStoreXml = `<?xml version="1.0" encoding="UTF-8"?>
+<GetStoreResponse xmlns="urn:ebay:apis:eBLBaseComponents"><Ack>Success</Ack><Store>
+<Name>Bottega &amp; Ricambi</Name><Description>Ricambi d'epoca</Description>
+<Logo><URL>${syntheticStoreLogo}</URL></Logo>
+<CustomCategories><CustomCategory><CategoryID>1</CategoryID><Name>Altro</Name></CustomCategory></CustomCategories>
+</Store></GetStoreResponse>`;
+// Venditore senza negozio eBay: `GetStore` risponde con un rifiuto.
+const noStoreXml = `<?xml version="1.0" encoding="UTF-8"?>
+<GetStoreResponse xmlns="urn:ebay:apis:eBLBaseComponents"><Ack>Failure</Ack><Errors>
+<ErrorCode>13003</ErrorCode><SeverityCode>Error</SeverityCode>
+<ErrorClassification>RequestError</ErrorClassification></Errors></GetStoreResponse>`;
+
 export function syntheticEbay(
   options: {
     username?: string;
     trading?: () => Response;
+    store?: () => Response;
     token?: () => Response;
     orderId?: string;
     lastModifiedDate?: string;
@@ -63,6 +77,8 @@ export function syntheticEbay(
     }
     if (url.endsWith("/ws/api.dll")) {
       if (String(init?.body).includes("<ModTimeFrom>")) return new Response(emptyTradingOrders);
+      if (new Headers(init?.headers).get("x-ebay-api-call-name") === "GetStore")
+        return options.store?.() ?? new Response(noStoreXml);
       return options.trading?.() ?? new Response(syntheticTradingXml);
     }
     return new Response(null, { status: 404 });

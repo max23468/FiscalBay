@@ -27,6 +27,9 @@ afterEach(() => vi.useRealTimers());
 describe("acquisizione con il client", () => {
   const grantedAt = "2026-09-01T00:00:00.000Z";
   const image = "https://i.ebayimg.com/images/g/abc/s-l1600.jpg";
+  const storeResponse = ack(
+    `<Ack>Success</Ack><Store><Name>Negozio Sintetico</Name><Logo><URL>${image}</URL></Logo></Store>`,
+  );
   type FakeOrder = ReturnType<typeof order>;
   /**
    * eBay sintetico con paginazione reale: filtra per data, ordina dal più recente e restituisce
@@ -48,6 +51,7 @@ describe("acquisizione con il client", () => {
       const failed = options.fail?.(url, init);
       if (failed) return failed;
       const call = new Headers(init?.headers).get("x-ebay-api-call-name");
+      if (call === "GetStore") return new Response(storeResponse);
       if (call === "GetItem") {
         return (
           options.getItem?.() ??
@@ -1010,7 +1014,8 @@ describe("acquisizione con il client", () => {
     // Senza chiamate lo storico non parte, anche con pagine disponibili.
     const noCalls = ebay({ orders });
     expect(await acquire(noCalls, undefined, { calls: 1, pages: 10 })).toBe("budget");
-    expect(noCalls).toHaveBeenCalledTimes(1);
+    // I recenti e la prima lettura del profilo del negozio, che non scala il budget.
+    expect(noCalls).toHaveBeenCalledTimes(2);
     await reset();
     // Senza pagine lo storico non parte, anche con chiamate disponibili.
     const noPages = ebay({ orders });
@@ -1311,7 +1316,8 @@ describe("acquisizione con il client", () => {
           tokenOf(init) === "token-s-c" ? new Response(null, { status: 401 }) : undefined,
       });
       await cronTurn(env, fetcher, new Date("2026-09-02T00:00:00.000Z"));
-      expect(perStore(fetcher)).toEqual({ "token-s-a": 11, "token-s-c": 1, "token-s-d": 11 });
+      // Il budget di A e D più la prima lettura del profilo del negozio, fuori budget.
+      expect(perStore(fetcher)).toEqual({ "token-s-a": 12, "token-s-c": 1, "token-s-d": 12 });
       expect(logged()).toBe(2);
       expect(errors.mock.calls.map(([line]) => JSON.parse(String(line)).failure).sort()).toEqual([
         "credentials",
