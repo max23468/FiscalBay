@@ -80,9 +80,16 @@ export async function listActiveSessions(
   }));
 }
 
-/** Chiude una sessione dell'utente; quella di un altro utente resta invariata. */
-export async function revokeSession(db: D1Database, userId: string, id: string): Promise<void> {
-  await db.prepare('DELETE FROM "session" WHERE "id" = ? AND "userId" = ?').bind(id, userId).run();
+/**
+ * Chiude una sessione dell'utente; quella di un altro utente resta invariata. False se la
+ * sessione non è sua o non esiste più.
+ */
+export async function revokeSession(db: D1Database, userId: string, id: string): Promise<boolean> {
+  const result = await db
+    .prepare('DELETE FROM "session" WHERE "id" = ? AND "userId" = ?')
+    .bind(id, userId)
+    .run();
+  return result.meta.changes > 0;
 }
 
 /** Chiude tutte le sessioni dell'utente tranne quella indicata. */

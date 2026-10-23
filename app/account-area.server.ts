@@ -12,7 +12,7 @@ import { sandboxAvailable, type EbayEnvironment } from "./integrations/ebay/envi
 import { tracePhase } from "./errors";
 import { languageFromPath, localizedPath, type Language } from "./i18n";
 import { measure } from "./observability.server";
-import type { ShellData } from "./preferences";
+import { detectedTimeZone, effectiveTimeZone, type ShellData } from "./preferences";
 
 export type AccountArea = {
   language: Language;
@@ -21,6 +21,8 @@ export type AccountArea = {
   /** Nome ed email per la shell. */
   account: { name: string; email: string };
   preferences: Preferences;
+  /** Fuso del dispositivo comunicato dal browser, se noto. */
+  detectedTimeZone: string | null;
 };
 
 /** Sessione corrente, misurata nella fase Auth. */
@@ -78,6 +80,7 @@ export async function requireAccountArea(
     profile: status!.profile!,
     account: { name: `${firstName} ${lastName}`, email: session.user.email },
     preferences: preferences!,
+    detectedTimeZone: detectedTimeZone(request.headers.get("cookie")),
   };
 }
 
@@ -88,7 +91,10 @@ export async function shellData(
   now = new Date(),
 ): Promise<ShellData> {
   const { session, preferences, language } = area;
-  const display = { theme: preferences.theme, timeZone: preferences.timeZone };
+  const display = {
+    theme: preferences.theme,
+    timeZone: effectiveTimeZone(preferences.timeZone, area.detectedTimeZone),
+  };
   if (!session.user.emailVerified) return { display, notifications: null, now: now.toISOString() };
   const notifications = await measure("d1", "notifications", async () =>
     listNotifications(
@@ -96,7 +102,7 @@ export async function shellData(
       session.user.id,
       stores ?? (await listStores(env.DB, session.user.id, now)),
       language,
-      preferences.timeZone,
+      display.timeZone,
       now,
     ),
   );

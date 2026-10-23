@@ -671,20 +671,19 @@ function NotificationsMenu({
           />
         ) : null}
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-96 gap-0 p-0">
+      {/* Su schermi stretti resta dentro i margini della pagina, quindi centrato. */}
+      <PopoverContent align="end" collisionPadding={16} className="w-96 gap-0 p-0">
         <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
           <div className="grid">
             <PopoverTitle>{t.shell.notifications}</PopoverTitle>
             <span className="text-xs text-muted-foreground">{t.shell.notificationsWindow}</span>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={unread === 0}
-            onClick={() => markRead(notifications)}
-          >
-            {t.shell.markAllRead}
-          </Button>
+          {/* Senza notifiche da leggere l'azione non c'è, invece di un pulsante inattivo. */}
+          {unread > 0 ? (
+            <Button variant="ghost" size="sm" onClick={() => markRead(notifications)}>
+              {t.shell.markAllRead}
+            </Button>
+          ) : null}
         </div>
         {notifications.length === 0 ? (
           <p className="px-3 py-6 text-center text-muted-foreground">

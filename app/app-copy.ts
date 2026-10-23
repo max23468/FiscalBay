@@ -411,6 +411,7 @@ const it = {
   settings: {
     title: "Impostazioni",
     categories: "Categorie",
+    groups: { ordini: "Ordini", account: "Account", generale: "Generale" },
     sections: {
       piano: { title: "Piano e pagamenti", description: "Piano, sblocchi e pagamenti" },
       notifiche: { title: "Notifiche", description: "Telegram e comunicazioni" },
@@ -556,6 +557,8 @@ const it = {
     themeNote: "Nell’anteprima la scelta si azzera alla ricarica completa della pagina.",
     language: "Lingua",
     timeZone: "Fuso orario",
+    timeZoneAuto: (zone: string | null) =>
+      zone ? `Automatico: ${zone}` : "Automatico, dal dispositivo",
     timeZones: {
       "Europe/Rome": "Roma (Italia)",
       "Europe/London": "Londra (Regno Unito)",
@@ -569,6 +572,7 @@ const it = {
     templateHint: "{ordine} viene sostituito con il numero dell’ordine.",
     templateFailed: "Modello non salvato. Il testo scritto resta qui: riprova.",
     templateInvalid: "Scrivi il modello in entrambe le lingue, entro 2.000 caratteri.",
+    unsavedTitle: "Modifiche non salvate",
     unsaved: "Hai modifiche non salvate al modello di messaggio. Vuoi lasciare la pagina?",
     leave: "Lascia la pagina",
     templateDefaultIt:
@@ -830,6 +834,13 @@ const it = {
     passwordRecoveryConfirm: "Salva nuova password",
     signOut: "Esci",
     signOutSignIn: "Esci e accedi di nuovo",
+    confirmTitle: "Conferma che sei tu",
+    confirmBody: "L’ultimo accesso risale a più di 24 ore fa. Conferma per continuare.",
+    confirmPasskeyBody: "Per le passkey dell’amministratore serve la conferma con una passkey.",
+    confirm: "Conferma",
+    confirmPasskey: "Conferma con passkey",
+    confirmFailed: "Conferma non riuscita. Controlla la password e riprova.",
+    confirmOther: "Con Google o eBay esci e accedi di nuovo: poi ripeti la modifica.",
     terms: {
       before: "Accetto i ",
       terms: "Termini di servizio",
@@ -1285,6 +1296,7 @@ const en: AppCopy = {
   settings: {
     title: "Settings",
     categories: "Categories",
+    groups: { ordini: "Orders", account: "Account", generale: "General" },
     sections: {
       piano: { title: "Plan and billing", description: "Plan, unlocks and payments" },
       notifiche: { title: "Notifications", description: "Telegram and communications" },
@@ -1419,6 +1431,7 @@ const en: AppCopy = {
     themeNote: "In the preview, the choice resets on a full page reload.",
     language: "Language",
     timeZone: "Time zone",
+    timeZoneAuto: (zone) => (zone ? `Automatic: ${zone}` : "Automatic, from your device"),
     timeZones: {
       "Europe/Rome": "Rome (Italy)",
       "Europe/London": "London (United Kingdom)",
@@ -1431,6 +1444,7 @@ const en: AppCopy = {
     templateHint: "{ordine} is replaced with the order number.",
     templateFailed: "Template not saved. Your text is still here: try again.",
     templateInvalid: "Write the template in both languages, within 2,000 characters.",
+    unsavedTitle: "Unsaved changes",
     unsaved: "You have unsaved changes to the message template. Leave the page?",
     leave: "Leave page",
     templateDefaultIt:
@@ -1687,6 +1701,13 @@ const en: AppCopy = {
     passwordRecoveryConfirm: "Save new password",
     signOut: "Sign out",
     signOutSignIn: "Sign out and sign in again",
+    confirmTitle: "Confirm it’s you",
+    confirmBody: "Your last sign-in was more than 24 hours ago. Confirm to continue.",
+    confirmPasskeyBody: "Administrator passkeys need confirmation with a passkey.",
+    confirm: "Confirm",
+    confirmPasskey: "Confirm with a passkey",
+    confirmFailed: "Confirmation failed. Check your password and try again.",
+    confirmOther: "With Google or eBay, sign out and sign in again, then repeat the change.",
     terms: {
       before: "I accept the ",
       terms: "Terms of service",

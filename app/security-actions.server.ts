@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { redirect } from "react-router";
+import { data, redirect } from "react-router";
 
 import { notifySecurityEvent } from "./account-email.server";
 import type { AccountArea } from "./account-area.server";
@@ -19,14 +19,18 @@ import {
   removePasskey,
   type AccountMethod,
 } from "./domain/sign-in-methods.server";
+import { appCopy } from "./app-copy";
 import { localizedPath } from "./i18n";
+
+/** Esito della conferma dell'identità, letto dal riquadro senza lasciare la pagina. */
+export type ConfirmResult = { ok: boolean; notice?: string };
 
 /** Metodi di accesso, email, passkey e sessioni; ogni esito torna alla Sicurezza. */
 export async function securityAction(
   request: Request,
   { language, session }: AccountArea,
   form: FormData,
-): Promise<Response> {
+): Promise<Response | ReturnType<typeof data<ConfirmResult>>> {
   const auth = session as AuthSession;
   const field = (name: string) => String(form.get(name) ?? "");
   const intent = field("intent");
@@ -40,6 +44,41 @@ export async function securityAction(
       `${localizedPath(language, accessPath)}?${new URLSearchParams({ returnTo: target })}`,
       await forwardToAuth(env, request, "/sign-out"),
     );
+  }
+
+  // Conferma dell'identità sul posto, senza uscire: la password apre una nuova sessione al
+  // posto di quella in uso; dopo una passkey si chiude la sessione precedente, se era dello
+  // stesso utente. In entrambi i casi la sessione nuova è un accesso recente.
+  if (intent === "conferma-accesso") {
+    const confirmed = (ok: boolean, response?: Response) => {
+      const headers = new Headers({ "cache-control": "no-store" });
+      for (const cookie of response?.headers.getSetCookie() ?? [])
+        headers.append("set-cookie", cookie);
+      return data<ConfirmResult>(
+        ok ? { ok } : { ok, notice: appCopy[language].access.confirmFailed },
+        { status: ok ? 200 : 400, headers },
+      );
+    };
+    if (field("metodo") === "password") {
+      const response = await forwardToAuth(env, request, "/sign-in/email", {
+        email: session.user.email,
+        password: field("password"),
+      });
+      if (!response.ok) return confirmed(false);
+      await revokeSession(env.DB, session.user.id, session.session.id);
+      return confirmed(true, response);
+    }
+    if (field("metodo") === "passkey") {
+      const previous = field("precedente");
+      const same =
+        recentSignIn(auth) &&
+        !!previous &&
+        previous.length <= 128 &&
+        (previous === session.session.id ||
+          (await revokeSession(env.DB, session.user.id, previous)));
+      return confirmed(same);
+    }
+    return confirmed(false);
   }
 
   // Chiudere sessioni protegge l'account: basta la sessione corrente, anche non recente.

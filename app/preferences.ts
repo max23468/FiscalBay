@@ -26,10 +26,39 @@ export function isTimeZone(value: unknown): value is TimeZone {
   return (timeZones as readonly unknown[]).includes(value);
 }
 
+/** Fuso scelto: uno dell'elenco, oppure quello del dispositivo (predefinito). */
+export type TimeZoneChoice = TimeZone | "auto";
+
+/** Fuso del dispositivo, scritto dal browser nell'area dell'account e letto dal server. */
+export const timeZoneCookie = "fiscalbay_fuso";
+
+/** Identificativo IANA che `Intl` riconosce; null per qualunque altro valore. */
+export function validTimeZone(value: unknown): string | null {
+  if (typeof value !== "string" || value.length > 64 || !/^[A-Za-z][\w+\-/]*$/u.test(value))
+    return null;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: value });
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+/** Fuso del dispositivo dal cookie della richiesta, se valido. */
+export function detectedTimeZone(cookieHeader: string | null): string | null {
+  const match = new RegExp(`(?:^|;\\s*)${timeZoneCookie}=([^;]*)`, "u").exec(cookieHeader ?? "");
+  return match ? validTimeZone(decodeURIComponent(match[1]!)) : null;
+}
+
+/** Fuso delle date: quello scelto, oppure quello del dispositivo, altrimenti Roma. */
+export function effectiveTimeZone(choice: TimeZoneChoice, detected: string | null): string {
+  return choice === "auto" ? (detected ?? displayTimeZone) : choice;
+}
+
 /** Aspetto applicato alle pagine dell'account: tema e fuso delle date. */
 export interface DisplayPreferences {
   theme: Theme;
-  timeZone: TimeZone;
+  timeZone: string;
 }
 
 export const defaultDisplay: DisplayPreferences = {
