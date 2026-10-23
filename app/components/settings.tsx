@@ -17,10 +17,11 @@ import {
   SunMoon,
   User,
 } from "lucide-react";
-import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Form, Link, useLocation, useBlocker, useBeforeUnload } from "react-router";
 
 import { useAction } from "~/components/app-shell";
+import { useHydrated } from "~/components/hydrated";
 import { UnlockConfirmation } from "~/components/unlock-confirmation";
 import { AccessNotice, AccountSecurity } from "~/components/account";
 import { useFieldErrors } from "~/components/form-validation";
@@ -145,20 +146,6 @@ export interface ExportContext {
 }
 
 type SaveState = "idle" | "saving" | "saved" | "error";
-
-const subscribeNever = () => () => {};
-
-/**
- * Pagina idratata: prima i controlli non reagirebbero al clic e i campi controllati
- * perderebbero il testo scritto, quindi restano inattivi.
- */
-function useHydrated() {
-  return useSyncExternalStore(
-    subscribeNever,
-    () => true,
-    () => false,
-  );
-}
 
 /**
  * Salvataggio automatico delle scelte semplici tramite l'azione `save`: stato in
