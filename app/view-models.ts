@@ -327,23 +327,24 @@ export const settingsSections = [
 
 export type SettingsSection = (typeof settingsSections)[number];
 
-/** Fuso di visualizzazione finché la scelta delle Impostazioni non viene salvata sul server. */
+/** Fuso di visualizzazione predefinito, finché l'utente non ne sceglie un altro. */
 export const displayTimeZone = "Europe/Rome";
 
 export function formatDate(
   value: string,
   language: Language,
   style: "date" | "dateTime" | "time" = "dateTime",
+  timeZone: string = displayTimeZone,
 ): string {
   // Il pattern combinato varia fra versioni ICU (virgola oppure "at" in inglese).
   // Un separatore esplicito conserva lo stesso testo fra server e browser.
   if (style === "dateTime") {
-    return `${formatDate(value, language, "date")}, ${formatDate(value, language, "time")}`;
+    return `${formatDate(value, language, "date", timeZone)}, ${formatDate(value, language, "time", timeZone)}`;
   }
   const options: Intl.DateTimeFormatOptions =
     style === "date" ? { dateStyle: "medium" } : { timeStyle: "short" };
   // ICU recenti abbreviano settembre in «Sept», quelli precedenti in «Sep».
-  return new Intl.DateTimeFormat(locales[language], { ...options, timeZone: displayTimeZone })
+  return new Intl.DateTimeFormat(locales[language], { ...options, timeZone })
     .format(new Date(value))
     .replace("Sept", "Sep");
 }

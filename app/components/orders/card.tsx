@@ -28,6 +28,7 @@ import { CopyButton } from "~/components/tax-code";
 import { FiscalCodes, FiscalNotes, type FiscalProps } from "./fiscal";
 import { ebayOrderHref, fromListState, missingContact } from "./labels";
 import { buyerLabel, paymentLabel, shippingLabel, type PillTone } from "./status";
+import { useTimeZone } from "~/components/time-zone";
 
 /** Azioni secondarie disponibili nella pagina: eBay ed esportazione del singolo ordine. */
 export interface SecondaryActions {
@@ -326,6 +327,7 @@ export function OrderCard({
   enterIndex?: number;
   actions: SecondaryActions;
 }) {
+  const zone = useTimeZone();
   const titleId = useId();
   const [first, second, ...rest] = order.items;
   const shown = [first, second].filter((item) => item !== undefined);
@@ -387,7 +389,7 @@ export function OrderCard({
         </div>
         <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
           <time dateTime={order.createdAt} className="whitespace-nowrap">
-            {formatDate(order.createdAt, language)}
+            {formatDate(order.createdAt, language, "dateTime", zone)}
           </time>
           <span aria-hidden="true">·</span>
           {/* Il punto ha la tinta del negozio, la stessa del suo avatar in Negozi. */}

@@ -1,6 +1,6 @@
 import { loader as loadHome } from "../../app/routes/orders";
 import { action as signIn, loader as loadAccess } from "../../app/routes/sign-in";
-import { action as securityAction } from "../../app/routes/security";
+import { action as securityAction } from "../../app/routes/settings";
 
 export function accessForm(path: string, fields: Record<string, string>, cookie?: string) {
   return signIn({

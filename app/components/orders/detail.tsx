@@ -42,6 +42,7 @@ import {
   orderLinkSelector,
 } from "./labels";
 import { buyerLabel, paymentLabel, shippingLabel } from "./status";
+import { useTimeZone } from "~/components/time-zone";
 
 /**
  * Spiegazioni complete del dato, suggerimento e richiesta all'acquirente,
@@ -53,10 +54,11 @@ function FiscalDetail({
   language,
   account,
   ebayDown,
-  template,
+  templates,
 }: Pick<FiscalProps, "order" | "t" | "language" | "account" | "ebayDown"> & {
-  template: string;
+  templates: Record<Language, string>;
 }) {
+  const zone = useTimeZone();
   return (
     <div className="flex min-w-0 flex-col gap-3">
       <FiscalNotes
@@ -73,12 +75,12 @@ function FiscalDetail({
           order={order}
           t={t}
           language={language}
-          template={template}
+          templates={templates}
         />
       ) : null}
       {order.lastSyncedAt ? (
         <p className="text-xs text-muted-foreground">
-          {t.order.source(formatDate(order.lastSyncedAt, language))}
+          {t.order.source(formatDate(order.lastSyncedAt, language, "dateTime", zone))}
         </p>
       ) : null}
     </div>
@@ -128,6 +130,7 @@ function Recipient({ order, t, language }: { order: OrderView; t: AppCopy; langu
 }
 
 function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; language: Language }) {
+  const zone = useTimeZone();
   const row = "grid min-w-0 gap-0.5 [overflow-wrap:anywhere]";
   const missing = <span className="text-muted-foreground">{t.orders.notProvided}</span>;
   const billing = billingCopyText(order, language, t);
@@ -167,7 +170,9 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
             <div className={row}>
               <dt className="text-muted-foreground">{t.order.created}</dt>
               <dd>
-                <time dateTime={order.createdAt}>{formatDate(order.createdAt, language)}</time>
+                <time dateTime={order.createdAt}>
+                  {formatDate(order.createdAt, language, "dateTime", zone)}
+                </time>
               </dd>
             </div>
             {order.marketplace ? (
@@ -266,7 +271,9 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
             <div className={row}>
               <dt className="text-muted-foreground">{t.order.updatedOnEbay}</dt>
               <dd>
-                <time dateTime={order.updatedAt}>{formatDate(order.updatedAt, language)}</time>
+                <time dateTime={order.updatedAt}>
+                  {formatDate(order.updatedAt, language, "dateTime", zone)}
+                </time>
               </dd>
             </div>
           </dl>
@@ -320,7 +327,7 @@ export function OrderSheet({
   detail,
   account,
   ebayDown,
-  template,
+  templates,
   confirmUnlock,
   t,
   links,
@@ -330,7 +337,7 @@ export function OrderSheet({
   detail: OrderView | null;
   account: OrdersAccount;
   ebayDown: boolean;
-  template: string;
+  templates: Record<Language, string>;
   confirmUnlock?: boolean;
   t: AppCopy;
   links: AppLinks;
@@ -341,6 +348,7 @@ export function OrderSheet({
   };
   actions: SecondaryActions;
 }) {
+  const zone = useTimeZone();
   const { language } = links;
   const location = useLocation();
   const navigate = useNavigate();
@@ -376,7 +384,7 @@ export function OrderSheet({
             <SheetHeader>
               <SheetTitle className="break-words">{t.order.title(shown.ebayOrderId)}</SheetTitle>
               <SheetDescription className="text-pretty [overflow-wrap:anywhere]">
-                {formatDate(shown.createdAt, language)} · {buyerLabel(shown, t)}
+                {formatDate(shown.createdAt, language, "dateTime", zone)} · {buyerLabel(shown, t)}
               </SheetDescription>
             </SheetHeader>
           }
@@ -427,7 +435,7 @@ export function OrderSheet({
               language={language}
               account={account}
               ebayDown={ebayDown}
-              template={template}
+              templates={templates}
             />
           </div>
           <OrderDetail order={shown} t={t} language={language} />

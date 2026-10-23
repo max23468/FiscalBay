@@ -8,7 +8,7 @@ import { createAuth, createAuthOptions, gmailDomain } from "../app/auth.server";
 import { completeRegistration } from "../app/domain/registration.server";
 import { adminAccess, recentSignIn } from "../app/domain/sessions.server";
 import { loader as adminLoader } from "../app/routes/admin";
-import { action as securityRouteAction, loader as securityLoader } from "../app/routes/security";
+import { action as securityRouteAction, loader as securityLoader } from "../app/routes/settings";
 import { action as signInAction, loader as signInLoader } from "../app/routes/sign-in";
 import { action as storeLinkAction, loader as storeLinkLoader } from "../app/routes/store-link";
 import { pendingEmailChange } from "../app/domain/email-change.server";
@@ -1586,6 +1586,7 @@ describe("Sessioni, revoche e area admin", () => {
     try {
       return await securityLoader({
         request: new Request(`${origin}${path}`, { headers: { cookie } }),
+        params: { sezione: "sicurezza" },
       } as never);
     } catch (thrown) {
       if (thrown instanceof Response) return thrown.headers.get("location");
@@ -1670,6 +1671,7 @@ describe("Sessioni, revoche e area admin", () => {
         request: new Request(`${origin}${prefix}/app/impostazioni/sicurezza`, {
           headers: { cookie: user.cookie },
         }),
+        params: { sezione: "sicurezza" },
       } as never);
       expect(area.userId).toBe(user.id);
       const out = await securityRouteAction({
@@ -1802,12 +1804,12 @@ describe("Sessioni, revoche e area admin", () => {
     const other = await createUser("sessioni.altro@example.invalid");
 
     const loaded = await security(user.cookie);
-    if (typeof loaded === "string" || !loaded) throw new Error("sessione attesa");
-    expect(loaded.sessions).toHaveLength(3);
-    expect(
-      loaded.sessions.every((session) => Number.isFinite(Date.parse(session.createdAt!))),
-    ).toBe(true);
-    expect(loaded.sessions.filter((session) => session.current)).toEqual([
+    if (typeof loaded === "string" || !loaded || !("page" in loaded))
+      throw new Error("sessione attesa");
+    const { sessions } = loaded.page.security;
+    expect(sessions).toHaveLength(3);
+    expect(sessions.every((session) => Number.isFinite(Date.parse(session.createdAt!)))).toBe(true);
+    expect(sessions.filter((session) => session.current)).toEqual([
       expect.objectContaining({ id: await sessionId(user.cookie), device: "Safari su macOS" }),
     ]);
     expect(JSON.stringify(loaded)).not.toMatch(/token/iu);
@@ -1868,9 +1870,13 @@ describe("Sessioni, revoche e area admin", () => {
     // Le altre route non chiedono un accesso recente.
     expect((await jsonRequest("get-session", user.cookie)).status).toBe(200);
     expect(await security(user.cookie)).toMatchObject({
-      recent: false,
-      passkeyRestriction: "nuovo-accesso",
-      passkeyBlock: "nuovo-accesso",
+      page: {
+        security: {
+          recent: false,
+          passkeyRestriction: "nuovo-accesso",
+          passkeyBlock: "nuovo-accesso",
+        },
+      },
     });
     // Le stesse modifiche chiamate direttamente sulle route Auth seguono la stessa regola.
     expect(
@@ -1925,9 +1931,13 @@ describe("Sessioni, revoche e area admin", () => {
     expect((await jsonRequest("passkey/generate-register-options", user.cookie)).status).toBe(403);
     // La home indica il passaggio giusto: accedere con passkey, non un accesso qualsiasi.
     expect(await security(user.cookie)).toMatchObject({
-      recent: true,
-      passkeyRestriction: "conferma-passkey",
-      passkeyBlock: "conferma-passkey",
+      page: {
+        security: {
+          recent: true,
+          passkeyRestriction: "conferma-passkey",
+          passkeyBlock: "conferma-passkey",
+        },
+      },
     });
     await env.DB.prepare('UPDATE "user" SET "admin" = 0 WHERE id = ?').bind(user.id).run();
     expect(await admin(user.cookie)).toBe(404);

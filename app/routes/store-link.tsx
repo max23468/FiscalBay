@@ -18,6 +18,8 @@ import { languageFromPath, localizedPath } from "../i18n";
 import { startStoreLink } from "../integrations/ebay/store-link.server";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import type { Route } from "./+types/store-link";
+import { readPreferences } from "../domain/preferences.server";
+import type { ShellData } from "../preferences";
 
 const noStore = { headers: { "cache-control": "no-store" } };
 
@@ -73,8 +75,15 @@ export async function loader({ request }: Route.LoaderArgs) {
       )
     : null;
   if (search.has(reconnectParam) && !expected) throw errorResponse(request, "INVALID_REQUEST");
+  const { theme, timeZone } = await readPreferences(env.DB, status.userId);
   return {
     language,
+    // Pagina dell'area senza barra: valgono soltanto tema e fuso scelti.
+    shell: {
+      display: { theme, timeZone },
+      notifications: null,
+      now: new Date().toISOString(),
+    } satisfies ShellData,
     reconnect: search.has(reconnectParam),
     // Arrivando da Negozi, «Annulla» torna lì.
     fromStores: search.get("da") === "negozi",

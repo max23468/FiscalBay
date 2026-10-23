@@ -10,6 +10,7 @@ import {
   assertSameOrigin,
   requestedEbayEnvironment,
   requireAccountArea,
+  shellData,
 } from "../account-area.server";
 import { appCopy } from "../app-copy";
 import { appBase, ordersPath, storeLinkPath, type AppLinks } from "../app-links";
@@ -20,6 +21,7 @@ import {
   unlockOrders,
 } from "../domain/grants.server";
 import { requestOrderRead } from "../domain/order-sync.server";
+import { messageTemplates } from "../domain/preferences.server";
 import {
   countVisibleOrders,
   listVisibleOrders,
@@ -74,7 +76,8 @@ function verifying(order: OrderView) {
  * nella stessa risposta, entro l'attesa dello streaming.
  */
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const { language, session, account } = await requireAccountArea(request, { unverified: true });
+  const area = await requireAccountArea(request, { unverified: true });
+  const { language, session, account, preferences } = area;
   const search = new URL(request.url).searchParams;
   const ebayEnvironment = requestedEbayEnvironment(request);
   const userId = session.user.id;
@@ -153,7 +156,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // Un ordine inesistente, scaduto o di un altro spazio risponde allo stesso modo.
   if (params.ordine && !detail) {
     return data(
-      { notFound: true as const, language, account, notice, verified, ebayEnvironment },
+      {
+        notFound: true as const,
+        language,
+        account,
+        notice,
+        verified,
+        ebayEnvironment,
+        shell: await shellData(area, stores, now),
+      },
       { status: 404 },
     );
   }
@@ -238,9 +249,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       { label: "stepStore", done: linked.length > 0 },
       { label: "stepSync", done: lastSync !== undefined },
     ],
-    // Le preferenze del modello arriveranno con le Impostazioni: vale il testo predefinito.
-    messageTemplate:
-      appCopy[language].settings[language === "it" ? "templateDefaultIt" : "templateDefaultEn"],
+    messageTemplates: messageTemplates(preferences),
     now: now.toISOString(),
     confirmUnlock,
     settings: false,
@@ -263,6 +272,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ebayEnvironment,
     sandbox: sandboxAvailable(env),
     page: pageData,
+    shell: await shellData(area, stores, now),
     confirmation:
       pending.length > 0
         ? settle(
@@ -377,6 +387,7 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
     <AccountShell
       language={language}
       account={account}
+      shell={loaderData.shell}
       security={loaderData.verified}
       searchQuery={loaderData.notFound ? "" : (loaderData.page.search ?? "")}
     >

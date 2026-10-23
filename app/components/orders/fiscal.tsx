@@ -44,6 +44,7 @@ import {
 } from "../../view-models";
 
 import { identifierLabel, remainingUnlocks, taxCodeLabels, type OrdersAccount } from "./labels";
+import { useTimeZone } from "~/components/time-zone";
 
 export type { OrdersAccount } from "./labels";
 
@@ -373,13 +374,14 @@ function LockedNote({
   fiscal: Extract<FiscalView, { state: "locked" }>;
   compact: boolean;
 }) {
+  const zone = useTimeZone();
   if (fiscal.hold) return <CardNote tone="info">{t.orders.lockedHold[fiscal.hold]}</CardNote>;
   const remaining = remainingUnlocks(account);
   if (remaining === null || !account.quota) return null;
   if (remaining > 0) return compact ? null : <CardNote>{t.orders.lockedHint(remaining)}</CardNote>;
   const { cycleEndsAt } = account.quota;
   if (!cycleEndsAt) return null;
-  const cycleEnd = formatDate(cycleEndsAt, language, "date");
+  const cycleEnd = formatDate(cycleEndsAt, language, "date", zone);
   return (
     <CardNote>
       {compact ? t.orders.lockedUntil(cycleEnd) : t.orders.lockedExhausted(cycleEnd)}
@@ -461,21 +463,21 @@ export function MissingOrderHelp({
   order,
   t,
   language,
-  template,
+  templates,
 }: {
   order: Pick<OrderView, "ebayOrderId" | "contacts" | "suggestions" | "suggestionStatus">;
   t: AppCopy;
   language: Language;
-  template?: string;
+  /** Modello di messaggio per lingua; senza, i testi predefiniti. */
+  templates?: Record<Language, string>;
 }) {
+  const zone = useTimeZone();
   // La lingua della pagina inizializza il messaggio; poi decide il merchant.
   const [messageLanguage, setMessageLanguage] = useState<Language>(() => language);
   const defaultMessage = (code: Language) =>
-    (code === language && template
-      ? template
-      : code === "it"
-        ? t.settings.templateDefaultIt
-        : t.settings.templateDefaultEn
+    (
+      templates?.[code] ??
+      (code === "it" ? t.settings.templateDefaultIt : t.settings.templateDefaultEn)
     ).replaceAll("{ordine}", order.ebayOrderId);
   const [message, setMessage] = useState(() => defaultMessage(language));
   const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
@@ -505,7 +507,7 @@ export function MissingOrderHelp({
             <p className="text-sm text-muted-foreground">
               {t.orders.suggestionHint(
                 suggestion.sourceOrder,
-                formatDate(suggestion.sourceDate, language, "date"),
+                formatDate(suggestion.sourceDate, language, "date", zone),
               )}
             </p>
             {suggestion.sourceStore ? (

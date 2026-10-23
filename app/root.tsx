@@ -6,6 +6,7 @@ import {
   Scripts,
   ScrollRestoration,
   useLocation,
+  useMatches,
   useRouteLoaderData,
   useRevalidator,
   type ShouldRevalidateFunctionArgs,
@@ -17,11 +18,13 @@ import { CircleAlert, FileQuestion } from "lucide-react";
 
 import type { Route } from "./+types/root";
 import { StandalonePage } from "./components/standalone-page";
+import { TimeZoneContext } from "./components/time-zone";
 import { buttonVariants } from "./components/ui/button-variants";
 import { correlationId } from "./errors";
 import { appCopy } from "./app-copy";
 import { languageFromPath, localizedPath } from "./i18n";
 import { snapshotOnlyAdded } from "./orders/order-list";
+import { defaultDisplay, matchedShell } from "./preferences";
 import "./app.css";
 
 export const links: Route.LinksFunction = () => [
@@ -50,8 +53,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const data = useRouteLoaderData<typeof loader>("root");
   const location = useLocation();
   const language = data?.language ?? languageFromPath(location.pathname);
+  // Nell'area dell'account tema e fuso sono quelli scelti; altrove valgono i predefiniti.
+  const display = matchedShell(useMatches())?.display ?? defaultDisplay;
   return (
-    <html lang={language}>
+    <html lang={language} data-theme={display.theme === "system" ? undefined : display.theme}>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -59,7 +64,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        {children}
+        <TimeZoneContext value={display.timeZone}>{children}</TimeZoneContext>
         <ScrollRestoration />
         <Scripts />
       </body>

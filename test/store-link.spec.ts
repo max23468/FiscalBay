@@ -764,6 +764,11 @@ describe("collegamento negozio eBay", () => {
         ebayEnvironment: "production",
         expectedStoreId: null,
         expectedStoreName: null,
+        shell: {
+          display: { theme: "system", timeZone: "Europe/Rome" },
+          notifications: null,
+          now: expect.any(String),
+        },
       });
     }
     // Da Negozi la schermata riporta lì con «Annulla».

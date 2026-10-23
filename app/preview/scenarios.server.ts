@@ -1,4 +1,5 @@
 import { contactsView } from "../contact";
+import type { SignInMethods } from "../domain/sign-in-methods.server";
 import type { Language } from "../i18n";
 import { formatDate } from "../view-models";
 import type {
@@ -788,6 +789,8 @@ export interface Scenario {
   elsewhere: boolean;
   notifications: NotificationView[];
   sessions: SessionView[];
+  /** Metodi di accesso dimostrativi della Sicurezza. */
+  signInMethods: SignInMethods;
   diagnostics: DiagnosticsView;
   telegramChat: string | null;
   saveFailsOnce: boolean;
@@ -831,16 +834,6 @@ const text = {
     en: {
       title: "Scheduled maintenance",
       body: "On 2 October from 6:00 to 6:30 syncing will be paused. Orders remain available.",
-    },
-  },
-  newSignIn: {
-    it: {
-      title: "Nuovo accesso",
-      body: "Accesso da Chrome su Windows, Milano. Se non eri tu, controlla le sessioni in Sicurezza.",
-    },
-    en: {
-      title: "New sign-in",
-      body: "Sign-in from Chrome on Windows, Milan. If it wasn’t you, check your sessions in Security.",
     },
   },
   quota: {
@@ -941,6 +934,10 @@ export function loadScenario(
     ebayDown: false,
     elsewhere: false,
     sessions: sessions(language),
+    signInMethods: {
+      accounts: { password: true, google: true, ebay: false },
+      passkeys: [{ id: "preview-passkey", name: "MacBook Air", createdAt: "2026-09-21T10:12:00Z" }],
+    },
     telegramChat: null,
     saveFailsOnce: false,
     onboarding: [
@@ -951,13 +948,6 @@ export function loadScenario(
     ],
     notifications: [
       note("maintenance", { id: "n-maint", tone: "info", at: minutesAgo(300), read: false }),
-      note("newSignIn", {
-        id: "n-signin",
-        tone: "info",
-        at: minutesAgo(2_900),
-        read: true,
-        href: "impostazioni/sicurezza",
-      }),
     ],
   };
   const diagnostics = (overrides: Partial<DiagnosticsView> = {}): DiagnosticsView => ({

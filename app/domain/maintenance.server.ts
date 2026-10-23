@@ -1,4 +1,5 @@
 import { orderSearchText } from "../orders/order-search";
+import { notificationWindowMilliseconds } from "./notification-reads.server";
 
 /**
  * Pulizia periodica degli ordini e dei dati tecnici scaduti, eseguita dal consumer
@@ -17,6 +18,10 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
     db.prepare('DELETE FROM "rateLimit" WHERE "lastRequest" < ?').bind(now.getTime() - 3_600_000),
     db.prepare("DELETE FROM ebay_store_link_sessions WHERE expires_at <= ?").bind(at),
     db.prepare("DELETE FROM account_email_changes WHERE expires_at <= ?").bind(at),
+    // Una notifica resta nella campanella al massimo 30 giorni dopo la sua lettura.
+    db
+      .prepare("DELETE FROM notification_reads WHERE read_at < ?")
+      .bind(new Date(now.getTime() - notificationWindowMilliseconds).toISOString()),
   ]);
 }
 

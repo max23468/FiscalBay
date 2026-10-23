@@ -18,11 +18,11 @@ import {
   User,
 } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { Link, useLocation, useBlocker, useBeforeUnload } from "react-router";
+import { Form, Link, useLocation, useBlocker, useBeforeUnload } from "react-router";
 
 import { useAction } from "~/components/app-shell";
 import { UnlockConfirmation } from "~/components/unlock-confirmation";
-import { AccountSecurity } from "~/components/account";
+import { AccessNotice, AccountSecurity } from "~/components/account";
 import { useFieldErrors } from "~/components/form-validation";
 import { IconTile, InitialsTile, PageTitle } from "~/components/icon-tile";
 import { LanguageSwitch } from "~/components/language-switch";
@@ -62,33 +62,73 @@ import {
 import { Switch } from "~/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Textarea } from "~/components/ui/textarea";
+import type { AccessNoticeView } from "../access-notice";
 import type { AppCopy } from "../app-copy";
-import { appHref, type AppLinks } from "../app-links";
-import { languageNames, localizedPath, type Language } from "../i18n";
+import { appHref, languagePath, type AppLinks } from "../app-links";
+import type { PendingEmailChange } from "../domain/email-change.server";
+import type { ActiveSession } from "../domain/sessions.server";
+import type { SignInMethods } from "../domain/sign-in-methods.server";
+import { languageNames, languages, localizedPath, type Language } from "../i18n";
+import { maxTemplateLength, timeZones, type Theme, type TimeZone } from "../preferences";
 import {
   formatDate,
-  settingsSections,
   type AccountView,
   type ActionResult,
   type DiagnosticsView,
-  type SessionView,
   type SettingsSection,
   type StoreView,
 } from "../view-models";
+import { useTimeZone } from "~/components/time-zone";
 
 export interface SettingsPageData {
   confirmUnlock: boolean;
   section: SettingsSection | null;
+  /** Categorie presenti: nell'area reale mancano quelle di servizi non ancora disponibili. */
+  sections: readonly SettingsSection[];
+  /** Servizi che eseguono le azioni; nell'anteprima sono tutti simulati. */
+  services: SettingsServices;
+  /** Scenario dell'anteprima: le azioni sono simulate e le scelte non restano. */
+  preview: boolean;
   account: AccountView;
   stores: StoreView[];
-  sessions: SessionView[];
-  diagnostics: DiagnosticsView;
+  security: SecurityData;
+  /** Valori salvati, con i testi predefiniti dove non c'è una scelta. */
+  preferences: {
+    theme: Theme;
+    timeZone: TimeZone;
+    marketing: boolean;
+    templates: Record<Language, string>;
+  };
+  /** Dati tecnici allegabili alla richiesta di assistenza; null senza il modulo. */
+  diagnostics: DiagnosticsView | null;
   telegramChat: string | null;
   /** Ordini dell'esportazione e quanti fra loro hanno un dato ancora da sbloccare. */
   exportEstimate: { orders: number; locked: number };
   /** Ambito ricevuto dagli Ordini; null se l'esportazione è aperta dalle Impostazioni. */
   exportContext: ExportContext | null;
   now: string;
+}
+
+/**
+ * Servizi dietro le azioni: pagamenti e prova (Stripe), Telegram, esportazione e cancellazione
+ * dell'account, modulo di assistenza. Senza il servizio l'azione non compare.
+ */
+export interface SettingsServices {
+  billing: boolean;
+  telegram: boolean;
+  accountData: boolean;
+  support: boolean;
+}
+
+/** Metodi di accesso, sessioni ed esito dell'ultima azione di Sicurezza. */
+export interface SecurityData {
+  methods: SignInMethods;
+  sessions: ActiveSession[];
+  passkeyBlock: string;
+  recent?: boolean;
+  passkeyRestriction?: "conferma-passkey" | "nuovo-accesso" | null;
+  pendingEmail?: PendingEmailChange | null;
+  notice: AccessNoticeView | null;
 }
 
 /** Selezione, singolo ordine o elenco filtrato degli Ordini, da esportare così com'è. */
@@ -356,38 +396,50 @@ function Group({
   );
 }
 
-/** Il lifetime conserva l'accesso ai documenti senza presentare un rinnovo. */
+/**
+ * Il lifetime conserva l'accesso ai documenti senza presentare un rinnovo. Un Premium concesso
+ * senza abbonamento non ha periodo né gestione su Stripe.
+ */
 function PremiumPlan({
   account,
+  billing,
   t,
   language,
 }: {
   account: AccountView;
+  billing: boolean;
   t: AppCopy;
   language: Language;
 }) {
+  const zone = useTimeZone();
   const action = useAction();
   const lifetime = account.premium?.period === "lifetime";
   return (
     <Group title={t.settings.currentPlan}>
       <div className="grid gap-1">
         <p className="flex items-center gap-2 text-lg font-semibold">
-          {t.settings.premiumPeriod[account.premium?.period ?? "annual"]}
+          {account.premium ? t.settings.premiumPeriod[account.premium.period] : t.settings.premium}
         </p>
         {lifetime ? (
           <p className="text-sm text-muted-foreground">{t.settings.premiumLifetime}</p>
         ) : account.premium?.renewsAt ? (
           <p className="text-sm text-muted-foreground">
-            {t.settings.premiumRenews(formatDate(account.premium.renewsAt, language, "date"))}
+            {t.settings.premiumRenews(formatDate(account.premium.renewsAt, language, "date", zone))}
           </p>
         ) : null}
       </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button variant="outline" onClick={() => action.run("manage-billing")}>
-          {lifetime ? t.settings.billingDocuments : t.settings.manageBilling}
-        </Button>
-      </div>
-      {lifetime ? null : <p className="text-sm text-muted-foreground">{t.settings.billingDocs}</p>}
+      {billing && account.premium ? (
+        <>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="outline" onClick={() => action.run("manage-billing")}>
+              {lifetime ? t.settings.billingDocuments : t.settings.manageBilling}
+            </Button>
+          </div>
+          {lifetime ? null : (
+            <p className="text-sm text-muted-foreground">{t.settings.billingDocs}</p>
+          )}
+        </>
+      ) : null}
     </Group>
   );
 }
@@ -401,14 +453,16 @@ function PlanSection({
   t: AppCopy;
   language: Language;
 }) {
+  const zone = useTimeZone();
   const action = useAction();
   const { account } = data;
   const [downgradeStore, setDowngradeStore] = useState(
     () => data.stores.find((store) => store.pauseReason !== "plan")?.id ?? "",
   );
+  const { billing } = data.services;
   // La scelta del negozio attivo compare solo nel Free: in Premium non anticipa il downgrade.
   if (account.plan === "premium") {
-    return <PremiumPlan account={account} t={t} language={language} />;
+    return <PremiumPlan account={account} billing={billing} t={t} language={language} />;
   }
   const quota = account.quota;
   return (
@@ -436,13 +490,14 @@ function PlanSection({
             </div>
             {quota.cycleEndsAt ? (
               <p className="text-sm text-muted-foreground">
-                {t.settings.cycleEnds(formatDate(quota.cycleEndsAt, language))}
+                {t.settings.cycleEnds(formatDate(quota.cycleEndsAt, language, "dateTime", zone))}
               </p>
             ) : null}
           </div>
         ) : null}
       </Group>
-      {data.stores.length > 1 ? (
+      {/* Prova, acquisto e negozio attivo del Free dipendono dai pagamenti. */}
+      {billing && data.stores.length > 1 ? (
         <Group>
           <SimpleSelect
             label={t.stores.chooseFreeStore}
@@ -456,7 +511,7 @@ function PlanSection({
           />
         </Group>
       ) : null}
-      {account.trialAvailable ? (
+      {billing && account.trialAvailable ? (
         <Group title={t.settings.trialTitle}>
           <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
             {t.settings.trialBody}
@@ -466,6 +521,15 @@ function PlanSection({
           </Button>
         </Group>
       ) : null}
+      {billing ? <PurchaseOptions t={t} /> : null}
+    </>
+  );
+}
+
+function PurchaseOptions({ t }: { t: AppCopy }) {
+  const action = useAction();
+  return (
+    <>
       <Group title={t.settings.buyTitle}>
         <PremiumNote>{t.settings.buyBody}</PremiumNote>
         <ul className="grid gap-3 sm:grid-cols-3">
@@ -507,6 +571,31 @@ function PlanSection({
 }
 
 function NotificationsSection({
+  data,
+  t,
+  links,
+}: {
+  data: SettingsPageData;
+  t: AppCopy;
+  links: AppLinks;
+}) {
+  return (
+    <>
+      {data.services.telegram ? <TelegramGroup data={data} t={t} links={links} /> : null}
+      <Group title={t.settings.marketingTitle}>
+        <AutoSwitch
+          name="marketing"
+          label={t.settings.marketingConsent}
+          description={t.settings.marketingHint}
+          initial={data.preferences.marketing}
+          t={t}
+        />
+      </Group>
+    </>
+  );
+}
+
+function TelegramGroup({
   data,
   t,
   links,
@@ -614,15 +703,6 @@ function NotificationsSection({
             </fieldset>
           </FieldGroup>
         )}
-      </Group>
-      <Group title={t.settings.marketingTitle}>
-        <AutoSwitch
-          name="marketing"
-          label={t.settings.marketingConsent}
-          description={t.settings.marketingHint}
-          initial={false}
-          t={t}
-        />
       </Group>
     </>
   );
@@ -747,57 +827,105 @@ function ExportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
   );
 }
 
-function SecuritySection({
-  data,
-  language,
-}: {
-  data: SettingsPageData;
-  t: AppCopy;
-  language: Language;
-}) {
+function SecuritySection({ data, language }: { data: SettingsPageData; language: Language }) {
   const action = useAction();
+  const { security } = data;
   return (
-    <AccountSecurity
-      className="grid gap-4"
-      language={language}
-      email={data.account.email}
-      methods={{
-        accounts: { password: true, google: true, ebay: false },
-        passkeys: [
-          { id: "preview-passkey", name: "MacBook Air", createdAt: "2026-09-21T10:12:00Z" },
-        ],
-      }}
-      sessions={data.sessions}
-      now={data.now}
-      passkeyBlock="nuovo-accesso"
-      onAction={(intent, fields) => action.run(intent, fields)}
-    />
+    <>
+      <AccessNotice
+        language={language}
+        notice={security.notice}
+        showSignInAgain={security.recent !== false && !security.passkeyRestriction}
+      />
+      <AccountSecurity
+        className="grid gap-4"
+        language={language}
+        email={data.account.email}
+        methods={security.methods}
+        sessions={security.sessions}
+        now={data.now}
+        passkeyBlock={security.passkeyBlock}
+        recent={security.recent}
+        passkeyRestriction={security.passkeyRestriction}
+        pendingEmail={security.pendingEmail}
+        onAction={data.preview ? (intent, fields) => action.run(intent, fields) : undefined}
+      />
+    </>
   );
 }
 
-type Theme = "system" | "light" | "dark";
+/** Tema sul documento: `data-theme` impone chiaro o scuro, senza attributo segue il sistema. */
+function applyTheme(theme: Theme) {
+  const root = document.documentElement;
+  if (theme === "system") delete root.dataset.theme;
+  else root.dataset.theme = theme;
+}
 
-function AppearanceSection({ t, links }: { t: AppCopy; links: AppLinks }) {
+/**
+ * Lingua dell'account: nell'area reale la scelta si salva e riapre la pagina nella nuova
+ * lingua, nell'anteprima cambia soltanto l'indirizzo.
+ */
+function LanguageChoice({ t, links, preview }: { t: AppCopy; links: AppLinks; preview: boolean }) {
   const location = useLocation();
-  const [theme, setTheme] = useState<Theme>(() =>
-    typeof document === "undefined"
-      ? "system"
-      : ((document.documentElement.dataset.theme as Theme | undefined) ?? "system"),
-  );
-  const [timeZone, setTimeZone, zoneState] = useAutoSave<string>("time-zone", "Europe/Rome");
   const barePath = location.pathname.replace(/^\/en(?=\/|$)/u, "") || "/";
+  if (preview) {
+    return (
+      <LanguageSwitch
+        label={t.settings.language}
+        current={links.language}
+        hrefFor={(code) => localizedPath(code, barePath)}
+      />
+    );
+  }
+  return (
+    <Form method="post" action={languagePath} className="flex gap-1 text-sm">
+      <input type="hidden" name="returnTo" value={`${location.pathname}${location.search}`} />
+      {languages.map((code) => (
+        <button
+          key={code}
+          type="submit"
+          name="language"
+          value={code}
+          lang={code}
+          aria-pressed={links.language === code}
+          className="inline-flex items-center rounded-md px-2.5 py-1.5 text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-pressed:bg-secondary aria-pressed:font-medium aria-pressed:text-foreground pointer-coarse:min-h-11"
+        >
+          {languageNames[code]}
+        </button>
+      ))}
+    </Form>
+  );
+}
+
+function AppearanceSection({
+  data,
+  t,
+  links,
+}: {
+  data: SettingsPageData;
+  t: AppCopy;
+  links: AppLinks;
+}) {
+  // L'anteprima non conserva il tema: la scelta resta sul documento fino alla ricarica.
+  const [theme, setTheme, themeState] = useAutoSave<Theme>(
+    "theme",
+    data.preview && typeof document !== "undefined"
+      ? ((document.documentElement.dataset.theme as Theme | undefined) ?? "system")
+      : data.preferences.theme,
+  );
+  const [timeZone, setTimeZone, zoneState] = useAutoSave<string>(
+    "time-zone",
+    data.preferences.timeZone,
+  );
+  // Anche il ripristino dopo un salvataggio non riuscito torna sul documento.
+  useEffect(() => applyTheme(theme), [theme]);
   return (
     <>
       <Group title={t.settings.theme}>
         <RadioGroup
           value={theme}
-          onValueChange={(value) => {
-            const next = value as Theme;
-            setTheme(next);
-            const root = document.documentElement;
-            if (next === "system") delete root.dataset.theme;
-            else root.dataset.theme = next;
-          }}
+          disabled={themeState === "saving"}
+          onValueChange={(value) => setTheme(value as Theme)}
           className="flex flex-wrap gap-5"
           aria-label={t.settings.theme}
         >
@@ -814,28 +942,19 @@ function AppearanceSection({ t, links }: { t: AppCopy; links: AppLinks }) {
             </RadioOption>
           ))}
         </RadioGroup>
-        <p className="text-sm text-muted-foreground">{t.settings.themeNote}</p>
+        <SaveStatus state={themeState} t={t} />
+        {data.preview ? (
+          <p className="text-sm text-muted-foreground">{t.settings.themeNote}</p>
+        ) : null}
       </Group>
       <Group title={t.settings.language}>
-        <LanguageSwitch
-          label={t.settings.language}
-          current={links.language}
-          hrefFor={(code) => localizedPath(code, barePath)}
-        />
+        <LanguageChoice t={t} links={links} preview={data.preview} />
       </Group>
       <Group>
         <SimpleSelect
           label={t.settings.timeZone}
-          items={[
-            "Europe/Rome",
-            "Europe/London",
-            "Europe/Berlin",
-            "Europe/Madrid",
-            "America/New_York",
-          ].map((zone) => ({
-            value: zone,
-            label: t.settings.timeZones[zone as keyof typeof t.settings.timeZones],
-          }))}
+          disabled={zoneState === "saving"}
+          items={timeZones.map((zone) => ({ value: zone, label: t.settings.timeZones[zone] }))}
           value={timeZone}
           onChange={setTimeZone}
         />
@@ -845,16 +964,120 @@ function AppearanceSection({ t, links }: { t: AppCopy; links: AppLinks }) {
   );
 }
 
-function TemplateSection({ t }: { t: AppCopy }) {
-  const action = useAction();
-  const [dirty, setDirty] = useState(false);
+/**
+ * Modifiche non salvate: uscire dalle Impostazioni, ricaricare o chiudere la pagina chiede
+ * conferma. Fra le categorie la bozza resta, perché la pagina è la stessa.
+ */
+function useUnsavedGuard(dirty: boolean) {
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      dirty && settingsRoot(currentLocation.pathname) !== settingsRoot(nextLocation.pathname),
+  );
+  useBeforeUnload((event) => {
+    if (dirty) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+  });
+  return blocker;
+}
+
+/** Radice delle Impostazioni di un indirizzo, oppure l'indirizzo stesso fuori da esse. */
+function settingsRoot(pathname: string) {
+  return /^(.*\/impostazioni)(?:\/[^/]*)?$/u.exec(pathname)?.[1] ?? pathname;
+}
+
+function UnsavedDialog({
+  blocker,
+  title,
+  leave,
+  stay,
+}: {
+  blocker: ReturnType<typeof useBlocker>;
+  title: string;
+  leave: string;
+  stay: string;
+}) {
+  return (
+    <AlertDialog
+      open={blocker.state === "blocked"}
+      onOpenChange={(open) => {
+        if (!open && blocker.state === "blocked") blocker.reset();
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{title}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{stay}</AlertDialogCancel>
+          <Button
+            onClick={() => {
+              if (blocker.state === "blocked") blocker.proceed();
+            }}
+          >
+            {leave}
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+/**
+ * Bozza del modello rispetto all'ultimo testo salvato. Un salvataggio riuscito rende salvato il
+ * testo inviato; una rilettura del server aggiorna il modulo soltanto senza modifiche in corso.
+ */
+function useTemplateDraft(stored: Record<Language, string>, action: ReturnType<typeof useAction>) {
+  const storedKey = JSON.stringify(stored);
+  const [observed, setObserved] = useState(storedKey);
+  const [base, setBase] = useState({ saved: stored, submitted: stored });
+  const [draft, setDraft] = useState(stored);
+  const [handled, setHandled] = useState(action.result);
+  const [failed, setFailed] = useState(false);
+  const dirty = languages.some((code) => draft[code] !== base.saved[code]);
+  if (storedKey !== observed) {
+    setObserved(storedKey);
+    if (!dirty && !action.pending) {
+      setBase({ saved: stored, submitted: stored });
+      setDraft(stored);
+    }
+  }
+  if (action.result && action.result !== handled) {
+    setHandled(action.result);
+    setFailed(!action.result.ok);
+    if (action.result.ok) setBase((current) => ({ ...current, saved: current.submitted }));
+  }
+  const submit = () => {
+    const next = { it: draft.it.trim(), en: draft.en.trim() };
+    setDraft(next);
+    setBase((current) => ({ ...current, submitted: next }));
+    setFailed(false);
+    action.run("template", next);
+  };
   const state: SaveState = action.pending
     ? "saving"
-    : dirty || !action.result
-      ? "idle"
-      : action.result.ok
+    : failed
+      ? "error"
+      : action.result?.ok && !dirty
         ? "saved"
-        : "error";
+        : "idle";
+  return { draft, setDraft, dirty, state, submit };
+}
+
+/**
+ * Modello di messaggio: si salva con Salva. Un salvataggio non riuscito lascia il testo scritto
+ * e lo dice; uno riuscito diventa il nuovo riferimento delle modifiche.
+ */
+function TemplateSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
+  const action = useAction();
+  const { draft, setDraft, dirty, state, submit } = useTemplateDraft(
+    data.preferences.templates,
+    action,
+  );
+  const blocker = useUnsavedGuard(dirty);
+  const empty = languages.some((code) => !draft[code].trim());
   return (
     <div className="grid gap-4">
       <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
@@ -864,37 +1087,35 @@ function TemplateSection({ t }: { t: AppCopy }) {
         className="grid gap-4"
         onSubmit={(event) => {
           event.preventDefault();
-          const form = new FormData(event.currentTarget);
-          setDirty(false);
-          action.run("template", { it: String(form.get("it")), en: String(form.get("en")) });
+          if (dirty && !action.pending) submit();
         }}
       >
         <Tabs defaultValue="it">
           <TabsList variant="line">
-            <TabsTrigger value="it" lang="it">
-              {languageNames.it}
-            </TabsTrigger>
-            <TabsTrigger value="en" lang="en">
-              {languageNames.en}
-            </TabsTrigger>
+            {languages.map((code) => (
+              <TabsTrigger key={code} value={code} lang={code}>
+                {languageNames[code]}
+              </TabsTrigger>
+            ))}
           </TabsList>
-          {(
-            [
-              ["it", languageNames.it, t.settings.templateDefaultIt],
-              ["en", languageNames.en, t.settings.templateDefaultEn],
-            ] as const
-          ).map(([code, label, value]) => (
+          {languages.map((code) => (
             <TabsContent key={code} value={code} className="pt-3">
               <Field>
                 <FieldLabel htmlFor={`template-${code}`} className="sr-only">
-                  {label}
+                  {languageNames[code]}
                 </FieldLabel>
                 <Textarea
                   id={`template-${code}`}
                   name={code}
                   rows={5}
-                  defaultValue={value}
-                  onChange={() => setDirty(true)}
+                  required
+                  maxLength={maxTemplateLength}
+                  value={draft[code]}
+                  disabled={action.pending}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setDraft((current) => ({ ...current, [code]: value }));
+                  }}
                   aria-describedby="template-hint"
                 />
               </Field>
@@ -903,35 +1124,74 @@ function TemplateSection({ t }: { t: AppCopy }) {
         </Tabs>
         <FieldDescription id="template-hint">{t.settings.templateHint}</FieldDescription>
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" disabled={state === "saving"}>
-            {t.settings.save}
+          <Button
+            type="submit"
+            disabled={!dirty || empty || action.pending}
+            aria-busy={action.pending || undefined}
+          >
+            {action.pending ? t.settings.saving : t.settings.save}
           </Button>
-          <SaveStatus state={state} t={t} />
+          <span
+            role={state === "error" ? "alert" : "status"}
+            className={cn(
+              "text-sm",
+              state === "error" ? "basis-full text-danger" : "text-muted-foreground",
+            )}
+          >
+            {state === "saved" ? t.settings.saved : null}
+            {state === "error" ? (action.result?.notice ?? t.settings.templateFailed) : null}
+          </span>
         </div>
       </form>
+      <UnsavedDialog
+        blocker={blocker}
+        title={t.settings.unsaved}
+        leave={t.settings.leave}
+        stay={t.profile.stay}
+      />
     </div>
   );
 }
 
-function PrivacySection({ t }: { t: AppCopy }) {
+function PrivacySection({
+  data,
+  t,
+  links,
+}: {
+  data: SettingsPageData;
+  t: AppCopy;
+  links: AppLinks;
+}) {
   const action = useAction();
-  const rows = [
-    {
-      intent: "privacy-policy",
-      title: t.settings.privacyPolicy,
-      body: t.settings.privacyPolicyBody,
-      action: t.settings.readPolicy,
-    },
-    {
-      intent: "account-export",
-      title: t.settings.accountExport,
-      body: t.settings.accountExportBody,
-      action: t.settings.accountExportAction,
-    },
-  ];
+  const rows = data.services.accountData
+    ? [
+        {
+          intent: "account-export",
+          title: t.settings.accountExport,
+          body: t.settings.accountExportBody,
+          action: t.settings.accountExportAction,
+        },
+      ]
+    : [];
   return (
     <div className="grid gap-4">
       <ul className="grid divide-y border-y">
+        <li className="flex flex-wrap items-center justify-between gap-3 py-4">
+          <span className="grid min-w-0 flex-1 gap-0.5">
+            <span className="font-medium">{t.settings.privacyPolicy}</span>
+            <span className="text-sm text-pretty text-muted-foreground">
+              {t.settings.privacyPolicyBody}
+            </span>
+          </span>
+          <Link
+            to={localizedPath(links.language, "/privacy")}
+            reloadDocument
+            data-slot="button"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            {t.settings.readPolicy}
+          </Link>
+        </li>
         {rows.map((row) => (
           <li key={row.title} className="flex flex-wrap items-center justify-between gap-3 py-4">
             <span className="grid min-w-0 flex-1 gap-0.5">
@@ -943,57 +1203,47 @@ function PrivacySection({ t }: { t: AppCopy }) {
             </Button>
           </li>
         ))}
-        <li className="flex flex-wrap items-center justify-between gap-3 py-4">
-          <span className="grid min-w-0 flex-1 gap-0.5">
-            <span className="font-medium">{t.settings.deleteAccount}</span>
-            <span className="text-sm text-pretty text-muted-foreground">
-              {t.settings.deleteAccountBody}
-            </span>
-          </span>
-          <AlertDialog>
-            <AlertDialogTrigger render={<Button variant="destructive" size="sm" />}>
-              {t.settings.deleteAccount}
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>{t.settings.deleteAccountTitle}</AlertDialogTitle>
-                <AlertDialogDescription>
-                  {t.settings.deleteAccountConfirmation}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>{t.orders.cancel}</AlertDialogCancel>
-                <AlertDialogClose
-                  render={<Button variant="destructive-solid" />}
-                  onClick={() => action.run("account-delete")}
-                >
-                  {t.settings.deleteAccountConfirm}
-                </AlertDialogClose>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </li>
+        {data.services.accountData ? <DeleteAccount t={t} /> : null}
       </ul>
     </div>
   );
 }
 
-function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
+function DeleteAccount({ t }: { t: AppCopy }) {
   const action = useAction();
-  const [topic, setTopic] = useState("orders");
-  const [error, setError] = useState(false);
-  const sent = !error && action.result?.ok === true;
-  const messageRef = useRef<HTMLTextAreaElement>(null);
-  const { diagnostics } = data;
-  const diag = t.settings.diag;
-  const rows = [
-    [diag.version, diagnostics.version],
-    [diag.store, diagnostics.storeRef ?? diag.none],
-    [diag.sync, diagnostics.syncPhase],
-    [diag.error, diagnostics.errorCode ?? diag.none],
-    [diag.rights, diagnostics.rights],
-    [diag.reference, diagnostics.correlationId],
-  ] as const;
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-3 py-4">
+      <span className="grid min-w-0 flex-1 gap-0.5">
+        <span className="font-medium">{t.settings.deleteAccount}</span>
+        <span className="text-sm text-pretty text-muted-foreground">
+          {t.settings.deleteAccountBody}
+        </span>
+      </span>
+      <AlertDialog>
+        <AlertDialogTrigger render={<Button variant="destructive" size="sm" />}>
+          {t.settings.deleteAccount}
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t.settings.deleteAccountTitle}</AlertDialogTitle>
+            <AlertDialogDescription>{t.settings.deleteAccountConfirmation}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.orders.cancel}</AlertDialogCancel>
+            <AlertDialogClose
+              render={<Button variant="destructive-solid" />}
+              onClick={() => action.run("account-delete")}
+            >
+              {t.settings.deleteAccountConfirm}
+            </AlertDialogClose>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </li>
+  );
+}
+
+function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
   return (
     <>
       <Group title={t.settings.faq}>
@@ -1014,6 +1264,48 @@ function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
           ))}
         </div>
       </Group>
+      {data.services.support && data.diagnostics ? (
+        <SupportForm data={data} diagnostics={data.diagnostics} t={t} />
+      ) : (
+        <Group title={t.settings.contact}>
+          <p className="text-sm text-muted-foreground">
+            {t.settings.supportWrite}{" "}
+            <a href="mailto:supporto@fiscalbay.it" className="underline underline-offset-4">
+              supporto@fiscalbay.it
+            </a>
+            .
+          </p>
+        </Group>
+      )}
+    </>
+  );
+}
+
+function SupportForm({
+  data,
+  diagnostics,
+  t,
+}: {
+  data: SettingsPageData;
+  diagnostics: DiagnosticsView;
+  t: AppCopy;
+}) {
+  const action = useAction();
+  const [topic, setTopic] = useState("orders");
+  const [error, setError] = useState(false);
+  const sent = !error && action.result?.ok === true;
+  const messageRef = useRef<HTMLTextAreaElement>(null);
+  const diag = t.settings.diag;
+  const rows = [
+    [diag.version, diagnostics.version],
+    [diag.store, diagnostics.storeRef ?? diag.none],
+    [diag.sync, diagnostics.syncPhase],
+    [diag.error, diagnostics.errorCode ?? diag.none],
+    [diag.rights, diagnostics.rights],
+    [diag.reference, diagnostics.correlationId],
+  ] as const;
+  return (
+    <>
       <Group title={t.settings.contact} className="scroll-mt-20">
         <form
           noValidate
@@ -1128,6 +1420,7 @@ export function SettingsPage({
   links: AppLinks;
 }) {
   const { language } = links;
+  const sectionIds = data.sections;
   const current = data.section ?? "piano";
   const content = {
     piano: <PlanSection data={data} t={t} language={language} />,
@@ -1136,12 +1429,12 @@ export function SettingsPage({
     sicurezza: (
       <>
         <UnlockConfirmation confirmed={data.confirmUnlock} t={t} />
-        <SecuritySection data={data} t={t} language={language} />
+        <SecuritySection data={data} language={language} />
       </>
     ),
-    aspetto: <AppearanceSection t={t} links={links} />,
-    messaggio: <TemplateSection t={t} />,
-    privacy: <PrivacySection t={t} />,
+    aspetto: <AppearanceSection data={data} t={t} links={links} />,
+    messaggio: <TemplateSection data={data} t={t} />,
+    privacy: <PrivacySection data={data} t={t} links={links} />,
     supporto: <SupportSection data={data} t={t} />,
   } satisfies Record<SettingsSection, React.ReactNode>;
   const sections = useRef<Partial<Record<SettingsSection, HTMLElement | null>>>({});
@@ -1164,14 +1457,14 @@ export function SettingsPage({
 
   const spy = () => {
     if (following.current || !window.matchMedia(wideQuery).matches) return;
-    let next: SettingsSection = settingsSections[0];
-    for (const id of settingsSections) {
+    let next: SettingsSection = sectionIds[0]!;
+    for (const id of sectionIds) {
       const top = sections.current[id]?.getBoundingClientRect().top ?? Infinity;
       if (top <= Math.max(spyOffset, window.innerHeight * 0.35)) next = id;
     }
     const atBottom =
       window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
-    setActive(atBottom ? settingsSections[settingsSections.length - 1] : next);
+    setActive(atBottom ? sectionIds[sectionIds.length - 1]! : next);
   };
 
   const finishFollowing = () => {
@@ -1225,7 +1518,7 @@ export function SettingsPage({
                 style={{ translate: `0 ${indicator.top}px`, height: indicator.height }}
               />
             ) : null}
-            {settingsSections.map((id) => {
+            {sectionIds.map((id) => {
               const icon = sectionIcons[id];
               return (
                 <li
@@ -1273,7 +1566,7 @@ export function SettingsPage({
             <ChevronLeft aria-hidden="true" className="size-4" />
             {t.settings.title}
           </Link>
-          {settingsSections.map((id) => {
+          {sectionIds.map((id) => {
             const icon = sectionIcons[id];
             return (
               <section

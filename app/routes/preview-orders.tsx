@@ -12,6 +12,7 @@ import { NotFoundState } from "~/components/not-found";
 import { appHref } from "../app-links";
 import { appCopy } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
+import { defaultTemplate } from "../preferences";
 import { rememberedStore, snapshotOnlyAdded } from "../orders/order-list";
 import { openSearch } from "../orders/order-search.server";
 import { previewOrderPage, previewSearchScope } from "../preview/order-list.server";
@@ -75,8 +76,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       storeName: vintage?.name ?? null,
     },
     onboarding: scenario.onboarding,
-    messageTemplate:
-      appCopy[language].settings[language === "it" ? "templateDefaultIt" : "templateDefaultEn"],
+    messageTemplates: { it: defaultTemplate("it"), en: defaultTemplate("en") },
     now: scenario.now,
     confirmUnlock: state.confirmUnlock !== false,
     settings: true,

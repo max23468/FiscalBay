@@ -39,6 +39,7 @@ import { OrderSheet } from "./detail";
 import { remainingUnlocks, type OrdersAccount } from "./labels";
 import { SelectionBar } from "./selection";
 import { OrdersToolbar, SearchChip } from "./toolbar";
+import { useTimeZone } from "~/components/time-zone";
 
 /**
  * Dati della pagina Ordini, uguali per l'area reale (ordini persistiti e autorizzati) e per
@@ -74,7 +75,8 @@ export interface OrdersPageData extends SecondaryActions {
     label: "stepAccount" | "stepEmail" | "stepStore" | "stepSync";
     done: boolean;
   }>;
-  messageTemplate: string;
+  /** Modello di messaggio scelto per ogni lingua dell'acquirente. */
+  messageTemplates: Record<Language, string>;
   now: string;
   confirmUnlock?: boolean;
   /** Le Impostazioni del piano esistono: l'avviso degli sblocchi esauriti vi rimanda. */
@@ -226,6 +228,7 @@ function OrdersNotices({
   language: Language;
   links: AppLinks;
 }) {
+  const zone = useTimeZone();
   if (data.notices.every((notice) => notice.kind === "importing")) return null;
   return (
     <div className="grid gap-3">
@@ -234,14 +237,14 @@ function OrdersNotices({
           case "ebay-down":
             return (
               <StatusAlert key={notice.kind} tone="warning" title={t.orders.ebayDownTitle}>
-                {t.orders.ebayDownBody(formatDate(notice.at, language))}
+                {t.orders.ebayDownBody(formatDate(notice.at, language, "dateTime", zone))}
               </StatusAlert>
             );
           case "quota":
             return (
               <StatusAlert key={notice.kind} tone="warning" title={t.orders.quotaTitle}>
                 <span className="grid justify-items-start gap-3">
-                  {t.orders.quotaBody(formatDate(notice.until, language))}
+                  {t.orders.quotaBody(formatDate(notice.until, language, "dateTime", zone))}
                   {/* Senza la pagina del piano nessun collegamento a una destinazione assente. */}
                   {data.settings ? (
                     <Link
@@ -273,7 +276,7 @@ function OrdersNotices({
                 title={t.orders.consentExpiringTitle(notice.storeName)}
               >
                 <span className="grid justify-items-start gap-3">
-                  {t.orders.consentExpiringBody(formatDate(notice.at, language, "date"))}
+                  {t.orders.consentExpiringBody(formatDate(notice.at, language, "date", zone))}
                   {/* Il consenso è ancora valido: il ricollegamento parte subito dalla
                       schermata preparatoria, fuori dalle route dell'app. */}
                   <a
@@ -767,6 +770,7 @@ function OrdersList({
 
 /** Negozio collegato senza ordini: in attesa della prima lettura o senza ordini nel periodo. */
 function NoOrders({ data, t, links }: { data: OrdersPageData; t: AppCopy; links: AppLinks }) {
+  const zone = useTimeZone();
   const { language } = links;
   return (
     <EmptyState
@@ -774,7 +778,10 @@ function NoOrders({ data, t, links }: { data: OrdersPageData; t: AppCopy; links:
       title={data.sync.lastAt ? t.orders.noOrdersTitle : t.orders.firstSyncTitle}
       description={
         data.sync.lastAt
-          ? t.orders.noOrdersBody(data.sync.storeName ?? "", formatDate(data.sync.lastAt, language))
+          ? t.orders.noOrdersBody(
+              data.sync.storeName ?? "",
+              formatDate(data.sync.lastAt, language, "dateTime", zone),
+            )
           : t.orders.firstSyncBody(data.sync.storeName ?? "")
       }
       action={
@@ -837,7 +844,7 @@ export function OrdersPage({
         detail={detail ?? null}
         account={data.account}
         ebayDown={isEbayDown(data)}
-        template={data.messageTemplate}
+        templates={data.messageTemplates}
         confirmUnlock={data.confirmUnlock}
         t={t}
         links={links}

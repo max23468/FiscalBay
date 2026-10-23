@@ -5,6 +5,7 @@ import { SettingsPage, type ExportContext, type SettingsPageData } from "~/compo
 import { NotFoundState } from "~/components/not-found";
 import { appCopy } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
+import { defaultDisplay, defaultTemplate } from "../preferences";
 import { exportReturnHref, exportScope } from "../orders/export-scope";
 import { snapshotParam } from "../orders/order-list";
 import { openSearch } from "../orders/order-search.server";
@@ -68,9 +69,24 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const page: SettingsPageData = {
     confirmUnlock: state.confirmUnlock !== false,
     section: params.sezione ?? null,
+    sections: settingsSections,
+    services: { billing: true, telegram: true, accountData: true, support: true },
+    preview: true,
     account: scenario.account,
     stores: scenario.stores,
-    sessions: scenario.sessions,
+    security: {
+      methods: scenario.signInMethods,
+      sessions: scenario.sessions,
+      passkeyBlock: "nuovo-accesso",
+      notice: null,
+    },
+    // Ogni scelta parte dal predefinito: l'anteprima non conserva preferenze.
+    preferences: {
+      theme: defaultDisplay.theme,
+      timeZone: defaultDisplay.timeZone,
+      marketing: false,
+      templates: { it: defaultTemplate("it"), en: defaultTemplate("en") },
+    },
     diagnostics: scenario.diagnostics,
     telegramChat: scenario.telegramChat,
     exportEstimate: {

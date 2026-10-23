@@ -3,7 +3,7 @@ import { data, isRouteErrorResponse } from "react-router";
 
 import { AccountShell } from "~/components/account";
 import { ProfilePage } from "~/components/settings";
-import { assertSameOrigin, requireAccountArea } from "../account-area.server";
+import { assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
 import { appCopy } from "../app-copy";
 import { appBase } from "../app-links";
 import { completeRegistration, parseProfile } from "../domain/registration.server";
@@ -23,8 +23,14 @@ export function headers(): HeadersInit {
 
 /** Profilo dall'avatar: i dati minimi personali raccolti alla registrazione. */
 export async function loader({ request }: Route.LoaderArgs) {
-  const { language, profile, account, session } = await requireAccountArea(request);
-  return { language, userId: session.user.id, account: { ...account, profile } };
+  const area = await requireAccountArea(request);
+  const { language, profile, account, session } = area;
+  return {
+    language,
+    userId: session.user.id,
+    account: { ...account, profile },
+    shell: await shellData(area),
+  };
 }
 
 /** Aggiorna nome, cognome e ragione sociale; il tipo di account resta quello registrato. */
@@ -68,9 +74,15 @@ export async function clientAction({ request, serverAction }: Route.ClientAction
 }
 
 export default function Profile({ loaderData }: Route.ComponentProps) {
-  const { language, account } = loaderData;
+  const { language, account, shell } = loaderData;
   return (
-    <AccountShell key={loaderData.userId} language={language} account={account} security>
+    <AccountShell
+      key={loaderData.userId}
+      language={language}
+      account={account}
+      shell={shell}
+      security
+    >
       <ProfilePage account={account} t={appCopy[language]} links={{ language, base: appBase }} />
     </AccountShell>
   );
