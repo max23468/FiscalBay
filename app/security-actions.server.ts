@@ -1,76 +1,36 @@
 import { env } from "cloudflare:workers";
-import { ShieldCheck } from "lucide-react";
-import { data, redirect } from "react-router";
-import { UnlockConfirmation } from "~/components/unlock-confirmation";
-import { restoreUnlockConfirmation, unlockConfirmation } from "../domain/grants.server";
+import { redirect } from "react-router";
 
-import { AccessNotice, AccountSecurity, AccountShell } from "~/components/account";
-import { PageTitle } from "~/components/icon-tile";
-import { notifySecurityEvent } from "../account-email.server";
-import { assertSameOrigin, requireAccountArea } from "../account-area.server";
-import { forwardToAuth, redirectWithCookies } from "../auth-route.server";
+import { notifySecurityEvent } from "./account-email.server";
+import type { AccountArea } from "./account-area.server";
+import { accessPath, securityPath, securityReturnPath } from "./app-links";
+import { forwardToAuth, redirectWithCookies } from "./auth-route.server";
+import { pendingEmailChange } from "./domain/email-change.server";
 import {
-  listActiveSessions,
   passkeyChangeBlock,
   recentSignIn,
   revokeOtherSessions,
   revokeSession,
   type AuthSession,
-} from "../domain/sessions.server";
+} from "./domain/sessions.server";
 import {
   accountMethods,
-  listSignInMethods,
   removeAccountMethod,
   removePasskey,
   type AccountMethod,
-} from "../domain/sign-in-methods.server";
-import { accessNotice } from "../access-notice";
-import { accessPath, securityReturnPath } from "../app-links";
-import { pendingEmailChange } from "../domain/email-change.server";
-import { appCopy } from "../app-copy";
-import { languageFromPath, localizedPath } from "../i18n";
-import type { Route } from "./+types/security";
+} from "./domain/sign-in-methods.server";
+import { localizedPath } from "./i18n";
 
-export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
-  const t = appCopy[languageFromPath(location.pathname)];
-  return [{ title: `FiscalBay | ${t.shell.security}` }];
-}
-
-/** Sicurezza dell'account: metodi di accesso, email e sessioni, per chi ha confermato l'email. */
-export async function loader({ request }: Route.LoaderArgs) {
-  const { language, session, account } = await requireAccountArea(request);
-  const url = new URL(request.url);
-  const now = new Date();
-  return {
-    language,
-    confirmUnlock: await unlockConfirmation(env.DB, session.user.id),
-    userId: session.user.id,
-    notice: accessNotice(url.searchParams, language),
-    ...account,
-    methods: await listSignInMethods(env.DB, session.user.id),
-    sessions: await listActiveSessions(env.DB, session.user.id, session.session.id, language, now),
-    now: now.toISOString(),
-    recent: recentSignIn(session as AuthSession, now),
-    passkeyRestriction: passkeyChangeBlock(session as AuthSession, now),
-    // Avviso da mostrare se la registrazione di una passkey viene rifiutata.
-    passkeyBlock: passkeyChangeBlock(session as AuthSession, now) ?? "nuovo-accesso",
-    pendingEmail: await pendingEmailChange(env.DB, session.user.id, session.user.email),
-  };
-}
-
-/** Metodi di accesso, email, passkey e sessioni; ogni esito torna a questa pagina. */
-export async function action({ request }: Route.ActionArgs) {
-  assertSameOrigin(request);
-  const { language, session } = await requireAccountArea(request);
+/** Metodi di accesso, email, passkey e sessioni; ogni esito torna alla Sicurezza. */
+export async function securityAction(
+  request: Request,
+  { language, session }: AccountArea,
+  form: FormData,
+): Promise<Response> {
   const auth = session as AuthSession;
-  const form = await request.formData();
   const field = (name: string) => String(form.get(name) ?? "");
   const intent = field("intent");
-  if (intent === "unlock-confirmation") {
-    await restoreUnlockConfirmation(env.DB, session.user.id);
-    return data({ ok: true });
-  }
-  const security = new URL(request.url).pathname;
+  const security = localizedPath(language, securityPath);
   const notice = (value: string) => redirect(`${security}?accesso=${value}`, 303);
   const authError = `${localizedPath(language, "/auth/error")}?provider=`;
 
@@ -171,39 +131,4 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   return notice("errore");
-}
-
-export default function Security({ loaderData }: Route.ComponentProps) {
-  const { language } = loaderData;
-  const t = appCopy[language];
-  return (
-    <AccountShell key={loaderData.userId} language={language} account={loaderData} security>
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-        <PageTitle icon={ShieldCheck} tone="neutral">
-          {t.shell.security}
-        </PageTitle>
-        <AccessNotice
-          language={language}
-          notice={loaderData.notice}
-          showSignInAgain={loaderData.recent && !loaderData.passkeyRestriction}
-        />
-        {/* Come nell'anteprima la preferenza di sblocco apre la scheda Sicurezza. */}
-        <div className="grid gap-4 rounded-xl border bg-card p-5 md:p-6">
-          <UnlockConfirmation confirmed={loaderData.confirmUnlock} t={t} />
-          <AccountSecurity
-            className="grid gap-4"
-            language={language}
-            email={loaderData.email}
-            methods={loaderData.methods}
-            sessions={loaderData.sessions}
-            now={loaderData.now}
-            passkeyBlock={loaderData.passkeyBlock}
-            recent={loaderData.recent}
-            passkeyRestriction={loaderData.passkeyRestriction}
-            pendingEmail={loaderData.pendingEmail}
-          />
-        </div>
-      </div>
-    </AccountShell>
-  );
 }

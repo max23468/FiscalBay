@@ -14,6 +14,8 @@ export type PhaseOperation =
   | "stores"
   | "allowance"
   | "registration"
+  | "notifications"
+  | "settings"
   | "request"
   | "document";
 

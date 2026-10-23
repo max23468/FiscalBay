@@ -129,13 +129,17 @@ export function useAction() {
   };
 }
 
-/** Voce del menu dell'avatar; `reloadDocument` per le pagine fuori dalle route dell'app. */
+/**
+ * Voce del menu dell'avatar; `reloadDocument` per le pagine fuori dalle route dell'app,
+ * `onSelect` per una voce che invia una scelta invece di aprire una pagina.
+ */
 export interface AccountMenuItem {
   href: string;
   label: string;
   Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   lang?: Language;
   reloadDocument?: boolean;
+  onSelect?: () => void;
 }
 
 /** Destinazione della navigazione principale; `end` per la radice dell'area. */
@@ -155,6 +159,7 @@ export function AppShell({
   t,
   account,
   notifications,
+  notificationsAction,
   now,
   search,
   navigation,
@@ -168,6 +173,8 @@ export function AppShell({
   t: AppCopy;
   account: Pick<AccountView, "name" | "email">;
   notifications?: NotificationView[];
+  /** Registra sul server le notifiche lette; senza, la lettura resta nella pagina. */
+  notificationsAction?: string;
   now?: string;
   search?: ShellSearch;
   /** Destinazioni principali; senza, quelle complete dell'app. Vuota, nessuna navigazione. */
@@ -259,7 +266,13 @@ export function AppShell({
               </>
             ) : null}
             {notifications && now ? (
-              <NotificationsMenu t={t} links={links} notifications={notifications} now={now} />
+              <NotificationsMenu
+                t={t}
+                links={links}
+                notifications={notifications}
+                readAction={notificationsAction}
+                now={now}
+              />
             ) : null}
             <AccountMenu
               t={t}
@@ -614,18 +627,30 @@ function NotificationsMenu({
   t,
   links,
   notifications,
+  readAction,
   now,
 }: {
   t: AppCopy;
   links: AppLinks;
   notifications: NotificationView[];
+  readAction?: string;
   now: string;
 }) {
-  const [readIds, setReadIds] = useState<ReadonlySet<string>>(
-    () => new Set(notifications.filter((item) => item.read).map((item) => item.id)),
-  );
+  // Letture di questa pagina, in attesa che il server le riporti nelle notifiche.
+  const [readIds, setReadIds] = useState<ReadonlySet<string>>(() => new Set());
   const [open, setOpen] = useState(false);
-  const unread = notifications.filter((item) => !readIds.has(item.id)).length;
+  const isRead = (item: NotificationView) => item.read || readIds.has(item.id);
+  const unread = notifications.filter((item) => !isRead(item)).length;
+  const markRead = (items: NotificationView[]) => {
+    const ids = items.filter((item) => !isRead(item)).map((item) => item.id);
+    if (ids.length === 0) return;
+    setReadIds((current) => new Set([...current, ...ids]));
+    if (!readAction) return;
+    const body = new FormData();
+    body.set("ids", ids.join(","));
+    // Nessuna nuova lettura della pagina; `keepalive` regge l'apertura della notifica.
+    void fetch(readAction, { method: "POST", body, keepalive: true }).catch(() => {});
+  };
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
@@ -656,7 +681,7 @@ function NotificationsMenu({
             variant="ghost"
             size="sm"
             disabled={unread === 0}
-            onClick={() => setReadIds(new Set(notifications.map((item) => item.id)))}
+            onClick={() => markRead(notifications)}
           >
             {t.shell.markAllRead}
           </Button>
@@ -668,7 +693,7 @@ function NotificationsMenu({
         ) : (
           <ul className="grid divide-y">
             {notifications.map((item) => {
-              const unreadItem = !readIds.has(item.id);
+              const unreadItem = !isRead(item);
               const body = (
                 <>
                   <StatusIcon tone={item.tone} className="mt-0.5" />
@@ -697,7 +722,7 @@ function NotificationsMenu({
                     <Link
                       to={appHref(links, item.href)}
                       onClick={() => {
-                        setReadIds((ids) => new Set(ids).add(item.id));
+                        markRead([item]);
                         setOpen(false);
                       }}
                       className={cn(
@@ -757,12 +782,16 @@ function AccountMenu({
         {menu.map((group) => (
           <DropdownMenuGroup key={group.map((item) => item.href).join(" ")}>
             <DropdownMenuSeparator />
-            {group.map(({ href, label, Icon, lang, reloadDocument }) => (
+            {group.map(({ href, label, Icon, lang, reloadDocument, onSelect }) => (
               <DropdownMenuItem
                 key={href}
                 lang={lang}
                 onClick={() =>
-                  reloadDocument ? window.location.assign(href) : void navigate(href)
+                  onSelect
+                    ? onSelect()
+                    : reloadDocument
+                      ? window.location.assign(href)
+                      : void navigate(href)
                 }
               >
                 <Icon aria-hidden="true" />

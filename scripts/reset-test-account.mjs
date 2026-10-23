@@ -79,6 +79,9 @@ export async function resetStatements(password, now = new Date()) {
 
   return [
     `DELETE FROM session WHERE "userId" = ${quote(userId)};`,
+    // Lingua, tema, fuso, modello e letture della campanella tornano ai predefiniti.
+    `DELETE FROM user_preferences WHERE user_id = ${quote(userId)};`,
+    `DELETE FROM notification_reads WHERE user_id = ${quote(userId)};`,
     // Lo spazio porta con sé negozi, token, pause, ordini, identificativi, sblocchi e cicli.
     `DELETE FROM workspaces WHERE id = ${quote(workspaceId)};`,
     `INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
@@ -226,6 +229,26 @@ async function main() {
         INSERT INTO order_tax_checks (order_id, source, observed_at, availability)
           VALUES ('${id}', 'ebay_fulfillment', '${now}', 'absent');`);
       }
+    }
+    // Preferenze e campanella: un account per browser, con un negozio da ricollegare.
+    for (const browser of ["chromium", "webkit"]) {
+      const id = `preferences-${browser}`;
+      statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
+      INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+        SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
+      INSERT INTO user_profiles SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
+        FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
+      INSERT INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
+        FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};
+      INSERT INTO workspaces (id, name, created_at) VALUES ('${id}', 'Collaudo preferenze', '${now}');
+      INSERT INTO workspace_members VALUES ('${id}', '${id}', 'owner');
+      INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
+        VALUES ('${id}', '${id}', '${id}', '${now}', 'Negozio preferenze');
+      INSERT INTO ebay_store_credentials
+        (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at, rejected_at)
+        VALUES ('${id}', 'v1.collaudo', '2099-01-01T00:00:00.000Z', 'v1.collaudo', '2099-01-01T00:00:00.000Z', '${now}', '${new Date(Date.now() - day).toISOString()}');
+      INSERT INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
+        VALUES ('${id}', '${id}', '${id}', '${expires}', '${now}', '${now}');`);
     }
     for (const browser of ["chromium", "webkit"]) {
       const id = `passkey-${browser}`;

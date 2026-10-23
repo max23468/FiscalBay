@@ -1,4 +1,14 @@
-import { ClipboardList, Globe, KeyRound, Languages, ShieldCheck, Store, User } from "lucide-react";
+import {
+  ClipboardList,
+  CreditCard,
+  Globe,
+  KeyRound,
+  Languages,
+  Settings,
+  ShieldCheck,
+  Store,
+  User,
+} from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useLocation, useSubmit } from "react-router";
@@ -31,12 +41,16 @@ import {
   accessPath,
   appBase,
   appHref,
+  languagePath,
+  notificationsPath,
   orderSearchPath,
   securityPath,
   visitParam,
 } from "../app-links";
 import { languageNames, localizedPath, type Language } from "../i18n";
+import type { ShellData } from "../preferences";
 import { formatDate, formatRelative } from "../view-models";
+import { useTimeZone } from "~/components/time-zone";
 
 /** Riga di un metodo di accesso: nome, stato e azioni, come nelle Impostazioni. */
 function MethodRow({
@@ -344,6 +358,7 @@ function SessionList({
   now: string;
   actionPath: string;
 }) {
+  const zone = useTimeZone();
   const { settings } = appCopy[language];
   return (
     <SecurityGroup id="security-sessions" title={settings.sessions}>
@@ -354,7 +369,7 @@ function SessionList({
             label={session.device}
             hint={
               session.createdAt
-                ? settings.sessionOpened(formatDate(session.createdAt, language))
+                ? settings.sessionOpened(formatDate(session.createdAt, language, "dateTime", zone))
                 : undefined
             }
             status={
@@ -506,6 +521,7 @@ export function AccountSecurity({
   onAction?: (intent: string, fields: Record<string, string>) => void;
   className?: string;
 }) {
+  const zone = useTimeZone();
   const { access: t, settings } = appCopy[language];
   const { pathname } = useLocation();
   // Anche senza JavaScript i form dell'anteprima restano nella route simulata.
@@ -638,7 +654,7 @@ export function AccountSecurity({
                   passkey.createdAt
                     ? settings.passkeyItem(
                         passkey.name || settings.methodPasskey,
-                        formatDate(passkey.createdAt, language),
+                        formatDate(passkey.createdAt, language, "dateTime", zone),
                       )
                     : passkey.name || settings.methodConnected
                 }
@@ -771,20 +787,23 @@ export function AccessNotice({
 }
 
 /**
- * Shell dell'area reale: le stesse barra e menu dell'anteprima, con le sole
- * destinazioni che esistono. La lingua sta nel menu finché non c'è Aspetto e lingua.
+ * Shell dell'area reale: le stesse barra e menu dell'anteprima, con le sole destinazioni che
+ * esistono. Prima della conferma dell'email le Impostazioni non sono raggiungibili e la lingua
+ * resta nel menu.
  */
 export function AccountShell({
   language,
   account,
   security,
+  shell,
   searchQuery = null,
   children,
 }: {
   language: Language;
   account: { name: string; email: string };
-  /** Dopo la conferma dell'email: navigazione, ricerca ordini, Profilo e Sicurezza. */
+  /** Dopo la conferma dell'email: navigazione, ricerca ordini, campanella e Impostazioni. */
   security: boolean;
+  shell?: ShellData;
   /** Ricerca attiva della pagina Ordini; null nelle altre pagine. */
   searchQuery?: string | null;
   children: React.ReactNode;
@@ -795,18 +814,21 @@ export function AccountShell({
   // La ricerca resta nell'ambiente eBay mostrato, che sul test può essere la Sandbox.
   const sandbox = new URLSearchParams(search).get("environment") === "sandbox";
   const other: Language = language === "it" ? "en" : "it";
-  const bare = pathname.replace(/^\/en(?=\/|$)/u, "") || "/";
   const links = { language, base: appBase };
   return (
     <AppShell
       links={links}
       t={t}
       account={account}
+      notifications={security ? (shell?.notifications ?? undefined) : undefined}
+      notificationsAction={notificationsPath}
+      now={shell?.now}
       navigation={
         security
           ? [
               { href: appHref(links, "ordini"), label: t.shell.orders, Icon: ClipboardList },
               { href: appHref(links, "negozi"), label: t.shell.stores, Icon: Store },
+              { href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings },
             ]
           : []
       }
@@ -829,17 +851,31 @@ export function AccountShell({
                   label: t.shell.security,
                   Icon: ShieldCheck,
                 },
+                {
+                  href: appHref(links, "impostazioni/piano"),
+                  label: t.shell.planBilling,
+                  Icon: CreditCard,
+                },
+                { href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings },
               ],
             ]
           : []),
         [
-          {
-            href: localizedPath(other, bare),
-            label: languageNames[other],
-            Icon: Languages,
-            lang: other,
-            reloadDocument: true,
-          },
+          ...(security
+            ? []
+            : [
+                {
+                  href: languagePath,
+                  label: languageNames[other],
+                  Icon: Languages,
+                  lang: other,
+                  onSelect: () =>
+                    void submit(
+                      { language: other, returnTo: `${pathname}${search}` },
+                      { method: "post", action: languagePath },
+                    ),
+                },
+              ]),
           {
             href: `${localizedPath(language)}?${visitParam}=1`,
             label: t.shell.visitSite,

@@ -22,8 +22,16 @@ export const ordersPath = `${appBase}/ordini`;
 /** Ricerca ordini della barra superiore: riceve la query nel corpo, mai nell'indirizzo. */
 export const orderSearchPath = "/api/v1/orders/search";
 
-/** Pagina reale di Sicurezza; le Impostazioni complete la ospiteranno fra le categorie. */
-export const securityPath = `${appBase}/impostazioni/sicurezza`;
+export const settingsPath = `${appBase}/impostazioni`;
+
+/** Sicurezza, fra le categorie delle Impostazioni: riceve anche le sue azioni. */
+export const securityPath = `${settingsPath}/sicurezza`;
+
+/** Scelta della lingua dell'account; non ha prefisso perché la lingua arriva nel modulo. */
+export const languagePath = `${appBase}/lingua`;
+
+/** Letture della campanella. */
+export const notificationsPath = "/api/v1/notifications";
 
 /** Solo la pagina Sicurezza e i suoi gruppi, mai URL esterni o azioni da rieseguire. */
 export function securityReturnPath(language: Language, value: string | null): string | null {

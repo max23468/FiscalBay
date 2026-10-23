@@ -5,7 +5,7 @@ import { AccessNotice, AccountShell } from "~/components/account";
 import { NotFoundState } from "~/components/not-found";
 import { StoresPage } from "~/components/stores";
 import { accessNotice } from "../access-notice";
-import { assertSameOrigin, requireAccountArea } from "../account-area.server";
+import { assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
 import { appCopy } from "../app-copy";
 import { appBase, storeLinkPath, type AppLinks } from "../app-links";
 import {
@@ -72,12 +72,15 @@ function storeView(store: StoreStatus): StoreView {
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const { language, session, account } = await requireAccountArea(request);
+  const area = await requireAccountArea(request);
+  const { language, session, account } = area;
+  const now = new Date();
+  const statuses = await measure("d1", "stores", () => listStores(env.DB, session.user.id, now));
   const read = () =>
     measure("d1", "stores", () => listStores(env.DB, session.user.id)).then((stores) =>
       stores.map(storeView),
     );
-  const stores = await read();
+  const stores = statuses.map(storeView);
   const detail = params.negozio
     ? (stores.find((store) => store.id === params.negozio) ?? null)
     : null;
@@ -86,6 +89,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     notFound: Boolean(params.negozio) && !detail,
     language,
     account,
+    shell: await shellData(area, statuses, now),
     // Il collegamento eBay partito da Negozi torna qui con il suo esito.
     notice: accessNotice(new URL(request.url).searchParams, language),
     page: {
@@ -93,7 +97,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       detail,
       // Finché non esistono gli abbonamenti ogni spazio usa il piano Free.
       account: { plan: "free" as const },
-      now: new Date().toISOString(),
+      now: now.toISOString(),
       ebayDown: false,
       elsewhere: false,
       connectHref: localizedPath(language, storeLinkPath),
@@ -199,11 +203,11 @@ export async function clientAction({ request, serverAction }: Route.ClientAction
 }
 
 export default function Stores({ loaderData }: Route.ComponentProps) {
-  const { language, account, page, notice } = loaderData;
+  const { language, account, page, notice, shell } = loaderData;
   const links: AppLinks = { language, base: appBase };
   const t = appCopy[language];
   return (
-    <AccountShell language={language} account={account} security>
+    <AccountShell language={language} account={account} shell={shell} security>
       {loaderData.notFound ? (
         <NotFoundState kind="store" t={t} links={links} />
       ) : (

@@ -482,7 +482,15 @@ test.describe("miglioramenti account e negozi", () => {
             name: it ? "Riattiva conferma sblocco" : "Restore unlock confirmation",
           });
           await expect(restore).toBeEnabled();
+          // Il pulsante si disattiva già durante l'invio: si attende anche la rilettura della
+          // pagina, che una navigazione successiva altrimenti annullerebbe.
+          const revalidated = page.waitForResponse(
+            (response) =>
+              response.request().method() === "GET" &&
+              response.url().includes("/impostazioni/sicurezza.data"),
+          );
           await restore.click();
+          await revalidated;
           await expect(restore).toBeDisabled();
           expect(errors).toEqual([]);
         }
@@ -773,6 +781,83 @@ test.describe("miglioramenti account e negozi", () => {
       .getByRole("button", { name: "Rimuovi", exact: true })
       .click();
     await expect(row).toHaveCount(0);
+  });
+
+  test("impostazioni reali: tema, fuso, lingua, modello e campanella restano dopo la ricarica", async ({
+    page,
+    context,
+    baseURL,
+    browserName,
+  }) => {
+    test.setTimeout(60_000);
+    await useLocalAccount(context, "member", baseURL!, `preferences-${browserName}`);
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto("/app/impostazioni/aspetto");
+    await page.waitForLoadState("networkidle");
+    // Le categorie dei servizi non ancora disponibili non compaiono.
+    const categories = page.getByRole("navigation", { name: "Categorie" });
+    await expect(categories.getByRole("link")).toHaveCount(7);
+    await expect(categories.getByRole("link", { name: /Esportazione/u })).toHaveCount(0);
+
+    const saved = () =>
+      page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" && response.url().includes("/app/impostazioni"),
+      );
+    let save = saved();
+    await page.getByRole("radio", { name: "Scuro", exact: true }).check();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    expect((await save).status()).toBe(200);
+    const zone = page.getByRole("combobox", { name: "Fuso orario" });
+    await zone.click();
+    save = saved();
+    await page.getByRole("option", { name: "New York (Stati Uniti)" }).click();
+    expect((await save).status()).toBe(200);
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(zone).toContainText("New York (Stati Uniti)");
+
+    // Il modello non salvato protegge l'uscita dalla pagina, non il passaggio fra categorie.
+    const template = page.getByRole("textbox", { name: "Italiano", exact: true });
+    await template.fill("Ciao, per l'ordine {ordine} ci serve il Codice Fiscale.");
+    await page.getByRole("link", { name: "Negozi eBay" }).first().click();
+    const leave = page.getByRole("alertdialog");
+    await expect(leave).toContainText("modifiche non salvate");
+    await leave.getByRole("button", { name: "Continua a modificare" }).click();
+    await expect(page).toHaveURL(/\/app\/impostazioni\/aspetto$/u);
+    const templateSection = page.locator('section[aria-labelledby="settings-messaggio"]');
+    await templateSection.getByRole("button", { name: "Salva", exact: true }).click();
+    await expect(templateSection.getByText("Salvato", { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(template).toHaveValue("Ciao, per l'ordine {ordine} ci serve il Codice Fiscale.");
+
+    // La campanella segnala il negozio da ricollegare e ricorda la lettura.
+    const bell = page.getByRole("button", { name: "Notifiche, 1 da leggere" });
+    await bell.click();
+    const dialog = page.getByRole("dialog", { name: "Notifiche" });
+    await expect(dialog).toContainText("Negozio preferenze: la sincronizzazione è sospesa.");
+    const read = page.waitForResponse((response) =>
+      response.url().endsWith("/api/v1/notifications"),
+    );
+    await dialog.getByRole("button", { name: "Segna tutte come lette" }).click();
+    expect((await read).status()).toBe(200);
+    await page.keyboard.press("Escape");
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Notifiche", exact: true })).toBeVisible();
+
+    // La lingua scelta resta anche aprendo l'area in italiano.
+    const appearance = page.locator('section[aria-labelledby="settings-aspetto"]');
+    await appearance.getByRole("button", { name: "English", exact: true }).click();
+    await expect(page).toHaveURL(/\/en\/app\/impostazioni\/aspetto$/u);
+    await page.goto("/app/ordini");
+    await expect(page).toHaveURL(/\/en\/app\/ordini$/u);
+    await page.goto("/en/app/impostazioni/aspetto");
+    await page.waitForLoadState("networkidle");
+    await appearance.getByRole("button", { name: "Italiano", exact: true }).click();
+    await expect(page).toHaveURL(/\/app\/impostazioni\/aspetto$/u);
+    await expect(page.locator("html")).toHaveAttribute("lang", "it");
+    expect(errors).toEqual([]);
   });
 
   test("passkey: nome, rinomina, rimozione e unico metodo visibili nella pagina reale", async ({
@@ -1722,6 +1807,9 @@ for (const language of ["it", "en"] as const) {
         path: testInfo.outputPath(`security-${language}-${width}.png`),
         fullPage: true,
       });
+      // La rilettura dopo l'ultima azione simulata si chiude prima di cambiare pagina: WebKit
+      // segnala come errore della pagina una richiesta annullata dalla navigazione.
+      await page.waitForLoadState("networkidle");
 
       await open(page, `${prefix}/anteprima/profilo`);
       const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });

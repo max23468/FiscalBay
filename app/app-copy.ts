@@ -56,6 +56,14 @@ const it = {
     notificationsWindow: "Ultimi 30 giorni",
     notificationsEmpty: "Nessuna notifica negli ultimi 30 giorni.",
     markAllRead: "Segna tutte come lette",
+    storeNotifications: {
+      expiredTitle: "Collegamento scaduto",
+      expiredBody: (store: string) =>
+        `${store}: la sincronizzazione è sospesa. Ricollega il negozio.`,
+      expiringTitle: "Autorizzazione in scadenza",
+      expiringBody: (store: string, date: string) =>
+        `${store}: l’autorizzazione eBay scade il ${date}. Ricollega il negozio entro quella data.`,
+    },
     account: "Account",
     profile: "Profilo",
     security: "Sicurezza",
@@ -559,6 +567,10 @@ const it = {
     templateIntro:
       "Quando eBay non riporta il Codice Fiscale, puoi copiare questo messaggio dall’ordine e inviarlo all’acquirente dai tuoi canali.",
     templateHint: "{ordine} viene sostituito con il numero dell’ordine.",
+    templateFailed: "Modello non salvato. Il testo scritto resta qui: riprova.",
+    templateInvalid: "Scrivi il modello in entrambe le lingue, entro 2.000 caratteri.",
+    unsaved: "Hai modifiche non salvate al modello di messaggio. Vuoi lasciare la pagina?",
+    leave: "Lascia la pagina",
     templateDefaultIt:
       "Buongiorno e grazie per l’acquisto. Per emettere la fattura elettronica dell’ordine {ordine} ci serve il tuo Codice Fiscale. Se acquisti con Partita IVA, indicaci quella e la ragione sociale. Grazie.",
     templateDefaultEn:
@@ -621,6 +633,7 @@ const it = {
     sent: (email: string) => `Anteprima: richiesta non inviata. Ti risponderemmo a ${email}.`,
     formErrors: "Correggi i campi evidenziati.",
     supportEmail: "Puoi scrivere anche a",
+    supportWrite: "Scrivi a",
   },
   profile: {
     title: "Profilo",
@@ -922,6 +935,13 @@ const en: AppCopy = {
     notificationsWindow: "Last 30 days",
     notificationsEmpty: "No notifications in the last 30 days.",
     markAllRead: "Mark all as read",
+    storeNotifications: {
+      expiredTitle: "Connection expired",
+      expiredBody: (store) => `${store}: syncing is paused. Reconnect the store.`,
+      expiringTitle: "Authorisation expiring",
+      expiringBody: (store, date) =>
+        `${store}: the eBay authorisation expires on ${date}. Reconnect the store by then.`,
+    },
     account: "Account",
     profile: "Profile",
     security: "Security",
@@ -1409,6 +1429,10 @@ const en: AppCopy = {
     templateIntro:
       "When eBay does not provide the tax code, you can copy this message from the order and send it to the buyer through your own channels.",
     templateHint: "{ordine} is replaced with the order number.",
+    templateFailed: "Template not saved. Your text is still here: try again.",
+    templateInvalid: "Write the template in both languages, within 2,000 characters.",
+    unsaved: "You have unsaved changes to the message template. Leave the page?",
+    leave: "Leave page",
     templateDefaultIt:
       "Buongiorno e grazie per l’acquisto. Per emettere la fattura elettronica dell’ordine {ordine} ci serve il tuo Codice Fiscale. Se acquisti con Partita IVA, indicaci quella e la ragione sociale. Grazie.",
     templateDefaultEn:
@@ -1469,6 +1493,7 @@ const en: AppCopy = {
     sent: (email) => `Preview: request not sent. We would reply to ${email}.`,
     formErrors: "Fix the highlighted fields.",
     supportEmail: "You can also write to",
+    supportWrite: "Write to",
   },
   profile: {
     title: "Profile",

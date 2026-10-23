@@ -2,13 +2,17 @@ import { env } from "cloudflare:workers";
 import { redirect } from "react-router";
 
 import { createAuth } from "./auth.server";
+import { listNotifications } from "./domain/notifications.server";
+import { readPreferences, type Preferences } from "./domain/preferences.server";
 import { registrationStatus, type Profile } from "./domain/registration.server";
+import { listStores, type StoreStatus } from "./domain/stores.server";
 import { accessPath, ordersPath } from "./app-links";
 import { errorResponse } from "./error-response";
 import { sandboxAvailable, type EbayEnvironment } from "./integrations/ebay/environment.server";
 import { tracePhase } from "./errors";
 import { languageFromPath, localizedPath, type Language } from "./i18n";
 import { measure } from "./observability.server";
+import type { ShellData } from "./preferences";
 
 export type AccountArea = {
   language: Language;
@@ -16,6 +20,7 @@ export type AccountArea = {
   profile: Profile;
   /** Nome ed email per la shell. */
   account: { name: string; email: string };
+  preferences: Preferences;
 };
 
 /** Sessione corrente, misurata nella fase Auth. */
@@ -42,9 +47,14 @@ export async function requireAccountArea(
   const url = new URL(request.url);
   const language = languageFromPath(url.pathname);
   const session = await currentSession(request);
-  const status = session
-    ? await measure("d1", "registration", () => registrationStatus(env.DB, session.user.id))
-    : null;
+  const [status, preferences] = session
+    ? await measure("d1", "registration", () =>
+        Promise.all([
+          registrationStatus(env.DB, session.user.id),
+          readPreferences(env.DB, session.user.id),
+        ]),
+      )
+    : [null, null];
   tracePhase(request, "registration");
   const complete = !!status?.profile && status.termsAccepted;
   if (!session || !complete || (!session.user.emailVerified && !options.unverified)) {
@@ -53,13 +63,44 @@ export async function requireAccountArea(
       { headers: { "cache-control": "no-store" } },
     );
   }
+  // Una pagina aperta in un'altra lingua, da un nuovo accesso o da un collegamento, segue la
+  // lingua scelta; le azioni rispondono nella lingua dell'indirizzo che le ha inviate.
+  if (request.method === "GET" && preferences!.language && preferences!.language !== language) {
+    const bare = url.pathname.replace(/^\/en(?=\/|$)/u, "") || "/";
+    throw redirect(`${localizedPath(preferences!.language, bare)}${url.search}`, {
+      headers: { "cache-control": "no-store" },
+    });
+  }
   const { firstName, lastName } = status!.profile!;
   return {
     language,
     session,
     profile: status!.profile!,
     account: { name: `${firstName} ${lastName}`, email: session.user.email },
+    preferences: preferences!,
   };
+}
+
+/** I negozi già letti dalla pagina evitano una seconda lettura. */
+export async function shellData(
+  area: AccountArea,
+  stores?: StoreStatus[],
+  now = new Date(),
+): Promise<ShellData> {
+  const { session, preferences, language } = area;
+  const display = { theme: preferences.theme, timeZone: preferences.timeZone };
+  if (!session.user.emailVerified) return { display, notifications: null, now: now.toISOString() };
+  const notifications = await measure("d1", "notifications", async () =>
+    listNotifications(
+      env.DB,
+      session.user.id,
+      stores ?? (await listStores(env.DB, session.user.id, now)),
+      language,
+      preferences.timeZone,
+      now,
+    ),
+  );
+  return { display, notifications, now: now.toISOString() };
 }
 
 /** Le azioni dell'area riservata accettano solo richieste partite dalla propria origine. */

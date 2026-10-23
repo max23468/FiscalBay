@@ -70,6 +70,7 @@ import {
   type StatusTone,
   type StoreView,
 } from "../view-models";
+import { useTimeZone } from "~/components/time-zone";
 
 export interface StoresPageData {
   stores: StoreView[];
@@ -490,6 +491,7 @@ function StoreDetail({
   t: AppCopy;
   links: AppLinks;
 }) {
+  const zone = useTimeZone();
   return (
     <div className="grid gap-7 px-4 pb-6">
       {store.issue ? (
@@ -520,7 +522,7 @@ function StoreDetail({
             {(store.connection === "paused"
               ? t.stores.consentExpiringPaused
               : t.orders.consentExpiringBody)(
-              formatDate(store.consentExpiresAt, links.language, "date"),
+              formatDate(store.consentExpiresAt, links.language, "date", zone),
             )}
             <ReconnectButton
               store={store}
@@ -551,6 +553,7 @@ function StoreDetail({
 type SectionProps = { store: StoreView; t: AppCopy; language: Language };
 
 function ConnectionSection({ store, now, t, language }: SectionProps & { now: string }) {
+  const zone = useTimeZone();
   const status = connectionStatus(store, t);
   const expired =
     store.connection === "reconnect_required" ||
@@ -579,7 +582,7 @@ function ConnectionSection({ store, now, t, language }: SectionProps & { now: st
         {store.connectedAt ? (
           <div className={row}>
             <dt className="text-muted-foreground">{t.stores.connectedSince}</dt>
-            <dd>{formatDate(store.connectedAt, language, "date")}</dd>
+            <dd>{formatDate(store.connectedAt, language, "date", zone)}</dd>
           </div>
         ) : null}
         {store.consentExpiresAt ? (
@@ -588,7 +591,7 @@ function ConnectionSection({ store, now, t, language }: SectionProps & { now: st
             <dd className={expired ? "text-warning" : undefined}>
               {expired
                 ? t.stores.consentExpired
-                : formatDate(store.consentExpiresAt, language, "date")}
+                : formatDate(store.consentExpiresAt, language, "date", zone)}
             </dd>
           </div>
         ) : null}
@@ -630,6 +633,7 @@ function SyncSection({ store, data, t, language }: SectionProps & { data: Stores
 
 /** Un negozio mai sincronizzato non ha aggiornamenti: niente titolo vuoto. */
 function RecentSection({ store, t, language }: SectionProps) {
+  const zone = useTimeZone();
   if (store.recent.length === 0) return null;
   return (
     <section aria-labelledby="store-recent" className="grid gap-3 border-t pt-5">
@@ -650,7 +654,7 @@ function RecentSection({ store, t, language }: SectionProps) {
               {sync.ok ? t.stores.recentOk(sync.newOrders) : t.stores.recentFailed}
             </span>
             <time dateTime={sync.at} className="pl-5.5 text-muted-foreground">
-              {formatDate(sync.at, language)}
+              {formatDate(sync.at, language, "dateTime", zone)}
             </time>
           </li>
         ))}

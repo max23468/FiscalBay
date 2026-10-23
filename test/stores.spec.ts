@@ -21,6 +21,14 @@ import {
   clientAction as profileClientAction,
 } from "../app/routes/profile";
 import {
+  action as settingsAction,
+  loader as loadSettings,
+  clientAction as settingsClientAction,
+} from "../app/routes/settings";
+import { action as languageAction } from "../app/routes/language";
+import { action as notificationsAction } from "../app/routes/notifications";
+import { purgeExpiredRecords } from "../app/domain/maintenance.server";
+import {
   refreshExpiringTokens,
   refreshStoreToken,
 } from "../app/integrations/ebay/seller-credentials.server";
@@ -38,6 +46,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
   it.each([
     ["profilo", profileClientAction],
     ["negozi", storesClientAction],
+    ["impostazioni", settingsClientAction],
   ] as const)(
     "%s conserva gli errori di rete senza assorbire autorizzazioni e richieste annullate",
     async (path, clientAction) => {
@@ -611,6 +620,11 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         email: "profilo@example.invalid",
         profile: syntheticProfile,
       },
+      shell: {
+        display: { theme: "system", timeZone: "Europe/Rome" },
+        notifications: [],
+        now: expect.any(String),
+      },
     });
 
     const save = (fields: Record<string, string>, origin = "http://localhost:5173") =>
@@ -642,5 +656,227 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       .bind(seller.userId)
       .first();
     expect(user).toEqual({ name: "Nuovo Nome" });
+  });
+
+  const origin = "http://localhost:5173";
+  const post = (path: string, cookie: string, fields: Record<string, string>, from = origin) =>
+    new Request(`${origin}${path}`, {
+      method: "POST",
+      headers: { cookie, origin: from },
+      body: new URLSearchParams(fields),
+    });
+  const settings = (cookie: string, path = "/app/impostazioni", sezione?: string) =>
+    loadSettings({
+      request: new Request(`${origin}${path}`, { headers: { cookie } }),
+      params: { sezione },
+    } as never).catch((thrown: unknown) => {
+      if (thrown instanceof Response) return thrown;
+      throw thrown;
+    });
+  const settingsPage = async (cookie: string) => {
+    const loaded = await settings(cookie);
+    if (loaded instanceof Response || !("page" in loaded)) throw new Error("pagina attesa");
+    return loaded;
+  };
+  const saveSetting = (cookie: string, fields: Record<string, string>, from = origin) =>
+    settingsAction({ request: post("/app/impostazioni", cookie, fields, from) } as never).catch(
+      (thrown: unknown) => thrown,
+    );
+
+  it("apre le Impostazioni reali con le sole categorie che hanno un servizio", async () => {
+    const seller = await verifiedSession("impostazioni@example.invalid");
+    const loaded = await settingsPage(seller.cookie);
+    expect(loaded.page).toMatchObject({
+      section: null,
+      sections: ["piano", "notifiche", "sicurezza", "aspetto", "messaggio", "privacy", "supporto"],
+      services: { billing: false, telegram: false, accountData: false, support: false },
+      preview: false,
+      account: { plan: "free", trialAvailable: false, quota: undefined },
+      preferences: { theme: "system", timeZone: "Europe/Rome", marketing: false },
+      diagnostics: null,
+    });
+    expect(loaded.page.preferences.templates.it).toContain("{ordine}");
+    for (const sezione of ["esportazione", "inesistente"]) {
+      const missing = await settings(seller.cookie, `/app/impostazioni/${sezione}`, sezione);
+      expect(missing).toMatchObject({ init: { status: 404 }, data: { notFound: true } });
+    }
+    // Senza email confermata l'area rimanda agli Ordini, che spiegano come proseguire.
+    await env.DB.prepare('UPDATE "user" SET "emailVerified" = 0 WHERE id = ?')
+      .bind(seller.userId)
+      .run();
+    expect(((await settings(seller.cookie)) as Response).headers.get("location")).toBe(
+      "/app/ordini",
+    );
+  });
+
+  it("salva tema, fuso e consenso a ogni scelta e rifiuta valori non ammessi", async () => {
+    const seller = await verifiedSession("scelte@example.invalid");
+    const save = (name: string, value: string) =>
+      saveSetting(seller.cookie, { intent: "save", name, value });
+    expect(await save("theme", "dark")).toEqual({ ok: true });
+    expect(await save("time-zone", "America/New_York")).toEqual({ ok: true });
+    expect(await save("marketing", "true")).toEqual({ ok: true });
+    for (const [name, value] of [
+      ["theme", "sepia"],
+      ["time-zone", "Mars/Olympus"],
+      ["marketing", "forse"],
+      ["language", "en"],
+      ["telegram", "true"],
+    ]) {
+      expect(await save(name, value)).toMatchObject({ init: { status: 400 }, data: { ok: false } });
+    }
+    const foreign = await saveSetting(
+      seller.cookie,
+      { intent: "save", name: "theme", value: "light" },
+      "https://estraneo.invalid",
+    );
+    expect((foreign as Response).status).toBe(403);
+    const loaded = await settingsPage(seller.cookie);
+    expect(loaded.page.preferences).toMatchObject({
+      theme: "dark",
+      timeZone: "America/New_York",
+      marketing: true,
+    });
+    // Tema e fuso valgono in tutta l'area, con le date nel fuso scelto.
+    expect(loaded.shell.display).toEqual({ theme: "dark", timeZone: "America/New_York" });
+    expect(await save("theme", "system")).toEqual({ ok: true });
+    expect(await save("marketing", "false")).toEqual({ ok: true });
+    expect(
+      await env.DB.prepare("SELECT theme, time_zone FROM user_preferences WHERE user_id = ?")
+        .bind(seller.userId)
+        .first(),
+    ).toEqual({ theme: null, time_zone: "America/New_York" });
+    // Ogni scelta del consenso resta come prova; vale l'ultima.
+    const { results } = await env.DB.prepare(
+      "SELECT granted, text_version, language FROM marketing_consents WHERE user_id = ? ORDER BY rowid",
+    )
+      .bind(seller.userId)
+      .all();
+    expect(results).toEqual([
+      { granted: 0, text_version: "2026-09-28", language: "it" },
+      { granted: 1, text_version: "2026-09-28", language: "it" },
+      { granted: 0, text_version: "2026-09-28", language: "it" },
+    ]);
+    expect((await settingsPage(seller.cookie)).page.preferences.marketing).toBe(false);
+  });
+
+  it("salva il modello di messaggio con Salva e lo usa negli Ordini per lingua", async () => {
+    const seller = await verifiedSession("modello@example.invalid");
+    const { templates } = (await settingsPage(seller.cookie)).page.preferences;
+    const save = (it: string, en: string) =>
+      saveSetting(seller.cookie, { intent: "template", it, en });
+    expect(await save(" Ciao, mi serve il CF per {ordine}. ", templates.en)).toEqual({ ok: true });
+    const home = await homeFor(seller.cookie);
+    expect(!home.notFound && home.page.messageTemplates).toEqual({
+      it: "Ciao, mi serve il CF per {ordine}.",
+      en: templates.en,
+    });
+    // Il testo predefinito non si conserva: segue le sue revisioni.
+    expect(
+      await env.DB.prepare(
+        "SELECT template_it, template_en FROM user_preferences WHERE user_id = ?",
+      )
+        .bind(seller.userId)
+        .first(),
+    ).toEqual({ template_it: "Ciao, mi serve il CF per {ordine}.", template_en: null });
+    for (const [it, en] of [
+      ["  ", templates.en],
+      ["x".repeat(2001), templates.en],
+      [templates.it, ""],
+    ]) {
+      expect(await save(it!, en!)).toMatchObject({
+        init: { status: 400 },
+        data: { ok: false, notice: expect.stringContaining("2.000") },
+      });
+    }
+    expect((await settingsPage(seller.cookie)).page.preferences.templates.it).toBe(
+      "Ciao, mi serve il CF per {ordine}.",
+    );
+  });
+
+  it("ricorda la lingua scelta e riapre l'area in quella lingua anche al nuovo accesso", async () => {
+    const seller = await verifiedSession("lingua@example.invalid");
+    const choose = (language: string, returnTo: string, from = origin) =>
+      languageAction({
+        request: post("/app/lingua", seller.cookie, { language, returnTo }, from),
+      } as never).catch((thrown: unknown) => thrown as Response);
+    const moved = await choose("en", "/app/impostazioni/aspetto?x=1");
+    expect(moved.status).toBe(303);
+    expect(moved.headers.get("location")).toBe("/en/app/impostazioni/aspetto?x=1");
+    // Le pagine dell'area aperte in italiano, anche da un nuovo accesso, seguono la scelta.
+    const home = await homeFor(seller.cookie).catch((thrown: Response) => thrown);
+    expect((home as Response).headers.get("location")).toBe("/en/app/ordini");
+    expect(await settings(seller.cookie, "/en/app/impostazioni")).toMatchObject({
+      language: "en",
+    });
+    // Si torna soltanto a una pagina dell'area; altrimenti agli Ordini.
+    for (const target of [
+      "https://estraneo.invalid/app/ordini",
+      "/accesso",
+      "//estraneo.invalid",
+    ]) {
+      expect((await choose("it", target)).headers.get("location")).toBe("/app/ordini");
+    }
+    expect((await choose("de", "/app/ordini")).status).toBe(400);
+    expect((await choose("en", "/app/ordini", "https://estraneo.invalid")).status).toBe(403);
+  });
+
+  it("mostra nella campanella i collegamenti da ricollegare e ricorda le letture", async () => {
+    const seller = await linkedSeller("campanella@example.invalid");
+    const expired = new Date(Date.now() - 2 * day).toISOString();
+    await env.DB.prepare("UPDATE ebay_store_credentials SET rejected_at = ?").bind(expired).run();
+    const bell = async () => (await settingsPage(seller.cookie)).shell.notifications!;
+    const [notification] = await bell();
+    expect(await bell()).toEqual([
+      {
+        id: `store-expired:${seller.storeId}:${expired}`,
+        tone: "warning",
+        title: "Collegamento scaduto",
+        body: "venditore: la sincronizzazione è sospesa. Ricollega il negozio.",
+        at: expired,
+        read: false,
+        href: `negozi/${seller.storeId}`,
+      },
+    ]);
+    const read = (ids: string, from = origin) =>
+      notificationsAction({
+        request: post("/api/v1/notifications", seller.cookie, { ids }, from),
+      } as never).catch((thrown: unknown) => thrown as Response);
+    expect((await read(notification!.id)).status).toBe(200);
+    expect((await read(notification!.id)).status).toBe(200);
+    expect(await bell()).toEqual([{ ...notification, read: true }]);
+    for (const ids of ["", "nessun-prefisso", Array(51).fill("store-x:1").join(",")]) {
+      expect((await read(ids)).status).toBe(400);
+    }
+    expect((await read(notification!.id, "https://estraneo.invalid")).status).toBe(403);
+    // Un consenso in scadenza compare con la data nel fuso scelto.
+    await env.DB.prepare(
+      "UPDATE ebay_store_credentials SET rejected_at = NULL, refresh_expires_at = ?",
+    )
+      .bind(new Date(Date.now() + 10 * day).toISOString().slice(0, 10) + "T03:00:00.000Z")
+      .run();
+    await saveSetting(seller.cookie, {
+      intent: "save",
+      name: "time-zone",
+      value: "America/New_York",
+    });
+    const [expiring] = await bell();
+    expect(expiring).toMatchObject({
+      tone: "warning",
+      title: "Autorizzazione in scadenza",
+      read: false,
+    });
+    const expiry = new Date(Date.now() + 10 * day);
+    const previousDay = new Date(expiry.getTime() - day);
+    expect(expiring!.body).toContain(
+      new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeZone: "UTC" })
+        .format(previousDay)
+        .replace("Sept", "Sep"),
+    );
+    // Una lettura, anche di una notifica non più attuale, resta finché la notifica può comparire, cioè trenta giorni.
+    await purgeExpiredRecords(env.DB, new Date(Date.now() + 29 * day));
+    expect(await count("notification_reads")).toBe(1);
+    await purgeExpiredRecords(env.DB, new Date(Date.now() + 31 * day));
+    expect(await count("notification_reads")).toBe(0);
   });
 });

@@ -26,7 +26,7 @@ import { action as unlockAction, loader as loadHome } from "../app/routes/orders
 import { action as orderSearch } from "../app/routes/order-search";
 import type { SearchResults } from "../app/components/app-shell";
 import { loader as loadAccess } from "../app/routes/sign-in";
-import { action as securityAction } from "../app/routes/security";
+import { action as securityAction } from "../app/routes/settings";
 import { now, resetDatabase, seed } from "./fixtures/database-fixtures";
 import { syntheticProfile, verifiedSession } from "./fixtures/account-fixtures";
 import { displayTaxValue } from "../app/tax-quality";
@@ -175,7 +175,7 @@ describe("percorso ordini", () => {
         body: new URLSearchParams({ intent: "unlock-confirmation" }),
       }),
     } as Parameters<typeof securityAction>[0]);
-    expect(restored).toMatchObject({ data: { ok: true } });
+    expect(restored).toEqual({ ok: true });
     expect(await unlockConfirmation(env.DB, user!.id)).toBe(true);
   });
 
