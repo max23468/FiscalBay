@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { unlockOrders } from "../app/domain/grants.server";
 import { listVisibleOrders } from "../app/domain/orders.server";
+import { revokeSession } from "../app/domain/sessions.server";
 import {
   deleteStoreData,
   disconnectStore,
@@ -854,6 +855,36 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     expect((await withZone("fiscalbay_fuso=Asia%2FTokyo")).shell.display.timeZone).toBe(
       "Asia/Tokyo",
     );
+  });
+
+  it("chiude dopo una passkey soltanto la sessione precedente dello stesso utente", async () => {
+    const seller = await verifiedSession("precedente@example.invalid");
+    const other = await verifiedSession("estraneo.precedente@example.invalid");
+    const ids = async (userId: string) =>
+      (
+        await env.DB.prepare('SELECT id FROM "session" WHERE "userId" = ? ORDER BY "createdAt"')
+          .bind(userId)
+          .all<{ id: string }>()
+      ).results.map((row) => row.id);
+    const [foreign] = await ids(other.userId);
+    expect(await revokeSession(env.DB, seller.userId, foreign!)).toBe(false);
+    expect(await revokeSession(env.DB, seller.userId, "inesistente")).toBe(false);
+    expect(await ids(other.userId)).toEqual([foreign]);
+    const confirm = (precedente: string) =>
+      settingsAction({
+        request: post("/app/impostazioni/sicurezza", seller.cookie, {
+          intent: "conferma-accesso",
+          metodo: "passkey",
+          precedente,
+        }),
+      } as never) as Promise<{ data: { ok: boolean } }>;
+    // La sessione di un altro utente non conferma nulla e resta aperta.
+    expect((await confirm(foreign!)).data.ok).toBe(false);
+    expect(await ids(other.userId)).toEqual([foreign]);
+    // La propria sessione si chiude.
+    const [previous] = await ids(seller.userId);
+    expect(await revokeSession(env.DB, seller.userId, previous!)).toBe(true);
+    expect(await ids(seller.userId)).not.toContain(previous);
   });
 
   it("conferma l'identità sul posto con la password senza uscire", async () => {
