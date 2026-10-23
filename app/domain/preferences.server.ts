@@ -6,7 +6,7 @@ import {
   isTimeZone,
   maxTemplateLength,
   type Theme,
-  type TimeZone,
+  type TimeZoneChoice,
 } from "../preferences";
 import { legalVersions } from "./registration.server";
 
@@ -19,7 +19,8 @@ export interface Preferences {
   /** Lingua scelta; null finché l'utente non ne sceglie una e vale quella dell'indirizzo. */
   language: Language | null;
   theme: Theme;
-  timeZone: TimeZone;
+  /** Fuso scelto; «auto» segue il dispositivo. */
+  timeZone: TimeZoneChoice;
   /** Modello di messaggio per lingua dell'acquirente; null vale il testo predefinito. */
   templates: Record<Language, string | null>;
 }
@@ -42,8 +43,8 @@ export async function readPreferences(db: D1Database, userId: string): Promise<P
   return {
     language: row?.language ?? null,
     theme: row?.theme ?? defaultDisplay.theme,
-    // Un fuso tolto dall'elenco torna al predefinito invece di rompere le date.
-    timeZone: isTimeZone(row?.time_zone) ? row.time_zone : defaultDisplay.timeZone,
+    // Un fuso tolto dall'elenco torna al rilevamento automatico invece di rompere le date.
+    timeZone: isTimeZone(row?.time_zone) ? row.time_zone : "auto",
     templates: { it: row?.template_it ?? null, en: row?.template_en ?? null },
   };
 }
@@ -52,13 +53,14 @@ export async function readPreferences(db: D1Database, userId: string): Promise<P
 export type PreferenceChange =
   | { name: "language"; value: Language }
   | { name: "theme"; value: Theme }
-  | { name: "timeZone"; value: TimeZone };
+  | { name: "timeZone"; value: TimeZoneChoice };
 
 /** Valida una scelta inviata dal modulo; null se nome o valore non sono ammessi. */
 export function parsePreference(name: string, value: string): PreferenceChange | null {
   if (name === "language" && (value === "it" || value === "en")) return { name, value };
   if (name === "theme" && isTheme(value)) return { name, value };
-  if (name === "time-zone" && isTimeZone(value)) return { name: "timeZone", value };
+  if (name === "time-zone" && (value === "auto" || isTimeZone(value)))
+    return { name: "timeZone", value };
   return null;
 }
 
@@ -71,10 +73,10 @@ export async function savePreference(
   now = new Date(),
 ): Promise<void> {
   const column = columns[change.name];
-  // Il tema del sistema e il fuso predefinito non si conservano: valgono già senza riga.
+  // Tema del sistema e fuso automatico non si conservano: valgono già senza riga.
   const value =
     (change.name === "theme" && change.value === defaultDisplay.theme) ||
-    (change.name === "timeZone" && change.value === defaultDisplay.timeZone)
+    (change.name === "timeZone" && change.value === "auto")
       ? null
       : change.value;
   await db

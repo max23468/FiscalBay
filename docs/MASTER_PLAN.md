@@ -273,7 +273,7 @@ Sicurezza consente di scegliere il nome di una passkey durante l'aggiunta e di r
 
 Il cambio email mostra la richiesta pendente e il passaggio di conferma, distinguendoli dall'indirizzo di accesso attuale. Il reinvio riparte dal primo link e usa gli stessi limiti Auth; stato e risposta non rivelano se il nuovo indirizzo appartiene a un altro account. Lo stato temporaneo scade con la verifica, si elimina al cambio effettivo e rientra nella pulizia periodica.
 
-Sessioni persistenti con scadenze/rotazione gestite dal sistema Auth; elenco sessioni, logout singolo e globale. Logout non ferma sync né billing. Il titolare riceve un'email quando la password viene reimpostata e quando si aggiungono o rimuovono metodi di accesso o passkey. I tentativi di accesso con password e gli invii di email di accesso hanno un limite per IP e uno per indirizzo, che la tabella dei limiti conserva solo come impronta. Le password si conservano con scrypt (N=2^14, r=8, p=1) e un prefisso di versione; gli hash nel formato predefinito di Better Auth restano verificabili (D167). Riautenticazione per cancellazione account e modifiche critiche. Admin autorizzato esplicitamente, MFA obbligatoria e recovery robusto: nessun percorso debole alternativo che aggiri il secondo fattore. TOTP è escluso dalla 2.0. Il secondo fattore amministrativo è l'accesso con una passkey dell'utente e verifica sul dispositivo (flag UV dell'asserzione WebAuthn), registrato sulla sessione che ne nasce: la presenza di una passkey registrata, una passkey senza verifica, password, Google, eBay o un link email non bastano. L'area admin accetta quella sessione per 12 ore; le altre modifiche critiche richiedono un accesso delle ultime 24 ore. Il ruolo admin si concede e si revoca soltanto con l'accesso tecnico al database, protetto dalla MFA dell'account Cloudflare, e ha effetto alla richiesta successiva. Un admin aggiunge o rimuove passkey solo da una sessione già confermata con passkey, così una password o un'email compromesse non registrano un nuovo fattore. Recovery: almeno due passkey indipendenti per l'admin; se le perde tutte, l'owner revoca il ruolo dal database, l'utente registra una nuova passkey come merchant e il ruolo viene riconcesso dopo la verifica dell'identità fuori banda.
+Sessioni persistenti con scadenze/rotazione gestite dal sistema Auth; elenco sessioni, logout singolo e globale. Logout non ferma sync né billing. Il titolare riceve un'email quando la password viene reimpostata e quando si aggiungono o rimuovono metodi di accesso o passkey. I tentativi di accesso con password e gli invii di email di accesso hanno un limite per IP e uno per indirizzo, che la tabella dei limiti conserva solo come impronta. Le password si conservano con scrypt (N=2^14, r=8, p=1) e un prefisso di versione; gli hash nel formato predefinito di Better Auth restano verificabili (D167). Riautenticazione per cancellazione account e modifiche critiche. Admin autorizzato esplicitamente, MFA obbligatoria e recovery robusto: nessun percorso debole alternativo che aggiri il secondo fattore. TOTP è escluso dalla 2.0. Il secondo fattore amministrativo è l'accesso con una passkey dell'utente e verifica sul dispositivo (flag UV dell'asserzione WebAuthn), registrato sulla sessione che ne nasce: la presenza di una passkey registrata, una passkey senza verifica, password, Google, eBay o un link email non bastano. L'area admin accetta quella sessione per 12 ore; le altre modifiche critiche richiedono un accesso delle ultime 24 ore; oltre, l'utente conferma l'identità sul posto con password o passkey e la modifica prosegue, mentre con soli Google o eBay esce e rientra (D185). Il ruolo admin si concede e si revoca soltanto con l'accesso tecnico al database, protetto dalla MFA dell'account Cloudflare, e ha effetto alla richiesta successiva. Un admin aggiunge o rimuove passkey solo da una sessione già confermata con passkey, così una password o un'email compromesse non registrano un nuovo fattore. Recovery: almeno due passkey indipendenti per l'admin; se le perde tutte, l'owner revoca il ruolo dal database, l'utente registra una nuova passkey come merchant e il ruolo viene riconcesso dopo la verifica dell'identità fuori banda.
 
 ### 7.1 Sessione server, revoca e ambienti
 
@@ -493,18 +493,18 @@ Scelta del negozio attivo mostrata soltanto nel Free, quindi dopo il downgrade: 
 <a id="s19"></a>
 ## 19. Impostazioni, Profilo e campanella
 
-Impostazioni desktop: categorie a sinistra e contenuto a destra; navigazione locale, non sidebar globale. Mobile elenco→pagina. Tutte le opzioni concordate, incluse notifiche per negozio, template IT/EN e configurazioni export, devono avere una sola fonte di stato; collegamenti da altre superfici sono scorciatoie, non configurazioni duplicate.
+Impostazioni desktop: categorie a sinistra e contenuto a destra; navigazione locale, non sidebar globale. Mobile elenco→pagina. Le categorie stanno in tre gruppi con un'etichetta, nell'ordine della tabella: Ordini, Account, Generale (D185). Tutte le opzioni concordate, incluse notifiche per negozio, template IT/EN e configurazioni export, devono avere una sola fonte di stato; collegamenti da altre superfici sono scorciatoie, non configurazioni duplicate.
 
-| Sezione | Contenuto |
-|---|---|
-| Piano e pagamenti | Stato effettivo, trial, quote/date, upgrade, periodicità, lifetime, disdetta, concessioni, negozio attivo nel Free, storico pagamenti e documenti tramite il portale del provider, senza elenco interno (D176) |
-| Notifiche | Chat Telegram, stato, filtro tutti/solo fiscali, singolo/riepilogo giornaliero, orario/fuso, negozi; consenso marketing separato |
-| Export | Ambito/anteprima, CSV/XLSX secondo piano, righe/colonne, configurazioni; non archivio permanente |
-| Sicurezza | Metodi login, passkey, password, sessioni, logout globale, verifiche pertinenti |
-| Aspetto e lingua | Sistema/chiaro/scuro, IT/EN, fuso configurabile |
-| Dati fiscali / modello messaggio | Template IT/EN copiabile, non anagrafica fiscale fittizia del merchant né modifica ordini |
-| Dati e privacy | Informative, export account, cancellazione e gestione diritti |
-| Supporto | FAQ/form, contatto, storico esteso, integrazioni su valutazione |
+| Gruppo | Sezione | Contenuto |
+|---|---|---|
+| Ordini | Notifiche | Chat Telegram, stato, filtro tutti/solo fiscali, singolo/riepilogo giornaliero, orario/fuso, negozi; consenso marketing separato |
+| Ordini | Export | Ambito/anteprima, CSV/XLSX secondo piano, righe/colonne, configurazioni; non archivio permanente |
+| Ordini | Dati fiscali / modello messaggio | Template IT/EN copiabile, non anagrafica fiscale fittizia del merchant né modifica ordini |
+| Account | Piano e pagamenti | Stato effettivo, trial, quote/date, upgrade, periodicità, lifetime, disdetta, concessioni, negozio attivo nel Free, storico pagamenti e documenti tramite il portale del provider, senza elenco interno (D176) |
+| Account | Sicurezza | Metodi login, passkey, password, sessioni, logout globale, verifiche pertinenti |
+| Account | Dati e privacy | Informative, export account, cancellazione e gestione diritti |
+| Generale | Aspetto e lingua | Sistema/chiaro/scuro, IT/EN, fuso del dispositivo come predefinito o scelto (D185) |
+| Generale | Supporto | FAQ/form, contatto, storico esteso, integrazioni su valutazione |
 
 Profilo dall'avatar: informazioni minime personali. Fuso nelle Impostazioni, accessi in Sicurezza, dati necessari alla vendita nel checkout provider. Menu avatar: nome/email, Profilo, Sicurezza, Piano e pagamenti, Impostazioni, Visita sito, Esci.
 

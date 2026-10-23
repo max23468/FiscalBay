@@ -134,6 +134,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     preferences: {
       theme: preferences.theme,
       timeZone: preferences.timeZone,
+      detectedTimeZone: area.detectedTimeZone,
       marketing,
       templates: messageTemplates(preferences),
     },

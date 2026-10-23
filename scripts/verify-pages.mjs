@@ -38,11 +38,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     );
   // Node non carica direttamente il modulo runtime con i suoi import TS senza estensioni.
   const declared = readFileSync("app/view-models.ts", "utf8").match(
-    /export const settingsSections = \[([\s\S]*?)\] as const/u,
+    /export const settingsGroups = \[([\s\S]*?)\] as const/u,
   )?.[1];
   if (!declared)
     throw new Error("Elenco delle sezioni non riconosciuto: copertura non attestabile.");
-  const sections = [...declared.matchAll(/"([^"]+)"/gu)].map((match) => match[1]);
+  const sections = [...declared.matchAll(/sections: \[([^\]]*)\]/gu)].flatMap((group) =>
+    [...group[1].matchAll(/"([^"]+)"/gu)].map((match) => match[1]),
+  );
   const missingSettings = missingSections(sections, pageCases);
   if (!sections.length || missingSettings.length)
     throw new Error(`Sezioni senza collaudo: ${missingSettings.join(", ")}`);

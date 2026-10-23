@@ -70,12 +70,19 @@ import type { PendingEmailChange } from "../domain/email-change.server";
 import type { ActiveSession } from "../domain/sessions.server";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
 import { languageNames, languages, localizedPath, type Language } from "../i18n";
-import { maxTemplateLength, timeZones, type Theme, type TimeZone } from "../preferences";
+import {
+  maxTemplateLength,
+  timeZones,
+  type Theme,
+  type TimeZone,
+  type TimeZoneChoice,
+} from "../preferences";
 import {
   formatDate,
   type AccountView,
   type ActionResult,
   type DiagnosticsView,
+  settingsGroups,
   type SettingsSection,
   type StoreView,
 } from "../view-models";
@@ -96,7 +103,9 @@ export interface SettingsPageData {
   /** Valori salvati, con i testi predefiniti dove non c'è una scelta. */
   preferences: {
     theme: Theme;
-    timeZone: TimeZone;
+    timeZone: TimeZoneChoice;
+    /** Fuso del dispositivo, se il browser l'ha già comunicato. */
+    detectedTimeZone: string | null;
     marketing: boolean;
     templates: Record<Language, string>;
   };
@@ -181,14 +190,17 @@ function useAutoSave<T extends string | boolean>(name: string, initial: T) {
   return [value, change, state] as const;
 }
 
+/**
+ * Esito del salvataggio automatico in una riga sempre riservata: comparire e sparire non
+ * sposta il testo intorno.
+ */
 function SaveStatus({ state, t }: { state: SaveState; t: AppCopy }) {
   return (
     <span
       role="status"
       className={cn(
-        "text-xs",
-        state === "error" ? "basis-full text-danger" : "text-muted-foreground",
-        state === "idle" && "sr-only",
+        "block min-h-4 text-xs leading-4",
+        state === "error" ? "text-danger" : "text-muted-foreground",
       )}
     >
       {state === "saving"
@@ -221,7 +233,7 @@ function AutoSwitch({
   const [checked, setChecked, state] = useAutoSave(name, initial);
   const ready = useHydrated();
   return (
-    <Field orientation="horizontal" className="flex-wrap items-start">
+    <Field orientation="horizontal" className="items-start">
       <Switch
         id={id}
         checked={checked}
@@ -237,8 +249,8 @@ function AutoSwitch({
         {description ? (
           <FieldDescription id={`${id}-description`}>{description}</FieldDescription>
         ) : null}
+        <SaveStatus state={state} t={t} />
       </div>
-      <SaveStatus state={state} t={t} />
     </Field>
   );
 }
@@ -515,9 +527,7 @@ function PlanSection({
       ) : null}
       {billing && account.trialAvailable ? (
         <Group title={t.settings.trialTitle}>
-          <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
-            {t.settings.trialBody}
-          </p>
+          <p className="text-sm leading-relaxed text-muted-foreground">{t.settings.trialBody}</p>
           <Button className="w-fit" onClick={() => action.run("start-trial")}>
             {t.settings.trialAction}
           </Button>
@@ -635,7 +645,7 @@ function TelegramGroup({
                 {t.settings.telegramChange}
               </Button>
             </div>
-            <Field orientation="horizontal" className="flex-wrap items-start">
+            <Field orientation="horizontal" className="items-start">
               <Switch
                 id="telegram-enabled"
                 checked={enabled}
@@ -643,14 +653,16 @@ function TelegramGroup({
                 disabled={enabledState === "saving"}
                 aria-labelledby="telegram-enabled-label"
               />
-              <FieldLabel
-                id="telegram-enabled-label"
-                htmlFor="telegram-enabled"
-                className="flex-1 font-normal"
-              >
-                {t.settings.telegramEnabled}
-              </FieldLabel>
-              <SaveStatus state={enabledState} t={t} />
+              <div className="grid min-w-0 flex-1 gap-1">
+                <FieldLabel
+                  id="telegram-enabled-label"
+                  htmlFor="telegram-enabled"
+                  className="font-normal"
+                >
+                  {t.settings.telegramEnabled}
+                </FieldLabel>
+                <SaveStatus state={enabledState} t={t} />
+              </div>
             </Field>
             <fieldset disabled={!enabled} className="grid gap-5 disabled:opacity-60">
               <AutoRadio
@@ -834,11 +846,7 @@ function SecuritySection({ data, language }: { data: SettingsPageData; language:
   const { security } = data;
   return (
     <>
-      <AccessNotice
-        language={language}
-        notice={security.notice}
-        showSignInAgain={security.recent !== false && !security.passkeyRestriction}
-      />
+      <AccessNotice language={language} notice={security.notice} />
       <AccountSecurity
         className="grid gap-4"
         language={language}
@@ -854,6 +862,14 @@ function SecuritySection({ data, language }: { data: SettingsPageData; language:
       />
     </>
   );
+}
+
+/** Nome del fuso: quello dell'elenco, altrimenti la città dell'identificativo IANA. */
+function zoneLabel(zone: string | null, t: AppCopy): string | null {
+  if (!zone) return null;
+  return (timeZones as readonly string[]).includes(zone)
+    ? t.settings.timeZones[zone as TimeZone]
+    : (zone.split("/").at(-1) ?? zone).replaceAll("_", " ");
 }
 
 /** Tema sul documento: `data-theme` impone chiaro o scuro, senza attributo segue il sistema. */
@@ -925,27 +941,29 @@ function AppearanceSection({
   return (
     <>
       <Group title={t.settings.theme}>
-        <RadioGroup
-          value={theme}
-          disabled={!ready || themeState === "saving"}
-          onValueChange={(value) => setTheme(value as Theme)}
-          className="flex flex-wrap gap-5"
-          aria-label={t.settings.theme}
-        >
-          {(
-            [
-              ["system", t.settings.themeSystem, SunMoon],
-              ["light", t.settings.themeLight, Sun],
-              ["dark", t.settings.themeDark, Moon],
-            ] as const
-          ).map(([value, label, Icon]) => (
-            <RadioOption key={value} value={value}>
-              <Icon aria-hidden="true" className="size-4" />
-              {label}
-            </RadioOption>
-          ))}
-        </RadioGroup>
-        <SaveStatus state={themeState} t={t} />
+        <div className="grid gap-2">
+          <RadioGroup
+            value={theme}
+            disabled={!ready || themeState === "saving"}
+            onValueChange={(value) => setTheme(value as Theme)}
+            className="flex flex-wrap gap-5"
+            aria-label={t.settings.theme}
+          >
+            {(
+              [
+                ["system", t.settings.themeSystem, SunMoon],
+                ["light", t.settings.themeLight, Sun],
+                ["dark", t.settings.themeDark, Moon],
+              ] as const
+            ).map(([value, label, Icon]) => (
+              <RadioOption key={value} value={value}>
+                <Icon aria-hidden="true" className="size-4" />
+                {label}
+              </RadioOption>
+            ))}
+          </RadioGroup>
+          <SaveStatus state={themeState} t={t} />
+        </div>
         {data.preview ? (
           <p className="text-sm text-muted-foreground">{t.settings.themeNote}</p>
         ) : null}
@@ -954,14 +972,22 @@ function AppearanceSection({
         <LanguageChoice t={t} links={links} preview={data.preview} />
       </Group>
       <Group>
-        <SimpleSelect
-          label={t.settings.timeZone}
-          disabled={!ready || zoneState === "saving"}
-          items={timeZones.map((zone) => ({ value: zone, label: t.settings.timeZones[zone] }))}
-          value={timeZone}
-          onChange={setTimeZone}
-        />
-        <SaveStatus state={zoneState} t={t} />
+        <div className="grid gap-2">
+          <SimpleSelect
+            label={t.settings.timeZone}
+            disabled={!ready || zoneState === "saving"}
+            items={[
+              {
+                value: "auto",
+                label: t.settings.timeZoneAuto(zoneLabel(data.preferences.detectedTimeZone, t)),
+              },
+              ...timeZones.map((zone) => ({ value: zone, label: t.settings.timeZones[zone] })),
+            ]}
+            value={timeZone}
+            onChange={setTimeZone}
+          />
+          <SaveStatus state={zoneState} t={t} />
+        </div>
       </Group>
     </>
   );
@@ -993,11 +1019,13 @@ function settingsRoot(pathname: string) {
 function UnsavedDialog({
   blocker,
   title,
+  description,
   leave,
   stay,
 }: {
   blocker: ReturnType<typeof useBlocker>;
   title: string;
+  description: string;
   leave: string;
   stay: string;
 }) {
@@ -1011,7 +1039,7 @@ function UnsavedDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{title}</AlertDialogDescription>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{stay}</AlertDialogCancel>
@@ -1084,9 +1112,7 @@ function TemplateSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
   const ready = useHydrated();
   return (
     <div className="grid gap-4">
-      <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
-        {t.settings.templateIntro}
-      </p>
+      <p className="text-sm leading-relaxed text-muted-foreground">{t.settings.templateIntro}</p>
       <form
         className="grid gap-4"
         onSubmit={(event) => {
@@ -1149,7 +1175,8 @@ function TemplateSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
       </form>
       <UnsavedDialog
         blocker={blocker}
-        title={t.settings.unsaved}
+        title={t.settings.unsavedTitle}
+        description={t.settings.unsaved}
         leave={t.settings.leave}
         stay={t.profile.stay}
       />
@@ -1183,9 +1210,7 @@ function PrivacySection({
         <li className="flex flex-wrap items-center justify-between gap-3 py-4">
           <span className="grid min-w-0 flex-1 gap-0.5">
             <span className="font-medium">{t.settings.privacyPolicy}</span>
-            <span className="text-sm text-pretty text-muted-foreground">
-              {t.settings.privacyPolicyBody}
-            </span>
+            <span className="text-sm text-muted-foreground">{t.settings.privacyPolicyBody}</span>
           </span>
           <Link
             to={localizedPath(links.language, "/privacy")}
@@ -1200,7 +1225,7 @@ function PrivacySection({
           <li key={row.title} className="flex flex-wrap items-center justify-between gap-3 py-4">
             <span className="grid min-w-0 flex-1 gap-0.5">
               <span className="font-medium">{row.title}</span>
-              <span className="text-sm text-pretty text-muted-foreground">{row.body}</span>
+              <span className="text-sm text-muted-foreground">{row.body}</span>
             </span>
             <Button variant="outline" size="sm" onClick={() => action.run(row.intent)}>
               {row.action}
@@ -1219,9 +1244,7 @@ function DeleteAccount({ t }: { t: AppCopy }) {
     <li className="flex flex-wrap items-center justify-between gap-3 py-4">
       <span className="grid min-w-0 flex-1 gap-0.5">
         <span className="font-medium">{t.settings.deleteAccount}</span>
-        <span className="text-sm text-pretty text-muted-foreground">
-          {t.settings.deleteAccountBody}
-        </span>
+        <span className="text-sm text-muted-foreground">{t.settings.deleteAccountBody}</span>
       </span>
       <AlertDialog>
         <AlertDialogTrigger render={<Button variant="destructive" size="sm" />}>
@@ -1261,9 +1284,7 @@ function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
                   className="size-4 shrink-0 text-muted-foreground transition-[rotate] duration-(--duration-quick) group-open:rotate-180"
                 />
               </summary>
-              <p className="pr-7 pb-2 leading-relaxed text-pretty text-muted-foreground">
-                {item.a}
-              </p>
+              <p className="pr-7 pb-2 leading-relaxed text-muted-foreground">{item.a}</p>
             </details>
           ))}
         </div>
@@ -1425,7 +1446,15 @@ export function SettingsPage({
 }) {
   const { language } = links;
   const sectionIds = data.sections;
-  const current = data.section ?? "piano";
+  const current = data.section ?? sectionIds[0]!;
+  // Gruppi con le sole categorie presenti, nell'ordine delle Impostazioni.
+  const present = new Set(sectionIds);
+  const groups = settingsGroups
+    .map((group) => ({
+      id: group.id,
+      sections: (group.sections as readonly SettingsSection[]).filter((id) => present.has(id)),
+    }))
+    .filter((group) => group.sections.length > 0);
   const content = {
     piano: <PlanSection data={data} t={t} language={language} />,
     notifiche: <NotificationsSection data={data} t={t} links={links} />,
@@ -1513,7 +1542,7 @@ export function SettingsPage({
           aria-label={t.settings.categories}
           className={cn("md:sticky md:top-20 md:self-start", data.section && "max-md:hidden")}
         >
-          <ul className="relative grid divide-y border-y md:gap-1 md:divide-y-0 md:border-y-0">
+          <ul className="relative grid gap-6 md:gap-4">
             {/* Indicatore che scorre fra le voci insieme alla sezione visibile. */}
             {indicator ? (
               <li
@@ -1522,44 +1551,59 @@ export function SettingsPage({
                 style={{ translate: `0 ${indicator.top}px`, height: indicator.height }}
               />
             ) : null}
-            {sectionIds.map((id) => {
-              const icon = sectionIcons[id];
-              return (
-                <li
-                  key={id}
-                  ref={(node) => {
-                    items.current[id] = node;
-                  }}
-                  className="relative"
+            {groups.map((group) => (
+              <li key={group.id} className="grid gap-2 md:gap-1">
+                <span
+                  id={`settings-group-${group.id}`}
+                  className="text-sm font-medium text-muted-foreground md:px-2 md:text-xs"
                 >
-                  <Link
-                    to={appHref(links, `impostazioni/${id}`)}
-                    preventScrollReset
-                    aria-current={active === id ? "true" : undefined}
-                    onClick={() => goTo(id, "smooth")}
-                    className={cn(
-                      "flex items-center gap-3 py-3.5 outline-none focus-visible:ring-3 focus-visible:ring-ring md:rounded-lg md:px-2 md:py-1.5 md:text-sm md:text-muted-foreground md:transition-colors md:duration-(--duration-quick) md:hover:text-foreground md:aria-[current=true]:font-medium md:aria-[current=true]:text-foreground",
-                      // Prima della misura l'indicatore non c'è: la voce attiva ha il suo fondo.
-                      !indicator && "md:aria-[current=true]:bg-secondary",
-                    )}
-                  >
-                    <IconTile icon={icon} tone="neutral" size="sm" />
-                    <span className="grid min-w-0 flex-1 gap-0.5">
-                      <span className="font-medium md:font-[inherit]">
-                        {t.settings.sections[id].title}
-                      </span>
-                      <span className="text-sm text-muted-foreground md:hidden">
-                        {t.settings.sections[id].description}
-                      </span>
-                    </span>
-                    <ChevronRight
-                      aria-hidden="true"
-                      className="size-4 text-muted-foreground md:hidden"
-                    />
-                  </Link>
-                </li>
-              );
-            })}
+                  {t.settings.groups[group.id]}
+                </span>
+                <ul
+                  aria-labelledby={`settings-group-${group.id}`}
+                  className="grid divide-y border-y md:gap-1 md:divide-y-0 md:border-y-0"
+                >
+                  {group.sections.map((id) => {
+                    const icon = sectionIcons[id];
+                    return (
+                      <li
+                        key={id}
+                        ref={(node) => {
+                          items.current[id] = node;
+                        }}
+                        className="relative"
+                      >
+                        <Link
+                          to={appHref(links, `impostazioni/${id}`)}
+                          preventScrollReset
+                          aria-current={active === id ? "true" : undefined}
+                          onClick={() => goTo(id, "smooth")}
+                          className={cn(
+                            "flex items-center gap-3 py-3.5 outline-none focus-visible:ring-3 focus-visible:ring-ring md:rounded-lg md:px-2 md:py-1.5 md:text-sm md:text-muted-foreground md:transition-colors md:duration-(--duration-quick) md:hover:text-foreground md:aria-[current=true]:font-medium md:aria-[current=true]:text-foreground",
+                            // Prima della misura l'indicatore non c'è: la voce attiva ha il suo fondo.
+                            !indicator && "md:aria-[current=true]:bg-secondary",
+                          )}
+                        >
+                          <IconTile icon={icon} tone="neutral" size="sm" />
+                          <span className="grid min-w-0 flex-1 gap-0.5">
+                            <span className="font-medium md:font-[inherit]">
+                              {t.settings.sections[id].title}
+                            </span>
+                            <span className="text-sm text-muted-foreground md:hidden">
+                              {t.settings.sections[id].description}
+                            </span>
+                          </span>
+                          <ChevronRight
+                            aria-hidden="true"
+                            className="size-4 text-muted-foreground md:hidden"
+                          />
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </li>
+            ))}
           </ul>
         </nav>
         <div className={cn("grid min-w-0 content-start gap-6", !data.section && "max-md:hidden")}>
@@ -1796,7 +1840,7 @@ export function ProfilePage({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t.profile.unsaved}</AlertDialogTitle>
+            <AlertDialogTitle>{t.settings.unsavedTitle}</AlertDialogTitle>
             <AlertDialogDescription>{t.profile.unsaved}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

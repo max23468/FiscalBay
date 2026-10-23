@@ -725,18 +725,44 @@ test.describe("miglioramenti account e negozi", () => {
       );
       const token = `stale-security-${language}-${testInfo.project.name}`;
       await useLocalAccount(context, "member", baseURL!, token);
-      for (const suffix of ["", "?accesso=nuovo-accesso"]) {
-        await page.goto(`${prefix}/app/impostazioni/sicurezza${suffix}`);
-        await expect(
-          page.getByRole("button", {
-            name: it ? "Esci e accedi di nuovo" : "Sign out and sign in again",
-            exact: true,
-          }),
-        ).toHaveCount(1);
-        await expect(
-          page.getByRole("button", { name: it ? "Cambia email" : "Change email", exact: true }),
-        ).toBeDisabled();
-      }
+      const signInAgain = page.getByRole("button", {
+        name: it ? "Esci e accedi di nuovo" : "Sign out and sign in again",
+        exact: true,
+      });
+      // Con un accesso di più di 24 ore nessun avviso fisso: l'esito arrivato nell'indirizzo sì.
+      await page.goto(`${prefix}/app/impostazioni/sicurezza?accesso=nuovo-accesso`);
+      await expect(signInAgain).toHaveCount(1);
+      await page.goto(`${prefix}/app/impostazioni/sicurezza`);
+      await expect(signInAgain).toHaveCount(0);
+      // La modifica resta possibile: prima chiede la conferma dell'identità sul posto.
+      const change = page.getByRole("button", {
+        name: it ? "Cambia email" : "Change email",
+        exact: true,
+      });
+      await change.click();
+      await page
+        .getByRole("textbox", { name: it ? "Nuova email" : "New email", exact: true })
+        .fill("nuova@example.invalid");
+      await page
+        .getByRole("button", { name: it ? "Invia il link" : "Send the link", exact: true })
+        .click();
+      const confirm = page.getByRole("alertdialog", {
+        name: it ? "Conferma che sei tu" : "Confirm it’s you",
+      });
+      await expect(confirm).toBeVisible();
+      await confirm.getByLabel("Password", { exact: true }).fill("password-errata");
+      await confirm.getByRole("button", { name: it ? "Conferma" : "Confirm", exact: true }).click();
+      await expect(confirm.getByRole("alert")).toContainText(
+        it ? "Conferma non riuscita" : "Confirmation failed",
+      );
+      await expect(
+        confirm.getByRole("button", {
+          name: it ? "Esci e accedi di nuovo" : "Sign out and sign in again",
+        }),
+      ).toBeVisible();
+      await confirm.getByRole("button", { name: it ? "Annulla" : "Cancel", exact: true }).click();
+      await expect(confirm).toHaveCount(0);
+      await expect(page).toHaveURL(new RegExp(`${prefix}/app/impostazioni/sicurezza$`));
     });
   }
 
@@ -1221,7 +1247,7 @@ for (const language of ["it", "en"] as const) {
         await open(page, `${prefix}/anteprima/impostazioni/aspetto`);
         await expect(
           page.getByRole("combobox", { name: t("Fuso orario", "Time zone") }),
-        ).toContainText(t("Roma (Italia)", "Rome (Italy)"));
+        ).toContainText(t("Automatico", "Automatic"));
         await page.getByRole("radio", { name: t("Scuro", "Dark"), exact: true }).check();
         await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
         await page.reload();
@@ -2203,8 +2229,8 @@ for (const width of [390, 768, 1440]) {
                 .evaluate((link) => {
                   const item = link.parentElement!.getBoundingClientRect();
                   const indicator = link
-                    .closest("ul")!
-                    .querySelector('[aria-hidden="true"]')!
+                    .closest("nav")!
+                    .querySelector('li[aria-hidden="true"]')!
                     .getBoundingClientRect();
                   return (
                     Math.abs(item.y - indicator.y) < 1 &&

@@ -19,7 +19,7 @@ import { startStoreLink } from "../integrations/ebay/store-link.server";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import type { Route } from "./+types/store-link";
 import { readPreferences } from "../domain/preferences.server";
-import type { ShellData } from "../preferences";
+import { detectedTimeZone, effectiveTimeZone, type ShellData } from "../preferences";
 
 const noStore = { headers: { "cache-control": "no-store" } };
 
@@ -80,7 +80,10 @@ export async function loader({ request }: Route.LoaderArgs) {
     language,
     // Pagina dell'area senza barra: valgono soltanto tema e fuso scelti.
     shell: {
-      display: { theme, timeZone },
+      display: {
+        theme,
+        timeZone: effectiveTimeZone(timeZone, detectedTimeZone(request.headers.get("cookie"))),
+      },
       notifications: null,
       now: new Date().toISOString(),
     } satisfies ShellData,

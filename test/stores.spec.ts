@@ -688,11 +688,11 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     const loaded = await settingsPage(seller.cookie);
     expect(loaded.page).toMatchObject({
       section: null,
-      sections: ["piano", "notifiche", "sicurezza", "aspetto", "messaggio", "privacy", "supporto"],
+      sections: ["notifiche", "messaggio", "piano", "sicurezza", "privacy", "aspetto", "supporto"],
       services: { billing: false, telegram: false, accountData: false, support: false },
       preview: false,
       account: { plan: "free", trialAvailable: false, quota: undefined },
-      preferences: { theme: "system", timeZone: "Europe/Rome", marketing: false },
+      preferences: { theme: "system", timeZone: "auto", detectedTimeZone: null, marketing: false },
       diagnostics: null,
     });
     expect(loaded.page.preferences.templates.it).toContain("{ordine}");
@@ -819,6 +819,74 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     }
     expect((await choose("de", "/app/ordini")).status).toBe(400);
     expect((await choose("en", "/app/ordini", "https://estraneo.invalid")).status).toBe(403);
+  });
+
+  it("segue il fuso del dispositivo finché non se ne sceglie uno", async () => {
+    const seller = await verifiedSession("fuso@example.invalid");
+    const withZone = (cookie: string) =>
+      settings(`${seller.cookie}; ${cookie}`).then((loaded) => {
+        if (loaded instanceof Response || !("page" in loaded)) throw new Error("pagina attesa");
+        return loaded;
+      });
+    const detected = await withZone("fiscalbay_fuso=Asia%2FTokyo");
+    expect(detected.page.preferences).toMatchObject({
+      timeZone: "auto",
+      detectedTimeZone: "Asia/Tokyo",
+    });
+    expect(detected.shell.display.timeZone).toBe("Asia/Tokyo");
+    // Un valore non riconosciuto vale Roma, senza rompere le date.
+    for (const cookie of ["fiscalbay_fuso=Mars%2FOlympus", "fiscalbay_fuso=..%2Fx"]) {
+      expect((await withZone(cookie)).shell.display.timeZone).toBe("Europe/Rome");
+    }
+    // Un fuso scelto vale più di quello del dispositivo; «auto» torna al rilevamento.
+    const save = (value: string) =>
+      saveSetting(seller.cookie, { intent: "save", name: "time-zone", value });
+    expect(await save("Europe/London")).toEqual({ ok: true });
+    expect((await withZone("fiscalbay_fuso=Asia%2FTokyo")).shell.display.timeZone).toBe(
+      "Europe/London",
+    );
+    expect(await save("auto")).toEqual({ ok: true });
+    expect(
+      await env.DB.prepare("SELECT time_zone FROM user_preferences WHERE user_id = ?")
+        .bind(seller.userId)
+        .first(),
+    ).toEqual({ time_zone: null });
+    expect((await withZone("fiscalbay_fuso=Asia%2FTokyo")).shell.display.timeZone).toBe(
+      "Asia/Tokyo",
+    );
+  });
+
+  it("conferma l'identità sul posto con la password senza uscire", async () => {
+    const seller = await verifiedSession("conferma@example.invalid");
+    const before = await env.DB.prepare('SELECT id FROM "session" WHERE "userId" = ?')
+      .bind(seller.userId)
+      .all<{ id: string }>();
+    const confirm = (fields: Record<string, string>) =>
+      settingsAction({
+        request: post("/app/impostazioni/sicurezza", seller.cookie, {
+          intent: "conferma-accesso",
+          ...fields,
+        }),
+      } as never) as Promise<{ data: { ok: boolean; notice?: string }; init: ResponseInit }>;
+    const wrong = await confirm({ metodo: "password", password: "non-questa" });
+    expect(wrong.data).toEqual({
+      ok: false,
+      notice: "Conferma non riuscita. Controlla la password e riprova.",
+    });
+    expect((wrong.init.headers as Headers).getSetCookie()).toEqual([]);
+    expect((await confirm({ metodo: "altro" })).data.ok).toBe(false);
+    const right = await confirm({
+      metodo: "password",
+      password: "Una-password-negozio-molto-lunga",
+    });
+    expect(right.data).toEqual({ ok: true });
+    // La sessione nuova sostituisce quella in uso, che si chiude.
+    expect((right.init.headers as Headers).getSetCookie().join(";")).toContain("session_token");
+    const after = await env.DB.prepare('SELECT id FROM "session" WHERE "userId" = ?')
+      .bind(seller.userId)
+      .all<{ id: string }>();
+    expect(after.results).toHaveLength(before.results.length);
+    expect(after.results.map((row) => row.id)).not.toEqual(before.results.map((row) => row.id));
   });
 
   it("mostra nella campanella i collegamenti da ricollegare e ricorda le letture", async () => {

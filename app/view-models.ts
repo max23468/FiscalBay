@@ -314,18 +314,21 @@ export function marketplaceLabel(id: string) {
   return marketplaces[id] ?? id;
 }
 
-export const settingsSections = [
-  "piano",
-  "notifiche",
-  "esportazione",
-  "sicurezza",
-  "aspetto",
-  "messaggio",
-  "privacy",
-  "supporto",
+/**
+ * Categorie delle Impostazioni in tre gruppi: il lavoro sugli ordini, l'account e le
+ * preferenze generali con l'assistenza.
+ */
+export const settingsGroups = [
+  { id: "ordini", sections: ["notifiche", "esportazione", "messaggio"] },
+  { id: "account", sections: ["piano", "sicurezza", "privacy"] },
+  { id: "generale", sections: ["aspetto", "supporto"] },
 ] as const;
 
-export type SettingsSection = (typeof settingsSections)[number];
+export type SettingsSection = (typeof settingsGroups)[number]["sections"][number];
+
+export const settingsSections: readonly SettingsSection[] = settingsGroups.flatMap(
+  (group) => group.sections,
+);
 
 /** Fuso di visualizzazione predefinito, finché l'utente non ne sceglie un altro. */
 export const displayTimeZone = "Europe/Rome";

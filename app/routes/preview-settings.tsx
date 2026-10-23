@@ -83,7 +83,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     // Ogni scelta parte dal predefinito: l'anteprima non conserva preferenze.
     preferences: {
       theme: defaultDisplay.theme,
-      timeZone: defaultDisplay.timeZone,
+      timeZone: "auto",
+      detectedTimeZone: null,
       marketing: false,
       templates: { it: defaultTemplate("it"), en: defaultTemplate("en") },
     },
