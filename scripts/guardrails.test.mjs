@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, realpathSync, readFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  writeFileSync,
+  mkdirSync,
+  rmSync,
+  realpathSync,
+  readFileSync,
+  existsSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
@@ -13,6 +21,7 @@ import {
   listedTestIds,
   assertCandidateReports,
   prepareBrowserSystem,
+  installBrowserSystem,
 } from "./browser-tests.mjs";
 import {
   changedLines,
@@ -2182,6 +2191,49 @@ describe("prove browser divise fra macchine", () => {
       );
       assert.equal(readFileSync(other, "utf8"), unrelated);
       assert.equal(prepareBrowserSystem(directory), 0);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+  it("installa i pacchetti dei browser dalla cache e conserva quelli scaricati", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "browser-packages-"));
+    try {
+      const cache = path.join(directory, "cache");
+      const archives = path.join(directory, "archives");
+      mkdirSync(cache);
+      mkdirSync(archives);
+      writeFileSync(path.join(cache, "cached.deb"), "");
+      writeFileSync(path.join(cache, "notes.txt"), "");
+      const calls = [];
+      const run = (command, args) => {
+        calls.push([command, ...args]);
+        if (args[1] === "playwright") writeFileSync(path.join(archives, "new.deb"), "");
+      };
+      installBrowserSystem(["chromium", "webkit"], { cache, archives, run });
+      assert.deepEqual(calls[0], ["sudo", "dpkg", "--configure", "-a"]);
+      assert.deepEqual(calls[2], ["sudo", "cp", path.join(cache, "cached.deb"), archives]);
+      assert.deepEqual(calls[3], [
+        "pnpm",
+        "exec",
+        "playwright",
+        "install-deps",
+        "chromium",
+        "webkit",
+      ]);
+      assert.deepEqual(calls[4], ["cp", path.join(archives, "new.deb"), cache]);
+      calls.length = 0;
+      rmSync(cache, { recursive: true });
+      installBrowserSystem(["chromium"], { withBrowsers: true, cache, archives, run });
+      assert.equal(
+        calls.some(([command, verb]) => command === "sudo" && verb === "cp"),
+        false,
+      );
+      assert.ok(
+        calls.some(
+          (call) => call.join(" ") === "pnpm exec playwright install --with-deps chromium",
+        ),
+      );
+      assert.ok(existsSync(cache));
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

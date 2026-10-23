@@ -56,6 +56,15 @@ export async function waitUpdatedHead(read, previous, contains, attempts = 30, d
   throw new Error("Base della PR non aggiornata da GitHub: nessun rilancio automatico.");
 }
 
+function contains(base, head) {
+  try {
+    git("merge-base", "--is-ancestor", base, head);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function candidateRef(command, ref = "main") {
   if (ref !== "main" && !(command === "candidate" && ref === "develop"))
     throw new Error("Production richiede main; la sola prova ammette anche develop.");
@@ -222,7 +231,7 @@ function summary(repository, runId) {
 /**
  * Run più recente del workflow sul commit atteso, esclusi gli eventi estranei e le run già
  * annullate da una successiva: il ritorno della PR da bozza a pronta avvia una nuova run che
- * annulla, per concorrenza, quella avviata dall'aggiornamento della base.
+ * annulla, per concorrenza, quella avviata dalla push.
  */
 export function expectedRun(runs, sha, events, since, cancelled = new Set()) {
   return runs
@@ -623,37 +632,48 @@ async function main() {
         throw new Error("La PR non parte da un feature branch.");
       if (pr.state === "CLOSED") throw new Error("PR chiusa senza merge.");
       if (pr.state === "OPEN") {
-        // Solo la qualifica finale viene coordinata; il lavoro in bozza resta indipendente.
+        // Il merge automatico resta sospeso finché la testa non è qualificata sulla base attuale.
         if (pr.autoMergeRequest) gh("pr", "merge", number, "--disable-auto", "--repo", repository);
-        if (!pr.isDraft) gh("pr", "ready", number, "--undo", "--repo", repository);
-        const base = gh("api", `repos/${repository}/git/ref/heads/develop`, "--jq", ".object.sha");
-        git("fetch", "origin", "develop", pr.headRefName);
-        let current = false;
-        try {
-          git("merge-base", "--is-ancestor", base, pr.headRefOid);
-          current = true;
-        } catch {
-          /* Base da aggiornare. */
-        }
         const read = () => json("pr", "view", number, "--repo", repository, "--json", fields);
-        if (current) pr = read();
-        else {
-          gh("pr", "update-branch", number, "--repo", repository);
-          pr = await waitUpdatedHead(read, pr.headRefOid, (head) => {
-            try {
+        const develop = () =>
+          gh("api", `repos/${repository}/git/ref/heads/develop`, "--jq", ".object.sha");
+        // Una base avanzata durante la qualifica la fa fallire: il ciclo aggiorna la PR e
+        // segue la nuova qualifica, fino a tre volte, senza rimetterla in bozza.
+        for (let attempt = 1; ; attempt++) {
+          const base = develop();
+          git("fetch", "origin", "develop", pr.headRefName);
+          let since = 0;
+          if (!contains(base, pr.headRefOid)) {
+            since = Date.now() - 1000;
+            gh("pr", "update-branch", number, "--repo", repository);
+            pr = await waitUpdatedHead(read, pr.headRefOid, (head) => {
               git("fetch", "origin", pr.headRefName);
-              git("merge-base", "--is-ancestor", base, head);
-              return true;
-            } catch {
-              return false;
-            }
-          });
+              return contains(base, head);
+            });
+          }
+          if (pr.isDraft) {
+            since = Date.now() - 1000;
+            gh("pr", "ready", number, "--repo", repository);
+          }
+          // Senza aggiornamento vale la run già avviata sulla testa, anche se ancora in corso.
+          try {
+            await waitRun(
+              repository,
+              "ci.yml",
+              pr.headRefOid,
+              pr.headRefName,
+              ["pull_request"],
+              since,
+            );
+            break;
+          } catch (error) {
+            if (attempt === 3 || develop() === base) throw error;
+            console.log("Base avanzata durante la qualifica: aggiornamento della PR.");
+            pr = read();
+          }
         }
         const expectedHead = pr.headRefOid;
-        const since = Date.now() - 1000;
-        gh("pr", "ready", number, "--repo", repository);
-        await waitRun(repository, "ci.yml", expectedHead, pr.headRefName, ["pull_request"], since);
-        pr = json("pr", "view", number, "--repo", repository, "--json", fields);
+        pr = read();
         if (pr.headRefOid !== expectedHead) throw new Error("PR modificata durante la qualifica.");
         gh(
           "pr",
