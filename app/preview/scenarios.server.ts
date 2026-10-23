@@ -1164,7 +1164,7 @@ export function loadScenario(
           if (seed.id === "ord-02")
             return {
               ...seed,
-              buyerName: "  Maria   Rossi  ",
+              buyerName: "  MARIA   ROSSI  ",
               billingAddress: {
                 line: `via ${"esempio".repeat(40)} 12B`,
                 city: "roma",

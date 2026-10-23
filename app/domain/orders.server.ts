@@ -1,5 +1,5 @@
 import { buyerSnapshotSchema, type BuyerSnapshot } from "./order-import.server";
-import { contactsView } from "../contact";
+import { buyerNameView, contactsView } from "../contact";
 import { maxListedOrders } from "../orders/order-list";
 import { searchTokens } from "../orders/order-search";
 import { taxComparisonKey, taxIdentifierType, taxQuality } from "../tax-quality";
@@ -334,8 +334,8 @@ export async function searchVisibleOrders(
     db
       .prepare(
         `SELECT o.id, o.ebay_order_id,
-                COALESCE(json_extract(o.buyer_json, '$.name'), json_extract(o.buyer_json, '$.username'), '')
-                  AS buyer_name,
+                json_extract(o.buyer_json, '$.name') AS buyer_name,
+                json_extract(o.buyer_json, '$.username') AS buyer_username,
                 COALESCE((SELECT title FROM order_items WHERE order_id = o.id ORDER BY rowid LIMIT 1), '')
                   AS detail
            ${visibleOrdersSql}
@@ -343,14 +343,20 @@ export async function searchVisibleOrders(
           LIMIT ?4`,
       )
       .bind(...visibleOrdersParams(userId, ebayEnvironment, now, limit, undefined, criteria))
-      .all<{ id: string; ebay_order_id: string; buyer_name: string; detail: string }>(),
+      .all<{
+        id: string;
+        ebay_order_id: string;
+        buyer_name: string | null;
+        buyer_username: string | null;
+        detail: string;
+      }>(),
     countVisibleOrders(db, userId, ebayEnvironment, now, criteria),
   ]);
   return {
     items: result.results.map((row) => ({
       id: row.id,
       ebayOrderId: row.ebay_order_id,
-      buyerName: row.buyer_name,
+      buyerName: buyerNameView(row.buyer_name) ?? row.buyer_username ?? "",
       detail: row.detail,
     })),
     total,
