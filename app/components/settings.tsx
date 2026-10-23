@@ -146,6 +146,20 @@ export interface ExportContext {
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
+const subscribeNever = () => () => {};
+
+/**
+ * Pagina idratata: prima i controlli non reagirebbero al clic e i campi controllati
+ * perderebbero il testo scritto, quindi restano inattivi.
+ */
+function useHydrated() {
+  return useSyncExternalStore(
+    subscribeNever,
+    () => true,
+    () => false,
+  );
+}
+
 /**
  * Salvataggio automatico delle scelte semplici tramite l'azione `save`: stato in
  * corso ed esito espliciti, ripristino dell'ultimo valore salvato se il server rifiuta.
@@ -218,12 +232,13 @@ function AutoSwitch({
 }) {
   const id = useId();
   const [checked, setChecked, state] = useAutoSave(name, initial);
+  const ready = useHydrated();
   return (
     <Field orientation="horizontal" className="flex-wrap items-start">
       <Switch
         id={id}
         checked={checked}
-        disabled={disabled || state === "saving"}
+        disabled={!ready || disabled || state === "saving"}
         onCheckedChange={(next) => setChecked(next)}
         aria-labelledby={`${id}-label`}
         aria-describedby={description ? `${id}-description` : undefined}
@@ -854,8 +869,6 @@ function SecuritySection({ data, language }: { data: SettingsPageData; language:
   );
 }
 
-const subscribeNever = () => () => {};
-
 /** Tema sul documento: `data-theme` impone chiaro o scuro, senza attributo segue il sistema. */
 function applyTheme(theme: Theme) {
   const root = document.documentElement;
@@ -919,6 +932,7 @@ function AppearanceSection({
     "time-zone",
     data.preferences.timeZone,
   );
+  const ready = useHydrated();
   // Anche il ripristino dopo un salvataggio non riuscito torna sul documento.
   useEffect(() => applyTheme(theme), [theme]);
   return (
@@ -926,7 +940,7 @@ function AppearanceSection({
       <Group title={t.settings.theme}>
         <RadioGroup
           value={theme}
-          disabled={themeState === "saving"}
+          disabled={!ready || themeState === "saving"}
           onValueChange={(value) => setTheme(value as Theme)}
           className="flex flex-wrap gap-5"
           aria-label={t.settings.theme}
@@ -955,7 +969,7 @@ function AppearanceSection({
       <Group>
         <SimpleSelect
           label={t.settings.timeZone}
-          disabled={zoneState === "saving"}
+          disabled={!ready || zoneState === "saving"}
           items={timeZones.map((zone) => ({ value: zone, label: t.settings.timeZones[zone] }))}
           value={timeZone}
           onChange={setTimeZone}
@@ -1080,12 +1094,7 @@ function TemplateSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
   );
   const blocker = useUnsavedGuard(dirty);
   const empty = languages.some((code) => !draft[code].trim());
-  // Prima dell'idratazione il campo controllato perderebbe il testo già scritto.
-  const ready = useSyncExternalStore(
-    subscribeNever,
-    () => true,
-    () => false,
-  );
+  const ready = useHydrated();
   return (
     <div className="grid gap-4">
       <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
