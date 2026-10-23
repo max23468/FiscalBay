@@ -180,6 +180,8 @@ const it = {
     copyFailed: "Copia non riuscita. Riprova oppure seleziona e copia il codice.",
     contactCopyFailed: "Copia non riuscita. Riprova oppure seleziona e copia il testo.",
     lockedLabel: (label: string) => `${label} da sbloccare`,
+    unlockBalance: (remaining: number) =>
+      `${remaining} ${plural(remaining, "sblocco disponibile", "sblocchi disponibili")} in questo ciclo.`,
     lockedHint: (remaining: number) =>
       `Hai ${remaining} ${plural(remaining, "sblocco disponibile", "sblocchi disponibili")} in questo ciclo. Questo ordine ne usa uno.`,
     lockedExhausted: (date: string) =>
@@ -267,8 +269,7 @@ const it = {
     openStore: "Apri il negozio",
     noResultsTitle: "Nessun risultato",
     noResultsBody: "Nessun ordine corrisponde ai filtri. Modifica i criteri di ricerca.",
-    noSearchResultsBody:
-      "Nessun ordine corrisponde alla ricerca. Controlla il testo o cerca per numero d’ordine, acquirente, articolo o SKU.",
+    noSearchResultsBody: "Prova un’altra ricerca.",
     loading: "Caricamento degli ordini",
     list: "Elenco ordini",
   },
@@ -329,13 +330,12 @@ const it = {
     account: "Account eBay",
     connectedSince: "Collegato dal",
     consentUntil: "Scadenza autorizzazione",
-    consentHint: "Prima della scadenza ti chiederemo di ricollegare il negozio.",
     consentExpired: "Scaduta",
     consentExpiringPaused: (date: string) =>
       `L’autorizzazione eBay scade il ${date}. Ricollega il negozio entro quella data per riprendere la sincronizzazione senza interruzioni.`,
     target: (minutes: number) => `Aggiornamento previsto circa ogni ${minutes} minuti`,
     history: (days: number) => `Storico degli ultimi ${days} giorni`,
-    importDone: "Importazione dello storico completata",
+    importDone: (days: number) => `Storico di ${days} giorni importato`,
     importRunning: "Importazione dello storico in corso",
     importNotStarted: "Importazione dello storico non iniziata",
     syncSuspended: "Sincronizzazione sospesa fino al ricollegamento.",
@@ -625,13 +625,11 @@ const it = {
   profile: {
     title: "Profilo",
     name: "Nome",
-    nameHint: "Nome e cognome sono obbligatori e compaiono nelle email di servizio.",
     details: "Dati dell’account",
     accountType: "Tipo di account",
     email: "Email",
     emailHint: "Per cambiarla confermi con un link all’indirizzo attuale, poi con uno al nuovo.",
     changeEmail: "Cambia email",
-    security: "Metodi di accesso e sessioni sono in Sicurezza.",
     securityLink: "Apri Sicurezza",
     saved: "Anteprima: profilo non salvato.",
     updated: "Profilo aggiornato.",
@@ -1047,6 +1045,8 @@ const en: AppCopy = {
     copyFailed: "Copy failed. Try again, or select and copy the code.",
     contactCopyFailed: "Copy failed. Try again, or select and copy the text.",
     lockedLabel: (label) => `${label} to unlock`,
+    unlockBalance: (remaining) =>
+      `${remaining} ${plural(remaining, "unlock", "unlocks")} left this cycle.`,
     lockedHint: (remaining) =>
       `You have ${remaining} ${plural(remaining, "unlock", "unlocks")} left this cycle. This order uses one.`,
     lockedExhausted: (date) =>
@@ -1131,8 +1131,7 @@ const en: AppCopy = {
     openStore: "Open store",
     noResultsTitle: "No results",
     noResultsBody: "No orders match the filters. Change your search criteria.",
-    noSearchResultsBody:
-      "No orders match the search. Check the text or search by order number, buyer, item or SKU.",
+    noSearchResultsBody: "Try another search.",
     loading: "Loading orders",
     list: "Order list",
   },
@@ -1193,13 +1192,12 @@ const en: AppCopy = {
     account: "eBay account",
     connectedSince: "Connected since",
     consentUntil: "Authorisation expires",
-    consentHint: "Before it expires we will ask you to reconnect the store.",
     consentExpired: "Expired",
     consentExpiringPaused: (date) =>
       `The eBay authorisation expires on ${date}. Reconnect the store by then so syncing can resume without interruption.`,
     target: (minutes) => `Expected update about every ${minutes} minutes`,
     history: (days) => `History of the last ${days} days`,
-    importDone: "History import complete",
+    importDone: (days) => `${days}-day history imported`,
     importRunning: "History import in progress",
     importNotStarted: "History import not started",
     syncSuspended: "Sync is suspended until the store is reconnected.",
@@ -1475,14 +1473,12 @@ const en: AppCopy = {
   profile: {
     title: "Profile",
     name: "Name",
-    nameHint: "First and last name are required and shown in service emails.",
     details: "Account details",
     accountType: "Account type",
     email: "Email",
     emailHint:
       "To change it, confirm with a link sent to your current address, then with one sent to the new one.",
     changeEmail: "Change email",
-    security: "Sign-in methods and sessions are in Security.",
     securityLink: "Open Security",
     saved: "Preview: profile not saved.",
     updated: "Profile updated.",

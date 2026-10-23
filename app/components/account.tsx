@@ -260,18 +260,6 @@ function EmailChange({
           </Button>
         )}
       </div>
-      {disabled ? (
-        <form method="post" action={actionPath}>
-          <input
-            type="hidden"
-            name="returnTo"
-            value={`${localizedPath(language, securityPath)}#security-email`}
-          />
-          <Button type="submit" variant="outline" size="sm" name="intent" value="riautentica">
-            {t.signOutSignIn}
-          </Button>
-        </form>
-      ) : null}
       {pendingEmail ? (
         <div role="status" className="grid gap-2 rounded-lg border p-3 text-sm">
           <p>{profile.emailPending(pendingEmail.new_email)}</p>
@@ -733,9 +721,11 @@ export function VerifyEmail({
 export function AccessNotice({
   language,
   notice,
+  showSignInAgain = true,
 }: {
   language: Language;
   notice: AccessNoticeView | null;
+  showSignInAgain?: boolean;
 }) {
   const t = appCopy[language].access;
   const { pathname } = useLocation();
@@ -762,8 +752,9 @@ export function AccessNotice({
         // Il testo dell'esito ripete la spiegazione: qui serve solo il titolo breve.
         title={elsewhere ? appCopy[language].stores.elsewhereTitle : notice.text}
       >
-        {notice.text === t.signInNotices["nuovo-accesso"] ||
-        notice.text === t.signInNotices["conferma-passkey"] ? (
+        {showSignInAgain &&
+        (notice.text === t.signInNotices["nuovo-accesso"] ||
+          notice.text === t.signInNotices["conferma-passkey"]) ? (
           <SignInAgain language={language} inSecurity={inSecurity} />
         ) : null}
         {elsewhere ? (

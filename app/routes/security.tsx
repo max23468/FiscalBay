@@ -182,7 +182,11 @@ export default function Security({ loaderData }: Route.ComponentProps) {
         <PageTitle icon={ShieldCheck} tone="neutral">
           {t.shell.security}
         </PageTitle>
-        <AccessNotice language={language} notice={loaderData.notice} />
+        <AccessNotice
+          language={language}
+          notice={loaderData.notice}
+          showSignInAgain={loaderData.recent && !loaderData.passkeyRestriction}
+        />
         {/* Come nell'anteprima la preferenza di sblocco apre la scheda Sicurezza. */}
         <div className="grid gap-4 rounded-xl border bg-card p-5 md:p-6">
           <UnlockConfirmation confirmed={loaderData.confirmUnlock} t={t} />

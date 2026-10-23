@@ -163,6 +163,13 @@ async function main() {
       statements.push(
         `INSERT OR REPLACE INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt", "passkeyVerified") VALUES ('pages-${role}', 'pages-${role}', '${role === "member" ? testAccount.userId : "collaudo-admin"}', '${expires}', '${now}', '${now}', ${role === "admin-granted" ? 1 : 0});`,
       );
+    // Le sessioni non recenti qualificano il richiamo unico al nuovo accesso.
+    for (const browser of ["chromium", "webkit"])
+      for (const language of ["it", "en"]) {
+        const token = `stale-security-${language}-${browser}`;
+        statements.push(`INSERT OR REPLACE INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
+          VALUES ('${token}', '${token}', ${quote(testAccount.userId)}, '${expires}', '${new Date(Date.now() - day).toISOString()}', '${now}');`);
+      }
     // Account separati per lingua, browser e flusso: le prove non alterano fixture concorrenti.
     const unlockAccounts = ["chromium", "webkit"].flatMap((browser) =>
       ["it", "en"].map((language) => `unlock-${language}-${browser}`),

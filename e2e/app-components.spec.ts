@@ -687,8 +687,9 @@ test.describe("miglioramenti account e negozi", () => {
 
     test(`nuovo accesso: ritorno a Sicurezza anche dopo password errata ${language}`, async ({
       page,
+      context,
       baseURL,
-    }) => {
+    }, testInfo) => {
       expect(
         (
           await page.request.post("/api/auth/sign-in/email", {
@@ -714,6 +715,20 @@ test.describe("miglioramenti account e negozi", () => {
       await expect(page).toHaveURL(
         new RegExp(`${prefix}/app/impostazioni/sicurezza#security-email$`),
       );
+      const token = `stale-security-${language}-${testInfo.project.name}`;
+      await useLocalAccount(context, "member", baseURL!, token);
+      for (const suffix of ["", "?accesso=nuovo-accesso"]) {
+        await page.goto(`${prefix}/app/impostazioni/sicurezza${suffix}`);
+        await expect(
+          page.getByRole("button", {
+            name: it ? "Esci e accedi di nuovo" : "Sign out and sign in again",
+            exact: true,
+          }),
+        ).toHaveCount(1);
+        await expect(
+          page.getByRole("button", { name: it ? "Cambia email" : "Change email", exact: true }),
+        ).toBeDisabled();
+      }
     });
   }
 
@@ -933,6 +948,12 @@ for (const language of ["it", "en"] as const) {
         );
         await page.getByRole("link", { name: /Outlet ricambi/u }).click();
         const panel = page.getByRole("dialog");
+        await expect(panel).toContainText(
+          t("Storico di 30 giorni importato", "30-day history imported"),
+        );
+        await expect(panel).not.toContainText(
+          t("Prima della scadenza ti chiederemo", "Before it expires we will ask"),
+        );
         await expect(panel.locator("#store-sync + ul")).not.toContainText(
           t("Aggiornamento previsto", "Expected update"),
         );
@@ -979,7 +1000,7 @@ for (const language of ["it", "en"] as const) {
           t("Importazione dello storico non iniziata", "History import not started"),
         );
         await expect(panel).not.toContainText(
-          t("Importazione dello storico completata", "History import complete"),
+          t("Storico di 30 giorni importato", "30-day history imported"),
         );
         await expect(panel.locator("[data-slot=badge]").first()).toHaveClass(/warning/);
         // Senza autorizzazione non arrivano ordini: la preferenza attiva resta sospesa.
@@ -1209,6 +1230,17 @@ for (const language of ["it", "en"] as const) {
         const locked = page.getByRole("article", {
           name: t("Ordine", "Order") + " 05-55555-12121",
         });
+        await expect(
+          page.getByText(
+            t("2 sblocchi disponibili in questo ciclo.", "2 unlocks left this cycle."),
+            {
+              exact: true,
+            },
+          ),
+        ).toHaveCount(1);
+        await expect(locked).not.toContainText(
+          t("Questo ordine ne usa uno.", "This order uses one."),
+        );
         const unlock = locked.getByRole("button", { name: t("Sblocca ordine", "Unlock order") });
         await unlock.click();
         const confirm = page.getByRole("alertdialog");
@@ -1407,6 +1439,17 @@ for (const language of ["it", "en"] as const) {
           await open(page, await searched(page, query, `${prefix}/anteprima`));
           await expect(page.getByRole("article").filter({ hasText: order })).toContainText(text);
         }
+        await open(page, await searched(page, "nessun-risultato-collaudo", `${prefix}/anteprima`));
+        await expect(
+          page.getByRole("heading", { name: t("Nessun risultato", "No results") }),
+        ).toBeVisible();
+        await expect(
+          page.getByText(t("Prova un’altra ricerca.", "Try another search."), { exact: true }),
+        ).toBeVisible();
+        await page
+          .getByRole("link", { name: t("Cancella ricerca", "Clear search"), exact: true })
+          .click();
+        await expect(page.getByRole("article").first()).toBeVisible();
         await open(page, `${prefix}/anteprima/ordini/ord-03`, "dati-discordanti");
         await expect(
           page
@@ -1683,6 +1726,18 @@ for (const language of ["it", "en"] as const) {
       await open(page, `${prefix}/anteprima/profilo`);
       const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
       await expect(first).toHaveValue("Laura");
+      await expect(first).not.toHaveAttribute("aria-describedby", /profile-name-hint/);
+      await expect(
+        page.getByText(
+          it
+            ? "Metodi di accesso e sessioni sono in Sicurezza."
+            : "Sign-in methods and sessions are in Security.",
+          { exact: true },
+        ),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("link", { name: it ? "Apri Sicurezza" : "Open Security", exact: true }),
+      ).toBeVisible();
       await expect(
         page.getByRole("textbox", { name: it ? "Cognome" : "Last name", exact: true }),
       ).toHaveValue("Martini");
@@ -2257,6 +2312,11 @@ test("messaggio per l'acquirente a larghezza piena e fonte in fondo al dettaglio
       name: language === "it" ? "Copia messaggio per l’acquirente" : "Copy message for the buyer",
     });
     const message = dialog.getByRole("textbox");
+    await expect(dialog).not.toContainText(
+      language === "it"
+        ? "Quando eBay non riporta il Codice Fiscale, puoi copiare questo messaggio"
+        : "When eBay does not provide the tax code, you can copy this message",
+    );
     for (const width of [320, 390, 768, 1280]) {
       await page.setViewportSize({ width, height: 900 });
       await expect(async () => {
@@ -2318,7 +2378,10 @@ test("geometria dei codici e delle colonne fiscali da 320 a 1280 px", async ({ p
 });
 
 test("stati senza valore senza Copia, sblocco e Premium distinti", async ({ page }) => {
-  await open(page, "/anteprima/ordini");
+  await open(page, "/anteprima/ordini", "ordinario");
+  await expect(
+    page.getByText("2 sblocchi disponibili in questo ciclo.", { exact: true }),
+  ).toHaveCount(1);
   for (const id of ["19-00001-99999", "31-77421-10058", "05-55555-12121"]) {
     const card = page.getByRole("article", { name: `Ordine ${id}` });
     await expect(card.getByRole("button", { name: /^Copia / })).toHaveCount(0);
@@ -2326,6 +2389,12 @@ test("stati senza valore senza Copia, sblocco e Premium distinti", async ({ page
   const locked = page.getByRole("article", { name: "Ordine 05-55555-12121" });
   await expect(locked.locator(".icon-unlock")).toHaveCount(2);
   await expect(locked.locator(".lucide-crown")).toHaveCount(0);
+  await expect(locked).not.toContainText("Questo ordine ne usa uno.");
+  await locked.getByRole("link", { name: "Dettaglio", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText(
+    "Hai 2 sblocchi disponibili in questo ciclo. Questo ordine ne usa uno.",
+  );
+  await page.getByRole("button", { name: "Chiudi", exact: true }).click();
   const missing = page.getByRole("article", { name: "Ordine 31-77421-10058" });
   await expect(missing).toContainText("Non disponibile su eBay");
   await expect(missing).not.toContainText("eBay non riporta il Codice Fiscale per questo ordine.");

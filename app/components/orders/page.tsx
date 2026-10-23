@@ -665,6 +665,7 @@ function OrdersList({
   const lockedSelected = visibleSelected.filter(unlockable).map((order) => order.id);
   const onlySearch =
     criteria.has(searchParam) && [...criteria.keys()].every((key) => key === searchParam);
+  const remaining = remainingUnlocks(data.account);
   return (
     <>
       <OrdersToolbar
@@ -680,6 +681,9 @@ function OrdersList({
         onToggleSelect={() => (selecting ? stopSelecting() : setSelecting(true))}
       />
       <SearchChip t={t} query={data.search} clearable={orders.length > 0 || !onlySearch} />
+      {remaining !== null && remaining > 0 && orders.some(unlockable) ? (
+        <p className="text-sm text-muted-foreground">{t.orders.unlockBalance(remaining)}</p>
+      ) : null}
       {freshHref ? (
         <div className="flex justify-center">
           <Link

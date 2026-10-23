@@ -376,7 +376,7 @@ function LockedNote({
   if (fiscal.hold) return <CardNote tone="info">{t.orders.lockedHold[fiscal.hold]}</CardNote>;
   const remaining = remainingUnlocks(account);
   if (remaining === null || !account.quota) return null;
-  if (remaining > 0) return <CardNote>{t.orders.lockedHint(remaining)}</CardNote>;
+  if (remaining > 0) return compact ? null : <CardNote>{t.orders.lockedHint(remaining)}</CardNote>;
   const { cycleEndsAt } = account.quota;
   if (!cycleEndsAt) return null;
   const cycleEnd = formatDate(cycleEndsAt, language, "date");
@@ -569,7 +569,6 @@ export function MissingOrderHelp({
           }}
         />
       </Field>
-      <p className="text-xs text-muted-foreground">{t.settings.templateIntro}</p>
       <Button
         variant="outline"
         className="h-auto min-h-9 w-fit max-w-full whitespace-normal"
