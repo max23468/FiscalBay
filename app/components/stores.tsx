@@ -2,6 +2,7 @@ import { cn } from "cn";
 import {
   Bell,
   ChevronRight,
+  ExternalLink,
   CirclePause,
   History,
   Link2,
@@ -18,6 +19,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { useAction } from "~/components/app-shell";
+import { useHydrated } from "~/components/hydrated";
 import { useConfirmed } from "~/components/confirmation";
 import { LedgerIndicator } from "~/components/brand";
 import { EmptyState } from "~/components/empty-state";
@@ -108,7 +110,13 @@ function marketplaceText(store: StoreView) {
 }
 
 /** Logo del negozio eBay; senza logo, o se non si carica, le iniziali del nome. */
-function StoreTile({ store, size = "md" }: { store: StoreView; size?: "md" | "lg" }) {
+const logoSizes = {
+  md: { pixels: 36, className: "size-9 rounded-lg" },
+  lg: { pixels: 44, className: "size-11 rounded-xl" },
+  xl: { pixels: 56, className: "size-14 rounded-2xl" },
+};
+
+function StoreTile({ store, size = "md" }: { store: StoreView; size?: keyof typeof logoSizes }) {
   const [failed, setFailed] = useState<string | null>(null);
   if (!store.logoUrl || failed === store.logoUrl)
     return <InitialsTile name={store.name} size={size} />;
@@ -116,14 +124,11 @@ function StoreTile({ store, size = "md" }: { store: StoreView; size?: "md" | "lg
     <img
       src={store.logoUrl}
       alt=""
-      width={size === "lg" ? 44 : 36}
-      height={size === "lg" ? 44 : 36}
+      width={logoSizes[size].pixels}
+      height={logoSizes[size].pixels}
       referrerPolicy="no-referrer"
       onError={() => setFailed(store.logoUrl!)}
-      className={cn(
-        "shrink-0 border bg-white object-contain",
-        size === "lg" ? "size-11 rounded-xl" : "size-9 rounded-lg",
-      )}
+      className={cn("shrink-0 border bg-white object-contain", logoSizes[size].className)}
     />
   );
 }
@@ -177,6 +182,7 @@ function LastSync({
   now,
   language,
   slot = true,
+  wrap = false,
 }: {
   store: StoreView;
   t: AppCopy;
@@ -184,12 +190,19 @@ function LastSync({
   language: Language;
   /** In tabella lo slot vuoto allinea il testo alle righe con l'indicatore. */
   slot?: boolean;
+  /** Nei riquadri stretti della scheda il testo va a capo. */
+  wrap?: boolean;
 }) {
   // Le righe della tessera indicano una sincronizzazione che procede: un negozio
   // sospeso o mai sincronizzato mostra solo il testo.
   const live = store.connection === "active" && store.lastSyncAt !== null;
   return (
-    <span className="inline-flex items-center gap-2 whitespace-nowrap text-muted-foreground">
+    <span
+      className={cn(
+        "inline-flex items-center gap-2 text-muted-foreground",
+        wrap ? "min-w-0" : "whitespace-nowrap",
+      )}
+    >
       {live || store.syncing ? (
         <LedgerIndicator active={store.syncing} />
       ) : slot ? (
@@ -263,6 +276,8 @@ function StoreActions({
 /** Letture a richiesta e pausa, nella stessa forma: pulsanti larghi con icona. */
 function ReadActions({ store, ebayDown, t }: { store: StoreView; ebayDown: boolean; t: AppCopy }) {
   const action = useAction();
+  const ready = useHydrated();
+  const look = { variant: "outline" as const, className: "justify-start" };
   const run = (intent: string) => action.run(intent, { store: store.id });
   const needsReconnect =
     store.issue !== undefined ||
@@ -274,9 +289,8 @@ function ReadActions({ store, ebayDown, t }: { store: StoreView; ebayDown: boole
     <div className="grid gap-2">
       {needsReconnect ? null : (
         <Button
-          variant="outline"
-          className="justify-start"
-          disabled={ebayDown || store.syncing || store.connection !== "active"}
+          {...look}
+          disabled={!ready || ebayDown || store.syncing || store.connection !== "active"}
           onClick={() => run("store-sync")}
         >
           <RefreshCw aria-hidden="true" data-icon="inline-start" />
@@ -284,17 +298,18 @@ function ReadActions({ store, ebayDown, t }: { store: StoreView; ebayDown: boole
         </Button>
       )}
       <Button
-        variant="outline"
-        className="justify-start"
-        disabled={ebayDown || store.syncing || needsReconnect || store.connection !== "active"}
+        {...look}
+        disabled={
+          !ready || ebayDown || store.syncing || needsReconnect || store.connection !== "active"
+        }
         onClick={() => run("store-reimport")}
       >
         <History aria-hidden="true" data-icon="inline-start" />
         {t.stores.reimport}
       </Button>
       <Button
-        variant="outline"
-        className="justify-start"
+        {...look}
+        disabled={!ready}
         onClick={() => run(paused ? "store-resume" : "store-pause")}
       >
         {paused ? (
@@ -449,21 +464,22 @@ function ReconnectButton({
   ebayDown,
   connectHref,
   t,
-  inAlert = false,
+  prominent = false,
 }: {
   store: StoreView;
   ebayDown: boolean;
   connectHref?: string;
   t: AppCopy;
-  inAlert?: boolean;
+  /** Pulsante principale piccolo, negli avvisi e nella scheda del negozio. */
+  prominent?: boolean;
 }) {
   const action = useAction();
-  const look = inAlert
+  const look = prominent
     ? { size: "sm" as const }
     : { variant: "outline" as const, className: "justify-start" };
   const content = (
     <>
-      {inAlert ? null : <Link2 aria-hidden="true" data-icon="inline-start" />}
+      {prominent ? null : <Link2 aria-hidden="true" data-icon="inline-start" />}
       {t.stores.reconnect}
     </>
   );
@@ -532,7 +548,7 @@ function StoreDetail({
               ebayDown={data.ebayDown}
               connectHref={data.connectHref}
               t={t}
-              inAlert
+              prominent
             />
           </span>
         </StatusAlert>
@@ -550,7 +566,7 @@ function StoreDetail({
               ebayDown={data.ebayDown}
               connectHref={data.connectHref}
               t={t}
-              inAlert
+              prominent
             />
           </span>
         </StatusAlert>
@@ -604,15 +620,7 @@ function ConnectionSection({ store, now, t, language }: SectionProps & { now: st
           <div className={row}>
             <dt className="text-muted-foreground">{t.stores.feedback}</dt>
             <dd className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span>
-                <span className="font-code">{formatCount(store.feedback.score, language)}</span>
-                {store.feedback.positivePercent === null
-                  ? null
-                  : ` · ${t.stores.positiveFeedback(formatPercent(store.feedback.positivePercent, language))}`}
-              </span>
-              {store.feedback.topRated ? (
-                <StatusBadge tone="success">{t.stores.topRated}</StatusBadge>
-              ) : null}
+              <FeedbackSummary feedback={store.feedback} t={t} language={language} />
             </dd>
           </div>
         ) : null}
@@ -644,6 +652,29 @@ function ConnectionSection({ store, now, t, language }: SectionProps & { now: st
         </a>
       ) : null}
     </section>
+  );
+}
+
+/** Punteggio e percentuale positiva del feedback, con il badge Top Rated. */
+function FeedbackSummary({
+  feedback,
+  t,
+  language,
+}: {
+  feedback: NonNullable<StoreView["feedback"]>;
+  t: AppCopy;
+  language: Language;
+}) {
+  return (
+    <>
+      <span>
+        <span className="font-code">{formatCount(feedback.score, language)}</span>
+        {feedback.positivePercent === null
+          ? null
+          : ` · ${t.stores.positiveFeedback(formatPercent(feedback.positivePercent, language))}`}
+      </span>
+      {feedback.topRated ? <StatusBadge tone="success">{t.stores.topRated}</StatusBadge> : null}
+    </>
   );
 }
 
@@ -809,8 +840,26 @@ export function StoresPage({
       ) : (
         <>
           {premium ? null : <FreeNotes stores={data.stores} t={t} />}
-          <StoreTable stores={data.stores} premium={premium} now={data.now} t={t} links={links} />
-          <StoreList stores={data.stores} premium={premium} now={data.now} t={t} links={links} />
+          {data.stores.length === 1 ? (
+            <StoreOverview store={data.stores[0]!} data={data} t={t} links={links} />
+          ) : (
+            <>
+              <StoreTable
+                stores={data.stores}
+                premium={premium}
+                now={data.now}
+                t={t}
+                links={links}
+              />
+              <StoreList
+                stores={data.stores}
+                premium={premium}
+                now={data.now}
+                t={t}
+                links={links}
+              />
+            </>
+          )}
         </>
       )}
       <StoreSheet data={data} t={t} links={links} />
@@ -909,6 +958,242 @@ type ListProps = {
   t: AppCopy;
   links: AppLinks;
 };
+
+/** Valore di un riquadro della scheda: etichetta sopra, valore sotto. */
+function OverviewStat({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="grid min-w-0 content-start gap-1 rounded-lg bg-muted/50 p-3">
+      <dt className="text-xs text-pretty text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium">{children}</dd>
+    </div>
+  );
+}
+
+/** Intestazione della scheda: logo, nome, account, feedback, stato e pagina eBay. */
+function OverviewIdentity({
+  store,
+  t,
+  language,
+}: {
+  store: StoreView;
+  t: AppCopy;
+  language: Language;
+}) {
+  const status = connectionStatus(store, t);
+  return (
+    <div className="flex items-start gap-4">
+      <StoreTile store={store} size="xl" />
+      <div className="grid min-w-0 flex-1 justify-items-start gap-1">
+        <h2 id="store-overview" className="text-xl font-semibold text-pretty wrap-anywhere">
+          {store.name}
+        </h2>
+        {hasSubtitle(store) ? (
+          <p className="text-sm text-muted-foreground">
+            <StoreSubtitle store={store} />
+          </p>
+        ) : null}
+        {store.feedback ? (
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <span className="text-muted-foreground">{t.stores.feedback}:</span>
+            <FeedbackSummary feedback={store.feedback} t={t} language={language} />
+          </p>
+        ) : null}
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
+          <StatusBadge tone={status.tone} icon={status.icon} filled>
+            {status.label}
+          </StatusBadge>
+          {store.storeUrl ? (
+            <a
+              href={store.storeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-sm font-medium underline underline-offset-4 hover:text-muted-foreground"
+            >
+              {t.stores.openStore}
+              <ExternalLink aria-hidden="true" className="size-3.5" />
+            </a>
+          ) : null}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Storico in breve: importato, in corso o non ancora iniziato; null prima del primo avvio. */
+function historyText(store: StoreView, t: AppCopy) {
+  if (store.historyDays === null) return null;
+  if (!store.importing && store.lastSyncAt) return t.stores.historyImported(store.historyDays);
+  return store.importing ? t.stores.historyRunning : t.stores.historyPending;
+}
+
+/** Riquadri della scheda: ordini, ultima lettura, storico e scadenza dell'autorizzazione. */
+function OverviewStats({ store, now, t, language }: SectionProps & { now: string }) {
+  const zone = useTimeZone();
+  const history = historyText(store, t);
+  const expired =
+    store.connection === "reconnect_required" ||
+    (store.consentExpiresAt !== null && store.consentExpiresAt <= now);
+  return (
+    <dl className="grid grid-cols-2 gap-3">
+      <OverviewStat label={t.stores.orders}>
+        <span className="font-code">{store.importedOrders}</span>
+      </OverviewStat>
+      <OverviewStat label={t.stores.lastRead}>
+        <LastSync store={store} t={t} now={now} language={language} slot={false} wrap />
+      </OverviewStat>
+      {history ? <OverviewStat label={t.stores.historyLabel}>{history}</OverviewStat> : null}
+      {store.consentExpiresAt ? (
+        <OverviewStat label={t.stores.consentUntil}>
+          <span className={expired ? "text-warning" : undefined}>
+            {expired
+              ? t.stores.consentExpired
+              : formatDate(store.consentExpiresAt, language, "date", zone)}
+          </span>
+        </OverviewStat>
+      ) : null}
+    </dl>
+  );
+}
+
+/** Ultime letture dei recenti, dalla più recente. */
+function OverviewRecent({ store, t, language }: SectionProps) {
+  const zone = useTimeZone();
+  return (
+    <div className="grid content-start gap-2">
+      <h3 className="text-sm font-semibold">{t.stores.sectionRecent}</h3>
+      <ul className="grid gap-2 text-sm">
+        {store.recent.map((sync) => (
+          <li key={sync.at} className="grid gap-0.5">
+            <span
+              className={cn(
+                "inline-flex items-center gap-2",
+                sync.ok ? "text-foreground" : "text-danger",
+              )}
+            >
+              <StatusIcon tone={sync.ok ? "success" : "danger"} className="size-3.5" />
+              {sync.ok ? t.stores.recentOk(sync.newOrders) : t.stores.recentFailed}
+            </span>
+            <time dateTime={sync.at} className="pl-5.5 text-muted-foreground">
+              {formatDate(sync.at, language, "dateTime", zone)}
+            </time>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * Azioni frequenti della scheda: lettura o ricollegamento, pausa e dettagli. Reimportazione,
+ * scollegamento ed eliminazione restano nel pannello. Sotto `sm` i pulsanti stanno in colonna
+ * a tutta larghezza, da `sm` in riga.
+ */
+function OverviewActions({
+  store,
+  data,
+  t,
+  links,
+}: {
+  store: StoreView;
+  data: StoresPageData;
+  t: AppCopy;
+  links: AppLinks;
+}) {
+  const action = useAction();
+  const ready = useHydrated();
+  const paused = store.pauseReason !== undefined;
+  const disconnected = store.connection === "disconnected";
+  const needsReconnect =
+    disconnected ||
+    store.issue !== undefined ||
+    store.connection === "reconnect_required" ||
+    store.connection === "error";
+  const button = "w-full sm:w-auto";
+  return (
+    <div className="flex flex-col gap-2 border-t pt-4 sm:flex-row sm:flex-wrap lg:col-start-1">
+      {needsReconnect ? (
+        <ReconnectButton
+          store={store}
+          ebayDown={data.ebayDown}
+          connectHref={data.connectHref}
+          t={t}
+          prominent
+        />
+      ) : store.connection === "active" ? (
+        <Button
+          size="sm"
+          className={button}
+          disabled={!ready || data.ebayDown || store.syncing}
+          onClick={() => action.run("store-sync", { store: store.id })}
+        >
+          <RefreshCw aria-hidden="true" data-icon="inline-start" />
+          {t.stores.syncNow}
+        </Button>
+      ) : null}
+      {disconnected || store.pauseReason === "plan" ? null : (
+        <Button
+          variant="outline"
+          size="sm"
+          className={button}
+          disabled={!ready}
+          onClick={() => action.run(paused ? "store-resume" : "store-pause", { store: store.id })}
+        >
+          {paused ? (
+            <Play aria-hidden="true" data-icon="inline-start" />
+          ) : (
+            <Pause aria-hidden="true" data-icon="inline-start" />
+          )}
+          {paused ? t.stores.resume : t.stores.pause}
+        </Button>
+      )}
+      <Link
+        to={`${appHref(links, "negozi")}/${store.id}`}
+        preventScrollReset
+        className={cn(buttonVariants({ variant: "outline", size: "sm" }), button)}
+      >
+        {t.stores.details}
+        <ChevronRight aria-hidden="true" data-icon="inline-end" />
+      </Link>
+    </div>
+  );
+}
+
+/**
+ * Con un solo negozio, il caso più comune, la pagina lo mostra per esteso: stato, letture,
+ * storico e autorizzazione si leggono senza aprire il pannello, che resta completo. Da desktop
+ * gli aggiornamenti stanno nella colonna destra; su mobile precedono le azioni.
+ */
+function StoreOverview({
+  store,
+  data,
+  t,
+  links,
+}: {
+  store: StoreView;
+  data: StoresPageData;
+  t: AppCopy;
+  links: AppLinks;
+}) {
+  const { language } = links;
+  return (
+    <section
+      aria-labelledby="store-overview"
+      className="grid gap-5 rounded-xl border bg-card p-4 sm:p-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:gap-x-6"
+    >
+      <div className="grid content-start gap-5 lg:col-start-1">
+        <OverviewIdentity store={store} t={t} language={language} />
+        <OverviewStats store={store} now={data.now} t={t} language={language} />
+        <p className="text-sm text-muted-foreground">{syncDescription(store, data.ebayDown, t)}</p>
+      </div>
+      {store.recent.length > 0 ? (
+        <div className="border-t pt-5 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
+          <OverviewRecent store={store} t={t} language={language} />
+        </div>
+      ) : null}
+      <OverviewActions store={store} data={data} t={t} links={links} />
+    </section>
+  );
+}
 
 /** Tabella da desktop: tutta la riga apre il pannello del negozio. */
 function StoreTable({ stores, premium, now, t, links }: ListProps) {
