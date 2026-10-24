@@ -2267,7 +2267,7 @@ for (const width of [390, 768, 1440]) {
       // Prezzi netti dal listino; l'acquisto porta a Stripe e torna con il pagamento in verifica.
       await expect(page.locator("main")).toContainText(it ? "4,90 € al mese" : "€4.90 per month");
       await expect(page.locator("main")).toContainText(
-        it ? "Equivale a 4,08 € al mese." : "Works out at €4.08 per month.",
+        it ? "12 mesi al prezzo di 10." : "12 months for the price of 10.",
       );
       await page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }).click();
       await expect(page).toHaveURL(/\?checkout=processing$/u);
@@ -2287,12 +2287,28 @@ for (const width of [390, 768, 1440]) {
       await expect(
         page.getByRole("button", { name: /Scegli mensile|Choose monthly/u }),
       ).toHaveCount(0);
-      // Durante la prova un abbonamento ordinario perderebbe i giorni residui: niente acquisto.
+      // Durante la prova si paga subito e il primo rinnovo segue i giorni residui della prova.
       await open(page, `${prefix}/anteprima/impostazioni/piano`, "prova-premium");
-      await expect(page.locator("main")).toContainText(it ? "Prova Premium" : "Premium trial");
+      const main = page.locator("main");
+      await expect(main).toContainText(it ? "Prova Premium" : "Premium trial");
+      await expect(main).toContainText(it ? "non perdi i giorni di prova" : "keep your trial days");
+      await expect(main).toContainText(
+        it ? /Primo rinnovo il .*2026\./u : /First renewal on .*2026\./u,
+      );
+      await expect(main).toContainText(
+        it ? /Primo rinnovo il .*2027\./u : /First renewal on .*2027\./u,
+      );
       await expect(
-        page.getByRole("button", { name: /Scegli (mensile|annuale)|Choose (monthly|annual)/u }),
-      ).toHaveCount(0);
+        page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }),
+      ).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`trial-purchase-${locale}.png`) });
+      // Il ritorno da Stripe resta visibile anche con la prova in corso.
+      await page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }).click();
+      await expect(page).toHaveURL(/\?checkout=processing$/u);
+      await expect(main).toContainText(it ? "Prova Premium" : "Premium trial");
+      await expect(
+        page.getByText(it ? "Attivazione Premium in corso" : "Activating Premium"),
+      ).toBeVisible();
       await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium-a-vita");
       const documents = page.getByRole("button", {
         name: it ? "Consulta ricevute e fatture su Stripe" : "View receipts and invoices on Stripe",

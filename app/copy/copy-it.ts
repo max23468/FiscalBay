@@ -477,8 +477,11 @@ export const it = {
       priceAnnual: (price: string) => `${price} all’anno`,
       priceLifetime: (price: string) => `${price} una tantum`,
       priceMonthlyNote: "Si rinnova ogni mese.",
-      priceAnnualNote: (price: string) => `Equivale a ${price} al mese.`,
+      priceAnnualNote: (months: number) => `12 mesi al prezzo di ${months}.`,
       priceLifetimeNote: "Pagamento unico, senza rinnovi.",
+      prepaidNote:
+        "Paghi oggi e non perdi i giorni di prova: il periodo pagato parte quando la prova finisce.",
+      firstRenewal: (date: string) => `Primo rinnovo il ${date}.`,
       pricesNote:
         "Prezzi IVA esclusa. Su Stripe vedi il totale con le imposte del tuo paese, anche nella tua valuta, prima di pagare.",
       purchaseNeedsSync: "Potrai acquistare Premium dopo la prima lettura riuscita di un negozio.",

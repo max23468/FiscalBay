@@ -39,15 +39,25 @@ export function buildManagedCheckoutParams(input: {
   language: Language;
   successUrl: string;
   cancelUrl: string;
+  /**
+   * Acquisto durante la prova: prezzo una tantum pari al primo periodo, incassato subito, e
+   * abbonamento senza addebito fino al primo rinnovo, dopo la prova residua e il periodo pagato.
+   */
+  prepaid?: { priceId: string; trialEndsAt: string; renewsAt: string; expiresAt?: Date };
 }): Stripe.Checkout.SessionCreateParams {
+  const { prepaid } = input;
   const metadata = {
     workspace_id: input.workspaceId,
     offer: input.offer,
     price_generation: input.generation,
+    ...(prepaid ? { trial_ends_at: prepaid.trialEndsAt } : {}),
   };
   return {
     mode: input.offer === "lifetime" ? "payment" : "subscription",
-    line_items: [{ price: input.priceId, quantity: 1 }],
+    line_items: [
+      { price: input.priceId, quantity: 1 },
+      ...(prepaid ? [{ price: prepaid.priceId, quantity: 1 }] : []),
+    ],
     managed_payments: { enabled: true },
     integration_identifier: integrationIdentifier,
     client_reference_id: input.workspaceId,
@@ -57,7 +67,13 @@ export function buildManagedCheckoutParams(input: {
     // Il riferimento allo spazio resta anche sull'oggetto che sopravvive alla sessione.
     ...(input.offer === "lifetime"
       ? { payment_intent_data: { metadata } }
-      : { subscription_data: { metadata } }),
+      : {
+          subscription_data: {
+            metadata,
+            ...(prepaid ? { trial_end: Date.parse(prepaid.renewsAt) / 1000 } : {}),
+          },
+        }),
+    ...(prepaid?.expiresAt ? { expires_at: Math.floor(prepaid.expiresAt.getTime() / 1000) } : {}),
     success_url: `${input.successUrl}?checkout=processing&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${input.cancelUrl}?checkout=cancelled`,
   };
@@ -75,12 +91,14 @@ export type CatalogMismatch =
 /**
  * Il prezzo configurato su Stripe deve essere quello del listino: attivo, in euro, netto con
  * le imposte aggiunte da Stripe, con la periodicità dell'offerta e un prodotto con codice
- * fiscale, senza il quale Managed Payments non copre la vendita.
+ * fiscale, senza il quale Managed Payments non copre la vendita. Il primo periodo pagato
+ * durante la prova è un prezzo una tantum con l'importo dell'offerta (`oneTime`).
  */
 export function catalogMismatch(
   price: Stripe.Price,
   offer: PremiumOffer,
   netCents: number,
+  oneTime = offer === "lifetime",
 ): CatalogMismatch | null {
   const product = typeof price.product === "string" || price.product.deleted ? null : price.product;
   if (!price.active || !product?.active) return "inactive";
@@ -88,7 +106,7 @@ export function catalogMismatch(
   if (price.unit_amount !== netCents) return "amount";
   // Senza indicazione esplicita conterebbe l'impostazione dell'account, che può includerle.
   if (price.tax_behavior !== "exclusive") return "tax_behavior";
-  const interval = offer === "monthly" ? "month" : offer === "annual" ? "year" : null;
+  const interval = oneTime ? null : offer === "monthly" ? "month" : "year";
   if (
     interval
       ? price.recurring?.interval !== interval || price.recurring.interval_count !== 1

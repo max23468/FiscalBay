@@ -8,8 +8,9 @@ import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
 import type { AppCopy } from "../../app-copy";
 import {
-  annualMonthlyPrice,
+  annualPaidMonths,
   formatPrice,
+  paidPeriodEnd,
   priceGeneration,
   type PremiumOffer,
   type PurchaseState,
@@ -26,8 +27,8 @@ import { AutoSwitch, Group, SimpleSelect } from "./controls";
 
 /**
  * La prova dice quando finisce e cosa resta dopo, in evidenza negli ultimi giorni. L'acquisto
- * compare quando il server lo ammette: un abbonamento ordinario non conserverebbe i giorni
- * residui della prova.
+ * compare quando il server lo ammette: si paga subito e il periodo pagato parte alla fine
+ * della prova, che conserva i suoi giorni.
  */
 function TrialPlan({
   trial,
@@ -48,6 +49,8 @@ function TrialPlan({
   const ending = trialEnding(trial.endsAt, now);
   return (
     <>
+      {/* Dopo l'acquisto la prova resta finché Stripe non conferma il pagamento. */}
+      <CheckoutReturn checkout={purchase.checkout} t={t} />
       <Group title={t.settings.plan.currentPlan}>
         <div className="grid gap-1">
           <p className="text-lg font-semibold">{t.settings.plan.trialPlan}</p>
@@ -62,7 +65,13 @@ function TrialPlan({
           <p className="text-sm text-muted-foreground">{t.settings.plan.trialAfter}</p>
         </div>
       </Group>
-      <PurchaseOptions billing={billing} purchase={purchase} t={t} language={language} />
+      <PurchaseOptions
+        billing={billing}
+        purchase={purchase}
+        trialEndsAt={trial.endsAt}
+        t={t}
+        language={language}
+      />
     </>
   );
 }
@@ -262,27 +271,39 @@ export function PlanSection({
   );
 }
 
-/** Acquisto con i pagamenti attivi e senza una copertura in corso, prova compresa. */
+/** Acquisto con i pagamenti attivi e senza un diritto in corso diverso dalla prova. */
 function PurchaseOptions({
   billing,
   purchase,
+  trialEndsAt,
   t,
   language,
 }: {
   billing: boolean;
   purchase: PurchaseView;
+  /** Durante la prova il primo rinnovo cade dopo i giorni residui e il periodo pagato. */
+  trialEndsAt?: string;
   t: AppCopy;
   language: Language;
 }) {
+  const zone = useTimeZone();
   const action = useAction();
   if (!billing || purchase.state === "covered") return null;
   const copy = t.settings.plan;
   const net = (offer: PremiumOffer) => formatPrice(priceGeneration.net[offer], language);
+  // Durante la prova la nota dell'offerta aggiunge la data del primo rinnovo.
+  const withRenewal = (offer: "monthly" | "annual", note: string) =>
+    trialEndsAt
+      ? `${note} ${copy.firstRenewal(formatDate(paidPeriodEnd(trialEndsAt, offer), language, "date", zone))}`
+      : note;
   const prices = {
-    monthly: { price: copy.priceMonthly(net("monthly")), note: copy.priceMonthlyNote },
+    monthly: {
+      price: copy.priceMonthly(net("monthly")),
+      note: withRenewal("monthly", copy.priceMonthlyNote),
+    },
     annual: {
       price: copy.priceAnnual(net("annual")),
-      note: copy.priceAnnualNote(annualMonthlyPrice(language)),
+      note: withRenewal("annual", copy.priceAnnualNote(annualPaidMonths())),
     },
     lifetime: { price: copy.priceLifetime(net("lifetime")), note: copy.priceLifetimeNote },
   };
@@ -290,6 +311,7 @@ function PurchaseOptions({
   return (
     <Group title={copy.buyTitle}>
       <PremiumNote>{copy.buyBody}</PremiumNote>
+      {trialEndsAt ? <p className="text-sm text-muted-foreground">{copy.prepaidNote}</p> : null}
       <ul
         className={cn(
           "grid gap-3",

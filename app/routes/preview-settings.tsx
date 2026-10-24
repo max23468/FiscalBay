@@ -77,10 +77,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     services: { billing: true, telegram: true, accountData: true, support: true },
     preview: true,
     account: scenario.account,
-    // Come nell'area reale: l'acquisto aspetta la prima lettura riuscita di un negozio.
+    // Come nell'area reale: l'acquisto aspetta la prima lettura riuscita di un negozio e
+    // durante la prova resta possibile.
     purchase: {
       state:
-        scenario.account.plan === "premium"
+        scenario.account.plan === "premium" && !scenario.account.trial
           ? "covered"
           : scenario.onboarding.some((step) => step.label === "stepSync" && step.done)
             ? "available"
