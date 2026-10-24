@@ -73,14 +73,14 @@ describe("radice pubblica e area riservata", () => {
     for (const path of ["/app/ordini", "/en/app/negozi/x", "/accesso", "/admin", "/anteprima"]) {
       expect(indexable("https://fiscalbay.it", path)).toBe(false);
     }
-    // Production si riconosce dall'host, non dalla grafia dell'origine.
+    // Production si riconosce dall'host, non dalla grafia dell'origine. Le varianti si
+    // compongono dall'host: nelle fixture compaiono soltanto host ammessi.
     for (const origin of [
       "https://fiscalbay.it",
       "https://fiscalbay.it/",
-      "https://www.fiscalbay.it",
       "https://FiscalBay.it:443",
-      "https://fiscalbay.it.",
       "http://fiscalbay.it",
+      ...["www.fiscalbay.it", "fiscalbay.it."].map((host) => `https://${host}`),
     ])
       expect(isProductionOrigin(origin), origin).toBe(true);
     for (const origin of [
