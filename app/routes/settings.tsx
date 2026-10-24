@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { data, isRouteErrorResponse } from "react-router";
 
-import { AccountShell } from "~/components/account";
+import { AccountShell } from "~/components/account-shell";
 import { NotFoundState } from "~/components/not-found";
 import { SettingsPage, type SettingsPageData } from "~/components/settings";
 import { accessNotice } from "../access-notice";

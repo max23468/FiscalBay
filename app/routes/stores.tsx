@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
 import { data, isRouteErrorResponse, redirect } from "react-router";
 
-import { AccessNotice, AccountShell } from "~/components/account";
+import { AccessNotice } from "~/components/account";
+import { AccountShell } from "~/components/account-shell";
 import { NotFoundState } from "~/components/not-found";
 import { StoresPage } from "~/components/stores";
 import { accessNotice } from "../access-notice";

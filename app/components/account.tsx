@@ -1,20 +1,9 @@
-import {
-  ClipboardList,
-  CreditCard,
-  Globe,
-  KeyRound,
-  Languages,
-  Settings,
-  ShieldCheck,
-  Store,
-  User,
-} from "lucide-react";
+import { KeyRound } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { useFetcher, useLocation, useNavigation, useSubmit } from "react-router";
+import { useFetcher, useLocation } from "react-router";
 
-import { AppShell, useFetcherResult } from "~/components/app-shell";
-import { OrdersLoading } from "~/components/orders/loading";
+import { useFetcherResult } from "~/components/app-shell";
 import { useFieldErrors } from "~/components/form-validation";
 import { StatusAlert } from "~/components/status";
 import {
@@ -41,19 +30,8 @@ import { passkeyFailure, type PasskeyFailure } from "../account/passkey-error";
 import type { AccessNoticeView } from "../access-notice";
 import { appCopy, supportEmail } from "../app-copy";
 import { deviceName } from "../account/device-name";
-import {
-  accessPath,
-  appBase,
-  appHref,
-  languagePath,
-  notificationsPath,
-  orderSearchPath,
-  securityPath,
-  visitParam,
-} from "../app-links";
-import { languageNames, localizedPath, type Language } from "../i18n";
-import type { ShellData } from "../preferences";
-import { useDeviceTimeZone } from "./device-time-zone";
+import { accessPath, securityPath } from "../app-links";
+import { localizedPath, type Language } from "../i18n";
 import { formatDate, formatRelative } from "../view-models";
 import { useTimeZone } from "~/components/time-zone";
 
@@ -1005,121 +983,5 @@ export function AccessNotice({
   ) : null;
 }
 
-/**
- * Shell dell'area reale: le stesse barra e menu dell'anteprima, con le sole destinazioni che
- * esistono. Prima della conferma dell'email le Impostazioni non sono raggiungibili e la lingua
- * resta nel menu.
- */
-export function AccountShell({
-  language,
-  account,
-  security,
-  shell,
-  searchQuery = null,
-  children,
-}: {
-  language: Language;
-  account: { name: string; email: string };
-  /** Dopo la conferma dell'email: navigazione, ricerca ordini, campanella e Impostazioni. */
-  security: boolean;
-  shell?: ShellData;
-  /** Ricerca attiva della pagina Ordini; null nelle altre pagine. */
-  searchQuery?: string | null;
-  children: React.ReactNode;
-}) {
-  const t = appCopy[language];
-  const submit = useSubmit();
-  const { pathname, search } = useLocation();
-  useDeviceTimeZone();
-  // La ricerca resta nell'ambiente eBay mostrato, che sul test può essere la Sandbox.
-  const sandbox = new URLSearchParams(search).get("environment") === "sandbox";
-  const other: Language = language === "it" ? "en" : "it";
-  const links = { language, base: appBase };
-  // Verso gli Ordini da un'altra sezione la pagina precedente lascia subito il posto allo
-  // scheletro dell'elenco; dentro gli Ordini i dati mostrati restano durante la lettura.
-  const navigation = useNavigation();
-  const ordersList = appHref(links, "ordini");
-  const loadingOrders =
-    navigation.state === "loading" &&
-    navigation.location.pathname === ordersList &&
-    !pathname.startsWith(ordersList);
-  return (
-    <AppShell
-      links={links}
-      t={t}
-      account={account}
-      notifications={security ? (shell?.notifications ?? undefined) : undefined}
-      notificationsAction={notificationsPath}
-      now={shell?.now}
-      navigation={
-        security
-          ? [
-              { href: appHref(links, "ordini"), label: t.shell.orders, Icon: ClipboardList },
-              { href: appHref(links, "negozi"), label: t.shell.stores, Icon: Store },
-              { href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings },
-            ]
-          : []
-      }
-      home={appHref(links, "ordini")}
-      search={
-        security
-          ? {
-              action: `${orderSearchPath}${sandbox ? "?environment=sandbox" : ""}`,
-              query: searchQuery,
-            }
-          : undefined
-      }
-      menu={[
-        ...(security
-          ? [
-              [
-                { href: appHref(links, "profilo"), label: t.shell.profile, Icon: User },
-                {
-                  href: localizedPath(language, securityPath),
-                  label: t.shell.security,
-                  Icon: ShieldCheck,
-                },
-                {
-                  href: appHref(links, "impostazioni/piano"),
-                  label: t.shell.planBilling,
-                  Icon: CreditCard,
-                },
-                { href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings },
-              ],
-            ]
-          : []),
-        [
-          ...(security
-            ? []
-            : [
-                {
-                  href: languagePath,
-                  label: languageNames[other],
-                  Icon: Languages,
-                  lang: other,
-                  onSelect: () =>
-                    void submit(
-                      { language: other, returnTo: `${pathname}${search}` },
-                      { method: "post", action: languagePath },
-                    ),
-                },
-              ]),
-          {
-            href: `${localizedPath(language)}?${visitParam}=1`,
-            label: t.shell.visitSite,
-            Icon: Globe,
-            reloadDocument: true,
-          },
-        ],
-      ]}
-      onSignOut={() =>
-        void submit(
-          { intent: "esci" },
-          { method: "post", action: localizedPath(language, accessPath) },
-        )
-      }
-    >
-      {loadingOrders ? <OrdersLoading t={t} /> : children}
-    </AppShell>
-  );
-}
+// Gli Ordini importano ancora la shell da qui: l'esportazione si toglie con il loro import.
+export { AccountShell } from "~/components/account-shell";

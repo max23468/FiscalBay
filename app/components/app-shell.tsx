@@ -167,6 +167,25 @@ export interface NavDestination {
   end?: boolean;
 }
 
+/** Destinazioni principali dell'app, nell'anteprima e nell'area reale. */
+export function shellDestinations(links: AppLinks, t: AppCopy): NavDestination[] {
+  return [
+    { href: appHref(links, "ordini"), label: t.shell.orders, Icon: ClipboardList },
+    { href: appHref(links, "negozi"), label: t.shell.stores, Icon: Store },
+    { href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings },
+  ];
+}
+
+/** Voci dell'account nel menu dell'avatar: profilo e categorie più cercate delle Impostazioni. */
+export function accountMenu(links: AppLinks, t: AppCopy): AccountMenuItem[] {
+  return [
+    { href: appHref(links, "profilo"), label: t.shell.profile, Icon: User },
+    { href: appHref(links, "impostazioni/sicurezza"), label: t.shell.security, Icon: ShieldCheck },
+    { href: appHref(links, "impostazioni/piano"), label: t.shell.planBilling, Icon: CreditCard },
+    { href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings },
+  ];
+}
+
 /**
  * Shell dell'app. Navigazione, ricerca e campanella compaiono quando le loro
  * destinazioni esistono: l'area reale le riceve insieme alle funzioni relative.
@@ -215,11 +234,7 @@ export function AppShell({
     [],
   );
 
-  const destinations: NavDestination[] = navigation ?? [
-    { href: appHref(links, "ordini"), label: t.shell.orders, Icon: ClipboardList },
-    { href: appHref(links, "negozi"), label: t.shell.stores, Icon: Store },
-    { href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings },
-  ];
+  const destinations = navigation ?? shellDestinations(links, t);
   const navigable = destinations.length > 0;
 
   return (
@@ -296,24 +311,7 @@ export function AppShell({
               account={account}
               menu={
                 menu ?? [
-                  [
-                    { href: appHref(links, "profilo"), label: t.shell.profile, Icon: User },
-                    {
-                      href: appHref(links, "impostazioni/sicurezza"),
-                      label: t.shell.security,
-                      Icon: ShieldCheck,
-                    },
-                    {
-                      href: appHref(links, "impostazioni/piano"),
-                      label: t.shell.planBilling,
-                      Icon: CreditCard,
-                    },
-                    {
-                      href: appHref(links, "impostazioni"),
-                      label: t.shell.settings,
-                      Icon: Settings,
-                    },
-                  ],
+                  accountMenu(links, t),
                   [
                     {
                       href: localizedPath(links.language, "/"),
