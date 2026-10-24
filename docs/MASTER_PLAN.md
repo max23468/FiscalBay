@@ -1055,7 +1055,7 @@ Dipendenze rigide sui gate, attività indipendenti avviabili prima dell'integraz
 
 Gli stati descrivono capacità significative: `Da completare`, `In corso`, `Bloccata`, `Completata`. La chiusura richiede comportamento, prove pertinenti e checkpoint previsto; implementazione, distribuzione sul test e collaudo reale restano distinti. Non ripetere conteggi di test, durate, branch o cronaca delle sessioni. Le prove di una chiusura si collegano alla PR, CI o ricevuta competente; questa sintesi non sostituisce il readback dei provider alla ripresa.
 
-Ogni milestone elenca in coda i propri task (D164) con codice `Mx-yy`, stato (`Da completare`, `In corso`, `Bloccato`, `Completato`), prerequisiti d'avvio, eventuali dipendenze **Per chiudere**, contratto e criterio di completamento. I prerequisiti indicano ciò che serve per iniziare; **Per chiudere** aggiunge integrazioni che non impediscono di lavorare prima. La PR che avvia, blocca o chiude un task ne aggiorna lo stato nello stesso diff; un task completato conserva descrizione, criterio e limiti residui, non la cronaca delle prove. I codici dei task restano nella documentazione di piano, mai nel codice o nel runtime. Prima di chiudere una milestone confrontare funzionalità, piano, task applicabili e DoD: un conflitto con un provider va portato al gate, non risolto eliminando in silenzio una funzione.
+Ogni milestone elenca in coda i propri task (D164) con codice `Mx-yy`, stato (`Da completare`, `In corso`, `Bloccato`, `Completato`), prerequisiti d'avvio, eventuali dipendenze **Per chiudere**, contratto e criterio di completamento. I prerequisiti indicano ciò che serve per iniziare; **Per chiudere** aggiunge integrazioni che non impediscono di lavorare prima. Una milestone si chiude nel suo insieme senza attendere milestone successive (D187): prerequisiti e **Per chiudere** rimandano soltanto a task della stessa milestone o di quelle precedenti. Ciò che richiede una capacità successiva diventa un requisito del task che la crea, che integra i componenti esistenti; il task corrente lo dichiara fra i limiti residui. La PR che avvia, blocca o chiude un task ne aggiorna lo stato nello stesso diff; un task completato conserva descrizione, criterio e limiti residui, non la cronaca delle prove. I codici dei task restano nella documentazione di piano, mai nel codice o nel runtime. Prima di chiudere una milestone confrontare funzionalità, piano, task applicabili e DoD: un conflitto con un provider va portato al gate, non risolto eliminando in silenzio una funzione.
 
 | Milestone | Stato | Capacità e limite |
 |---|---|---|
@@ -2014,7 +2014,7 @@ Estendere a un anno la finestra di acquisizione, consultazione e conservazione p
 
 Gestire estensioni oltre l'anno soltanto su richiesta valutata, dopo verifica del periodo recuperabile, consenso e approvazione dell'eventuale costo una tantum secondo §11; nessun diritto illimitato implicito. Il ritorno al Free e i 30 giorni transitori si integrano in [M5-06](#m5-06).
 
-**Criterio di completamento:** Confini di 30 giorni/un anno coerenti fra import, elenco, dettaglio, ricerca e pulizia; provare attivazione e scadenza dei diversi diritti, backfill interrotto e ripreso, estensione concessa e replay dopo cancellazione. Con pulizia sospesa nessun accesso oltre la finestra effettiva. **Per chiudere:** M4-02 per la ricerca e M5-06 per il downgrade; M6-03 verifica le stesse finestre negli export.
+**Criterio di completamento:** Confini di 30 giorni/un anno coerenti fra import, elenco, dettaglio, ricerca e pulizia; provare attivazione e scadenza dei diversi diritti, backfill interrotto e ripreso, estensione concessa e replay dopo cancellazione. Con pulizia sospesa nessun accesso oltre la finestra effettiva. **Per chiudere:** M4-02 per la ricerca e M5-06 per il downgrade. Le stesse finestre negli export si verificano in [M6-03](#m6-03).
 
 <a id="m6"></a>
 ### M6 · Export, admin e supporto
@@ -2052,7 +2052,7 @@ Campi CF/P.IVA/SKU tipizzati testo nel file XLSX; verificare i totali anche in o
 <a id="m6-03"></a>
 #### M6-03 · Job export e portabilità
 
-Provare generazione e download con pulizia fisica sospesa: file scaduti e accessi revocati rimangono negati anche se i byte esistono ancora. Includere scadenza o revoca durante la generazione e il download secondo §30.
+Provare generazione e download con pulizia fisica sospesa: file scaduti e accessi revocati rimangono negati anche se i byte esistono ancora. Gli export rispettano gli stessi confini di 30 giorni e un anno di elenco e ricerca ([M5-13](#m5-13)). Includere scadenza o revoca durante la generazione e il download secondo §30.
 
 **Stato:** Da completare · **Prerequisiti:** M6-01, M6-02, M6-10 · **Contratto:** [§12](#s12) · [§30](#s30)
 
@@ -2093,7 +2093,7 @@ Qualificare info/supporto iCloud e noreply transazionale, template Auth/servizio
 
 Integrare anche la proposta separata del consenso marketing dopo l'onboarding prevista dal [§14](#s14), facoltativa, non preselezionata e senza bloccare il servizio. Provare proposta, mancata adesione, prova della scelta e revoca dalle impostazioni nelle due lingue; il consenso non abilita campagne o nuovi fornitori senza il mandato previsto.
 
-Integrare il riepilogo diagnostico visibile e allowlistato del §14. Provare isolamento fra spazi, assenza di CF/token/payload e invio del form anche con diagnostica indisponibile; includere il riepilogo nella gestione della retention del supporto. Il form usa Rate Limiting di [M7-09](#m7-09) e Turnstile di [M7-10](#m7-10).
+Integrare il riepilogo diagnostico visibile e allowlistato del §14. Provare isolamento fra spazi, assenza di CF/token/payload e invio del form anche con diagnostica indisponibile; includere il riepilogo nella gestione della retention del supporto. Rate Limiting di [M7-09](#m7-09) e Turnstile di [M7-10](#m7-10) si aggiungono poi al form esistente: M6-06 si chiude senza attenderli.
 
 Il trasporto è Cloudflare Email Service con Workers Paid (D169): qualificare il recapito verso caselle esterne comuni, rimbalzi, reclami e lista di soppressione, consumo della quota mensile e comportamento del modulo email quando l'invio fallisce. Verificare le soppressioni con scope `sending_domain` sul dominio mittente FiscalBay, incluse quelle automatiche per rimbalzo/reclamo, senza coinvolgere gli altri progetti: il dominio e i suoi sottodomini sono scope distinti; una soppressione manuale senza scope resta `account` e coinvolge tutti i mittenti. Usare gli strumenti nativi, senza un nuovo pannello nell'app. La registrazione pubblica si apre solo dopo questa qualifica.
 
