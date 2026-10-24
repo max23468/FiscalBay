@@ -869,6 +869,8 @@ test.describe("miglioramenti account e negozi", () => {
     await page.keyboard.press("Escape");
     await page.reload();
     await expect(page.getByRole("button", { name: "Notifiche", exact: true })).toBeVisible();
+    // Dopo la ricarica il cambio lingua richiede l'idratazione: un clic precedente andrebbe perso.
+    await page.waitForLoadState("networkidle");
 
     // La lingua scelta resta anche aprendo l'area in italiano.
     const appearance = page.locator('section[aria-labelledby="settings-aspetto"]');
