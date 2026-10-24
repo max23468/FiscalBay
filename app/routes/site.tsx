@@ -5,8 +5,8 @@ import { redirect } from "react-router";
 
 import { LanguageSwitch } from "~/components/language-switch";
 import { Logo } from "~/components/standalone-page";
-import { buttonVariants } from "~/components/ui/button-variants";
-import { appCopy } from "../app-copy";
+import { buttonLink } from "~/components/ui/button-variants";
+import { appCopy, pageTitle, supportEmail } from "../app-copy";
 import { accessPath, ordersPath, visitCookie, visitParam } from "../app-links";
 import { createAuth } from "../auth.server";
 import { tracePhase } from "../errors";
@@ -57,7 +57,7 @@ export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   const { language, origin } = loaderData;
   const t = appCopy[language].site;
   return [
-    { title: `FiscalBay | ${t.title}` },
+    { title: pageTitle(t.title) },
     { name: "description", content: t.description },
     { tagName: "link", rel: "canonical", href: `${origin}${localizedPath(language)}` },
     ...languages.map((code) => ({
@@ -115,7 +115,7 @@ export default function Site({ loaderData }: Route.ComponentProps) {
               {signedIn ? (
                 <a
                   href={`${localizedPath(language)}?${visitParam}=0`}
-                  className={cn(buttonVariants({ size: "lg" }), onBrand)}
+                  {...buttonLink({ size: "lg", className: onBrand })}
                 >
                   {t.openApp}
                 </a>
@@ -123,16 +123,18 @@ export default function Site({ loaderData }: Route.ComponentProps) {
                 <>
                   <a
                     href={`${access}?registrati`}
-                    className={cn(buttonVariants({ size: "lg" }), onBrand)}
+                    {...buttonLink({ size: "lg", className: onBrand })}
                   >
                     {t.start}
                   </a>
                   <a
                     href={access}
-                    className={cn(
-                      buttonVariants({ variant: "outline", size: "lg" }),
-                      "border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white dark:bg-transparent dark:hover:bg-white/10",
-                    )}
+                    {...buttonLink({
+                      variant: "outline",
+                      size: "lg",
+                      className:
+                        "border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white dark:bg-transparent dark:hover:bg-white/10",
+                    })}
                   >
                     {t.signIn}
                   </a>
@@ -174,7 +176,7 @@ export default function Site({ loaderData }: Route.ComponentProps) {
             <a href={localizedPath(language, "/privacy")} className="underline underline-offset-4">
               {appCopy[language].legal.privacy}
             </a>
-            <a href="mailto:supporto@fiscalbay.it" className="underline underline-offset-4">
+            <a href={`mailto:${supportEmail}`} className="underline underline-offset-4">
               {t.support}
             </a>
           </nav>

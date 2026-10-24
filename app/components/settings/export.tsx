@@ -1,0 +1,151 @@
+import { useState } from "react";
+import { Link } from "react-router";
+
+import { useAction } from "~/components/app-shell";
+import { PremiumNote, StatusBadge } from "~/components/status";
+import { Button } from "~/components/ui/button";
+import { FieldGroup, FieldLegend, FieldSet } from "~/components/ui/field";
+import { RadioGroup } from "~/components/ui/radio-group";
+import type { AppCopy } from "../../app-copy";
+import { CheckboxOption, Group, RadioOption, SimpleSelect } from "./controls";
+
+/** Selezione, singolo ordine o elenco filtrato degli Ordini, da esportare così com'è. */
+export interface ExportContext {
+  kind: "orders" | "filtered";
+  /** Numero eBay quando l'ambito è un solo ordine. */
+  order: string | null;
+  /** L'elenco ha filtri o una ricerca attivi. */
+  filtered: boolean;
+  /** Torna all'elenco degli Ordini con lo stesso contesto. */
+  returnHref: string;
+  /** Ambito trasmesso alla creazione del file, nella forma dell'indirizzo. */
+  query: string;
+}
+
+/** Ambito ricevuto dagli Ordini, sempre esplicito, con il ritorno all'elenco di partenza. */
+function ExportContextNote({ context, t }: { context: ExportContext; t: AppCopy }) {
+  return (
+    <div className="grid justify-items-start gap-2 rounded-lg border bg-muted/30 p-3 text-sm">
+      <p>
+        {context.order
+          ? t.settings.exportContextOrder(context.order)
+          : context.kind === "orders"
+            ? t.settings.exportContextSelection
+            : context.filtered
+              ? t.settings.exportContextFiltered
+              : t.settings.exportContextAll}
+      </p>
+      <Link to={context.returnHref} className="underline underline-offset-4">
+        {t.settings.exportContextBack}
+      </Link>
+    </div>
+  );
+}
+
+export function ExportSection({
+  premium,
+  context,
+  estimate,
+  t,
+}: {
+  premium: boolean;
+  context: ExportContext | null;
+  /** Ordini dell'esportazione e quanti fra loro hanno un dato ancora da sbloccare. */
+  estimate: { orders: number; locked: number };
+  t: AppCopy;
+}) {
+  const action = useAction();
+  const [period, setPeriod] = useState("30");
+  const [format, setFormat] = useState("csv");
+  const [rows, setRows] = useState("order");
+  const columns = Object.entries(t.settings.columns);
+  const { orders, locked } = estimate;
+  return (
+    <>
+      <Group title={t.settings.exportScope}>
+        {context ? <ExportContextNote context={context} t={t} /> : null}
+        <FieldGroup>
+          {/* Con l'ambito degli Ordini il periodo è già nei loro filtri. */}
+          {context ? null : (
+            <SimpleSelect
+              label={t.settings.exportPeriod}
+              items={[
+                { value: "7", label: t.orders.last7 },
+                { value: "30", label: t.orders.last30 },
+                { value: "90", label: t.orders.last90, premium: !premium },
+              ]}
+              value={period}
+              premiumLabel={t.orders.premiumOption}
+              onChange={setPeriod}
+            />
+          )}
+          <FieldSet>
+            <FieldLegend variant="label">{t.settings.exportFormat}</FieldLegend>
+            <RadioGroup
+              value={format}
+              onValueChange={(next) => setFormat(String(next))}
+              className="gap-3"
+            >
+              <RadioOption value="csv">CSV</RadioOption>
+              <RadioOption value="xlsx" disabled={!premium}>
+                XLSX
+                {premium ? null : (
+                  <StatusBadge tone="premium">{t.settings.premiumBadge}</StatusBadge>
+                )}
+              </RadioOption>
+            </RadioGroup>
+          </FieldSet>
+          <FieldSet>
+            <FieldLegend variant="label">{t.settings.exportRows}</FieldLegend>
+            <RadioGroup
+              value={rows}
+              onValueChange={(next) => setRows(String(next))}
+              className="gap-3"
+            >
+              <RadioOption value="order">{t.settings.exportRowOrder}</RadioOption>
+              <RadioOption value="item">{t.settings.exportRowItem}</RadioOption>
+            </RadioGroup>
+          </FieldSet>
+          <FieldSet>
+            <FieldLegend variant="label">{t.settings.exportColumns}</FieldLegend>
+            {premium ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {columns.map(([key, label]) => (
+                  <CheckboxOption key={key} defaultChecked>
+                    {label}
+                  </CheckboxOption>
+                ))}
+              </div>
+            ) : (
+              <PremiumNote>{t.settings.exportColumnsPremium}</PremiumNote>
+            )}
+          </FieldSet>
+        </FieldGroup>
+        <p className="text-sm text-muted-foreground" role="status">
+          {context
+            ? t.settings.exportCount(orders, locked)
+            : t.settings.exportPreview(orders, locked)}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {/* Il file nasce soltanto da qui: nessuno sblocco e nessun download prima. */}
+          <Button
+            disabled={context !== null && orders === 0}
+            onClick={() =>
+              action.run(
+                "export-create",
+                context ? { scope: context.query, format, rows } : { period, format, rows },
+              )
+            }
+          >
+            {t.settings.exportCreate}
+          </Button>
+          {premium ? (
+            <Button variant="outline" onClick={() => action.run("export-save")}>
+              {t.settings.exportSaveConfig}
+            </Button>
+          ) : null}
+        </div>
+      </Group>
+    </>
+  );
+}

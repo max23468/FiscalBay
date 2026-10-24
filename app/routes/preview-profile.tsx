@@ -1,8 +1,8 @@
 import { isRouteErrorResponse, useOutletContext } from "react-router";
 
 import { UnavailableState } from "~/components/not-found";
-import { ProfilePage } from "~/components/settings";
-import { appCopy } from "../app-copy";
+import { ProfilePage } from "~/components/settings/profile";
+import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath } from "../i18n";
 import { pageScenario, simulateAction } from "../preview/state.server";
 import type { PreviewContext } from "./preview";
@@ -10,10 +10,7 @@ import type { Route } from "./+types/preview-profile";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
-  return [
-    { title: `FiscalBay | ${t.profile.title}` },
-    { name: "robots", content: "noindex, nofollow" },
-  ];
+  return [{ title: pageTitle(t.profile.title) }, { name: "robots", content: "noindex, nofollow" }];
 }
 
 export async function loader({ request }: Route.LoaderArgs) {

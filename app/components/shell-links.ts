@@ -1,0 +1,45 @@
+import { ClipboardList, CreditCard, Settings, ShieldCheck, Store, User } from "lucide-react";
+
+import type { AppCopy } from "../app-copy";
+import { appHref, type AppLinks } from "../app-links";
+import type { Language } from "../i18n";
+
+/**
+ * Voce del menu dell'avatar; `reloadDocument` per le pagine fuori dalle route dell'app,
+ * `onSelect` per una voce che invia una scelta invece di aprire una pagina.
+ */
+export interface AccountMenuItem {
+  href: string;
+  label: string;
+  Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  lang?: Language;
+  reloadDocument?: boolean;
+  onSelect?: () => void;
+}
+
+/** Destinazione della navigazione principale; `end` per la radice dell'area. */
+export interface NavDestination {
+  href: string;
+  label: string;
+  Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  end?: boolean;
+}
+
+/** Destinazioni principali dell'app, nell'anteprima e nell'area reale. */
+export function shellDestinations(links: AppLinks, t: AppCopy): NavDestination[] {
+  return [
+    { href: appHref(links, "ordini"), label: t.shell.orders, Icon: ClipboardList },
+    { href: appHref(links, "negozi"), label: t.shell.stores, Icon: Store },
+    { href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings },
+  ];
+}
+
+/** Voci dell'account nel menu dell'avatar: profilo e categorie più cercate delle Impostazioni. */
+export function accountMenu(links: AppLinks, t: AppCopy): AccountMenuItem[] {
+  return [
+    { href: appHref(links, "profilo"), label: t.shell.profile, Icon: User },
+    { href: appHref(links, "impostazioni/sicurezza"), label: t.shell.security, Icon: ShieldCheck },
+    { href: appHref(links, "impostazioni/piano"), label: t.shell.planBilling, Icon: CreditCard },
+    { href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings },
+  ];
+}

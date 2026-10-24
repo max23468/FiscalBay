@@ -1,20 +1,9 @@
-import {
-  ClipboardList,
-  CreditCard,
-  Globe,
-  KeyRound,
-  Languages,
-  Settings,
-  ShieldCheck,
-  Store,
-  User,
-} from "lucide-react";
+import { KeyRound } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { useFetcher, useLocation, useNavigation, useSubmit } from "react-router";
+import { useFetcher, useLocation } from "react-router";
 
-import { AppShell } from "~/components/app-shell";
-import { OrdersLoading } from "~/components/orders/loading";
+import { useFetcherResult } from "~/components/app-shell";
 import { useFieldErrors } from "~/components/form-validation";
 import { StatusAlert } from "~/components/status";
 import {
@@ -36,23 +25,13 @@ import type { ActiveSession } from "../domain/sessions.server";
 import type { ConfirmResult } from "../security-actions.server";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
 import type { PendingEmailChange } from "../domain/email-change.server";
+import { loadPasskeyClient } from "../account/passkey";
 import { passkeyFailure, type PasskeyFailure } from "../account/passkey-error";
 import type { AccessNoticeView } from "../access-notice";
-import { appCopy } from "../app-copy";
+import { appCopy, supportEmail } from "../app-copy";
 import { deviceName } from "../account/device-name";
-import {
-  accessPath,
-  appBase,
-  appHref,
-  languagePath,
-  notificationsPath,
-  orderSearchPath,
-  securityPath,
-  visitParam,
-} from "../app-links";
-import { languageNames, localizedPath, type Language } from "../i18n";
-import type { ShellData } from "../preferences";
-import { useDeviceTimeZone } from "./device-time-zone";
+import { accessPath, securityPath } from "../app-links";
+import { localizedPath, type Language } from "../i18n";
 import { formatDate, formatRelative } from "../view-models";
 import { useTimeZone } from "~/components/time-zone";
 
@@ -155,7 +134,7 @@ function MethodAction({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{t.orders.cancel}</AlertDialogCancel>
+          <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
           {form}
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -183,7 +162,7 @@ function SecurityGroup({
   );
 }
 
-/** Email attuale; il nuovo indirizzo si inserisce solo quando serve. */
+/** Nome della passkey modificato sul posto; annullando, il focus torna a «Rinomina». */
 function PasskeyRename({
   passkey,
   language,
@@ -195,7 +174,7 @@ function PasskeyRename({
 }) {
   const [open, setOpen] = useState(false);
   const id = useId();
-  const { settings, orders } = appCopy[language];
+  const { settings, common } = appCopy[language];
   const trigger = useRef<HTMLButtonElement>(null);
   const ready = useHydrated();
   return open ? (
@@ -212,7 +191,7 @@ function PasskeyRename({
       />
       <div className="flex gap-2">
         <Button type="submit" size="sm" name="intent" value="passkey-rename">
-          {settings.save}
+          {common.save}
         </Button>
         <Button
           type="button"
@@ -223,7 +202,7 @@ function PasskeyRename({
             trigger.current?.focus();
           }}
         >
-          {orders.cancel}
+          {common.cancel}
         </Button>
       </div>
     </form>
@@ -241,6 +220,7 @@ function PasskeyRename({
   );
 }
 
+/** Email attuale; il nuovo indirizzo si inserisce solo quando serve. */
 function EmailChange({
   language,
   email,
@@ -252,7 +232,7 @@ function EmailChange({
   actionPath: string;
   pendingEmail?: PendingEmailChange | null;
 }) {
-  const { access: t, profile, orders } = appCopy[language];
+  const { access: t, profile, common } = appCopy[language];
   const [open, setOpen] = useState(false);
   const opener = useRef<HTMLButtonElement>(null);
   const v = useFieldErrors(t.validation);
@@ -327,7 +307,7 @@ function EmailChange({
                 opener.current?.focus();
               }}
             >
-              {orders.cancel}
+              {common.cancel}
             </Button>
           </div>
         </form>
@@ -425,11 +405,11 @@ function AddPasskey({
     setPending(true);
     setError(null);
     try {
-      if (!window.PublicKeyCredential) {
+      const authClient = await loadPasskeyClient();
+      if (!authClient) {
         setError("unsupported");
         return;
       }
-      const { authClient } = await import("../account/passkey-client");
       const result = await authClient.passkey.addPasskey({
         name: name.trim() || deviceName(navigator.userAgent, language),
       });
@@ -506,12 +486,7 @@ function AddPasskey({
           aria-busy={pending || undefined}
         >
           {pending ? (
-            <Spinner
-              label={settings.addPasskey}
-              aria-hidden="true"
-              role={undefined}
-              data-icon="inline-start"
-            />
+            <Spinner data-icon="inline-start" />
           ) : (
             <KeyRound aria-hidden="true" data-icon="inline-start" />
           )}
@@ -528,7 +503,7 @@ function AddPasskey({
             opener.current?.focus();
           }}
         >
-          {appCopy[language].orders.cancel}
+          {appCopy[language].common.cancel}
         </Button>
       </div>
       {failure}
@@ -574,16 +549,13 @@ function ConfirmIdentity({
   const fetcher = useFetcher<ConfirmResult>();
   const [passkeyError, setPasskeyError] = useState<PasskeyFailure | null>(null);
   const [pending, setPending] = useState(false);
-  const handled = useRef<ConfirmResult | undefined>(undefined);
   const id = useId();
   const result = fetcher.state === "idle" ? fetcher.data : undefined;
-  useEffect(() => {
-    if (!result || handled.current === result) return;
-    handled.current = result;
-    if (result.ok) onConfirmed();
+  useFetcherResult(fetcher, (confirmed) => {
+    if (confirmed.ok) onConfirmed();
     // Una passkey di un altro account ha aperto la sua sessione: la pagina si rilegge.
     else if (fetcher.formData === undefined && pending) window.location.reload();
-  }, [result, onConfirmed, fetcher.formData, pending]);
+  });
   const password = methods.accounts.password && !passkeyOnly;
   const passkey = methods.passkeys.length > 0;
   const confirmWithPasskey = async () => {
@@ -591,8 +563,8 @@ function ConfirmIdentity({
     setPasskeyError(null);
     setPending(true);
     try {
-      if (!window.PublicKeyCredential) return setPasskeyError("unsupported");
-      const { authClient } = await import("../account/passkey-client");
+      const authClient = await loadPasskeyClient();
+      if (!authClient) return setPasskeyError("unsupported");
       const signed = await authClient.signIn.passkey();
       if (signed.error) return setPasskeyError(passkeyFailure(signed.error));
       void fetcher.submit(
@@ -696,7 +668,7 @@ function ConfirmIdentity({
           </div>
         )}
         <AlertDialogFooter>
-          <AlertDialogCancel>{appCopy[language].orders.cancel}</AlertDialogCancel>
+          <AlertDialogCancel>{appCopy[language].common.cancel}</AlertDialogCancel>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -1001,8 +973,8 @@ export function AccessNotice({
         {elsewhere ? (
           <span className="grid gap-2">
             <span>{appCopy[language].stores.elsewhereBody}</span>
-            <a href="mailto:supporto@fiscalbay.it" className="underline underline-offset-4">
-              {appCopy[language].authError.support}: supporto@fiscalbay.it
+            <a href={`mailto:${supportEmail}`} className="underline underline-offset-4">
+              {appCopy[language].common.contactSupport}: {supportEmail}
             </a>
           </span>
         ) : null}
@@ -1011,121 +983,5 @@ export function AccessNotice({
   ) : null;
 }
 
-/**
- * Shell dell'area reale: le stesse barra e menu dell'anteprima, con le sole destinazioni che
- * esistono. Prima della conferma dell'email le Impostazioni non sono raggiungibili e la lingua
- * resta nel menu.
- */
-export function AccountShell({
-  language,
-  account,
-  security,
-  shell,
-  searchQuery = null,
-  children,
-}: {
-  language: Language;
-  account: { name: string; email: string };
-  /** Dopo la conferma dell'email: navigazione, ricerca ordini, campanella e Impostazioni. */
-  security: boolean;
-  shell?: ShellData;
-  /** Ricerca attiva della pagina Ordini; null nelle altre pagine. */
-  searchQuery?: string | null;
-  children: React.ReactNode;
-}) {
-  const t = appCopy[language];
-  const submit = useSubmit();
-  const { pathname, search } = useLocation();
-  useDeviceTimeZone();
-  // La ricerca resta nell'ambiente eBay mostrato, che sul test può essere la Sandbox.
-  const sandbox = new URLSearchParams(search).get("environment") === "sandbox";
-  const other: Language = language === "it" ? "en" : "it";
-  const links = { language, base: appBase };
-  // Verso gli Ordini da un'altra sezione la pagina precedente lascia subito il posto allo
-  // scheletro dell'elenco; dentro gli Ordini i dati mostrati restano durante la lettura.
-  const navigation = useNavigation();
-  const ordersList = appHref(links, "ordini");
-  const loadingOrders =
-    navigation.state === "loading" &&
-    navigation.location.pathname === ordersList &&
-    !pathname.startsWith(ordersList);
-  return (
-    <AppShell
-      links={links}
-      t={t}
-      account={account}
-      notifications={security ? (shell?.notifications ?? undefined) : undefined}
-      notificationsAction={notificationsPath}
-      now={shell?.now}
-      navigation={
-        security
-          ? [
-              { href: appHref(links, "ordini"), label: t.shell.orders, Icon: ClipboardList },
-              { href: appHref(links, "negozi"), label: t.shell.stores, Icon: Store },
-              { href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings },
-            ]
-          : []
-      }
-      home={appHref(links, "ordini")}
-      search={
-        security
-          ? {
-              action: `${orderSearchPath}${sandbox ? "?environment=sandbox" : ""}`,
-              query: searchQuery,
-            }
-          : undefined
-      }
-      menu={[
-        ...(security
-          ? [
-              [
-                { href: appHref(links, "profilo"), label: t.shell.profile, Icon: User },
-                {
-                  href: localizedPath(language, securityPath),
-                  label: t.shell.security,
-                  Icon: ShieldCheck,
-                },
-                {
-                  href: appHref(links, "impostazioni/piano"),
-                  label: t.shell.planBilling,
-                  Icon: CreditCard,
-                },
-                { href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings },
-              ],
-            ]
-          : []),
-        [
-          ...(security
-            ? []
-            : [
-                {
-                  href: languagePath,
-                  label: languageNames[other],
-                  Icon: Languages,
-                  lang: other,
-                  onSelect: () =>
-                    void submit(
-                      { language: other, returnTo: `${pathname}${search}` },
-                      { method: "post", action: languagePath },
-                    ),
-                },
-              ]),
-          {
-            href: `${localizedPath(language)}?${visitParam}=1`,
-            label: t.shell.visitSite,
-            Icon: Globe,
-            reloadDocument: true,
-          },
-        ],
-      ]}
-      onSignOut={() =>
-        void submit(
-          { intent: "esci" },
-          { method: "post", action: localizedPath(language, accessPath) },
-        )
-      }
-    >
-      {loadingOrders ? <OrdersLoading t={t} /> : children}
-    </AppShell>
-  );
-}
+// Gli Ordini importano ancora la shell da qui: l'esportazione si toglie con il loro import.
+export { AccountShell } from "~/components/account-shell";

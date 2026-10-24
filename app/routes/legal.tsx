@@ -1,10 +1,9 @@
 import { FileText, ShieldCheck } from "lucide-react";
-import { cn } from "cn";
-import { buttonVariants } from "~/components/ui/button-variants";
+import { buttonLink } from "~/components/ui/button-variants";
 
 import { StandalonePage } from "~/components/standalone-page";
 import type { Route } from "./+types/legal";
-import { appCopy } from "../app-copy";
+import { appCopy, pageTitle } from "../app-copy";
 import { legalVersions } from "../domain/registration.server";
 import { languageFromPath, localizedPath } from "../i18n";
 
@@ -21,7 +20,7 @@ export function loader({ request }: Route.LoaderArgs) {
 }
 
 export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
-  return [{ title: `FiscalBay | ${appCopy[loaderData.language].legal[loaderData.document]}` }];
+  return [{ title: pageTitle(appCopy[loaderData.language].legal[loaderData.document]) }];
 }
 
 export default function Legal({ loaderData }: Route.ComponentProps) {
@@ -36,10 +35,7 @@ export default function Legal({ loaderData }: Route.ComponentProps) {
     >
       <p className="text-sm text-muted-foreground">{t.version(version)}</p>
       <p className="leading-relaxed text-pretty text-muted-foreground">{t.draft}</p>
-      <a
-        href={localizedPath(language)}
-        className={cn(buttonVariants({ variant: "outline" }), "w-fit")}
-      >
+      <a href={localizedPath(language)} {...buttonLink({ variant: "outline", className: "w-fit" })}>
         {appCopy[language].errors.home}
       </a>
     </StandalonePage>

@@ -1,5 +1,6 @@
 import { waitUntil } from "cloudflare:workers";
 
+import { supportEmail } from "./app-copy";
 import { accessPath, securityPath } from "./app-links";
 import { logFailure } from "./errors";
 import { languageFromPath, localizedPath, type Language } from "./i18n";
@@ -26,7 +27,7 @@ async function sendAccountEmail(
   const safeUrl = escapeHtml(input.url);
   await environment.AUTH_EMAIL.send({
     from: { email: authEmailFrom, name: "FiscalBay" },
-    replyTo: "supporto@fiscalbay.it",
+    replyTo: supportEmail,
     to: input.to,
     subject: input.subject,
     text: `${input.message}\n\n${input.url}`,

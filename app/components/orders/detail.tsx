@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 
 import { StatusAlert } from "~/components/status";
 import { CopyButton } from "~/components/tax-code";
-import { buttonVariants } from "~/components/ui/button-variants";
+import { buttonLink } from "~/components/ui/button-variants";
 import {
   Sheet,
   SheetContent,
@@ -407,7 +407,7 @@ export function OrderSheet({
                   href={ebayOrderHref(shown.ebayOrderId)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                  {...buttonLink({ variant: "outline", size: "sm" })}
                 >
                   {t.orders.openOnEbay}
                 </a>
@@ -419,8 +419,7 @@ export function OrderSheet({
                     new URLSearchParams(location.search),
                     [shown.id],
                   )}
-                  data-slot="button"
-                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                  {...buttonLink({ variant: "outline", size: "sm" })}
                 >
                   {t.orders.exportOrder}
                 </Link>

@@ -10,7 +10,7 @@ import {
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
 import { NotFoundState, UnavailableState } from "~/components/not-found";
 import { appHref } from "../app-links";
-import { appCopy } from "../app-copy";
+import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
 import { defaultTemplate } from "../preferences";
 import { rememberedStore, snapshotOnlyAdded } from "../orders/order-list";
@@ -27,10 +27,7 @@ import type { Route } from "./+types/preview-orders";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
-  return [
-    { title: `FiscalBay | ${t.orders.title}` },
-    { name: "robots", content: "noindex, nofollow" },
-  ];
+  return [{ title: pageTitle(t.orders.title) }, { name: "robots", content: "noindex, nofollow" }];
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {

@@ -1,9 +1,10 @@
 import { env } from "cloudflare:workers";
 import { data, isRouteErrorResponse, useOutletContext } from "react-router";
 
-import { SettingsPage, type ExportContext, type SettingsPageData } from "~/components/settings";
+import type { ExportContext } from "~/components/settings/export";
+import { SettingsPage, type SettingsPageData } from "~/components/settings/page";
 import { NotFoundState, UnavailableState } from "~/components/not-found";
-import { appCopy } from "../app-copy";
+import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
 import { defaultDisplay, defaultTemplate, detectedTimeZone } from "../preferences";
 import { exportReturnHref, exportScope } from "../orders/export-scope";
@@ -24,7 +25,7 @@ export function meta({ location, params }: Route.MetaArgs): Route.MetaDescriptor
   const title = isSection(params.sezione)
     ? `${t.settings.sections[params.sezione].title} | ${t.settings.title}`
     : t.settings.title;
-  return [{ title: `FiscalBay | ${title}` }, { name: "robots", content: "noindex, nofollow" }];
+  return [{ title: pageTitle(title) }, { name: "robots", content: "noindex, nofollow" }];
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
