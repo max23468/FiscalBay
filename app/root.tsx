@@ -20,7 +20,7 @@ import { StandalonePage } from "./components/standalone-page";
 import { TimeZoneContext } from "./components/time-zone";
 import { buttonLink } from "./components/ui/button-variants";
 import { correlationId } from "./errors";
-import { appCopy, pageTitle } from "./app-copy";
+import { appCopy, loadCopy, pageTitle } from "./app-copy";
 import { languageFromPath, localizedPath } from "./i18n";
 import { snapshotOnlyAdded } from "./orders/order-list";
 import { defaultDisplay, matchedShell } from "./preferences";
@@ -38,6 +38,12 @@ export function loader({ request }: Route.LoaderArgs) {
     correlationId: correlationId(request),
   };
 }
+
+/** Una navigazione verso l'altra lingua ne scarica i testi prima di caricare e disegnare. */
+// oxlint-disable-next-line react-doctor/only-export-components -- export di React Router assente dall'elenco della regola
+export const clientMiddleware: Route.ClientMiddlewareFunction[] = [
+  async ({ request }) => loadCopy(new URL(request.url).pathname),
+];
 
 /** L'istantanea aggiunta all'elenco Ordini non cambia lingua né pagina: nessuna nuova lettura. */
 export function shouldRevalidate({

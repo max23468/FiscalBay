@@ -8,12 +8,13 @@ import { randomBytes } from "node:crypto";
 import { budgetKiB } from "./check-bundle-size.mjs";
 
 describe("budget del JavaScript client", () => {
-  // KiB di ogni file della build sintetica; `lazy` non è nel manifest, come un import dinamico.
-  const run = ({ entry = 10, site = 10, orders = 10, lazy = 0 }) => {
+  // KiB di ogni file della build sintetica; `lazy` non è nel manifest, come un import dinamico,
+  // mentre i testi di una lingua (`copy-it`) si scaricano prima dell'idratazione.
+  const run = ({ entry = 10, site = 10, orders = 10, lazy = 0, copy = 0 }) => {
     const directory = mkdtempSync(path.join(tmpdir(), "bundle-"));
     mkdirSync(path.join(directory, "assets"));
     // Byte casuali: gzip non li comprime, quindi la dimensione misurata è nota.
-    for (const [name, kib] of Object.entries({ entry, site, orders, lazy }))
+    for (const [name, kib] of Object.entries({ entry, site, orders, lazy, "copy-it-a1": copy }))
       writeFileSync(path.join(directory, "assets", `${name}.js`), randomBytes(kib * 1024));
     const route = (id, routePath, parentId, module) => ({
       id,
@@ -49,6 +50,8 @@ describe("budget del JavaScript client", () => {
     assert.equal(run({ entry: 100, orders: budgetKiB.app - 90 }), 1));
   it("ignora per il budget i file caricati dopo e il totale della build", () =>
     assert.equal(run({ entry: 100, lazy: budgetKiB.app + 10 }), 0));
+  it("conta i testi della lingua più pesante, scaricati prima dell'idratazione", () =>
+    assert.equal(run({ entry: 100, orders: budgetKiB.app - 110, copy: 20 }), 1));
   it("fallisce senza manifest", () => {
     const directory = mkdtempSync(path.join(tmpdir(), "bundle-"));
     writeFileSync(path.join(directory, "entry.js"), randomBytes(1024));
