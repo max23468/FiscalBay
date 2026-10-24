@@ -166,36 +166,19 @@ export function checkImports(files, pending = pendingServerModules) {
   return errors;
 }
 
-/** Versioni di Node e pnpm coincidenti fra `mise.toml`, `package.json` e workflow. */
+/**
+ * `mise.toml` serve all'ambiente locale e ripete le versioni del manifest; la CI le legge
+ * direttamente da `package.json` tramite `.github/actions/setup`.
+ */
 export function checkToolPins(files) {
   const byPath = new Map(files.map(({ path: file, text }) => [file, text]));
   const mise = byPath.get("mise.toml") ?? "";
   const manifest = JSON.parse(byPath.get("package.json") ?? "{}");
-  const expected = {
-    node: mise.match(/^node\s*=\s*"([^"]+)"/mu)?.[1],
-    pnpm: mise.match(/^pnpm\s*=\s*"([^"]+)"/mu)?.[1],
-  };
   const errors = [];
-  if (!expected.node || !expected.pnpm) return ["mise.toml: versioni di node e pnpm mancanti"];
-  if (manifest.engines?.node !== expected.node)
-    errors.push(`package.json: engines.node ${manifest.engines?.node} diverso da ${expected.node}`);
-  if (manifest.packageManager !== `pnpm@${expected.pnpm}`)
-    errors.push(
-      `package.json: packageManager ${manifest.packageManager} diverso da pnpm@${expected.pnpm}`,
-    );
-  for (const [file, text] of byPath) {
-    if (!/^\.github\/workflows\/.+\.ya?ml$/u.test(file)) continue;
-    let action = "";
-    for (const [index, line] of text.split("\n").entries()) {
-      action = line.match(/^\s*(?:-\s+)?uses:\s*([^@\s]+)/u)?.[1] ?? action;
-      const value = line.match(/^\s*(node-version|version):\s*["']?([^"'\s#]+)/u);
-      if (!value || value[2].startsWith("${{")) continue;
-      const tool =
-        value[1] === "node-version" ? "node" : action === "pnpm/action-setup" ? "pnpm" : "";
-      if (tool && value[2] !== expected[tool])
-        errors.push(`${file}:${index + 1}: ${tool} ${value[2]} diverso da ${expected[tool]}`);
-    }
-  }
+  if (manifest.engines?.node !== mise.match(/^node\s*=\s*"([^"]+)"/mu)?.[1])
+    errors.push(`mise.toml: node diverso da engines.node ${manifest.engines?.node}`);
+  if (manifest.packageManager !== `pnpm@${mise.match(/^pnpm\s*=\s*"([^"]+)"/mu)?.[1]}`)
+    errors.push(`mise.toml: pnpm diverso da packageManager ${manifest.packageManager}`);
   return errors;
 }
 
@@ -203,7 +186,7 @@ export function checkToolPins(files) {
 export function checkActionPins(files) {
   const errors = [];
   for (const { path: file, text } of files) {
-    if (!/^\.github\/workflows\/.+\.ya?ml$/u.test(file)) continue;
+    if (!/^\.github\/(?:workflows|actions)\/.+\.ya?ml$/u.test(file)) continue;
     for (const [index, line] of text.split("\n").entries()) {
       const uses = line.match(/^\s*(?:-\s+)?uses:\s*(\S+)(.*)$/u);
       if (!uses || uses[1].startsWith("./")) continue;

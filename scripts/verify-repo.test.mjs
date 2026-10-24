@@ -99,30 +99,18 @@ describe("import applicativi", () => {
 });
 
 describe("versioni degli strumenti", () => {
-  const files = (
-    workflow,
-    manifest = { engines: { node: "26.10.0" }, packageManager: "pnpm@12.6.0" },
-  ) => [
+  const files = (manifest) => [
     { path: "mise.toml", text: '[tools]\nnode = "26.10.0"\npnpm = "12.6.0"\n' },
     { path: "package.json", text: JSON.stringify(manifest) },
-    { path: ".github/workflows/ci.yml", text: workflow },
   ];
-  const workflow = (node, pnpm) =>
-    `steps:\n  - uses: pnpm/action-setup@x\n    with:\n      version: ${pnpm}\n  - uses: actions/setup-node@x\n    with:\n      node-version: ${node}\n  - uses: other/action@x\n    with:\n      version: \${{ steps.v.outputs.doctor }}\n`;
 
-  it("accetta versioni coincidenti ed espressioni lette dal manifest", () => {
-    assert.deepEqual(checkToolPins(files(workflow("26.10.0", "12.6.0"))), []);
-  });
-
-  it("rifiuta divergenze fra mise, manifest e workflow", () => {
-    assert.equal(checkToolPins(files(workflow("26.9.0", "12.5.0"))).length, 2);
+  it("allinea mise.toml al manifest letto dalla CI", () => {
+    assert.deepEqual(
+      checkToolPins(files({ engines: { node: "26.10.0" }, packageManager: "pnpm@12.6.0" })),
+      [],
+    );
     assert.equal(
-      checkToolPins(
-        files(workflow("26.10.0", "12.6.0"), {
-          engines: { node: "26" },
-          packageManager: "pnpm@12",
-        }),
-      ).length,
+      checkToolPins(files({ engines: { node: "26" }, packageManager: "pnpm@12" })).length,
       2,
     );
   });
@@ -139,5 +127,6 @@ describe("Action fissate", () => {
   it("rifiuta tag mobili, SHA abbreviati e SHA senza versione", () => {
     const text = `      - uses: actions/checkout@v7\n        uses: actions/setup-node@3d3c42e\n      - uses: actions/checkout@${sha}\n`;
     assert.equal(checkActionPins([{ path: ".github/workflows/ci.yml", text }]).length, 3);
+    assert.equal(checkActionPins([{ path: ".github/actions/setup/action.yml", text }]).length, 3);
   });
 });
