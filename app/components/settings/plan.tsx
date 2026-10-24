@@ -4,6 +4,16 @@ import { useState } from "react";
 import { useAction } from "~/components/app-shell";
 import { PremiumNote, StatusAlert } from "~/components/status";
 import { useTimeZone } from "~/components/time-zone";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogClose,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
 import type { AppCopy } from "../../app-copy";
@@ -16,13 +26,7 @@ import {
   type PurchaseState,
 } from "../../catalog";
 import type { Language } from "../../i18n";
-import {
-  formatDate,
-  trialDaysLeft,
-  trialEnding,
-  type AccountView,
-  type StoreView,
-} from "../../view-models";
+import { formatDate, trialDaysLeft, trialEnding, type AccountView } from "../../view-models";
 import { AutoSwitch, Group, SimpleSelect } from "./controls";
 
 /**
@@ -116,22 +120,16 @@ function PremiumPlan({
             ? t.settings.plan.premiumPeriod[account.premium.period]
             : t.settings.plan.premium}
         </p>
-        {lifetime ? (
-          <p className="text-sm text-muted-foreground">{t.settings.plan.premiumLifetime}</p>
-        ) : account.premium?.renewsAt ? (
-          <p className="text-sm text-muted-foreground">
-            {t.settings.plan.premiumRenews(
-              formatDate(account.premium.renewsAt, language, "date", zone),
-            )}
-          </p>
-        ) : account.premium?.endsAt ? (
-          <p className="text-sm text-muted-foreground">
-            {t.settings.plan.premiumEnds(
-              formatDate(account.premium.endsAt, language, "dateTime", zone),
-            )}
-          </p>
-        ) : null}
+        <PremiumStatus premium={account.premium} t={t} language={language} />
       </div>
+      {billingPortal && account.premium?.renewsAt && account.premium.period !== "lifetime" ? (
+        <RenewalPeriod
+          period={account.premium.period}
+          next={account.premium.nextPeriod}
+          renewsAt={formatDate(account.premium.renewsAt, language, "date", zone)}
+          t={t}
+        />
+      ) : null}
       {billingPortal && account.premium ? (
         <>
           <div className="flex flex-wrap items-center gap-3">
@@ -145,6 +143,64 @@ function PremiumPlan({
         </>
       ) : null}
     </Group>
+  );
+}
+
+/** Rinnovo, eventuale cambio programmato, fine dopo la disdetta o acquisto una tantum. */
+function PremiumStatus({
+  premium,
+  t,
+  language,
+}: {
+  premium: AccountView["premium"];
+  t: AppCopy;
+  language: Language;
+}) {
+  const zone = useTimeZone();
+  const copy = t.settings.plan;
+  let text: string | null = null;
+  if (premium?.period === "lifetime") text = copy.premiumLifetime;
+  else if (premium?.renewsAt) {
+    const date = formatDate(premium.renewsAt, language, "date", zone);
+    text = premium.nextPeriod
+      ? copy.switchScheduled(premium.nextPeriod)(date)
+      : copy.premiumRenews(date);
+  } else if (premium?.endsAt)
+    text = copy.premiumEnds(formatDate(premium.endsAt, language, "dateTime", zone));
+  return text ? <p className="text-sm text-muted-foreground">{text}</p> : null;
+}
+
+/**
+ * Cambio della periodicità del rinnovo: vale dalla fine del periodo pagato, senza conguaglio,
+ * e resta annullabile fino ad allora. Il cambio programmato si legge già nella data di rinnovo.
+ */
+function RenewalPeriod({
+  period,
+  next,
+  renewsAt,
+  t,
+}: {
+  period: "monthly" | "annual";
+  next: "monthly" | "annual" | undefined;
+  renewsAt: string;
+  t: AppCopy;
+}) {
+  const action = useAction();
+  const copy = t.settings.plan;
+  const other = period === "monthly" ? "annual" : "monthly";
+  return (
+    <div className="grid justify-items-start gap-2">
+      {next ? null : <p className="text-sm text-muted-foreground">{copy.switchHint(renewsAt)}</p>}
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={action.pending}
+        onClick={() => action.run("change-period", { period: next ? period : other })}
+      >
+        {action.pending ? <Spinner /> : null}
+        {next ? copy.keepPeriod[period] : copy.switchTo[other]}
+      </Button>
+    </div>
   );
 }
 
@@ -168,6 +224,87 @@ export interface PurchaseView {
   offers: readonly PremiumOffer[];
   /** Ritorno da Stripe: pagamento in verifica oppure annullato. */
   checkout: "processing" | "cancelled" | null;
+}
+
+/** Negozio attivo del Free: negozi dello spazio, quello attivo e la prima nuova sostituzione. */
+export interface FreeStoreView {
+  stores: readonly { id: string; name: string }[];
+  activeId: string | null;
+  /** Prima data in cui il negozio attivo si può sostituire; null se è già possibile. */
+  changeFrom: string | null;
+}
+
+/** Giorni fra due sostituzioni del negozio attivo, come sul server. */
+const freeStoreChangeDays = 90;
+
+/**
+ * Scelta del negozio attivo, soltanto nel Free (D155). La sostituzione chiede conferma: il
+ * negozio lasciato va in pausa e la prossima resta possibile solo dopo 90 giorni.
+ */
+function FreeStoreChoice({
+  freeStore,
+  now,
+  t,
+  language,
+}: {
+  freeStore: FreeStoreView;
+  now: string;
+  t: AppCopy;
+  language: Language;
+}) {
+  const zone = useTimeZone();
+  const copy = t.settings.plan;
+  const [active, setActive] = useState(freeStore.activeId ?? "");
+  const [pending, setPending] = useState<string | null>(null);
+  // Un rifiuto del server riporta la scelta al negozio attivo.
+  const action = useAction((result) => {
+    if (!result.ok) setActive(freeStore.activeId ?? "");
+  });
+  const name = (id: string | null) => freeStore.stores.find((store) => store.id === id)?.name;
+  const next = new Date(Date.parse(now) + freeStoreChangeDays * 86_400_000).toISOString();
+  return (
+    <Group>
+      <SimpleSelect
+        label={t.stores.chooseFreeStore}
+        hint={
+          freeStore.changeFrom
+            ? copy.freeStoreLocked(formatDate(freeStore.changeFrom, language, "date", zone))
+            : copy.freeStoreHint
+        }
+        items={freeStore.stores.map((store) => ({ value: store.id, label: store.name }))}
+        value={active}
+        disabled={freeStore.changeFrom !== null || action.pending}
+        onChange={(value) => {
+          if (value !== active) setPending(value);
+        }}
+      />
+      <AlertDialog open={pending !== null} onOpenChange={(open) => !open && setPending(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{copy.freeStoreConfirmTitle(name(pending) ?? "")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {copy.freeStoreConfirmBody(
+                name(active) ?? null,
+                formatDate(next, language, "date", zone),
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
+            <AlertDialogClose
+              render={<Button />}
+              onClick={() => {
+                setActive(pending!);
+                action.run("free-store", { store: pending! });
+              }}
+            >
+              {copy.freeStoreConfirm}
+            </AlertDialogClose>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Group>
+  );
 }
 
 /**
@@ -224,7 +361,7 @@ function CheckoutReturn({
 
 export function PlanSection({
   account,
-  stores,
+  freeStore,
   billing,
   billingPortal,
   purchase,
@@ -234,8 +371,9 @@ export function PlanSection({
   language,
 }: {
   account: AccountView;
-  stores: StoreView[];
-  /** Acquisto e negozio attivo del Free dipendono dai pagamenti; la prova no. */
+  /** Negozio attivo del Free; null senza negozi da scegliere. */
+  freeStore: FreeStoreView | null;
+  /** L'acquisto dipende dai pagamenti; prova e negozio attivo no. */
   billing: boolean;
   billingPortal: boolean;
   purchase: PurchaseView;
@@ -245,10 +383,6 @@ export function PlanSection({
   language: Language;
 }) {
   const zone = useTimeZone();
-  const action = useAction();
-  const [downgradeStore, setDowngradeStore] = useState(
-    () => stores.find((store) => store.pauseReason !== "plan")?.id ?? "",
-  );
   // La scelta del negozio attivo compare solo nel Free: in Premium non anticipa il downgrade.
   if (account.plan === "premium") {
     return account.trial ? (
@@ -317,20 +451,8 @@ export function PlanSection({
           t={t}
         />
       </Group>
-      {/* Acquisto e negozio attivo del Free dipendono dai pagamenti. */}
-      {billing && stores.length > 1 ? (
-        <Group>
-          <SimpleSelect
-            label={t.stores.chooseFreeStore}
-            hint={t.settings.plan.freeStoreHint}
-            items={stores.map((store) => ({ value: store.id, label: store.name }))}
-            value={downgradeStore}
-            onChange={(value) => {
-              setDowngradeStore(value);
-              action.run("free-store", { store: value });
-            }}
-          />
-        </Group>
+      {freeStore && freeStore.stores.length > 1 ? (
+        <FreeStoreChoice freeStore={freeStore} now={now} t={t} language={language} />
       ) : null}
       {account.trialAvailable ? <TrialOffer t={t} /> : null}
       <PurchaseOptions billing={billing} purchase={purchase} t={t} language={language} />

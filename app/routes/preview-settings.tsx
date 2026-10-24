@@ -95,6 +95,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       offers: premiumOffers,
       checkout: checkoutReturn(query),
     },
+    // Il negozio attivo è quello senza la pausa del piano; la sostituzione è simulata.
+    freeStore:
+      scenario.account.plan === "premium"
+        ? null
+        : {
+            stores: scenario.stores.map(({ id, name }) => ({ id, name })),
+            activeId: scenario.stores.find((store) => store.pauseReason !== "plan")?.id ?? null,
+            changeFrom: null,
+          },
     stores: scenario.stores,
     security: {
       methods: scenario.signInMethods,

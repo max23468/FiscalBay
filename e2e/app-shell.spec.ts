@@ -803,10 +803,12 @@ test.describe("area reale", () => {
     const nav = page.getByRole("navigation", { name: "Navigazione principale" });
     await expect(nav.getByRole("link")).toHaveText(["Ordini", "Negozi eBay", "Impostazioni"]);
     await expect(nav.getByRole("link", { name: "Ordini" })).toHaveAttribute("aria-current", "page");
-    // Il negozio scaduto e il consenso in scadenza arrivano dai dati salvati; le letture restano.
-    await page.getByRole("button", { name: /^Notifiche, \d+ da leggere$/u }).click();
+    // Nel Free i negozi oltre a quello attivo sono in pausa per il piano: il collegamento
+    // scaduto non avvisa nella campanella.
+    await page.getByRole("button", { name: /^Notifiche/u }).click();
     const bell = page.getByRole("dialog");
-    await expect(bell.getByRole("link", { name: /collaudo-scaduto/u })).toBeVisible();
+    await expect(bell).toBeVisible();
+    await expect(bell.getByRole("link", { name: /collaudo-scaduto/u })).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(bell).toBeHidden();
     await page.getByRole("button", { name: "Account" }).click();
@@ -884,9 +886,10 @@ test.describe("area reale", () => {
 });
 
 // Sul tablet i filtri riempiono le righe: quattro su due colonne, cinque (con il negozio) su tre.
+// Il filtro del negozio compare con più negozi ammessi: nel Free ne resta attivo uno.
 for (const [account, columns] of [
-  [undefined, 3],
-  ["suggestions-it", 2],
+  ["stores-premium", 3],
+  [undefined, 2],
 ] as const)
   test(`filtri del tablet a righe piene su ${columns} colonne, area reale`, async ({
     page,

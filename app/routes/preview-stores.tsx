@@ -28,6 +28,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ebayDown: scenario.ebayDown ? ["production"] : [],
     elsewhere: scenario.elsewhere,
     settings: true,
+    // Come nell'area reale: un abbonamento che si rinnova non si disdice scollegando.
+    subscriptionRenews:
+      !!scenario.account.premium?.renewsAt && scenario.account.premium.period !== "lifetime",
   };
   return page;
 }

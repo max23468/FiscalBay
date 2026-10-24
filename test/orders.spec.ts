@@ -183,8 +183,13 @@ describe("percorso ordini", () => {
       }) as Parameters<typeof unlockAction>[0];
     const denied = await unlockAction(unlockRequest("o-b"));
     expect(denied).toMatchObject({ init: { status: 409 }, data: { error: true, unlocked: [] } });
-    // Un guasto che non è un rifiuto dello sblocco resta un errore della pagina (500).
-    const outage = vi.spyOn(env.DB, "batch").mockRejectedValueOnce(new Error("D1_ERROR: guasto"));
+    // Un guasto che non è un rifiuto dello sblocco resta un errore della pagina (500). Il primo
+    // batch della richiesta riallinea il piano dello spazio, il secondo è lo sblocco.
+    const batch = env.DB.batch.bind(env.DB);
+    const outage = vi
+      .spyOn(env.DB, "batch")
+      .mockImplementationOnce(batch)
+      .mockRejectedValueOnce(new Error("D1_ERROR: guasto"));
     await expect(unlockAction(unlockRequest("o-a"))).rejects.toThrow("D1_ERROR: guasto");
     outage.mockRestore();
     expect(await unlockConfirmation(env.DB, user!.id)).toBe(true);
@@ -1580,6 +1585,14 @@ describe("pagina Ordini reale", () => {
     return session;
   }
 
+  /** Premium concesso allo spazio A: tutti i suoi negozi sono ammessi. */
+  async function premiumCoverage() {
+    await env.DB.prepare(
+      `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+       VALUES ('concessione', 'w-a', 'admin', '2026-01-01T00:00:00.000Z', '2027-12-31T00:00:00.000Z')`,
+    ).run();
+  }
+
   function ordersPage(cookie: string, path = "/app/ordini", params: { ordine?: string } = {}) {
     return loadHome({
       params,
@@ -1966,6 +1979,8 @@ describe("pagina Ordini reale", () => {
       ordersPage(sessionCookie, path).catch((response: Response) => response);
     // Con un solo negozio il filtro non compare: il negozio ricordato non si applica.
     expect(await entry(remembered)).toMatchObject({ page: expect.any(Object) });
+    // Con Premium anche il secondo negozio è fra i filtri; nel Free resterebbe in pausa.
+    await premiumCoverage();
     await insertStore({ id: "s-c", ebayUserId: "e-c" }).run();
     const redirected = (await entry(remembered)) as Response;
     expect(redirected.status).toBe(302);
@@ -2111,6 +2126,8 @@ describe("pagina Ordini reale", () => {
     await env.DB.prepare("DELETE FROM ebay_stores WHERE id = 's-sb'").run();
 
     // Con un altro negozio che legge, il problema resta del solo negozio, finché è nella vista.
+    // Con Premium il secondo negozio è ammesso; nel Free resterebbe in pausa.
+    await premiumCoverage();
     await insertStore({ id: "s-c", ebayUserId: "e-c" }).run();
     await env.DB.prepare(
       `INSERT INTO ebay_store_credentials (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)

@@ -12,9 +12,11 @@ import { Button } from "~/components/ui/button";
  */
 type Labels = { copy: string; copied: string; copyFailed: string; locked: string };
 
+// Larghezza minima, non fissa: il riquadro si allarga fino al valore intero, così codice e
+// copia restano sulla stessa riga; va a capo soltanto la conferma di una copia non riuscita.
 const sizes = {
-  default: "min-h-10 w-56 text-[0.9375rem]",
-  compact: "min-h-8 w-48 text-sm",
+  default: "min-h-10 w-fit min-w-56 text-[0.9375rem]",
+  compact: "min-h-8 w-fit min-w-48 text-sm",
 };
 
 /**

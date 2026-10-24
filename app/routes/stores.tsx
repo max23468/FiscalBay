@@ -19,6 +19,7 @@ import {
   type StoreActionResult,
   type StoreStatus,
 } from "../domain/stores.server";
+import { subscriptionRenews } from "../domain/billing.server";
 import { requestStoreSync, type SyncRequestResult } from "../domain/order-sync.server";
 import { languageFromPath, localizedPath } from "../i18n";
 import type { ActionResult, StoreView } from "../view-models";
@@ -84,7 +85,12 @@ async function readStores({ request, params }: Route.LoaderArgs) {
   const area = await requireAccountArea(request);
   const { language, session, account } = area;
   const now = new Date();
-  const statuses = await measure("d1", "stores", () => listStores(env.DB, session.user.id, now));
+  const [statuses, renews] = await measure("d1", "stores", () =>
+    Promise.all([
+      listStores(env.DB, session.user.id, now),
+      subscriptionRenews(env.DB, env, session.user.id, now),
+    ]),
+  );
   const read = () =>
     measure("d1", "stores", () => listStores(env.DB, session.user.id)).then((stores) =>
       stores.map(storeView),
@@ -104,7 +110,9 @@ async function readStores({ request, params }: Route.LoaderArgs) {
     page: {
       stores,
       detail,
-      // Finché non esistono gli abbonamenti ogni spazio usa il piano Free.
+      // Il piano della pagina decide soltanto la colonna delle notifiche Telegram, che arriva
+      // con il loro servizio: fino ad allora resta quella del Free. Le pause del piano sono nei
+      // negozi.
       account: { plan: "free" as const },
       now: now.toISOString(),
       // Con eBay che non risponde restano sospese soltanto le azioni che lo chiamano, per
@@ -114,6 +122,7 @@ async function readStores({ request, params }: Route.LoaderArgs) {
       connectHref: localizedPath(language, storeLinkPath),
       // Notifiche, piano e supporto non hanno ancora una pagina reale.
       settings: false,
+      subscriptionRenews: renews,
     },
   };
   const syncing = stores.filter((store) => store.syncing).length;

@@ -303,23 +303,11 @@ test.describe("miglioramenti account e negozi", () => {
     }) => {
       await useLocalAccount(context, "member", baseURL!);
       await page.goto(`${prefix}/app/ordini`);
-      // Come nel collaudo remoto: il consenso in scadenza si ricollega subito, lo scaduto apre
-      // il pannello del negozio.
-      await expect(
-        page
-          .getByRole("status")
-          .filter({ hasText: testAccount.stores.expiring })
-          .getByRole("link", { name: it ? "Ricollega negozio" : "Reconnect store" }),
-      ).toHaveAttribute(
-        "href",
-        `${prefix}/app/negozi/collega?ricollega=${testAccount.stores.expiring}&environment=production`,
-      );
-      await expect(
-        page
-          .getByRole("status")
-          .filter({ hasText: testAccount.stores.expired })
-          .getByRole("link", { name: it ? "Apri il negozio" : "Open store" }),
-      ).toHaveAttribute("href", `${prefix}/app/negozi/${testAccount.stores.expired}`);
+      // Come nel collaudo remoto: nel Free i negozi oltre a quello attivo sono in pausa per il
+      // piano e non avvisano del consenso.
+      await expect(page.getByText(testAccount.taxCodes.unlocked).first()).toBeVisible();
+      for (const store of [testAccount.stores.expiring, testAccount.stores.expired])
+        await expect(page.getByRole("status").filter({ hasText: store })).toHaveCount(0);
       await expect(
         page.getByText(testAccount.taxCodes.unlocked, { exact: true }).first(),
       ).toBeVisible();
@@ -1167,7 +1155,17 @@ for (const language of ["it", "en"] as const) {
       await expect(selection).toContainText("Vintage Garage Italia");
       await selection.click();
       await expect(page.getByRole("option")).toHaveCount(2);
+      // La sostituzione chiede conferma: annullare lascia il negozio attivo com'era.
       await page.getByRole("option").filter({ hasText: "Outlet" }).click();
+      const replace = page.getByRole("alertdialog");
+      await expect(replace).toContainText(
+        t("Vintage Garage Italia va in pausa", "Vintage Garage Italia will be paused"),
+      );
+      await replace.getByRole("button", { name: t("Annulla", "Cancel") }).click();
+      await expect(selection).toContainText("Vintage Garage Italia");
+      await selection.click();
+      await page.getByRole("option").filter({ hasText: "Outlet" }).click();
+      await replace.getByRole("button", { name: t("Rendi attivo", "Make active") }).click();
       await expect(selection).toContainText("Outlet");
       await expect(
         page.getByRole("button", { name: t("Scegli annuale", "Choose annual") }).locator(".."),
@@ -3039,6 +3037,64 @@ test.describe("caricamento degli Ordini reali", () => {
   });
 });
 
+test.describe("negozio attivo del Free", () => {
+  test.skip(
+    Boolean(process.env.E2E_BASE_URL),
+    "Prove con dati sintetici soltanto sul database locale.",
+  );
+
+  for (const language of ["it", "en"] as const)
+    test(`negozi reali: il secondo negozio è in pausa e la sostituzione chiede conferma ${language}`, async ({
+      page,
+      context,
+      baseURL,
+      browserName,
+    }, testInfo) => {
+      const it = language === "it";
+      const prefix = it ? "" : "/en";
+      const id = `free-store-${language}-${browserName}-${testInfo.retry}`;
+      await useLocalAccount(context, "member", baseURL!, id);
+      await page.goto(`${prefix}/app/negozi`);
+      const paused = it ? "In pausa per il piano Free" : "Paused on the Free plan";
+      const row = (name: string) =>
+        page.getByRole("table", { name: it ? "Elenco negozi" : "Store list" }).getByRole("row", {
+          name: new RegExp(name, "u"),
+        });
+      await expect(row("Negozio secondario")).toContainText(paused);
+      await expect(row("Negozio principale")).not.toContainText(paused);
+      await page.goto(`${prefix}/app/negozi/${id}-2`);
+      const choose = it ? "Scegli il negozio attivo" : "Choose the active store";
+      await page.getByRole("dialog").getByRole("link", { name: choose }).click();
+      await expect(page).toHaveURL(new RegExp(`${prefix}/app/impostazioni/piano$`, "u"));
+      const selection = page.getByRole("combobox", { name: choose });
+      await expect(selection).toContainText("Negozio principale");
+      await selection.click();
+      await page.getByRole("option", { name: "Negozio secondario" }).click();
+      const confirm = page.getByRole("alertdialog");
+      await expect(confirm).toContainText(
+        it ? "Negozio principale va in pausa" : "Negozio principale will be paused",
+      );
+      await confirm.getByRole("button", { name: it ? "Rendi attivo" : "Make active" }).click();
+      await expect(
+        page
+          .getByRole("status")
+          .filter({ hasText: it ? "Negozio attivo aggiornato." : "Active store updated." }),
+      ).toBeVisible();
+      // Dopo la sostituzione la prossima attende 90 giorni.
+      await expect(selection).toBeDisabled();
+      await expect(
+        page.getByText(
+          it
+            ? /^Potrai sostituire il negozio attivo dal /
+            : /^You can replace the active store from /,
+        ),
+      ).toBeVisible();
+      await page.goto(`${prefix}/app/negozi`);
+      await expect(row("Negozio principale")).toContainText(paused);
+      await expect(row("Negozio secondario")).not.toContainText(paused);
+    });
+});
+
 test.describe("prova Premium", () => {
   test.skip(
     Boolean(process.env.E2E_BASE_URL),
@@ -3108,11 +3164,57 @@ test.describe("abbonamento nel piano", () => {
   // Ogni stato reale si legge accanto allo scenario dell'anteprima che lo rappresenta.
   const states = [
     { account: "active", scenario: "premium" },
+    { account: "switching", scenario: "cambio-rinnovo" },
     { account: "cancelled", scenario: "rinnovo-disdetto" },
     { account: "pending", scenario: "pagamento-in-attivazione" },
     { account: "lapsed", scenario: "rinnovo-non-riuscito" },
     { account: "scheduled", scenario: "prova-con-abbonamento" },
   ] as const;
+
+  // Scollegare l'unico negozio con un abbonamento che si rinnova non lo disdice: lo dicono
+  // entrambe le superfici.
+  for (const language of ["it", "en"] as const)
+    test(`scollegare l'ultimo negozio avvisa che l'abbonamento continua, ${language}`, async ({
+      page,
+      context,
+      browser,
+      baseURL,
+    }) => {
+      const it = language === "it";
+      const prefix = it ? "" : "/en";
+      const check = async (target: Page) => {
+        await target
+          .getByRole("dialog")
+          .getByRole("button", { name: it ? "Scollega" : "Disconnect", exact: true })
+          .click();
+        const confirm = target.getByRole("alertdialog");
+        await expect(confirm).toContainText(
+          it
+            ? "Scollegare il negozio non disdice l’abbonamento Premium"
+            : "Disconnecting the store does not cancel the Premium subscription",
+        );
+        await expect(
+          confirm.getByRole("link", {
+            name: it ? "Gestisci l’abbonamento" : "Manage subscription",
+          }),
+        ).toHaveAttribute(
+          "href",
+          `${prefix}/${target.url().includes("/anteprima/") ? "anteprima" : "app"}/impostazioni/piano`,
+        );
+        await confirm.getByRole("button", { name: it ? "Annulla" : "Cancel" }).click();
+      };
+      await useLocalAccount(context, "member", baseURL!, "subscription-active");
+      await page.goto(`${prefix}/app/negozi/subscription-active`);
+      await check(page);
+      const preview = await browser.newContext({ baseURL });
+      try {
+        const previewPage = await preview.newPage();
+        await open(previewPage, `${prefix}/anteprima/negozi/neg-vintage`, "cambio-rinnovo");
+        await check(previewPage);
+      } finally {
+        await preview.close();
+      }
+    });
 
   for (const language of ["it", "en"] as const)
     for (const { account, scenario } of states)
@@ -3128,6 +3230,10 @@ test.describe("abbonamento nel piano", () => {
           active: {
             title: it ? /^Premium (mensile|annuale)$/u : /^Premium, (monthly|annual)$/u,
             text: it ? "Si rinnova il" : "Renews on",
+          },
+          switching: {
+            title: it ? "Premium mensile" : "Premium, monthly",
+            text: it ? "come annuale" : "as annual",
           },
           cancelled: {
             title: it ? "Premium mensile" : "Premium, monthly",

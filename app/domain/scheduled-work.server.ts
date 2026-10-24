@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { reconcileBilling } from "./billing.server";
+import { applyFreePlans } from "./free-store.server";
 import { indexOrderSearch, purgeExpiredRecords } from "./maintenance.server";
 import { dispatchStoreSyncs } from "./order-sync.server";
 import { logFailure } from "../errors";
@@ -157,8 +158,9 @@ export async function consumeTask(
 }
 
 /**
- * Lavoro del Cron Trigger. Ogni passo accoda soltanto: un passo fallito non ferma i successivi
- * e il suo lavoro resta al trigger seguente.
+ * Lavoro del Cron Trigger. Ogni passo accoda soltanto, salvo il riallineamento del piano, che
+ * resta su D1 e precede le letture: un negozio uscito dal piano non viene più smistato. Un
+ * passo fallito non ferma i successivi e il suo lavoro resta al trigger seguente.
  */
 export async function dispatchScheduledWork(environment: Env, now: Date): Promise<void> {
   await dispatchTasks(environment, now).catch((error: unknown) =>
@@ -166,6 +168,9 @@ export async function dispatchScheduledWork(environment: Env, now: Date): Promis
   );
   await recoverWebhookIngress(environment, now).catch((error: unknown) =>
     logFailure({ error, operation: "webhook_ingress" }),
+  );
+  await applyFreePlans(environment.DB, now).catch((error: unknown) =>
+    logFailure({ error, operation: "scheduling" }),
   );
   await dispatchStoreSyncs(environment, now).catch((error: unknown) =>
     logFailure({ error, operation: "scheduling" }),
