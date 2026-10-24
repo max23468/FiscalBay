@@ -489,6 +489,10 @@ export const en: AppCopy = {
       },
       premiumLifetime: "One-off purchase, no renewals.",
       premiumRenews: (date) => `Renews on ${date}.`,
+      premiumEnds: (date) => `Renewal cancelled: Premium stays active until ${date}.`,
+      renewalFailedTitle: "Renewal failed",
+      renewalFailedBody: (date) =>
+        `You are back on Free. Complete the payment Stripe asks for by ${date} to keep your price.`,
       manageBilling: "Manage subscription on Stripe",
       billingDocuments: "View receipts and invoices on Stripe",
       billingDocs: "Receipts and invoices are available on Stripe.",

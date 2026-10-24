@@ -4,6 +4,7 @@ import { verifyStripeEvent } from "./stripe.server";
 import { NotificationLimit, verifyOrderNotification } from "./ebay/notifications.server";
 import { readBounded, UpstreamError } from "./http.server";
 import { ebayConfiguration } from "./ebay/environment.server";
+import { applyStripeEvent } from "../domain/billing.server";
 import { consumeOrderConfirmation } from "../domain/order-acquisition.server";
 import { isProduction } from "../app-links";
 import { logFailure } from "../errors";
@@ -279,9 +280,15 @@ export async function consumeWebhooks(
           fetcher,
           now,
         );
+      } else {
+        // Il payload non è conservato: l'effetto viene dallo stato corrente riletto da Stripe.
+        await applyStripeEvent(
+          env,
+          { topic: receipt.topic, objectId: receipt.object_id },
+          fetcher,
+          now,
+        );
       }
-      // Stripe conserva qui la ricevuta verificata; gli effetti commerciali si integrano
-      // nello stesso consumer quando vengono implementati, senza accettare payload grezzi.
       await env.DB.prepare(
         "UPDATE webhook_receipts SET completed_at = ?, lease = NULL, locked_until = NULL WHERE id = ? AND lease = ?",
       )

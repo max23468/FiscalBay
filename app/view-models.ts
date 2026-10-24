@@ -305,7 +305,17 @@ export interface AccountView {
    * che inizia o finisce.
    */
   quota?: { used: number; limit: number; cycleEndsAt: string | null; nextLimit?: number };
-  premium?: { period: "monthly" | "annual" | "lifetime"; renewsAt: string | null };
+  /** `endsAt` compare dopo la disdetta: la copertura pagata finisce senza rinnovo. */
+  premium?: {
+    period: "monthly" | "annual" | "lifetime";
+    renewsAt: string | null;
+    endsAt?: string | null;
+  };
+  /**
+   * Pagamento senza copertura in corso: in attesa della conferma di Stripe, oppure rinnovo
+   * non riuscito con il prezzo protetto fino a `protectedUntil`.
+   */
+  payment?: { state: "pending" } | { state: "renewal-failed"; protectedUntil: string };
 }
 
 export interface SessionView {

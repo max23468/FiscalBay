@@ -74,14 +74,20 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     confirmUnlock: state.confirmUnlock !== false,
     section: params.sezione ?? null,
     sections: settingsSections,
-    services: { billing: true, telegram: true, accountData: true, support: true },
+    services: {
+      billing: true,
+      billingPortal: true,
+      telegram: true,
+      accountData: true,
+      support: true,
+    },
     preview: true,
     account: scenario.account,
-    // Come nell'area reale: l'acquisto aspetta la prima lettura riuscita di un negozio e
-    // durante la prova resta possibile.
+    // Come nell'area reale: l'acquisto aspetta la prima lettura riuscita di un negozio, durante
+    // la prova resta possibile e resta fermo con un abbonamento che può ancora incassare.
     purchase: {
       state:
-        scenario.account.plan === "premium" && !scenario.account.trial
+        (scenario.account.plan === "premium" && !scenario.account.trial) || scenario.account.payment
           ? "covered"
           : scenario.onboarding.some((step) => step.label === "stepSync" && step.done)
             ? "available"

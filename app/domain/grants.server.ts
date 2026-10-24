@@ -27,6 +27,26 @@ export function activeEntitlementSql(workspace: string, at: string) {
     AND (e.ends_at IS NULL OR julianday(${at}) < julianday(e.ends_at)))`;
 }
 
+/** Stati in cui un abbonamento Stripe può ancora incassare. */
+export const openSubscriptionStatuses = [
+  "active",
+  "trialing",
+  "past_due",
+  "unpaid",
+  "incomplete",
+  "paused",
+] as const;
+
+/**
+ * Abbonamento dello spazio che può ancora incassare, come un pagamento da confermare o un
+ * rinnovo da regolarizzare: un nuovo acquisto o la prova lo sovrapporrebbero.
+ */
+export function openSubscriptionSql(workspace: string) {
+  return `EXISTS (SELECT 1 FROM stripe_subscriptions s WHERE s.workspace_id = ${workspace}
+    AND s.unavailable_at IS NULL
+    AND s.status IN (${openSubscriptionStatuses.map((status) => `'${status}'`).join(", ")}))`;
+}
+
 /**
  * Copertura attiva mostrata all'utente: prima un diritto diverso dalla prova, poi quello che
  * dura di più. Argomenti come in `activeEntitlementSql`.
@@ -53,13 +73,13 @@ export function storeReadSql(workspace: string) {
 }
 
 /**
- * La prova si offre allo spazio che non l'ha mai avuta, senza una copertura in corso e dopo
- * la prima lettura riuscita di un suo negozio.
+ * La prova si offre allo spazio che non l'ha mai avuta, senza una copertura in corso né un
+ * abbonamento che può ancora incassare, dopo la prima lettura riuscita di un suo negozio.
  */
 function trialAvailableSql(workspace: string, at: string) {
   return `(NOT EXISTS (SELECT 1 FROM workspace_entitlements e
       WHERE e.workspace_id = ${workspace} AND e.source = 'trial')
-    AND NOT ${activeEntitlementSql(workspace, at)}
+    AND NOT ${activeEntitlementSql(workspace, at)} AND NOT ${openSubscriptionSql(workspace)}
     AND ${storeReadSql(workspace)})`;
 }
 

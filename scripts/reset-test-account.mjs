@@ -237,6 +237,44 @@ async function main() {
         statements.push(`INSERT INTO sync_state (store_id, polled_at, last_success_at, updated_at)
           VALUES ('${id}', '${now}', '${now}', '${now}');`);
     }
+    // Abbonamenti Stripe nei quattro stati del piano, soltanto in lettura: attivo, disdetto,
+    // pagamento da confermare e rinnovo non riuscito con il prezzo ancora protetto.
+    const period = 30 * day;
+    const subscriptions = {
+      active: { status: "active", start: -day, cancel: 0, paid: true },
+      cancelled: { status: "active", start: -day, cancel: 1, paid: true },
+      pending: { status: "incomplete", start: -day, cancel: 0, paid: false },
+      lapsed: { status: "past_due", start: -2 * day, cancel: 0, paid: false },
+    };
+    for (const [state, subscription] of Object.entries(subscriptions)) {
+      const id = `subscription-${state}`;
+      const start = new Date(Date.now() + subscription.start).toISOString();
+      const end = new Date(Date.now() + subscription.start + period).toISOString();
+      statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
+      INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+        SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
+      INSERT INTO user_profiles SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
+        FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
+      INSERT INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
+        FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};
+      INSERT INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
+        VALUES ('${id}', '${id}', '${id}', '${expires}', '${now}', '${now}');
+      INSERT INTO workspaces (id, name, created_at) VALUES ('${id}', 'Collaudo abbonamento', '${now}');
+      INSERT INTO workspace_members VALUES ('${id}', '${id}', 'owner');
+      INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
+        VALUES ('${id}', '${id}', '${id}', '${now}', 'Negozio abbonamento');
+      INSERT INTO sync_state (store_id, polled_at, last_success_at, updated_at)
+        VALUES ('${id}', '${now}', '${now}', '${now}');
+      INSERT INTO stripe_subscriptions (id, workspace_id, environment, customer_id, offer,
+        price_generation, status, current_period_start, current_period_end, cancel_at_period_end,
+        synced_at, checked_at)
+        VALUES ('sub_${id}', '${id}', 'test', 'cus_${id}', 'monthly', '2026-09', '${subscription.status}',
+          '${start}', '${end}', ${subscription.cancel}, '${now}', '${now}');`);
+      if (subscription.paid)
+        statements.push(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at,
+          stripe_invoice_id, amount_paid, currency, paid_at)
+          VALUES ('${id}', '${id}', 'premium', '${start}', '${end}', 'in_${id}', 598, 'eur', '${start}');`);
+    }
     // Preferenze e campanella: un account per browser e per tentativo, con un negozio da
     // ricollegare. La prova salva tema, fuso e letture: un nuovo tentativo riparte pulito.
     for (const id of ["chromium", "webkit"].flatMap((browser) =>

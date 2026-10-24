@@ -8,7 +8,7 @@ import {
   expireCheckout,
   retrieveCatalogPrice,
 } from "../integrations/stripe.server";
-import { storeReadSql } from "./grants.server";
+import { openSubscriptionSql, storeReadSql } from "./grants.server";
 
 /**
  * Offerte in vendita. Il lifetime aspetta la prenotazione atomica dei venti posti: senza,
@@ -54,11 +54,13 @@ function activeSql(workspace: string, at: string, trial: boolean) {
 /**
  * Acquisto possibile dopo il primo collegamento e la prima lettura riuscita di un negozio,
  * anche senza ordini. Un diritto in corso diverso dalla prova lo ferma; durante la prova
- * l'acquisto resta possibile e ne conserva i giorni residui (`trialEndsAt`).
+ * l'acquisto resta possibile e ne conserva i giorni residui (`trialEndsAt`). Lo ferma anche un
+ * abbonamento che può ancora incassare, come un pagamento da confermare o un rinnovo da
+ * regolarizzare.
  */
 export async function purchaseState(db: D1Database, userId: string, now = new Date()) {
   const row = await db
-    .prepare(`SELECT w.id, ${activeSql("w.id", "?2", false)} AS covered,
+    .prepare(`SELECT w.id, (${activeSql("w.id", "?2", false)} OR ${openSubscriptionSql("w.id")}) AS covered,
       ${activeSql("w.id", "?2", true)} AS trial_ends_at, ${storeReadSql("w.id")} AS synced
     FROM workspaces w JOIN workspace_members wm ON wm.workspace_id = w.id
     WHERE wm.user_id = ?1`)
