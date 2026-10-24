@@ -1,13 +1,44 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { useLocalAccount } from "./local-account";
+import { testAccount } from "./test-account";
 
 /*
  * Shell e sezioni dell'app sugli scenari sintetici dell'anteprima.
  * Ogni prova usa un contesto nuovo, quindi parte dallo scenario ordinario.
+ * Le prove dei comportamenti già presenti nell'area reale girano anche sulle route reali, con la
+ * sessione e gli ordini sintetici del database locale; l'anteprima resta per gli stati rari.
  */
+
+// Le richieste locali ancora intercettate a fine prova non sono errori del collaudo.
+test.afterEach(async ({ context }) => context.unrouteAll({ behavior: "ignoreErrors" }));
+
+const areas = [
+  {
+    name: "anteprima",
+    base: "/anteprima",
+    locked: "02-44519-70831",
+    unlocked: { id: "27-10293-84756", value: "RSSMRA80A41H501Y" },
+  },
+  {
+    name: "area reale",
+    base: "/app",
+    locked: testAccount.orders.locked,
+    unlocked: { id: testAccount.orders.unlocked, value: testAccount.taxCodes.unlocked },
+  },
+] as const;
+type Area = (typeof areas)[number];
+
+/** Nell'area reale la sessione sintetica locale attraversa loader e azioni senza bypass. */
+async function enter(context: BrowserContext, baseURL: string, area: Area) {
+  if (area.base === "/app") await useLocalAccount(context, "member", baseURL);
+}
 
 async function open(page: Page, path = "/anteprima/ordini") {
   await page.goto(path);
-  await expect(page.getByRole("combobox", { name: /Scenario/ })).toBeEnabled({ timeout: 20_000 });
+  if (path.includes("/anteprima"))
+    await expect(page.getByRole("combobox", { name: /Scenario/ })).toBeEnabled({
+      timeout: 20_000,
+    });
   await expect(
     page.getByRole("searchbox", { name: /Cerca ordini|Search orders/u, includeHidden: true }),
   ).toBeEnabled();
@@ -16,10 +47,11 @@ async function open(page: Page, path = "/anteprima/ordini") {
 
 /** Elenco con la ricerca: la query va nel corpo e l'indirizzo riceve la sua forma cifrata. */
 async function searched(page: Page, query: string, base = "/anteprima") {
-  const response = await page.request.post(`${base}/ricerca`, {
-    form: { q: query },
-    maxRedirects: 0,
-  });
+  // L'area reale accetta la ricerca soltanto dalla propria origine.
+  const response = await page.request.post(
+    base === "/app" ? "/api/v1/orders/search" : `${base}/ricerca`,
+    { form: { q: query }, headers: { origin: new URL(page.url()).origin }, maxRedirects: 0 },
+  );
   expect(response.status()).toBe(303);
   return response.headers().location!;
 }
@@ -61,36 +93,46 @@ test(
   },
 );
 
-test("il dettaglio ha un URL, si chiude con Indietro e conserva i filtri", async ({ page }) => {
-  await open(page, "/anteprima/ordini?fiscale=available");
-  const list = page.getByRole("region", { name: "Elenco ordini" });
-  const first = list.getByRole("article").first();
-  const buyer = (await first.getByRole("heading", { level: 2 }).textContent()) ?? "";
-  await first.getByRole("link", { name: "Dettaglio" }).click();
-  await expect(page).toHaveURL(
-    /\/anteprima\/ordini\/ord-\d+\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$/u,
-  );
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText(buyer);
-  await dialog.getByRole("tab", { name: /Articoli/ }).click();
-  await expect(dialog.getByRole("tabpanel", { name: /Articoli/ })).toContainText("SKU");
-  await page.goBack();
-  await expect(dialog).toBeHidden();
-  await expect(page).toHaveURL(/\/anteprima\/ordini\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$/u);
-  const entries = await page.evaluate(() => history.length);
-  const details = first.getByRole("link", { name: "Dettaglio" });
-  await details.click();
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toBeFocused();
-  await expect(dialog.getByText("Ultima modifica su eBay")).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
-  await expect(page).toHaveURL(/\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$/u);
-  // La chiusura torna alla voce dell'elenco, senza aggiungerne una: Indietro non riapre il
-  // pannello. Il dettaglio aperto ha preso il posto della voce in avanti lasciata da Indietro.
-  await expect(first.getByRole("heading", { level: 2 }).getByRole("link")).toBeFocused();
-  expect(await page.evaluate(() => history.length)).toBe(entries);
-});
+for (const area of areas)
+  test(`il dettaglio ha un URL, si chiude con Indietro e conserva i filtri, ${area.name}`, async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    await enter(context, baseURL!, area);
+    await open(page, `${area.base}/ordini?fiscale=available`);
+    const list = page.getByRole("region", { name: "Elenco ordini" });
+    const first = list.getByRole("article").first();
+    const buyer = (await first.getByRole("heading", { level: 2 }).textContent()) ?? "";
+    await first.getByRole("link", { name: "Dettaglio" }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`${area.base}/ordini/[^/?]+\\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$`, "u"),
+    );
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toContainText(buyer);
+    await dialog.getByRole("tab", { name: /Articoli/ }).click();
+    await expect(dialog.getByRole("tabpanel", { name: /Articoli/ })).toContainText(
+      area.base === "/app" ? "Articolo di collaudo" : "SKU",
+    );
+    await page.goBack();
+    await expect(dialog).toBeHidden();
+    await expect(page).toHaveURL(
+      new RegExp(`${area.base}/ordini\\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$`, "u"),
+    );
+    const entries = await page.evaluate(() => history.length);
+    const details = first.getByRole("link", { name: "Dettaglio" });
+    await details.click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toBeFocused();
+    await expect(dialog.getByText("Ultima modifica su eBay")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(page).toHaveURL(/\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$/u);
+    // La chiusura torna alla voce dell'elenco, senza aggiungerne una: Indietro non riapre il
+    // pannello. Il dettaglio aperto ha preso il posto della voce in avanti lasciata da Indietro.
+    await expect(first.getByRole("heading", { level: 2 }).getByRole("link")).toBeFocused();
+    expect(await page.evaluate(() => history.length)).toBe(entries);
+  });
 
 test("il collegamento diretto al dettaglio regge ricarica e chiusura", async ({ page }) => {
   await open(page, "/anteprima/ordini?fiscale=available");
@@ -112,32 +154,46 @@ test("il collegamento diretto al dettaglio regge ricarica e chiusura", async ({ 
   await expect(title).toBeFocused();
 });
 
-test("il dettaglio conserva selezione e posizione dell'elenco", async ({ page }) => {
-  await open(page, "/anteprima/ordini?fiscale=locked");
-  await page.getByRole("button", { name: "Seleziona" }).click();
-  const checkbox = page.getByRole("checkbox", { name: "Seleziona l’ordine 02-44519-70831" });
-  await checkbox.click();
-  const card = page.getByRole("article", { name: "Ordine 02-44519-70831" });
-  await card.scrollIntoViewIfNeeded();
-  const scroll = await page.evaluate(() => window.scrollY);
-  await card.getByRole("link", { name: "Dettaglio" }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toBeVisible();
-  await page.goBack();
-  await expect(dialog).toBeHidden();
-  await expect(checkbox).toBeChecked();
-  expect(await page.evaluate(() => window.scrollY)).toBe(scroll);
-});
+for (const area of areas)
+  test(`il dettaglio conserva selezione e posizione dell'elenco, ${area.name}`, async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    await enter(context, baseURL!, area);
+    await open(page, `${area.base}/ordini?fiscale=locked`);
+    await page.getByRole("button", { name: "Seleziona" }).click();
+    const checkbox = page.getByRole("checkbox", { name: `Seleziona l’ordine ${area.locked}` });
+    await checkbox.click();
+    const card = page.getByRole("article", { name: `Ordine ${area.locked}` });
+    await card.scrollIntoViewIfNeeded();
+    // Con la tastiera: il clic di Playwright scorrerebbe il collegamento fuori dalla barra fissa.
+    await card.getByRole("link", { name: "Dettaglio" }).focus();
+    const scroll = await page.evaluate(() => window.scrollY);
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await page.goBack();
+    await expect(dialog).toBeHidden();
+    await expect(checkbox).toBeChecked();
+    expect(await page.evaluate(() => window.scrollY)).toBe(scroll);
+  });
 
-test("su smartphone il dettaglio occupa tutto lo schermo", async ({ page }) => {
-  await page.setViewportSize({ width: 375, height: 740 });
-  await open(page);
-  await page.getByRole("article").first().getByRole("link", { name: "Dettaglio" }).click();
-  // Si attende la fine dell'ingresso, che trasla il pannello.
-  await expect
-    .poll(() => page.getByRole("dialog").boundingBox())
-    .toMatchObject({ x: 0, y: 0, width: 375, height: 740 });
-});
+for (const area of areas)
+  test(`su smartphone il dettaglio occupa tutto lo schermo, ${area.name}`, async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    await enter(context, baseURL!, area);
+    await page.setViewportSize({ width: 375, height: 740 });
+    await open(page, `${area.base}/ordini`);
+    await page.getByRole("article").first().getByRole("link", { name: "Dettaglio" }).click();
+    // Si attende la fine dell'ingresso, che trasla il pannello.
+    await expect
+      .poll(() => page.getByRole("dialog").boundingBox())
+      .toMatchObject({ x: 0, y: 0, width: 375, height: 740 });
+  });
 
 test("lo sblocco rivela il dato solo dopo l'azione e aggiorna la quota", async ({ page }) => {
   await open(page);
@@ -475,59 +531,75 @@ test("il salvataggio automatico fallito ripristina il valore", async ({ page }) 
   await expect(toggle).not.toBeChecked();
 });
 
-for (const locale of ["it", "en"] as const) {
-  test(`mobile con tocco e bottom navigation, ${locale}`, async ({ browser, baseURL }) => {
-    const context = await browser.newContext({
+for (const area of areas)
+  for (const locale of ["it", "en"] as const) {
+    test(`mobile con tocco e bottom navigation, ${locale}, ${area.name}`, async ({
+      browser,
       baseURL,
-      viewport: { width: 375, height: 740 },
-      hasTouch: true,
-      isMobile: true,
-    });
-    const page = await context.newPage();
-    const prefix = locale === "it" ? "" : "/en";
-    const labels =
-      locale === "it"
-        ? { nav: "Navigazione principale", settings: "Impostazioni", notifications: "Notifiche" }
-        : { nav: "Main navigation", settings: "Settings", notifications: "Notifications" };
-    try {
-      await open(page, `${prefix}/anteprima/ordini`);
-      await expect(page.locator("html")).toHaveAttribute("lang", locale);
-      // Anche su mobile l'anteprima dichiara che le azioni sono simulate.
-      await expect(
-        page.getByText(
-          locale === "it"
-            ? "Qui le azioni sono simulate e usano dati di esempio."
-            : "Actions here are simulated and use sample data.",
-        ),
-      ).toBeVisible();
-      const bottom = page.getByRole("navigation", { name: labels.nav });
-      await expect(bottom).toHaveCount(1);
-      await expect(bottom).toBeInViewport();
-      const noOverflow = () =>
-        page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
-      await expect.poll(noOverflow).toBe(true);
-      await bottom.getByRole("link", { name: labels.settings }).tap();
-      await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni$`, "u"));
-      const categories = page.getByRole("navigation", {
-        name: locale === "it" ? "Categorie" : "Categories",
+    }) => {
+      const context = await browser.newContext({
+        baseURL,
+        viewport: { width: 375, height: 740 },
+        hasTouch: true,
+        isMobile: true,
       });
-      await categories.getByRole("link", { name: new RegExp(labels.notifications, "u") }).tap();
-      await expect(categories).toBeHidden();
-      await expect(
-        page.getByRole("heading", { level: 2, name: labels.notifications }),
-      ).toBeVisible();
-      await expect.poll(noOverflow).toBe(true);
-      await page.getByRole("link", { name: labels.settings, exact: true }).first().tap();
-      await expect(categories).toBeVisible();
-      await bottom
-        .getByRole("link", { name: locale === "it" ? "Negozi eBay" : "eBay stores" })
-        .tap();
-      await expect.poll(noOverflow).toBe(true);
-    } finally {
-      await context.close();
-    }
-  });
-}
+      await enter(context, baseURL!, area);
+      const page = await context.newPage();
+      const prefix = locale === "it" ? "" : "/en";
+      const labels =
+        locale === "it"
+          ? { nav: "Navigazione principale", settings: "Impostazioni", notifications: "Notifiche" }
+          : { nav: "Main navigation", settings: "Settings", notifications: "Notifications" };
+      try {
+        await open(page, `${prefix}${area.base}/ordini`);
+        await expect(page.locator("html")).toHaveAttribute("lang", locale);
+        // Anche su mobile l'anteprima dichiara che le azioni sono simulate.
+        if (area.base === "/anteprima")
+          await expect(
+            page.getByText(
+              locale === "it"
+                ? "Qui le azioni sono simulate e usano dati di esempio."
+                : "Actions here are simulated and use sample data.",
+            ),
+          ).toBeVisible();
+        const bottom = page.getByRole("navigation", { name: labels.nav });
+        await expect(bottom).toHaveCount(1);
+        await expect(bottom).toBeInViewport();
+        const noOverflow = () =>
+          page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
+        await expect.poll(noOverflow).toBe(true);
+        await bottom.getByRole("link", { name: labels.settings }).tap();
+        await expect(page).toHaveURL(new RegExp(`${prefix}${area.base}/impostazioni$`, "u"));
+        const categories = page.getByRole("navigation", {
+          name: locale === "it" ? "Categorie" : "Categories",
+        });
+        // Le descrizioni nominano soltanto i servizi disponibili: Telegram manca nell'area reale.
+        await expect(
+          categories.getByRole("link", { name: new RegExp(labels.notifications, "u") }),
+        ).toContainText(
+          area.base === "/app"
+            ? locale === "it"
+              ? "Comunicazioni via email"
+              : "Email communications"
+            : "Telegram",
+        );
+        await categories.getByRole("link", { name: new RegExp(labels.notifications, "u") }).tap();
+        await expect(categories).toBeHidden();
+        await expect(
+          page.getByRole("heading", { level: 2, name: labels.notifications }),
+        ).toBeVisible();
+        await expect.poll(noOverflow).toBe(true);
+        await page.getByRole("link", { name: labels.settings, exact: true }).first().tap();
+        await expect(categories).toBeVisible();
+        await bottom
+          .getByRole("link", { name: locale === "it" ? "Negozi eBay" : "eBay stores" })
+          .tap();
+        await expect.poll(noOverflow).toBe(true);
+      } finally {
+        await context.close();
+      }
+    });
+  }
 
 test("con Premium nessun ordine resta da sbloccare e il piano a vita non si rinnova", async ({
   page,
@@ -662,4 +734,125 @@ test("contatti cliccabili e copiabili, senza richiesta fiscale precompilata agli
   );
   await expect(alias.getByRole("link", { name: "Scrivi all’acquirente via email" })).toHaveCount(0);
   await expect(alias.getByRole("button", { name: /^Copia messaggio/u })).toBeVisible();
+});
+
+test.describe("area reale", () => {
+  test.beforeEach(({ context, baseURL }) => enter(context, baseURL!, areas[1]));
+
+  test("Ordini con navigazione, campanella e menu account", async ({ page }) => {
+    await open(page, "/app/ordini");
+    await expect(page).toHaveTitle("FiscalBay | Ordini");
+    const nav = page.getByRole("navigation", { name: "Navigazione principale" });
+    await expect(nav.getByRole("link")).toHaveText(["Ordini", "Negozi eBay", "Impostazioni"]);
+    await expect(nav.getByRole("link", { name: "Ordini" })).toHaveAttribute("aria-current", "page");
+    // Il negozio scaduto e il consenso in scadenza arrivano dai dati salvati; le letture restano.
+    await page.getByRole("button", { name: /^Notifiche, \d+ da leggere$/u }).click();
+    const bell = page.getByRole("dialog");
+    await expect(bell.getByRole("link", { name: /collaudo-scaduto/u })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(bell).toBeHidden();
+    await page.getByRole("button", { name: "Account" }).click();
+    const menu = page.getByRole("menu");
+    await expect(menu.getByRole("menuitem")).toHaveText([
+      "Profilo",
+      "Sicurezza",
+      "Piano e pagamenti",
+      "Impostazioni",
+      "Visita fiscalbay.it",
+      "Esci",
+    ]);
+    await menu.getByRole("menuitem", { name: "Sicurezza" }).click();
+    await expect(page).toHaveURL(/\/app\/impostazioni\/sicurezza$/u);
+    await expect(page.getByRole("heading", { name: "Sicurezza", level: 2 })).toBeVisible();
+  });
+
+  test("la ricerca della top bar suggerisce e apre l'elenco filtrato", async ({ page }) => {
+    await open(page, "/app/ordini");
+    const search = page.getByRole("searchbox", { name: "Cerca ordini" });
+    await search.fill(testAccount.orders.unlocked);
+    const suggestion = page
+      .getByRole("search")
+      .getByRole("link", { name: new RegExp(testAccount.orders.unlocked, "u") });
+    await expect(suggestion).toBeVisible();
+    await page.getByRole("link", { name: "Vedi tutti i risultati (1)" }).click();
+    await expect(page).toHaveURL(/\/app\/ordini\?ricerca=[\w-]+(?:[?&]vista=[0-9a-z]+)?$/u);
+    await expect(search).toHaveValue(testAccount.orders.unlocked);
+    await expect(
+      page.getByRole("region", { name: "Elenco ordini" }).getByRole("article"),
+    ).toHaveCount(1);
+    await search.fill("");
+    await search.fill(testAccount.orders.unlocked);
+    await suggestion.click();
+    await expect(page).toHaveURL(/\/app\/ordini\/[^/?]+\?ricerca=[\w-]+(?:[?&]vista=[0-9a-z]+)?$/u);
+    await expect(page.getByRole("dialog")).toContainText(testAccount.taxCodes.unlocked);
+  });
+
+  test("stati vuoti, ricerca e indirizzi inesistenti restano dentro l'app", async ({ page }) => {
+    const response = await page.goto("/app/ordini/non-esiste");
+    expect(response?.status()).toBe(404);
+    await expect(page.getByRole("heading", { level: 1, name: "Ordine non trovato" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Navigazione principale" })).toBeVisible();
+    await page.getByRole("link", { name: "Torna agli ordini" }).click();
+    await expect(page).toHaveURL(/\/app\/ordini(?:[?&]vista=[0-9a-z]+)?$/u);
+
+    await open(page, "/app/ordini?pagamento=sconosciuto");
+    await expect(page.getByRole("combobox", { name: "Pagamento" })).toContainText("Tutti");
+    await expect(page.getByText("2 ordini")).toBeVisible();
+
+    await open(page, await searched(page, "zzzz", "/app"));
+    await expect(page.getByRole("searchbox").first()).toHaveValue("zzzz");
+    await expect(page.getByText("Prova un’altra ricerca.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Cancella ricerca" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Seleziona" })).toBeDisabled();
+  });
+
+  test("negozio da ricollegare e conferma forte dell'eliminazione", async ({ page }) => {
+    await open(page, "/app/negozi");
+    const name = testAccount.stores.expired;
+    await page.getByRole("table", { name: "Elenco negozi" }).getByRole("link", { name }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toContainText(name);
+    await dialog.getByRole("button", { name: "Scollega ed elimina negozio" }).click();
+    const confirm = page.getByRole("alertdialog");
+    const button = confirm.getByRole("button", { name: "Scollega ed elimina negozio" });
+    await expect(button).toBeDisabled();
+    await confirm.getByRole("textbox").fill(name);
+    await expect(button).toBeEnabled();
+    // Il negozio serve alle altre prove: l'eliminazione resta alla prova dell'errore.
+    await confirm.getByRole("button", { name: "Annulla", exact: true }).click();
+    await expect(confirm).toBeHidden();
+    await expect(dialog).toBeVisible();
+  });
+});
+
+// Sul tablet i filtri riempiono le righe: quattro su due colonne, cinque (con il negozio) su tre.
+for (const [account, columns] of [
+  [undefined, 3],
+  ["suggestions-it", 2],
+] as const)
+  test(`filtri del tablet a righe piene su ${columns} colonne, area reale`, async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    await useLocalAccount(context, "member", baseURL!, account);
+    await page.setViewportSize({ width: 768, height: 900 });
+    await open(page, "/app/ordini");
+    const lefts = await page
+      .locator("#orders-filters > *")
+      .evaluateAll((filters) => filters.map((filter) => filter.getBoundingClientRect().left));
+    expect(lefts).toHaveLength(columns === 3 ? 5 : 4);
+    expect(new Set(lefts).size).toBe(columns);
+  });
+
+// Il fuso automatico nomina quello del dispositivo anche nell'anteprima, come nell'area reale.
+test.describe("fuso del dispositivo", () => {
+  for (const area of areas)
+    test(`Impostazioni con il fuso rilevato, ${area.name}`, async ({ page, context, baseURL }) => {
+      await enter(context, baseURL!, area);
+      await open(page, `${area.base}/impostazioni/aspetto`);
+      await expect(page.getByRole("combobox", { name: "Fuso orario" })).toContainText(
+        "Automatico: Roma (Italia)",
+      );
+    });
 });

@@ -231,8 +231,10 @@ export function OrdersToolbar({
         className={cn(
           // Due colonne anche su smartphone: i filtri aperti lasciano in vista i primi risultati.
           // Da desktop una sola riga: ogni filtro parte dalla larghezza della sua voce più lunga
-          // e, se lo spazio non basta, tutti si restringono in proporzione.
-          "grid grid-cols-2 gap-3 md:flex-1 md:grid-cols-3 lg:flex",
+          // e, se lo spazio non basta, tutti si restringono in proporzione. Sul tablet le righe
+          // restano piene: quattro filtri su due colonne, cinque su tre.
+          "grid grid-cols-2 gap-3 md:flex-1 lg:flex",
+          stores.length > 1 ? "md:grid-cols-3" : "md:grid-cols-2",
           !filtersOpen && "max-md:hidden",
         )}
       >

@@ -436,6 +436,12 @@ const it = {
       },
       supporto: { title: "Supporto", description: "Domande frequenti e assistenza" },
     },
+    // Descrizioni delle categorie finché pagamenti, Telegram ed esportazione dei dati mancano.
+    limitedDescriptions: {
+      piano: "Piano e sblocchi",
+      notifiche: "Comunicazioni via email",
+      privacy: "Informativa sulla privacy",
+    },
     premiumBadge: "Premium",
     saving: "Salvataggio…",
     saved: "Salvato",
@@ -1328,6 +1334,11 @@ const en: AppCopy = {
       messaggio: { title: "Message template", description: "Asking the buyer for the tax code" },
       privacy: { title: "Data and privacy", description: "Policy, export and deletion" },
       supporto: { title: "Support", description: "FAQ and help" },
+    },
+    limitedDescriptions: {
+      piano: "Plan and unlocks",
+      notifiche: "Email communications",
+      privacy: "Privacy policy",
     },
     premiumBadge: "Premium",
     saving: "Saving…",

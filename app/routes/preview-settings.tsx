@@ -5,7 +5,7 @@ import { SettingsPage, type ExportContext, type SettingsPageData } from "~/compo
 import { NotFoundState, UnavailableState } from "~/components/not-found";
 import { appCopy } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
-import { defaultDisplay, defaultTemplate } from "../preferences";
+import { defaultDisplay, defaultTemplate, detectedTimeZone } from "../preferences";
 import { exportReturnHref, exportScope } from "../orders/export-scope";
 import { snapshotParam } from "../orders/order-list";
 import { openSearch } from "../orders/order-search.server";
@@ -80,11 +80,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       passkeyBlock: "nuovo-accesso",
       notice: null,
     },
-    // Ogni scelta parte dal predefinito: l'anteprima non conserva preferenze.
+    // Ogni scelta parte dal predefinito: l'anteprima non conserva preferenze. Il fuso
+    // rilevato è quello del dispositivo, come nell'area reale.
     preferences: {
       theme: defaultDisplay.theme,
       timeZone: "auto",
-      detectedTimeZone: null,
+      detectedTimeZone: detectedTimeZone(request.headers.get("cookie")),
       marketing: false,
       templates: { it: defaultTemplate("it"), en: defaultTemplate("en") },
     },

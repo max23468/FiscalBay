@@ -42,6 +42,8 @@ export async function useLocalAccount(
   await context.addCookies([cookie]);
   const origin = new URL(baseURL).origin;
   const jar = new Map<string, string>([[cookie.name, cookie.value]]);
+  // Cookie che passano dal proxy: il browser potrebbe conservarne una copia già eliminata.
+  const managed = new Set(jar.keys());
   // Il report delle misure non usa la sessione e Playwright con WebKit non inoltra il corpo
   // dei beacon intercettati: resta fuori dall'instradamento.
   await context.route(
@@ -51,10 +53,17 @@ export async function useLocalAccount(
       url.pathname !== "/api/v1/page-timing",
     async (route) => {
       const request = route.request();
+      // I cookie scritti dalla pagina, come il fuso del dispositivo, restano accanto alla sessione.
+      const cookies = new Map(
+        (await context.cookies(request.url()))
+          .filter(({ name }) => !managed.has(name))
+          .map(({ name, value }) => [name, value] as const),
+      );
+      for (const [name, value] of jar) cookies.set(name, value);
       const response = await route.fetch({
         headers: {
           ...request.headers(),
-          cookie: [...jar].map(([name, value]) => `${name}=${value}`).join("; "),
+          cookie: [...cookies].map(([name, value]) => `${name}=${value}`).join("; "),
         },
         maxRedirects: 0,
       });
@@ -62,6 +71,7 @@ export async function useLocalAccount(
         if (name.toLowerCase() !== "set-cookie") continue;
         const [pair = ""] = value.split(";");
         const [key = "", ...rest] = pair.split("=");
+        managed.add(key.trim());
         if (/max-age=0/iu.test(value)) jar.delete(key.trim());
         else jar.set(key.trim(), rest.join("="));
       }
