@@ -26,6 +26,58 @@ export async function resetOrderFixtures() {
   ]);
 }
 
+type StoreRow = {
+  id: string;
+  workspaceId?: string;
+  ebayUserId?: string;
+  environment?: "production" | "sandbox";
+  linkedAt?: string;
+};
+
+/** Negozio eBay sintetico, eseguibile con `run()` o dentro un `batch`. */
+export function insertStore({
+  id,
+  workspaceId = "w-a",
+  ebayUserId = id,
+  environment = "production",
+  linkedAt = now,
+}: StoreRow) {
+  return env.DB.prepare(
+    "INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, ebay_environment, linked_at) VALUES (?, ?, ?, ?, ?)",
+  ).bind(id, workspaceId, ebayUserId, environment, linkedAt);
+}
+
+type TaxIdentifierRow = {
+  id: string;
+  orderId: string;
+  type: string;
+  value: string;
+  country?: string | null;
+  source?: string;
+  observedAt?: string;
+  removedAt?: string | null;
+};
+
+/** Identificativi fiscali sintetici in un'unica istruzione, eseguibile con `run()` o in `batch`. */
+export function insertTaxIdentifiers(...rows: TaxIdentifierRow[]) {
+  return env.DB.prepare(
+    `INSERT INTO tax_identifiers
+      (id, order_id, identifier_type, issuing_country, value, source, observed_at, removed_at)
+     VALUES ${rows.map(() => "(?, ?, ?, ?, ?, ?, ?, ?)").join(", ")}`,
+  ).bind(
+    ...rows.flatMap((row) => [
+      row.id,
+      row.orderId,
+      row.type,
+      row.country ?? null,
+      row.value,
+      row.source ?? "synthetic_fixture",
+      row.observedAt ?? now,
+      row.removedAt ?? null,
+    ]),
+  );
+}
+
 export async function seed(): Promise<void> {
   await env.DB.batch([
     env.DB.prepare(
