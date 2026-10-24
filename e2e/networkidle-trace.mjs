@@ -12,7 +12,7 @@ if (!s.includes("__idleTrace")) {
     s = s.replace(a, b);
   };
   const H = (frame, msg) =>
-    `((${frame}).__h ??= [], (${frame}).__h.push(Date.now()%1000000+" "+${msg}), (${frame}).__h.length>200 && (${frame}).__h.shift());`;
+    `((${frame}).__h ??= [], (${frame}).__last = Date.now(), (${frame}).__dumped = false, (${frame}).__h.push(Date.now()%1000000+" "+${msg}), (${frame}).__h.length>200 && (${frame}).__h.shift());`;
   rep(
     `        this._inflightRequests = /* @__PURE__ */ new Set();`,
     `        this._inflightRequests = /* @__PURE__ */ new Set();
@@ -20,9 +20,9 @@ if (!s.includes("__idleTrace")) {
           globalThis.__idleTrace = new Set();
           setInterval(() => {
             for (const f of globalThis.__idleTrace) {
-              if (f.__dumped || !f.__clearedAt || f._detachedScope.isClosed()) continue;
+              if (f.__dumped || !f.__clearedAt || f._detachedScope.isClosed() || f._page.isClosed()) continue;
               if (!f._firedLifecycleEvents.has("load") || f._firedLifecycleEvents.has("networkidle")) continue;
-              if (Date.now() - f.__clearedAt < 10000) continue;
+              if (Date.now() - (f.__last ?? 0) < 8000) continue;
               f.__dumped = true;
               process.stderr.write("IDLE-TRACE stuck " + f._url + " inflight=[" + [...f._inflightRequests].map((r) => r.url() + "|" + r.resourceType() + "|doc=" + r._documentId) + "] fired=[" + [...f._firedLifecycleEvents] + "] timer=" + !!f._networkIdleTimer + " self=" + f._firedNetworkIdleSelf + " children=" + f._childFrames.size + "\\n" + (f.__h ?? []).map((l) => "IDLE-TRACE   " + l).join("\\n") + "\\n");
             }
