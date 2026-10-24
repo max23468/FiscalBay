@@ -437,9 +437,9 @@ export function OrderCard({
           ) : null}
         </ul>
       </div>
-      {/* Colonna fiscale fissa, larga quanto il riquadro del codice: l'azione va
-          sotto il riquadro invece di schiacciare la colonna dell'acquirente. */}
-      <div className="grid content-start gap-x-4 gap-y-3 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_14.5rem]">
+      {/* Colonna fiscale larga quanto il riquadro del codice, mai meno della sua misura base:
+          codice e copia restano sulla stessa riga e l'azione va sotto il riquadro. */}
+      <div className="grid content-start gap-x-4 gap-y-3 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_minmax(14.5rem,max-content)]">
         <p className="grid min-w-0 content-start gap-1.5">
           <span className="text-xs font-medium text-muted-foreground">{t.order.buyer}</span>
           <span className="text-sm leading-snug font-medium text-pretty [overflow-wrap:anywhere] sm:min-h-10">

@@ -380,6 +380,9 @@ export const it = {
     disconnectTitle: (name: string) => `Scollegare ${name}?`,
     disconnectBody:
       "FiscalBay smette di leggere il negozio su eBay. Gli ordini già importati restano consultabili per il periodo di conservazione e puoi ricollegare lo stesso negozio in seguito.",
+    disconnectSubscription:
+      "Scollegare il negozio non disdice l’abbonamento Premium, che continua a rinnovarsi.",
+    disconnectSubscriptionLink: "Gestisci l’abbonamento",
     deleteBody:
       "Il negozio verrà rimosso da FiscalBay e tutti i suoi ordini importati saranno eliminati. Questa operazione non può essere annullata. Il negozio su eBay e l’abbonamento FiscalBay non vengono modificati.",
     deleteLabel: "Scrivi il nome del negozio per confermare",
@@ -500,8 +503,14 @@ export const it = {
         "Premium si attiva appena Stripe conferma il pagamento. Ricevuta e fattura arrivano da Stripe.",
       checkoutCancelled: "Pagamento annullato. Nessun addebito.",
       buyPeriod: { monthly: "Scegli mensile", annual: "Scegli annuale", lifetime: "Scegli a vita" },
-      freeStoreHint:
-        "Puoi sostituire il negozio attivo ogni 90 giorni. Nell’anteprima la scelta è simulata e non modifica i negozi.",
+      freeStoreHint: "Puoi sostituire il negozio attivo ogni 90 giorni.",
+      freeStoreLocked: (date: string) => `Potrai sostituire il negozio attivo dal ${date}.`,
+      freeStoreConfirmTitle: (name: string) => `Rendere attivo ${name}?`,
+      freeStoreConfirmBody: (previous: string | null, date: string) =>
+        `${previous ? `${previous} va in pausa: nessuna nuova lettura e ordini non consultabili. ` : ""}Potrai sostituire di nuovo il negozio attivo dal ${date}.`,
+      freeStoreConfirm: "Rendi attivo",
+      freeStoreChanged: "Negozio attivo aggiornato.",
+      freeStoreUnavailable: "Il negozio attivo non si può sostituire ora.",
       premiumPeriod: {
         monthly: "Premium mensile",
         annual: "Premium annuale",
@@ -515,6 +524,15 @@ export const it = {
         `Sei di nuovo nel piano Free. Completa il pagamento richiesto da Stripe entro il ${date} per mantenere il tuo prezzo.`,
       manageBilling: "Gestisci abbonamento su Stripe",
       billingDocuments: "Consulta ricevute e fatture su Stripe",
+      billingUnavailable: "Gestione dell’abbonamento non disponibile ora. Riprova più tardi.",
+      switchTo: { monthly: "Passa al mensile", annual: "Passa all’annuale" },
+      switchHint: (date: string) =>
+        `Il cambio vale dal ${date}: nessun addebito prima di quella data e il prezzo resta quello del tuo listino.`,
+      switchScheduled: (period: "monthly" | "annual") => (date: string) =>
+        `Si rinnova il ${date} come ${period === "annual" ? "annuale" : "mensile"}.`,
+      keepPeriod: { monthly: "Resta al mensile", annual: "Resta all’annuale" },
+      periodChanged: "Rinnovo aggiornato.",
+      periodUnavailable: "Il cambio di rinnovo non è disponibile ora. Riprova più tardi.",
       billingDocs: "Ricevute e fatture sono disponibili su Stripe.",
     },
     notifications: {

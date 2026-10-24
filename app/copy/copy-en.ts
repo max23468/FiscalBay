@@ -373,6 +373,9 @@ export const en: AppCopy = {
     disconnectTitle: (name) => `Disconnect ${name}?`,
     disconnectBody:
       "FiscalBay will stop reading this store on eBay. Imported orders remain available for the retention period and you can reconnect the same store later.",
+    disconnectSubscription:
+      "Disconnecting the store does not cancel the Premium subscription, which keeps renewing.",
+    disconnectSubscriptionLink: "Manage subscription",
     deleteBody:
       "The store will be removed from FiscalBay and all its imported orders will be deleted. This cannot be undone. Your store on eBay and your FiscalBay subscription will not change.",
     deleteLabel: "Type the store name to confirm",
@@ -490,8 +493,14 @@ export const en: AppCopy = {
         annual: "Choose annual",
         lifetime: "Choose lifetime",
       },
-      freeStoreHint:
-        "You can replace the active store every 90 days. In the preview, the choice is simulated and does not change stores.",
+      freeStoreHint: "You can replace the active store every 90 days.",
+      freeStoreLocked: (date: string) => `You can replace the active store from ${date}.`,
+      freeStoreConfirmTitle: (name: string) => `Make ${name} the active store?`,
+      freeStoreConfirmBody: (previous: string | null, date: string) =>
+        `${previous ? `${previous} will be paused: no new reads and orders unavailable. ` : ""}You can replace the active store again from ${date}.`,
+      freeStoreConfirm: "Make active",
+      freeStoreChanged: "Active store updated.",
+      freeStoreUnavailable: "The active store cannot be replaced right now.",
       premiumPeriod: {
         monthly: "Premium, monthly",
         annual: "Premium, annual",
@@ -505,6 +514,15 @@ export const en: AppCopy = {
         `You are back on Free. Complete the payment Stripe asks for by ${date} to keep your price.`,
       manageBilling: "Manage subscription on Stripe",
       billingDocuments: "View receipts and invoices on Stripe",
+      billingUnavailable: "Subscription management is not available right now. Try again later.",
+      switchTo: { monthly: "Switch to monthly", annual: "Switch to annual" },
+      switchHint: (date: string) =>
+        `The change applies from ${date}: no charge before then, and your price list stays the same.`,
+      switchScheduled: (period: "monthly" | "annual") => (date: string) =>
+        `Renews on ${date} as ${period === "annual" ? "annual" : "monthly"}.`,
+      keepPeriod: { monthly: "Stay on monthly", annual: "Stay on annual" },
+      periodChanged: "Renewal updated.",
+      periodUnavailable: "The renewal change is not available right now. Try again later.",
       billingDocs: "Receipts and invoices are available on Stripe.",
     },
     notifications: {

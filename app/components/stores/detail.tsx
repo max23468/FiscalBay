@@ -167,6 +167,10 @@ function StoreDetail({
         store={store}
         ebayDown={ebayDownFor(data, store)}
         connectHref={data.connectHref}
+        renewsAlone={
+          !!data.subscriptionRenews &&
+          data.stores.every((other) => other.id === store.id || other.connection === "disconnected")
+        }
         t={t}
         links={links}
       />

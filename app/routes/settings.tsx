@@ -16,8 +16,13 @@ import {
   purchaseState,
   startCheckout,
 } from "../domain/checkout.server";
-import { subscriptionView } from "../domain/billing.server";
+import {
+  changeSubscriptionPeriod,
+  openBillingPortal,
+  subscriptionView,
+} from "../domain/billing.server";
 import { pendingEmailChange } from "../domain/email-change.server";
+import { chooseFreeStore, freeStoreState } from "../domain/free-store.server";
 import {
   accountCoverage,
   orderAllowance,
@@ -43,10 +48,16 @@ import {
 } from "../domain/sessions.server";
 import { listSignInMethods } from "../domain/sign-in-methods.server";
 import { logFailure } from "../errors";
-import { languageFromPath } from "../i18n";
+import { languageFromPath, localizedPath } from "../i18n";
 import { measure } from "../observability.server";
 import { securityAction } from "../security-actions.server";
-import { settingsSections, type ActionResult, type SettingsSection } from "../view-models";
+import { effectiveTimeZone } from "../preferences";
+import {
+  formatDate,
+  settingsSections,
+  type ActionResult,
+  type SettingsSection,
+} from "../view-models";
 import type { Route } from "./+types/settings";
 
 /**
@@ -58,7 +69,7 @@ import type { Route } from "./+types/settings";
 const sections = settingsSections.filter((section) => section !== "esportazione");
 const services = (): SettingsPageData["services"] => ({
   billing: checkoutConfigured(env),
-  billingPortal: false,
+  billingPortal: !!env.STRIPE_SECRET_KEY,
   telegram: false,
   accountData: false,
   support: false,
@@ -106,21 +117,24 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
   const userId = session.user.id;
   const now = new Date();
   const auth = session as AuthSession;
-  const [shell, [allowance, purchase, confirmUnlock, marketing, methods, sessions, pendingEmail]] =
-    await Promise.all([
-      shellData(area, undefined, now),
-      measure("d1", "settings", () =>
-        Promise.all([
-          orderAllowance(env.DB, userId, now),
-          purchaseState(env.DB, userId, now),
-          unlockConfirmation(env.DB, userId),
-          marketingConsent(env.DB, userId),
-          listSignInMethods(env.DB, userId),
-          listActiveSessions(env.DB, userId, session.session.id, language, now),
-          pendingEmailChange(env.DB, userId, session.user.email),
-        ]),
-      ),
-    ]);
+  const [
+    shell,
+    [allowance, purchase, freeStore, confirmUnlock, marketing, methods, sessions, pendingEmail],
+  ] = await Promise.all([
+    shellData(area, undefined, now),
+    measure("d1", "settings", () =>
+      Promise.all([
+        orderAllowance(env.DB, userId, now),
+        purchaseState(env.DB, userId, now),
+        freeStoreState(env.DB, userId, now),
+        unlockConfirmation(env.DB, userId),
+        marketingConsent(env.DB, userId),
+        listSignInMethods(env.DB, userId),
+        listActiveSessions(env.DB, userId, session.session.id, language, now),
+        pendingEmailChange(env.DB, userId, session.user.email),
+      ]),
+    ),
+  ]);
   const cycle = allowance?.cycle;
   // Periodo dell'abbonamento, pagamento da confermare o rinnovo non riuscito.
   const subscription = allowance
@@ -157,6 +171,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       offers: checkoutOffers,
       checkout: checkoutReturn(new URL(request.url).searchParams),
     },
+    freeStore,
     stores: [],
     security: {
       methods,
@@ -254,6 +269,39 @@ export async function action({ request }: Route.ActionArgs) {
             : t.plan.checkoutUnavailable,
       );
     }
+    if (intent === "manage-billing") {
+      const plan = `${new URL(env.APP_ORIGIN).origin}${localizedPath(language, "/app/impostazioni/piano")}`;
+      const url = await openBillingPortal(env, userId, plan, language);
+      if (!url) return failed(409, t.plan.billingUnavailable);
+      return redirect(url);
+    }
+    if (intent === "change-period") {
+      const period = String(form.get("period") ?? "");
+      if (period !== "monthly" && period !== "annual") return failed(400, t.plan.periodUnavailable);
+      const change = await changeSubscriptionPeriod(env, userId, period);
+      if (change === "done" || change === "unchanged")
+        return { ok: true, notice: t.plan.periodChanged } satisfies ActionResult;
+      return failed(change === "not_allowed" ? 409 : 503, t.plan.periodUnavailable);
+    }
+    if (intent === "free-store") {
+      // La scelta e le pause sono un unico commit; un rifiuto lascia il negozio attivo com'era.
+      const choice = await chooseFreeStore(env.DB, userId, String(form.get("store") ?? ""));
+      if (choice.result === "done")
+        return { ok: true, notice: t.plan.freeStoreChanged } satisfies ActionResult;
+      if (choice.result === "locked")
+        return failed(
+          409,
+          t.plan.freeStoreLocked(
+            formatDate(
+              choice.changeFrom,
+              language,
+              "date",
+              effectiveTimeZone(area.preferences.timeZone, area.detectedTimeZone),
+            ),
+          ),
+        );
+      return failed(choice.result === "not_found" ? 404 : 409, t.plan.freeStoreUnavailable);
+    }
     if (intent === "profile") {
       // Nome, cognome e ragione sociale; il tipo di account resta quello registrato.
       form.set("tipo", area.profile.accountType === "business" ? "azienda" : "privato");
@@ -270,7 +318,9 @@ export async function action({ request }: Route.ActionArgs) {
         ? t.template.templateFailed
         : intent === "profile"
           ? appCopy[language].errors.unexpected
-          : t.saveFailed,
+          : intent === "manage-billing"
+            ? t.plan.billingUnavailable
+            : t.saveFailed,
     );
   }
   return securityAction(request, area, form);

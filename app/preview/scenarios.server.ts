@@ -48,6 +48,7 @@ export const scenarioIds = [
   "rinnovo-non-riuscito",
   "stripe-non-disponibile",
   "premium",
+  "cambio-rinnovo",
   "rinnovo-disdetto",
   "premium-a-vita",
 ] as const;
@@ -299,6 +300,18 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
     en: {
       name: "Premium, several stores",
       focus: "Three stores, Telegram notifications, XLSX. The first autosave fails.",
+    },
+  },
+  "cambio-rinnovo": {
+    it: {
+      name: "Cambio di rinnovo",
+      focus:
+        "Premium mensile che passa all'annuale al rinnovo, senza conguaglio; un solo negozio, che scollegato non disdice l'abbonamento.",
+    },
+    en: {
+      name: "Renewal change",
+      focus:
+        "Monthly Premium switching to annual at renewal, with no proration; a single store, which does not cancel the subscription when disconnected.",
     },
   },
   "rinnovo-disdetto": {
@@ -1688,6 +1701,21 @@ export function loadScenario(
           }),
           ...common.notifications,
         ],
+        diagnostics: diagnostics(),
+      };
+      break;
+    case "cambio-rinnovo":
+      scenario = {
+        ...common,
+        account: account({
+          plan: "premium",
+          trialAvailable: false,
+          quota: undefined,
+          premium: { period: "monthly", renewsAt: "2026-10-13T10:00:00Z", nextPeriod: "annual" },
+        }),
+        stores: [premiumStores[0]!],
+        seeds: seeds.filter((seed) => seed.store === "vintage"),
+        premium: true,
         diagnostics: diagnostics(),
       };
       break;

@@ -25,6 +25,8 @@ export interface StoresPageData {
   connectHref?: string;
   /** Impostazioni esistono: le scorciatoie verso notifiche, piano e supporto hanno una meta. */
   settings: boolean;
+  /** Abbonamento Premium che si rinnova: scollegare l'ultimo negozio non lo disdice. */
+  subscriptionRenews?: boolean;
 }
 
 /** Nome proprio dell'ambiente di prova di eBay, uguale nelle due lingue. */

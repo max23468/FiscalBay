@@ -44,12 +44,15 @@ export function StoreActions({
   store,
   ebayDown,
   connectHref,
+  renewsAlone = false,
   t,
   links,
 }: {
   store: StoreView;
   ebayDown: boolean;
   connectHref?: string;
+  /** Ultimo negozio collegato con un abbonamento che si rinnova: lo scollegamento lo dice. */
+  renewsAlone?: boolean;
   t: AppCopy;
   links: AppLinks;
 }) {
@@ -76,7 +79,7 @@ export function StoreActions({
       {store.connection === "active" ? (
         <p className="text-sm text-muted-foreground">{t.stores.pauseHint}</p>
       ) : null}
-      <DisconnectActions store={store} t={t} links={links} />
+      <DisconnectActions store={store} renewsAlone={renewsAlone} t={t} links={links} />
     </StoreSection>
   );
 }
@@ -174,7 +177,17 @@ function useDisconnectDialog(store: StoreView, t: AppCopy, links: AppLinks) {
   return { action, open, failure, changeOpen, run, confirmName, setConfirmName };
 }
 
-function DisconnectActions({ store, t, links }: { store: StoreView; t: AppCopy; links: AppLinks }) {
+function DisconnectActions({
+  store,
+  renewsAlone,
+  t,
+  links,
+}: {
+  store: StoreView;
+  renewsAlone: boolean;
+  t: AppCopy;
+  links: AppLinks;
+}) {
   const { action, open, failure, changeOpen, run, confirmName, setConfirmName } =
     useDisconnectDialog(store, t, links);
   const deleteLabel =
@@ -202,6 +215,18 @@ function DisconnectActions({ store, t, links }: { store: StoreView; t: AppCopy; 
               <AlertDialogTitle>{t.stores.disconnectTitle(store.name)}</AlertDialogTitle>
               <AlertDialogDescription>{t.stores.disconnectBody}</AlertDialogDescription>
             </AlertDialogHeader>
+            {/* Scollegare l'ultimo negozio non disdice Premium: la disdetta resta nel Piano (§6.2). */}
+            {renewsAlone ? (
+              <p className="text-sm">
+                {t.stores.disconnectSubscription}{" "}
+                <Link
+                  to={appHref(links, "impostazioni/piano")}
+                  className="font-medium underline underline-offset-4"
+                >
+                  {t.stores.disconnectSubscriptionLink}
+                </Link>
+              </p>
+            ) : null}
             {failure ? (
               <p role="alert" className="text-sm text-danger">
                 {failure}

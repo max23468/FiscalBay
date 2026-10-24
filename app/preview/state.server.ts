@@ -99,6 +99,8 @@ const notices: Record<string, (t: AppCopy) => string | undefined> = {
   profile: (t) => t.profile.saved,
   template: () => undefined,
   support: () => undefined,
+  "free-store": (t) => t.settings.plan.freeStoreChanged,
+  "change-period": (t) => t.settings.plan.periodChanged,
 };
 
 /**

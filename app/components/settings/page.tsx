@@ -31,7 +31,7 @@ import {
 import { AppearanceSection } from "./appearance";
 import { ExportSection, type ExportContext } from "./export";
 import { NotificationsSection } from "./notifications";
-import { PlanSection, type PurchaseView } from "./plan";
+import { PlanSection, type FreeStoreView, type PurchaseView } from "./plan";
 import { PrivacySection } from "./privacy";
 import { ProfileSection } from "./profile";
 import { SecuritySection, type SecurityData } from "./security";
@@ -50,6 +50,8 @@ export interface SettingsPageData {
   preview: boolean;
   account: AccountView;
   purchase: PurchaseView;
+  /** Negozio attivo del Free; null in Premium o senza negozi. */
+  freeStore: FreeStoreView | null;
   stores: StoreView[];
   security: SecurityData;
   /** Valori salvati, con i testi predefiniti dove non c'è una scelta. */
@@ -168,7 +170,7 @@ export function SettingsPage({
     piano: (
       <PlanSection
         account={data.account}
-        stores={data.stores}
+        freeStore={data.freeStore}
         billing={data.services.billing}
         billingPortal={data.services.billingPortal}
         purchase={data.purchase}

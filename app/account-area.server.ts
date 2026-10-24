@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { data, redirect } from "react-router";
 
 import { createAuth } from "./auth.server";
+import { applyFreePlan } from "./domain/free-store.server";
 import { listNotifications } from "./domain/notifications.server";
 import { readPreferences, type Preferences } from "./domain/preferences.server";
 import { registrationStatus, type Profile } from "./domain/registration.server";
@@ -39,8 +40,10 @@ export async function currentSession(request: Request) {
 }
 
 /**
- * Sessione, registrazione e preferenze. Se Auth o il database non rispondono la pagina non
- * promette dati che non ha letto: risponde 503 con la sola indicazione di riprovare.
+ * Sessione, registrazione e preferenze. Il piano dello spazio si riallinea prima di ogni
+ * lettura della pagina: dopo un downgrade i negozi esclusi sono già in pausa. Se Auth o il
+ * database non rispondono la pagina non promette dati che non ha letto: risponde 503 con la
+ * sola indicazione di riprovare.
  */
 async function readAccount(request: Request) {
   try {
@@ -50,6 +53,7 @@ async function readAccount(request: Request) {
           Promise.all([
             registrationStatus(env.DB, session.user.id),
             readPreferences(env.DB, session.user.id),
+            applyFreePlan(env.DB, session.user.id),
           ]),
         )
       : [null, null];
