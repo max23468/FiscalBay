@@ -40,7 +40,7 @@ const categories = [
 function toolingFile(file) {
   return (
     file.endsWith(".md") ||
-    /^scripts\/(?:verify-(?:copy|docs|repo|pages)|guardrails\.test|classify-changes|benchmark|coverage-report|release\/release(?:-notes|-cycle)?|find-(?:build|deployed)|reset-test-account|watch-invocations)\.mjs$/u.test(
+    /^scripts\/(?:verify-(?:copy|docs|repo|pages)|classify-changes|benchmark|coverage-report|release\/release(?:-notes|-cycle)?|find-(?:build|deployed)|reset-test-account|watch-invocations)(?:\.test)?\.mjs$/u.test(
       file,
     ) ||
     /^\.github\/(?:dependabot\.yml|workflows\/(?:ci|publish|qualify|promotion|mutation|react-doctor|actionlint|pr-title|dependency-review|dependabot-auto-merge)\.yml)$/u.test(
