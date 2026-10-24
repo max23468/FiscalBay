@@ -48,3 +48,11 @@ const variants = cva(
 export function buttonVariants(props?: Parameters<typeof variants>[0]) {
   return cn(variants(props));
 }
+
+/**
+ * Attributi di un collegamento con l'aspetto del pulsante. `data-slot="button"` lo separa dai
+ * collegamenti testuali: gli avvisi non lo sottolineano e la comparsa dei dati fiscali lo anima.
+ */
+export function buttonLink(props?: Parameters<typeof variants>[0]) {
+  return { "data-slot": "button", className: buttonVariants(props) };
+}

@@ -1,14 +1,14 @@
 import { env } from "cloudflare:workers";
-import { cn } from "cn";
 import { KeyRound, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { data } from "react-router";
 
 import { StandalonePage } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
-import { buttonVariants } from "~/components/ui/button-variants";
+import { buttonLink } from "~/components/ui/button-variants";
 import { Spinner } from "~/components/ui/spinner";
-import { appCopy } from "../app-copy";
+import { loadPasskeyClient } from "../account/passkey";
+import { appCopy, pageTitle } from "../app-copy";
 import { createAuth } from "../auth.server";
 import { adminAccess, type AuthSession } from "../domain/sessions.server";
 import { tracePhase } from "../errors";
@@ -19,7 +19,7 @@ import type { Route } from "./+types/admin";
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const language = languageFromPath(location.pathname);
   return [
-    { title: `FiscalBay | ${appCopy[language].admin.title}` },
+    { title: pageTitle(appCopy[language].admin.title) },
     { name: "robots", content: "noindex" },
   ];
 }
@@ -71,9 +71,8 @@ function PasskeyConfirm({ language, unverified }: { language: Language; unverifi
           setError(false);
           setRetried(true);
           try {
-            const { authClient } = await import("../account/passkey-client");
-            const result = await authClient.signIn.passkey();
-            if (result.error) setError(true);
+            const result = await (await loadPasskeyClient())?.signIn.passkey();
+            if (!result || result.error) setError(true);
             else window.location.replace(`${localizedPath(language, "/admin")}?${confirmedParam}`);
           } catch {
             setError(true);
@@ -83,12 +82,7 @@ function PasskeyConfirm({ language, unverified }: { language: Language; unverifi
         }}
       >
         {pending ? (
-          <Spinner
-            label={t.verifyTitle}
-            aria-hidden="true"
-            role={undefined}
-            data-icon="inline-start"
-          />
+          <Spinner data-icon="inline-start" />
         ) : (
           <KeyRound aria-hidden="true" data-icon="inline-start" />
         )}
@@ -120,11 +114,7 @@ export default function Admin({ loaderData }: Route.ComponentProps) {
       ) : (
         <PasskeyConfirm language={language} unverified={unverified} />
       )}
-      <a
-        href={localizedPath(language)}
-        data-slot="button"
-        className={cn(buttonVariants({ variant: "outline" }), "w-fit")}
-      >
+      <a href={localizedPath(language)} {...buttonLink({ variant: "outline", className: "w-fit" })}>
         {t.back}
       </a>
     </StandalonePage>

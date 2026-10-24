@@ -17,7 +17,7 @@ import { EmptyState } from "~/components/empty-state";
 import { PageTitle } from "~/components/icon-tile";
 import { StatusAlert, StatusIcon } from "~/components/status";
 import { Button } from "~/components/ui/button";
-import { buttonVariants } from "~/components/ui/button-variants";
+import { buttonLink } from "~/components/ui/button-variants";
 import { Spinner } from "~/components/ui/spinner";
 import type { AppCopy } from "../../app-copy";
 import { appHref, type AppLinks } from "../../app-links";
@@ -182,7 +182,7 @@ function SyncStatus({
       {down ? (
         <StatusIcon tone="warning" />
       ) : running || importing ? (
-        <Spinner label={label} aria-hidden="true" role={undefined} />
+        <Spinner />
       ) : (
         <Clock aria-hidden="true" className="size-4" />
       )}
@@ -209,8 +209,7 @@ function StoreIssueAlert({
         {t.orders.storeIssueBody}
         <Link
           to={appHref(links, `negozi/${storeId}`)}
-          data-slot="button"
-          className={buttonVariants({ variant: "outline", size: "sm" })}
+          {...buttonLink({ variant: "outline", size: "sm" })}
         >
           {t.orders.storeIssueAction}
         </Link>
@@ -255,8 +254,7 @@ function OrdersNotices({
                   {t.orders.storeReadFailedBody(formatDate(notice.at, language, "dateTime", zone))}
                   <Link
                     to={appHref(links, `negozi/${notice.storeId}`)}
-                    data-slot="button"
-                    className={buttonVariants({ variant: "outline", size: "sm" })}
+                    {...buttonLink({ variant: "outline", size: "sm" })}
                   >
                     {t.orders.openStore}
                   </Link>
@@ -272,8 +270,7 @@ function OrdersNotices({
                   {data.settings ? (
                     <Link
                       to={appHref(links, "impostazioni/piano")}
-                      data-slot="button"
-                      className={buttonVariants({ variant: "outline", size: "sm" })}
+                      {...buttonLink({ variant: "outline", size: "sm" })}
                     >
                       {t.orders.quotaAction}
                     </Link>
@@ -310,8 +307,7 @@ function OrdersNotices({
                   ) : (
                     <a
                       href={`${appHref(links, "negozi/collega")}?ricollega=${encodeURIComponent(notice.storeId)}&environment=${notice.ebayEnvironment}`}
-                      data-slot="button"
-                      className={buttonVariants({ variant: "outline", size: "sm" })}
+                      {...buttonLink({ variant: "outline", size: "sm" })}
                     >
                       {t.orders.reconnectStore}
                     </a>
@@ -341,7 +337,7 @@ function ConnectAction({ data, t }: { data: OrdersPageData; t: AppCopy }) {
   if (data.connectHref === null) return null;
   if (data.connectHref)
     return (
-      <Link to={data.connectHref} data-slot="button" className={buttonVariants()}>
+      <Link to={data.connectHref} {...buttonLink()}>
         {content}
       </Link>
     );
@@ -440,12 +436,7 @@ function LoadMore({ data, t }: { data: OrdersPageData; t: AppCopy }) {
   return (
     <div className="flex justify-center">
       {data.nextHref ? (
-        <Link
-          to={data.nextHref}
-          preventScrollReset
-          data-slot="button"
-          className={buttonVariants({ variant: "outline" })}
-        >
+        <Link to={data.nextHref} preventScrollReset {...buttonLink({ variant: "outline" })}>
           {t.orders.loadMore}
         </Link>
       ) : (
@@ -496,8 +487,7 @@ function NoResults({
             preventScrollReset
             // Anche il negozio ricordato si azzera, altrimenti il nuovo accesso lo riapplica.
             onClick={onlySearch ? undefined : () => rememberStore(null)}
-            data-slot="button"
-            className={buttonVariants({ variant: "outline" })}
+            {...buttonLink({ variant: "outline" })}
           >
             {onlySearch ? t.orders.clearSearch : t.orders.resetFilters}
           </Link>
@@ -666,13 +656,7 @@ function OrdersList({
       ) : null}
       {freshHref ? (
         <div className="flex justify-center">
-          <Link
-            to={freshHref}
-            replace
-            preventScrollReset
-            data-slot="button"
-            className={buttonVariants({ variant: "secondary" })}
-          >
+          <Link to={freshHref} replace preventScrollReset {...buttonLink({ variant: "secondary" })}>
             {t.orders.newOrders(data.incoming)} · {t.orders.showNew}
           </Link>
         </div>
@@ -767,8 +751,7 @@ function NoOrders({ data, t, links }: { data: OrdersPageData; t: AppCopy; links:
         data.sync.storeId ? (
           <Link
             to={appHref(links, `negozi/${data.sync.storeId}`)}
-            data-slot="button"
-            className={buttonVariants({ variant: "outline" })}
+            {...buttonLink({ variant: "outline" })}
           >
             {t.orders.openStore}
           </Link>

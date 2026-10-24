@@ -39,7 +39,7 @@ import {
   AlertDialogTrigger,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
-import { buttonVariants } from "~/components/ui/button-variants";
+import { buttonLink } from "~/components/ui/button-variants";
 import { Checkbox } from "~/components/ui/checkbox";
 import {
   Field,
@@ -63,7 +63,7 @@ import { Switch } from "~/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Textarea } from "~/components/ui/textarea";
 import type { AccessNoticeView } from "../access-notice";
-import type { AppCopy } from "../app-copy";
+import { supportEmail, type AppCopy } from "../app-copy";
 import { appHref, languagePath, type AppLinks } from "../app-links";
 import type { PendingEmailChange } from "../domain/email-change.server";
 import type { ActiveSession } from "../domain/sessions.server";
@@ -212,7 +212,7 @@ function SaveStatus({ state, t }: { state: SaveState; t: AppCopy }) {
       )}
     >
       {state === "saving"
-        ? t.settings.saving
+        ? t.common.saving
         : state === "saved"
           ? t.settings.saved
           : state === "error"
@@ -651,8 +651,7 @@ function TelegramGroup({
           <StatusAlert tone="premium" title={t.settings.telegramPremium}>
             <Link
               to={appHref(links, "impostazioni/piano")}
-              data-slot="button"
-              className={buttonVariants({ variant: "outline", size: "sm", className: "mt-2" })}
+              {...buttonLink({ variant: "outline", size: "sm", className: "mt-2" })}
             >
               {t.settings.buyTitle}
             </Link>
@@ -1182,7 +1181,7 @@ function TemplateSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
             disabled={!dirty || empty || action.pending}
             aria-busy={action.pending || undefined}
           >
-            {action.pending ? t.settings.saving : t.settings.save}
+            {action.pending ? t.common.saving : t.common.save}
           </Button>
           <span
             role={state === "error" ? "alert" : "status"}
@@ -1238,8 +1237,7 @@ function PrivacySection({
           <Link
             to={localizedPath(links.language, "/privacy")}
             reloadDocument
-            data-slot="button"
-            className={buttonVariants({ variant: "outline", size: "sm" })}
+            {...buttonLink({ variant: "outline", size: "sm" })}
           >
             {t.settings.readPolicy}
           </Link>
@@ -1279,7 +1277,7 @@ function DeleteAccount({ t }: { t: AppCopy }) {
             <AlertDialogDescription>{t.settings.deleteAccountConfirmation}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{t.orders.cancel}</AlertDialogCancel>
+            <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
             <AlertDialogClose
               render={<Button variant="destructive-solid" />}
               onClick={() => action.run("account-delete")}
@@ -1319,8 +1317,8 @@ function SupportSection({ data, t }: { data: SettingsPageData; t: AppCopy }) {
         <Group title={t.settings.contact} separated={false}>
           <p className="text-sm text-muted-foreground">
             {t.settings.supportWrite}{" "}
-            <a href="mailto:supporto@fiscalbay.it" className="underline underline-offset-4">
-              supporto@fiscalbay.it
+            <a href={`mailto:${supportEmail}`} className="underline underline-offset-4">
+              {supportEmail}
             </a>
             .
           </p>
@@ -1425,8 +1423,8 @@ function SupportForm({
           </Button>
           <p className="text-sm text-muted-foreground">
             {t.settings.supportEmail}{" "}
-            <a href="mailto:supporto@fiscalbay.it" className="underline underline-offset-4">
-              supporto@fiscalbay.it
+            <a href={`mailto:${supportEmail}`} className="underline underline-offset-4">
+              {supportEmail}
             </a>
             .
           </p>
@@ -1839,7 +1837,7 @@ export function ProfilePage({
             disabled={!dirty || action.pending}
             aria-busy={action.pending || undefined}
           >
-            {action.pending ? t.settings.saving : t.settings.save}
+            {action.pending ? t.common.saving : t.common.save}
           </Button>
           {action.result ? (
             <p
@@ -1887,8 +1885,7 @@ export function ProfilePage({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Link
             to={appHref(links, "impostazioni/sicurezza")}
-            data-slot="button"
-            className={buttonVariants({ variant: "outline", size: "sm" })}
+            {...buttonLink({ variant: "outline", size: "sm" })}
           >
             {t.profile.securityLink}
           </Link>

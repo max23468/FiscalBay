@@ -6,7 +6,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { useAction } from "~/components/app-shell";
 import { StatusIcon } from "~/components/status";
 import { Button } from "~/components/ui/button";
-import { buttonVariants } from "~/components/ui/button-variants";
+import { buttonLink } from "~/components/ui/button-variants";
 import { Field, FieldLabel } from "~/components/ui/field";
 import {
   Select,
@@ -141,7 +141,7 @@ function ExportListButton({
       </Button>
     );
   return (
-    <Link to={href} data-slot="button" className={buttonVariants({ variant: "outline" })}>
+    <Link to={href} {...buttonLink({ variant: "outline" })}>
       {content}
     </Link>
   );

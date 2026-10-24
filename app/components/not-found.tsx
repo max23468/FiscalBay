@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router";
 
 import { EmptyState } from "~/components/empty-state";
-import { buttonVariants } from "~/components/ui/button-variants";
+import { buttonLink } from "~/components/ui/button-variants";
 import type { AppCopy } from "../app-copy";
 import { appHref, type AppLinks } from "../app-links";
 
@@ -21,11 +21,7 @@ export function UnavailableState({ t }: { t: AppCopy }) {
         title={t.errors.unavailableTitle}
         description={t.errors.unavailable}
         action={
-          <a
-            href={`${pathname}${search}`}
-            data-slot="button"
-            className={buttonVariants({ variant: "outline" })}
-          >
+          <a href={`${pathname}${search}`} {...buttonLink({ variant: "outline" })}>
             {t.errors.retry}
           </a>
         }
@@ -58,8 +54,7 @@ export function NotFoundState({
         action={
           <Link
             to={appHref(links, kind === "store" ? "negozi" : "ordini")}
-            data-slot="button"
-            className={buttonVariants({ variant: "outline" })}
+            {...buttonLink({ variant: "outline" })}
           >
             {copy.back}
           </Link>

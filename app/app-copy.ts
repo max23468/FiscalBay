@@ -18,6 +18,13 @@ const legalDateFormats = {
 };
 
 const it = {
+  /** Etichette generiche, uguali in ogni pagina. */
+  common: {
+    cancel: "Annulla",
+    save: "Salva",
+    saving: "Salvataggio…",
+    contactSupport: "Contatta il supporto",
+  },
   shell: {
     notFound: {
       order: {
@@ -135,7 +142,6 @@ const it = {
       removed: "eBay ha rimosso il Codice Fiscale da questo ordine.",
       foreign: (country: string) => `Acquirente estero (${country}).`,
     },
-    lastChanged: (date: string) => `Ultima modifica su eBay: ${date}`,
     orderLabel: (id: string) => `Ordine ${id}`,
     fiscal: {
       available: "Disponibile",
@@ -146,7 +152,6 @@ const it = {
       error: "Aggiornamento non riuscito",
     },
     select: "Seleziona",
-    cancelSelection: "Annulla",
     selectOrder: (id: string) => `Seleziona l’ordine ${id}`,
     selected: (count: number) => `${count} ${plural(count, "selezionato", "selezionati")}`,
     selectedLocked: (count: number) =>
@@ -165,7 +170,6 @@ const it = {
     dontAskUnlock: "Non chiedermelo più",
     unlockFailed: "Sblocco non riuscito. Controlla gli ordini e gli sblocchi rimasti, poi riprova.",
     restoreUnlockConfirmation: "Riattiva conferma sblocco",
-    cancel: "Annulla",
     unlocked: (remaining: number | null) =>
       remaining === null
         ? "Ordine sbloccato."
@@ -205,7 +209,6 @@ const it = {
     missingHint: "eBay non riporta il Codice Fiscale per questo ordine.",
     checkingHint: "Verifica del Codice Fiscale in corso.",
     errorHint: "Non siamo riusciti a recuperare il Codice Fiscale da eBay. Riprova tra poco.",
-    errorReadHint: "Non siamo riusciti a recuperare il Codice Fiscale da eBay.",
     errorHintEbayDown:
       "Non siamo riusciti a recuperare il Codice Fiscale da eBay. Potrai riprovare quando eBay torna a rispondere.",
     retry: "Riprova",
@@ -391,7 +394,6 @@ const it = {
     deleteBody:
       "Il negozio verrà rimosso da FiscalBay e tutti i suoi ordini importati saranno eliminati. Questa operazione non può essere annullata. Il negozio su eBay e l’abbonamento FiscalBay non vengono modificati.",
     deleteLabel: "Scrivi il nome del negozio per confermare",
-    cancel: "Annulla",
     issue: {
       reconnect: {
         title: "Collegamento scaduto",
@@ -454,10 +456,8 @@ const it = {
       privacy: "Informativa sulla privacy",
     },
     premiumBadge: "Premium",
-    saving: "Salvataggio…",
     saved: "Salvato",
     saveFailed: "Modifica non salvata. L’impostazione è tornata com’era: riprova.",
-    save: "Salva",
     // Piano e pagamenti
     currentPlan: "Piano attuale",
     unlockConfirmation: "Chiedi conferma prima di sbloccare un ordine",
@@ -515,7 +515,6 @@ const it = {
     // Esportazione
     exportScope: "Ordini da esportare",
     exportPeriod: "Periodo",
-    exportStores: "Negozi",
     exportFormat: "Formato",
     exportRows: "Una riga per",
     exportRowOrder: "Ordine",
@@ -731,7 +730,6 @@ const it = {
     },
     body: "Riprova con il metodo di accesso che usi di solito.",
     back: "Torna a FiscalBay",
-    support: "Contatta il supporto",
     ebayWithoutEmail: {
       title: "Accesso con eBay non disponibile",
       body: "eBay non ci fornisce l’indirizzo email del tuo account, come succede per gli account individuali. Accedi con email, Google o passkey: dopo potrai collegare il tuo negozio eBay.",
@@ -765,7 +763,6 @@ const it = {
       "Un negozio eBay può essere collegato a un solo account FiscalBay.",
     ],
     continue: "Continua su eBay",
-    cancel: "Annulla",
   },
   legal: {
     navigation: "Documenti legali",
@@ -942,6 +939,12 @@ const it = {
 export type AppCopy = typeof it;
 
 const en: AppCopy = {
+  common: {
+    cancel: "Cancel",
+    save: "Save",
+    saving: "Saving…",
+    contactSupport: "Contact support",
+  },
   shell: {
     notFound: {
       order: {
@@ -1055,7 +1058,6 @@ const en: AppCopy = {
       removed: "eBay removed the tax code from this order.",
       foreign: (country) => `Foreign buyer (${country}).`,
     },
-    lastChanged: (date) => `Last changed on eBay: ${date}`,
     orderLabel: (id) => `Order ${id}`,
     fiscal: {
       available: "Available",
@@ -1066,7 +1068,6 @@ const en: AppCopy = {
       error: "Couldn’t update",
     },
     select: "Select",
-    cancelSelection: "Cancel",
     selectOrder: (id) => `Select order ${id}`,
     selected: (count) => `${count} selected`,
     selectedLocked: (count) =>
@@ -1085,7 +1086,6 @@ const en: AppCopy = {
     dontAskUnlock: "Don’t ask again",
     unlockFailed: "Unlock failed. Check the orders and remaining unlocks, then try again.",
     restoreUnlockConfirmation: "Restore unlock confirmation",
-    cancel: "Cancel",
     unlocked: (remaining) =>
       remaining === null
         ? "Order unlocked."
@@ -1125,7 +1125,6 @@ const en: AppCopy = {
     missingHint: "eBay does not provide the tax code for this order.",
     checkingHint: "Checking the tax code.",
     errorHint: "We could not get the tax code from eBay. Try again shortly.",
-    errorReadHint: "We could not get the tax code from eBay.",
     errorHintEbayDown:
       "We could not get the tax code from eBay. You can try again once eBay responds.",
     retry: "Try again",
@@ -1308,7 +1307,6 @@ const en: AppCopy = {
     deleteBody:
       "The store will be removed from FiscalBay and all its imported orders will be deleted. This cannot be undone. Your store on eBay and your FiscalBay subscription will not change.",
     deleteLabel: "Type the store name to confirm",
-    cancel: "Cancel",
     issue: {
       reconnect: {
         title: "Connection expired",
@@ -1364,10 +1362,8 @@ const en: AppCopy = {
       privacy: "Privacy policy",
     },
     premiumBadge: "Premium",
-    saving: "Saving…",
     saved: "Saved",
     saveFailed: "Change not saved. The setting has been restored: try again.",
-    save: "Save",
     currentPlan: "Current plan",
     unlockConfirmation: "Ask before unlocking an order",
     unlockConfirmationHint: "Unlocking several orders always asks for confirmation.",
@@ -1422,7 +1418,6 @@ const en: AppCopy = {
     marketingHint: "Emails about your account are always sent.",
     exportScope: "Orders to export",
     exportPeriod: "Period",
-    exportStores: "Stores",
     exportFormat: "Format",
     exportRows: "One row per",
     exportRowOrder: "Order",
@@ -1631,7 +1626,6 @@ const en: AppCopy = {
     },
     body: "Try again with the sign-in method you usually use.",
     back: "Back to FiscalBay",
-    support: "Contact support",
     ebayWithoutEmail: {
       title: "Sign in with eBay unavailable",
       body: "eBay does not share the email address of your account, as happens with individual accounts. Sign in with email, Google or a passkey: you can then connect your eBay store.",
@@ -1665,7 +1659,6 @@ const en: AppCopy = {
       "An eBay store can be connected to only one FiscalBay account.",
     ],
     continue: "Continue to eBay",
-    cancel: "Cancel",
   },
   legal: {
     navigation: "Legal documents",
@@ -1834,3 +1827,9 @@ const en: AppCopy = {
 };
 
 export const appCopy: Record<Language, AppCopy> = { it, en };
+
+/** Indirizzo dell'assistenza clienti, mostrato e usato come risposta delle email. */
+export const supportEmail = "supporto@fiscalbay.it";
+
+/** Titolo della scheda del browser: marchio e pagina, separati da ` | `. */
+export const pageTitle = (title: string) => `FiscalBay | ${title}`;

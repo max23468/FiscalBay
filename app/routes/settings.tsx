@@ -6,7 +6,7 @@ import { NotFoundState } from "~/components/not-found";
 import { SettingsPage, type SettingsPageData } from "~/components/settings";
 import { accessNotice } from "../access-notice";
 import { areaPage, assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
-import { appCopy } from "../app-copy";
+import { appCopy, pageTitle } from "../app-copy";
 import { appBase, type AppLinks } from "../app-links";
 import { pendingEmailChange } from "../domain/email-change.server";
 import { orderAllowance, setUnlockConfirmation, unlockConfirmation } from "../domain/grants.server";
@@ -55,7 +55,7 @@ export function meta({ location, params }: Route.MetaArgs): Route.MetaDescriptor
   const title = isSection(params.sezione)
     ? `${t.settings.sections[params.sezione].title} | ${t.settings.title}`
     : t.settings.title;
-  return [{ title: `FiscalBay | ${title}` }, { name: "robots", content: "noindex" }];
+  return [{ title: pageTitle(title) }, { name: "robots", content: "noindex" }];
 }
 
 export function headers(): HeadersInit {

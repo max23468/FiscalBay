@@ -2,7 +2,7 @@ import { data, isRouteErrorResponse, useOutletContext } from "react-router";
 
 import { StoresPage, type StoresPageData } from "~/components/stores";
 import { NotFoundState, UnavailableState } from "~/components/not-found";
-import { appCopy } from "../app-copy";
+import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath } from "../i18n";
 import { pageScenario, simulateAction } from "../preview/state.server";
 import type { PreviewContext } from "./preview";
@@ -10,10 +10,7 @@ import type { Route } from "./+types/preview-stores";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
-  return [
-    { title: `FiscalBay | ${t.stores.title}` },
-    { name: "robots", content: "noindex, nofollow" },
-  ];
+  return [{ title: pageTitle(t.stores.title) }, { name: "robots", content: "noindex, nofollow" }];
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {

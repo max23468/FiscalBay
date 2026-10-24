@@ -81,7 +81,7 @@ export function SelectionBar({
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>{t.orders.cancel}</AlertDialogCancel>
+                <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
                 <AlertDialogClose
                   disabled={exceeds}
                   render={<Button />}
@@ -98,7 +98,7 @@ export function SelectionBar({
             </Button>
           ) : null}
           <Button variant="ghost" onClick={onCancel}>
-            {t.orders.cancelSelection}
+            {t.common.cancel}
           </Button>
         </div>
       </div>

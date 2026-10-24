@@ -17,7 +17,7 @@ import {
   AlertDialogTrigger,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
-import { buttonVariants } from "~/components/ui/button-variants";
+import { buttonLink } from "~/components/ui/button-variants";
 import { Checkbox } from "~/components/ui/checkbox";
 import { Field, FieldLabel } from "~/components/ui/field";
 import {
@@ -123,12 +123,7 @@ function UnlockButton({
         }
       >
         {unlocking ? (
-          <Spinner
-            label={t.orders.unlock}
-            aria-hidden="true"
-            role={undefined}
-            data-icon="inline-start"
-          />
+          <Spinner data-icon="inline-start" />
         ) : (
           <UnlockIcon aria-hidden="true" data-icon="inline-start" />
         )}
@@ -151,7 +146,7 @@ function UnlockButton({
           {t.orders.dontAskUnlock}
         </label>
         <AlertDialogFooter>
-          <AlertDialogCancel ref={cancel}>{t.orders.cancel}</AlertDialogCancel>
+          <AlertDialogCancel ref={cancel}>{t.common.cancel}</AlertDialogCancel>
           <AlertDialogClose render={<Button />} onClick={() => onUnlock([order.id], dontAsk)}>
             {t.orders.unlockConfirm}
           </AlertDialogClose>
@@ -591,11 +586,10 @@ export function MissingOrderHelp({
       {email && !email.relay && message.trim() ? (
         <a
           href={mailtoHref(email.address, { subject, body: message })}
-          data-slot="button"
-          className={cn(
-            buttonVariants({ variant: "outline" }),
-            "h-auto min-h-9 w-fit max-w-full whitespace-normal",
-          )}
+          {...buttonLink({
+            variant: "outline",
+            className: "h-auto min-h-9 w-fit max-w-full whitespace-normal",
+          })}
         >
           <Mail aria-hidden="true" data-icon="inline-start" />
           {t.orders.requestEmail}

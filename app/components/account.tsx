@@ -36,9 +36,10 @@ import type { ActiveSession } from "../domain/sessions.server";
 import type { ConfirmResult } from "../security-actions.server";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
 import type { PendingEmailChange } from "../domain/email-change.server";
+import { loadPasskeyClient } from "../account/passkey";
 import { passkeyFailure, type PasskeyFailure } from "../account/passkey-error";
 import type { AccessNoticeView } from "../access-notice";
-import { appCopy } from "../app-copy";
+import { appCopy, supportEmail } from "../app-copy";
 import { deviceName } from "../account/device-name";
 import {
   accessPath,
@@ -155,7 +156,7 @@ function MethodAction({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{t.orders.cancel}</AlertDialogCancel>
+          <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
           {form}
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -183,7 +184,7 @@ function SecurityGroup({
   );
 }
 
-/** Email attuale; il nuovo indirizzo si inserisce solo quando serve. */
+/** Nome della passkey modificato sul posto; annullando, il focus torna a «Rinomina». */
 function PasskeyRename({
   passkey,
   language,
@@ -195,7 +196,7 @@ function PasskeyRename({
 }) {
   const [open, setOpen] = useState(false);
   const id = useId();
-  const { settings, orders } = appCopy[language];
+  const { settings, common } = appCopy[language];
   const trigger = useRef<HTMLButtonElement>(null);
   const ready = useHydrated();
   return open ? (
@@ -212,7 +213,7 @@ function PasskeyRename({
       />
       <div className="flex gap-2">
         <Button type="submit" size="sm" name="intent" value="passkey-rename">
-          {settings.save}
+          {common.save}
         </Button>
         <Button
           type="button"
@@ -223,7 +224,7 @@ function PasskeyRename({
             trigger.current?.focus();
           }}
         >
-          {orders.cancel}
+          {common.cancel}
         </Button>
       </div>
     </form>
@@ -241,6 +242,7 @@ function PasskeyRename({
   );
 }
 
+/** Email attuale; il nuovo indirizzo si inserisce solo quando serve. */
 function EmailChange({
   language,
   email,
@@ -252,7 +254,7 @@ function EmailChange({
   actionPath: string;
   pendingEmail?: PendingEmailChange | null;
 }) {
-  const { access: t, profile, orders } = appCopy[language];
+  const { access: t, profile, common } = appCopy[language];
   const [open, setOpen] = useState(false);
   const opener = useRef<HTMLButtonElement>(null);
   const v = useFieldErrors(t.validation);
@@ -327,7 +329,7 @@ function EmailChange({
                 opener.current?.focus();
               }}
             >
-              {orders.cancel}
+              {common.cancel}
             </Button>
           </div>
         </form>
@@ -425,11 +427,11 @@ function AddPasskey({
     setPending(true);
     setError(null);
     try {
-      if (!window.PublicKeyCredential) {
+      const authClient = await loadPasskeyClient();
+      if (!authClient) {
         setError("unsupported");
         return;
       }
-      const { authClient } = await import("../account/passkey-client");
       const result = await authClient.passkey.addPasskey({
         name: name.trim() || deviceName(navigator.userAgent, language),
       });
@@ -506,12 +508,7 @@ function AddPasskey({
           aria-busy={pending || undefined}
         >
           {pending ? (
-            <Spinner
-              label={settings.addPasskey}
-              aria-hidden="true"
-              role={undefined}
-              data-icon="inline-start"
-            />
+            <Spinner data-icon="inline-start" />
           ) : (
             <KeyRound aria-hidden="true" data-icon="inline-start" />
           )}
@@ -528,7 +525,7 @@ function AddPasskey({
             opener.current?.focus();
           }}
         >
-          {appCopy[language].orders.cancel}
+          {appCopy[language].common.cancel}
         </Button>
       </div>
       {failure}
@@ -591,8 +588,8 @@ function ConfirmIdentity({
     setPasskeyError(null);
     setPending(true);
     try {
-      if (!window.PublicKeyCredential) return setPasskeyError("unsupported");
-      const { authClient } = await import("../account/passkey-client");
+      const authClient = await loadPasskeyClient();
+      if (!authClient) return setPasskeyError("unsupported");
       const signed = await authClient.signIn.passkey();
       if (signed.error) return setPasskeyError(passkeyFailure(signed.error));
       void fetcher.submit(
@@ -696,7 +693,7 @@ function ConfirmIdentity({
           </div>
         )}
         <AlertDialogFooter>
-          <AlertDialogCancel>{appCopy[language].orders.cancel}</AlertDialogCancel>
+          <AlertDialogCancel>{appCopy[language].common.cancel}</AlertDialogCancel>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -1001,8 +998,8 @@ export function AccessNotice({
         {elsewhere ? (
           <span className="grid gap-2">
             <span>{appCopy[language].stores.elsewhereBody}</span>
-            <a href="mailto:supporto@fiscalbay.it" className="underline underline-offset-4">
-              {appCopy[language].authError.support}: supporto@fiscalbay.it
+            <a href={`mailto:${supportEmail}`} className="underline underline-offset-4">
+              {appCopy[language].common.contactSupport}: {supportEmail}
             </a>
           </span>
         ) : null}

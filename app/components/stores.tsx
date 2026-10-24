@@ -42,7 +42,7 @@ import {
   AlertDialogTrigger,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
-import { buttonVariants } from "~/components/ui/button-variants";
+import { buttonLink } from "~/components/ui/button-variants";
 import { Field, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import {
@@ -60,7 +60,7 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import type { AppCopy } from "../app-copy";
+import { supportEmail, type AppCopy } from "../app-copy";
 import { appHref, type AppLinks } from "../app-links";
 import { locales, type Language } from "../i18n";
 import { usePageTiming } from "../page-timing";
@@ -258,7 +258,7 @@ function StoreActions({
         <div className="grid justify-items-start">
           <Link
             to={appHref(links, "impostazioni/piano")}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
+            {...buttonLink({ variant: "outline", size: "sm" })}
           >
             {t.stores.chooseFreeStore}
           </Link>
@@ -392,14 +392,14 @@ function DisconnectActions({ store, t, links }: { store: StoreView; t: AppCopy; 
               </p>
             ) : null}
             <AlertDialogFooter>
-              <AlertDialogCancel disabled={action.pending}>{t.stores.cancel}</AlertDialogCancel>
+              <AlertDialogCancel disabled={action.pending}>{t.common.cancel}</AlertDialogCancel>
               <Button
                 variant="destructive-solid"
                 disabled={action.pending}
                 aria-busy={action.pending || undefined}
                 onClick={() => run("store-disconnect")}
               >
-                {action.pending ? t.settings.saving : t.stores.disconnect}
+                {action.pending ? t.common.saving : t.stores.disconnect}
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -440,14 +440,14 @@ function DisconnectActions({ store, t, links }: { store: StoreView; t: AppCopy; 
             </p>
           ) : null}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={action.pending}>{t.stores.cancel}</AlertDialogCancel>
+            <AlertDialogCancel disabled={action.pending}>{t.common.cancel}</AlertDialogCancel>
             <Button
               disabled={action.pending || confirmName.trim() !== store.name}
               aria-busy={action.pending || undefined}
               variant="destructive-solid"
               onClick={() => run("store-delete", { conferma: confirmName.trim() })}
             >
-              {action.pending ? t.settings.saving : deleteLabel}
+              {action.pending ? t.common.saving : deleteLabel}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -486,11 +486,7 @@ function ReconnectButton({
   );
   if (connectHref && !ebayDown) {
     return (
-      <Link
-        to={reconnectHref(connectHref, store)}
-        data-slot="button"
-        className={cn(buttonVariants(look), look.className)}
-      >
+      <Link to={reconnectHref(connectHref, store)} {...buttonLink(look)}>
         {content}
       </Link>
     );
@@ -546,7 +542,7 @@ function StoreDetail({
                 to={appHref(links, "impostazioni/supporto")}
                 className="underline underline-offset-4"
               >
-                {t.authError.support}
+                {t.common.contactSupport}
               </Link>
             ) : null}
             <ReconnectButton
@@ -652,7 +648,7 @@ function ConnectionSection({ store, now, t, language }: SectionProps & { now: st
           href={store.storeUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "justify-self-start")}
+          {...buttonLink({ variant: "outline", size: "sm", className: "justify-self-start" })}
         >
           {t.stores.openStore}
         </a>
@@ -833,8 +829,8 @@ export function StoresPage({
       {data.elsewhere && attempted ? (
         <StatusAlert tone="warning" title={t.stores.elsewhereTitle}>
           {t.stores.elsewhereBody}
-          <a href="mailto:supporto@fiscalbay.it" className="block underline underline-offset-4">
-            {t.authError.support}: supporto@fiscalbay.it
+          <a href={`mailto:${supportEmail}`} className="block underline underline-offset-4">
+            {t.common.contactSupport}: {supportEmail}
           </a>
         </StatusAlert>
       ) : null}
@@ -933,11 +929,7 @@ function ConnectButton({
   const action = useAction();
   if (data.connectHref && !data.ebayDown.includes("production")) {
     return (
-      <Link
-        to={connectFromStores(data.connectHref)}
-        data-slot="button"
-        className={buttonVariants()}
-      >
+      <Link to={connectFromStores(data.connectHref)} {...buttonLink()}>
         <Plus aria-hidden="true" data-icon="inline-start" />
         {t.stores.connect}
       </Link>
@@ -1152,7 +1144,7 @@ function OverviewActions({
       <Link
         to={`${appHref(links, "negozi")}/${store.id}`}
         preventScrollReset
-        className={cn(buttonVariants({ variant: "outline", size: "sm" }), button)}
+        {...buttonLink({ variant: "outline", size: "sm", className: button })}
       >
         {t.stores.details}
         <ChevronRight aria-hidden="true" data-icon="inline-end" />

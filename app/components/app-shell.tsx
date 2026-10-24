@@ -11,18 +11,10 @@ import {
   Store,
   User,
 } from "lucide-react";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from "react";
 import { Link, NavLink, useFetcher, useLocation, useNavigate } from "react-router";
 
+import { useHydrated } from "~/components/hydrated";
 import { InitialsTile } from "~/components/icon-tile";
 import { StatusIcon } from "~/components/status";
 import { Button } from "~/components/ui/button";
@@ -100,7 +92,6 @@ async function requestSearch(
 const suggestionDelay = 150;
 
 const NoticeContext = createContext<(message: string) => void>(() => {});
-const subscribeNever = () => () => {};
 
 /** Conferma breve di un'azione, annunciata anche ai lettori di schermo. */
 export function useNotice() {
@@ -493,11 +484,7 @@ function GlobalSearch({
   }
   const [open, setOpen] = useState(false);
   const { answer, suggest } = useSearchSuggestions(search.action, links.language);
-  const ready = useSyncExternalStore(
-    subscribeNever,
-    () => true,
-    () => false,
-  );
+  const ready = useHydrated();
   const id = useId();
   const trimmed = query.trim();
   // Soltanto la risposta per il testo attuale: una precedente non descrive ciò che è scritto.

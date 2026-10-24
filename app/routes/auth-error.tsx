@@ -1,11 +1,10 @@
-import { cn } from "cn";
 import { LogIn } from "lucide-react";
 import { useSearchParams } from "react-router";
 
 import { StandalonePage } from "~/components/standalone-page";
-import { buttonVariants } from "~/components/ui/button-variants";
+import { buttonLink } from "~/components/ui/button-variants";
 import type { Route } from "./+types/auth-error";
-import { appCopy } from "../app-copy";
+import { appCopy, pageTitle, supportEmail } from "../app-copy";
 import { accessPath, securityReturnPath } from "../app-links";
 import { languageFromPath, localizedPath } from "../i18n";
 
@@ -36,7 +35,9 @@ export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const search = new URLSearchParams(location.search);
   return [
     {
-      title: `FiscalBay | ${messageFor(appCopy[language].authError, search.get("error"), search.get("provider")).title}`,
+      title: pageTitle(
+        messageFor(appCopy[language].authError, search.get("error"), search.get("provider")).title,
+      ),
     },
   ];
 }
@@ -55,14 +56,13 @@ export default function AuthError({ matches }: Route.ComponentProps) {
       homeHref={localizedPath(language)}
     >
       <p className="leading-relaxed text-pretty text-muted-foreground">{message.body}</p>
-      <a href="mailto:supporto@fiscalbay.it" className="w-fit underline underline-offset-4">
-        {t.support}: supporto@fiscalbay.it
+      <a href={`mailto:${supportEmail}`} className="w-fit underline underline-offset-4">
+        {appCopy[language].common.contactSupport}: {supportEmail}
       </a>
       {/* Si torna all'accesso; con la sessione l'accesso porta all'app. */}
       <a
         href={`${localizedPath(language, accessPath)}${returnTo ? `?${new URLSearchParams({ returnTo })}` : ""}`}
-        data-slot="button"
-        className={cn(buttonVariants({ variant: "outline" }), "w-fit")}
+        {...buttonLink({ variant: "outline", className: "w-fit" })}
       >
         {t.back}
       </a>

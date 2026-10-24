@@ -32,9 +32,10 @@ import {
 } from "../domain/registration.server";
 import { accessPath, ordersPath, visitCookie, securityReturnPath } from "../app-links";
 import { accessLoader } from "../account-page.server";
-import { appCopy } from "../app-copy";
+import { appCopy, pageTitle } from "../app-copy";
 import { errorResponse } from "../error-response";
 import { tracePhase } from "../errors";
+import { loadPasskeyClient } from "../account/passkey";
 import { passkeyFailure, type PasskeyFailure } from "../account/passkey-error";
 import { languageFromPath, localizedPath, type Language } from "../i18n";
 import type { Route } from "./+types/sign-in";
@@ -47,7 +48,7 @@ export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescri
     : loaderData?.resetToken
       ? access.passwordResetTitle
       : access.signIn;
-  return [{ title: `FiscalBay | ${title}` }, { name: "description", content: access.description }];
+  return [{ title: pageTitle(title) }, { name: "description", content: access.description }];
 }
 
 export function loader({ request }: Route.LoaderArgs) {
@@ -427,11 +428,11 @@ function PasskeyButton({ t, language }: { t: AccessCopy; language: Language }) {
           setPending(true);
           setError(null);
           try {
-            if (!window.PublicKeyCredential) {
+            const authClient = await loadPasskeyClient();
+            if (!authClient) {
               setError("unsupported");
               return;
             }
-            const { authClient } = await import("../account/passkey-client");
             const result = await authClient.signIn.passkey();
             if (result.error) setError(passkeyFailure(result.error));
             else window.location.assign(target ?? localizedPath(language, ordersPath));
