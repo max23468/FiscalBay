@@ -10,7 +10,7 @@ import type { AppCopy } from "../../app-copy";
 import {
   annualPaidMonths,
   formatPrice,
-  paidPeriodEnd,
+  firstChargeAt,
   priceGeneration,
   type PremiumOffer,
   type PurchaseState,
@@ -27,8 +27,8 @@ import { AutoSwitch, Group, SimpleSelect } from "./controls";
 
 /**
  * La prova dice quando finisce e cosa resta dopo, in evidenza negli ultimi giorni. L'acquisto
- * compare quando il server lo ammette: si paga subito e il periodo pagato parte alla fine
- * della prova, che conserva i suoi giorni.
+ * compare quando il server lo ammette: mensile e annuale si pagano alla fine della prova,
+ * che conserva i suoi giorni.
  */
 function TrialPlan({
   trial,
@@ -68,7 +68,7 @@ function TrialPlan({
       <PurchaseOptions
         billing={billing}
         purchase={purchase}
-        trialEndsAt={trial.endsAt}
+        trial={{ endsAt: trial.endsAt, now }}
         t={t}
         language={language}
       />
@@ -275,14 +275,14 @@ export function PlanSection({
 function PurchaseOptions({
   billing,
   purchase,
-  trialEndsAt,
+  trial,
   t,
   language,
 }: {
   billing: boolean;
   purchase: PurchaseView;
-  /** Durante la prova il primo rinnovo cade dopo i giorni residui e il periodo pagato. */
-  trialEndsAt?: string;
+  /** Durante la prova mensile e annuale si pagano alla sua fine, la stessa data del server. */
+  trial?: { endsAt: string; now: string };
   t: AppCopy;
   language: Language;
 }) {
@@ -291,19 +291,19 @@ function PurchaseOptions({
   if (!billing || purchase.state === "covered") return null;
   const copy = t.settings.plan;
   const net = (offer: PremiumOffer) => formatPrice(priceGeneration.net[offer], language);
-  // Durante la prova la nota dell'offerta aggiunge la data del primo rinnovo.
-  const withRenewal = (offer: "monthly" | "annual", note: string) =>
-    trialEndsAt
-      ? `${note} ${copy.firstRenewal(formatDate(paidPeriodEnd(trialEndsAt, offer), language, "date", zone))}`
-      : note;
+  // Durante la prova la nota dell'offerta aggiunge la data del primo addebito.
+  const firstCharge = trial
+    ? copy.firstCharge(formatDate(firstChargeAt(trial.endsAt, trial.now), language, "date", zone))
+    : null;
+  const withCharge = (note: string) => (firstCharge ? `${note} ${firstCharge}` : note);
   const prices = {
     monthly: {
       price: copy.priceMonthly(net("monthly")),
-      note: withRenewal("monthly", copy.priceMonthlyNote),
+      note: withCharge(copy.priceMonthlyNote),
     },
     annual: {
       price: copy.priceAnnual(net("annual")),
-      note: withRenewal("annual", copy.priceAnnualNote(annualPaidMonths())),
+      note: withCharge(copy.priceAnnualNote(annualPaidMonths())),
     },
     lifetime: { price: copy.priceLifetime(net("lifetime")), note: copy.priceLifetimeNote },
   };
@@ -311,7 +311,7 @@ function PurchaseOptions({
   return (
     <Group title={copy.buyTitle}>
       <PremiumNote>{copy.buyBody}</PremiumNote>
-      {trialEndsAt ? <p className="text-sm text-muted-foreground">{copy.prepaidNote}</p> : null}
+      {trial ? <p className="text-sm text-muted-foreground">{copy.trialPurchaseNote}</p> : null}
       <ul
         className={cn(
           "grid gap-3",

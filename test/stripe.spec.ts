@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import Stripe from "stripe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { annualPaidMonths, formatPrice, paidPeriodEnd, priceGeneration } from "../app/catalog";
+import { annualPaidMonths, firstChargeAt, formatPrice, priceGeneration } from "../app/catalog";
 import { purchaseState, startCheckout } from "../app/domain/checkout.server";
 import {
   buildManagedCheckoutParams,
@@ -457,14 +457,6 @@ describe("Stripe Managed Payments", () => {
       account: { plan: "premium", trial: { endsAt: "2026-09-30T09:00:00.000Z" } },
       purchase: { state: "available" },
     });
-    // Senza i prezzi del primo periodo la prova non offre l'acquisto.
-    const prepaid = env.STRIPE_PRICE_ANNUAL_PREPAID;
-    env.STRIPE_PRICE_ANNUAL_PREPAID = "";
-    try {
-      expect(await page()).toMatchObject({ purchase: { state: "covered" } });
-    } finally {
-      env.STRIPE_PRICE_ANNUAL_PREPAID = prepaid;
-    }
     const previous = env.STRIPE_PRICE_ANNUAL;
     env.STRIPE_PRICE_ANNUAL = "";
     try {
@@ -474,74 +466,46 @@ describe("Stripe Managed Payments", () => {
     }
   });
 
-  it("conta il periodo pagato in mesi di calendario UTC, con fine mese e anno bisestile", () => {
-    // Sei giorni di prova residui più l'annuale: rinnovo dopo i sei giorni e dodici mesi.
-    expect(paidPeriodEnd("2026-10-30T09:00:00.000Z", "annual")).toBe("2027-10-30T09:00:00.000Z");
-    expect(paidPeriodEnd("2026-10-30T09:00:00.000Z", "monthly")).toBe("2026-11-30T09:00:00.000Z");
-    expect(paidPeriodEnd("2026-12-31T23:30:00.000Z", "monthly")).toBe("2027-01-31T23:30:00.000Z");
-    expect(paidPeriodEnd("2027-01-31T10:00:00.000Z", "monthly")).toBe("2027-02-28T10:00:00.000Z");
-    expect(paidPeriodEnd("2028-01-31T10:00:00.000Z", "monthly")).toBe("2028-02-29T10:00:00.000Z");
-    expect(paidPeriodEnd("2028-02-29T10:00:00.000Z", "annual")).toBe("2029-02-28T10:00:00.000Z");
-    expect(paidPeriodEnd("2027-03-31T00:00:00.000Z", "monthly")).toBe("2027-04-30T00:00:00.000Z");
-    // La fine della prova ha i millesimi; Stripe conta in secondi, senza accorciare il periodo.
-    expect(paidPeriodEnd("2026-10-06T10:00:00.250Z", "monthly")).toBe("2026-11-06T10:00:01.000Z");
+  it("fa partire il primo addebito alla fine della prova, mai prima di due giorni", () => {
+    // Prova lontana: il primo addebito coincide con la sua fine, al secondo intero.
+    expect(firstChargeAt("2026-09-30T09:00:00.250Z", now)).toBe("2026-09-30T09:00:01.000Z");
+    // Con meno di due giorni di prova Stripe non accetta la sessione: il cliente riceve il
+    // minimo ammesso, due giorni e dieci minuti, e non perde giorni.
+    expect(firstChargeAt("2026-09-14T08:00:00.000Z", now)).toBe("2026-09-15T20:10:00.000Z");
+    expect(firstChargeAt("2026-09-15T20:10:00.000Z", now)).toBe("2026-09-15T20:10:00.000Z");
   });
 
-  it("durante la prova incassa subito il primo periodo e rinvia l'abbonamento", () => {
+  it("durante la prova apre l'abbonamento con i soli giorni residui, senza incasso oggi", () => {
     const params = buildManagedCheckoutParams({
       ...checkoutInput,
       offer: "annual",
       priceId: "price_test_annual",
-      prepaid: {
-        priceId: "price_test_annual_prepaid",
-        trialEndsAt: "2026-10-30T09:00:00.000Z",
-        renewsAt: "2027-10-30T09:00:00.000Z",
-        expiresAt: new Date("2026-10-29T12:00:00.000Z"),
-      },
+      trial: { endsAt: "2026-10-30T09:00:00.250Z", chargeAt: "2026-10-30T09:00:01.000Z" },
     });
     const metadata = {
       workspace_id: "workspace-test",
       offer: "annual",
       price_generation: "2026-09",
-      trial_ends_at: "2026-10-30T09:00:00.000Z",
+      trial_ends_at: "2026-10-30T09:00:00.250Z",
     };
     expect(params).toMatchObject({
       mode: "subscription",
-      line_items: [
-        { price: "price_test_annual", quantity: 1 },
-        { price: "price_test_annual_prepaid", quantity: 1 },
-      ],
+      line_items: [{ price: "price_test_annual", quantity: 1 }],
       managed_payments: { enabled: true },
       metadata,
       subscription_data: {
         metadata,
-        trial_end: Date.parse("2027-10-30T09:00:00.000Z") / 1000,
+        trial_end: Date.parse("2026-10-30T09:00:01.000Z") / 1000,
       },
-      expires_at: Date.parse("2026-10-29T12:00:00.000Z") / 1000,
     });
-    // Nessun ancoraggio o proration: l'unica data di Stripe è la fine dell'attesa del rinnovo.
+    // Una sola riga: nessun incasso anticipato e nessun rinvio presentato come prova gratuita.
+    expect(params.line_items).toHaveLength(1);
+    expect(params).not.toHaveProperty("expires_at");
     expect(params.subscription_data).not.toHaveProperty("billing_cycle_anchor");
     expect(params.subscription_data).not.toHaveProperty("trial_period_days");
-    // Il prezzo del primo periodo è una tantum, con lo stesso importo dell'offerta.
-    const firstPeriod = catalogPrice({
-      id: "price_test_annual_prepaid",
-      unit_amount: 4900,
-      type: "one_time",
-      recurring: null,
-    });
-    expect(catalogMismatch(firstPeriod, "annual", 4900, true)).toBeNull();
-    expect(catalogMismatch(firstPeriod, "annual", 4900)).toBe("billing_period");
-    expect(
-      catalogMismatch(
-        catalogPrice({ unit_amount: 4900, recurring: { interval: "year", interval_count: 1 } }),
-        "annual",
-        4900,
-        true,
-      ),
-    ).toBe("billing_period");
   });
 
-  it("acquista durante la prova con due prezzi verificati e la data del primo rinnovo", async () => {
+  it("acquista durante la prova con il primo addebito alla sua fine", async () => {
     const { userId } = await verifiedSession("acquisto-prova@example.invalid");
     await workspace(userId);
     const trialEndsAt = "2026-09-30T09:00:00.000Z";
@@ -558,80 +522,28 @@ describe("Stripe Managed Payments", () => {
       offer: "monthly" as const,
       language: "it" as const,
     };
-    const prices = {
-      price_test_monthly: catalogPrice(),
-      price_test_monthly_prepaid: catalogPrice({
-        id: "price_test_monthly_prepaid",
-        type: "one_time",
-        recurring: null,
-      }),
-    };
-    const at = new Date(now);
-    let api = stripeApi(prices);
-    try {
-      expect(await startCheckout(env, input, at)).toMatchObject({ ok: true });
-      expect(paths(api).toSorted()).toEqual([
-        "GET /v1/prices/price_test_monthly",
-        "GET /v1/prices/price_test_monthly_prepaid",
-        "POST /v1/checkout/sessions",
-      ]);
-      const body = new URLSearchParams(String(api.mock.calls.at(-1)![1]?.body));
-      expect(body.get("mode")).toBe("subscription");
-      expect(body.get("line_items[0][price]")).toBe("price_test_monthly");
-      expect(body.get("line_items[1][price]")).toBe("price_test_monthly_prepaid");
-      // Rinnovo alla fine della prova più un mese: nessun addebito alla fine della prova.
-      expect(body.get("subscription_data[trial_end]")).toBe(
-        String(Date.parse("2026-10-30T09:00:00.000Z") / 1000),
-      );
-      expect(body.get("subscription_data[metadata][trial_ends_at]")).toBe(trialEndsAt);
-      // Con la prova lontana più di un giorno vale la scadenza predefinita della sessione.
-      expect(body.has("expires_at")).toBe(false);
-    } finally {
-      api.mockRestore();
-    }
-
-    // Vicino alla fine della prova la sessione scade con essa, mai prima di 31 minuti.
-    for (const [left, expiry] of [
-      [5 * 60 * 60 * 1000, 5 * 60 * 60 * 1000],
-      [10 * 60 * 1000, 31 * 60 * 1000],
-    ] as const) {
-      const late = new Date(Date.parse(trialEndsAt) - left);
-      api = stripeApi(prices);
+    const charge = async (at: Date) => {
+      const api = stripeApi(catalogPrice());
       try {
-        expect(await startCheckout(env, input, late)).toMatchObject({ ok: true });
+        expect(await startCheckout(env, input, at)).toMatchObject({ ok: true });
+        expect(paths(api)).toEqual([
+          "GET /v1/prices/price_test_monthly",
+          "POST /v1/checkout/sessions",
+        ]);
         const body = new URLSearchParams(String(api.mock.calls.at(-1)![1]?.body));
-        expect(body.get("expires_at")).toBe(String((late.getTime() + expiry) / 1000));
+        expect(body.get("mode")).toBe("subscription");
+        expect(body.has("line_items[1][price]")).toBe(false);
+        expect(body.get("subscription_data[metadata][trial_ends_at]")).toBe(trialEndsAt);
+        return body.get("subscription_data[trial_end]");
       } finally {
         api.mockRestore();
       }
-    }
-
-    // Un prezzo del primo periodo ricorrente ferma la vendita prima della sessione.
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
-    api = stripeApi({ ...prices, price_test_monthly_prepaid: catalogPrice() });
-    try {
-      expect(await startCheckout(env, input, at)).toEqual({ ok: false, reason: "unavailable" });
-      expect(paths(api)).not.toContain("POST /v1/checkout/sessions");
-      expect(JSON.parse(String(log.mock.calls.at(-1)?.[0]))).toMatchObject({
-        failure: "catalog_billing_period",
-      });
-    } finally {
-      api.mockRestore();
-      log.mockRestore();
-    }
-
-    // Senza il prezzo del primo periodo nessuna chiamata: un abbonamento ordinario perderebbe
-    // i giorni di prova.
-    const previous = env.STRIPE_PRICE_MONTHLY_PREPAID;
-    env.STRIPE_PRICE_MONTHLY_PREPAID = "";
-    api = stripeApi(prices);
-    try {
-      expect(await startCheckout(env, input, at)).toEqual({ ok: false, reason: "unavailable" });
-      expect(api).not.toHaveBeenCalled();
-    } finally {
-      api.mockRestore();
-      env.STRIPE_PRICE_MONTHLY_PREPAID = previous;
-    }
+    };
+    // Il primo addebito è alla fine della prova.
+    expect(await charge(new Date(now))).toBe(String(Date.parse(trialEndsAt) / 1000));
+    // Nell'ultimo giorno della prova Stripe vuole almeno due giorni: il cliente non perde nulla.
+    const late = new Date(Date.parse(trialEndsAt) - 5 * 60 * 60 * 1000);
+    expect(await charge(late)).toBe(String(Date.parse(firstChargeAt(trialEndsAt, late)) / 1000));
   });
 
   it("verifica la firma sul corpo grezzo e registra l'evento una sola volta", async () => {
