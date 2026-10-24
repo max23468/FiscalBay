@@ -662,8 +662,54 @@ describe("collegamento negozio eBay", () => {
     expect(String(tradingList[0]![1]?.body)).toContain(
       "<OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>",
     );
+    const profileCall = (init?: RequestInit) =>
+      ["GetStore", "GetUser"].includes(
+        new Headers(init?.headers).get("x-ebay-api-call-name") ?? "",
+      );
+    const request = ([url, init]: Parameters<typeof fetch>) => ({
+      url: String(url),
+      method: init?.method ?? "GET",
+      headers: init?.headers,
+      body: init?.body === undefined ? undefined : String(init.body),
+    });
+    // Dopo i recenti, nome, logo e indirizzo del negozio con feedback e stato Top Rated, in
+    // parallelo.
+    expect(ebay.mock.calls.filter(([, init]) => profileCall(init)).map(request)).toEqual(
+      expect.arrayContaining([
+        {
+          url: "https://api.ebay.com/ws/api.dll",
+          method: "POST",
+          headers: {
+            "content-type": "text/xml;charset=UTF-8",
+            "x-ebay-api-call-name": "GetStore",
+            "x-ebay-api-siteid": "101",
+            "x-ebay-api-compatibility-level": "1455",
+            "x-ebay-api-iaf-token": "token-sintetico",
+          },
+          body:
+            '<?xml version="1.0" encoding="utf-8"?>' +
+            '<GetStoreRequest xmlns="urn:ebay:apis:eBLBaseComponents">' +
+            "<Version>1455</Version><LevelLimit>1</LevelLimit></GetStoreRequest>",
+        },
+        {
+          url: "https://api.ebay.com/ws/api.dll",
+          method: "POST",
+          headers: {
+            "content-type": "text/xml;charset=UTF-8",
+            "x-ebay-api-call-name": "GetUser",
+            "x-ebay-api-siteid": "101",
+            "x-ebay-api-compatibility-level": "1455",
+            "x-ebay-api-iaf-token": "token-sintetico",
+          },
+          body:
+            '<?xml version="1.0" encoding="utf-8"?>' +
+            '<GetUserRequest xmlns="urn:ebay:apis:eBLBaseComponents">' +
+            "<Version>1455</Version></GetUserRequest>",
+        },
+      ]),
+    );
     const requests = ebay.mock.calls
-      .filter(([, init]) => !String(init?.body).includes("<ModTimeFrom>"))
+      .filter(([, init]) => !String(init?.body).includes("<ModTimeFrom>") && !profileCall(init))
       .map(([url, init]) => ({
         url: String(url),
         method: init?.method ?? "GET",
@@ -702,38 +748,6 @@ describe("collegamento negozio eBay", () => {
         body: undefined,
       },
       fulfillmentList("lastmodifieddate"),
-      // Dopo i recenti, nome e logo del negozio eBay.
-      {
-        url: "https://api.ebay.com/ws/api.dll",
-        method: "POST",
-        headers: {
-          "content-type": "text/xml;charset=UTF-8",
-          "x-ebay-api-call-name": "GetStore",
-          "x-ebay-api-siteid": "101",
-          "x-ebay-api-compatibility-level": "1455",
-          "x-ebay-api-iaf-token": "token-sintetico",
-        },
-        body:
-          '<?xml version="1.0" encoding="utf-8"?>' +
-          '<GetStoreRequest xmlns="urn:ebay:apis:eBLBaseComponents">' +
-          "<Version>1455</Version><LevelLimit>1</LevelLimit></GetStoreRequest>",
-      },
-      // Feedback e stato Top Rated del venditore.
-      {
-        url: "https://api.ebay.com/ws/api.dll",
-        method: "POST",
-        headers: {
-          "content-type": "text/xml;charset=UTF-8",
-          "x-ebay-api-call-name": "GetUser",
-          "x-ebay-api-siteid": "101",
-          "x-ebay-api-compatibility-level": "1455",
-          "x-ebay-api-iaf-token": "token-sintetico",
-        },
-        body:
-          '<?xml version="1.0" encoding="utf-8"?>' +
-          '<GetUserRequest xmlns="urn:ebay:apis:eBLBaseComponents">' +
-          "<Version>1455</Version></GetUserRequest>",
-      },
       fulfillmentList("creationdate"),
       {
         url: "https://api.ebay.com/sell/fulfillment/v1/order/12-%3C0%3E%261",
@@ -762,7 +776,7 @@ describe("collegamento negozio eBay", () => {
     ]);
     // I recenti partono dall'istante del collegamento, con la sovrapposizione; lo storico copre
     // i trenta giorni precedenti.
-    const filters = [requests[2]!, requests[5]!].map(({ url }) =>
+    const filters = [requests[2]!, requests[3]!].map(({ url }) =>
       new URL(url).searchParams.get("filter")!.match(/\[(.+)\.\.(.+)\]/u)!,
     );
     const span = ([, from, to]: RegExpMatchArray) => Date.parse(to!) - Date.parse(from!);

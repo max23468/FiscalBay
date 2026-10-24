@@ -40,8 +40,10 @@ export async function refreshStoreProfile(ctx: Context): Promise<void> {
     .bind(ctx.storeId, new Date(Date.parse(ctx.at) - storeProfileRefreshMilliseconds).toISOString())
     .first();
   if (!stale) return;
-  const profile = await profileCall(ctx, "GetStore", () => readStoreProfile(ctx.access));
-  const standing = await profileCall(ctx, "GetUser", () => readSellerStanding(ctx.access));
+  const [profile, standing] = await Promise.all([
+    profileCall(ctx, "GetStore", () => readStoreProfile(ctx.access)),
+    profileCall(ctx, "GetUser", () => readSellerStanding(ctx.access)),
+  ]);
   if (!profile && !standing) return;
   const statements = [
     ctx.db
