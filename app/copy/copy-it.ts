@@ -481,7 +481,15 @@ export const it = {
       priceLifetimeNote: "Pagamento unico, senza rinnovi.",
       trialPurchaseNote:
         "Con mensile o annuale oggi non paghi: i giorni di prova restano e il primo addebito arriva quando la prova finisce.",
+      trialEndingPurchaseNote:
+        "La prova finisce fra meno di due giorni: con mensile o annuale il primo addebito è oggi e il periodo pagato parte subito.",
       firstCharge: (date: string) => `Primo addebito il ${date}.`,
+      trialCheckoutProcessingTitle: "Scelta del piano in corso",
+      trialCheckoutProcessingBody:
+        "Stripe sta confermando l’abbonamento. La prova continua e il primo addebito arriva quando finisce.",
+      trialChosenTitle: (plan: string) => `${plan} scelto`,
+      trialChosenBody: (date: string) =>
+        `La prova continua: il primo addebito arriva il ${date}, quando finisce. Fino ad allora non paghi nulla.`,
       pricesNote:
         "Prezzi IVA esclusa. Su Stripe vedi il totale con le imposte del tuo paese, anche nella tua valuta, prima di pagare.",
       purchaseNeedsSync: "Potrai acquistare Premium dopo la prima lettura riuscita di un negozio.",
@@ -501,6 +509,10 @@ export const it = {
       },
       premiumLifetime: "Acquisto una tantum, senza rinnovi.",
       premiumRenews: (date: string) => `Si rinnova il ${date}.`,
+      premiumEnds: (date: string) => `Rinnovo disdetto: Premium resta attivo fino al ${date}.`,
+      renewalFailedTitle: "Rinnovo non riuscito",
+      renewalFailedBody: (date: string) =>
+        `Sei di nuovo nel piano Free. Completa il pagamento richiesto da Stripe entro il ${date} per mantenere il tuo prezzo.`,
       manageBilling: "Gestisci abbonamento su Stripe",
       billingDocuments: "Consulta ricevute e fatture su Stripe",
       billingDocs: "Ricevute e fatture sono disponibili su Stripe.",

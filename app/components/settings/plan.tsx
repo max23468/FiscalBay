@@ -32,6 +32,7 @@ import { AutoSwitch, Group, SimpleSelect } from "./controls";
  */
 function TrialPlan({
   trial,
+  payment,
   billing,
   purchase,
   now,
@@ -39,6 +40,7 @@ function TrialPlan({
   language,
 }: {
   trial: NonNullable<AccountView["trial"]>;
+  payment: AccountView["payment"];
   billing: boolean;
   purchase: PurchaseView;
   now: string;
@@ -49,8 +51,14 @@ function TrialPlan({
   const ending = trialEnding(trial.endsAt, now);
   return (
     <>
-      {/* Dopo l'acquisto la prova resta finché Stripe non conferma il pagamento. */}
-      <CheckoutReturn checkout={purchase.checkout} t={t} />
+      {/* Dopo la scelta la prova resta fino alla sua fine, quando arriva il primo addebito. */}
+      <CheckoutReturn
+        checkout={purchase.checkout}
+        payment={payment}
+        trial
+        t={t}
+        language={language}
+      />
       <Group title={t.settings.plan.currentPlan}>
         <div className="grid gap-1">
           <p className="text-lg font-semibold">{t.settings.plan.trialPlan}</p>
@@ -77,17 +85,18 @@ function TrialPlan({
 }
 
 /**
- * Il lifetime conserva l'accesso ai documenti senza presentare un rinnovo. Un Premium concesso
- * senza abbonamento non ha periodo né gestione su Stripe.
+ * Il lifetime conserva l'accesso ai documenti senza presentare un rinnovo; dopo la disdetta
+ * l'abbonamento indica la fine del periodo pagato. Un Premium concesso senza abbonamento non
+ * ha periodo né gestione su Stripe.
  */
 function PremiumPlan({
   account,
-  billing,
+  billingPortal,
   t,
   language,
 }: {
   account: AccountView;
-  billing: boolean;
+  billingPortal: boolean;
   t: AppCopy;
   language: Language;
 }) {
@@ -110,9 +119,15 @@ function PremiumPlan({
               formatDate(account.premium.renewsAt, language, "date", zone),
             )}
           </p>
+        ) : account.premium?.endsAt ? (
+          <p className="text-sm text-muted-foreground">
+            {t.settings.plan.premiumEnds(
+              formatDate(account.premium.endsAt, language, "dateTime", zone),
+            )}
+          </p>
         ) : null}
       </div>
-      {billing && account.premium ? (
+      {billingPortal && account.premium ? (
         <>
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="outline" onClick={() => action.run("manage-billing")}>
@@ -150,9 +165,48 @@ export interface PurchaseView {
   checkout: "processing" | "cancelled" | null;
 }
 
-/** Il ritorno da Stripe non prova il pagamento: il piano cambia con la conferma. */
-function CheckoutReturn({ checkout, t }: { checkout: PurchaseView["checkout"]; t: AppCopy }) {
-  if (checkout === "processing")
+/**
+ * Il ritorno da Stripe non prova il pagamento: il piano cambia con la conferma. Un pagamento
+ * che Stripe non ha ancora confermato resta in attivazione anche senza il ritorno; un rinnovo
+ * non riuscito riporta al Free e indica fino a quando il prezzo resta protetto.
+ */
+function CheckoutReturn({
+  checkout,
+  payment,
+  trial = false,
+  t,
+  language,
+}: {
+  checkout: PurchaseView["checkout"];
+  payment: AccountView["payment"];
+  /** Durante la prova la scelta non comporta un pagamento immediato. */
+  trial?: boolean;
+  t: AppCopy;
+  language: Language;
+}) {
+  const zone = useTimeZone();
+  const copy = t.settings.plan;
+  if (payment?.state === "scheduled")
+    return (
+      <StatusAlert tone="info" title={copy.trialChosenTitle(copy.premiumPeriod[payment.period])}>
+        {copy.trialChosenBody(formatDate(payment.chargeAt, language, "dateTime", zone))}
+      </StatusAlert>
+    );
+  if (trial && checkout === "processing")
+    return (
+      <StatusAlert tone="info" title={copy.trialCheckoutProcessingTitle}>
+        {copy.trialCheckoutProcessingBody}
+      </StatusAlert>
+    );
+  if (payment?.state === "renewal-failed")
+    return (
+      <StatusAlert tone="warning" title={t.settings.plan.renewalFailedTitle}>
+        {t.settings.plan.renewalFailedBody(
+          formatDate(payment.protectedUntil, language, "dateTime", zone),
+        )}
+      </StatusAlert>
+    );
+  if (checkout === "processing" || payment?.state === "pending")
     return (
       <StatusAlert tone="info" title={t.settings.plan.checkoutProcessingTitle}>
         {t.settings.plan.checkoutProcessingBody}
@@ -167,6 +221,7 @@ export function PlanSection({
   account,
   stores,
   billing,
+  billingPortal,
   purchase,
   confirmUnlock,
   now,
@@ -177,6 +232,7 @@ export function PlanSection({
   stores: StoreView[];
   /** Acquisto e negozio attivo del Free dipendono dai pagamenti; la prova no. */
   billing: boolean;
+  billingPortal: boolean;
   purchase: PurchaseView;
   confirmUnlock: boolean;
   now: string;
@@ -193,6 +249,7 @@ export function PlanSection({
     return account.trial ? (
       <TrialPlan
         trial={account.trial}
+        payment={account.payment}
         billing={billing}
         purchase={purchase}
         now={now}
@@ -200,13 +257,18 @@ export function PlanSection({
         language={language}
       />
     ) : (
-      <PremiumPlan account={account} billing={billing} t={t} language={language} />
+      <PremiumPlan account={account} billingPortal={billingPortal} t={t} language={language} />
     );
   }
   const quota = account.quota;
   return (
     <>
-      <CheckoutReturn checkout={purchase.checkout} t={t} />
+      <CheckoutReturn
+        checkout={purchase.checkout}
+        payment={account.payment}
+        t={t}
+        language={language}
+      />
       <Group title={t.settings.plan.currentPlan}>
         <div className="grid gap-1">
           <p className="text-lg font-semibold">{t.settings.plan.free}</p>
@@ -291,9 +353,11 @@ function PurchaseOptions({
   if (!billing || purchase.state === "covered") return null;
   const copy = t.settings.plan;
   const net = (offer: PremiumOffer) => formatPrice(priceGeneration.net[offer], language);
-  // Durante la prova la nota dell'offerta aggiunge la data del primo addebito.
-  const firstCharge = trial
-    ? copy.firstCharge(formatDate(firstChargeAt(trial.endsAt, trial.now), language, "date", zone))
+  // Durante la prova la nota dell'offerta aggiunge la data del primo addebito; con meno di due
+  // giorni residui il primo addebito è subito.
+  const chargeAt = trial ? firstChargeAt(trial.endsAt, trial.now) : null;
+  const firstCharge = chargeAt
+    ? copy.firstCharge(formatDate(chargeAt, language, "date", zone))
     : null;
   const withCharge = (note: string) => (firstCharge ? `${note} ${firstCharge}` : note);
   const prices = {
@@ -311,7 +375,11 @@ function PurchaseOptions({
   return (
     <Group title={copy.buyTitle}>
       <PremiumNote>{copy.buyBody}</PremiumNote>
-      {trial ? <p className="text-sm text-muted-foreground">{copy.trialPurchaseNote}</p> : null}
+      {trial ? (
+        <p className="text-sm text-muted-foreground">
+          {chargeAt ? copy.trialPurchaseNote : copy.trialEndingPurchaseNote}
+        </p>
+      ) : null}
       <ul
         className={cn(
           "grid gap-3",

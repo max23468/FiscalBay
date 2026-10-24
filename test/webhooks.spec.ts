@@ -475,6 +475,7 @@ it("il cron del Worker accoda i turni dell'orario pianificato, anche se eseguito
   expect(sendBatch).toHaveBeenNthCalledWith(1, [
     { body: { task: "maintenance", slot: "2026-10-11T00:00:00.000Z" } },
     { body: { task: "token_refresh", slot: now.toISOString() } },
+    { body: { task: "billing", slot: now.toISOString() } },
   ]);
   expect(sendBatch).toHaveBeenNthCalledWith(2, [{ body: { syncStore: "webhook-store" } }]);
   expect(sendBatch).toHaveBeenCalledTimes(2);
@@ -736,7 +737,7 @@ it("consegne concorrenti non producono due effetti e messaggi invalidi vanno in 
   expect(invalid.message.retry).toHaveBeenCalledWith({ delaySeconds: 30 });
 });
 
-it("prende in carico Stripe con firma valida senza anticipare gli effetti commerciali", async () => {
+it("prende in carico Stripe con firma valida e rilegge l'oggetto prima degli effetti", async () => {
   const event = {
     id: "evt_synthetic",
     type: "checkout.session.completed",
@@ -758,10 +759,17 @@ it("prende in carico Stripe con firma valida senza anticipare gli effetti commer
   expect((await receive(request()))?.status).toBe(204);
   expect((await receive(request()))?.status).toBe(204);
   expect(send).toHaveBeenCalledTimes(1);
+  // Il payload non è usato: la sessione riletta da Stripe è un pagamento, senza abbonamento.
+  const stripe = vi.fn<typeof fetch>(async () =>
+    Response.json({ id: "cs_synthetic", object: "checkout.session", mode: "payment" }),
+  );
   const work = batch({ receiptId: (await receipt())!.id });
-  await consumeWebhooks(work.value, environment, fetcher, now);
+  await consumeWebhooks(work.value, environment, stripe, now);
   expect(work.message.ack).toHaveBeenCalledOnce();
-  expect(fetcher).not.toHaveBeenCalled();
+  expect(stripe).toHaveBeenCalledOnce();
+  expect(new URL(String(stripe.mock.calls[0]![0])).pathname).toBe(
+    "/v1/checkout/sessions/cs_synthetic",
+  );
   expect((await receipt())?.completed_at).toBe(now.toISOString());
   expect(
     (await receive(request(), { ...environment, STRIPE_WEBHOOK_SECRET: undefined } as Env))?.status,

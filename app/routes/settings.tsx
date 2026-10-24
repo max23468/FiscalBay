@@ -16,6 +16,7 @@ import {
   purchaseState,
   startCheckout,
 } from "../domain/checkout.server";
+import { subscriptionView } from "../domain/billing.server";
 import { pendingEmailChange } from "../domain/email-change.server";
 import {
   accountCoverage,
@@ -51,11 +52,13 @@ import type { Route } from "./+types/settings";
 /**
  * Categorie con un servizio reale. L'esportazione arriva con il file degli ordini; Telegram,
  * esportazione e cancellazione dell'account e modulo di assistenza compaiono nelle rispettive
- * categorie insieme ai loro servizi. L'acquisto compare con la configurazione Stripe.
+ * categorie insieme ai loro servizi. L'acquisto compare con la configurazione Stripe, la
+ * gestione dell'abbonamento con il portale di Stripe.
  */
 const sections = settingsSections.filter((section) => section !== "esportazione");
 const services = (): SettingsPageData["services"] => ({
   billing: checkoutConfigured(env),
+  billingPortal: false,
   telegram: false,
   accountData: false,
   support: false,
@@ -119,6 +122,12 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       ),
     ]);
   const cycle = allowance?.cycle;
+  // Periodo dell'abbonamento, pagamento da confermare o rinnovo non riuscito.
+  const subscription = allowance
+    ? await measure("d1", "settings", () =>
+        subscriptionView(env.DB, env, allowance.workspaceId, allowance.coverage, now),
+      )
+    : {};
   const page: SettingsPageData = {
     confirmUnlock,
     section: params.sezione ?? null,
@@ -131,6 +140,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       plan: allowance?.premium ? "premium" : "free",
       trialAvailable: allowance?.trialAvailable ?? false,
       ...accountCoverage(allowance),
+      ...subscription,
       // Prima del primo collegamento nessun ciclo è avviato e non c'è una quota da mostrare.
       quota:
         !allowance?.premium && cycle

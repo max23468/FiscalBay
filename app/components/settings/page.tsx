@@ -72,11 +72,13 @@ export interface SettingsPageData {
 }
 
 /**
- * Servizi dietro le azioni: pagamenti e prova (Stripe), Telegram, esportazione e cancellazione
- * dell'account, modulo di assistenza. Senza il servizio l'azione non compare.
+ * Servizi dietro le azioni: pagamenti e prova (Stripe), gestione dell'abbonamento e documenti
+ * su Stripe, Telegram, esportazione e cancellazione dell'account, modulo di assistenza. Senza il
+ * servizio l'azione non compare.
  */
 export interface SettingsServices {
   billing: boolean;
+  billingPortal: boolean;
   telegram: boolean;
   accountData: boolean;
   support: boolean;
@@ -168,6 +170,7 @@ export function SettingsPage({
         account={data.account}
         stores={data.stores}
         billing={data.services.billing}
+        billingPortal={data.services.billingPortal}
         purchase={data.purchase}
         confirmUnlock={data.confirmUnlock}
         now={data.now}

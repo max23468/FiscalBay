@@ -2318,6 +2318,35 @@ for (const width of [390, 768, 1440]) {
       });
       await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/piano$`));
       await page.screenshot({ path: testInfo.outputPath(`lifetime-${locale}.png`) });
+      // Pagamento da confermare o rinnovo da regolarizzare: Free, senza un secondo acquisto.
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "pagamento-in-attivazione");
+      await expect(
+        page.getByText(it ? "Attivazione Premium in corso" : "Activating Premium"),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: /Scegli (mensile|annuale)|Choose (monthly|annual)/u }),
+      ).toHaveCount(0);
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "rinnovo-non-riuscito");
+      await expect(
+        page.locator("main").getByText(it ? "Rinnovo non riuscito" : "Renewal failed"),
+      ).toBeVisible();
+      await expect(page.locator("main")).toContainText(
+        it ? "per mantenere il tuo prezzo" : "to keep your price",
+      );
+      await page.screenshot({ path: testInfo.outputPath(`renewal-failed-${locale}.png`) });
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "stripe-non-disponibile");
+      await page.getByRole("button", { name: it ? "Scegli mensile" : "Choose monthly" }).click();
+      await expect(
+        page
+          .getByRole("status")
+          .filter({
+            hasText: it
+              ? "Pagamento non disponibile ora. Riprova più tardi."
+              : "Payment is not available right now. Try again later.",
+          })
+          .first(),
+      ).toBeVisible({ timeout: 20_000 });
+      await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/piano$`));
 
       await open(page, `${prefix}/anteprima/impostazioni/supporto`);
       await page.getByRole("button", { name: it ? "Invia" : "Send", exact: true }).click();
@@ -2402,13 +2431,24 @@ for (const width of [390, 768, 1440]) {
         page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }),
       ).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath(`trial-purchase-${locale}.png`) });
-      // Il ritorno da Stripe resta visibile anche con la prova in corso.
+      // Il ritorno da Stripe durante la prova non parla di pagamento: la prova continua.
       await page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }).click();
       await expect(page).toHaveURL(/\?checkout=processing$/u);
       await expect(main).toContainText(it ? "Prova Premium" : "Premium trial");
       await expect(
-        page.getByText(it ? "Attivazione Premium in corso" : "Activating Premium"),
+        page.getByText(it ? "Scelta del piano in corso" : "Confirming your plan"),
       ).toBeVisible();
+      // Con l'abbonamento scelto la prova continua senza addebiti né un secondo acquisto.
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "prova-con-abbonamento");
+      await expect(
+        page.getByText(it ? "Premium mensile scelto" : "You chose Premium, monthly"),
+      ).toBeVisible();
+      await expect(main).toContainText(
+        it ? "Fino ad allora non paghi nulla." : "Until then you pay nothing.",
+      );
+      await expect(
+        page.getByRole("button", { name: /Scegli (mensile|annuale)|Choose (monthly|annual)/u }),
+      ).toHaveCount(0);
     }
   });
 }
@@ -3048,4 +3088,85 @@ test.describe("prova Premium", () => {
         plan.getByRole("button", { name: it ? "Attiva la prova" : "Start trial" }),
       ).toHaveCount(0);
     });
+});
+
+test.describe("abbonamento nel piano", () => {
+  test.skip(
+    Boolean(process.env.E2E_BASE_URL),
+    "Prove con dati sintetici soltanto sul database locale.",
+  );
+
+  // Ogni stato reale si legge accanto allo scenario dell'anteprima che lo rappresenta.
+  const states = [
+    { account: "active", scenario: "premium" },
+    { account: "cancelled", scenario: "rinnovo-disdetto" },
+    { account: "pending", scenario: "pagamento-in-attivazione" },
+    { account: "lapsed", scenario: "rinnovo-non-riuscito" },
+  ] as const;
+
+  for (const language of ["it", "en"] as const)
+    for (const { account, scenario } of states)
+      test(`area reale e anteprima mostrano lo stesso abbonamento: ${account}, ${language}`, async ({
+        page,
+        context,
+        browser,
+        baseURL,
+      }) => {
+        const it = language === "it";
+        const prefix = it ? "" : "/en";
+        const expected = {
+          active: {
+            title: it ? /^Premium (mensile|annuale)$/u : /^Premium, (monthly|annual)$/u,
+            text: it ? "Si rinnova il" : "Renews on",
+          },
+          cancelled: {
+            title: it ? "Premium mensile" : "Premium, monthly",
+            text: it
+              ? "Rinnovo disdetto: Premium resta attivo fino al"
+              : "Renewal cancelled: Premium stays active until",
+          },
+          pending: {
+            title: "Free",
+            text: it ? "Attivazione Premium in corso" : "Activating Premium",
+          },
+          lapsed: {
+            title: "Free",
+            text: it ? "per mantenere il tuo prezzo" : "to keep your price",
+          },
+        }[account];
+        const check = async (target: Page, surface: "real" | "preview") => {
+          const section = target.getByRole("region", {
+            name: it ? "Piano e pagamenti" : "Plan and billing",
+          });
+          await expect(section.getByText(expected.title, { exact: true })).toBeVisible();
+          await expect(section).toContainText(expected.text);
+          // Con un abbonamento aperto né la prova né un secondo acquisto.
+          await expect(
+            section.getByRole("button", {
+              name: /Attiva la prova|Start trial|Scegli (mensile|annuale)|Choose (monthly|annual)/u,
+            }),
+          ).toHaveCount(0);
+          await section.screenshot({
+            path: test.info().outputPath(`subscription-${account}-${surface}-${language}.png`),
+          });
+        };
+        await useLocalAccount(context, "member", baseURL!, `subscription-${account}`);
+        await page.goto(`${prefix}/app/impostazioni/piano`);
+        await check(page, "real");
+        if (account === "pending" || account === "lapsed") {
+          await page.goto(`${prefix}/app/ordini`);
+          await expect(
+            page.getByRole("button", { name: it ? "Attiva la prova" : "Start trial" }),
+          ).toHaveCount(0);
+        }
+        // L'anteprima in un contesto proprio, anonimo e senza la sessione dell'area reale.
+        const preview = await browser.newContext({ baseURL });
+        try {
+          const previewPage = await preview.newPage();
+          await open(previewPage, `${prefix}/anteprima/impostazioni/piano`, scenario);
+          await check(previewPage, "preview");
+        } finally {
+          await preview.close();
+        }
+      });
 });

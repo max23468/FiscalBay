@@ -43,7 +43,12 @@ export const scenarioIds = [
   "prova-premium",
   "prova-in-scadenza",
   "prova-terminata",
+  "prova-con-abbonamento",
+  "pagamento-in-attivazione",
+  "rinnovo-non-riuscito",
+  "stripe-non-disponibile",
   "premium",
+  "rinnovo-disdetto",
   "premium-a-vita",
 ] as const;
 
@@ -237,6 +242,54 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
         "Back on Free after the trial, with no offer to repeat it: orders whose data arrived during the trial stay unlocked.",
     },
   },
+  "prova-con-abbonamento": {
+    it: {
+      name: "Prova con abbonamento scelto",
+      focus:
+        "Mensile scelto durante la prova: la prova continua, nessun addebito fino alla sua fine e nessun secondo acquisto.",
+    },
+    en: {
+      name: "Trial with plan chosen",
+      focus:
+        "Monthly chosen during the trial: the trial continues, no charge until it ends and no second purchase.",
+    },
+  },
+  "pagamento-in-attivazione": {
+    it: {
+      name: "Pagamento in attivazione",
+      focus:
+        "Stripe non ha ancora confermato il pagamento: il piano resta Free e l'attivazione è in corso, senza un secondo acquisto.",
+    },
+    en: {
+      name: "Payment being activated",
+      focus:
+        "Stripe has not confirmed the payment yet: the plan stays Free and activation is in progress, with no second purchase.",
+    },
+  },
+  "rinnovo-non-riuscito": {
+    it: {
+      name: "Rinnovo non riuscito",
+      focus:
+        "Il rinnovo non è stato pagato: di nuovo Free subito, con la data entro cui regolarizzare per mantenere il prezzo.",
+    },
+    en: {
+      name: "Renewal failed",
+      focus:
+        "The renewal was not paid: back on Free right away, with the date by which to pay to keep the price.",
+    },
+  },
+  "stripe-non-disponibile": {
+    it: {
+      name: "Stripe non disponibile",
+      focus:
+        "Stripe non risponde: l'acquisto non parte e lo dice, il resto del piano resta utilizzabile.",
+    },
+    en: {
+      name: "Stripe unavailable",
+      focus:
+        "Stripe is not responding: the purchase does not start and says so, the rest of the plan still works.",
+    },
+  },
   premium: {
     it: {
       name: "Premium, più negozi",
@@ -245,6 +298,18 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
     en: {
       name: "Premium, several stores",
       focus: "Three stores, Telegram notifications, XLSX. The first autosave fails.",
+    },
+  },
+  "rinnovo-disdetto": {
+    it: {
+      name: "Rinnovo disdetto",
+      focus:
+        "Premium mensile disdetto: resta attivo fino alla fine del periodo pagato, senza rinnovo.",
+    },
+    en: {
+      name: "Renewal cancelled",
+      focus:
+        "Monthly Premium cancelled: it stays active until the end of the paid period, with no renewal.",
     },
   },
   "premium-a-vita": {
@@ -884,6 +949,8 @@ export interface Scenario {
   diagnostics: DiagnosticsView;
   telegramChat: string | null;
   saveFailsOnce: boolean;
+  /** Stripe non risponde: l'acquisto simulato fallisce. */
+  stripeDown: boolean;
   onboarding: Array<{
     label: "stepAccount" | "stepEmail" | "stepStore" | "stepSync";
     done: boolean;
@@ -1051,6 +1118,7 @@ export function loadScenario(
     },
     telegramChat: null,
     saveFailsOnce: false,
+    stripeDown: false,
     onboarding: [
       { label: "stepAccount" as const, done: true },
       { label: "stepEmail" as const, done: true },
@@ -1546,11 +1614,22 @@ export function loadScenario(
       break;
     case "prova-premium":
     case "prova-in-scadenza":
+    case "prova-con-abbonamento":
       scenario = {
         ...common,
-        account: trialAccount(
-          id === "prova-premium" ? "2026-10-06T10:00:00Z" : "2026-09-29T09:00:00Z",
-        ),
+        account:
+          id === "prova-con-abbonamento"
+            ? {
+                ...trialAccount("2026-10-06T10:00:00Z"),
+                payment: {
+                  state: "scheduled",
+                  period: "monthly",
+                  chargeAt: "2026-10-06T10:00:00Z",
+                },
+              }
+            : trialAccount(
+                id === "prova-premium" ? "2026-10-06T10:00:00Z" : "2026-09-29T09:00:00Z",
+              ),
         stores: [freeStores[0]!, storeView("outlet")],
         seeds: seeds.filter((seed) => seed.store !== "retro"),
         premium: true,
@@ -1566,6 +1645,26 @@ export function loadScenario(
         stores: freeStores,
         seeds: freeSeeds,
         premium: false,
+        diagnostics: diagnostics(),
+      };
+      break;
+    case "pagamento-in-attivazione":
+    case "rinnovo-non-riuscito":
+    case "stripe-non-disponibile":
+      scenario = {
+        ...common,
+        account: account({
+          trialAvailable: false,
+          ...(id === "pagamento-in-attivazione"
+            ? { payment: { state: "pending" } }
+            : id === "rinnovo-non-riuscito"
+              ? { payment: { state: "renewal-failed", protectedUntil: "2026-10-02T10:00:00Z" } }
+              : {}),
+        }),
+        stores: freeStores,
+        seeds: freeSeeds,
+        premium: false,
+        stripeDown: id === "stripe-non-disponibile",
         diagnostics: diagnostics(),
       };
       break;
@@ -1588,6 +1687,21 @@ export function loadScenario(
           }),
           ...common.notifications,
         ],
+        diagnostics: diagnostics(),
+      };
+      break;
+    case "rinnovo-disdetto":
+      scenario = {
+        ...common,
+        account: account({
+          plan: "premium",
+          trialAvailable: false,
+          quota: undefined,
+          premium: { period: "monthly", renewsAt: null, endsAt: "2026-10-13T10:00:00Z" },
+        }),
+        stores: premiumStores,
+        seeds,
+        premium: true,
         diagnostics: diagnostics(),
       };
       break;
@@ -1684,9 +1798,13 @@ export function loadScenario(
           ? language === "it"
             ? "Premium a vita"
             : "Premium, lifetime"
-          : language === "it"
-            ? "Premium annuale"
-            : "Premium, annual";
+          : currentAccount.premium?.period === "monthly"
+            ? language === "it"
+              ? "Premium mensile"
+              : "Premium, monthly"
+            : language === "it"
+              ? "Premium annuale"
+              : "Premium, annual";
   return {
     ...rest,
     account: currentAccount,

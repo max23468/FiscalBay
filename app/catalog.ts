@@ -39,14 +39,14 @@ export function annualPaidMonths() {
 const minimumCheckoutTrial = 2 * 24 * 60 * 60 * 1000 + 10 * 60 * 1000;
 
 /**
- * Primo addebito di un acquisto durante la prova: alla fine della prova, oppure due giorni
- * dopo l'acquisto quando ne manca meno, perché Stripe non accetta una prova più breve. Il
- * cliente non perde giorni e può riceverne al massimo un paio in più. Il risultato sale al
- * secondo intero, la precisione delle date di Stripe.
+ * Primo addebito di un acquisto durante la prova: alla fine della prova, al secondo intero
+ * come le date di Stripe. Null quando ne mancano meno di due giorni, perché il Checkout non
+ * accetta una prova più breve: allora il primo addebito è subito e il periodo pagato parte
+ * dall'acquisto, senza interrompere Premium.
  */
 export function firstChargeAt(trialEndsAt: string, now: string | Date) {
-  const at = Math.max(Date.parse(trialEndsAt), new Date(now).getTime() + minimumCheckoutTrial);
-  return new Date(Math.ceil(at / 1000) * 1000).toISOString();
+  const at = Math.ceil(Date.parse(trialEndsAt) / 1000) * 1000;
+  return at < new Date(now).getTime() + minimumCheckoutTrial ? null : new Date(at).toISOString();
 }
 
 /** Esito del ritorno da Stripe, soltanto per il messaggio: il diritto non dipende da esso. */

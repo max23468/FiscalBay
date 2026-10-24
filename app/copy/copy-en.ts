@@ -465,7 +465,15 @@ export const en: AppCopy = {
       priceLifetimeNote: "One-off payment, no renewals.",
       trialPurchaseNote:
         "With monthly or annual you don't pay today: your trial days stay and the first charge comes when the trial ends.",
+      trialEndingPurchaseNote:
+        "Your trial ends in less than two days: with monthly or annual the first charge is today and the paid period starts now.",
       firstCharge: (date: string) => `First charge on ${date}.`,
+      trialCheckoutProcessingTitle: "Confirming your plan",
+      trialCheckoutProcessingBody:
+        "Stripe is confirming the subscription. Your trial continues and the first charge comes when it ends.",
+      trialChosenTitle: (plan: string) => `You chose ${plan}`,
+      trialChosenBody: (date: string) =>
+        `Your trial continues: the first charge comes on ${date}, when it ends. Until then you pay nothing.`,
       pricesNote:
         "Prices exclude VAT. Before paying, Stripe shows the total with your country’s taxes, in your currency too.",
       purchaseNeedsSync: "You can buy Premium once a store has been read successfully.",
@@ -489,6 +497,10 @@ export const en: AppCopy = {
       },
       premiumLifetime: "One-off purchase, no renewals.",
       premiumRenews: (date) => `Renews on ${date}.`,
+      premiumEnds: (date) => `Renewal cancelled: Premium stays active until ${date}.`,
+      renewalFailedTitle: "Renewal failed",
+      renewalFailedBody: (date) =>
+        `You are back on Free. Complete the payment Stripe asks for by ${date} to keep your price.`,
       manageBilling: "Manage subscription on Stripe",
       billingDocuments: "View receipts and invoices on Stripe",
       billingDocs: "Receipts and invoices are available on Stripe.",
