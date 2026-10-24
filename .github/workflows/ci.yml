@@ -201,6 +201,10 @@ jobs:
         with:
           persist-credentials: false
 
+      # Nel container l'utente non possiede il workspace: Git lo rifiuta senza questa eccezione.
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Set up Node and dependencies
         uses: ./.github/actions/setup
 
