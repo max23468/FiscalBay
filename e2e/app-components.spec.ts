@@ -2239,6 +2239,12 @@ for (const width of [390, 768, 1440]) {
       await expect(page.locator("main")).not.toContainText(
         it ? "Negozio attivo se torni al piano Free" : "Active store if you return to Free",
       );
+      // Il ciclo iniziato nella promozione conserva la quota e annuncia quella seguente.
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "fine-promozione");
+      await expect(page.locator("main")).toContainText(it ? "7 di 10" : "7 of 10");
+      await expect(page.locator("main")).toContainText(
+        it ? "Il prossimo ciclo avrà 5 sblocchi." : "The next cycle will have 5 unlocks.",
+      );
       await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium-a-vita");
       const documents = page.getByRole("button", {
         name: it ? "Consulta ricevute e fatture su Stripe" : "View receipts and invoices on Stripe",
