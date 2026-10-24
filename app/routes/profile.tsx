@@ -1,10 +1,10 @@
 import { env } from "cloudflare:workers";
 import { data, isRouteErrorResponse } from "react-router";
 
-import { AccountShell } from "~/components/account";
-import { ProfilePage } from "~/components/settings";
+import { AccountShell } from "~/components/account-shell";
+import { ProfilePage } from "~/components/settings/profile";
 import { areaPage, assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
-import { appCopy } from "../app-copy";
+import { appCopy, pageTitle } from "../app-copy";
 import { appBase } from "../app-links";
 import { completeRegistration, parseProfile } from "../domain/registration.server";
 import { languageFromPath } from "../i18n";
@@ -14,7 +14,7 @@ import type { Route } from "./+types/profile";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
-  return [{ title: `FiscalBay | ${t.profile.title}` }, { name: "robots", content: "noindex" }];
+  return [{ title: pageTitle(t.profile.title) }, { name: "robots", content: "noindex" }];
 }
 
 export function headers(): HeadersInit {

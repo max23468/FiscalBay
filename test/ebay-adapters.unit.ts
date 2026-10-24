@@ -19,7 +19,6 @@ import {
   parseTradingOrders,
   readTradingOrders,
   tradingAck,
-  parseTradingOrderTaxIdentifiers,
 } from "../app/integrations/ebay/trading.server";
 import { ebayConfiguration } from "../app/integrations/ebay/environment.server";
 
@@ -382,16 +381,6 @@ describe("acquisti Trading", () => {
     ).toThrow(
       expect.objectContaining({ failure: "rejected", details: { providerCode: undefined } }),
     );
-  });
-  it("ignora identificativi fiscali incompleti nel parser senza attribuirli ad altri ordini", () => {
-    expect(
-      parseTradingOrderTaxIdentifiers(
-        "<Ack>Success</Ack><Order><OrderID>richiesto</OrderID>" +
-          "<BuyerTaxIdentifier><Type>CODICE_FISCALE</Type></BuyerTaxIdentifier></Order>" +
-          "<Order><OrderID>altro</OrderID><BuyerTaxIdentifier><ID>SINTETICO</ID><Type>VAT_ID</Type></BuyerTaxIdentifier></Order>",
-        "richiesto",
-      ),
-    ).toEqual([]);
   });
   it("un identificativo malformato lascia importabile l'ordine", () => {
     const result = parseTradingOrders(
@@ -761,6 +750,13 @@ describe("seconda osservazione fiscale Fulfillment", () => {
       orderFound: true,
       values: [],
     });
+    // L'identificativo di un altro ordine della risposta non passa a quello richiesto.
+    expect(
+      await read(
+        "<Order><OrderID>ordine</OrderID></Order>" +
+          "<Order><OrderID>altro</OrderID><BuyerTaxIdentifier><ID>SINTETICO</ID><Type>VAT_ID</Type></BuyerTaxIdentifier></Order>",
+      ),
+    ).toEqual({ orderFound: true, values: [] });
     expect(
       await read(
         "<Order><OrderID>ordine</OrderID><EIASToken>buyer-stabile</EIASToken><TransactionArray><Transaction><EIASToken>estraneo</EIASToken></Transaction></TransactionArray></Order>",

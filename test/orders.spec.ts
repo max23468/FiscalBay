@@ -8,6 +8,7 @@ import {
 import { mapTradingTaxIdentifiers } from "../app/integrations/ebay/trading.server";
 import {
   orderAllowance,
+  UnlockError,
   unlockOrders,
   unlockConfirmation,
   restoreUnlockConfirmation,
@@ -31,7 +32,13 @@ import { action as storesAction, loader as loadStores } from "../app/routes/stor
 import { action as startStoreLink } from "../app/routes/store-link";
 import { listNotifications } from "../app/domain/notifications.server";
 import { ebayOutage, listStores } from "../app/domain/stores.server";
-import { now, resetDatabase, seed } from "./fixtures/database-fixtures";
+import {
+  insertStore,
+  insertTaxIdentifiers,
+  now,
+  resetDatabase,
+  seed,
+} from "./fixtures/database-fixtures";
 import { syntheticProfile, verifiedSession } from "./fixtures/account-fixtures";
 import { displayTaxValue } from "../app/tax-quality";
 import { addressRows, fiscalSituation, itemPrice } from "../app/view-models";
@@ -173,6 +180,10 @@ describe("percorso ordini", () => {
       }) as Parameters<typeof unlockAction>[0];
     const denied = await unlockAction(unlockRequest("o-b"));
     expect(denied).toMatchObject({ init: { status: 409 }, data: { error: true, unlocked: [] } });
+    // Un guasto che non è un rifiuto dello sblocco resta un errore della pagina (500).
+    const outage = vi.spyOn(env.DB, "batch").mockRejectedValueOnce(new Error("D1_ERROR: guasto"));
+    await expect(unlockAction(unlockRequest("o-a"))).rejects.toThrow("D1_ERROR: guasto");
+    outage.mockRestore();
     expect(await unlockConfirmation(env.DB, user!.id)).toBe(true);
     await expect(
       unlockAction(unlockRequest("o-a", "https://estraneo.invalid")),
@@ -256,13 +267,24 @@ describe("percorso ordini", () => {
       await seed();
       await unlockOrders(env.DB, "u-a", ["o-a"]);
       await env.DB.prepare("DELETE FROM tax_identifiers WHERE order_id = 'o-a'").run();
-      await env.DB.prepare(
-        `INSERT INTO tax_identifiers (id, order_id, identifier_type, issuing_country, value, source, observed_at)
-         VALUES ('f', 'o-a', ?1, ?2, 'SINTETICO', ?6, ?5),
-                ('t', 'o-a', ?3, ?4, 'SINTETICO', ?7, ?5)`,
-      )
-        .bind(fType, fCountry, tType, tCountry, now, fSource, tSource)
-        .run();
+      await insertTaxIdentifiers(
+        {
+          id: "f",
+          orderId: "o-a",
+          type: fType,
+          country: fCountry,
+          value: "SINTETICO",
+          source: fSource,
+        },
+        {
+          id: "t",
+          orderId: "o-a",
+          type: tType,
+          country: tCountry,
+          value: "SINTETICO",
+          source: tSource,
+        },
+      ).run();
       const identifiers = (await listVisibleOrders(env.DB, "u-a"))[0]!.taxIdentifiers;
       expect(identifiers).toHaveLength(total as number);
       if (total === 1) expect(identifiers[0]!.source).toBe("ebay_fulfillment");
@@ -310,17 +332,42 @@ describe("percorso ordini", () => {
       taxCheckedAt: null,
       firstTaxAvailableAt: now,
     });
-    await env.DB.prepare(
-      `INSERT INTO tax_identifiers (id, order_id, identifier_type, issuing_country, value, source, observed_at)
-       VALUES ('fiscal-f-before', 'o-a', 'CODICE_FISCALE', NULL, 'RSSMRA80A01H501U', 'ebay_fulfillment', ?1),
-              ('fiscal-f', 'o-a', 'CODICE_FISCALE', 'IT', 'RSSMRA80A01H501U', 'ebay_fulfillment', ?1),
-              ('fiscal-t', 'o-a', 'CodiceFiscale', NULL, 'RSSMRA80A01H501U', 'ebay_trading_get_orders', ?1),
-              ('fiscal-other', 'o-a', 'CodiceFiscale', NULL, 'ALTRO-SINTETICO', 'ebay_trading_get_orders', ?1),
-              ('fiscal-country', 'o-a', 'CodiceFiscale', 'ES', 'RSSMRA80A01H501U', 'ebay_trading_get_orders', ?1),
-              ('fiscal-unknown', 'o-a', 'codice_fiscale', NULL, 'RSSMRA80A01H501U', 'ebay_trading_get_orders', ?1)`,
-    )
-      .bind(now)
-      .run();
+    const cf = "RSSMRA80A01H501U";
+    const trading = "ebay_trading_get_orders";
+    await insertTaxIdentifiers(
+      {
+        id: "fiscal-f-before",
+        orderId: "o-a",
+        type: "CODICE_FISCALE",
+        value: cf,
+        source: "ebay_fulfillment",
+      },
+      {
+        id: "fiscal-f",
+        orderId: "o-a",
+        type: "CODICE_FISCALE",
+        country: "IT",
+        value: cf,
+        source: "ebay_fulfillment",
+      },
+      { id: "fiscal-t", orderId: "o-a", type: "CodiceFiscale", value: cf, source: trading },
+      {
+        id: "fiscal-other",
+        orderId: "o-a",
+        type: "CodiceFiscale",
+        value: "ALTRO-SINTETICO",
+        source: trading,
+      },
+      {
+        id: "fiscal-country",
+        orderId: "o-a",
+        type: "CodiceFiscale",
+        country: "ES",
+        value: cf,
+        source: trading,
+      },
+      { id: "fiscal-unknown", orderId: "o-a", type: "codice_fiscale", value: cf, source: trading },
+    ).run();
     const identifiers = (await listVisibleOrders(env.DB, "u-a"))[0]!.taxIdentifiers;
     expect(identifiers).toHaveLength(5);
     expect(identifiers).toContainEqual(
@@ -563,10 +610,12 @@ describe("percorso ordini", () => {
       VALUES ('o-a2', 's-a', 'secondo', ?1, ?1, 'EUR', 100)`)
       .bind(now)
       .run();
-    await env.DB.prepare(`INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at)
-      VALUES ('secondo', 'o-a2', 'VAT_ID', 'SINTETICO', 'synthetic_fixture', ?)`)
-      .bind(now)
-      .run();
+    await insertTaxIdentifiers({
+      id: "secondo",
+      orderId: "o-a2",
+      type: "VAT_ID",
+      value: "SINTETICO",
+    }).run();
     expect(await unlockConfirmation(env.DB, "u-a")).toBe(true);
     await expect(unlockOrders(env.DB, "u-a", ["o-a", "o-a2"], true)).rejects.toThrow(
       "free_quota_exhausted",
@@ -642,10 +691,12 @@ describe("percorso ordini", () => {
       VALUES (?1, 's-a', ?1, ?2, ?2, 'EUR', 100)`)
       .bind(id, now)
       .run();
-    await env.DB.prepare(`INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at)
-      VALUES ('boundary', ?, 'VAT_ID', 'SINTETICO', 'synthetic_fixture', ?)`)
-      .bind(id, now)
-      .run();
+    await insertTaxIdentifiers({
+      id: "boundary",
+      orderId: id,
+      type: "VAT_ID",
+      value: "SINTETICO",
+    }).run();
     expect(await unlockOrders(env.DB, "u-a", Array(100).fill(id), true)).toEqual({
       unlocked: [id],
       remaining: 0,
@@ -668,8 +719,7 @@ describe("percorso ordini", () => {
     expect(next?.cycle?.ends_at).toBe("2026-09-27T20:00:00.000Z");
     expect(next?.cycle?.id).not.toBe(first?.cycle?.id);
     await env.DB.prepare("DELETE FROM ebay_stores WHERE id = 's-a'").run();
-    await env.DB.prepare(`INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at)
-      VALUES ('replacement', 'w-a', 'replacement', '2026-09-21T00:00:00.000Z')`).run();
+    await insertStore({ id: "replacement", linkedAt: "2026-09-21T00:00:00.000Z" }).run();
     expect(
       (await orderAllowance(env.DB, "u-a", new Date("2026-09-21T00:00:00.000Z")))?.cycle?.id,
     ).toBe(next?.cycle?.id);
@@ -700,10 +750,13 @@ describe("percorso ordini", () => {
       "available",
     );
     expect((await orderAllowance(env.DB, "u-a", later))?.remaining).toBe(1);
-    await env.DB.prepare(`INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at)
-      VALUES ('later-identifier', 'o-a', 'VATIN', 'AGGIORNATO', 'synthetic_fixture', ?)`)
-      .bind(later.toISOString())
-      .run();
+    await insertTaxIdentifiers({
+      id: "later-identifier",
+      orderId: "o-a",
+      type: "VATIN",
+      value: "AGGIORNATO",
+      observedAt: later.toISOString(),
+    }).run();
     expect(
       (await listVisibleOrders(env.DB, "u-a", 50, "production", later))[0]?.taxIdentifiers,
     ).toHaveLength(3);
@@ -739,10 +792,13 @@ describe("percorso ordini", () => {
       VALUES ('trial', 'w-a', 'trial', ?1, ?2)`)
       .bind(now, end)
       .run();
-    await env.DB.prepare(`INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at)
-      VALUES ('late-tax', 'late', 'VAT_ID', 'TARDIVO', 'synthetic_fixture', ?)`)
-      .bind(end)
-      .run();
+    await insertTaxIdentifiers({
+      id: "late-tax",
+      orderId: "late",
+      type: "VAT_ID",
+      value: "TARDIVO",
+      observedAt: end,
+    }).run();
     expect(
       (await listVisibleOrders(env.DB, "u-a", 50, "production", later)).find(
         (o) => o.id === "late",
@@ -790,16 +846,25 @@ describe("percorso ordini", () => {
     await env.DB.prepare("UPDATE tax_identifiers SET removed_at = ? WHERE order_id = 'o-a'")
       .bind(now)
       .run();
-    await env.DB.prepare(`INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at)
-      VALUES ('after-scheduled', 'o-a', 'VAT_ID', 'DOPO', 'synthetic_fixture', ?)`)
-      .bind(ends)
-      .run();
+    await insertTaxIdentifiers({
+      id: "after-scheduled",
+      orderId: "o-a",
+      type: "VAT_ID",
+      value: "DOPO",
+      observedAt: ends,
+    }).run();
     const later = new Date("2026-09-16T00:00:00.000Z");
     expect((await listVisibleOrders(env.DB, "u-a", 50, "production", later))[0]?.fiscalState).toBe(
       "locked",
     );
-    await env.DB.prepare(`INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at, removed_at)
-      VALUES ('historical', 'o-a', 'VAT_ID', 'DURANTE', 'synthetic_fixture', '2026-09-14T01:00:00.000Z', '2026-09-14T02:00:00.000Z')`).run();
+    await insertTaxIdentifiers({
+      id: "historical",
+      orderId: "o-a",
+      type: "VAT_ID",
+      value: "DURANTE",
+      observedAt: "2026-09-14T01:00:00.000Z",
+      removedAt: "2026-09-14T02:00:00.000Z",
+    }).run();
     expect((await listVisibleOrders(env.DB, "u-a", 50, "production", later))[0]).toMatchObject({
       fiscalState: "available",
       taxIdentifiers: [expect.objectContaining({ value: "DOPO" })],
@@ -856,20 +921,24 @@ describe("percorso ordini", () => {
       VALUES ('live', 'w-a', 'lifetime', ?, NULL)`)
       .bind(now)
       .run();
-    await env.DB.prepare(`INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at)
-      VALUES ('during', 'o-a', 'VAT_ID', 'DURANTE', 'synthetic_fixture', ?)`)
-      .bind(now)
-      .run();
+    await insertTaxIdentifiers({
+      id: "during",
+      orderId: "o-a",
+      type: "VAT_ID",
+      value: "DURANTE",
+    }).run();
     expect((await listVisibleOrders(env.DB, "u-a"))[0]?.fiscalState).toBe("available");
     await env.DB.prepare(`INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor)
       VALUES ('final', 's-a', 'final', ?1, ?1, 'EUR', 100)`)
       .bind(now)
       .run();
     await env.DB.prepare("UPDATE orders SET merged_into = 'final' WHERE id = 'o-a'").run();
-    await env.DB.prepare(`INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at)
-      VALUES ('final-tax', 'final', 'VAT_ID', 'DURANTE', 'synthetic_fixture', ?)`)
-      .bind(now)
-      .run();
+    await insertTaxIdentifiers({
+      id: "final-tax",
+      orderId: "final",
+      type: "VAT_ID",
+      value: "DURANTE",
+    }).run();
     await unlockOrders(env.DB, "u-a", ["final"]);
     expect(await unlockConfirmation(env.DB, "u-a")).toBe(true);
     expect((await listVisibleOrders(env.DB, "u-a"))[0]).toMatchObject({
@@ -898,11 +967,12 @@ describe("percorso ordini", () => {
     )
       .bind(now, now)
       .run();
-    await env.DB.prepare(
-      "INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at) VALUES ('t-a3', 'o-a2', 'VAT_ID', '01234567890', 'synthetic_fixture', ?)",
-    )
-      .bind(now)
-      .run();
+    await insertTaxIdentifiers({
+      id: "t-a3",
+      orderId: "o-a2",
+      type: "VAT_ID",
+      value: "01234567890",
+    }).run();
     const outcomes = await Promise.allSettled([
       unlockOrders(env.DB, "u-a", ["o-a"]),
       unlockOrders(env.DB, "u-a", ["o-a2"]),
@@ -939,7 +1009,13 @@ describe("percorso ordini", () => {
   it("rifiuta un grant per un ordine di un altro workspace", async () => {
     await seed();
 
-    await expect(unlockOrders(env.DB, "u-a", ["o-b"])).rejects.toThrow();
+    // Il rifiuto del database arriva tradotto, senza testo SQL.
+    const refused = unlockOrders(env.DB, "u-a", ["o-b"]);
+    await expect(refused).rejects.toBeInstanceOf(UnlockError);
+    await expect(refused).rejects.toMatchObject({
+      code: "order_not_available",
+      message: "order_not_available",
+    });
 
     const cycle = await env.DB.prepare(
       "SELECT used, quota FROM free_cycles WHERE id = 'c-a'",
@@ -959,11 +1035,12 @@ describe("percorso ordini", () => {
         .bind(now)
         .run(),
     ).rejects.toThrow();
-    await env.DB.prepare(
-      "INSERT INTO tax_identifiers (id, order_id, identifier_type, value, source, observed_at) VALUES ('t-new', 'o-a', 'VAT_ID', '01234567890', 'synthetic_fixture', ?)",
-    )
-      .bind(now)
-      .run();
+    await insertTaxIdentifiers({
+      id: "t-new",
+      orderId: "o-a",
+      type: "VAT_ID",
+      value: "01234567890",
+    }).run();
     await expect(
       env.DB.prepare(`INSERT INTO order_grants
         (id, workspace_id, order_id, cycle_id, source, granted_at)
@@ -1455,11 +1532,7 @@ describe("pagina Ordini reale", () => {
       ordersPage(sessionCookie, path).catch((response: Response) => response);
     // Con un solo negozio il filtro non compare: il negozio ricordato non si applica.
     expect(await entry(remembered)).toMatchObject({ page: expect.any(Object) });
-    await env.DB.prepare(
-      "INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at) VALUES ('s-c', 'w-a', 'e-c', ?)",
-    )
-      .bind(now)
-      .run();
+    await insertStore({ id: "s-c", ebayUserId: "e-c" }).run();
     const redirected = (await entry(remembered)) as Response;
     expect(redirected.status).toBe(302);
     expect(redirected.headers.get("location")).toBe("/app/ordini?negozio=s-c");
@@ -1591,11 +1664,7 @@ describe("pagina Ordini reale", () => {
     expect(send).not.toHaveBeenCalled();
     send.mockRestore();
     // Un negozio Sandbox che legge non cambia l'indisponibilità di Production, e viceversa.
-    await env.DB.prepare(
-      "INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, ebay_environment, linked_at) VALUES ('s-sb', 'w-a', 'e-sb', 'sandbox', ?)",
-    )
-      .bind(now)
-      .run();
+    await insertStore({ id: "s-sb", ebayUserId: "e-sb", environment: "sandbox" }).run();
     await env.DB.prepare(
       `INSERT INTO ebay_store_credentials (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
        VALUES ('s-sb', 'a', '2026-09-14T00:00:00.000Z', 'r', '2027-09-13T00:00:00.000Z', ?)`,
@@ -1608,11 +1677,7 @@ describe("pagina Ordini reale", () => {
     await env.DB.prepare("DELETE FROM ebay_stores WHERE id = 's-sb'").run();
 
     // Con un altro negozio che legge, il problema resta del solo negozio, finché è nella vista.
-    await env.DB.prepare(
-      "INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at) VALUES ('s-c', 'w-a', 'e-c', ?)",
-    )
-      .bind(now)
-      .run();
+    await insertStore({ id: "s-c", ebayUserId: "e-c" }).run();
     await env.DB.prepare(
       `INSERT INTO ebay_store_credentials (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
        VALUES ('s-c', 'a', '2026-09-14T00:00:00.000Z', 'r', '2027-09-13T00:00:00.000Z', ?)`,
@@ -1758,10 +1823,14 @@ describe("pagina Ordini reale", () => {
            total_minor, is_provisional, payment_status, buyer_json)
          VALUES ('x-prov', 's-a', 'x-prov', ?1, ?1, 'EUR', 100, 1, 'PENDING', '{"username":"carrello"}')`,
       ).bind(now),
-      env.DB.prepare(
-        `INSERT INTO tax_identifiers (id, order_id, identifier_type, issuing_country, value, source, observed_at)
-         VALUES ('t-prov', 'x-prov', 'CODICE_FISCALE', 'IT', 'VRDGLI80A41H501X', 'ebay_trading_get_orders', ?1)`,
-      ).bind(now),
+      insertTaxIdentifiers({
+        id: "t-prov",
+        orderId: "x-prov",
+        type: "CODICE_FISCALE",
+        country: "IT",
+        value: "VRDGLI80A41H501X",
+        source: "ebay_trading_get_orders",
+      }),
     ]);
     const ids = async (query: string) =>
       (await ordersPage(cookie, `/app/ordini?${query}`)).page!.orders.map(({ id }) => id);
@@ -1892,6 +1961,8 @@ describe("pagina Ordini reale", () => {
     const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(undefined);
     await withCredentials();
     await env.DB.batch([
+      // Senza dato e senza verifica la lettura risulta non riuscita.
+      env.DB.prepare("DELETE FROM tax_identifiers WHERE order_id = 'o-a'"),
       env.DB.prepare(
         `INSERT INTO order_source_refs (store_id, source, external_order_id, order_id, last_modified_time)
          VALUES ('s-a', 'trading', 'ebay-a', 'o-a', ?1)`,
@@ -1906,8 +1977,13 @@ describe("pagina Ordini reale", () => {
         "SELECT store_id, trading_cursor, trading_end, trading_page, trading_total FROM sync_state ORDER BY store_id",
       ).all();
     // Il negozio di un altro spazio non si rilegge e il suo cursore resta.
-    expect(await requestOrderRead(env, userId, { id: "o-b", storeId: "s-b" })).toBe("not_found");
-    expect(await requestOrderRead(env, userId, { id: "o-a", storeId: "s-a" })).toBe("queued");
+    expect(await requestOrderRead(env, userId, "o-b", "production")).toBe("not_found");
+    // Neppure un ordine del proprio negozio fuori conservazione o in un altro ambiente.
+    const expired = new Date("2026-11-01T00:00:00.000Z");
+    expect(await requestOrderRead(env, userId, "o-a", "production", expired)).toBe("not_found");
+    expect(await requestOrderRead(env, userId, "o-a", "sandbox")).toBe("not_found");
+    expect((await tradingState()).results[0]).toMatchObject({ trading_cursor: now });
+    expect(await requestOrderRead(env, userId, "o-a", "production")).toBe("queued");
     expect((await tradingState()).results).toEqual([
       {
         store_id: "s-a",
@@ -1932,7 +2008,7 @@ describe("pagina Ordini reale", () => {
          VALUES ('s-a', 'fulfillment', 'ebay-a', 'o-a', ?1, ?1)`,
       ).bind(now),
     ]);
-    expect(await requestOrderRead(env, userId, { id: "o-a", storeId: "s-a" })).toBe("queued");
+    expect(await requestOrderRead(env, userId, "o-a", "production")).toBe("queued");
     expect((await tradingState()).results[0]).toMatchObject({ trading_cursor: now });
     expect(
       await env.DB.prepare(
@@ -2166,13 +2242,16 @@ describe("vista condivisa e criteri degli ordini", () => {
         ...base.summary,
         buyer: { billingAddress: { countryCode } },
       }) as VisibleOrder["summary"];
-    const missing = { fiscalState: "missing", taxAvailability: "not_included" } as const;
-    expect(view({ ...missing, summary: billedIn("ES") }).fiscal).toEqual({
+    const foreign = { fiscalState: "foreign", taxAvailability: "not_included" } as const;
+    expect(view({ ...foreign, summary: billedIn("ES") }).fiscal).toEqual({
       state: "missing",
       reason: "foreign",
       country: "ES",
     });
-    expect(view({ ...missing, summary: billedIn("IT") }).fiscal).toEqual({ state: "missing" });
+    expect(
+      view({ fiscalState: "missing", taxAvailability: "not_included", summary: billedIn("IT") })
+        .fiscal,
+    ).toEqual({ state: "missing" });
     expect(
       view({ fiscalState: "missing", taxAvailability: "masked", summary: billedIn("ES") }).fiscal,
     ).toEqual({ state: "missing", reason: "masked" });

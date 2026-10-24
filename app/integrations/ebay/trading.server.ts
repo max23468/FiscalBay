@@ -110,6 +110,10 @@ async function tradingCall(access: EbayAccess, call: string, fields: string): Pr
   }
 }
 
+/**
+ * Risposta Trading già verificata con `tradingAck`: i parser ricevono soltanto letture valide e
+ * non ripetono il controllo.
+ */
 async function tradingRequest(access: EbayAccess, call: string, fields: string): Promise<string> {
   const xml = await upstreamText(
     access.fetcher,
@@ -153,13 +157,15 @@ export async function readTradingOrders(
   return parseTradingOrders(xml);
 }
 
-/** Campi strutturati soltanto: le transazioni non contaminano i campi dell'ordine. */
 /** Blocchi `<Order>` di una risposta GetOrders. */
 function orderBlocks(xml: string): string[] {
   return [...xml.matchAll(/<Order>([\s\S]*?)<\/Order>/gu)].map(([, block]) => block!);
 }
 
-/** Il blocco senza le transazioni: qui stanno i campi dell'ordine e dell'acquirente. */
+/**
+ * Il blocco senza le transazioni: qui stanno i campi dell'ordine e dell'acquirente, e quelli
+ * delle transazioni non li contaminano.
+ */
 function orderHeader(block: string): string {
   return block.replace(/<TransactionArray>[\s\S]*?<\/TransactionArray>/gu, "");
 }
@@ -194,7 +200,6 @@ function completeTaxIdentifiers(block: string): TradingTaxIdentifier[] {
 }
 
 export function parseTradingOrders(xml: string) {
-  tradingAck(xml);
   const totalText = xmlField(xml, "TotalNumberOfEntries");
   const moreText = xmlField(xml, "HasMoreOrders");
   if (!totalText || !/^\d+$/u.test(totalText) || !["true", "false"].includes(moreText ?? ""))
@@ -344,16 +349,6 @@ export async function readTradingTaxObservation(access: EbayAccess, orderId: str
   };
 }
 
-export function parseTradingOrderTaxIdentifiers(
-  xml: string,
-  orderId: string,
-): TradingTaxIdentifier[] {
-  tradingAck(xml);
-  return orderBlocks(xml)
-    .filter((block) => isOrder(block, orderId))
-    .flatMap(completeTaxIdentifiers);
-}
-
 export function mapTradingTaxIdentifiers(
   identifiers: ReadonlyArray<TradingTaxIdentifier>,
 ): EbayTaxIdentifierObservation[] {
@@ -390,7 +385,6 @@ export function qualifiedImageUrl(value: string): string | null {
 
 /** Prima immagine qualificata dell'inserzione in una risposta `GetItem`. */
 export function parseItemImage(xml: string): string | null {
-  tradingAck(xml);
   const pictures = /<PictureDetails>([\s\S]*?)<\/PictureDetails>/u.exec(xml)?.[1] ?? "";
   for (const [, , url] of pictures.matchAll(/<(PictureURL|GalleryURL)>([^<]*)<\/\1>/gu)) {
     const qualified = qualifiedImageUrl(xmlText(url!));
@@ -435,7 +429,6 @@ export function qualifiedEbayUrl(value: string): string | null {
  * elementi `Name` e `URL` propri: si tolgono prima di leggere quelli del negozio.
  */
 export function parseStoreProfile(xml: string): StoreProfile {
-  tradingAck(xml);
   const store = /<Store>([\s\S]*)<\/Store>/u.exec(xml)?.[1] ?? "";
   const logo = /<Logo>([\s\S]*?)<\/Logo>/u.exec(store)?.[1] ?? "";
   const own = store.replace(/<(CustomCategories|Logo|Theme)>[\s\S]*?<\/\1>/gu, "");
@@ -473,7 +466,6 @@ export type SellerStanding = {
  * per chi lo è: l'assenza vale come venditore non Top Rated.
  */
 export function parseSellerStanding(xml: string): SellerStanding {
-  tradingAck(xml);
   const user = /<User>([\s\S]*)<\/User>/u.exec(xml)?.[1] ?? "";
   const score = Number(xmlField(user, "FeedbackScore") || Number.NaN);
   const percent = Number(xmlField(user, "PositiveFeedbackPercent") || Number.NaN);

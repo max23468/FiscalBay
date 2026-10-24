@@ -100,7 +100,7 @@ export function resolveImport(from, specifier, known) {
   return undefined;
 }
 
-/** Grafo degli import applicativi (`app/`, `workers/`) aciclico e moduli server raggiungibili. */
+/** Grafo degli import applicativi (`app/`, `workers/`); i cicli li rifiuta oxlint. */
 export function importGraph(files, scope = /^(?:app|workers)\/.+\.tsx?$/u) {
   const sources = new Map(
     files.filter(({ path: file }) => scope.test(file)).map(({ path: file, text }) => [file, text]),
@@ -117,27 +117,11 @@ export function importGraph(files, scope = /^(?:app|workers)\/.+\.tsx?$/u) {
   return graph;
 }
 
+/** Ogni modulo server o route ha un consumatore runtime, salvo quelli in attesa motivati. */
 export function checkImports(files, pending = pendingServerModules) {
   const graph = importGraph(files);
   const sources = new Map(files.map(({ path: file, text }) => [file, text]));
-
   const errors = [];
-  const state = new Map();
-  const stack = [];
-  const visit = (file) => {
-    state.set(file, "open");
-    stack.push(file);
-    for (const target of graph.get(file)) {
-      if (state.get(target) === "open") {
-        const cycle = [...stack.slice(stack.indexOf(target)), target].join(" → ");
-        errors.push(`import ciclico: ${cycle}`);
-      } else if (!state.has(target)) visit(target);
-    }
-    stack.pop();
-    state.set(file, "done");
-  };
-  for (const file of graph.keys()) if (!state.has(file)) visit(file);
-
   const routes = sources.get("app/routes.ts") ?? "";
   const entries = [
     "workers/app.ts",
@@ -166,36 +150,19 @@ export function checkImports(files, pending = pendingServerModules) {
   return errors;
 }
 
-/** Versioni di Node e pnpm coincidenti fra `mise.toml`, `package.json` e workflow. */
+/**
+ * `mise.toml` serve all'ambiente locale e ripete le versioni del manifest; la CI le legge
+ * direttamente da `package.json` tramite `.github/actions/setup`.
+ */
 export function checkToolPins(files) {
   const byPath = new Map(files.map(({ path: file, text }) => [file, text]));
   const mise = byPath.get("mise.toml") ?? "";
   const manifest = JSON.parse(byPath.get("package.json") ?? "{}");
-  const expected = {
-    node: mise.match(/^node\s*=\s*"([^"]+)"/mu)?.[1],
-    pnpm: mise.match(/^pnpm\s*=\s*"([^"]+)"/mu)?.[1],
-  };
   const errors = [];
-  if (!expected.node || !expected.pnpm) return ["mise.toml: versioni di node e pnpm mancanti"];
-  if (manifest.engines?.node !== expected.node)
-    errors.push(`package.json: engines.node ${manifest.engines?.node} diverso da ${expected.node}`);
-  if (manifest.packageManager !== `pnpm@${expected.pnpm}`)
-    errors.push(
-      `package.json: packageManager ${manifest.packageManager} diverso da pnpm@${expected.pnpm}`,
-    );
-  for (const [file, text] of byPath) {
-    if (!/^\.github\/workflows\/.+\.ya?ml$/u.test(file)) continue;
-    let action = "";
-    for (const [index, line] of text.split("\n").entries()) {
-      action = line.match(/^\s*(?:-\s+)?uses:\s*([^@\s]+)/u)?.[1] ?? action;
-      const value = line.match(/^\s*(node-version|version):\s*["']?([^"'\s#]+)/u);
-      if (!value || value[2].startsWith("${{")) continue;
-      const tool =
-        value[1] === "node-version" ? "node" : action === "pnpm/action-setup" ? "pnpm" : "";
-      if (tool && value[2] !== expected[tool])
-        errors.push(`${file}:${index + 1}: ${tool} ${value[2]} diverso da ${expected[tool]}`);
-    }
-  }
+  if (manifest.engines?.node !== mise.match(/^node\s*=\s*"([^"]+)"/mu)?.[1])
+    errors.push(`mise.toml: node diverso da engines.node ${manifest.engines?.node}`);
+  if (manifest.packageManager !== `pnpm@${mise.match(/^pnpm\s*=\s*"([^"]+)"/mu)?.[1]}`)
+    errors.push(`mise.toml: pnpm diverso da packageManager ${manifest.packageManager}`);
   return errors;
 }
 
@@ -203,7 +170,7 @@ export function checkToolPins(files) {
 export function checkActionPins(files) {
   const errors = [];
   for (const { path: file, text } of files) {
-    if (!/^\.github\/workflows\/.+\.ya?ml$/u.test(file)) continue;
+    if (!/^\.github\/(?:workflows|actions)\/.+\.ya?ml$/u.test(file)) continue;
     for (const [index, line] of text.split("\n").entries()) {
       const uses = line.match(/^\s*(?:-\s+)?uses:\s*(\S+)(.*)$/u);
       if (!uses || uses[1].startsWith("./")) continue;
@@ -219,7 +186,7 @@ export function checkActionPins(files) {
 export const checks = {
   "sigle di piano": checkPlanCodes,
   fixture: checkFixtures,
-  import: (files) => checkImports(files),
+  "moduli server raggiungibili": (files) => checkImports(files),
   "versioni degli strumenti": checkToolPins,
   "Action fissate": checkActionPins,
 };

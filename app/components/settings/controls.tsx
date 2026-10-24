@@ -1,0 +1,278 @@
+import { cn } from "cn";
+import { useEffect, useId, useState } from "react";
+
+import { useAction } from "~/components/app-shell";
+import { useHydrated } from "~/components/hydrated";
+import { StatusIcon } from "~/components/status";
+import { Checkbox } from "~/components/ui/checkbox";
+import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "~/components/ui/field";
+import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
+import { Switch } from "~/components/ui/switch";
+import type { AppCopy } from "../../app-copy";
+
+export type SaveState = "idle" | "saving" | "saved" | "error";
+
+/**
+ * Salvataggio automatico delle scelte semplici tramite l'azione `save`: stato in
+ * corso ed esito espliciti, ripristino dell'ultimo valore salvato se il server rifiuta.
+ */
+export function useAutoSave<T extends string | boolean>(name: string, initial: T) {
+  const [value, setValue] = useState(initial);
+  const [saved, setSaved] = useState(initial);
+  const [outcome, setOutcome] = useState<"idle" | "saved" | "error">("idle");
+  const action = useAction((result) => {
+    if (result.ok) {
+      setSaved(value);
+      setOutcome("saved");
+    } else {
+      setValue(saved);
+      setOutcome("error");
+    }
+  });
+  useEffect(() => {
+    if (outcome !== "saved") return;
+    const timer = setTimeout(() => setOutcome("idle"), 2000);
+    return () => clearTimeout(timer);
+  }, [outcome]);
+  const change = (next: T) => {
+    setValue(next);
+    setOutcome("idle");
+    action.run("save", { name, value: String(next) });
+  };
+  const state: SaveState = action.pending ? "saving" : outcome;
+  return [value, change, state] as const;
+}
+
+/**
+ * Esito del salvataggio automatico in una riga sempre riservata: comparire e sparire non
+ * sposta il testo intorno.
+ */
+export function SaveStatus({ state, t }: { state: SaveState; t: AppCopy }) {
+  return (
+    <span
+      role="status"
+      className={cn(
+        "block min-h-4 text-xs leading-4",
+        state === "error" ? "text-danger" : "text-muted-foreground",
+      )}
+    >
+      {state === "saving"
+        ? t.common.saving
+        : state === "saved"
+          ? t.settings.saved
+          : state === "error"
+            ? t.settings.saveFailed
+            : ""}
+    </span>
+  );
+}
+
+export function AutoSwitch({
+  name,
+  label,
+  description,
+  initial,
+  t,
+  disabled,
+}: {
+  name: string;
+  label: string;
+  description?: string;
+  initial: boolean;
+  t: AppCopy;
+  disabled?: boolean;
+}) {
+  const id = useId();
+  const [checked, setChecked, state] = useAutoSave(name, initial);
+  const ready = useHydrated();
+  return (
+    <Field orientation="horizontal" className="items-start">
+      <Switch
+        id={id}
+        checked={checked}
+        disabled={!ready || disabled || state === "saving"}
+        onCheckedChange={(next) => setChecked(next)}
+        aria-labelledby={`${id}-label`}
+        aria-describedby={description ? `${id}-description` : undefined}
+      />
+      <div className="grid min-w-0 flex-1 gap-1">
+        <FieldLabel id={`${id}-label`} htmlFor={id} className="font-normal">
+          {label}
+        </FieldLabel>
+        {description ? (
+          <FieldDescription id={`${id}-description`}>{description}</FieldDescription>
+        ) : null}
+        <SaveStatus state={state} t={t} />
+      </div>
+    </Field>
+  );
+}
+
+export function AutoRadio({
+  name,
+  legend,
+  options,
+  initial,
+  t,
+  disabled,
+}: {
+  name: string;
+  legend: string;
+  options: Array<{ value: string; label: string }>;
+  initial: string;
+  t: AppCopy;
+  disabled?: boolean;
+}) {
+  const [value, setValue, state] = useAutoSave(name, initial);
+  return (
+    <FieldSet>
+      <FieldLegend variant="label">{legend}</FieldLegend>
+      <RadioGroup
+        disabled={disabled || state === "saving"}
+        value={value}
+        onValueChange={(next) => setValue(String(next))}
+        className="gap-3"
+      >
+        {options.map((option) => (
+          <RadioOption key={option.value} value={option.value}>
+            {option.label}
+          </RadioOption>
+        ))}
+      </RadioGroup>
+      <SaveStatus state={state} t={t} />
+    </FieldSet>
+  );
+}
+
+/**
+ * Opzioni con nome accessibile già nell'HTML del server: Base UI collega la `<label>`
+ * esterna soltanto dopo l'idratazione.
+ */
+export function RadioOption({
+  value,
+  disabled,
+  children,
+}: {
+  value: string;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  const id = useId();
+  return (
+    <FieldLabel id={id} className="font-normal">
+      <RadioGroupItem value={value} disabled={disabled} aria-labelledby={id} />
+      {children}
+    </FieldLabel>
+  );
+}
+
+export function CheckboxOption({
+  name,
+  defaultChecked,
+  children,
+}: {
+  name?: string;
+  defaultChecked?: boolean;
+  children: React.ReactNode;
+}) {
+  const id = useId();
+  return (
+    <FieldLabel id={id} className="font-normal">
+      <Checkbox name={name} defaultChecked={defaultChecked} aria-labelledby={id} />
+      {children}
+    </FieldLabel>
+  );
+}
+
+export function SimpleSelect({
+  label,
+  hint,
+  items,
+  value,
+  premiumLabel,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  hint?: string;
+  /** `premium`: opzione del piano Premium, visibile con la corona ma non selezionabile. */
+  items: Array<{ value: string; label: string; premium?: boolean }>;
+  value: string;
+  premiumLabel?: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const id = useId();
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <Select
+        disabled={disabled}
+        items={items}
+        value={value}
+        onValueChange={(next) => onChange(String(next))}
+      >
+        <SelectTrigger
+          id={id}
+          className="w-full min-w-0 sm:max-w-sm"
+          aria-describedby={hint ? `${id}-hint` : undefined}
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {items.map((item) => (
+            <SelectItem key={item.value} value={item.value} disabled={item.premium}>
+              {item.label}
+              {item.premium ? (
+                <>
+                  <StatusIcon tone="premium" className="ml-auto" />
+                  <span className="sr-only">{premiumLabel}</span>
+                </>
+              ) : null}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {hint ? <FieldDescription id={`${id}-hint`}>{hint}</FieldDescription> : null}
+    </Field>
+  );
+}
+
+export function Group({
+  title,
+  children,
+  className,
+  separated = true,
+}: {
+  title?: string;
+  children: React.ReactNode;
+  className?: string;
+  /** Linea sopra il gruppo; senza, quando il gruppo precedente finisce già con una linea. */
+  separated?: boolean;
+}) {
+  const id = useId();
+  return (
+    <section
+      aria-labelledby={title ? id : undefined}
+      className={cn(
+        "grid gap-4",
+        separated && "border-t pt-6 first:border-t-0 first:pt-0",
+        className,
+      )}
+    >
+      {title ? (
+        <h3 id={id} className="text-base font-semibold">
+          {title}
+        </h3>
+      ) : null}
+      {children}
+    </section>
+  );
+}

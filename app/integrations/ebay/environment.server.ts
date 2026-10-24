@@ -1,16 +1,30 @@
 import { UpstreamError } from "../http.server";
+import type { EbayEnvironment } from "../../view-models";
 
-export type EbayEnvironment = "production" | "sandbox";
+export type { EbayEnvironment } from "../../view-models";
 
-type EbayBindings = {
+/** Segreti eBay facoltativi: senza valore Sandbox e verifica delle notifiche restano spente. */
+type OptionalEbaySecrets = {
+  EBAY_SANDBOX_CLIENT_ID?: string;
+  EBAY_SANDBOX_CLIENT_SECRET?: string;
+  EBAY_SANDBOX_RUNAME?: string;
+  EBAY_NOTIFICATION_VERIFICATION_TOKEN?: string;
+};
+
+// Tipizzati su `Env` come opzionali: `bindings.secret()` in `cloudflare.config.ts` li renderebbe
+// obbligatori in ogni ambiente.
+declare global {
+  namespace Cloudflare {
+    interface Env extends OptionalEbaySecrets {}
+  }
+}
+
+type EbayBindings = OptionalEbaySecrets & {
   APP_ORIGIN: string;
   EBAY_CLIENT_ID: string;
   EBAY_CLIENT_SECRET: string;
   EBAY_RUNAME: string;
   EBAY_SANDBOX_ENABLED?: string;
-  EBAY_SANDBOX_CLIENT_ID?: string;
-  EBAY_SANDBOX_CLIENT_SECRET?: string;
-  EBAY_SANDBOX_RUNAME?: string;
 };
 
 export function sandboxAvailable(env: EbayBindings): boolean {

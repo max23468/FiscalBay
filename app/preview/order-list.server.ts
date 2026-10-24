@@ -7,30 +7,18 @@ import {
   snapshotParam,
 } from "../orders/order-list";
 import { orderSearchText, searchFold, searchTokens } from "../orders/order-search";
+import { orderCriteria, type OrderCriteria } from "../domain/orders.server";
 import { displayTaxValue } from "../tax-quality";
-import {
-  fiscalSituation,
-  fiscalSituations,
-  paymentStatuses,
-  shippingStatuses,
-  type OrderView,
-  type Plan,
-} from "../view-models";
+import { fiscalSituation, type OrderView, type Plan } from "../view-models";
 
 /** La ricerca dell'anteprima è legata soltanto all'anteprima: i suoi dati sono sintetici. */
 export const previewSearchScope = "anteprima";
-
-/** Valore di un filtro dell'URL, ignorato se non è tra quelli previsti. */
-function known(params: URLSearchParams, name: string, values: readonly string[]) {
-  const value = params.get(name);
-  return value && values.includes(value) ? value : null;
-}
 
 /**
  * Ricerca sugli scenari sintetici con le regole dell'area reale: testo dell'ordine e soltanto
  * i valori fiscali disponibili, mai quelli da sbloccare.
  */
-function matchesSearch(order: OrderView, tokens: string[]) {
+function matchesSearch(order: OrderView, tokens: readonly string[]) {
   if (tokens.length === 0) return true;
   const fiscal =
     order.fiscal.state === "available"
@@ -40,34 +28,19 @@ function matchesSearch(order: OrderView, tokens: string[]) {
   return tokens.every((token) => text.includes(token));
 }
 
-/** Criteri dell'URL e ricerca sugli scenari sintetici. L'area reale filtra con la query D1. */
-function matchesOrder(
-  order: OrderView,
-  params: URLSearchParams,
-  now: string,
-  tokens: string[],
-  plan: Plan,
-) {
-  if (!matchesSearch(order, tokens)) return false;
-  const store = params.get("negozio");
-  if (store && order.storeId !== store) return false;
-  const payment = known(params, "pagamento", paymentStatuses);
-  if (payment && order.payment.status !== payment) return false;
-  const shipping = known(params, "spedizione", shippingStatuses);
-  if (shipping && order.shipping.status !== shipping) return false;
-  const fiscal = known(params, "fiscale", fiscalSituations);
-  if (fiscal && fiscalSituation(order.fiscal) !== fiscal) return false;
-  // Come nell'area reale, i 90 giorni valgono soltanto per Premium.
-  const days = Number(
-    known(params, "periodo", plan === "premium" ? ["7", "30", "90"] : ["7", "30"]),
+/**
+ * Criteri dell'area reale, letti e validati da `orderCriteria`, applicati agli scenari
+ * sintetici: l'area reale li esegue nella query D1.
+ */
+function matchesOrder(order: OrderView, criteria: OrderCriteria) {
+  return (
+    matchesSearch(order, criteria.tokens ?? []) &&
+    (!criteria.storeId || order.storeId === criteria.storeId) &&
+    (!criteria.since || Date.parse(order.createdAt) >= Date.parse(criteria.since)) &&
+    (!criteria.payment || order.payment.status === criteria.payment) &&
+    (!criteria.shipping || order.shipping.status === criteria.shipping) &&
+    (!criteria.fiscal || fiscalSituation(order.fiscal) === criteria.fiscal)
   );
-  if (
-    days > 0 &&
-    new Date(now).getTime() - new Date(order.createdAt).getTime() > days * 86_400_000
-  ) {
-    return false;
-  }
-  return true;
 }
 
 /** Dal più recente, con spareggio per ID decrescente come la query D1. */
@@ -137,9 +110,8 @@ export function previewListing(
   now: string,
   plan: Plan,
 ) {
-  const tokens = searchTokens(query);
-  const matching = (list: OrderView[]) =>
-    list.filter((order) => matchesOrder(order, search, now, tokens, plan));
+  const criteria = orderCriteria(search, new Date(now), plan, query);
+  const matching = (list: OrderView[]) => list.filter((order) => matchesOrder(order, criteria));
   const arrival = new Date(new Date(now).getTime() + arrivalDelay);
   const snapshot = snapshotInstant(search.get(snapshotParam)) ?? new Date(now);
   const arrived = snapshot >= arrival;

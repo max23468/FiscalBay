@@ -1,5 +1,7 @@
 import { syncMinutes } from "./order-sync.server";
 import { dayMilliseconds } from "../time";
+import { storeNameSql } from "./store-state.server";
+import type { EbayEnvironment } from "../integrations/ebay/environment.server";
 
 /**
  * Collegamento dei negozi: stato derivato da scollegamento, consenso e pause, separato
@@ -7,8 +9,7 @@ import { dayMilliseconds } from "../time";
  * spazio dell'utente.
  */
 
-/** Nome mostrato: quello del negozio eBay, altrimenti lo username dell'account. */
-const storeNameSql = "COALESCE(s.store_name, s.display_name, s.ebay_account_id, s.ebay_user_id)";
+/** Username dell'account eBay del negozio. */
 const usernameSql = "COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id)";
 
 export type StoreConnection = "active" | "paused" | "reconnect_required" | "disconnected";
@@ -16,7 +17,7 @@ export type PauseReason = "manual" | "plan" | "inactivity" | "admin";
 
 export type StoreStatus = {
   id: string;
-  ebayEnvironment: "production" | "sandbox";
+  ebayEnvironment: EbayEnvironment;
   name: string;
   username: string;
   /** Logo e pagina del negozio eBay, se il venditore ne ha uno. */
@@ -103,7 +104,7 @@ async function ownedStore(
 ): Promise<OwnedStore | null> {
   return db
     .prepare(
-      `SELECT ${storeNameSql} AS name, s.disconnected_at
+      `SELECT ${storeNameSql("s")} AS name, s.disconnected_at
          FROM ebay_stores s
          JOIN workspace_members wm ON wm.workspace_id = s.workspace_id
         WHERE wm.user_id = ? AND s.id = ?`,
@@ -114,7 +115,7 @@ async function ownedStore(
 
 type StoreRow = {
   id: string;
-  ebay_environment: "production" | "sandbox";
+  ebay_environment: EbayEnvironment;
   name: string;
   username: string;
   store_logo_url: string | null;
@@ -147,7 +148,7 @@ export async function listStores(
   const [{ results }, { results: runs }] = await db.batch<StoreRow | RunRow>([
     db
       .prepare(
-        `SELECT s.id, s.ebay_environment, ${storeNameSql} AS name, ${usernameSql} AS username,
+        `SELECT s.id, s.ebay_environment, ${storeNameSql("s")} AS name, ${usernameSql} AS username,
               s.store_logo_url, s.store_url, s.feedback_score, s.feedback_positive_percent,
               s.top_rated_seller, s.disconnected_at,
               c.store_id AS credentials, c.granted_at, c.refresh_expires_at,

@@ -1,13 +1,13 @@
 import { cn } from "cn";
-import { env } from "cloudflare:workers";
 import { ClipboardList, Copy, KeyRound, LogOut, Store } from "lucide-react";
 import { useEffect, useState } from "react";
-import { redirect, useLocation } from "react-router";
+import { useLocation } from "react-router";
 
 import { AccessNotice, VerifyEmail } from "~/components/account";
 import { Logo } from "~/components/standalone-page";
 import { useFieldErrors, type FieldErrors } from "~/components/form-validation";
 import { LanguageSwitch } from "~/components/language-switch";
+import { ProfileFields } from "~/components/profile-fields";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
 import {
@@ -16,25 +16,14 @@ import {
   FieldDescription,
   FieldGroup,
   FieldLabel,
-  FieldLegend,
   FieldSeparator,
-  FieldSet,
 } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
-import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import { createAuth } from "../auth.server";
-import { forwardToAuth, redirectWithCookies } from "../auth-route.server";
-import {
-  completeRegistration,
-  parseProfile,
-  registrationStatus,
-} from "../domain/registration.server";
-import { accessPath, ordersPath, visitCookie, securityReturnPath } from "../app-links";
-import { accessLoader } from "../account-page.server";
-import { appCopy } from "../app-copy";
-import { errorResponse } from "../error-response";
-import { tracePhase } from "../errors";
+import { accessPath, ordersPath, securityReturnPath } from "../app-links";
+import { accessAction, accessLoader } from "../account-page.server";
+import { appCopy, pageTitle } from "../app-copy";
+import { loadPasskeyClient } from "../account/passkey";
 import { passkeyFailure, type PasskeyFailure } from "../account/passkey-error";
 import { languageFromPath, localizedPath, type Language } from "../i18n";
 import type { Route } from "./+types/sign-in";
@@ -47,146 +36,15 @@ export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescri
     : loaderData?.resetToken
       ? access.passwordResetTitle
       : access.signIn;
-  return [{ title: `FiscalBay | ${title}` }, { name: "description", content: access.description }];
+  return [{ title: pageTitle(title) }, { name: "description", content: access.description }];
 }
 
 export function loader({ request }: Route.LoaderArgs) {
   return accessLoader(request);
 }
 
-export async function action({ request }: Route.ActionArgs) {
-  const language = languageFromPath(new URL(request.url).pathname);
-  // Con la sessione si torna agli Ordini, senza all'accesso: ciascuna pagina rimanda all'altra
-  // se il caso non è il suo, conservando l'esito.
-  const base = localizedPath(language, ordersPath);
-  const access = localizedPath(language, accessPath);
-  if (request.headers.get("origin") !== new URL(env.APP_ORIGIN).origin) {
-    return errorResponse(request, "FORBIDDEN");
-  }
-  const form = await request.formData();
-  tracePhase(request, "form");
-  const field = (name: string) => String(form.get(name) ?? "");
-  const intent = field("intent");
-  const returnTo = securityReturnPath(language, field("returnTo"));
-  const destination = returnTo ?? base;
-  const accessReturn = returnTo ? `${access}?${new URLSearchParams({ returnTo })}` : access;
-  const notice = (value: string, page = access) => {
-    const query = new URLSearchParams({ accesso: value });
-    if (returnTo) query.set("returnTo", returnTo);
-    return redirect(`${page}?${query}`, 303);
-  };
-  const forward = (path: string, body?: Record<string, unknown>) =>
-    forwardToAuth(env, request, path, body);
-
-  // Dopo l'uscita la radice torna a essere il sito pubblico, senza la scelta di visita.
-  if (intent === "esci") {
-    const response = redirectWithCookies(localizedPath(language), await forward("/sign-out"));
-    response.headers.append("set-cookie", `${visitCookie}=; Path=/; Max-Age=0`);
-    return response;
-  }
-
-  if (intent === "google" || intent === "ebay") {
-    const response = await forward("/sign-in/social", {
-      provider: intent,
-      callbackURL: destination,
-      errorCallbackURL: `${localizedPath(language, "/auth/error")}?${new URLSearchParams({ provider: intent, ...(returnTo ? { returnTo } : {}) })}`,
-    });
-    if (!response.ok) return notice(response.status === 429 ? "troppi-tentativi" : "errore");
-    const { url } = await response.clone().json<{ url: string }>();
-    return redirectWithCookies(url, response);
-  }
-
-  if (intent === "recupera-password") {
-    const response = await forward("/request-password-reset", {
-      email: field("email"),
-      redirectTo: `${new URL(env.APP_ORIGIN).origin}${accessReturn}`,
-    });
-    return notice(
-      response.status === 429 ? "troppi-tentativi" : response.ok ? "recupero-inviato" : "errore",
-    );
-  }
-
-  if (intent === "reimposta-password") {
-    const token = field("token");
-    if (!token || token.length > 512) return notice("recupero-scaduto");
-    const response = await forward("/reset-password", {
-      token,
-      newPassword: field("password"),
-    });
-    return notice(response.ok ? "password-reimpostata" : "recupero-scaduto");
-  }
-
-  if (intent === "registrati") {
-    // Profilo e Termini obbligatori, marketing facoltativo: nessuna scelta vale se non inviata.
-    const profile = parseProfile(form);
-    if (!profile) return notice("dati");
-    if (field("termini") !== "on") return notice("termini");
-    const response = await forward("/sign-up/email", {
-      email: field("email"),
-      password: field("password"),
-      name: `${profile.firstName} ${profile.lastName}`,
-      callbackURL: base,
-    });
-    if (!response.ok) {
-      if (response.status === 403) {
-        const error = await response.clone().json<{ code?: string }>();
-        if (error.code === "registration_approval_required") return notice("autorizzazione");
-      }
-      return notice(response.status === 429 ? "troppi-tentativi" : "registrazione");
-    }
-    // Per un indirizzo già registrato Better Auth risponde con un utente fittizio, senza
-    // sessione: profilo e Termini si salvano solo per l'account appena creato. La sessione
-    // nasce dal link di conferma, quindi la risposta è la stessa nei due casi.
-    const { user } = await response.clone().json<{ user: { id: string } }>();
-    const created = await env.DB.prepare('SELECT 1 FROM "user" WHERE "id" = ?')
-      .bind(user.id)
-      .first();
-    if (created) {
-      await completeRegistration(env.DB, {
-        userId: user.id,
-        language,
-        now: new Date(),
-        profile,
-        agreement: { marketing: field("marketing") === "on" },
-      });
-    }
-    return notice("registrato");
-  }
-
-  if (intent === "verifica" || intent === "completa") {
-    const session = await createAuth(env).api.getSession({ headers: request.headers });
-    if (!session) return notice("errore");
-    if (intent === "verifica") {
-      if (session.user.emailVerified) return redirect(base, 303);
-      const response = await forward("/send-verification-email", {
-        email: session.user.email,
-        callbackURL: base,
-      });
-      if (response.status === 429) return notice("troppi-tentativi", base);
-      return notice(response.ok ? "verifica-inviata" : "errore", base);
-    }
-    // Chi è entrato con Google o prima di una nuova versione dei Termini completa qui ciò che manca.
-    const status = await registrationStatus(env.DB, session.user.id);
-    const profile = status.profile ? undefined : parseProfile(form);
-    // Gli errori del completamento restano sull'accesso, dove il passaggio si ripete.
-    if (profile === null) return notice("dati");
-    if (!status.termsAccepted && field("termini") !== "on") return notice("termini");
-    await completeRegistration(env.DB, {
-      userId: session.user.id,
-      language,
-      now: new Date(),
-      profile,
-      agreement: status.termsAccepted ? undefined : { marketing: field("marketing") === "on" },
-    });
-    return redirect(base, 303);
-  }
-
-  const response = await forward("/sign-in/email", {
-    email: field("email"),
-    password: field("password"),
-  });
-  if (response.ok) return redirectWithCookies(destination, response);
-  return notice(response.status === 429 ? "troppi-tentativi" : "errore");
+export function action({ request }: Route.ActionArgs) {
+  return accessAction(request);
 }
 
 type AccessCopy = (typeof appCopy)[Language]["access"];
@@ -227,100 +85,6 @@ function useRemembered(error: boolean) {
 }
 
 const rise = "animate-[rise-in_var(--duration-fast)_var(--ease-smooth-out)_both]";
-
-/** Persona sempre obbligatoria; l'azienda aggiunge la ragione sociale, senza CF né Partita IVA. */
-function ProfileFields({
-  t,
-  v,
-  values,
-  suggested,
-}: {
-  t: AccessCopy;
-  v: FieldErrors;
-  values?: Record<string, string>;
-  suggested?: { firstName: string; lastName: string };
-}) {
-  const [type, setType] = useState(values?.tipo === "azienda" ? "azienda" : "privato");
-  return (
-    <>
-      <FieldSet>
-        <FieldLegend variant="label" id="account-type-label">
-          {t.accountType}
-        </FieldLegend>
-        <RadioGroup
-          name="tipo"
-          value={type}
-          onValueChange={(next) => setType(String(next))}
-          aria-labelledby="account-type-label"
-          aria-describedby="account-type-hint"
-          className="grid grid-cols-2 gap-2"
-        >
-          {(["privato", "azienda"] as const).map((value) => (
-            <FieldLabel
-              key={value}
-              className="w-full rounded-lg border border-input/40 px-3 py-2.5 font-normal transition-colors duration-(--duration-quick) has-data-checked:border-primary has-data-checked:bg-info-surface"
-            >
-              <RadioGroupItem value={value} aria-labelledby={`account-type-${value}`} />
-              <span id={`account-type-${value}`}>
-                {value === "privato" ? t.private : t.business}
-              </span>
-            </FieldLabel>
-          ))}
-        </RadioGroup>
-        <FieldDescription id="account-type-hint">{t.accountTypeHint}</FieldDescription>
-      </FieldSet>
-      {type === "azienda" ? (
-        <Field className={rise}>
-          <FieldLabel htmlFor="company-name" required>
-            {t.companyName}
-          </FieldLabel>
-          <Input
-            id="company-name"
-            name="ragione_sociale"
-            autoComplete="organization"
-            maxLength={200}
-            defaultValue={values?.ragione_sociale}
-            required
-            {...v.control("ragione_sociale")}
-          />
-          {v.error("ragione_sociale")}
-        </Field>
-      ) : null}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field>
-          <FieldLabel htmlFor="first-name" required>
-            {t.firstName}
-          </FieldLabel>
-          <Input
-            id="first-name"
-            name="nome"
-            autoComplete="given-name"
-            maxLength={100}
-            defaultValue={values?.nome ?? suggested?.firstName}
-            required
-            {...v.control("nome")}
-          />
-          {v.error("nome")}
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="last-name" required>
-            {t.lastName}
-          </FieldLabel>
-          <Input
-            id="last-name"
-            name="cognome"
-            autoComplete="family-name"
-            maxLength={100}
-            defaultValue={values?.cognome ?? suggested?.lastName}
-            required
-            {...v.control("cognome")}
-          />
-          {v.error("cognome")}
-        </Field>
-      </div>
-    </>
-  );
-}
 
 /** Termini obbligatori e marketing facoltativo, entrambi mai preselezionati. */
 function AgreementFields({
@@ -427,11 +191,11 @@ function PasskeyButton({ t, language }: { t: AccessCopy; language: Language }) {
           setPending(true);
           setError(null);
           try {
-            if (!window.PublicKeyCredential) {
+            const authClient = await loadPasskeyClient();
+            if (!authClient) {
               setError("unsupported");
               return;
             }
-            const { authClient } = await import("../account/passkey-client");
             const result = await authClient.signIn.passkey();
             if (result.error) setError(passkeyFailure(result.error));
             else window.location.assign(target ?? localizedPath(language, ordersPath));

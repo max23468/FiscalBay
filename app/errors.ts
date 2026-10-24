@@ -64,7 +64,8 @@ export function logFailure(input: {
     | "order_acquisition"
     | "account_email"
     | "maintenance"
-    | "scheduling";
+    | "scheduling"
+    | "queue";
   status?: number;
 }): void {
   if (input.request?.signal.aborted) return;

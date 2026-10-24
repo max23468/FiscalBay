@@ -69,7 +69,9 @@ export const defaultDisplay: DisplayPreferences = {
 /** Modello di messaggio predefinito, per ogni lingua dell'acquirente. */
 export function defaultTemplate(language: Language): string {
   const { settings } = appCopy[language];
-  return language === "it" ? settings.templateDefaultIt : settings.templateDefaultEn;
+  return language === "it"
+    ? settings.template.templateDefaultIt
+    : settings.template.templateDefaultEn;
 }
 
 /** Dati della shell dell'area: aspetto scelto, campanella e istante di riferimento. */

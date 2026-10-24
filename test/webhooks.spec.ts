@@ -316,11 +316,23 @@ it("la coda smista richieste di sincronizzazione, compiti e riferimenti dei webh
     retry: vi.fn(),
     attempts: 1,
   };
-  await worker.queue(
-    { messages: [sync, webhook, task] } as unknown as MessageBatch<unknown>,
-    environment,
-    {} as ExecutionContext,
-  );
+  const unknown = { body: { altro: true }, ack: vi.fn(), retry: vi.fn(), attempts: 1 };
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    await worker.queue(
+      { messages: [sync, webhook, task, unknown] } as unknown as MessageBatch<unknown>,
+      environment,
+      {} as ExecutionContext,
+    );
+    // Un messaggio sconosciuto non passa dai webhook: si riprova fino ai non consegnati.
+    expect(unknown.retry).toHaveBeenCalledOnce();
+    expect(unknown.ack).not.toHaveBeenCalled();
+    expect(logged.mock.calls.map(([entry]) => JSON.parse(entry))).toContainEqual(
+      expect.objectContaining({ operation: "queue", code: "INVALID_REQUEST" }),
+    );
+  } finally {
+    logged.mockRestore();
+  }
   // Senza una richiesta in attesa la consegna si chiude senza leggere eBay.
   expect(sync.ack).toHaveBeenCalledOnce();
   expect(sync.retry).not.toHaveBeenCalled();
@@ -1357,6 +1369,14 @@ it("una ricevuta conserva il retry anche se il rilascio della lease fallisce", a
     expect(logged).toHaveBeenCalledTimes(2);
     for (const [entry] of logged.mock.calls)
       expect(JSON.parse(entry)).toMatchObject({ operation: "webhook_consumer" });
+    // Come negli altri moduli, il log porta il codice e il tipo dell'errore, mai il messaggio.
+    expect(logged.mock.calls.map(([entry]) => JSON.parse(entry))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "INTERNAL_ERROR" }),
+        expect.objectContaining({ code: "UPSTREAM_UNAVAILABLE", failure: "unavailable" }),
+      ]),
+    );
+    expect(JSON.stringify(logged.mock.calls)).not.toContain("database_unavailable");
   } finally {
     failing.mockRestore();
     logged.mockRestore();

@@ -1,5 +1,9 @@
 import type { createRequestHandler } from "react-router";
-import { receiveWebhook, consumeWebhooks } from "../app/integrations/webhooks.server";
+import {
+  consumeWebhooks,
+  isWebhookMessage,
+  receiveWebhook,
+} from "../app/integrations/webhooks.server";
 import { indexable } from "../app/app-links";
 import { correlateResponse, correlationHeader, logFailure, tracePhase } from "../app/errors";
 import { withPhaseTimings } from "../app/observability.server";
@@ -51,13 +55,19 @@ export default {
       return new Response(null, { status: 500, headers: { [correlationHeader]: id } });
     }
   },
-  // La coda porta i riferimenti dei webhook, le letture dei negozi e i compiti periodici.
+  // La coda porta i riferimenti dei webhook, le letture dei negozi e i compiti periodici: ogni
+  // tipo ha il proprio schema e nessuno raccoglie i messaggi degli altri.
   async queue(batch, env) {
     const syncs = batch.messages.filter((message) => isSyncMessage(message.body));
     const tasks = batch.messages.filter((message) => isTaskMessage(message.body));
-    const webhooks = batch.messages.filter(
-      (message) => !isSyncMessage(message.body) && !isTaskMessage(message.body),
-    );
+    const webhooks = batch.messages.filter((message) => isWebhookMessage(message.body));
+    // Un messaggio di forma sconosciuta non ha un consumer: si riprova fino alla coda dei
+    // messaggi non consegnati, dove resta da esaminare.
+    const known = new Set([...syncs, ...tasks, ...webhooks]);
+    for (const message of batch.messages.filter((message) => !known.has(message))) {
+      logFailure({ code: "INVALID_REQUEST", operation: "queue" });
+      message.retry();
+    }
     // Negozi diversi non si ostacolano; lo stesso negozio è serializzato dal suo blocco.
     await Promise.all([
       ...syncs.map((message) => consumeStoreSync(message, env)),

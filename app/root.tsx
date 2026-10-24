@@ -13,15 +13,14 @@ import {
 } from "react-router";
 import { useEffect } from "react";
 
-import { cn } from "cn";
 import { CircleAlert, CloudOff, FileQuestion } from "lucide-react";
 
 import type { Route } from "./+types/root";
 import { StandalonePage } from "./components/standalone-page";
 import { TimeZoneContext } from "./components/time-zone";
-import { buttonVariants } from "./components/ui/button-variants";
+import { buttonLink } from "./components/ui/button-variants";
 import { correlationId } from "./errors";
-import { appCopy } from "./app-copy";
+import { appCopy, pageTitle } from "./app-copy";
 import { languageFromPath, localizedPath } from "./i18n";
 import { snapshotOnlyAdded } from "./orders/order-list";
 import { defaultDisplay, matchedShell } from "./preferences";
@@ -129,12 +128,12 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       title={page.title}
       homeHref={localizedPath(language)}
     >
-      <title>{`FiscalBay | ${page.title}`}</title>
+      <title>{pageTitle(page.title)}</title>
       <p className="leading-relaxed text-pretty text-muted-foreground">{page.body}</p>
       {status !== 404 && reference ? (
         <p className="font-code text-xs text-muted-foreground">{t.reference(reference)}</p>
       ) : null}
-      <a href={page.home.href} className={cn(buttonVariants({ variant: "outline" }), "w-fit")}>
+      <a href={page.home.href} {...buttonLink({ variant: "outline", className: "w-fit" })}>
         {page.home.label}
       </a>
     </StandalonePage>

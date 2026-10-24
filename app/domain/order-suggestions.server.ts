@@ -1,5 +1,6 @@
-import { orderAccessSql } from "./grants.server";
-import { consultableStore } from "./store-state.server";
+import { activeEntitlementSql, orderAccessSql } from "./grants.server";
+import { consultableStore, storeNameSql } from "./store-state.server";
+import type { EbayEnvironment } from "../integrations/ebay/environment.server";
 import { taxComparisonKey, taxIdentifierType, taxQuality } from "../tax-quality";
 import type { SuggestionView } from "../view-models";
 
@@ -13,7 +14,7 @@ export async function orderSuggestions(
   db: D1Database,
   userId: string,
   ids: string[],
-  environment: "production" | "sandbox",
+  environment: EbayEnvironment,
   now: Date,
 ): Promise<Map<string, Suggestions>> {
   if (!ids.length) return new Map();
@@ -25,12 +26,10 @@ export async function orderSuggestions(
      WHERE wm.user_id = ?1 AND s.ebay_environment = ?2
        AND o.id IN (SELECT value FROM json_each(?3))
        AND o.merged_into IS NULL AND o.retention_until > ?4 AND ${consultableStore("s")}
-       AND EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = s.workspace_id
-         AND e.revoked_at IS NULL AND julianday(e.starts_at) <= julianday(?4)
-         AND (e.ends_at IS NULL OR julianday(e.ends_at) > julianday(?4)))
+       AND ${activeEntitlementSql("s.workspace_id", "?4")}
   ) SELECT target.id AS target_id, target.buyer_eias_token,
       o.id AS source_id, o.ebay_order_id, o.creation_time,
-      COALESCE(s.store_name, s.display_name, s.ebay_account_id, s.ebay_user_id) AS store_name,
+      ${storeNameSql("s")} AS store_name,
       t.identifier_type, t.issuing_country, t.value, t.source
     FROM targets target
     LEFT JOIN orders o ON o.buyer_eias_token = target.buyer_eias_token

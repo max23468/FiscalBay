@@ -1,5 +1,6 @@
-import { useId, useState, useSyncExternalStore } from "react";
+import { useId, useState } from "react";
 
+import { useHydrated } from "~/components/hydrated";
 import { FieldError } from "~/components/ui/field";
 
 export interface ValidationCopy {
@@ -10,8 +11,6 @@ export interface ValidationCopy {
 }
 
 type Control = HTMLInputElement | HTMLTextAreaElement;
-
-const subscribeNever = () => () => {};
 
 function messageFor(control: Control, copy: ValidationCopy): string {
   const { validity } = control;
@@ -31,12 +30,7 @@ function messageFor(control: Control, copy: ValidationCopy): string {
 export function useFieldErrors(copy: ValidationCopy) {
   const id = useId();
   const [errors, setErrors] = useState<Record<string, string>>({});
-  // Falso sul server e durante l'idratazione, vero nel browser idratato.
-  const ready = useSyncExternalStore(
-    subscribeNever,
-    () => true,
-    () => false,
-  );
+  const ready = useHydrated();
   const errorId = (name: string) => `${id}-${name}-error`;
 
   return {

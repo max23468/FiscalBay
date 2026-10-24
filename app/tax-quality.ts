@@ -1,9 +1,22 @@
 import type { TaxIdentifierType, TaxQuality } from "./view-models";
 
+/**
+ * Tipi della fonte per CF e Partita IVA italiani, anche con Paese omesso; VAT_ID e VATIN valgono
+ * come Partita IVA soltanto con Paese IT. La forma SQL degli ordini parte dagli stessi elenchi.
+ */
+export const taxTypeNames = {
+  cf: ["CODICE_FISCALE", "CodiceFiscale"],
+  vat: ["PartitaIVA"],
+  italianVat: ["VAT_ID", "VATIN"],
+} as const;
+
+const isOneOf = (names: readonly string[], type: string) => names.includes(type);
+
 export function taxIdentifierType(type: string, country: string | null): TaxIdentifierType {
   if (country !== null && country !== "IT") return "OTHER";
-  if (["CODICE_FISCALE", "CodiceFiscale"].includes(type)) return "CF";
-  return type === "PartitaIVA" || (country === "IT" && ["VAT_ID", "VATIN"].includes(type))
+  if (isOneOf(taxTypeNames.cf, type)) return "CF";
+  return isOneOf(taxTypeNames.vat, type) ||
+    (country === "IT" && isOneOf(taxTypeNames.italianVat, type))
     ? "PIVA"
     : "OTHER";
 }

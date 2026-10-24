@@ -2,11 +2,10 @@ import { env } from "cloudflare:workers";
 import { createCookie, data } from "react-router";
 
 import { appCopy, type AppCopy } from "../app-copy";
+import { isProduction } from "../app-links";
 import { languageFromPath } from "../i18n";
 import type { ActionResult } from "../view-models";
 import { isScenarioId, loadScenario, type ScenarioId } from "./scenarios.server";
-
-const productionOrigin = "https://fiscalbay.it";
 
 /** Scenario scelto e ordini sbloccati per finta: niente dati personali, solo identificativi sintetici. */
 const previewCookie = createCookie("fb_anteprima", {
@@ -28,7 +27,7 @@ export interface PreviewState {
 
 /** L'anteprima esiste solo negli ambienti non Production. */
 export function assertPreviewAvailable() {
-  if (env.APP_ORIGIN === productionOrigin) throw data(null, { status: 404 });
+  if (isProduction(env)) throw data(null, { status: 404 });
 }
 
 export async function readPreviewState(request: Request): Promise<PreviewState> {
@@ -90,7 +89,7 @@ export async function pageScenario(request: Request) {
 
 /** Azioni senza effetto dell'anteprima: la risposta ha la forma di quelle reali. */
 const notices: Record<string, (t: AppCopy) => string | undefined> = {
-  "export-create": (t) => t.settings.exportCreated,
+  "export-create": (t) => t.settings.export.exportCreated,
   retry: (t) => t.orders.retried,
   profile: (t) => t.profile.saved,
   template: () => undefined,

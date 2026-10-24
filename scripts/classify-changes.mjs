@@ -1,66 +1,44 @@
 #!/usr/bin/env node
 /**
- * Classifica i file modificati e sceglie i controlli, uguale in locale e in CI.
- * Categorie: documentazione, test, runtime, tooling. Un file non classificato,
- * un diff vuoto o un confronto non disponibile eseguono il gate completo.
- * Uso: node scripts/classify-changes.mjs [--base REF --head REF] [--github-output] [--run]
+ * Sceglie il livello del gate dai file modificati, uguale in locale e in CI:
+ * - `docs`: documentazione ordinaria, `pnpm verify:documents`;
+ * - `tooling`: governo, script, workflow e configurazioni degli strumenti, `pnpm verify:tooling`;
+ * - `full`: ogni altro file, un diff vuoto o un confronto non disponibile, `pnpm verify`.
+ * La sequenza di ogni livello esiste soltanto negli script di package.json. Nel livello completo
+ * il classificatore sceglie anche le prove browser e il deploy test.
+ * Uso: node scripts/classify-changes.mjs [--base REF --head REF] [--complete] [--github-output] [--run]
  * Senza --base confronta il checkout, file non tracciati inclusi, con origin/develop.
  */
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { criticalModule } from "./mutation.mjs";
 import { importGraph } from "./verify-repo.mjs";
 
-// Il governo richiede anche i test degli script, senza implicare browser o deploy.
-const governance = [
-  /^AGENTS\.md$/u,
-  /^CLAUDE\.md$/u,
-  /^docs\/MASTER_PLAN\.md$/u,
-  /^docs\/engineering\//u,
-];
-const categories = [
-  ["test", [/^test\//u, /^e2e\//u, /^benchmarks\//u]],
-  ["runtime", [/^app\//u, /^workers\//u, /^public\//u, /^migrations\//u, /^placeholder\//u]],
-  [
-    "tooling",
-    [
-      /^\.github\//u,
-      /^\.claude\//u,
-      /^scripts\//u,
-      /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|mise\.toml)$/u,
-      /^tsconfig(?:\.\w+)?\.json$/u,
-      /^(?:vite|vitest(?:\.(?:unit|cloudflare|mutation|benchmark))?|playwright|react-router|cloudflare)\.config\.ts$/u,
-      /^(?:components\.json|doctor\.config\.json|stryker\.config\.json|knip\.json)$/u,
-      /^(?:\.oxfmtrc\.json|\.gitignore|\.dev\.vars\.example)$/u,
-    ],
-  ],
+/** Script di package.json eseguito da ciascun livello. */
+export const levelScripts = { docs: "verify:documents", tooling: "verify:tooling", full: "verify" };
+
+// Il governo contiene i gate Production letti dagli script: richiede anche i loro test.
+const governance = /^(?:AGENTS\.md|CLAUDE\.md|docs\/MASTER_PLAN\.md|docs\/engineering\/.+)$/u;
+
+// Strumenti che non entrano nella build, nei test applicativi o nelle prove browser.
+const tooling = [
+  /^\.github\//u,
+  /^\.claude\//u,
+  /^scripts\/.+\.test\.mjs$/u,
+  /^scripts\/(?:verify-(?:copy|docs|repo|pages)|classify-changes|benchmark|coverage-report|mutation(?:-vitest)?|find-(?:build|deployed)|reset-test-account|watch-invocations|release\/release(?:-notes|-cycle)?)\.mjs$/u,
+  /^benchmarks\//u,
+  /^(?:\.oxfmtrc\.json|\.oxlintrc\.json|knip\.json|stryker\.config\.json|vitest\.(?:benchmark|mutation)\.config\.ts)$/u,
 ];
 
-function toolingFile(file) {
-  return (
-    file.endsWith(".md") ||
-    /^scripts\/(?:verify-(?:copy|docs|repo|pages)|guardrails\.test|classify-changes|benchmark|coverage-report|release\/release(?:-notes|-cycle)?|find-(?:build|deployed)|reset-test-account|watch-invocations)\.mjs$/u.test(
-      file,
-    ) ||
-    /^\.github\/(?:dependabot\.yml|workflows\/(?:ci|publish|qualify|promotion|mutation|react-doctor|actionlint|pr-title|dependency-review|dependabot-auto-merge)\.yml)$/u.test(
-      file,
-    ) ||
-    /^(?:\.oxfmtrc\.json|doctor\.config\.json|knip\.json|vitest\.benchmark\.config\.ts)$/u.test(
-      file,
-    ) ||
-    file.startsWith("benchmarks/")
-  );
+/** Livello minimo di un singolo file. */
+export function fileLevel(file) {
+  if (file.endsWith(".md") && !governance.test(file)) return "docs";
+  if (governance.test(file) || tooling.some((pattern) => pattern.test(file))) return "tooling";
+  return "full";
 }
 
-/** Categoria di un file, oppure `undefined` se non classificato. */
-export function classifyFile(file) {
-  if (governance.some((pattern) => pattern.test(file))) return "tooling";
-  if (file.endsWith(".md")) return "documentation";
-  return categories.find(([, patterns]) => patterns.some((pattern) => pattern.test(file)))?.[0];
-}
-
-/** Controlli necessari per un insieme di file modificati. */
 /** Chiusura inversa: un consumatore di un modulo modificato cambia con esso. */
 function consumers(files, graph) {
   const affected = new Set(files);
@@ -77,50 +55,38 @@ function consumers(files, graph) {
   return affected;
 }
 
-/**
- * Righe del nuovo sorgente toccate da un diff `-U0`, unite se vicine. Una cancellazione segna
- * le due righe che la circondano, dove un controllo rimosso cambia il comportamento.
- */
-export function changedLines(diff) {
-  const ranges = [];
-  for (const match of diff.matchAll(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gmu)) {
-    const start = Number(match[1]);
-    const count = match[2] === undefined ? 1 : Number(match[2]);
-    const from = Math.max(1, start);
-    const to = count === 0 ? start + 1 : start + count - 1;
-    const last = ranges.at(-1);
-    if (last && from <= last[1] + 3) last[1] = Math.max(last[1], to);
-    else ranges.push([from, to]);
-  }
-  return ranges;
-}
+const areaPatterns = {
+  orders: "ordini|ordine|orders|idratazione",
+  stores: "negozi|negozio|stores",
+  settings: "impostazioni|settings|superfici",
+  profile: "profilo|profile",
+  auth: "accesso|sicurezza|security|auth|admin|idratazione",
+  public: "pubblico|standalone|public|termini|privacy",
+};
 
-/**
- * `ranges` associa a un file modificato le righe cambiate; un file senza voce (nuovo, non
- * tracciato o confronto non disponibile) si qualifica per intero.
- */
-export function plan(files, sources = [], complete = false, ranges = {}) {
-  const unclassified = files.filter((file) => !classifyFile(file));
-  const kinds = new Set(files.map(classifyFile));
-  const docsOnly = kinds.size === 1 && kinds.has("documentation");
-  const toolsOnly = files.length > 0 && files.every(toolingFile);
-  const graph = importGraph(sources, /^(?:app|workers|benchmarks)\/.+\.tsx?$/u);
+/** Controlli per i file modificati; `complete` qualifica il candidato sul diff cumulativo. */
+export function plan(files, sources = [], complete = false) {
+  const levels = new Set(files.map(fileLevel));
+  const gate =
+    complete || files.length === 0 || levels.has("full")
+      ? "full"
+      : levels.has("tooling")
+        ? "tooling"
+        : "docs";
+  const product = files.filter((file) => fileLevel(file) === "full");
+  // Le sole prove unitarie non toccano browser né artefatto distribuito.
+  const unitOnly =
+    !complete && product.length > 0 && product.every((file) => file.startsWith("test/"));
+  const e2e = gate === "full" && !unitOnly;
+  // Un diff vuoto distribuisce; prove e soli strumenti no.
+  const deploy =
+    gate === "full" &&
+    (files.length === 0 || product.some((file) => !/^(?:test|e2e)\//u.test(file)));
+
+  const graph = importGraph(sources);
   const affected = consumers(files, graph);
-  const full =
-    complete ||
-    files.length === 0 ||
-    unclassified.length > 0 ||
-    files.some((file) => classifyFile(file) === "tooling" && !toolingFile(file)) ||
-    files.some((file) =>
-      /^(?:app\/(?:root\.tsx|routes\.ts|entry\.server|app-copy|app-links)|app\/components\/(?:ui\/|app-shell|account)|app\/app\.css|public\/|workers\/|migrations\/|e2e\/)/u.test(
-        file,
-      ),
-    ) ||
-    (kinds.has("runtime") &&
-      (sources.length === 0 || files.some((file) => file.startsWith("app/") && !graph.has(file))));
   const areas = new Set();
-  const routes = [...affected].filter((file) => file.startsWith("app/routes/"));
-  for (const route of routes) {
+  for (const route of [...affected].filter((file) => file.startsWith("app/routes/"))) {
     if (/orders|home/u.test(route)) areas.add("orders");
     // Ordini e accesso condividono la pagina; il sito pubblico è `site.tsx`.
     if (route.endsWith("/home.tsx")) areas.add("auth");
@@ -130,175 +96,57 @@ export function plan(files, sources = [], complete = false, ranges = {}) {
     if (/security|admin|auth|sign-in/u.test(route)) areas.add("auth");
     if (/legal|site|robots/u.test(route)) areas.add("public");
   }
-  const unitOnly =
-    files.some((file) => classifyFile(file) === "test") &&
-    files.every(
-      (file) => toolingFile(file) || (classifyFile(file) === "test" && !file.startsWith("e2e/")),
-    );
-  const mode =
-    docsOnly && !complete
-      ? "docs"
-      : toolsOnly && !complete
-        ? "tooling"
-        : unitOnly && !complete
-          ? "unit"
-          : full || areas.size === 0
-            ? "full"
-            : "targeted";
-  const e2e = mode === "full" || mode === "targeted";
-  const patterns = {
-    orders: "ordini|ordine|orders|idratazione",
-    stores: "negozi|negozio|stores",
-    settings: "impostazioni|settings|superfici",
-    profile: "profilo|profile",
-    auth: "accesso|sicurezza|security|auth|admin|idratazione",
-    public: "pubblico|standalone|public|termini|privacy",
-  };
-  const browserGrep =
-    mode === "targeted"
-      ? [
-          "app-shell.spec",
-          "app-components.spec",
-          "@smoke",
-          ...[...areas].map((area) => patterns[area]),
-        ].join("|")
-      : ".";
-  // Nel candidato i mutanti partono dai moduli critici modificati e risalgono ai consumatori
-  // critici; un modulo condiviso non critico non estende la campagna a tutti i domini. PR e
-  // push qualificano soltanto le righe cambiate dei moduli critici toccati: il candidato
-  // ripete comunque l'intero modulo prima di Production.
-  const critical = (file) =>
-    (sources.length === 0 || graph.has(file)) &&
-    (file === "app/tax-quality.ts" ||
-      /^app\/(?:auth(?:-route)?|domain\/(?:orders|order-import|order-acquisition|order-sync|quota|grants|cycles|sessions|sign-in-methods|registration|stores|export)|integrations\/(?:webhooks|stripe|ebay\/(?:notifications|seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
-        file,
-      ));
-  const mutationInputs = files.filter(critical);
-  if (
-    files.some((file) =>
-      /^(?:workers\/app\.ts|cloudflare\.config\.ts|test\/webhooks\.spec\.ts)$/u.test(file),
-    )
-  )
-    mutationInputs.push(
-      "app/integrations/webhooks.server.ts",
-      "app/integrations/ebay/notifications.server.ts",
-    );
-  if (
-    files.some((file) =>
-      /^(?:test\/(?:auth-route\.unit|worker-context)\.ts|vitest\.unit\.config\.ts)$/u.test(file),
-    )
-  )
-    mutationInputs.push("app/auth-route.server.ts");
-  const mutation = complete
-    ? [...consumers(mutationInputs, graph)].filter(critical)
-    : [...new Set(mutationInputs)]
-        .filter((file) => critical(file) && ranges[file]?.length !== 0)
-        .map((file) =>
-          ranges[file] ? `${file}:${ranges[file].map(([a, b]) => `${a}-${b}`).join(",")}` : file,
-        );
-  const browsers = e2e
-    ? mode === "full" ||
-      areas.has("auth") ||
-      files.some((file) => /i18n|view-models|date|\.tsx$/u.test(file))
+  // Una selezione per area vale soltanto per moduli applicativi risolti fino alle route.
+  const targeted =
+    e2e &&
+    !complete &&
+    areas.size > 0 &&
+    product
+      .filter((file) => !file.startsWith("test/"))
+      .every(
+        (file) =>
+          graph.has(file) &&
+          !/^app\/(?:root\.tsx|routes\.ts|entry\.server|app-copy|app-links|app\.css|components\/(?:ui\/|app-shell|account))/u.test(
+            file,
+          ),
+      );
+  const browserGrep = targeted
+    ? [
+        "app-shell.spec",
+        "app-components.spec",
+        "@smoke",
+        ...[...areas].map((area) => areaPatterns[area]),
+      ].join("|")
+    : ".";
+  const browsers = !e2e
+    ? ""
+    : !targeted ||
+        areas.has("auth") ||
+        files.some((file) => /i18n|view-models|date|\.tsx$/u.test(file))
       ? "chromium,webkit"
-      : "chromium"
-    : "";
-  const build = mode === "full" || mode === "targeted" || mode === "unit";
-  const placeholder =
-    complete ||
-    files.length === 0 ||
-    unclassified.length > 0 ||
-    files.some(
-      (file) =>
-        file.startsWith("placeholder/") ||
-        (file.startsWith("scripts/") && !toolingFile(file)) ||
-        /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|mise\.toml|patches\/)/u.test(file),
-    );
-  const live = build && (complete || mode !== "unit");
-  const deploy =
-    files.length === 0 ||
-    unclassified.length > 0 ||
-    kinds.has("runtime") ||
-    files.some((file) => classifyFile(file) === "tooling" && !toolingFile(file));
-  const doctor =
-    complete ||
-    unclassified.length > 0 ||
-    files.length === 0 ||
-    (full && kinds.has("runtime")) ||
-    files.some((file) => classifyFile(file) === "tooling" && !toolingFile(file)) ||
-    [...affected].some((file) => /^app\/.*\.tsx$/u.test(file)) ||
-    files.some((file) => /^(?:package\.json|pnpm-lock\.yaml|doctor\.config\.json)$/u.test(file));
-  const benchmark =
-    complete ||
-    files.length === 0 ||
-    unclassified.length > 0 ||
-    files.some((file) =>
-      /^(?:benchmarks\/|scripts\/benchmark\.mjs$|vitest\.benchmark\.config\.ts$|tsconfig(?:\.\w+)?\.json$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|mise\.toml$|patches\/|\.github\/workflows\/(?:ci|qualify)\.yml$)/u.test(
-        file,
-      ),
-    ) ||
-    [...affected].some((file) => file.startsWith("benchmarks/")) ||
-    (kinds.has("runtime") &&
-      (sources.length === 0 || files.some((file) => file.startsWith("app/") && !graph.has(file))));
+      : "chromium";
+  // Soltanto il candidato esegue mutation: moduli critici modificati e loro consumatori critici.
+  // PR e push non ne eseguono; la campagna settimanale prova tutti i moduli critici.
+  const critical = (file) => (sources.length === 0 || graph.has(file)) && criticalModule(file);
+  const mutation = complete ? [...consumers(files.filter(critical), graph)].filter(critical) : [];
   return {
-    gate: mode === "docs" ? "docs" : mode === "tooling" ? "tooling" : "full",
+    gate,
+    script: levelScripts[gate],
     e2e,
-    unclassified,
-    mode,
+    build: gate === "full",
+    deploy,
     areas: [...areas].sort(),
     browserGrep,
     browsers,
-    build,
-    placeholder,
-    live,
-    deploy,
-    doctor,
-    benchmark,
     promotionReuse: !files.some(
       (file) =>
         /^scripts\/(?:classify-changes|release\/release(?:-notes)?|find-build)\.mjs$/u.test(file) ||
-        /^\.github\/workflows\/(?:ci|mutation|publish|qualify|promotion)\.yml$/u.test(file),
+        /^\.github\/(?:actions\/|workflows\/(?:ci|mutation|publish|qualify|promotion)\.yml$)/u.test(
+          file,
+        ),
     ),
     mutation,
-    reasons: [
-      complete ? "diff cumulativo, collaudo completo" : `modalità ${mode}`,
-      ...(unclassified.length ? ["file non classificati"] : []),
-      ...routes.map((route) => `consumatore ${route}`),
-      `browser ${e2e ? "richiesti dal perimetro applicativo" : "non richiesti"}`,
-      `build ${build ? "richiesta dal gate applicativo" : "non richiesta"}`,
-      `build pagina provvisoria ${placeholder ? "richiesta dai suoi input o dal candidato completo" : "input invariati"}`,
-      `deploy ${deploy ? "richiesto da runtime, configurazione o perimetro sconosciuto" : "nessun artefatto applicativo modificato"}`,
-      `mutation ${complete ? "sui moduli critici interi e i loro consumatori critici" : "sulle righe cambiate dei moduli critici toccati"}`,
-      `benchmark ${benchmark ? "richiesti dagli input dei percorsi misurati" : "input invariati"}`,
-      ...files
-        .filter((file) => !toolingFile(file) && classifyFile(file) !== "test")
-        .map((file) => `impatto applicativo o non classificato: ${file}`),
-    ],
   };
-}
-
-/** Sequenza del gate condivisa da locale e CI, senza browser o mutation. */
-export function gateCommands({ gate, doctor, placeholder, live, benchmark }) {
-  if (gate === "docs")
-    return [
-      ["node", ["scripts/verify-copy.mjs"]],
-      ["node", ["scripts/verify-docs.mjs"]],
-    ];
-  const checks =
-    gate === "tooling"
-      ? ["verify:tooling"]
-      : [
-          "verify:tooling",
-          "verify:pages",
-          "typecheck",
-          "test:coverage",
-          ...(placeholder ? ["build:placeholder"] : []),
-          ...(live ? ["build:live"] : []),
-          "build",
-        ];
-  if (doctor) checks.push("doctor:react");
-  if (benchmark) checks.push("benchmark");
-  return checks.map((check) => ["pnpm", [check]]);
 }
 
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" });
@@ -324,22 +172,6 @@ function localChanges() {
   ];
 }
 
-/** Righe cambiate dei moduli applicativi esistenti in entrambi i lati del confronto. */
-function changedRanges(files, base, head) {
-  const ranges = {};
-  for (const file of files.filter((item) => /^app\/.+\.server\.ts$/u.test(item))) {
-    try {
-      const diff = git("diff", "-U0", base, ...(head ? [head] : []), "--", file);
-      // Un file nuovo o rimosso non ha righe precedenti da confrontare: si qualifica intero.
-      if (/^(?:new|deleted) file mode/mu.test(diff) || !diff) continue;
-      ranges[file] = changedLines(diff);
-    } catch {
-      // Confronto non disponibile: il modulo resta intero.
-    }
-  }
-  return ranges;
-}
-
 function run(command, args, env = {}) {
   console.log(`\n$ ${command} ${args.join(" ")}`);
   execFileSync(command, args, { stdio: "inherit", env: { ...process.env, ...env } });
@@ -351,58 +183,35 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     const index = args.indexOf(name);
     return index === -1 ? undefined : args[index + 1] || undefined;
   };
-  const base = option("--base");
-  const head = option("--head");
   // Base vuota, a zeri o non raggiungibile (avvio manuale, nuovo branch, storia riscritta):
   // il diff resta vuoto e il gate completo.
-  const local = !args.includes("--base");
-  const files = local ? localChanges() : committedChanges(base, head);
+  const files = args.includes("--base")
+    ? committedChanges(option("--base"), option("--head"))
+    : localChanges();
   const sources = lines(git("ls-files", "--cached", "--others", "--exclude-standard"))
-    .filter((file) => /^(?:app|workers|benchmarks)\/.+\.tsx?$/u.test(file) && existsSync(file))
+    .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file) && existsSync(file))
     .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
-  const complete = args.includes("--complete");
-  const ranges =
-    complete || files.length === 0
-      ? {}
-      : local
-        ? changedRanges(files, git("merge-base", "origin/develop", "HEAD").trim())
-        : changedRanges(files, base, head);
-  const result = plan(files, sources, complete, ranges);
+  const result = plan(files, sources, args.includes("--complete"));
 
-  for (const file of files) console.log(`${classifyFile(file) ?? "non classificato"}: ${file}`);
-  console.log(
-    `Gate: ${result.gate === "docs" ? "documentazione" : result.gate === "tooling" ? "strumenti" : "completo"}; E2E: ${result.e2e ? "sì" : "no"}.`,
-  );
+  for (const file of files) console.log(`${fileLevel(file)}: ${file}`);
+  const summary = `Gate ${result.gate} (\`pnpm ${result.script}\`); browser: ${result.e2e ? `${result.browsers}, grep ${result.browserGrep}` : "no"}; deploy test: ${result.deploy ? "sì" : "no"}; mutation: ${result.mutation.join(", ") || "nessuna"}.`;
+  console.log(summary);
   if (args.includes("--github-output") && process.env.GITHUB_OUTPUT)
     appendFileSync(
       process.env.GITHUB_OUTPUT,
-      `gate=${result.gate}\ne2e=${result.e2e}\nbuild=${result.build}\ndeploy=${result.deploy}\ndoctor=${result.doctor}\nbenchmark=${result.benchmark}\npromotion-reuse=${result.promotionReuse}\nmode=${result.mode}\ngrep=${result.browserGrep}\nbrowsers=${result.browsers}\nmutation=${result.mutation.join(" ")}\nmutation-matrix=${JSON.stringify({ target: result.mutation })}\n`,
+      `gate=${result.gate}\ne2e=${result.e2e}\nbuild=${result.build}\ndeploy=${result.deploy}\npromotion-reuse=${result.promotionReuse}\ngrep=${result.browserGrep}\nbrowsers=${result.browsers}\nmutation=${result.mutation.join(" ")}\nmutation-matrix=${JSON.stringify({ target: result.mutation })}\n`,
     );
   if (process.env.GITHUB_STEP_SUMMARY && !args.includes("--gate-only"))
-    appendFileSync(
-      process.env.GITHUB_STEP_SUMMARY,
-      `### Piano dei controlli\n\n${result.reasons.map((reason) => `- ${reason}`).join("\n")}\n\nBrowser: ${result.browsers || "non applicabili"}. Mutation: ${result.mutation.join(", ") || "nessun dominio critico modificato"}.\n`,
-    );
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Piano dei controlli\n\n${summary}\n`);
   if (args.includes("--json")) console.log(JSON.stringify(result));
 
   if (args.includes("--run")) {
-    for (const [command, arguments_] of gateCommands(result))
-      run(
-        command,
-        arguments_,
-        arguments_[0] === "benchmark"
-          ? {
-              BENCHMARK_BASE_SHA: base || git("merge-base", "origin/develop", "HEAD").trim(),
-            }
-          : {},
-      );
+    run("pnpm", [result.script]);
     if (result.e2e && !args.includes("--gate-only"))
       run(
         "node",
         ["scripts/browser-tests.mjs", "--grep", result.browserGrep, "--browsers", result.browsers],
         { E2E_PREBUILT: "1" },
       );
-    if (result.mutation.length && !args.includes("--gate-only"))
-      run("pnpm", ["test:mutation", ...result.mutation]);
   }
 }

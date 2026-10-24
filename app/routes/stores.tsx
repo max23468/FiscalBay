@@ -1,12 +1,13 @@
 import { env } from "cloudflare:workers";
 import { data, isRouteErrorResponse, redirect } from "react-router";
 
-import { AccessNotice, AccountShell } from "~/components/account";
+import { AccessNotice } from "~/components/account";
+import { AccountShell } from "~/components/account-shell";
 import { NotFoundState } from "~/components/not-found";
-import { StoresPage } from "~/components/stores";
+import { StoresPage } from "~/components/stores/page";
 import { accessNotice } from "../access-notice";
 import { areaPage, assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
-import { appCopy } from "../app-copy";
+import { appCopy, pageTitle } from "../app-copy";
 import { appBase, storeLinkPath, type AppLinks } from "../app-links";
 import {
   deleteStoreData,
@@ -28,7 +29,7 @@ import type { Route } from "./+types/stores";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
-  return [{ title: `FiscalBay | ${t.stores.title}` }, { name: "robots", content: "noindex" }];
+  return [{ title: pageTitle(t.stores.title) }, { name: "robots", content: "noindex" }];
 }
 
 export function headers(): HeadersInit {

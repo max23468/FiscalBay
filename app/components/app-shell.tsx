@@ -1,29 +1,25 @@
 import { cn } from "cn";
-import {
-  Bell,
-  ClipboardList,
-  CreditCard,
-  Globe,
-  LogOut,
-  Search,
-  Settings,
-  ShieldCheck,
-  Store,
-  User,
-} from "lucide-react";
+import { Bell, Globe, LogOut, Search } from "lucide-react";
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
+  useEffectEvent,
   useId,
   useRef,
   useState,
-  useSyncExternalStore,
 } from "react";
 import { Link, NavLink, useFetcher, useLocation, useNavigate } from "react-router";
 
+import { useHydrated } from "~/components/hydrated";
 import { InitialsTile } from "~/components/icon-tile";
+import {
+  accountMenu,
+  shellDestinations,
+  type AccountMenuItem,
+  type NavDestination,
+} from "~/components/shell-links";
 import { StatusIcon } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import {
@@ -100,7 +96,6 @@ async function requestSearch(
 const suggestionDelay = 150;
 
 const NoticeContext = createContext<(message: string) => void>(() => {});
-const subscribeNever = () => () => {};
 
 /** Conferma breve di un'azione, annunciata anche ai lettori di schermo. */
 export function useNotice() {
@@ -108,19 +103,35 @@ export function useNotice() {
 }
 
 /**
- * Azione sulla route corrente, distinta da `intent`: esito e avviso li decide il
- * server. L'anteprima risponde con una simulazione, le route reali eseguono.
+ * Reazione a un nuovo esito del fetcher, una sola volta e a richiesta conclusa: una
+ * rilettura della pagina o un nuovo rendering non ripropongono l'esito già gestito.
  */
-export function useAction() {
-  const notify = useNotice();
-  const fetcher = useFetcher<ActionResult>();
-  const handled = useRef<ActionResult | undefined>(undefined);
+export function useFetcherResult<T>(
+  fetcher: { state: string; data: T | undefined },
+  onResult: (result: T) => void,
+) {
+  const handled = useRef<T | undefined>(undefined);
+  const handle = useEffectEvent(onResult);
   useEffect(() => {
     const result = fetcher.data;
-    if (fetcher.state !== "idle" || !result || handled.current === result) return;
+    if (fetcher.state !== "idle" || result === undefined || handled.current === result) return;
     handled.current = result;
+    handle(result);
+  }, [fetcher.state, fetcher.data]);
+}
+
+/**
+ * Azione sulla route corrente, distinta da `intent`: esito e avviso li decide il
+ * server. L'anteprima risponde con una simulazione, le route reali eseguono.
+ * `onResult` riceve ogni nuovo esito, dopo l'avviso.
+ */
+export function useAction(onResult?: (result: ActionResult) => void) {
+  const notify = useNotice();
+  const fetcher = useFetcher<ActionResult>();
+  useFetcherResult(fetcher, (result) => {
     if (result.notice) notify(result.notice);
-  }, [fetcher.state, fetcher.data, notify]);
+    onResult?.(result);
+  });
   return {
     run: (intent: string, fields: Record<string, string> = {}) =>
       void fetcher.submit({ ...fields, intent }, { method: "post" }),
@@ -128,27 +139,6 @@ export function useAction() {
     /** Ultimo esito, disponibile a richiesta conclusa. */
     result: fetcher.state === "idle" ? fetcher.data : undefined,
   };
-}
-
-/**
- * Voce del menu dell'avatar; `reloadDocument` per le pagine fuori dalle route dell'app,
- * `onSelect` per una voce che invia una scelta invece di aprire una pagina.
- */
-export interface AccountMenuItem {
-  href: string;
-  label: string;
-  Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  lang?: Language;
-  reloadDocument?: boolean;
-  onSelect?: () => void;
-}
-
-/** Destinazione della navigazione principale; `end` per la radice dell'area. */
-export interface NavDestination {
-  href: string;
-  label: string;
-  Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  end?: boolean;
 }
 
 /**
@@ -199,11 +189,7 @@ export function AppShell({
     [],
   );
 
-  const destinations: NavDestination[] = navigation ?? [
-    { href: appHref(links, "ordini"), label: t.shell.orders, Icon: ClipboardList },
-    { href: appHref(links, "negozi"), label: t.shell.stores, Icon: Store },
-    { href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings },
-  ];
+  const destinations = navigation ?? shellDestinations(links, t);
   const navigable = destinations.length > 0;
 
   return (
@@ -280,24 +266,7 @@ export function AppShell({
               account={account}
               menu={
                 menu ?? [
-                  [
-                    { href: appHref(links, "profilo"), label: t.shell.profile, Icon: User },
-                    {
-                      href: appHref(links, "impostazioni/sicurezza"),
-                      label: t.shell.security,
-                      Icon: ShieldCheck,
-                    },
-                    {
-                      href: appHref(links, "impostazioni/piano"),
-                      label: t.shell.planBilling,
-                      Icon: CreditCard,
-                    },
-                    {
-                      href: appHref(links, "impostazioni"),
-                      label: t.shell.settings,
-                      Icon: Settings,
-                    },
-                  ],
+                  accountMenu(links, t),
                   [
                     {
                       href: localizedPath(links.language, "/"),
@@ -493,11 +462,7 @@ function GlobalSearch({
   }
   const [open, setOpen] = useState(false);
   const { answer, suggest } = useSearchSuggestions(search.action, links.language);
-  const ready = useSyncExternalStore(
-    subscribeNever,
-    () => true,
-    () => false,
-  );
+  const ready = useHydrated();
   const id = useId();
   const trimmed = query.trim();
   // Soltanto la risposta per il testo attuale: una precedente non descrive ciò che è scritto.

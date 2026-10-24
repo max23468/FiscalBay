@@ -37,9 +37,12 @@ export type OrdersNotice =
       storeId: string;
       storeName: string;
       at: string;
-      ebayEnvironment: "production" | "sandbox";
+      ebayEnvironment: EbayEnvironment;
     }
   | { kind: "importing"; count: number };
+
+/** Ambiente eBay di un negozio, condiviso da server e interfaccia. */
+export type EbayEnvironment = "production" | "sandbox";
 
 export type Plan = "free" | "premium";
 

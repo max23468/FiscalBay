@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
 import { data, redirect, useNavigate, type ShouldRevalidateFunctionArgs } from "react-router";
 
-import { AccessNotice, AccountShell, VerifyEmail } from "~/components/account";
+import { AccessNotice, VerifyEmail } from "~/components/account";
+import { AccountShell } from "~/components/account-shell";
 import { EbayEnvironmentField, type EbayEnvironment } from "~/components/ebay-environment";
 import { NotFoundState } from "~/components/not-found";
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
@@ -13,12 +14,13 @@ import {
   requireAccountArea,
   shellData,
 } from "../account-area.server";
-import { appCopy } from "../app-copy";
+import { appCopy, pageTitle } from "../app-copy";
 import { appBase, ordersPath, storeLinkPath, type AppLinks } from "../app-links";
 import {
   orderAllowance,
   restoreUnlockConfirmation,
   unlockConfirmation,
+  UnlockError,
   unlockOrders,
 } from "../domain/grants.server";
 import { historyDays } from "../domain/order-acquisition.server";
@@ -54,7 +56,7 @@ import type { Route } from "./+types/orders";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
-  return [{ title: `FiscalBay | ${t.orders.title}` }, { name: "robots", content: "noindex" }];
+  return [{ title: pageTitle(t.orders.title) }, { name: "robots", content: "noindex" }];
 }
 
 export function headers(): HeadersInit {
@@ -340,9 +342,6 @@ export function shouldRevalidate({
   return snapshotOnlyAdded(currentUrl, nextUrl) ? false : defaultShouldRevalidate;
 }
 
-const unlockFailures =
-  /invalid_order_selection|order_not_available|order_not_in_workspace|free_quota_exhausted|tax_data_unavailable|invalid_grant_cycle|order_already_granted_or_merged|NOT NULL constraint failed|UNIQUE constraint failed/u;
-
 /**
  * Sblocco, nuova lettura di un ordine non riuscito e ripristino della conferma di sblocco,
  * sempre sugli ordini e sullo spazio dell'utente.
@@ -360,15 +359,7 @@ export async function action({ request }: Route.ActionArgs) {
   const environment = requestedEbayEnvironment(request);
   if (intent === "retry") {
     const id = String(form.get("order") ?? "");
-    const [order] =
-      id && id.length <= 64
-        ? // Anche un acquisto non pagato, che il filtro «Non pagato» mostra con il suo stato.
-          await listVisibleOrders(env.DB, session.user.id, 1, environment, new Date(), {
-            ids: [id],
-            provisional: true,
-          })
-        : [];
-    if (!order || order.fiscalState !== "error")
+    if (!id || id.length > 64)
       return data<ActionResult>({ ok: false, notice: t.stores.failed }, { status: 409 });
     // Con eBay che non risponde la nuova lettura resta sospesa, come il pulsante.
     const stores = await listStores(env.DB, session.user.id);
@@ -376,7 +367,8 @@ export async function action({ request }: Route.ActionArgs) {
       return data<ActionResult>({ ok: false, notice: t.stores.ebayDown }, { status: 409 });
     let requested;
     try {
-      requested = await requestOrderRead(env, session.user.id, order);
+      // Il dominio rilegge soltanto un ordine che l'utente consulta, con lettura non riuscita.
+      requested = await requestOrderRead(env, session.user.id, id, environment);
     } catch (error) {
       logFailure({ request, error, operation: "route" });
       return data<ActionResult>({ ok: false, notice: t.stores.failed }, { status: 500 });
@@ -400,7 +392,7 @@ export async function action({ request }: Route.ActionArgs) {
     );
   } catch (error) {
     // Le violazioni del dominio non espongono ordine, quota altrui o testo SQL.
-    if (!(error instanceof Error) || !unlockFailures.test(error.message)) throw error;
+    if (!(error instanceof UnlockError)) throw error;
     return data<UnlockResult>({ unlocked: [], remaining: null, error: true }, { status: 409 });
   }
 }

@@ -3,6 +3,14 @@ import type Stripe from "stripe";
 // Il webhook resta indisponibile senza il suo segreto; i pagamenti si attivano separatamente.
 export type StripeSecrets = { STRIPE_SECRET_KEY: string; STRIPE_WEBHOOK_SECRET: string };
 
+// Segreti facoltativi del Worker, tipizzati su `Env` come opzionali: dichiararli con
+// `bindings.secret()` in `cloudflare.config.ts` li renderebbe obbligatori in ogni ambiente.
+declare global {
+  namespace Cloudflare {
+    interface Env extends Partial<StripeSecrets> {}
+  }
+}
+
 export type PremiumOffer = "monthly" | "annual" | "lifetime";
 
 const integrationIdentifier = "fiscalbay_mp_qnwjrzta";

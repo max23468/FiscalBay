@@ -157,8 +157,8 @@ export async function dispatchScheduledWork(environment: Env, now: Date): Promis
   await dispatchTasks(environment, now).catch((error: unknown) =>
     logFailure({ error, operation: "scheduling" }),
   );
-  await recoverWebhookIngress(environment, now).catch(() =>
-    logFailure({ operation: "webhook_ingress" }),
+  await recoverWebhookIngress(environment, now).catch((error: unknown) =>
+    logFailure({ error, operation: "webhook_ingress" }),
   );
   await dispatchStoreSyncs(environment, now).catch((error: unknown) =>
     logFailure({ error, operation: "scheduling" }),

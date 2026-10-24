@@ -1,14 +1,13 @@
 import { env } from "cloudflare:workers";
-import { cn } from "cn";
 import { Check, Store } from "lucide-react";
 import { redirect } from "react-router";
 
 import { StandalonePage } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
 import { EbayEnvironmentField, type EbayEnvironment } from "~/components/ebay-environment";
-import { buttonVariants } from "~/components/ui/button-variants";
+import { buttonLink } from "~/components/ui/button-variants";
 import { accessPath, appBase, ordersPath, storeLinkPath } from "../app-links";
-import { appCopy } from "../app-copy";
+import { appCopy, pageTitle } from "../app-copy";
 import { createAuth } from "../auth.server";
 import { registrationComplete, registrationStatus } from "../domain/registration.server";
 import { ebayOutages, listStores } from "../domain/stores.server";
@@ -30,7 +29,7 @@ export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)].storeLink;
   const reconnect = new URLSearchParams(location.search).has(reconnectParam);
   return [
-    { title: `FiscalBay | ${reconnect ? t.reconnectTitle : t.title}` },
+    { title: pageTitle(reconnect ? t.reconnectTitle : t.title) },
     { name: "robots", content: "noindex" },
   ];
 }
@@ -201,12 +200,8 @@ export default function StoreLink({ loaderData }: Route.ComponentProps) {
         )}
         {loaderData.fromStores ? <input type="hidden" name="da" value="negozi" /> : null}
         <Button type="submit">{t.continue}</Button>
-        <a
-          href={back}
-          data-slot="button"
-          className={cn(buttonVariants({ variant: "outline" }), "w-fit")}
-        >
-          {t.cancel}
+        <a href={back} {...buttonLink({ variant: "outline", className: "w-fit" })}>
+          {appCopy[language].common.cancel}
         </a>
       </form>
     </StandalonePage>
