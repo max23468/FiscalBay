@@ -237,9 +237,11 @@ async function main() {
         statements.push(`INSERT INTO sync_state (store_id, polled_at, last_success_at, updated_at)
           VALUES ('${id}', '${now}', '${now}', '${now}');`);
     }
-    // Preferenze e campanella: un account per browser, con un negozio da ricollegare.
-    for (const browser of ["chromium", "webkit"]) {
-      const id = `preferences-${browser}`;
+    // Preferenze e campanella: un account per browser e per tentativo, con un negozio da
+    // ricollegare. La prova salva tema, fuso e letture: un nuovo tentativo riparte pulito.
+    for (const id of ["chromium", "webkit"].flatMap((browser) =>
+      [0, 1, 2].map((attempt) => `preferences-${browser}-${attempt}`),
+    )) {
       statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
       INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
         SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
