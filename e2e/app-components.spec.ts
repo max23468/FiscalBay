@@ -1342,6 +1342,15 @@ for (const language of ["it", "en"] as const) {
         page.getByRole("textbox", { name: t("Messaggio", "Message"), exact: true }),
       ).toHaveAttribute("placeholder", /.+/);
       await expect(page.locator('main a[href^="mailto:"]')).toHaveAttribute("href", /^mailto:.+$/);
+      const requiredLabels = page
+        .locator("main label[data-slot=field-label]")
+        .filter({ has: page.locator("span[aria-hidden=true]") });
+      await expect(requiredLabels).not.toHaveCount(0);
+      for (const label of await requiredLabels.all()) {
+        expect(
+          await label.evaluate((element) => parseFloat(getComputedStyle(element).columnGap)),
+        ).toBe(2);
+      }
       await open(page, `${prefix}/anteprima/impostazioni/profilo`);
       await expect(
         page.getByRole("textbox", { name: t("Nome", "First name"), exact: true }),
@@ -1349,14 +1358,6 @@ for (const language of ["it", "en"] as const) {
       await expect(
         page.getByRole("textbox", { name: t("Cognome", "Last name"), exact: true }),
       ).toHaveAttribute("required", "");
-      const requiredLabels = page
-        .locator("main label[data-slot=field-label]")
-        .filter({ has: page.locator("span[aria-hidden=true]") });
-      for (const label of await requiredLabels.all()) {
-        expect(
-          await label.evaluate((element) => parseFloat(getComputedStyle(element).columnGap)),
-        ).toBe(2);
-      }
       await expect.poll(() => noPageOverflow(page)).toBe(true);
       expect(errors).toEqual([]);
       await page.screenshot({ path: testInfo.outputPath("profile.png"), fullPage: true });
@@ -2297,9 +2298,29 @@ for (const width of [390, 768, 1440]) {
       await page.screenshot({ path: testInfo.outputPath(`support-${locale}.png`) });
 
       await open(page, `${prefix}/anteprima/impostazioni/profilo`);
-      await expect(
-        page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true }),
-      ).toBeVisible();
+      const profile = page.getByRole("region", { name: it ? "Profilo" : "Profile", exact: true });
+      const first = profile.getByRole("textbox", {
+        name: it ? "Nome" : "First name",
+        exact: true,
+      });
+      const last = profile.getByRole("textbox", {
+        name: it ? "Cognome" : "Last name",
+        exact: true,
+      });
+      await expect(first).toBeVisible();
+      // Tutti i campi sono obbligatori: nessuna legenda né asterisco.
+      await expect(profile.getByText(it ? "Campo obbligatorio" : "Required field")).toHaveCount(0);
+      await expect(profile.locator("label span[aria-hidden=true]")).toHaveCount(0);
+      // Il tipo di account è un dato in sola lettura, con etichetta e valore.
+      await expect(profile.getByRole("definition")).toHaveText(it ? "Azienda" : "Business");
+      // Nome e cognome affiancati da 640 px, con una larghezza contenuta.
+      const [firstBox, lastBox] = [await first.boundingBox(), await last.boundingBox()];
+      if (width >= 640) {
+        expect(Math.abs(firstBox!.y - lastBox!.y)).toBeLessThan(1);
+        expect(lastBox!.x + lastBox!.width - firstBox!.x).toBeLessThanOrEqual(672);
+      } else {
+        expect(lastBox!.y).toBeGreaterThan(firstBox!.y);
+      }
       await expect.poll(() => noPageOverflow(page)).toBe(true);
       await page.screenshot({
         path: testInfo.outputPath(`profile-${locale}.png`),
