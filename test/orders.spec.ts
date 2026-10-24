@@ -2378,8 +2378,8 @@ describe("vista condivisa e criteri degli ordini", () => {
     for (const raw of ["mario rossi@esempio.invalid", "@esempio.invalid", "mario@", "mario"])
       expect(emailView(raw)).toBeNull();
     // Un `?` o un `&` della fonte restano nell'indirizzo e non aggiungono campi.
-    const tricky = emailView("a?subject=Ciao&body=x@gmail.com")!;
-    expect(mailtoHref(tricky.address)).toBe("mailto:a%3Fsubject%3DCiao%26body%3Dx@gmail.com");
+    const tricky = emailView("a?subject=Ciao&body=x@esempio.invalid")!;
+    expect(mailtoHref(tricky.address)).toBe("mailto:a%3Fsubject%3DCiao%26body%3Dx@esempio.invalid");
     expect(
       mailtoHref("mario.rossi@esempio.invalid", { subject: "CF ordine", body: "Ciao & grazie" }),
     ).toBe("mailto:mario.rossi@esempio.invalid?subject=CF%20ordine&body=Ciao%20%26%20grazie");
