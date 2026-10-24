@@ -13,6 +13,8 @@ import { taxQuality } from "../app/tax-quality";
 import { readPreviewState, writePreviewState } from "../app/preview/state.server";
 import { action as previewSearch } from "../app/routes/preview-search";
 import { loader as previewOrders } from "../app/routes/preview-orders";
+import { previewListing } from "../app/preview/order-list.server";
+import { orderCriteria } from "../app/domain/orders.server";
 import type { SearchResults } from "../app/components/app-shell";
 
 describe("stato sintetico dell'anteprima", () => {
@@ -254,5 +256,61 @@ describe("elenco ordini dell'anteprima", () => {
       incoming: 0,
       freshHref: null,
     });
+  });
+});
+
+describe("criteri dell'elenco dell'anteprima", () => {
+  const scenario = loadScenario("ordinario", "it", new Set());
+  const daysAgo = (days: number) =>
+    new Date(new Date(scenario.now).getTime() - days * 86_400_000).toISOString();
+  const [first, second] = scenario.orders;
+  // Ordini oltre i 30 giorni: separano i periodi di Free e Premium.
+  const orders = [
+    ...scenario.orders,
+    { ...first!, id: "ord-60-giorni", createdAt: daysAgo(60) },
+    { ...second!, id: "ord-120-giorni", createdAt: daysAgo(120) },
+  ];
+  const listed = (query: string, plan: "free" | "premium") =>
+    previewListing(orders, [], new URLSearchParams(query), null, scenario.now, plan)
+      .filtered.map(({ id }) => id)
+      .sort();
+  /** Gli stessi criteri dell'area reale, applicati in memoria come fa la query D1. */
+  const expected = (query: string, plan: "free" | "premium") => {
+    const criteria = orderCriteria(new URLSearchParams(query), new Date(scenario.now), plan);
+    return orders
+      .filter(
+        (order) =>
+          (!criteria.storeId || order.storeId === criteria.storeId) &&
+          (!criteria.since || Date.parse(order.createdAt) >= Date.parse(criteria.since)) &&
+          (!criteria.payment || order.payment.status === criteria.payment),
+      )
+      .map(({ id }) => id)
+      .sort();
+  };
+
+  it("legge l'indirizzo con orderCriteria, come l'area reale", () => {
+    const all = listed("", "premium");
+    expect(all).toHaveLength(orders.length);
+    const longStore = "s".repeat(65);
+    for (const plan of ["free", "premium"] as const)
+      for (const query of [
+        "",
+        `negozio=${first!.storeId}`,
+        `negozio=${longStore}`,
+        "periodo=7",
+        "periodo=30",
+        "periodo=90",
+        "periodo=365",
+        "pagamento=paid",
+        "pagamento=sconosciuto",
+      ])
+        expect(listed(query, plan), `${plan} ${query}`).toEqual(expected(query, plan));
+    // Un negozio oltre i 64 caratteri non filtra, invece di svuotare l'elenco.
+    expect(listed(`negozio=${longStore}`, "premium")).toEqual(all);
+    // I 90 giorni valgono soltanto per Premium; in Free l'opzione vale «Tutti».
+    expect(listed("periodo=90", "premium")).toContain("ord-60-giorni");
+    expect(listed("periodo=90", "premium")).not.toContain("ord-120-giorni");
+    expect(listed("periodo=90", "free")).toEqual(all);
+    expect(listed("periodo=30", "free")).not.toContain("ord-60-giorni");
   });
 });
