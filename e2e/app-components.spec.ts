@@ -898,9 +898,30 @@ test.describe("miglioramenti account e negozi", () => {
     browserName,
   }) => {
     await useLocalAccount(context, "member", baseURL!, `passkey-${browserName}`);
-    await page.goto("/app/impostazioni/sicurezza");
+    // Prima dell'idratazione i pulsanti che aprono un modulo non reagirebbero al clic: restano
+    // inattivi, così un clic durante il caricamento non va perso.
+    let continueHydration = () => {};
+    const hydration = new Promise<void>((resolve) => {
+      continueHydration = resolve;
+    });
+    await page.route("**/assets/*.js", async (route) => {
+      await hydration;
+      await route.continue();
+    });
     const methods = page.locator('section[aria-labelledby="security-methods"]');
     const row = methods.getByRole("group", { name: /Chiave browser sintetica/ });
+    const openers = [
+      row.getByRole("button", { name: "Rinomina", exact: true }),
+      methods.getByRole("button", { name: "Aggiungi passkey", exact: true }),
+      page.getByRole("button", { name: "Cambia email", exact: true }),
+    ];
+    try {
+      await page.goto("/app/impostazioni/sicurezza", { waitUntil: "commit" });
+      for (const opener of openers) await expect(opener).toBeDisabled();
+    } finally {
+      continueHydration();
+    }
+    for (const opener of openers) await expect(opener).toBeEnabled();
     await expect(row).toBeVisible();
     await page.waitForLoadState("networkidle");
     await page.screenshot({ path: "/tmp/fiscalbay-security-improvements.png", fullPage: true });

@@ -31,6 +31,7 @@ import { Button } from "~/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import { Spinner } from "~/components/ui/spinner";
+import { useHydrated } from "~/components/hydrated";
 import type { ActiveSession } from "../domain/sessions.server";
 import type { ConfirmResult } from "../security-actions.server";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
@@ -196,6 +197,7 @@ function PasskeyRename({
   const id = useId();
   const { settings, orders } = appCopy[language];
   const trigger = useRef<HTMLButtonElement>(null);
+  const ready = useHydrated();
   return open ? (
     <form method="post" action={actionPath} className="grid w-full gap-2">
       <input type="hidden" name="id" value={passkey.id} />
@@ -226,7 +228,14 @@ function PasskeyRename({
       </div>
     </form>
   ) : (
-    <Button ref={trigger} type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+    <Button
+      ref={trigger}
+      type="button"
+      variant="outline"
+      size="sm"
+      disabled={!ready}
+      onClick={() => setOpen(true)}
+    >
       {settings.renamePasskey}
     </Button>
   );
@@ -247,6 +256,7 @@ function EmailChange({
   const [open, setOpen] = useState(false);
   const opener = useRef<HTMLButtonElement>(null);
   const v = useFieldErrors(t.validation);
+  const ready = useHydrated();
   return (
     <SecurityGroup id="security-email" title={profile.email}>
       <div className="flex flex-col items-start gap-x-4 gap-y-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -258,6 +268,7 @@ function EmailChange({
             variant="outline"
             size="sm"
             aria-describedby="new-email-hint"
+            disabled={!ready}
             onClick={() => setOpen(true)}
           >
             {profile.changeEmail}
@@ -434,6 +445,7 @@ function AddPasskey({
   };
   const opener = useRef<HTMLButtonElement>(null);
   const [naming, setNaming] = useState(false);
+  const ready = useHydrated();
   const failure = error ? (
     <p role="alert" className="text-sm text-danger">
       {t.passkeyErrors[error]}
@@ -449,6 +461,7 @@ function AddPasskey({
           variant="outline"
           size="sm"
           className="w-fit"
+          disabled={!ready}
           onClick={() =>
             guard("passkey-add", () => {
               setName(deviceName(navigator.userAgent, language));
