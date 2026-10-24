@@ -329,7 +329,7 @@ const it = {
       error: "Autorizzazione incompleta",
       disconnected: "Scollegato",
     },
-    syncing: "In sincronizzazione",
+    syncing: "In corso",
     never: "Mai",
     pausedByPlan: "In pausa per il piano Free",
     notificationsOn: "Attive",
@@ -359,6 +359,12 @@ const it = {
     importDone: (days: number) => `Storico di ${days} giorni importato`,
     importRunning: "Importazione dello storico in corso",
     importNotStarted: "Importazione dello storico non iniziata",
+    historyLabel: "Storico",
+    lastRead: "Ultima lettura",
+    historyImported: (days: number) => `${days} giorni importati`,
+    historyRunning: "In importazione",
+    historyPending: "Non iniziato",
+    details: "Dettagli e azioni",
     syncSuspended: "Sincronizzazione sospesa fino al ricollegamento.",
     recentOk: (count: number) =>
       count === 0
@@ -1240,7 +1246,7 @@ const en: AppCopy = {
       error: "Incomplete authorisation",
       disconnected: "Disconnected",
     },
-    syncing: "Syncing",
+    syncing: "In progress",
     never: "Never",
     pausedByPlan: "Paused on the Free plan",
     notificationsOn: "On",
@@ -1270,6 +1276,12 @@ const en: AppCopy = {
     importDone: (days) => `${days}-day history imported`,
     importRunning: "History import in progress",
     importNotStarted: "History import not started",
+    historyLabel: "History",
+    lastRead: "Last read",
+    historyImported: (days) => `${days} days imported`,
+    historyRunning: "Importing",
+    historyPending: "Not started",
+    details: "Details and actions",
     syncSuspended: "Sync is suspended until the store is reconnected.",
     recentOk: (count) =>
       count === 0

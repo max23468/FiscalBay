@@ -7,6 +7,7 @@ const sizes = {
   sm: "size-7 rounded-md [&_svg]:size-4",
   md: "size-9 rounded-lg [&_svg]:size-[1.125rem]",
   lg: "size-11 rounded-xl [&_svg]:size-5",
+  xl: "size-14 rounded-2xl [&_svg]:size-6",
 };
 
 /**
@@ -66,7 +67,7 @@ export function InitialsTile({
         "grid shrink-0 place-items-center font-semibold",
         tileTones[toneFor(name || fallback)],
         sizes[size],
-        size === "sm" ? "text-[0.6875rem]" : size === "md" ? "text-xs" : "text-sm",
+        { sm: "text-[0.6875rem]", md: "text-xs", lg: "text-sm", xl: "text-base" }[size],
         className,
       )}
     >

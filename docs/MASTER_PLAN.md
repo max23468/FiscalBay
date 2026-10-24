@@ -484,7 +484,7 @@ Drawer unico con URL aggiornato su desktop, full-screen mobile; tab **Dettagli**
 <a id="s18"></a>
 ## 18. Schermata Negozi eBay
 
-Lista/tabella leggera con righe spaziose, non replica delle card Ordini. Colonne: nome/account, marketplace pertinente, stato connessione, ultima sync, stato ammissione nel piano, notifiche e ordini importati. **Il piano è dello spazio**: niente account contemporaneamente «Free» e «Premium» nello stesso spazio come nei concept illustrativi.
+Con un solo negozio, il caso più comune, la pagina lo mostra in una scheda: identità con stato e collegamento alla pagina eBay, riquadri di ordini importati, ultima lettura, storico e scadenza dell'autorizzazione, ultimi aggiornamenti accanto (sotto su mobile) e le azioni Sincronizza, Pausa/Riprendi e Dettagli; il pannello resta completo (D189). Con più negozi: lista/tabella leggera con righe spaziose, non replica delle card Ordini. Colonne: nome/account, marketplace pertinente, stato connessione, ultima sync, stato ammissione nel piano, notifiche e ordini importati. **Il piano è dello spazio**: niente account contemporaneamente «Free» e «Premium» nello stesso spazio come nei concept illustrativi.
 
 Il negozio si presenta con nome e logo del negozio eBay e lo username sotto; senza negozio eBay, o con un logo non qualificato, restano username e iniziali. Lo stesso nome identifica il negozio negli Ordini. Il pannello aggiunge feedback, percentuale positiva e stato Top Rated del venditore e un collegamento alla pagina del negozio eBay, accettato soltanto su domini eBay. Profilo e feedback si leggono con Trading `GetStore` e `GetUser` dopo i recenti, al più una volta a settimana; eliminare i dati li cancella (D186).
 
