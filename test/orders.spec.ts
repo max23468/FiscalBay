@@ -1257,7 +1257,10 @@ describe("pagina Ordini reale", () => {
     expect(
       (await ordersPage(cookie, "/app/ordini?negozio=collegato")).page!.orders.map(({ id }) => id),
     ).toEqual(["o-a"]);
-    expect((await ordersPage(cookie, "/app/ordini?negozio=s-b")).page!.orders).toEqual([]);
+    // Un negozio fuori dai filtrabili, anche di un altro spazio, vale come «Tutti».
+    expect(
+      (await ordersPage(cookie, "/app/ordini?negozio=s-b")).page!.orders.map(({ id }) => id),
+    ).toEqual(["o-a"]);
   });
 
   it("filtri, ricerca, conteggio e «Carica altri» usano la query reale sullo spazio", async () => {

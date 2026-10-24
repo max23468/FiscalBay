@@ -842,12 +842,7 @@ function StoreSheet({ data, t, links }: { data: StoresPageData; t: AppCopy; link
       }}
     >
       {shownDetail ? (
-        <SheetContent
-          ref={panel}
-          initialFocus={panel}
-          closeLabel={t.shell.close}
-          className="sm:max-w-lg"
-        >
+        <SheetContent ref={panel} initialFocus={panel} closeLabel={t.shell.close}>
           <SheetHeader className="flex-row items-center gap-3">
             <StoreTile store={shownDetail} size="lg" />
             <span className="grid min-w-0 gap-1">

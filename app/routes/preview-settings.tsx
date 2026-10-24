@@ -39,20 +39,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   let estimate = scenario.orders;
   let exportContext: ExportContext | null = null;
   if (scope) {
-    const listed = [...scenario.orders, ...scenario.incoming];
+    // La selezione conta soltanto gli ordini dell'elenco da cui è partita, alla sua istantanea.
+    const search = await openSearch(env.BETTER_AUTH_SECRET, previewSearchScope, query);
+    const listed = previewListing(
+      scenario.orders,
+      scenario.incoming,
+      query,
+      search,
+      scenario.now,
+      scenario.account.plan,
+    ).filtered;
     if (scope.kind === "orders") {
       const ids = new Set(scope.ids);
       estimate = listed.filter((order) => ids.has(order.id));
     } else {
-      const search = await openSearch(env.BETTER_AUTH_SECRET, previewSearchScope, query);
-      estimate = previewListing(
-        scenario.orders,
-        scenario.incoming,
-        query,
-        search,
-        scenario.now,
-        scenario.account.plan,
-      ).filtered;
+      estimate = listed;
     }
     exportContext = {
       kind: scope.kind,
