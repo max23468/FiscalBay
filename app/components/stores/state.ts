@@ -5,18 +5,18 @@ import type { AppCopy } from "../../app-copy";
 import {
   marketplaceLabel,
   type AccountView,
+  type EbayEnvironment,
   type StatusTone,
   type StoreView,
 } from "../../view-models";
 
-/** Nome proprio dell'ambiente di prova di eBay, uguale nelle due lingue. */
 export interface StoresPageData {
   stores: StoreView[];
   detail: StoreView | null;
   account: Pick<AccountView, "plan">;
   now: string;
   /** Ambienti in cui eBay non risponde: le azioni che lo chiamano restano sospese. */
-  ebayDown: Array<"production" | "sandbox">;
+  ebayDown: EbayEnvironment[];
   elsewhere: boolean;
   /**
    * Schermata preparatoria del collegamento. Nell'area reale collegare e ricollegare la aprono;
@@ -27,6 +27,7 @@ export interface StoresPageData {
   settings: boolean;
 }
 
+/** Nome proprio dell'ambiente di prova di eBay, uguale nelle due lingue. */
 const sandboxLabel = "eBay Sandbox";
 
 export function marketplaceText(store: StoreView) {

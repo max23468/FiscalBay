@@ -128,9 +128,9 @@ function MethodAction({
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t.settings.removeMethodTitle}</AlertDialogTitle>
+          <AlertDialogTitle>{t.settings.security.removeMethodTitle}</AlertDialogTitle>
           <AlertDialogDescription>
-            {t.settings.removeMethodBody(label ?? t.settings.methodPasskey)}
+            {t.settings.security.removeMethodBody(label ?? t.settings.security.methodPasskey)}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -180,7 +180,7 @@ function PasskeyRename({
   return open ? (
     <form method="post" action={actionPath} className="grid w-full gap-2">
       <input type="hidden" name="id" value={passkey.id} />
-      <FieldLabel htmlFor={id}>{settings.passkeyName}</FieldLabel>
+      <FieldLabel htmlFor={id}>{settings.security.passkeyName}</FieldLabel>
       <Input
         id={id}
         name="name"
@@ -215,7 +215,7 @@ function PasskeyRename({
       disabled={!ready}
       onClick={() => setOpen(true)}
     >
-      {settings.renamePasskey}
+      {settings.security.renamePasskey}
     </Button>
   );
 }
@@ -335,7 +335,7 @@ function SessionList({
   const zone = useTimeZone();
   const { settings } = appCopy[language];
   return (
-    <SecurityGroup id="security-sessions" title={settings.sessions}>
+    <SecurityGroup id="security-sessions" title={settings.security.sessions}>
       <ul className="grid divide-y border-t">
         {sessions.map((session) => (
           <MethodRow
@@ -343,13 +343,15 @@ function SessionList({
             label={session.device}
             hint={
               session.createdAt
-                ? settings.sessionOpened(formatDate(session.createdAt, language, "dateTime", zone))
+                ? settings.security.sessionOpened(
+                    formatDate(session.createdAt, language, "dateTime", zone),
+                  )
                 : undefined
             }
             status={
               session.current
-                ? settings.thisDevice
-                : settings.lastActive(formatRelative(session.lastActiveAt, now, language))
+                ? settings.security.thisDevice
+                : settings.security.lastActive(formatRelative(session.lastActiveAt, now, language))
             }
           >
             {session.current ? null : (
@@ -362,7 +364,7 @@ function SessionList({
                   name="intent"
                   value="esci-sessione"
                 >
-                  {settings.signOutSession}
+                  {settings.security.signOutSession}
                 </Button>
               </form>
             )}
@@ -372,7 +374,7 @@ function SessionList({
       {sessions.some((session) => !session.current) ? (
         <form method="post" action={actionPath}>
           <Button type="submit" variant="destructive" name="intent" value="esci-altri">
-            {settings.signOutAll}
+            {settings.security.signOutAll}
           </Button>
         </form>
       ) : null}
@@ -451,7 +453,7 @@ function AddPasskey({
           }
         >
           <KeyRound aria-hidden="true" data-icon="inline-start" />
-          {settings.addPasskey}
+          {settings.security.addPasskey}
         </Button>
         {failure}
       </div>
@@ -465,7 +467,7 @@ function AddPasskey({
       }}
     >
       <Field>
-        <FieldLabel htmlFor={id}>{settings.passkeyName}</FieldLabel>
+        <FieldLabel htmlFor={id}>{settings.security.passkeyName}</FieldLabel>
         <Input
           id={id}
           aria-describedby={`${id}-hint`}
@@ -475,7 +477,7 @@ function AddPasskey({
           disabled={pending}
           onChange={(event) => setName(event.target.value)}
         />
-        <FieldDescription id={`${id}-hint`}>{settings.passkeyNameHint}</FieldDescription>
+        <FieldDescription id={`${id}-hint`}>{settings.security.passkeyNameHint}</FieldDescription>
       </Field>
       <div className="flex flex-wrap gap-2">
         <Button
@@ -490,7 +492,7 @@ function AddPasskey({
           ) : (
             <KeyRound aria-hidden="true" data-icon="inline-start" />
           )}
-          {settings.addPasskey}
+          {settings.security.addPasskey}
         </Button>
         <Button
           type="button"
@@ -723,19 +725,19 @@ export function AccountSecurity({
   const lastMethod =
     Object.values(methods.accounts).filter(Boolean).length + methods.passkeys.length === 1;
   const status = (connected: boolean) =>
-    connected ? settings.methodConnected : settings.methodNotConnected;
+    connected ? settings.security.methodConnected : settings.security.methodNotConnected;
   const oauth = (method: "google" | "ebay") =>
     methods.accounts[method] ? (
       <MethodAction
         language={language}
         intent="rimuovi-metodo"
         method={method}
-        label={method === "google" ? settings.methodGoogle : settings.methodEbay}
+        label={method === "google" ? settings.security.methodGoogle : settings.security.methodEbay}
         simulated={!!onAction}
         actionPath={actionPath}
         disabled={lastMethod}
       >
-        {settings.remove}
+        {settings.security.remove}
       </MethodAction>
     ) : (
       <MethodAction
@@ -744,7 +746,7 @@ export function AccountSecurity({
         method={method}
         actionPath={actionPath}
       >
-        {settings.connect}
+        {settings.security.connect}
       </MethodAction>
     );
   const addPasskey = (
@@ -803,37 +805,43 @@ export function AccountSecurity({
         actionPath={actionPath}
         pendingEmail={pendingEmail}
       />
-      <SecurityGroup id="security-methods" title={settings.methods}>
+      <SecurityGroup id="security-methods" title={settings.security.methods}>
         {lastMethod ? (
           <p role="status" className="text-sm text-warning">
-            {settings.addAlternative}
+            {settings.security.addAlternative}
           </p>
         ) : null}
         <ul className="grid divide-y border-y">
-          <MethodRow label={settings.methodPassword} status={status(methods.accounts.password)}>
+          <MethodRow
+            label={settings.security.methodPassword}
+            status={status(methods.accounts.password)}
+          >
             <MethodAction language={language} intent="password" actionPath={actionPath}>
-              {methods.accounts.password ? settings.changePassword : t.setPassword}
+              {methods.accounts.password ? settings.security.changePassword : t.setPassword}
             </MethodAction>
             {methods.accounts.password ? (
               <MethodAction
                 language={language}
                 intent="rimuovi-metodo"
                 method="password"
-                label={settings.methodPassword}
+                label={settings.security.methodPassword}
                 simulated={!!onAction}
                 actionPath={actionPath}
                 disabled={lastMethod}
               >
-                {settings.remove}
+                {settings.security.remove}
               </MethodAction>
             ) : null}
           </MethodRow>
-          <MethodRow label={settings.methodGoogle} status={status(methods.accounts.google)}>
+          <MethodRow
+            label={settings.security.methodGoogle}
+            status={status(methods.accounts.google)}
+          >
             {oauth("google")}
           </MethodRow>
           {/* Accedere con eBay non collega un negozio, e viceversa. */}
           <MethodRow
-            label={settings.methodEbay}
+            label={settings.security.methodEbay}
             status={status(methods.accounts.ebay)}
             hint={methods.accounts.ebay ? undefined : t.ebayAccessBody}
           >
@@ -841,7 +849,7 @@ export function AccountSecurity({
           </MethodRow>
           {passkeys.length === 0 ? (
             <MethodRow
-              label={settings.methodPasskey}
+              label={settings.security.methodPasskey}
               status={t.passkeyEmpty}
               hint={t.passkeyRecovery}
             >
@@ -851,26 +859,26 @@ export function AccountSecurity({
             passkeys.map((passkey) => (
               <MethodRow
                 key={passkey.id}
-                label={settings.methodPasskey}
+                label={settings.security.methodPasskey}
                 status={
                   passkey.createdAt
-                    ? settings.passkeyItem(
-                        passkey.name || settings.methodPasskey,
+                    ? settings.security.passkeyItem(
+                        passkey.name || settings.security.methodPasskey,
                         formatDate(passkey.createdAt, language, "dateTime", zone),
                       )
-                    : passkey.name || settings.methodConnected
+                    : passkey.name || settings.security.methodConnected
                 }
               >
                 <MethodAction
                   language={language}
                   intent="passkey-remove"
                   id={passkey.id}
-                  label={passkey.name || settings.methodPasskey}
+                  label={passkey.name || settings.security.methodPasskey}
                   simulated={!!onAction}
                   actionPath={actionPath}
                   disabled={lastMethod}
                 >
-                  {settings.remove}
+                  {settings.security.remove}
                 </MethodAction>
                 <PasskeyRename passkey={passkey} language={language} actionPath={actionPath} />
               </MethodRow>
@@ -878,7 +886,7 @@ export function AccountSecurity({
           )}
         </ul>
         {passkeys.length > 0 ? <div className="max-w-xl">{addPasskey}</div> : null}
-        <p className="text-sm text-muted-foreground">{settings.lastMethod}</p>
+        <p className="text-sm text-muted-foreground">{settings.security.lastMethod}</p>
       </SecurityGroup>
       <SessionList language={language} sessions={sessions} now={now} actionPath={actionPath} />
     </div>
@@ -982,6 +990,3 @@ export function AccessNotice({
     </div>
   ) : null;
 }
-
-// Gli Ordini importano ancora la shell da qui: l'esportazione si toglie con il loro import.
-export { AccountShell } from "~/components/account-shell";

@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
 import { data, redirect, useNavigate, type ShouldRevalidateFunctionArgs } from "react-router";
 
-import { AccessNotice, AccountShell, VerifyEmail } from "~/components/account";
+import { AccessNotice, VerifyEmail } from "~/components/account";
+import { AccountShell } from "~/components/account-shell";
 import { EbayEnvironmentField, type EbayEnvironment } from "~/components/ebay-environment";
 import { NotFoundState } from "~/components/not-found";
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
@@ -13,7 +14,7 @@ import {
   requireAccountArea,
   shellData,
 } from "../account-area.server";
-import { appCopy } from "../app-copy";
+import { appCopy, pageTitle } from "../app-copy";
 import { appBase, ordersPath, storeLinkPath, type AppLinks } from "../app-links";
 import {
   orderAllowance,
@@ -55,7 +56,7 @@ import type { Route } from "./+types/orders";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
-  return [{ title: `FiscalBay | ${t.orders.title}` }, { name: "robots", content: "noindex" }];
+  return [{ title: pageTitle(t.orders.title) }, { name: "robots", content: "noindex" }];
 }
 
 export function headers(): HeadersInit {

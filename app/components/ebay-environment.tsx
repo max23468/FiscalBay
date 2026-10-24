@@ -8,10 +8,11 @@ import {
 } from "~/components/ui/select";
 import { appCopy } from "../app-copy";
 import type { Language } from "../i18n";
+import type { EbayEnvironment } from "../view-models";
 
-const environments = ["production", "sandbox"] as const;
+export type { EbayEnvironment };
 
-export type EbayEnvironment = (typeof environments)[number];
+const environments: readonly EbayEnvironment[] = ["production", "sandbox"];
 
 /** Scelta dell'ambiente eBay, sul solo dominio di test: nome dell'ambiente e tipo di account. */
 export function EbayEnvironmentField({
