@@ -32,6 +32,7 @@ import { AutoSwitch, Group, SimpleSelect } from "./controls";
  */
 function TrialPlan({
   trial,
+  payment,
   billing,
   purchase,
   now,
@@ -39,6 +40,7 @@ function TrialPlan({
   language,
 }: {
   trial: NonNullable<AccountView["trial"]>;
+  payment: AccountView["payment"];
   billing: boolean;
   purchase: PurchaseView;
   now: string;
@@ -50,7 +52,7 @@ function TrialPlan({
   return (
     <>
       {/* Dopo l'acquisto la prova resta finché Stripe non conferma il pagamento. */}
-      <CheckoutReturn checkout={purchase.checkout} t={t} />
+      <CheckoutReturn checkout={purchase.checkout} payment={payment} t={t} language={language} />
       <Group title={t.settings.plan.currentPlan}>
         <div className="grid gap-1">
           <p className="text-lg font-semibold">{t.settings.plan.trialPlan}</p>
@@ -77,17 +79,18 @@ function TrialPlan({
 }
 
 /**
- * Il lifetime conserva l'accesso ai documenti senza presentare un rinnovo. Un Premium concesso
- * senza abbonamento non ha periodo né gestione su Stripe.
+ * Il lifetime conserva l'accesso ai documenti senza presentare un rinnovo; dopo la disdetta
+ * l'abbonamento indica la fine del periodo pagato. Un Premium concesso senza abbonamento non
+ * ha periodo né gestione su Stripe.
  */
 function PremiumPlan({
   account,
-  billing,
+  billingPortal,
   t,
   language,
 }: {
   account: AccountView;
-  billing: boolean;
+  billingPortal: boolean;
   t: AppCopy;
   language: Language;
 }) {
@@ -110,9 +113,15 @@ function PremiumPlan({
               formatDate(account.premium.renewsAt, language, "date", zone),
             )}
           </p>
+        ) : account.premium?.endsAt ? (
+          <p className="text-sm text-muted-foreground">
+            {t.settings.plan.premiumEnds(
+              formatDate(account.premium.endsAt, language, "dateTime", zone),
+            )}
+          </p>
         ) : null}
       </div>
-      {billing && account.premium ? (
+      {billingPortal && account.premium ? (
         <>
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="outline" onClick={() => action.run("manage-billing")}>
@@ -150,9 +159,32 @@ export interface PurchaseView {
   checkout: "processing" | "cancelled" | null;
 }
 
-/** Il ritorno da Stripe non prova il pagamento: il piano cambia con la conferma. */
-function CheckoutReturn({ checkout, t }: { checkout: PurchaseView["checkout"]; t: AppCopy }) {
-  if (checkout === "processing")
+/**
+ * Il ritorno da Stripe non prova il pagamento: il piano cambia con la conferma. Un pagamento
+ * che Stripe non ha ancora confermato resta in attivazione anche senza il ritorno; un rinnovo
+ * non riuscito riporta al Free e indica fino a quando il prezzo resta protetto.
+ */
+function CheckoutReturn({
+  checkout,
+  payment,
+  t,
+  language,
+}: {
+  checkout: PurchaseView["checkout"];
+  payment: AccountView["payment"];
+  t: AppCopy;
+  language: Language;
+}) {
+  const zone = useTimeZone();
+  if (payment?.state === "renewal-failed")
+    return (
+      <StatusAlert tone="warning" title={t.settings.plan.renewalFailedTitle}>
+        {t.settings.plan.renewalFailedBody(
+          formatDate(payment.protectedUntil, language, "dateTime", zone),
+        )}
+      </StatusAlert>
+    );
+  if (checkout === "processing" || payment?.state === "pending")
     return (
       <StatusAlert tone="info" title={t.settings.plan.checkoutProcessingTitle}>
         {t.settings.plan.checkoutProcessingBody}
@@ -167,6 +199,7 @@ export function PlanSection({
   account,
   stores,
   billing,
+  billingPortal,
   purchase,
   confirmUnlock,
   now,
@@ -177,6 +210,7 @@ export function PlanSection({
   stores: StoreView[];
   /** Acquisto e negozio attivo del Free dipendono dai pagamenti; la prova no. */
   billing: boolean;
+  billingPortal: boolean;
   purchase: PurchaseView;
   confirmUnlock: boolean;
   now: string;
@@ -193,6 +227,7 @@ export function PlanSection({
     return account.trial ? (
       <TrialPlan
         trial={account.trial}
+        payment={account.payment}
         billing={billing}
         purchase={purchase}
         now={now}
@@ -200,13 +235,18 @@ export function PlanSection({
         language={language}
       />
     ) : (
-      <PremiumPlan account={account} billing={billing} t={t} language={language} />
+      <PremiumPlan account={account} billingPortal={billingPortal} t={t} language={language} />
     );
   }
   const quota = account.quota;
   return (
     <>
-      <CheckoutReturn checkout={purchase.checkout} t={t} />
+      <CheckoutReturn
+        checkout={purchase.checkout}
+        payment={account.payment}
+        t={t}
+        language={language}
+      />
       <Group title={t.settings.plan.currentPlan}>
         <div className="grid gap-1">
           <p className="text-lg font-semibold">{t.settings.plan.free}</p>

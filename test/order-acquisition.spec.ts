@@ -2076,6 +2076,7 @@ describe("acquisizione con il client", () => {
           expect(sendBatch).toHaveBeenLastCalledWith([
             { body: { task: "maintenance", slot: "2026-09-02T00:00:00.000Z" } },
             { body: { task: "token_refresh", slot: "2026-09-02T00:00:00.000Z" } },
+            { body: { task: "billing", slot: "2026-09-02T00:00:00.000Z" } },
           ]);
           expect(sendBatch).toHaveBeenCalledTimes(3);
           expect(fetcher).not.toHaveBeenCalled();
@@ -2087,15 +2088,20 @@ describe("acquisizione con il client", () => {
 
       it("accoda ogni compito una volta per periodo con trigger ripetuti, sovrapposti o saltati", async () => {
         const slot = (minute: number) => ({ slot: minutes(minute).toISOString() });
-        expect(await dispatchTasks(cron, minutes(0))).toEqual(["maintenance", "token_refresh"]);
+        expect(await dispatchTasks(cron, minutes(0))).toEqual([
+          "maintenance",
+          "token_refresh",
+          "billing",
+        ]);
         expect(sendBatch).toHaveBeenCalledWith([
           { body: { task: "maintenance", ...slot(0) } },
           { body: { task: "token_refresh", ...slot(0) } },
+          { body: { task: "billing", ...slot(0) } },
         ]);
         // Ripetuto a pochi secondi, o un trigger precedente consegnato in ritardo.
         expect(await dispatchTasks(cron, minutes(0.05))).toEqual([]);
         expect(await dispatchTasks(cron, minutes(-0.05))).toEqual([]);
-        // Il periodo successivo del rinnovo; la pulizia resta una al giorno.
+        // Il periodo successivo del rinnovo; la riconciliazione è oraria, la pulizia giornaliera.
         expect(await dispatchTasks(cron, minutes(10))).toEqual(["token_refresh"]);
         // Trigger saltati fra 20 e 40: il primo che arriva prende il turno.
         expect(await dispatchTasks(cron, minutes(50))).toEqual(["token_refresh"]);
@@ -2105,10 +2111,12 @@ describe("acquisizione con il client", () => {
         expect(await dispatchTasks(cron, minutes(24 * 60 + 3))).toEqual([
           "maintenance",
           "token_refresh",
+          "billing",
         ]);
         expect(sendBatch).toHaveBeenLastCalledWith([
           { body: { task: "maintenance", ...slot(24 * 60) } },
           { body: { task: "token_refresh", ...slot(24 * 60) } },
+          { body: { task: "billing", ...slot(24 * 60) } },
         ]);
       });
 
@@ -2130,7 +2138,11 @@ describe("acquisizione con il client", () => {
 
         // Accettato e mai consegnato: entro l'ora non si riaccoda, dopo sì, con lo stesso turno.
         expect(await dispatchTasks(cron, minutes(59))).toEqual(["token_refresh"]);
-        expect(await dispatchTasks(cron, minutes(60))).toEqual(["maintenance", "token_refresh"]);
+        expect(await dispatchTasks(cron, minutes(60))).toEqual([
+          "maintenance",
+          "token_refresh",
+          "billing",
+        ]);
         expect(sendBatch).toHaveBeenLastCalledWith(expect.arrayContaining([{ body }]));
 
         const first = queueMessage(body);
@@ -2150,7 +2162,7 @@ describe("acquisizione con il client", () => {
         expect(older.ack).toHaveBeenCalledOnce();
         expect(await remaining()).toBe(1);
         // Un turno concluso non si riaccoda nello stesso giorno.
-        expect(await dispatchTasks(cron, minutes(180))).toEqual(["token_refresh"]);
+        expect(await dispatchTasks(cron, minutes(180))).toEqual(["token_refresh", "billing"]);
       });
 
       it("serializza due consegne dello stesso compito e riprende una lease scaduta", async () => {
@@ -2205,7 +2217,7 @@ describe("acquisizione con il client", () => {
           dispatchTasks(cron, minutes(0)),
           dispatchTasks(cron, minutes(0)),
         ]);
-        expect(turns.flat().sort()).toEqual(["maintenance", "token_refresh"]);
+        expect(turns.flat().sort()).toEqual(["billing", "maintenance", "token_refresh"]);
         expect(sendBatch).toHaveBeenCalledOnce();
       });
 

@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 
 import type { PremiumOffer } from "../catalog";
 import type { Language } from "../i18n";
+import { readBounded, retryAfterSeconds, UpstreamError } from "./http.server";
 
 // Il webhook resta indisponibile senza il suo segreto; i pagamenti si attivano separatamente.
 export type StripeSecrets = { STRIPE_SECRET_KEY: string; STRIPE_WEBHOOK_SECRET: string };
@@ -23,6 +24,77 @@ const loadStripe = () => import("stripe").then((module) => module.default);
 export async function createStripeClient(secretKey: string): Promise<Stripe> {
   const StripeSdk = await loadStripe();
   return new StripeSdk(secretKey, { httpClient: StripeSdk.createFetchHttpClient() });
+}
+
+const readTimeoutMs = 15_000;
+const readMaxBytes = 1_048_576;
+
+/**
+ * Client delle letture da coda e cron: nessun retry dello SDK, perché riprova già la coda, e
+ * gli stessi timeout e limite dei byte delle altre chiamate ai provider.
+ */
+export async function createStripeReader(
+  secretKey: string,
+  fetcher: typeof fetch = fetch,
+): Promise<Stripe> {
+  const StripeSdk = await loadStripe();
+  const bounded: typeof fetch = async (input, init) => {
+    const response = await fetcher(input, init);
+    const bytes = await readBounded(response, readMaxBytes);
+    if (!bytes) throw new UpstreamError("invalid_response", { status: response.status });
+    return new Response(bytes.byteLength ? new TextDecoder().decode(bytes) : null, {
+      status: response.status,
+      headers: response.headers,
+    });
+  };
+  return new StripeSdk(secretKey, {
+    httpClient: StripeSdk.createFetchHttpClient(bounded),
+    maxNetworkRetries: 0,
+    timeout: readTimeoutMs,
+  });
+}
+
+/**
+ * Errore di Stripe nella classificazione comune dei provider. Un oggetto che Stripe non
+ * restituisce più resta distinto: non prova un acquisto inesistente né un rimborso.
+ */
+export function stripeFailure(error: unknown): UpstreamError {
+  const {
+    statusCode: status,
+    code,
+    headers,
+    detail,
+  } = (error ?? {}) as {
+    statusCode?: number;
+    code?: string;
+    headers: Record<string, string>;
+    detail?: unknown;
+  };
+  // Lo SDK avvolge in un errore di connessione quello del trasporto, come il limite dei byte.
+  if (detail instanceof UpstreamError) return detail;
+  if (status === 429) {
+    const retryAfter = retryAfterSeconds(headers["retry-after"] ?? null) ?? undefined;
+    return new UpstreamError("rate_limited", { status, retryAfter });
+  }
+  if (status && status >= 400 && status < 500)
+    return new UpstreamError("rejected", {
+      status,
+      providerCode: code && /^[a-z_]{1,64}$/u.test(code) ? code : undefined,
+    });
+  return new UpstreamError("unavailable", status ? { status } : {});
+}
+
+export function isMissingObject(error: UpstreamError) {
+  return error.details.status === 404 && error.details.providerCode === "resource_missing";
+}
+
+/** Chiamata a Stripe con gli errori classificati come quelli degli altri provider. */
+export async function stripeRead<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    throw stripeFailure(error);
+  }
 }
 
 /**

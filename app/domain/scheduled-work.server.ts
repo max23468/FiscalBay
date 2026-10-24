@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { reconcileBilling } from "./billing.server";
 import { indexOrderSearch, purgeExpiredRecords } from "./maintenance.server";
 import { dispatchStoreSyncs } from "./order-sync.server";
 import { logFailure } from "../errors";
@@ -39,6 +40,12 @@ const tasks = {
     period: 10 * minute,
     run: (environment: Env, fetcher: typeof fetch, now: Date) =>
       refreshExpiringTokens(environment, fetcher, now),
+  },
+  // Riconciliazione degli abbonamenti con Stripe, per i webhook mancati o tardivi.
+  billing: {
+    period: 60 * minute,
+    run: (environment: Env, fetcher: typeof fetch, now: Date) =>
+      reconcileBilling(environment, fetcher, now),
   },
 } satisfies Record<
   string,

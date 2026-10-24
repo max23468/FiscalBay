@@ -104,6 +104,7 @@ describe("esito dei mutation test", () => {
       "app/tax-quality.ts",
     ];
     assert.equal(criticalModule("app/i18n.ts"), false);
+    assert.equal(criticalModule("app/domain/billing.server.ts"), true);
     assert.deepEqual(mutationMatrix("", files), {
       target: [
         "app/domain/order-import.server.ts",

@@ -155,6 +155,11 @@ export async function simulateAction(request: Request, form: FormData) {
   }
   if (intent === "save") return { ok: true } satisfies ActionResult;
   // Al posto di Stripe, il ritorno con il pagamento in verifica.
+  if (intent === "buy" && scenario.stripeDown)
+    return data<ActionResult>(
+      { ok: false, notice: t.settings.plan.checkoutUnavailable },
+      { status: 503 },
+    );
   if (intent === "buy")
     return redirect(
       `${localizedPath(language, "/anteprima/impostazioni/piano")}?checkout=processing`,

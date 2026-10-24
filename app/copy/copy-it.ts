@@ -501,6 +501,10 @@ export const it = {
       },
       premiumLifetime: "Acquisto una tantum, senza rinnovi.",
       premiumRenews: (date: string) => `Si rinnova il ${date}.`,
+      premiumEnds: (date: string) => `Rinnovo disdetto: Premium resta attivo fino al ${date}.`,
+      renewalFailedTitle: "Rinnovo non riuscito",
+      renewalFailedBody: (date: string) =>
+        `Sei di nuovo nel piano Free. Completa il pagamento richiesto da Stripe entro il ${date} per mantenere il tuo prezzo.`,
       manageBilling: "Gestisci abbonamento su Stripe",
       billingDocuments: "Consulta ricevute e fatture su Stripe",
       billingDocs: "Ricevute e fatture sono disponibili su Stripe.",
