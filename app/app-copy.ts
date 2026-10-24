@@ -891,6 +891,7 @@ const it = {
       "altro-spazio": "Questo negozio eBay è già collegato a un altro account FiscalBay.",
       accesso: "Conferma l’indirizzo email per collegare un negozio.",
       errore: "Collegamento non riuscito. Riprova.",
+      "ebay-non-risponde": "eBay non risponde: ricollega il negozio quando le letture riprendono.",
     } as Record<string, string>,
     signInNotices: {
       "metodo-collegato": "Metodo di accesso collegato al tuo account FiscalBay.",
@@ -1781,6 +1782,7 @@ const en: AppCopy = {
       "altro-spazio": "This eBay store is already connected to another FiscalBay account.",
       accesso: "Confirm your email address to connect a store.",
       errore: "Could not connect the store. Try again.",
+      "ebay-non-risponde": "eBay is not responding: reconnect the store when reads resume.",
     },
     signInNotices: {
       "metodo-collegato": "Sign-in method linked to your FiscalBay account.",

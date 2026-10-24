@@ -27,12 +27,22 @@ import { action as orderSearch } from "../app/routes/order-search";
 import type { SearchResults } from "../app/components/app-shell";
 import { loader as loadAccess } from "../app/routes/sign-in";
 import { action as securityAction } from "../app/routes/settings";
-import { loader as loadStores } from "../app/routes/stores";
+import { action as storesAction, loader as loadStores } from "../app/routes/stores";
+import { action as startStoreLink } from "../app/routes/store-link";
+import { listNotifications } from "../app/domain/notifications.server";
+import { ebayOutage, listStores } from "../app/domain/stores.server";
 import { now, resetDatabase, seed } from "./fixtures/database-fixtures";
 import { syntheticProfile, verifiedSession } from "./fixtures/account-fixtures";
 import { displayTaxValue } from "../app/tax-quality";
 import { addressRows, fiscalSituation, itemPrice } from "../app/view-models";
-import { addressCase, buyerNameView, contactsView, emailView, phoneView } from "../app/contact";
+import {
+  addressCase,
+  buyerNameView,
+  contactsView,
+  emailView,
+  mailtoHref,
+  phoneView,
+} from "../app/contact";
 import { billingCopyText, missingContact } from "../app/components/orders/labels";
 import { appCopy } from "../app/app-copy";
 import { settle } from "../app/settle.server";
@@ -1392,6 +1402,8 @@ describe("pagina Ordini reale", () => {
       incoming: 2,
       // La nuova istantanea conserva le pagine caricate.
       freshHref: "/app/ordini?mostra=2",
+      // L'ordine dello storico finirebbe fra quelli già letti: resta all'indicatore.
+      incomingAtTop: false,
     });
     // Anche i filtri contano i nuovi ordini con gli stessi criteri.
     expect(await listed(`/app/ordini?periodo=7&vista=${first.snapshot}`)).toMatchObject({
@@ -1418,11 +1430,19 @@ describe("pagina Ordini reale", () => {
       "x-2",
       "x-storico",
     ]);
-    expect(fresh).toMatchObject({ total: 10, incoming: 0 });
+    expect(fresh).toMatchObject({ total: 10, incoming: 0, incomingAtTop: false });
     expect(fresh.snapshot > first.snapshot).toBe(true);
+    // Un ordine più recente del primo mostrato entra da solo in cima.
+    const reopened = new Date(Number.parseInt(fresh.snapshot, 36));
+    vi.setSystemTime(reopened.getTime() + 60_000);
+    await env.DB.batch([insert("x-ultimo", 0, new Date(reopened.getTime() + 1).toISOString())]);
+    expect(await listed(`/app/ordini?vista=${fresh.snapshot}`)).toMatchObject({
+      incoming: 1,
+      incomingAtTop: true,
+    });
     // Un cursore alterato o futuro non va oltre l'istante della richiesta.
-    expect(await listed("/app/ordini?vista=zzzzzzzzzz")).toMatchObject({ total: 10, incoming: 0 });
-    expect(await listed("/app/ordini?vista=..")).toMatchObject({ total: 10, incoming: 0 });
+    expect(await listed("/app/ordini?vista=zzzzzzzzzz")).toMatchObject({ total: 11, incoming: 0 });
+    expect(await listed("/app/ordini?vista=..")).toMatchObject({ total: 11, incoming: 0 });
   });
 
   it("un nuovo accesso riapre soltanto il negozio ricordato, se ancora fra i filtri", async () => {
@@ -1469,12 +1489,23 @@ describe("pagina Ordini reale", () => {
       });
     } finally {
       prepare.mockRestore();
+    }
+    // Anche una lettura che non riesce dopo quella dell'account non mostra dati né l'errore
+    // imprevisto: Negozi e ordini si leggono in lotto.
+    const batch = vi.spyOn(env.DB, "batch").mockRejectedValue(new Error("D1_ERROR: unavailable"));
+    try {
+      expect(await ordersPage(cookie).catch((error: unknown) => error)).toMatchObject({
+        data: null,
+        init: { status: 503, headers: { "retry-after": "60" } },
+      });
+    } finally {
+      batch.mockRestore();
       log.mockRestore();
     }
   });
 
   it("con le letture ferme segnala eBay o il solo negozio, con l'ultimo aggiornamento", async () => {
-    const { cookie } = await owner();
+    const { cookie, userId } = await owner();
     await withCredentials();
     const synced = "2026-09-13T21:00:00.000Z";
     /** Letture dei recenti del negozio, dalla più recente, e ultima lettura riuscita. */
@@ -1510,12 +1541,12 @@ describe("pagina Ordini reale", () => {
     await reads("s-a", [false, true]);
     expect(await notices()).toEqual([]);
     expect(await bell()).toEqual([]);
-    expect(await storesDown()).toBe(false);
+    expect(await storesDown()).toEqual([]);
 
     // Tutti i negozi attivi non riescono a leggere: eBay non risponde.
     await reads("s-a", [false, false, true]);
     expect(await notices()).toEqual([{ kind: "ebay-down", at: synced }]);
-    expect(await storesDown()).toBe(true);
+    expect(await storesDown()).toEqual(["production"]);
     // Un solo problema nella campanella, come nell'anteprima, e la nuova lettura resta sospesa.
     expect(await bell()).toEqual([`ebay-down:${synced}`]);
     await env.DB.batch([
@@ -1531,8 +1562,47 @@ describe("pagina Ordini reale", () => {
       data: { ok: false, notice: appCopy.it.stores.ebayDown },
       init: { status: 409 },
     });
+    // Anche Sincronizza, Reimporta e Ricollega restano sospese sul server.
+    for (const intent of ["store-sync", "store-reimport"])
+      expect(
+        await storesAction({
+          request: new Request(`${origin}/app/negozi`, {
+            method: "POST",
+            headers: { cookie, origin },
+            body: new URLSearchParams({ intent, store: "s-a" }),
+          }),
+        } as Parameters<typeof storesAction>[0]),
+      ).toMatchObject({
+        data: { ok: false, notice: appCopy.it.stores.ebayDown },
+        init: { status: 409 },
+      });
+    const reconnect = (await startStoreLink({
+      request: new Request(`${origin}/app/negozi/collega`, {
+        method: "POST",
+        headers: { cookie, origin },
+        body: new URLSearchParams({ negozio: "s-a", da: "negozi" }),
+      }),
+    } as Parameters<typeof startStoreLink>[0])) as Response;
+    expect(reconnect.status).toBe(303);
+    expect(reconnect.headers.get("location")).toBe("/app/negozi?negozio=ebay-non-risponde");
     expect(send).not.toHaveBeenCalled();
     send.mockRestore();
+    // Un negozio Sandbox che legge non cambia l'indisponibilità di Production, e viceversa.
+    await env.DB.prepare(
+      "INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, ebay_environment, linked_at) VALUES ('s-sb', 'w-a', 'e-sb', 'sandbox', ?)",
+    )
+      .bind(now)
+      .run();
+    await env.DB.prepare(
+      `INSERT INTO ebay_store_credentials (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
+       VALUES ('s-sb', 'a', '2026-09-14T00:00:00.000Z', 'r', '2027-09-13T00:00:00.000Z', ?)`,
+    )
+      .bind(now)
+      .run();
+    await reads("s-sb", [true, true]);
+    expect(await storesDown()).toEqual(["production"]);
+    expect(await bell()).toEqual([`ebay-down:${synced}`]);
+    await env.DB.prepare("DELETE FROM ebay_stores WHERE id = 's-sb'").run();
 
     // Con un altro negozio che legge, il problema resta del solo negozio, finché è nella vista.
     await env.DB.prepare(
@@ -1551,7 +1621,7 @@ describe("pagina Ordini reale", () => {
     expect(await notices()).toEqual([failed]);
     expect(await notices("/app/ordini?negozio=s-a")).toEqual([failed]);
     expect(await notices("/app/ordini?negozio=s-c")).toEqual([]);
-    expect(await storesDown()).toBe(false);
+    expect(await storesDown()).toEqual([]);
     expect(await bell()).toEqual([`store-read-failed:s-a:${synced}`]);
 
     // Un negozio in pausa non legge eBay: non conta per l'indisponibilità né per gli avvisi.
@@ -1578,6 +1648,13 @@ describe("pagina Ordini reale", () => {
     await reads("s-c", [false, false], null);
     expect(await notices()).toEqual([{ kind: "ebay-down", at: null }]);
     expect(await bell()).toEqual(["ebay-down:never"]);
+    // Oltre i trenta giorni della campanella il problema resta soltanto negli avvisi.
+    const later = new Date(Date.parse("2026-09-14T08:00:00.000Z") + 31 * 86_400_000);
+    const statuses = await listStores(env.DB, userId, later);
+    expect(await listNotifications(env.DB, userId, statuses, "it", "Europe/Rome", later)).toEqual(
+      [],
+    );
+    expect(ebayOutage(statuses)).not.toBeNull();
   });
 
   it("la barra superiore cerca con la query nel corpo e l'elenco la riceve cifrata", async () => {
@@ -2297,6 +2374,12 @@ describe("vista condivisa e criteri degli ordini", () => {
     expect(emailView("acquisti@notebay.invalid")?.relay).toBe(false);
     for (const raw of ["mario rossi@esempio.invalid", "@esempio.invalid", "mario@", "mario"])
       expect(emailView(raw)).toBeNull();
+    // Un `?` o un `&` della fonte restano nell'indirizzo e non aggiungono campi.
+    const tricky = emailView("a?subject=Ciao&body=x@gmail.com")!;
+    expect(mailtoHref(tricky.address)).toBe("mailto:a%3Fsubject%3DCiao%26body%3Dx@gmail.com");
+    expect(
+      mailtoHref("mario.rossi@esempio.invalid", { subject: "CF ordine", body: "Ciao & grazie" }),
+    ).toBe("mailto:mario.rossi@esempio.invalid?subject=CF%20ordine&body=Ciao%20%26%20grazie");
     // Indirizzo: maiuscolo e minuscolo uniformi, grafia mista ed estera conservate.
     expect(addressCase("VIA DELL'ORTO 12B")).toBe("Via dell'Orto 12B");
     expect(addressCase("SANT'ANGELO LODIGIANO")).toBe("Sant'Angelo Lodigiano");
@@ -2304,6 +2387,10 @@ describe("vista condivisa e criteri degli ordini", () => {
       "Via XX Settembre 14, c/o Rossi SNC",
     );
     expect(addressCase("PIAZZA DI SPAGNA E DEI MILLE")).toBe("Piazza di Spagna e dei Mille");
+    // Soltanto numeri romani ben formati restano maiuscoli.
+    expect(addressCase("LOCALITÀ IL PRATO 3")).toBe("Località Il Prato 3");
+    expect(addressCase("VIA LI MADOU, VIA MILL 2")).toBe("Via Li Madou, Via Mill 2");
+    expect(addressCase("VIA PIO IX 4, VIA XXIV MAGGIO")).toBe("Via Pio IX 4, Via XXIV Maggio");
     expect(addressCase("DI FRONTE ALLA STAZIONE")).toBe("Di Fronte alla Stazione");
     expect(addressCase("Via del Corso 1")).toBe("Via del Corso 1");
     expect(addressCase("12345")).toBe("12345");
@@ -2483,19 +2570,19 @@ describe("vista condivisa e criteri degli ordini", () => {
       fiscal: {
         state: "available" as const,
         identifiers: [
-          { type: "CF" as const, value: "RSSMRA80A01H501U", quality: "valid" as const },
-          { type: "PIVA" as const, value: "12345678901", quality: "unchecked" as const },
+          { type: "CF" as const, value: "rss mra80a01 h501u", quality: "valid" as const },
+          { type: "PIVA" as const, value: " 12345 678901", quality: "unchecked" as const },
           {
             type: "OTHER" as const,
             typeLabel: "NIF",
-            value: "123X",
+            value: "123x",
             quality: "unchecked" as const,
           },
         ],
       },
     };
     expect(billingCopyText(available, "it", appCopy.it)).toBe(
-      `${prefix}\nCodice Fiscale: RSSMRA80A01H501U\nPartita IVA: 12345678901\nNIF: 123X`,
+      `${prefix}\nCodice Fiscale: RSSMRA80A01H501U\nPartita IVA: 12345678901\nNIF: 123x`,
     );
     expect(billingCopyText(available, "en", appCopy.en)).toContain(
       "Italy\nCodice Fiscale: RSSMRA80A01H501U",

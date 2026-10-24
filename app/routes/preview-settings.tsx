@@ -51,6 +51,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         query,
         search,
         scenario.now,
+        scenario.account.plan,
       ).filtered;
     }
     exportContext = {

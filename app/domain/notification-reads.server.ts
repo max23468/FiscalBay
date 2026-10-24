@@ -1,4 +1,5 @@
 import { dayMilliseconds } from "../time";
+import { maxReadNotifications } from "../view-models";
 
 /**
  * Letture della campanella, separate dai testi delle notifiche: la manutenzione periodica le
@@ -7,9 +8,6 @@ import { dayMilliseconds } from "../time";
 
 /** La campanella mostra soltanto gli ultimi 30 giorni. */
 export const notificationWindowMilliseconds = 30 * dayMilliseconds;
-
-/** Limite degli identificativi letti in una sola richiesta. */
-const maxReadNotifications = 50;
 
 /** Segna come lette le notifiche indicate; un identificativo già letto resta com'era. */
 export async function markNotificationsRead(

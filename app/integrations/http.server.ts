@@ -53,14 +53,20 @@ export function retryAfterSeconds(value: string | null, now = Date.now()): numbe
   return Number.isFinite(date) ? Math.max(0, Math.ceil((date - now) / 1000)) : null;
 }
 
-async function readLimited(response: Response, maxBytes: number): Promise<Uint8Array> {
-  const declared = Number(response.headers.get("content-length"));
-  if (declared > maxBytes) {
-    await response.body?.cancel();
-    throw new UpstreamError("invalid_response", { status: response.status });
+/**
+ * Corpo di una richiesta o di una risposta letto fino a `maxBytes`, anche senza lunghezza
+ * dichiarata o con una lunghezza falsa; null se la supera, interrompendo la lettura.
+ */
+export async function readBounded(
+  message: Request | Response,
+  maxBytes: number,
+): Promise<Uint8Array | null> {
+  if (Number(message.headers.get("content-length")) > maxBytes) {
+    await message.body?.cancel();
+    return null;
   }
-  if (!response.body) return new Uint8Array();
-  const reader = response.body.getReader();
+  if (!message.body) return new Uint8Array();
+  const reader = message.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
   for (;;) {
@@ -69,7 +75,7 @@ async function readLimited(response: Response, maxBytes: number): Promise<Uint8A
     size += value.byteLength;
     if (size > maxBytes) {
       await reader.cancel();
-      throw new UpstreamError("invalid_response", { status: response.status });
+      return null;
     }
     chunks.push(value);
   }
@@ -79,6 +85,12 @@ async function readLimited(response: Response, maxBytes: number): Promise<Uint8A
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
+  return bytes;
+}
+
+async function readLimited(response: Response, maxBytes: number): Promise<Uint8Array> {
+  const bytes = await readBounded(response, maxBytes);
+  if (!bytes) throw new UpstreamError("invalid_response", { status: response.status });
   return bytes;
 }
 

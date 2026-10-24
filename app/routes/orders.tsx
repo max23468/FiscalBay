@@ -7,6 +7,7 @@ import { NotFoundState } from "~/components/not-found";
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
 import { accessNotice } from "../access-notice";
 import {
+  areaPage,
   assertSameOrigin,
   requestedEbayEnvironment,
   requireAccountArea,
@@ -70,13 +71,17 @@ function verifying(order: OrderView) {
   );
 }
 
+export function loader(args: Route.LoaderArgs) {
+  return areaPage(args.request, () => readOrders(args));
+}
+
 /**
  * Ordini persistiti e autorizzati dello spazio, senza attendere eBay: sessione, diritti e
  * conservazione sono verificati qui, prima della risposta. Gli ordini ancora in verifica
  * compaiono con l'ultimo stato salvato e lo sblocco sospeso; il loro stato confermato arriva
  * nella stessa risposta, entro l'attesa dello streaming.
  */
-export async function loader({ request, params }: Route.LoaderArgs) {
+async function readOrders({ request, params }: Route.LoaderArgs) {
   const area = await requireAccountArea(request, { unverified: true });
   const { language, session, account, preferences } = area;
   const search = new URL(request.url).searchParams;
@@ -143,15 +148,23 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           countVisibleOrders(env.DB, userId, ebayEnvironment, now, counted),
         )
       : 0;
+  const arrived = { ...filters, listedAfter: snapshot.toISOString() };
   const [orders, total, incoming, facets, detailOrders] = await Promise.all([
     verified ? read() : [],
     count(criteria),
-    opened ? count({ ...filters, listedAfter: snapshot.toISOString() }) : 0,
+    opened ? count(arrived) : 0,
     verified
       ? measure("d1", "orders", () => visibleOrderFacets(env.DB, userId, ebayEnvironment, now))
       : { total: 0, locked: false },
     verified && requested ? read([requested]) : [],
   ]);
+  // Entrano da soli soltanto i nuovi ordini che stanno tutti sopra il primo mostrato: uno
+  // recuperato dallo storico si inserirebbe fra quelli già letti e resta all'indicatore.
+  const top = orders[0];
+  const incomingAtTop =
+    incoming > 0 &&
+    (!top ||
+      (await count({ ...arrived, after: { creationTime: top.createdAt, id: top.id } })) === 0);
   const notice = accessNotice(search, language);
   const detail = detailOrders[0] ?? null;
   // Un ordine inesistente, scaduto o di un altro spazio risponde allo stesso modo.
@@ -187,6 +200,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     limited: more && shown * ordersPageSize >= maxListedOrders,
     incoming,
     freshHref: incoming > 0 ? `${path}${fresh.size ? `?${fresh}` : ""}` : null,
+    incomingAtTop,
   };
   const cycle = allowance?.cycle ?? null;
   const outage = ebayOutage(environmentStores);

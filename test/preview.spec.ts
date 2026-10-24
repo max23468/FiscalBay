@@ -231,12 +231,15 @@ describe("elenco ordini dell'anteprima", () => {
       snapshot: string;
       nextHref: string | null;
       freshHref: string | null;
+      incomingAtTop: boolean;
     }>;
   };
 
   it("conta gli ordini in arrivo e li mostra in cima con la nuova istantanea", async () => {
     const opened = await list("/anteprima/ordini", "aggiornamento");
     expect(opened.incoming).toBeGreaterThan(0);
+    // Gli ordini in arrivo sono più recenti del primo mostrato: entrano da soli in cima.
+    expect(opened.incomingAtTop).toBe(true);
     expect(opened.orders.map(({ id }) => id)).not.toContain("ord-20");
     // «Carica altri» resta sull'istantanea e non porta gli ordini in arrivo.
     expect(opened.nextHref).toBe(`/anteprima/ordini?mostra=2&vista=${opened.snapshot}`);

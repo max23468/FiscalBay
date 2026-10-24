@@ -1,4 +1,5 @@
 import {
+  maxListedOrders,
   ordersPageSize,
   pagesParam,
   snapshotCursor,
@@ -13,6 +14,7 @@ import {
   paymentStatuses,
   shippingStatuses,
   type OrderView,
+  type Plan,
 } from "../view-models";
 
 /** La ricerca dell'anteprima è legata soltanto all'anteprima: i suoi dati sono sintetici. */
@@ -39,7 +41,13 @@ function matchesSearch(order: OrderView, tokens: string[]) {
 }
 
 /** Criteri dell'URL e ricerca sugli scenari sintetici. L'area reale filtra con la query D1. */
-function matchesOrder(order: OrderView, params: URLSearchParams, now: string, tokens: string[]) {
+function matchesOrder(
+  order: OrderView,
+  params: URLSearchParams,
+  now: string,
+  tokens: string[],
+  plan: Plan,
+) {
   if (!matchesSearch(order, tokens)) return false;
   const store = params.get("negozio");
   if (store && order.storeId !== store) return false;
@@ -49,7 +57,10 @@ function matchesOrder(order: OrderView, params: URLSearchParams, now: string, to
   if (shipping && order.shipping.status !== shipping) return false;
   const fiscal = known(params, "fiscale", fiscalSituations);
   if (fiscal && fiscalSituation(order.fiscal) !== fiscal) return false;
-  const days = Number(known(params, "periodo", ["7", "30", "90"]));
+  // Come nell'area reale, i 90 giorni valgono soltanto per Premium.
+  const days = Number(
+    known(params, "periodo", plan === "premium" ? ["7", "30", "90"] : ["7", "30"]),
+  );
   if (
     days > 0 &&
     new Date(now).getTime() - new Date(order.createdAt).getTime() > days * 86_400_000
@@ -59,8 +70,11 @@ function matchesOrder(order: OrderView, params: URLSearchParams, now: string, to
   return true;
 }
 
+/** Dal più recente, con spareggio per ID decrescente come la query D1. */
 const newestFirst = (a: OrderView, b: OrderView) =>
-  b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id);
+  a.createdAt === b.createdAt
+    ? Number(a.id < b.id) - Number(a.id > b.id)
+    : Number(a.createdAt < b.createdAt) - Number(a.createdAt > b.createdAt);
 
 /** Gli ordini in arrivo degli scenari entrano negli elenchi subito dopo l'apertura. */
 const arrivalDelay = 1_000;
@@ -77,16 +91,22 @@ export function previewOrderPage(
   search: URLSearchParams,
   query: string | null,
   now: string,
+  plan: Plan,
   href: (query: URLSearchParams) => string,
 ) {
-  const { filtered, waiting, snapshot, arrival } = previewListing(
+  const { filtered, waiting, snapshot, arrival, incomingAtTop } = previewListing(
     orders,
     incoming,
     search,
     query,
     now,
+    plan,
   );
-  const shown = Math.max(Number(search.get(pagesParam)) || 1, 1);
+  const shown = Math.min(
+    Math.max(Math.trunc(Number(search.get(pagesParam))) || 1, 1),
+    Math.floor(maxListedOrders / ordersPageSize),
+  );
+  const more = filtered.length > shown * ordersPageSize;
   const cursor = snapshotCursor(snapshot);
   const next = new URLSearchParams(search);
   next.set(pagesParam, String(shown + 1));
@@ -97,10 +117,11 @@ export function previewOrderPage(
     orders: filtered.slice(0, shown * ordersPageSize),
     total: filtered.length,
     snapshot: cursor,
-    nextHref: filtered.length > shown * ordersPageSize ? href(next) : null,
-    limited: false,
+    nextHref: more && shown * ordersPageSize < maxListedOrders ? href(next) : null,
+    limited: more && shown * ordersPageSize >= maxListedOrders,
     incoming: waiting,
     freshHref: waiting > 0 ? href(fresh) : null,
+    incomingAtTop,
   };
 }
 
@@ -114,16 +135,23 @@ export function previewListing(
   search: URLSearchParams,
   query: string | null,
   now: string,
+  plan: Plan,
 ) {
   const tokens = searchTokens(query);
   const matching = (list: OrderView[]) =>
-    list.filter((order) => matchesOrder(order, search, now, tokens));
+    list.filter((order) => matchesOrder(order, search, now, tokens, plan));
   const arrival = new Date(new Date(now).getTime() + arrivalDelay);
   const snapshot = snapshotInstant(search.get(snapshotParam)) ?? new Date(now);
   const arrived = snapshot >= arrival;
+  const filtered = matching(arrived ? [...orders, ...incoming] : orders).sort(newestFirst);
+  const waiting = arrived ? [] : matching(incoming);
   return {
-    filtered: matching(arrived ? [...orders, ...incoming] : orders).sort(newestFirst),
-    waiting: arrived ? 0 : matching(incoming).length,
+    filtered,
+    waiting: waiting.length,
+    // Come nell'area reale: i nuovi ordini entrano da soli soltanto sopra il primo mostrato.
+    incomingAtTop:
+      waiting.length > 0 &&
+      (filtered.length === 0 || waiting.every((order) => newestFirst(order, filtered[0]!) < 0)),
     snapshot,
     arrival,
   };

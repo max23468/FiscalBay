@@ -163,6 +163,8 @@ export type OrderCriteria = {
   listedBefore?: string;
   /** Ordini entrati negli elenchi dopo questo istante: i nuovi rispetto all'istantanea. */
   listedAfter?: string;
+  /** Ordini che nell'elenco seguono questo, dal più recente con spareggio per ID. */
+  after?: { creationTime: string; id: string };
 };
 
 // Stryker disable next-line StringLiteral: un altro separatore rende la query invalida e le prove falliscono subito; sotto Stryker il worker supera invece il timeout.
@@ -226,17 +228,20 @@ const tokenMissingSql = `instr(COALESCE(o.search_text, ${unindexedSearchSql}), t
 
 /**
  * Ordini consultabili dello spazio: utente ?1, ambiente ?2, istante ?3, ID ?6, criteri da ?7,
- * acquisti non pagati ?13 e istantanea da ?14. Un ordine senza istante d'ingresso negli elenchi
- * è stato letto prima che venisse registrato e vale come già presente. Ogni percorso (elenco, conteggio, facet, suggerimenti) applica gli
- * stessi controlli di negozio e conservazione. Un acquisto non pagato resta fuori, salvo con
+ * acquisti non pagati ?13, istantanea da ?14 e posizione nell'elenco da ?16. Un ordine senza
+ * istante d'ingresso negli elenchi è stato letto prima che venisse registrato e vale come già
+ * presente. Ogni percorso (elenco, conteggio, facet, suggerimenti) applica gli stessi controlli
+ * di negozio e conservazione. Un acquisto non pagato resta fuori, salvo con
  * il filtro «Non pagato» o quando l'elenco lo mostra (D180).
  */
+// `+o.merged_into` esclude quell'indice: il piano parte dai negozi dello spazio e legge i loro
+// ordini per negozio, invece di scorrere gli ordini non uniti di tutti gli spazi.
 const visibleOrdersSql = `FROM workspace_members wm
    JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
    JOIN orders o ON o.store_id = s.id
   WHERE wm.user_id = ?1 AND s.ebay_environment = ?2 AND ${consultableStore("s")}
     AND o.retention_until > ?3
-    AND o.merged_into IS NULL
+    AND +o.merged_into IS NULL
     AND (o.is_provisional = 0 OR ?9 = 'unpaid' OR ?13 = 1)
     AND (?6 IS NULL OR o.id IN (SELECT value FROM json_each(?6)))
     AND (?7 IS NULL OR o.store_id = ?7)
@@ -246,7 +251,8 @@ const visibleOrdersSql = `FROM workspace_members wm
     AND (?11 IS NULL OR ${fiscalSql} = ?11)
     AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(?12, '[]')) token WHERE ${tokenMissingSql})
     AND (?14 IS NULL OR o.listed_at IS NULL OR o.listed_at <= ?14)
-    AND (?15 IS NULL OR o.listed_at > ?15)`;
+    AND (?15 IS NULL OR o.listed_at > ?15)
+    AND (?16 IS NULL OR o.creation_time < ?16 OR (o.creation_time = ?16 AND o.id < ?17))`;
 
 function visibleOrdersParams(
   userId: string,
@@ -273,6 +279,8 @@ function visibleOrdersParams(
     provisional ? 1 : 0,
     criteria.listedBefore ?? null,
     criteria.listedAfter ?? null,
+    criteria.after?.creationTime ?? null,
+    criteria.after?.id ?? null,
   ];
 }
 
