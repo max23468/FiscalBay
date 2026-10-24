@@ -2585,19 +2585,24 @@ test("nomi distinti dei pulsanti Copia nell'elenco", async ({ page }) => {
 });
 
 for (const area of areas)
-  test(`superfici nei due temi, ${area.name}`, { tag: "@smoke" }, async ({ page, baseURL }) => {
-    await enter(page, baseURL!, area);
-    for (const [scheme, background, card, panel] of [
-      ["light", "rgb(245, 247, 250)", "rgb(255, 255, 255)", "rgb(255, 255, 255)"],
-      ["dark", "rgb(18, 20, 24)", "rgb(28, 31, 37)", "rgb(36, 40, 48)"],
-    ] as const) {
-      await page.emulateMedia({ colorScheme: scheme });
-      await open(page, `${area.base}/ordini/${area.detail}`);
-      await expect(page.locator("body")).toHaveCSS("background-color", background);
-      await expect(page.locator("article").first()).toHaveCSS("background-color", card);
-      await expect(page.getByRole("dialog")).toHaveCSS("background-color", panel);
-    }
-  });
+  // Dopo il deploy le prove @smoke girano sul dominio test, dove la sessione sintetica non esiste.
+  test(
+    `superfici nei due temi, ${area.name}`,
+    { tag: area.base === "/anteprima" ? "@smoke" : [] },
+    async ({ page, baseURL }) => {
+      await enter(page, baseURL!, area);
+      for (const [scheme, background, card, panel] of [
+        ["light", "rgb(245, 247, 250)", "rgb(255, 255, 255)", "rgb(255, 255, 255)"],
+        ["dark", "rgb(18, 20, 24)", "rgb(28, 31, 37)", "rgb(36, 40, 48)"],
+      ] as const) {
+        await page.emulateMedia({ colorScheme: scheme });
+        await open(page, `${area.base}/ordini/${area.detail}`);
+        await expect(page.locator("body")).toHaveCSS("background-color", background);
+        await expect(page.locator("article").first()).toHaveCSS("background-color", card);
+        await expect(page.getByRole("dialog")).toHaveCSS("background-color", panel);
+      }
+    },
+  );
 
 test("movimento ridotto: dato intero e nuovi ordini senza animazione", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
