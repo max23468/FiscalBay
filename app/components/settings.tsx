@@ -129,6 +129,15 @@ export interface SettingsServices {
   support: boolean;
 }
 
+/** La descrizione della categoria nomina soltanto i servizi disponibili. */
+function sectionDescription(t: AppCopy, id: SettingsSection, services: SettingsServices) {
+  const limited = t.settings.limitedDescriptions;
+  if (id === "piano" && !services.billing) return limited.piano;
+  if (id === "notifiche" && !services.telegram) return limited.notifiche;
+  if (id === "privacy" && !services.accountData) return limited.privacy;
+  return t.settings.sections[id].description;
+}
+
 /** Metodi di accesso, sessioni ed esito dell'ultima azione di Sicurezza. */
 export interface SecurityData {
   methods: SignInMethods;
@@ -1600,7 +1609,7 @@ export function SettingsPage({
                               {t.settings.sections[id].title}
                             </span>
                             <span className="text-sm text-muted-foreground md:hidden">
-                              {t.settings.sections[id].description}
+                              {sectionDescription(t, id, data.services)}
                             </span>
                           </span>
                           <ChevronRight

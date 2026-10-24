@@ -17,6 +17,8 @@ export default defineConfig({
   use: {
     baseURL: process.env.E2E_BASE_URL || localOrigin,
     viewport: { width: 1280, height: 900 },
+    // Il fuso del dispositivo arriva al server: lo stesso in locale e sui runner in UTC.
+    timezoneId: "Europe/Rome",
     trace: process.env.E2E_BASE_URL ? "off" : "retain-on-failure",
   },
   projects: [

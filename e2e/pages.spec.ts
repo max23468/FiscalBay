@@ -11,6 +11,8 @@ const matrix =
     ? ([
         { width: 390, scheme: "light" },
         { width: 390, scheme: "dark" },
+        { width: 768, scheme: "light" },
+        { width: 768, scheme: "dark" },
         { width: 1280, scheme: "light" },
         { width: 1280, scheme: "dark" },
       ] as const)
@@ -213,10 +215,43 @@ for (const scenario of scenarios) {
             ).toBe(true);
         }
         checked("font, layout, immagini e collegamenti interni");
-        await page.keyboard.press(browserName === "webkit" ? "Alt+Tab" : "Tab");
-        expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true);
+        // I primi elementi raggiunti con la tastiera mostrano il focus: contorno o anello.
+        const unmarked: string[] = [];
+        for (let stop = 0; stop < 6; stop++) {
+          await page.keyboard.press(browserName === "webkit" ? "Alt+Tab" : "Tab");
+          const focus = await page.evaluate(() => {
+            const element = document.activeElement;
+            if (!element || element === document.body) return null;
+            const style = getComputedStyle(element);
+            const outline =
+              style.outlineStyle !== "none" &&
+              parseFloat(style.outlineWidth) > 0 &&
+              !/rgba\([^)]*,\s*0\)|transparent/u.test(style.outlineColor);
+            const ring = style.boxShadow !== "none";
+            return {
+              visible: outline || ring,
+              name: `${element.tagName.toLowerCase()} ${element.getAttribute("aria-label") ?? element.textContent?.trim().slice(0, 40) ?? ""}`,
+            };
+          });
+          if (stop === 0) expect(focus, "Nessun elemento raggiunto con Tab").not.toBeNull();
+          if (!focus) break;
+          if (!focus.visible) unmarked.push(focus.name);
+        }
+        expect(unmarked, "Focus senza indicatore visibile").toEqual([]);
+        // Con il movimento ridotto nessuna animazione o transizione dura più di un istante.
+        expect(
+          await page.evaluate(() =>
+            document
+              .getAnimations()
+              .filter((animation) => animation.playState === "running")
+              .map((animation) => Number(animation.effect?.getComputedTiming().duration ?? 0))
+              .filter((duration) => duration > 1),
+          ),
+          "Animazioni con il movimento ridotto",
+        ).toEqual([]);
+        checked("focus visibile e movimento ridotto");
         const accessibility = await new AxeBuilder({ page })
-          .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+          .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
           .analyze();
         expect(
           // Base UI usa sentinelle invisibili role=button per intercettare il cursore
@@ -243,7 +278,7 @@ for (const scenario of scenarios) {
             }))
             .filter(({ targets }) => targets.length > 0),
         ).toEqual([]);
-        checked("tastiera e axe WCAG A/AA");
+        checked("axe WCAG 2.2 A/AA");
         if (scenario.role === "admin-verify") {
           await expect(page.getByRole("button", { name: /passkey/i })).toBeVisible();
           checked("secondo fattore richiesto per admin");

@@ -24,8 +24,6 @@ export type StoreStatus = {
   storeUrl: string | null;
   /** Feedback del venditore su eBay; null prima della lettura. */
   feedback: { score: number; positivePercent: number | null; topRated: boolean } | null;
-  /** Marketplace delle inserzioni più frequente fra gli ordini importati. */
-  marketplace: string | null;
   connection: StoreConnection;
   pauseReasons: PauseReason[];
   /** Inizio del consenso corrente; null per un negozio scollegato. */
@@ -43,6 +41,8 @@ export type StoreStatus = {
   /** Ultime letture dei recenti, dalla più recente. */
   recent: { at: string; ok: boolean; newOrders: number }[];
   importedOrders: number;
+  /** Marketplace pertinente: quello con più ordini del negozio, se gli ordini lo riportano. */
+  marketplace: string | null;
   /** Finestra dello storico e completamento della sua importazione; null prima del primo avvio. */
   history: { days: number; done: boolean } | null;
   /**
@@ -110,7 +110,6 @@ type StoreRow = {
   feedback_score: number | null;
   feedback_positive_percent: number | null;
   top_rated_seller: number | null;
-  marketplace: string | null;
   disconnected_at: string | null;
   credentials: string | null;
   granted_at: string | null;
@@ -123,6 +122,7 @@ type StoreRow = {
   syncing: number | null;
   pauses: string | null;
   orders: number;
+  marketplace: string | null;
 };
 
 type RunRow = { store_id: string; started_at: string; ok: number; new_orders: number };
@@ -138,11 +138,6 @@ export async function listStores(
         `SELECT s.id, s.ebay_environment, ${storeNameSql} AS name, ${usernameSql} AS username,
               s.store_logo_url, s.store_url, s.feedback_score, s.feedback_positive_percent,
               s.top_rated_seller, s.disconnected_at,
-              (SELECT o.marketplace_id FROM orders o WHERE o.store_id = s.id
-                AND o.marketplace_id IS NOT NULL AND o.merged_into IS NULL
-                AND o.is_provisional = 0 AND o.retention_until > ?2
-                GROUP BY o.marketplace_id ORDER BY COUNT(*) DESC, o.marketplace_id LIMIT 1)
-                AS marketplace,
               c.store_id AS credentials, c.granted_at, c.refresh_expires_at,
               c.rejected_at, ss.last_success_at, ss.history_from, ss.history_until,
               ss.history_done_at, ss.locked_until > ?2 AS syncing,
@@ -150,7 +145,12 @@ export async function listStores(
                 AS pauses,
               (SELECT COUNT(*) FROM orders o WHERE o.store_id = s.id AND o.merged_into IS NULL
                 AND o.retention_until > ?2
-                AND o.is_provisional = 0) AS orders
+                AND o.is_provisional = 0) AS orders,
+              (SELECT o.marketplace_id FROM orders o WHERE o.store_id = s.id
+                AND o.marketplace_id IS NOT NULL AND o.merged_into IS NULL
+                AND o.retention_until > ?2 AND o.is_provisional = 0
+                GROUP BY o.marketplace_id ORDER BY COUNT(*) DESC, o.marketplace_id LIMIT 1)
+                AS marketplace
          FROM workspace_members wm
          JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
          LEFT JOIN ebay_store_credentials c ON c.store_id = s.id
@@ -218,7 +218,6 @@ export async function listStores(
               positivePercent: row.feedback_positive_percent,
               topRated: row.top_rated_seller === 1,
             },
-      marketplace: row.marketplace,
       connection,
       pauseReasons,
       consentGrantedAt: row.disconnected_at ? null : row.granted_at,
@@ -229,6 +228,7 @@ export async function listStores(
       targetMinutes: syncMinutes.free,
       recent: recent.get(row.id) ?? [],
       importedOrders: row.orders,
+      marketplace: row.marketplace,
       history:
         // Le due date dello storico si fissano insieme al primo avvio.
         row.history_from

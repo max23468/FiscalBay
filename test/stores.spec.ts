@@ -153,8 +153,6 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         logoUrl: null,
         storeUrl: null,
         feedback: { score: 42, positivePercent: 100, topRated: false },
-        // Gli ordini importati non sono più conservati alla data della prova.
-        marketplace: null,
         ebayEnvironment: "production",
         connection: "active",
         pauseReasons: [],
@@ -166,6 +164,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         // La lettura del collegamento è la prima fra gli ultimi aggiornamenti.
         recent: [{ at: expect.any(String), ok: true, newOrders: 1 }],
         importedOrders: 0,
+        marketplace: null,
         // Al collegamento l'unico ordine dello storico completa l'importazione.
         history: { days: 30, done: true },
         reminder: null,
@@ -486,6 +485,15 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       ],
     });
     expect(list.data.page.stores[0]!.lastSyncAt).not.toBeNull();
+    // Il marketplace pertinente viene dagli ordini del negozio; senza, la riga non lo indica.
+    await env.DB.prepare("UPDATE orders SET marketplace_id = 'EBAY_DE'").run();
+    expect((await storesPage("/app/negozi", seller.cookie)).data.page.stores[0]).toMatchObject({
+      marketplace: "EBAY_DE",
+    });
+    await env.DB.prepare("UPDATE orders SET marketplace_id = NULL").run();
+    expect(
+      (await storesPage("/app/negozi", seller.cookie)).data.page.stores[0]!.marketplace,
+    ).toBeNull();
 
     // Link diretto e refresh del pannello, anche in inglese.
     const detail = await storesPage(`/en/app/negozi/${seller.storeId}`, seller.cookie);

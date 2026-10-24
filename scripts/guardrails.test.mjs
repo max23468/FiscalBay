@@ -8,6 +8,7 @@ import {
   realpathSync,
   readFileSync,
   existsSync,
+  utimesSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -70,6 +71,8 @@ import {
   squashIntegrated,
   cleanup,
   effectiveProductionVariable,
+  acquireLock,
+  withLock,
 } from "./release/release-cycle.mjs";
 import { lastDeployed } from "./find-deployed.mjs";
 import { compareEbayTax } from "./compare-ebay-tax.mjs";
@@ -1591,6 +1594,82 @@ describe("coordinamento e provenienza della pubblicazione", () => {
       ),
     );
     assert.equal(count, 1);
+  });
+
+  it("blocca soltanto lo stesso oggetto del ciclo e recupera i blocchi rimasti", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "cycle-lock-"));
+    const lock = (name) => path.join(directory, name);
+    try {
+      // Due PR diverse procedono insieme; la stessa PR resta a un solo ciclo.
+      assert.equal(acquireLock(lock("pr-1")), true);
+      assert.equal(acquireLock(lock("pr-2")), true);
+      assert.equal(acquireLock(lock("pr-1")), false);
+      // Il titolare terminato lascia il blocco al ciclo successivo.
+      const ended = spawnSync(
+        process.execPath,
+        ["-e", "process.stdout.write(String(process.pid))"],
+        {
+          encoding: "utf8",
+        },
+      );
+      writeFileSync(
+        path.join(lock("pr-1"), "owner.json"),
+        JSON.stringify({ pid: Number(ended.stdout) }),
+      );
+      assert.equal(acquireLock(lock("pr-1")), true);
+      // Una cartella senza titolare è appena nata altrove, se non è rimasta da più di un minuto.
+      mkdirSync(lock("pr-3"));
+      assert.equal(acquireLock(lock("pr-3")), false);
+      const old = new Date(Date.now() - 120_000);
+      utimesSync(lock("pr-3"), old, old);
+      assert.equal(acquireLock(lock("pr-3")), true);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("attende il titolare vivo e rilascia il blocco anche con lavoro asincrono o fallito", async () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "cycle-lock-"));
+    const lock = path.join(directory, "merge");
+    try {
+      // Il titolare è un processo vivo per circa mezzo secondo.
+      const started = Date.now();
+      // Come nel ciclo reale il titolare è un processo indipendente, non un figlio di questo.
+      const sleeper = spawnSync(
+        process.execPath,
+        [
+          "-e",
+          'const c=require("node:child_process").spawn(process.execPath,["-e","setTimeout(()=>{},500)"],{detached:true,stdio:"ignore"});c.unref();process.stdout.write(String(c.pid))',
+        ],
+        { encoding: "utf8" },
+      );
+      mkdirSync(lock);
+      writeFileSync(path.join(lock, "owner.json"), JSON.stringify({ pid: Number(sleeper.stdout) }));
+      assert.equal(
+        withLock(lock, "la prova", () => existsSync(path.join(lock, "owner.json")), 50),
+        true,
+      );
+      assert.ok(Date.now() - started >= 400, "Il blocco non ha atteso il titolare vivo.");
+      assert.equal(existsSync(lock), false);
+      assert.equal(await withLock(lock, "la prova", async () => "fatto", 50), "fatto");
+      assert.equal(existsSync(lock), false);
+      await assert.rejects(
+        withLock(lock, "la prova", async () => {
+          throw new Error("errore della prova");
+        }),
+        /errore della prova/u,
+      );
+      assert.throws(
+        () =>
+          withLock(lock, "la prova", () => {
+            throw new Error("errore sincrono");
+          }),
+        /errore sincrono/u,
+      );
+      assert.equal(existsSync(lock), false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it("prova l'integrazione squash sul tree completo preservando differenze e lavoro aggiunto", () => {
