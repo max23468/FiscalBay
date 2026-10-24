@@ -11,7 +11,7 @@ import {
   useSearchParams,
 } from "react-router";
 
-import { useAction, useNotice } from "~/components/app-shell";
+import { useAction, useFetcherResult, useNotice } from "~/components/app-shell";
 import { useConfirmed } from "~/components/confirmation";
 import { EmptyState } from "~/components/empty-state";
 import { PageTitle } from "~/components/icon-tile";
@@ -402,11 +402,7 @@ type Unlock = ReturnType<typeof useUnlock>;
 function useUnlock(unlockAction: string, t: AppCopy) {
   const notify = useNotice();
   const fetcher = useFetcher<UnlockResult>();
-  const handled = useRef<UnlockResult | undefined>(undefined);
-  useEffect(() => {
-    const result = fetcher.data;
-    if (fetcher.state !== "idle" || !result || handled.current === result) return;
-    handled.current = result;
+  useFetcherResult(fetcher, (result) => {
     if (result.error) {
       notify(t.orders.unlockFailed);
       return;
@@ -416,7 +412,7 @@ function useUnlock(unlockAction: string, t: AppCopy) {
         ? t.orders.unlocked(result.remaining)
         : t.orders.unlockedMany(result.unlocked.length),
     );
-  }, [fetcher.state, fetcher.data, notify, t]);
+  });
   return {
     submit: (ids: string[], skipConfirmation = false) =>
       void fetcher.submit(

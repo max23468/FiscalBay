@@ -15,7 +15,7 @@ import {
   Trash2,
   Unplug,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { useAction } from "~/components/app-shell";
@@ -329,23 +329,15 @@ function ReadActions({ store, ebayDown, t }: { store: StoreView; ebayDown: boole
  * Dopo il successo si torna all'elenco.
  */
 function useDisconnectDialog(store: StoreView, t: AppCopy, links: AppLinks) {
-  const action = useAction();
   const navigate = useNavigate();
   const [open, setOpen] = useState<"disconnect" | "delete" | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
-  const [deleted, setDeleted] = useState(false);
-  const [handled, setHandled] = useState(action.result);
-  if (action.result && handled !== action.result) {
-    setHandled(action.result);
-    if (action.result.ok) {
-      setDeleted(open === "delete");
-      setOpen(null);
-    } else setFailure(action.result.notice || t.stores.failed);
-  }
-  const storesHref = appHref(links, "negozi");
-  useEffect(() => {
-    if (deleted) void navigate(storesHref, { preventScrollReset: true });
-  }, [deleted, navigate, storesHref]);
+  const [confirmName, setConfirmName] = useState("");
+  const action = useAction((result) => {
+    if (!result.ok) return setFailure(result.notice || t.stores.failed);
+    if (open === "delete") void navigate(appHref(links, "negozi"), { preventScrollReset: true });
+    setOpen(null);
+  });
   const changeOpen = (kind: "disconnect" | "delete", next: boolean) => {
     if (action.pending) return;
     setOpen(next ? kind : null);
@@ -354,7 +346,6 @@ function useDisconnectDialog(store: StoreView, t: AppCopy, links: AppLinks) {
   };
   const run = (intent: string, fields: Record<string, string> = {}) =>
     action.run(intent, { store: store.id, ...fields });
-  const [confirmName, setConfirmName] = useState("");
   return { action, open, failure, changeOpen, run, confirmName, setConfirmName };
 }
 

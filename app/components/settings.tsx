@@ -169,21 +169,18 @@ type SaveState = "idle" | "saving" | "saved" | "error";
  * corso ed esito espliciti, ripristino dell'ultimo valore salvato se il server rifiuta.
  */
 function useAutoSave<T extends string | boolean>(name: string, initial: T) {
-  const action = useAction();
   const [value, setValue] = useState(initial);
   const [saved, setSaved] = useState(initial);
   const [outcome, setOutcome] = useState<"idle" | "saved" | "error">("idle");
-  const [handled, setHandled] = useState<ActionResult>();
-  if (action.result && action.result !== handled) {
-    setHandled(action.result);
-    if (action.result.ok) {
+  const action = useAction((result) => {
+    if (result.ok) {
       setSaved(value);
       setOutcome("saved");
     } else {
       setValue(saved);
       setOutcome("error");
     }
-  }
+  });
   useEffect(() => {
     if (outcome !== "saved") return;
     const timer = setTimeout(() => setOutcome("idle"), 2000);

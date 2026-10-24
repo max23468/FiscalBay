@@ -11,7 +11,16 @@ import {
   Store,
   User,
 } from "lucide-react";
-import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useEffectEvent,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { Link, NavLink, useFetcher, useLocation, useNavigate } from "react-router";
 
 import { useHydrated } from "~/components/hydrated";
@@ -99,19 +108,35 @@ export function useNotice() {
 }
 
 /**
- * Azione sulla route corrente, distinta da `intent`: esito e avviso li decide il
- * server. L'anteprima risponde con una simulazione, le route reali eseguono.
+ * Reazione a un nuovo esito del fetcher, una sola volta e a richiesta conclusa: una
+ * rilettura della pagina o un nuovo rendering non ripropongono l'esito già gestito.
  */
-export function useAction() {
-  const notify = useNotice();
-  const fetcher = useFetcher<ActionResult>();
-  const handled = useRef<ActionResult | undefined>(undefined);
+export function useFetcherResult<T>(
+  fetcher: { state: string; data: T | undefined },
+  onResult: (result: T) => void,
+) {
+  const handled = useRef<T | undefined>(undefined);
+  const handle = useEffectEvent(onResult);
   useEffect(() => {
     const result = fetcher.data;
-    if (fetcher.state !== "idle" || !result || handled.current === result) return;
+    if (fetcher.state !== "idle" || result === undefined || handled.current === result) return;
     handled.current = result;
+    handle(result);
+  }, [fetcher.state, fetcher.data]);
+}
+
+/**
+ * Azione sulla route corrente, distinta da `intent`: esito e avviso li decide il
+ * server. L'anteprima risponde con una simulazione, le route reali eseguono.
+ * `onResult` riceve ogni nuovo esito, dopo l'avviso.
+ */
+export function useAction(onResult?: (result: ActionResult) => void) {
+  const notify = useNotice();
+  const fetcher = useFetcher<ActionResult>();
+  useFetcherResult(fetcher, (result) => {
     if (result.notice) notify(result.notice);
-  }, [fetcher.state, fetcher.data, notify]);
+    onResult?.(result);
+  });
   return {
     run: (intent: string, fields: Record<string, string> = {}) =>
       void fetcher.submit({ ...fields, intent }, { method: "post" }),

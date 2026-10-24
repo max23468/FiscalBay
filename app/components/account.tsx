@@ -13,7 +13,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useFetcher, useLocation, useNavigation, useSubmit } from "react-router";
 
-import { AppShell } from "~/components/app-shell";
+import { AppShell, useFetcherResult } from "~/components/app-shell";
 import { OrdersLoading } from "~/components/orders/loading";
 import { useFieldErrors } from "~/components/form-validation";
 import { StatusAlert } from "~/components/status";
@@ -571,16 +571,13 @@ function ConfirmIdentity({
   const fetcher = useFetcher<ConfirmResult>();
   const [passkeyError, setPasskeyError] = useState<PasskeyFailure | null>(null);
   const [pending, setPending] = useState(false);
-  const handled = useRef<ConfirmResult | undefined>(undefined);
   const id = useId();
   const result = fetcher.state === "idle" ? fetcher.data : undefined;
-  useEffect(() => {
-    if (!result || handled.current === result) return;
-    handled.current = result;
-    if (result.ok) onConfirmed();
+  useFetcherResult(fetcher, (confirmed) => {
+    if (confirmed.ok) onConfirmed();
     // Una passkey di un altro account ha aperto la sua sessione: la pagina si rilegge.
     else if (fetcher.formData === undefined && pending) window.location.reload();
-  }, [result, onConfirmed, fetcher.formData, pending]);
+  });
   const password = methods.accounts.password && !passkeyOnly;
   const passkey = methods.passkeys.length > 0;
   const confirmWithPasskey = async () => {
