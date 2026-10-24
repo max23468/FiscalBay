@@ -1,6 +1,7 @@
 import { UpstreamError } from "../http.server";
+import type { EbayEnvironment } from "../../view-models";
 
-export type EbayEnvironment = "production" | "sandbox";
+export type { EbayEnvironment } from "../../view-models";
 
 /** Segreti eBay facoltativi: senza valore Sandbox e verifica delle notifiche restano spente. */
 type OptionalEbaySecrets = {

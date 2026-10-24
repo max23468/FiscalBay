@@ -11,6 +11,14 @@ import { logFailure } from "../errors";
 const maxBytes = 262_144;
 const retention = 7 * 86_400_000;
 const referenceSchema = z.object({ receiptId: z.string().uuid() });
+
+/**
+ * Messaggio della coda con il riferimento a una ricevuta; il consumer convalida il riferimento e
+ * riprova quello malformato.
+ */
+export function isWebhookMessage(body: unknown): body is { receiptId: string } {
+  return z.object({ receiptId: z.string() }).safeParse(body).success;
+}
 type Receipt = {
   id: string;
   provider: "ebay" | "stripe";
