@@ -104,7 +104,9 @@ async function readStores({ request, params }: Route.LoaderArgs) {
     page: {
       stores,
       detail,
-      // Finché non esistono gli abbonamenti ogni spazio usa il piano Free.
+      // Il piano della pagina decide soltanto la colonna delle notifiche Telegram, che arriva
+      // con il loro servizio: fino ad allora resta quella del Free. Le pause del piano sono nei
+      // negozi.
       account: { plan: "free" as const },
       now: now.toISOString(),
       // Con eBay che non risponde restano sospese soltanto le azioni che lo chiamano, per

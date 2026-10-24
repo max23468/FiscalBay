@@ -2,6 +2,7 @@ import { z } from "zod";
 import { logFailure } from "../../errors";
 import type { Language } from "../../i18n";
 import { upstreamJson } from "../http.server";
+import { applyFreePlan } from "../../domain/free-store.server";
 import { acquireOrders } from "../../domain/order-acquisition.server";
 import { base64Url } from "../../sealed.server";
 import { saveStoreCredentials } from "./seller-credentials.server";
@@ -246,6 +247,8 @@ export async function completeStoreLink(input: {
   });
   // Il negozio di un altro spazio non riceve token e l'esito non dice nulla di quello spazio.
   if (!storeId) return "altro-spazio";
+  // Nel Free un negozio oltre a quello attivo entra in pausa prima della prima lettura.
+  await applyFreePlan(environment.DB, link.userId, issued);
   await saveStoreCredentials(
     environment,
     storeId,

@@ -500,8 +500,14 @@ export const it = {
         "Premium si attiva appena Stripe conferma il pagamento. Ricevuta e fattura arrivano da Stripe.",
       checkoutCancelled: "Pagamento annullato. Nessun addebito.",
       buyPeriod: { monthly: "Scegli mensile", annual: "Scegli annuale", lifetime: "Scegli a vita" },
-      freeStoreHint:
-        "Puoi sostituire il negozio attivo ogni 90 giorni. Nell’anteprima la scelta è simulata e non modifica i negozi.",
+      freeStoreHint: "Puoi sostituire il negozio attivo ogni 90 giorni.",
+      freeStoreLocked: (date: string) => `Potrai sostituire il negozio attivo dal ${date}.`,
+      freeStoreConfirmTitle: (name: string) => `Rendere attivo ${name}?`,
+      freeStoreConfirmBody: (previous: string | null, date: string) =>
+        `${previous ? `${previous} va in pausa: nessuna nuova lettura e ordini non consultabili. ` : ""}Potrai sostituire di nuovo il negozio attivo dal ${date}.`,
+      freeStoreConfirm: "Rendi attivo",
+      freeStoreChanged: "Negozio attivo aggiornato.",
+      freeStoreUnavailable: "Il negozio attivo non si può sostituire ora.",
       premiumPeriod: {
         monthly: "Premium mensile",
         annual: "Premium annuale",

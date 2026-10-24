@@ -181,7 +181,13 @@ async function main() {
     const trialAccounts = ["chromium", "webkit"].flatMap((browser) =>
       ["it", "en"].map((language) => `trial-${language}-${browser}`),
     );
-    for (const id of [...unlockAccounts, ...trialAccounts, "suggestions-it", "suggestions-en"]) {
+    for (const id of [
+      ...unlockAccounts,
+      ...trialAccounts,
+      "suggestions-it",
+      "suggestions-en",
+      "stores-premium",
+    ]) {
       const value = `VALORE-SINTETICO-${id.split("-")[1]}`;
       statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
       INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
@@ -233,9 +239,37 @@ async function main() {
         INSERT INTO order_tax_checks (order_id, source, observed_at, availability)
           VALUES ('${id}', 'ebay_fulfillment', '${now}', 'absent');`);
       }
+      // Premium con due negozi: entrambi ammessi, quindi il filtro del negozio compare.
+      if (id === "stores-premium")
+        statements.push(`INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
+          VALUES ('${id}-2', '${id}', '${id}-2', '${now}', 'Secondo negozio');
+        INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+          VALUES ('${id}', '${id}', 'admin', '${now}', '${expires}');`);
       if (id.startsWith("trial-"))
         statements.push(`INSERT INTO sync_state (store_id, polled_at, last_success_at, updated_at)
           VALUES ('${id}', '${now}', '${now}', '${now}');`);
+    }
+    // Negozio attivo del Free: due negozi senza copertura, per lingua, browser e tentativo. La
+    // sostituzione vale ogni 90 giorni, quindi un nuovo tentativo riparte da uno spazio intatto.
+    for (const id of ["chromium", "webkit"].flatMap((browser) =>
+      ["it", "en"].flatMap((language) =>
+        [0, 1, 2].map((attempt) => `free-store-${language}-${browser}-${attempt}`),
+      ),
+    )) {
+      statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
+      INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+        SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
+      INSERT INTO user_profiles SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
+        FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
+      INSERT INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
+        FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};
+      INSERT INTO workspaces (id, name, created_at) VALUES ('${id}', 'Collaudo negozio attivo', '${now}');
+      INSERT INTO workspace_members VALUES ('${id}', '${id}', 'owner');
+      INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
+        VALUES ('${id}', '${id}', '${id}', '${now}', 'Negozio principale'),
+               ('${id}-2', '${id}', '${id}-2', '${new Date(Date.now() + 1000).toISOString()}', 'Negozio secondario');
+      INSERT INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
+        VALUES ('${id}', '${id}', '${id}', '${expires}', '${now}', '${now}');`);
     }
     // Abbonamenti Stripe nei quattro stati del piano, soltanto in lettura: attivo, disdetto,
     // pagamento da confermare e rinnovo non riuscito con il prezzo ancora protetto.

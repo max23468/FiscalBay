@@ -490,8 +490,14 @@ export const en: AppCopy = {
         annual: "Choose annual",
         lifetime: "Choose lifetime",
       },
-      freeStoreHint:
-        "You can replace the active store every 90 days. In the preview, the choice is simulated and does not change stores.",
+      freeStoreHint: "You can replace the active store every 90 days.",
+      freeStoreLocked: (date: string) => `You can replace the active store from ${date}.`,
+      freeStoreConfirmTitle: (name: string) => `Make ${name} the active store?`,
+      freeStoreConfirmBody: (previous: string | null, date: string) =>
+        `${previous ? `${previous} will be paused: no new reads and orders unavailable. ` : ""}You can replace the active store again from ${date}.`,
+      freeStoreConfirm: "Make active",
+      freeStoreChanged: "Active store updated.",
+      freeStoreUnavailable: "The active store cannot be replaced right now.",
       premiumPeriod: {
         monthly: "Premium, monthly",
         annual: "Premium, annual",

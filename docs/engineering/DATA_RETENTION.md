@@ -6,11 +6,29 @@ millisecondi. Il default è trenta giorni dalla creazione dell'ordine, mai dalla
 lettura o dall'ultimo aggiornamento. Una pausa o uno scollegamento non fermano il tempo.
 
 Il percorso commerciale dovrà impostare le scadenze esplicite previste dal piano:
-un anno calendariale per Premium, estensioni concesse e trenta giorni di grace
-dall'effettivo downgrade per l'eccedenza. Nella grace il termine di accesso è già
-scaduto, mentre `purge_after` conserva la finestra di ripensamento. Il billing
-completo resta nella milestone competente: il modello attuale non deduce un piano
-attivo dalla presenza di un vecchio grant Premium, trial o lifetime.
+un anno calendariale per Premium ed estensioni concesse. Il modello non deduce un
+piano attivo dalla presenza di un vecchio grant Premium, trial o lifetime: vale la
+copertura in corso.
+
+<a id="downgrade"></a>
+## Downgrade al Free
+
+Senza una copertura in corso lo spazio ha un solo negozio eBay attivo, registrato in
+`free_store_changes`; gli altri ricevono la pausa `plan`, che ferma le letture e
+nasconde i dati. Nella stessa operazione gli ordini tornano alla finestra Free: il
+termine di accesso diventa trenta giorni dalla data dell'ordine e, per gli ordini che
+la perdono, `purge_after` conserva trenta giorni dal downgrade. Gli ordini dei negozi
+esclusi restano non consultabili e vengono eliminati trenta giorni dopo la pausa. Un
+termine non si allunga mai: la grace non rinvia eliminazioni già dovute o richieste.
+
+Il riallineamento parte dal cron ogni dieci minuti, prima dello smistamento delle
+letture, a ogni pagina dell'area riservata e al collegamento di un negozio, quindi le
+letture dell'utente lo trovano già applicato anche prima della pulizia. Il cron rivede
+i termini degli ordini soltanto per gli spazi la cui copertura è finita nell'ultima
+settimana; le visite coprono gli altri. Il ritorno a Premium toglie le pause e rende
+di nuovo consultabili gli ordini ancora presenti entro il loro termine; quelli già
+eliminati non tornano, perché i marker ne impediscono il reimport. La Sandbox eBay,
+disponibile soltanto sul test, resta fuori dal limite.
 
 Elenco, dettaglio e conteggi leggono soltanto ordini non scaduti. I dati fiscali
 richiedono anche un grant non revocato e non scaduto; `expires_at` nullo eredita il

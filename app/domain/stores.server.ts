@@ -1,5 +1,6 @@
 import { syncMinutes } from "./order-sync.server";
 import { dayMilliseconds } from "../time";
+import { activeEntitlementSql } from "./grants.server";
 import { storeNameSql } from "./store-state.server";
 import type { EbayEnvironment } from "../integrations/ebay/environment.server";
 
@@ -134,6 +135,7 @@ type StoreRow = {
   history_done_at: string | null;
   syncing: number | null;
   pauses: string | null;
+  premium: number;
   orders: number;
   marketplace: string | null;
 };
@@ -155,7 +157,7 @@ export async function listStores(
               c.rejected_at, ss.last_success_at, ss.history_from, ss.history_until,
               ss.history_done_at, ss.locked_until > ?2 AS syncing,
               (SELECT group_concat(reason) FROM ebay_store_pauses p WHERE p.store_id = s.id)
-                AS pauses,
+                AS pauses, ${activeEntitlementSql("s.workspace_id", "?2")} AS premium,
               (SELECT COUNT(*) FROM orders o WHERE o.store_id = s.id AND o.merged_into IS NULL
                 AND o.retention_until > ?2
                 AND o.is_provisional = 0) AS orders,
@@ -195,13 +197,17 @@ export async function listStores(
     const pauseReasons = (row.pauses?.split(",").sort() ?? []) as PauseReason[];
     const expiresAt = row.refresh_expires_at;
     const expired = !row.credentials || row.rejected_at !== null || Date.parse(expiresAt!) <= at;
+    // Un negozio escluso dal piano resta in pausa anche con il consenso scaduto: ricollegarlo
+    // non lo farebbe leggere finché non diventa il negozio attivo.
     const connection: StoreConnection = row.disconnected_at
       ? "disconnected"
-      : expired
-        ? "reconnect_required"
-        : pauseReasons.length > 0
-          ? "paused"
-          : "active";
+      : pauseReasons.includes("plan")
+        ? "paused"
+        : expired
+          ? "reconnect_required"
+          : pauseReasons.length > 0
+            ? "paused"
+            : "active";
 
     let reminder: StoreStatus["reminder"] = null;
     if (pauseReasons.length === 0 && connection === "reconnect_required") {
@@ -237,8 +243,7 @@ export async function listStores(
       consentExpiresAt: row.disconnected_at ? null : expiresAt,
       lastSyncAt: row.last_success_at,
       syncing: row.syncing === 1,
-      // Finché non esistono gli abbonamenti ogni spazio usa il piano Free.
-      targetMinutes: syncMinutes.free,
+      targetMinutes: syncMinutes[row.premium ? "premium" : "free"],
       recent: recent.get(row.id) ?? [],
       importedOrders: row.orders,
       marketplace: row.marketplace,

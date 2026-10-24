@@ -25,12 +25,19 @@ import {
 import { action as languageAction } from "../app/routes/language";
 import { action as notificationsAction } from "../app/routes/notifications";
 import { appCopy } from "../app/app-copy";
+import {
+  applyFreePlan,
+  applyFreePlans,
+  chooseFreeStore,
+  freeStoreState,
+} from "../app/domain/free-store.server";
+import type { ActionResult } from "../app/view-models";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import {
   refreshExpiringTokens,
   refreshStoreToken,
 } from "../app/integrations/ebay/seller-credentials.server";
-import { now, resetDatabase, resetOrderFixtures } from "./fixtures/database-fixtures";
+import { insertStore, now, resetDatabase, resetOrderFixtures } from "./fixtures/database-fixtures";
 import { syntheticEbay } from "./fixtures/ebay-fixtures";
 import { syntheticProfile, verifiedSession, profileOf } from "./fixtures/account-fixtures";
 import { homeFor } from "./fixtures/account-route-fixtures";
@@ -1041,5 +1048,347 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     expect(await count("notification_reads")).toBe(1);
     await purgeExpiredRecords(env.DB, new Date(Date.now() + 31 * day));
     expect(await count("notification_reads")).toBe(0);
+  });
+
+  describe("negozio attivo del Free e downgrade", () => {
+    const iso = (at: number) => new Date(at).toISOString();
+
+    /** Venditore con il negozio collegato da eBay e un secondo negozio collegato dopo. */
+    async function twoStores(email: string) {
+      const seller = await linkedSeller(email);
+      await insertStore({
+        id: "secondo",
+        workspaceId: seller.workspaceId,
+        linkedAt: iso(Date.now() + 60_000),
+      }).run();
+      return seller;
+    }
+
+    async function addOrder(id: string, storeId: string, created: number, retained?: number) {
+      await env.DB.prepare(
+        `INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time,
+           currency, total_minor, retention_until, purge_after)
+         VALUES (?1, ?2, ?1, ?3, ?3, 'EUR', 100, ?4, ?4)`,
+      )
+        .bind(id, storeId, iso(created), retained === undefined ? null : iso(retained))
+        .run();
+    }
+
+    async function coverage(workspaceId: string, source: string, from: number, until: number) {
+      await env.DB.prepare(
+        `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+        .bind(crypto.randomUUID(), workspaceId, source, iso(from), iso(until))
+        .run();
+    }
+
+    const pauses = async (userId: string, at?: Date) =>
+      Object.fromEntries(
+        (await listStores(env.DB, userId, at)).map((store) => [store.id, store.pauseReasons]),
+      );
+    const visible = async (userId: string, at: number) =>
+      (await listVisibleOrders(env.DB, userId, 50, "production", new Date(at)))
+        .map((order) => order.id)
+        .sort();
+    const changes = async () =>
+      (
+        await env.DB.prepare(
+          "SELECT store_id, kind FROM free_store_changes ORDER BY changed_at, rowid",
+        ).all<{ store_id: string; kind: string }>()
+      ).results;
+
+    it("resta attivo il primo negozio collegato, anche scollegandolo, e gli altri sono in pausa", async () => {
+      const seller = await twoStores("attivo@example.invalid");
+      await addOrder("ordine-secondo", "secondo", Date.now() - day);
+      await applyFreePlan(env.DB, seller.userId);
+      expect(await pauses(seller.userId)).toEqual({ [seller.storeId]: [], secondo: ["plan"] });
+      expect(await changes()).toEqual([{ store_id: seller.storeId, kind: "default" }]);
+      const [first] = await listVisibleOrders(env.DB, seller.userId);
+      expect(await visible(seller.userId, Date.now())).toEqual([first!.id]);
+      expect(await refreshExpiringTokens(env, vi.fn<typeof fetch>())).toEqual([]);
+
+      // Scollegare e ricollegare il negozio attivo non porta un altro negozio al suo posto.
+      await disconnectStore(env.DB, seller.userId, seller.storeId);
+      await applyFreePlan(env.DB, seller.userId);
+      expect(await pauses(seller.userId)).toEqual({ [seller.storeId]: [], secondo: ["plan"] });
+      await linkThroughEbay(seller.cookie);
+      expect(await pauses(seller.userId)).toEqual({ [seller.storeId]: [], secondo: ["plan"] });
+      expect(await changes()).toEqual([{ store_id: seller.storeId, kind: "default" }]);
+      expect(await visible(seller.userId, Date.now())).not.toContain("ordine-secondo");
+    });
+
+    it("un negozio collegato nel Free oltre a quello attivo va in pausa prima della prima lettura", async () => {
+      const seller = await linkedSeller("collega@example.invalid");
+      const ebay = syntheticEbay({ userId: "altro-venditore", orderId: "ordine-altro" });
+      await linkThroughEbay(seller.cookie, ebay);
+      const stores = await listStores(env.DB, seller.userId);
+      expect(stores.map((store) => [store.id === seller.storeId, store.pauseReasons])).toEqual([
+        [true, []],
+        [false, ["plan"]],
+      ]);
+      expect(stores[1]).toMatchObject({ connection: "paused", importedOrders: 0 });
+      expect(ebay.mock.calls.map(([input]) => new URL(String(input)).pathname)).toEqual([
+        "/identity/v1/oauth2/token",
+        "/commerce/identity/v1/user/",
+      ]);
+    });
+
+    it("con una copertura tutti i negozi sono ammessi e al downgrade vale il primo ancora collegato", async () => {
+      const seller = await twoStores("copertura@example.invalid");
+      await applyFreePlan(env.DB, seller.userId);
+      const start = Date.now();
+      await coverage(seller.workspaceId, "trial", start - day, start + day);
+      await applyFreePlan(env.DB, seller.userId);
+      expect(await pauses(seller.userId)).toEqual({ [seller.storeId]: [], secondo: [] });
+      expect((await listStores(env.DB, seller.userId)).map((store) => store.targetMinutes)).toEqual(
+        [10, 10],
+      );
+      // In Premium nessun negozio predefinito: non anticipa la scelta del downgrade (D155).
+      expect(await changes()).toEqual([]);
+      expect(await freeStoreState(env.DB, seller.userId)).toBeNull();
+      await disconnectStore(env.DB, seller.userId, seller.storeId);
+
+      const after = new Date(start + 2 * day);
+      await applyFreePlans(env.DB, after);
+      expect(await pauses(seller.userId, after)).toEqual({
+        [seller.storeId]: ["plan"],
+        secondo: [],
+      });
+      expect(
+        (await listStores(env.DB, seller.userId, after)).map((store) => store.targetMinutes),
+      ).toEqual([30, 30]);
+      expect(await changes()).toEqual([{ store_id: "secondo", kind: "default" }]);
+    });
+
+    it("la sostituzione dell'utente vale una volta ogni 90 giorni, soltanto nel Free", async () => {
+      const seller = await twoStores("sostituzione@example.invalid");
+      await insertStore({
+        id: "terzo",
+        workspaceId: seller.workspaceId,
+        linkedAt: iso(Date.now() + 120_000),
+      }).run();
+      await applyFreePlan(env.DB, seller.userId);
+      const chosenAt = Date.now();
+      // La prima scelta è sempre ammessa; due richieste concorrenti ne registrano una sola.
+      const [first, second] = await Promise.all([
+        chooseFreeStore(env.DB, seller.userId, "secondo", new Date(chosenAt)),
+        chooseFreeStore(env.DB, seller.userId, "terzo", new Date(chosenAt)),
+      ]);
+      expect(first).toEqual({ result: "done" });
+      const changeFrom = iso(chosenAt + 90 * day);
+      expect(second).toEqual({ result: "locked", changeFrom });
+      expect(await pauses(seller.userId)).toEqual({
+        [seller.storeId]: ["plan"],
+        secondo: [],
+        terzo: ["plan"],
+      });
+      expect(await freeStoreState(env.DB, seller.userId, new Date(chosenAt))).toEqual({
+        stores: [
+          { id: seller.storeId, name: "venditore" },
+          { id: "secondo", name: "secondo" },
+          { id: "terzo", name: "terzo" },
+        ],
+        activeId: "secondo",
+        changeFrom,
+      });
+      // Scollegare e ricollegare non sposta il vincolo; il negozio già attivo non conta.
+      await disconnectStore(env.DB, seller.userId, "secondo");
+      expect(
+        await chooseFreeStore(env.DB, seller.userId, seller.storeId, new Date(chosenAt + day)),
+      ).toEqual({ result: "locked", changeFrom });
+      expect(
+        await chooseFreeStore(env.DB, seller.userId, "secondo", new Date(chosenAt + day)),
+      ).toEqual({ result: "done" });
+      expect(
+        await chooseFreeStore(env.DB, seller.userId, "estraneo", new Date(chosenAt + day)),
+      ).toEqual({ result: "not_found" });
+      const later = new Date(chosenAt + 90 * day);
+      expect(await chooseFreeStore(env.DB, seller.userId, seller.storeId, later)).toEqual({
+        result: "done",
+      });
+      expect(await pauses(seller.userId, later)).toEqual({
+        [seller.storeId]: [],
+        secondo: ["plan"],
+        terzo: ["plan"],
+      });
+      // In Premium la scelta non compare e non si registra.
+      await coverage(seller.workspaceId, "premium", later.getTime(), later.getTime() + 30 * day);
+      const covered = new Date(later.getTime() + 100 * day);
+      await coverage(seller.workspaceId, "admin", covered.getTime() - day, covered.getTime() + day);
+      expect(await chooseFreeStore(env.DB, seller.userId, "terzo", covered)).toEqual({
+        result: "invalid",
+      });
+      expect((await changes()).filter((change) => change.kind === "choice")).toHaveLength(2);
+    });
+
+    it("l'eccezione assistita richiede motivo e autore e non tocca quota, prova o ciclo", async () => {
+      const seller = await twoStores("assistenza@example.invalid");
+      await grantImportedOrder(seller);
+      await applyFreePlan(env.DB, seller.userId);
+      await chooseFreeStore(env.DB, seller.userId, "secondo");
+      const assisted = (reason: string | null, actor: string | null) =>
+        env.DB.prepare(
+          `INSERT INTO free_store_changes (id, workspace_id, store_id, kind, changed_at, reason, actor)
+           VALUES (?, ?, ?, 'assisted', ?, ?, ?)`,
+        )
+          .bind(
+            crypto.randomUUID(),
+            seller.workspaceId,
+            seller.storeId,
+            iso(Date.now() + 1000),
+            reason,
+            actor,
+          )
+          .run();
+      await expect(assisted(null, "assistenza@example.invalid")).rejects.toThrow("CHECK");
+      await expect(assisted("Account eBay chiuso", null)).rejects.toThrow("CHECK");
+      await expect(assisted(" ", "assistenza@example.invalid")).rejects.toThrow("CHECK");
+      await assisted("Account eBay chiuso, nuovo negozio", "assistenza@example.invalid");
+      await expect(
+        env.DB.prepare(
+          "UPDATE free_store_changes SET reason = 'altro' WHERE kind = 'assisted'",
+        ).run(),
+      ).rejects.toThrow("immutable_free_store_change");
+      const after = new Date(Date.now() + 2000);
+      await applyFreePlan(env.DB, seller.userId, after);
+      expect(await pauses(seller.userId, after)).toEqual({
+        [seller.storeId]: [],
+        secondo: ["plan"],
+      });
+      expect(await quotaUsed()).toBe(1);
+      expect(await count("free_cycles")).toBe(1);
+      expect(await count("workspace_entitlements")).toBe(0);
+      // Anche l'eccezione è una sostituzione: la prossima scelta attende 90 giorni.
+      expect(await chooseFreeStore(env.DB, seller.userId, "secondo", after)).toMatchObject({
+        result: "locked",
+      });
+    });
+
+    it("al downgrade l'eccedenza non è più consultabile, resta 30 giorni e torna con Premium prima della pulizia", async () => {
+      const seller = await twoStores("downgrade@example.invalid");
+      await resetOrderFixtures();
+      const end = Date.parse("2026-10-01T12:00:00.000Z");
+      const year = 365 * day;
+      // Termini di un anno, come per gli ordini acquisiti con Premium.
+      await addOrder("attivo-vecchio", seller.storeId, end - 60 * day, end - 60 * day + year);
+      await addOrder("attivo-recente", seller.storeId, end - 5 * day, end - 5 * day + year);
+      await addOrder("eccedente", "secondo", end - 5 * day, end - 5 * day + year);
+      await coverage(seller.workspaceId, "trial", end - 14 * day, end);
+      await applyFreePlans(env.DB, new Date(end - 60_000));
+      expect(await visible(seller.userId, end - 60_000)).toEqual([
+        "attivo-recente",
+        "attivo-vecchio",
+        "eccedente",
+      ]);
+
+      // Il cron applica il downgrade; anche prima del suo passaggio la visita lo applica.
+      const applied = end + 60_000;
+      await applyFreePlan(env.DB, seller.userId, new Date(applied));
+      expect(await visible(seller.userId, applied)).toEqual(["attivo-recente"]);
+      const terms = await env.DB.prepare(
+        "SELECT id, retention_until, purge_after FROM orders ORDER BY id",
+      ).all<{ id: string; retention_until: string; purge_after: string }>();
+      expect(terms.results).toEqual([
+        {
+          id: "attivo-recente",
+          retention_until: iso(end + 25 * day),
+          purge_after: iso(applied + 30 * day),
+        },
+        {
+          id: "attivo-vecchio",
+          retention_until: iso(end - 30 * day),
+          purge_after: iso(applied + 30 * day),
+        },
+        {
+          id: "eccedente",
+          retention_until: iso(end + 25 * day),
+          purge_after: iso(applied + 30 * day),
+        },
+      ]);
+      // Ripetere il riallineamento non allunga né accorcia i termini.
+      await applyFreePlans(env.DB, new Date(applied + day));
+      await applyFreePlan(env.DB, seller.userId, new Date(applied + day));
+      expect(
+        (
+          await env.DB.prepare(
+            "SELECT id, retention_until, purge_after FROM orders ORDER BY id",
+          ).all()
+        ).results,
+      ).toEqual(terms.results);
+
+      // Con la pulizia sospesa nessun accesso; prima del termine fisico i dati restano.
+      await purgeExpiredRecords(env.DB, new Date(applied + 29 * day));
+      expect(await count("orders")).toBe(3);
+      const back = applied + 10 * day;
+      await coverage(seller.workspaceId, "premium", back, back + 30 * day);
+      await applyFreePlan(env.DB, seller.userId, new Date(back));
+      expect(await visible(seller.userId, back)).toEqual(["attivo-recente", "eccedente"]);
+
+      // Dopo la pulizia il ritorno a Premium non ripristina i dati eliminati.
+      await purgeExpiredRecords(env.DB, new Date(applied + 30 * day));
+      expect(await count("orders")).toBe(0);
+      expect(await count("deleted_order_keys")).toBe(3);
+      const again = applied + 31 * day;
+      await coverage(seller.workspaceId, "admin", again, again + day);
+      await applyFreePlan(env.DB, seller.userId, new Date(again));
+      expect(await visible(seller.userId, again)).toEqual([]);
+    });
+
+    it("il cron rivede i termini soltanto dopo un downgrade recente, la visita sempre", async () => {
+      const seller = await linkedSeller("termini@example.invalid");
+      await resetOrderFixtures();
+      const end = Date.parse("2026-10-01T12:00:00.000Z");
+      await addOrder("lungo", seller.storeId, end - 60 * day, end + 300 * day);
+      await coverage(seller.workspaceId, "trial", end - 14 * day, end);
+      const term = async () =>
+        (await env.DB.prepare("SELECT retention_until FROM orders").first<{
+          retention_until: string;
+        }>())!.retention_until;
+      await applyFreePlans(env.DB, new Date(end + 8 * day));
+      expect(await term()).toBe(iso(end + 300 * day));
+      await applyFreePlan(env.DB, seller.userId, new Date(end + 8 * day));
+      expect(await term()).toBe(iso(end - 30 * day));
+    });
+
+    it("il piano mostra e registra la scelta del negozio attivo soltanto nel Free", async () => {
+      const seller = await twoStores("piano-negozio@example.invalid");
+      expect((await settingsPage(seller.cookie)).page.freeStore).toEqual({
+        stores: [
+          { id: seller.storeId, name: "venditore" },
+          { id: "secondo", name: "secondo" },
+        ],
+        activeId: seller.storeId,
+        changeFrom: null,
+      });
+      expect(await saveSetting(seller.cookie, { intent: "free-store", store: "secondo" })).toEqual({
+        ok: true,
+        notice: "Negozio attivo aggiornato.",
+      });
+      const locked = (await saveSetting(seller.cookie, {
+        intent: "free-store",
+        store: seller.storeId,
+      })) as { data: ActionResult; init: ResponseInit };
+      expect(locked.init.status).toBe(409);
+      expect(locked.data.notice).toMatch(/^Potrai sostituire il negozio attivo dal /u);
+      const missing = (await saveSetting(seller.cookie, {
+        intent: "free-store",
+        store: "estraneo",
+      })) as { init: ResponseInit };
+      expect(missing.init.status).toBe(404);
+      const foreign = (await saveSetting(
+        seller.cookie,
+        { intent: "free-store", store: seller.storeId },
+        "https://estraneo.invalid",
+      )) as Response;
+      expect(foreign.status).toBe(403);
+      expect((await settingsPage(seller.cookie)).page.freeStore).toMatchObject({
+        activeId: "secondo",
+        changeFrom: expect.any(String),
+      });
+      await coverage(seller.workspaceId, "trial", Date.now() - day, Date.now() + day);
+      expect((await settingsPage(seller.cookie)).page.freeStore).toBeNull();
+      expect(await pauses(seller.userId)).toEqual({ [seller.storeId]: [], secondo: [] });
+    });
   });
 });

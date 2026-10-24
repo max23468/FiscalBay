@@ -12,7 +12,7 @@ test.skip(
 );
 
 test(
-  "l'account di collaudo entra e vede ordini, sblocchi e avvisi dei negozi",
+  "l'account di collaudo entra e vede ordini, sblocchi e negozi del piano Free",
   { tag: "@smoke" },
   async ({ page }) => {
     const { stores, orders, taxCodes } = testAccount;
@@ -26,21 +26,13 @@ test(
     await signIn.getByRole("button", { name: "Accedi", exact: true }).click();
     await expect(page).toHaveTitle("FiscalBay | Ordini");
 
-    // Il collegamento scaduto precede quello in scadenza; il negozio in pausa non avvisa.
-    const alerts = page
-      .getByRole("status")
-      .filter({ hasText: /collegamento scaduto|autorizzazione in scadenza/u });
-    await expect(alerts).toHaveCount(2);
-    await expect(alerts.nth(0)).toContainText(`${stores.expired}: collegamento scaduto`);
-    await expect(alerts.nth(0).getByRole("link", { name: "Apri il negozio" })).toHaveAttribute(
-      "href",
-      `/app/negozi/${stores.expired}`,
-    );
-    await expect(alerts.nth(1)).toContainText(`${stores.expiring}: autorizzazione in scadenza`);
-    await expect(alerts.nth(1).getByRole("link", { name: "Ricollega negozio" })).toHaveAttribute(
-      "href",
-      `/app/negozi/collega?ricollega=${encodeURIComponent(stores.expiring)}&environment=production`,
-    );
+    // Nel Free resta attivo il primo negozio collegato: gli altri sono in pausa per il piano,
+    // non avvisano del consenso e non compaiono negli Ordini.
+    await expect(
+      page
+        .getByRole("status")
+        .filter({ hasText: /collegamento scaduto|autorizzazione in scadenza/u }),
+    ).toHaveCount(0);
     await expect(page.getByText(stores.paused)).toHaveCount(0);
 
     // Il codice dell'ordine sbloccato è visibile, quello bloccato non arriva al browser.
@@ -49,18 +41,27 @@ test(
     await expect(page.getByText(taxCodes.unlocked).first()).toBeVisible();
     expect(await page.content()).not.toContain(taxCodes.locked);
 
-    // Negozi: elenco riconoscibile e pannello aperto da link diretto, senza azioni.
+    // Negozi: elenco riconoscibile e pannello aperto da link diretto, senza azioni. Il negozio
+    // in pausa per il piano rimanda alla scelta del negozio attivo nel Piano.
     await page.getByRole("link", { name: "Negozi eBay" }).first().click();
     await expect(page).toHaveTitle("FiscalBay | Negozi eBay");
     await expect(page.getByRole("heading", { name: "Negozi eBay", exact: true })).toBeVisible();
+    await expect(page.getByText("Il piano Free include un solo negozio attivo.")).toBeVisible();
     for (const name of Object.values(stores)) {
       await expect(page.getByRole("table").getByText(name, { exact: true })).toBeVisible();
     }
     await page.goto(`/app/negozi/${stores.paused}`);
     const panel = page.getByRole("dialog", { name: stores.paused });
-    await expect(panel.getByRole("button", { name: "Riprendi" })).toBeVisible();
+    await expect(panel.getByRole("link", { name: "Scegli il negozio attivo" })).toHaveAttribute(
+      "href",
+      "/app/impostazioni/piano",
+    );
     await page.keyboard.press("Escape");
     await expect(page).toHaveURL(/\/app\/negozi$/u);
+    await page.goto("/app/impostazioni/piano");
+    await expect(page.getByRole("combobox", { name: "Scegli il negozio attivo" })).toContainText(
+      stores.active,
+    );
 
     // Il vecchio indirizzo del profilo porta alla sua categoria delle Impostazioni.
     await page.goto("/app/profilo");
@@ -77,7 +78,7 @@ test(
     await page.goto("/en");
     await expect(page).toHaveURL(/\/en\/app\/ordini(?:[?&]vista=[0-9a-z]+)?$/u);
     await expect(page).toHaveTitle("FiscalBay | Orders");
-    await expect(page.getByText(`${stores.expired}: connection expired`)).toBeVisible();
+    await expect(page.getByText(`${stores.expired}: connection expired`)).toHaveCount(0);
     expect(await page.content()).not.toContain(taxCodes.locked);
     expect(errors).toEqual([]);
   },

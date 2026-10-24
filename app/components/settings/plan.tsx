@@ -4,6 +4,16 @@ import { useState } from "react";
 import { useAction } from "~/components/app-shell";
 import { PremiumNote, StatusAlert } from "~/components/status";
 import { useTimeZone } from "~/components/time-zone";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogClose,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
 import type { AppCopy } from "../../app-copy";
@@ -16,13 +26,7 @@ import {
   type PurchaseState,
 } from "../../catalog";
 import type { Language } from "../../i18n";
-import {
-  formatDate,
-  trialDaysLeft,
-  trialEnding,
-  type AccountView,
-  type StoreView,
-} from "../../view-models";
+import { formatDate, trialDaysLeft, trialEnding, type AccountView } from "../../view-models";
 import { AutoSwitch, Group, SimpleSelect } from "./controls";
 
 /**
@@ -165,6 +169,87 @@ export interface PurchaseView {
   checkout: "processing" | "cancelled" | null;
 }
 
+/** Negozio attivo del Free: negozi dello spazio, quello attivo e la prima nuova sostituzione. */
+export interface FreeStoreView {
+  stores: readonly { id: string; name: string }[];
+  activeId: string | null;
+  /** Prima data in cui il negozio attivo si può sostituire; null se è già possibile. */
+  changeFrom: string | null;
+}
+
+/** Giorni fra due sostituzioni del negozio attivo, come sul server. */
+const freeStoreChangeDays = 90;
+
+/**
+ * Scelta del negozio attivo, soltanto nel Free (D155). La sostituzione chiede conferma: il
+ * negozio lasciato va in pausa e la prossima resta possibile solo dopo 90 giorni.
+ */
+function FreeStoreChoice({
+  freeStore,
+  now,
+  t,
+  language,
+}: {
+  freeStore: FreeStoreView;
+  now: string;
+  t: AppCopy;
+  language: Language;
+}) {
+  const zone = useTimeZone();
+  const copy = t.settings.plan;
+  const [active, setActive] = useState(freeStore.activeId ?? "");
+  const [pending, setPending] = useState<string | null>(null);
+  // Un rifiuto del server riporta la scelta al negozio attivo.
+  const action = useAction((result) => {
+    if (!result.ok) setActive(freeStore.activeId ?? "");
+  });
+  const name = (id: string | null) => freeStore.stores.find((store) => store.id === id)?.name;
+  const next = new Date(Date.parse(now) + freeStoreChangeDays * 86_400_000).toISOString();
+  return (
+    <Group>
+      <SimpleSelect
+        label={t.stores.chooseFreeStore}
+        hint={
+          freeStore.changeFrom
+            ? copy.freeStoreLocked(formatDate(freeStore.changeFrom, language, "date", zone))
+            : copy.freeStoreHint
+        }
+        items={freeStore.stores.map((store) => ({ value: store.id, label: store.name }))}
+        value={active}
+        disabled={freeStore.changeFrom !== null || action.pending}
+        onChange={(value) => {
+          if (value !== active) setPending(value);
+        }}
+      />
+      <AlertDialog open={pending !== null} onOpenChange={(open) => !open && setPending(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{copy.freeStoreConfirmTitle(name(pending) ?? "")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {copy.freeStoreConfirmBody(
+                name(active) ?? null,
+                formatDate(next, language, "date", zone),
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
+            <AlertDialogClose
+              render={<Button />}
+              onClick={() => {
+                setActive(pending!);
+                action.run("free-store", { store: pending! });
+              }}
+            >
+              {copy.freeStoreConfirm}
+            </AlertDialogClose>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Group>
+  );
+}
+
 /**
  * Il ritorno da Stripe non prova il pagamento: il piano cambia con la conferma. Un pagamento
  * che Stripe non ha ancora confermato resta in attivazione anche senza il ritorno; un rinnovo
@@ -219,7 +304,7 @@ function CheckoutReturn({
 
 export function PlanSection({
   account,
-  stores,
+  freeStore,
   billing,
   billingPortal,
   purchase,
@@ -229,8 +314,9 @@ export function PlanSection({
   language,
 }: {
   account: AccountView;
-  stores: StoreView[];
-  /** Acquisto e negozio attivo del Free dipendono dai pagamenti; la prova no. */
+  /** Negozio attivo del Free; null senza negozi da scegliere. */
+  freeStore: FreeStoreView | null;
+  /** L'acquisto dipende dai pagamenti; prova e negozio attivo no. */
   billing: boolean;
   billingPortal: boolean;
   purchase: PurchaseView;
@@ -240,10 +326,6 @@ export function PlanSection({
   language: Language;
 }) {
   const zone = useTimeZone();
-  const action = useAction();
-  const [downgradeStore, setDowngradeStore] = useState(
-    () => stores.find((store) => store.pauseReason !== "plan")?.id ?? "",
-  );
   // La scelta del negozio attivo compare solo nel Free: in Premium non anticipa il downgrade.
   if (account.plan === "premium") {
     return account.trial ? (
@@ -312,20 +394,8 @@ export function PlanSection({
           t={t}
         />
       </Group>
-      {/* Acquisto e negozio attivo del Free dipendono dai pagamenti. */}
-      {billing && stores.length > 1 ? (
-        <Group>
-          <SimpleSelect
-            label={t.stores.chooseFreeStore}
-            hint={t.settings.plan.freeStoreHint}
-            items={stores.map((store) => ({ value: store.id, label: store.name }))}
-            value={downgradeStore}
-            onChange={(value) => {
-              setDowngradeStore(value);
-              action.run("free-store", { store: value });
-            }}
-          />
-        </Group>
+      {freeStore && freeStore.stores.length > 1 ? (
+        <FreeStoreChoice freeStore={freeStore} now={now} t={t} language={language} />
       ) : null}
       {account.trialAvailable ? <TrialOffer t={t} /> : null}
       <PurchaseOptions billing={billing} purchase={purchase} t={t} language={language} />
