@@ -74,7 +74,12 @@ function TrialPlan({
               trialDaysLeft(trial.endsAt, now),
             )}
           </p>
-          <p className="text-sm text-muted-foreground">{t.settings.plan.trialAfter}</p>
+          {/* Con un abbonamento scelto la prova non riporta al Free: prosegue in Premium. */}
+          <p className="text-sm text-muted-foreground">
+            {payment?.state === "scheduled"
+              ? t.settings.plan.trialAfterChosen
+              : t.settings.plan.trialAfter}
+          </p>
         </div>
       </Group>
       <PurchaseOptions

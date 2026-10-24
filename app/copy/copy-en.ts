@@ -459,6 +459,8 @@ export const en: AppCopy = {
         `Ends on ${date}: ${days ? `${days} ${plural(days, "day", "days")}` : "less than a day"} left.`,
       trialAfter:
         "No charge: when it ends you go back to Free. Orders whose data arrived during the trial stay unlocked.",
+      trialAfterChosen:
+        "When it ends, Premium continues with the first charge. Orders whose data arrived during the trial stay unlocked.",
       buyTitle: "Upgrade to Premium",
       buyBody:
         "No limit on orders to unlock per cycle, more active stores, one year of history, XLSX and Telegram notifications.",

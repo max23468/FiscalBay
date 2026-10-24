@@ -473,6 +473,8 @@ export const it = {
         `Finisce il ${date}: ${days ? `${days} ${plural(days, "giorno rimasto", "giorni rimasti")}` : "meno di un giorno rimasto"}.`,
       trialAfter:
         "Nessun addebito: alla fine torni al Free. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
+      trialAfterChosen:
+        "Alla fine Premium continua con il primo addebito. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
       buyTitle: "Passa a Premium",
       buyBody:
         "Ordini da sbloccare senza limite per ciclo, più negozi attivi, un anno di storico, XLSX e notifiche Telegram.",

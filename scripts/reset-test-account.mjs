@@ -272,8 +272,9 @@ async function main() {
         VALUES ('${id}', '${id}', '${id}', '${expires}', '${now}', '${now}');`);
     }
     // Abbonamenti Stripe negli stati del piano, soltanto in lettura: attivo, con il passaggio
-    // all'annuale programmato al rinnovo, disdetto, pagamento da confermare e rinnovo non
-    // riuscito con il prezzo ancora protetto.
+    // all'annuale programmato al rinnovo, disdetto, pagamento da confermare, rinnovo non
+    // riuscito con il prezzo ancora protetto e scelto durante la prova, con il primo addebito
+    // alla sua fine.
     const period = 30 * day;
     const subscriptions = {
       active: { status: "active", start: -day, cancel: 0, paid: true },
@@ -281,6 +282,7 @@ async function main() {
       cancelled: { status: "active", start: -day, cancel: 1, paid: true },
       pending: { status: "incomplete", start: -day, cancel: 0, paid: false },
       lapsed: { status: "past_due", start: -2 * day, cancel: 0, paid: false },
+      scheduled: { status: "trialing", start: -day, cancel: 0, paid: false, trial: true },
     };
     for (const [state, subscription] of Object.entries(subscriptions)) {
       const id = `subscription-${state}`;
@@ -311,6 +313,10 @@ async function main() {
         statements.push(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at,
           stripe_invoice_id, amount_paid, currency, paid_at)
           VALUES ('${id}', '${id}', 'premium', '${start}', '${end}', 'in_${id}', 598, 'eur', '${start}');`);
+      // La prova dura quanto il periodo `trialing` di Stripe, senza coperture pagate.
+      if (subscription.trial)
+        statements.push(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+          VALUES ('${id}', '${id}', 'trial', '${start}', '${end}');`);
     }
     // Preferenze e campanella: un account per browser e per tentativo, con un negozio da
     // ricollegare. La prova salva tema, fuso e letture: un nuovo tentativo riparte pulito.

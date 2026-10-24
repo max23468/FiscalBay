@@ -2444,6 +2444,15 @@ for (const width of [390, 768, 1440]) {
       await expect(main).toContainText(
         it ? "Fino ad allora non paghi nulla." : "Until then you pay nothing.",
       );
+      // La prova non annuncia più il ritorno al Free.
+      await expect(main).toContainText(
+        it
+          ? "Alla fine Premium continua con il primo addebito."
+          : "When it ends, Premium continues with the first charge.",
+      );
+      await expect(main).not.toContainText(
+        it ? "alla fine torni al Free" : "when it ends you go back to Free",
+      );
       await expect(
         page.getByRole("button", { name: /Scegli (mensile|annuale)|Choose (monthly|annual)/u }),
       ).toHaveCount(0);
@@ -3159,6 +3168,7 @@ test.describe("abbonamento nel piano", () => {
     { account: "cancelled", scenario: "rinnovo-disdetto" },
     { account: "pending", scenario: "pagamento-in-attivazione" },
     { account: "lapsed", scenario: "rinnovo-non-riuscito" },
+    { account: "scheduled", scenario: "prova-con-abbonamento" },
   ] as const;
 
   // Scollegare l'unico negozio con un abbonamento che si rinnova non lo disdice: lo dicono
@@ -3238,6 +3248,12 @@ test.describe("abbonamento nel piano", () => {
           lapsed: {
             title: "Free",
             text: it ? "per mantenere il tuo prezzo" : "to keep your price",
+          },
+          scheduled: {
+            title: it ? "Prova Premium" : "Premium trial",
+            text: it
+              ? "Alla fine Premium continua con il primo addebito."
+              : "When it ends, Premium continues with the first charge.",
           },
         }[account];
         const check = async (target: Page, surface: "real" | "preview") => {
