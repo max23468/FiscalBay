@@ -177,10 +177,17 @@ describe("stato sintetico dell'anteprima", () => {
       const ending = loadScenario("prova-in-scadenza", language, new Set());
       const ended = loadScenario("prova-terminata", language, new Set());
       expect(active.account).toMatchObject({ plan: "premium", trialAvailable: false });
-      expect(trialDaysLeft(active.account.trial!.endsAt, previewNow)).toBe(9);
+      expect(trialDaysLeft(active.account.trial!.endsAt, previewNow)).toBe(8);
       expect(trialEnding(active.account.trial!.endsAt, previewNow)).toBe(false);
-      expect(trialDaysLeft(ending.account.trial!.endsAt, previewNow)).toBe(2);
+      expect(trialDaysLeft(ending.account.trial!.endsAt, previewNow)).toBe(1);
       expect(trialEnding(ending.account.trial!.endsAt, previewNow)).toBe(true);
+      // Come il Checkout di Stripe si contano i giorni interi: l'ultimo è «meno di un giorno».
+      expect(trialDaysLeft("2026-09-28T12:59:59Z", previewNow)).toBe(0);
+      expect(appCopy[language].orders.trialStatus(0)).toBe(
+        language === "it"
+          ? "Prova Premium: meno di un giorno rimasto"
+          : "Premium trial: less than a day left",
+      );
       // Durante la prova nessun ordine resta da sbloccare.
       expect(active.orders.some((order) => order.fiscal.state === "locked")).toBe(false);
       expect(active.diagnostics.rights).toBe(language === "it" ? "Prova Premium" : "Premium trial");

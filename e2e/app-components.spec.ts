@@ -3066,7 +3066,7 @@ test.describe("prova Premium", () => {
           .filter({ hasText: it ? "Prova Premium attivata." : "Premium trial started." }),
       ).toBeVisible();
       await expect(
-        page.getByText(it ? "Prova Premium: 14 giorni rimasti" : "Premium trial: 14 days left"),
+        page.getByText(it ? "Prova Premium: 13 giorni rimasti" : "Premium trial: 13 days left"),
       ).toBeVisible();
       // Con la prova il dato è leggibile senza sblocco e senza consumare la quota.
       await expect(page.getByText(secret, { exact: true }).first()).toBeVisible();
@@ -3083,7 +3083,7 @@ test.describe("prova Premium", () => {
       await expect(
         plan.getByText(it ? "Prova Premium" : "Premium trial", { exact: true }),
       ).toBeVisible();
-      await expect(plan.getByText(it ? /14 giorni rimasti/u : /14 days left/u)).toBeVisible();
+      await expect(plan.getByText(it ? /13 giorni rimasti/u : /13 days left/u)).toBeVisible();
       await expect(
         plan.getByRole("button", { name: it ? "Attiva la prova" : "Start trial" }),
       ).toHaveCount(0);

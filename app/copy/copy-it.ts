@@ -241,7 +241,7 @@ export const it = {
     quotaAction: "Passa a Premium",
     trialOffer: "Prova Premium gratis per 14 giorni, senza carta.",
     trialStatus: (days: number) =>
-      `Prova Premium: ${days} ${plural(days, "giorno rimasto", "giorni rimasti")}`,
+      `Prova Premium: ${days ? `${days} ${plural(days, "giorno rimasto", "giorni rimasti")}` : "meno di un giorno rimasto"}`,
     trialEndingTitle: (date: string) => `La prova Premium finisce il ${date}`,
     trialEndingBody:
       "Poi i Codici Fiscali dei nuovi ordini tornano agli sblocchi del Free. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
@@ -467,7 +467,7 @@ export const it = {
       trialUnavailable: "La prova Premium non è disponibile per questo account.",
       trialPlan: "Prova Premium",
       trialEnds: (date: string, days: number) =>
-        `Finisce il ${date}: ${days} ${plural(days, "giorno rimasto", "giorni rimasti")}.`,
+        `Finisce il ${date}: ${days ? `${days} ${plural(days, "giorno rimasto", "giorni rimasti")}` : "meno di un giorno rimasto"}.`,
       trialAfter:
         "Nessun addebito: alla fine torni al Free. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
       buyTitle: "Passa a Premium",
