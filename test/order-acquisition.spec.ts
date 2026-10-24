@@ -1032,9 +1032,12 @@ describe("acquisizione con il client", () => {
       lastModifiedDate: "2026-09-02T00:30:00.000Z",
     }));
     const partial = ebay({ orders: recent });
+    // Anche con il profilo del negozio da rileggere, recenti incompleti non lo leggono.
+    await env.DB.prepare("UPDATE ebay_stores SET store_profile_read_at = NULL").run();
     expect(await acquire(partial, "2026-09-02T01:00:00.000Z", { calls: 1, pages: 1 })).toBe(
       "budget",
     );
+    expect(partial).toHaveBeenCalledTimes(1);
     expect(await syncState()).toMatchObject({
       last_success_at: "2026-09-02T00:00:00.000Z",
       recent_next: expect.stringContaining("offset=25"),

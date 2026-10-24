@@ -1993,6 +1993,37 @@ describe("vista condivisa e criteri degli ordini", () => {
     updated: false,
   };
 
+  it("collega l'inserzione soltanto da un'identità di riga che inizia con il suo ID", () => {
+    const listing = (stableKey: string | null) =>
+      view({
+        summary: {
+          ...base.summary,
+          lineItems: [
+            {
+              lineItemId: "riga",
+              title: "Articolo",
+              quantity: 1,
+              sku: null,
+              totalMinor: null,
+              currency: null,
+              imageUrl: null,
+              stableKey,
+            },
+          ],
+        },
+      }).items[0]!.listingId;
+    expect(listing("110000000099-9001")).toBe("110000000099");
+    expect(listing("123456-1")).toBe("123456");
+    expect(listing("1234567890123456789-1")).toBe("1234567890123456789");
+    // Troppe o troppo poche cifre, un prefisso estraneo o il trattino mancante non sono un ID.
+    expect(listing("12345-1")).toBeNull();
+    expect(listing("12345678901234567890-1")).toBeNull();
+    expect(listing("x110000000099-1")).toBeNull();
+    expect(listing("110000000099")).toBeNull();
+    expect(listing("11000a000099-1")).toBeNull();
+    expect(listing(null)).toBeNull();
+  });
+
   it("riporta la condizione dell'ultima lettura accanto a un valore disponibile", () => {
     const available = (
       taxVerification: VisibleOrder["taxVerification"],

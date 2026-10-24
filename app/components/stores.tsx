@@ -118,7 +118,6 @@ function StoreTile({ store, size = "md" }: { store: StoreView; size?: "md" | "lg
       alt=""
       width={size === "lg" ? 44 : 36}
       height={size === "lg" ? 44 : 36}
-      loading="lazy"
       referrerPolicy="no-referrer"
       onError={() => setFailed(store.logoUrl!)}
       className={cn(

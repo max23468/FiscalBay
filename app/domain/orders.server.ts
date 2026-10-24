@@ -652,7 +652,7 @@ function locality(address: NonNullable<BuyerSnapshot["shipTo"]>["address"]) {
  */
 /** ID dell'inserzione eBay in testa all'identità stabile della riga (`<inserzione>-<riga>`). */
 function listingId(stableKey: string | null): string | null {
-  return /^(\d{6,19})-/u.exec(stableKey ?? "")?.[1] ?? null;
+  return stableKey?.match(/^(\d{6,19})-/u)?.[1] ?? null;
 }
 
 export function orderView(order: VisibleOrder): OrderView {
