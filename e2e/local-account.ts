@@ -38,6 +38,8 @@ export async function useLocalAccount(
   baseURL: string,
   token?: string,
 ) {
+  if (process.env.E2E_BASE_URL)
+    throw new Error("Sessione sintetica soltanto in locale: la prova non vale sul dominio remoto.");
   const cookie = localCookie(role, baseURL, token);
   await context.addCookies([cookie]);
   const origin = new URL(baseURL).origin;
