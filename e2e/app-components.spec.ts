@@ -828,9 +828,14 @@ test.describe("miglioramenti account e negozi", () => {
     baseURL,
     browserName,
     pageErrors: errors,
-  }) => {
+  }, testInfo) => {
     test.setTimeout(60_000);
-    await useLocalAccount(context, "member", baseURL!, `preferences-${browserName}`);
+    await useLocalAccount(
+      context,
+      "member",
+      baseURL!,
+      `preferences-${browserName}-${testInfo.retry}`,
+    );
     await page.goto("/app/impostazioni/aspetto");
     await page.waitForLoadState("networkidle");
     // Le categorie dei servizi non ancora disponibili non compaiono.
@@ -843,6 +848,14 @@ test.describe("miglioramenti account e negozi", () => {
         (response) =>
           response.request().method() === "POST" && response.url().includes("/app/impostazioni"),
       );
+    // Dopo un salvataggio la pagina rilegge i propri dati: una ricarica che la interrompe fa
+    // segnalare a WebKit la lettura annullata come errore della pagina.
+    const reread = () =>
+      page.waitForResponse(
+        (response) =>
+          response.request().method() === "GET" &&
+          new URL(response.url()).pathname.endsWith("/app/impostazioni/aspetto.data"),
+      );
     let save = saved();
     await page.getByRole("radio", { name: "Scuro", exact: true }).check();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -850,8 +863,10 @@ test.describe("miglioramenti account e negozi", () => {
     const zone = page.getByRole("combobox", { name: "Fuso orario" });
     await zone.click();
     save = saved();
+    let settled = reread();
     await page.getByRole("option", { name: "New York (Stati Uniti)" }).click();
     expect((await save).status()).toBe(200);
+    await settled;
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await expect(zone).toContainText("New York (Stati Uniti)");
@@ -865,8 +880,10 @@ test.describe("miglioramenti account e negozi", () => {
     await leave.getByRole("button", { name: "Continua a modificare" }).click();
     await expect(page).toHaveURL(/\/app\/impostazioni\/aspetto$/u);
     const templateSection = page.locator('section[aria-labelledby="settings-messaggio"]');
+    settled = reread();
     await templateSection.getByRole("button", { name: "Salva", exact: true }).click();
     await expect(templateSection.getByText("Salvato", { exact: true })).toBeVisible();
+    await settled;
     await page.reload();
     await expect(template).toHaveValue("Ciao, per l'ordine {ordine} ci serve il Codice Fiscale.");
     // Il valore arriva già dal server: un clic sulla campanella prima dell'idratazione andrebbe perso.
@@ -2287,28 +2304,6 @@ for (const width of [390, 768, 1440]) {
       await expect(
         page.getByRole("button", { name: /Scegli mensile|Choose monthly/u }),
       ).toHaveCount(0);
-      // Durante la prova si paga subito e il primo rinnovo segue i giorni residui della prova.
-      await open(page, `${prefix}/anteprima/impostazioni/piano`, "prova-premium");
-      const main = page.locator("main");
-      await expect(main).toContainText(it ? "Prova Premium" : "Premium trial");
-      await expect(main).toContainText(it ? "non perdi i giorni di prova" : "keep your trial days");
-      await expect(main).toContainText(
-        it ? /Primo rinnovo il .*2026\./u : /First renewal on .*2026\./u,
-      );
-      await expect(main).toContainText(
-        it ? /Primo rinnovo il .*2027\./u : /First renewal on .*2027\./u,
-      );
-      await expect(
-        page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }),
-      ).toBeVisible();
-      await page.screenshot({ path: testInfo.outputPath(`trial-purchase-${locale}.png`) });
-      // Il ritorno da Stripe resta visibile anche con la prova in corso.
-      await page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }).click();
-      await expect(page).toHaveURL(/\?checkout=processing$/u);
-      await expect(main).toContainText(it ? "Prova Premium" : "Premium trial");
-      await expect(
-        page.getByText(it ? "Attivazione Premium in corso" : "Activating Premium"),
-      ).toBeVisible();
       await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium-a-vita");
       const documents = page.getByRole("button", {
         name: it ? "Consulta ricevute e fatture su Stripe" : "View receipts and invoices on Stripe",
@@ -2381,6 +2376,39 @@ for (const width of [390, 768, 1440]) {
         path: testInfo.outputPath(`profile-${locale}.png`),
         fullPage: true,
       });
+    }
+  });
+
+  // Durante la prova si paga subito e il primo rinnovo segue i giorni residui della prova.
+  test(`piano durante la prova: acquisto con il primo rinnovo a ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: width === 1440 ? 720 : 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    for (const locale of ["en", "it"] as const) {
+      const it = locale === "it";
+      const prefix = it ? "" : "/en";
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "prova-premium");
+      const main = page.locator("main");
+      await expect(main).toContainText(it ? "Prova Premium" : "Premium trial");
+      await expect(main).toContainText(it ? "non perdi i giorni di prova" : "keep your trial days");
+      await expect(main).toContainText(
+        it ? /Primo rinnovo il .*2026\./u : /First renewal on .*2026\./u,
+      );
+      await expect(main).toContainText(
+        it ? /Primo rinnovo il .*2027\./u : /First renewal on .*2027\./u,
+      );
+      await expect(
+        page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }),
+      ).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`trial-purchase-${locale}.png`) });
+      // Il ritorno da Stripe resta visibile anche con la prova in corso.
+      await page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }).click();
+      await expect(page).toHaveURL(/\?checkout=processing$/u);
+      await expect(main).toContainText(it ? "Prova Premium" : "Premium trial");
+      await expect(
+        page.getByText(it ? "Attivazione Premium in corso" : "Activating Premium"),
+      ).toBeVisible();
     }
   });
 }
