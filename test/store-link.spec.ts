@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { parseTradingOrderTaxIdentifiers } from "../app/integrations/ebay/trading.server";
+import { readTradingTaxObservation } from "../app/integrations/ebay/trading.server";
 import { acquireOrders } from "../app/domain/order-acquisition.server";
 import { storeProfileRefreshMilliseconds } from "../app/domain/store-profile.server";
 import { listVisibleOrders, orderView } from "../app/domain/orders.server";
@@ -370,13 +370,28 @@ describe("collegamento negozio eBay", () => {
     ).toBe(403);
   });
 
-  it("legge l'osservazione fiscale Trading del solo ordine richiesto", () => {
-    expect(parseTradingOrderTaxIdentifiers(syntheticTradingXml, syntheticOrderId)).toEqual([
-      { id: "SYNTHETIC&ID", type: "CODICE_FISCALE", attributes: [] },
-    ]);
-    expect(() =>
-      parseTradingOrderTaxIdentifiers("<GetOrdersResponse><Ack>Failure</Ack>", syntheticOrderId),
-    ).toThrow(UpstreamError);
+  it("legge l'osservazione fiscale Trading del solo ordine richiesto", async () => {
+    const read = (xml: string) =>
+      readTradingTaxObservation(
+        {
+          fetcher: async () => new Response(xml),
+          accessToken: "token-sintetico",
+          configuration: ebayConfiguration(env, "production"),
+        },
+        syntheticOrderId,
+      );
+    expect(await read(syntheticTradingXml)).toEqual({
+      orderFound: true,
+      values: [
+        {
+          type: "CODICE_FISCALE",
+          issuingCountry: null,
+          value: "SYNTHETIC&ID",
+          source: "ebay_trading_get_orders",
+        },
+      ],
+    });
+    await expect(read("<GetOrdersResponse><Ack>Failure</Ack>")).rejects.toThrow(UpstreamError);
   });
 
   it("dà allo spazio creato al collegamento il nome nella lingua dell'utente", async () => {
