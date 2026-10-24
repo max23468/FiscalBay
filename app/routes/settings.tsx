@@ -5,7 +5,7 @@ import { AccountShell } from "~/components/account";
 import { NotFoundState } from "~/components/not-found";
 import { SettingsPage, type SettingsPageData } from "~/components/settings";
 import { accessNotice } from "../access-notice";
-import { assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
+import { areaPage, assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
 import { appCopy } from "../app-copy";
 import { appBase, type AppLinks } from "../app-links";
 import { pendingEmailChange } from "../domain/email-change.server";
@@ -62,11 +62,15 @@ export function headers(): HeadersInit {
   return { "cache-control": "no-store" };
 }
 
+export function loader(args: Route.LoaderArgs) {
+  return areaPage(args.request, () => readSettings(args));
+}
+
 /**
  * Impostazioni dell'account, per chi ha confermato l'email: ogni preferenza viene dalla sua
  * fonte salvata, Sicurezza dai metodi di accesso e dalle sessioni reali.
  */
-export async function loader({ request, params }: Route.LoaderArgs) {
+async function readSettings({ request, params }: Route.LoaderArgs) {
   const area = await requireAccountArea(request);
   const { language, session, account, profile, preferences } = area;
   if (params.sezione !== undefined && !isSection(params.sezione)) {

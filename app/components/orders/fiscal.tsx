@@ -31,6 +31,7 @@ import { Spinner } from "~/components/ui/spinner";
 import { Textarea } from "~/components/ui/textarea";
 import { cn } from "cn";
 import { appCopy, type AppCopy } from "../../app-copy";
+import { mailtoHref } from "../../contact";
 import { languages, languageNames, type Language } from "../../i18n";
 import { displayTaxValue } from "../../tax-quality";
 import {
@@ -589,7 +590,7 @@ export function MissingOrderHelp({
       </Button>
       {email && !email.relay && message.trim() ? (
         <a
-          href={`mailto:${email.address}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`}
+          href={mailtoHref(email.address, { subject, body: message })}
           data-slot="button"
           className={cn(
             buttonVariants({ variant: "outline" }),

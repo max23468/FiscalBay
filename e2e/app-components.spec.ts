@@ -868,6 +868,11 @@ test.describe("miglioramenti account e negozi", () => {
     await bell.click();
     const dialog = page.getByRole("dialog", { name: "Notifiche" });
     await expect(dialog).toContainText("Negozio preferenze: la sincronizzazione è sospesa.");
+    // Una lettura che il server non registra torna da leggere.
+    await page.route("**/api/v1/notifications", (route) => route.fulfill({ status: 503 }));
+    await dialog.getByRole("button", { name: "Segna tutte come lette" }).click();
+    await expect(page.getByRole("button", { name: "Notifiche, 1 da leggere" })).toBeVisible();
+    await page.unroute("**/api/v1/notifications");
     const read = page.waitForResponse((response) =>
       response.url().endsWith("/api/v1/notifications"),
     );

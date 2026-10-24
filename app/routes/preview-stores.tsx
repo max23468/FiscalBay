@@ -27,7 +27,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     detail,
     account: scenario.account,
     now: scenario.now,
-    ebayDown: scenario.ebayDown,
+    ebayDown: scenario.ebayDown ? ["production"] : [],
     elsewhere: scenario.elsewhere,
     settings: true,
   };

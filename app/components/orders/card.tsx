@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import type { AppCopy } from "../../app-copy";
+import { mailtoHref } from "../../contact";
 import { formatAmount, type Language } from "../../i18n";
 import {
   addressRows,
@@ -149,7 +150,7 @@ export function EmailLink({
   return (
     <span className="inline-flex max-w-full flex-wrap items-center gap-1">
       <a
-        href={`mailto:${view.address}`}
+        href={mailtoHref(view.address)}
         className="group/email min-w-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {/* Le parti in blocco non ereditano la sottolineatura del collegamento. */}

@@ -58,6 +58,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     search,
     query,
     scenario.now,
+    scenario.account.plan,
     (next) => `${localizedPath(language, "/anteprima/ordini")}?${next.toString()}`,
   );
   const detail = params.ordine

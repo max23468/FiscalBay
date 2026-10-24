@@ -11,7 +11,7 @@ import { accessPath, appBase, ordersPath, storeLinkPath } from "../app-links";
 import { appCopy } from "../app-copy";
 import { createAuth } from "../auth.server";
 import { registrationComplete, registrationStatus } from "../domain/registration.server";
-import { listStores } from "../domain/stores.server";
+import { ebayOutages, listStores } from "../domain/stores.server";
 import { errorResponse } from "../error-response";
 import { tracePhase } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
@@ -122,13 +122,20 @@ export async function action({ request }: Route.ActionArgs) {
   }
   const expectedStoreId = String(form.get("negozio") ?? "");
   const fromStores = form.get("da") === "negozi";
-  if (
-    expectedStoreId &&
-    !(await listStores(env.DB, status.userId)).some(
-      (store) => store.id === expectedStoreId && store.ebayEnvironment === ebayEnvironment,
+  if (expectedStoreId) {
+    const stores = await listStores(env.DB, status.userId);
+    if (
+      !stores.some(
+        (store) => store.id === expectedStoreId && store.ebayEnvironment === ebayEnvironment,
+      )
     )
-  )
-    return errorResponse(request, "INVALID_REQUEST");
+      return errorResponse(request, "INVALID_REQUEST");
+    // Come in Ordini e Negozi, con eBay che non risponde il ricollegamento resta sospeso.
+    if (ebayOutages(stores).has(ebayEnvironment)) {
+      const back = fromStores ? localizedPath(language, `${appBase}/negozi`) : base;
+      return redirect(`${back}?negozio=ebay-non-risponde`, { status: 303, ...noStore });
+    }
+  }
   return redirect(
     await startStoreLink(
       env,

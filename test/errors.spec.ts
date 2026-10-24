@@ -277,6 +277,23 @@ describe("misure delle fasi e del browser", () => {
     expect((await timing(JSON.stringify({ ...valid, padding: "x".repeat(2_000) }))).status).toBe(
       413,
     );
+    // Anche un invio a blocchi, senza lunghezza dichiarata, si ferma al limite.
+    const chunked = new ReadableStream({
+      start(controller) {
+        for (let index = 0; index < 4; index++) controller.enqueue(new Uint8Array(400));
+        controller.close();
+      },
+    });
+    const streamed = new Request("http://localhost:5173/api/v1/page-timing", {
+      method: "POST",
+      headers: { origin: "http://localhost:5173" },
+      body: chunked,
+      duplex: "half",
+    } as RequestInit);
+    expect(streamed.headers.get("content-length")).toBeNull();
+    expect(
+      (await pageTiming({ request: streamed } as Parameters<typeof pageTiming>[0])).status,
+    ).toBe(413);
     expect((await timing("")).status).toBe(204);
     expect(log).not.toHaveBeenCalled();
     log.mockRestore();

@@ -45,6 +45,7 @@ import { localizedPath, type Language } from "../i18n";
 import { maxSearchLength, minSuggestionLength } from "../orders/order-search";
 import {
   formatRelative,
+  maxReadNotifications,
   type AccountView,
   type ActionResult,
   type NotificationView,
@@ -646,10 +647,24 @@ function NotificationsMenu({
     if (ids.length === 0) return;
     setReadIds((current) => new Set([...current, ...ids]));
     if (!readAction) return;
-    const body = new FormData();
-    body.set("ids", ids.join(","));
-    // Nessuna nuova lettura della pagina; `keepalive` regge l'apertura della notifica.
-    void fetch(readAction, { method: "POST", body, keepalive: true }).catch(() => {});
+    // Nessuna nuova lettura della pagina; `keepalive` regge l'apertura della notifica. Una
+    // lettura che il server non registra torna da leggere, invece di sembrare riuscita.
+    for (let start = 0; start < ids.length; start += maxReadNotifications) {
+      const chunk = ids.slice(start, start + maxReadNotifications);
+      const body = new FormData();
+      body.set("ids", chunk.join(","));
+      void fetch(readAction, { method: "POST", body, keepalive: true })
+        .then((response) => response.ok)
+        .catch(() => false)
+        .then((saved) => {
+          if (saved) return;
+          setReadIds((current) => {
+            const next = new Set(current);
+            for (const id of chunk) next.delete(id);
+            return next;
+          });
+        });
+    }
   };
   return (
     <Popover open={open} onOpenChange={setOpen}>

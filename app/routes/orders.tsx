@@ -7,6 +7,7 @@ import { NotFoundState } from "~/components/not-found";
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
 import { accessNotice } from "../access-notice";
 import {
+  areaPage,
   assertSameOrigin,
   requestedEbayEnvironment,
   requireAccountArea,
@@ -70,13 +71,17 @@ function verifying(order: OrderView) {
   );
 }
 
+export function loader(args: Route.LoaderArgs) {
+  return areaPage(args.request, () => readOrders(args));
+}
+
 /**
  * Ordini persistiti e autorizzati dello spazio, senza attendere eBay: sessione, diritti e
  * conservazione sono verificati qui, prima della risposta. Gli ordini ancora in verifica
  * compaiono con l'ultimo stato salvato e lo sblocco sospeso; il loro stato confermato arriva
  * nella stessa risposta, entro l'attesa dello streaming.
  */
-export async function loader({ request, params }: Route.LoaderArgs) {
+async function readOrders({ request, params }: Route.LoaderArgs) {
   const area = await requireAccountArea(request, { unverified: true });
   const { language, session, account, preferences } = area;
   const search = new URL(request.url).searchParams;
@@ -117,7 +122,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // Senza istantanea l'elenco si apre adesso e non ha ancora nuovi ordini.
   const opened = snapshotInstant(query.get(snapshotParam));
   const snapshot = new Date(Math.min(opened?.getTime() ?? now.getTime(), now.getTime()));
-  const filters = orderCriteria(query, now, premium ? "premium" : "free", searchText);
+  const parsed = orderCriteria(query, now, premium ? "premium" : "free", searchText);
+  // Come gli altri filtri, un negozio che non è fra quelli filtrabili vale come «Tutti».
+  const filters = filterStores.some((store) => store.id === parsed.storeId)
+    ? parsed
+    : { ...parsed, storeId: undefined };
   const criteria = { ...filters, listedBefore: snapshot.toISOString() };
   // Con «Non pagato» anche dettaglio e conferma leggono gli acquisti non pagati (D180).
   const provisional = criteria.payment === "unpaid";
@@ -143,15 +152,23 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           countVisibleOrders(env.DB, userId, ebayEnvironment, now, counted),
         )
       : 0;
+  const arrived = { ...filters, listedAfter: snapshot.toISOString() };
   const [orders, total, incoming, facets, detailOrders] = await Promise.all([
     verified ? read() : [],
     count(criteria),
-    opened ? count({ ...filters, listedAfter: snapshot.toISOString() }) : 0,
+    opened ? count(arrived) : 0,
     verified
       ? measure("d1", "orders", () => visibleOrderFacets(env.DB, userId, ebayEnvironment, now))
       : { total: 0, locked: false },
     verified && requested ? read([requested]) : [],
   ]);
+  // Entrano da soli soltanto i nuovi ordini che stanno tutti sopra il primo mostrato: uno
+  // recuperato dallo storico si inserirebbe fra quelli già letti e resta all'indicatore.
+  const top = orders[0];
+  const incomingAtTop =
+    incoming > 0 &&
+    (!top ||
+      (await count({ ...arrived, after: { creationTime: top.createdAt, id: top.id } })) === 0);
   const notice = accessNotice(search, language);
   const detail = detailOrders[0] ?? null;
   // Un ordine inesistente, scaduto o di un altro spazio risponde allo stesso modo.
@@ -187,6 +204,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     limited: more && shown * ordersPageSize >= maxListedOrders,
     incoming,
     freshHref: incoming > 0 ? `${path}${fresh.size ? `?${fresh}` : ""}` : null,
+    incomingAtTop,
   };
   const cycle = allowance?.cycle ?? null;
   const outage = ebayOutage(environmentStores);
@@ -238,11 +256,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         ]
       : []),
   ];
-  const lastSync = environmentStores
-    .map((store) => store.lastSyncAt)
-    .filter((at): at is string => at !== null)
-    .sort()
-    .at(-1);
+  // Ultima lettura riuscita fra i negozi collegati: un negozio scollegato non conta per i
+  // primi passi, e lo stato vuoto nomina il negozio letto per ultimo con il suo orario.
+  const latest =
+    linked
+      .filter((store) => store.lastSyncAt !== null)
+      .sort((a, b) => a.lastSyncAt!.localeCompare(b.lastSyncAt!))
+      .at(-1) ?? linked[0];
+  const lastSync = latest?.lastSyncAt ?? undefined;
   const pageData: OrdersPageData = {
     view: facets.total > 0 ? "list" : linked.length > 0 ? "empty" : "no-store",
     ...page,
@@ -260,10 +281,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     sync: {
       running: environmentStores.some((store) => store.syncing),
       lastAt: lastSync ?? null,
-      storeId: linked[0]?.id ?? null,
-      storeName: linked[0]?.name ?? null,
+      storeId: latest?.id ?? null,
+      storeName: latest?.name ?? null,
       // Periodo letto dal primo avvio; prima vale quello che la lettura userà.
-      historyDays: linked[0]?.history?.days ?? historyDays,
+      historyDays: latest?.history?.days ?? historyDays,
     },
     onboarding: [
       { label: "stepAccount", done: true },

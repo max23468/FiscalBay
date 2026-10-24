@@ -77,7 +77,8 @@ export interface StoresPageData {
   detail: StoreView | null;
   account: Pick<AccountView, "plan">;
   now: string;
-  ebayDown: boolean;
+  /** Ambienti in cui eBay non risponde: le azioni che lo chiamano restano sospese. */
+  ebayDown: Array<"production" | "sandbox">;
   elsewhere: boolean;
   /**
    * Schermata preparatoria del collegamento. Nell'area reale collegare e ricollegare la aprono;
@@ -490,6 +491,11 @@ function ReconnectButton({
   );
 }
 
+/** eBay non risponde nell'ambiente del negozio. */
+function ebayDownFor(data: StoresPageData, store: StoreView) {
+  return data.ebayDown.includes(store.sandbox ? "sandbox" : "production");
+}
+
 function syncDescription(store: StoreView, ebayDown: boolean, t: AppCopy) {
   if (store.connection === "disconnected") {
     return t.stores.disconnectedHint;
@@ -529,7 +535,7 @@ function StoreDetail({
             ) : null}
             <ReconnectButton
               store={store}
-              ebayDown={data.ebayDown}
+              ebayDown={ebayDownFor(data, store)}
               connectHref={data.connectHref}
               t={t}
               inAlert
@@ -547,7 +553,7 @@ function StoreDetail({
             )}
             <ReconnectButton
               store={store}
-              ebayDown={data.ebayDown}
+              ebayDown={ebayDownFor(data, store)}
               connectHref={data.connectHref}
               t={t}
               inAlert
@@ -555,14 +561,14 @@ function StoreDetail({
           </span>
         </StatusAlert>
       ) : null}
-      {data.ebayDown ? <StatusAlert tone="warning" title={t.stores.ebayDown} /> : null}
+      {ebayDownFor(data, store) ? <StatusAlert tone="warning" title={t.stores.ebayDown} /> : null}
       <ConnectionSection store={store} now={data.now} t={t} language={links.language} />
       <SyncSection store={store} data={data} t={t} language={links.language} />
       <RecentSection store={store} t={t} language={links.language} />
       <NotificationsSection store={store} settings={data.settings} t={t} links={links} />
       <StoreActions
         store={store}
-        ebayDown={data.ebayDown}
+        ebayDown={ebayDownFor(data, store)}
         connectHref={data.connectHref}
         t={t}
         links={links}
@@ -667,7 +673,9 @@ function SyncSection({ store, data, t, language }: SectionProps & { data: Stores
         <li>
           <LastSync store={store} t={t} now={data.now} language={language} slot={false} />
         </li>
-        <li className="text-muted-foreground">{syncDescription(store, data.ebayDown, t)}</li>
+        <li className="text-muted-foreground">
+          {syncDescription(store, ebayDownFor(data, store), t)}
+        </li>
         {store.historyDays === null ? null : !store.importing && store.lastSyncAt ? (
           <li className="text-muted-foreground">{t.stores.importDone(store.historyDays)}</li>
         ) : (
@@ -799,7 +807,7 @@ export function StoresPage({
           </a>
         </StatusAlert>
       ) : null}
-      {data.ebayDown ? <StatusAlert tone="warning" title={t.stores.ebayDown} /> : null}
+      {data.ebayDown.length > 0 ? <StatusAlert tone="warning" title={t.stores.ebayDown} /> : null}
       {data.stores.length === 0 ? (
         <EmptyState
           title={t.orders.firstUseTitle}
@@ -834,12 +842,7 @@ function StoreSheet({ data, t, links }: { data: StoresPageData; t: AppCopy; link
       }}
     >
       {shownDetail ? (
-        <SheetContent
-          ref={panel}
-          initialFocus={panel}
-          closeLabel={t.shell.close}
-          className="sm:max-w-lg"
-        >
+        <SheetContent ref={panel} initialFocus={panel} closeLabel={t.shell.close}>
           <SheetHeader className="flex-row items-center gap-3">
             <StoreTile store={shownDetail} size="lg" />
             <span className="grid min-w-0 gap-1">
@@ -879,7 +882,7 @@ function ConnectButton({
   onElsewhere: () => void;
 }) {
   const action = useAction();
-  if (data.connectHref && !data.ebayDown) {
+  if (data.connectHref && !data.ebayDown.includes("production")) {
     return (
       <Link
         to={connectFromStores(data.connectHref)}
@@ -893,7 +896,7 @@ function ConnectButton({
   }
   return (
     <Button
-      disabled={data.ebayDown}
+      disabled={data.ebayDown.includes("production")}
       onClick={() => (data.elsewhere ? onElsewhere() : action.run("store-connect"))}
     >
       <Plus aria-hidden="true" data-icon="inline-start" />

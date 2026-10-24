@@ -2,7 +2,7 @@ import { appCopy } from "../app-copy";
 import type { Language } from "../i18n";
 import { formatDate, type NotificationView } from "../view-models";
 import { notificationWindowMilliseconds } from "./notification-reads.server";
-import { ebayOutage, readsFailing, type StoreStatus } from "./stores.server";
+import { ebayOutages, readsFailing, type StoreStatus } from "./stores.server";
 
 /**
  * Notifiche della campanella, derivate dallo stato corrente: un problema risolto esce dalla
@@ -42,23 +42,26 @@ export async function listNotifications(
       },
     ];
   };
-  // Le letture ferme in tutti i negozi attivi sono un solo problema di eBay, non uno per negozio.
-  // Ogni problema resta lo stesso fino alla prossima lettura riuscita e parte dalla prima delle
-  // due letture fallite che lo segnalano.
-  const outage = ebayOutage(stores);
+  // Le letture ferme in tutti i negozi attivi di un ambiente sono un solo problema di eBay, non
+  // uno per negozio. Ogni problema resta lo stesso fino alla prossima lettura riuscita e parte
+  // dalla prima delle due letture fallite che lo segnalano.
+  const outages = ebayOutages(stores);
   const failing = stores.filter(readsFailing);
-  const reads: NotificationView[] = outage
-    ? [
-        {
-          id: `ebay-down:${outage.lastSyncAt ?? "never"}`,
-          tone: "warning",
-          title: t.ebayDownTitle,
-          body: t.ebayDownBody,
-          at: failing.map((store) => store.recent[1]!.at).sort()[0]!,
-          read: false,
-        },
-      ]
-    : failing.map((store): NotificationView => ({
+  const reads: NotificationView[] = [
+    ...[...outages].map(([environment, outage]): NotificationView => ({
+      id: `ebay-down:${environment === "sandbox" ? "sandbox:" : ""}${outage.lastSyncAt ?? "never"}`,
+      tone: "warning",
+      title: t.ebayDownTitle,
+      body: t.ebayDownBody,
+      at: failing
+        .filter((store) => store.ebayEnvironment === environment)
+        .map((store) => store.recent[1]!.at)
+        .sort()[0]!,
+      read: false,
+    })),
+    ...failing
+      .filter((store) => !outages.has(store.ebayEnvironment))
+      .map((store): NotificationView => ({
         id: `store-read-failed:${store.id}:${store.lastSyncAt ?? "never"}`,
         tone: "warning",
         title: t.readFailedTitle,
@@ -66,8 +69,14 @@ export async function listNotifications(
         at: store.recent[1]!.at,
         read: false,
         href: `negozi/${encodeURIComponent(store.id)}`,
-      }));
-  const items = [...stores.flatMap(reminder), ...reads];
+      })),
+  ];
+  // Come i promemoria, un problema delle letture compare soltanto negli ultimi trenta giorni:
+  // oltre, la sua lettura non è più conservata e resta l'avviso di Ordini e Negozi.
+  const items = [
+    ...stores.flatMap(reminder),
+    ...reads.filter((item) => Date.parse(item.at) >= since),
+  ];
   if (items.length === 0) return [];
   const { results } = await db
     .prepare(

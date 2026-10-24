@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 
+import { readBounded } from "../integrations/http.server";
 import { maxTimingMs, serverPhases, timedPages } from "../page-timing";
 import type { Route } from "./+types/page-timing";
 
@@ -32,10 +33,10 @@ export function loader() {
 export async function action({ request }: Route.ActionArgs) {
   if (request.headers.get("origin") !== new URL(env.APP_ORIGIN).origin)
     return new Response(null, { status: 403 });
-  const length = Number(request.headers.get("content-length"));
-  if (!Number.isFinite(length) || length > maxBytes) return new Response(null, { status: 413 });
-  const text = await request.text();
-  if (text.length > maxBytes) return new Response(null, { status: 413 });
+  // Il limite vale anche per un invio a blocchi, senza lunghezza dichiarata.
+  const body = await readBounded(request, maxBytes);
+  if (!body) return new Response(null, { status: 413 });
+  const text = new TextDecoder().decode(body);
   // Un invio senza contenuto (per esempio partito mentre la pagina si chiude) non ha misure.
   if (!text) return new Response(null, { status: 204 });
   let parsed;

@@ -1,6 +1,7 @@
 import type { AppCopy } from "../../app-copy";
 import { buyerNameView } from "../../contact";
 import type { Language } from "../../i18n";
+import { displayTaxValue } from "../../tax-quality";
 import {
   addressRows,
   type AccountView,
@@ -8,7 +9,10 @@ import {
   type TaxIdentifierView,
 } from "../../view-models";
 
-/** Solo valori già autorizzati dal server; suggerimenti e identificativi bloccati esclusi. */
+/**
+ * Solo valori già autorizzati dal server; suggerimenti e identificativi bloccati esclusi.
+ * CF e Partita IVA italiani nella forma mostrata nel riquadro fiscale.
+ */
 export function billingCopyText(order: OrderView, language: Language, t: AppCopy): string {
   const name = order.maskedContacts?.includes("name") ? null : buyerNameView(order.buyerName);
   const address = order.contacts.billingAddress
@@ -20,7 +24,8 @@ export function billingCopyText(order: OrderView, language: Language, t: AppCopy
           .filter((identifier) => identifier.value.trim())
           .map((identifier) => {
             const label = identifierLabel(identifier, t);
-            return label ? `${label}: ${identifier.value}` : identifier.value;
+            const value = displayTaxValue(identifier);
+            return label ? `${label}: ${value}` : value;
           })
       : [];
   return [name, ...address, ...identifiers].filter(Boolean).join("\n");

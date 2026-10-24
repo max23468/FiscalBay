@@ -79,6 +79,18 @@ export function ebayOutage(stores: StoreStatus[]): { lastSyncAt: string | null }
   return { lastSyncAt: synced.sort().at(-1) ?? null };
 }
 
+/** Indisponibilità di eBay per ambiente: Production e Sandbox rispondono ciascuno per sé. */
+export function ebayOutages(
+  stores: StoreStatus[],
+): Map<StoreStatus["ebayEnvironment"], { lastSyncAt: string | null }> {
+  const outages = new Map<StoreStatus["ebayEnvironment"], { lastSyncAt: string | null }>();
+  for (const environment of ["production", "sandbox"] as const) {
+    const outage = ebayOutage(stores.filter((store) => store.ebayEnvironment === environment));
+    if (outage) outages.set(environment, outage);
+  }
+  return outages;
+}
+
 const expiringNoticeMilliseconds = 30 * dayMilliseconds;
 const expiredReminderMilliseconds = 30 * dayMilliseconds;
 

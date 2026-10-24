@@ -54,11 +54,35 @@ async function readAccount(request: Request) {
       : [null, null];
     return { session, status, preferences };
   } catch (error) {
-    logFailure({ request, code: "UPSTREAM_UNAVAILABLE", error, operation: "route" });
-    throw data(null, {
-      status: 503,
-      headers: { "cache-control": "no-store", "retry-after": "60" },
-    });
+    throw unavailable(request, error);
+  }
+}
+
+/** Servizio non disponibile: 503 senza dati, con la sola indicazione di riprovare. */
+function unavailable(request: Request, error: unknown) {
+  logFailure({ request, code: "UPSTREAM_UNAVAILABLE", error, operation: "route" });
+  return data(null, {
+    status: 503,
+    headers: { "cache-control": "no-store", "retry-after": "60" },
+  });
+}
+
+/**
+ * Pagina dell'area: una lettura che non riesce dopo quella dell'account vale come Auth o
+ * database non disponibili, con lo stesso 503 senza dati. Reindirizzamenti e risposte
+ * previste dalla pagina (404, 503) passano invariati.
+ */
+export async function areaPage<T>(request: Request, read: () => Promise<T>): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    const response =
+      error instanceof Response ||
+      (typeof error === "object" &&
+        error !== null &&
+        "type" in error &&
+        error.type === "DataWithResponseInit");
+    throw response ? error : unavailable(request, error);
   }
 }
 

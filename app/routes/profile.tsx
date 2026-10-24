@@ -3,7 +3,7 @@ import { data, isRouteErrorResponse } from "react-router";
 
 import { AccountShell } from "~/components/account";
 import { ProfilePage } from "~/components/settings";
-import { assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
+import { areaPage, assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
 import { appCopy } from "../app-copy";
 import { appBase } from "../app-links";
 import { completeRegistration, parseProfile } from "../domain/registration.server";
@@ -21,8 +21,12 @@ export function headers(): HeadersInit {
   return { "cache-control": "no-store" };
 }
 
+export function loader(args: Route.LoaderArgs) {
+  return areaPage(args.request, () => readProfile(args));
+}
+
 /** Profilo dall'avatar: i dati minimi personali raccolti alla registrazione. */
-export async function loader({ request }: Route.LoaderArgs) {
+async function readProfile({ request }: Route.LoaderArgs) {
   const area = await requireAccountArea(request);
   const { language, profile, account, session } = area;
   return {

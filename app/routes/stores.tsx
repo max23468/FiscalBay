@@ -5,13 +5,13 @@ import { AccessNotice, AccountShell } from "~/components/account";
 import { NotFoundState } from "~/components/not-found";
 import { StoresPage } from "~/components/stores";
 import { accessNotice } from "../access-notice";
-import { assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
+import { areaPage, assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
 import { appCopy } from "../app-copy";
 import { appBase, storeLinkPath, type AppLinks } from "../app-links";
 import {
   deleteStoreData,
   disconnectStore,
-  ebayOutage,
+  ebayOutages,
   listStores,
   pauseStore,
   resumeStore,
@@ -75,7 +75,11 @@ function storeView(store: StoreStatus): StoreView {
   };
 }
 
-export async function loader({ request, params }: Route.LoaderArgs) {
+export function loader(args: Route.LoaderArgs) {
+  return areaPage(args.request, () => readStores(args));
+}
+
+async function readStores({ request, params }: Route.LoaderArgs) {
   const area = await requireAccountArea(request);
   const { language, session, account } = area;
   const now = new Date();
@@ -102,8 +106,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       // Finché non esistono gli abbonamenti ogni spazio usa il piano Free.
       account: { plan: "free" as const },
       now: now.toISOString(),
-      // Con eBay che non risponde restano sospese soltanto le azioni che lo chiamano.
-      ebayDown: ebayOutage(statuses) !== null,
+      // Con eBay che non risponde restano sospese soltanto le azioni che lo chiamano, per
+      // ambiente: Production e Sandbox rispondono ciascuno per sé.
+      ebayDown: [...ebayOutages(statuses).keys()],
       elsewhere: false,
       connectHref: localizedPath(language, storeLinkPath),
       // Notifiche, piano e supporto non hanno ancora una pagina reale.
@@ -136,6 +141,13 @@ const storeActions: Record<
     deleteStoreData(env.DB, userId, storeId, String(form.get("conferma") ?? "")),
 };
 
+/** eBay non risponde nell'ambiente del negozio, fra i negozi dello spazio dell'utente. */
+async function ebayDownForStore(userId: string, storeId: string) {
+  const stores = await listStores(env.DB, userId);
+  const store = stores.find((candidate) => candidate.id === storeId);
+  return store !== undefined && ebayOutages(stores).has(store.ebayEnvironment);
+}
+
 const syncActions: Record<string, { reimport: boolean }> = {
   "store-sync": { reimport: false },
   "store-reimport": { reimport: true },
@@ -160,6 +172,9 @@ export async function action({ request }: Route.ActionArgs) {
   if (sync) {
     let requested: SyncRequestResult;
     try {
+      // Come Riprova negli Ordini: con eBay che non risponde una nuova lettura resta sospesa.
+      if (await ebayDownForStore(session.user.id, storeId))
+        return data<ActionResult>({ ok: false, notice: t.ebayDown }, { status: 409 });
       requested = await requestStoreSync(env, session.user.id, storeId, sync);
     } catch (error) {
       logFailure({ request, error, operation: "route" });
