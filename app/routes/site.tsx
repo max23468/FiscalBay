@@ -10,6 +10,7 @@ import { appCopy, pageTitle, supportEmail } from "../app-copy";
 import { accessPath, ordersPath, visitCookie, visitParam } from "../app-links";
 import { createAuth } from "../auth.server";
 import { baseFreeQuota, currentFreePromotion } from "../domain/grants.server";
+import { readSession } from "../domain/sessions.server";
 import { tracePhase } from "../errors";
 import { languageFromPath, languages, localizedPath } from "../i18n";
 import { formatDate } from "../view-models";
@@ -42,7 +43,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     .some((cookie) => cookie.trim() === `${visitCookie}=1`);
   const auth = createAuth(env);
   await auth.$context;
-  const session = await auth.api.getSession({ headers: request.headers });
+  const session = await readSession(env, request);
   tracePhase(request, "session");
   if (session && !visiting) {
     throw redirect(localizedPath(language, ordersPath), { headers: noStore });
