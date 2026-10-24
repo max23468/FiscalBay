@@ -1,4 +1,3 @@
-import { appCopy } from "./app-copy";
 import type { Language } from "./i18n";
 import { displayTimeZone, type NotificationView } from "./view-models";
 
@@ -66,12 +65,31 @@ export const defaultDisplay: DisplayPreferences = {
   timeZone: displayTimeZone,
 };
 
+/**
+ * Messaggio all'acquirente nella sua lingua, indipendente da quella dell'interfaccia: per questo
+ * resta fuori dai testi dell'app, che il browser carica una lingua alla volta.
+ */
+const buyerMessages: Record<Language, { template: string; subject: (order: string) => string }> = {
+  it: {
+    template:
+      "Buongiorno e grazie per l’acquisto. Per emettere la fattura elettronica dell’ordine {ordine} ci serve il tuo Codice Fiscale. Se acquisti con Partita IVA, indicaci quella e la ragione sociale. Grazie.",
+    subject: (order) => `Ordine eBay ${order}: Codice Fiscale per la fattura`,
+  },
+  en: {
+    template:
+      "Hello and thank you for your purchase. To issue the electronic invoice for order {ordine} we need your Italian tax code (Codice Fiscale). If you are buying with a VAT number, please send that and your company name instead. Thank you.",
+    subject: (order) => `eBay order ${order}: tax code for the invoice`,
+  },
+};
+
 /** Modello di messaggio predefinito, per ogni lingua dell'acquirente. */
 export function defaultTemplate(language: Language): string {
-  const { settings } = appCopy[language];
-  return language === "it"
-    ? settings.template.templateDefaultIt
-    : settings.template.templateDefaultEn;
+  return buyerMessages[language].template;
+}
+
+/** Oggetto dell'email all'acquirente, nella lingua del messaggio. */
+export function requestEmailSubject(language: Language, order: string): string {
+  return buyerMessages[language].subject(order);
 }
 
 /** Dati della shell dell'area: aspetto scelto, campanella e istante di riferimento. */

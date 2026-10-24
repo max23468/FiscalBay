@@ -642,10 +642,13 @@ function fiscalView(order: VisibleOrder): FiscalView {
         : null;
     return { state: "locked", shownAs: order.lockedShownAs, ...(hold ? { hold } : {}) };
   }
-  if (order.fiscalState === "foreign") {
-    const country = order.summary.buyer?.billingAddress?.countryCode;
-    return country ? { state: "missing", reason: "foreign", country } : { state: "missing" };
-  }
+  // La situazione estera nasce soltanto da un paese di fatturazione presente e diverso dall'Italia.
+  if (order.fiscalState === "foreign")
+    return {
+      state: "missing",
+      reason: "foreign",
+      country: order.summary.buyer!.billingAddress!.countryCode!,
+    };
   if (order.fiscalState === "missing") {
     const reason = order.taxAvailability;
     return reason === "masked" || reason === "removed"
