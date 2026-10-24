@@ -1,7 +1,10 @@
+import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { headers as siteHeaders, loader as loadSite } from "../app/routes/site";
 import { loader as loadRobots } from "../app/routes/robots";
 import { indexable, isProductionOrigin } from "../app/app-links";
+import { appCopy } from "../app/app-copy";
+import { formatDate } from "../app/view-models";
 import { resetDatabase } from "./fixtures/database-fixtures";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { accessForm } from "./fixtures/account-route-fixtures";
@@ -23,6 +26,8 @@ describe("radice pubblica e area riservata", () => {
       language: "it",
       signedIn: false,
       origin: "http://localhost:5173",
+      baseFreeQuota: 5,
+      freePromotion: null,
     });
     expect(await root("/en")).toMatchObject({ language: "en", signedIn: false });
     for (const { cookie } of [first, second]) {
@@ -34,6 +39,23 @@ describe("radice pubblica e area riservata", () => {
       }
     }
     expect(siteHeaders()).toEqual({ "cache-control": "no-store" });
+  });
+
+  it("annuncia la promozione Free fino alla sua fine, poi la quota base", async () => {
+    await env.DB.prepare(
+      `INSERT INTO free_promotions (id, starts_at, ends_at, quota, created_at)
+       VALUES ('lancio', '2026-09-01T00:00:00.000Z', '2026-11-01T00:00:00.000Z', 10, ?1)`,
+    )
+      .bind(new Date().toISOString())
+      .run();
+    const promotion = { quota: 10, endsAt: "2026-11-01T00:00:00.000Z" };
+    expect(await root("/")).toMatchObject({ freePromotion: promotion });
+    const t = appCopy.it.site;
+    expect(t.freePromotion(10, formatDate(promotion.endsAt, "it"), 5)).toBe(
+      "Promozione Free: 10 ordini da sbloccare ogni 7 giorni nei cicli che iniziano entro il 1 nov 2026, 01:00, poi 5.",
+    );
+    vi.setSystemTime(new Date(promotion.endsAt));
+    expect(await root("/en")).toMatchObject({ baseFreeQuota: 5, freePromotion: null });
   });
 
   it("visita il sito pubblico mantenendo la sessione e torna all'app senza ciclo", async () => {

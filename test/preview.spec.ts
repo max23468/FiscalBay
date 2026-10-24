@@ -159,6 +159,16 @@ describe("stato sintetico dell'anteprima", () => {
       }
       expect(loadScenario("importazione", language, new Set()).account.quota?.used).toBe(0);
       expect(loadScenario("quota-esaurita", language, new Set()).account.quota?.used).toBe(5);
+      // Come nell'area reale, la quota del ciclo seguente compare solo quando cambia.
+      expect(loadScenario("fine-promozione", language, new Set()).account.quota).toEqual({
+        used: 7,
+        limit: 10,
+        cycleEndsAt: "2026-10-02T12:20:00Z",
+        nextLimit: 5,
+      });
+      expect(loadScenario("ordinario", language, new Set()).account.quota).not.toHaveProperty(
+        "nextLimit",
+      );
     });
 
     it(`localizza descrittori e spiega entrambi gli identificativi, ${language}`, () => {

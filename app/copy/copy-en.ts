@@ -437,6 +437,7 @@ export const en: AppCopy = {
       unlocksCycle: "Orders unlocked this cycle",
       unlocksUsed: (used, limit) => `${used} of ${limit}`,
       cycleEnds: (date) => `The cycle renews on ${date}.`,
+      nextCycleLimit: (limit) => `The next cycle will have ${limit} unlocks.`,
       trialTitle: "Try Premium for 14 days",
       trialBody:
         "No card and no automatic renewal. When the trial ends, you choose whether to keep Premium.",
@@ -759,6 +760,9 @@ export const en: AppCopy = {
     openApp: "Go to the app",
     trust:
       "Data read through eBay’s official APIs, read-only: FiscalBay never changes your orders.",
+    freeQuota: (base) => `On the Free plan you unlock ${base} orders every 7 days.`,
+    freePromotion: (quota, date, base) =>
+      `Free promotion: ${quota} orders to unlock every 7 days in cycles starting by ${date}, then ${base}.`,
     independent: "FiscalBay is an independent service, not affiliated with eBay.",
     support: "Support",
   },

@@ -296,8 +296,12 @@ export interface AccountView {
   email: string;
   plan: Plan;
   trialAvailable: boolean;
-  /** Sblocchi del ciclo Free in corso; senza ciclo avviato nessuno sblocco è disponibile. */
-  quota?: { used: number; limit: number; cycleEndsAt: string | null };
+  /**
+   * Sblocchi del ciclo Free in corso; senza ciclo avviato nessuno sblocco è disponibile.
+   * `nextLimit` compare quando il ciclo seguente avrà una quota diversa, per una promozione
+   * che inizia o finisce.
+   */
+  quota?: { used: number; limit: number; cycleEndsAt: string | null; nextLimit?: number };
   premium?: { period: "monthly" | "annual" | "lifetime"; renewsAt: string | null };
 }
 

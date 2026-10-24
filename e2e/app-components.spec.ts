@@ -888,6 +888,8 @@ test.describe("miglioramenti account e negozi", () => {
     await page.keyboard.press("Escape");
     await page.reload();
     await expect(page.getByRole("button", { name: "Notifiche", exact: true })).toBeVisible();
+    // Dopo la ricarica il cambio lingua richiede l'idratazione: un clic precedente andrebbe perso.
+    await page.waitForLoadState("networkidle");
 
     // La lingua scelta resta anche aprendo l'area in italiano.
     const appearance = page.locator('section[aria-labelledby="settings-aspetto"]');
@@ -2253,6 +2255,12 @@ for (const width of [390, 768, 1440]) {
       // Premium non anticipa il downgrade: la scelta del negozio attivo è solo nel Free.
       await expect(page.locator("main")).not.toContainText(
         it ? "Negozio attivo se torni al piano Free" : "Active store if you return to Free",
+      );
+      // Il ciclo iniziato nella promozione conserva la quota e annuncia quella seguente.
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "fine-promozione");
+      await expect(page.locator("main")).toContainText(it ? "7 di 10" : "7 of 10");
+      await expect(page.locator("main")).toContainText(
+        it ? "Il prossimo ciclo avrà 5 sblocchi." : "The next cycle will have 5 unlocks.",
       );
       await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium-a-vita");
       const documents = page.getByRole("button", {

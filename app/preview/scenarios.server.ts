@@ -29,6 +29,7 @@ export const scenarioIds = [
   "ordinario",
   "sblocco-non-riuscito",
   "quota-esaurita",
+  "fine-promozione",
   "aggiornamento",
   "ebay-non-disponibile",
   "negozio-scaduto",
@@ -81,6 +82,18 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
       name: "No unlocks left",
       focus:
         "Orders remain available. Codice Fiscale and Partita IVA of new orders wait for the next cycle.",
+    },
+  },
+  "fine-promozione": {
+    it: {
+      name: "Fine della promozione",
+      focus:
+        "La promozione è finita: il ciclo in corso conserva i suoi 10 sblocchi, il prossimo ne avrà 5.",
+    },
+    en: {
+      name: "Promotion ending",
+      focus:
+        "The promotion has ended: the current cycle keeps its 10 unlocks, the next one will have 5.",
     },
   },
   aggiornamento: {
@@ -1038,6 +1051,18 @@ export function loadScenario(
       scenario = {
         ...common,
         account: account(),
+        stores: freeStores,
+        seeds: freeSeeds,
+        premium: false,
+        diagnostics: diagnostics(),
+      };
+      break;
+    case "fine-promozione":
+      scenario = {
+        ...common,
+        account: account({
+          quota: { used: 7, limit: 10, cycleEndsAt: "2026-10-02T12:20:00Z", nextLimit: 5 },
+        }),
         stores: freeStores,
         seeds: freeSeeds,
         premium: false,

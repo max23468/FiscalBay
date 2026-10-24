@@ -451,6 +451,7 @@ export const it = {
       unlocksCycle: "Ordini sbloccati in questo ciclo",
       unlocksUsed: (used: number, limit: number) => `${used} di ${limit}`,
       cycleEnds: (date: string) => `Il ciclo si rinnova il ${date}.`,
+      nextCycleLimit: (limit: number) => `Il prossimo ciclo avrà ${limit} sblocchi.`,
       trialTitle: "Prova Premium per 14 giorni",
       trialBody:
         "Senza carta e senza rinnovo automatico. Alla fine della prova scegli tu se continuare con Premium.",
@@ -772,6 +773,9 @@ export const it = {
     openApp: "Vai all’app",
     trust:
       "Dati letti con le API ufficiali di eBay, in sola lettura: FiscalBay non modifica i tuoi ordini.",
+    freeQuota: (base: number) => `Con il piano Free sblocchi ${base} ordini ogni 7 giorni.`,
+    freePromotion: (quota: number, date: string, base: number) =>
+      `Promozione Free: ${quota} ordini da sbloccare ogni 7 giorni nei cicli che iniziano entro il ${date}, poi ${base}.`,
     independent: "FiscalBay è un servizio indipendente, non affiliato a eBay.",
     support: "Assistenza",
   },
