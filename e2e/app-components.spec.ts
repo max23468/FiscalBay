@@ -2456,6 +2456,12 @@ for (const width of [390, 768, 1440]) {
       await expect(
         page.getByRole("button", { name: /Scegli (mensile|annuale)|Choose (monthly|annual)/u }),
       ).toHaveCount(0);
+      // L'abbonamento scelto si disdice dal portale di Stripe prima del primo addebito.
+      await expect(
+        main.getByRole("button", {
+          name: it ? "Gestisci abbonamento su Stripe" : "Manage subscription on Stripe",
+        }),
+      ).toBeVisible();
     }
   });
 }

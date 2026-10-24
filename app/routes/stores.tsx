@@ -88,7 +88,7 @@ async function readStores({ request, params }: Route.LoaderArgs) {
   const [statuses, renews] = await measure("d1", "stores", () =>
     Promise.all([
       listStores(env.DB, session.user.id, now),
-      subscriptionRenews(env.DB, env, session.user.id, now),
+      subscriptionRenews(env.DB, env, session.user.id),
     ]),
   );
   const read = () =>

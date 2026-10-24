@@ -38,6 +38,7 @@ function TrialPlan({
   trial,
   payment,
   billing,
+  billingPortal,
   purchase,
   now,
   t,
@@ -46,6 +47,7 @@ function TrialPlan({
   trial: NonNullable<AccountView["trial"]>;
   payment: AccountView["payment"];
   billing: boolean;
+  billingPortal: boolean;
   purchase: PurchaseView;
   now: string;
   t: AppCopy;
@@ -81,6 +83,8 @@ function TrialPlan({
               : t.settings.plan.trialAfter}
           </p>
         </div>
+        {/* L'abbonamento scelto si disdice dal portale prima del primo addebito. */}
+        {billingPortal && payment?.state === "scheduled" ? <ManageBilling t={t} /> : null}
       </Group>
       <PurchaseOptions
         billing={billing}
@@ -110,7 +114,6 @@ function PremiumPlan({
   language: Language;
 }) {
   const zone = useTimeZone();
-  const action = useAction();
   const lifetime = account.premium?.period === "lifetime";
   return (
     <Group title={t.settings.plan.currentPlan}>
@@ -130,18 +133,7 @@ function PremiumPlan({
           t={t}
         />
       ) : null}
-      {billingPortal && account.premium ? (
-        <>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button variant="outline" onClick={() => action.run("manage-billing")}>
-              {lifetime ? t.settings.plan.billingDocuments : t.settings.plan.manageBilling}
-            </Button>
-          </div>
-          {lifetime ? null : (
-            <p className="text-sm text-muted-foreground">{t.settings.plan.billingDocs}</p>
-          )}
-        </>
-      ) : null}
+      {billingPortal && account.premium ? <ManageBilling lifetime={lifetime} t={t} /> : null}
     </Group>
   );
 }
@@ -201,6 +193,23 @@ function RenewalPeriod({
         {next ? copy.keepPeriod[period] : copy.switchTo[other]}
       </Button>
     </div>
+  );
+}
+
+/** Portale di Stripe: disdetta, metodo di pagamento e documenti; per il lifetime i soli documenti. */
+function ManageBilling({ lifetime = false, t }: { lifetime?: boolean; t: AppCopy }) {
+  const action = useAction();
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="outline" onClick={() => action.run("manage-billing")}>
+          {lifetime ? t.settings.plan.billingDocuments : t.settings.plan.manageBilling}
+        </Button>
+      </div>
+      {lifetime ? null : (
+        <p className="text-sm text-muted-foreground">{t.settings.plan.billingDocs}</p>
+      )}
+    </>
   );
 }
 
@@ -390,6 +399,7 @@ export function PlanSection({
         trial={account.trial}
         payment={account.payment}
         billing={billing}
+        billingPortal={billingPortal}
         purchase={purchase}
         now={now}
         t={t}

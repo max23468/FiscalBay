@@ -415,3 +415,14 @@ uso ordinario.
 Nessun errore in console. Al primo caricamento della scheda in background il
 pannello del negozio non si è aperto; ricaricando e riaprendolo più volte si
 è sempre aperto, quindi il caso non è stato registrato come finding.
+
+### Codice Fiscale nella scheda dell'ordine
+
+Correzione della PR #421 (`b581693` su `develop`), distribuita sul test il
+25 ottobre 2026 e verificata su Chrome live, su `test.fiscalbay.it`, con la
+sessione di info@ a 1440 px in tema scuro. La segnalazione è arrivata
+dall'owner dopo l'audit, quindi non ha un ID precedente.
+
+| ID | Esito | Verifica su Chrome live | Verifica implementazione · 25 ottobre 2026 |
+| --- | --- | --- | --- |
+| CF1 | Corretto | In tutte le schede degli Ordini il codice e l'icona di copia stanno sulla stessa riga, compreso `MRMMSM75A24D872B` dell'ordine 12-15330-70281, che prima mandava a capo l'icona | Colonna fiscale e riquadro larghi quanto il contenuto, con la misura base come minimo. Prova locale con codici di lettere larghe a 390 e 1280 px in Chromium e WebKit. |
