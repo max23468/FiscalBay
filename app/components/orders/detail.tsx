@@ -390,7 +390,7 @@ export function OrderSheet({
           // collegamento diretto o quando il browser non dà il focus al link cliccato.
           finalFocus={() => document.querySelector<HTMLElement>(orderLinkSelector(shown.id))}
           closeLabel={t.shell.close}
-          className="sm:max-w-lg outline-none"
+          className="outline-none"
           header={
             <SheetHeader>
               <SheetTitle className="break-words">{t.order.title(shown.ebayOrderId)}</SheetTitle>

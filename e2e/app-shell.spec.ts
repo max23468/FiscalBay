@@ -219,6 +219,22 @@ test("lo sblocco rivela il dato solo dopo l'azione e aggiorna la quota", async (
   ).toHaveCount(1);
 });
 
+test("lo sblocco di una scheda conserva la selezione", async ({ page }) => {
+  await open(page, "/anteprima/ordini?fiscale=locked");
+  await page.getByRole("button", { name: "Seleziona" }).click();
+  await page.getByRole("checkbox", { name: "Seleziona l’ordine 02-44519-70831" }).click();
+  await page
+    .getByRole("article", { name: "Ordine 05-55555-12121" })
+    .getByRole("button", { name: "Sblocca ordine" })
+    .click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Sblocca", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Ordine sbloccato" })).toBeVisible();
+  await expect(page.getByText("1 selezionato")).toBeVisible();
+  await expect(
+    page.getByRole("checkbox", { name: "Seleziona l’ordine 02-44519-70831" }),
+  ).toBeChecked();
+});
+
 test("la selezione sblocca più ordini entro la quota", async ({ page }) => {
   await open(page, "/anteprima/ordini?fiscale=locked");
   await page.getByRole("button", { name: "Seleziona" }).click();
@@ -261,6 +277,19 @@ test("Esporta porta la selezione con conteggio esplicito e la ritrova al ritorno
   await page.getByRole("link", { name: "Torna agli ordini" }).click();
   await expect(page).toHaveURL(/\/anteprima\/ordini\?fiscale=locked&vista=[0-9a-z]+$/u);
   await expect(page.getByText("2 selezionati")).toBeVisible();
+  // La selezione esportata si ripristina una volta: le modifiche successive restano anche
+  // dopo un dettaglio aperto e chiuso.
+  await page.getByRole("checkbox", { name: "Seleziona l’ordine 02-44519-70831" }).click();
+  await expect(page.getByText("1 selezionato")).toBeVisible();
+  await page
+    .getByRole("article", { name: "Ordine 05-55555-12121" })
+    .getByRole("link", { name: "Dettaglio" })
+    .focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByText("1 selezionato")).toBeVisible();
   await page.getByRole("button", { name: "Annulla", exact: true }).click();
   await page.reload();
   await expect(page.getByRole("checkbox")).toHaveCount(0);
@@ -670,6 +699,8 @@ test("stati coerenti: aggiornamento, eBay fermo e collegamento già usato", asyn
       name: "Riprova",
     }),
   ).toBeDisabled();
+  // Anche il ricollegamento del consenso in scadenza chiama eBay e resta sospeso.
+  await expect(page.getByRole("button", { name: "Ricollega negozio" })).toBeDisabled();
 
   await chooseScenario(page, "Primo accesso");
   // Il selettore cambia subito: attendere anche i dati dello scenario prima del collegamento.

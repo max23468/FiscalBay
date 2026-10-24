@@ -123,6 +123,18 @@ export function emailView(raw: string): EmailView | null {
   };
 }
 
+/**
+ * Collegamento `mailto:` con la parte locale codificata (RFC 6068): un `?`, `&` o `#` della
+ * fonte resta parte dell'indirizzo e non aggiunge oggetto o testo.
+ */
+export function mailtoHref(address: string, fields: { subject?: string; body?: string } = {}) {
+  const separator = address.lastIndexOf("@");
+  const query = Object.entries(fields)
+    .map(([name, value]) => `${name}=${encodeURIComponent(value)}`)
+    .join("&");
+  return `mailto:${encodeURIComponent(address.slice(0, separator))}${address.slice(separator)}${query ? `?${query}` : ""}`;
+}
+
 /** Parole che restano minuscole dentro un indirizzo, salvo all'inizio. */
 const lowerWords = new Set([
   "di",
@@ -145,7 +157,10 @@ const lowerWords = new Set([
 ]);
 /** Sigle che restano maiuscole. */
 const upperWords = new Set(["snc", "srl", "srls", "spa", "sas", "ss", "sp", "sr", "km"]);
-const romanNumeral = /^[ivxlcdm]+$/u;
+/** Numeri romani ben formati (XX Settembre, Pio IX), non parole fatte delle stesse lettere. */
+const romanNumeral = /^m{0,3}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})$/u;
+/** Parole italiane che sono anche numeri romani ben formati. */
+const romanLookalikes = new Set(["li", "mi", "ci"]);
 
 function capitalize(part: string) {
   return part.charAt(0).toUpperCase() + part.slice(1);
@@ -190,7 +205,8 @@ export function addressCase(raw: string, country = "IT"): string {
       if (bare === "c/o") return lower;
       if (index > 0 && lowerWords.has(bare)) return lower;
       if (upperWords.has(bare.replaceAll(".", ""))) return word.toUpperCase();
-      if (romanNumeral.test(bare) && !lowerWords.has(bare)) return word.toUpperCase();
+      if (bare && romanNumeral.test(bare) && !lowerWords.has(bare) && !romanLookalikes.has(bare))
+        return word.toUpperCase();
       // Apostrofi e trattini separano parti con la propria iniziale: Sant'Angelo, Dell'Orto.
       return lower
         .split(/(['’-])/u)

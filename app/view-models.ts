@@ -268,6 +268,9 @@ export interface StoreView {
   recent: StoreSyncView[];
 }
 
+/** Identificativi letti al massimo in una sola richiesta della campanella. */
+export const maxReadNotifications = 50;
+
 export interface NotificationView {
   id: string;
   tone: StatusTone;

@@ -1099,6 +1099,7 @@ export function loadScenario(
         stores: [
           storeView("vintage", {
             lastSyncAt: minutesAgo(125),
+            consentExpiresAt: minutesAgo(-12 * 24 * 60),
             recent: [
               { at: minutesAgo(5), ok: false, newOrders: 0 },
               { at: minutesAgo(35), ok: false, newOrders: 0 },
@@ -1110,7 +1111,17 @@ export function loadScenario(
         seeds: freeSeeds,
         premium: false,
         ebayDown: true,
-        notices: [{ kind: "ebay-down", at: minutesAgo(125) }],
+        // Il consenso in scadenza resta segnalato, con Ricollega sospeso finché eBay non risponde.
+        notices: [
+          { kind: "ebay-down", at: minutesAgo(125) },
+          {
+            kind: "consent-expiring",
+            storeId: stores.vintage.id,
+            storeName: stores.vintage.name,
+            at: minutesAgo(-12 * 24 * 60),
+            ebayEnvironment: "production",
+          },
+        ],
         notifications: [
           note("ebayDown", { id: "n-ebay", tone: "warning", at: minutesAgo(35), read: false }),
           ...common.notifications,

@@ -4,7 +4,7 @@ import { parseTradingOrderTaxIdentifiers } from "../app/integrations/ebay/tradin
 import { acquireOrders } from "../app/domain/order-acquisition.server";
 import { storeProfileRefreshMilliseconds } from "../app/domain/store-profile.server";
 import { listVisibleOrders, orderView } from "../app/domain/orders.server";
-import { deleteStoreData, listStores } from "../app/domain/stores.server";
+import { deleteStoreData, disconnectStore, listStores } from "../app/domain/stores.server";
 import { handleAuthRequest } from "../app/auth-route.server";
 import { loader as loadHome } from "../app/routes/orders";
 import { action as signIn } from "../app/routes/sign-in";
@@ -1068,7 +1068,7 @@ describe("collegamento negozio eBay", () => {
   ])(
     "conserva ordine e collegamento quando Trading risponde $response",
     async ({ xml, status, failure }) => {
-      const { cookie } = await verifiedSession("import-fallito@example.invalid");
+      const { cookie, userId } = await verifiedSession("import-fallito@example.invalid");
       const state = (await beginStoreLink(cookie)).searchParams.get("state");
       const log = vi.spyOn(console, "error").mockImplementation(() => {});
       try {
@@ -1129,6 +1129,17 @@ describe("collegamento negozio eBay", () => {
         orders: [],
         view: "empty",
       });
+      // Dopo lo scollegamento dell'unico negozio i primi passi ripartono dal collegamento.
+      const [store] = await listStores(env.DB, userId);
+      expect(await disconnectStore(env.DB, userId, store!.id)).toBe("done");
+      const disconnected = await homeFor(cookie);
+      expect(disconnected.page?.view).toBe("no-store");
+      expect(disconnected.page?.onboarding).toMatchObject([
+        { label: "stepAccount", done: true },
+        { label: "stepEmail", done: true },
+        { label: "stepStore", done: false },
+        { label: "stepSync", done: false },
+      ]);
     },
   );
 

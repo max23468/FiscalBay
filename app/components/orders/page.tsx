@@ -58,6 +58,8 @@ export interface OrdersPageData extends SecondaryActions {
   incoming: number;
   /** Elenco con una nuova istantanea, che comprende i nuovi ordini. */
   freshHref: string | null;
+  /** I nuovi ordini stanno tutti sopra il primo mostrato: possono entrare da soli in cima. */
+  incomingAtTop: boolean;
   /** Ricerca attiva, decifrata dal server: nell'indirizzo resta soltanto in forma cifrata. */
   search: string | null;
   /** Ordine aperto nel pannello, anche se fuori dalla pagina caricata. */
@@ -299,14 +301,21 @@ function OrdersNotices({
                 <span className="grid justify-items-start gap-3">
                   {t.orders.consentExpiringBody(formatDate(notice.at, language, "date", zone))}
                   {/* Il consenso è ancora valido: il ricollegamento parte subito dalla
-                      schermata preparatoria, fuori dalle route dell'app. */}
-                  <a
-                    href={`${appHref(links, "negozi/collega")}?ricollega=${encodeURIComponent(notice.storeId)}&environment=${notice.ebayEnvironment}`}
-                    data-slot="button"
-                    className={buttonVariants({ variant: "outline", size: "sm" })}
-                  >
-                    {t.orders.reconnectStore}
-                  </a>
+                      schermata preparatoria, fuori dalle route dell'app. Con eBay che non
+                      risponde resta sospeso, come in Negozi. */}
+                  {isEbayDown(data) ? (
+                    <Button variant="outline" size="sm" disabled focusableWhenDisabled>
+                      {t.orders.reconnectStore}
+                    </Button>
+                  ) : (
+                    <a
+                      href={`${appHref(links, "negozi/collega")}?ricollega=${encodeURIComponent(notice.storeId)}&environment=${notice.ebayEnvironment}`}
+                      data-slot="button"
+                      className={buttonVariants({ variant: "outline", size: "sm" })}
+                    >
+                      {t.orders.reconnectStore}
+                    </a>
+                  )}
                 </span>
               </StatusAlert>
             );
@@ -500,15 +509,16 @@ function NoResults({
 
 /**
  * L'indirizzo conserva l'istantanea dell'elenco, così ricarica, dettaglio e Indietro ritrovano
- * gli stessi ordini nello stesso ordine. I nuovi ordini entrano subito se l'utente è in cima
- * alla lista e non sta selezionando né leggendo un dettaglio (`held`); altrimenti resta
- * l'indicatore, così nulla si sposta mentre legge e il pannello aperto non si chiude.
+ * gli stessi ordini nello stesso ordine. I nuovi ordini entrano subito se stanno tutti sopra il
+ * primo mostrato e l'utente è in cima alla lista senza selezionare né leggere un dettaglio
+ * (`held`); altrimenti resta l'indicatore, così nulla si sposta mentre legge, il pannello
+ * aperto non si chiude e un ordine recuperato dallo storico non entra fra quelli già letti.
  */
 function useListSnapshot(data: OrdersPageData, held: boolean) {
   const navigate = useNavigate();
   const location = useLocation();
   const [params, setParams] = useSearchParams();
-  const { snapshot, freshHref } = data;
+  const { snapshot, freshHref, incomingAtTop } = data;
   const synced = params.get(snapshotParam) === snapshot;
   // Durante un'altra navigazione, per esempio Indietro, la sostituzione prenderebbe il posto
   // della pagina di destinazione: si attende il router inattivo e l'indirizzo del browser
@@ -523,7 +533,7 @@ function useListSnapshot(data: OrdersPageData, held: boolean) {
     setParams(next, { replace: true, preventScrollReset: true });
   });
   const insertAtTop = useEffectEvent(() => {
-    if (freshHref && window.scrollY < topThreshold && !held && current())
+    if (freshHref && incomingAtTop && window.scrollY < topThreshold && !held && current())
       void navigate(freshHref, { replace: true, preventScrollReset: true });
   });
   // Si parte dall'indirizzo con l'istantanea: la nuova la cambia o la toglie, mai la aggiunge,
@@ -599,6 +609,9 @@ function OrdersList({
   useEffect(() => {
     const ids = exportedSelection(listHref);
     if (!ids) return;
+    // Si ripristina una volta: dettaglio, «Carica altri» e Indietro conservano poi la
+    // selezione modificata, senza riportare quella esportata.
+    forgetExportedSelection();
     setSelecting(true);
     setSelected(new Set(ids));
   }, [listHref]);
@@ -611,9 +624,10 @@ function OrdersList({
   const exportPath = appHref(links, exportSection);
   const exportOrders = (ids?: string[]) =>
     data.exportable ? exportHref(exportPath, listParams, ids) : null;
-  const submit = (ids: string[], skipConfirmation = false) => {
+  // Lo sblocco della selezione chiude la modalità; quello di una scheda la lascia com'è.
+  const submitSelection = (ids: string[]) => {
     stopSelecting();
-    unlock.submit(ids, skipConfirmation);
+    unlock.submit(ids);
   };
   const ordersHref = appHref(links, "ordini");
   const orders = listed;
@@ -694,7 +708,7 @@ function OrdersList({
                     }
                     revealed={unlock.revealed.has(order.id)}
                     unlocking={unlock.pending.has(order.id)}
-                    onUnlock={submit}
+                    onUnlock={unlock.submit}
                     confirmUnlock={data.confirmUnlock}
                     isNew={newIds.has(order.id)}
                     enterIndex={enterIndexes.get(order.id)}
@@ -714,7 +728,7 @@ function OrdersList({
           selected={visibleSelected.map((order) => order.id)}
           lockedSelected={lockedSelected}
           remaining={remainingUnlocks(data.account)}
-          onUnlock={submit}
+          onUnlock={submitSelection}
           onCancel={stopSelecting}
           onExport={
             data.exportable
