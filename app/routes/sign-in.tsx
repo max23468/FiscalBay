@@ -8,6 +8,7 @@ import { AccessNotice, VerifyEmail } from "~/components/account";
 import { Logo } from "~/components/standalone-page";
 import { useFieldErrors, type FieldErrors } from "~/components/form-validation";
 import { LanguageSwitch } from "~/components/language-switch";
+import { ProfileFields } from "~/components/profile-fields";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
 import {
@@ -16,12 +17,9 @@ import {
   FieldDescription,
   FieldGroup,
   FieldLabel,
-  FieldLegend,
   FieldSeparator,
-  FieldSet,
 } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
-import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { createAuth } from "../auth.server";
 import { forwardToAuth, redirectWithCookies } from "../auth-route.server";
@@ -228,100 +226,6 @@ function useRemembered(error: boolean) {
 }
 
 const rise = "animate-[rise-in_var(--duration-fast)_var(--ease-smooth-out)_both]";
-
-/** Persona sempre obbligatoria; l'azienda aggiunge la ragione sociale, senza CF né Partita IVA. */
-function ProfileFields({
-  t,
-  v,
-  values,
-  suggested,
-}: {
-  t: AccessCopy;
-  v: FieldErrors;
-  values?: Record<string, string>;
-  suggested?: { firstName: string; lastName: string };
-}) {
-  const [type, setType] = useState(values?.tipo === "azienda" ? "azienda" : "privato");
-  return (
-    <>
-      <FieldSet>
-        <FieldLegend variant="label" id="account-type-label">
-          {t.accountType}
-        </FieldLegend>
-        <RadioGroup
-          name="tipo"
-          value={type}
-          onValueChange={(next) => setType(String(next))}
-          aria-labelledby="account-type-label"
-          aria-describedby="account-type-hint"
-          className="grid grid-cols-2 gap-2"
-        >
-          {(["privato", "azienda"] as const).map((value) => (
-            <FieldLabel
-              key={value}
-              className="w-full rounded-lg border border-input/40 px-3 py-2.5 font-normal transition-colors duration-(--duration-quick) has-data-checked:border-primary has-data-checked:bg-info-surface"
-            >
-              <RadioGroupItem value={value} aria-labelledby={`account-type-${value}`} />
-              <span id={`account-type-${value}`}>
-                {value === "privato" ? t.private : t.business}
-              </span>
-            </FieldLabel>
-          ))}
-        </RadioGroup>
-        <FieldDescription id="account-type-hint">{t.accountTypeHint}</FieldDescription>
-      </FieldSet>
-      {type === "azienda" ? (
-        <Field className={rise}>
-          <FieldLabel htmlFor="company-name" required>
-            {t.companyName}
-          </FieldLabel>
-          <Input
-            id="company-name"
-            name="ragione_sociale"
-            autoComplete="organization"
-            maxLength={200}
-            defaultValue={values?.ragione_sociale}
-            required
-            {...v.control("ragione_sociale")}
-          />
-          {v.error("ragione_sociale")}
-        </Field>
-      ) : null}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field>
-          <FieldLabel htmlFor="first-name" required>
-            {t.firstName}
-          </FieldLabel>
-          <Input
-            id="first-name"
-            name="nome"
-            autoComplete="given-name"
-            maxLength={100}
-            defaultValue={values?.nome ?? suggested?.firstName}
-            required
-            {...v.control("nome")}
-          />
-          {v.error("nome")}
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="last-name" required>
-            {t.lastName}
-          </FieldLabel>
-          <Input
-            id="last-name"
-            name="cognome"
-            autoComplete="family-name"
-            maxLength={100}
-            defaultValue={values?.cognome ?? suggested?.lastName}
-            required
-            {...v.control("cognome")}
-          />
-          {v.error("cognome")}
-        </Field>
-      </div>
-    </>
-  );
-}
 
 /** Termini obbligatori e marketing facoltativo, entrambi mai preselezionati. */
 function AgreementFields({

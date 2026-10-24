@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { data, isRouteErrorResponse } from "react-router";
 
 import { AccountShell } from "~/components/account-shell";
-import { ProfilePage } from "~/components/settings";
+import { ProfilePage } from "~/components/settings/profile";
 import { areaPage, assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { appBase } from "../app-links";

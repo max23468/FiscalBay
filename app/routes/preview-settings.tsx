@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
 import { data, isRouteErrorResponse, useOutletContext } from "react-router";
 
-import { SettingsPage, type ExportContext, type SettingsPageData } from "~/components/settings";
+import type { ExportContext } from "~/components/settings/export";
+import { SettingsPage, type SettingsPageData } from "~/components/settings/page";
 import { NotFoundState, UnavailableState } from "~/components/not-found";
 import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";

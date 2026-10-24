@@ -3,7 +3,7 @@ import { data, isRouteErrorResponse } from "react-router";
 
 import { AccountShell } from "~/components/account-shell";
 import { NotFoundState } from "~/components/not-found";
-import { SettingsPage, type SettingsPageData } from "~/components/settings";
+import { SettingsPage, type SettingsPageData } from "~/components/settings/page";
 import { accessNotice } from "../access-notice";
 import { areaPage, assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";

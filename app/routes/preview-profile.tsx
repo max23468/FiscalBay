@@ -1,7 +1,7 @@
 import { isRouteErrorResponse, useOutletContext } from "react-router";
 
 import { UnavailableState } from "~/components/not-found";
-import { ProfilePage } from "~/components/settings";
+import { ProfilePage } from "~/components/settings/profile";
 import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath } from "../i18n";
 import { pageScenario, simulateAction } from "../preview/state.server";
