@@ -2,8 +2,9 @@
 /**
  * Budget del JavaScript client per pagina: per ogni route con una pagina somma il gzip
  * dei moduli che il browser carica all'apertura (entry, route e antenati con i loro
- * import statici, letti dal manifest di React Router). Gli import dinamici arrivano dopo
- * il primo disegno e restano fuori. La build fallisce se una pagina supera la soglia
+ * import statici, letti dal manifest di React Router), più i testi della lingua più
+ * pesante, che il browser scarica prima dell'idratazione. Gli altri import dinamici arrivano
+ * dopo il primo disegno e restano fuori. La build fallisce se una pagina supera la soglia
  * della sua classe; rivedere i valori solo con una motivazione. Il totale di tutti i
  * file è soltanto informativo: cresce con ogni pagina anche se nessuna diventa più pesante.
  * Uso: node scripts/check-bundle-size.mjs [cartella]
@@ -39,6 +40,19 @@ export function measure(directory) {
     if (!sizes.has(url)) sizes.set(url, gzipSync(readFileSync(path.join(directory, url))).length);
     return sizes.get(url);
   };
+  // Testi di una lingua (`copy-<lingua>`) con i loro import statici, dai nomi dei chunk.
+  const assets = new Map(files.map((file) => [path.relative(directory, file), file]));
+  const closure = (relative, seen = new Set()) => {
+    if (seen.has(relative)) return seen;
+    seen.add(relative);
+    const source = readFileSync(assets.get(relative), "utf8");
+    for (const [, target] of source.matchAll(/(?:from|import)\s*["'](\.\/[^"']+\.js)["']/gu))
+      closure(path.join(path.dirname(relative), target), seen);
+    return seen;
+  };
+  const copies = [...assets.keys()]
+    .filter((relative) => /^copy-[a-z]{2}-[\w-]+\.js$/u.test(path.basename(relative)))
+    .map((relative) => [...closure(relative)].map((file) => `/${file}`));
   const chain = (id) => (id ? [...chain(routes[id].parentId), routes[id]] : []);
 
   const pages = Object.values(routes)
@@ -52,6 +66,12 @@ export function measure(directory) {
         .map((item) => item.path ?? "")
         .filter(Boolean)
         .join("/");
+      const copy = copies.toSorted(
+        (a, b) =>
+          b.filter((url) => !urls.has(url)).reduce((sum, url) => sum + gzip(url), 0) -
+          a.filter((url) => !urls.has(url)).reduce((sum, url) => sum + gzip(url), 0),
+      )[0];
+      copy?.forEach((url) => urls.add(url));
       const bytes = [...urls].reduce((sum, url) => sum + gzip(url), 0);
       const heaviest = [...urls].toSorted((a, b) => gzip(b) - gzip(a)).slice(0, 5);
       return {

@@ -43,7 +43,6 @@ function preview(path: string, suffix: string) {
       route("impostazioni/:sezione?", "routes/preview-settings.tsx", {
         id: `preview-settings${suffix}`,
       }),
-      route("profilo", "routes/preview-profile.tsx", { id: `preview-profile${suffix}` }),
     ]),
   ];
 }

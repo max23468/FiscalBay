@@ -8,27 +8,21 @@ import { Textarea } from "~/components/ui/textarea";
 import type { AppCopy } from "../../app-copy";
 import { languageNames, languages, type Language } from "../../i18n";
 import { maxTemplateLength } from "../../preferences";
-import { UnsavedDialog, useDraft, useUnsavedGuard } from "./unsaved";
-
-/** Radice delle Impostazioni di un indirizzo, oppure l'indirizzo stesso fuori da esse. */
-function settingsRoot(pathname: string) {
-  return /^(.*\/impostazioni)(?:\/[^/]*)?$/u.exec(pathname)?.[1] ?? pathname;
-}
+import type { Draft } from "./unsaved";
 
 /**
  * Modello di messaggio: si salva con Salva. Un salvataggio non riuscito lascia il testo scritto
- * e lo dice; uno riuscito diventa il nuovo riferimento delle modifiche.
+ * e lo dice; uno riuscito diventa il nuovo riferimento delle modifiche. La bozza appartiene
+ * alla pagina, che ne tiene l'avviso d'uscita.
  */
 export function TemplateSection({
-  templates,
+  form,
   t,
 }: {
-  templates: Record<Language, string>;
+  form: Draft<Record<Language, string>>;
   t: AppCopy;
 }) {
-  const { draft, setDraft, dirty, state, submit, action } = useDraft(templates, "template");
-  // Fra le categorie la bozza resta, perché la pagina è la stessa.
-  const blocker = useUnsavedGuard(dirty, settingsRoot);
+  const { draft, setDraft, dirty, state, submit, action } = form;
   const empty = languages.some((code) => !draft[code].trim());
   const ready = useHydrated();
   return (
@@ -98,13 +92,6 @@ export function TemplateSection({
           </span>
         </div>
       </form>
-      <UnsavedDialog
-        blocker={blocker}
-        title={t.settings.template.unsavedTitle}
-        description={t.settings.template.unsaved}
-        leave={t.settings.template.leave}
-        stay={t.profile.stay}
-      />
     </div>
   );
 }

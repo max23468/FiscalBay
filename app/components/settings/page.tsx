@@ -11,6 +11,7 @@ import {
   Palette,
   Settings,
   ShieldCheck,
+  User,
 } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
@@ -32,9 +33,11 @@ import { ExportSection, type ExportContext } from "./export";
 import { NotificationsSection } from "./notifications";
 import { PlanSection } from "./plan";
 import { PrivacySection } from "./privacy";
+import { ProfileSection } from "./profile";
 import { SecuritySection, type SecurityData } from "./security";
 import { SupportSection } from "./support";
 import { TemplateSection } from "./template";
+import { UnsavedDialog, useDraft, useUnsavedGuard } from "./unsaved";
 
 export interface SettingsPageData {
   confirmUnlock: boolean;
@@ -89,6 +92,7 @@ function sectionDescription(t: AppCopy, id: SettingsSection, services: SettingsS
 
 /** Icone neutre: le Impostazioni restano sobrie, il colore sta in Ordini e Negozi. */
 const sectionIcons: Record<SettingsSection, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
+  profilo: User,
   piano: CreditCard,
   notifiche: Bell,
   esportazione: FileSpreadsheet,
@@ -98,6 +102,20 @@ const sectionIcons: Record<SettingsSection, React.ComponentType<React.SVGProps<S
   privacy: Database,
   supporto: LifeBuoy,
 };
+
+/** Radice delle Impostazioni di un indirizzo, oppure l'indirizzo stesso fuori da esse. */
+function settingsRoot(pathname: string) {
+  return /^(.*\/impostazioni)(?:\/[^/]*)?$/u.exec(pathname)?.[1] ?? pathname;
+}
+
+/** Campi modificabili del profilo; la ragione sociale soltanto per un'azienda. */
+function profileFields(profile: AccountView["profile"]): Record<string, string> {
+  return {
+    nome: profile.firstName,
+    cognome: profile.lastName,
+    ...(profile.accountType === "business" ? { ragione_sociale: profile.companyName ?? "" } : {}),
+  };
+}
 
 /** Da 768 px tutte le categorie stanno in una pagina che scorre. */
 const wideQuery = "(min-width: 48rem)";
@@ -131,7 +149,19 @@ export function SettingsPage({
     }))
     .filter((group) => group.sections.length > 0);
   const premium = data.account.plan === "premium";
+  // Le bozze stanno nella pagina: il router ammette un solo blocco della navigazione, quindi
+  // l'avviso d'uscita è uno per entrambe. Fra le categorie restano, perché la pagina è la stessa.
+  const profileDraft = useDraft(profileFields(data.account.profile), "profile");
+  const templateDraft = useDraft(data.preferences.templates, "template");
+  const blocker = useUnsavedGuard(profileDraft.dirty || templateDraft.dirty, settingsRoot);
+  const unsaved =
+    profileDraft.dirty && templateDraft.dirty
+      ? t.settings.template.unsavedBoth
+      : profileDraft.dirty
+        ? t.profile.unsaved
+        : t.settings.template.unsaved;
   const content = {
+    profilo: <ProfileSection account={data.account} form={profileDraft} t={t} />,
     piano: (
       <PlanSection
         account={data.account}
@@ -180,7 +210,7 @@ export function SettingsPage({
         links={links}
       />
     ),
-    messaggio: <TemplateSection templates={data.preferences.templates} t={t} />,
+    messaggio: <TemplateSection form={templateDraft} t={t} />,
     privacy: <PrivacySection accountData={data.services.accountData} t={t} links={links} />,
     supporto: (
       <SupportSection
@@ -359,6 +389,14 @@ export function SettingsPage({
           })}
         </div>
       </div>
+      <UnsavedDialog
+        blocker={blocker}
+        title={t.settings.template.unsavedTitle}
+        description={unsaved}
+        leave={t.settings.template.leave}
+        stay={t.profile.stay}
+        pending={profileDraft.action.pending || templateDraft.action.pending}
+      />
     </div>
   );
 }

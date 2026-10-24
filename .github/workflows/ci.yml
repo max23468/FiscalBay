@@ -25,6 +25,11 @@ on:
 env:
   DO_NOT_TRACK: "1"
 
+# Anche nel container di Playwright, dove la shell predefinita dei passi sarebbe `sh`.
+defaults:
+  run:
+    shell: bash
+
 permissions:
   actions: read
   contents: read

@@ -457,7 +457,7 @@ Desktop: **top navigation**, non sidebar principale. Voci **Ordini · Negozi eBa
 | Ordini e dettaglio | `/app/ordini`, `/app/ordini/:id` |
 | Negozi e dettaglio | `/app/negozi`, `/app/negozi/:id` |
 | Impostazioni e sottosezioni | `/app/impostazioni/:sezione` |
-| Profilo | `/app/profilo` |
+| Profilo | `/app/impostazioni/profilo`; `/app/profilo` reindirizza (D191) |
 | Admin | `/admin` e sottosezioni autorizzate |
 | Endpoint applicativi necessari | `/api/v1/...`, solo con un consumatore concreto |
 | Callback / webhook | Endpoint dedicati, non confusi con pagine pubbliche |
@@ -502,15 +502,16 @@ Impostazioni desktop: categorie a sinistra e contenuto a destra; navigazione loc
 | Ordini | Notifiche | Chat Telegram, stato, filtro tutti/solo fiscali, singolo/riepilogo giornaliero, orario/fuso, negozi; consenso marketing separato |
 | Ordini | Export | Ambito/anteprima, CSV/XLSX secondo piano, righe/colonne, configurazioni; non archivio permanente |
 | Ordini | Dati fiscali / modello messaggio | Template IT/EN copiabile, non anagrafica fiscale fittizia del merchant né modifica ordini |
+| Account | Profilo | Nome, cognome, ragione sociale e tipo di account registrato, che il salvataggio non cambia (D191) |
 | Account | Piano e pagamenti | Stato effettivo, trial, quote/date, upgrade, periodicità, lifetime, disdetta, concessioni, negozio attivo nel Free, storico pagamenti e documenti tramite il portale del provider, senza elenco interno (D176) |
 | Account | Sicurezza | Metodi login, passkey, password, sessioni, logout globale, verifiche pertinenti |
 | Account | Dati e privacy | Informative, export account, cancellazione e gestione diritti |
 | Generale | Aspetto e lingua | Sistema/chiaro/scuro, IT/EN, fuso del dispositivo come predefinito o scelto (D185) |
 | Generale | Supporto | FAQ/form, contatto, storico esteso, integrazioni su valutazione |
 
-Profilo dall'avatar: informazioni minime personali. Fuso nelle Impostazioni, accessi in Sicurezza, dati necessari alla vendita nel checkout provider. Menu avatar: nome/email, Profilo, Sicurezza, Piano e pagamenti, Impostazioni, Visita sito, Esci.
+Profilo come categoria delle Impostazioni: informazioni minime personali, senza email o accessi, che restano in Sicurezza (D191). Fuso in Aspetto e lingua, dati necessari alla vendita nel checkout provider. Menu avatar: nome/email, Profilo, Sicurezza, Piano e pagamenti, Impostazioni, Visita sito, Esci; Profilo apre la sua categoria.
 
-Il profilo abilita Salva soltanto per modifiche pendenti, espone attesa ed esito e conserva i valori in caso di errore. Uscita dalla pagina, ricarica o chiusura avvisano quando restano modifiche non salvate.
+Il profilo abilita Salva soltanto per modifiche pendenti, espone attesa ed esito e conserva i valori in caso di errore. Uscire dalle Impostazioni, ricaricare o chiudere avvisa quando restano modifiche non salvate al profilo o al modello di messaggio; il passaggio fra categorie conserva le bozze.
 
 Campanella: problemi e comunicazioni rilevanti di sicurezza/billing/servizio/manutenzione, non tutti gli ordini. Popover in 2.0, letture/segna tutti, ultimi **30 giorni**; pagina completa in 2.x. Niente storico di sicurezza visibile separato. Salvataggio misto: autosave controllato per toggle/scelte semplici, Salva per template/configurazioni articolate; pending/error espliciti, ripristino coerente in caso di fallimento.
 

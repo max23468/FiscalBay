@@ -30,9 +30,10 @@ import {
 import { Spinner } from "~/components/ui/spinner";
 import { Textarea } from "~/components/ui/textarea";
 import { cn } from "cn";
-import { appCopy, type AppCopy } from "../../app-copy";
+import type { AppCopy } from "../../app-copy";
 import { mailtoHref } from "../../contact";
 import { languages, languageNames, type Language } from "../../i18n";
+import { defaultTemplate, requestEmailSubject } from "../../preferences";
 import { displayTaxValue } from "../../tax-quality";
 import {
   countryName,
@@ -471,19 +472,14 @@ export function MissingOrderHelp({
   // La lingua della pagina inizializza il messaggio; poi decide il merchant.
   const [messageLanguage, setMessageLanguage] = useState<Language>(() => language);
   const defaultMessage = (code: Language) =>
-    (
-      templates?.[code] ??
-      (code === "it"
-        ? t.settings.template.templateDefaultIt
-        : t.settings.template.templateDefaultEn)
-    ).replaceAll("{ordine}", order.ebayOrderId);
+    (templates?.[code] ?? defaultTemplate(code)).replaceAll("{ordine}", order.ebayOrderId);
   const [message, setMessage] = useState(() => defaultMessage(language));
   const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
   const fieldId = useId();
   // Un alias eBay passa dalla messaggistica eBay, dove non si chiedono dati personali.
   const { email } = order.contacts;
   // L'oggetto segue la lingua del messaggio.
-  const subject = appCopy[messageLanguage].orders.requestEmailSubject(order.ebayOrderId);
+  const subject = requestEmailSubject(messageLanguage, order.ebayOrderId);
   return (
     <div className="grid min-w-0 grid-cols-1 gap-3">
       {order.suggestions.map((suggestion) => {
