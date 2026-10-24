@@ -242,7 +242,6 @@ const it = {
     requestMessage: "Copia messaggio per l’acquirente",
     requestCopied: "Messaggio copiato. Invialo all’acquirente dai tuoi canali.",
     requestEmail: "Scrivi all’acquirente via email",
-    requestEmailSubject: (order: string) => `Ordine eBay ${order}: Codice Fiscale per la fattura`,
     syncedAgo: (time: string) => `Aggiornato ${time}`,
     refreshingTitle: "Aggiornamento in corso",
     ebayDownTitle: "eBay non risponde",
@@ -606,10 +605,6 @@ const it = {
       unsavedTitle: "Modifiche non salvate",
       unsaved: "Hai modifiche non salvate al modello di messaggio. Vuoi lasciare la pagina?",
       leave: "Lascia la pagina",
-      templateDefaultIt:
-        "Buongiorno e grazie per l’acquisto. Per emettere la fattura elettronica dell’ordine {ordine} ci serve il tuo Codice Fiscale. Se acquisti con Partita IVA, indicaci quella e la ragione sociale. Grazie.",
-      templateDefaultEn:
-        "Hello and thank you for your purchase. To issue the electronic invoice for order {ordine} we need your Italian tax code (Codice Fiscale). If you are buying with a VAT number, please send that and your company name instead. Thank you.",
     },
     privacy: {
       privacyPolicy: "Informativa privacy",
@@ -1166,7 +1161,6 @@ const en: AppCopy = {
     requestMessage: "Copy message for the buyer",
     requestCopied: "Message copied. Send it to the buyer through your own channels.",
     requestEmail: "Email the buyer",
-    requestEmailSubject: (order) => `eBay order ${order}: tax code for the invoice`,
     syncedAgo: (time) => `Updated ${time}`,
     refreshingTitle: "Updating",
     ebayDownTitle: "eBay is not responding",
@@ -1523,10 +1517,6 @@ const en: AppCopy = {
       unsavedTitle: "Unsaved changes",
       unsaved: "You have unsaved changes to the message template. Leave the page?",
       leave: "Leave page",
-      templateDefaultIt:
-        "Buongiorno e grazie per l’acquisto. Per emettere la fattura elettronica dell’ordine {ordine} ci serve il tuo Codice Fiscale. Se acquisti con Partita IVA, indicaci quella e la ragione sociale. Grazie.",
-      templateDefaultEn:
-        "Hello and thank you for your purchase. To issue the electronic invoice for order {ordine} we need your Italian tax code (Codice Fiscale). If you are buying with a VAT number, please send that and your company name instead. Thank you.",
     },
     privacy: {
       privacyPolicy: "Privacy policy",
