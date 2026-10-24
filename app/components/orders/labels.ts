@@ -72,6 +72,11 @@ export function ebayOrderHref(ebayOrderId: string) {
   return `https://www.ebay.it/sh/ord/details?orderid=${encodeURIComponent(ebayOrderId)}`;
 }
 
+/** Pagina dell'inserzione su eBay. */
+export function ebayListingHref(listingId: string) {
+  return `https://www.ebay.it/itm/${encodeURIComponent(listingId)}`;
+}
+
 /** Stato della navigazione dall'elenco al dettaglio: chiudere il pannello torna indietro. */
 export const fromListState = { fromList: true } as const;
 

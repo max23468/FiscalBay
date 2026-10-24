@@ -7,6 +7,10 @@ import { dayMilliseconds } from "../time";
  * spazio dell'utente.
  */
 
+/** Nome mostrato: quello del negozio eBay, altrimenti lo username dell'account. */
+const storeNameSql = "COALESCE(s.store_name, s.display_name, s.ebay_account_id, s.ebay_user_id)";
+const usernameSql = "COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id)";
+
 export type StoreConnection = "active" | "paused" | "reconnect_required" | "disconnected";
 export type PauseReason = "manual" | "plan" | "inactivity" | "admin";
 
@@ -14,6 +18,12 @@ export type StoreStatus = {
   id: string;
   ebayEnvironment: "production" | "sandbox";
   name: string;
+  username: string;
+  /** Logo e pagina del negozio eBay, se il venditore ne ha uno. */
+  logoUrl: string | null;
+  storeUrl: string | null;
+  /** Feedback del venditore su eBay; null prima della lettura. */
+  feedback: { score: number; positivePercent: number | null; topRated: boolean } | null;
   connection: StoreConnection;
   pauseReasons: PauseReason[];
   /** Inizio del consenso corrente; null per un negozio scollegato. */
@@ -81,7 +91,7 @@ async function ownedStore(
 ): Promise<OwnedStore | null> {
   return db
     .prepare(
-      `SELECT COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id) AS name, s.disconnected_at
+      `SELECT ${storeNameSql} AS name, s.disconnected_at
          FROM ebay_stores s
          JOIN workspace_members wm ON wm.workspace_id = s.workspace_id
         WHERE wm.user_id = ? AND s.id = ?`,
@@ -94,6 +104,12 @@ type StoreRow = {
   id: string;
   ebay_environment: "production" | "sandbox";
   name: string;
+  username: string;
+  store_logo_url: string | null;
+  store_url: string | null;
+  feedback_score: number | null;
+  feedback_positive_percent: number | null;
+  top_rated_seller: number | null;
   disconnected_at: string | null;
   credentials: string | null;
   granted_at: string | null;
@@ -119,7 +135,9 @@ export async function listStores(
   const [{ results }, { results: runs }] = await db.batch<StoreRow | RunRow>([
     db
       .prepare(
-        `SELECT s.id, s.ebay_environment, COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id) AS name, s.disconnected_at,
+        `SELECT s.id, s.ebay_environment, ${storeNameSql} AS name, ${usernameSql} AS username,
+              s.store_logo_url, s.store_url, s.feedback_score, s.feedback_positive_percent,
+              s.top_rated_seller, s.disconnected_at,
               c.store_id AS credentials, c.granted_at, c.refresh_expires_at,
               c.rejected_at, ss.last_success_at, ss.history_from, ss.history_until,
               ss.history_done_at, ss.locked_until > ?2 AS syncing,
@@ -189,6 +207,17 @@ export async function listStores(
       id: row.id,
       ebayEnvironment: row.ebay_environment,
       name: row.name,
+      username: row.username,
+      logoUrl: row.store_logo_url,
+      storeUrl: row.store_url,
+      feedback:
+        row.feedback_score === null
+          ? null
+          : {
+              score: row.feedback_score,
+              positivePercent: row.feedback_positive_percent,
+              topRated: row.top_rated_seller === 1,
+            },
       connection,
       pauseReasons,
       consentGrantedAt: row.disconnected_at ? null : row.granted_at,
@@ -304,7 +333,9 @@ export async function deleteStoreData(
     db.prepare("DELETE FROM sync_runs WHERE store_id = ?").bind(storeId),
     db
       .prepare(
-        `UPDATE ebay_stores SET data_deleted_at = ?1,
+        `UPDATE ebay_stores SET data_deleted_at = ?1, store_name = NULL, store_logo_url = NULL,
+          store_url = NULL, feedback_score = NULL, feedback_positive_percent = NULL,
+          top_rated_seller = NULL, store_profile_read_at = NULL,
           orders_deleted_through = MAX(COALESCE(orders_deleted_through, ?1), ?1) WHERE id = ?2`,
       )
       .bind(at, storeId),

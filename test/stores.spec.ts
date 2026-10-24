@@ -149,6 +149,10 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       {
         id: seller.storeId,
         name: "venditore",
+        username: "venditore",
+        logoUrl: null,
+        storeUrl: null,
+        feedback: { score: 42, positivePercent: 100, topRated: false },
         ebayEnvironment: "production",
         connection: "active",
         pauseReasons: [],
@@ -167,6 +171,9 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         consentExpiring: false,
       },
     ]);
+    // Prima della lettura di `GetUser` il feedback non c'è.
+    await env.DB.prepare("UPDATE ebay_stores SET feedback_score = NULL").run();
+    expect((await listStores(env.DB, seller.userId, at))[0]?.feedback).toBeNull();
     await setExpiry(new Date(at.getTime() + 30 * day));
     expect((await listStores(env.DB, seller.userId, at))[0]).toMatchObject({
       connection: "active",

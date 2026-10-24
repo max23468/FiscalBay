@@ -16,7 +16,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
+  pull-requests: read
 
 concurrency:
   group: react-doctor-${{ github.event.pull_request.number || github.ref }}
@@ -65,6 +65,7 @@ jobs:
           node-version: ${{ steps.versions.outputs.node }}
           scope: ${{ github.event_name == 'pull_request' && 'changed' || 'full' }}
           blocking: warning
+          # Gli avvisi restano nel log e bloccano il controllo, senza commenti che notificano.
           comment: "false"
-          review-comments: "true"
+          review-comments: "false"
           commit-status: "false"

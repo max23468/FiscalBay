@@ -5,9 +5,9 @@ import { parseMinor } from "../../money";
 
 /**
  * Trading resta circoscritto alle chiamate necessarie: `GetOrders` per gli acquisti prima del
- * checkout, le identità di riga e i dati fiscali, `GetItem` per l'immagine. Le risposte passano dal
- * confine HTTP e vengono rifiutate prima del parsing se troppo grandi, con byte NUL o con
- * dichiarazioni `DOCTYPE`/`ENTITY`.
+ * checkout, le identità di riga e i dati fiscali, `GetItem` per l'immagine, `GetStore` e `GetUser`
+ * per il profilo pubblico del negozio. Le risposte passano dal confine HTTP e vengono rifiutate
+ * prima del parsing se troppo grandi, con byte NUL o con dichiarazioni `DOCTYPE`/`ENTITY`.
  */
 const tradingApiVersion = "1455";
 const tradingSiteId = "101";
@@ -407,4 +407,85 @@ export async function readItemImage(
   return parseItemImage(
     await tradingCall(access, "GetItem", `<ItemID>${escapeXml(legacyItemId)}</ItemID>`),
   );
+}
+
+export type StoreProfile = { name: string | null; logoUrl: string | null; url: string | null };
+
+const emptyStoreProfile: StoreProfile = { name: null, logoUrl: null, url: null };
+
+/** Indirizzo HTTPS su un dominio eBay, senza credenziali né porta; altrimenti null. */
+export function qualifiedEbayUrl(value: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  return url.protocol === "https:" &&
+    /^(?:[a-z\d-]+\.)*ebay\.[a-z]{2,3}(?:\.[a-z]{2})?$/u.test(url.hostname) &&
+    !url.port &&
+    !url.username &&
+    !url.password
+    ? url.href
+    : null;
+}
+
+/**
+ * Nome, logo e indirizzo del negozio in una risposta `GetStore`. Categorie, logo e tema hanno
+ * elementi `Name` e `URL` propri: si tolgono prima di leggere quelli del negozio.
+ */
+export function parseStoreProfile(xml: string): StoreProfile {
+  tradingAck(xml);
+  const store = /<Store>([\s\S]*)<\/Store>/u.exec(xml)?.[1] ?? "";
+  const logo = /<Logo>([\s\S]*?)<\/Logo>/u.exec(store)?.[1] ?? "";
+  const own = store.replace(/<(CustomCategories|Logo|Theme)>[\s\S]*?<\/\1>/gu, "");
+  const name = xmlField(own, "Name");
+  const logoUrl = xmlField(logo, "URL");
+  const url = xmlField(own, "URL");
+  return {
+    name: name && name.length <= 200 ? name : null,
+    logoUrl: logoUrl ? qualifiedImageUrl(logoUrl) : null,
+    url: url ? qualifiedEbayUrl(url) : null,
+  };
+}
+
+/**
+ * Negozio eBay dell'utente del token. Chi non ha un negozio riceve un rifiuto da eBay: vale come
+ * profilo vuoto, non come errore della lettura.
+ */
+export async function readStoreProfile(access: EbayAccess): Promise<StoreProfile> {
+  try {
+    return parseStoreProfile(await tradingCall(access, "GetStore", "<LevelLimit>1</LevelLimit>"));
+  } catch (error) {
+    if (error instanceof UpstreamError && error.failure === "rejected") return emptyStoreProfile;
+    throw error;
+  }
+}
+
+export type SellerStanding = {
+  feedbackScore: number | null;
+  positivePercent: number | null;
+  topRated: boolean;
+};
+
+/**
+ * Feedback e stato Top Rated in una risposta `GetUser`. eBay riporta `TopRatedSeller` soltanto
+ * per chi lo è: l'assenza vale come venditore non Top Rated.
+ */
+export function parseSellerStanding(xml: string): SellerStanding {
+  tradingAck(xml);
+  const user = /<User>([\s\S]*)<\/User>/u.exec(xml)?.[1] ?? "";
+  const score = Number(xmlField(user, "FeedbackScore") || Number.NaN);
+  const percent = Number(xmlField(user, "PositiveFeedbackPercent") || Number.NaN);
+  const seller = /<SellerInfo>([\s\S]*?)<\/SellerInfo>/u.exec(user)?.[1] ?? "";
+  return {
+    feedbackScore: Number.isSafeInteger(score) ? score : null,
+    positivePercent: Number.isFinite(percent) && percent >= 0 && percent <= 100 ? percent : null,
+    topRated: xmlField(seller, "TopRatedSeller") === "true",
+  };
+}
+
+/** Feedback e stato Top Rated dell'utente del token. */
+export async function readSellerStanding(access: EbayAccess): Promise<SellerStanding> {
+  return parseSellerStanding(await tradingCall(access, "GetUser", ""));
 }

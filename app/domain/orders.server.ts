@@ -72,6 +72,8 @@ export type OrderSummary = {
     totalMinor: number | null;
     currency: string | null;
     imageUrl: string | null;
+    /** Identità della riga: inizia con l'ID dell'inserzione eBay, quando la fonte lo fornisce. */
+    stableKey: string | null;
   }>;
 };
 
@@ -403,9 +405,10 @@ export async function listVisibleOrders(
                OR EXISTS (SELECT 1 FROM order_items i WHERE i.order_id = o.id AND i.stable_key IS NULL)) AS reconciliation_issue,
               (SELECT json_group_array(json_object('lineItemId', line_item_id, 'title', title,
                         'quantity', quantity, 'sku', sku, 'totalMinor', total_minor,
-                        'currency', currency, 'imageUrl', image_url))
+                        'currency', currency, 'imageUrl', image_url,
+                        'stableKey', stable_key))
                  FROM (SELECT * FROM order_items WHERE order_id = o.id ORDER BY rowid)) AS items_json,
-              COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id) ||
+              COALESCE(s.store_name, s.display_name, s.ebay_account_id, s.ebay_user_id) ||
                 CASE WHEN s.ebay_environment = 'sandbox' THEN ' (Sandbox)' ELSE '' END AS store_name,
               EXISTS (SELECT 1 FROM tax_identifiers
                        WHERE order_id = o.id AND removed_at IS NULL) AS has_identifiers,
@@ -647,6 +650,11 @@ function locality(address: NonNullable<BuyerSnapshot["shipTo"]>["address"]) {
  * Ordine persistito nella vista condivisa con l'anteprima. Prima riga d'indirizzo e località
  * compongono l'indirizzo di fatturazione; un dato non fornito da eBay resta null.
  */
+/** ID dell'inserzione eBay in testa all'identità stabile della riga (`<inserzione>-<riga>`). */
+function listingId(stableKey: string | null): string | null {
+  return stableKey?.match(/^(\d{6,19})-/u)?.[1] ?? null;
+}
+
 export function orderView(order: VisibleOrder): OrderView {
   const buyer = order.summary.buyer;
   const billing = buyer?.billingAddress;
@@ -678,6 +686,7 @@ export function orderView(order: VisibleOrder): OrderView {
       // Un importo in un'altra valuta non si mostra come se fosse nella valuta dell'ordine.
       totalMinor: item.currency === order.currency ? item.totalMinor : null,
       currency: order.currency,
+      listingId: listingId(item.stableKey),
     })),
     totalMinor: order.totalMinor,
     currency: order.currency,

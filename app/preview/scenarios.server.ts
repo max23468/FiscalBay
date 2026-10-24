@@ -234,11 +234,19 @@ const thumbnail = (hue: number) =>
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" fill="hsl(${hue} 15% 25%)"/><path d="M 12 17 24 11 36 17v15L 24 38 12 32Zm0 0 12 6 12-6M 24 23v15" fill="none" stroke="hsl(${hue} 20% 75%)" stroke-width="2"/></svg>`,
   )}`;
 
+// Logo del negozio eBay, come lo restituisce `GetStore`; gli altri negozi non ne hanno uno.
+const storeLogo = `data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48"><rect width="48" height="48" fill="#fff"/><circle cx="24" cy="24" r="17" fill="none" stroke="#b45309" stroke-width="3"/><path d="M 15 27h18M 18 27l3-8h6l3 8M 17 31a2 2 0 1 0 0 .1M 31 31a2 2 0 1 0 0 .1" fill="none" stroke="#1f2937" stroke-width="2.5" stroke-linecap="round"/></svg>`,
+)}`;
+
 const stores = {
   vintage: {
     id: "neg-vintage",
     name: "Vintage Garage Italia",
     username: "vintage_garage_it",
+    logoUrl: storeLogo,
+    storeUrl: "https://vintage-garage.invalid/str/vintagegarageitalia",
+    feedback: { score: 4_812, positivePercent: 99.8, topRated: true },
     marketplace: "EBAY_IT",
   },
   outlet: {
@@ -376,7 +384,12 @@ const seeds: OrderSeed[] = [
     buyerName: "Maria Rossi",
     buyerUsername: "maria.rossi80",
     shipTo: { name: "Maria Rossi", locality: "Roma (RM)", country: "IT" },
-    items: [item("it-02a", "Carburatore Dell’Orto PHBG 19 revisionato", 4_990, 1, "CARB-PHBG19")],
+    items: [
+      {
+        ...item("it-02a", "Carburatore Dell’Orto PHBG 19 revisionato", 4_990, 1, "CARB-PHBG19"),
+        listingId: "286104553201",
+      },
+    ],
     totalMinor: 4_990,
     currency: "EUR",
     payment: "paid",
