@@ -11,8 +11,9 @@ import {
   Palette,
   Settings,
   ShieldCheck,
+  User,
 } from "lucide-react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { IconTile, PageTitle } from "~/components/icon-tile";
@@ -32,9 +33,17 @@ import { ExportSection, type ExportContext } from "./export";
 import { NotificationsSection } from "./notifications";
 import { PlanSection } from "./plan";
 import { PrivacySection } from "./privacy";
+import { ProfileSection } from "./profile";
 import { SecuritySection, type SecurityData } from "./security";
 import { SupportSection } from "./support";
 import { TemplateSection } from "./template";
+import {
+  UnsavedDialog,
+  useUnsavedGuard,
+  type DraftSection,
+  type DraftState,
+  type ReportDraft,
+} from "./unsaved";
 
 export interface SettingsPageData {
   confirmUnlock: boolean;
@@ -89,6 +98,7 @@ function sectionDescription(t: AppCopy, id: SettingsSection, services: SettingsS
 
 /** Icone neutre: le Impostazioni restano sobrie, il colore sta in Ordini e Negozi. */
 const sectionIcons: Record<SettingsSection, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
+  profilo: User,
   piano: CreditCard,
   notifiche: Bell,
   esportazione: FileSpreadsheet,
@@ -98,6 +108,13 @@ const sectionIcons: Record<SettingsSection, React.ComponentType<React.SVGProps<S
   privacy: Database,
   supporto: LifeBuoy,
 };
+
+/** Radice delle Impostazioni di un indirizzo, oppure l'indirizzo stesso fuori da esse. */
+function settingsRoot(pathname: string) {
+  return /^(.*\/impostazioni)(?:\/[^/]*)?$/u.exec(pathname)?.[1] ?? pathname;
+}
+
+const idleDraft: DraftState = { dirty: false, pending: false };
 
 /** Da 768 px tutte le categorie stanno in una pagina che scorre. */
 const wideQuery = "(min-width: 48rem)";
@@ -131,7 +148,29 @@ export function SettingsPage({
     }))
     .filter((group) => group.sections.length > 0);
   const premium = data.account.plan === "premium";
+  const [drafts, setDrafts] = useState<Record<DraftSection, DraftState>>({
+    profilo: idleDraft,
+    messaggio: idleDraft,
+  });
+  const reportDraft = useCallback<ReportDraft>(
+    (section, state) =>
+      setDrafts((current) =>
+        current[section].dirty === state.dirty && current[section].pending === state.pending
+          ? current
+          : { ...current, [section]: state },
+      ),
+    [],
+  );
+  // Fra le categorie le bozze restano, perché la pagina è la stessa.
+  const blocker = useUnsavedGuard(drafts.profilo.dirty || drafts.messaggio.dirty, settingsRoot);
+  const unsaved =
+    drafts.profilo.dirty && drafts.messaggio.dirty
+      ? t.settings.template.unsavedBoth
+      : drafts.profilo.dirty
+        ? t.profile.unsaved
+        : t.settings.template.unsaved;
   const content = {
+    profilo: <ProfileSection account={data.account} t={t} onDraft={reportDraft} />,
     piano: (
       <PlanSection
         account={data.account}
@@ -180,7 +219,9 @@ export function SettingsPage({
         links={links}
       />
     ),
-    messaggio: <TemplateSection templates={data.preferences.templates} t={t} />,
+    messaggio: (
+      <TemplateSection templates={data.preferences.templates} t={t} onDraft={reportDraft} />
+    ),
     privacy: <PrivacySection accountData={data.services.accountData} t={t} links={links} />,
     supporto: (
       <SupportSection
@@ -359,6 +400,14 @@ export function SettingsPage({
           })}
         </div>
       </div>
+      <UnsavedDialog
+        blocker={blocker}
+        title={t.settings.template.unsavedTitle}
+        description={unsaved}
+        leave={t.settings.template.leave}
+        stay={t.profile.stay}
+        pending={drafts.profilo.pending || drafts.messaggio.pending}
+      />
     </div>
   );
 }

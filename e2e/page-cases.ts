@@ -46,6 +46,7 @@ export function knownPagePath(pathname: string) {
 }
 
 const settings = [
+  "profilo",
   "piano",
   "notifiche",
   "esportazione",
@@ -123,7 +124,11 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
       }),
     ),
     make("/app/profilo", "profile", { redirect: access }),
-    make("/app/profilo", "profile", { role: "member", remote: !prefix }),
+    make("/app/profilo", "profile", {
+      role: "member",
+      redirect: `${prefix}/app/impostazioni/profilo`,
+      remote: !prefix,
+    }),
     make("/app/impostazioni", "settings", {
       pattern: `${prefix}/app/impostazioni/:sezione?`,
       redirect: access,
@@ -163,7 +168,6 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
         status: suffix === "/non-esiste" ? 404 : 200,
       }),
     ),
-    preview("/profilo", "profile"),
     // Riceve soltanto ricerche: una lettura risponde senza contenuto.
     preview("/ricerca", "orders", { endpoint: true, status: 405 }),
     make("/pagina-inesistente", "public", { status: 404, pattern: "*", remote: !prefix }),

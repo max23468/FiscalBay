@@ -1,4 +1,5 @@
 import { cn } from "cn";
+import { useEffect } from "react";
 
 import { useHydrated } from "~/components/hydrated";
 import { Button } from "~/components/ui/button";
@@ -8,12 +9,7 @@ import { Textarea } from "~/components/ui/textarea";
 import type { AppCopy } from "../../app-copy";
 import { languageNames, languages, type Language } from "../../i18n";
 import { maxTemplateLength } from "../../preferences";
-import { UnsavedDialog, useDraft, useUnsavedGuard } from "./unsaved";
-
-/** Radice delle Impostazioni di un indirizzo, oppure l'indirizzo stesso fuori da esse. */
-function settingsRoot(pathname: string) {
-  return /^(.*\/impostazioni)(?:\/[^/]*)?$/u.exec(pathname)?.[1] ?? pathname;
-}
+import { useDraft, type ReportDraft } from "./unsaved";
 
 /**
  * Modello di messaggio: si salva con Salva. Un salvataggio non riuscito lascia il testo scritto
@@ -22,13 +18,17 @@ function settingsRoot(pathname: string) {
 export function TemplateSection({
   templates,
   t,
+  onDraft,
 }: {
   templates: Record<Language, string>;
   t: AppCopy;
+  onDraft: ReportDraft;
 }) {
   const { draft, setDraft, dirty, state, submit, action } = useDraft(templates, "template");
-  // Fra le categorie la bozza resta, perché la pagina è la stessa.
-  const blocker = useUnsavedGuard(dirty, settingsRoot);
+  useEffect(
+    () => onDraft("messaggio", { dirty, pending: action.pending }),
+    [onDraft, dirty, action.pending],
+  );
   const empty = languages.some((code) => !draft[code].trim());
   const ready = useHydrated();
   return (
@@ -98,13 +98,6 @@ export function TemplateSection({
           </span>
         </div>
       </form>
-      <UnsavedDialog
-        blocker={blocker}
-        title={t.settings.template.unsavedTitle}
-        description={t.settings.template.unsaved}
-        leave={t.settings.template.leave}
-        stay={t.profile.stay}
-      />
     </div>
   );
 }

@@ -58,6 +58,20 @@ export function useDraft<T extends Record<string, string>>(stored: T, intent: st
   return { draft, setDraft, dirty, state, submit, action };
 }
 
+/** Categorie delle Impostazioni con un modulo che si salva con «Salva». */
+export type DraftSection = "profilo" | "messaggio";
+
+export interface DraftState {
+  dirty: boolean;
+  pending: boolean;
+}
+
+/**
+ * Stato della bozza di una categoria, comunicato alla pagina delle Impostazioni: il router
+ * ammette un solo blocco della navigazione, quindi la conferma d'uscita è una per pagina.
+ */
+export type ReportDraft = (section: DraftSection, state: DraftState) => void;
+
 /**
  * Modifiche non salvate: lasciare l'area, ricaricare o chiudere la pagina chiede conferma.
  * `area` riduce l'indirizzo alla parte che conta: dentro la stessa area la bozza resta.
