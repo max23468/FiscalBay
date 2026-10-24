@@ -3094,66 +3094,68 @@ test.describe("abbonamento nel piano", () => {
   ] as const;
 
   for (const language of ["it", "en"] as const)
-    test(`area reale e anteprima mostrano gli stessi stati dell'abbonamento ${language}`, async ({
-      page,
-      context,
-      baseURL,
-    }) => {
-      const it = language === "it";
-      const prefix = it ? "" : "/en";
-      const expected = {
-        active: {
-          title: it ? /^Premium (mensile|annuale)$/u : /^Premium, (monthly|annual)$/u,
-          text: it ? "Si rinnova il" : "Renews on",
-        },
-        cancelled: {
-          title: it ? "Premium mensile" : "Premium, monthly",
-          text: it
-            ? "Rinnovo disdetto: Premium resta attivo fino al"
-            : "Renewal cancelled: Premium stays active until",
-        },
-        pending: {
-          title: "Free",
-          text: it ? "Attivazione Premium in corso" : "Activating Premium",
-        },
-        lapsed: {
-          title: "Free",
-          text: it ? "per mantenere il tuo prezzo" : "to keep your price",
-        },
-      };
-      const plan = () =>
-        page.getByRole("region", { name: it ? "Piano e pagamenti" : "Plan and billing" });
-      const check = async (state: (typeof states)[number]["account"]) => {
-        const section = plan();
-        await expect(section.getByText(expected[state].title, { exact: true })).toBeVisible();
-        await expect(section).toContainText(expected[state].text);
-        // Con un abbonamento aperto né la prova né un secondo acquisto.
-        await expect(
-          section.getByRole("button", {
-            name: /Attiva la prova|Start trial|Scegli (mensile|annuale)|Choose (monthly|annual)/u,
-          }),
-        ).toHaveCount(0);
-      };
-      for (const { account, scenario } of states) {
+    for (const { account, scenario } of states)
+      test(`area reale e anteprima mostrano lo stesso abbonamento: ${account}, ${language}`, async ({
+        page,
+        context,
+        browser,
+        baseURL,
+      }) => {
+        const it = language === "it";
+        const prefix = it ? "" : "/en";
+        const expected = {
+          active: {
+            title: it ? /^Premium (mensile|annuale)$/u : /^Premium, (monthly|annual)$/u,
+            text: it ? "Si rinnova il" : "Renews on",
+          },
+          cancelled: {
+            title: it ? "Premium mensile" : "Premium, monthly",
+            text: it
+              ? "Rinnovo disdetto: Premium resta attivo fino al"
+              : "Renewal cancelled: Premium stays active until",
+          },
+          pending: {
+            title: "Free",
+            text: it ? "Attivazione Premium in corso" : "Activating Premium",
+          },
+          lapsed: {
+            title: "Free",
+            text: it ? "per mantenere il tuo prezzo" : "to keep your price",
+          },
+        }[account];
+        const check = async (target: Page, surface: "real" | "preview") => {
+          const section = target.getByRole("region", {
+            name: it ? "Piano e pagamenti" : "Plan and billing",
+          });
+          await expect(section.getByText(expected.title, { exact: true })).toBeVisible();
+          await expect(section).toContainText(expected.text);
+          // Con un abbonamento aperto né la prova né un secondo acquisto.
+          await expect(
+            section.getByRole("button", {
+              name: /Attiva la prova|Start trial|Scegli (mensile|annuale)|Choose (monthly|annual)/u,
+            }),
+          ).toHaveCount(0);
+          await section.screenshot({
+            path: test.info().outputPath(`subscription-${account}-${surface}-${language}.png`),
+          });
+        };
         await useLocalAccount(context, "member", baseURL!, `subscription-${account}`);
         await page.goto(`${prefix}/app/impostazioni/piano`);
-        await check(account);
-        await plan().screenshot({
-          path: test.info().outputPath(`subscription-${account}-real-${language}.png`),
-        });
+        await check(page, "real");
         if (account === "pending" || account === "lapsed") {
           await page.goto(`${prefix}/app/ordini`);
           await expect(
             page.getByRole("button", { name: it ? "Attiva la prova" : "Start trial" }),
           ).toHaveCount(0);
         }
-        await context.clearCookies();
-        await context.unrouteAll({ behavior: "ignoreErrors" });
-        await open(page, `${prefix}/anteprima/impostazioni/piano`, scenario);
-        await check(account);
-        await plan().screenshot({
-          path: test.info().outputPath(`subscription-${account}-preview-${language}.png`),
-        });
-      }
-    });
+        // L'anteprima in un contesto proprio, anonimo e senza la sessione dell'area reale.
+        const preview = await browser.newContext({ baseURL });
+        try {
+          const previewPage = await preview.newPage();
+          await open(previewPage, `${prefix}/anteprima/impostazioni/piano`, scenario);
+          await check(previewPage, "preview");
+        } finally {
+          await preview.close();
+        }
+      });
 });
