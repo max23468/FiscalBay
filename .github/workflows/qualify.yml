@@ -32,6 +32,7 @@ jobs:
     outputs:
       run-id: ${{ steps.reuse.outputs.run-id }}
       tree: ${{ steps.tree.outputs.tree }}
+      playwright: ${{ steps.tree.outputs.playwright }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -43,7 +44,10 @@ jobs:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: |
           test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
-          echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "${GITHUB_OUTPUT}"
+          {
+            echo "tree=$(git rev-parse 'HEAD^{tree}')"
+            echo "playwright=$(node -p 'require("./package.json").devDependencies["@playwright/test"]')"
+          } >> "${GITHUB_OUTPUT}"
       - name: Find qualified Production candidate
         id: reuse
         env:
@@ -126,10 +130,14 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # Browser e librerie di sistema dall'immagine ufficiale della versione di Playwright del manifest.
   browser:
     needs: [select, source, production]
     if: needs.select.outputs.run-id == ''
     runs-on: ubuntu-26.04
+    container:
+      image: mcr.microsoft.com/playwright:v${{ needs.select.outputs.playwright }}-noble
+      options: --ipc=host
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -155,40 +163,6 @@ jobs:
           environment="test"
           if [ "${KIND}" = production ]; then environment="production"; fi
           node scripts/release/release.mjs verify --environment "${environment}"
-      - name: Read Playwright version
-        id: playwright
-        run: |
-          echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
-          echo "image=${ImageOS}" >> "${GITHUB_OUTPUT}"
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        id: browsers
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium-webkit
-      - name: Prepare browser system packages
-        run: sudo "$(command -v node)" scripts/browser-tests.mjs --prepare-system
-      # La cache riduce i download; i pacchetti mancanti arrivano dall'archivio Ubuntu.
-      - name: Restore system packages
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/apt-archives
-          key: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium-webkit
-          restore-keys: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-
-      # Un archivio lento non deve occupare il job fino al timeout: il passo si interrompe e si
-      # ripete una volta, ripartendo dai pacchetti già scaricati.
-      - name: Install browser system dependencies
-        id: system
-        timeout-minutes: 5
-        continue-on-error: true
-        env:
-          BROWSER_CACHE_HIT: ${{ steps.browsers.outputs.cache-hit }}
-        run: node scripts/browser-tests.mjs --install-system --browsers chromium,webkit
-      - name: Retry browser system dependencies
-        if: steps.system.outcome == 'failure'
-        timeout-minutes: 5
-        env:
-          BROWSER_CACHE_HIT: ${{ steps.browsers.outputs.cache-hit }}
-        run: node scripts/browser-tests.mjs --install-system --browsers chromium,webkit
       - name: Qualify all selected pages and interactions
         env:
           E2E_PREBUILT: "1"

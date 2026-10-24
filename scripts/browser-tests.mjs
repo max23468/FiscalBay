@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
-import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
@@ -76,73 +75,6 @@ export function assertCandidateReports(parts, sha, expected) {
   }
 }
 
-/** Il mirror Azure dei runner può bloccare APT anche con i pacchetti in cache. */
-export function prepareBrowserSystem(directory = "/etc/apt") {
-  const fragments = path.join(directory, "sources.list.d");
-  // I runner GitHub leggono l'host da apt-mirrors.txt tramite `mirror+file:`.
-  const sources = [
-    path.join(directory, "apt-mirrors.txt"),
-    path.join(directory, "sources.list"),
-    ...(existsSync(fragments)
-      ? readdirSync(fragments)
-          .filter((name) => /\.(?:sources|list)$/u.test(name))
-          .map((name) => path.join(fragments, name))
-      : []),
-  ].filter((file) => existsSync(file));
-  if (sources.length === 0) throw new Error("Sorgenti APT non disponibili.");
-  let changed = 0;
-  for (const file of sources) {
-    const before = readFileSync(file, "utf8");
-    const after = before.replace(
-      /https?:\/\/azure\.archive\.ubuntu\.com(?=\/ubuntu(?:\/|\s|$))/gu,
-      "https://archive.ubuntu.com",
-    );
-    if (before === after) continue;
-    writeFileSync(file, after);
-    changed++;
-  }
-  return changed;
-}
-
-/**
- * Pacchetti di sistema dei browser: i `.deb` della cache del runner evitano i download e quelli
- * scaricati tornano nella cache. Un tentativo interrotto dal timeout del passo lascia dpkg da
- * completare: il nuovo tentativo lo chiude prima di ripartire dai pacchetti già scaricati.
- */
-export function installBrowserSystem(
-  browsers,
-  {
-    withBrowsers = false,
-    cache = path.join(homedir(), ".cache/apt-archives"),
-    archives = "/var/cache/apt/archives",
-    run = (command, args) => execFileSync(command, args, { stdio: "inherit" }),
-  } = {},
-) {
-  const debs = (directory) =>
-    existsSync(directory)
-      ? readdirSync(directory)
-          .filter((name) => name.endsWith(".deb"))
-          .map((name) => path.join(directory, name))
-      : [];
-  run("sudo", ["dpkg", "--configure", "-a"]);
-  run("sudo", [
-    "sh",
-    "-c",
-    `echo 'APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/99-keep-downloaded`,
-  ]);
-  const cached = debs(cache);
-  if (cached.length) run("sudo", ["cp", ...cached, archives]);
-  run("pnpm", [
-    "exec",
-    "playwright",
-    ...(withBrowsers ? ["install", "--with-deps"] : ["install-deps"]),
-    ...browsers,
-  ]);
-  mkdirSync(cache, { recursive: true });
-  const downloaded = debs(archives);
-  if (downloaded.length) run("cp", [...downloaded, cache]);
-}
-
 function main() {
   const { values } = parseArgs({
     options: {
@@ -151,14 +83,8 @@ function main() {
       pages: { type: "boolean", default: false },
       shard: { type: "string" },
       "check-evidence": { type: "string" },
-      "prepare-system": { type: "boolean", default: false },
-      "install-system": { type: "boolean", default: false },
     },
   });
-  if (values["prepare-system"]) {
-    console.log(`APT: ${prepareBrowserSystem()} sorgenti aggiornate all'archivio Ubuntu.`);
-    return;
-  }
   if (values["check-evidence"]) {
     const directory = values["check-evidence"];
     const parts = readdirSync(directory, { recursive: true }).flatMap((file) => {
@@ -220,11 +146,6 @@ function main() {
   const browsers = values.browsers.split(",");
   if (browsers.some((browser) => !["chromium", "webkit"].includes(browser)))
     throw new Error("Browser non supportato.");
-  // Senza browser ripristinati dalla cache si scaricano anche quelli.
-  if (values["install-system"])
-    return void installBrowserSystem(browsers, {
-      withBrowsers: process.env.BROWSER_CACHE_HIT !== "true",
-    });
   const selection = [
     ...(values.pages ? ["e2e/pages.spec.ts"] : []),
     "--grep",

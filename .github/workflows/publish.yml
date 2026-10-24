@@ -132,40 +132,11 @@ jobs:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
           REVIEWED_MIGRATIONS: ${{ inputs.reviewed_migrations }}
         run: node scripts/release/release.mjs deploy --environment production --expected-sha "${EXPECTED_SHA}" --reviewed-migrations "${REVIEWED_MIGRATIONS}"
-      - name: Read Playwright version
-        id: playwright
-        run: |
-          echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
-          echo "image=${ImageOS}" >> "${GITHUB_OUTPUT}"
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        id: browsers
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium-webkit
-      - name: Prepare browser system packages
-        run: sudo "$(command -v node)" scripts/browser-tests.mjs --prepare-system
-      # La cache riduce i download; i pacchetti mancanti arrivano dall'archivio Ubuntu.
-      - name: Restore system packages
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/apt-archives
-          key: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium-webkit
-          restore-keys: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-
-      # Un archivio lento non deve occupare il job fino al timeout: il passo si interrompe e si
-      # ripete una volta, ripartendo dai pacchetti già scaricati.
-      - name: Install browser system dependencies
-        id: system
-        timeout-minutes: 5
-        continue-on-error: true
-        env:
-          BROWSER_CACHE_HIT: ${{ steps.browsers.outputs.cache-hit }}
-        run: node scripts/browser-tests.mjs --install-system --browsers chromium,webkit
-      - name: Retry browser system dependencies
-        if: steps.system.outcome == 'failure'
-        timeout-minutes: 5
-        env:
-          BROWSER_CACHE_HIT: ${{ steps.browsers.outputs.cache-hit }}
-        run: node scripts/browser-tests.mjs --install-system --browsers chromium,webkit
+      # Il job distribuisce e può tornare indietro: resta sul runner, con browser e librerie
+      # installati dall'installer ufficiale di Playwright.
+      - name: Install browsers
+        timeout-minutes: 10
+        run: pnpm exec playwright install --with-deps chromium webkit
       - name: Check Production public pages and preview exclusion
         env:
           E2E_BASE_URL: https://fiscalbay.it

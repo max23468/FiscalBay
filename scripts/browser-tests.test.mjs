@@ -1,16 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { describe, it } from "node:test";
-import {
-  shardTests,
-  listedTestIds,
-  assertCandidateReports,
-  prepareBrowserSystem,
-  installBrowserSystem,
-} from "./browser-tests.mjs";
+import { shardTests, listedTestIds, assertCandidateReports } from "./browser-tests.mjs";
 
 describe("coordinamento e provenienza della pubblicazione", () => {
   it("certifica tutte le partizioni browser solo con prove coerenti e complete", () => {
@@ -103,88 +94,6 @@ describe("coordinamento e provenienza della pubblicazione", () => {
 });
 
 describe("prove browser divise fra macchine", () => {
-  it("usa l'archivio Ubuntu per APT e conserva gli altri repository", () => {
-    const directory = mkdtempSync(path.join(tmpdir(), "browser-system-"));
-    try {
-      const fragments = path.join(directory, "sources.list.d");
-      mkdirSync(fragments);
-      const legacy = path.join(directory, "sources.list");
-      const ubuntu = path.join(fragments, "ubuntu.sources");
-      const other = path.join(fragments, "other.list");
-      writeFileSync(legacy, "deb http://azure.archive.ubuntu.com/ubuntu resolute main\n");
-      writeFileSync(
-        ubuntu,
-        "Types: deb\nURIs: https://azure.archive.ubuntu.com/ubuntu/\nSuites: resolute-updates\nComponents: main\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n",
-      );
-      const mirrors = path.join(directory, "apt-mirrors.txt");
-      writeFileSync(
-        mirrors,
-        "http://azure.archive.ubuntu.com/ubuntu/\tpriority:1\nhttps://security.ubuntu.com/ubuntu/\tpriority:3\n",
-      );
-      const unrelated = "deb https://packages.example.invalid/repository stable main\n";
-      writeFileSync(other, unrelated);
-      assert.equal(prepareBrowserSystem(directory), 3);
-      assert.equal(
-        readFileSync(mirrors, "utf8"),
-        "https://archive.ubuntu.com/ubuntu/\tpriority:1\nhttps://security.ubuntu.com/ubuntu/\tpriority:3\n",
-      );
-      assert.equal(
-        readFileSync(legacy, "utf8"),
-        "deb https://archive.ubuntu.com/ubuntu resolute main\n",
-      );
-      assert.equal(
-        readFileSync(ubuntu, "utf8"),
-        "Types: deb\nURIs: https://archive.ubuntu.com/ubuntu/\nSuites: resolute-updates\nComponents: main\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n",
-      );
-      assert.equal(readFileSync(other, "utf8"), unrelated);
-      assert.equal(prepareBrowserSystem(directory), 0);
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
-    }
-  });
-  it("installa i pacchetti dei browser dalla cache e conserva quelli scaricati", () => {
-    const directory = mkdtempSync(path.join(tmpdir(), "browser-packages-"));
-    try {
-      const cache = path.join(directory, "cache");
-      const archives = path.join(directory, "archives");
-      mkdirSync(cache);
-      mkdirSync(archives);
-      writeFileSync(path.join(cache, "cached.deb"), "");
-      writeFileSync(path.join(cache, "notes.txt"), "");
-      const calls = [];
-      const run = (command, args) => {
-        calls.push([command, ...args]);
-        if (args[1] === "playwright") writeFileSync(path.join(archives, "new.deb"), "");
-      };
-      installBrowserSystem(["chromium", "webkit"], { cache, archives, run });
-      assert.deepEqual(calls[0], ["sudo", "dpkg", "--configure", "-a"]);
-      assert.deepEqual(calls[2], ["sudo", "cp", path.join(cache, "cached.deb"), archives]);
-      assert.deepEqual(calls[3], [
-        "pnpm",
-        "exec",
-        "playwright",
-        "install-deps",
-        "chromium",
-        "webkit",
-      ]);
-      assert.deepEqual(calls[4], ["cp", path.join(archives, "new.deb"), cache]);
-      calls.length = 0;
-      rmSync(cache, { recursive: true });
-      installBrowserSystem(["chromium"], { withBrowsers: true, cache, archives, run });
-      assert.equal(
-        calls.some(([command, verb]) => command === "sudo" && verb === "cp"),
-        false,
-      );
-      assert.ok(
-        calls.some(
-          (call) => call.join(" ") === "pnpm exec playwright install --with-deps chromium",
-        ),
-      );
-      assert.ok(existsSync(cache));
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
-    }
-  });
   it("raccoglie ogni scenario funzionale in Chromium e WebKit", () => {
     const result = spawnSync(
       "pnpm",

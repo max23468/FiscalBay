@@ -51,6 +51,7 @@ jobs:
       reused: ${{ steps.reuse.outputs.run-id != '' }}
       artifact: build-${{ steps.tree.outputs.tree }}
       artifact-run: ${{ steps.reuse.outputs.run-id || github.run_id }}
+      playwright: ${{ steps.tree.outputs.playwright }}
 
     steps:
       - name: Checkout
@@ -107,7 +108,12 @@ jobs:
 
       - name: Identify tree
         id: tree
-        run: echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "${GITHUB_OUTPUT}"
+        # La versione di Playwright del manifest sceglie l'immagine dei job browser.
+        run: |
+          {
+            echo "tree=$(git rev-parse 'HEAD^{tree}')"
+            echo "playwright=$(node -p 'require("./package.json").devDependencies["@playwright/test"]')"
+          } >> "${GITHUB_OUTPUT}"
 
       # Un tree già verificato da una PR di questo repository non ripete il gate:
       # il deploy distribuisce l'artefatto prodotto da quella verifica.
@@ -171,12 +177,16 @@ jobs:
           retention-days: 7
 
   # Prove browser sulla build verificata, divise su quattro macchine con quattro worker ciascuna.
+  # L'immagine ufficiale di Playwright contiene browser e librerie di sistema della stessa versione.
   browser:
     name: Browser ${{ matrix.shard }}/4
     needs: verify
     # Una PR in bozza esegue soltanto `Verify`: le prove complete partono quando è pronta.
     if: needs.verify.outputs.e2e == 'true' && needs.verify.outputs.reused != 'true' && github.event.pull_request.draft != true
     runs-on: ubuntu-26.04
+    container:
+      image: mcr.microsoft.com/playwright:v${{ needs.verify.outputs.playwright }}-noble
+      options: --ipc=host
     timeout-minutes: 20
     concurrency:
       group: browser-${{ github.event.pull_request.number || github.ref }}-${{ matrix.shard }}
@@ -200,56 +210,6 @@ jobs:
         with:
           name: ${{ needs.verify.outputs.artifact }}
           path: .cloudflare/output/
-
-      - name: Read Playwright version
-        id: playwright
-        env:
-          BROWSERS: ${{ needs.verify.outputs.browsers }}
-        run: |
-          # Le build dei browser dipendono dalle librerie dell'immagine: `runner.os` non distingue Ubuntu 24.04 da 26.04.
-          {
-            echo "version=$(node -p 'require("@playwright/test/package.json").version')"
-            echo "browsers=${BROWSERS//,/-}"
-            echo "image=${ImageOS}"
-          } >> "${GITHUB_OUTPUT}"
-
-      - name: Restore browser cache
-        id: browsers
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.browsers }}
-          restore-keys: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-
-
-      - name: Prepare browser system packages
-        run: sudo "$(command -v node)" scripts/browser-tests.mjs --prepare-system
-
-      # La cache riduce i download; i pacchetti mancanti arrivano dall'archivio Ubuntu.
-      - name: Restore system packages
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/apt-archives
-          key: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.browsers }}
-          restore-keys: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-
-
-      # Un archivio lento non deve occupare il job fino al timeout: il passo si interrompe e si
-      # ripete una volta, ripartendo dai pacchetti già scaricati.
-      - name: Install browser system dependencies
-        id: system
-        timeout-minutes: 5
-        continue-on-error: true
-        env:
-          BROWSERS: ${{ needs.verify.outputs.browsers }}
-          BROWSER_CACHE_HIT: ${{ steps.browsers.outputs.cache-hit }}
-        run: node scripts/browser-tests.mjs --install-system --browsers "${BROWSERS}"
-
-      - name: Retry browser system dependencies
-        if: steps.system.outcome == 'failure'
-        timeout-minutes: 5
-        env:
-          BROWSERS: ${{ needs.verify.outputs.browsers }}
-          BROWSER_CACHE_HIT: ${{ steps.browsers.outputs.cache-hit }}
-        run: node scripts/browser-tests.mjs --install-system --browsers "${BROWSERS}"
 
       # Una prova che riesce alla ripetizione resta nel report con un avviso; due fallimenti
       # bloccano ancora il gate.
@@ -315,72 +275,6 @@ jobs:
             esac
           done
 
-  # Le PR leggono soltanto le cache del proprio ambito e di `develop`. Senza questa copia ogni
-  # nuova PR riscarica dall'archivio Ubuntu i pacchetti di WebKit, salvati solo nell'ambito
-  # della PR precedente. Con le cache già presenti il job si chiude dopo la ricerca.
-  browser-cache:
-    name: Browser cache
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-    runs-on: ubuntu-26.04
-    timeout-minutes: 15
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # La versione è fissata nel manifest: la ricerca non richiede l'installazione delle dipendenze.
-      - name: Read Playwright version
-        id: playwright
-        run: |
-          {
-            echo "version=$(node -p 'require("./package.json").devDependencies["@playwright/test"]')"
-            echo "image=${ImageOS}"
-          } >> "${GITHUB_OUTPUT}"
-
-      - name: Look up browser cache
-        id: browsers
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium-webkit
-          lookup-only: true
-
-      - name: Look up system packages
-        id: packages
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/apt-archives
-          key: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium-webkit
-          lookup-only: true
-
-      - name: Set up Node and dependencies
-        if: steps.browsers.outputs.cache-hit != 'true' || steps.packages.outputs.cache-hit != 'true'
-        uses: ./.github/actions/setup
-
-      - name: Prepare browser system packages
-        if: steps.browsers.outputs.cache-hit != 'true' || steps.packages.outputs.cache-hit != 'true'
-        run: sudo "$(command -v node)" scripts/browser-tests.mjs --prepare-system
-
-      - name: Install browsers and system packages
-        if: steps.browsers.outputs.cache-hit != 'true' || steps.packages.outputs.cache-hit != 'true'
-        run: node scripts/browser-tests.mjs --install-system --browsers chromium,webkit
-
-      - name: Save browser cache
-        if: steps.browsers.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium-webkit
-
-      - name: Save system packages
-        if: steps.packages.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/apt-archives
-          key: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium-webkit
-
   deploy-test:
     name: Deploy test
     needs: [verify, gate]
@@ -445,49 +339,12 @@ jobs:
       - name: Check test endpoint
         run: curl --fail --silent --show-error --max-time 20 --output /dev/null https://test.fiscalbay.it/
 
-      - name: Read Playwright version
-        id: playwright
+      # Il job distribuisce e può tornare indietro: resta sul runner, con il solo Chromium
+      # installato dall'installer ufficiale di Playwright.
+      - name: Install Chromium
         if: needs.verify.outputs.e2e == 'true'
-        run: |
-          echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "${GITHUB_OUTPUT}"
-          echo "image=${ImageOS}" >> "${GITHUB_OUTPUT}"
-
-      - name: Restore browser cache
-        id: browsers
-        if: needs.verify.outputs.e2e == 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium
-          restore-keys: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-
-
-      - name: Restore system packages
-        if: needs.verify.outputs.e2e == 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/apt-archives
-          key: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium
-          restore-keys: apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-
-
-      - name: Prepare browser system packages
-        if: needs.verify.outputs.e2e == 'true'
-        run: sudo "$(command -v node)" scripts/browser-tests.mjs --prepare-system
-
-      - name: Install browser system dependencies
-        id: system
-        if: needs.verify.outputs.e2e == 'true'
-        timeout-minutes: 5
-        continue-on-error: true
-        env:
-          BROWSER_CACHE_HIT: ${{ steps.browsers.outputs.cache-hit }}
-        run: node scripts/browser-tests.mjs --install-system --browsers chromium
-
-      - name: Retry browser system dependencies
-        if: needs.verify.outputs.e2e == 'true' && steps.system.outcome == 'failure'
-        timeout-minutes: 5
-        env:
-          BROWSER_CACHE_HIT: ${{ steps.browsers.outputs.cache-hit }}
-        run: node scripts/browser-tests.mjs --install-system --browsers chromium
+        timeout-minutes: 10
+        run: pnpm exec playwright install --with-deps chromium
 
       # L'account di collaudo torna a uno stato noto prima delle prove autenticate. Se il
       # ripristino non riesce (permessi del token, D1 non raggiungibile) le prove autenticate
