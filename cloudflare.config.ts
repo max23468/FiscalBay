@@ -96,8 +96,8 @@ export default defineConfig((ctx) => ({
             STRIPE_PRICE_ANNUAL: bindings.text("price_1UUABwJqfZnQjIbKjc1m9dc0"),
             STRIPE_PRICE_LIFETIME: bindings.text("price_1UUABxJqfZnQjIbK0m1dpfRa"),
             // Primo periodo pagato durante la prova: senza, la prova non mostra l'acquisto.
-            STRIPE_PRICE_MONTHLY_PREPAID: bindings.text("price_1UUBXfJqfZnQjIbK46jncXYQ"),
-            STRIPE_PRICE_ANNUAL_PREPAID: bindings.text("price_1UUBXgJqfZnQjIbKChMoVMR7"),
+            STRIPE_PRICE_MONTHLY_PREPAID: bindings.text("price_1UUC6sJqfZnQjIbKDtqr0TBO"),
+            STRIPE_PRICE_ANNUAL_PREPAID: bindings.text("price_1UUC8EJqfZnQjIbK07AFMIsm"),
           },
         }),
 }));
