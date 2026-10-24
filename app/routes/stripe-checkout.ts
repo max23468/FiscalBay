@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 
-import { createAuth } from "../auth.server";
+import { readSession } from "../domain/sessions.server";
 import { errorResponse } from "../error-response";
 import {
   createManagedCheckout,
@@ -34,7 +34,7 @@ export async function action({ request }: { request: Request }) {
   const priceId = env[priceByOffer[parsed.data.offer]];
   if (!priceId) return errorResponse(request, "FORBIDDEN");
 
-  const session = await createAuth(env).api.getSession({ headers: request.headers });
+  const session = await readSession(env, request);
   if (!session) return errorResponse(request, "AUTH_REQUIRED");
 
   const membership = await env.DB.prepare(
