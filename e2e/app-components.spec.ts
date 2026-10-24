@@ -2267,7 +2267,7 @@ for (const width of [390, 768, 1440]) {
       // Prezzi netti dal listino; l'acquisto porta a Stripe e torna con il pagamento in verifica.
       await expect(page.locator("main")).toContainText(it ? "4,90 € al mese" : "€4.90 per month");
       await expect(page.locator("main")).toContainText(
-        it ? "Equivale a 4,08 € al mese." : "Works out at €4.08 per month.",
+        it ? "12 mesi al prezzo di 10." : "12 months for the price of 10.",
       );
       await page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }).click();
       await expect(page).toHaveURL(/\?checkout=processing$/u);

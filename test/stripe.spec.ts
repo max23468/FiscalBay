@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import Stripe from "stripe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { annualMonthlyPrice, formatPrice, paidPeriodEnd, priceGeneration } from "../app/catalog";
+import { annualPaidMonths, formatPrice, paidPeriodEnd, priceGeneration } from "../app/catalog";
 import { purchaseState, startCheckout } from "../app/domain/checkout.server";
 import {
   buildManagedCheckoutParams,
@@ -209,7 +209,8 @@ describe("Stripe Managed Payments", () => {
     expect(formatPrice(priceGeneration.net.monthly, "it")).toBe("4,90\u00a0€");
     expect(formatPrice(priceGeneration.net.annual, "en")).toBe("€49");
     expect(formatPrice(priceGeneration.net.lifetime, "it")).toBe("149\u00a0€");
-    expect(annualMonthlyPrice("it")).toBe("4,08\u00a0€");
+    // L'annuale costa dieci mesi: dodici al prezzo di dieci.
+    expect(annualPaidMonths()).toBe(10);
   });
 
   it("crea il checkout con il trasporto Fetch del Worker e restituisce la sessione", async () => {

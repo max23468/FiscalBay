@@ -30,9 +30,9 @@ export function formatPrice(cents: number, language: Language) {
   }).format(cents / 100);
 }
 
-/** Costo mensile dell'annuale, arrotondato per difetto al centesimo. */
-export function annualMonthlyPrice(language: Language) {
-  return formatPrice(Math.floor(priceGeneration.net.annual / 12), language);
+/** Mesi di mensile che costa l'annuale: il listino ne regala due su dodici. */
+export function annualPaidMonths() {
+  return priceGeneration.net.annual / priceGeneration.net.monthly;
 }
 
 /** Offerte con rinnovo, le sole che si possono pagare in anticipo durante la prova. */

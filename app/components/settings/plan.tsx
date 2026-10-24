@@ -8,7 +8,7 @@ import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
 import type { AppCopy } from "../../app-copy";
 import {
-  annualMonthlyPrice,
+  annualPaidMonths,
   formatPrice,
   paidPeriodEnd,
   priceGeneration,
@@ -291,18 +291,19 @@ function PurchaseOptions({
   if (!billing || purchase.state === "covered") return null;
   const copy = t.settings.plan;
   const net = (offer: PremiumOffer) => formatPrice(priceGeneration.net[offer], language);
-  const firstRenewal = (offer: "monthly" | "annual") =>
+  // Durante la prova la nota dell'offerta aggiunge la data del primo rinnovo.
+  const withRenewal = (offer: "monthly" | "annual", note: string) =>
     trialEndsAt
-      ? copy.firstRenewal(formatDate(paidPeriodEnd(trialEndsAt, offer), language, "date", zone))
-      : null;
+      ? `${note} ${copy.firstRenewal(formatDate(paidPeriodEnd(trialEndsAt, offer), language, "date", zone))}`
+      : note;
   const prices = {
     monthly: {
       price: copy.priceMonthly(net("monthly")),
-      note: firstRenewal("monthly") ?? copy.priceMonthlyNote,
+      note: withRenewal("monthly", copy.priceMonthlyNote),
     },
     annual: {
       price: copy.priceAnnual(net("annual")),
-      note: firstRenewal("annual") ?? copy.priceAnnualNote(annualMonthlyPrice(language)),
+      note: withRenewal("annual", copy.priceAnnualNote(annualPaidMonths())),
     },
     lifetime: { price: copy.priceLifetime(net("lifetime")), note: copy.priceLifetimeNote },
   };

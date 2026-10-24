@@ -461,7 +461,7 @@ export const en: AppCopy = {
       priceAnnual: (price) => `${price} per year`,
       priceLifetime: (price) => `${price} one-off`,
       priceMonthlyNote: "Renews every month.",
-      priceAnnualNote: (price) => `Works out at ${price} per month.`,
+      priceAnnualNote: (months) => `12 months for the price of ${months}.`,
       priceLifetimeNote: "One-off payment, no renewals.",
       prepaidNote:
         "You pay today and keep your trial days: the paid period starts when the trial ends.",
