@@ -517,18 +517,34 @@ test.describe("miglioramenti account e negozi", () => {
       await expect(order.getByText("BNCLCU75C12F205G")).toBeVisible();
     });
     test(`profilo: modifiche, uscita, attesa e salvataggio ${language}`, async ({ page }) => {
-      await open(page, `${prefix}/anteprima/profilo`, "ordinario");
-      const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
-      const save = page.getByRole("button", { name: it ? "Salva" : "Save", exact: true });
+      await open(page, `${prefix}/anteprima/impostazioni/profilo`, "ordinario");
+      const section = page.getByRole("region", { name: it ? "Profilo" : "Profile", exact: true });
+      const first = section.getByRole("textbox", {
+        name: it ? "Nome" : "First name",
+        exact: true,
+      });
+      const save = section.getByRole("button", { name: it ? "Salva" : "Save", exact: true });
+      const orders = page
+        .locator("header")
+        .getByRole("link", { name: it ? "Ordini" : "Orders", exact: true });
       const original = await first.inputValue();
       await expect(save).toBeDisabled();
       await first.fill(`${original} modificato`);
       await expect(save).toBeEnabled();
+      // Fra le categorie delle Impostazioni la bozza resta senza chiedere conferma.
       await page
-        .getByRole("link", { name: it ? "Apri Sicurezza" : "Open Security", exact: true })
+        .getByRole("navigation", { name: it ? "Categorie" : "Categories" })
+        .getByRole("link", { name: it ? /^Sicurezza/u : /^Security/u })
         .click();
+      await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/sicurezza$`));
       const dialog = page.getByRole("alertdialog");
+      await expect(dialog).toHaveCount(0);
+      await expect(first).toHaveValue(`${original} modificato`);
+      await orders.click();
       await expect(dialog).toBeVisible();
+      await expect(dialog).toContainText(
+        it ? "modifiche non salvate al profilo" : "unsaved changes to your profile",
+      );
       await dialog
         .getByRole("button", { name: it ? "Continua a modificare" : "Keep editing" })
         .click();
@@ -537,21 +553,19 @@ test.describe("miglioramenti account e negozi", () => {
       const gate = new Promise<void>((resolve) => {
         release = resolve;
       });
-      await page.route(`**${prefix}/anteprima/profilo.data*`, async (route) => {
+      await page.route(`**${prefix}/anteprima/impostazioni/*.data*`, async (route) => {
         if (route.request().method() === "POST") await gate;
         await route.continue();
       });
       await save.click();
       await expect(
-        page.getByRole("button", { name: it ? "Salvataggio…" : "Saving…", exact: true }),
+        section.getByRole("button", { name: it ? "Salvataggio…" : "Saving…", exact: true }),
       ).toBeDisabled();
       await expect(first).toBeDisabled();
-      await page
-        .getByRole("link", { name: it ? "Apri Sicurezza" : "Open Security", exact: true })
-        .click();
+      await orders.click();
       await expect(dialog).toBeVisible();
       await expect(
-        dialog.getByRole("button", { name: it ? "Lascia il profilo" : "Leave profile" }),
+        dialog.getByRole("button", { name: it ? "Lascia la pagina" : "Leave page" }),
       ).toBeDisabled();
       await dialog
         .getByRole("button", { name: it ? "Continua a modificare" : "Keep editing" })
@@ -560,15 +574,12 @@ test.describe("miglioramenti account e negozi", () => {
       await expect(save).toBeDisabled();
       await expect(first).toBeEnabled();
       await expect(
-        page
+        section
           .getByRole("status")
-          .filter({ hasText: it ? "profilo non salvato" : "profile not saved" })
-          .first(),
+          .filter({ hasText: it ? "profilo non salvato" : "profile not saved" }),
       ).toBeVisible();
-      await page
-        .getByRole("link", { name: it ? "Apri Sicurezza" : "Open Security", exact: true })
-        .click();
-      await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/sicurezza$`));
+      await orders.click();
+      await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/ordini`));
     });
 
     test(`conferma negozio: resta aperta durante la richiesta e si chiude al successo ${language}`, async ({
@@ -646,36 +657,44 @@ test.describe("miglioramenti account e negozi", () => {
       const hydration = new Promise<void>((resolve) => {
         continueHydration = resolve;
       });
-      await page.route("**/assets/profile-main-*.js", async (route) => {
+      await page.route("**/assets/settings-main-*.js", async (route) => {
         await hydration;
         await route.continue();
       });
       const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
       try {
-        await page.goto(`${prefix}/app/profilo`, { waitUntil: "commit" });
+        await page.goto(`${prefix}/app/impostazioni/profilo`, { waitUntil: "commit" });
         await expect(first).toBeDisabled();
       } finally {
         continueHydration();
       }
-      await page.route("**/app/profilo.data*", async (route) => {
+      await page.route("**/app/impostazioni/profilo.data*", async (route) => {
         if (route.request().method() !== "POST") return route.continue();
         const form = new URLSearchParams(route.request().postData()!);
         form.set("nome", "");
         await route.continue({ postData: form.toString() });
       });
       await first.fill("Valore da conservare");
-      await page.getByRole("button", { name: it ? "Salva" : "Save", exact: true }).click();
+      await page
+        .getByRole("region", { name: it ? "Profilo" : "Profile", exact: true })
+        .getByRole("button", { name: it ? "Salva" : "Save", exact: true })
+        .click();
       await expect(
         page.getByRole("alert").filter({ hasText: it ? "Compila nome" : "Enter your first" }),
       ).toBeVisible();
       await expect(first).toHaveValue("Valore da conservare");
       await expect(
-        page.getByRole("button", { name: it ? "Salva" : "Save", exact: true }),
+        page
+          .getByRole("region", { name: it ? "Profilo" : "Profile", exact: true })
+          .getByRole("button", { name: it ? "Salva" : "Save", exact: true }),
       ).toBeEnabled();
-      await page.route("**/app/profilo.data*", (route) =>
+      await page.route("**/app/impostazioni/profilo.data*", (route) =>
         route.request().method() === "POST" ? route.abort("failed") : route.continue(),
       );
-      await page.getByRole("button", { name: it ? "Salva" : "Save", exact: true }).click();
+      await page
+        .getByRole("region", { name: it ? "Profilo" : "Profile", exact: true })
+        .getByRole("button", { name: it ? "Salva" : "Save", exact: true })
+        .click();
       await expect(
         page
           .getByRole("alert")
@@ -816,7 +835,7 @@ test.describe("miglioramenti account e negozi", () => {
     await page.waitForLoadState("networkidle");
     // Le categorie dei servizi non ancora disponibili non compaiono.
     const categories = page.getByRole("navigation", { name: "Categorie" });
-    await expect(categories.getByRole("link")).toHaveCount(7);
+    await expect(categories.getByRole("link")).toHaveCount(8);
     await expect(categories.getByRole("link", { name: /Esportazione/u })).toHaveCount(0);
 
     const saved = () =>
@@ -966,9 +985,11 @@ test.describe("miglioramenti account e negozi", () => {
       await expect(page.getByRole("heading", { name: "Sicurezza", exact: true })).toBeVisible();
       await expect(page.getByText(/^Sessione aperta il/).first()).toBeVisible();
       const profile = await context.newPage();
-      await profile.goto("/app/profilo");
+      await profile.goto("/app/impostazioni/profilo");
       const firstName = profile.getByRole("textbox", { name: "Nome", exact: true });
-      const save = profile.getByRole("button", { name: "Salva", exact: true });
+      const save = profile
+        .getByRole("region", { name: "Profilo", exact: true })
+        .getByRole("button", { name: "Salva", exact: true });
       const originalName = await firstName.inputValue();
       await firstName.fill(`  ${originalName} aggiornato  `);
       await save.click();
@@ -1321,10 +1342,7 @@ for (const language of ["it", "en"] as const) {
         page.getByRole("textbox", { name: t("Messaggio", "Message"), exact: true }),
       ).toHaveAttribute("placeholder", /.+/);
       await expect(page.locator('main a[href^="mailto:"]')).toHaveAttribute("href", /^mailto:.+$/);
-      await open(page, `${prefix}/anteprima/profilo`);
-      await expect(
-        page.locator("main").getByText("laura.martini@esempio.invalid", { exact: true }),
-      ).toHaveCount(1);
+      await open(page, `${prefix}/anteprima/impostazioni/profilo`);
       await expect(
         page.getByRole("textbox", { name: t("Nome", "First name"), exact: true }),
       ).toHaveAttribute("required", "");
@@ -1339,9 +1357,6 @@ for (const language of ["it", "en"] as const) {
           await label.evaluate((element) => parseFloat(getComputedStyle(element).columnGap)),
         ).toBe(2);
       }
-      await expect(
-        page.getByRole("link", { name: t("Apri Sicurezza", "Open Security"), exact: true }),
-      ).toHaveAttribute("href", `${prefix}/anteprima/impostazioni/sicurezza`);
       await expect.poll(() => noPageOverflow(page)).toBe(true);
       expect(errors).toEqual([]);
       await page.screenshot({ path: testInfo.outputPath("profile.png"), fullPage: true });
@@ -1842,37 +1857,31 @@ for (const language of ["it", "en"] as const) {
     // segnala come errore della pagina una richiesta annullata dalla navigazione.
     await page.waitForLoadState("networkidle");
 
-    await open(page, `${prefix}/anteprima/profilo`);
-    const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
+    await open(page, `${prefix}/anteprima/impostazioni/profilo`);
+    const profile = page.getByRole("region", { name: it ? "Profilo" : "Profile", exact: true });
+    const first = profile.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
     await expect(first).toHaveValue("Laura");
     await expect(first).not.toHaveAttribute("aria-describedby", /profile-name-hint/);
     await expect(
-      page.getByText(
-        it
-          ? "Metodi di accesso e sessioni sono in Sicurezza."
-          : "Sign-in methods and sessions are in Security.",
-        { exact: true },
-      ),
-    ).toHaveCount(0);
-    await expect(
-      page.getByRole("link", { name: it ? "Apri Sicurezza" : "Open Security", exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("textbox", { name: it ? "Cognome" : "Last name", exact: true }),
+      profile.getByRole("textbox", { name: it ? "Cognome" : "Last name", exact: true }),
     ).toHaveValue("Martini");
     await expect(
-      page.getByRole("textbox", { name: it ? "Ragione sociale" : "Company name", exact: true }),
+      profile.getByRole("textbox", {
+        name: it ? "Ragione sociale" : "Company name",
+        exact: true,
+      }),
     ).toHaveValue("Martini ricambi");
     await expect(
       page.getByText(
         it ? "Facoltativo. Compare nelle email di servizio." : "Optional. Shown in service emails.",
       ),
     ).toHaveCount(0);
+    // Email e accessi restano soltanto in Sicurezza.
     await expect(
-      page.getByRole("button", { name: it ? "Cambia email" : "Change email", exact: true }),
+      profile.getByRole("button", { name: it ? "Cambia email" : "Change email", exact: true }),
     ).toHaveCount(0);
     await first.fill("");
-    await page.getByRole("button", { name: it ? "Salva" : "Save", exact: true }).click();
+    await profile.getByRole("button", { name: it ? "Salva" : "Save", exact: true }).click();
     await expect(first).toBeFocused();
     await expect(first).toHaveAttribute("aria-invalid", "true");
     await expect.poll(() => noPageOverflow(page)).toBe(true);
@@ -2057,7 +2066,12 @@ test(
         expect(response.headers()["x-robots-tag"]).toBe("noindex, nofollow");
       }
       // L'area riservata rimanda all'accesso, senza seguire un redirect esterno.
-      for (const path of ["/app/ordini", "/app/negozi", "/app/negozi/collega", "/app/profilo"]) {
+      for (const path of [
+        "/app/ordini",
+        "/app/negozi",
+        "/app/negozi/collega",
+        "/app/impostazioni/profilo",
+      ]) {
         const response = await request.get(`${prefix}${path}?redirectTo=https://example.invalid`, {
           maxRedirects: 0,
         });
@@ -2282,19 +2296,10 @@ for (const width of [390, 768, 1440]) {
         .toBe(true);
       await page.screenshot({ path: testInfo.outputPath(`support-${locale}.png`) });
 
-      await open(page, `${prefix}/anteprima/profilo`);
+      await open(page, `${prefix}/anteprima/impostazioni/profilo`);
       await expect(
         page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true }),
       ).toBeVisible();
-      await expect
-        .poll(() =>
-          page.locator("main > div").evaluate((element) => {
-            const own = element.getBoundingClientRect();
-            const parent = element.parentElement!.getBoundingClientRect();
-            return Math.abs(own.left + own.width / 2 - parent.left - parent.width / 2);
-          }),
-        )
-        .toBeLessThan(1);
       await expect.poll(() => noPageOverflow(page)).toBe(true);
       await page.screenshot({
         path: testInfo.outputPath(`profile-${locale}.png`),
@@ -2830,7 +2835,7 @@ for (const language of ["it", "en"] as const) {
     );
     // Auth o database non disponibili: nessun dato e soltanto Riprova, su ogni pagina.
     await open(page, `${prefix}/anteprima/ordini`, "servizio-non-disponibile");
-    for (const section of ["ordini", "negozi", "impostazioni", "profilo"]) {
+    for (const section of ["ordini", "negozi", "impostazioni", "impostazioni/profilo"]) {
       await page.goto(`${prefix}/anteprima/${section}`);
       await expect(
         page.getByRole("heading", {

@@ -409,6 +409,7 @@ export const en: AppCopy = {
     categories: "Categories",
     groups: { ordini: "Orders", account: "Account", generale: "General" },
     sections: {
+      profilo: { title: "Profile", description: "Name and account type" },
       piano: { title: "Plan and billing", description: "Plan, unlocks and payments" },
       notifiche: { title: "Notifications", description: "Telegram and communications" },
       esportazione: { title: "Export", description: "CSV and XLSX order files" },
@@ -576,6 +577,8 @@ export const en: AppCopy = {
       templateInvalid: "Write the template in both languages, within 2,000 characters.",
       unsavedTitle: "Unsaved changes",
       unsaved: "You have unsaved changes to the message template. Leave the page?",
+      unsavedBoth:
+        "You have unsaved changes to your profile and the message template. Leave the page?",
       leave: "Leave page",
     },
     privacy: {
@@ -641,20 +644,16 @@ export const en: AppCopy = {
     },
   },
   profile: {
-    title: "Profile",
     name: "Name",
-    details: "Account details",
     accountType: "Account type",
     email: "Email",
     emailHint:
       "To change it, confirm with a link sent to your current address, then with one sent to the new one.",
     changeEmail: "Change email",
-    securityLink: "Open Security",
     saved: "Preview: profile not saved.",
     updated: "Profile updated.",
     invalid: "Enter your first and last name, and the company name for a business.",
-    unsaved: "You have unsaved changes. Leave your profile?",
-    leave: "Leave profile",
+    unsaved: "You have unsaved changes to your profile. Leave the page?",
     stay: "Keep editing",
     emailPending: (email: string) =>
       `Change requested to ${email}. Your current address remains valid until confirmation.`,

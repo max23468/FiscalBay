@@ -336,7 +336,7 @@ export function marketplaceLabel(id: string) {
  */
 export const settingsGroups = [
   { id: "ordini", sections: ["notifiche", "esportazione", "messaggio"] },
-  { id: "account", sections: ["piano", "sicurezza", "privacy"] },
+  { id: "account", sections: ["profilo", "piano", "sicurezza", "privacy"] },
   { id: "generale", sections: ["aspetto", "supporto"] },
 ] as const;
 

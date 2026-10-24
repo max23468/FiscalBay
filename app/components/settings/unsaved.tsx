@@ -58,6 +58,8 @@ export function useDraft<T extends Record<string, string>>(stored: T, intent: st
   return { draft, setDraft, dirty, state, submit, action };
 }
 
+export type Draft<T extends Record<string, string>> = ReturnType<typeof useDraft<T>>;
+
 /**
  * Modifiche non salvate: lasciare l'area, ricaricare o chiudere la pagina chiede conferma.
  * `area` riduce l'indirizzo alla parte che conta: dentro la stessa area la bozza resta.

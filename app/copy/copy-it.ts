@@ -416,6 +416,7 @@ export const it = {
     categories: "Categorie",
     groups: { ordini: "Ordini", account: "Account", generale: "Generale" },
     sections: {
+      profilo: { title: "Profilo", description: "Nome e tipo di account" },
       piano: { title: "Piano e pagamenti", description: "Piano, sblocchi e pagamenti" },
       notifiche: { title: "Notifiche", description: "Telegram e comunicazioni" },
       esportazione: { title: "Esportazione", description: "File CSV e XLSX degli ordini" },
@@ -587,6 +588,8 @@ export const it = {
       templateInvalid: "Scrivi il modello in entrambe le lingue, entro 2.000 caratteri.",
       unsavedTitle: "Modifiche non salvate",
       unsaved: "Hai modifiche non salvate al modello di messaggio. Vuoi lasciare la pagina?",
+      unsavedBoth:
+        "Hai modifiche non salvate al profilo e al modello di messaggio. Vuoi lasciare la pagina?",
       leave: "Lascia la pagina",
     },
     privacy: {
@@ -652,19 +655,15 @@ export const it = {
     },
   },
   profile: {
-    title: "Profilo",
     name: "Nome",
-    details: "Dati dell’account",
     accountType: "Tipo di account",
     email: "Email",
     emailHint: "Per cambiarla confermi con un link all’indirizzo attuale, poi con uno al nuovo.",
     changeEmail: "Cambia email",
-    securityLink: "Apri Sicurezza",
     saved: "Anteprima: profilo non salvato.",
     updated: "Profilo aggiornato.",
     invalid: "Compila nome e cognome, e la ragione sociale per un’azienda.",
-    unsaved: "Hai modifiche non salvate. Vuoi lasciare il profilo?",
-    leave: "Lascia il profilo",
+    unsaved: "Hai modifiche non salvate al profilo. Vuoi lasciare la pagina?",
     stay: "Continua a modificare",
     emailPending: (email: string) =>
       `Cambio richiesto verso ${email}. L’indirizzo attuale resta valido fino alla conferma.`,

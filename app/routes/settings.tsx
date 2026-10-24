@@ -10,6 +10,7 @@ import { appCopy, pageTitle } from "../app-copy";
 import { appBase, type AppLinks } from "../app-links";
 import { pendingEmailChange } from "../domain/email-change.server";
 import { orderAllowance, setUnlockConfirmation, unlockConfirmation } from "../domain/grants.server";
+import { completeRegistration, parseProfile } from "../domain/registration.server";
 import {
   marketingConsent,
   messageTemplates,
@@ -192,9 +193,24 @@ export async function action({ request }: Route.ActionArgs) {
       await saveTemplates(env.DB, userId, templates);
       return { ok: true } satisfies ActionResult;
     }
+    if (intent === "profile") {
+      // Nome, cognome e ragione sociale; il tipo di account resta quello registrato.
+      form.set("tipo", area.profile.accountType === "business" ? "azienda" : "privato");
+      const profile = parseProfile(form);
+      if (!profile) return failed(400, appCopy[language].profile.invalid);
+      await completeRegistration(env.DB, { userId, language, now: new Date(), profile });
+      return { ok: true, notice: appCopy[language].profile.updated } satisfies ActionResult;
+    }
   } catch (error) {
     logFailure({ request, error, operation: "route" });
-    return failed(500, intent === "template" ? t.template.templateFailed : t.saveFailed);
+    return failed(
+      500,
+      intent === "template"
+        ? t.template.templateFailed
+        : intent === "profile"
+          ? appCopy[language].errors.unexpected
+          : t.saveFailed,
+    );
   }
   return securityAction(request, area, form);
 }
