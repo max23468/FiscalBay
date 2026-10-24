@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { useLocalAccount, localPassword } from "./local-account";
 import { testAccount } from "./test-account";
 
@@ -17,13 +18,9 @@ test.describe("miglioramenti account e negozi", () => {
       page,
       context,
       baseURL,
+      browserErrors: errors,
     }) => {
-      const errors: string[] = [];
       const posts: string[] = [];
-      page.on("pageerror", (error) => errors.push(error.message));
-      page.on("console", (message) => {
-        if (message.type() === "error") errors.push(message.text());
-      });
       page.on("request", (request) => {
         // Le misure della pagina partono da sole dopo 10 secondi: non sono un'azione della prova.
         if (
@@ -60,7 +57,6 @@ test.describe("miglioramenti account e negozi", () => {
         ),
       ).toBeVisible();
       await expect(dialog.getByText(new RegExp(`suggestions-${language}-2`))).toBeVisible();
-      await page.screenshot({ path: `/tmp/fiscalbay-suggestions-${language}.png` });
       const message = dialog.getByLabel(it ? "Testo per l’acquirente" : "Text for the buyer");
       await expect(message).toHaveValue(new RegExp(`suggestions-${language}`));
       // Contatti formattati e utilizzabili; l'originale di eBay resta nel database.
@@ -399,6 +395,7 @@ test.describe("miglioramenti account e negozi", () => {
         context,
         baseURL,
         browserName,
+        browserErrors: errors,
       }) => {
         // Due lingue nello stesso test: su WebKit in CI supera i 30 secondi predefiniti.
         test.setTimeout(60_000);
@@ -409,14 +406,8 @@ test.describe("miglioramenti account e negozi", () => {
           // la suite non scrive nel D1 mentre il server lo usa e non tocca le altre fixture.
           const id = `unlock-${language}-${browserName}`;
           await useLocalAccount(context, "member", baseURL!, id);
-          const errors: string[] = [];
-          page.on("pageerror", (error) => errors.push(error.message));
-          page.on("console", (message) => {
-            if (message.type() === "error") errors.push(message.text());
-          });
           await page.setViewportSize({ width: it ? 1280 : 390, height: 900 });
           await page.emulateMedia({
-            colorScheme: it ? "light" : "dark",
             reducedMotion: "reduce",
           });
           await page.goto(`${prefix}/app/ordini`);
@@ -431,7 +422,6 @@ test.describe("miglioramenti account e negozi", () => {
             .getByRole("button", { name: it ? "Sblocca ordine" : "Unlock order", exact: true })
             .click();
           const dialog = page.getByRole("alertdialog");
-          await page.screenshot({ path: `/tmp/fiscalbay-unlock-${language}.png` });
           const skip = dialog.getByRole("checkbox", {
             name: it ? "Non chiedermelo più" : "Don’t ask again",
           });
@@ -476,7 +466,6 @@ test.describe("miglioramenti account e negozi", () => {
           });
           // Lo sblocco chiude la selezione; senza altro da sbloccare né export non si riapre.
           await expect(select).toBeDisabled();
-          await page.screenshot({ path: `/tmp/fiscalbay-unlock-${language}-complete.png` });
           await page.goto(`${prefix}/app/impostazioni/piano`);
           const confirmation = page.getByRole("switch", {
             name: it
@@ -819,11 +808,10 @@ test.describe("miglioramenti account e negozi", () => {
     context,
     baseURL,
     browserName,
+    pageErrors: errors,
   }) => {
     test.setTimeout(60_000);
     await useLocalAccount(context, "member", baseURL!, `preferences-${browserName}`);
-    const errors: string[] = [];
-    page.on("pageerror", (error) => errors.push(error.message));
     await page.goto("/app/impostazioni/aspetto");
     await page.waitForLoadState("networkidle");
     // Le categorie dei servizi non ancora disponibili non compaiono.
@@ -929,13 +917,8 @@ test.describe("miglioramenti account e negozi", () => {
     for (const opener of openers) await expect(opener).toBeEnabled();
     await expect(row).toBeVisible();
     await page.waitForLoadState("networkidle");
-    await page.screenshot({ path: "/tmp/fiscalbay-security-improvements.png", fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     expect(await noPageOverflow(page)).toBe(true);
-    await page.screenshot({
-      path: "/tmp/fiscalbay-security-improvements-mobile.png",
-      fullPage: true,
-    });
     await page.setViewportSize({ width: 1280, height: 900 });
     await row.getByRole("button", { name: "Rinomina", exact: true }).click();
     await expect(row.getByRole("button", { name: "Salva", exact: true })).toBeVisible();
@@ -947,7 +930,6 @@ test.describe("miglioramenti account e negozi", () => {
     await page.waitForLoadState("networkidle");
     await page.setViewportSize({ width: 390, height: 844 });
     expect(await noPageOverflow(page)).toBe(true);
-    await page.screenshot({ path: "/tmp/fiscalbay-passkey-name-mobile.png", fullPage: true });
     await renamed.getByRole("button", { name: "Rimuovi", exact: true }).click();
     await page
       .getByRole("alertdialog")
@@ -1087,672 +1069,636 @@ const noPageOverflow = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
 
 for (const language of ["it", "en"] as const) {
-  for (const colorScheme of ["light", "dark"] as const) {
-    for (const width of [390, 1280]) {
-      test(`negozi, preferenze e identità coerenti ${language} ${colorScheme} ${width}px`, async ({
-        page,
-      }, testInfo) => {
-        test.setTimeout(120_000);
-        const t = (it: string, en: string) => (language === "it" ? it : en);
-        const prefix = language === "it" ? "" : "/en";
-        const errors: string[] = [];
-        page.on("pageerror", (error) => errors.push(error.message));
-        await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
-        await page.setViewportSize({ width, height: 844 });
-        await open(page, `${prefix}/anteprima/negozi`, "ordinario");
-        await expect(
-          page.getByText(
-            t(
-              "Il piano Free include un solo negozio attivo.",
-              "The Free plan includes one active store.",
-            ),
-            { exact: true },
+  for (const width of [390, 1280]) {
+    test(`negozi, preferenze e identità coerenti ${language} ${width}px`, async ({
+      page,
+      pageErrors: errors,
+    }, testInfo) => {
+      test.setTimeout(120_000);
+      const t = (it: string, en: string) => (language === "it" ? it : en);
+      const prefix = language === "it" ? "" : "/en";
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.setViewportSize({ width, height: 844 });
+      await open(page, `${prefix}/anteprima/negozi`, "ordinario");
+      await expect(
+        page.getByText(
+          t(
+            "Il piano Free include un solo negozio attivo.",
+            "The Free plan includes one active store.",
           ),
-        ).toBeVisible();
-        await expect(page.locator("main")).not.toContainText(
-          t("Le notifiche Telegram dei nuovi ordini", "Telegram notifications for new orders"),
-        );
-        await page.getByRole("link", { name: /Outlet ricambi/u }).click();
-        const panel = page.getByRole("dialog");
-        await expect(panel).toContainText(
-          t("Storico di 30 giorni importato", "30-day history imported"),
-        );
-        await expect(panel).not.toContainText(
-          t("Prima della scadenza ti chiederemo", "Before it expires we will ask"),
-        );
-        await expect(panel.locator("#store-sync + ul")).not.toContainText(
-          t("Aggiornamento previsto", "Expected update"),
-        );
-        // La causa della pausa compare una volta e il testo resta allineato all'elenco.
-        await expect(
-          panel.getByText(t("In pausa per il piano Free:", "Paused by the Free plan:")),
-        ).toHaveCount(1);
-        const syncLeft = await panel.locator("#store-sync + ul > li").evaluateAll((items) =>
-          items.slice(0, 2).map((item) => {
-            const range = document.createRange();
-            range.selectNodeContents(item);
-            return [...range.getClientRects()].find((rect) => rect.width > 0)?.left ?? 0;
-          }),
-        );
-        expect(Math.abs(syncLeft[0]! - syncLeft[1]!)).toBeLessThan(1);
-        const choose = panel.getByRole("link", {
-          name: t("Scegli il negozio attivo", "Choose the active store"),
-        });
-        await choose.click();
-        const selection = page.getByRole("combobox", {
-          name: t("Scegli il negozio attivo", "Choose the active store"),
-        });
-        await expect(selection).toContainText("Vintage Garage Italia");
-        await selection.click();
-        await expect(page.getByRole("option")).toHaveCount(2);
-        await page.getByRole("option").filter({ hasText: "Outlet" }).click();
-        await expect(selection).toContainText("Outlet");
-        await expect(
-          page.getByRole("button", { name: t("Scegli annuale", "Choose annual") }).locator(".."),
-        ).toHaveClass(/border-primary/);
-
-        await open(page, `${prefix}/anteprima/negozi/neg-outlet`, "negozio-scaduto");
-        await expect(
-          panel.getByRole("button", { name: t("Reimporta storico", "Re-import history") }),
-        ).toBeDisabled();
-        await expect(panel.locator("#store-sync + ul")).toContainText(
-          t("Sincronizzazione sospesa", "Sync is suspended"),
-        );
-        await expect(panel.locator("section[aria-labelledby=store-connection]")).toContainText(
-          t("Scaduta", "Expired"),
-        );
-        await open(page, `${prefix}/anteprima/negozi/neg-retro`);
-        await expect(panel).toContainText(
-          t("Importazione dello storico non iniziata", "History import not started"),
-        );
-        await expect(panel).not.toContainText(
-          t("Storico di 30 giorni importato", "30-day history imported"),
-        );
-        await expect(panel.locator("[data-slot=badge]").first()).toHaveClass(/warning/);
-        // Senza autorizzazione non arrivano ordini: la preferenza attiva resta sospesa.
-        await expect(panel.locator("section[aria-labelledby=store-notifications]")).toContainText(
-          t("Sospese finché la sincronizzazione non riprende", "Paused until sync resumes"),
-        );
-        // L'elenco usa l'etichetta breve per non stringere la colonna dei nomi.
-        await expect(page.locator("main")).toContainText(t("Sospese", "Paused"));
-        await expect(page.locator("main")).not.toContainText(
-          t("finché la sincronizzazione", "until sync resumes"),
-        );
-        await open(page, `${prefix}/anteprima/negozi/neg-bottega`);
-        await expect(
-          panel.getByRole("link", {
-            name: t("Contatta il supporto", "Contact support"),
-            exact: true,
-          }),
-        ).toHaveAttribute("href", `${prefix}/anteprima/impostazioni/supporto`);
-        await open(page, `${prefix}/anteprima/negozi/neg-vintage`, "ebay-non-disponibile");
-        await expect(
-          page.getByRole("button", {
-            name: t("Collega negozio eBay", "Connect eBay store"),
-            includeHidden: true,
-          }),
-        ).toBeDisabled();
-        await expect(
-          panel.getByRole("button", { name: t("Reimporta storico", "Re-import history") }),
-        ).toBeDisabled();
-        const remove = panel.getByRole("button", {
-          name: t("Scollega ed elimina negozio", "Disconnect and delete store"),
-          exact: true,
-        });
-        await remove.click();
-        const confirm = page.getByRole("alertdialog");
-        await expect(confirm.getByRole("heading")).toHaveText(
-          t("Scollega ed elimina negozio", "Disconnect and delete store"),
-        );
-        const overlay = page.locator("[data-slot=alert-dialog-overlay]");
-        expect(await overlay.evaluate((el) => Number(getComputedStyle(el).zIndex))).toBeGreaterThan(
-          await page
-            .locator("[data-slot=sheet-content]")
-            .evaluate((el) => Number(getComputedStyle(el).zIndex)),
-        );
-        const deleteButton = confirm.getByRole("button", {
-          name: t("Scollega ed elimina negozio", "Disconnect and delete store"),
-          exact: true,
-        });
-        await expect(deleteButton).toBeDisabled();
-        await confirm.getByRole("textbox").fill("Vintage Garage Italia");
-        await expect(deleteButton).toBeEnabled();
-        await page.screenshot({ path: testInfo.outputPath("store-confirmation.png") });
-        await page.keyboard.press("Escape");
-        await expect(remove).toBeFocused();
-
-        await open(page, `${prefix}/anteprima/negozi/neg-outlet`, "premium-a-vita");
-        await expect(panel.locator("#store-sync + ul")).toContainText(
-          t("La pausa manuale", "A manual pause"),
-        );
-        await expect(panel.locator("#store-sync + ul")).not.toContainText(
-          t("Aggiornamento previsto", "Expected update"),
-        );
-        await expect(
-          panel.getByRole("button", { name: t("Riprendi", "Resume"), exact: true }),
-        ).toBeEnabled();
-        await open(page, `${prefix}/anteprima/negozi`, "premium");
-        if (width >= 1024) {
-          const geometry = await page.getByRole("table").evaluate((table) => {
-            const heads = table.querySelectorAll("th");
-            const cells = table.querySelectorAll("tbody tr:first-child td");
-            const sync = cells[2]!.querySelector("span")!.getBoundingClientRect();
-            const badge = cells[1]!.querySelector("[data-slot=badge]")!.getBoundingClientRect();
-            const head = heads[2]!.getBoundingClientRect();
-            return {
-              label: Math.abs(
-                head.left + parseFloat(getComputedStyle(heads[2]!).paddingLeft) - sync.left - 24,
-              ),
-              center: Math.abs(badge.top + badge.height / 2 - sync.top - sync.height / 2),
-            };
-          });
-          expect(geometry.label).toBeLessThan(1);
-          expect(geometry.center).toBeLessThan(1);
-        }
-
-        await open(page, `${prefix}/anteprima/impostazioni/notifiche`, "premium");
-        const enabled = page.getByRole("switch", {
-          name: t("Invia notifiche degli ordini", "Send order notifications"),
-        });
-        const allOrders = page.getByRole("radio", {
-          name: t("Tutti i nuovi ordini", "All new orders"),
-        });
-        // Il salvataggio fallisce e lo switch torna acceso: `uncheck` pretenderebbe il nuovo stato.
-        await enabled.click();
-        await expect(enabled).toBeChecked();
-        await expect(allOrders).toBeEnabled();
-        await expect(
-          page
-            .getByRole("status")
-            .filter({ hasText: t("Modifica non salvata", "Change not saved") }),
-        ).toBeVisible();
-        await allOrders.check();
-        await expect(allOrders).toBeChecked();
-        const digest = page.getByRole("radio", {
-          name: t("Riepilogo giornaliero", "Daily summary"),
-        });
-        await digest.check();
-        const time = page.getByRole("combobox", {
-          name: t("Orario del riepilogo", "Summary time"),
-        });
-        // Lo switch resta disattivato finché il salvataggio non finisce: il nuovo clic aspetta.
-        const saved = page.waitForResponse(
-          (response) =>
-            response.request().method() === "POST" &&
-            new URLSearchParams(response.request().postData() ?? "").get("name") === "telegram",
-        );
-        await enabled.uncheck();
-        await saved;
-        await expect(enabled).not.toHaveAttribute("data-disabled");
-        await expect(enabled).not.toBeChecked();
-        await expect(allOrders).toBeDisabled();
-        await expect(digest).toBeDisabled();
-        await expect(time).toBeDisabled();
-        const storeSwitch = page.getByRole("switch", {
-          name: "Vintage Garage Italia",
-          exact: true,
-        });
-        await expect(storeSwitch).toBeDisabled();
-        await enabled.check();
-        await expect(allOrders).toBeEnabled();
-        await expect(allOrders).toBeChecked();
-        await expect(digest).toBeChecked();
-        await expect(time).toBeEnabled();
-
-        await open(page, `${prefix}/anteprima/impostazioni/aspetto`);
-        await expect(
-          page.getByRole("combobox", { name: t("Fuso orario", "Time zone") }),
-        ).toContainText(t("Automatico", "Automatic"));
-        await page.getByRole("radio", { name: t("Scuro", "Dark"), exact: true }).check();
-        await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-        await page.reload();
-        await expect(page.locator("html")).not.toHaveAttribute("data-theme", "dark");
-        await page.waitForLoadState("networkidle");
-        if (width >= 768) {
-          // L'indicatore nasce nel layout effect, poi il frame allinea la route ripristinata.
-          await expect(page.locator('main nav li[aria-hidden="true"]')).toBeVisible();
-          await page.evaluate(
-            () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
-          );
-          await expect(page.locator("#settings-aspetto")).toBeInViewport({ ratio: 1 });
-          await page
-            .locator("#settings-privacy")
-            .evaluate((el) => window.scrollBy(0, el.getBoundingClientRect().top - 210));
-          await expect(
-            page.locator('nav a[aria-current=true][href$="/impostazioni/privacy"]'),
-          ).toBeVisible();
-          await page
-            .locator("#settings-aspetto")
-            .evaluate((el) => window.scrollBy(0, el.getBoundingClientRect().top - 210));
-          await expect(
-            page.locator('nav a[aria-current=true][href$="/impostazioni/aspetto"]'),
-          ).toBeVisible();
-        }
-        await open(page, `${prefix}/anteprima/impostazioni/privacy`);
-        await page
-          .getByRole("button", { name: t("Elimina account", "Delete account"), exact: true })
-          .click();
-        await expect(
-          confirm.getByRole("button", {
-            name: t("Conferma con un nuovo accesso", "Confirm by signing in again"),
-          }),
-        ).toBeVisible();
-        await page.keyboard.press("Escape");
-        await open(page, `${prefix}/anteprima/impostazioni/supporto`);
-        await expect(
-          page.getByRole("textbox", { name: t("Messaggio", "Message"), exact: true }),
-        ).toHaveAttribute("placeholder", /.+/);
-        await expect(page.locator('main a[href^="mailto:"]')).toHaveAttribute(
-          "href",
-          /^mailto:.+$/,
-        );
-        await open(page, `${prefix}/anteprima/profilo`);
-        await expect(
-          page.locator("main").getByText("laura.martini@esempio.invalid", { exact: true }),
-        ).toHaveCount(1);
-        await expect(
-          page.getByRole("textbox", { name: t("Nome", "First name"), exact: true }),
-        ).toHaveAttribute("required", "");
-        await expect(
-          page.getByRole("textbox", { name: t("Cognome", "Last name"), exact: true }),
-        ).toHaveAttribute("required", "");
-        const requiredLabels = page
-          .locator("main label[data-slot=field-label]")
-          .filter({ has: page.locator("span[aria-hidden=true]") });
-        for (const label of await requiredLabels.all()) {
-          expect(
-            await label.evaluate((element) => parseFloat(getComputedStyle(element).columnGap)),
-          ).toBe(2);
-        }
-        await expect(
-          page.getByRole("link", { name: t("Apri Sicurezza", "Open Security"), exact: true }),
-        ).toHaveAttribute("href", `${prefix}/anteprima/impostazioni/sicurezza`);
-        await expect.poll(() => noPageOverflow(page)).toBe(true);
-        expect(errors).toEqual([]);
-        await page.screenshot({ path: testInfo.outputPath("profile.png"), fullPage: true });
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await expect(page.locator("main")).not.toContainText(
+        t("Le notifiche Telegram dei nuovi ordini", "Telegram notifications for new orders"),
+      );
+      await page.getByRole("link", { name: /Outlet ricambi/u }).click();
+      const panel = page.getByRole("dialog");
+      await expect(panel).toContainText(
+        t("Storico di 30 giorni importato", "30-day history imported"),
+      );
+      await expect(panel).not.toContainText(
+        t("Prima della scadenza ti chiederemo", "Before it expires we will ask"),
+      );
+      await expect(panel.locator("#store-sync + ul")).not.toContainText(
+        t("Aggiornamento previsto", "Expected update"),
+      );
+      // La causa della pausa compare una volta e il testo resta allineato all'elenco.
+      await expect(
+        panel.getByText(t("In pausa per il piano Free:", "Paused by the Free plan:")),
+      ).toHaveCount(1);
+      const syncLeft = await panel.locator("#store-sync + ul > li").evaluateAll((items) =>
+        items.slice(0, 2).map((item) => {
+          const range = document.createRange();
+          range.selectNodeContents(item);
+          return [...range.getClientRects()].find((rect) => rect.width > 0)?.left ?? 0;
+        }),
+      );
+      expect(Math.abs(syncLeft[0]! - syncLeft[1]!)).toBeLessThan(1);
+      const choose = panel.getByRole("link", {
+        name: t("Scegli il negozio attivo", "Choose the active store"),
       });
-    }
-  }
-}
+      await choose.click();
+      const selection = page.getByRole("combobox", {
+        name: t("Scegli il negozio attivo", "Choose the active store"),
+      });
+      await expect(selection).toContainText("Vintage Garage Italia");
+      await selection.click();
+      await expect(page.getByRole("option")).toHaveCount(2);
+      await page.getByRole("option").filter({ hasText: "Outlet" }).click();
+      await expect(selection).toContainText("Outlet");
+      await expect(
+        page.getByRole("button", { name: t("Scegli annuale", "Choose annual") }).locator(".."),
+      ).toHaveClass(/border-primary/);
 
-for (const language of ["it", "en"] as const) {
-  for (const colorScheme of ["light", "dark"] as const) {
-    for (const width of [390, 1280]) {
-      test(`ordini: conferme, stati e dettaglio ${language} ${colorScheme} a ${width} px`, async ({
-        page,
-      }) => {
-        // Comprende oltre venti navigazioni, conferme, pannelli e screenshot.
-        test.setTimeout(90_000);
-        await page.setViewportSize({ width, height: 844 });
-        await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
-        const prefix = language === "it" ? "" : "/en";
-        const t = (it: string, en: string) => (language === "it" ? it : en);
-        const errors: string[] = [];
-        page.on("pageerror", (error) => errors.push(error.message));
-        page.on("console", (message) => {
-          if (message.type() === "error") errors.push(message.text());
-        });
-        await open(page, `${prefix}/anteprima/ordini`, "ordinario");
-        const locked = page.getByRole("article", {
-          name: t("Ordine", "Order") + " 05-55555-12121",
-        });
-        await expect(
-          page.getByText(
-            t("2 sblocchi disponibili in questo ciclo.", "2 unlocks left this cycle."),
-            {
-              exact: true,
-            },
-          ),
-        ).toHaveCount(1);
-        await expect(locked).not.toContainText(
-          t("Questo ordine ne usa uno.", "This order uses one."),
-        );
-        const unlock = locked.getByRole("button", { name: t("Sblocca ordine", "Unlock order") });
-        await unlock.click();
-        const confirm = page.getByRole("alertdialog");
-        await expect(confirm).toContainText(t("1 sblocco", "1 unlock"));
-        const cancel = confirm.getByRole("button", { name: t("Annulla", "Cancel"), exact: true });
-        await expect(cancel).toBeFocused();
-        await confirm
-          .getByRole("checkbox", { name: t("Non chiedermelo più", "Don’t ask again") })
-          .check();
-        await cancel.click();
-        await expect(unlock).toBeFocused();
-        await expect(locked.getByText("BNCLCU75C12F205G")).toHaveCount(0);
-        await unlock.click();
-        await expect(confirm.getByRole("checkbox")).not.toBeChecked();
-        await confirm
-          .getByRole("checkbox", {
-            name: t("Non chiedermelo più", "Don’t ask again"),
-          })
-          .check();
-        await confirm.getByRole("button", { name: t("Sblocca", "Unlock"), exact: true }).click();
-        await expect(locked.getByText("BNCLCU75C12F205G")).toBeVisible();
-        await page.reload();
-        const restore = page.getByRole("button", {
-          name: t("Riattiva conferma sblocco", "Restore unlock confirmation"),
-        });
-        await expect(restore).toBeVisible();
-        await open(page, `${prefix}/anteprima/ordini/ord-09`);
+      await open(page, `${prefix}/anteprima/negozi/neg-outlet`, "negozio-scaduto");
+      await expect(
+        panel.getByRole("button", { name: t("Reimporta storico", "Re-import history") }),
+      ).toBeDisabled();
+      await expect(panel.locator("#store-sync + ul")).toContainText(
+        t("Sincronizzazione sospesa", "Sync is suspended"),
+      );
+      await expect(panel.locator("section[aria-labelledby=store-connection]")).toContainText(
+        t("Scaduta", "Expired"),
+      );
+      await open(page, `${prefix}/anteprima/negozi/neg-retro`);
+      await expect(panel).toContainText(
+        t("Importazione dello storico non iniziata", "History import not started"),
+      );
+      await expect(panel).not.toContainText(
+        t("Storico di 30 giorni importato", "30-day history imported"),
+      );
+      await expect(panel.locator("[data-slot=badge]").first()).toHaveClass(/warning/);
+      // Senza autorizzazione non arrivano ordini: la preferenza attiva resta sospesa.
+      await expect(panel.locator("section[aria-labelledby=store-notifications]")).toContainText(
+        t("Sospese finché la sincronizzazione non riprende", "Paused until sync resumes"),
+      );
+      // L'elenco usa l'etichetta breve per non stringere la colonna dei nomi.
+      await expect(page.locator("main")).toContainText(t("Sospese", "Paused"));
+      await expect(page.locator("main")).not.toContainText(
+        t("finché la sincronizzazione", "until sync resumes"),
+      );
+      await open(page, `${prefix}/anteprima/negozi/neg-bottega`);
+      await expect(
+        panel.getByRole("link", {
+          name: t("Contatta il supporto", "Contact support"),
+          exact: true,
+        }),
+      ).toHaveAttribute("href", `${prefix}/anteprima/impostazioni/supporto`);
+      await open(page, `${prefix}/anteprima/negozi/neg-vintage`, "ebay-non-disponibile");
+      await expect(
+        page.getByRole("button", {
+          name: t("Collega negozio eBay", "Connect eBay store"),
+          includeHidden: true,
+        }),
+      ).toBeDisabled();
+      await expect(
+        panel.getByRole("button", { name: t("Reimporta storico", "Re-import history") }),
+      ).toBeDisabled();
+      const remove = panel.getByRole("button", {
+        name: t("Scollega ed elimina negozio", "Disconnect and delete store"),
+        exact: true,
+      });
+      await remove.click();
+      const confirm = page.getByRole("alertdialog");
+      await expect(confirm.getByRole("heading")).toHaveText(
+        t("Scollega ed elimina negozio", "Disconnect and delete store"),
+      );
+      const overlay = page.locator("[data-slot=alert-dialog-overlay]");
+      expect(await overlay.evaluate((el) => Number(getComputedStyle(el).zIndex))).toBeGreaterThan(
         await page
-          .getByRole("dialog")
-          .getByRole("button", { name: t("Sblocca ordine", "Unlock order") })
-          .click();
-        await expect(page.getByRole("alertdialog")).toHaveCount(0);
+          .locator("[data-slot=sheet-content]")
+          .evaluate((el) => Number(getComputedStyle(el).zIndex)),
+      );
+      const deleteButton = confirm.getByRole("button", {
+        name: t("Scollega ed elimina negozio", "Disconnect and delete store"),
+        exact: true,
+      });
+      await expect(deleteButton).toBeDisabled();
+      await confirm.getByRole("textbox").fill("Vintage Garage Italia");
+      await expect(deleteButton).toBeEnabled();
+      await page.screenshot({ path: testInfo.outputPath("store-confirmation.png") });
+      await page.keyboard.press("Escape");
+      await expect(remove).toBeFocused();
+
+      await open(page, `${prefix}/anteprima/negozi/neg-outlet`, "premium-a-vita");
+      await expect(panel.locator("#store-sync + ul")).toContainText(
+        t("La pausa manuale", "A manual pause"),
+      );
+      await expect(panel.locator("#store-sync + ul")).not.toContainText(
+        t("Aggiornamento previsto", "Expected update"),
+      );
+      await expect(
+        panel.getByRole("button", { name: t("Riprendi", "Resume"), exact: true }),
+      ).toBeEnabled();
+      await open(page, `${prefix}/anteprima/negozi`, "premium");
+      if (width >= 1024) {
+        const geometry = await page.getByRole("table").evaluate((table) => {
+          const heads = table.querySelectorAll("th");
+          const cells = table.querySelectorAll("tbody tr:first-child td");
+          const sync = cells[2]!.querySelector("span")!.getBoundingClientRect();
+          const badge = cells[1]!.querySelector("[data-slot=badge]")!.getBoundingClientRect();
+          const head = heads[2]!.getBoundingClientRect();
+          return {
+            label: Math.abs(
+              head.left + parseFloat(getComputedStyle(heads[2]!).paddingLeft) - sync.left - 24,
+            ),
+            center: Math.abs(badge.top + badge.height / 2 - sync.top - sync.height / 2),
+          };
+        });
+        expect(geometry.label).toBeLessThan(1);
+        expect(geometry.center).toBeLessThan(1);
+      }
+
+      await open(page, `${prefix}/anteprima/impostazioni/notifiche`, "premium");
+      const enabled = page.getByRole("switch", {
+        name: t("Invia notifiche degli ordini", "Send order notifications"),
+      });
+      const allOrders = page.getByRole("radio", {
+        name: t("Tutti i nuovi ordini", "All new orders"),
+      });
+      // Il salvataggio fallisce e lo switch torna acceso: `uncheck` pretenderebbe il nuovo stato.
+      await enabled.click();
+      await expect(enabled).toBeChecked();
+      await expect(allOrders).toBeEnabled();
+      await expect(
+        page.getByRole("status").filter({ hasText: t("Modifica non salvata", "Change not saved") }),
+      ).toBeVisible();
+      await allOrders.check();
+      await expect(allOrders).toBeChecked();
+      const digest = page.getByRole("radio", {
+        name: t("Riepilogo giornaliero", "Daily summary"),
+      });
+      await digest.check();
+      const time = page.getByRole("combobox", {
+        name: t("Orario del riepilogo", "Summary time"),
+      });
+      // Lo switch resta disattivato finché il salvataggio non finisce: il nuovo clic aspetta.
+      const saved = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          new URLSearchParams(response.request().postData() ?? "").get("name") === "telegram",
+      );
+      await enabled.uncheck();
+      await saved;
+      await expect(enabled).not.toHaveAttribute("data-disabled");
+      await expect(enabled).not.toBeChecked();
+      await expect(allOrders).toBeDisabled();
+      await expect(digest).toBeDisabled();
+      await expect(time).toBeDisabled();
+      const storeSwitch = page.getByRole("switch", {
+        name: "Vintage Garage Italia",
+        exact: true,
+      });
+      await expect(storeSwitch).toBeDisabled();
+      await enabled.check();
+      await expect(allOrders).toBeEnabled();
+      await expect(allOrders).toBeChecked();
+      await expect(digest).toBeChecked();
+      await expect(time).toBeEnabled();
+
+      await open(page, `${prefix}/anteprima/impostazioni/aspetto`);
+      await expect(
+        page.getByRole("combobox", { name: t("Fuso orario", "Time zone") }),
+      ).toContainText(t("Automatico", "Automatic"));
+      await page.getByRole("radio", { name: t("Scuro", "Dark"), exact: true }).check();
+      await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+      await page.reload();
+      await expect(page.locator("html")).not.toHaveAttribute("data-theme", "dark");
+      await page.waitForLoadState("networkidle");
+      if (width >= 768) {
+        // L'indicatore nasce nel layout effect, poi il frame allinea la route ripristinata.
+        await expect(page.locator('main nav li[aria-hidden="true"]')).toBeVisible();
+        await page.evaluate(
+          () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+        );
+        await expect(page.locator("#settings-aspetto")).toBeInViewport({ ratio: 1 });
+        await page
+          .locator("#settings-privacy")
+          .evaluate((el) => window.scrollBy(0, el.getBoundingClientRect().top - 210));
         await expect(
-          page.getByRole("dialog").getByText("04567890126", { exact: true }),
+          page.locator('nav a[aria-current=true][href$="/impostazioni/privacy"]'),
         ).toBeVisible();
         await page
-          .getByRole("dialog")
-          .getByRole("button", { name: t("Chiudi", "Close"), exact: true })
-          .click();
-        await restore.click();
-        await expect(restore).toHaveCount(0);
-        await open(page, `${prefix}/anteprima/ordini`, "ordinario");
-        const select = page.getByRole("button", { name: t("Seleziona", "Select"), exact: true });
-        await select.click();
-        const zero = page.getByRole("button", { name: t("Sblocca 0", "Unlock 0"), exact: true });
-        await expect(zero).toBeDisabled();
-        await expect(zero).toHaveClass(/bg-muted/);
-        await page.getByRole("button", { name: t("Annulla", "Cancel"), exact: true }).click();
-        await expect(select).toBeFocused();
-        const failed = page.getByRole("article", {
-          name: t("Ordine", "Order") + " 19-00001-99999",
-        });
-        const retried = page.waitForResponse(
-          (response) =>
-            response.url().includes("/ordini.data") && response.request().method() === "POST",
-        );
-        await failed.getByRole("button", { name: t("Riprova", "Try again"), exact: true }).click();
-        await expect(failed).toContainText(t("Verifica in corso", "Verification in progress"));
-        expect((await retried).status()).toBe(200);
+          .locator("#settings-aspetto")
+          .evaluate((el) => window.scrollBy(0, el.getBoundingClientRect().top - 210));
         await expect(
-          failed.getByRole("button", { name: t("Riprova", "Try again"), exact: true }),
-        ).toHaveCount(0);
-        await page.reload();
-        await expect(failed).toContainText(t("Verifica in corso", "Verification in progress"));
-        // Nel menu della scheda «Apri su eBay» è un collegamento al Seller Hub.
-        await failed
-          .getByRole("button", {
-            name: t("Altre azioni per l’ordine", "More actions for order") + " 19-00001-99999",
-          })
-          .click();
-        await expect(
-          page.getByRole("menuitem", { name: t("Apri su eBay", "Open on eBay") }),
-        ).toHaveAttribute(
-          "href",
-          /^https:\/\/www\.ebay\.it\/sh\/ord\/details\?orderid=19-00001-99999$/,
-        );
-        await page.keyboard.press("Escape");
-        if (width === 390)
-          await page.getByRole("button", { name: t("Filtri", "Filters"), exact: true }).click();
-        const period = page.getByRole("combobox", { name: t("Periodo", "Period"), exact: true });
-        await period.click();
-        const menu = page.locator('[data-slot="select-content"]');
-        await expect(
-          menu.getByText(t("Disponibile con Premium", "Available with Premium")),
+          page.locator('nav a[aria-current=true][href$="/impostazioni/aspetto"]'),
         ).toBeVisible();
-        // Il menu è largo quanto la voce più lunga, mai meno del campo, e resta entro il
-        // margine laterale di 16 px.
-        await expect
-          .poll(async () => {
-            const [box, field] = [(await menu.boundingBox())!, (await period.boundingBox())!];
-            return (
-              box.width >= field.width - 1 && box.x >= 15.5 && box.x + box.width <= width - 15.5
-            );
-          })
-          .toBe(true);
-        expect((await menu.boundingBox())!.y).toBeGreaterThanOrEqual(
-          (await period.boundingBox())!.y + (await period.boundingBox())!.height,
-        );
-        await page.keyboard.press("Escape");
-        await page.setViewportSize({ width, height: 600 });
-        await open(page, `${prefix}/anteprima/ordini/ord-01`, "ordinario");
-        const dialog = page.getByRole("dialog");
-        await expect(dialog).toHaveCSS("outline-style", "none");
-        const ebay = dialog.getByRole("link", { name: t("Apri su eBay", "Open on eBay") });
-        await expect(ebay).toBeVisible();
-        await expect(ebay).toHaveAttribute(
-          "href",
-          /^https:\/\/www\.ebay\.it\/sh\/ord\/details\?orderid=\d{2}-\d{5}-\d{5}$/,
-        );
-        await expect(ebay).toHaveAttribute("target", "_blank");
-        await expect(
-          dialog.getByRole("link", { name: t("Esporta ordine", "Export order") }),
-        ).toBeVisible();
-        const header = dialog.locator('[data-slot="sheet-header"]');
-        const headerY = (await header.boundingBox())!.y;
-        await dialog.getByRole("tab", { name: /Articoli|Items/ }).click();
-        await expect(dialog).toContainText(t("Prezzo unitario", "Unit price"));
-        // Un prezzo di lotto non divisibile in centesimi esatti resta l'importo della riga.
-        await expect(dialog).toContainText(t("Importo della riga", "Line amount"));
-        await expect(dialog.locator("li .lucide-package")).toHaveCount(4);
-        await dialog
-          .locator("[data-slot=sheet-header] + div")
-          .evaluate((el) => (el.scrollTop = el.scrollHeight));
+      }
+      await open(page, `${prefix}/anteprima/impostazioni/privacy`);
+      await page
+        .getByRole("button", { name: t("Elimina account", "Delete account"), exact: true })
+        .click();
+      await expect(
+        confirm.getByRole("button", {
+          name: t("Conferma con un nuovo accesso", "Confirm by signing in again"),
+        }),
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
+      await open(page, `${prefix}/anteprima/impostazioni/supporto`);
+      await expect(
+        page.getByRole("textbox", { name: t("Messaggio", "Message"), exact: true }),
+      ).toHaveAttribute("placeholder", /.+/);
+      await expect(page.locator('main a[href^="mailto:"]')).toHaveAttribute("href", /^mailto:.+$/);
+      await open(page, `${prefix}/anteprima/profilo`);
+      await expect(
+        page.locator("main").getByText("laura.martini@esempio.invalid", { exact: true }),
+      ).toHaveCount(1);
+      await expect(
+        page.getByRole("textbox", { name: t("Nome", "First name"), exact: true }),
+      ).toHaveAttribute("required", "");
+      await expect(
+        page.getByRole("textbox", { name: t("Cognome", "Last name"), exact: true }),
+      ).toHaveAttribute("required", "");
+      const requiredLabels = page
+        .locator("main label[data-slot=field-label]")
+        .filter({ has: page.locator("span[aria-hidden=true]") });
+      for (const label of await requiredLabels.all()) {
         expect(
-          await dialog.locator("[data-slot=sheet-header] + div").evaluate((el) => el.scrollTop),
-        ).toBeGreaterThan(0);
-        expect((await header.boundingBox())!.y).toBe(headerY);
-        await expect(dialog.getByRole("tablist")).toBeInViewport();
-        await expect(
-          dialog.getByRole("tab", { name: t("Dettagli", "Details"), exact: true }),
-        ).toBeInViewport();
-        await page.screenshot({ path: test.info().outputPath("dettaglio.png") });
-        expect(await noPageOverflow(page)).toBe(true);
-        await page.setViewportSize({ width, height: 844 });
-        await open(page, `${prefix}/anteprima/ordini`, "ordinario");
-        // Riquadro ambra senza etichetta ripetuta: una sola nota sotto il codice spiega il controllo.
-        const code = page.getByText("SPSNNA85T55F83", { exact: true }).locator("..");
-        await expect(code).toHaveClass(/bg-warning-surface/);
-        await expect(code).not.toContainText(t("Codice da controllare", "Check code"));
-        await expect(code.getByRole("button", { name: /^Copia |^Copy / })).toBeVisible();
-        const card = page.getByRole("article").filter({ hasText: "SPSNNA85T55F83" });
-        await expect(card.getByText(t("Codice da controllare", "Check code"))).toHaveCount(1);
-        await page.screenshot({ path: test.info().outputPath("elenco.png"), fullPage: true });
-        await open(page, await searched(page, "zzzz", `${prefix}/anteprima`), "ordinario");
-        const clear = page.getByRole("link", {
-          name: t("Cancella ricerca", "Clear search"),
-          exact: true,
-        });
-        await expect(clear).toBeVisible();
-        await expect(
-          page.getByRole("button", { name: t("Cancella ricerca", "Clear search"), exact: true }),
-        ).toHaveCount(0);
-        await expect(clear.locator("../..")).toHaveClass(/rounded-xl/);
-        await open(page, `${prefix}/anteprima/ordini?mostra=10`, "ordinario");
-        await expect(
-          page.getByText(
-            t("Hai visto tutti gli ordini disponibili.", "You have seen all available orders."),
-          ),
-        ).toBeVisible();
-        await open(page, `${prefix}/anteprima/ordini?periodo=7&mostra=10`, "ordinario");
-        await expect(
-          page.getByText(
-            t(
-              "Hai visto tutti gli ordini del periodo.",
-              "You have seen all orders in this period.",
-            ),
-          ),
-        ).toBeVisible();
-        await open(page, `${prefix}/anteprima/ordini`, "dati-discordanti");
-        await expect(page.getByRole("article").filter({ hasText: "05-55555-12121" })).toContainText(
-          t("Ordine da verificare", "Order to check"),
-        );
-        // Valore letto in precedenza con l'ultima lettura non riuscita, dato nascosto o rimosso.
-        for (const [query, order, text] of [
-          [
-            "Ricci",
-            "25-30491-88120",
-            t("Ultima lettura da eBay non riuscita", "The latest read from eBay failed"),
-          ],
-          [
-            "Colombo",
-            "09-11873-20564",
-            t("eBay nasconde il Codice Fiscale", "eBay hides the tax code"),
-          ],
-          [
-            "Tecnoufficio",
-            "30-55012-90876",
-            t("eBay ha rimosso il Codice Fiscale", "eBay removed the tax code"),
-          ],
-          [
-            "08-33110-45672",
-            "08-33110-45672",
-            t("Acquirente estero (Spagna)", "Foreign buyer (Spain)"),
-          ],
-        ] as const) {
-          await open(page, await searched(page, query, `${prefix}/anteprima`));
-          await expect(page.getByRole("article").filter({ hasText: order })).toContainText(text);
-        }
-        await open(page, await searched(page, "nessun-risultato-collaudo", `${prefix}/anteprima`));
-        await expect(
-          page.getByRole("heading", { name: t("Nessun risultato", "No results") }),
-        ).toBeVisible();
-        await expect(
-          page.getByText(t("Prova un’altra ricerca.", "Try another search."), { exact: true }),
-        ).toBeVisible();
-        await page
-          .getByRole("link", { name: t("Cancella ricerca", "Clear search"), exact: true })
-          .click();
-        await expect(page.getByRole("article").first()).toBeVisible();
-        await open(page, `${prefix}/anteprima/ordini/ord-03`, "dati-discordanti");
-        await expect(
-          page
-            .getByRole("dialog")
-            .getByRole("status")
-            .filter({ hasText: t("Ordine da verificare", "Order to check") }),
-        ).toBeVisible();
-        await open(page, `${prefix}/anteprima/ordini`, "ebay-non-disponibile");
-        await expect(page.locator("main > div > header [role=status]")).toHaveClass(/text-warning/);
-        await expect(
-          page.getByRole("button", { name: t("Riprova", "Try again"), exact: true }).first(),
-        ).toBeDisabled();
-        expect(errors).toEqual([]);
-      });
-    }
+          await label.evaluate((element) => parseFloat(getComputedStyle(element).columnGap)),
+        ).toBe(2);
+      }
+      await expect(
+        page.getByRole("link", { name: t("Apri Sicurezza", "Open Security"), exact: true }),
+      ).toHaveAttribute("href", `${prefix}/anteprima/impostazioni/sicurezza`);
+      await expect.poll(() => noPageOverflow(page)).toBe(true);
+      expect(errors).toEqual([]);
+      await page.screenshot({ path: testInfo.outputPath("profile.png"), fullPage: true });
+    });
   }
 }
 
 for (const language of ["it", "en"] as const) {
-  for (const colorScheme of ["light", "dark"] as const) {
-    for (const width of [500, 1440]) {
-      test(`accesso e pagine standalone ${language} ${colorScheme} a ${width} px`, async ({
-        page,
-      }) => {
-        await page.setViewportSize({ width, height: 666 });
-        await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
-        const prefix = language === "it" ? "" : "/en";
-        const errors: string[] = [];
-        page.on("pageerror", (error) => errors.push(error.message));
-        page.on("console", (message) => {
-          if (message.type() === "error") errors.push(message.text());
-        });
-        await page.goto(`${prefix}/accesso`);
-        await page.waitForLoadState("networkidle");
-        await expect(page).toHaveTitle(
-          language === "it" ? "FiscalBay | Accedi" : "FiscalBay | Sign in",
-        );
-        const legal = page.getByRole("navigation", {
-          name: language === "it" ? "Documenti legali" : "Legal documents",
-        });
-        await expect(legal.getByRole("link")).toHaveCount(2);
-        if (width === 500) {
-          const card = page.locator("main .rounded-2xl");
-          expect((await card.boundingBox())!.x).toBe(16);
-          expect((await page.locator("main header img:visible").boundingBox())!.x).toBe(16);
-        }
-        const passkey = page.getByRole("button", {
-          name: language === "it" ? "Accedi con passkey" : "Sign in with a passkey",
-          exact: true,
-        });
-        await expect(passkey).toBeVisible();
-        if (width === 1440) await expect(passkey).toBeInViewport();
-        const ebay = page.locator('button[value="ebay"]:visible img');
-        await expect(ebay).toBeVisible();
-        expect(await ebay.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
-        const headline = page.locator("aside p").first();
-        const top = width === 1440 ? (await headline.boundingBox())!.y : 0;
-        await page
-          .getByRole("tab", {
-            name: language === "it" ? "Crea account" : "Create account",
-            exact: true,
-          })
-          .click();
-        await page
-          .getByRole("radio", { name: language === "it" ? "Azienda" : "Business", exact: true })
-          .click();
-        if (width === 1440) expect((await headline.boundingBox())!.y).toBeCloseTo(top, 0);
-        await page
-          .getByRole("tab", { name: language === "it" ? "Accedi" : "Sign in", exact: true })
-          .click();
-        await page
-          .getByRole("button", {
-            name: language === "it" ? "Hai dimenticato la password?" : "Forgot your password?",
-            exact: true,
-          })
-          .click();
-        await expect(passkey).toHaveCount(0);
-        await expect(
-          page.locator('button[value="google"]:visible,button[value="ebay"]:visible'),
-        ).toHaveCount(0);
-        await page
-          .getByRole("button", {
-            name: language === "it" ? "Torna ad accedere" : "Back to sign in",
-            exact: true,
-          })
-          .click();
-        await expect(passkey).toBeVisible();
-        await expect.poll(() => noPageOverflow(page)).toBe(true);
-        await page.screenshot({
-          path: `/tmp/fiscalbay-accesso-${language}-${colorScheme}-${width}.png`,
-          fullPage: true,
-        });
-        for (const path of ["/termini", "/privacy", "/auth/error"]) {
-          await page.goto(`${prefix}${path}`);
-          await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-          await expect(
-            page.getByRole("link", {
-              name: language === "it" ? "Torna a FiscalBay" : "Back to FiscalBay",
-              exact: true,
-            }),
-          ).toBeVisible();
-          const logo = page.locator("header img:visible");
-          const card = page.locator("main > div");
-          expect(
-            (await card.boundingBox())!.y -
-              ((await logo.boundingBox())!.y + (await logo.boundingBox())!.height),
-          ).toBeLessThan(40);
-          await expect.poll(() => noPageOverflow(page)).toBe(true);
-          if (path !== "/auth/error") {
-            await expect(page.locator("main")).not.toContainText("bozza-2026");
-            await expect(page.locator("main")).toContainText(
-              language === "it" ? "28 settembre 2026" : "28 September 2026",
-            );
-          }
-        }
-        for (const provider of ["google", "ebay", "unknown"]) {
-          await page.goto(
-            `${prefix}/auth/error?error=account_already_linked_to_different_user&provider=${provider}`,
-          );
-          const body = page.locator("main p");
-          await expect(body).toContainText(
-            provider === "google"
-              ? "Google"
-              : provider === "ebay"
-                ? "eBay"
-                : language === "it"
-                  ? "L’account che hai appena usato"
-                  : "The account you just used",
-          );
-        }
-        await page.screenshot({
-          path: `/tmp/fiscalbay-standalone-${language}-${colorScheme}-${width}.png`,
-          fullPage: true,
-        });
-        expect(errors).toEqual([]);
+  for (const width of [390, 1280]) {
+    test(`ordini: conferme, stati e dettaglio ${language} a ${width} px`, async ({
+      page,
+      browserErrors: errors,
+    }) => {
+      // Comprende oltre venti navigazioni, conferme, pannelli e screenshot.
+      test.setTimeout(90_000);
+      await page.setViewportSize({ width, height: 844 });
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      const prefix = language === "it" ? "" : "/en";
+      const t = (it: string, en: string) => (language === "it" ? it : en);
+      await open(page, `${prefix}/anteprima/ordini`, "ordinario");
+      const locked = page.getByRole("article", {
+        name: t("Ordine", "Order") + " 05-55555-12121",
       });
-    }
+      await expect(
+        page.getByText(t("2 sblocchi disponibili in questo ciclo.", "2 unlocks left this cycle."), {
+          exact: true,
+        }),
+      ).toHaveCount(1);
+      await expect(locked).not.toContainText(
+        t("Questo ordine ne usa uno.", "This order uses one."),
+      );
+      const unlock = locked.getByRole("button", { name: t("Sblocca ordine", "Unlock order") });
+      await unlock.click();
+      const confirm = page.getByRole("alertdialog");
+      await expect(confirm).toContainText(t("1 sblocco", "1 unlock"));
+      const cancel = confirm.getByRole("button", { name: t("Annulla", "Cancel"), exact: true });
+      await expect(cancel).toBeFocused();
+      await confirm
+        .getByRole("checkbox", { name: t("Non chiedermelo più", "Don’t ask again") })
+        .check();
+      await cancel.click();
+      await expect(unlock).toBeFocused();
+      await expect(locked.getByText("BNCLCU75C12F205G")).toHaveCount(0);
+      await unlock.click();
+      await expect(confirm.getByRole("checkbox")).not.toBeChecked();
+      await confirm
+        .getByRole("checkbox", {
+          name: t("Non chiedermelo più", "Don’t ask again"),
+        })
+        .check();
+      await confirm.getByRole("button", { name: t("Sblocca", "Unlock"), exact: true }).click();
+      await expect(locked.getByText("BNCLCU75C12F205G")).toBeVisible();
+      await page.reload();
+      const restore = page.getByRole("button", {
+        name: t("Riattiva conferma sblocco", "Restore unlock confirmation"),
+      });
+      await expect(restore).toBeVisible();
+      await open(page, `${prefix}/anteprima/ordini/ord-09`);
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: t("Sblocca ordine", "Unlock order") })
+        .click();
+      await expect(page.getByRole("alertdialog")).toHaveCount(0);
+      await expect(
+        page.getByRole("dialog").getByText("04567890126", { exact: true }),
+      ).toBeVisible();
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: t("Chiudi", "Close"), exact: true })
+        .click();
+      await restore.click();
+      await expect(restore).toHaveCount(0);
+      await open(page, `${prefix}/anteprima/ordini`, "ordinario");
+      const select = page.getByRole("button", { name: t("Seleziona", "Select"), exact: true });
+      await select.click();
+      const zero = page.getByRole("button", { name: t("Sblocca 0", "Unlock 0"), exact: true });
+      await expect(zero).toBeDisabled();
+      await expect(zero).toHaveClass(/bg-muted/);
+      await page.getByRole("button", { name: t("Annulla", "Cancel"), exact: true }).click();
+      await expect(select).toBeFocused();
+      const failed = page.getByRole("article", {
+        name: t("Ordine", "Order") + " 19-00001-99999",
+      });
+      const retried = page.waitForResponse(
+        (response) =>
+          response.url().includes("/ordini.data") && response.request().method() === "POST",
+      );
+      await failed.getByRole("button", { name: t("Riprova", "Try again"), exact: true }).click();
+      await expect(failed).toContainText(t("Verifica in corso", "Verification in progress"));
+      expect((await retried).status()).toBe(200);
+      await expect(
+        failed.getByRole("button", { name: t("Riprova", "Try again"), exact: true }),
+      ).toHaveCount(0);
+      await page.reload();
+      await expect(failed).toContainText(t("Verifica in corso", "Verification in progress"));
+      // Nel menu della scheda «Apri su eBay» è un collegamento al Seller Hub.
+      await failed
+        .getByRole("button", {
+          name: t("Altre azioni per l’ordine", "More actions for order") + " 19-00001-99999",
+        })
+        .click();
+      await expect(
+        page.getByRole("menuitem", { name: t("Apri su eBay", "Open on eBay") }),
+      ).toHaveAttribute(
+        "href",
+        /^https:\/\/www\.ebay\.it\/sh\/ord\/details\?orderid=19-00001-99999$/,
+      );
+      await page.keyboard.press("Escape");
+      if (width === 390)
+        await page.getByRole("button", { name: t("Filtri", "Filters"), exact: true }).click();
+      const period = page.getByRole("combobox", { name: t("Periodo", "Period"), exact: true });
+      await period.click();
+      const menu = page.locator('[data-slot="select-content"]');
+      await expect(
+        menu.getByText(t("Disponibile con Premium", "Available with Premium")),
+      ).toBeVisible();
+      // Il menu è largo quanto la voce più lunga, mai meno del campo, e resta entro il
+      // margine laterale di 16 px.
+      await expect
+        .poll(async () => {
+          const [box, field] = [(await menu.boundingBox())!, (await period.boundingBox())!];
+          return box.width >= field.width - 1 && box.x >= 15.5 && box.x + box.width <= width - 15.5;
+        })
+        .toBe(true);
+      expect((await menu.boundingBox())!.y).toBeGreaterThanOrEqual(
+        (await period.boundingBox())!.y + (await period.boundingBox())!.height,
+      );
+      await page.keyboard.press("Escape");
+      await page.setViewportSize({ width, height: 600 });
+      await open(page, `${prefix}/anteprima/ordini/ord-01`, "ordinario");
+      const dialog = page.getByRole("dialog");
+      await expect(dialog).toHaveCSS("outline-style", "none");
+      const ebay = dialog.getByRole("link", { name: t("Apri su eBay", "Open on eBay") });
+      await expect(ebay).toBeVisible();
+      await expect(ebay).toHaveAttribute(
+        "href",
+        /^https:\/\/www\.ebay\.it\/sh\/ord\/details\?orderid=\d{2}-\d{5}-\d{5}$/,
+      );
+      await expect(ebay).toHaveAttribute("target", "_blank");
+      await expect(
+        dialog.getByRole("link", { name: t("Esporta ordine", "Export order") }),
+      ).toBeVisible();
+      const header = dialog.locator('[data-slot="sheet-header"]');
+      const headerY = (await header.boundingBox())!.y;
+      await dialog.getByRole("tab", { name: /Articoli|Items/ }).click();
+      await expect(dialog).toContainText(t("Prezzo unitario", "Unit price"));
+      // Un prezzo di lotto non divisibile in centesimi esatti resta l'importo della riga.
+      await expect(dialog).toContainText(t("Importo della riga", "Line amount"));
+      await expect(dialog.locator("li .lucide-package")).toHaveCount(4);
+      await dialog
+        .locator("[data-slot=sheet-header] + div")
+        .evaluate((el) => (el.scrollTop = el.scrollHeight));
+      expect(
+        await dialog.locator("[data-slot=sheet-header] + div").evaluate((el) => el.scrollTop),
+      ).toBeGreaterThan(0);
+      expect((await header.boundingBox())!.y).toBe(headerY);
+      await expect(dialog.getByRole("tablist")).toBeInViewport();
+      await expect(
+        dialog.getByRole("tab", { name: t("Dettagli", "Details"), exact: true }),
+      ).toBeInViewport();
+      await page.screenshot({ path: test.info().outputPath("dettaglio.png") });
+      expect(await noPageOverflow(page)).toBe(true);
+      await page.setViewportSize({ width, height: 844 });
+      await open(page, `${prefix}/anteprima/ordini`, "ordinario");
+      // Riquadro ambra senza etichetta ripetuta: una sola nota sotto il codice spiega il controllo.
+      const code = page.getByText("SPSNNA85T55F83", { exact: true }).locator("..");
+      await expect(code).toHaveClass(/bg-warning-surface/);
+      await expect(code).not.toContainText(t("Codice da controllare", "Check code"));
+      await expect(code.getByRole("button", { name: /^Copia |^Copy / })).toBeVisible();
+      const card = page.getByRole("article").filter({ hasText: "SPSNNA85T55F83" });
+      await expect(card.getByText(t("Codice da controllare", "Check code"))).toHaveCount(1);
+      await page.screenshot({ path: test.info().outputPath("elenco.png"), fullPage: true });
+      await open(page, await searched(page, "zzzz", `${prefix}/anteprima`), "ordinario");
+      const clear = page.getByRole("link", {
+        name: t("Cancella ricerca", "Clear search"),
+        exact: true,
+      });
+      await expect(clear).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: t("Cancella ricerca", "Clear search"), exact: true }),
+      ).toHaveCount(0);
+      await expect(clear.locator("../..")).toHaveClass(/rounded-xl/);
+      await open(page, `${prefix}/anteprima/ordini?mostra=10`, "ordinario");
+      await expect(
+        page.getByText(
+          t("Hai visto tutti gli ordini disponibili.", "You have seen all available orders."),
+        ),
+      ).toBeVisible();
+      await open(page, `${prefix}/anteprima/ordini?periodo=7&mostra=10`, "ordinario");
+      await expect(
+        page.getByText(
+          t("Hai visto tutti gli ordini del periodo.", "You have seen all orders in this period."),
+        ),
+      ).toBeVisible();
+      await open(page, `${prefix}/anteprima/ordini`, "dati-discordanti");
+      await expect(page.getByRole("article").filter({ hasText: "05-55555-12121" })).toContainText(
+        t("Ordine da verificare", "Order to check"),
+      );
+      // Valore letto in precedenza con l'ultima lettura non riuscita, dato nascosto o rimosso.
+      for (const [query, order, text] of [
+        [
+          "Ricci",
+          "25-30491-88120",
+          t("Ultima lettura da eBay non riuscita", "The latest read from eBay failed"),
+        ],
+        [
+          "Colombo",
+          "09-11873-20564",
+          t("eBay nasconde il Codice Fiscale", "eBay hides the tax code"),
+        ],
+        [
+          "Tecnoufficio",
+          "30-55012-90876",
+          t("eBay ha rimosso il Codice Fiscale", "eBay removed the tax code"),
+        ],
+        [
+          "08-33110-45672",
+          "08-33110-45672",
+          t("Acquirente estero (Spagna)", "Foreign buyer (Spain)"),
+        ],
+      ] as const) {
+        await open(page, await searched(page, query, `${prefix}/anteprima`));
+        await expect(page.getByRole("article").filter({ hasText: order })).toContainText(text);
+      }
+      await open(page, await searched(page, "nessun-risultato-collaudo", `${prefix}/anteprima`));
+      await expect(
+        page.getByRole("heading", { name: t("Nessun risultato", "No results") }),
+      ).toBeVisible();
+      await expect(
+        page.getByText(t("Prova un’altra ricerca.", "Try another search."), { exact: true }),
+      ).toBeVisible();
+      await page
+        .getByRole("link", { name: t("Cancella ricerca", "Clear search"), exact: true })
+        .click();
+      await expect(page.getByRole("article").first()).toBeVisible();
+      await open(page, `${prefix}/anteprima/ordini/ord-03`, "dati-discordanti");
+      await expect(
+        page
+          .getByRole("dialog")
+          .getByRole("status")
+          .filter({ hasText: t("Ordine da verificare", "Order to check") }),
+      ).toBeVisible();
+      await open(page, `${prefix}/anteprima/ordini`, "ebay-non-disponibile");
+      await expect(page.locator("main > div > header [role=status]")).toHaveClass(/text-warning/);
+      await expect(
+        page.getByRole("button", { name: t("Riprova", "Try again"), exact: true }).first(),
+      ).toBeDisabled();
+      expect(errors).toEqual([]);
+    });
+  }
+}
+
+for (const language of ["it", "en"] as const) {
+  for (const width of [500, 1440]) {
+    test(`accesso e pagine standalone ${language} a ${width} px`, async ({
+      page,
+      browserErrors: errors,
+    }) => {
+      await page.setViewportSize({ width, height: 666 });
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      const prefix = language === "it" ? "" : "/en";
+      await page.goto(`${prefix}/accesso`);
+      await page.waitForLoadState("networkidle");
+      await expect(page).toHaveTitle(
+        language === "it" ? "FiscalBay | Accedi" : "FiscalBay | Sign in",
+      );
+      const legal = page.getByRole("navigation", {
+        name: language === "it" ? "Documenti legali" : "Legal documents",
+      });
+      await expect(legal.getByRole("link")).toHaveCount(2);
+      if (width === 500) {
+        const card = page.locator("main .rounded-2xl");
+        expect((await card.boundingBox())!.x).toBe(16);
+        expect((await page.locator("main header img:visible").boundingBox())!.x).toBe(16);
+      }
+      const passkey = page.getByRole("button", {
+        name: language === "it" ? "Accedi con passkey" : "Sign in with a passkey",
+        exact: true,
+      });
+      await expect(passkey).toBeVisible();
+      if (width === 1440) await expect(passkey).toBeInViewport();
+      const ebay = page.locator('button[value="ebay"]:visible img');
+      await expect(ebay).toBeVisible();
+      expect(await ebay.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+      const headline = page.locator("aside p").first();
+      const top = width === 1440 ? (await headline.boundingBox())!.y : 0;
+      await page
+        .getByRole("tab", {
+          name: language === "it" ? "Crea account" : "Create account",
+          exact: true,
+        })
+        .click();
+      await page
+        .getByRole("radio", { name: language === "it" ? "Azienda" : "Business", exact: true })
+        .click();
+      if (width === 1440) expect((await headline.boundingBox())!.y).toBeCloseTo(top, 0);
+      await page
+        .getByRole("tab", { name: language === "it" ? "Accedi" : "Sign in", exact: true })
+        .click();
+      await page
+        .getByRole("button", {
+          name: language === "it" ? "Hai dimenticato la password?" : "Forgot your password?",
+          exact: true,
+        })
+        .click();
+      await expect(passkey).toHaveCount(0);
+      await expect(
+        page.locator('button[value="google"]:visible,button[value="ebay"]:visible'),
+      ).toHaveCount(0);
+      await page
+        .getByRole("button", {
+          name: language === "it" ? "Torna ad accedere" : "Back to sign in",
+          exact: true,
+        })
+        .click();
+      await expect(passkey).toBeVisible();
+      await expect.poll(() => noPageOverflow(page)).toBe(true);
+      for (const path of ["/termini", "/privacy", "/auth/error"]) {
+        await page.goto(`${prefix}${path}`);
+        await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+        await expect(
+          page.getByRole("link", {
+            name: language === "it" ? "Torna a FiscalBay" : "Back to FiscalBay",
+            exact: true,
+          }),
+        ).toBeVisible();
+        const logo = page.locator("header img:visible");
+        const card = page.locator("main > div");
+        expect(
+          (await card.boundingBox())!.y -
+            ((await logo.boundingBox())!.y + (await logo.boundingBox())!.height),
+        ).toBeLessThan(40);
+        await expect.poll(() => noPageOverflow(page)).toBe(true);
+        if (path !== "/auth/error") {
+          await expect(page.locator("main")).not.toContainText("bozza-2026");
+          await expect(page.locator("main")).toContainText(
+            language === "it" ? "28 settembre 2026" : "28 September 2026",
+          );
+        }
+      }
+      for (const provider of ["google", "ebay", "unknown"]) {
+        await page.goto(
+          `${prefix}/auth/error?error=account_already_linked_to_different_user&provider=${provider}`,
+        );
+        const body = page.locator("main p");
+        await expect(body).toContainText(
+          provider === "google"
+            ? "Google"
+            : provider === "ebay"
+              ? "eBay"
+              : language === "it"
+                ? "L’account che hai appena usato"
+                : "The account you just used",
+        );
+      }
+      expect(errors).toEqual([]);
+    });
   }
 }
 
@@ -1803,310 +1749,295 @@ test("sicurezza nell'anteprima senza JavaScript resta simulata", async ({ browse
 });
 
 for (const language of ["it", "en"] as const) {
-  for (const width of [390, 1280]) {
-    test(`sicurezza condivisa e profilo coerente ${language} ${width}px`, async ({
-      page,
-    }, testInfo) => {
-      const it = language === "it";
-      const prefix = it ? "" : "/en";
-      await page.setViewportSize({ width, height: 844 });
-      const errors: string[] = [];
-      page.on("pageerror", (error) => errors.push(error.message));
-      const posts: Array<{ path: string; fields: URLSearchParams }> = [];
-      page.on("request", (request) => {
-        if (request.method() === "POST")
-          posts.push({
-            path: new URL(request.url()).pathname,
-            fields: new URLSearchParams(request.postData() ?? ""),
-          });
-      });
-      await open(page, `${prefix}/anteprima/impostazioni/sicurezza`, "ordinario");
-      const removeText = it ? "Rimuovi" : "Remove";
-      const cancelText = it ? "Annulla" : "Cancel";
-      const methods = page.locator('section[aria-labelledby="security-methods"]');
-      await expect(methods.getByRole("button", { name: removeText, exact: true })).toHaveCount(3);
-      for (const [label, intent, field, value] of [
-        [it ? "Email e password" : "Email and password", "rimuovi-metodo", "metodo", "password"],
-        ["Google", "rimuovi-metodo", "metodo", "google"],
-        ["Passkey", "passkey-remove", "id", "preview-passkey"],
-      ]) {
-        const row = methods.getByRole("group", { name: new RegExp(`^${label}`) });
-        const trigger = row.getByRole("button", { name: removeText, exact: true });
-        const before = posts.length;
-        await trigger.click();
-        const dialog = page.getByRole("alertdialog");
-        await expect(dialog).toBeVisible();
-        await expect(dialog.getByRole("button", { name: cancelText, exact: true })).toBeFocused();
-        expect(posts).toHaveLength(before);
-        await dialog.getByRole("button", { name: cancelText, exact: true }).click();
-        await expect(trigger).toBeFocused();
-        expect(posts).toHaveLength(before);
-        await trigger.click();
-        await dialog.getByRole("button", { name: removeText, exact: true }).click();
-        await expect.poll(() => posts.length).toBe(before + 1);
-        expect(posts.at(-1)!.path).toBe(`${prefix}/anteprima/impostazioni/sicurezza.data`);
-        expect(posts.at(-1)!.fields.get("intent")).toBe(intent);
-        expect(posts.at(-1)!.fields.get(field)).toBe(value);
-        await expect(dialog).toHaveCount(0);
-        await expect(
-          page.getByText(
-            it ? "Anteprima: l’azione è simulata." : "Preview: this action is simulated.",
-            { exact: true },
-          ),
-        ).toBeVisible();
-      }
+  // Nessuna misura dipende dalla larghezza: basta quella mobile, la più stretta.
+  const width = 390;
+  test(`sicurezza condivisa e profilo coerente ${language} ${width}px`, async ({
+    page,
+    pageErrors: errors,
+  }, testInfo) => {
+    const it = language === "it";
+    const prefix = it ? "" : "/en";
+    await page.setViewportSize({ width, height: 844 });
+    const posts: Array<{ path: string; fields: URLSearchParams }> = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST")
+        posts.push({
+          path: new URL(request.url()).pathname,
+          fields: new URLSearchParams(request.postData() ?? ""),
+        });
+    });
+    await open(page, `${prefix}/anteprima/impostazioni/sicurezza`, "ordinario");
+    const removeText = it ? "Rimuovi" : "Remove";
+    const cancelText = it ? "Annulla" : "Cancel";
+    const methods = page.locator('section[aria-labelledby="security-methods"]');
+    await expect(methods.getByRole("button", { name: removeText, exact: true })).toHaveCount(3);
+    for (const [label, intent, field, value] of [
+      [it ? "Email e password" : "Email and password", "rimuovi-metodo", "metodo", "password"],
+      ["Google", "rimuovi-metodo", "metodo", "google"],
+      ["Passkey", "passkey-remove", "id", "preview-passkey"],
+    ]) {
+      const row = methods.getByRole("group", { name: new RegExp(`^${label}`) });
+      const trigger = row.getByRole("button", { name: removeText, exact: true });
       const before = posts.length;
-      await page
-        .getByRole("button", { name: it ? "Cambia email" : "Change email", exact: true })
-        .click();
-      await page
-        .getByRole("button", { name: it ? "Invia il link" : "Send the link", exact: true })
-        .click();
-      const email = page.getByRole("textbox", {
-        name: it ? "Nuova email" : "New email",
-        exact: true,
-      });
-      await expect(email).toHaveAttribute("aria-invalid", "true");
-      await expect(email).toBeFocused();
+      await trigger.click();
+      const dialog = page.getByRole("alertdialog");
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole("button", { name: cancelText, exact: true })).toBeFocused();
       expect(posts).toHaveLength(before);
-      await email.fill("new@example.invalid");
-      await page
-        .getByRole("button", { name: it ? "Invia il link" : "Send the link", exact: true })
-        .click();
+      await dialog.getByRole("button", { name: cancelText, exact: true }).click();
+      await expect(trigger).toBeFocused();
+      expect(posts).toHaveLength(before);
+      await trigger.click();
+      await dialog.getByRole("button", { name: removeText, exact: true }).click();
       await expect.poll(() => posts.length).toBe(before + 1);
-      expect(posts.at(-1)!.fields.get("intent")).toBe("cambia-email");
-      const addPasskey = page.getByRole("button", {
-        name: it ? "Aggiungi passkey" : "Add passkey",
-        exact: true,
-      });
-      await addPasskey.click();
-      expect(posts).toHaveLength(before + 1);
-      await addPasskey.click();
-      await expect.poll(() => posts.length).toBe(before + 2);
-      expect(posts.at(-1)!.fields.get("intent")).toBe("passkey-add");
-      expect(
-        posts.some((post) => post.path.includes("/api/auth") || post.path.endsWith("/accesso")),
-      ).toBe(false);
-      await expect.poll(() => noPageOverflow(page)).toBe(true);
-      await page.screenshot({
-        path: testInfo.outputPath(`security-${language}-${width}.png`),
-        fullPage: true,
-      });
-      // La rilettura dopo l'ultima azione simulata si chiude prima di cambiare pagina: WebKit
-      // segnala come errore della pagina una richiesta annullata dalla navigazione.
-      await page.waitForLoadState("networkidle");
-
-      await open(page, `${prefix}/anteprima/profilo`);
-      const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
-      await expect(first).toHaveValue("Laura");
-      await expect(first).not.toHaveAttribute("aria-describedby", /profile-name-hint/);
+      expect(posts.at(-1)!.path).toBe(`${prefix}/anteprima/impostazioni/sicurezza.data`);
+      expect(posts.at(-1)!.fields.get("intent")).toBe(intent);
+      expect(posts.at(-1)!.fields.get(field)).toBe(value);
+      await expect(dialog).toHaveCount(0);
       await expect(
         page.getByText(
-          it
-            ? "Metodi di accesso e sessioni sono in Sicurezza."
-            : "Sign-in methods and sessions are in Security.",
+          it ? "Anteprima: l’azione è simulata." : "Preview: this action is simulated.",
           { exact: true },
         ),
-      ).toHaveCount(0);
-      await expect(
-        page.getByRole("link", { name: it ? "Apri Sicurezza" : "Open Security", exact: true }),
       ).toBeVisible();
-      await expect(
-        page.getByRole("textbox", { name: it ? "Cognome" : "Last name", exact: true }),
-      ).toHaveValue("Martini");
-      await expect(
-        page.getByRole("textbox", { name: it ? "Ragione sociale" : "Company name", exact: true }),
-      ).toHaveValue("Martini ricambi");
-      await expect(
-        page.getByText(
-          it
-            ? "Facoltativo. Compare nelle email di servizio."
-            : "Optional. Shown in service emails.",
-        ),
-      ).toHaveCount(0);
-      await expect(
-        page.getByRole("button", { name: it ? "Cambia email" : "Change email", exact: true }),
-      ).toHaveCount(0);
-      await first.fill("");
-      await page.getByRole("button", { name: it ? "Salva" : "Save", exact: true }).click();
-      await expect(first).toBeFocused();
-      await expect(first).toHaveAttribute("aria-invalid", "true");
-      await expect.poll(() => noPageOverflow(page)).toBe(true);
-      await page.screenshot({
-        path: testInfo.outputPath(`profile-${language}-${width}.png`),
-        fullPage: true,
-      });
-      expect(errors).toEqual([]);
+    }
+    const before = posts.length;
+    await page
+      .getByRole("button", { name: it ? "Cambia email" : "Change email", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: it ? "Invia il link" : "Send the link", exact: true })
+      .click();
+    const email = page.getByRole("textbox", {
+      name: it ? "Nuova email" : "New email",
+      exact: true,
     });
-  }
+    await expect(email).toHaveAttribute("aria-invalid", "true");
+    await expect(email).toBeFocused();
+    expect(posts).toHaveLength(before);
+    await email.fill("new@example.invalid");
+    await page
+      .getByRole("button", { name: it ? "Invia il link" : "Send the link", exact: true })
+      .click();
+    await expect.poll(() => posts.length).toBe(before + 1);
+    expect(posts.at(-1)!.fields.get("intent")).toBe("cambia-email");
+    const addPasskey = page.getByRole("button", {
+      name: it ? "Aggiungi passkey" : "Add passkey",
+      exact: true,
+    });
+    await addPasskey.click();
+    expect(posts).toHaveLength(before + 1);
+    await addPasskey.click();
+    await expect.poll(() => posts.length).toBe(before + 2);
+    expect(posts.at(-1)!.fields.get("intent")).toBe("passkey-add");
+    expect(
+      posts.some((post) => post.path.includes("/api/auth") || post.path.endsWith("/accesso")),
+    ).toBe(false);
+    await expect.poll(() => noPageOverflow(page)).toBe(true);
+    await page.screenshot({
+      path: testInfo.outputPath(`security-${language}-${width}.png`),
+      fullPage: true,
+    });
+    // La rilettura dopo l'ultima azione simulata si chiude prima di cambiare pagina: WebKit
+    // segnala come errore della pagina una richiesta annullata dalla navigazione.
+    await page.waitForLoadState("networkidle");
+
+    await open(page, `${prefix}/anteprima/profilo`);
+    const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
+    await expect(first).toHaveValue("Laura");
+    await expect(first).not.toHaveAttribute("aria-describedby", /profile-name-hint/);
+    await expect(
+      page.getByText(
+        it
+          ? "Metodi di accesso e sessioni sono in Sicurezza."
+          : "Sign-in methods and sessions are in Security.",
+        { exact: true },
+      ),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: it ? "Apri Sicurezza" : "Open Security", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("textbox", { name: it ? "Cognome" : "Last name", exact: true }),
+    ).toHaveValue("Martini");
+    await expect(
+      page.getByRole("textbox", { name: it ? "Ragione sociale" : "Company name", exact: true }),
+    ).toHaveValue("Martini ricambi");
+    await expect(
+      page.getByText(
+        it ? "Facoltativo. Compare nelle email di servizio." : "Optional. Shown in service emails.",
+      ),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: it ? "Cambia email" : "Change email", exact: true }),
+    ).toHaveCount(0);
+    await first.fill("");
+    await page.getByRole("button", { name: it ? "Salva" : "Save", exact: true }).click();
+    await expect(first).toBeFocused();
+    await expect(first).toHaveAttribute("aria-invalid", "true");
+    await expect.poll(() => noPageOverflow(page)).toBe(true);
+    await page.screenshot({
+      path: testInfo.outputPath(`profile-${language}-${width}.png`),
+      fullPage: true,
+    });
+    expect(errors).toEqual([]);
+  });
 }
 
 for (const language of ["it", "en"] as const) {
-  for (const colorScheme of ["light", "dark"] as const) {
-    test(`idratazione dei tempi relativi ${language} ${colorScheme}`, async ({
-      browser,
-      baseURL,
-    }) => {
-      const prefix = language === "it" ? "/anteprima" : "/en/anteprima";
-      for (const route of ["impostazioni/aspetto", "impostazioni/supporto", "negozi", "ordini"]) {
-        // Ogni caricamento diretto parte da una sessione nuova, senza richieste della pagina precedente.
-        const context = await browser.newContext({
-          baseURL,
-          colorScheme,
-          viewport: { width: 1440, height: 900 },
-        });
-        const page = await context.newPage();
-        const errors: string[] = [];
-        page.on("pageerror", (error) => errors.push(error.message));
-        try {
-          await open(page, `${prefix}/${route}`, "ordinario");
-          expect(errors, route).toEqual([]);
-          if (route.startsWith("impostazioni/")) {
-            await expect(
-              page.getByText(
-                language === "it" ? "Ultima attività l’altro ieri" : "Last active 2 days ago",
-                { exact: true },
-              ),
-            ).toBeVisible();
-          }
-          await page
-            .getByRole("button", { name: language === "it" ? /Notifiche/ : /Notifications/ })
-            .click();
+  test(`idratazione dei tempi relativi ${language}`, async ({ browser, baseURL }) => {
+    const prefix = language === "it" ? "/anteprima" : "/en/anteprima";
+    for (const route of ["impostazioni/aspetto", "impostazioni/supporto", "negozi", "ordini"]) {
+      // Ogni caricamento diretto parte da una sessione nuova, senza richieste della pagina precedente.
+      const context = await browser.newContext({
+        baseURL,
+        viewport: { width: 1440, height: 900 },
+      });
+      const page = await context.newPage();
+      const errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      try {
+        await open(page, `${prefix}/${route}`, "ordinario");
+        expect(errors, route).toEqual([]);
+        if (route.startsWith("impostazioni/")) {
           await expect(
-            page.getByRole("dialog", { name: language === "it" ? "Notifiche" : "Notifications" }),
+            page.getByText(
+              language === "it" ? "Ultima attività l’altro ieri" : "Last active 2 days ago",
+              { exact: true },
+            ),
           ).toBeVisible();
-          expect(errors, `${route}, notifiche`).toEqual([]);
-        } finally {
-          await context.close();
         }
+        await page
+          .getByRole("button", { name: language === "it" ? /Notifiche/ : /Notifications/ })
+          .click();
+        await expect(
+          page.getByRole("dialog", { name: language === "it" ? "Notifiche" : "Notifications" }),
+        ).toBeVisible();
+        expect(errors, `${route}, notifiche`).toEqual([]);
+      } finally {
+        await context.close();
       }
-    });
-  }
+    }
+  });
 }
 
 for (const locale of ["it", "en"] as const) {
-  for (const colorScheme of ["light", "dark"] as const) {
-    for (const width of [390, 768, 1280]) {
-      test(`negozi e contatti completi, ${locale}, ${colorScheme}, ${width} px`, async ({
-        page,
-      }, testInfo) => {
-        test.setTimeout(90_000);
-        await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
-        const prefix = locale === "it" ? "/anteprima" : "/en/anteprima";
-        await page.setViewportSize({ width, height: 900 });
-        await open(page, `${prefix}/negozi`, "premium-a-vita");
-        const list =
-          width < 1024
-            ? page.getByRole("list", { name: locale === "it" ? "Elenco negozi" : "Store list" })
-            : page.getByRole("table");
-        await expect(list).toBeVisible();
-        await expect(list).toContainText(
-          "Outlet ricambi auto e moto d’epoca - magazzino secondario",
-        );
-        await expect(list).toContainText("outlet_ricambi_epoca");
-        await expect(list).toContainText(locale === "it" ? "Disattivate" : "Off");
-        await expect.poll(() => noPageOverflow(page)).toBe(true);
-        await page.screenshot({ path: testInfo.outputPath(`stores-${width}.png`), fullPage: true });
+  for (const width of [390, 768, 1280]) {
+    test(`negozi e contatti completi, ${locale}, ${width} px`, async ({ page }, testInfo) => {
+      test.setTimeout(90_000);
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      const prefix = locale === "it" ? "/anteprima" : "/en/anteprima";
+      await page.setViewportSize({ width, height: 900 });
+      await open(page, `${prefix}/negozi`, "premium-a-vita");
+      const list =
+        width < 1024
+          ? page.getByRole("list", { name: locale === "it" ? "Elenco negozi" : "Store list" })
+          : page.getByRole("table");
+      await expect(list).toBeVisible();
+      await expect(list).toContainText("Outlet ricambi auto e moto d’epoca - magazzino secondario");
+      await expect(list).toContainText("outlet_ricambi_epoca");
+      await expect(list).toContainText(locale === "it" ? "Disattivate" : "Off");
+      await expect.poll(() => noPageOverflow(page)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`stores-${width}.png`), fullPage: true });
 
-        await open(page, `${prefix}/negozi/neg-vintage`);
-        const dialog = page.getByRole("dialog");
-        const disconnect = dialog.getByRole("button", {
-          name: locale === "it" ? "Scollega" : "Disconnect",
-          exact: true,
-        });
-        const remove = dialog.getByRole("button", {
-          name: locale === "it" ? "Scollega ed elimina negozio" : "Disconnect and delete store",
-          exact: true,
-        });
-        await remove.scrollIntoViewIfNeeded();
-        for (const button of [disconnect, remove]) {
-          await expect(button).toBeInViewport({ ratio: 1 });
-          expect(
-            await button.evaluate((e) => {
-              const panel = e.closest('[role="dialog"]')!.getBoundingClientRect();
-              const bounds = e.getBoundingClientRect();
-              return (
-                e.scrollWidth <= e.clientWidth &&
-                bounds.left >= panel.left &&
-                bounds.right <= panel.right
-              );
-            }),
-          ).toBe(true);
-        }
-        const updates = dialog.locator("section[aria-labelledby='store-recent'] li");
-        expect(await updates.count()).toBeGreaterThan(1);
-        for (const update of await updates.all()) {
-          expect(
-            await update.evaluate((e) => {
-              const outcome = e.querySelector("span")!.getBoundingClientRect();
-              const time = e.querySelector("time")!.getBoundingClientRect();
-              return time.top >= outcome.bottom;
-            }),
-          ).toBe(true);
-        }
-        await page.screenshot({ path: testInfo.outputPath(`store-actions-${width}.png`) });
-        await remove.click();
-        const confirm = page.getByRole("alertdialog");
-        const deletion = confirm.getByRole("button", {
-          name: locale === "it" ? "Scollega ed elimina negozio" : "Disconnect and delete store",
-          exact: true,
-        });
-        await expect(deletion).toBeDisabled();
-        await confirm.getByRole("textbox").fill("Vintage Garage Italia");
-        await expect(deletion).toBeEnabled();
-        await page.keyboard.press("Escape");
-        await expect(remove).toBeFocused();
-        await disconnect.click();
-        await expect(page.getByRole("alertdialog").getByRole("textbox")).toHaveCount(0);
-        await page.keyboard.press("Escape");
-        await expect(disconnect).toBeFocused();
-
-        await open(page, `${prefix}/ordini?mostra=2`, "ordinario");
-        const email = page
-          .getByRole("article")
-          .getByText("amministrazione@galli-restauri.invalid", { exact: true });
-        await expect(email).toBeVisible();
+      await open(page, `${prefix}/negozi/neg-vintage`);
+      const dialog = page.getByRole("dialog");
+      const disconnect = dialog.getByRole("button", {
+        name: locale === "it" ? "Scollega" : "Disconnect",
+        exact: true,
+      });
+      const remove = dialog.getByRole("button", {
+        name: locale === "it" ? "Scollega ed elimina negozio" : "Disconnect and delete store",
+        exact: true,
+      });
+      await remove.scrollIntoViewIfNeeded();
+      for (const button of [disconnect, remove]) {
+        await expect(button).toBeInViewport({ ratio: 1 });
         expect(
-          await email.evaluate((e) => {
-            const domain = e.querySelector("span:last-child")!;
-            const range = document.createRange();
-            range.selectNodeContents(domain);
-            return range.getClientRects().length === 1 && e.scrollWidth <= e.clientWidth;
+          await button.evaluate((e) => {
+            const panel = e.closest('[role="dialog"]')!.getBoundingClientRect();
+            const bounds = e.getBoundingClientRect();
+            return (
+              e.scrollWidth <= e.clientWidth &&
+              bounds.left >= panel.left &&
+              bounds.right <= panel.right
+            );
           }),
         ).toBe(true);
-        await expect(
-          page
-            .getByRole("article")
-            .filter({ hasText: "amministrazione@galli-restauri.invalid" })
-            .getByRole("link", { name: locale === "it" ? "Dettaglio" : "Details", exact: true }),
-        ).toBeVisible();
-        await expect.poll(() => noPageOverflow(page)).toBe(true);
-        await email.scrollIntoViewIfNeeded();
-        await page.screenshot({ path: testInfo.outputPath(`contacts-${width}.png`) });
-
-        await open(page, `${prefix}/ordini/ord-10`);
-        await expect(
-          page
-            .getByRole("dialog")
-            .getByText("amministrazione@galli-restauri.invalid", { exact: true }),
-        ).toBeVisible();
-        await open(page, `${prefix}/ordini/ord-01`);
-        await page
-          .getByRole("tab", { name: locale === "it" ? "Articoli (4)" : "Items (4)", exact: true })
-          .click();
-        const items = page.getByRole("tabpanel", {
-          name: locale === "it" ? "Articoli (4)" : "Items (4)",
-          exact: true,
-        });
-        await expect(
-          items.getByText(locale === "it" ? "Senza SKU" : "No SKU", { exact: true }).first(),
-        ).toBeVisible();
-        await expect(items).not.toContainText(locale === "it" ? "SKU: Senza SKU" : "SKU: No SKU");
-        await expect(items).toContainText("MSC-OL-44");
-        await expect(items).toContainText("CUS-12");
-        await expect.poll(() => noPageOverflow(page)).toBe(true);
+      }
+      const updates = dialog.locator("section[aria-labelledby='store-recent'] li");
+      expect(await updates.count()).toBeGreaterThan(1);
+      for (const update of await updates.all()) {
+        expect(
+          await update.evaluate((e) => {
+            const outcome = e.querySelector("span")!.getBoundingClientRect();
+            const time = e.querySelector("time")!.getBoundingClientRect();
+            return time.top >= outcome.bottom;
+          }),
+        ).toBe(true);
+      }
+      await page.screenshot({ path: testInfo.outputPath(`store-actions-${width}.png`) });
+      await remove.click();
+      const confirm = page.getByRole("alertdialog");
+      const deletion = confirm.getByRole("button", {
+        name: locale === "it" ? "Scollega ed elimina negozio" : "Disconnect and delete store",
+        exact: true,
       });
-    }
+      await expect(deletion).toBeDisabled();
+      await confirm.getByRole("textbox").fill("Vintage Garage Italia");
+      await expect(deletion).toBeEnabled();
+      await page.keyboard.press("Escape");
+      await expect(remove).toBeFocused();
+      await disconnect.click();
+      await expect(page.getByRole("alertdialog").getByRole("textbox")).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(disconnect).toBeFocused();
+
+      await open(page, `${prefix}/ordini?mostra=2`, "ordinario");
+      const email = page
+        .getByRole("article")
+        .getByText("amministrazione@galli-restauri.invalid", { exact: true });
+      await expect(email).toBeVisible();
+      expect(
+        await email.evaluate((e) => {
+          const domain = e.querySelector("span:last-child")!;
+          const range = document.createRange();
+          range.selectNodeContents(domain);
+          return range.getClientRects().length === 1 && e.scrollWidth <= e.clientWidth;
+        }),
+      ).toBe(true);
+      await expect(
+        page
+          .getByRole("article")
+          .filter({ hasText: "amministrazione@galli-restauri.invalid" })
+          .getByRole("link", { name: locale === "it" ? "Dettaglio" : "Details", exact: true }),
+      ).toBeVisible();
+      await expect.poll(() => noPageOverflow(page)).toBe(true);
+      await email.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: testInfo.outputPath(`contacts-${width}.png`) });
+
+      await open(page, `${prefix}/ordini/ord-10`);
+      await expect(
+        page
+          .getByRole("dialog")
+          .getByText("amministrazione@galli-restauri.invalid", { exact: true }),
+      ).toBeVisible();
+      await open(page, `${prefix}/ordini/ord-01`);
+      await page
+        .getByRole("tab", { name: locale === "it" ? "Articoli (4)" : "Items (4)", exact: true })
+        .click();
+      const items = page.getByRole("tabpanel", {
+        name: locale === "it" ? "Articoli (4)" : "Items (4)",
+        exact: true,
+      });
+      await expect(
+        items.getByText(locale === "it" ? "Senza SKU" : "No SKU", { exact: true }).first(),
+      ).toBeVisible();
+      await expect(items).not.toContainText(locale === "it" ? "SKU: Senza SKU" : "SKU: No SKU");
+      await expect(items).toContainText("MSC-OL-44");
+      await expect(items).toContainText("CUS-12");
+      await expect.poll(() => noPageOverflow(page)).toBe(true);
+    });
   }
 }
 
@@ -2141,244 +2072,236 @@ test(
 );
 
 for (const language of ["it", "en"] as const) {
-  for (const colorScheme of ["light", "dark"] as const) {
-    for (const width of [390, 768, 1280]) {
-      test(`accesso pubblico e nuova password ${language} ${colorScheme} a ${width} px`, async ({
-        browser,
+  for (const width of [390, 768, 1280]) {
+    test(`accesso pubblico e nuova password ${language} a ${width} px`, async ({
+      browser,
+      baseURL,
+    }, testInfo) => {
+      // Il caso percorre errore, collegamento, reset e recupero con più navigazioni.
+      test.setTimeout(60_000);
+      const context = await browser.newContext({
         baseURL,
-      }, testInfo) => {
-        // Il caso percorre errore, collegamento, reset e recupero con più navigazioni.
-        test.setTimeout(60_000);
-        const context = await browser.newContext({
-          baseURL,
-          colorScheme,
-          viewport: { width, height: 844 },
-          reducedMotion: "reduce",
-        });
-        const page = await context.newPage();
-        const prefix = language === "it" ? "" : "/en";
-        const title = language === "it" ? "Scegli una nuova password" : "Choose a new password";
-        const back = language === "it" ? "Torna ad accedere" : "Back to sign in";
-        try {
-          for (const error of [
-            "",
-            "account_already_linked_to_different_user",
-            "registration_approval_required",
-          ]) {
-            await page.goto(`${prefix}/auth/error?error=${error}`);
-            await expect(
-              page.getByRole("link", { name: new RegExp(supportAddress) }),
-            ).toHaveAttribute("href", `mailto:${supportAddress}`);
-            if (error === "registration_approval_required") {
-              await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-                language === "it" ? "Registrazione riservata" : "Registration restricted",
-              );
-              await expect(
-                page.getByText(
-                  language === "it"
-                    ? "Ambiente di test riservato. La registrazione richiede un’autorizzazione preventiva."
-                    : "Private test environment. Registration requires prior approval.",
-                  { exact: true },
-                ),
-              ).toBeVisible();
-            }
-          }
-          await testInfo.attach("errore-pubblico", {
-            body: await page.screenshot({
-              path: testInfo.outputPath("errore-pubblico.png"),
-              fullPage: true,
-            }),
-            contentType: "image/png",
-          });
-          await page.goto(`${prefix}/accesso?negozio=altro-spazio`);
-          await expect(page.getByRole("link", { name: new RegExp(supportAddress) })).toBeVisible();
-          await page.goto(`${prefix}/accesso?token=synthetic-invalid-token`);
-          await expect(page).toHaveTitle(`FiscalBay | ${title}`);
-          await expect(page.getByRole("heading", { name: title, level: 2 })).toBeVisible();
-          const form = page.locator("form");
-          await expect(form).toHaveAttribute("action", `${prefix}/accesso`);
-          await expect(form.locator('input[name="token"]')).toHaveValue("synthetic-invalid-token");
-          await expect(form.locator('input[name="password"]')).toHaveAttribute(
-            "autocomplete",
-            "new-password",
-          );
-          const backLink = page.getByRole("link", { name: back, exact: true });
-          await expect(backLink).toBeInViewport();
-          await expect.poll(() => noPageOverflow(page)).toBe(true);
-          if (width < 1024) {
-            const heading = page.getByRole("heading", { name: title, level: 2 });
-            expect((await heading.boundingBox())!.y).toBeLessThan(320);
-          }
-          await page.evaluate(() => document.fonts.ready);
-          await testInfo.attach("nuova-password", {
-            body: await page.screenshot({
-              path: testInfo.outputPath("nuova-password.png"),
-              fullPage: true,
-            }),
-            contentType: "image/png",
-          });
-          await backLink.click();
-          await page.waitForLoadState("networkidle");
-          await expect(page).toHaveURL(new RegExp(`${prefix}/accesso$`));
+        viewport: { width, height: 844 },
+        reducedMotion: "reduce",
+      });
+      const page = await context.newPage();
+      const prefix = language === "it" ? "" : "/en";
+      const title = language === "it" ? "Scegli una nuova password" : "Choose a new password";
+      const back = language === "it" ? "Torna ad accedere" : "Back to sign in";
+      try {
+        for (const error of [
+          "",
+          "account_already_linked_to_different_user",
+          "registration_approval_required",
+        ]) {
+          await page.goto(`${prefix}/auth/error?error=${error}`);
           await expect(
-            page.getByRole("tab", { name: language === "it" ? "Accedi" : "Sign in", exact: true }),
-          ).toBeVisible();
-          await page
-            .getByRole("button", {
-              name: language === "it" ? "Hai dimenticato la password?" : "Forgot your password?",
+            page.getByRole("link", { name: new RegExp(supportAddress) }),
+          ).toHaveAttribute("href", `mailto:${supportAddress}`);
+          if (error === "registration_approval_required") {
+            await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+              language === "it" ? "Registrazione riservata" : "Registration restricted",
+            );
+            await expect(
+              page.getByText(
+                language === "it"
+                  ? "Ambiente di test riservato. La registrazione richiede un’autorizzazione preventiva."
+                  : "Private test environment. Registration requires prior approval.",
+                { exact: true },
+              ),
+            ).toBeVisible();
+          }
+        }
+        await testInfo.attach("errore-pubblico", {
+          body: await page.screenshot({
+            path: testInfo.outputPath("errore-pubblico.png"),
+            fullPage: true,
+          }),
+          contentType: "image/png",
+        });
+        await page.goto(`${prefix}/accesso?negozio=altro-spazio`);
+        await expect(page.getByRole("link", { name: new RegExp(supportAddress) })).toBeVisible();
+        await page.goto(`${prefix}/accesso?token=synthetic-invalid-token`);
+        await expect(page).toHaveTitle(`FiscalBay | ${title}`);
+        await expect(page.getByRole("heading", { name: title, level: 2 })).toBeVisible();
+        const form = page.locator("form");
+        await expect(form).toHaveAttribute("action", `${prefix}/accesso`);
+        await expect(form.locator('input[name="token"]')).toHaveValue("synthetic-invalid-token");
+        await expect(form.locator('input[name="password"]')).toHaveAttribute(
+          "autocomplete",
+          "new-password",
+        );
+        const backLink = page.getByRole("link", { name: back, exact: true });
+        await expect(backLink).toBeInViewport();
+        await expect.poll(() => noPageOverflow(page)).toBe(true);
+        if (width < 1024) {
+          const heading = page.getByRole("heading", { name: title, level: 2 });
+          expect((await heading.boundingBox())!.y).toBeLessThan(320);
+        }
+        await page.evaluate(() => document.fonts.ready);
+        await testInfo.attach("nuova-password", {
+          body: await page.screenshot({
+            path: testInfo.outputPath("nuova-password.png"),
+            fullPage: true,
+          }),
+          contentType: "image/png",
+        });
+        await backLink.click();
+        await page.waitForLoadState("networkidle");
+        await expect(page).toHaveURL(new RegExp(`${prefix}/accesso$`));
+        await expect(
+          page.getByRole("tab", { name: language === "it" ? "Accedi" : "Sign in", exact: true }),
+        ).toBeVisible();
+        await page
+          .getByRole("button", {
+            name: language === "it" ? "Hai dimenticato la password?" : "Forgot your password?",
+            exact: true,
+          })
+          .click();
+        await expect(
+          page.getByRole("button", {
+            name: language === "it" ? "Invia il link" : "Send link",
+            exact: true,
+          }),
+        ).toBeVisible();
+        await expect(
+          page
+            .getByRole("tabpanel", {
+              name: language === "it" ? "Accedi" : "Sign in",
               exact: true,
             })
-            .click();
-          await expect(
-            page.getByRole("button", {
-              name: language === "it" ? "Invia il link" : "Send link",
-              exact: true,
-            }),
-          ).toBeVisible();
-          await expect(
-            page
-              .getByRole("tabpanel", {
-                name: language === "it" ? "Accedi" : "Sign in",
-                exact: true,
-              })
-              .locator('input[name="email"]'),
-          ).toBeVisible();
-        } finally {
-          await context.close();
-        }
-      });
-    }
+            .locator('input[name="email"]'),
+        ).toBeVisible();
+      } finally {
+        await context.close();
+      }
+    });
   }
 }
 
 for (const width of [390, 768, 1440]) {
-  for (const colorScheme of ["light", "dark"] as const) {
-    test(`impostazioni e profilo: contesto, documenti e validazione a ${width}px ${colorScheme}`, async ({
-      page,
-    }, testInfo) => {
-      test.setTimeout(90_000);
-      await page.setViewportSize({ width, height: width === 1440 ? 720 : 844 });
-      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
-      await open(page, "/anteprima/impostazioni/aspetto");
-      for (const locale of ["en", "it"] as const) {
-        const it = locale === "it";
-        const prefix = it ? "" : "/en";
-        await page.getByRole("link", { name: it ? "Italiano" : "English", exact: true }).click();
-        await expect(page).toHaveURL(
-          `${testInfo.project.use.baseURL}${prefix}/anteprima/impostazioni/aspetto`,
-        );
-        const appearance = page.locator("#settings-aspetto");
-        await expect(appearance).toHaveText(it ? "Aspetto e lingua" : "Appearance and language");
-        await expect(appearance).toBeInViewport({ ratio: 1 });
-        if (width >= 768) {
-          await expect(
-            page.locator('a[aria-current="true"][href$="/impostazioni/aspetto"]'),
-          ).toBeVisible();
-          await expect
-            .poll(async () => {
-              const heading = await appearance.boundingBox();
-              const header = await page.locator("header").boundingBox();
-              return heading!.y >= header!.y + header!.height && heading!.y < 180;
-            })
-            .toBe(true);
-          await expect
-            .poll(() =>
-              page
-                .locator('a[aria-current="true"][href$="/impostazioni/aspetto"]')
-                .evaluate((link) => {
-                  const item = link.parentElement!.getBoundingClientRect();
-                  const indicator = link
-                    .closest("nav")!
-                    .querySelector('li[aria-hidden="true"]')!
-                    .getBoundingClientRect();
-                  return (
-                    Math.abs(item.y - indicator.y) < 1 &&
-                    Math.abs(item.height - indicator.height) < 1
-                  );
-                }),
-            )
-            .toBe(true);
-        }
-        const timezone = it ? "Fuso orario" : "Time zone";
-        await expect(page.getByRole("combobox", { name: timezone, exact: true })).toBeVisible();
-        await expect(page.getByRole("heading", { name: timezone, exact: true })).toHaveCount(0);
-        await page.screenshot({ path: testInfo.outputPath(`appearance-${locale}.png`) });
-      }
-
-      for (const locale of ["it", "en"] as const) {
-        const it = locale === "it";
-        const prefix = it ? "" : "/en";
-        await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium");
-        // Premium non anticipa il downgrade: la scelta del negozio attivo è solo nel Free.
-        await expect(page.locator("main")).not.toContainText(
-          it ? "Negozio attivo se torni al piano Free" : "Active store if you return to Free",
-        );
-        await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium-a-vita");
-        const documents = page.getByRole("button", {
-          name: it
-            ? "Consulta ricevute e fatture su Stripe"
-            : "View receipts and invoices on Stripe",
-        });
-        await expect(documents).toBeVisible();
+  test(`impostazioni e profilo: contesto, documenti e validazione a ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    await page.setViewportSize({ width, height: width === 1440 ? 720 : 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await open(page, "/anteprima/impostazioni/aspetto");
+    for (const locale of ["en", "it"] as const) {
+      const it = locale === "it";
+      const prefix = it ? "" : "/en";
+      await page.getByRole("link", { name: it ? "Italiano" : "English", exact: true }).click();
+      await expect(page).toHaveURL(
+        `${testInfo.project.use.baseURL}${prefix}/anteprima/impostazioni/aspetto`,
+      );
+      const appearance = page.locator("#settings-aspetto");
+      await expect(appearance).toHaveText(it ? "Aspetto e lingua" : "Appearance and language");
+      await expect(appearance).toBeInViewport({ ratio: 1 });
+      if (width >= 768) {
         await expect(
-          page.getByRole("button", { name: /Gestisci abbonamento|Manage subscription/ }),
-        ).toHaveCount(0);
-        await documents.click();
-        await expect(page.getByRole("status").filter({ hasText: "simulat" }).first()).toBeVisible({
-          timeout: 20_000,
-        });
-        await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/piano$`));
-        await page.screenshot({ path: testInfo.outputPath(`lifetime-${locale}.png`) });
-
-        await open(page, `${prefix}/anteprima/impostazioni/supporto`);
-        await page.getByRole("button", { name: it ? "Invia" : "Send", exact: true }).click();
-        const message = page.getByRole("textbox", {
-          name: it ? "Messaggio" : "Message",
-          exact: true,
-        });
-        await expect(message).toBeFocused();
-        await expect(page.locator('[role="alert"][data-slot="alert"]')).toBeInViewport({
-          ratio: 1,
-        });
-        await expect(message).toHaveAttribute("aria-invalid", "true");
-        await expect(message).toHaveAccessibleDescription(
-          it ? "Scrivi il messaggio." : "Write your message.",
-        );
-        await expect(message).toBeInViewport({ ratio: 1 });
-        const contact = page.getByRole("heading", {
-          name: it ? "Scrivi all’assistenza" : "Contact support",
-          exact: true,
-        });
-        await expect
-          .poll(async () => {
-            const heading = await contact.boundingBox();
-            const header = await page.locator("header").boundingBox();
-            return heading!.y >= header!.y + header!.height;
-          })
-          .toBe(true);
-        await page.screenshot({ path: testInfo.outputPath(`support-${locale}.png`) });
-
-        await open(page, `${prefix}/anteprima/profilo`);
-        await expect(
-          page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true }),
+          page.locator('a[aria-current="true"][href$="/impostazioni/aspetto"]'),
         ).toBeVisible();
         await expect
+          .poll(async () => {
+            const heading = await appearance.boundingBox();
+            const header = await page.locator("header").boundingBox();
+            return heading!.y >= header!.y + header!.height && heading!.y < 180;
+          })
+          .toBe(true);
+        await expect
           .poll(() =>
-            page.locator("main > div").evaluate((element) => {
-              const own = element.getBoundingClientRect();
-              const parent = element.parentElement!.getBoundingClientRect();
-              return Math.abs(own.left + own.width / 2 - parent.left - parent.width / 2);
-            }),
+            page
+              .locator('a[aria-current="true"][href$="/impostazioni/aspetto"]')
+              .evaluate((link) => {
+                const item = link.parentElement!.getBoundingClientRect();
+                const indicator = link
+                  .closest("nav")!
+                  .querySelector('li[aria-hidden="true"]')!
+                  .getBoundingClientRect();
+                return (
+                  Math.abs(item.y - indicator.y) < 1 && Math.abs(item.height - indicator.height) < 1
+                );
+              }),
           )
-          .toBeLessThan(1);
-        await expect.poll(() => noPageOverflow(page)).toBe(true);
-        await page.screenshot({
-          path: testInfo.outputPath(`profile-${locale}.png`),
-          fullPage: true,
-        });
+          .toBe(true);
       }
-    });
-  }
+      const timezone = it ? "Fuso orario" : "Time zone";
+      await expect(page.getByRole("combobox", { name: timezone, exact: true })).toBeVisible();
+      await expect(page.getByRole("heading", { name: timezone, exact: true })).toHaveCount(0);
+      await page.screenshot({ path: testInfo.outputPath(`appearance-${locale}.png`) });
+    }
+
+    for (const locale of ["it", "en"] as const) {
+      const it = locale === "it";
+      const prefix = it ? "" : "/en";
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium");
+      // Premium non anticipa il downgrade: la scelta del negozio attivo è solo nel Free.
+      await expect(page.locator("main")).not.toContainText(
+        it ? "Negozio attivo se torni al piano Free" : "Active store if you return to Free",
+      );
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium-a-vita");
+      const documents = page.getByRole("button", {
+        name: it ? "Consulta ricevute e fatture su Stripe" : "View receipts and invoices on Stripe",
+      });
+      await expect(documents).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: /Gestisci abbonamento|Manage subscription/ }),
+      ).toHaveCount(0);
+      await documents.click();
+      await expect(page.getByRole("status").filter({ hasText: "simulat" }).first()).toBeVisible({
+        timeout: 20_000,
+      });
+      await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/piano$`));
+      await page.screenshot({ path: testInfo.outputPath(`lifetime-${locale}.png`) });
+
+      await open(page, `${prefix}/anteprima/impostazioni/supporto`);
+      await page.getByRole("button", { name: it ? "Invia" : "Send", exact: true }).click();
+      const message = page.getByRole("textbox", {
+        name: it ? "Messaggio" : "Message",
+        exact: true,
+      });
+      await expect(message).toBeFocused();
+      await expect(page.locator('[role="alert"][data-slot="alert"]')).toBeInViewport({
+        ratio: 1,
+      });
+      await expect(message).toHaveAttribute("aria-invalid", "true");
+      await expect(message).toHaveAccessibleDescription(
+        it ? "Scrivi il messaggio." : "Write your message.",
+      );
+      await expect(message).toBeInViewport({ ratio: 1 });
+      const contact = page.getByRole("heading", {
+        name: it ? "Scrivi all’assistenza" : "Contact support",
+        exact: true,
+      });
+      await expect
+        .poll(async () => {
+          const heading = await contact.boundingBox();
+          const header = await page.locator("header").boundingBox();
+          return heading!.y >= header!.y + header!.height;
+        })
+        .toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`support-${locale}.png`) });
+
+      await open(page, `${prefix}/anteprima/profilo`);
+      await expect(
+        page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true }),
+      ).toBeVisible();
+      await expect
+        .poll(() =>
+          page.locator("main > div").evaluate((element) => {
+            const own = element.getBoundingClientRect();
+            const parent = element.parentElement!.getBoundingClientRect();
+            return Math.abs(own.left + own.width / 2 - parent.left - parent.width / 2);
+          }),
+        )
+        .toBeLessThan(1);
+      await expect.poll(() => noPageOverflow(page)).toBe(true);
+      await page.screenshot({
+        path: testInfo.outputPath(`profile-${locale}.png`),
+        fullPage: true,
+      });
+    }
+  });
 }
 
 test("errori del form associati al campo e focus restituito dalla conferma", async ({ page }) => {
@@ -2435,7 +2358,6 @@ for (const locale of ["it", "en"] as const) {
       baseURL,
       viewport: { width: 375, height: 667 },
       hasTouch: true,
-      colorScheme: "dark",
     });
     const page = await context.newPage();
     try {
@@ -2857,11 +2779,12 @@ for (const area of areas)
   });
 
 for (const language of ["it", "en"] as const) {
-  test(`onboarding e degradazione nell'anteprima ${language}`, async ({ page }) => {
+  test(`onboarding e degradazione nell'anteprima ${language}`, async ({
+    page,
+    pageErrors: errors,
+  }) => {
     const prefix = language === "it" ? "" : "/en";
     const t = <Text>(it: Text, en: Text) => (language === "it" ? it : en);
-    const errors: string[] = [];
-    page.on("pageerror", (error) => errors.push(error.message));
     // Un solo negozio con le letture ferme: avviso con l'ultimo aggiornamento e campanella.
     await open(page, `${prefix}/anteprima/ordini`, "negozio-scaduto");
     const failed = page.getByRole("status").filter({

@@ -1,20 +1,6 @@
 # Confronto delle fonti fiscali eBay
 
-`node scripts/compare-ebay-tax.mjs` confronta gli identificativi dell'acquirente sugli stessi ordini controllati, senza scritture nel database né file di risposta. `fulfillmentTaxIdentifiers` conserva il tipo originale e la fonte `ebay_fulfillment`. L'import automatico usa la precedenza circoscritta approvata in D135; non esegue il confronto sperimentale fra due letture Fulfillment e Trading.
-
-## Esecuzione controllata
-
-Prima della lettura verificare mandato, account venditore, ambiente e keyset FiscalBay nella custodia privata. Non usare il keyset di SyncBay o un token di un altro progetto. Lo strumento non può attestare da quale keyset provenga un token opaco. Non crea né modifica ordini e non rinnova token.
-
-Fornire un access token seller valido, con i permessi di lettura Fulfillment e Trading, mediante `EBAY_ACCESS_TOKEN` già valorizzata dalla custodia sicura. Non scrivere il token nella riga di comando, nel campione o nel repository. Lo standard input riceve un oggetto JSON con `environment` (`production` oppure `sandbox`) e `orderIds` (da 1 a 50 ID distinti dello stesso account). Il campione e la corrispondenza con il numero progressivo dell'output restano privati, fuori dal checkout.
-
-Esempio della sola struttura, con ID sintetico:
-
-```json
-{ "environment": "sandbox", "orderIds": ["ordine-sintetico"] }
-```
-
-Eseguire dalla radice del progetto, fornendo il campione privato allo standard input. L'output JSON contiene numeri progressivi, marketplace, fasce di età in giorni, conteggi degli identificativi, coincidenza ed errori sanitizzati. Non contiene ID ordine, valori, hash, token, nomi o payload. Gli errori di input non vengono stampati con dettagli. Il caricamento degli adapter usa Vite già installato, senza avviare il server applicativo. Il codice d'uscita è 1 per errori o letture interrotte; una divergenza fra fonti resta un risultato leggibile con codice 0.
+La qualifica del 2026-10-10 ha confrontato gli identificativi dell'acquirente letti da Fulfillment e Trading sugli stessi ordini controllati, senza scritture nel database né file di risposta. Lo strumento del confronto è stato rimosso dopo l'approvazione di D135: l'import automatico applica la precedenza approvata e non ripete il confronto. Una nuova qualifica lo recupera dalla storia del repository (`scripts/compare-ebay-tax.mjs` fino al commit `562bd53`), con mandato, account, keyset FiscalBay e token verificati nella custodia privata. `fulfillmentTaxIdentifiers` conserva il tipo originale e la fonte `ebay_fulfillment`.
 
 ## Lettura ed esiti
 
