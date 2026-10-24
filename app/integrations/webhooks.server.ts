@@ -5,6 +5,7 @@ import { NotificationLimit, verifyOrderNotification } from "./ebay/notifications
 import { UpstreamError } from "./http.server";
 import { ebayConfiguration } from "./ebay/environment.server";
 import { consumeOrderConfirmation } from "../domain/order-acquisition.server";
+import { isProduction } from "../app-links";
 import { logFailure } from "../errors";
 
 const maxBytes = 262_144;
@@ -109,8 +110,7 @@ export async function receiveWebhook(
           signature ?? "",
           secret,
         );
-        if (stripe.livemode !== (new URL(env.APP_ORIGIN).hostname === "fiscalbay.it"))
-          throw new InvalidWebhook(400);
+        if (stripe.livemode !== isProduction(env)) throw new InvalidWebhook(400);
         const object = z.object({ id: z.string().min(1).max(256) }).parse(stripe.data.object);
         event = {
           provider: "stripe",

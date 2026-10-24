@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { headers as siteHeaders, loader as loadSite } from "../app/routes/site";
 import { loader as loadRobots } from "../app/routes/robots";
-import { indexable } from "../app/app-links";
+import { indexable, isProductionOrigin } from "../app/app-links";
 import { resetDatabase } from "./fixtures/database-fixtures";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { accessForm } from "./fixtures/account-route-fixtures";
@@ -73,6 +73,23 @@ describe("radice pubblica e area riservata", () => {
     for (const path of ["/app/ordini", "/en/app/negozi/x", "/accesso", "/admin", "/anteprima"]) {
       expect(indexable("https://fiscalbay.it", path)).toBe(false);
     }
+    // Production si riconosce dall'host, non dalla grafia dell'origine.
+    for (const origin of [
+      "https://fiscalbay.it",
+      "https://fiscalbay.it/",
+      "https://www.fiscalbay.it",
+      "https://FiscalBay.it:443",
+      "https://fiscalbay.it.",
+      "http://fiscalbay.it",
+    ])
+      expect(isProductionOrigin(origin), origin).toBe(true);
+    for (const origin of [
+      "https://test.fiscalbay.it",
+      "http://localhost:5173",
+      "https://fiscalbay.it.esempio.invalid",
+      "https://esempio.invalid/fiscalbay.it",
+    ])
+      expect(isProductionOrigin(origin), origin).toBe(false);
     // Fuori dalla produzione robots.txt chiude tutto il dominio.
     expect(await loadRobots().text()).toBe("User-agent: *\nDisallow: /\n");
   });

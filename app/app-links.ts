@@ -54,8 +54,21 @@ export const storeLinkPath = `${appBase}/negozi/collega`;
 export const visitParam = "visita";
 export const visitCookie = "fiscalbay_visita";
 
-/** Il solo dominio indicizzabile; test e anteprime restano fuori dai motori di ricerca. */
-export const productionOrigin = "https://fiscalbay.it";
+/** Host di Production, anche nella forma con `www.`: test e anteprime hanno altri host. */
+const productionHosts = new Set(["fiscalbay.it", "www.fiscalbay.it"]);
+
+/**
+ * Origine di Production, riconosciuta dall'host: schema, porta, barra o punto finale non la
+ * fanno passare per un ambiente di test.
+ */
+export function isProductionOrigin(origin: string): boolean {
+  return productionHosts.has(new URL(origin).hostname.replace(/\.$/u, ""));
+}
+
+/** L'ambiente servito è Production: l'unico indicizzabile, senza anteprima né eventi di test. */
+export function isProduction(environment: { APP_ORIGIN: string }): boolean {
+  return isProductionOrigin(environment.APP_ORIGIN);
+}
 
 /** Pagine del sito pubblico, senza prefisso di lingua. */
 const publicPages = new Set(["/", "/termini", "/privacy"]);
@@ -63,7 +76,6 @@ const publicPages = new Set(["/", "/termini", "/privacy"]);
 /** Indicizzabile solo una pagina pubblica servita dal dominio di produzione. */
 export function indexable(origin: string, pathname: string) {
   return (
-    new URL(origin).origin === productionOrigin &&
-    publicPages.has(pathname.replace(/^\/en(?=\/|$)/u, "") || "/")
+    isProductionOrigin(origin) && publicPages.has(pathname.replace(/^\/en(?=\/|$)/u, "") || "/")
   );
 }
