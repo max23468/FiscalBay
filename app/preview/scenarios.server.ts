@@ -245,7 +245,7 @@ const stores = {
     name: "Vintage Garage Italia",
     username: "vintage_garage_it",
     logoUrl: storeLogo,
-    storeUrl: "https://www.ebay.it/str/vintagegarageitalia",
+    storeUrl: "https://vintage-garage.invalid/str/vintagegarageitalia",
     feedback: { score: 4_812, positivePercent: 99.8, topRated: true },
     marketplace: "EBAY_IT",
   },

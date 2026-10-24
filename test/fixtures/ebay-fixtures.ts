@@ -19,7 +19,7 @@ export const syntheticTradingXml = `<?xml version="1.0" encoding="UTF-8"?>
 </GetOrdersResponse>`;
 
 export const syntheticStoreLogo = "https://i.ebayimg.com/00/s/MTAwWDEwMA==/z/logo/$_1.png";
-export const syntheticStoreUrl = "https://www.ebay.it/str/bottegaricambi";
+export const syntheticStoreUrl = "https://api.ebay.com/str/bottegaricambi";
 export const syntheticStoreXml = `<?xml version="1.0" encoding="UTF-8"?>
 <GetStoreResponse xmlns="urn:ebay:apis:eBLBaseComponents"><Ack>Success</Ack><Store>
 <Name>Bottega &amp; Ricambi</Name><Description>Ricambi d'epoca</Description>
