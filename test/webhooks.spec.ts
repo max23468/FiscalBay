@@ -1357,6 +1357,14 @@ it("una ricevuta conserva il retry anche se il rilascio della lease fallisce", a
     expect(logged).toHaveBeenCalledTimes(2);
     for (const [entry] of logged.mock.calls)
       expect(JSON.parse(entry)).toMatchObject({ operation: "webhook_consumer" });
+    // Come negli altri moduli, il log porta il codice e il tipo dell'errore, mai il messaggio.
+    expect(logged.mock.calls.map(([entry]) => JSON.parse(entry))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "INTERNAL_ERROR" }),
+        expect.objectContaining({ code: "UPSTREAM_UNAVAILABLE", failure: "unavailable" }),
+      ]),
+    );
+    expect(JSON.stringify(logged.mock.calls)).not.toContain("database_unavailable");
   } finally {
     failing.mockRestore();
     logged.mockRestore();

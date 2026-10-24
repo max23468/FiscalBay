@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { createHash } from "node:crypto";
-import { verifyStripeEvent, type StripeSecrets } from "./stripe.server";
+import { verifyStripeEvent } from "./stripe.server";
 import { NotificationLimit, verifyOrderNotification } from "./ebay/notifications.server";
-import { UpstreamError } from "./http.server";
+import { readBounded, UpstreamError } from "./http.server";
 import { ebayConfiguration } from "./ebay/environment.server";
 import { consumeOrderConfirmation } from "../domain/order-acquisition.server";
 import { isProduction } from "../app-links";
@@ -31,24 +31,11 @@ class InvalidWebhook extends Error {
   }
 }
 
+/** Byte originali del corpo, necessari alla firma: oltre il limite 413, assente o non UTF-8 400. */
 async function rawBody(request: Request): Promise<string> {
-  if (Number(request.headers.get("content-length")) > maxBytes) throw new InvalidWebhook(413);
+  const bytes = await readBounded(request, maxBytes);
+  if (!bytes) throw new InvalidWebhook(413);
   if (!request.body) throw new InvalidWebhook(400);
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for await (const value of request.body) {
-    size += value.byteLength;
-    if (size > maxBytes) {
-      throw new InvalidWebhook(413);
-    }
-    chunks.push(value);
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
   try {
     return new TextDecoder("utf-8", {
       fatal: true,
@@ -71,8 +58,7 @@ export async function receiveWebhook(
   if (!["/webhooks/ebay", "/webhooks/ebay/sandbox", "/webhooks/stripe"].includes(path)) return null;
   if (request.method === "GET" && path !== "/webhooks/stripe") {
     const challenge = new URL(request.url).searchParams.get("challenge_code");
-    const token = (env as Env & { EBAY_NOTIFICATION_VERIFICATION_TOKEN?: string })
-      .EBAY_NOTIFICATION_VERIFICATION_TOKEN;
+    const token = env.EBAY_NOTIFICATION_VERIFICATION_TOKEN;
     if (!token || !/^[a-zA-Z0-9_-]{32,80}$/u.test(token))
       return new Response(null, { status: 503 });
     try {
@@ -101,7 +87,7 @@ export async function receiveWebhook(
     let event: Omit<Receipt, "id" | "queued_at" | "completed_at">;
     try {
       if (path === "/webhooks/stripe") {
-        const secret = (env as Env & Partial<StripeSecrets>).STRIPE_WEBHOOK_SECRET;
+        const secret = env.STRIPE_WEBHOOK_SECRET;
         if (!secret) throw new InvalidWebhook(503);
         const signature = request.headers.get("stripe-signature");
         const stripe = await verifyStripeEvent(
@@ -205,7 +191,7 @@ export async function receiveWebhook(
         : error instanceof NotificationLimit
           ? 429
           : 503;
-    if (status === 503) logFailure({ operation: "webhook_ingress" });
+    if (status === 503) logFailure({ error, operation: "webhook_ingress" });
     return new Response(null, { status });
   }
 }
@@ -301,12 +287,14 @@ export async function consumeWebhooks(
         )
           .bind(receiptId, lease)
           .run()
-          .catch(() => logFailure({ operation: "webhook_consumer" }));
+          .catch((cleanup: unknown) =>
+            logFailure({ error: cleanup, operation: "webhook_consumer" }),
+          );
       const delay = error instanceof UpstreamError ? error.details.retryAfter : undefined;
       message.retry({
         delaySeconds: Math.min(43_200, delay ?? Math.min(3600, 30 * 2 ** (message.attempts - 1))),
       });
-      logFailure({ operation: "webhook_consumer" });
+      logFailure({ error, operation: "webhook_consumer" });
     }
   }
 }
