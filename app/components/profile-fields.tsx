@@ -15,13 +15,17 @@ const profileInputs = {
   ragione_sociale: { label: "companyName", autoComplete: "organization", maxLength: 200 },
 } as const;
 
-/** Campo obbligatorio del profilo, con l'errore accanto; valore libero o controllato. */
+/**
+ * Campo obbligatorio del profilo, con l'errore accanto; valore libero o controllato. `marked`
+ * mostra l'asterisco, inutile dove ogni campo è obbligatorio.
+ */
 export function ProfileInput({
   name,
   id,
   t,
   v,
   className,
+  marked = true,
   ...props
 }: {
   name: keyof typeof profileInputs;
@@ -29,11 +33,12 @@ export function ProfileInput({
   t: AccessCopy;
   v: FieldErrors;
   className?: string;
+  marked?: boolean;
 } & Pick<React.ComponentProps<"input">, "defaultValue" | "value" | "onChange" | "disabled">) {
   const { label, autoComplete, maxLength } = profileInputs[name];
   return (
     <Field className={className}>
-      <FieldLabel htmlFor={id} required>
+      <FieldLabel htmlFor={id} required={marked}>
         {t[label]}
       </FieldLabel>
       <Input

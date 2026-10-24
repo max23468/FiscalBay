@@ -21,12 +21,15 @@ export function ProfileSection({
   const v = useFieldErrors(t.access.validation);
   const business = account.profile.accountType === "business";
   const { draft, setDraft, dirty, submit, action } = form;
-  const field = (name: "nome" | "cognome" | "ragione_sociale", id: string) => (
+  // Ogni campo è obbligatorio: niente asterischi né legenda, l'errore lo spiega accanto.
+  const field = (name: "nome" | "cognome" | "ragione_sociale", id: string, className?: string) => (
     <ProfileInput
       name={name}
       id={id}
       t={t.access}
       v={v}
+      marked={false}
+      className={className}
       value={draft[name] ?? ""}
       disabled={!v.ready || action.pending}
       onChange={(event) => {
@@ -46,13 +49,16 @@ export function ProfileSection({
         submit({ tipo: business ? "azienda" : "privato" });
       }}
     >
-      <p className="text-sm text-muted-foreground">{t.access.requiredFields}</p>
-      <p className="text-sm text-muted-foreground">
-        {t.profile.accountType}: {business ? t.access.business : t.access.private}
-      </p>
-      {field("nome", "profile-name")}
-      {field("cognome", "profile-last-name")}
-      {business ? field("ragione_sociale", "profile-company") : null}
+      {/* Dato registrato e non modificabile, presentato come l'email in Sicurezza. */}
+      <dl className="grid gap-1 text-sm">
+        <dt className="text-muted-foreground">{t.profile.accountType}</dt>
+        <dd>{business ? t.access.business : t.access.private}</dd>
+      </dl>
+      <div className="grid max-w-2xl gap-4 sm:grid-cols-2">
+        {field("nome", "profile-name")}
+        {field("cognome", "profile-last-name")}
+        {business ? field("ragione_sociale", "profile-company", "sm:col-span-2") : null}
+      </div>
       <Button
         type="submit"
         className="w-fit"
