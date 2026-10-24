@@ -54,6 +54,7 @@ const unlockTriggerCodes: UnlockErrorCode[] = [
   "invalid_grant_cycle",
   "order_already_granted_or_merged",
 ];
+const unlockTriggerPattern = new RegExp(unlockTriggerCodes.join("|"), "u");
 
 /**
  * Codice dello sblocco rifiutato dal database; null per un errore di altra natura. Un ordine
@@ -64,8 +65,8 @@ const unlockTriggerCodes: UnlockErrorCode[] = [
 function unlockErrorCode(error: unknown): UnlockErrorCode | null {
   for (let cause = error; cause instanceof Error; cause = cause.cause) {
     const { message } = cause;
-    const trigger = unlockTriggerCodes.find((code) => message.includes(code));
-    if (trigger) return trigger;
+    const trigger = unlockTriggerPattern.exec(message)?.[0];
+    if (trigger) return trigger as UnlockErrorCode;
     if (message.includes("NOT NULL constraint failed: order_grants.order_id"))
       return "order_not_in_workspace";
     if (
