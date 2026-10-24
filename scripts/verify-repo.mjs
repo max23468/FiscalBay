@@ -100,7 +100,7 @@ export function resolveImport(from, specifier, known) {
   return undefined;
 }
 
-/** Grafo degli import applicativi (`app/`, `workers/`) aciclico e moduli server raggiungibili. */
+/** Grafo degli import applicativi (`app/`, `workers/`); i cicli li rifiuta oxlint. */
 export function importGraph(files, scope = /^(?:app|workers)\/.+\.tsx?$/u) {
   const sources = new Map(
     files.filter(({ path: file }) => scope.test(file)).map(({ path: file, text }) => [file, text]),
@@ -117,27 +117,11 @@ export function importGraph(files, scope = /^(?:app|workers)\/.+\.tsx?$/u) {
   return graph;
 }
 
+/** Ogni modulo server o route ha un consumatore runtime, salvo quelli in attesa motivati. */
 export function checkImports(files, pending = pendingServerModules) {
   const graph = importGraph(files);
   const sources = new Map(files.map(({ path: file, text }) => [file, text]));
-
   const errors = [];
-  const state = new Map();
-  const stack = [];
-  const visit = (file) => {
-    state.set(file, "open");
-    stack.push(file);
-    for (const target of graph.get(file)) {
-      if (state.get(target) === "open") {
-        const cycle = [...stack.slice(stack.indexOf(target)), target].join(" → ");
-        errors.push(`import ciclico: ${cycle}`);
-      } else if (!state.has(target)) visit(target);
-    }
-    stack.pop();
-    state.set(file, "done");
-  };
-  for (const file of graph.keys()) if (!state.has(file)) visit(file);
-
   const routes = sources.get("app/routes.ts") ?? "";
   const entries = [
     "workers/app.ts",
@@ -202,7 +186,7 @@ export function checkActionPins(files) {
 export const checks = {
   "sigle di piano": checkPlanCodes,
   fixture: checkFixtures,
-  import: (files) => checkImports(files),
+  "moduli server raggiungibili": (files) => checkImports(files),
   "versioni degli strumenti": checkToolPins,
   "Action fissate": checkActionPins,
 };

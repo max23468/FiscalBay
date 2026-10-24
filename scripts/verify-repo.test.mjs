@@ -62,7 +62,7 @@ describe("import applicativi", () => {
     { path: "app/root.tsx", text: "" },
   ];
 
-  it("accetta un grafo aciclico con i moduli server raggiungibili", () => {
+  it("accetta i moduli server raggiungibili dalle route, anche tramite alias", () => {
     const files = [
       ...entries,
       { path: "app/routes/home.tsx", text: 'import { load } from "../domain/orders.server";' },
@@ -70,19 +70,6 @@ describe("import applicativi", () => {
       { path: "app/i18n.ts", text: "" },
     ];
     assert.deepEqual(checkImports(files, new Map()), []);
-  });
-
-  it("rifiuta un ciclo, anche attraverso un import dinamico", () => {
-    const files = [
-      ...entries,
-      { path: "app/routes/home.tsx", text: 'import { a } from "../a";' },
-      { path: "app/a.ts", text: 'export { b } from "./b";' },
-      { path: "app/b.ts", text: 'const a = await import("./a");' },
-    ];
-    assert.match(
-      checkImports(files, new Map()).join("\n"),
-      /import ciclico: app\/a\.ts → app\/b\.ts → app\/a\.ts/u,
-    );
   });
 
   it("rifiuta un modulo server senza consumatore e una voce in attesa superata", () => {
