@@ -245,6 +245,8 @@ const stores = {
     name: "Vintage Garage Italia",
     username: "vintage_garage_it",
     logoUrl: storeLogo,
+    storeUrl: "https://www.ebay.it/str/vintagegarageitalia",
+    feedback: { score: 4_812, positivePercent: 99.8, topRated: true },
     marketplace: "EBAY_IT",
   },
   outlet: {
@@ -382,7 +384,12 @@ const seeds: OrderSeed[] = [
     buyerName: "Maria Rossi",
     buyerUsername: "maria.rossi80",
     shipTo: { name: "Maria Rossi", locality: "Roma (RM)", country: "IT" },
-    items: [item("it-02a", "Carburatore Dell’Orto PHBG 19 revisionato", 4_990, 1, "CARB-PHBG19")],
+    items: [
+      {
+        ...item("it-02a", "Carburatore Dell’Orto PHBG 19 revisionato", 4_990, 1, "CARB-PHBG19"),
+        listingId: "286104553201",
+      },
+    ],
     totalMinor: 4_990,
     currency: "EUR",
     payment: "paid",

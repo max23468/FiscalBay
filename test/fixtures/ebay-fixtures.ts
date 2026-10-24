@@ -19,12 +19,19 @@ export const syntheticTradingXml = `<?xml version="1.0" encoding="UTF-8"?>
 </GetOrdersResponse>`;
 
 export const syntheticStoreLogo = "https://i.ebayimg.com/00/s/MTAwWDEwMA==/z/logo/$_1.png";
+export const syntheticStoreUrl = "https://www.ebay.it/str/bottegaricambi";
 export const syntheticStoreXml = `<?xml version="1.0" encoding="UTF-8"?>
 <GetStoreResponse xmlns="urn:ebay:apis:eBLBaseComponents"><Ack>Success</Ack><Store>
 <Name>Bottega &amp; Ricambi</Name><Description>Ricambi d'epoca</Description>
+<URL>${syntheticStoreUrl}</URL>
 <Logo><URL>${syntheticStoreLogo}</URL></Logo>
 <CustomCategories><CustomCategory><CategoryID>1</CategoryID><Name>Altro</Name></CustomCategory></CustomCategories>
 </Store></GetStoreResponse>`;
+export const syntheticUserXml = `<?xml version="1.0" encoding="UTF-8"?>
+<GetUserResponse xmlns="urn:ebay:apis:eBLBaseComponents"><Ack>Success</Ack><User>
+<FeedbackScore>42</FeedbackScore><PositiveFeedbackPercent>100.0</PositiveFeedbackPercent>
+<SellerInfo><StoreOwner>false</StoreOwner></SellerInfo></User></GetUserResponse>`;
+
 // Venditore senza negozio eBay: `GetStore` risponde con un rifiuto.
 const noStoreXml = `<?xml version="1.0" encoding="UTF-8"?>
 <GetStoreResponse xmlns="urn:ebay:apis:eBLBaseComponents"><Ack>Failure</Ack><Errors>
@@ -36,6 +43,7 @@ export function syntheticEbay(
     username?: string;
     trading?: () => Response;
     store?: () => Response;
+    user?: () => Response;
     token?: () => Response;
     orderId?: string;
     lastModifiedDate?: string;
@@ -77,8 +85,9 @@ export function syntheticEbay(
     }
     if (url.endsWith("/ws/api.dll")) {
       if (String(init?.body).includes("<ModTimeFrom>")) return new Response(emptyTradingOrders);
-      if (new Headers(init?.headers).get("x-ebay-api-call-name") === "GetStore")
-        return options.store?.() ?? new Response(noStoreXml);
+      const call = new Headers(init?.headers).get("x-ebay-api-call-name");
+      if (call === "GetStore") return options.store?.() ?? new Response(noStoreXml);
+      if (call === "GetUser") return options.user?.() ?? new Response(syntheticUserXml);
       return options.trading?.() ?? new Response(syntheticTradingXml);
     }
     return new Response(null, { status: 404 });

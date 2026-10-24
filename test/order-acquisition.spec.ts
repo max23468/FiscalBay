@@ -52,6 +52,8 @@ describe("acquisizione con il client", () => {
       if (failed) return failed;
       const call = new Headers(init?.headers).get("x-ebay-api-call-name");
       if (call === "GetStore") return new Response(storeResponse);
+      if (call === "GetUser")
+        return new Response(ack("<Ack>Success</Ack><User><FeedbackScore>7</FeedbackScore></User>"));
       if (call === "GetItem") {
         return (
           options.getItem?.() ??
@@ -1015,7 +1017,7 @@ describe("acquisizione con il client", () => {
     const noCalls = ebay({ orders });
     expect(await acquire(noCalls, undefined, { calls: 1, pages: 10 })).toBe("budget");
     // I recenti e la prima lettura del profilo del negozio, che non scala il budget.
-    expect(noCalls).toHaveBeenCalledTimes(2);
+    expect(noCalls).toHaveBeenCalledTimes(3);
     await reset();
     // Senza pagine lo storico non parte, anche con chiamate disponibili.
     const noPages = ebay({ orders });
@@ -1317,7 +1319,7 @@ describe("acquisizione con il client", () => {
       });
       await cronTurn(env, fetcher, new Date("2026-09-02T00:00:00.000Z"));
       // Il budget di A e D più la prima lettura del profilo del negozio, fuori budget.
-      expect(perStore(fetcher)).toEqual({ "token-s-a": 12, "token-s-c": 1, "token-s-d": 12 });
+      expect(perStore(fetcher)).toEqual({ "token-s-a": 13, "token-s-c": 1, "token-s-d": 13 });
       expect(logged()).toBe(2);
       expect(errors.mock.calls.map(([line]) => JSON.parse(String(line)).failure).sort()).toEqual([
         "credentials",

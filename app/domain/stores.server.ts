@@ -19,8 +19,13 @@ export type StoreStatus = {
   ebayEnvironment: "production" | "sandbox";
   name: string;
   username: string;
-  /** Logo del negozio eBay, se il venditore ne ha uno. */
+  /** Logo e pagina del negozio eBay, se il venditore ne ha uno. */
   logoUrl: string | null;
+  storeUrl: string | null;
+  /** Feedback del venditore su eBay; null prima della lettura. */
+  feedback: { score: number; positivePercent: number | null; topRated: boolean } | null;
+  /** Marketplace delle inserzioni più frequente fra gli ordini importati. */
+  marketplace: string | null;
   connection: StoreConnection;
   pauseReasons: PauseReason[];
   /** Inizio del consenso corrente; null per un negozio scollegato. */
@@ -101,6 +106,11 @@ type StoreRow = {
   name: string;
   username: string;
   store_logo_url: string | null;
+  store_url: string | null;
+  feedback_score: number | null;
+  feedback_positive_percent: number | null;
+  top_rated_seller: number | null;
+  marketplace: string | null;
   disconnected_at: string | null;
   credentials: string | null;
   granted_at: string | null;
@@ -126,7 +136,13 @@ export async function listStores(
     db
       .prepare(
         `SELECT s.id, s.ebay_environment, ${storeNameSql} AS name, ${usernameSql} AS username,
-              s.store_logo_url, s.disconnected_at,
+              s.store_logo_url, s.store_url, s.feedback_score, s.feedback_positive_percent,
+              s.top_rated_seller, s.disconnected_at,
+              (SELECT o.marketplace_id FROM orders o WHERE o.store_id = s.id
+                AND o.marketplace_id IS NOT NULL AND o.merged_into IS NULL
+                AND o.is_provisional = 0 AND o.retention_until > ?2
+                GROUP BY o.marketplace_id ORDER BY COUNT(*) DESC, o.marketplace_id LIMIT 1)
+                AS marketplace,
               c.store_id AS credentials, c.granted_at, c.refresh_expires_at,
               c.rejected_at, ss.last_success_at, ss.history_from, ss.history_until,
               ss.history_done_at, ss.locked_until > ?2 AS syncing,
@@ -193,6 +209,16 @@ export async function listStores(
       name: row.name,
       username: row.username,
       logoUrl: row.store_logo_url,
+      storeUrl: row.store_url,
+      feedback:
+        row.feedback_score === null
+          ? null
+          : {
+              score: row.feedback_score,
+              positivePercent: row.feedback_positive_percent,
+              topRated: row.top_rated_seller === 1,
+            },
+      marketplace: row.marketplace,
       connection,
       pauseReasons,
       consentGrantedAt: row.disconnected_at ? null : row.granted_at,
@@ -308,7 +334,8 @@ export async function deleteStoreData(
     db
       .prepare(
         `UPDATE ebay_stores SET data_deleted_at = ?1, store_name = NULL, store_logo_url = NULL,
-          store_profile_read_at = NULL,
+          store_url = NULL, feedback_score = NULL, feedback_positive_percent = NULL,
+          top_rated_seller = NULL, store_profile_read_at = NULL,
           orders_deleted_through = MAX(COALESCE(orders_deleted_through, ?1), ?1) WHERE id = ?2`,
       )
       .bind(at, storeId),

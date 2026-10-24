@@ -161,6 +161,8 @@ export interface OrderItemView {
   /** Importo della riga come fornito da eBay; null se la fonte non lo riporta. */
   totalMinor: number | null;
   currency: string;
+  /** Inserzione eBay dell'articolo, quando nota. */
+  listingId?: string | null;
 }
 
 /**
@@ -236,8 +238,11 @@ export interface StoreView {
   id: string;
   name: string;
   username: string;
-  /** Logo del negozio eBay, se il venditore ne ha uno. */
+  /** Logo e pagina del negozio eBay, se il venditore ne ha uno. */
   logoUrl?: string | null;
+  storeUrl?: string | null;
+  /** Feedback del venditore su eBay, quando letto. */
+  feedback?: { score: number; positivePercent: number | null; topRated: boolean } | null;
   /** Marketplace prevalente, quando noto. */
   marketplace: string | null;
   /** Negozio dell'ambiente Sandbox di eBay, disponibile solo sul test. */

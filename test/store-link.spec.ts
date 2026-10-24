@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseTradingOrderTaxIdentifiers } from "../app/integrations/ebay/trading.server";
 import { acquireOrders } from "../app/domain/order-acquisition.server";
 import { storeProfileRefreshMilliseconds } from "../app/domain/store-profile.server";
-import { listVisibleOrders } from "../app/domain/orders.server";
+import { listVisibleOrders, orderView } from "../app/domain/orders.server";
 import { deleteStoreData, listStores } from "../app/domain/stores.server";
 import { handleAuthRequest } from "../app/auth-route.server";
 import { loader as loadHome } from "../app/routes/orders";
@@ -23,7 +23,9 @@ import {
   syntheticEbay,
   syntheticOrderId,
   syntheticStoreLogo,
+  syntheticStoreUrl,
   syntheticStoreXml,
+  syntheticUserXml,
   syntheticTradingXml,
 } from "./fixtures/ebay-fixtures";
 import { verifiedSession } from "./fixtures/account-fixtures";
@@ -281,9 +283,9 @@ describe("collegamento negozio eBay", () => {
           ? [
               "api.sandbox.ebay.com",
               "apiz.sandbox.ebay.com",
-              ...Array(6).fill("api.sandbox.ebay.com"),
+              ...Array(7).fill("api.sandbox.ebay.com"),
             ]
-          : ["api.ebay.com", "apiz.ebay.com", ...Array(6).fill("api.ebay.com")],
+          : ["api.ebay.com", "apiz.ebay.com", ...Array(7).fill("api.ebay.com")],
       );
     }
     const { results: stores } = await env.DB.prepare(
@@ -436,7 +438,7 @@ describe("collegamento negozio eBay", () => {
       "http://localhost:5173/app/ordini?negozio=collegato",
     );
     expect(callback.headers.get("cache-control")).toBe("no-store");
-    expect(ebay).toHaveBeenCalledTimes(8);
+    expect(ebay).toHaveBeenCalledTimes(9);
 
     const stored = await env.DB.prepare(
       `SELECT wm.user_id, s.ebay_user_id, o.ebay_order_id, o.total_minor,
@@ -505,29 +507,63 @@ describe("collegamento negozio eBay", () => {
     expect(stolenReplay.headers.get("location")).toBe(
       "http://localhost:5173/app/ordini?negozio=errore",
     );
-    expect(ebay).toHaveBeenCalledTimes(8);
+    expect(ebay).toHaveBeenCalledTimes(9);
   });
 
-  it("mostra nome e logo del negozio eBay e li rilegge una volta a settimana", async () => {
+  it("mostra il profilo del negozio eBay e lo rilegge una volta a settimana", async () => {
     const owner = await verifiedSession("profilo-negozio@example.invalid");
     const state = (await beginStoreLink(owner.cookie)).searchParams.get("state");
     await handleAuthRequest(
       storeCallback(`state=${state}&code=codice-sintetico`, owner.cookie),
       env,
-      syntheticEbay({ store: () => new Response(syntheticStoreXml) }),
+      syntheticEbay({
+        store: () => new Response(syntheticStoreXml),
+        user: () =>
+          new Response(
+            syntheticUserXml
+              .replace("<FeedbackScore>42", "<FeedbackScore>1500")
+              .replace("100.0", "99.8")
+              .replace("<StoreOwner>false</StoreOwner>", "<TopRatedSeller>true</TopRatedSeller>"),
+          ),
+        orders: [
+          {
+            orderId: "12-profilo",
+            creationDate: new Date(Date.now() - 3_600_000).toISOString(),
+            lastModifiedDate: new Date(Date.now() - 3_600_000).toISOString(),
+            pricingSummary: { total: { value: "5", currency: "EUR" } },
+            orderPaymentStatus: "PAID",
+            orderFulfillmentStatus: "NOT_STARTED",
+            lineItems: [
+              {
+                lineItemId: "9001",
+                legacyItemId: "110000000099",
+                title: "Faro anteriore",
+                quantity: 1,
+                lineItemCost: { value: "5", currency: "EUR" },
+                listingMarketplaceId: "EBAY_DE",
+              },
+            ],
+          },
+        ],
+      }),
     );
     const [store] = await listStores(env.DB, owner.userId);
-    // Il nome delle categorie del negozio non prende il posto del nome del negozio.
+    // Nome e indirizzo delle categorie e del logo non prendono il posto di quelli del negozio.
     expect(store).toMatchObject({
       name: "Bottega & Ricambi",
       username: "venditore",
       logoUrl: syntheticStoreLogo,
+      storeUrl: syntheticStoreUrl,
+      feedback: { score: 1500, positivePercent: 99.8, topRated: true },
+      marketplace: "EBAY_DE",
     });
     const [visible] = await listVisibleOrders(env.DB, owner.userId, 10);
     expect(visible?.storeName).toBe("Bottega & Ricambi");
+    // L'inserzione dell'articolo viene dall'identità stabile della riga.
+    expect(orderView(visible!).items[0]?.listingId).toBe("110000000099");
 
-    // Entro la settimana la sincronizzazione non rilegge il profilo; dopo, un logo fuori dagli
-    // host delle immagini eBay non si conserva.
+    // Entro la settimana la sincronizzazione non rilegge il profilo; dopo, logo e indirizzo fuori
+    // dai domini eBay non si conservano e un feedback non letto resta quello precedente.
     const acquire = async (at: Date, fetcher: typeof fetch) =>
       acquireOrders({
         db: env.DB,
@@ -545,7 +581,8 @@ describe("collegamento negozio eBay", () => {
       new Response(
         syntheticStoreXml
           .replace("Bottega &amp; Ricambi", "Nuovo nome")
-          .replace(syntheticStoreLogo, "https://example.invalid/logo.png"),
+          .replace(syntheticStoreLogo, "https://example.invalid/logo.png")
+          .replace(syntheticStoreUrl, "https://ebay.example.invalid/str/x"),
       );
     const soon = syntheticEbay({ store: renamed });
     await acquire(new Date(Date.now() + 60_000), soon);
@@ -556,22 +593,33 @@ describe("collegamento negozio eBay", () => {
     ).toBe(false);
     await acquire(
       new Date(Date.now() + storeProfileRefreshMilliseconds + 60_000),
-      syntheticEbay({ store: renamed }),
+      syntheticEbay({ store: renamed, user: () => new Response(null, { status: 503 }) }),
     );
     expect((await listStores(env.DB, owner.userId))[0]).toMatchObject({
       name: "Nuovo nome",
       logoUrl: null,
+      storeUrl: null,
+      feedback: { score: 1500, positivePercent: 99.8, topRated: true },
     });
 
     // Eliminati i dati, il profilo non resta.
     expect(await deleteStoreData(env.DB, owner.userId, store!.id, "Nuovo nome")).toBe("done");
     expect(
       await env.DB.prepare(
-        "SELECT store_name, store_logo_url, store_profile_read_at FROM ebay_stores WHERE id = ?",
+        `SELECT store_name, store_logo_url, store_url, feedback_score, feedback_positive_percent,
+                top_rated_seller, store_profile_read_at FROM ebay_stores WHERE id = ?`,
       )
         .bind(store!.id)
         .first(),
-    ).toEqual({ store_name: null, store_logo_url: null, store_profile_read_at: null });
+    ).toEqual({
+      store_name: null,
+      store_logo_url: null,
+      store_url: null,
+      feedback_score: null,
+      feedback_positive_percent: null,
+      top_rated_seller: null,
+      store_profile_read_at: null,
+    });
   });
 
   it("invia a eBay soltanto le richieste previste, con sessione di collegamento a scadenza", async () => {
@@ -670,6 +718,22 @@ describe("collegamento negozio eBay", () => {
           '<GetStoreRequest xmlns="urn:ebay:apis:eBLBaseComponents">' +
           "<Version>1455</Version><LevelLimit>1</LevelLimit></GetStoreRequest>",
       },
+      // Feedback e stato Top Rated del venditore.
+      {
+        url: "https://api.ebay.com/ws/api.dll",
+        method: "POST",
+        headers: {
+          "content-type": "text/xml;charset=UTF-8",
+          "x-ebay-api-call-name": "GetUser",
+          "x-ebay-api-siteid": "101",
+          "x-ebay-api-compatibility-level": "1455",
+          "x-ebay-api-iaf-token": "token-sintetico",
+        },
+        body:
+          '<?xml version="1.0" encoding="utf-8"?>' +
+          '<GetUserRequest xmlns="urn:ebay:apis:eBLBaseComponents">' +
+          "<Version>1455</Version></GetUserRequest>",
+      },
       fulfillmentList("creationdate"),
       {
         url: "https://api.ebay.com/sell/fulfillment/v1/order/12-%3C0%3E%261",
@@ -698,7 +762,7 @@ describe("collegamento negozio eBay", () => {
     ]);
     // I recenti partono dall'istante del collegamento, con la sovrapposizione; lo storico copre
     // i trenta giorni precedenti.
-    const filters = [requests[2]!, requests[4]!].map(({ url }) =>
+    const filters = [requests[2]!, requests[5]!].map(({ url }) =>
       new URL(url).searchParams.get("filter")!.match(/\[(.+)\.\.(.+)\]/u)!,
     );
     const span = ([, from, to]: RegExpMatchArray) => Date.parse(to!) - Date.parse(from!);
@@ -744,7 +808,7 @@ describe("collegamento negozio eBay", () => {
     await handleAuthRequest(storeCallback(`state=${state}&code=codice`, cookie), env, ebay);
     // Token e identità, tre pagine e due dettagli da due chiamate entro il budget di otto, più
     // il profilo del negozio, che non scala il budget.
-    expect(ebay).toHaveBeenCalledTimes(10);
+    expect(ebay).toHaveBeenCalledTimes(11);
     expect(await env.DB.prepare("SELECT COUNT(*) AS total FROM orders").first()).toEqual({
       total: 4,
     });

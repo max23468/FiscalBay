@@ -60,7 +60,7 @@ import {
 } from "~/components/ui/table";
 import type { AppCopy } from "../app-copy";
 import { appHref, type AppLinks } from "../app-links";
-import type { Language } from "../i18n";
+import { locales, type Language } from "../i18n";
 import { usePageTiming } from "../page-timing";
 import {
   formatDate,
@@ -601,6 +601,22 @@ function ConnectionSection({ store, now, t, language }: SectionProps & { now: st
             <dd>{marketplaceText(store)}</dd>
           </div>
         ) : null}
+        {store.feedback ? (
+          <div className={row}>
+            <dt className="text-muted-foreground">{t.stores.feedback}</dt>
+            <dd className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span>
+                <span className="font-code">{formatCount(store.feedback.score, language)}</span>
+                {store.feedback.positivePercent === null
+                  ? null
+                  : ` · ${t.stores.positiveFeedback(formatPercent(store.feedback.positivePercent, language))}`}
+              </span>
+              {store.feedback.topRated ? (
+                <StatusBadge tone="success">{t.stores.topRated}</StatusBadge>
+              ) : null}
+            </dd>
+          </div>
+        ) : null}
         {store.connectedAt ? (
           <div className={row}>
             <dt className="text-muted-foreground">{t.stores.connectedSince}</dt>
@@ -618,9 +634,28 @@ function ConnectionSection({ store, now, t, language }: SectionProps & { now: st
           </div>
         ) : null}
       </dl>
+      {store.storeUrl ? (
+        <a
+          href={store.storeUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "justify-self-start")}
+        >
+          {t.stores.openStore}
+        </a>
+      ) : null}
     </section>
   );
 }
+
+const formatCount = (value: number, language: Language) =>
+  new Intl.NumberFormat(locales[language], { useGrouping: "always" }).format(value);
+
+/** Percentuale come la riporta eBay, con al massimo un decimale. */
+const formatPercent = (value: number, language: Language) =>
+  new Intl.NumberFormat(locales[language], { style: "percent", maximumFractionDigits: 1 }).format(
+    value / 100,
+  );
 
 function SyncSection({ store, data, t, language }: SectionProps & { data: StoresPageData }) {
   return (

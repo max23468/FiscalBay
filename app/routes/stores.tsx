@@ -48,7 +48,9 @@ function storeView(store: StoreStatus): StoreView {
     name: store.name,
     username: store.username,
     logoUrl: store.logoUrl,
-    marketplace: null,
+    storeUrl: store.storeUrl,
+    feedback: store.feedback,
+    marketplace: store.marketplace,
     sandbox: store.ebayEnvironment === "sandbox" || undefined,
     connection: store.connection,
     pauseReason:

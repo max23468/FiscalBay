@@ -151,6 +151,10 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         name: "venditore",
         username: "venditore",
         logoUrl: null,
+        storeUrl: null,
+        feedback: { score: 42, positivePercent: 100, topRated: false },
+        // Gli ordini importati non sono più conservati alla data della prova.
+        marketplace: null,
         ebayEnvironment: "production",
         connection: "active",
         pauseReasons: [],

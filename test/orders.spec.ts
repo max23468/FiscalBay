@@ -346,6 +346,7 @@ describe("percorso ordini", () => {
           totalMinor: 999,
           currency: "EUR",
           imageUrl: null,
+          stableKey: null,
         },
         {
           lineItemId: "line-a2",
@@ -355,6 +356,7 @@ describe("percorso ordini", () => {
           totalMinor: 300,
           currency: "EUR",
           imageUrl: null,
+          stableKey: null,
         },
       ],
     });

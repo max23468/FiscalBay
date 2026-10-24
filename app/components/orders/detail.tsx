@@ -36,6 +36,7 @@ import {
 import {
   billingCopyText,
   contactCopyLabels,
+  ebayListingHref,
   ebayOrderHref,
   fromListState,
   missingContact,
@@ -304,6 +305,16 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
                   {t.orders.quantity}: <span className="font-code">{item.quantity}</span>
                 </span>
                 <ItemPrice item={item} t={t} language={language} />
+                {item.listingId ? (
+                  <a
+                    href={ebayListingHref(item.listingId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-foreground underline underline-offset-4 hover:no-underline"
+                  >
+                    {t.order.viewListing}
+                  </a>
+                ) : null}
               </p>
             </li>
           ))}
