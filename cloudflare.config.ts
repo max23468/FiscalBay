@@ -90,9 +90,9 @@ export default defineConfig((ctx) => ({
             REGISTRATION_MODE: bindings.text("approval"),
             // Spenta su richiesta dell'owner finché non la riattiva: segreti e dati restano.
             EBAY_SANDBOX_ENABLED: bindings.text("false"),
-            STRIPE_PRICE_MONTHLY: bindings.text("price_1UHlnnJP7SSN14Zph79bnCQu"),
-            STRIPE_PRICE_ANNUAL: bindings.text("price_1UHlnnJP7SSN14Zpc0f7vZkS"),
-            STRIPE_PRICE_LIFETIME: bindings.text("price_1UHlngJP7SSN14ZpuFWGNO5w"),
+            STRIPE_PRICE_MONTHLY: bindings.text("price_1UUABwJqfZnQjIbKpQPYZhKu"),
+            STRIPE_PRICE_ANNUAL: bindings.text("price_1UUABwJqfZnQjIbKjc1m9dc0"),
+            STRIPE_PRICE_LIFETIME: bindings.text("price_1UUABxJqfZnQjIbK0m1dpfRa"),
           },
         }),
 }));
