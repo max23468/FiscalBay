@@ -35,32 +35,18 @@ export function annualPaidMonths() {
   return priceGeneration.net.annual / priceGeneration.net.monthly;
 }
 
-/** Offerte con rinnovo, le sole che si possono pagare in anticipo durante la prova. */
-export type RecurringOffer = Exclude<PremiumOffer, "lifetime">;
+/** Il Checkout di Stripe accetta una prova che finisce almeno due giorni dopo l'apertura. */
+const minimumCheckoutTrial = 2 * 24 * 60 * 60 * 1000 + 10 * 60 * 1000;
 
 /**
- * Fine di un periodo pagato che parte da `start`: mesi di calendario sull'istante UTC, come
- * li conta Stripe. Senza lo stesso giorno nel mese di arrivo vale l'ultimo: il 31 gennaio più
- * un mese è il 28 o il 29 febbraio, il 29 febbraio più un anno è il 28 febbraio. Il risultato
- * sale al secondo intero, la precisione delle date di Stripe.
- *
- * Durante la prova l'incasso è immediato e il periodo pagato parte dalla fine originale della
- * prova: questa ne è la fine e il primo rinnovo, senza un addebito alla fine della prova.
+ * Primo addebito di un acquisto durante la prova: alla fine della prova, al secondo intero
+ * come le date di Stripe. Null quando ne mancano meno di due giorni, perché il Checkout non
+ * accetta una prova più breve: allora il primo addebito è subito e il periodo pagato parte
+ * dall'acquisto, senza interrompere Premium.
  */
-export function paidPeriodEnd(start: string, offer: RecurringOffer) {
-  const from = new Date(start);
-  const month = from.getUTCMonth() + (offer === "monthly" ? 1 : 12);
-  const lastDay = new Date(Date.UTC(from.getUTCFullYear(), month + 1, 0)).getUTCDate();
-  const end = Date.UTC(
-    from.getUTCFullYear(),
-    month,
-    Math.min(from.getUTCDate(), lastDay),
-    from.getUTCHours(),
-    from.getUTCMinutes(),
-    from.getUTCSeconds(),
-    from.getUTCMilliseconds(),
-  );
-  return new Date(Math.ceil(end / 1000) * 1000).toISOString();
+export function firstChargeAt(trialEndsAt: string, now: string | Date) {
+  const at = Math.ceil(Date.parse(trialEndsAt) / 1000) * 1000;
+  return at < new Date(now).getTime() + minimumCheckoutTrial ? null : new Date(at).toISOString();
 }
 
 /** Esito del ritorno da Stripe, soltanto per il messaggio: il diritto non dipende da esso. */

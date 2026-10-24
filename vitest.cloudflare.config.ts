@@ -21,8 +21,6 @@ export default defineConfig({
           STRIPE_PRICE_MONTHLY: "price_test_monthly",
           STRIPE_PRICE_ANNUAL: "price_test_annual",
           STRIPE_PRICE_LIFETIME: "price_test_lifetime",
-          STRIPE_PRICE_MONTHLY_PREPAID: "price_test_monthly_prepaid",
-          STRIPE_PRICE_ANNUAL_PREPAID: "price_test_annual_prepaid",
           TEST_MIGRATIONS: await readD1Migrations("./migrations"),
         },
       },

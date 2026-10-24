@@ -479,9 +479,17 @@ export const it = {
       priceMonthlyNote: "Si rinnova ogni mese.",
       priceAnnualNote: (months: number) => `12 mesi al prezzo di ${months}.`,
       priceLifetimeNote: "Pagamento unico, senza rinnovi.",
-      prepaidNote:
-        "Paghi oggi e non perdi i giorni di prova: il periodo pagato parte quando la prova finisce.",
-      firstRenewal: (date: string) => `Primo rinnovo il ${date}.`,
+      trialPurchaseNote:
+        "Con mensile o annuale oggi non paghi: i giorni di prova restano e il primo addebito arriva quando la prova finisce.",
+      trialEndingPurchaseNote:
+        "La prova finisce fra meno di due giorni: con mensile o annuale il primo addebito è oggi e il periodo pagato parte subito.",
+      firstCharge: (date: string) => `Primo addebito il ${date}.`,
+      trialCheckoutProcessingTitle: "Scelta del piano in corso",
+      trialCheckoutProcessingBody:
+        "Stripe sta confermando l’abbonamento. La prova continua e il primo addebito arriva quando finisce.",
+      trialChosenTitle: (plan: string) => `${plan} scelto`,
+      trialChosenBody: (date: string) =>
+        `La prova continua: il primo addebito arriva il ${date}, quando finisce. Fino ad allora non paghi nulla.`,
       pricesNote:
         "Prezzi IVA esclusa. Su Stripe vedi il totale con le imposte del tuo paese, anche nella tua valuta, prima di pagare.",
       purchaseNeedsSync: "Potrai acquistare Premium dopo la prima lettura riuscita di un negozio.",

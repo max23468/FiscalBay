@@ -1,4 +1,4 @@
-import { paidPeriodEnd, priceGeneration, type PremiumOffer, type PurchaseState } from "../catalog";
+import { firstChargeAt, priceGeneration, type PremiumOffer, type PurchaseState } from "../catalog";
 import { ApplicationError, logFailure } from "../errors";
 import { localizedPath, type Language } from "../i18n";
 import {
@@ -23,12 +23,6 @@ const priceVariable = {
   annual: "STRIPE_PRICE_ANNUAL",
 } as const satisfies Record<CheckoutOffer, keyof Env>;
 
-/** Primo periodo pagato durante la prova: prezzo una tantum con l'importo dell'offerta. */
-const prepaidPriceVariable = {
-  monthly: "STRIPE_PRICE_MONTHLY_PREPAID",
-  annual: "STRIPE_PRICE_ANNUAL_PREPAID",
-} as const satisfies Record<CheckoutOffer, keyof Env>;
-
 export function isCheckoutOffer(value: string): value is CheckoutOffer {
   return (checkoutOffers as readonly string[]).includes(value);
 }
@@ -36,11 +30,6 @@ export function isCheckoutOffer(value: string): value is CheckoutOffer {
 /** L'acquisto compare soltanto con la chiave Stripe e i prezzi di ogni offerta in vendita. */
 export function checkoutConfigured(env: Env) {
   return !!env.STRIPE_SECRET_KEY && checkoutOffers.every((offer) => !!env[priceVariable[offer]]);
-}
-
-/** Durante la prova si vende soltanto con i prezzi del primo periodo di ogni offerta. */
-export function prepaidConfigured(env: Env) {
-  return checkoutOffers.every((offer) => !!env[prepaidPriceVariable[offer]]);
 }
 
 /** Diritto in corso dello spazio, separato per la prova e per ogni altra origine. */
@@ -75,17 +64,13 @@ export async function purchaseState(db: D1Database, userId: string, now = new Da
   };
 }
 
-/** Stripe accetta una scadenza della sessione fra 30 minuti e 24 ore dalla creazione. */
-const sessionExpiry = { min: 31 * 60 * 1000, max: 23 * 60 * 60 * 1000 };
-
 /**
- * La sessione aperta durante la prova scade con la prova, entro i limiti di Stripe: il
- * pagamento non arriva dopo, quando il periodo pagato sarebbe già iniziato senza diritto.
+ * Durante la prova si paga quando finisce: i giorni residui restano gratuiti. Con meno di due
+ * giorni residui l'abbonamento parte subito, come un acquisto ordinario.
  */
-function prepaidExpiry(trialEndsAt: string, now: Date) {
-  const left = Date.parse(trialEndsAt) - now.getTime();
-  if (left >= sessionExpiry.max) return undefined;
-  return new Date(now.getTime() + Math.max(left, sessionExpiry.min));
+function trialCheckout(trialEndsAt: string | null, now: Date) {
+  const chargeAt = trialEndsAt ? firstChargeAt(trialEndsAt, now) : null;
+  return trialEndsAt && chargeAt ? { trial: { endsAt: trialEndsAt, chargeAt } } : {};
 }
 
 export type CheckoutResult =
@@ -116,18 +101,13 @@ export async function startCheckout(
   if (purchase?.state !== "available")
     return { ok: false, reason: purchase?.state ?? "needs-sync" };
   const { trialEndsAt } = purchase;
-  const prepaidPriceId = trialEndsAt ? env[prepaidPriceVariable[input.offer]] : undefined;
-  if (trialEndsAt && !prepaidPriceId) return { ok: false, reason: "unavailable" };
   try {
     const stripe = await createStripeClient(env.STRIPE_SECRET_KEY);
-    const net = priceGeneration.net[input.offer];
-    const [price, prepaidPrice] = await Promise.all([
-      retrieveCatalogPrice(stripe, priceId),
-      prepaidPriceId ? retrieveCatalogPrice(stripe, prepaidPriceId) : null,
-    ]);
-    const mismatch =
-      catalogMismatch(price, input.offer, net) ??
-      (prepaidPrice ? catalogMismatch(prepaidPrice, input.offer, net, true) : null);
+    const mismatch = catalogMismatch(
+      await retrieveCatalogPrice(stripe, priceId),
+      input.offer,
+      priceGeneration.net[input.offer],
+    );
     if (mismatch) {
       logCheckoutFailure(input.request, `catalog_${mismatch}`);
       return { ok: false, reason: "unavailable" };
@@ -142,16 +122,7 @@ export async function startCheckout(
       language: input.language,
       successUrl: plan,
       cancelUrl: plan,
-      ...(trialEndsAt && prepaidPriceId
-        ? {
-            prepaid: {
-              priceId: prepaidPriceId,
-              trialEndsAt,
-              renewsAt: paidPeriodEnd(trialEndsAt, input.offer),
-              expiresAt: prepaidExpiry(trialEndsAt, now),
-            },
-          }
-        : {}),
+      ...trialCheckout(trialEndsAt, now),
     });
     if (session.managed_payments?.enabled !== true) {
       await expireCheckout(stripe, session.id);

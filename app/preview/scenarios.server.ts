@@ -43,6 +43,7 @@ export const scenarioIds = [
   "prova-premium",
   "prova-in-scadenza",
   "prova-terminata",
+  "prova-con-abbonamento",
   "pagamento-in-attivazione",
   "rinnovo-non-riuscito",
   "stripe-non-disponibile",
@@ -239,6 +240,18 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
       name: "Trial ended",
       focus:
         "Back on Free after the trial, with no offer to repeat it: orders whose data arrived during the trial stay unlocked.",
+    },
+  },
+  "prova-con-abbonamento": {
+    it: {
+      name: "Prova con abbonamento scelto",
+      focus:
+        "Mensile scelto durante la prova: la prova continua, nessun addebito fino alla sua fine e nessun secondo acquisto.",
+    },
+    en: {
+      name: "Trial with plan chosen",
+      focus:
+        "Monthly chosen during the trial: the trial continues, no charge until it ends and no second purchase.",
     },
   },
   "pagamento-in-attivazione": {
@@ -1601,11 +1614,22 @@ export function loadScenario(
       break;
     case "prova-premium":
     case "prova-in-scadenza":
+    case "prova-con-abbonamento":
       scenario = {
         ...common,
-        account: trialAccount(
-          id === "prova-premium" ? "2026-10-06T10:00:00Z" : "2026-09-29T09:00:00Z",
-        ),
+        account:
+          id === "prova-con-abbonamento"
+            ? {
+                ...trialAccount("2026-10-06T10:00:00Z"),
+                payment: {
+                  state: "scheduled",
+                  period: "monthly",
+                  chargeAt: "2026-10-06T10:00:00Z",
+                },
+              }
+            : trialAccount(
+                id === "prova-premium" ? "2026-10-06T10:00:00Z" : "2026-09-29T09:00:00Z",
+              ),
         stores: [freeStores[0]!, storeView("outlet")],
         seeds: seeds.filter((seed) => seed.store !== "retro"),
         premium: true,

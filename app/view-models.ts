@@ -312,10 +312,14 @@ export interface AccountView {
     endsAt?: string | null;
   };
   /**
-   * Pagamento senza copertura in corso: in attesa della conferma di Stripe, oppure rinnovo
-   * non riuscito con il prezzo protetto fino a `protectedUntil`.
+   * Pagamento senza copertura in corso: in attesa della conferma di Stripe, abbonamento scelto
+   * durante la prova con il primo addebito alla sua fine (`chargeAt`), oppure rinnovo non
+   * riuscito con il prezzo protetto fino a `protectedUntil`.
    */
-  payment?: { state: "pending" } | { state: "renewal-failed"; protectedUntil: string };
+  payment?:
+    | { state: "pending" }
+    | { state: "scheduled"; period: "monthly" | "annual"; chargeAt: string }
+    | { state: "renewal-failed"; protectedUntil: string };
 }
 
 export interface SessionView {

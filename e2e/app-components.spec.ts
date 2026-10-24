@@ -2408,8 +2408,8 @@ for (const width of [390, 768, 1440]) {
     }
   });
 
-  // Durante la prova si paga subito e il primo rinnovo segue i giorni residui della prova.
-  test(`piano durante la prova: acquisto con il primo rinnovo a ${width}px`, async ({
+  // Durante la prova mensile e annuale si pagano alla sua fine, che conserva i giorni residui.
+  test(`piano durante la prova: acquisto con il primo addebito a ${width}px`, async ({
     page,
   }, testInfo) => {
     await page.setViewportSize({ width, height: width === 1440 ? 720 : 844 });
@@ -2420,24 +2420,35 @@ for (const width of [390, 768, 1440]) {
       await open(page, `${prefix}/anteprima/impostazioni/piano`, "prova-premium");
       const main = page.locator("main");
       await expect(main).toContainText(it ? "Prova Premium" : "Premium trial");
-      await expect(main).toContainText(it ? "non perdi i giorni di prova" : "keep your trial days");
       await expect(main).toContainText(
-        it ? /Primo rinnovo il .*2026\./u : /First renewal on .*2026\./u,
+        it ? "Con mensile o annuale oggi non paghi" : "With monthly or annual you don't pay today",
       );
-      await expect(main).toContainText(
-        it ? /Primo rinnovo il .*2027\./u : /First renewal on .*2027\./u,
-      );
+      // Mensile e annuale hanno lo stesso primo addebito, alla fine della prova.
+      await expect(
+        main.getByText(it ? /Primo addebito il 6 ott 2026\./u : /First charge on 6 Oct 2026\./u),
+      ).toHaveCount(2);
       await expect(
         page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }),
       ).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath(`trial-purchase-${locale}.png`) });
-      // Il ritorno da Stripe resta visibile anche con la prova in corso.
+      // Il ritorno da Stripe durante la prova non parla di pagamento: la prova continua.
       await page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }).click();
       await expect(page).toHaveURL(/\?checkout=processing$/u);
       await expect(main).toContainText(it ? "Prova Premium" : "Premium trial");
       await expect(
-        page.getByText(it ? "Attivazione Premium in corso" : "Activating Premium"),
+        page.getByText(it ? "Scelta del piano in corso" : "Confirming your plan"),
       ).toBeVisible();
+      // Con l'abbonamento scelto la prova continua senza addebiti né un secondo acquisto.
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "prova-con-abbonamento");
+      await expect(
+        page.getByText(it ? "Premium mensile scelto" : "You chose Premium, monthly"),
+      ).toBeVisible();
+      await expect(main).toContainText(
+        it ? "Fino ad allora non paghi nulla." : "Until then you pay nothing.",
+      );
+      await expect(
+        page.getByRole("button", { name: /Scegli (mensile|annuale)|Choose (monthly|annual)/u }),
+      ).toHaveCount(0);
     }
   });
 }

@@ -10,7 +10,7 @@ import type { AppCopy } from "../../app-copy";
 import {
   annualPaidMonths,
   formatPrice,
-  paidPeriodEnd,
+  firstChargeAt,
   priceGeneration,
   type PremiumOffer,
   type PurchaseState,
@@ -27,8 +27,8 @@ import { AutoSwitch, Group, SimpleSelect } from "./controls";
 
 /**
  * La prova dice quando finisce e cosa resta dopo, in evidenza negli ultimi giorni. L'acquisto
- * compare quando il server lo ammette: si paga subito e il periodo pagato parte alla fine
- * della prova, che conserva i suoi giorni.
+ * compare quando il server lo ammette: mensile e annuale si pagano alla fine della prova,
+ * che conserva i suoi giorni.
  */
 function TrialPlan({
   trial,
@@ -51,8 +51,14 @@ function TrialPlan({
   const ending = trialEnding(trial.endsAt, now);
   return (
     <>
-      {/* Dopo l'acquisto la prova resta finché Stripe non conferma il pagamento. */}
-      <CheckoutReturn checkout={purchase.checkout} payment={payment} t={t} language={language} />
+      {/* Dopo la scelta la prova resta fino alla sua fine, quando arriva il primo addebito. */}
+      <CheckoutReturn
+        checkout={purchase.checkout}
+        payment={payment}
+        trial
+        t={t}
+        language={language}
+      />
       <Group title={t.settings.plan.currentPlan}>
         <div className="grid gap-1">
           <p className="text-lg font-semibold">{t.settings.plan.trialPlan}</p>
@@ -70,7 +76,7 @@ function TrialPlan({
       <PurchaseOptions
         billing={billing}
         purchase={purchase}
-        trialEndsAt={trial.endsAt}
+        trial={{ endsAt: trial.endsAt, now }}
         t={t}
         language={language}
       />
@@ -167,15 +173,31 @@ export interface PurchaseView {
 function CheckoutReturn({
   checkout,
   payment,
+  trial = false,
   t,
   language,
 }: {
   checkout: PurchaseView["checkout"];
   payment: AccountView["payment"];
+  /** Durante la prova la scelta non comporta un pagamento immediato. */
+  trial?: boolean;
   t: AppCopy;
   language: Language;
 }) {
   const zone = useTimeZone();
+  const copy = t.settings.plan;
+  if (payment?.state === "scheduled")
+    return (
+      <StatusAlert tone="info" title={copy.trialChosenTitle(copy.premiumPeriod[payment.period])}>
+        {copy.trialChosenBody(formatDate(payment.chargeAt, language, "dateTime", zone))}
+      </StatusAlert>
+    );
+  if (trial && checkout === "processing")
+    return (
+      <StatusAlert tone="info" title={copy.trialCheckoutProcessingTitle}>
+        {copy.trialCheckoutProcessingBody}
+      </StatusAlert>
+    );
   if (payment?.state === "renewal-failed")
     return (
       <StatusAlert tone="warning" title={t.settings.plan.renewalFailedTitle}>
@@ -315,14 +337,14 @@ export function PlanSection({
 function PurchaseOptions({
   billing,
   purchase,
-  trialEndsAt,
+  trial,
   t,
   language,
 }: {
   billing: boolean;
   purchase: PurchaseView;
-  /** Durante la prova il primo rinnovo cade dopo i giorni residui e il periodo pagato. */
-  trialEndsAt?: string;
+  /** Durante la prova mensile e annuale si pagano alla sua fine, la stessa data del server. */
+  trial?: { endsAt: string; now: string };
   t: AppCopy;
   language: Language;
 }) {
@@ -331,19 +353,21 @@ function PurchaseOptions({
   if (!billing || purchase.state === "covered") return null;
   const copy = t.settings.plan;
   const net = (offer: PremiumOffer) => formatPrice(priceGeneration.net[offer], language);
-  // Durante la prova la nota dell'offerta aggiunge la data del primo rinnovo.
-  const withRenewal = (offer: "monthly" | "annual", note: string) =>
-    trialEndsAt
-      ? `${note} ${copy.firstRenewal(formatDate(paidPeriodEnd(trialEndsAt, offer), language, "date", zone))}`
-      : note;
+  // Durante la prova la nota dell'offerta aggiunge la data del primo addebito; con meno di due
+  // giorni residui il primo addebito è subito.
+  const chargeAt = trial ? firstChargeAt(trial.endsAt, trial.now) : null;
+  const firstCharge = chargeAt
+    ? copy.firstCharge(formatDate(chargeAt, language, "date", zone))
+    : null;
+  const withCharge = (note: string) => (firstCharge ? `${note} ${firstCharge}` : note);
   const prices = {
     monthly: {
       price: copy.priceMonthly(net("monthly")),
-      note: withRenewal("monthly", copy.priceMonthlyNote),
+      note: withCharge(copy.priceMonthlyNote),
     },
     annual: {
       price: copy.priceAnnual(net("annual")),
-      note: withRenewal("annual", copy.priceAnnualNote(annualPaidMonths())),
+      note: withCharge(copy.priceAnnualNote(annualPaidMonths())),
     },
     lifetime: { price: copy.priceLifetime(net("lifetime")), note: copy.priceLifetimeNote },
   };
@@ -351,7 +375,11 @@ function PurchaseOptions({
   return (
     <Group title={copy.buyTitle}>
       <PremiumNote>{copy.buyBody}</PremiumNote>
-      {trialEndsAt ? <p className="text-sm text-muted-foreground">{copy.prepaidNote}</p> : null}
+      {trial ? (
+        <p className="text-sm text-muted-foreground">
+          {chargeAt ? copy.trialPurchaseNote : copy.trialEndingPurchaseNote}
+        </p>
+      ) : null}
       <ul
         className={cn(
           "grid gap-3",

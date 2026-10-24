@@ -463,9 +463,17 @@ export const en: AppCopy = {
       priceMonthlyNote: "Renews every month.",
       priceAnnualNote: (months) => `12 months for the price of ${months}.`,
       priceLifetimeNote: "One-off payment, no renewals.",
-      prepaidNote:
-        "You pay today and keep your trial days: the paid period starts when the trial ends.",
-      firstRenewal: (date: string) => `First renewal on ${date}.`,
+      trialPurchaseNote:
+        "With monthly or annual you don't pay today: your trial days stay and the first charge comes when the trial ends.",
+      trialEndingPurchaseNote:
+        "Your trial ends in less than two days: with monthly or annual the first charge is today and the paid period starts now.",
+      firstCharge: (date: string) => `First charge on ${date}.`,
+      trialCheckoutProcessingTitle: "Confirming your plan",
+      trialCheckoutProcessingBody:
+        "Stripe is confirming the subscription. Your trial continues and the first charge comes when it ends.",
+      trialChosenTitle: (plan: string) => `You chose ${plan}`,
+      trialChosenBody: (date: string) =>
+        `Your trial continues: the first charge comes on ${date}, when it ends. Until then you pay nothing.`,
       pricesNote:
         "Prices exclude VAT. Before paying, Stripe shows the total with your country’s taxes, in your currency too.",
       purchaseNeedsSync: "You can buy Premium once a store has been read successfully.",
