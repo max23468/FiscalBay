@@ -334,9 +334,9 @@ jobs:
         run: curl --fail --silent --show-error --max-time 20 --output /dev/null https://test.fiscalbay.it/
 
       # Il job distribuisce e può tornare indietro: resta sul runner, con il solo Chromium
-      # installato dall'installer ufficiale di Playwright.
+      # installato dall'installer ufficiale di Playwright. Il collaudo remoto vale per ogni
+      # deploy, anche quando il livello del gate non esegue le prove browser della PR.
       - name: Install Chromium
-        if: needs.verify.outputs.e2e == 'true'
         timeout-minutes: 10
         run: pnpm exec playwright install --with-deps chromium
 
@@ -345,7 +345,6 @@ jobs:
       # vengono saltate con un avviso: il deploy non torna indietro per un problema del dato.
       - name: Reset test account
         id: account
-        if: needs.verify.outputs.e2e == 'true'
         continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -354,18 +353,16 @@ jobs:
         run: node scripts/reset-test-account.mjs
 
       - name: Report test account warning
-        if: needs.verify.outputs.e2e == 'true' && steps.account.outcome == 'failure'
+        if: steps.account.outcome == 'failure'
         run: echo "::warning::Account di collaudo non ripristinato, prove autenticate saltate."
 
       - name: Check deployed browser interactions
-        if: needs.verify.outputs.e2e == 'true'
         env:
           E2E_RUN_ID: test-smoke
           E2E_ACCOUNT_PASSWORD: ${{ steps.account.outcome == 'success' && secrets.E2E_ACCOUNT_PASSWORD || '' }}
         run: pnpm test:e2e:smoke
 
       - name: Check deployed pages
-        if: needs.verify.outputs.e2e == 'true'
         env:
           E2E_RUN_ID: test-pages
           E2E_MATRIX: single
