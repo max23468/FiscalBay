@@ -1010,7 +1010,8 @@ async function open(page: Page, path: string, scenario?: string) {
   }
   await page.goto(path);
   // Con un pannello aperto il resto della pagina è inerte: si attende il controllo per id.
-  await expect(page.locator("#preview-scenario")).toBeEnabled({ timeout: 20_000 });
+  if (path.includes("/anteprima"))
+    await expect(page.locator("#preview-scenario")).toBeEnabled({ timeout: 20_000 });
   await expect(
     page.getByRole("searchbox", { name: /Cerca ordini|Search orders/u, includeHidden: true }),
   ).toBeEnabled();
@@ -1031,6 +1032,29 @@ async function searched(page: Page, query: string, base = "/anteprima") {
   });
   expect(response.status()).toBe(303);
   return response.headers().location!;
+}
+
+/**
+ * Le garanzie dei componenti già presenti nell'area reale valgono anche sulle sue route, con la
+ * sessione e gli ordini sintetici del database locale.
+ */
+const areas = [
+  {
+    name: "anteprima",
+    base: "/anteprima",
+    detail: "ord-02",
+    copied: { id: "27-10293-84756", value: "RSSMRA80A41H501Y" },
+  },
+  {
+    name: "area reale",
+    base: "/app",
+    detail: "collaudo-ordine-sbloccato",
+    copied: { id: testAccount.orders.unlocked, value: testAccount.taxCodes.unlocked },
+  },
+] as const;
+
+async function enter(page: Page, baseURL: string, area: (typeof areas)[number]) {
+  if (area.base === "/app") await useLocalAccount(page.context(), "member", baseURL);
 }
 
 const noPageOverflow = (page: Page) =>
@@ -2349,30 +2373,35 @@ test("errori del form associati al campo e focus restituito dalla conferma", asy
   await expect(trigger).toBeFocused();
 });
 
-test("copia fallita visibile e recupero con un nuovo tentativo", async ({ page }) => {
-  await open(page, "/anteprima/ordini");
-  await page.evaluate(() => {
-    let attempts = 0;
-    Object.defineProperty(navigator.clipboard, "writeText", {
-      configurable: true,
-      value: async (value: string) => {
-        if (++attempts === 1) throw new DOMException("Denied", "NotAllowedError");
-        document.documentElement.dataset.copied = value;
-      },
+for (const area of areas)
+  test(`copia fallita visibile e recupero con un nuovo tentativo, ${area.name}`, async ({
+    page,
+    baseURL,
+  }) => {
+    await enter(page, baseURL!, area);
+    await open(page, `${area.base}/ordini`);
+    await page.evaluate(() => {
+      let attempts = 0;
+      Object.defineProperty(navigator.clipboard, "writeText", {
+        configurable: true,
+        value: async (value: string) => {
+          if (++attempts === 1) throw new DOMException("Denied", "NotAllowedError");
+          document.documentElement.dataset.copied = value;
+        },
+      });
     });
+    const card = page.getByRole("article", { name: `Ordine ${area.copied.id}` });
+    const copy = card.getByRole("button", {
+      name: `Copia Codice Fiscale: ordine ${area.copied.id}`,
+      exact: true,
+    });
+    await copy.click();
+    await expect(card.getByText(/^Copia non riuscita\./)).toBeVisible();
+    await copy.click();
+    await expect(page.locator("html")).toHaveAttribute("data-copied", area.copied.value);
+    await expect(card.getByText(/^Copia non riuscita\./)).toHaveCount(0);
+    await expect(copy).toHaveAttribute("data-state", "copied");
   });
-  const card = page.getByRole("article", { name: "Ordine 27-10293-84756" });
-  const copy = card.getByRole("button", {
-    name: "Copia Codice Fiscale: ordine 27-10293-84756",
-    exact: true,
-  });
-  await copy.click();
-  await expect(card.getByText(/^Copia non riuscita\./)).toBeVisible();
-  await copy.click();
-  await expect(page.locator("html")).toHaveAttribute("data-copied", "RSSMRA80A41H501Y");
-  await expect(card.getByText(/^Copia non riuscita\./)).toHaveCount(0);
-  await expect(copy).toHaveAttribute("data-state", "copied");
-});
 
 for (const locale of ["it", "en"] as const) {
   test(`nomi lunghi nel filtro dei negozi su touch, ${locale}`, async ({ browser, baseURL }) => {
@@ -2407,20 +2436,30 @@ for (const locale of ["it", "en"] as const) {
   });
 }
 
-test("pannello di dettaglio scorrevole con chiusura raggiungibile", async ({ page }) => {
-  await page.setViewportSize({ width: 667, height: 260 });
-  await open(page, "/anteprima/ordini/ord-01");
-  const dialog = page.getByRole("dialog");
-  const source = dialog.getByText(/^Fonte: eBay/);
-  await source.scrollIntoViewIfNeeded();
-  await expect(source).toBeInViewport({ ratio: 1 });
-  const close = dialog.getByRole("button", { name: "Chiudi", exact: true });
-  await expect(close).toBeInViewport({ ratio: 1 });
-  await close.click();
-  await expect(dialog).toBeHidden();
-  // L'elenco conserva la sua istantanea.
-  await expect(page).toHaveURL(/\/anteprima\/ordini\?vista=[0-9a-z]+$/u);
-});
+for (const area of areas)
+  test(`pannello di dettaglio scorrevole con chiusura raggiungibile, ${area.name}`, async ({
+    page,
+    baseURL,
+  }) => {
+    await enter(page, baseURL!, area);
+    await page.setViewportSize({ width: 667, height: 260 });
+    await open(page, `${area.base}/ordini/${area.detail}`);
+    const dialog = page.getByRole("dialog");
+    // L'ordine reale di collaudo non ha ancora un controllo fiscale: chiude il pannello l'ultima
+    // sezione, non la riga della fonte.
+    const end =
+      area.base === "/app"
+        ? dialog.getByRole("tabpanel").locator(":scope > *").last()
+        : dialog.getByText(/^Fonte: eBay/);
+    await end.scrollIntoViewIfNeeded();
+    await expect(end).toBeInViewport({ ratio: 1 });
+    const close = dialog.getByRole("button", { name: "Chiudi", exact: true });
+    await expect(close).toBeInViewport({ ratio: 1 });
+    await close.click();
+    await expect(dialog).toBeHidden();
+    // L'elenco conserva la sua istantanea.
+    await expect(page).toHaveURL(new RegExp(`${area.base}/ordini\\?vista=[0-9a-z]+$`, "u"));
+  });
 
 test("messaggio per l'acquirente a larghezza piena e fonte in fondo al dettaglio", async ({
   page,
@@ -2545,18 +2584,20 @@ test("nomi distinti dei pulsanti Copia nell'elenco", async ({ page }) => {
   expect(new Set(names).size).toBe(names.length);
 });
 
-test("superfici nei due temi", { tag: "@smoke" }, async ({ page }) => {
-  for (const [scheme, background, card, panel] of [
-    ["light", "rgb(245, 247, 250)", "rgb(255, 255, 255)", "rgb(255, 255, 255)"],
-    ["dark", "rgb(18, 20, 24)", "rgb(28, 31, 37)", "rgb(36, 40, 48)"],
-  ] as const) {
-    await page.emulateMedia({ colorScheme: scheme });
-    await open(page, "/anteprima/ordini/ord-02");
-    await expect(page.locator("body")).toHaveCSS("background-color", background);
-    await expect(page.locator("article").first()).toHaveCSS("background-color", card);
-    await expect(page.getByRole("dialog")).toHaveCSS("background-color", panel);
-  }
-});
+for (const area of areas)
+  test(`superfici nei due temi, ${area.name}`, { tag: "@smoke" }, async ({ page, baseURL }) => {
+    await enter(page, baseURL!, area);
+    for (const [scheme, background, card, panel] of [
+      ["light", "rgb(245, 247, 250)", "rgb(255, 255, 255)", "rgb(255, 255, 255)"],
+      ["dark", "rgb(18, 20, 24)", "rgb(28, 31, 37)", "rgb(36, 40, 48)"],
+    ] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await open(page, `${area.base}/ordini/${area.detail}`);
+      await expect(page.locator("body")).toHaveCSS("background-color", background);
+      await expect(page.locator("article").first()).toHaveCSS("background-color", card);
+      await expect(page.getByRole("dialog")).toHaveCSS("background-color", panel);
+    }
+  });
 
 test("movimento ridotto: dato intero e nuovi ordini senza animazione", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -2750,28 +2791,39 @@ test("l'esito dell'accesso esce dall'indirizzo e non torna alla ricarica", async
   await expect(page.getByText(text, { exact: true })).toHaveCount(0);
 });
 
-test("domande frequenti con il segno del prodotto e tastiera", async ({ page }) => {
-  await open(page, "/anteprima/impostazioni/supporto");
-  const summary = page.locator("details summary").first();
-  expect(await summary.evaluate((node) => getComputedStyle(node).display)).toBe("flex");
-  await summary.focus();
-  await page.keyboard.press("Enter");
-  await expect(page.locator("details").first()).toHaveAttribute("open", "");
-});
+for (const area of areas)
+  test(`domande frequenti con il segno del prodotto e tastiera, ${area.name}`, async ({
+    page,
+    baseURL,
+  }) => {
+    await enter(page, baseURL!, area);
+    await open(page, `${area.base}/impostazioni/supporto`);
+    const summary = page.locator("details summary").first();
+    expect(await summary.evaluate((node) => getComputedStyle(node).display)).toBe("flex");
+    await summary.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("details").first()).toHaveAttribute("open", "");
+  });
 
-test("lingue con il proprio nome nelle Impostazioni inglesi", async ({ page }) => {
-  await open(page, "/en/anteprima/impostazioni/aspetto");
-  const language = page.getByRole("navigation", { name: "Language" });
-  await expect(language.getByRole("link", { name: "Italiano", exact: true })).toHaveAttribute(
-    "lang",
-    "it",
-  );
-  await open(page, "/en/anteprima/impostazioni/messaggio");
-  await expect(page.getByRole("tab", { name: "Italiano", exact: true })).toHaveAttribute(
-    "lang",
-    "it",
-  );
-});
+for (const area of areas)
+  test(`lingue con il proprio nome nelle Impostazioni inglesi, ${area.name}`, async ({
+    page,
+    baseURL,
+  }) => {
+    await enter(page, baseURL!, area);
+    await open(page, `/en${area.base}/impostazioni/aspetto`);
+    // Nell'area reale la scelta si salva con un pulsante; nell'anteprima cambia soltanto pagina.
+    const language =
+      area.base === "/app"
+        ? page.getByRole("region", { name: "Language" }).getByRole("button")
+        : page.getByRole("navigation", { name: "Language" }).getByRole("link");
+    await expect(language.filter({ hasText: /^Italiano$/u })).toHaveAttribute("lang", "it");
+    await open(page, `/en${area.base}/impostazioni/messaggio`);
+    await expect(page.getByRole("tab", { name: "Italiano", exact: true })).toHaveAttribute(
+      "lang",
+      "it",
+    );
+  });
 
 for (const language of ["it", "en"] as const) {
   test(`onboarding e degradazione nell'anteprima ${language}`, async ({ page }) => {

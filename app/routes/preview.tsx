@@ -8,6 +8,7 @@ import {
 } from "react-router";
 
 import { AppShell } from "~/components/app-shell";
+import { useDeviceTimeZone } from "~/components/device-time-zone";
 import type { OrdersPageData } from "~/components/orders/page";
 import {
   Select,
@@ -142,6 +143,7 @@ export default function Preview({ loaderData }: Route.ComponentProps) {
   const { language } = loaderData;
   const t = appCopy[language];
   const links: AppLinks = { language, base };
+  useDeviceTimeZone();
   // Su Ordini il campo mostra la ricerca attiva, decifrata dal loader della pagina.
   const orders = useMatches().find((match) => match.id.startsWith("preview-orders"));
   return (

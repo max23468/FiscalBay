@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { useFetcher, useLocation, useNavigation, useRevalidator, useSubmit } from "react-router";
+import { useFetcher, useLocation, useNavigation, useSubmit } from "react-router";
 
 import { AppShell } from "~/components/app-shell";
 import { OrdersLoading } from "~/components/orders/loading";
@@ -50,7 +50,8 @@ import {
   visitParam,
 } from "../app-links";
 import { languageNames, localizedPath, type Language } from "../i18n";
-import { detectedTimeZone, timeZoneCookie, type ShellData } from "../preferences";
+import type { ShellData } from "../preferences";
+import { useDeviceTimeZone } from "./device-time-zone";
 import { formatDate, formatRelative } from "../view-models";
 import { useTimeZone } from "~/components/time-zone";
 
@@ -1021,16 +1022,8 @@ export function AccountShell({
 }) {
   const t = appCopy[language];
   const submit = useSubmit();
-  const revalidator = useRevalidator();
   const { pathname, search } = useLocation();
-  // Il fuso del dispositivo arriva al server in un cookie; quando cambia, le date si rileggono.
-  useEffect(() => {
-    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (!zone || detectedTimeZone(document.cookie) === zone) return;
-    const secure = window.location.protocol === "https:" ? "; Secure" : "";
-    document.cookie = `${timeZoneCookie}=${encodeURIComponent(zone)}; Path=/; Max-Age=31536000; SameSite=Lax${secure}`;
-    void revalidator.revalidate();
-  }, [revalidator]);
+  useDeviceTimeZone();
   // La ricerca resta nell'ambiente eBay mostrato, che sul test può essere la Sandbox.
   const sandbox = new URLSearchParams(search).get("environment") === "sandbox";
   const other: Language = language === "it" ? "en" : "it";
