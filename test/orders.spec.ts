@@ -1013,6 +1013,7 @@ describe("percorso ordini", () => {
     const refused = unlockOrders(env.DB, "u-a", ["o-b"]);
     await expect(refused).rejects.toBeInstanceOf(UnlockError);
     await expect(refused).rejects.toMatchObject({
+      name: "UnlockError",
       code: "order_not_available",
       message: "order_not_available",
     });
@@ -1021,6 +1022,52 @@ describe("percorso ordini", () => {
       "SELECT used, quota FROM free_cycles WHERE id = 'c-a'",
     ).first<{ used: number; quota: number }>();
     expect(cycle).toEqual({ used: 0, quota: 1 });
+  });
+
+  it("traduce ogni rifiuto del database nel suo codice e lascia invariati gli altri errori", async () => {
+    await seed();
+    let failure: unknown;
+    const db = new Proxy(env.DB, {
+      get(target, key) {
+        if (key === "batch") return () => Promise.reject(failure);
+        const value: unknown = Reflect.get(target, key);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const refusal = (error: unknown) => {
+      failure = error;
+      return unlockOrders(db, "u-a", ["o-a"]);
+    };
+    for (const code of [
+      "order_not_available",
+      "order_not_in_workspace",
+      "free_quota_exhausted",
+      "tax_data_unavailable",
+      "invalid_grant_cycle",
+      "order_already_granted_or_merged",
+    ])
+      await expect(
+        refusal(
+          new Error(`D1_ERROR: ${code}: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_TRIGGER)`),
+        ),
+      ).rejects.toMatchObject({ code });
+    // Senza trigger restano i vincoli della tabella, anche come causa dell'errore ricevuto.
+    await expect(
+      refusal(
+        new Error("D1_ERROR", {
+          cause: new Error("NOT NULL constraint failed: order_grants.order_id: SQLITE_CONSTRAINT"),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "order_not_in_workspace" });
+    await expect(
+      refusal(
+        new Error(
+          "D1_ERROR: UNIQUE constraint failed: order_grants.workspace_id, order_grants.order_id",
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "order_already_granted" });
+    const other = new Error("D1_ERROR: database unavailable");
+    await expect(refusal(other)).rejects.toBe(other);
   });
 
   it("nega sblocco senza appartenenza, dato fiscale o ciclo valido", async () => {
@@ -1906,6 +1953,15 @@ describe("pagina Ordini reale", () => {
       "x-it": "missing",
       "x-none": "missing",
     });
+    // Con Premium anche l'acquirente estero riceve la ricerca dei suggerimenti.
+    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+      VALUES ('foreign-premium', 'w-a', 'premium', ?, '2099-01-01T00:00:00.000Z')`)
+      .bind(now)
+      .run();
+    expect((await page("mostra=2")).orders.find(({ id }) => id === "x-es")).toMatchObject({
+      fiscal: { state: "missing", reason: "foreign", country: "ES" },
+      suggestionStatus: "identity_missing",
+    });
   });
 
   it("forma derivata di CF e Partita IVA italiani senza toccare i tipi esteri", () => {
@@ -1936,6 +1992,11 @@ describe("pagina Ordini reale", () => {
     expect(await ordersAction(cookie, { intent: "retry", order: "o-a" })).toMatchObject({
       init: { status: 409 },
     });
+    expect(
+      await env.DB.prepare(
+        "SELECT detail_for, detail_error, detail_attempts FROM order_source_refs WHERE order_id = 'o-a'",
+      ).first(),
+    ).toEqual({ detail_for: now, detail_error: "unavailable", detail_attempts: 5 });
     await withCredentials();
     expect(await ordersAction(cookie, { intent: "retry", order: "o-a" })).toEqual({
       ok: true,
@@ -1960,6 +2021,9 @@ describe("pagina Ordini reale", () => {
     const { userId } = await owner();
     const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(undefined);
     await withCredentials();
+    // Un ordine con dati da sbloccare non si rilegge, anche con un consenso valido.
+    expect(await requestOrderRead(env, userId, "o-a", "production")).toBe("invalid");
+    expect(send).not.toHaveBeenCalled();
     await env.DB.batch([
       // Senza dato e senza verifica la lettura risulta non riuscita.
       env.DB.prepare("DELETE FROM tax_identifiers WHERE order_id = 'o-a'"),
@@ -2015,6 +2079,54 @@ describe("pagina Ordini reale", () => {
         "SELECT detail_for FROM order_source_refs WHERE source = 'fulfillment'",
       ).first(),
     ).toEqual({ detail_for: null });
+    send.mockRestore();
+  });
+
+  it("non riprende la lettura di un ordine il cui negozio esce dallo spazio durante la richiesta", async () => {
+    const { userId } = await owner();
+    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(undefined);
+    await withCredentials();
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM tax_identifiers WHERE order_id = 'o-a'"),
+      env.DB.prepare(
+        `INSERT INTO order_source_refs (store_id, source, external_order_id, order_id, last_modified_time,
+           detail_for, detail_error, detail_attempts)
+         VALUES ('s-a', 'fulfillment', 'ebay-a', 'o-a', ?1, ?1, 'unavailable', 5)`,
+      ).bind(now),
+    ]);
+    // L'appartenenza cessa tra la verifica dell'ordine e la richiesta di lettura del negozio.
+    const database = new Proxy(env.DB, {
+      get(target, key) {
+        const value = Reflect.get(target, key) as unknown;
+        if (key !== "prepare") return typeof value === "function" ? value.bind(target) : value;
+        return (query: string) =>
+          query.includes("LEFT JOIN ebay_store_credentials c")
+            ? {
+                bind: (...values: unknown[]) => ({
+                  first: async () => {
+                    await target
+                      .prepare("DELETE FROM workspace_members WHERE user_id = ?")
+                      .bind(userId)
+                      .run();
+                    return target
+                      .prepare(query)
+                      .bind(...values)
+                      .first();
+                  },
+                }),
+              }
+            : target.prepare(query);
+      },
+    });
+    expect(
+      await requestOrderRead({ ...env, DB: database } as Env, userId, "o-a", "production"),
+    ).toBe("not_found");
+    expect(send).not.toHaveBeenCalled();
+    expect(
+      await env.DB.prepare(
+        "SELECT detail_for, detail_error, detail_attempts FROM order_source_refs WHERE order_id = 'o-a'",
+      ).first(),
+    ).toEqual({ detail_for: now, detail_error: "unavailable", detail_attempts: 5 });
     send.mockRestore();
   });
 

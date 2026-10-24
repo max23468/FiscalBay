@@ -327,9 +327,12 @@ it("la coda smista richieste di sincronizzazione, compiti e riferimenti dei webh
     // Un messaggio sconosciuto non passa dai webhook: si riprova fino ai non consegnati.
     expect(unknown.retry).toHaveBeenCalledOnce();
     expect(unknown.ack).not.toHaveBeenCalled();
-    expect(logged.mock.calls.map(([entry]) => JSON.parse(entry))).toContainEqual(
-      expect.objectContaining({ operation: "queue", code: "INVALID_REQUEST" }),
-    );
+    // Il riferimento di un webhook, anche malformato, resta al suo consumer.
+    expect(
+      logged.mock.calls
+        .map(([entry]) => JSON.parse(entry))
+        .filter((entry) => entry.operation === "queue" && entry.code === "INVALID_REQUEST"),
+    ).toHaveLength(1);
   } finally {
     logged.mockRestore();
   }
