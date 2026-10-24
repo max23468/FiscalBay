@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 import { forwardToAuth, handleAuthRequest } from "../app/auth-route.server";
 import { createAuth, createAuthOptions, gmailDomain } from "../app/auth.server";
 import { completeRegistration } from "../app/domain/registration.server";
-import { adminAccess, recentSignIn } from "../app/domain/sessions.server";
+import { adminAccess, readSession, recentSignIn } from "../app/domain/sessions.server";
+import { withResponseCookies } from "../app/response-cookies.server";
 import { loader as adminLoader } from "../app/routes/admin";
 import { action as securityRouteAction, loader as securityLoader } from "../app/routes/settings";
 import { action as signInAction, loader as signInLoader } from "../app/routes/sign-in";
@@ -1795,6 +1796,33 @@ describe("Sessioni, revoche e area admin", () => {
     };
     expect(await agentOf(await signIn({ origin, "user-agent": userAgent }))).toBe(userAgent);
     expect(await agentOf(await signIn({ origin }))).toBeFalsy();
+  });
+
+  it("rinnova il cookie insieme alla sessione, salvo un cookie già impostato dalla risposta", async () => {
+    const { cookie } = await createUser("rinnovo@example.invalid");
+    const id = await sessionId(cookie);
+    // Accesso di due ore fa: la sessione va rinnovata alla prossima lettura.
+    const due = new Date(Date.now() + 7 * 86_400_000 - 2 * 3_600_000).toISOString();
+    const setDue = () =>
+      env.DB.prepare('UPDATE "session" SET "expiresAt" = ? WHERE id = ?').bind(due, id).run();
+    const page = (response: Response) =>
+      withResponseCookies(async () => {
+        await readSession(env, new Request(`${origin}/app`, { headers: { cookie } }));
+        return response;
+      });
+
+    await setDue();
+    const renewed = (await page(new Response(null))).headers.getSetCookie();
+    expect(renewed).toEqual([expect.stringMatching(/session_token=.*Max-Age=604800/u)]);
+    const row = await env.DB.prepare('SELECT "expiresAt" FROM "session" WHERE id = ?')
+      .bind(id)
+      .first<{ expiresAt: string }>();
+    expect(new Date(row!.expiresAt).getTime()).toBeGreaterThan(new Date(due).getTime());
+
+    await setDue();
+    const cleared = `${renewed[0]!.split("=")[0]}=; Path=/; Max-Age=0`;
+    const signedOut = await page(new Response(null, { headers: { "set-cookie": cleared } }));
+    expect(signedOut.headers.getSetCookie()).toEqual([cleared]);
   });
 
   it("elenca le sessioni senza token e chiude una sessione o tutte le altre", async () => {

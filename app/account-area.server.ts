@@ -5,6 +5,7 @@ import { createAuth } from "./auth.server";
 import { listNotifications } from "./domain/notifications.server";
 import { readPreferences, type Preferences } from "./domain/preferences.server";
 import { registrationStatus, type Profile } from "./domain/registration.server";
+import { readSession } from "./domain/sessions.server";
 import { listStores, type StoreStatus } from "./domain/stores.server";
 import { accessPath, ordersPath } from "./app-links";
 import { errorResponse } from "./error-response";
@@ -16,7 +17,7 @@ import { detectedTimeZone, effectiveTimeZone, type ShellData } from "./preferenc
 
 export type AccountArea = {
   language: Language;
-  session: NonNullable<Awaited<ReturnType<ReturnType<typeof createAuth>["api"]["getSession"]>>>;
+  session: NonNullable<Awaited<ReturnType<typeof readSession>>>;
   profile: Profile;
   /** Nome ed email per la shell. */
   account: { name: string; email: string };
@@ -31,7 +32,7 @@ export async function currentSession(request: Request) {
     const auth = createAuth(env);
     await auth.$context;
     tracePhase(request, "auth-context");
-    const session = await auth.api.getSession({ headers: request.headers });
+    const session = await readSession(env, request);
     tracePhase(request, "session");
     return session;
   });
