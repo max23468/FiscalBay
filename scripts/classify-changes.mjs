@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 /**
  * Sceglie il livello del gate dai file modificati, uguale in locale e in CI:
- * - `docs`: documentazione ordinaria, `pnpm verify:documents`;
+ * - `docs`: documentazione ordinaria e suo archivio, `pnpm verify:documents`;
  * - `tooling`: governo, script, workflow e configurazioni degli strumenti, `pnpm verify:tooling`;
+ * - `unit`: test applicativi e loro configurazione, `pnpm verify:unit`;
+ * - `build`: prove browser e loro strumenti, controllo del bundle, soli valori testuali delle
+ *   variabili del Worker test, `pnpm verify:build`;
  * - `full`: ogni altro file, un diff vuoto o un confronto non disponibile, `pnpm verify`.
- * La sequenza di ogni livello esiste soltanto negli script di package.json. Nel livello completo
- * il classificatore sceglie anche le prove browser e il deploy test.
+ * La sequenza di ogni livello esiste soltanto negli script di package.json; ogni livello comprende
+ * il precedente. Il classificatore sceglie anche le prove browser e il deploy test.
  * Uso: node scripts/classify-changes.mjs [--base REF --head REF] [--complete] [--github-output] [--run]
  * Senza --base confronta il checkout, file non tracciati inclusi, con origin/develop.
  */
@@ -16,8 +19,18 @@ import { fileURLToPath } from "node:url";
 import { criticalModule } from "./mutation.mjs";
 import { importGraph } from "./verify-repo.mjs";
 
-/** Script di package.json eseguito da ciascun livello. */
-export const levelScripts = { docs: "verify:documents", tooling: "verify:tooling", full: "verify" };
+/** Script di package.json eseguito da ciascun livello, dal più leggero. */
+export const levelScripts = {
+  docs: "verify:documents",
+  tooling: "verify:tooling",
+  unit: "verify:unit",
+  build: "verify:build",
+  full: "verify",
+};
+const levels = Object.keys(levelScripts);
+
+/** Configurazione dei Worker: i soli valori del test hanno un livello proprio. */
+export const configFile = "cloudflare.config.ts";
 
 // Il governo contiene i gate Production letti dagli script: richiede anche i loro test.
 const governance = /^(?:AGENTS\.md|CLAUDE\.md|docs\/MASTER_PLAN\.md|docs\/engineering\/.+)$/u;
@@ -32,12 +45,63 @@ const tooling = [
   /^(?:\.oxfmtrc\.json|\.oxlintrc\.json|knip\.json|stryker\.config\.json|vitest\.(?:benchmark|mutation)\.config\.ts)$/u,
 ];
 
-/** Livello minimo di un singolo file. */
-export function fileLevel(file) {
-  if (file.endsWith(".md") && !governance.test(file)) return "docs";
-  if (governance.test(file) || tooling.some((pattern) => pattern.test(file))) return "tooling";
-  return "full";
+// Test applicativi: non entrano nell'artefatto né nelle prove browser.
+const unit = /^(?:test\/|vitest(?:\.(?:cloudflare|unit))?\.config\.ts$)/u;
+
+// Prove browser e loro strumenti: provano la build ma non cambiano l'artefatto distribuito.
+const browser =
+  /^(?:e2e\/|playwright\.config\.ts$|scripts\/(?:browser-tests|local-preview)\.mjs$)/u;
+
+/**
+ * Vero se le due versioni della configurazione differiscono soltanto nei valori
+ * `bindings.text("...")` dentro `vars` del Worker test. Nomi, righe aggiunte o tolte, binding,
+ * risorse, commenti e il target `live` restano fuori: nel dubbio il confronto fallisce.
+ */
+export function testVariablesOnly(before, after) {
+  if (typeof before !== "string" || typeof after !== "string" || before === after) return false;
+  const masked = [before, after].map(maskTestValues);
+  return masked[0] !== undefined && masked[0] === masked[1];
 }
+
+function maskTestValues(text) {
+  const lines = text.split("\n");
+  const names = lines.flatMap((line, index) =>
+    line.trim() === 'name: "fiscalbay-test",' ? [index] : [],
+  );
+  if (names.length !== 1) return undefined;
+  const start = lines.findIndex((line, index) => index > names[0] && line.trim() === "vars: {");
+  const end = lines.findIndex((line, index) => index > start && /^\s*\},?$/u.test(line));
+  if (start === -1 || end === -1) return undefined;
+  return lines
+    .map((line, index) =>
+      index > start && index < end
+        ? line.replace(/^(\s*[A-Z][A-Z0-9_]*: bindings\.text\()"(?:[^"\\]|\\.)*"(\),)$/u, '$1""$2')
+        : line,
+    )
+    .join("\n");
+}
+
+/**
+ * Livello di un file ed effetti sulle prove browser e sul deploy test. `change` contiene le due
+ * versioni di `cloudflare.config.ts`, quando il confronto le rende disponibili.
+ */
+export function fileImpact(file, change) {
+  if (file.startsWith("docs/archive/") || (file.endsWith(".md") && !governance.test(file)))
+    return { level: "docs", e2e: false, deploy: false };
+  if (governance.test(file) || tooling.some((pattern) => pattern.test(file)))
+    return { level: "tooling", e2e: false, deploy: false };
+  if (unit.test(file)) return { level: "unit", e2e: false, deploy: false };
+  if (browser.test(file)) return { level: "build", e2e: true, deploy: false };
+  if (file === "scripts/check-bundle-size.mjs")
+    return { level: "build", e2e: false, deploy: false };
+  // Il collaudo remoto dopo il deploy prova le variabili nell'ambiente reale.
+  if (file === configFile && testVariablesOnly(change?.before, change?.after))
+    return { level: "build", e2e: false, deploy: true };
+  return { level: "full", e2e: true, deploy: true };
+}
+
+/** Livello minimo di un singolo file. */
+export const fileLevel = (file, change) => fileImpact(file, change).level;
 
 /** Chiusura inversa: un consumatore di un modulo modificato cambia con esso. */
 function consumers(files, graph) {
@@ -64,24 +128,21 @@ const areaPatterns = {
   public: "pubblico|standalone|public|termini|privacy",
 };
 
-/** Controlli per i file modificati; `complete` qualifica il candidato sul diff cumulativo. */
-export function plan(files, sources = [], complete = false) {
-  const levels = new Set(files.map(fileLevel));
-  const gate =
-    complete || files.length === 0 || levels.has("full")
-      ? "full"
-      : levels.has("tooling")
-        ? "tooling"
-        : "docs";
-  const product = files.filter((file) => fileLevel(file) === "full");
-  // Le sole prove unitarie non toccano browser né artefatto distribuito.
-  const unitOnly =
-    !complete && product.length > 0 && product.every((file) => file.startsWith("test/"));
-  const e2e = gate === "full" && !unitOnly;
+/**
+ * Controlli per i file modificati; `complete` qualifica il candidato sul diff cumulativo.
+ * `changes` associa a `cloudflare.config.ts` le versioni prima e dopo.
+ */
+export function plan(files, sources = [], complete = false, changes = {}) {
+  const impacts = files.map((file) => fileImpact(file, changes[file]));
+  // Un diff vuoto o non disponibile e il candidato eseguono tutto.
+  const everything = complete || files.length === 0;
+  const gate = everything
+    ? "full"
+    : levels[Math.max(...impacts.map(({ level }) => levels.indexOf(level)))];
+  const product = files.filter((_, index) => ["build", "full"].includes(impacts[index].level));
+  const e2e = everything || impacts.some((impact) => impact.e2e);
   // Un diff vuoto distribuisce; prove e soli strumenti no.
-  const deploy =
-    gate === "full" &&
-    (files.length === 0 || product.some((file) => !/^(?:test|e2e)\//u.test(file)));
+  const deploy = files.length === 0 || impacts.some((impact) => impact.deploy);
 
   const graph = importGraph(sources);
   const affected = consumers(files, graph);
@@ -101,15 +162,13 @@ export function plan(files, sources = [], complete = false) {
     e2e &&
     !complete &&
     areas.size > 0 &&
-    product
-      .filter((file) => !file.startsWith("test/"))
-      .every(
-        (file) =>
-          graph.has(file) &&
-          !/^app\/(?:root\.tsx|routes\.ts|entry\.server|app-copy|app-links|app\.css|components\/(?:ui\/|app-shell|account))/u.test(
-            file,
-          ),
-      );
+    product.every(
+      (file) =>
+        graph.has(file) &&
+        !/^app\/(?:root\.tsx|routes\.ts|entry\.server|app-copy|app-links|app\.css|components\/(?:ui\/|app-shell|account))/u.test(
+          file,
+        ),
+    );
   const browserGrep = targeted
     ? [
         "app-shell.spec",
@@ -133,7 +192,7 @@ export function plan(files, sources = [], complete = false) {
     gate,
     script: levelScripts[gate],
     e2e,
-    build: gate === "full",
+    build: gate === "build" || gate === "full",
     deploy,
     areas: [...areas].sort(),
     browserGrep,
@@ -172,6 +231,18 @@ function localChanges() {
   ];
 }
 
+// Versione di un file a un commit; `undefined` se manca o il confronto non è disponibile.
+function show(ref, file) {
+  try {
+    return execFileSync("git", ["show", `${ref}:${file}`], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return undefined;
+  }
+}
+
 function run(command, args, env = {}) {
   console.log(`\n$ ${command} ${args.join(" ")}`);
   execFileSync(command, args, { stdio: "inherit", env: { ...process.env, ...env } });
@@ -185,15 +256,27 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   };
   // Base vuota, a zeri o non raggiungibile (avvio manuale, nuovo branch, storia riscritta):
   // il diff resta vuoto e il gate completo.
-  const files = args.includes("--base")
-    ? committedChanges(option("--base"), option("--head"))
-    : localChanges();
+  const committed = args.includes("--base");
+  const files = committed ? committedChanges(option("--base"), option("--head")) : localChanges();
+  const before = committed ? option("--base") : git("merge-base", "origin/develop", "HEAD").trim();
+  const changes = files.includes(configFile)
+    ? {
+        [configFile]: {
+          before: show(before, configFile),
+          after: committed
+            ? show(option("--head"), configFile)
+            : existsSync(configFile)
+              ? readFileSync(configFile, "utf8")
+              : undefined,
+        },
+      }
+    : {};
   const sources = lines(git("ls-files", "--cached", "--others", "--exclude-standard"))
     .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file) && existsSync(file))
     .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
-  const result = plan(files, sources, args.includes("--complete"));
+  const result = plan(files, sources, args.includes("--complete"), changes);
 
-  for (const file of files) console.log(`${fileLevel(file)}: ${file}`);
+  for (const file of files) console.log(`${fileLevel(file, changes[file])}: ${file}`);
   const summary = `Gate ${result.gate} (\`pnpm ${result.script}\`); browser: ${result.e2e ? `${result.browsers}, grep ${result.browserGrep}` : "no"}; deploy test: ${result.deploy ? "sì" : "no"}; mutation: ${result.mutation.join(", ") || "nessuna"}.`;
   console.log(summary);
   if (args.includes("--github-output") && process.env.GITHUB_OUTPUT)

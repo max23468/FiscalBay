@@ -4,11 +4,29 @@ import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { fileLevel, levelScripts, plan } from "./classify-changes.mjs";
+import {
+  configFile,
+  fileLevel,
+  levelScripts,
+  plan,
+  testVariablesOnly,
+} from "./classify-changes.mjs";
+
+const config = readFileSync(configFile, "utf8");
+const configChange = (after) => ({ [configFile]: { before: config, after } });
+const testValue = config.replace(
+  /(STRIPE_PRICE_MONTHLY: bindings\.text\()"price_[^"]+"/u,
+  '$1"price_other"',
+);
 
 describe("livello del gate dai file modificati", () => {
-  it("assegna documenti, strumenti e prodotto ai tre livelli", () => {
-    for (const file of ["README.md", "docs/DECISION_REGISTER.md", "docs/brand/README.md"])
+  it("assegna documenti, strumenti, test, build e prodotto ai cinque livelli", () => {
+    for (const file of [
+      "README.md",
+      "docs/DECISION_REGISTER.md",
+      "docs/brand/README.md",
+      "docs/archive/2026-10-03-settings-profile/profile-it-1440-light.png",
+    ])
       assert.equal(fileLevel(file), "docs", file);
     for (const file of [
       "AGENTS.md",
@@ -24,15 +42,22 @@ describe("livello del gate dai file modificati", () => {
       "knip.json",
     ])
       assert.equal(fileLevel(file), "tooling", file);
+    for (const file of ["test/orders.spec.ts", "vitest.config.ts", "vitest.cloudflare.config.ts"])
+      assert.equal(fileLevel(file), "unit", file);
+    for (const file of [
+      "e2e/pages.spec.ts",
+      "playwright.config.ts",
+      "scripts/browser-tests.mjs",
+      "scripts/check-bundle-size.mjs",
+    ])
+      assert.equal(fileLevel(file), "build", file);
     for (const file of [
       "app/root.tsx",
-      "test/orders.spec.ts",
-      "e2e/pages.spec.ts",
+      "cloudflare.config.ts",
       "package.json",
       "pnpm-lock.yaml",
       "vite.config.ts",
       "doctor.config.json",
-      "scripts/browser-tests.mjs",
       "scripts/unknown.mjs",
       "docs/brand/logo/fiscalbay-logo.svg",
       "new.bin",
@@ -55,10 +80,17 @@ describe("livello del gate dai file modificati", () => {
     assert.deepEqual(levelScripts, {
       docs: "verify:documents",
       tooling: "verify:tooling",
+      unit: "verify:unit",
+      build: "verify:build",
       full: "verify",
     });
     assert.match(scripts[levelScripts.tooling], /pnpm verify:documents\b/u);
-    assert.match(scripts[levelScripts.full], /pnpm verify:tooling\b/u);
+    assert.match(scripts[levelScripts.unit], /pnpm verify:tooling\b/u);
+    for (const level of ["build", "full"]) {
+      assert.match(scripts[levelScripts[level]], /^pnpm verify:unit\b/u, level);
+      // La build test resta l'ultima: è l'artefatto caricato e distribuito.
+      assert.match(scripts[levelScripts[level]], /&& pnpm verify:pages && .*pnpm build$/u, level);
+    }
     assert.equal(plan(["README.md"]).script, levelScripts.docs);
     assert.equal(plan(["AGENTS.md"]).script, levelScripts.tooling);
     assert.equal(plan([]).script, levelScripts.full);
@@ -66,9 +98,19 @@ describe("livello del gate dai file modificati", () => {
 
   it("separa prove unitarie, prove browser e prodotto distribuito", () => {
     const unit = plan(["AGENTS.md", "test/orders.spec.ts"]);
-    assert.deepEqual([unit.gate, unit.e2e, unit.build, unit.deploy], ["full", false, true, false]);
+    assert.deepEqual([unit.gate, unit.e2e, unit.build, unit.deploy], ["unit", false, false, false]);
     const browser = plan(["e2e/pages.spec.ts"]);
-    assert.deepEqual([browser.e2e, browser.deploy], [true, false]);
+    assert.deepEqual(
+      [browser.gate, browser.e2e, browser.build, browser.deploy],
+      ["build", true, true, false],
+    );
+    const bundle = plan(["scripts/check-bundle-size.mjs"]);
+    assert.deepEqual(
+      [bundle.gate, bundle.e2e, bundle.build, bundle.deploy],
+      ["build", false, true, false],
+    );
+    const mixed = plan(["test/orders.spec.ts", "app/root.tsx"]);
+    assert.deepEqual([mixed.gate, mixed.e2e, mixed.deploy], ["full", true, true]);
     for (const file of ["app/root.tsx", "package.json", "new.bin"]) {
       const selected = plan([file]);
       assert.deepEqual([selected.e2e, selected.build, selected.deploy], [true, true, true], file);
@@ -76,6 +118,64 @@ describe("livello del gate dai file modificati", () => {
     assert.equal(plan([]).deploy, true);
     const candidate = plan(["AGENTS.md"], [], true);
     assert.deepEqual([candidate.e2e, candidate.deploy], [true, false]);
+  });
+});
+
+describe("variabili del Worker test", () => {
+  it("distribuisce i soli valori testuali del test senza prove browser della PR", () => {
+    assert.equal(testVariablesOnly(config, testValue), true);
+    const selected = plan([configFile], [], false, configChange(testValue));
+    assert.deepEqual(
+      [selected.gate, selected.script, selected.e2e, selected.build, selected.deploy],
+      ["build", "verify:build", false, true, true],
+    );
+    assert.equal(selected.browserGrep, ".");
+    assert.deepEqual(plan([configFile], [], true, configChange(testValue)).gate, "full");
+  });
+
+  it("resta completo per Production, binding, nomi, righe nuove, file misti o confronti assenti", () => {
+    const live = config.replace(
+      'APP_ORIGIN: bindings.text("https://fiscalbay.it")',
+      'APP_ORIGIN: bindings.text("https://www.fiscalbay.it")',
+    );
+    const binding = testValue.replace(
+      'REGISTRATION_MODE: bindings.text("approval"),',
+      'REGISTRATION_MODE: bindings.text("approval"),\n            EXTRA: bindings.secret(),',
+    );
+    const added = testValue.replace(
+      'REGISTRATION_MODE: bindings.text("approval"),',
+      'REGISTRATION_MODE: bindings.text("approval"),\n            EXTRA: bindings.text("on"),',
+    );
+    const renamed = testValue.replace(
+      "STRIPE_PRICE_ANNUAL: bindings",
+      "STRIPE_PRICE_YEARLY: bindings",
+    );
+    const comment = testValue.replace("// Spenta su richiesta", "// Spenta per scelta");
+    const resource = testValue.replace(
+      'queue: "fiscalbay-test-webhooks"',
+      'queue: "fiscalbay-test-jobs"',
+    );
+    const domain = testValue.replace('domain: "test.fiscalbay.it"', 'domain: "beta.fiscalbay.it"');
+    for (const [name, after] of Object.entries({
+      live,
+      binding,
+      added,
+      renamed,
+      comment,
+      resource,
+      domain,
+    })) {
+      assert.equal(testVariablesOnly(config, after), false, name);
+      assert.equal(plan([configFile], [], false, configChange(after)).gate, "full", name);
+    }
+    assert.notEqual(live, config);
+    for (const change of [{}, { [configFile]: { before: undefined, after: testValue } }])
+      assert.equal(plan([configFile], [], false, change).gate, "full");
+    assert.equal(testVariablesOnly(config, config), false);
+    const mixed = plan([configFile, "app/root.tsx"], [], false, configChange(testValue));
+    assert.deepEqual([mixed.gate, mixed.e2e, mixed.deploy], ["full", true, true]);
+    const withTests = plan([configFile, "test/stripe.spec.ts"], [], false, configChange(testValue));
+    assert.deepEqual([withTests.gate, withTests.e2e, withTests.deploy], ["build", false, true]);
   });
 });
 
