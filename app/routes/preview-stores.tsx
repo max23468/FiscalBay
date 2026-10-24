@@ -31,7 +31,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     // Come nell'area reale: un abbonamento che si rinnova non si disdice scollegando.
     subscriptionRenews:
       (!!scenario.account.premium?.renewsAt && scenario.account.premium.period !== "lifetime") ||
-      scenario.account.payment?.state === "scheduled",
+      (scenario.account.payment?.state === "scheduled" && !scenario.account.payment.cancelled),
   };
   return page;
 }

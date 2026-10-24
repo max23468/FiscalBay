@@ -44,6 +44,7 @@ export const scenarioIds = [
   "prova-in-scadenza",
   "prova-terminata",
   "prova-con-abbonamento",
+  "prova-con-abbonamento-disdetto",
   "pagamento-in-attivazione",
   "rinnovo-non-riuscito",
   "stripe-non-disponibile",
@@ -254,6 +255,18 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
       name: "Trial with plan chosen",
       focus:
         "Monthly chosen during the trial: the trial continues, no charge until it ends and no second purchase.",
+    },
+  },
+  "prova-con-abbonamento-disdetto": {
+    it: {
+      name: "Prova con abbonamento disdetto",
+      focus:
+        "Mensile scelto durante la prova e poi disdetto: nessun addebito, alla fine si torna al Free e su Stripe si può riattivare.",
+    },
+    en: {
+      name: "Trial with plan cancelled",
+      focus:
+        "Monthly chosen during the trial and then cancelled: no charge, back to Free when it ends, and it can be reactivated on Stripe.",
     },
   },
   "pagamento-in-attivazione": {
@@ -1629,16 +1642,18 @@ export function loadScenario(
     case "prova-premium":
     case "prova-in-scadenza":
     case "prova-con-abbonamento":
+    case "prova-con-abbonamento-disdetto":
       scenario = {
         ...common,
         account:
-          id === "prova-con-abbonamento"
+          id === "prova-con-abbonamento" || id === "prova-con-abbonamento-disdetto"
             ? {
                 ...trialAccount("2026-10-06T10:00:00Z"),
                 payment: {
                   state: "scheduled",
                   period: "monthly",
                   chargeAt: "2026-10-06T10:00:00Z",
+                  ...(id === "prova-con-abbonamento-disdetto" ? { cancelled: true as const } : {}),
                 },
               }
             : trialAccount(
