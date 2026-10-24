@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import Stripe from "stripe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { annualMonthlyPrice, formatPrice, priceGeneration } from "../app/catalog";
+import { annualMonthlyPrice, formatPrice, paidPeriodEnd, priceGeneration } from "../app/catalog";
 import { purchaseState, startCheckout } from "../app/domain/checkout.server";
 import {
   buildManagedCheckoutParams,
@@ -66,9 +66,12 @@ function catalogPrice(
   } as unknown as Stripe.Price;
 }
 
-/** Stripe simulato: prezzo, creazione e chiusura della sessione, con le richieste ricevute. */
+/**
+ * Stripe simulato: prezzi, creazione e chiusura della sessione, con le richieste ricevute. Più
+ * prezzi si distinguono per identificativo.
+ */
 function stripeApi(
-  price: Stripe.Price,
+  price: Stripe.Price | Record<string, Stripe.Price>,
   session: Record<string, unknown> = {
     id: "cs_test_checkout",
     object: "checkout.session",
@@ -78,7 +81,11 @@ function stripeApi(
 ) {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const path = new URL(String(input)).pathname;
-    const body = path.startsWith("/v1/prices/") ? price : session;
+    const body = !path.startsWith("/v1/prices/")
+      ? session
+      : "object" in price
+        ? price
+        : price[path.slice("/v1/prices/".length)];
     return Response.json(body, { headers: { "request-id": "req_test" } });
   });
 }
@@ -250,6 +257,7 @@ describe("Stripe Managed Payments", () => {
     expect(await purchaseState(env.DB, userId)).toEqual({
       workspaceId: "w-a",
       state: "needs-sync",
+      trialEndsAt: null,
     });
     await env.DB.prepare(
       "INSERT INTO sync_state (store_id, last_success_at, updated_at) VALUES ('s-a', ?1, ?1)",
@@ -257,18 +265,41 @@ describe("Stripe Managed Payments", () => {
       .bind(now)
       .run();
     // Anche senza ordini: conta la lettura riuscita, e resta dopo lo scollegamento.
-    expect((await purchaseState(env.DB, userId))?.state).toBe("available");
+    expect(await purchaseState(env.DB, userId)).toEqual({
+      workspaceId: "w-a",
+      state: "available",
+      trialEndsAt: null,
+    });
+    // Durante la prova l'acquisto resta possibile e ne conserva la fine.
     await env.DB.prepare(
       `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
        VALUES ('trial', 'w-a', 'trial', ?, ?)`,
     )
       .bind(now, "2026-09-27T20:00:00.000Z")
       .run();
-    expect((await purchaseState(env.DB, userId))?.state).toBe("covered");
-    // Alla fine della copertura l'acquisto torna disponibile.
-    expect((await purchaseState(env.DB, userId, new Date("2026-09-27T20:00:00.000Z")))?.state).toBe(
-      "available",
-    );
+    expect(await purchaseState(env.DB, userId)).toEqual({
+      workspaceId: "w-a",
+      state: "available",
+      trialEndsAt: "2026-09-27T20:00:00.000Z",
+    });
+    // Alla fine della prova l'acquisto è quello ordinario.
+    expect(await purchaseState(env.DB, userId, new Date("2026-09-27T20:00:00.000Z"))).toEqual({
+      workspaceId: "w-a",
+      state: "available",
+      trialEndsAt: null,
+    });
+    // Un altro diritto in corso ferma l'acquisto, anche insieme alla prova.
+    await env.DB.prepare(
+      `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+       VALUES ('admin', 'w-a', 'admin', ?, ?)`,
+    )
+      .bind(now, "2026-09-25T20:00:00.000Z")
+      .run();
+    expect(await purchaseState(env.DB, userId)).toEqual({
+      workspaceId: "w-a",
+      state: "covered",
+      trialEndsAt: null,
+    });
   });
 
   it("apre il checkout soltanto con prezzo conforme e sessione Managed Payments", async () => {
@@ -415,12 +446,190 @@ describe("Stripe Managed Payments", () => {
       purchase: { state: "available", checkout: "processing" },
     });
     expect(await page("?checkout=altro")).toMatchObject({ purchase: { checkout: null } });
+    await env.DB.prepare(
+      `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+       VALUES ('trial', 'w-a', 'trial', ?, ?)`,
+    )
+      .bind(now, "2026-09-30T09:00:00.000Z")
+      .run();
+    expect(await page()).toMatchObject({
+      account: { plan: "premium", trial: { endsAt: "2026-09-30T09:00:00.000Z" } },
+      purchase: { state: "available" },
+    });
+    // Senza i prezzi del primo periodo la prova non offre l'acquisto.
+    const prepaid = env.STRIPE_PRICE_ANNUAL_PREPAID;
+    env.STRIPE_PRICE_ANNUAL_PREPAID = "";
+    try {
+      expect(await page()).toMatchObject({ purchase: { state: "covered" } });
+    } finally {
+      env.STRIPE_PRICE_ANNUAL_PREPAID = prepaid;
+    }
     const previous = env.STRIPE_PRICE_ANNUAL;
     env.STRIPE_PRICE_ANNUAL = "";
     try {
       expect(await page()).toMatchObject({ services: { billing: false } });
     } finally {
       env.STRIPE_PRICE_ANNUAL = previous;
+    }
+  });
+
+  it("conta il periodo pagato in mesi di calendario UTC, con fine mese e anno bisestile", () => {
+    // Sei giorni di prova residui più l'annuale: rinnovo dopo i sei giorni e dodici mesi.
+    expect(paidPeriodEnd("2026-10-30T09:00:00.000Z", "annual")).toBe("2027-10-30T09:00:00.000Z");
+    expect(paidPeriodEnd("2026-10-30T09:00:00.000Z", "monthly")).toBe("2026-11-30T09:00:00.000Z");
+    expect(paidPeriodEnd("2026-12-31T23:30:00.000Z", "monthly")).toBe("2027-01-31T23:30:00.000Z");
+    expect(paidPeriodEnd("2027-01-31T10:00:00.000Z", "monthly")).toBe("2027-02-28T10:00:00.000Z");
+    expect(paidPeriodEnd("2028-01-31T10:00:00.000Z", "monthly")).toBe("2028-02-29T10:00:00.000Z");
+    expect(paidPeriodEnd("2028-02-29T10:00:00.000Z", "annual")).toBe("2029-02-28T10:00:00.000Z");
+    expect(paidPeriodEnd("2027-03-31T00:00:00.000Z", "monthly")).toBe("2027-04-30T00:00:00.000Z");
+    // La fine della prova ha i millesimi; Stripe conta in secondi, senza accorciare il periodo.
+    expect(paidPeriodEnd("2026-10-06T10:00:00.250Z", "monthly")).toBe("2026-11-06T10:00:01.000Z");
+  });
+
+  it("durante la prova incassa subito il primo periodo e rinvia l'abbonamento", () => {
+    const params = buildManagedCheckoutParams({
+      ...checkoutInput,
+      offer: "annual",
+      priceId: "price_test_annual",
+      prepaid: {
+        priceId: "price_test_annual_prepaid",
+        trialEndsAt: "2026-10-30T09:00:00.000Z",
+        renewsAt: "2027-10-30T09:00:00.000Z",
+        expiresAt: new Date("2026-10-29T12:00:00.000Z"),
+      },
+    });
+    const metadata = {
+      workspace_id: "workspace-test",
+      offer: "annual",
+      price_generation: "2026-09",
+      trial_ends_at: "2026-10-30T09:00:00.000Z",
+    };
+    expect(params).toMatchObject({
+      mode: "subscription",
+      line_items: [
+        { price: "price_test_annual", quantity: 1 },
+        { price: "price_test_annual_prepaid", quantity: 1 },
+      ],
+      managed_payments: { enabled: true },
+      metadata,
+      subscription_data: {
+        metadata,
+        trial_end: Date.parse("2027-10-30T09:00:00.000Z") / 1000,
+      },
+      expires_at: Date.parse("2026-10-29T12:00:00.000Z") / 1000,
+    });
+    // Nessun ancoraggio o proration: l'unica data di Stripe è la fine dell'attesa del rinnovo.
+    expect(params.subscription_data).not.toHaveProperty("billing_cycle_anchor");
+    expect(params.subscription_data).not.toHaveProperty("trial_period_days");
+    // Il prezzo del primo periodo è una tantum, con lo stesso importo dell'offerta.
+    const firstPeriod = catalogPrice({
+      id: "price_test_annual_prepaid",
+      unit_amount: 4900,
+      type: "one_time",
+      recurring: null,
+    });
+    expect(catalogMismatch(firstPeriod, "annual", 4900, true)).toBeNull();
+    expect(catalogMismatch(firstPeriod, "annual", 4900)).toBe("billing_period");
+    expect(
+      catalogMismatch(
+        catalogPrice({ unit_amount: 4900, recurring: { interval: "year", interval_count: 1 } }),
+        "annual",
+        4900,
+        true,
+      ),
+    ).toBe("billing_period");
+  });
+
+  it("acquista durante la prova con due prezzi verificati e la data del primo rinnovo", async () => {
+    const { userId } = await verifiedSession("acquisto-prova@example.invalid");
+    await workspace(userId);
+    const trialEndsAt = "2026-09-30T09:00:00.000Z";
+    await env.DB.prepare(
+      `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+       VALUES ('trial', 'w-a', 'trial', ?, ?)`,
+    )
+      .bind(now, trialEndsAt)
+      .run();
+    const input = {
+      request: new Request("http://localhost:5173/app/impostazioni/piano", { method: "POST" }),
+      userId,
+      email: "acquisto-prova@example.invalid",
+      offer: "monthly" as const,
+      language: "it" as const,
+    };
+    const prices = {
+      price_test_monthly: catalogPrice(),
+      price_test_monthly_prepaid: catalogPrice({
+        id: "price_test_monthly_prepaid",
+        type: "one_time",
+        recurring: null,
+      }),
+    };
+    const at = new Date(now);
+    let api = stripeApi(prices);
+    try {
+      expect(await startCheckout(env, input, at)).toMatchObject({ ok: true });
+      expect(paths(api).toSorted()).toEqual([
+        "GET /v1/prices/price_test_monthly",
+        "GET /v1/prices/price_test_monthly_prepaid",
+        "POST /v1/checkout/sessions",
+      ]);
+      const body = new URLSearchParams(String(api.mock.calls.at(-1)![1]?.body));
+      expect(body.get("mode")).toBe("subscription");
+      expect(body.get("line_items[0][price]")).toBe("price_test_monthly");
+      expect(body.get("line_items[1][price]")).toBe("price_test_monthly_prepaid");
+      // Rinnovo alla fine della prova più un mese: nessun addebito alla fine della prova.
+      expect(body.get("subscription_data[trial_end]")).toBe(
+        String(Date.parse("2026-10-30T09:00:00.000Z") / 1000),
+      );
+      expect(body.get("subscription_data[metadata][trial_ends_at]")).toBe(trialEndsAt);
+      // Con la prova lontana più di un giorno vale la scadenza predefinita della sessione.
+      expect(body.has("expires_at")).toBe(false);
+    } finally {
+      api.mockRestore();
+    }
+
+    // Vicino alla fine della prova la sessione scade con essa, mai prima di 31 minuti.
+    for (const [left, expiry] of [
+      [5 * 60 * 60 * 1000, 5 * 60 * 60 * 1000],
+      [10 * 60 * 1000, 31 * 60 * 1000],
+    ] as const) {
+      const late = new Date(Date.parse(trialEndsAt) - left);
+      api = stripeApi(prices);
+      try {
+        expect(await startCheckout(env, input, late)).toMatchObject({ ok: true });
+        const body = new URLSearchParams(String(api.mock.calls.at(-1)![1]?.body));
+        expect(body.get("expires_at")).toBe(String((late.getTime() + expiry) / 1000));
+      } finally {
+        api.mockRestore();
+      }
+    }
+
+    // Un prezzo del primo periodo ricorrente ferma la vendita prima della sessione.
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    api = stripeApi({ ...prices, price_test_monthly_prepaid: catalogPrice() });
+    try {
+      expect(await startCheckout(env, input, at)).toEqual({ ok: false, reason: "unavailable" });
+      expect(paths(api)).not.toContain("POST /v1/checkout/sessions");
+      expect(JSON.parse(String(log.mock.calls.at(-1)?.[0]))).toMatchObject({
+        failure: "catalog_billing_period",
+      });
+    } finally {
+      api.mockRestore();
+      log.mockRestore();
+    }
+
+    // Senza il prezzo del primo periodo nessuna chiamata: un abbonamento ordinario perderebbe
+    // i giorni di prova.
+    const previous = env.STRIPE_PRICE_MONTHLY_PREPAID;
+    env.STRIPE_PRICE_MONTHLY_PREPAID = "";
+    api = stripeApi(prices);
+    try {
+      expect(await startCheckout(env, input, at)).toEqual({ ok: false, reason: "unavailable" });
+      expect(api).not.toHaveBeenCalled();
+    } finally {
+      api.mockRestore();
+      env.STRIPE_PRICE_MONTHLY_PREPAID = previous;
     }
   });
 

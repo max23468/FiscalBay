@@ -13,6 +13,7 @@ import {
   checkoutConfigured,
   checkoutOffers,
   isCheckoutOffer,
+  prepaidConfigured,
   purchaseState,
   startCheckout,
 } from "../domain/checkout.server";
@@ -143,7 +144,11 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
           : undefined,
     },
     purchase: {
-      state: purchase?.state ?? "needs-sync",
+      // Senza i prezzi del primo periodo la prova non offre l'acquisto, che ne perderebbe i giorni.
+      state:
+        purchase?.trialEndsAt && !prepaidConfigured(env)
+          ? "covered"
+          : (purchase?.state ?? "needs-sync"),
       offers: checkoutOffers,
       checkout: checkoutReturn(new URL(request.url).searchParams),
     },
