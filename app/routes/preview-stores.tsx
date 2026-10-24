@@ -1,6 +1,6 @@
 import { data, isRouteErrorResponse, useOutletContext } from "react-router";
 
-import { StoresPage, type StoresPageData } from "~/components/stores";
+import { StoresPage, type StoresPageData } from "~/components/stores/page";
 import { NotFoundState, UnavailableState } from "~/components/not-found";
 import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath } from "../i18n";

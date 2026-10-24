@@ -4,7 +4,7 @@ import { data, isRouteErrorResponse, redirect } from "react-router";
 import { AccessNotice } from "~/components/account";
 import { AccountShell } from "~/components/account-shell";
 import { NotFoundState } from "~/components/not-found";
-import { StoresPage } from "~/components/stores";
+import { StoresPage } from "~/components/stores/page";
 import { accessNotice } from "../access-notice";
 import { areaPage, assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
