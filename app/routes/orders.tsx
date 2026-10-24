@@ -19,6 +19,7 @@ import {
   orderAllowance,
   restoreUnlockConfirmation,
   unlockConfirmation,
+  UnlockError,
   unlockOrders,
 } from "../domain/grants.server";
 import { historyDays } from "../domain/order-acquisition.server";
@@ -340,9 +341,6 @@ export function shouldRevalidate({
   return snapshotOnlyAdded(currentUrl, nextUrl) ? false : defaultShouldRevalidate;
 }
 
-const unlockFailures =
-  /invalid_order_selection|order_not_available|order_not_in_workspace|free_quota_exhausted|tax_data_unavailable|invalid_grant_cycle|order_already_granted_or_merged|NOT NULL constraint failed|UNIQUE constraint failed/u;
-
 /**
  * Sblocco, nuova lettura di un ordine non riuscito e ripristino della conferma di sblocco,
  * sempre sugli ordini e sullo spazio dell'utente.
@@ -393,7 +391,7 @@ export async function action({ request }: Route.ActionArgs) {
     );
   } catch (error) {
     // Le violazioni del dominio non espongono ordine, quota altrui o testo SQL.
-    if (!(error instanceof Error) || !unlockFailures.test(error.message)) throw error;
+    if (!(error instanceof UnlockError)) throw error;
     return data<UnlockResult>({ unlocked: [], remaining: null, error: true }, { status: 409 });
   }
 }

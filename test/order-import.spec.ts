@@ -498,9 +498,7 @@ describe("modello ordini", () => {
         expect(JSON.stringify(visible)).not.toContain("RSSMRA80A01H501U");
         await expect(
           unlockOrders(env.DB, "u-a", [orderId], false, "production", at),
-        ).rejects.toThrow(
-          "UNIQUE constraint failed: order_grants.workspace_id, order_grants.order_id",
-        );
+        ).rejects.toMatchObject({ code: "order_already_granted" });
       }
       expect(await env.DB.prepare("SELECT used FROM free_cycles WHERE id = 'c-a'").first()).toEqual(
         { used: 1 },

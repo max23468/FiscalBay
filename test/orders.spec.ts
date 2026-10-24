@@ -8,6 +8,7 @@ import {
 import { mapTradingTaxIdentifiers } from "../app/integrations/ebay/trading.server";
 import {
   orderAllowance,
+  UnlockError,
   unlockOrders,
   unlockConfirmation,
   restoreUnlockConfirmation,
@@ -173,6 +174,10 @@ describe("percorso ordini", () => {
       }) as Parameters<typeof unlockAction>[0];
     const denied = await unlockAction(unlockRequest("o-b"));
     expect(denied).toMatchObject({ init: { status: 409 }, data: { error: true, unlocked: [] } });
+    // Un guasto che non è un rifiuto dello sblocco resta un errore della pagina (500).
+    const outage = vi.spyOn(env.DB, "batch").mockRejectedValueOnce(new Error("D1_ERROR: guasto"));
+    await expect(unlockAction(unlockRequest("o-a"))).rejects.toThrow("D1_ERROR: guasto");
+    outage.mockRestore();
     expect(await unlockConfirmation(env.DB, user!.id)).toBe(true);
     await expect(
       unlockAction(unlockRequest("o-a", "https://estraneo.invalid")),
@@ -939,7 +944,13 @@ describe("percorso ordini", () => {
   it("rifiuta un grant per un ordine di un altro workspace", async () => {
     await seed();
 
-    await expect(unlockOrders(env.DB, "u-a", ["o-b"])).rejects.toThrow();
+    // Il rifiuto del database arriva tradotto, senza testo SQL.
+    const refused = unlockOrders(env.DB, "u-a", ["o-b"]);
+    await expect(refused).rejects.toBeInstanceOf(UnlockError);
+    await expect(refused).rejects.toMatchObject({
+      code: "order_not_available",
+      message: "order_not_available",
+    });
 
     const cycle = await env.DB.prepare(
       "SELECT used, quota FROM free_cycles WHERE id = 'c-a'",

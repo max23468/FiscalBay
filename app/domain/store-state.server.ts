@@ -1,7 +1,11 @@
 /**
- * Condizioni SQL sullo stato di un negozio, condivise dalle query che leggono, importano o
- * consultano i suoi dati. Gli argomenti sono espressioni SQL (alias o parametri), mai valori.
+ * Frammenti SQL sul negozio (nome mostrato e condizioni sul suo stato), condivisi dalle query
+ * che leggono, importano o consultano i suoi dati. Gli argomenti sono espressioni SQL (alias o parametri), mai valori.
  */
+
+/** Nome mostrato del negozio: quello del negozio eBay, altrimenti lo username dell'account. */
+export const storeNameSql = (store: string) =>
+  `COALESCE(${store}.store_name, ${store}.display_name, ${store}.ebay_account_id, ${store}.ebay_user_id)`;
 
 /** Il negozio non ha pause di alcun tipo. */
 export const unpausedStore = (storeId: string) =>

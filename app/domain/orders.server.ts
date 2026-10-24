@@ -19,7 +19,7 @@ import {
 } from "../view-models";
 import { orderAccessSql } from "./grants.server";
 import type { EbayEnvironment } from "../integrations/ebay/environment.server";
-import { consultableStore } from "./store-state.server";
+import { consultableStore, storeNameSql } from "./store-state.server";
 import { orderSuggestions } from "./order-suggestions.server";
 
 export type PaymentState = "paid" | "unpaid" | "partially_refunded" | "refunded" | "unknown";
@@ -450,7 +450,7 @@ export async function listVisibleOrders(
                         'currency', currency, 'imageUrl', image_url,
                         'stableKey', stable_key))
                  FROM (SELECT * FROM order_items WHERE order_id = o.id ORDER BY rowid)) AS items_json,
-              COALESCE(s.store_name, s.display_name, s.ebay_account_id, s.ebay_user_id) ||
+              ${storeNameSql("s")} ||
                 CASE WHEN s.ebay_environment = 'sandbox' THEN ' (Sandbox)' ELSE '' END AS store_name,
               NOT EXISTS (SELECT 1 FROM tax_identifiers t WHERE t.order_id = o.id
                 AND t.removed_at IS NULL AND ${taxKind("t")} <> 'PIVA') AS vat_only,
