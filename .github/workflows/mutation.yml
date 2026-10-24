@@ -3,6 +3,11 @@ name: Mutation
 # Campagna settimanale su `develop` e avvio manuale; il candidato Production la richiama per i
 # moduli critici del diff cumulativo. Le PR non eseguono mutation test.
 on:
+  # La pianificazione e l'avvio manuale richiedono il workflow sul branch predefinito: finché non
+  # è promosso, una sua modifica integrata su `develop` esegue la campagna e lo registra.
+  push:
+    branches: [develop]
+    paths: [.github/workflows/mutation.yml]
   schedule:
     # Lunedì 03:17 UTC: fuori dagli orari di lavoro e lontano dall'inizio dell'ora.
     - cron: "17 3 * * 1"
