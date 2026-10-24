@@ -10,6 +10,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { criticalModule } from "./mutation.mjs";
 import { importGraph } from "./verify-repo.mjs";
 
 // Il governo richiede anche i test degli script, senza implicare browser o deploy.
@@ -77,29 +78,8 @@ function consumers(files, graph) {
   return affected;
 }
 
-/**
- * Righe del nuovo sorgente toccate da un diff `-U0`, unite se vicine. Una cancellazione segna
- * le due righe che la circondano, dove un controllo rimosso cambia il comportamento.
- */
-export function changedLines(diff) {
-  const ranges = [];
-  for (const match of diff.matchAll(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gmu)) {
-    const start = Number(match[1]);
-    const count = match[2] === undefined ? 1 : Number(match[2]);
-    const from = Math.max(1, start);
-    const to = count === 0 ? start + 1 : start + count - 1;
-    const last = ranges.at(-1);
-    if (last && from <= last[1] + 3) last[1] = Math.max(last[1], to);
-    else ranges.push([from, to]);
-  }
-  return ranges;
-}
-
-/**
- * `ranges` associa a un file modificato le righe cambiate; un file senza voce (nuovo, non
- * tracciato o confronto non disponibile) si qualifica per intero.
- */
-export function plan(files, sources = [], complete = false, ranges = {}) {
+/** Controlli per i file modificati; `complete` qualifica il candidato sul diff cumulativo. */
+export function plan(files, sources = [], complete = false) {
   const unclassified = files.filter((file) => !classifyFile(file));
   const kinds = new Set(files.map(classifyFile));
   const docsOnly = kinds.size === 1 && kinds.has("documentation");
@@ -163,39 +143,10 @@ export function plan(files, sources = [], complete = false, ranges = {}) {
           ...[...areas].map((area) => patterns[area]),
         ].join("|")
       : ".";
-  // Nel candidato i mutanti partono dai moduli critici modificati e risalgono ai consumatori
-  // critici; un modulo condiviso non critico non estende la campagna a tutti i domini. PR e
-  // push qualificano soltanto le righe cambiate dei moduli critici toccati: il candidato
-  // ripete comunque l'intero modulo prima di Production.
-  const critical = (file) =>
-    (sources.length === 0 || graph.has(file)) &&
-    (file === "app/tax-quality.ts" ||
-      /^app\/(?:auth(?:-route)?|domain\/(?:orders|order-import|order-acquisition|order-sync|quota|grants|cycles|sessions|sign-in-methods|registration|stores|export)|integrations\/(?:webhooks|stripe|ebay\/(?:notifications|seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
-        file,
-      ));
-  const mutationInputs = files.filter(critical);
-  if (
-    files.some((file) =>
-      /^(?:workers\/app\.ts|cloudflare\.config\.ts|test\/webhooks\.spec\.ts)$/u.test(file),
-    )
-  )
-    mutationInputs.push(
-      "app/integrations/webhooks.server.ts",
-      "app/integrations/ebay/notifications.server.ts",
-    );
-  if (
-    files.some((file) =>
-      /^(?:test\/(?:auth-route\.unit|worker-context)\.ts|vitest\.unit\.config\.ts)$/u.test(file),
-    )
-  )
-    mutationInputs.push("app/auth-route.server.ts");
-  const mutation = complete
-    ? [...consumers(mutationInputs, graph)].filter(critical)
-    : [...new Set(mutationInputs)]
-        .filter((file) => critical(file) && ranges[file]?.length !== 0)
-        .map((file) =>
-          ranges[file] ? `${file}:${ranges[file].map(([a, b]) => `${a}-${b}`).join(",")}` : file,
-        );
+  // Soltanto il candidato esegue mutation: moduli critici modificati e loro consumatori critici.
+  // PR e push non ne eseguono; la campagna settimanale prova tutti i moduli critici.
+  const critical = (file) => (sources.length === 0 || graph.has(file)) && criticalModule(file);
+  const mutation = complete ? [...consumers(files.filter(critical), graph)].filter(critical) : [];
   const browsers = e2e
     ? mode === "full" ||
       areas.has("auth") ||
@@ -268,7 +219,7 @@ export function plan(files, sources = [], complete = false, ranges = {}) {
       `build ${build ? "richiesta dal gate applicativo" : "non richiesta"}`,
       `build pagina provvisoria ${placeholder ? "richiesta dai suoi input o dal candidato completo" : "input invariati"}`,
       `deploy ${deploy ? "richiesto da runtime, configurazione o perimetro sconosciuto" : "nessun artefatto applicativo modificato"}`,
-      `mutation ${complete ? "sui moduli critici interi e i loro consumatori critici" : "sulle righe cambiate dei moduli critici toccati"}`,
+      `mutation ${complete ? "sui moduli critici modificati e i loro consumatori critici" : "settimanale, fuori dal gate"}`,
       `benchmark ${benchmark ? "richiesti dagli input dei percorsi misurati" : "input invariati"}`,
       ...files
         .filter((file) => !toolingFile(file) && classifyFile(file) !== "test")
@@ -277,7 +228,7 @@ export function plan(files, sources = [], complete = false, ranges = {}) {
   };
 }
 
-/** Sequenza del gate condivisa da locale e CI, senza browser o mutation. */
+/** Sequenza del gate condivisa da locale e CI, senza browser. */
 export function gateCommands({ gate, doctor, placeholder, live, benchmark }) {
   if (gate === "docs")
     return [
@@ -324,22 +275,6 @@ function localChanges() {
   ];
 }
 
-/** Righe cambiate dei moduli applicativi esistenti in entrambi i lati del confronto. */
-function changedRanges(files, base, head) {
-  const ranges = {};
-  for (const file of files.filter((item) => /^app\/.+\.server\.ts$/u.test(item))) {
-    try {
-      const diff = git("diff", "-U0", base, ...(head ? [head] : []), "--", file);
-      // Un file nuovo o rimosso non ha righe precedenti da confrontare: si qualifica intero.
-      if (/^(?:new|deleted) file mode/mu.test(diff) || !diff) continue;
-      ranges[file] = changedLines(diff);
-    } catch {
-      // Confronto non disponibile: il modulo resta intero.
-    }
-  }
-  return ranges;
-}
-
 function run(command, args, env = {}) {
   console.log(`\n$ ${command} ${args.join(" ")}`);
   execFileSync(command, args, { stdio: "inherit", env: { ...process.env, ...env } });
@@ -361,13 +296,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     .filter((file) => /^(?:app|workers|benchmarks)\/.+\.tsx?$/u.test(file) && existsSync(file))
     .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
   const complete = args.includes("--complete");
-  const ranges =
-    complete || files.length === 0
-      ? {}
-      : local
-        ? changedRanges(files, git("merge-base", "origin/develop", "HEAD").trim())
-        : changedRanges(files, base, head);
-  const result = plan(files, sources, complete, ranges);
+  const result = plan(files, sources, complete);
 
   for (const file of files) console.log(`${classifyFile(file) ?? "non classificato"}: ${file}`);
   console.log(
@@ -402,7 +331,5 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
         ["scripts/browser-tests.mjs", "--grep", result.browserGrep, "--browsers", result.browsers],
         { E2E_PREBUILT: "1" },
       );
-    if (result.mutation.length && !args.includes("--gate-only"))
-      run("pnpm", ["test:mutation", ...result.mutation]);
   }
 }

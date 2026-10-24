@@ -4,13 +4,7 @@ import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
-import {
-  changedLines,
-  classifyFile,
-  plan as changePlan,
-  gateCommands,
-} from "./classify-changes.mjs";
-import { mutationInputs } from "./mutation.mjs";
+import { classifyFile, plan as changePlan, gateCommands } from "./classify-changes.mjs";
 
 const plan = (files) => {
   const { gate, e2e, unclassified } = changePlan(files);
@@ -65,7 +59,7 @@ describe("classificazione dei file modificati", () => {
       "app/domain/order-sync.server.ts",
       "app/integrations/ebay/store-link.server.ts",
     ])
-      assert.ok(changePlan([file]).mutation.includes(file));
+      assert.ok(changePlan([file], [], true).mutation.includes(file));
     const sources = [{ path: "app/routes/stores.tsx", text: "" }];
     const selected = new RegExp(changePlan([sources[0].path], sources).browserGrep);
     assert.ok(
@@ -95,7 +89,7 @@ describe("classificazione dei file modificati", () => {
     assert.equal(changePlan(["app/new-module.ts"], files).mode, "full");
   });
 
-  it("limita le mutation ai moduli critici modificati e, nel candidato, ai consumatori critici", () => {
+  it("esegue mutation soltanto nel candidato, sui moduli critici e i consumatori critici", () => {
     const files = [
       { path: "app/i18n.ts", text: "" },
       { path: "app/domain/stores.server.ts", text: 'import { t } from "../i18n";' },
@@ -105,30 +99,14 @@ describe("classificazione dei file modificati", () => {
       },
     ];
     assert.deepEqual(changePlan(["app/i18n.ts"], files).mutation, []);
-    assert.deepEqual(changePlan(["app/domain/stores.server.ts"], files).mutation, [
-      "app/domain/stores.server.ts",
-    ]);
+    assert.deepEqual(changePlan(["app/domain/stores.server.ts"], files).mutation, []);
     assert.deepEqual(changePlan(["app/domain/stores.server.ts"], files, true).mutation.sort(), [
       "app/auth.server.ts",
       "app/domain/stores.server.ts",
     ]);
   });
 
-  it("muta nelle PR le sole righe cambiate e nel candidato il modulo intero", () => {
-    const file = "app/domain/stores.server.ts";
-    assert.deepEqual(
-      changePlan([file], [], false, {
-        [file]: [
-          [3, 5],
-          [10, 12],
-        ],
-      }).mutation,
-      [`${file}:3-5,10-12`],
-    );
-    assert.deepEqual(changePlan([file], [], false, { [file]: [] }).mutation, []);
-    assert.deepEqual(changePlan([file], [], true, { [file]: [[3, 5]] }).mutation, [file]);
-  });
-  it("include il controllo fiscale fra i moduli critici e usa le sue prove unitarie", () => {
+  it("include il controllo fiscale fra i moduli critici", () => {
     const target = "app/tax-quality.ts";
     const files = [
       { path: target, text: "export const taxQuality = () => true;" },
@@ -138,35 +116,7 @@ describe("classificazione dei file modificati", () => {
       },
       { path: "test/orders.spec.ts", text: 'import { taxQuality } from "../app/tax-quality";' },
     ];
-    assert.deepEqual(changePlan([target], files).mutation, [target]);
-    assert.deepEqual(mutationInputs(target, files).tests, ["test/ebay-adapters.unit.ts"]);
-  });
-
-  it("ricava le righe cambiate da un diff senza contesto", () => {
-    const diff = [
-      "@@ -10,2 +10,3 @@ a",
-      "@@ -20 +21 @@ b",
-      "@@ -40,3 +41,0 @@ c",
-      "@@ -60,0 +60,1 @@ d",
-    ].join("\n");
-    assert.deepEqual(changedLines(diff), [
-      [10, 12],
-      [21, 21],
-      [41, 42],
-      [60, 60],
-    ]);
-    assert.deepEqual(changedLines("@@ -1,1 +0,0 @@"), [[1, 1]]);
-    assert.deepEqual(changedLines("@@ -5 +5 @@\n@@ -8 +8,2 @@"), [[5, 9]]);
-  });
-
-  it("ripete mutation Auth quando cambiano le sue prove veloci o il loro runtime", () => {
-    for (const file of [
-      "test/auth-route.unit.ts",
-      "test/worker-context.ts",
-      "vitest.unit.config.ts",
-    ])
-      assert.deepEqual(changePlan([file]).mutation, ["app/auth-route.server.ts"]);
-    assert.equal(classifyFile("vitest.cloudflare.config.ts"), "tooling");
+    assert.deepEqual(changePlan([target], files, true).mutation, [target]);
   });
 
   it("seleziona una route circoscritta ma forza il completo sulla tabella delle route", () => {
@@ -184,18 +134,6 @@ describe("classificazione dei file modificati", () => {
     assert.equal(changePlan(files).mode, "tooling");
     assert.equal(changePlan(files).deploy, false);
     assert.equal(changePlan(files, [], true).mode, "full");
-    assert.equal(changePlan(["app/integrations/stripe.server.ts"]).mutation.length, 1);
-    assert.deepEqual(changePlan(["app/integrations/webhooks.server.ts"]).mutation, [
-      "app/integrations/webhooks.server.ts",
-    ]);
-    assert.deepEqual(changePlan(["app/integrations/ebay/notifications.server.ts"]).mutation, [
-      "app/integrations/ebay/notifications.server.ts",
-    ]);
-    for (const file of ["workers/app.ts", "cloudflare.config.ts", "test/webhooks.spec.ts"])
-      assert.deepEqual(changePlan([file]).mutation, [
-        "app/integrations/webhooks.server.ts",
-        "app/integrations/ebay/notifications.server.ts",
-      ]);
     assert.equal(changePlan([".github/workflows/publish.yml"]).promotionReuse, false);
     assert.equal(changePlan([".github/workflows/mutation.yml"]).promotionReuse, false);
     assert.equal(changePlan(["app/routes/stores.tsx"]).promotionReuse, true);
@@ -299,7 +237,7 @@ describe("classificazione dei file modificati", () => {
     }
   });
 
-  it("applica React Doctor nel gate e riserva browser e mutation ai job separati", () => {
+  it("applica React Doctor nel gate e riserva i browser ai job separati", () => {
     const commands = (files, sources = [], complete = false) =>
       gateCommands(changePlan(files, sources, complete)).map(([, args]) => args[0]);
     assert.deepEqual(commands(["scripts/release/release.mjs"]), ["verify:tooling"]);

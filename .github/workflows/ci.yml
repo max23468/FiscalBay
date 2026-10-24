@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    # `ready_for_review` riavvia le prove browser e mutation saltate mentre la PR era in bozza.
+    # `ready_for_review` riavvia le prove browser saltate mentre la PR era in bozza.
     types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - develop
@@ -32,7 +32,7 @@ permissions:
   pull-requests: read
 
 jobs:
-  # Gate locale, build e artefatto; prove browser e mutation girano in job propri.
+  # Gate locale, build e artefatto; le prove browser girano in job propri.
   verify:
     name: Verify
     runs-on: ubuntu-26.04
@@ -46,8 +46,6 @@ jobs:
       e2e: ${{ steps.detect.outputs.e2e }}
       grep: ${{ steps.detect.outputs.grep }}
       browsers: ${{ steps.detect.outputs.browsers }}
-      mutation: ${{ steps.detect.outputs.mutation }}
-      mutation-matrix: ${{ steps.detect.outputs.mutation-matrix }}
       reused: ${{ steps.reuse.outputs.run-id != '' }}
       artifact: build-${{ steps.tree.outputs.tree }}
       artifact-run: ${{ steps.reuse.outputs.run-id || github.run_id }}
@@ -148,7 +146,7 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || steps.deployed.outputs.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.after }}
-        # Browser e mutation restano nei rispettivi job; il gate locale usa la stessa sequenza.
+        # I browser restano nei rispettivi job; il gate locale usa la stessa sequenza.
         run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --run --gate-only
 
       - name: Record build provenance
@@ -230,20 +228,10 @@ jobs:
           path: test-results/
           retention-days: 7
 
-  # Lo stesso workflow mutation serve PR, merge e candidato, con ricevute per input.
-  mutation:
-    name: Mutation
-    needs: verify
-    if: needs.verify.outputs.mutation != '' && needs.verify.outputs.reused != 'true' && github.event.pull_request.draft != true
-    uses: ./.github/workflows/mutation.yml
-    with:
-      targets: ${{ needs.verify.outputs.mutation-matrix }}
-      fail-fast: ${{ github.event_name == 'pull_request' }}
-
   # Unico controllo richiesto dalla protezione dei branch: riassume gli esiti dei job.
   gate:
     name: Node 26
-    needs: [verify, browser, mutation]
+    needs: [verify, browser]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5
@@ -278,7 +266,7 @@ jobs:
   deploy-test:
     name: Deploy test
     needs: [verify, gate]
-    # I job browser e mutation saltati per il riuso non devono bloccare il deploy.
+    # I job browser saltati per il riuso non devono bloccare il deploy.
     # Gli esiti dei due gate restano obbligatori, anche dopo un fallimento o una cancellazione.
     if: ${{ !cancelled() && needs.verify.result == 'success' && needs.gate.result == 'success' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/develop' && vars.TEST_DEPLOY_ENABLED == 'true' && needs.verify.outputs.deploy == 'true' }}
     runs-on: ubuntu-26.04
