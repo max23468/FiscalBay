@@ -668,7 +668,7 @@ test("la prova si attiva volontariamente, poi la fine è in evidenza e non si ri
   await expect(page).toHaveURL(/\/anteprima\/impostazioni\/piano$/u);
   const plan = page.getByRole("region", { name: "Piano e pagamenti" });
   await expect(plan.getByText("Prova Premium", { exact: true })).toBeVisible();
-  await expect(plan.getByText(/2 giorni rimasti/u)).toBeVisible();
+  await expect(plan.getByText(/1 giorno rimasto/u)).toBeVisible();
 
   await chooseScenario(page, "Prova terminata");
   await expect(plan.getByText("Free", { exact: true })).toBeVisible();

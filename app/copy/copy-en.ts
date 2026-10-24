@@ -236,7 +236,8 @@ export const en: AppCopy = {
       `You can still view and search all orders. Codice Fiscale and Partita IVA of new orders stay locked until ${date}.`,
     quotaAction: "Upgrade to Premium",
     trialOffer: "Try Premium free for 14 days, no card needed.",
-    trialStatus: (days) => `Premium trial: ${days} ${plural(days, "day", "days")} left`,
+    trialStatus: (days) =>
+      `Premium trial: ${days ? `${days} ${plural(days, "day", "days")}` : "less than a day"} left`,
     trialEndingTitle: (date) => `Your Premium trial ends on ${date}`,
     trialEndingBody:
       "After that, the Codice Fiscale of new orders goes back to Free unlocks. Orders whose data arrived during the trial stay unlocked.",
@@ -451,7 +452,8 @@ export const en: AppCopy = {
       trialStarted: "Premium trial started.",
       trialUnavailable: "The Premium trial is not available for this account.",
       trialPlan: "Premium trial",
-      trialEnds: (date, days) => `Ends on ${date}: ${days} ${plural(days, "day", "days")} left.`,
+      trialEnds: (date, days) =>
+        `Ends on ${date}: ${days ? `${days} ${plural(days, "day", "days")}` : "less than a day"} left.`,
       trialAfter:
         "No charge: when it ends you go back to Free. Orders whose data arrived during the trial stay unlocked.",
       buyTitle: "Upgrade to Premium",

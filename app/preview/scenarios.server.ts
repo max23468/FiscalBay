@@ -223,11 +223,12 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
     it: {
       name: "Prova in scadenza",
       focus:
-        "Mancano due giorni alla fine della prova: avviso in evidenza in Ordini con il rimando al piano.",
+        "Manca meno di due giorni alla fine della prova: avviso in evidenza in Ordini con il rimando al piano.",
     },
     en: {
       name: "Trial ending",
-      focus: "Two days before the trial ends: prominent notice in Orders linking to the plan.",
+      focus:
+        "Less than two days before the trial ends: prominent notice in Orders linking to the plan.",
     },
   },
   "prova-terminata": {

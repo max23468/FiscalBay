@@ -410,9 +410,12 @@ export function addressRows(address: AddressView, language: Language): string[] 
 /** Negli ultimi tre giorni la fine della prova si mostra in evidenza. */
 const trialEndingMilliseconds = 3 * 24 * 60 * 60 * 1000;
 
-/** Giorni di prova rimasti, contando come intero anche quello in corso. */
+/**
+ * Giorni interi di prova rimasti, come li conta il Checkout di Stripe: zero nell'ultimo giorno,
+ * che i testi indicano come «meno di un giorno».
+ */
 export function trialDaysLeft(endsAt: string, now: string) {
-  return Math.max(Math.ceil((Date.parse(endsAt) - Date.parse(now)) / 86_400_000), 0);
+  return Math.max(Math.floor((Date.parse(endsAt) - Date.parse(now)) / 86_400_000), 0);
 }
 
 export function trialEnding(endsAt: string, now: string) {
