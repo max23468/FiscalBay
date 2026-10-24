@@ -9,8 +9,7 @@ import { buttonLink } from "~/components/ui/button-variants";
 import { Spinner } from "~/components/ui/spinner";
 import { loadPasskeyClient } from "../account/passkey";
 import { appCopy, pageTitle } from "../app-copy";
-import { createAuth } from "../auth.server";
-import { adminAccess, type AuthSession } from "../domain/sessions.server";
+import { adminAccess, readSession, type AuthSession } from "../domain/sessions.server";
 import { tracePhase } from "../errors";
 import { languageFromPath, localizedPath, type Language } from "../i18n";
 import { formatDate } from "../view-models";
@@ -34,9 +33,7 @@ const confirmedParam = "conferma";
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const language = languageFromPath(url.pathname);
-  const session = (await createAuth(env).api.getSession({
-    headers: request.headers,
-  })) as AuthSession | null;
+  const session = (await readSession(env, request)) as AuthSession | null;
   tracePhase(request, "session");
   const access = adminAccess(session);
   // Chi non è admin riceve la stessa risposta di un indirizzo inesistente.

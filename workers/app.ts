@@ -7,6 +7,7 @@ import {
 import { indexable } from "../app/app-links";
 import { correlateResponse, correlationHeader, logFailure, tracePhase } from "../app/errors";
 import { withPhaseTimings } from "../app/observability.server";
+import { withResponseCookies } from "../app/response-cookies.server";
 import { consumeStoreSync, isSyncMessage } from "../app/domain/order-sync.server";
 import {
   consumeTask,
@@ -38,7 +39,10 @@ export default {
     try {
       tracePhase(correlatedRequest, "start");
       const handler = requestHandler;
-      const response = await withPhaseTimings(() => handler(correlatedRequest), ctx?.tracing);
+      const response = await withPhaseTimings(
+        () => withResponseCookies(() => handler(correlatedRequest)),
+        ctx?.tracing,
+      );
       tracePhase(correlatedRequest, "response");
       const correlated = correlateResponse(response, id);
       // Quasi ogni pagina dipende dalla sessione: nessuna cache conserva una risposta del

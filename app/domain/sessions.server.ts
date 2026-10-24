@@ -1,11 +1,25 @@
-import { sessionPolicy } from "../auth.server";
+import { createAuth, sessionPolicy } from "../auth.server";
 import { deviceName } from "../account/device-name";
 import type { Language } from "../i18n";
+import { queueResponseCookies } from "../response-cookies.server";
 
 /** Campi della sessione Better Auth usati qui, compresi quelli aggiunti da FiscalBay. */
 export interface AuthSession {
   session: { id: string; createdAt: Date | string; passkeyVerified?: boolean };
   user: { id: string; admin?: boolean };
+}
+
+/**
+ * Sessione della richiesta, o null. Quando l'uso la rinnova, il nuovo cookie raggiunge il
+ * browser con la risposta: senza, il browser lo scarterebbe alla scadenza del primo accesso.
+ */
+export async function readSession(environment: Env, request: Request) {
+  const { headers, response } = await createAuth(environment).api.getSession({
+    headers: request.headers,
+    returnHeaders: true,
+  });
+  queueResponseCookies(headers);
+  return response;
 }
 
 /** Durata massima della sessione admin dopo la conferma con passkey. */

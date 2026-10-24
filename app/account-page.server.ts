@@ -4,7 +4,7 @@ import { redirect } from "react-router";
 import { accessNotice } from "./access-notice";
 import { currentSession } from "./account-area.server";
 import { accessPath, ordersPath, securityReturnPath, visitCookie } from "./app-links";
-import { createAuth } from "./auth.server";
+import { readSession } from "./domain/sessions.server";
 import { forwardToAuth, redirectWithCookies } from "./auth-route.server";
 import {
   completeRegistration,
@@ -171,7 +171,7 @@ export async function accessAction(request: Request) {
   }
 
   if (intent === "verifica" || intent === "completa") {
-    const session = await createAuth(env).api.getSession({ headers: request.headers });
+    const session = await readSession(env, request);
     if (!session) return notice("errore");
     if (intent === "verifica") {
       if (session.user.emailVerified) return redirect(base, 303);
