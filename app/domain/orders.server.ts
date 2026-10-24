@@ -2,7 +2,7 @@ import { buyerSnapshotSchema, type BuyerSnapshot } from "./order-import.server";
 import { buyerNameView, contactsView } from "../contact";
 import { maxListedOrders } from "../orders/order-list";
 import { searchTokens } from "../orders/order-search";
-import { taxComparisonKey, taxIdentifierType, taxQuality } from "../tax-quality";
+import { taxComparisonKey, taxIdentifierType, taxQuality, taxTypeNames } from "../tax-quality";
 import {
   fiscalSituations,
   paymentStatuses,
@@ -18,6 +18,7 @@ import {
   type TaxQuality,
 } from "../view-models";
 import { orderAccessSql } from "./grants.server";
+import type { EbayEnvironment } from "../integrations/ebay/environment.server";
 import { consultableStore } from "./store-state.server";
 import { orderSuggestions } from "./order-suggestions.server";
 
@@ -91,10 +92,11 @@ export type VisibleOrder = {
   provisional: boolean;
   summary: OrderSummary;
   /**
-   * Un ordine senza controllo fiscale e senza lettura in attesa non è stato verificato:
-   * risulta una lettura non riuscita, da riprovare.
+   * Situazione fiscale calcolata dalla stessa espressione SQL dei filtri. Un ordine senza
+   * controllo fiscale e senza lettura in attesa non è stato verificato: risulta una lettura non
+   * riuscita, da riprovare.
    */
-  fiscalState: "available" | "locked" | "checking" | "missing" | "error";
+  fiscalState: FiscalSituation;
   taxVerification: "unchecked" | "checking" | "completed" | "error";
   taxAvailability: "unknown" | "present" | "absent" | "not_included" | "masked" | "removed";
   taxCheckedAt: string | null;
@@ -120,16 +122,20 @@ function isFulfillmentCf(tax: VisibleOrder["taxIdentifiers"][number]): boolean {
   return tax.source === "ebay_fulfillment" && tax.type === "CODICE_FISCALE";
 }
 
+const sqlList = (names: readonly string[]) => names.map((name) => `'${name}'`).join(", ");
+
 /**
- * Tipo dell'identificativo come in `taxIdentifierType`: CF e Partita IVA italiani, anche
- * con Paese omesso dove la fonte lo ammette; gli altri restano distinti per tipo e Paese.
+ * Tipo dell'identificativo come in `taxIdentifierType`, dagli stessi elenchi: CF e Partita IVA
+ * italiani, anche con Paese omesso dove la fonte lo ammette; gli altri restano distinti per tipo
+ * e Paese.
  */
 const taxKind = (table: string) => `CASE
   WHEN ${table}.issuing_country IS NOT NULL AND ${table}.issuing_country <> 'IT'
     THEN json_array(${table}.identifier_type, ${table}.issuing_country)
-  WHEN ${table}.identifier_type IN ('CODICE_FISCALE', 'CodiceFiscale') THEN 'CF'
-  WHEN ${table}.identifier_type = 'PartitaIVA'
-    OR (${table}.issuing_country = 'IT' AND ${table}.identifier_type IN ('VAT_ID', 'VATIN')) THEN 'PIVA'
+  WHEN ${table}.identifier_type IN (${sqlList(taxTypeNames.cf)}) THEN 'CF'
+  WHEN ${table}.identifier_type IN (${sqlList(taxTypeNames.vat)})
+    OR (${table}.issuing_country = 'IT'
+      AND ${table}.identifier_type IN (${sqlList(taxTypeNames.italianVat)})) THEN 'PIVA'
   ELSE json_array(${table}.identifier_type, ${table}.issuing_country) END`;
 
 function summaryOf(row: {
@@ -190,23 +196,32 @@ const latestCheckSql = (column: "availability" | "verification") =>
      ORDER BY tc.observed_at DESC, tc.source LIMIT 1)`;
 
 /**
- * Situazione fiscale come in `listVisibleOrders` e `fiscalView`: identificativi autorizzati o
- * da sbloccare, poi lettura non riuscita, in corso, conclusa senza dato (acquirente con
- * fatturazione estera o dato non riportato da eBay) o mai conclusa (da riprovare).
+ * Verifica fiscale dell'ordine: lettura non riuscita, in corso, conclusa o mai avvenuta.
  */
-const fiscalSql = `CASE
-  WHEN EXISTS (SELECT 1 FROM tax_identifiers WHERE order_id = o.id AND removed_at IS NULL)
-    THEN CASE WHEN ${accessSql} THEN 'available' ELSE 'locked' END
+const verificationSql = `CASE
   WHEN EXISTS (SELECT 1 FROM order_source_refs r WHERE r.order_id = o.id AND r.detail_error IS NOT NULL)
     OR ${latestCheckSql("verification")} = 'error' THEN 'error'
   WHEN EXISTS (SELECT 1 FROM order_source_refs r WHERE r.order_id = o.id
     AND r.source = 'fulfillment' AND r.detail_for IS NOT r.last_modified_time) THEN 'checking'
   WHEN EXISTS (SELECT 1 FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
-         WHERE original.id = o.id OR original.merged_into = o.id)
-    THEN CASE WHEN ${latestCheckSql("availability")} NOT IN ('masked', 'removed')
+         WHERE original.id = o.id OR original.merged_into = o.id) THEN 'completed'
+  ELSE 'unchecked' END`;
+
+/**
+ * Unica definizione della situazione fiscale, per i filtri e per l'elenco: identificativi
+ * autorizzati con `access` o da sbloccare, altrimenti lo stato della verifica. Una verifica
+ * conclusa senza dato distingue l'acquirente con fatturazione estera dal dato non riportato da
+ * eBay; una mai conclusa è da riprovare.
+ */
+const fiscalSql = (access: string) => `CASE
+  WHEN EXISTS (SELECT 1 FROM tax_identifiers WHERE order_id = o.id AND removed_at IS NULL)
+    THEN CASE WHEN ${access} THEN 'available' ELSE 'locked' END
+  ELSE CASE ${verificationSql}
+    WHEN 'completed' THEN CASE WHEN ${latestCheckSql("availability")} NOT IN ('masked', 'removed')
       AND json_extract(o.buyer_json, '$.billingAddress.countryCode') NOT IN ('', 'IT')
       THEN 'foreign' ELSE 'missing' END
-  ELSE 'error' END`;
+    WHEN 'checking' THEN 'checking'
+    ELSE 'error' END END`;
 
 /**
  * Testo cercabile di un ordine che la manutenzione non ha ancora indicizzato: le stesse parti
@@ -248,7 +263,7 @@ const visibleOrdersSql = `FROM workspace_members wm
     AND (?8 IS NULL OR o.creation_time >= ?8)
     AND (?9 IS NULL OR ${paymentSql} = ?9)
     AND (?10 IS NULL OR ${shippingSql} = ?10)
-    AND (?11 IS NULL OR ${fiscalSql} = ?11)
+    AND (?11 IS NULL OR ${fiscalSql(accessSql)} = ?11)
     AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(?12, '[]')) token WHERE ${tokenMissingSql})
     AND (?14 IS NULL OR o.listed_at IS NULL OR o.listed_at <= ?14)
     AND (?15 IS NULL OR o.listed_at > ?15)
@@ -256,7 +271,7 @@ const visibleOrdersSql = `FROM workspace_members wm
 
 function visibleOrdersParams(
   userId: string,
-  ebayEnvironment: "production" | "sandbox",
+  ebayEnvironment: EbayEnvironment,
   now: Date,
   limit: number,
   ids: string[] | undefined,
@@ -288,7 +303,7 @@ function visibleOrdersParams(
 export async function countVisibleOrders(
   db: D1Database,
   userId: string,
-  ebayEnvironment: "production" | "sandbox",
+  ebayEnvironment: EbayEnvironment,
   now: Date,
   criteria: OrderCriteria = {},
 ): Promise<number> {
@@ -307,16 +322,36 @@ export async function countVisibleOrders(
 export async function visibleOrderFacets(
   db: D1Database,
   userId: string,
-  ebayEnvironment: "production" | "sandbox",
+  ebayEnvironment: EbayEnvironment,
   now: Date,
 ): Promise<{ total: number; locked: boolean }> {
   const row = await db
-    .prepare(`SELECT count(*) AS total, MAX(${fiscalSql} = 'locked') AS locked ${visibleOrdersSql}`)
+    .prepare(
+      `SELECT count(*) AS total, MAX(${fiscalSql(accessSql)} = 'locked') AS locked ${visibleOrdersSql}`,
+    )
     .bind(...visibleOrdersParams(userId, ebayEnvironment, now, 0, undefined, {}))
     .first<{ total: number; locked: number | null }>();
   // Un aggregato restituisce sempre una riga; senza ordini `locked` è null.
   const { total, locked } = row!;
   return { total, locked: locked === 1 };
+}
+
+/**
+ * Negozio e situazione fiscale di un ordine consultabile dall'utente nell'ambiente, anche non
+ * pagato come con il filtro «Non pagato»; null per un ordine che l'utente non può consultare.
+ */
+export async function visibleOrderState(
+  db: D1Database,
+  userId: string,
+  ebayEnvironment: EbayEnvironment,
+  id: string,
+  now = new Date(),
+): Promise<{ storeId: string; fiscalState: FiscalSituation } | null> {
+  const row = await db
+    .prepare(`SELECT o.store_id, ${fiscalSql(accessSql)} AS fiscal_state ${visibleOrdersSql}`)
+    .bind(...visibleOrdersParams(userId, ebayEnvironment, now, 1, [id], {}, true))
+    .first<{ store_id: string; fiscal_state: FiscalSituation }>();
+  return row ? { storeId: row.store_id, fiscalState: row.fiscal_state } : null;
 }
 
 /** Ordine proposto dalla ricerca della barra superiore, con i soli dati non fiscali. */
@@ -334,7 +369,7 @@ export type OrderSearchMatch = {
 export async function searchVisibleOrders(
   db: D1Database,
   userId: string,
-  ebayEnvironment: "production" | "sandbox",
+  ebayEnvironment: EbayEnvironment,
   now: Date,
   tokens: string[],
   limit = 5,
@@ -383,11 +418,12 @@ export async function listVisibleOrders(
   db: D1Database,
   userId: string,
   requestedLimit = 50,
-  ebayEnvironment: "production" | "sandbox" = "production",
+  ebayEnvironment: EbayEnvironment = "production",
   now = new Date(),
   filter: { ids?: string[]; criteria?: OrderCriteria; provisional?: boolean } = {},
 ): Promise<VisibleOrder[]> {
   const limit = Math.max(1, Math.min(maxListedOrders, Math.trunc(requestedLimit)));
+  const listedAccessSql = orderAccessSql("o.id", "vo.workspace_id", "?5");
   const result = await db
     .prepare(
       `WITH visible_orders AS (
@@ -402,10 +438,8 @@ export async function listVisibleOrders(
                  FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
                 WHERE original.id = o.id OR original.merged_into = o.id
                 ORDER BY tc.observed_at DESC, tc.source LIMIT 1) AS tax_check_json,
-              EXISTS (SELECT 1 FROM order_source_refs r WHERE r.order_id = o.id
-                AND r.detail_error IS NOT NULL) AS tax_error,
-              EXISTS (SELECT 1 FROM order_source_refs r WHERE r.order_id = o.id
-                AND r.source = 'fulfillment' AND r.detail_for IS NOT r.last_modified_time) AS tax_pending,
+              ${verificationSql} AS tax_verification,
+              ${fiscalSql(listedAccessSql)} AS fiscal_state,
               (SELECT MIN(t.observed_at) FROM tax_identifiers t JOIN orders original ON original.id = t.order_id
                 WHERE original.id = o.id OR original.merged_into = o.id) AS first_tax_available_at,
               (EXISTS (SELECT 1 FROM order_reconciliation_issues i
@@ -418,13 +452,9 @@ export async function listVisibleOrders(
                  FROM (SELECT * FROM order_items WHERE order_id = o.id ORDER BY rowid)) AS items_json,
               COALESCE(s.store_name, s.display_name, s.ebay_account_id, s.ebay_user_id) ||
                 CASE WHEN s.ebay_environment = 'sandbox' THEN ' (Sandbox)' ELSE '' END AS store_name,
-              EXISTS (SELECT 1 FROM tax_identifiers
-                       WHERE order_id = o.id AND removed_at IS NULL) AS has_identifiers,
-              NOT EXISTS (SELECT 1 FROM tax_identifiers
-                           WHERE order_id = o.id AND removed_at IS NULL
-                             AND NOT (identifier_type = 'PartitaIVA' AND (issuing_country IS NULL OR issuing_country = 'IT')
-                               OR identifier_type IN ('VAT_ID', 'VATIN') AND issuing_country = 'IT')) AS vat_only,
-              ${orderAccessSql("o.id", "vo.workspace_id", "?5")} AS grant_id, ti.identifier_type,
+              NOT EXISTS (SELECT 1 FROM tax_identifiers t WHERE t.order_id = o.id
+                AND t.removed_at IS NULL AND ${taxKind("t")} <> 'PIVA') AS vat_only,
+              ti.identifier_type,
               EXISTS (SELECT 1 FROM tax_identifiers previous
                 JOIN orders original ON original.id = previous.order_id
                 WHERE (original.id = o.id OR original.merged_into = o.id)
@@ -436,8 +466,7 @@ export async function listVisibleOrders(
          JOIN orders o ON o.id = vo.id
          JOIN ebay_stores s ON s.id = o.store_id
          LEFT JOIN tax_identifiers ti
-           ON ti.order_id = o.id AND ti.removed_at IS NULL
-             AND ${orderAccessSql("o.id", "vo.workspace_id", "?5")}
+           ON ti.order_id = o.id AND ti.removed_at IS NULL AND ${listedAccessSql}
         ORDER BY o.creation_time DESC, o.id DESC, ti.identifier_type, ti.issuing_country DESC`,
     )
     .bind(
@@ -463,8 +492,8 @@ export async function listVisibleOrders(
       fulfillment_status: string | null;
       cancel_status: string | null;
       tax_check_json: string | null;
-      tax_error: number;
-      tax_pending: number;
+      tax_verification: VisibleOrder["taxVerification"];
+      fiscal_state: FiscalSituation;
       first_tax_available_at: string | null;
       tax_updated: number;
       vat_only: number;
@@ -474,8 +503,6 @@ export async function listVisibleOrders(
       is_provisional: number;
       items_json: string;
       store_name: string;
-      has_identifiers: number;
-      grant_id: number;
       identifier_type: string | null;
       issuing_country: string | null;
       value: string | null;
@@ -489,17 +516,9 @@ export async function listVisibleOrders(
       ? (JSON.parse(row.tax_check_json) as {
           availability: VisibleOrder["taxAvailability"];
           at: string;
-          verification: "completed" | "error";
         })
       : null;
-    const verification =
-      row.tax_error || check?.verification === "error"
-        ? "error"
-        : row.tax_pending
-          ? "checking"
-          : check
-            ? "completed"
-            : "unchecked";
+    const identified = row.fiscal_state === "available" || row.fiscal_state === "locked";
     const order = orders.get(row.id) ?? {
       id: row.id,
       ebayOrderId: row.ebay_order_id,
@@ -512,20 +531,12 @@ export async function listVisibleOrders(
       marketplaceId: row.marketplace_id,
       provisional: row.is_provisional === 1,
       summary: summaryOf(row),
-      fiscalState: row.has_identifiers
-        ? row.grant_id
-          ? "available"
-          : "locked"
-        : verification === "completed"
-          ? "missing"
-          : verification === "unchecked"
-            ? "error"
-            : verification,
-      taxVerification: verification,
-      taxAvailability: check?.availability ?? (row.has_identifiers ? "present" : "unknown"),
+      fiscalState: row.fiscal_state,
+      taxVerification: row.tax_verification,
+      taxAvailability: check?.availability ?? (identified ? "present" : "unknown"),
       taxCheckedAt: check?.at ?? null,
       firstTaxAvailableAt: row.first_tax_available_at,
-      lockedShownAs: row.has_identifiers && row.vat_only ? "PIVA" : "CF",
+      lockedShownAs: identified && row.vat_only ? "PIVA" : "CF",
       reconciliationIssue: !!row.reconciliation_issue,
       taxIdentifiers: [],
     };
@@ -582,7 +593,11 @@ export async function listVisibleOrders(
     userId,
     // Un acquisto non pagato non riceve suggerimenti (D180).
     visible
-      .filter((order) => order.fiscalState === "missing" && !order.provisional)
+      .filter(
+        (order) =>
+          (order.fiscalState === "missing" || order.fiscalState === "foreign") &&
+          !order.provisional,
+      )
       .map((order) => order.id),
     ebayEnvironment,
     new Date(Math.max(now.getTime(), Date.now())),
@@ -627,12 +642,14 @@ function fiscalView(order: VisibleOrder): FiscalView {
         : null;
     return { state: "locked", shownAs: order.lockedShownAs, ...(hold ? { hold } : {}) };
   }
+  if (order.fiscalState === "foreign") {
+    const country = order.summary.buyer?.billingAddress?.countryCode;
+    return country ? { state: "missing", reason: "foreign", country } : { state: "missing" };
+  }
   if (order.fiscalState === "missing") {
     const reason = order.taxAvailability;
-    if (reason === "masked" || reason === "removed") return { state: "missing", reason };
-    const country = order.summary.buyer?.billingAddress?.countryCode;
-    return country && country !== "IT"
-      ? { state: "missing", reason: "foreign", country }
+    return reason === "masked" || reason === "removed"
+      ? { state: "missing", reason }
       : { state: "missing" };
   }
   return { state: order.fiscalState };

@@ -10,7 +10,8 @@ import { defaultRateLimitSeconds, rateLimitWait } from "./order-acquisition-cont
 import { activeStore, writableStore } from "./store-state.server";
 import { logFailure } from "../errors";
 import { UpstreamError } from "../integrations/http.server";
-import { ebayConfiguration } from "../integrations/ebay/environment.server";
+import { ebayConfiguration, type EbayEnvironment } from "../integrations/ebay/environment.server";
+import { visibleOrderState } from "./orders.server";
 
 /**
  * Lettura periodica dei negozi e richieste manuali. Il cron parte ogni dieci minuti, sceglie i
@@ -362,17 +363,22 @@ export async function consumeStoreSync(
 }
 
 /**
- * «Riprova» di un ordine la cui lettura fiscale non è riuscita: soltanto un ordine consultabile
- * dello spazio dell'utente, e soltanto se la lettura del negozio si può richiedere. Il dettaglio
- * Fulfillment torna da leggere; un ordine noto solo a Trading si rilegge con la passata Trading
- * del negozio.
+ * «Riprova» di un ordine la cui lettura fiscale non è riuscita: soltanto un ordine che l'utente
+ * può consultare nell'ambiente, e soltanto se la lettura del negozio si può richiedere. Il
+ * dettaglio Fulfillment torna da leggere; un ordine noto solo a Trading si rilegge con la
+ * passata Trading del negozio.
  */
 export async function requestOrderRead(
   environment: Env,
   userId: string,
-  order: { id: string; storeId: string },
+  orderId: string,
+  ebayEnvironment: EbayEnvironment,
   now = new Date(),
 ): Promise<SyncRequestResult> {
+  const state = await visibleOrderState(environment.DB, userId, ebayEnvironment, orderId, now);
+  if (!state) return "not_found";
+  if (state.fiscalState !== "error") return "invalid";
+  const order = { id: orderId, storeId: state.storeId };
   const requested = await requestStoreSync(environment, userId, order.storeId, {}, now);
   if (requested === "not_found" || requested === "invalid") return requested;
   await environment.DB.batch([

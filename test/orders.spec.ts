@@ -1892,6 +1892,8 @@ describe("pagina Ordini reale", () => {
     const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(undefined);
     await withCredentials();
     await env.DB.batch([
+      // Senza dato e senza verifica la lettura risulta non riuscita.
+      env.DB.prepare("DELETE FROM tax_identifiers WHERE order_id = 'o-a'"),
       env.DB.prepare(
         `INSERT INTO order_source_refs (store_id, source, external_order_id, order_id, last_modified_time)
          VALUES ('s-a', 'trading', 'ebay-a', 'o-a', ?1)`,
@@ -1906,8 +1908,13 @@ describe("pagina Ordini reale", () => {
         "SELECT store_id, trading_cursor, trading_end, trading_page, trading_total FROM sync_state ORDER BY store_id",
       ).all();
     // Il negozio di un altro spazio non si rilegge e il suo cursore resta.
-    expect(await requestOrderRead(env, userId, { id: "o-b", storeId: "s-b" })).toBe("not_found");
-    expect(await requestOrderRead(env, userId, { id: "o-a", storeId: "s-a" })).toBe("queued");
+    expect(await requestOrderRead(env, userId, "o-b", "production")).toBe("not_found");
+    // Neppure un ordine del proprio negozio fuori conservazione o in un altro ambiente.
+    const expired = new Date("2026-11-01T00:00:00.000Z");
+    expect(await requestOrderRead(env, userId, "o-a", "production", expired)).toBe("not_found");
+    expect(await requestOrderRead(env, userId, "o-a", "sandbox")).toBe("not_found");
+    expect((await tradingState()).results[0]).toMatchObject({ trading_cursor: now });
+    expect(await requestOrderRead(env, userId, "o-a", "production")).toBe("queued");
     expect((await tradingState()).results).toEqual([
       {
         store_id: "s-a",
@@ -1932,7 +1939,7 @@ describe("pagina Ordini reale", () => {
          VALUES ('s-a', 'fulfillment', 'ebay-a', 'o-a', ?1, ?1)`,
       ).bind(now),
     ]);
-    expect(await requestOrderRead(env, userId, { id: "o-a", storeId: "s-a" })).toBe("queued");
+    expect(await requestOrderRead(env, userId, "o-a", "production")).toBe("queued");
     expect((await tradingState()).results[0]).toMatchObject({ trading_cursor: now });
     expect(
       await env.DB.prepare(
@@ -2166,13 +2173,16 @@ describe("vista condivisa e criteri degli ordini", () => {
         ...base.summary,
         buyer: { billingAddress: { countryCode } },
       }) as VisibleOrder["summary"];
-    const missing = { fiscalState: "missing", taxAvailability: "not_included" } as const;
-    expect(view({ ...missing, summary: billedIn("ES") }).fiscal).toEqual({
+    const foreign = { fiscalState: "foreign", taxAvailability: "not_included" } as const;
+    expect(view({ ...foreign, summary: billedIn("ES") }).fiscal).toEqual({
       state: "missing",
       reason: "foreign",
       country: "ES",
     });
-    expect(view({ ...missing, summary: billedIn("IT") }).fiscal).toEqual({ state: "missing" });
+    expect(
+      view({ fiscalState: "missing", taxAvailability: "not_included", summary: billedIn("IT") })
+        .fiscal,
+    ).toEqual({ state: "missing" });
     expect(
       view({ fiscalState: "missing", taxAvailability: "masked", summary: billedIn("ES") }).fiscal,
     ).toEqual({ state: "missing", reason: "masked" });

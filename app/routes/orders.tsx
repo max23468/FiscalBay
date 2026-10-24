@@ -360,15 +360,7 @@ export async function action({ request }: Route.ActionArgs) {
   const environment = requestedEbayEnvironment(request);
   if (intent === "retry") {
     const id = String(form.get("order") ?? "");
-    const [order] =
-      id && id.length <= 64
-        ? // Anche un acquisto non pagato, che il filtro «Non pagato» mostra con il suo stato.
-          await listVisibleOrders(env.DB, session.user.id, 1, environment, new Date(), {
-            ids: [id],
-            provisional: true,
-          })
-        : [];
-    if (!order || order.fiscalState !== "error")
+    if (!id || id.length > 64)
       return data<ActionResult>({ ok: false, notice: t.stores.failed }, { status: 409 });
     // Con eBay che non risponde la nuova lettura resta sospesa, come il pulsante.
     const stores = await listStores(env.DB, session.user.id);
@@ -376,7 +368,8 @@ export async function action({ request }: Route.ActionArgs) {
       return data<ActionResult>({ ok: false, notice: t.stores.ebayDown }, { status: 409 });
     let requested;
     try {
-      requested = await requestOrderRead(env, session.user.id, order);
+      // Il dominio rilegge soltanto un ordine che l'utente consulta, con lettura non riuscita.
+      requested = await requestOrderRead(env, session.user.id, id, environment);
     } catch (error) {
       logFailure({ request, error, operation: "route" });
       return data<ActionResult>({ ok: false, notice: t.stores.failed }, { status: 500 });
