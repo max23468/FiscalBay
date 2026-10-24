@@ -16,11 +16,7 @@ import {
   loader as loadStores,
   clientAction as storesClientAction,
 } from "../app/routes/stores";
-import {
-  action as profileAction,
-  loader as loadProfile,
-  clientAction as profileClientAction,
-} from "../app/routes/profile";
+import { loader as loadProfile } from "../app/routes/profile";
 import {
   action as settingsAction,
   loader as loadSettings,
@@ -46,7 +42,6 @@ afterEach(() => vi.useRealTimers());
 describe("pausa, ricollegamento e scollegamento dei negozi", () => {
   beforeEach(() => vi.useRealTimers());
   it.each([
-    ["profilo", profileClientAction],
     ["negozi", storesClientAction],
     ["impostazioni", settingsClientAction],
   ] as const)(
@@ -626,34 +621,43 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
 
   it("aggiorna il profilo minimo senza cambiare il tipo di account", async () => {
     const seller = await verifiedSession("profilo@example.invalid");
-    const page = await loadProfile({
-      request: new Request("http://localhost:5173/en/profilo", {
+    // Il vecchio indirizzo del profilo porta alla sua categoria delle Impostazioni.
+    for (const [path, target] of [
+      ["/app/profilo", "/app/impostazioni/profilo"],
+      ["/en/app/profilo", "/en/app/impostazioni/profilo"],
+    ]) {
+      const moved = (await loadProfile({
+        request: new Request(`http://localhost:5173${path}`),
+      } as Parameters<typeof loadProfile>[0])) as Response;
+      expect(moved.status).toBe(302);
+      expect(moved.headers.get("location")).toBe(target);
+    }
+    const loaded = await loadSettings({
+      request: new Request("http://localhost:5173/en/app/impostazioni/profilo", {
         headers: { cookie: seller.cookie },
       }),
-    } as Parameters<typeof loadProfile>[0]);
-    expect(page).toEqual({
+      params: { sezione: "profilo" },
+    } as never);
+    expect(loaded).toMatchObject({
       language: "en",
-      userId: seller.userId,
-      account: {
-        name: "Utente Sintetico",
-        email: "profilo@example.invalid",
-        profile: syntheticProfile,
-      },
-      shell: {
-        display: { theme: "system", timeZone: "Europe/Rome" },
-        notifications: [],
-        now: expect.any(String),
+      page: {
+        section: "profilo",
+        account: {
+          name: "Utente Sintetico",
+          email: "profilo@example.invalid",
+          profile: syntheticProfile,
+        },
       },
     });
 
     const save = (fields: Record<string, string>, origin = "http://localhost:5173") =>
-      profileAction({
-        request: new Request("http://localhost:5173/profilo", {
+      settingsAction({
+        request: new Request("http://localhost:5173/app/impostazioni/profilo", {
           method: "POST",
           headers: { cookie: seller.cookie, origin },
           body: new URLSearchParams({ intent: "profile", ...fields }),
         }),
-      } as Parameters<typeof profileAction>[0]);
+      } as never);
 
     const foreign = await save({ nome: "Altro", cognome: "Nome" }, "https://esempio.invalid").catch(
       (response: Response) => response,
@@ -707,7 +711,16 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     const loaded = await settingsPage(seller.cookie);
     expect(loaded.page).toMatchObject({
       section: null,
-      sections: ["notifiche", "messaggio", "piano", "sicurezza", "privacy", "aspetto", "supporto"],
+      sections: [
+        "notifiche",
+        "messaggio",
+        "profilo",
+        "piano",
+        "sicurezza",
+        "privacy",
+        "aspetto",
+        "supporto",
+      ],
       services: { billing: false, telegram: false, accountData: false, support: false },
       preview: false,
       account: { plan: "free", trialAvailable: false, quota: undefined },

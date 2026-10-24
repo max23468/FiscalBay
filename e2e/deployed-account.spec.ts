@@ -62,8 +62,10 @@ test(
     await page.keyboard.press("Escape");
     await expect(page).toHaveURL(/\/app\/negozi$/u);
 
+    // Il vecchio indirizzo del profilo porta alla sua categoria delle Impostazioni.
     await page.goto("/app/profilo");
-    await expect(page).toHaveTitle("FiscalBay | Profilo");
+    await expect(page).toHaveURL(/\/app\/impostazioni\/profilo$/u);
+    await expect(page).toHaveTitle("FiscalBay | Profilo | Impostazioni");
 
     // Con la sessione la radice porta agli Ordini; «Visita fiscalbay.it» mostra il sito e
     // «Vai all'app» torna agli Ordini, senza uscire.

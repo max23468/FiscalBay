@@ -37,7 +37,7 @@ export function shellDestinations(links: AppLinks, t: AppCopy): NavDestination[]
 /** Voci dell'account nel menu dell'avatar: profilo e categorie più cercate delle Impostazioni. */
 export function accountMenu(links: AppLinks, t: AppCopy): AccountMenuItem[] {
   return [
-    { href: appHref(links, "profilo"), label: t.shell.profile, Icon: User },
+    { href: appHref(links, "impostazioni/profilo"), label: t.shell.profile, Icon: User },
     { href: appHref(links, "impostazioni/sicurezza"), label: t.shell.security, Icon: ShieldCheck },
     { href: appHref(links, "impostazioni/piano"), label: t.shell.planBilling, Icon: CreditCard },
     { href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings },
