@@ -435,7 +435,7 @@ Opt-in **facoltativo non preselezionato** in registrazione e proposta separata d
 
 I problemi operativi mostrano gravità, causa comprensibile, conseguenza, stato osservato e azione pertinente con collegamento al contesto. Raggruppare occorrenze della stessa anomalia; rileggere stato e permessi prima dell'azione, registrare esito e rientro senza chiusure apparenti. Un errore circoscritto a un negozio non blocca quelli estranei. Nessun payload fiscale nei riepiloghi ordinari.
 
-Stesso prodotto/dominio, area `/admin` con accesso esplicito e MFA; stessa Auth, nessuna impersonazione. Navigazione admin distinta da quella merchant. Viste di utenti/spazi, negozi, stato sync/job, piano e diritti, trial, ricavi operativi pertinenti, lifetime venduti/omaggio/residui, promo, errori e segnalazioni antiabuso.
+Stesso prodotto/dominio, area `/admin` con accesso esplicito e MFA; stessa Auth, nessuna impersonazione. Navigazione admin distinta da quella merchant. Viste di utenti/spazi, negozi, stato sync/job, quote delle API eBay, piano e diritti, trial, ricavi operativi pertinenti, lifetime venduti/omaggio/residui, promo, errori e segnalazioni antiabuso. Le quote eBay (D188) mostrano per ambiente, API e chiamata limite, consumo, residuo, azzeramento e chiamate sospese per limite superato; oltre il 70% del consumo giornaliero sono un'anomalia con l'azione di chiedere a eBay un aumento.
 
 Azioni: retry/ripresa job, sync recente, pause operative, revisione abusi, gestione concessioni e disponibilità, cambi commerciali tipizzati con efficacia e audit. Niente lettura ordinaria di CF, indirizzi o altri dati buyer; consultazione circoscritta per assistenza necessaria e autorizzata. Accesso tecnico a dati reali tramite Codex distinto dalla UI admin ordinaria.
 
@@ -2069,6 +2069,8 @@ Salva e trasmette i file tramite lo storage di [M6-10](#m6-10).
 
 Completare liste utenti/spazi/negozi, diritti e incassi, grant, promo, prezzi, configurazioni, retry, pause e revisione antiabuso. Comunicazioni di servizio o manutenzione per la campanella, con titolo, testo IT/EN e periodo di validità.
 
+Aggiungere la vista delle quote delle API eBay (D188): per ambiente, API e chiamata (Trading `GetOrders`, `GetItem`, `GetStore`, `GetUser` e Fulfillment) limite, consumo, residuo e ora di azzeramento letti da `getRateLimits` della Developer Analytics API con il token dell'applicazione, insieme alle chiamate oggi sospese in `ebay_rate_limits`. Oltre il 70% del consumo giornaliero di una chiamata la vista apre un'anomalia con gravità, conseguenza sulle letture e azione «chiedi a eBay l'aumento», una sola per giorno e per chiamata. La lettura ha un'attesa propria e un esito non riuscito resta indicato come tale, mai come quota piena o vuota; nessuna chiamata eBay dei negozi passa dalla console. Provare soglia, azzeramento, sospensione attiva e lettura non riuscita su fixture e sul keyset test.
+
 Includere il trasferimento assistito di un negozio fra spazi previsto dal [§8](#s08), dopo verifica, conferma e audit dell'operazione. Rileggere appartenenza e autorizzazioni al momento dell'esecuzione, invalidare accessi e lavori pendenti incompatibili e mantenere un solo spazio proprietario. Nessun trasferimento automatico di storico, login o pagamenti né reset di trial, quota o vincoli Free. Provare richieste concorrenti, replay e accesso negato dal vecchio spazio, senza esporre dati dell'altro spazio.
 
 Ogni anomalia espone gravità, conseguenza e azione contestuale; raggruppare duplicati e verificare permessi/stato aggiornato all'esecuzione. Provare rientro effettivo e isolamento del problema a un negozio, senza payload buyer nella console ordinaria.
@@ -2138,7 +2140,7 @@ Le metriche tecniche arrivano da [M6-11](#m6-11); i KPI di business restano even
 
 **Stato:** Da completare · **Prerequisiti:** M6-04, M6-08, M5-09 · **Contratto:** [§15](#s15) · [§31](#s31)
 
-Il punto si sovrappone a console admin (M6-04), KPI (M6-08), bot Telegram (M5-09) e alert (M7-04), quindi ha un task proprio. Bot privato dell'owner con comandi di sola lettura sulle stesse query aggregate della console, navigazione inline e aggiornamento dello stesso messaggio; webhook tramite l'ingresso di M3-11 con verifica di secret, chat privata e identità owner; notifiche incidenti deduplicate all'apertura e alla risoluzione. Nessun CF o dato buyer.
+Il punto si sovrappone a console admin (M6-04), KPI (M6-08), bot Telegram (M5-09) e alert (M7-04), quindi ha un task proprio. Bot privato dell'owner con comandi di sola lettura sulle stesse query aggregate della console, navigazione inline e aggiornamento dello stesso messaggio; webhook tramite l'ingresso di M3-11 con verifica di secret, chat privata e identità owner; notifiche incidenti deduplicate all'apertura e alla risoluzione, compresa l'anomalia delle quote eBay di [M6-04](#m6-04), e un comando con la stessa vista delle quote. Nessun CF o dato buyer.
 
 **Criterio di completamento:** Chat o utente diversi ignorati senza risposta informativa; stesso update ripetuto senza doppio effetto; ogni comando coerente con la vista console corrispondente; eventuale azione di scrittura prevista da §15 con conferma e audit. Readback del webhook e del menu comandi nell'ambiente test, bot test separato.
 
@@ -2213,7 +2215,7 @@ Integrato da CF Ready e Hub Fatture: il callback 2.0 di cancellazione account eB
 
 **Stato:** Da completare · **Prerequisiti:** M0, M3, M5, M6 · **Contratto:** [§36](#s36)
 
-Misurare il runtime reale con almeno 70.000 ordini, più negozi, picchi, code, export, log e traffico. Considerare capacità residua degli account condivisi e la quota Trading `GetOrders` del keyset eBay: con D177 il consumo giornaliero si legge con `getRateLimits` della Developer Analytics API e, oltre il 70% della quota, si chiede a eBay un aumento.
+Misurare il runtime reale con almeno 70.000 ordini, più negozi, picchi, code, export, log e traffico. Considerare capacità residua degli account condivisi e le quote delle API eBay del keyset, lette dalla vista di [M6-04](#m6-04) (D177, D188): oltre il 70% del consumo giornaliero si chiede a eBay un aumento.
 
 Separare nei risultati tempi Auth, D1, eBay e rendering/browser usando la strumentazione di M4-01/M6-11 e i report di M6-08; identificare la fase limitante e verificare i budget con campionamento proporzionato. Provare i custom span sotto carico, con allowlist priva di attributi personali ed eccezioni grezze, dichiarando copertura e costo del campionamento.
 
@@ -2230,7 +2232,7 @@ Qualificare separatamente HTTP/Auth/SSR, cron, consumer ed export su Workers Pai
 
 **Stato:** Da completare · **Prerequisiti:** M6-04, M6-08 · **Contratto:** [§31](#s31) · [§32](#s32)
 
-Configurare log ordinari a 90 giorni e audit a un anno, alert azionabili e business, severità P1–P3, canali Telegram/email ed escalation del MoR.
+Configurare log ordinari a 90 giorni e audit a un anno, alert azionabili e business, severità P1–P3, canali Telegram/email ed escalation del MoR. Fra gli alert rientra l'anomalia delle quote eBay di [M6-04](#m6-04), con severità e rientro provati.
 
 La conservazione a 90 giorni e un anno è realizzata in [M7-11](#m7-11).
 
