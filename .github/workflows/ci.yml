@@ -124,9 +124,12 @@ jobs:
           REPOSITORY_ID: ${{ github.repository_id }}
         run: node scripts/find-build.mjs
 
+      # I controlli dei documenti non richiedono le dipendenze.
       - name: Set up Node and dependencies
-        if: steps.detect.outputs.gate != 'docs' && !steps.reuse.outputs.run-id
+        if: ${{ !steps.reuse.outputs.run-id }}
         uses: ./.github/actions/setup
+        with:
+          install: ${{ steps.detect.outputs.gate != 'docs' }}
 
       # Le migration non additive si approvano nella PR, non dopo il merge sul deploy test.
       # Il corpo si rilegge dall'API: una nuova esecuzione vede la riga aggiunta dopo l'apertura.
@@ -153,14 +156,12 @@ jobs:
         if: steps.detect.outputs.build == 'true' && !steps.reuse.outputs.run-id
         run: node scripts/release/release.mjs manifest --environment test
 
-      - name: Preserve coverage and benchmark reports
+      - name: Preserve coverage report
         if: always() && steps.reuse.outputs.run-id == '' && steps.detect.outputs.gate != 'docs'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: quality-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            reports/coverage/
-            reports/benchmarks/
+          path: reports/coverage/
           if-no-files-found: ignore
           retention-days: 7
 
