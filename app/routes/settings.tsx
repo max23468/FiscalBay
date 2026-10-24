@@ -117,7 +117,12 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       // Prima del primo collegamento nessun ciclo è avviato e non c'è una quota da mostrare.
       quota:
         !allowance?.premium && cycle
-          ? { used: cycle.used, limit: cycle.quota, cycleEndsAt: cycle.ends_at }
+          ? {
+              used: cycle.used,
+              limit: cycle.quota,
+              cycleEndsAt: cycle.ends_at,
+              ...(cycle.next_quota !== cycle.quota ? { nextLimit: cycle.next_quota } : {}),
+            }
           : undefined,
     },
     stores: [],

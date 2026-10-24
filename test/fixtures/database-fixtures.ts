@@ -10,6 +10,7 @@ export async function resetDatabase() {
     env.DB.prepare("DELETE FROM lifetime_allocations"),
     env.DB.prepare("DELETE FROM order_grants"),
     env.DB.prepare("DELETE FROM free_cycles"),
+    env.DB.prepare("DELETE FROM free_promotions"),
     env.DB.prepare("DELETE FROM tax_identifiers"),
     env.DB.prepare("DELETE FROM order_items"),
     env.DB.prepare("DELETE FROM orders"),

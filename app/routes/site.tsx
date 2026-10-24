@@ -9,8 +9,10 @@ import { buttonLink } from "~/components/ui/button-variants";
 import { appCopy, pageTitle, supportEmail } from "../app-copy";
 import { accessPath, ordersPath, visitCookie, visitParam } from "../app-links";
 import { createAuth } from "../auth.server";
+import { baseFreeQuota, currentFreePromotion } from "../domain/grants.server";
 import { tracePhase } from "../errors";
 import { languageFromPath, languages, localizedPath } from "../i18n";
+import { formatDate } from "../view-models";
 import type { Route } from "./+types/site";
 
 const noStore = { "cache-control": "no-store" };
@@ -45,7 +47,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (session && !visiting) {
     throw redirect(localizedPath(language, ordersPath), { headers: noStore });
   }
-  return { language, signedIn: Boolean(session), origin: new URL(env.APP_ORIGIN).origin };
+  return {
+    language,
+    signedIn: Boolean(session),
+    origin: new URL(env.APP_ORIGIN).origin,
+    // Senza cache la pagina annuncia la promozione in corso e la quota base appena finisce.
+    baseFreeQuota,
+    freePromotion: await currentFreePromotion(env.DB),
+  };
 }
 
 export function headers(): HeadersInit {
@@ -80,7 +89,7 @@ const featureIcons = [
 ];
 
 export default function Site({ loaderData }: Route.ComponentProps) {
-  const { language, signedIn } = loaderData;
+  const { language, signedIn, baseFreeQuota, freePromotion } = loaderData;
   const t = appCopy[language].site;
   const { features } = appCopy[language].access;
   const access = localizedPath(language, accessPath);
@@ -163,6 +172,15 @@ export default function Site({ loaderData }: Route.ComponentProps) {
               );
             })}
           </ul>
+          <p className="text-pretty">
+            {freePromotion
+              ? t.freePromotion(
+                  freePromotion.quota,
+                  formatDate(freePromotion.endsAt, language),
+                  baseFreeQuota,
+                )
+              : t.freeQuota(baseFreeQuota)}
+          </p>
           <p className="text-pretty text-muted-foreground">{t.trust}</p>
         </section>
       </main>

@@ -101,7 +101,37 @@ export async function setUnlockConfirmation(db: D1Database, userId: string, conf
   await skipConfirmationStatement(db, userId).run();
 }
 
-/** Cicli su tempo UTC, fissati al primo collegamento riuscito e mai alla riconnessione. */
+/** Sblocchi di un ciclo Free fuori dalle promozioni. */
+export const baseFreeQuota = 5;
+
+const cycleLength = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Quota di un ciclo che inizia all'istante `at`, espressione SQL: la promozione in corso a
+ * quell'istante, altrimenti la base. La fine della promozione non tocca i cicli già iniziati.
+ */
+function cycleQuotaSql(at: string) {
+  return `COALESCE((SELECT p.quota FROM free_promotions p
+    WHERE julianday(p.starts_at) <= julianday(${at}) AND julianday(${at}) < julianday(p.ends_at)),
+    ${baseFreeQuota})`;
+}
+
+/** Promozione globale del Free in corso, con la quota e la fine da annunciare. */
+export async function currentFreePromotion(db: D1Database, now = new Date()) {
+  return db
+    .prepare(`SELECT quota, ends_at AS endsAt FROM free_promotions
+    WHERE julianday(starts_at) <= julianday(?1) AND julianday(?1) < julianday(ends_at)`)
+    .bind(now.toISOString())
+    .first<{ quota: number; endsAt: string }>();
+}
+
+type FreeCycle = { id: string; used: number; quota: number; ends_at: string; next_quota: number };
+
+/**
+ * Cicli consecutivi di 7×24 ore sul tempo UTC, fissati al primo collegamento riuscito e mai
+ * alla riconnessione: ora legale e fuso dell'utente non spostano i confini. Il ciclo si crea
+ * quando serve, con la quota decisa al suo inizio; `next_quota` è quella del ciclo seguente.
+ */
 export async function orderAllowance(db: D1Database, userId: string, now = new Date()) {
   const at = now.toISOString();
   const workspace = await db
@@ -111,30 +141,28 @@ export async function orderAllowance(db: D1Database, userId: string, now = new D
     .bind(at, userId)
     .first<{ id: string; free_cycle_anchor_at: string | null; premium: number }>();
   if (!workspace) return null;
-  let cycle = await db
-    .prepare(`SELECT id, used, quota, ends_at FROM free_cycles
-    WHERE workspace_id = ? AND julianday(starts_at) <= julianday(?)
-      AND julianday(?) < julianday(ends_at) ORDER BY starts_at DESC LIMIT 1`)
-    .bind(workspace.id, at, at)
-    .first<{ id: string; used: number; quota: number; ends_at: string }>();
+  const current = db
+    .prepare(`SELECT c.id, c.used, c.quota, c.ends_at, ${cycleQuotaSql("c.ends_at")} AS next_quota
+    FROM free_cycles c WHERE c.workspace_id = ?1 AND julianday(c.starts_at) <= julianday(?2)
+      AND julianday(?2) < julianday(c.ends_at) ORDER BY c.starts_at DESC LIMIT 1`)
+    .bind(workspace.id, at);
+  let cycle = await current.first<FreeCycle>();
   if (!cycle && workspace.free_cycle_anchor_at) {
     const anchor = Date.parse(workspace.free_cycle_anchor_at);
-    const week = 7 * 24 * 60 * 60 * 1000;
-    const start = anchor + Math.floor((now.getTime() - anchor) / week) * week;
+    const start = anchor + Math.floor((now.getTime() - anchor) / cycleLength) * cycleLength;
     if (start >= anchor) {
-      const startsAt = new Date(start).toISOString();
-      const endsAt = new Date(start + week).toISOString();
+      // Richieste concorrenti calcolano la stessa finestra e la stessa quota: vince una riga.
       await db
         .prepare(`INSERT OR IGNORE INTO free_cycles (id, workspace_id, starts_at, ends_at, quota)
-        VALUES (?, ?, ?, ?, 5)`)
-        .bind(crypto.randomUUID(), workspace.id, startsAt, endsAt)
-        .run();
-      cycle = await db
-        .prepare(
-          "SELECT id, used, quota, ends_at FROM free_cycles WHERE workspace_id = ? AND starts_at = ?",
+        VALUES (?1, ?2, ?3, ?4, ${cycleQuotaSql("?3")})`)
+        .bind(
+          crypto.randomUUID(),
+          workspace.id,
+          new Date(start).toISOString(),
+          new Date(start + cycleLength).toISOString(),
         )
-        .bind(workspace.id, startsAt)
-        .first<{ id: string; used: number; quota: number; ends_at: string }>();
+        .run();
+      cycle = await current.first<FreeCycle>();
     }
   }
   return {

@@ -118,6 +118,8 @@ export function PlanSection({
                 {t.settings.plan.cycleEnds(
                   formatDate(quota.cycleEndsAt, language, "dateTime", zone),
                 )}
+                {/* La promozione cambia la quota soltanto da un ciclo all'altro. */}
+                {quota.nextLimit ? ` ${t.settings.plan.nextCycleLimit(quota.nextLimit)}` : null}
               </p>
             ) : null}
           </div>

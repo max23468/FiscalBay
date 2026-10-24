@@ -7,6 +7,7 @@ import {
 } from "../app/integrations/ebay/fulfillment.server";
 import { mapTradingTaxIdentifiers } from "../app/integrations/ebay/trading.server";
 import {
+  currentFreePromotion,
   orderAllowance,
   UnlockError,
   unlockOrders,
@@ -41,7 +42,7 @@ import {
 } from "./fixtures/database-fixtures";
 import { syntheticProfile, verifiedSession } from "./fixtures/account-fixtures";
 import { displayTaxValue } from "../app/tax-quality";
-import { addressRows, fiscalSituation, itemPrice } from "../app/view-models";
+import { addressRows, fiscalSituation, formatDate, itemPrice } from "../app/view-models";
 import {
   addressCase,
   buyerNameView,
@@ -635,10 +636,11 @@ describe("percorso ordini", () => {
     expect((await orderAllowance(env.DB, "u-a"))?.remaining).toBe(0);
     await restoreUnlockConfirmation(env.DB, "u-a");
     expect(await unlockConfirmation(env.DB, "u-a")).toBe(true);
-    await env.DB.prepare("UPDATE free_cycles SET quota = 2 WHERE id = 'c-a'").run();
-    await unlockOrders(env.DB, "u-a", ["o-a", "o-a2"], true);
+    // Nel ciclo seguente il lotto riuscito non salva la preferenza del singolo sblocco.
+    const following = new Date("2026-10-01T00:00:00.000Z");
+    await unlockOrders(env.DB, "u-a", ["o-a", "o-a2"], true, "production", following);
     expect(await unlockConfirmation(env.DB, "u-a")).toBe(true);
-    expect((await orderAllowance(env.DB, "u-a"))?.remaining).toBe(0);
+    expect((await orderAllowance(env.DB, "u-a", following))?.remaining).toBe(4);
   });
 
   it("rifiuta lotti estranei, ambiente errato, ordini non disponibili e preferenze forzate", async () => {
@@ -726,15 +728,171 @@ describe("percorso ordini", () => {
     expect(await orderAllowance(env.DB, "u-a", new Date("2026-09-12T00:00:00.000Z"))).toMatchObject(
       { cycle: null, remaining: 0 },
     );
-    await env.DB.prepare(
-      "UPDATE workspaces SET free_cycle_anchor_at = NULL WHERE id = 'w-b'",
-    ).run();
-    await env.DB.prepare("DELETE FROM free_cycles WHERE workspace_id = 'w-b'").run();
-    expect(await orderAllowance(env.DB, "u-b")).toMatchObject({ cycle: null, remaining: 0 });
+    // Uno spazio senza negozi collegati non ha ancora un ciclo.
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO workspaces (id, name, created_at) VALUES ('w-c', 'C', ?)").bind(
+        now,
+      ),
+      env.DB.prepare(
+        "INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ('w-c', 'u-c', 'owner')",
+      ),
+    ]);
+    expect(await orderAllowance(env.DB, "u-c")).toMatchObject({ cycle: null, remaining: 0 });
     await env.DB.prepare("DELETE FROM free_cycles WHERE workspace_id = 'w-a'").run();
     expect(
       (await orderAllowance(env.DB, "u-a", new Date("2026-09-21T20:00:00.000Z")))?.cycle?.ends_at,
     ).toBe("2026-09-27T20:00:00.000Z");
+  });
+
+  describe("cicli e promozione del Free", () => {
+    const week = 7 * 24 * 60 * 60 * 1000;
+    const promotion = (id: string, startsAt: string, endsAt: string, quota = 10) =>
+      env.DB.prepare(
+        "INSERT INTO free_promotions (id, starts_at, ends_at, quota, created_at) VALUES (?, ?, ?, ?, ?)",
+      ).bind(id, startsAt, endsAt, quota, now);
+
+    it("misura 7×24 ore sull'istante UTC anche quando cambia l'ora legale", async () => {
+      await seed();
+      await env.DB.prepare("DELETE FROM free_cycles").run();
+      // Ancoraggio alle 22:00 di Roma: l'autunno toglie un'ora locale, la primavera la aggiunge.
+      for (const [at, startsAt] of [
+        ["2026-10-26T12:00:00.000Z", "2026-10-25T20:00:00.000Z"],
+        ["2027-03-30T12:00:00.000Z", "2027-03-28T20:00:00.000Z"],
+      ] as const) {
+        const cycle = (await orderAllowance(env.DB, "u-a", new Date(at)))!.cycle!;
+        expect(Date.parse(cycle.ends_at) - Date.parse(startsAt)).toBe(week);
+        expect(cycle.ends_at).toBe(new Date(Date.parse(startsAt) + week).toISOString());
+      }
+      // Lo stesso istante di fine si legge in ore locali diverse prima e dopo il cambio.
+      expect(formatDate("2026-11-01T20:00:00.000Z", "it", "time")).toBe("21:00");
+      expect(formatDate("2026-10-25T20:00:00.000Z", "it", "time")).toBe("21:00");
+      expect(formatDate("2026-10-18T20:00:00.000Z", "it", "time")).toBe("22:00");
+    });
+
+    it.each([
+      ["Asia/Tokyo", "21 set 2026, 05:30"],
+      ["America/Los_Angeles", "20 set 2026, 13:30"],
+    ])(
+      "assegna al ciclo nuovo lo sblocco della sua prima notte anche con il fuso %s",
+      async (zone, local) => {
+        await seed();
+        await env.DB.prepare("DELETE FROM free_cycles").run();
+        // Il secondo ciclo inizia alle 20:00 UTC del 20 settembre: in Giappone è già il 21.
+        const before = new Date("2026-09-20T19:59:59.999Z");
+        const night = new Date("2026-09-20T20:30:00.000Z");
+        expect(formatDate(night.toISOString(), "it", "dateTime", zone)).toBe(local);
+        const first = (await orderAllowance(env.DB, "u-a", before))!.cycle!;
+        await unlockOrders(env.DB, "u-a", ["o-a"], false, "production", night);
+        const second = (await orderAllowance(env.DB, "u-a", night))!.cycle!;
+        expect(second.id).not.toBe(first.id);
+        expect(second.used).toBe(1);
+        expect((await orderAllowance(env.DB, "u-a", before))!.cycle).toMatchObject({
+          id: first.id,
+          used: 0,
+        });
+        expect(
+          await env.DB.prepare("SELECT cycle_id FROM order_grants WHERE order_id = 'o-a'").first(),
+        ).toEqual({ cycle_id: second.id });
+      },
+    );
+
+    it("fissa la quota all'inizio del ciclo e annuncia quella del ciclo seguente", async () => {
+      await seed();
+      await env.DB.prepare("DELETE FROM free_cycles").run();
+      // Cicli dalle 20:00 UTC di ogni domenica dal 13 settembre; promozione dal 15 al 29.
+      await promotion("lancio", "2026-09-15T00:00:00.000Z", "2026-09-29T00:00:00.000Z").run();
+      const allowance = (at: string) => orderAllowance(env.DB, "u-a", new Date(at));
+      expect(await allowance("2026-09-16T00:00:00.000Z")).toMatchObject({
+        remaining: 5,
+        cycle: { quota: 5, next_quota: 10, ends_at: "2026-09-20T20:00:00.000Z" },
+      });
+      expect(await allowance("2026-09-21T00:00:00.000Z")).toMatchObject({
+        remaining: 10,
+        cycle: { quota: 10, next_quota: 10 },
+      });
+      // Il ciclo iniziato il 27 attraversa la fine della promozione e conserva la sua quota.
+      expect(await allowance("2026-09-29T12:00:00.000Z")).toMatchObject({
+        remaining: 10,
+        cycle: { quota: 10, next_quota: 5, ends_at: "2026-10-04T20:00:00.000Z" },
+      });
+      expect(await allowance("2026-10-05T00:00:00.000Z")).toMatchObject({
+        cycle: { quota: 5, next_quota: 5 },
+      });
+      // Una promozione accorciata non cambia la quota dei cicli già iniziati.
+      await env.DB.prepare(
+        "UPDATE free_promotions SET ends_at = '2026-09-27T00:00:00.000Z' WHERE id = 'lancio'",
+      ).run();
+      expect(await allowance("2026-09-29T12:00:00.000Z")).toMatchObject({
+        cycle: { quota: 10, next_quota: 5 },
+      });
+      expect(await currentFreePromotion(env.DB, new Date("2026-09-14T23:59:59.999Z"))).toBeNull();
+      expect(await currentFreePromotion(env.DB, new Date("2026-09-15T00:00:00.000Z"))).toEqual({
+        quota: 10,
+        endsAt: "2026-09-27T00:00:00.000Z",
+      });
+      expect(await currentFreePromotion(env.DB, new Date("2026-09-27T00:00:00.000Z"))).toBeNull();
+    });
+
+    it("crea un solo ciclo con richieste concorrenti e non lo azzera né lo sposta", async () => {
+      await seed();
+      await env.DB.prepare("DELETE FROM free_cycles").run();
+      const at = new Date("2026-09-16T00:00:00.000Z");
+      const results = await Promise.all(
+        Array.from({ length: 6 }, () => orderAllowance(env.DB, "u-a", at)),
+      );
+      expect(new Set(results.map((result) => result!.cycle!.id)).size).toBe(1);
+      expect(
+        await env.DB.prepare(
+          "SELECT count(*) AS n FROM free_cycles WHERE workspace_id = 'w-a'",
+        ).first(),
+      ).toEqual({ n: 1 });
+      await unlockOrders(env.DB, "u-a", ["o-a"], false, "production", at);
+      const id = results[0]!.cycle!.id;
+      for (const change of [
+        "used = 0",
+        "quota = 10",
+        "starts_at = '2026-09-15T00:00:00.000Z'",
+        "ends_at = '2026-09-30T00:00:00.000Z'",
+        "workspace_id = 'w-b'",
+      ])
+        await expect(
+          env.DB.prepare(`UPDATE free_cycles SET ${change} WHERE id = ?`).bind(id).run(),
+        ).rejects.toThrow("immutable_cycle");
+      for (const anchor of [null, "2026-09-16T00:00:00.000Z"])
+        await expect(
+          env.DB.prepare("UPDATE workspaces SET free_cycle_anchor_at = ? WHERE id = 'w-a'")
+            .bind(anchor)
+            .run(),
+        ).rejects.toThrow("immutable_cycle_anchor");
+      // Una promozione nuova non tocca il ciclo già creato.
+      await promotion("tardiva", "2026-09-14T00:00:00.000Z", "2026-09-30T00:00:00.000Z").run();
+      expect((await orderAllowance(env.DB, "u-a", at))!.cycle).toMatchObject({
+        id,
+        quota: 5,
+        used: 1,
+      });
+    });
+
+    it("rifiuta promozioni sovrapposte o con intervalli invalidi", async () => {
+      await promotion("prima", "2026-09-15T00:00:00.000Z", "2026-09-29T00:00:00.000Z").run();
+      await promotion("seguente", "2026-09-29T00:00:00.000Z", "2026-10-06T00:00:00.000Z").run();
+      await expect(
+        promotion("doppia", "2026-09-28T00:00:00.000Z", "2026-10-01T00:00:00.000Z").run(),
+      ).rejects.toThrow("overlapping_promotion");
+      await expect(
+        env.DB.prepare(
+          "UPDATE free_promotions SET ends_at = '2026-09-30T00:00:00.000Z' WHERE id = 'prima'",
+        ).run(),
+      ).rejects.toThrow("overlapping_promotion");
+      for (const [startsAt, endsAt, quota] of [
+        ["2026-11-02T00:00:00.000Z", "2026-11-01T00:00:00.000Z", 10],
+        ["non una data", "2026-11-01T00:00:00.000Z", 10],
+        ["2026-11-01T00:00:00.000Z", "2026-11-02T00:00:00.000Z", 0],
+      ] as const)
+        await expect(promotion("invalida", startsAt, endsAt, quota).run()).rejects.toThrow(
+          "CHECK constraint failed",
+        );
+    });
   });
 
   it("mantiene senza apertura i dati acquisiti in Premium, esclude quelli tardivi e rispetta le revoche indipendenti", async () => {

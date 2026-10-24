@@ -466,6 +466,12 @@ describe("modello ordini", () => {
   it.each(["expires_at", "revoked_at"])(
     "un grant con %s non espone valori e non consuma altra quota",
     async (column) => {
+      // Un posto libero dopo lo sblocco: il rifiuto successivo non dipende dalla quota.
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM free_cycles WHERE id = 'c-a'"),
+        env.DB.prepare(`INSERT INTO free_cycles (id, workspace_id, starts_at, ends_at, quota)
+          VALUES ('c-a', 'w-a', '2026-09-01T00:00:00Z', '2026-10-01T00:00:00Z', 2)`),
+      ]);
       const result = await recordOrderObservation(
         env.DB,
         target(),
@@ -483,7 +489,6 @@ describe("modello ordini", () => {
       await env.DB.prepare(`UPDATE order_grants SET ${column} = ?`)
         .bind(expiry.toISOString())
         .run();
-      await env.DB.prepare("UPDATE free_cycles SET quota = 2 WHERE id = 'c-a'").run();
       if (column === "expires_at") {
         expect(
           (

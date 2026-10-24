@@ -468,6 +468,7 @@ const it = {
       unlocksCycle: "Ordini sbloccati in questo ciclo",
       unlocksUsed: (used: number, limit: number) => `${used} di ${limit}`,
       cycleEnds: (date: string) => `Il ciclo si rinnova il ${date}.`,
+      nextCycleLimit: (limit: number) => `Il prossimo ciclo avrà ${limit} sblocchi.`,
       trialTitle: "Prova Premium per 14 giorni",
       trialBody:
         "Senza carta e senza rinnovo automatico. Alla fine della prova scegli tu se continuare con Premium.",
@@ -795,6 +796,9 @@ const it = {
     openApp: "Vai all’app",
     trust:
       "Dati letti con le API ufficiali di eBay, in sola lettura: FiscalBay non modifica i tuoi ordini.",
+    freeQuota: (base: number) => `Con il piano Free sblocchi ${base} ordini ogni 7 giorni.`,
+    freePromotion: (quota: number, date: string, base: number) =>
+      `Promozione Free: ${quota} ordini da sbloccare ogni 7 giorni nei cicli che iniziano entro il ${date}, poi ${base}.`,
     independent: "FiscalBay è un servizio indipendente, non affiliato a eBay.",
     support: "Assistenza",
   },
@@ -1382,6 +1386,7 @@ const en: AppCopy = {
       unlocksCycle: "Orders unlocked this cycle",
       unlocksUsed: (used, limit) => `${used} of ${limit}`,
       cycleEnds: (date) => `The cycle renews on ${date}.`,
+      nextCycleLimit: (limit) => `The next cycle will have ${limit} unlocks.`,
       trialTitle: "Try Premium for 14 days",
       trialBody:
         "No card and no automatic renewal. When the trial ends, you choose whether to keep Premium.",
@@ -1710,6 +1715,9 @@ const en: AppCopy = {
     openApp: "Go to the app",
     trust:
       "Data read through eBay’s official APIs, read-only: FiscalBay never changes your orders.",
+    freeQuota: (base) => `On the Free plan you unlock ${base} orders every 7 days.`,
+    freePromotion: (quota, date, base) =>
+      `Free promotion: ${quota} orders to unlock every 7 days in cycles starting by ${date}, then ${base}.`,
     independent: "FiscalBay is an independent service, not affiliated with eBay.",
     support: "Support",
   },

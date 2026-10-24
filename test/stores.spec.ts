@@ -28,6 +28,7 @@ import {
 } from "../app/routes/settings";
 import { action as languageAction } from "../app/routes/language";
 import { action as notificationsAction } from "../app/routes/notifications";
+import { appCopy } from "../app/app-copy";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import {
   refreshExpiringTokens,
@@ -725,6 +726,32 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     expect(((await settings(seller.cookie)) as Response).headers.get("location")).toBe(
       "/app/ordini",
     );
+  });
+
+  it("la quota personale mostra il proprio ciclo e la quota diversa del ciclo seguente", async () => {
+    // Primo collegamento il 13 settembre alle 20:00 UTC; la promozione finisce il 15.
+    vi.setSystemTime(new Date(now));
+    await env.DB.prepare(
+      `INSERT INTO free_promotions (id, starts_at, ends_at, quota, created_at)
+       VALUES ('lancio', '2026-09-01T00:00:00.000Z', '2026-09-15T00:00:00.000Z', 10, ?1)`,
+    )
+      .bind(now)
+      .run();
+    const seller = await linkedSeller("promozione@example.invalid");
+    expect((await settingsPage(seller.cookie)).page.account.quota).toEqual({
+      used: 0,
+      limit: 10,
+      cycleEndsAt: "2026-09-20T20:00:00.000Z",
+      nextLimit: 5,
+    });
+    // Il ciclo seguente inizia dopo la promozione e torna alla quota base.
+    vi.setSystemTime(new Date("2026-09-20T20:00:00.000Z"));
+    expect((await settingsPage(seller.cookie)).page.account.quota).toEqual({
+      used: 0,
+      limit: 5,
+      cycleEndsAt: "2026-09-27T20:00:00.000Z",
+    });
+    expect(appCopy.it.settings.plan.nextCycleLimit(5)).toBe("Il prossimo ciclo avrà 5 sblocchi.");
   });
 
   it("salva tema, fuso e consenso a ogni scelta e rifiuta valori non ammessi", async () => {
