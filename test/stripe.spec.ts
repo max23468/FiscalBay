@@ -1117,6 +1117,10 @@ describe("Webhook e riconciliazione Stripe", () => {
       payment: { state: "scheduled", period: "monthly", chargeAt: trialEnd },
     });
     expect((await purchaseState(env.DB, userId, at(now)))?.state).toBe("covered");
+    // Prima del primo addebito l'abbonamento si disdice dal portale e scollegare l'ultimo
+    // negozio non lo ferma; il cambio di periodicità aspetta un periodo pagato.
+    expect(await subscriptionRenews(env.DB, env, userId)).toBe(true);
+    expect(await changeSubscriptionPeriod(env, userId, "annual", at(now))).toBe("not_allowed");
     // Alla fine della prova Stripe incassa il primo periodo, che copre fino al rinnovo.
     stripe.state.subscription = { status: "active", start: trialEnd, end: renewsAt };
     stripe.state.invoices = [
@@ -1538,7 +1542,7 @@ describe("Webhook e riconciliazione Stripe", () => {
       await openBillingPortal(env, "estraneo", "https://test.fiscalbay.it/app", "it"),
     ).toBeNull();
     // Lo scollegamento dell'ultimo negozio avvisa finché l'abbonamento si rinnova.
-    expect(await subscriptionRenews(env.DB, env, userId, at(now))).toBe(true);
+    expect(await subscriptionRenews(env.DB, env, userId)).toBe(true);
     stripe.state.subscription.cancel = true;
     await applyStripeEvent(
       env,
@@ -1546,7 +1550,7 @@ describe("Webhook e riconciliazione Stripe", () => {
       stripe.fetcher,
       at(now),
     );
-    expect(await subscriptionRenews(env.DB, env, userId, at(now))).toBe(false);
+    expect(await subscriptionRenews(env.DB, env, userId)).toBe(false);
   });
 
   it("legge il periodo pagato soltanto dalle righe dell'abbonamento", () => {
