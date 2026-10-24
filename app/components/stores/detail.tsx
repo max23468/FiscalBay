@@ -16,7 +16,6 @@ import type { AppCopy } from "../../app-copy";
 import { appHref, type AppLinks } from "../../app-links";
 import { formatDate, type StoreView } from "../../view-models";
 import { ReconnectButton, StoreActions } from "./actions";
-import type { StoresPageData } from "./page";
 import {
   connectionStatus,
   ebayDownFor,
@@ -31,6 +30,7 @@ import {
   StoreTile,
   syncDescription,
   type SectionProps,
+  type StoresPageData,
 } from "./store";
 
 /** Pannello del negozio con URL proprio; resta visibile mentre si chiude. */

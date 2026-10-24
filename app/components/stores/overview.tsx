@@ -12,7 +12,6 @@ import { appHref, type AppLinks } from "../../app-links";
 import type { Language } from "../../i18n";
 import { formatDate, type StoreView } from "../../view-models";
 import { PauseButton, ReconnectButton } from "./actions";
-import type { StoresPageData } from "./page";
 import {
   connectionStatus,
   ebayDownFor,
@@ -25,6 +24,7 @@ import {
   StoreTile,
   syncDescription,
   type SectionProps,
+  type StoresPageData,
 } from "./store";
 
 /** Valore di un riquadro della scheda: etichetta sopra, valore sotto. */

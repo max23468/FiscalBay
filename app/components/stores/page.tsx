@@ -12,27 +12,11 @@ import { buttonLink } from "~/components/ui/button-variants";
 import { supportEmail, type AppCopy } from "../../app-copy";
 import type { AppLinks } from "../../app-links";
 import { usePageTiming } from "../../page-timing";
-import type { AccountView, StoreView } from "../../view-models";
+import type { StoreView } from "../../view-models";
 import { StoreSheet } from "./detail";
 import { StoreList, StoreTable } from "./list";
 import { StoreOverview } from "./overview";
-
-export interface StoresPageData {
-  stores: StoreView[];
-  detail: StoreView | null;
-  account: Pick<AccountView, "plan">;
-  now: string;
-  /** Ambienti in cui eBay non risponde: le azioni che lo chiamano restano sospese. */
-  ebayDown: Array<"production" | "sandbox">;
-  elsewhere: boolean;
-  /**
-   * Schermata preparatoria del collegamento. Nell'area reale collegare e ricollegare la aprono;
-   * senza, l'anteprima simula l'esito.
-   */
-  connectHref?: string;
-  /** Impostazioni esistono: le scorciatoie verso notifiche, piano e supporto hanno una meta. */
-  settings: boolean;
-}
+import type { StoresPageData } from "./store";
 
 /** La schermata preparatoria riporta ai negozi con «Annulla». */
 function connectFromStores(connectHref: string) {
