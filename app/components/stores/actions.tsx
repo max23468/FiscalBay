@@ -30,7 +30,8 @@ import { Input } from "~/components/ui/input";
 import type { AppCopy } from "../../app-copy";
 import { appHref, type AppLinks } from "../../app-links";
 import type { StoreView } from "../../view-models";
-import { needsReconnect, StoreSection } from "./store";
+import { StoreSection } from "./store";
+import { needsReconnect } from "./state";
 
 /** Ricollegamento dalla schermata preparatoria, nello stesso ambiente eBay del negozio. */
 function reconnectHref(connectHref: string, store: StoreView) {

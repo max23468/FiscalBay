@@ -1,16 +1,5 @@
 import { cn } from "cn";
-import {
-  Bell,
-  ClipboardList,
-  CreditCard,
-  Globe,
-  LogOut,
-  Search,
-  Settings,
-  ShieldCheck,
-  Store,
-  User,
-} from "lucide-react";
+import { Bell, Globe, LogOut, Search } from "lucide-react";
 import {
   createContext,
   useCallback,
@@ -25,6 +14,12 @@ import { Link, NavLink, useFetcher, useLocation, useNavigate } from "react-route
 
 import { useHydrated } from "~/components/hydrated";
 import { InitialsTile } from "~/components/icon-tile";
+import {
+  accountMenu,
+  shellDestinations,
+  type AccountMenuItem,
+  type NavDestination,
+} from "~/components/shell-links";
 import { StatusIcon } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import {
@@ -144,46 +139,6 @@ export function useAction(onResult?: (result: ActionResult) => void) {
     /** Ultimo esito, disponibile a richiesta conclusa. */
     result: fetcher.state === "idle" ? fetcher.data : undefined,
   };
-}
-
-/**
- * Voce del menu dell'avatar; `reloadDocument` per le pagine fuori dalle route dell'app,
- * `onSelect` per una voce che invia una scelta invece di aprire una pagina.
- */
-export interface AccountMenuItem {
-  href: string;
-  label: string;
-  Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  lang?: Language;
-  reloadDocument?: boolean;
-  onSelect?: () => void;
-}
-
-/** Destinazione della navigazione principale; `end` per la radice dell'area. */
-export interface NavDestination {
-  href: string;
-  label: string;
-  Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  end?: boolean;
-}
-
-/** Destinazioni principali dell'app, nell'anteprima e nell'area reale. */
-export function shellDestinations(links: AppLinks, t: AppCopy): NavDestination[] {
-  return [
-    { href: appHref(links, "ordini"), label: t.shell.orders, Icon: ClipboardList },
-    { href: appHref(links, "negozi"), label: t.shell.stores, Icon: Store },
-    { href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings },
-  ];
-}
-
-/** Voci dell'account nel menu dell'avatar: profilo e categorie più cercate delle Impostazioni. */
-export function accountMenu(links: AppLinks, t: AppCopy): AccountMenuItem[] {
-  return [
-    { href: appHref(links, "profilo"), label: t.shell.profile, Icon: User },
-    { href: appHref(links, "impostazioni/sicurezza"), label: t.shell.security, Icon: ShieldCheck },
-    { href: appHref(links, "impostazioni/piano"), label: t.shell.planBilling, Icon: CreditCard },
-    { href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings },
-  ];
 }
 
 /**

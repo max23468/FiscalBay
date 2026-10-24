@@ -13,19 +13,21 @@ import type { Language } from "../../i18n";
 import { formatDate, type StoreView } from "../../view-models";
 import { PauseButton, ReconnectButton } from "./actions";
 import {
-  connectionStatus,
-  ebayDownFor,
   FeedbackSummary,
-  hasSubtitle,
   LastSync,
-  needsReconnect,
   RecentList,
   StoreSubtitle,
   StoreTile,
-  syncDescription,
   type SectionProps,
-  type StoresPageData,
 } from "./store";
+import {
+  connectionStatus,
+  ebayDownFor,
+  hasSubtitle,
+  needsReconnect,
+  syncDescription,
+  type StoresPageData,
+} from "./state";
 
 /** Valore di un riquadro della scheda: etichetta sopra, valore sotto. */
 function OverviewStat({ label, children }: { label: string; children: React.ReactNode }) {

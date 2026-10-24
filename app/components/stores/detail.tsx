@@ -17,21 +17,23 @@ import { appHref, type AppLinks } from "../../app-links";
 import { formatDate, type StoreView } from "../../view-models";
 import { ReconnectButton, StoreActions } from "./actions";
 import {
-  connectionStatus,
-  ebayDownFor,
   FeedbackSummary,
-  hasSubtitle,
   LastSync,
-  marketplaceText,
-  notificationsLabel,
   RecentList,
   StoreSection,
   StoreSubtitle,
   StoreTile,
-  syncDescription,
   type SectionProps,
-  type StoresPageData,
 } from "./store";
+import {
+  connectionStatus,
+  ebayDownFor,
+  hasSubtitle,
+  marketplaceText,
+  notificationsLabel,
+  syncDescription,
+  type StoresPageData,
+} from "./state";
 
 /** Pannello del negozio con URL proprio; resta visibile mentre si chiude. */
 export function StoreSheet({

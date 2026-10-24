@@ -13,14 +13,8 @@ import {
 import type { AppCopy } from "../../app-copy";
 import { appHref, type AppLinks } from "../../app-links";
 import type { StoreView } from "../../view-models";
-import {
-  connectionStatus,
-  LastSync,
-  marketplaceText,
-  notificationsLabel,
-  StoreSubtitle,
-  StoreTile,
-} from "./store";
+import { LastSync, StoreSubtitle, StoreTile } from "./store";
+import { connectionStatus, marketplaceText, notificationsLabel } from "./state";
 
 type ListProps = {
   stores: StoreView[];

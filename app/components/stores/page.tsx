@@ -16,7 +16,7 @@ import type { StoreView } from "../../view-models";
 import { StoreSheet } from "./detail";
 import { StoreList, StoreTable } from "./list";
 import { StoreOverview } from "./overview";
-import type { StoresPageData } from "./store";
+import { type StoresPageData } from "./state";
 
 /** La schermata preparatoria riporta ai negozi con «Annulla». */
 function connectFromStores(connectHref: string) {

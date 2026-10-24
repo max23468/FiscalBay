@@ -1,9 +1,10 @@
 import { Globe, Languages } from "lucide-react";
 import { useLocation, useNavigation, useSubmit } from "react-router";
 
-import { accountMenu, AppShell, shellDestinations } from "~/components/app-shell";
+import { AppShell } from "~/components/app-shell";
 import { useDeviceTimeZone } from "~/components/device-time-zone";
 import { OrdersLoading } from "~/components/orders/loading";
+import { accountMenu, shellDestinations } from "~/components/shell-links";
 import { appCopy } from "../app-copy";
 import {
   accessPath,
