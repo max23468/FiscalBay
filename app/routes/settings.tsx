@@ -188,13 +188,13 @@ export async function action({ request }: Route.ActionArgs) {
     }
     if (intent === "template") {
       const templates = parseTemplates(form);
-      if (!templates) return failed(400, t.templateInvalid);
+      if (!templates) return failed(400, t.template.templateInvalid);
       await saveTemplates(env.DB, userId, templates);
       return { ok: true } satisfies ActionResult;
     }
   } catch (error) {
     logFailure({ request, error, operation: "route" });
-    return failed(500, intent === "template" ? t.templateFailed : t.saveFailed);
+    return failed(500, intent === "template" ? t.template.templateFailed : t.saveFailed);
   }
   return securityAction(request, area, form);
 }

@@ -33,7 +33,9 @@ export function TemplateSection({
   const ready = useHydrated();
   return (
     <div className="grid gap-4">
-      <p className="text-sm leading-relaxed text-muted-foreground">{t.settings.templateIntro}</p>
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        {t.settings.template.templateIntro}
+      </p>
       <form
         className="grid gap-4"
         onSubmit={(event) => {
@@ -73,7 +75,7 @@ export function TemplateSection({
             </TabsContent>
           ))}
         </Tabs>
-        <FieldDescription id="template-hint">{t.settings.templateHint}</FieldDescription>
+        <FieldDescription id="template-hint">{t.settings.template.templateHint}</FieldDescription>
         <div className="flex flex-wrap items-center gap-3">
           <Button
             type="submit"
@@ -90,15 +92,17 @@ export function TemplateSection({
             )}
           >
             {state === "saved" ? t.settings.saved : null}
-            {state === "error" ? (action.result?.notice ?? t.settings.templateFailed) : null}
+            {state === "error"
+              ? (action.result?.notice ?? t.settings.template.templateFailed)
+              : null}
           </span>
         </div>
       </form>
       <UnsavedDialog
         blocker={blocker}
-        title={t.settings.unsavedTitle}
-        description={t.settings.unsaved}
-        leave={t.settings.leave}
+        title={t.settings.template.unsavedTitle}
+        description={t.settings.template.unsaved}
+        leave={t.settings.template.leave}
         stay={t.profile.stay}
       />
     </div>

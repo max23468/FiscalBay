@@ -89,7 +89,7 @@ export async function pageScenario(request: Request) {
 
 /** Azioni senza effetto dell'anteprima: la risposta ha la forma di quelle reali. */
 const notices: Record<string, (t: AppCopy) => string | undefined> = {
-  "export-create": (t) => t.settings.exportCreated,
+  "export-create": (t) => t.settings.export.exportCreated,
   retry: (t) => t.orders.retried,
   profile: (t) => t.profile.saved,
   template: () => undefined,

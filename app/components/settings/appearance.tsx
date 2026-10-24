@@ -15,7 +15,7 @@ import { Group, RadioOption, SaveStatus, SimpleSelect, useAutoSave } from "./con
 function zoneLabel(zone: string | null, t: AppCopy): string | null {
   if (!zone) return null;
   return (timeZones as readonly string[]).includes(zone)
-    ? t.settings.timeZones[zone as TimeZone]
+    ? t.settings.appearance.timeZones[zone as TimeZone]
     : (zone.split("/").at(-1) ?? zone).replaceAll("_", " ");
 }
 
@@ -36,7 +36,7 @@ function LanguageChoice({ t, links, preview }: { t: AppCopy; links: AppLinks; pr
   if (preview) {
     return (
       <LanguageSwitch
-        label={t.settings.language}
+        label={t.settings.appearance.language}
         current={links.language}
         hrefFor={(code) => localizedPath(code, barePath)}
       />
@@ -91,20 +91,20 @@ export function AppearanceSection({
   useEffect(() => applyTheme(theme), [theme]);
   return (
     <>
-      <Group title={t.settings.theme}>
+      <Group title={t.settings.appearance.theme}>
         <div className="grid gap-2">
           <RadioGroup
             value={theme}
             disabled={!ready || themeState === "saving"}
             onValueChange={(value) => setTheme(value as Theme)}
             className="flex flex-wrap gap-5"
-            aria-label={t.settings.theme}
+            aria-label={t.settings.appearance.theme}
           >
             {(
               [
-                ["system", t.settings.themeSystem, SunMoon],
-                ["light", t.settings.themeLight, Sun],
-                ["dark", t.settings.themeDark, Moon],
+                ["system", t.settings.appearance.themeSystem, SunMoon],
+                ["light", t.settings.appearance.themeLight, Sun],
+                ["dark", t.settings.appearance.themeDark, Moon],
               ] as const
             ).map(([value, label, Icon]) => (
               <RadioOption key={value} value={value}>
@@ -115,22 +115,27 @@ export function AppearanceSection({
           </RadioGroup>
           <SaveStatus state={themeState} t={t} />
         </div>
-        {preview ? <p className="text-sm text-muted-foreground">{t.settings.themeNote}</p> : null}
+        {preview ? (
+          <p className="text-sm text-muted-foreground">{t.settings.appearance.themeNote}</p>
+        ) : null}
       </Group>
-      <Group title={t.settings.language}>
+      <Group title={t.settings.appearance.language}>
         <LanguageChoice t={t} links={links} preview={preview} />
       </Group>
       <Group>
         <div className="grid gap-2">
           <SimpleSelect
-            label={t.settings.timeZone}
+            label={t.settings.appearance.timeZone}
             disabled={!ready || zoneState === "saving"}
             items={[
               {
                 value: "auto",
-                label: t.settings.timeZoneAuto(zoneLabel(detectedTimeZone, t)),
+                label: t.settings.appearance.timeZoneAuto(zoneLabel(detectedTimeZone, t)),
               },
-              ...timeZones.map((zone) => ({ value: zone, label: t.settings.timeZones[zone] })),
+              ...timeZones.map((zone) => ({
+                value: zone,
+                label: t.settings.appearance.timeZones[zone],
+              })),
             ]}
             value={timeZone}
             onChange={setTimeZone}

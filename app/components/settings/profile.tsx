@@ -122,7 +122,7 @@ export function ProfilePage({
       </ProfileCard>
       <UnsavedDialog
         blocker={blocker}
-        title={t.settings.unsavedTitle}
+        title={t.settings.template.unsavedTitle}
         description={t.profile.unsaved}
         leave={t.profile.leave}
         stay={t.profile.stay}

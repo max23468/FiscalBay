@@ -473,7 +473,9 @@ export function MissingOrderHelp({
   const defaultMessage = (code: Language) =>
     (
       templates?.[code] ??
-      (code === "it" ? t.settings.templateDefaultIt : t.settings.templateDefaultEn)
+      (code === "it"
+        ? t.settings.template.templateDefaultIt
+        : t.settings.template.templateDefaultEn)
     ).replaceAll("{ordine}", order.ebayOrderId);
   const [message, setMessage] = useState(() => defaultMessage(language));
   const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");

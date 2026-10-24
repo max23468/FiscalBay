@@ -172,7 +172,7 @@ describe("stato sintetico dell'anteprima", () => {
         language === "it" ? "2.0.0 (anteprima)" : "2.0.0 (preview)",
       );
       const t = appCopy[language];
-      for (const text of [t.settings.faqItems[1]!.a, t.orders.quotaBody("date")]) {
+      for (const text of [t.settings.support.faqItems[1]!.a, t.orders.quotaBody("date")]) {
         expect(text).toContain("Codice Fiscale");
         expect(text).toContain("Partita IVA");
       }

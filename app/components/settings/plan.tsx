@@ -29,16 +29,20 @@ function PremiumPlan({
   const action = useAction();
   const lifetime = account.premium?.period === "lifetime";
   return (
-    <Group title={t.settings.currentPlan}>
+    <Group title={t.settings.plan.currentPlan}>
       <div className="grid gap-1">
         <p className="flex items-center gap-2 text-lg font-semibold">
-          {account.premium ? t.settings.premiumPeriod[account.premium.period] : t.settings.premium}
+          {account.premium
+            ? t.settings.plan.premiumPeriod[account.premium.period]
+            : t.settings.plan.premium}
         </p>
         {lifetime ? (
-          <p className="text-sm text-muted-foreground">{t.settings.premiumLifetime}</p>
+          <p className="text-sm text-muted-foreground">{t.settings.plan.premiumLifetime}</p>
         ) : account.premium?.renewsAt ? (
           <p className="text-sm text-muted-foreground">
-            {t.settings.premiumRenews(formatDate(account.premium.renewsAt, language, "date", zone))}
+            {t.settings.plan.premiumRenews(
+              formatDate(account.premium.renewsAt, language, "date", zone),
+            )}
           </p>
         ) : null}
       </div>
@@ -46,11 +50,11 @@ function PremiumPlan({
         <>
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="outline" onClick={() => action.run("manage-billing")}>
-              {lifetime ? t.settings.billingDocuments : t.settings.manageBilling}
+              {lifetime ? t.settings.plan.billingDocuments : t.settings.plan.manageBilling}
             </Button>
           </div>
           {lifetime ? null : (
-            <p className="text-sm text-muted-foreground">{t.settings.billingDocs}</p>
+            <p className="text-sm text-muted-foreground">{t.settings.plan.billingDocs}</p>
           )}
         </>
       ) : null}
@@ -86,16 +90,18 @@ export function PlanSection({
   const quota = account.quota;
   return (
     <>
-      <Group title={t.settings.currentPlan}>
+      <Group title={t.settings.plan.currentPlan}>
         <div className="grid gap-1">
-          <p className="text-lg font-semibold">{t.settings.free}</p>
-          <p className="text-sm text-muted-foreground">{t.settings.freeSummary}</p>
+          <p className="text-lg font-semibold">{t.settings.plan.free}</p>
+          <p className="text-sm text-muted-foreground">{t.settings.plan.freeSummary}</p>
         </div>
         {quota ? (
           <div className="grid max-w-md gap-2">
             <p className="flex justify-between gap-4 text-sm">
-              <span>{t.settings.unlocksCycle}</span>
-              <span className="font-code">{t.settings.unlocksUsed(quota.used, quota.limit)}</span>
+              <span>{t.settings.plan.unlocksCycle}</span>
+              <span className="font-code">
+                {t.settings.plan.unlocksUsed(quota.used, quota.limit)}
+              </span>
             </p>
             {/* Il valore è già nel testo sopra: la barra è solo visiva. */}
             <div aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-muted">
@@ -109,7 +115,9 @@ export function PlanSection({
             </div>
             {quota.cycleEndsAt ? (
               <p className="text-sm text-muted-foreground">
-                {t.settings.cycleEnds(formatDate(quota.cycleEndsAt, language, "dateTime", zone))}
+                {t.settings.plan.cycleEnds(
+                  formatDate(quota.cycleEndsAt, language, "dateTime", zone),
+                )}
               </p>
             ) : null}
           </div>
@@ -117,8 +125,8 @@ export function PlanSection({
         {/* La conferma protegge gli sblocchi del ciclo: sta accanto al loro conteggio. */}
         <AutoSwitch
           name="unlock-confirmation"
-          label={t.settings.unlockConfirmation}
-          description={t.settings.unlockConfirmationHint}
+          label={t.settings.plan.unlockConfirmation}
+          description={t.settings.plan.unlockConfirmationHint}
           initial={confirmUnlock}
           t={t}
         />
@@ -128,7 +136,7 @@ export function PlanSection({
         <Group>
           <SimpleSelect
             label={t.stores.chooseFreeStore}
-            hint={t.settings.freeStoreHint}
+            hint={t.settings.plan.freeStoreHint}
             items={stores.map((store) => ({ value: store.id, label: store.name }))}
             value={downgradeStore}
             onChange={(value) => {
@@ -139,10 +147,12 @@ export function PlanSection({
         </Group>
       ) : null}
       {billing && account.trialAvailable ? (
-        <Group title={t.settings.trialTitle}>
-          <p className="text-sm leading-relaxed text-muted-foreground">{t.settings.trialBody}</p>
+        <Group title={t.settings.plan.trialTitle}>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            {t.settings.plan.trialBody}
+          </p>
           <Button className="w-fit" onClick={() => action.run("start-trial")}>
-            {t.settings.trialAction}
+            {t.settings.plan.trialAction}
           </Button>
         </Group>
       ) : null}
@@ -155,16 +165,24 @@ function PurchaseOptions({ t }: { t: AppCopy }) {
   const action = useAction();
   return (
     <>
-      <Group title={t.settings.buyTitle}>
-        <PremiumNote>{t.settings.buyBody}</PremiumNote>
+      <Group title={t.settings.plan.buyTitle}>
+        <PremiumNote>{t.settings.plan.buyBody}</PremiumNote>
         <ul className="grid gap-3 sm:grid-cols-3">
           {[
-            { plan: "monthly", price: t.settings.priceMonthly, note: t.settings.priceMonthlyNote },
-            { plan: "annual", price: t.settings.priceAnnual, note: t.settings.priceAnnualNote },
+            {
+              plan: "monthly",
+              price: t.settings.plan.priceMonthly,
+              note: t.settings.plan.priceMonthlyNote,
+            },
+            {
+              plan: "annual",
+              price: t.settings.plan.priceAnnual,
+              note: t.settings.plan.priceAnnualNote,
+            },
             {
               plan: "lifetime",
-              price: t.settings.priceLifetime,
-              note: t.settings.priceLifetimeNote,
+              price: t.settings.plan.priceLifetime,
+              note: t.settings.plan.priceLifetimeNote,
             },
           ].map(({ plan, price, note }) => (
             <li
@@ -184,12 +202,12 @@ function PurchaseOptions({ t }: { t: AppCopy }) {
                 className="w-fit"
                 onClick={() => action.run("buy", { plan })}
               >
-                {t.settings.buyPeriod[plan as keyof typeof t.settings.buyPeriod]}
+                {t.settings.plan.buyPeriod[plan as keyof typeof t.settings.plan.buyPeriod]}
               </Button>
             </li>
           ))}
         </ul>
-        <p className="text-sm text-muted-foreground">{t.settings.pricesNote}</p>
+        <p className="text-sm text-muted-foreground">{t.settings.plan.pricesNote}</p>
       </Group>
     </>
   );

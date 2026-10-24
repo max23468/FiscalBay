@@ -33,10 +33,10 @@ export function SupportSection({
 }) {
   return (
     <>
-      <Group title={t.settings.faq}>
+      <Group title={t.settings.support.faq}>
         {/* Elenco chiuso da una linea anche in fondo, come in Dati e privacy. */}
         <div className="grid divide-y border-y">
-          {t.settings.faqItems.map((item) => (
+          {t.settings.support.faqItems.map((item) => (
             <details key={item.q} className="group py-1 text-sm">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-sm py-2 font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
                 {item.q}
@@ -53,9 +53,9 @@ export function SupportSection({
       {support && diagnostics ? (
         <SupportForm email={email} diagnostics={diagnostics} t={t} />
       ) : (
-        <Group title={t.settings.contact} separated={false}>
+        <Group title={t.settings.support.contact} separated={false}>
           <p className="text-sm text-muted-foreground">
-            {t.settings.supportWrite}{" "}
+            {t.settings.support.supportWrite}{" "}
             <a href={`mailto:${supportEmail}`} className="underline underline-offset-4">
               {supportEmail}
             </a>
@@ -81,9 +81,12 @@ function SupportForm({
   const [error, setError] = useState(false);
   const sent = !error && action.result?.ok === true;
   // Il messaggio è l'unico campo obbligatorio: il suo errore dice cosa manca.
-  const v = useFieldErrors({ ...t.access.validation, required: t.settings.messageRequired });
+  const v = useFieldErrors({
+    ...t.access.validation,
+    required: t.settings.support.messageRequired,
+  });
   const message = v.control("message");
-  const diag = t.settings.diag;
+  const diag = t.settings.support.diag;
   const rows = [
     [diag.version, diagnostics.version],
     [diag.store, diagnostics.storeRef ?? diag.none],
@@ -94,7 +97,7 @@ function SupportForm({
   ] as const;
   return (
     <>
-      <Group title={t.settings.contact} className="scroll-mt-20" separated={false}>
+      <Group title={t.settings.support.contact} className="scroll-mt-20" separated={false}>
         <form
           className="grid gap-5"
           {...v.form}
@@ -119,32 +122,35 @@ function SupportForm({
           }}
         >
           <p className="text-sm text-muted-foreground">{t.access.requiredFields}</p>
-          {error ? <StatusAlert tone="danger" title={t.settings.formErrors} /> : null}
-          {sent ? <StatusAlert tone="success" title={t.settings.sent(email)} /> : null}
+          {error ? <StatusAlert tone="danger" title={t.settings.support.formErrors} /> : null}
+          {sent ? <StatusAlert tone="success" title={t.settings.support.sent(email)} /> : null}
           <FieldGroup>
             <SimpleSelect
-              label={t.settings.topic}
-              items={Object.entries(t.settings.topics).map(([value, label]) => ({ value, label }))}
+              label={t.settings.support.topic}
+              items={Object.entries(t.settings.support.topics).map(([value, label]) => ({
+                value,
+                label,
+              }))}
               value={topic}
               onChange={setTopic}
             />
             <Field data-invalid={message["aria-invalid"]}>
               <FieldLabel htmlFor="support-message" required>
-                {t.settings.message}
+                {t.settings.support.message}
               </FieldLabel>
               <Textarea
                 id="support-message"
                 name="message"
                 required
                 rows={5}
-                placeholder={t.settings.messagePlaceholder}
+                placeholder={t.settings.support.messagePlaceholder}
                 {...message}
               />
               {v.error("message")}
             </Field>
             <FieldSet>
-              <FieldLegend variant="label">{t.settings.diagnostics}</FieldLegend>
-              <FieldDescription>{t.settings.diagnosticsHint}</FieldDescription>
+              <FieldLegend variant="label">{t.settings.support.diagnostics}</FieldLegend>
+              <FieldDescription>{t.settings.support.diagnosticsHint}</FieldDescription>
               <dl className="grid gap-x-6 gap-y-2 rounded-lg border bg-muted/40 p-3 text-sm sm:grid-cols-[auto_1fr]">
                 {rows.map(([label, value]) => (
                   <div key={label} className="contents">
@@ -154,15 +160,15 @@ function SupportForm({
                 ))}
               </dl>
               <CheckboxOption name="diagnostics" defaultChecked>
-                {t.settings.includeDiagnostics}
+                {t.settings.support.includeDiagnostics}
               </CheckboxOption>
             </FieldSet>
           </FieldGroup>
           <Button type="submit" className="w-fit">
-            {t.settings.send}
+            {t.settings.support.send}
           </Button>
           <p className="text-sm text-muted-foreground">
-            {t.settings.supportEmail}{" "}
+            {t.settings.support.supportEmail}{" "}
             <a href={`mailto:${supportEmail}`} className="underline underline-offset-4">
               {supportEmail}
             </a>

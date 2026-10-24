@@ -44,11 +44,11 @@ export function NotificationsSection({
       {telegram ? (
         <TelegramGroup premium={premium} chat={telegramChat} stores={stores} t={t} links={links} />
       ) : null}
-      <Group title={t.settings.marketingTitle}>
+      <Group title={t.settings.notifications.marketingTitle}>
         <AutoSwitch
           name="marketing"
-          label={t.settings.marketingConsent}
-          description={t.settings.marketingHint}
+          label={t.settings.notifications.marketingConsent}
+          description={t.settings.notifications.marketingHint}
           initial={marketing}
           t={t}
         />
@@ -76,25 +76,27 @@ function TelegramGroup({
   const [enabled, setEnabled, enabledState] = useAutoSave<boolean>("telegram", true);
   return (
     <>
-      <Group title={t.settings.telegramTitle}>
+      <Group title={t.settings.notifications.telegramTitle}>
         {!premium ? (
-          <StatusAlert tone="premium" title={t.settings.telegramPremium}>
+          <StatusAlert tone="premium" title={t.settings.notifications.telegramPremium}>
             <Link
               to={appHref(links, "impostazioni/piano")}
               {...buttonLink({ variant: "outline", size: "sm", className: "mt-2" })}
             >
-              {t.settings.buyTitle}
+              {t.settings.plan.buyTitle}
             </Link>
           </StatusAlert>
         ) : (
           <FieldGroup>
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-sm">
               <span className="grid">
-                <span className="text-muted-foreground">{t.settings.telegramChat}</span>
+                <span className="text-muted-foreground">
+                  {t.settings.notifications.telegramChat}
+                </span>
                 <span className="font-medium">{chat}</span>
               </span>
               <Button variant="outline" size="sm" onClick={() => action.run("telegram-change")}>
-                {t.settings.telegramChange}
+                {t.settings.notifications.telegramChange}
               </Button>
             </div>
             <Field orientation="horizontal" className="items-start">
@@ -111,7 +113,7 @@ function TelegramGroup({
                   htmlFor="telegram-enabled"
                   className="font-normal"
                 >
-                  {t.settings.telegramEnabled}
+                  {t.settings.notifications.telegramEnabled}
                 </FieldLabel>
                 <SaveStatus state={enabledState} t={t} />
               </div>
@@ -119,31 +121,35 @@ function TelegramGroup({
             <fieldset disabled={!enabled} className="grid gap-5 disabled:opacity-60">
               <AutoRadio
                 name="telegram-filter"
-                legend={t.settings.telegramFilter}
+                legend={t.settings.notifications.telegramFilter}
                 disabled={!enabled}
                 initial="fiscal"
                 t={t}
                 options={[
-                  { value: "fiscal", label: t.settings.telegramFilterFiscal },
-                  { value: "all", label: t.settings.telegramFilterAll },
+                  { value: "fiscal", label: t.settings.notifications.telegramFilterFiscal },
+                  { value: "all", label: t.settings.notifications.telegramFilterAll },
                 ]}
               />
               <FieldSet>
-                <FieldLegend variant="label">{t.settings.telegramMode}</FieldLegend>
+                <FieldLegend variant="label">{t.settings.notifications.telegramMode}</FieldLegend>
                 <RadioGroup
                   value={mode}
                   disabled={!enabled || modeState === "saving"}
                   onValueChange={(next) => setMode(String(next))}
                   className="gap-3"
                 >
-                  <RadioOption value="each">{t.settings.telegramModeEach}</RadioOption>
-                  <RadioOption value="digest">{t.settings.telegramModeDigest}</RadioOption>
+                  <RadioOption value="each">
+                    {t.settings.notifications.telegramModeEach}
+                  </RadioOption>
+                  <RadioOption value="digest">
+                    {t.settings.notifications.telegramModeDigest}
+                  </RadioOption>
                 </RadioGroup>
                 <SaveStatus state={modeState} t={t} />
               </FieldSet>
               {mode === "digest" ? (
                 <SimpleSelect
-                  label={t.settings.telegramDigestTime}
+                  label={t.settings.notifications.telegramDigestTime}
                   disabled={!enabled}
                   items={["08:00", "12:00", "18:00", "21:00"].map((time) => ({
                     value: time,
@@ -154,7 +160,7 @@ function TelegramGroup({
                 />
               ) : null}
               <FieldSet>
-                <FieldLegend variant="label">{t.settings.telegramStores}</FieldLegend>
+                <FieldLegend variant="label">{t.settings.notifications.telegramStores}</FieldLegend>
                 {stores.map((store) => (
                   <AutoSwitch
                     key={store.id}

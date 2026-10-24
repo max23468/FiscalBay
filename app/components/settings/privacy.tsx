@@ -33,9 +33,9 @@ export function PrivacySection({
     ? [
         {
           intent: "account-export",
-          title: t.settings.accountExport,
-          body: t.settings.accountExportBody,
-          action: t.settings.accountExportAction,
+          title: t.settings.privacy.accountExport,
+          body: t.settings.privacy.accountExportBody,
+          action: t.settings.privacy.accountExportAction,
         },
       ]
     : [];
@@ -44,15 +44,17 @@ export function PrivacySection({
       <ul className="grid divide-y border-y">
         <li className="flex flex-wrap items-center justify-between gap-3 py-4">
           <span className="grid min-w-0 flex-1 gap-0.5">
-            <span className="font-medium">{t.settings.privacyPolicy}</span>
-            <span className="text-sm text-muted-foreground">{t.settings.privacyPolicyBody}</span>
+            <span className="font-medium">{t.settings.privacy.privacyPolicy}</span>
+            <span className="text-sm text-muted-foreground">
+              {t.settings.privacy.privacyPolicyBody}
+            </span>
           </span>
           <Link
             to={localizedPath(links.language, "/privacy")}
             reloadDocument
             {...buttonLink({ variant: "outline", size: "sm" })}
           >
-            {t.settings.readPolicy}
+            {t.settings.privacy.readPolicy}
           </Link>
         </li>
         {rows.map((row) => (
@@ -77,17 +79,21 @@ function DeleteAccount({ t }: { t: AppCopy }) {
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 py-4">
       <span className="grid min-w-0 flex-1 gap-0.5">
-        <span className="font-medium">{t.settings.deleteAccount}</span>
-        <span className="text-sm text-muted-foreground">{t.settings.deleteAccountBody}</span>
+        <span className="font-medium">{t.settings.privacy.deleteAccount}</span>
+        <span className="text-sm text-muted-foreground">
+          {t.settings.privacy.deleteAccountBody}
+        </span>
       </span>
       <AlertDialog>
         <AlertDialogTrigger render={<Button variant="destructive" size="sm" />}>
-          {t.settings.deleteAccount}
+          {t.settings.privacy.deleteAccount}
         </AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t.settings.deleteAccountTitle}</AlertDialogTitle>
-            <AlertDialogDescription>{t.settings.deleteAccountConfirmation}</AlertDialogDescription>
+            <AlertDialogTitle>{t.settings.privacy.deleteAccountTitle}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t.settings.privacy.deleteAccountConfirmation}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
@@ -95,7 +101,7 @@ function DeleteAccount({ t }: { t: AppCopy }) {
               render={<Button variant="destructive-solid" />}
               onClick={() => action.run("account-delete")}
             >
-              {t.settings.deleteAccountConfirm}
+              {t.settings.privacy.deleteAccountConfirm}
             </AlertDialogClose>
           </AlertDialogFooter>
         </AlertDialogContent>
