@@ -2,9 +2,17 @@ import type Stripe from "stripe";
 import { z } from "zod";
 
 import { isProduction } from "../app-links";
+import { priceGeneration } from "../catalog";
 import { ApplicationError, logFailure } from "../errors";
+import type { Language } from "../i18n";
 import type { UpstreamError } from "../integrations/http.server";
-import { createStripeReader, isMissingObject, stripeRead } from "../integrations/stripe.server";
+import {
+  catalogMismatch,
+  createStripeClient,
+  createStripeReader,
+  isMissingObject,
+  stripeRead,
+} from "../integrations/stripe.server";
 import type { AccountView } from "../view-models";
 import { activeEntitlementSql, openSubscriptionStatuses } from "./grants.server";
 
@@ -37,6 +45,26 @@ const iso = (seconds: number) => new Date(seconds * 1000).toISOString();
 /** Identificativo di un riferimento Stripe, espanso o no. */
 const idOf = (reference: string | { id: string }) =>
   typeof reference === "string" ? reference : reference.id;
+
+/** Periodicità del prezzo di un elemento dell'abbonamento; null per un prezzo non ricorrente. */
+function itemOffer(item: Stripe.SubscriptionItem): "monthly" | "annual" | null {
+  const interval = item.price.recurring?.interval;
+  return interval === "year" ? "annual" : interval === "month" ? "monthly" : null;
+}
+
+/**
+ * Periodicità del periodo pagato e del prossimo rinnovo. Il prezzo dell'abbonamento è quello
+ * del rinnovo; finché il periodo pagato non è concluso (`trialing`, per un acquisto durante la
+ * prova o un cambio programmato) vale quella dei metadati, scritta all'acquisto e al cambio.
+ */
+export function subscriptionOffers(subscription: Stripe.Subscription, metadataOffer: string) {
+  const item = subscription.items.data[0];
+  const renewal = (item && itemOffer(item)) ?? (metadataOffer as "monthly" | "annual");
+  return {
+    offer: subscription.status === "trialing" ? (metadataOffer as "monthly" | "annual") : renewal,
+    renewal,
+  };
+}
 
 /** Abbonamento senza i riferimenti scritti dal nostro checkout: nessun effetto. */
 class UnknownSubscription extends ApplicationError {
@@ -146,13 +174,14 @@ export async function reconcileSubscription(
     stripe.invoices.list({ subscription: subscription.id, status: "paid", limit: 24 }),
   );
   const coverages = invoices.data.flatMap((invoice) => paidCoverage(invoice) ?? []);
+  const offers = subscriptionOffers(subscription, owner.data.offer);
   // Lo spazio deve esistere: un abbonamento di uno spazio cancellato non ricrea nulla.
   await env.DB.batch([
     env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment, customer_id,
         offer, price_generation, status, current_period_start, current_period_end,
-        cancel_at_period_end, synced_at, checked_at)
-      SELECT ?1, w.id, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11 FROM workspaces w WHERE w.id = ?2
-      ON CONFLICT(id) DO UPDATE SET offer = excluded.offer,
+        cancel_at_period_end, synced_at, checked_at, renewal_offer)
+      SELECT ?1, w.id, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12 FROM workspaces w WHERE w.id = ?2
+      ON CONFLICT(id) DO UPDATE SET offer = excluded.offer, renewal_offer = excluded.renewal_offer,
         price_generation = excluded.price_generation, status = excluded.status,
         current_period_start = excluded.current_period_start,
         current_period_end = excluded.current_period_end,
@@ -163,7 +192,7 @@ export async function reconcileSubscription(
       owner.data.workspace_id,
       environmentOf(env),
       idOf(subscription.customer),
-      owner.data.offer,
+      offers.offer,
       owner.data.price_generation,
       subscription.status,
       iso(item.current_period_start),
@@ -171,6 +200,7 @@ export async function reconcileSubscription(
       // La disdetta dal portale può indicare la fine del periodo o un istante esplicito.
       subscription.cancel_at_period_end || !!subscription.cancel_at ? 1 : 0,
       at,
+      offers.renewal,
     ),
     ...coverages.map((coverage) =>
       env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
@@ -290,13 +320,15 @@ export async function subscriptionView(
   now = new Date(),
 ): Promise<Pick<AccountView, "premium" | "payment">> {
   const row = await db
-    .prepare(`SELECT offer, status, current_period_start, current_period_end, cancel_at_period_end
+    .prepare(`SELECT offer, renewal_offer, status, current_period_start, current_period_end,
+        cancel_at_period_end
       FROM stripe_subscriptions WHERE workspace_id = ? AND environment = ?
         AND unavailable_at IS NULL AND status IN (${sqlList(openSubscriptionStatuses)})
       ORDER BY julianday(current_period_start) DESC LIMIT 1`)
     .bind(workspaceId, environmentOf(env))
     .first<{
       offer: "monthly" | "annual";
+      renewal_offer: "monthly" | "annual" | null;
       status: string;
       current_period_start: string;
       current_period_end: string;
@@ -307,7 +339,14 @@ export async function subscriptionView(
     return {
       premium: row.cancel_at_period_end
         ? { period: row.offer, renewsAt: null, endsAt: coverage.endsAt }
-        : { period: row.offer, renewsAt: row.current_period_end },
+        : {
+            period: row.offer,
+            renewsAt: row.current_period_end,
+            // Cambio di periodicità programmato: vale dal rinnovo.
+            ...(row.renewal_offer && row.renewal_offer !== row.offer
+              ? { nextPeriod: row.renewal_offer }
+              : {}),
+          },
     };
   // Durante la prova un acquisto ancora da confermare resta visibile; un'altra copertura,
   // come una concessione, prevale.
@@ -327,4 +366,147 @@ export async function subscriptionView(
       : {};
   }
   return row.status === "paused" ? {} : { payment: { state: "pending" } };
+}
+
+/** Abbonamento rinnovabile dello spazio: periodo pagato in corso e nessuna disdetta. */
+async function renewingSubscription(db: D1Database, env: Env, userId: string, now: Date) {
+  return db
+    .prepare(`SELECT s.id, s.workspace_id, s.price_generation FROM stripe_subscriptions s
+      JOIN workspace_members wm ON wm.workspace_id = s.workspace_id
+      WHERE wm.user_id = ?1 AND s.environment = ?2 AND s.unavailable_at IS NULL
+        AND s.status IN ('active', 'trialing') AND s.cancel_at_period_end = 0
+        AND EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = s.workspace_id
+          AND e.source = 'premium' AND e.revoked_at IS NULL
+          AND julianday(e.starts_at) <= julianday(?3) AND julianday(?3) < julianday(e.ends_at))
+      ORDER BY julianday(s.current_period_start) DESC LIMIT 1`)
+    .bind(userId, environmentOf(env), now.toISOString())
+    .first<{ id: string; workspace_id: string; price_generation: string }>();
+}
+
+/** Lo spazio ha un abbonamento con un periodo pagato in corso che si rinnoverà. */
+export async function subscriptionRenews(
+  db: D1Database,
+  env: Env,
+  userId: string,
+  now = new Date(),
+) {
+  return !!(await renewingSubscription(db, env, userId, now));
+}
+
+/**
+ * Prezzo ricorrente della periodicità richiesta nella generazione dell'abbonamento: il listino
+ * resta quello con cui è nato, anche dopo una generazione nuova (§6.2). Null se manca o non è
+ * conforme; il prezzo di una generazione precedente deve restare attivo su Stripe.
+ */
+async function generationPrice(
+  stripe: Stripe,
+  product: string,
+  generation: string,
+  offer: "monthly" | "annual",
+) {
+  const prices = await stripeRead(() =>
+    stripe.prices.list({ product, type: "recurring", limit: 100, expand: ["data.product"] }),
+  );
+  const price = prices.data.find(
+    (candidate) =>
+      candidate.metadata.price_generation === generation &&
+      candidate.metadata.offer === offer &&
+      !candidate.metadata.role,
+  );
+  if (!price) return null;
+  // L'importo si confronta con il listino corrente; quello di una generazione precedente è
+  // il suo prezzo su Stripe.
+  const net =
+    generation === priceGeneration.id ? priceGeneration.net[offer] : (price.unit_amount ?? -1);
+  return catalogMismatch(price, offer, net) ? null : price;
+}
+
+export type PeriodChange = "done" | "unchanged" | "not_allowed" | "unavailable";
+
+/**
+ * Cambio di periodicità alla fine del periodo pagato, senza conguaglio (§6.2). Il prezzo
+ * dell'altra periodicità della stessa generazione parte al rinnovo: fino ad allora Stripe
+ * registra l'abbonamento come `trialing` e non addebita nulla, e i metadati conservano la
+ * periodicità del periodo pagato. Lo stesso percorso annulla un cambio programmato. Dopo la
+ * modifica l'abbonamento si rilegge, come per un evento del webhook.
+ */
+export async function changeSubscriptionPeriod(
+  env: Env,
+  userId: string,
+  target: "monthly" | "annual",
+  now = new Date(),
+): Promise<PeriodChange> {
+  const local = await renewingSubscription(env.DB, env, userId, now);
+  if (!local) return "not_allowed";
+  if (!env.STRIPE_SECRET_KEY) return "unavailable";
+  try {
+    const stripe = await createStripeClient(env.STRIPE_SECRET_KEY);
+    const subscription = await stripeRead(() => stripe.subscriptions.retrieve(local.id));
+    const owner = ownerSchema.safeParse(subscription.metadata);
+    const item = subscription.items.data[0];
+    if (
+      !owner.success ||
+      owner.data.workspace_id !== local.workspace_id ||
+      !item ||
+      !["active", "trialing"].includes(subscription.status) ||
+      subscription.cancel_at_period_end ||
+      subscription.cancel_at ||
+      subscription.schedule
+    )
+      return "not_allowed";
+    const offers = subscriptionOffers(subscription, owner.data.offer);
+    if (offers.renewal === target) return "unchanged";
+    const price = await generationPrice(
+      stripe,
+      idOf(item.price.product as string | { id: string }),
+      owner.data.price_generation,
+      target,
+    );
+    if (!price) {
+      logFailure({ error: new UnknownSubscription(), operation: "billing" });
+      return "unavailable";
+    }
+    await stripeRead(() =>
+      stripe.subscriptions.update(subscription.id, {
+        items: [{ id: item.id, price: price.id }],
+        trial_end: item.current_period_end,
+        proration_behavior: "none",
+        metadata: { ...subscription.metadata, offer: offers.offer },
+      }),
+    );
+    await reconcileSubscription(env, stripe, subscription.id, now);
+    return "done";
+  } catch (error) {
+    logFailure({ error, operation: "billing" });
+    return "unavailable";
+  }
+}
+
+/**
+ * Portale clienti di Stripe per disdetta, metodo di pagamento e documenti, con il ritorno al
+ * piano. Null senza un cliente Stripe dello spazio nell'ambiente corrente.
+ */
+export async function openBillingPortal(
+  env: Env,
+  userId: string,
+  returnUrl: string,
+  language: Language,
+): Promise<string | null> {
+  if (!env.STRIPE_SECRET_KEY) return null;
+  const row = await env.DB.prepare(`SELECT s.customer_id FROM stripe_subscriptions s
+      JOIN workspace_members wm ON wm.workspace_id = s.workspace_id
+      WHERE wm.user_id = ?1 AND s.environment = ?2
+      ORDER BY julianday(s.current_period_start) DESC LIMIT 1`)
+    .bind(userId, environmentOf(env))
+    .first<{ customer_id: string }>();
+  if (!row) return null;
+  const stripe = await createStripeClient(env.STRIPE_SECRET_KEY);
+  const session = await stripeRead(() =>
+    stripe.billingPortal.sessions.create({
+      customer: row.customer_id,
+      return_url: returnUrl,
+      locale: language,
+    }),
+  );
+  return session.url;
 }

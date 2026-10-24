@@ -115,22 +115,16 @@ function PremiumPlan({
             ? t.settings.plan.premiumPeriod[account.premium.period]
             : t.settings.plan.premium}
         </p>
-        {lifetime ? (
-          <p className="text-sm text-muted-foreground">{t.settings.plan.premiumLifetime}</p>
-        ) : account.premium?.renewsAt ? (
-          <p className="text-sm text-muted-foreground">
-            {t.settings.plan.premiumRenews(
-              formatDate(account.premium.renewsAt, language, "date", zone),
-            )}
-          </p>
-        ) : account.premium?.endsAt ? (
-          <p className="text-sm text-muted-foreground">
-            {t.settings.plan.premiumEnds(
-              formatDate(account.premium.endsAt, language, "dateTime", zone),
-            )}
-          </p>
-        ) : null}
+        <PremiumStatus premium={account.premium} t={t} language={language} />
       </div>
+      {billingPortal && account.premium?.renewsAt && account.premium.period !== "lifetime" ? (
+        <RenewalPeriod
+          period={account.premium.period}
+          next={account.premium.nextPeriod}
+          renewsAt={formatDate(account.premium.renewsAt, language, "date", zone)}
+          t={t}
+        />
+      ) : null}
       {billingPortal && account.premium ? (
         <>
           <div className="flex flex-wrap items-center gap-3">
@@ -144,6 +138,64 @@ function PremiumPlan({
         </>
       ) : null}
     </Group>
+  );
+}
+
+/** Rinnovo, eventuale cambio programmato, fine dopo la disdetta o acquisto una tantum. */
+function PremiumStatus({
+  premium,
+  t,
+  language,
+}: {
+  premium: AccountView["premium"];
+  t: AppCopy;
+  language: Language;
+}) {
+  const zone = useTimeZone();
+  const copy = t.settings.plan;
+  let text: string | null = null;
+  if (premium?.period === "lifetime") text = copy.premiumLifetime;
+  else if (premium?.renewsAt) {
+    const date = formatDate(premium.renewsAt, language, "date", zone);
+    text = premium.nextPeriod
+      ? copy.switchScheduled(premium.nextPeriod)(date)
+      : copy.premiumRenews(date);
+  } else if (premium?.endsAt)
+    text = copy.premiumEnds(formatDate(premium.endsAt, language, "dateTime", zone));
+  return text ? <p className="text-sm text-muted-foreground">{text}</p> : null;
+}
+
+/**
+ * Cambio della periodicità del rinnovo: vale dalla fine del periodo pagato, senza conguaglio,
+ * e resta annullabile fino ad allora. Il cambio programmato si legge già nella data di rinnovo.
+ */
+function RenewalPeriod({
+  period,
+  next,
+  renewsAt,
+  t,
+}: {
+  period: "monthly" | "annual";
+  next: "monthly" | "annual" | undefined;
+  renewsAt: string;
+  t: AppCopy;
+}) {
+  const action = useAction();
+  const copy = t.settings.plan;
+  const other = period === "monthly" ? "annual" : "monthly";
+  return (
+    <div className="grid justify-items-start gap-2">
+      {next ? null : <p className="text-sm text-muted-foreground">{copy.switchHint(renewsAt)}</p>}
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={action.pending}
+        onClick={() => action.run("change-period", { period: next ? period : other })}
+      >
+        {action.pending ? <Spinner /> : null}
+        {next ? copy.keepPeriod[period] : copy.switchTo[other]}
+      </Button>
+    </div>
   );
 }
 

@@ -271,11 +271,13 @@ async function main() {
       INSERT INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
         VALUES ('${id}', '${id}', '${id}', '${expires}', '${now}', '${now}');`);
     }
-    // Abbonamenti Stripe nei quattro stati del piano, soltanto in lettura: attivo, disdetto,
-    // pagamento da confermare e rinnovo non riuscito con il prezzo ancora protetto.
+    // Abbonamenti Stripe negli stati del piano, soltanto in lettura: attivo, con il passaggio
+    // all'annuale programmato al rinnovo, disdetto, pagamento da confermare e rinnovo non
+    // riuscito con il prezzo ancora protetto.
     const period = 30 * day;
     const subscriptions = {
       active: { status: "active", start: -day, cancel: 0, paid: true },
+      switching: { status: "trialing", start: -day, cancel: 0, paid: true, renewal: "annual" },
       cancelled: { status: "active", start: -day, cancel: 1, paid: true },
       pending: { status: "incomplete", start: -day, cancel: 0, paid: false },
       lapsed: { status: "past_due", start: -2 * day, cancel: 0, paid: false },
@@ -301,9 +303,10 @@ async function main() {
         VALUES ('${id}', '${now}', '${now}', '${now}');
       INSERT INTO stripe_subscriptions (id, workspace_id, environment, customer_id, offer,
         price_generation, status, current_period_start, current_period_end, cancel_at_period_end,
-        synced_at, checked_at)
+        synced_at, checked_at, renewal_offer)
         VALUES ('sub_${id}', '${id}', 'test', 'cus_${id}', 'monthly', '2026-09', '${subscription.status}',
-          '${start}', '${end}', ${subscription.cancel}, '${now}', '${now}');`);
+          '${start}', '${end}', ${subscription.cancel}, '${now}', '${now}',
+          '${subscription.renewal ?? "monthly"}');`);
       if (subscription.paid)
         statements.push(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at,
           stripe_invoice_id, amount_paid, currency, paid_at)

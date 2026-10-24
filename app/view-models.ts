@@ -305,11 +305,15 @@ export interface AccountView {
    * che inizia o finisce.
    */
   quota?: { used: number; limit: number; cycleEndsAt: string | null; nextLimit?: number };
-  /** `endsAt` compare dopo la disdetta: la copertura pagata finisce senza rinnovo. */
+  /**
+   * `endsAt` compare dopo la disdetta: la copertura pagata finisce senza rinnovo. `nextPeriod`
+   * è la periodicità di un cambio programmato, che vale dal rinnovo.
+   */
   premium?: {
     period: "monthly" | "annual" | "lifetime";
     renewsAt: string | null;
     endsAt?: string | null;
+    nextPeriod?: "monthly" | "annual";
   };
   /**
    * Pagamento senza copertura in corso: in attesa della conferma di Stripe, abbonamento scelto

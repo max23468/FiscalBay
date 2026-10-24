@@ -5,8 +5,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { annualPaidMonths, firstChargeAt, formatPrice, priceGeneration } from "../app/catalog";
 import {
   applyStripeEvent,
+  changeSubscriptionPeriod,
+  openBillingPortal,
   paidCoverage,
   reconcileBilling,
+  subscriptionRenews,
   subscriptionView,
 } from "../app/domain/billing.server";
 import { purchaseState, startCheckout } from "../app/domain/checkout.server";
@@ -618,6 +621,8 @@ type FakeSubscription = {
   cancel?: boolean;
   metadata?: Record<string, string>;
   livemode?: boolean;
+  /** Prezzo del rinnovo; senza, quello della periodicità dei metadati. */
+  price?: { id: string; interval: "month" | "year" };
 };
 
 /**
@@ -662,6 +667,16 @@ function stripeAccount() {
           id: "si_test",
           current_period_start: second(state.subscription.start),
           current_period_end: second(state.subscription.end),
+          price: {
+            id: state.subscription.price?.id ?? "price_monthly",
+            object: "price",
+            product: "prod_test",
+            recurring: {
+              interval:
+                state.subscription.price?.interval ??
+                ((state.subscription.metadata?.offer ?? "monthly") === "annual" ? "year" : "month"),
+            },
+          },
         },
       ],
     },
@@ -690,9 +705,15 @@ function stripeAccount() {
     },
   });
   const requests: string[] = [];
+  /** Corpi delle richieste di modifica, già letti come form. */
+  const writes: Array<{ path: string; body: URLSearchParams }> = [];
+  /** Prezzi ricorrenti del prodotto, come li elenca Stripe. */
+  const prices: Stripe.Price[] = [];
   const fetcher = vi.fn<typeof fetch>(async (input, init) => {
     const url = new URL(String(input));
     requests.push(`${init?.method} ${url.pathname}`);
+    if (init?.method === "POST")
+      writes.push({ path: url.pathname, body: new URLSearchParams(String(init.body ?? "")) });
     if (state.down) return Response.json({ error: { type: "api_error" } }, { status: 503 });
     if (state.missing)
       return Response.json(
@@ -704,7 +725,36 @@ function stripeAccount() {
       state.subscription.status = "canceled";
       return Response.json(subscription());
     }
+    if (url.pathname === "/v1/subscriptions/sub_test" && init?.method === "POST") {
+      // Cambio di periodicità: prezzo del rinnovo, fine del periodo pagato e metadati.
+      const body = writes.at(-1)!.body;
+      const price = prices.find((candidate) => candidate.id === body.get("items[0][price]"))!;
+      state.subscription.price = {
+        id: price.id,
+        interval: price.recurring!.interval as "month" | "year",
+      };
+      state.subscription.status = "trialing";
+      state.subscription.metadata = {
+        ...(state.subscription.metadata ?? {
+          workspace_id: "w-a",
+          offer: "monthly",
+          price_generation: "2026-09",
+        }),
+        offer: body.get("metadata[offer]")!,
+      };
+      return Response.json(subscription());
+    }
     if (url.pathname === "/v1/subscriptions/sub_test") return Response.json(subscription());
+    if (url.pathname === "/v1/prices") {
+      expect(url.searchParams.get("product")).toBe("prod_test");
+      expect(url.searchParams.get("type")).toBe("recurring");
+      return list(prices);
+    }
+    if (url.pathname === "/v1/billing_portal/sessions")
+      return Response.json({
+        object: "billing_portal.session",
+        url: "https://billing.example.invalid/p/session_test",
+      });
     if (url.pathname === "/v1/invoices") {
       expect(url.searchParams.get("subscription")).toBe("sub_test");
       expect(url.searchParams.get("status")).toBe("paid");
@@ -724,7 +774,7 @@ function stripeAccount() {
       });
     throw new Error("unexpected_stripe_request");
   });
-  return { state, fetcher, requests };
+  return { state, fetcher, requests, writes, prices };
 }
 
 const firstInvoice = {
@@ -812,14 +862,14 @@ describe("Webhook e riconciliazione Stripe", () => {
     expect(await premium(now)).toBe(true);
     expect((await purchaseState(env.DB, userId, at(now)))?.state).toBe("covered");
     expect(await view(now)).toEqual({ premium: { period: "monthly", renewsAt: periodEnd } });
-    // Il piano reale mostra periodicità e rinnovo, senza il portale non ancora disponibile.
+    // Il piano reale mostra periodicità e rinnovo; con la chiave Stripe il portale è disponibile.
     const page = await planAccount(now);
     expect(page.account).toMatchObject({
       plan: "premium",
       premium: { period: "monthly", renewsAt: periodEnd },
     });
     expect(page.account).not.toHaveProperty("payment");
-    expect(page.services).toMatchObject({ billingPortal: false });
+    expect(page.services).toMatchObject({ billingPortal: true });
 
     // Una rilettura conclusa dopo una più recente non ne sovrascrive lo stato.
     stripe.state.subscription.cancel = true;
@@ -1314,6 +1364,189 @@ describe("Webhook e riconciliazione Stripe", () => {
     } finally {
       errors.mockRestore();
     }
+  });
+
+  /** Prezzi ricorrenti della generazione indicata, mensile e annuale, con il listino dato. */
+  const generationPrices = (generation: string, monthly: number, annual: number) => [
+    catalogPrice({
+      id: `price_monthly_${generation}`,
+      unit_amount: monthly,
+      metadata: { offer: "monthly", price_generation: generation },
+    }),
+    catalogPrice({
+      id: `price_annual_${generation}`,
+      unit_amount: annual,
+      recurring: { interval: "year", interval_count: 1 },
+      metadata: { offer: "annual", price_generation: generation },
+    }),
+  ];
+
+  /** Abbonamento mensile pagato, già riletto, con le chiamate globali allo Stripe simulato. */
+  const paidMonthly = async () => {
+    const stripe = stripeAccount();
+    stripe.state.invoices = [firstInvoice];
+    stripe.prices.push(
+      ...generationPrices("2026-09", 490, 4900),
+      ...generationPrices("2025-01", 390, 3900),
+      // Il prezzo una tantum del primo periodo non è un rinnovo.
+      catalogPrice({
+        id: "price_annual_prepaid",
+        recurring: { interval: "year", interval_count: 1 },
+        unit_amount: 4900,
+        metadata: { offer: "annual", price_generation: "2026-09", role: "prepaid_first_period" },
+      }),
+    );
+    await applyStripeEvent(
+      env,
+      { topic: "customer.subscription.created", objectId: "sub_test" },
+      stripe.fetcher,
+      at(now),
+    );
+    vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
+    return stripe;
+  };
+  const change = (period: string) =>
+    settingsAction({
+      request: new Request("http://localhost:5173/app/impostazioni/piano", {
+        method: "POST",
+        headers: { cookie, origin: "http://localhost:5173" },
+        body: new URLSearchParams({ intent: "change-period", period }),
+      }),
+    } as Parameters<typeof settingsAction>[0]).catch((thrown: unknown) => thrown);
+
+  it("cambia periodicità alla fine del periodo pagato, senza conguaglio, e la riporta indietro", async () => {
+    const stripe = await paidMonthly();
+    vi.setSystemTime(at(now));
+    expect(await change("annual")).toEqual({ ok: true, notice: "Rinnovo aggiornato." });
+    const [write] = stripe.writes;
+    expect(write!.path).toBe("/v1/subscriptions/sub_test");
+    expect(Object.fromEntries(write!.body)).toMatchObject({
+      "items[0][id]": "si_test",
+      "items[0][price]": "price_annual_2026-09",
+      trial_end: String(second(periodEnd)),
+      proration_behavior: "none",
+      "metadata[offer]": "monthly",
+      "metadata[workspace_id]": "w-a",
+      "metadata[price_generation]": "2026-09",
+    });
+    // Il periodo pagato resta mensile; l'annuale parte al rinnovo, senza nuova copertura.
+    expect(await view(now)).toEqual({
+      premium: { period: "monthly", renewsAt: periodEnd, nextPeriod: "annual" },
+    });
+    expect(await coverages()).toHaveLength(1);
+    expect((await planAccount(now)).account).toMatchObject({
+      premium: { period: "monthly", nextPeriod: "annual" },
+    });
+    // Ripetere lo stesso cambio non scrive nulla; tornare al mensile lo annulla.
+    expect(await change("annual")).toEqual({ ok: true, notice: "Rinnovo aggiornato." });
+    expect(stripe.writes).toHaveLength(1);
+    expect(await change("monthly")).toEqual({ ok: true, notice: "Rinnovo aggiornato." });
+    expect(stripe.writes.at(-1)!.body.get("items[0][price]")).toBe("price_monthly_2026-09");
+    expect(await view(now)).toEqual({ premium: { period: "monthly", renewsAt: periodEnd } });
+    expect(((await change("trimestrale")) as { init: ResponseInit }).init.status).toBe(400);
+
+    // Dopo il rinnovo con il nuovo prezzo, il periodo pagato è annuale.
+    stripe.state.subscription = {
+      status: "active",
+      start: periodEnd,
+      end: "2027-10-13T20:00:00.000Z",
+      price: { id: "price_annual_2026-09", interval: "year" },
+      metadata: { workspace_id: "w-a", offer: "monthly", price_generation: "2026-09" },
+    };
+    stripe.state.invoices.push({
+      id: "in_annual",
+      start: periodEnd,
+      end: "2027-10-13T20:00:00.000Z",
+      amount: 5978,
+      paidAt: periodEnd,
+    });
+    await applyStripeEvent(
+      env,
+      { topic: "invoice.paid", objectId: "in_annual" },
+      stripe.fetcher,
+      at("2026-10-13T21:00:00.000Z"),
+    );
+    expect(await view("2026-10-13T21:00:00.000Z")).toEqual({
+      premium: { period: "annual", renewsAt: "2027-10-13T20:00:00.000Z" },
+    });
+  });
+
+  it("conserva il listino della generazione dell'abbonamento e rifiuta prezzi non conformi", async () => {
+    const stripe = await paidMonthly();
+    stripe.state.subscription.metadata = {
+      workspace_id: "w-a",
+      offer: "monthly",
+      price_generation: "2025-01",
+    };
+    vi.setSystemTime(at(now));
+    expect(await changeSubscriptionPeriod(env, userId, "annual", at(now))).toBe("done");
+    expect(stripe.writes.at(-1)!.body.get("items[0][price]")).toBe("price_annual_2025-01");
+    stripe.writes.length = 0;
+    // Senza un prezzo conforme della generazione nessuna modifica.
+    stripe.state.subscription.metadata = {
+      workspace_id: "w-a",
+      offer: "monthly",
+      price_generation: "2024-01",
+    };
+    stripe.state.subscription.price = undefined;
+    stripe.state.subscription.status = "active";
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await changeSubscriptionPeriod(env, userId, "annual", at(now))).toBe("unavailable");
+    stripe.prices.push(
+      catalogPrice({
+        id: "price_annual_inclusive",
+        tax_behavior: "inclusive",
+        recurring: { interval: "year", interval_count: 1 },
+        metadata: { offer: "annual", price_generation: "2024-01" },
+      }),
+    );
+    expect(await changeSubscriptionPeriod(env, userId, "annual", at(now))).toBe("unavailable");
+    expect(stripe.writes).toEqual([]);
+    expect(errors).toHaveBeenCalled();
+    // Un abbonamento disdetto non cambia periodicità; un altro utente non ha abbonamenti.
+    stripe.state.subscription.cancel = true;
+    await applyStripeEvent(
+      env,
+      { topic: "customer.subscription.updated", objectId: "sub_test" },
+      stripe.fetcher,
+      at(now),
+    );
+    expect(await changeSubscriptionPeriod(env, userId, "annual", at(now))).toBe("not_allowed");
+    expect(await changeSubscriptionPeriod(env, "estraneo", "annual", at(now))).toBe("not_allowed");
+    expect(stripe.writes).toEqual([]);
+  });
+
+  it("apre il portale di Stripe con il cliente dello spazio e il ritorno al piano", async () => {
+    const stripe = await paidMonthly();
+    vi.setSystemTime(at(now));
+    expect((await planAccount(now)).services).toMatchObject({ billingPortal: true });
+    const portal = (await settingsAction({
+      request: new Request("http://localhost:5173/en/app/impostazioni/piano", {
+        method: "POST",
+        headers: { cookie, origin: "http://localhost:5173" },
+        body: new URLSearchParams({ intent: "manage-billing" }),
+      }),
+    } as Parameters<typeof settingsAction>[0]).catch((thrown: unknown) => thrown)) as Response;
+    expect(portal.status).toBe(302);
+    expect(portal.headers.get("location")).toBe("https://billing.example.invalid/p/session_test");
+    expect(Object.fromEntries(stripe.writes.at(-1)!.body)).toEqual({
+      customer: "cus_test",
+      return_url: `${new URL(env.APP_ORIGIN).origin}/en/app/impostazioni/piano`,
+      locale: "en",
+    });
+    expect(
+      await openBillingPortal(env, "estraneo", "https://test.fiscalbay.it/app", "it"),
+    ).toBeNull();
+    // Lo scollegamento dell'ultimo negozio avvisa finché l'abbonamento si rinnova.
+    expect(await subscriptionRenews(env.DB, env, userId, at(now))).toBe(true);
+    stripe.state.subscription.cancel = true;
+    await applyStripeEvent(
+      env,
+      { topic: "customer.subscription.updated", objectId: "sub_test" },
+      stripe.fetcher,
+      at(now),
+    );
+    expect(await subscriptionRenews(env.DB, env, userId, at(now))).toBe(false);
   });
 
   it("legge il periodo pagato soltanto dalle righe dell'abbonamento", () => {

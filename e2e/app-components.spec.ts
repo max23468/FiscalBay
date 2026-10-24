@@ -3155,10 +3155,56 @@ test.describe("abbonamento nel piano", () => {
   // Ogni stato reale si legge accanto allo scenario dell'anteprima che lo rappresenta.
   const states = [
     { account: "active", scenario: "premium" },
+    { account: "switching", scenario: "cambio-rinnovo" },
     { account: "cancelled", scenario: "rinnovo-disdetto" },
     { account: "pending", scenario: "pagamento-in-attivazione" },
     { account: "lapsed", scenario: "rinnovo-non-riuscito" },
   ] as const;
+
+  // Scollegare l'unico negozio con un abbonamento che si rinnova non lo disdice: lo dicono
+  // entrambe le superfici.
+  for (const language of ["it", "en"] as const)
+    test(`scollegare l'ultimo negozio avvisa che l'abbonamento continua, ${language}`, async ({
+      page,
+      context,
+      browser,
+      baseURL,
+    }) => {
+      const it = language === "it";
+      const prefix = it ? "" : "/en";
+      const check = async (target: Page) => {
+        await target
+          .getByRole("dialog")
+          .getByRole("button", { name: it ? "Scollega" : "Disconnect", exact: true })
+          .click();
+        const confirm = target.getByRole("alertdialog");
+        await expect(confirm).toContainText(
+          it
+            ? "Scollegare il negozio non disdice l’abbonamento Premium"
+            : "Disconnecting the store does not cancel the Premium subscription",
+        );
+        await expect(
+          confirm.getByRole("link", {
+            name: it ? "Gestisci l’abbonamento" : "Manage subscription",
+          }),
+        ).toHaveAttribute(
+          "href",
+          `${prefix}/${target.url().includes("/anteprima/") ? "anteprima" : "app"}/impostazioni/piano`,
+        );
+        await confirm.getByRole("button", { name: it ? "Annulla" : "Cancel" }).click();
+      };
+      await useLocalAccount(context, "member", baseURL!, "subscription-active");
+      await page.goto(`${prefix}/app/negozi/subscription-active`);
+      await check(page);
+      const preview = await browser.newContext({ baseURL });
+      try {
+        const previewPage = await preview.newPage();
+        await open(previewPage, `${prefix}/anteprima/negozi/neg-vintage`, "cambio-rinnovo");
+        await check(previewPage);
+      } finally {
+        await preview.close();
+      }
+    });
 
   for (const language of ["it", "en"] as const)
     for (const { account, scenario } of states)
@@ -3174,6 +3220,10 @@ test.describe("abbonamento nel piano", () => {
           active: {
             title: it ? /^Premium (mensile|annuale)$/u : /^Premium, (monthly|annual)$/u,
             text: it ? "Si rinnova il" : "Renews on",
+          },
+          switching: {
+            title: it ? "Premium mensile" : "Premium, monthly",
+            text: it ? "come annuale" : "as annual",
           },
           cancelled: {
             title: it ? "Premium mensile" : "Premium, monthly",

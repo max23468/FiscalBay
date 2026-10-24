@@ -728,10 +728,10 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         "aspetto",
         "supporto",
       ],
-      // Con chiave e prezzi Stripe configurati la categoria del piano offre l'acquisto.
+      // Con chiave e prezzi Stripe configurati il piano offre acquisto e portale clienti.
       services: {
         billing: true,
-        billingPortal: false,
+        billingPortal: true,
         telegram: false,
         accountData: false,
         support: false,

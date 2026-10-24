@@ -373,6 +373,9 @@ export const en: AppCopy = {
     disconnectTitle: (name) => `Disconnect ${name}?`,
     disconnectBody:
       "FiscalBay will stop reading this store on eBay. Imported orders remain available for the retention period and you can reconnect the same store later.",
+    disconnectSubscription:
+      "Disconnecting the store does not cancel the Premium subscription, which keeps renewing.",
+    disconnectSubscriptionLink: "Manage subscription",
     deleteBody:
       "The store will be removed from FiscalBay and all its imported orders will be deleted. This cannot be undone. Your store on eBay and your FiscalBay subscription will not change.",
     deleteLabel: "Type the store name to confirm",
@@ -511,6 +514,15 @@ export const en: AppCopy = {
         `You are back on Free. Complete the payment Stripe asks for by ${date} to keep your price.`,
       manageBilling: "Manage subscription on Stripe",
       billingDocuments: "View receipts and invoices on Stripe",
+      billingUnavailable: "Subscription management is not available right now. Try again later.",
+      switchTo: { monthly: "Switch to monthly", annual: "Switch to annual" },
+      switchHint: (date: string) =>
+        `The change applies from ${date}: no charge before then, and your price list stays the same.`,
+      switchScheduled: (period: "monthly" | "annual") => (date: string) =>
+        `Renews on ${date} as ${period === "annual" ? "annual" : "monthly"}.`,
+      keepPeriod: { monthly: "Stay on monthly", annual: "Stay on annual" },
+      periodChanged: "Renewal updated.",
+      periodUnavailable: "The renewal change is not available right now. Try again later.",
       billingDocs: "Receipts and invoices are available on Stripe.",
     },
     notifications: {
