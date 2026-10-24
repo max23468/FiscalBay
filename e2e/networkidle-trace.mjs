@@ -1,18 +1,10 @@
 // @ts-nocheck
 // Diagnostica temporanea, da rimuovere: storia interna di `networkidle` per frame in CI.
-import { readFileSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import path from "node:path";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 
-const require = createRequire(import.meta.url);
-const file = path.join(
-  path.dirname(
-    require.resolve("playwright-core/package.json", {
-      paths: [require.resolve("@playwright/test")],
-    }),
-  ),
-  "lib/coreBundle.js",
-);
+const store = "node_modules/.pnpm";
+const core = readdirSync(store).find((name) => name.startsWith("playwright-core@"));
+const file = `${store}/${core}/node_modules/playwright-core/lib/coreBundle.js`;
 let s = readFileSync(file, "utf8");
 if (!s.includes("__idleTrace")) {
   const rep = (a, b) => {
