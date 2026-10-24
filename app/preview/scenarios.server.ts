@@ -40,6 +40,9 @@ export const scenarioIds = [
   "nessun-ordine",
   "caricamento",
   "servizio-non-disponibile",
+  "prova-premium",
+  "prova-in-scadenza",
+  "prova-terminata",
   "premium",
   "premium-a-vita",
 ] as const;
@@ -197,6 +200,41 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
     en: {
       name: "Service unavailable",
       focus: "Sign-in or database not responding: no data shown, only Try again.",
+    },
+  },
+  "prova-premium": {
+    it: {
+      name: "Prova Premium",
+      focus:
+        "Prova attivata cinque giorni fa: giorni rimasti in Ordini e in Piano, nessun ordine da sbloccare, due negozi attivi.",
+    },
+    en: {
+      name: "Premium trial",
+      focus:
+        "Trial started five days ago: days left in Orders and Plan, no orders to unlock, two active stores.",
+    },
+  },
+  "prova-in-scadenza": {
+    it: {
+      name: "Prova in scadenza",
+      focus:
+        "Mancano due giorni alla fine della prova: avviso in evidenza in Ordini con il rimando al piano.",
+    },
+    en: {
+      name: "Trial ending",
+      focus: "Two days before the trial ends: prominent notice in Orders linking to the plan.",
+    },
+  },
+  "prova-terminata": {
+    it: {
+      name: "Prova terminata",
+      focus:
+        "Di nuovo Free dopo la prova, senza invito a ripeterla: gli ordini con il dato arrivato durante la prova restano sbloccati.",
+    },
+    en: {
+      name: "Trial ended",
+      focus:
+        "Back on Free after the trial, with no offer to repeat it: orders whose data arrived during the trial stay unlocked.",
     },
   },
   premium: {
@@ -877,6 +915,10 @@ const premiumAccount = (): AccountView =>
     premium: { period: "annual", renewsAt: "2027-03-12T10:00:00Z" },
   });
 
+/** Prova Premium in corso fino a `endsAt`, senza abbonamento. */
+const trialAccount = (endsAt: string): AccountView =>
+  account({ plan: "premium", trialAvailable: false, quota: undefined, trial: { endsAt } });
+
 const text = {
   maintenance: {
     it: {
@@ -975,10 +1017,15 @@ const sessions = (language: Language): SessionView[] => [
   },
 ];
 
+/** Fine della prova attivata per finta all'istante dell'anteprima: 14 giorni dopo. */
+const startedTrialEnd = new Date(Date.parse(previewNow) + 14 * 24 * 60 * 60_000).toISOString();
+
 export function loadScenario(
   id: ScenarioId,
   language: Language,
   unlocked: ReadonlySet<string>,
+  /** `trialStarted`: la prova disponibile è stata attivata nell'anteprima. */
+  { trialStarted = false }: { trialStarted?: boolean } = {},
 ): Scenario {
   const note = (
     key: keyof typeof text,
@@ -1406,10 +1453,14 @@ export function loadScenario(
       };
       break;
     case "prima-sincronizzazione":
-      // Come nell'area reale appena dopo il collegamento: lettura avviata, nessun ordine letto.
+      // Come nell'area reale appena dopo il collegamento: lettura avviata, nessun ordine letto,
+      // e la prova non ancora disponibile.
       scenario = {
         ...common,
-        account: account({ quota: { used: 0, limit: 5, cycleEndsAt: "2026-10-04T12:55:00Z" } }),
+        account: account({
+          quota: { used: 0, limit: 5, cycleEndsAt: "2026-10-04T12:55:00Z" },
+          trialAvailable: false,
+        }),
         stores: [
           storeView("vintage", {
             syncing: true,
@@ -1493,6 +1544,31 @@ export function loadScenario(
         diagnostics: diagnostics(),
       };
       break;
+    case "prova-premium":
+    case "prova-in-scadenza":
+      scenario = {
+        ...common,
+        account: trialAccount(
+          id === "prova-premium" ? "2026-10-06T10:00:00Z" : "2026-09-29T09:00:00Z",
+        ),
+        stores: [freeStores[0]!, storeView("outlet")],
+        seeds: seeds.filter((seed) => seed.store !== "retro"),
+        premium: true,
+        diagnostics: diagnostics(),
+      };
+      break;
+    case "prova-terminata":
+      // Dopo la prova restano sbloccati gli ordini con il dato arrivato durante la prova:
+      // nello scenario sono quelli già disponibili, gli altri seguono la quota del ciclo.
+      scenario = {
+        ...common,
+        account: account({ trialAvailable: false }),
+        stores: freeStores,
+        seeds: freeSeeds,
+        premium: false,
+        diagnostics: diagnostics(),
+      };
+      break;
     case "premium":
       scenario = {
         ...common,
@@ -1555,6 +1631,15 @@ export function loadScenario(
       break;
   }
 
+  // La prova attivata per finta porta lo scenario in Premium, senza avvisi degli sblocchi.
+  if (trialStarted && scenario.account.trialAvailable)
+    scenario = {
+      ...scenario,
+      account: trialAccount(startedTrialEnd),
+      premium: true,
+      notices: scenario.notices.filter((notice) => notice.kind !== "quota"),
+      notifications: scenario.notifications.filter((item) => item.id !== "n-quota"),
+    };
   const { seeds: scenarioSeeds, premium, ...rest } = scenario;
   const lockedValues: Record<string, TaxIdentifierView[]> = {};
   let unlockedCount = 0;
@@ -1591,13 +1676,17 @@ export function loadScenario(
       : `Free, ${currentAccount.quota.used} of ${currentAccount.quota.limit} orders unlocked`
     : currentAccount.plan === "free"
       ? "Free"
-      : currentAccount.premium?.period === "lifetime"
+      : currentAccount.trial
         ? language === "it"
-          ? "Premium a vita"
-          : "Premium, lifetime"
-        : language === "it"
-          ? "Premium annuale"
-          : "Premium, annual";
+          ? "Prova Premium"
+          : "Premium trial"
+        : currentAccount.premium?.period === "lifetime"
+          ? language === "it"
+            ? "Premium a vita"
+            : "Premium, lifetime"
+          : language === "it"
+            ? "Premium annuale"
+            : "Premium, annual";
   return {
     ...rest,
     account: currentAccount,

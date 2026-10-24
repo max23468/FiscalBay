@@ -168,6 +168,7 @@ export function SettingsPage({
         stores={data.stores}
         billing={data.services.billing}
         confirmUnlock={data.confirmUnlock}
+        now={data.now}
         t={t}
         language={language}
       />

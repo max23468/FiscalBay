@@ -295,7 +295,10 @@ export interface AccountView {
   };
   email: string;
   plan: Plan;
+  /** La prova Premium si può attivare: mai usata, nessuna copertura in corso, negozio letto. */
   trialAvailable: boolean;
+  /** Prova Premium in corso, senza un'altra copertura: finisce all'istante `endsAt`. */
+  trial?: { endsAt: string };
   /**
    * Sblocchi del ciclo Free in corso; senza ciclo avviato nessuno sblocco è disponibile.
    * `nextLimit` compare quando il ciclo seguente avrà una quota diversa, per una promozione
@@ -390,6 +393,18 @@ export function addressRows(address: AddressView, language: Language): string[] 
 }
 
 /** Tempo relativo rispetto a un istante fornito dal server, stabile fra server e browser. */
+/** Negli ultimi tre giorni la fine della prova si mostra in evidenza. */
+const trialEndingMilliseconds = 3 * 24 * 60 * 60 * 1000;
+
+/** Giorni di prova rimasti, contando come intero anche quello in corso. */
+export function trialDaysLeft(endsAt: string, now: string) {
+  return Math.max(Math.ceil((Date.parse(endsAt) - Date.parse(now)) / 86_400_000), 0);
+}
+
+export function trialEnding(endsAt: string, now: string) {
+  return Date.parse(endsAt) - Date.parse(now) <= trialEndingMilliseconds;
+}
+
 export function formatRelative(value: string, now: string, language: Language): string {
   const minutes = Math.round((new Date(value).getTime() - new Date(now).getTime()) / 60_000);
   const format = new Intl.RelativeTimeFormat(locales[language], { numeric: "auto" });

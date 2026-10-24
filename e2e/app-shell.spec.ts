@@ -648,6 +648,33 @@ test("con Premium nessun ordine resta da sbloccare e il piano a vita non si rinn
   await expect(page.getByRole("button", { name: /Gestisci abbonamento/u })).toHaveCount(0);
 });
 
+test("la prova si attiva volontariamente, poi la fine è in evidenza e non si ripete", async ({
+  page,
+}) => {
+  await open(page);
+  await expect(page.getByText("Prova Premium gratis per 14 giorni, senza carta.")).toBeVisible();
+  await page.getByRole("button", { name: "Attiva la prova", exact: true }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Prova Premium attivata." }),
+  ).toBeVisible();
+  await expect(page.getByText("Prova Premium: 14 giorni rimasti")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sblocca ordine" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Attiva la prova" })).toHaveCount(0);
+
+  await chooseScenario(page, "Prova in scadenza");
+  const ending = page.getByRole("status").filter({ hasText: "La prova Premium finisce il" });
+  await expect(ending).toContainText("29 set 2026");
+  await ending.getByRole("link", { name: "Vedi il piano" }).click();
+  await expect(page).toHaveURL(/\/anteprima\/impostazioni\/piano$/u);
+  const plan = page.getByRole("region", { name: "Piano e pagamenti" });
+  await expect(plan.getByText("Prova Premium", { exact: true })).toBeVisible();
+  await expect(plan.getByText(/2 giorni rimasti/u)).toBeVisible();
+
+  await chooseScenario(page, "Prova terminata");
+  await expect(plan.getByText("Free", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Attiva la prova" })).toHaveCount(0);
+});
+
 test("stati vuoti, ricerca e indirizzi inesistenti restano dentro l'app", async ({ page }) => {
   const response = await page.goto("/anteprima/ordini/ord-999");
   expect(response?.status()).toBe(404);

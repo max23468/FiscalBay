@@ -32,7 +32,14 @@ import { pagesParam, rememberStore, snapshotParam } from "../../orders/order-lis
 import { searchParam } from "../../orders/order-search";
 import { usePageTiming } from "../../page-timing";
 import type { Language } from "../../i18n";
-import { formatDate, formatRelative, type OrdersNotice, type OrderView } from "../../view-models";
+import {
+  formatDate,
+  formatRelative,
+  trialDaysLeft,
+  trialEnding,
+  type OrdersNotice,
+  type OrderView,
+} from "../../view-models";
 import { OrderCard, type SecondaryActions } from "./card";
 import { OrderSheet } from "./detail";
 import { LoadingGrid, LoadingHeader } from "./loading";
@@ -725,6 +732,62 @@ function OrdersList({
   );
 }
 
+/**
+ * Prova Premium: un invito discreto dopo la prima lettura riuscita, anche senza ordini, poi il
+ * tempo rimasto, in evidenza negli ultimi giorni con il rimando al piano.
+ */
+function TrialNotice({ data, t, links }: { data: OrdersPageData; t: AppCopy; links: AppLinks }) {
+  const zone = useTimeZone();
+  const action = useAction();
+  const { trial, trialAvailable } = data.account;
+  if (trial) {
+    if (!trialEnding(trial.endsAt, data.now))
+      return (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <StatusIcon tone="premium" />
+          {t.orders.trialStatus(trialDaysLeft(trial.endsAt, data.now))}
+        </p>
+      );
+    return (
+      <StatusAlert
+        tone="premium"
+        title={t.orders.trialEndingTitle(
+          formatDate(trial.endsAt, links.language, "dateTime", zone),
+        )}
+      >
+        <span className="grid justify-items-start gap-3">
+          {t.orders.trialEndingBody}
+          <Link
+            to={appHref(links, "impostazioni/piano")}
+            {...buttonLink({ variant: "outline", size: "sm" })}
+          >
+            {t.orders.trialEndingAction}
+          </Link>
+        </span>
+      </StatusAlert>
+    );
+  }
+  if (!trialAvailable || !data.sync.lastAt || (data.view !== "list" && data.view !== "empty"))
+    return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
+      <p className="flex items-center gap-2">
+        <StatusIcon tone="premium" />
+        {t.orders.trialOffer}
+      </p>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={action.pending}
+        onClick={() => action.run("start-trial")}
+      >
+        {action.pending ? <Spinner /> : null}
+        {t.settings.plan.trialAction}
+      </Button>
+    </div>
+  );
+}
+
 /** Negozio collegato senza ordini: in attesa della prima lettura o senza ordini nel periodo. */
 function NoOrders({ data, t, links }: { data: OrdersPageData; t: AppCopy; links: AppLinks }) {
   const zone = useTimeZone();
@@ -791,6 +854,7 @@ export function OrdersPage({
       <OrdersHeader data={data} t={t} language={language} />
       {notice}
       <OrdersNotices data={data} t={t} language={language} links={links} />
+      {data.view === "loading" ? null : <TrialNotice data={data} t={t} links={links} />}
       {data.view === "no-store" ? (
         <FirstUse data={data} t={t} />
       ) : data.view === "loading" ? (

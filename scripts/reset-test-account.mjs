@@ -177,7 +177,11 @@ async function main() {
     const unlockAccounts = ["chromium", "webkit"].flatMap((browser) =>
       ["it", "en"].map((language) => `unlock-${language}-${browser}`),
     );
-    for (const id of [...unlockAccounts, "suggestions-it", "suggestions-en"]) {
+    // La prova Premium si offre dopo la prima lettura riuscita: i suoi account hanno il negozio letto.
+    const trialAccounts = ["chromium", "webkit"].flatMap((browser) =>
+      ["it", "en"].map((language) => `trial-${language}-${browser}`),
+    );
+    for (const id of [...unlockAccounts, ...trialAccounts, "suggestions-it", "suggestions-en"]) {
       const value = `VALORE-SINTETICO-${id.split("-")[1]}`;
       statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
       INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
@@ -229,6 +233,9 @@ async function main() {
         INSERT INTO order_tax_checks (order_id, source, observed_at, availability)
           VALUES ('${id}', 'ebay_fulfillment', '${now}', 'absent');`);
       }
+      if (id.startsWith("trial-"))
+        statements.push(`INSERT INTO sync_state (store_id, polled_at, last_success_at, updated_at)
+          VALUES ('${id}', '${now}', '${now}', '${now}');`);
     }
     // Preferenze e campanella: un account per browser, con un negozio da ricollegare.
     for (const browser of ["chromium", "webkit"]) {

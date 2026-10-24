@@ -2914,3 +2914,63 @@ test.describe("caricamento degli Ordini reali", () => {
     await expect(page.getByRole("article").first()).toBeVisible();
   });
 });
+
+test.describe("prova Premium", () => {
+  test.skip(
+    Boolean(process.env.E2E_BASE_URL),
+    "Prove con dati sintetici soltanto sul database locale.",
+  );
+
+  for (const language of ["it", "en"] as const)
+    test(`ordini reali: la prova si attiva dopo la prima lettura e compare nel Piano ${language}`, async ({
+      page,
+      context,
+      baseURL,
+      browserName,
+    }) => {
+      const it = language === "it";
+      const prefix = it ? "" : "/en";
+      // Spazio con il negozio già letto e ordini da sbloccare, proprio di lingua e browser.
+      await useLocalAccount(context, "member", baseURL!, `trial-${language}-${browserName}`);
+      await page.goto(`${prefix}/app/ordini`);
+      const secret = `VALORE-SINTETICO-${language}`;
+      expect(await page.content()).not.toContain(secret);
+      await expect(
+        page.getByText(
+          it
+            ? "Prova Premium gratis per 14 giorni, senza carta."
+            : "Try Premium free for 14 days, no card needed.",
+        ),
+      ).toBeVisible();
+      await page
+        .getByRole("button", { name: it ? "Attiva la prova" : "Start trial", exact: true })
+        .click();
+      await expect(
+        page
+          .getByRole("status")
+          .filter({ hasText: it ? "Prova Premium attivata." : "Premium trial started." }),
+      ).toBeVisible();
+      await expect(
+        page.getByText(it ? "Prova Premium: 14 giorni rimasti" : "Premium trial: 14 days left"),
+      ).toBeVisible();
+      // Con la prova il dato è leggibile senza sblocco e senza consumare la quota.
+      await expect(page.getByText(secret, { exact: true }).first()).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: it ? "Sblocca ordine" : "Unlock order" }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: it ? "Attiva la prova" : "Start trial" }),
+      ).toHaveCount(0);
+      await page.goto(`${prefix}/app/impostazioni/piano`);
+      const plan = page.getByRole("region", {
+        name: it ? "Piano e pagamenti" : "Plan and billing",
+      });
+      await expect(
+        plan.getByText(it ? "Prova Premium" : "Premium trial", { exact: true }),
+      ).toBeVisible();
+      await expect(plan.getByText(it ? /14 giorni rimasti/u : /14 days left/u)).toBeVisible();
+      await expect(
+        plan.getByRole("button", { name: it ? "Attiva la prova" : "Start trial" }),
+      ).toHaveCount(0);
+    });
+});

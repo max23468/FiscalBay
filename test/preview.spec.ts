@@ -8,10 +8,11 @@ import {
   scenarioIds,
   scenarioOptions,
 } from "../app/preview/scenarios.server";
-import { formatDate, formatRelative } from "../app/view-models";
+import { formatDate, formatRelative, trialDaysLeft, trialEnding } from "../app/view-models";
 import { taxQuality } from "../app/tax-quality";
 import { readPreviewState, writePreviewState } from "../app/preview/state.server";
 import { action as previewSearch } from "../app/routes/preview-search";
+import { action as previewSettingsAction } from "../app/routes/preview-settings";
 import { loader as previewOrders } from "../app/routes/preview-orders";
 import { previewListing } from "../app/preview/order-list.server";
 import { orderCriteria } from "../app/domain/orders.server";
@@ -171,6 +172,33 @@ describe("stato sintetico dell'anteprima", () => {
       );
     });
 
+    it(`mostra la prova attiva, in scadenza e già usata, ${language}`, () => {
+      const active = loadScenario("prova-premium", language, new Set());
+      const ending = loadScenario("prova-in-scadenza", language, new Set());
+      const ended = loadScenario("prova-terminata", language, new Set());
+      expect(active.account).toMatchObject({ plan: "premium", trialAvailable: false });
+      expect(trialDaysLeft(active.account.trial!.endsAt, previewNow)).toBe(9);
+      expect(trialEnding(active.account.trial!.endsAt, previewNow)).toBe(false);
+      expect(trialDaysLeft(ending.account.trial!.endsAt, previewNow)).toBe(2);
+      expect(trialEnding(ending.account.trial!.endsAt, previewNow)).toBe(true);
+      // Durante la prova nessun ordine resta da sbloccare.
+      expect(active.orders.some((order) => order.fiscal.state === "locked")).toBe(false);
+      expect(active.diagnostics.rights).toBe(language === "it" ? "Prova Premium" : "Premium trial");
+      expect(ended.account).toMatchObject({ plan: "free", trialAvailable: false });
+      expect(ended.account.trial).toBeUndefined();
+      // Prima della prima lettura riuscita la prova non si offre.
+      expect(
+        loadScenario("prima-sincronizzazione", language, new Set()).account.trialAvailable,
+      ).toBe(false);
+      const started = loadScenario("quota-esaurita", language, new Set(), { trialStarted: true });
+      expect(started.account.trial).toEqual({ endsAt: "2026-10-11T13:00:00.000Z" });
+      expect(started.notices.some((notice) => notice.kind === "quota")).toBe(false);
+      // Una prova già usata non riparte neppure nell'anteprima.
+      expect(
+        loadScenario("prova-terminata", language, new Set(), { trialStarted: true }).account.plan,
+      ).toBe("free");
+    });
+
     it(`localizza descrittori e spiega entrambi gli identificativi, ${language}`, () => {
       const scenario = loadScenario("ordinario", language, new Set());
       expect(scenario.sessions.map((session) => session.device)).toEqual(
@@ -194,6 +222,37 @@ describe("stato sintetico dell'anteprima", () => {
       expect(t.legal.version("2026-10-03")).not.toMatch(/Bozza|Draft/);
     });
   }
+});
+
+describe("prova simulata dell'anteprima", () => {
+  const start = (cookie: string) =>
+    previewSettingsAction({
+      request: new Request("http://localhost:5173/anteprima/impostazioni/piano", {
+        method: "POST",
+        headers: { cookie },
+        body: new URLSearchParams({ intent: "start-trial" }),
+      }),
+    } as Parameters<typeof previewSettingsAction>[0]) as unknown as Promise<{
+      data: { ok: boolean; notice: string };
+      init: { status?: number; headers?: Record<string, string> } | null;
+    }>;
+
+  it("attiva la prova disponibile una sola volta nello scenario", async () => {
+    const cookie = (await writePreviewState({ scenario: "ordinario", unlocked: [] })).split(
+      ";",
+    )[0]!;
+    const first = await start(cookie);
+    expect(first.data).toEqual({ ok: true, notice: appCopy.it.settings.plan.trialStarted });
+    const started = new Headers(first.init?.headers).get("Set-Cookie")!.split(";")[0]!;
+    expect(
+      await readPreviewState(
+        new Request("http://localhost:5173", { headers: { cookie: started } }),
+      ),
+    ).toMatchObject({ scenario: "ordinario", trialStarted: true });
+    const again = await start(started);
+    expect(again.init?.status).toBe(409);
+    expect(again.data).toEqual({ ok: false, notice: appCopy.it.settings.plan.trialUnavailable });
+  });
 });
 
 describe("ricerca dell'anteprima", () => {
