@@ -239,6 +239,13 @@ export const it = {
     quotaBody: (date: string) =>
       `Puoi consultare e cercare tutti gli ordini. Codice Fiscale e Partita IVA dei nuovi ordini restano da sbloccare fino al ${date}.`,
     quotaAction: "Passa a Premium",
+    trialOffer: "Prova Premium gratis per 14 giorni, senza carta.",
+    trialStatus: (days: number) =>
+      `Prova Premium: ${days} ${plural(days, "giorno rimasto", "giorni rimasti")}`,
+    trialEndingTitle: (date: string) => `La prova Premium finisce il ${date}`,
+    trialEndingBody:
+      "Poi i Codici Fiscali dei nuovi ordini tornano agli sblocchi del Free. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
+    trialEndingAction: "Vedi il piano",
     reconciliationTitle: "Ordine da verificare",
     reconciliationBody:
       "Non è chiaro se gli articoli di questo ordine compaiono anche in un altro ordine eBay. Controllalo su eBay prima di usarne i dati.",
@@ -454,8 +461,15 @@ export const it = {
       nextCycleLimit: (limit: number) => `Il prossimo ciclo avrà ${limit} sblocchi.`,
       trialTitle: "Prova Premium per 14 giorni",
       trialBody:
-        "Senza carta e senza rinnovo automatico. Alla fine della prova scegli tu se continuare con Premium.",
+        "Senza carta e senza rinnovo automatico: alla fine torni al Free. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
       trialAction: "Attiva la prova",
+      trialStarted: "Prova Premium attivata.",
+      trialUnavailable: "La prova Premium non è disponibile per questo account.",
+      trialPlan: "Prova Premium",
+      trialEnds: (date: string, days: number) =>
+        `Finisce il ${date}: ${days} ${plural(days, "giorno rimasto", "giorni rimasti")}.`,
+      trialAfter:
+        "Nessun addebito: alla fine torni al Free. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
       buyTitle: "Passa a Premium",
       buyBody:
         "Ordini da sbloccare senza limite per ciclo, più negozi attivi, un anno di storico, XLSX e notifiche Telegram.",

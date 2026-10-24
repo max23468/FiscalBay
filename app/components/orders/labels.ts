@@ -40,8 +40,9 @@ export function missingContact(
   return order.maskedContacts?.includes(field) ? t.orders.maskedContact : t.orders.notProvided;
 }
 
-/** Piano e sblocchi del ciclo: tutto ciò che la pagina Ordini usa dell'account. */
-export type OrdersAccount = Pick<AccountView, "plan" | "quota">;
+/** Piano, prova e sblocchi del ciclo: tutto ciò che la pagina Ordini usa dell'account. */
+export type OrdersAccount = Pick<AccountView, "plan" | "quota" | "trial"> &
+  Partial<Pick<AccountView, "trialAvailable">>;
 
 export function identifierLabel(identifier: TaxIdentifierView, t: AppCopy) {
   return identifier.type === "OTHER"

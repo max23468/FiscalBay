@@ -7,6 +7,7 @@ import {
   type ActiveStore,
 } from "./order-acquisition.server";
 import { defaultRateLimitSeconds, rateLimitWait } from "./order-acquisition-context.server";
+import { activeEntitlementSql } from "./grants.server";
 import { activeStore, writableStore } from "./store-state.server";
 import { logFailure } from "../errors";
 import { UpstreamError } from "../integrations/http.server";
@@ -84,6 +85,7 @@ type CandidateRow = ActiveStore & {
   polled_at: string | null;
   requested_at: string | null;
   backlog: number;
+  premium: number;
 };
 
 /**
@@ -110,7 +112,8 @@ export async function dispatchStoreSyncs(environment: Env, now = new Date()): Pr
                  SELECT 1 FROM order_source_refs r
                   WHERE r.store_id = c.store_id AND r.source = 'fulfillment'
                     AND r.detail_for IS NOT r.last_modified_time
-                    AND (r.detail_retry_at IS NULL OR r.detail_retry_at <= ?1)))) AS backlog
+                    AND (r.detail_retry_at IS NULL OR r.detail_retry_at <= ?1)))) AS backlog,
+              ${activeEntitlementSql("s.workspace_id", "?1")} AS premium
          FROM ebay_store_credentials c
          JOIN ebay_stores s ON s.id = c.store_id
          LEFT JOIN sync_state ss ON ss.store_id = c.store_id
@@ -144,8 +147,8 @@ export async function dispatchStoreSyncs(environment: Env, now = new Date()): Pr
       storeId: row.store_id,
       grantedAt: row.granted_at,
       apiOrigin: apiOriginOf(environment, row.ebay_environment),
-      // Finché non esistono gli abbonamenti ogni spazio usa il piano Free.
-      plan: "free" as SyncPlan,
+      // Una copertura in corso, anche la prova, legge con la cadenza Premium.
+      plan: (row.premium === 1 ? "premium" : "free") as SyncPlan,
       polledAt: row.polled_at,
       requestedAt: row.requested_at,
       backlog: row.backlog === 1,

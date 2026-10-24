@@ -5,10 +5,57 @@ import { useAction } from "~/components/app-shell";
 import { PremiumNote } from "~/components/status";
 import { useTimeZone } from "~/components/time-zone";
 import { Button } from "~/components/ui/button";
+import { Spinner } from "~/components/ui/spinner";
 import type { AppCopy } from "../../app-copy";
 import type { Language } from "../../i18n";
-import { formatDate, type AccountView, type StoreView } from "../../view-models";
+import {
+  formatDate,
+  trialDaysLeft,
+  trialEnding,
+  type AccountView,
+  type StoreView,
+} from "../../view-models";
 import { AutoSwitch, Group, SimpleSelect } from "./controls";
+
+/**
+ * La prova dice quando finisce e cosa resta dopo, in evidenza negli ultimi giorni; durante la
+ * prova l'acquisto resta possibile.
+ */
+function TrialPlan({
+  trial,
+  billing,
+  now,
+  t,
+  language,
+}: {
+  trial: NonNullable<AccountView["trial"]>;
+  billing: boolean;
+  now: string;
+  t: AppCopy;
+  language: Language;
+}) {
+  const zone = useTimeZone();
+  const ending = trialEnding(trial.endsAt, now);
+  return (
+    <>
+      <Group title={t.settings.plan.currentPlan}>
+        <div className="grid gap-1">
+          <p className="text-lg font-semibold">{t.settings.plan.trialPlan}</p>
+          <p
+            className={cn("text-sm", ending ? "font-medium text-warning" : "text-muted-foreground")}
+          >
+            {t.settings.plan.trialEnds(
+              formatDate(trial.endsAt, language, "dateTime", zone),
+              trialDaysLeft(trial.endsAt, now),
+            )}
+          </p>
+          <p className="text-sm text-muted-foreground">{t.settings.plan.trialAfter}</p>
+        </div>
+      </Group>
+      {billing ? <PurchaseOptions t={t} /> : null}
+    </>
+  );
+}
 
 /**
  * Il lifetime conserva l'accesso ai documenti senza presentare un rinnovo. Un Premium concesso
@@ -62,19 +109,35 @@ function PremiumPlan({
   );
 }
 
+/** La prova è interna a FiscalBay: non crea abbonamenti né pagamenti. */
+function TrialOffer({ t }: { t: AppCopy }) {
+  const action = useAction();
+  return (
+    <Group title={t.settings.plan.trialTitle}>
+      <p className="text-sm leading-relaxed text-muted-foreground">{t.settings.plan.trialBody}</p>
+      <Button className="w-fit" disabled={action.pending} onClick={() => action.run("start-trial")}>
+        {action.pending ? <Spinner /> : null}
+        {t.settings.plan.trialAction}
+      </Button>
+    </Group>
+  );
+}
+
 export function PlanSection({
   account,
   stores,
   billing,
   confirmUnlock,
+  now,
   t,
   language,
 }: {
   account: AccountView;
   stores: StoreView[];
-  /** Prova, acquisto e negozio attivo del Free dipendono dai pagamenti. */
+  /** Acquisto e negozio attivo del Free dipendono dai pagamenti; la prova no. */
   billing: boolean;
   confirmUnlock: boolean;
+  now: string;
   t: AppCopy;
   language: Language;
 }) {
@@ -85,7 +148,11 @@ export function PlanSection({
   );
   // La scelta del negozio attivo compare solo nel Free: in Premium non anticipa il downgrade.
   if (account.plan === "premium") {
-    return <PremiumPlan account={account} billing={billing} t={t} language={language} />;
+    return account.trial ? (
+      <TrialPlan trial={account.trial} billing={billing} now={now} t={t} language={language} />
+    ) : (
+      <PremiumPlan account={account} billing={billing} t={t} language={language} />
+    );
   }
   const quota = account.quota;
   return (
@@ -133,7 +200,7 @@ export function PlanSection({
           t={t}
         />
       </Group>
-      {/* Prova, acquisto e negozio attivo del Free dipendono dai pagamenti. */}
+      {/* Acquisto e negozio attivo del Free dipendono dai pagamenti. */}
       {billing && stores.length > 1 ? (
         <Group>
           <SimpleSelect
@@ -148,16 +215,7 @@ export function PlanSection({
           />
         </Group>
       ) : null}
-      {billing && account.trialAvailable ? (
-        <Group title={t.settings.plan.trialTitle}>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            {t.settings.plan.trialBody}
-          </p>
-          <Button className="w-fit" onClick={() => action.run("start-trial")}>
-            {t.settings.plan.trialAction}
-          </Button>
-        </Group>
-      ) : null}
+      {account.trialAvailable ? <TrialOffer t={t} /> : null}
       {billing ? <PurchaseOptions t={t} /> : null}
     </>
   );

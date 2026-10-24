@@ -1988,6 +1988,21 @@ describe("acquisizione con il client", () => {
         expect(await dispatchStoreSyncs(cron, minutes(90))).toEqual(["s-a"]);
       });
 
+      it("durante la prova legge con la cadenza Premium e poi torna a quella Free", async () => {
+        expect(await dispatchStoreSyncs(cron, minutes(0))).toEqual(["s-a"]);
+        await consumeStoreSync(message(), env, ebay(), minutes(1));
+        expect(await dispatchStoreSyncs(cron, minutes(11))).toEqual([]);
+        await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+          VALUES ('prova', 'w-a', 'trial', ?, ?)`)
+          .bind(minutes(5).toISOString(), minutes(20).toISOString())
+          .run();
+        expect(await dispatchStoreSyncs(cron, minutes(11))).toEqual(["s-a"]);
+        await consumeStoreSync(message(), env, ebay(), minutes(12));
+        // Alla fine della prova il turno segue di nuovo la cadenza Free.
+        expect(await dispatchStoreSyncs(cron, minutes(23))).toEqual([]);
+        expect(await dispatchStoreSyncs(cron, minutes(42))).toEqual(["s-a"]);
+      });
+
       it("fra trigger sovrapposti uno solo prende il turno di un negozio", async () => {
         const turns = await Promise.all([
           dispatchStoreSyncs(cron, minutes(0)),

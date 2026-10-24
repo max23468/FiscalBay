@@ -235,6 +235,12 @@ export const en: AppCopy = {
     quotaBody: (date) =>
       `You can still view and search all orders. Codice Fiscale and Partita IVA of new orders stay locked until ${date}.`,
     quotaAction: "Upgrade to Premium",
+    trialOffer: "Try Premium free for 14 days, no card needed.",
+    trialStatus: (days) => `Premium trial: ${days} ${plural(days, "day", "days")} left`,
+    trialEndingTitle: (date) => `Your Premium trial ends on ${date}`,
+    trialEndingBody:
+      "After that, the Codice Fiscale of new orders goes back to Free unlocks. Orders whose data arrived during the trial stay unlocked.",
+    trialEndingAction: "View plan",
     reconciliationTitle: "Order to check",
     reconciliationBody:
       "It is unclear whether the items in this order also appear in another eBay order. Check it on eBay before using its details.",
@@ -440,8 +446,14 @@ export const en: AppCopy = {
       nextCycleLimit: (limit) => `The next cycle will have ${limit} unlocks.`,
       trialTitle: "Try Premium for 14 days",
       trialBody:
-        "No card and no automatic renewal. When the trial ends, you choose whether to keep Premium.",
+        "No card and no automatic renewal: when it ends you go back to Free. Orders whose data arrived during the trial stay unlocked.",
       trialAction: "Start trial",
+      trialStarted: "Premium trial started.",
+      trialUnavailable: "The Premium trial is not available for this account.",
+      trialPlan: "Premium trial",
+      trialEnds: (date, days) => `Ends on ${date}: ${days} ${plural(days, "day", "days")} left.`,
+      trialAfter:
+        "No charge: when it ends you go back to Free. Orders whose data arrived during the trial stay unlocked.",
       buyTitle: "Upgrade to Premium",
       buyBody:
         "No limit on orders to unlock per cycle, more active stores, one year of history, XLSX and Telegram notifications.",

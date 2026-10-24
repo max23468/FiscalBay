@@ -27,6 +27,54 @@ export function activeEntitlementSql(workspace: string, at: string) {
     AND (e.ends_at IS NULL OR julianday(${at}) < julianday(e.ends_at)))`;
 }
 
+/**
+ * Copertura attiva mostrata all'utente: prima un diritto diverso dalla prova, poi quello che
+ * dura di più. Argomenti come in `activeEntitlementSql`.
+ */
+function activeCoverageSql(column: "source" | "ends_at", workspace: string, at: string) {
+  return `(SELECT e.${column} FROM workspace_entitlements e WHERE e.workspace_id = ${workspace}
+    AND e.revoked_at IS NULL AND julianday(e.starts_at) <= julianday(${at})
+    AND (e.ends_at IS NULL OR julianday(${at}) < julianday(e.ends_at))
+    ORDER BY e.source = 'trial', e.ends_at IS NOT NULL, julianday(e.ends_at) DESC LIMIT 1)`;
+}
+
+/** Durata della prova Premium, in giorni di 24 ore sull'istante UTC come i cicli del Free. */
+export const trialDays = 14;
+
+const trialLength = trialDays * 24 * 60 * 60 * 1000;
+
+/**
+ * La prova si offre allo spazio che non l'ha mai avuta, senza una copertura in corso e dopo
+ * la prima lettura riuscita di un suo negozio, anche senza ordini. Lo scollegamento successivo
+ * non la toglie: il negozio è già stato letto.
+ */
+function trialAvailableSql(workspace: string, at: string) {
+  return `(NOT EXISTS (SELECT 1 FROM workspace_entitlements e
+      WHERE e.workspace_id = ${workspace} AND e.source = 'trial')
+    AND NOT ${activeEntitlementSql(workspace, at)}
+    AND EXISTS (SELECT 1 FROM ebay_stores s JOIN sync_state ss ON ss.store_id = s.id
+      WHERE s.workspace_id = ${workspace} AND ss.last_success_at IS NOT NULL))`;
+}
+
+/**
+ * Attivazione volontaria della prova: 14 giorni fissi da adesso, senza pause né ripartenze,
+ * che scorrono anche scollegando il negozio. Nessun abbonamento o pagamento. Restituisce la
+ * fine della prova, o null se non era disponibile: già usata, anche da una richiesta
+ * concorrente, con un'altra copertura in corso o prima della prima lettura riuscita.
+ */
+export async function startTrial(db: D1Database, userId: string, now = new Date()) {
+  const at = now.toISOString();
+  const row = await db
+    .prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+    SELECT ?1, w.id, 'trial', ?3, ?4 FROM workspaces w
+      JOIN workspace_members wm ON wm.workspace_id = w.id
+    WHERE wm.user_id = ?2 AND ${trialAvailableSql("w.id", "?3")}
+    ON CONFLICT DO NOTHING RETURNING ends_at`)
+    .bind(crypto.randomUUID(), userId, at, new Date(now.getTime() + trialLength).toISOString())
+    .first<{ ends_at: string }>();
+  return row?.ends_at ?? null;
+}
+
 /** Motivi per cui uno sblocco non avviene: nessun ordine, quota o testo SQL nel risultato. */
 export type UnlockErrorCode =
   | "invalid_order_selection"
@@ -126,6 +174,8 @@ export async function currentFreePromotion(db: D1Database, now = new Date()) {
     .first<{ quota: number; endsAt: string }>();
 }
 
+type EntitlementSource = "premium" | "trial" | "lifetime" | "admin";
+
 type FreeCycle = { id: string; used: number; quota: number; ends_at: string; next_quota: number };
 
 /**
@@ -136,11 +186,21 @@ type FreeCycle = { id: string; used: number; quota: number; ends_at: string; nex
 export async function orderAllowance(db: D1Database, userId: string, now = new Date()) {
   const at = now.toISOString();
   const workspace = await db
-    .prepare(`SELECT w.id, w.free_cycle_anchor_at, ${activeEntitlementSql("w.id", "?1")} AS premium
+    .prepare(`SELECT w.id, w.free_cycle_anchor_at, ${activeEntitlementSql("w.id", "?1")} AS premium,
+      ${activeCoverageSql("source", "w.id", "?1")} AS coverage,
+      ${activeCoverageSql("ends_at", "w.id", "?1")} AS coverage_ends_at,
+      ${trialAvailableSql("w.id", "?1")} AS trial_available
     FROM workspaces w JOIN workspace_members wm ON wm.workspace_id = w.id
     WHERE wm.user_id = ?2`)
     .bind(at, userId)
-    .first<{ id: string; free_cycle_anchor_at: string | null; premium: number }>();
+    .first<{
+      id: string;
+      free_cycle_anchor_at: string | null;
+      premium: number;
+      coverage: EntitlementSource | null;
+      coverage_ends_at: string | null;
+      trial_available: number;
+    }>();
   if (!workspace) return null;
   const current = db
     .prepare(`SELECT c.id, c.used, c.quota, c.ends_at, ${cycleQuotaSql("c.ends_at")} AS next_quota
@@ -169,6 +229,11 @@ export async function orderAllowance(db: D1Database, userId: string, now = new D
   return {
     workspaceId: workspace.id,
     premium: !!workspace.premium,
+    /** Origine e fine della copertura in corso; la fine è null per il lifetime. */
+    coverage: workspace.coverage
+      ? { source: workspace.coverage, endsAt: workspace.coverage_ends_at }
+      : null,
+    trialAvailable: !!workspace.trial_available,
     cycle,
     remaining: workspace.premium ? null : cycle ? cycle.quota - cycle.used : 0,
   };
@@ -228,4 +293,14 @@ export async function unlockOrders(
     throw code ? new UnlockError(code) : error;
   }
   return { unlocked: unique, remaining: (await orderAllowance(db, userId, now))!.remaining };
+}
+
+/** Prova in corso per l'interfaccia, se nessun'altra copertura è attiva insieme a essa. */
+export function accountCoverage(allowance: Awaited<ReturnType<typeof orderAllowance>>): {
+  trial?: { endsAt: string };
+} {
+  const coverage = allowance?.coverage;
+  return coverage?.source === "trial" && coverage.endsAt
+    ? { trial: { endsAt: coverage.endsAt } }
+    : {};
 }

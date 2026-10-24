@@ -9,7 +9,13 @@ import { areaPage, assertSameOrigin, requireAccountArea, shellData } from "../ac
 import { appCopy, pageTitle } from "../app-copy";
 import { appBase, type AppLinks } from "../app-links";
 import { pendingEmailChange } from "../domain/email-change.server";
-import { orderAllowance, setUnlockConfirmation, unlockConfirmation } from "../domain/grants.server";
+import {
+  accountCoverage,
+  orderAllowance,
+  setUnlockConfirmation,
+  startTrial,
+  unlockConfirmation,
+} from "../domain/grants.server";
 import { completeRegistration, parseProfile } from "../domain/registration.server";
 import {
   marketingConsent,
@@ -114,7 +120,8 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       ...account,
       profile,
       plan: allowance?.premium ? "premium" : "free",
-      trialAvailable: false,
+      trialAvailable: allowance?.trialAvailable ?? false,
+      ...accountCoverage(allowance),
       // Prima del primo collegamento nessun ciclo è avviato e non c'è una quota da mostrare.
       quota:
         !allowance?.premium && cycle
@@ -197,6 +204,11 @@ export async function action({ request }: Route.ActionArgs) {
       if (!templates) return failed(400, t.template.templateInvalid);
       await saveTemplates(env.DB, userId, templates);
       return { ok: true } satisfies ActionResult;
+    }
+    if (intent === "start-trial") {
+      // Una prova già usata, anche da un'altra scheda, non riparte: lo stato si rilegge.
+      if (!(await startTrial(env.DB, userId))) return failed(409, t.plan.trialUnavailable);
+      return { ok: true, notice: t.plan.trialStarted } satisfies ActionResult;
     }
     if (intent === "profile") {
       // Nome, cognome e ragione sociale; il tipo di account resta quello registrato.

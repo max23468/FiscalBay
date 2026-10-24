@@ -23,6 +23,8 @@ export interface PreviewState {
   saveFailed: boolean;
   retried?: string[];
   confirmUnlock?: boolean;
+  /** Prova attivata per finta nello scenario corrente. */
+  trialStarted?: boolean;
 }
 
 /** L'anteprima esiste solo negli ambienti non Production. */
@@ -45,6 +47,7 @@ export async function readPreviewState(request: Request): Promise<PreviewState> 
       unlocked: value.unlocked.filter((id): id is string => typeof id === "string").slice(0, 50),
       saveFailed: "saveFailed" in value && value.saveFailed === true,
       confirmUnlock: !("confirmUnlock" in value && value.confirmUnlock === false),
+      trialStarted: "trialStarted" in value && value.trialStarted === true,
       retried:
         "retried" in value && Array.isArray(value.retried)
           ? value.retried.filter((id): id is string => typeof id === "string").slice(0, 50)
@@ -63,7 +66,9 @@ export async function currentScenario(request: Request) {
   assertPreviewAvailable();
   const state = await readPreviewState(request);
   const language = languageFromPath(new URL(request.url).pathname);
-  const scenario = loadScenario(state.scenario, language, new Set(state.unlocked));
+  const scenario = loadScenario(state.scenario, language, new Set(state.unlocked), {
+    trialStarted: state.trialStarted,
+  });
   const retried = new Set(state.retried);
   for (const order of scenario.orders) {
     if (order.fiscal.state === "error" && retried.has(order.id))
@@ -125,6 +130,18 @@ export async function simulateAction(request: Request, form: FormData) {
           }),
         },
       },
+    );
+  }
+  // Come nell'area reale la prova parte una volta sola e soltanto se disponibile.
+  if (intent === "start-trial") {
+    if (!scenario.account.trialAvailable)
+      return data<ActionResult>(
+        { ok: false, notice: t.settings.plan.trialUnavailable },
+        { status: 409 },
+      );
+    return data<ActionResult>(
+      { ok: true, notice: t.settings.plan.trialStarted },
+      { headers: { "Set-Cookie": await writePreviewState({ ...state, trialStarted: true }) } },
     );
   }
   if (intent === "save" && scenario.saveFailsOnce && !state.saveFailed) {

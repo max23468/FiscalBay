@@ -17,8 +17,10 @@ import {
 import { appCopy, pageTitle } from "../app-copy";
 import { appBase, ordersPath, storeLinkPath, type AppLinks } from "../app-links";
 import {
+  accountCoverage,
   orderAllowance,
   restoreUnlockConfirmation,
+  startTrial,
   unlockConfirmation,
   UnlockError,
   unlockOrders,
@@ -274,6 +276,9 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     stores: filterStores,
     account: {
       plan: premium ? "premium" : "free",
+      // La prova si propone dopo la prima lettura riuscita, anche senza ordini.
+      trialAvailable: allowance?.trialAvailable ?? false,
+      ...accountCoverage(allowance),
       // Prima del primo collegamento nessun ciclo è avviato e nessuno sblocco è disponibile.
       quota: premium
         ? undefined
@@ -343,8 +348,8 @@ export function shouldRevalidate({
 }
 
 /**
- * Sblocco, nuova lettura di un ordine non riuscito e ripristino della conferma di sblocco,
- * sempre sugli ordini e sullo spazio dell'utente.
+ * Sblocco, nuova lettura di un ordine non riuscito, ripristino della conferma di sblocco e
+ * attivazione della prova, sempre sugli ordini e sullo spazio dell'utente.
  */
 export async function action({ request }: Route.ActionArgs) {
   assertSameOrigin(request);
@@ -355,6 +360,15 @@ export async function action({ request }: Route.ActionArgs) {
   if (intent === "unlock-confirmation") {
     await restoreUnlockConfirmation(env.DB, session.user.id);
     return { ok: true } satisfies ActionResult;
+  }
+  if (intent === "start-trial") {
+    const started = await startTrial(env.DB, session.user.id);
+    return started
+      ? ({ ok: true, notice: t.settings.plan.trialStarted } satisfies ActionResult)
+      : data<ActionResult>(
+          { ok: false, notice: t.settings.plan.trialUnavailable },
+          { status: 409 },
+        );
   }
   const environment = requestedEbayEnvironment(request);
   if (intent === "retry") {
