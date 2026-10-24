@@ -62,17 +62,17 @@ const unlockTriggerCodes: UnlockErrorCode[] = [
  * scaduto o revocato, viola l'unicità per spazio e ordine.
  */
 function unlockErrorCode(error: unknown): UnlockErrorCode | null {
-  const messages: string[] = [];
-  for (let cause = error; cause instanceof Error; cause = cause.cause) messages.push(cause.message);
-  const message = messages.join("\n");
-  const trigger = unlockTriggerCodes.find((code) => message.includes(code));
-  if (trigger) return trigger;
-  if (message.includes("NOT NULL constraint failed: order_grants.order_id"))
-    return "order_not_in_workspace";
-  if (
-    message.includes("UNIQUE constraint failed: order_grants.workspace_id, order_grants.order_id")
-  )
-    return "order_already_granted";
+  for (let cause = error; cause instanceof Error; cause = cause.cause) {
+    const { message } = cause;
+    const trigger = unlockTriggerCodes.find((code) => message.includes(code));
+    if (trigger) return trigger;
+    if (message.includes("NOT NULL constraint failed: order_grants.order_id"))
+      return "order_not_in_workspace";
+    if (
+      message.includes("UNIQUE constraint failed: order_grants.workspace_id, order_grants.order_id")
+    )
+      return "order_already_granted";
+  }
   return null;
 }
 
