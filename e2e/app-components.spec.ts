@@ -869,6 +869,8 @@ test.describe("miglioramenti account e negozi", () => {
     await expect(templateSection.getByText("Salvato", { exact: true })).toBeVisible();
     await page.reload();
     await expect(template).toHaveValue("Ciao, per l'ordine {ordine} ci serve il Codice Fiscale.");
+    // Il valore arriva già dal server: un clic sulla campanella prima dell'idratazione andrebbe perso.
+    await page.waitForLoadState("networkidle");
 
     // La campanella segnala il negozio da ricollegare e ricorda la lettura.
     const bell = page.getByRole("button", { name: "Notifiche, 1 da leggere" });
@@ -2262,6 +2264,35 @@ for (const width of [390, 768, 1440]) {
       await expect(page.locator("main")).toContainText(
         it ? "Il prossimo ciclo avrà 5 sblocchi." : "The next cycle will have 5 unlocks.",
       );
+      // Prezzi netti dal listino; l'acquisto porta a Stripe e torna con il pagamento in verifica.
+      await expect(page.locator("main")).toContainText(it ? "4,90 € al mese" : "€4.90 per month");
+      await expect(page.locator("main")).toContainText(
+        it ? "Equivale a 4,08 € al mese." : "Works out at €4.08 per month.",
+      );
+      await page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }).click();
+      await expect(page).toHaveURL(/\?checkout=processing$/u);
+      await expect(
+        page.getByText(it ? "Attivazione Premium in corso" : "Activating Premium"),
+      ).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`checkout-processing-${locale}.png`) });
+      // Prima della prima lettura riuscita i prezzi restano visibili, l'acquisto no.
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "prima-sincronizzazione");
+      await expect(
+        page.getByText(
+          it
+            ? "Potrai acquistare Premium dopo la prima lettura riuscita di un negozio."
+            : "You can buy Premium once a store has been read successfully.",
+        ),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: /Scegli mensile|Choose monthly/u }),
+      ).toHaveCount(0);
+      // Durante la prova un abbonamento ordinario perderebbe i giorni residui: niente acquisto.
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "prova-premium");
+      await expect(page.locator("main")).toContainText(it ? "Prova Premium" : "Premium trial");
+      await expect(
+        page.getByRole("button", { name: /Scegli (mensile|annuale)|Choose (monthly|annual)/u }),
+      ).toHaveCount(0);
       await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium-a-vita");
       const documents = page.getByRole("button", {
         name: it ? "Consulta ricevute e fatture su Stripe" : "View receipts and invoices on Stripe",

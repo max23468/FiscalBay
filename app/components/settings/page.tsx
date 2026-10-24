@@ -31,7 +31,7 @@ import {
 import { AppearanceSection } from "./appearance";
 import { ExportSection, type ExportContext } from "./export";
 import { NotificationsSection } from "./notifications";
-import { PlanSection } from "./plan";
+import { PlanSection, type PurchaseView } from "./plan";
 import { PrivacySection } from "./privacy";
 import { ProfileSection } from "./profile";
 import { SecuritySection, type SecurityData } from "./security";
@@ -49,6 +49,7 @@ export interface SettingsPageData {
   /** Scenario dell'anteprima: le azioni sono simulate e le scelte non restano. */
   preview: boolean;
   account: AccountView;
+  purchase: PurchaseView;
   stores: StoreView[];
   security: SecurityData;
   /** Valori salvati, con i testi predefiniti dove non c'è una scelta. */
@@ -167,6 +168,7 @@ export function SettingsPage({
         account={data.account}
         stores={data.stores}
         billing={data.services.billing}
+        purchase={data.purchase}
         confirmUnlock={data.confirmUnlock}
         now={data.now}
         t={t}
@@ -275,9 +277,9 @@ export function SettingsPage({
       clearTimeout(release.current);
       following.current = false;
     };
-    // Apertura e cambio lingua; i clic fra categorie scorrono dal menu.
+    // Apertura, cambio lingua e ritorno dal pagamento; i clic fra categorie scorrono dal menu.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [language]);
+  }, [language, data.purchase.checkout]);
 
   useLayoutEffect(() => {
     const item = items.current[active];

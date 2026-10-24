@@ -5,6 +5,7 @@ import type { ExportContext } from "~/components/settings/export";
 import { SettingsPage, type SettingsPageData } from "~/components/settings/page";
 import { NotFoundState, UnavailableState } from "~/components/not-found";
 import { appCopy, pageTitle } from "../app-copy";
+import { checkoutReturn, premiumOffers } from "../catalog";
 import { languageFromPath, localizedPath } from "../i18n";
 import { defaultDisplay, defaultTemplate, detectedTimeZone } from "../preferences";
 import { exportReturnHref, exportScope } from "../orders/export-scope";
@@ -76,6 +77,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     services: { billing: true, telegram: true, accountData: true, support: true },
     preview: true,
     account: scenario.account,
+    // Come nell'area reale: l'acquisto aspetta la prima lettura riuscita di un negozio.
+    purchase: {
+      state:
+        scenario.account.plan === "premium"
+          ? "covered"
+          : scenario.onboarding.some((step) => step.label === "stepSync" && step.done)
+            ? "available"
+            : "needs-sync",
+      offers: premiumOffers,
+      checkout: checkoutReturn(query),
+    },
     stores: scenario.stores,
     security: {
       methods: scenario.signInMethods,

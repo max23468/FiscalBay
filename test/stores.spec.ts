@@ -721,7 +721,8 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         "aspetto",
         "supporto",
       ],
-      services: { billing: false, telegram: false, accountData: false, support: false },
+      // Con chiave e prezzi Stripe configurati la categoria del piano offre l'acquisto.
+      services: { billing: true, telegram: false, accountData: false, support: false },
       preview: false,
       account: { plan: "free", trialAvailable: false, quota: undefined },
       preferences: { theme: "system", timeZone: "auto", detectedTimeZone: null, marketing: false },

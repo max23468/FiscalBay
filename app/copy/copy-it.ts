@@ -473,13 +473,21 @@ export const it = {
       buyTitle: "Passa a Premium",
       buyBody:
         "Ordini da sbloccare senza limite per ciclo, più negozi attivi, un anno di storico, XLSX e notifiche Telegram.",
-      priceMonthly: "4,90 € al mese",
-      priceAnnual: "49 € all’anno",
-      priceLifetime: "149 € una tantum",
+      priceMonthly: (price: string) => `${price} al mese`,
+      priceAnnual: (price: string) => `${price} all’anno`,
+      priceLifetime: (price: string) => `${price} una tantum`,
       priceMonthlyNote: "Si rinnova ogni mese.",
-      priceAnnualNote: "Equivale a 4,08 € al mese.",
+      priceAnnualNote: (price: string) => `Equivale a ${price} al mese.`,
       priceLifetimeNote: "Pagamento unico, senza rinnovi.",
-      pricesNote: "Prezzi IVA esclusa. Il pagamento avviene su Stripe.",
+      pricesNote:
+        "Prezzi IVA esclusa. Su Stripe vedi il totale con le imposte del tuo paese, anche nella tua valuta, prima di pagare.",
+      purchaseNeedsSync: "Potrai acquistare Premium dopo la prima lettura riuscita di un negozio.",
+      checkoutUnavailable: "Pagamento non disponibile ora. Riprova più tardi.",
+      checkoutCovered: "Il tuo spazio ha già Premium attivo.",
+      checkoutProcessingTitle: "Attivazione Premium in corso",
+      checkoutProcessingBody:
+        "Premium si attiva appena Stripe conferma il pagamento. Ricevuta e fattura arrivano da Stripe.",
+      checkoutCancelled: "Pagamento annullato. Nessun addebito.",
       buyPeriod: { monthly: "Scegli mensile", annual: "Scegli annuale", lifetime: "Scegli a vita" },
       freeStoreHint:
         "Puoi sostituire il negozio attivo ogni 90 giorni. Nell’anteprima la scelta è simulata e non modifica i negozi.",

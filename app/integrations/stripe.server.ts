@@ -1,5 +1,8 @@
 import type Stripe from "stripe";
 
+import type { PremiumOffer } from "../catalog";
+import type { Language } from "../i18n";
+
 // Il webhook resta indisponibile senza il suo segreto; i pagamenti si attivano separatamente.
 export type StripeSecrets = { STRIPE_SECRET_KEY: string; STRIPE_WEBHOOK_SECRET: string };
 
@@ -10,8 +13,6 @@ declare global {
     interface Env extends Partial<StripeSecrets> {}
   }
 }
-
-export type PremiumOffer = "monthly" | "annual" | "lifetime";
 
 const integrationIdentifier = "fiscalbay_mp_qnwjrzta";
 
@@ -24,13 +25,26 @@ export async function createStripeClient(secretKey: string): Promise<Stripe> {
   return new StripeSdk(secretKey, { httpClient: StripeSdk.createFetchHttpClient() });
 }
 
+/**
+ * Sessione di Hosted Checkout nel percorso Managed Payments. Imposte, conversione di valuta,
+ * metodi di pagamento e dati di fatturazione li decide Stripe come merchant of record: i
+ * parametri del Checkout ordinario che li controllano non compaiono.
+ */
 export function buildManagedCheckoutParams(input: {
   offer: PremiumOffer;
   priceId: string;
+  generation: string;
   workspaceId: string;
   email: string;
-  appOrigin: string;
+  language: Language;
+  successUrl: string;
+  cancelUrl: string;
 }): Stripe.Checkout.SessionCreateParams {
+  const metadata = {
+    workspace_id: input.workspaceId,
+    offer: input.offer,
+    price_generation: input.generation,
+  };
   return {
     mode: input.offer === "lifetime" ? "payment" : "subscription",
     line_items: [{ price: input.priceId, quantity: 1 }],
@@ -38,13 +52,55 @@ export function buildManagedCheckoutParams(input: {
     integration_identifier: integrationIdentifier,
     client_reference_id: input.workspaceId,
     customer_email: input.email,
-    metadata: {
-      workspace_id: input.workspaceId,
-      offer: input.offer,
-    },
-    success_url: `${input.appOrigin}/?checkout=processing&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${input.appOrigin}/?checkout=cancelled`,
+    locale: input.language,
+    metadata,
+    // Il riferimento allo spazio resta anche sull'oggetto che sopravvive alla sessione.
+    ...(input.offer === "lifetime"
+      ? { payment_intent_data: { metadata } }
+      : { subscription_data: { metadata } }),
+    success_url: `${input.successUrl}?checkout=processing&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${input.cancelUrl}?checkout=cancelled`,
   };
+}
+
+/** Motivo per cui un prezzo non corrisponde al listino: soltanto un'etichetta fissa. */
+export type CatalogMismatch =
+  | "inactive"
+  | "currency"
+  | "amount"
+  | "tax_behavior"
+  | "billing_period"
+  | "tax_code";
+
+/**
+ * Il prezzo configurato su Stripe deve essere quello del listino: attivo, in euro, netto con
+ * le imposte aggiunte da Stripe, con la periodicità dell'offerta e un prodotto con codice
+ * fiscale, senza il quale Managed Payments non copre la vendita.
+ */
+export function catalogMismatch(
+  price: Stripe.Price,
+  offer: PremiumOffer,
+  netCents: number,
+): CatalogMismatch | null {
+  const product = typeof price.product === "string" || price.product.deleted ? null : price.product;
+  if (!price.active || !product?.active) return "inactive";
+  if (price.currency !== "eur") return "currency";
+  if (price.unit_amount !== netCents) return "amount";
+  // Senza indicazione esplicita conterebbe l'impostazione dell'account, che può includerle.
+  if (price.tax_behavior !== "exclusive") return "tax_behavior";
+  const interval = offer === "monthly" ? "month" : offer === "annual" ? "year" : null;
+  if (
+    interval
+      ? price.recurring?.interval !== interval || price.recurring.interval_count !== 1
+      : price.type !== "one_time"
+  )
+    return "billing_period";
+  if (!product.tax_code) return "tax_code";
+  return null;
+}
+
+export async function retrieveCatalogPrice(stripe: Stripe, priceId: string) {
+  return stripe.prices.retrieve(priceId, { expand: ["product"] });
 }
 
 export async function createManagedCheckout(
@@ -52,6 +108,11 @@ export async function createManagedCheckout(
   input: Parameters<typeof buildManagedCheckoutParams>[0],
 ): Promise<Stripe.Checkout.Session> {
   return stripe.checkout.sessions.create(buildManagedCheckoutParams(input));
+}
+
+/** Una sessione che Stripe non ha aperto in Managed Payments non arriva mai al cliente. */
+export async function expireCheckout(stripe: Stripe, sessionId: string) {
+  await stripe.checkout.sessions.expire(sessionId);
 }
 
 export async function verifyStripeEvent(

@@ -17,7 +17,6 @@ const appliedMigrationNames = new Set(["migrations/0001_m0_slice.sql"]);
 // acquista un consumatore va rimossa: il controllo la segnala come superata.
 export const pendingServerModules = new Map([
   ["app/domain/export.server.ts", "export qualificato, consumato dall'export della pagina Ordini"],
-  ["app/routes/stripe-checkout.ts", "route registrata all'attivazione dei pagamenti"],
 ]);
 
 // Host ammessi nelle fixture oltre a `.invalid`: origini del sistema, endpoint

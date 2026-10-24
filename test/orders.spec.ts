@@ -1686,7 +1686,8 @@ describe("pagina Ordini reale", () => {
       exportable: false,
       // Negozio eBay reale: l'ordine si apre nel Seller Hub.
       openOnEbay: true,
-      settings: false,
+      // L'acquisto è configurato: gli sblocchi esauriti rimandano al piano.
+      settings: true,
       account: { plan: "free", quota: { used: 0, limit: 1 } },
     });
 

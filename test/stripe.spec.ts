@@ -2,15 +2,19 @@ import { env } from "cloudflare:workers";
 import Stripe from "stripe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { annualMonthlyPrice, formatPrice, priceGeneration } from "../app/catalog";
+import { purchaseState, startCheckout } from "../app/domain/checkout.server";
 import {
   buildManagedCheckoutParams,
+  catalogMismatch,
   createManagedCheckout,
   createStripeClient,
   verifyStripeEvent,
 } from "../app/integrations/stripe.server";
-import { action as checkoutAction } from "../app/routes/stripe-checkout";
 import { receiveWebhook } from "../app/integrations/webhooks.server";
-
+import { action as settingsAction, loader as settingsLoader } from "../app/routes/settings";
+import { verifiedSession } from "./fixtures/account-fixtures";
+import { insertStore, now, resetDatabase } from "./fixtures/database-fixtures";
 const event = {
   id: "evt_checkout_completed",
   object: "event",
@@ -27,37 +31,104 @@ beforeEach(async () => {
   await env.DB.prepare("DELETE FROM webhook_receipts").run();
 });
 
+const checkoutInput = {
+  priceId: "price_test_monthly",
+  generation: "2026-09",
+  workspaceId: "workspace-test",
+  email: "merchant@example.invalid",
+  language: "it" as const,
+  successUrl: "https://test.fiscalbay.it/app/impostazioni/piano",
+  cancelUrl: "https://test.fiscalbay.it/app/impostazioni/piano",
+};
+
+/** Prezzo Stripe conforme al listino, con le variazioni del singolo caso. */
+function catalogPrice(
+  overrides: Record<string, unknown> = {},
+  product: Record<string, unknown> = {},
+) {
+  return {
+    id: "price_test_monthly",
+    object: "price",
+    active: true,
+    currency: "eur",
+    unit_amount: 490,
+    tax_behavior: "exclusive",
+    type: "recurring",
+    recurring: { interval: "month", interval_count: 1 },
+    product: {
+      id: "prod_test",
+      object: "product",
+      active: true,
+      tax_code: "txcd_10103001",
+      ...product,
+    },
+    ...overrides,
+  } as unknown as Stripe.Price;
+}
+
+/** Stripe simulato: prezzo, creazione e chiusura della sessione, con le richieste ricevute. */
+function stripeApi(
+  price: Stripe.Price,
+  session: Record<string, unknown> = {
+    id: "cs_test_checkout",
+    object: "checkout.session",
+    url: "https://checkout.example.invalid/c/pay/cs_test_checkout",
+    managed_payments: { enabled: true },
+  },
+) {
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const path = new URL(String(input)).pathname;
+    const body = path.startsWith("/v1/prices/") ? price : session;
+    return Response.json(body, { headers: { "request-id": "req_test" } });
+  });
+}
+
+const paths = (request: ReturnType<typeof stripeApi>) =>
+  request.mock.calls.map(([url, options]) => `${options?.method} ${new URL(String(url)).pathname}`);
+
+/** Spazio con un negozio collegato; `synced` registra la prima lettura riuscita. */
+async function workspace(userId: string, { synced = true } = {}) {
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO workspaces (id, name, created_at) VALUES ('w-a', 'Spazio', ?)",
+    ).bind(now),
+    env.DB.prepare(
+      "INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ('w-a', ?, 'owner')",
+    ).bind(userId),
+    insertStore({ id: "s-a" }),
+    ...(synced
+      ? [
+          env.DB.prepare(
+            "INSERT INTO sync_state (store_id, last_success_at, updated_at) VALUES ('s-a', ?1, ?1)",
+          ).bind(now),
+        ]
+      : []),
+  ]);
+}
+
+function buy(cookie: string, plan: string, path = "/app/impostazioni/piano") {
+  return settingsAction({
+    request: new Request(`http://localhost:5173${path}`, {
+      method: "POST",
+      headers: { cookie, origin: "http://localhost:5173" },
+      body: new URLSearchParams({ intent: "buy", plan }),
+    }),
+  } as Parameters<typeof settingsAction>[0]);
+}
+
 describe("Stripe Managed Payments", () => {
-  it("rifiuta il checkout senza prezzo prima di usare Auth", async () => {
-    const previous = env.STRIPE_PRICE_MONTHLY;
-    env.STRIPE_PRICE_MONTHLY = "";
-    try {
-      const response = await checkoutAction({
-        request: new Request("http://localhost:5173/stripe-checkout", {
-          method: "POST",
-          headers: {
-            origin: "http://localhost:5173",
-            "content-type": "application/x-www-form-urlencoded",
-          },
-          body: "offer=monthly",
-        }),
-      });
-      expect(response.status).toBe(403);
-      expect((await response.json()).code).toBe("FORBIDDEN");
-    } finally {
-      env.STRIPE_PRICE_MONTHLY = previous;
-    }
+  beforeEach(async () => {
+    await resetDatabase();
+    await env.DB.prepare("DELETE FROM workspace_entitlements").run();
   });
 
   it("crea soltanto parametri compatibili con Managed Payments", () => {
-    const params = buildManagedCheckoutParams({
+    const metadata = {
+      workspace_id: "workspace-test",
       offer: "monthly",
-      priceId: "price_test_monthly",
-      workspaceId: "workspace-test",
-      email: "merchant@example.invalid",
-      appOrigin: "https://test.fiscalbay.it",
-    });
-
+      price_generation: "2026-09",
+    };
+    const params = buildManagedCheckoutParams({ ...checkoutInput, offer: "monthly" });
     expect(params).toEqual({
       mode: "subscription",
       line_items: [{ price: "price_test_monthly", quantity: 1 }],
@@ -65,22 +136,73 @@ describe("Stripe Managed Payments", () => {
       client_reference_id: "workspace-test",
       integration_identifier: "fiscalbay_mp_qnwjrzta",
       customer_email: "merchant@example.invalid",
-      metadata: { workspace_id: "workspace-test", offer: "monthly" },
+      locale: "it",
+      metadata,
+      subscription_data: { metadata },
       success_url:
-        "https://test.fiscalbay.it/?checkout=processing&session_id={CHECKOUT_SESSION_ID}",
-      cancel_url: "https://test.fiscalbay.it/?checkout=cancelled",
+        "https://test.fiscalbay.it/app/impostazioni/piano?checkout=processing&session_id={CHECKOUT_SESSION_ID}",
+      cancel_url: "https://test.fiscalbay.it/app/impostazioni/piano?checkout=cancelled",
     });
-    expect(params).not.toHaveProperty("automatic_tax");
-    expect(params).not.toHaveProperty("payment_method_types");
+    // Imposte, valuta e metodi restano a Stripe come merchant of record.
+    for (const parameter of [
+      "automatic_tax",
+      "adaptive_pricing",
+      "tax_id_collection",
+      "payment_method_types",
+      "payment_method_configuration",
+      "excluded_payment_method_types",
+      "invoice_creation",
+    ])
+      expect(params).not.toHaveProperty(parameter);
+    const lifetime = buildManagedCheckoutParams({
+      ...checkoutInput,
+      offer: "lifetime",
+      priceId: "price_test_lifetime",
+    });
+    expect(lifetime.mode).toBe("payment");
+    expect(lifetime.payment_intent_data).toEqual({
+      metadata: { ...metadata, offer: "lifetime" },
+    });
+    expect(lifetime).not.toHaveProperty("subscription_data");
+  });
+
+  it("vende soltanto prezzi conformi al listino netto e coperti da Managed Payments", () => {
+    const net = priceGeneration.net.monthly;
+    expect(catalogMismatch(catalogPrice(), "monthly", net)).toBeNull();
+    expect(catalogMismatch(catalogPrice({ active: false }), "monthly", net)).toBe("inactive");
+    expect(catalogMismatch(catalogPrice({}, { active: false }), "monthly", net)).toBe("inactive");
+    expect(catalogMismatch(catalogPrice({ product: "prod_test" }), "monthly", net)).toBe(
+      "inactive",
+    );
+    expect(catalogMismatch(catalogPrice({ currency: "usd" }), "monthly", net)).toBe("currency");
+    expect(catalogMismatch(catalogPrice({ unit_amount: 590 }), "monthly", net)).toBe("amount");
+    // Un prezzo con imposte incluse, o senza indicazione, non è il listino netto.
+    expect(catalogMismatch(catalogPrice({ tax_behavior: "inclusive" }), "monthly", net)).toBe(
+      "tax_behavior",
+    );
+    expect(catalogMismatch(catalogPrice({ tax_behavior: "unspecified" }), "monthly", net)).toBe(
+      "tax_behavior",
+    );
+    expect(catalogMismatch(catalogPrice(), "annual", net)).toBe("billing_period");
     expect(
-      buildManagedCheckoutParams({
-        offer: "lifetime",
-        priceId: "price_test_lifetime",
-        workspaceId: "workspace-test",
-        email: "merchant@example.invalid",
-        appOrigin: "https://test.fiscalbay.it",
-      }).mode,
-    ).toBe("payment");
+      catalogMismatch(
+        catalogPrice({ recurring: { interval: "month", interval_count: 12 } }),
+        "monthly",
+        net,
+      ),
+    ).toBe("billing_period");
+    expect(catalogMismatch(catalogPrice(), "lifetime", net)).toBe("billing_period");
+    expect(
+      catalogMismatch(catalogPrice({ type: "one_time", recurring: null }), "lifetime", net),
+    ).toBeNull();
+    expect(catalogMismatch(catalogPrice({}, { tax_code: null }), "monthly", net)).toBe("tax_code");
+  });
+
+  it("mostra il listino netto dalla sola fonte del catalogo", () => {
+    expect(formatPrice(priceGeneration.net.monthly, "it")).toBe("4,90\u00a0€");
+    expect(formatPrice(priceGeneration.net.annual, "en")).toBe("€49");
+    expect(formatPrice(priceGeneration.net.lifetime, "it")).toBe("149\u00a0€");
+    expect(annualMonthlyPrice("it")).toBe("4,08\u00a0€");
   });
 
   it("crea il checkout con il trasporto Fetch del Worker e restituisce la sessione", async () => {
@@ -100,11 +222,9 @@ describe("Stripe Managed Payments", () => {
       expect(transport).toHaveBeenCalledOnce();
       expect(
         await createManagedCheckout(client, {
+          ...checkoutInput,
           offer: "annual",
           priceId: "price_test_annual",
-          workspaceId: "workspace-test",
-          email: "merchant@example.invalid",
-          appOrigin: "https://test.fiscalbay.it",
         }),
       ).toMatchObject(session);
       expect(request).toHaveBeenCalledOnce();
@@ -114,10 +234,193 @@ describe("Stripe Managed Payments", () => {
       expect(new Headers(options?.headers).get("authorization")).toBe("Bearer sk_test_transport");
       const body = new URLSearchParams(String(options?.body));
       expect(body.get("line_items[0][price]")).toBe("price_test_annual");
+      expect(body.get("managed_payments[enabled]")).toBe("true");
       expect(body.get("metadata[offer]")).toBe("annual");
+      expect(body.get("subscription_data[metadata][workspace_id]")).toBe("workspace-test");
     } finally {
       request.mockRestore();
       transport.mockRestore();
+    }
+  });
+
+  it("richiede la prima lettura riuscita e nessuna copertura in corso", async () => {
+    const { userId } = await verifiedSession("acquisto-stato@example.invalid");
+    expect(await purchaseState(env.DB, userId)).toBeNull();
+    await workspace(userId, { synced: false });
+    expect(await purchaseState(env.DB, userId)).toEqual({
+      workspaceId: "w-a",
+      state: "needs-sync",
+    });
+    await env.DB.prepare(
+      "INSERT INTO sync_state (store_id, last_success_at, updated_at) VALUES ('s-a', ?1, ?1)",
+    )
+      .bind(now)
+      .run();
+    // Anche senza ordini: conta la lettura riuscita, e resta dopo lo scollegamento.
+    expect((await purchaseState(env.DB, userId))?.state).toBe("available");
+    await env.DB.prepare(
+      `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+       VALUES ('trial', 'w-a', 'trial', ?, ?)`,
+    )
+      .bind(now, "2026-09-27T20:00:00.000Z")
+      .run();
+    expect((await purchaseState(env.DB, userId))?.state).toBe("covered");
+    // Alla fine della copertura l'acquisto torna disponibile.
+    expect((await purchaseState(env.DB, userId, new Date("2026-09-27T20:00:00.000Z")))?.state).toBe(
+      "available",
+    );
+  });
+
+  it("apre il checkout soltanto con prezzo conforme e sessione Managed Payments", async () => {
+    const { userId } = await verifiedSession("acquisto-checkout@example.invalid");
+    await workspace(userId);
+    const input = {
+      request: new Request("http://localhost:5173/app/impostazioni/piano", { method: "POST" }),
+      userId,
+      email: "acquisto-checkout@example.invalid",
+      offer: "annual" as const,
+      language: "en" as const,
+    };
+    const annual = catalogPrice({
+      id: "price_test_annual",
+      unit_amount: 4900,
+      recurring: { interval: "year", interval_count: 1 },
+    });
+
+    let api = stripeApi(annual);
+    try {
+      expect(await startCheckout(env, input)).toEqual({
+        ok: true,
+        url: "https://checkout.example.invalid/c/pay/cs_test_checkout",
+      });
+      expect(paths(api)).toEqual([
+        "GET /v1/prices/price_test_annual",
+        "POST /v1/checkout/sessions",
+      ]);
+      const body = new URLSearchParams(String(api.mock.calls[1]![1]?.body));
+      expect(body.get("client_reference_id")).toBe("w-a");
+      expect(body.get("metadata[price_generation]")).toBe(priceGeneration.id);
+      expect(body.get("locale")).toBe("en");
+      expect(body.get("success_url")).toBe(
+        "http://localhost:5173/en/app/impostazioni/piano?checkout=processing&session_id={CHECKOUT_SESSION_ID}",
+      );
+    } finally {
+      api.mockRestore();
+    }
+
+    // Un prezzo diverso dal listino ferma la vendita prima di creare la sessione.
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    api = stripeApi(catalogPrice({ unit_amount: 3900, recurring: annual.recurring }));
+    try {
+      expect(await startCheckout(env, input)).toEqual({ ok: false, reason: "unavailable" });
+      expect(paths(api)).toEqual(["GET /v1/prices/price_test_annual"]);
+      expect(JSON.parse(String(log.mock.calls.at(-1)?.[0]))).toMatchObject({
+        operation: "checkout",
+        failure: "catalog_amount",
+      });
+    } finally {
+      api.mockRestore();
+    }
+
+    // Una sessione aperta fuori da Managed Payments si chiude e non arriva al cliente.
+    api = stripeApi(annual, {
+      id: "cs_test_standard",
+      object: "checkout.session",
+      url: "https://checkout.example.invalid/c/pay/cs_test_standard",
+      managed_payments: null,
+    });
+    try {
+      expect(await startCheckout(env, input)).toEqual({ ok: false, reason: "unavailable" });
+      expect(paths(api)).toEqual([
+        "GET /v1/prices/price_test_annual",
+        "POST /v1/checkout/sessions",
+        "POST /v1/checkout/sessions/cs_test_standard/expire",
+      ]);
+      expect(JSON.parse(String(log.mock.calls.at(-1)?.[0]))).toMatchObject({
+        failure: "not_managed",
+      });
+    } finally {
+      api.mockRestore();
+    }
+
+    // Stripe non raggiungibile: nessuna sessione, il merchant riprova.
+    api = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("rete assente"));
+    try {
+      expect(await startCheckout(env, input)).toEqual({ ok: false, reason: "unavailable" });
+    } finally {
+      api.mockRestore();
+      log.mockRestore();
+    }
+  });
+
+  it("porta a Stripe dalla pagina del piano soltanto quando l'acquisto è possibile", async () => {
+    const { userId, cookie } = await verifiedSession("acquisto-piano@example.invalid");
+    const api = stripeApi(catalogPrice());
+    try {
+      // Senza negozio letto nessuna chiamata a Stripe.
+      expect(await buy(cookie, "monthly")).toMatchObject({
+        data: {
+          ok: false,
+          notice: "Potrai acquistare Premium dopo la prima lettura riuscita di un negozio.",
+        },
+        init: { status: 409 },
+      });
+      await workspace(userId);
+      // Il lifetime non è in vendita finché mancano le prenotazioni dei posti.
+      expect(await buy(cookie, "lifetime")).toMatchObject({ init: { status: 400 } });
+      expect(api).not.toHaveBeenCalled();
+
+      const response = (await buy(cookie, "monthly")) as Response;
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe(
+        "https://checkout.example.invalid/c/pay/cs_test_checkout",
+      );
+
+      await env.DB.prepare(
+        `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+         VALUES ('paid', 'w-a', 'premium', ?, ?)`,
+      )
+        .bind(now, "2026-10-13T20:00:00.000Z")
+        .run();
+      expect(await buy(cookie, "annual")).toMatchObject({
+        data: { ok: false, notice: "Il tuo spazio ha già Premium attivo." },
+      });
+      expect(paths(api)).toEqual([
+        "GET /v1/prices/price_test_monthly",
+        "POST /v1/checkout/sessions",
+      ]);
+    } finally {
+      api.mockRestore();
+    }
+  });
+
+  it("mostra prezzi, stato dell'acquisto e ritorno da Stripe nella pagina del piano", async () => {
+    const { userId, cookie } = await verifiedSession("acquisto-pagina@example.invalid");
+    const page = async (query = "") => {
+      const result = (await settingsLoader({
+        request: new Request(`http://localhost:5173/app/impostazioni/piano${query}`, {
+          headers: { cookie },
+        }),
+        params: { sezione: "piano" },
+      } as unknown as Parameters<typeof settingsLoader>[0])) as { page: Record<string, unknown> };
+      return result.page;
+    };
+    expect(await page()).toMatchObject({
+      services: { billing: true },
+      purchase: { state: "needs-sync", offers: ["monthly", "annual"], checkout: null },
+    });
+    await workspace(userId);
+    expect(await page("?checkout=processing&session_id=cs_test_checkout")).toMatchObject({
+      account: { plan: "free" },
+      purchase: { state: "available", checkout: "processing" },
+    });
+    expect(await page("?checkout=altro")).toMatchObject({ purchase: { checkout: null } });
+    const previous = env.STRIPE_PRICE_ANNUAL;
+    env.STRIPE_PRICE_ANNUAL = "";
+    try {
+      expect(await page()).toMatchObject({ services: { billing: false } });
+    } finally {
+      env.STRIPE_PRICE_ANNUAL = previous;
     }
   });
 
