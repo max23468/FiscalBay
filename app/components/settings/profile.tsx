@@ -1,37 +1,26 @@
-import { useEffect } from "react";
-
 import { useFieldErrors } from "~/components/form-validation";
 import { ProfileInput } from "~/components/profile-fields";
 import { Button } from "~/components/ui/button";
 import type { AppCopy } from "../../app-copy";
 import type { AccountView } from "../../view-models";
-import { useDraft, type ReportDraft } from "./unsaved";
+import type { Draft } from "./unsaved";
 
-/** Profilo: soltanto le informazioni personali minime raccolte alla registrazione. */
+/**
+ * Profilo: soltanto le informazioni personali minime raccolte alla registrazione. La bozza
+ * appartiene alla pagina, che ne tiene l'avviso d'uscita.
+ */
 export function ProfileSection({
   account,
+  form,
   t,
-  onDraft,
 }: {
   account: Pick<AccountView, "profile">;
+  form: Draft<Record<string, string>>;
   t: AppCopy;
-  onDraft: ReportDraft;
 }) {
   const v = useFieldErrors(t.access.validation);
-  const profile = account.profile;
-  const business = profile.accountType === "business";
-  const { draft, setDraft, dirty, submit, action } = useDraft<Record<string, string>>(
-    {
-      nome: profile.firstName,
-      cognome: profile.lastName,
-      ...(business ? { ragione_sociale: profile.companyName ?? "" } : {}),
-    },
-    "profile",
-  );
-  useEffect(
-    () => onDraft("profilo", { dirty, pending: action.pending }),
-    [onDraft, dirty, action.pending],
-  );
+  const business = account.profile.accountType === "business";
+  const { draft, setDraft, dirty, submit, action } = form;
   const field = (name: "nome" | "cognome" | "ragione_sociale", id: string) => (
     <ProfileInput
       name={name}

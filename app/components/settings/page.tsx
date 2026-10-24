@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   User,
 } from "lucide-react";
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { IconTile, PageTitle } from "~/components/icon-tile";
@@ -37,13 +37,7 @@ import { ProfileSection } from "./profile";
 import { SecuritySection, type SecurityData } from "./security";
 import { SupportSection } from "./support";
 import { TemplateSection } from "./template";
-import {
-  UnsavedDialog,
-  useUnsavedGuard,
-  type DraftSection,
-  type DraftState,
-  type ReportDraft,
-} from "./unsaved";
+import { UnsavedDialog, useDraft, useUnsavedGuard } from "./unsaved";
 
 export interface SettingsPageData {
   confirmUnlock: boolean;
@@ -114,7 +108,14 @@ function settingsRoot(pathname: string) {
   return /^(.*\/impostazioni)(?:\/[^/]*)?$/u.exec(pathname)?.[1] ?? pathname;
 }
 
-const idleDraft: DraftState = { dirty: false, pending: false };
+/** Campi modificabili del profilo; la ragione sociale soltanto per un'azienda. */
+function profileFields(profile: AccountView["profile"]): Record<string, string> {
+  return {
+    nome: profile.firstName,
+    cognome: profile.lastName,
+    ...(profile.accountType === "business" ? { ragione_sociale: profile.companyName ?? "" } : {}),
+  };
+}
 
 /** Da 768 px tutte le categorie stanno in una pagina che scorre. */
 const wideQuery = "(min-width: 48rem)";
@@ -148,29 +149,19 @@ export function SettingsPage({
     }))
     .filter((group) => group.sections.length > 0);
   const premium = data.account.plan === "premium";
-  const [drafts, setDrafts] = useState<Record<DraftSection, DraftState>>({
-    profilo: idleDraft,
-    messaggio: idleDraft,
-  });
-  const reportDraft = useCallback<ReportDraft>(
-    (section, state) =>
-      setDrafts((current) =>
-        current[section].dirty === state.dirty && current[section].pending === state.pending
-          ? current
-          : { ...current, [section]: state },
-      ),
-    [],
-  );
-  // Fra le categorie le bozze restano, perché la pagina è la stessa.
-  const blocker = useUnsavedGuard(drafts.profilo.dirty || drafts.messaggio.dirty, settingsRoot);
+  // Le bozze stanno nella pagina: il router ammette un solo blocco della navigazione, quindi
+  // l'avviso d'uscita è uno per entrambe. Fra le categorie restano, perché la pagina è la stessa.
+  const profileDraft = useDraft(profileFields(data.account.profile), "profile");
+  const templateDraft = useDraft(data.preferences.templates, "template");
+  const blocker = useUnsavedGuard(profileDraft.dirty || templateDraft.dirty, settingsRoot);
   const unsaved =
-    drafts.profilo.dirty && drafts.messaggio.dirty
+    profileDraft.dirty && templateDraft.dirty
       ? t.settings.template.unsavedBoth
-      : drafts.profilo.dirty
+      : profileDraft.dirty
         ? t.profile.unsaved
         : t.settings.template.unsaved;
   const content = {
-    profilo: <ProfileSection account={data.account} t={t} onDraft={reportDraft} />,
+    profilo: <ProfileSection account={data.account} form={profileDraft} t={t} />,
     piano: (
       <PlanSection
         account={data.account}
@@ -219,9 +210,7 @@ export function SettingsPage({
         links={links}
       />
     ),
-    messaggio: (
-      <TemplateSection templates={data.preferences.templates} t={t} onDraft={reportDraft} />
-    ),
+    messaggio: <TemplateSection form={templateDraft} t={t} />,
     privacy: <PrivacySection accountData={data.services.accountData} t={t} links={links} />,
     supporto: (
       <SupportSection
@@ -406,7 +395,7 @@ export function SettingsPage({
         description={unsaved}
         leave={t.settings.template.leave}
         stay={t.profile.stay}
-        pending={drafts.profilo.pending || drafts.messaggio.pending}
+        pending={profileDraft.action.pending || templateDraft.action.pending}
       />
     </div>
   );

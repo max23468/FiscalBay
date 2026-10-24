@@ -1,5 +1,4 @@
 import { cn } from "cn";
-import { useEffect } from "react";
 
 import { useHydrated } from "~/components/hydrated";
 import { Button } from "~/components/ui/button";
@@ -9,26 +8,21 @@ import { Textarea } from "~/components/ui/textarea";
 import type { AppCopy } from "../../app-copy";
 import { languageNames, languages, type Language } from "../../i18n";
 import { maxTemplateLength } from "../../preferences";
-import { useDraft, type ReportDraft } from "./unsaved";
+import type { Draft } from "./unsaved";
 
 /**
  * Modello di messaggio: si salva con Salva. Un salvataggio non riuscito lascia il testo scritto
- * e lo dice; uno riuscito diventa il nuovo riferimento delle modifiche.
+ * e lo dice; uno riuscito diventa il nuovo riferimento delle modifiche. La bozza appartiene
+ * alla pagina, che ne tiene l'avviso d'uscita.
  */
 export function TemplateSection({
-  templates,
+  form,
   t,
-  onDraft,
 }: {
-  templates: Record<Language, string>;
+  form: Draft<Record<Language, string>>;
   t: AppCopy;
-  onDraft: ReportDraft;
 }) {
-  const { draft, setDraft, dirty, state, submit, action } = useDraft(templates, "template");
-  useEffect(
-    () => onDraft("messaggio", { dirty, pending: action.pending }),
-    [onDraft, dirty, action.pending],
-  );
+  const { draft, setDraft, dirty, state, submit, action } = form;
   const empty = languages.some((code) => !draft[code].trim());
   const ready = useHydrated();
   return (
