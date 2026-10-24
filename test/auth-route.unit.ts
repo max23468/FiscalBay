@@ -16,7 +16,15 @@ const services = vi.hoisted(() => ({
   notify: vi.fn(),
 }));
 vi.mock("../app/auth.server", () => ({
-  createAuth: () => ({ handler: services.handler, api: { getSession: services.session } }),
+  createAuth: () => ({
+    handler: services.handler,
+    api: {
+      getSession: async ({ headers }: { headers: Headers }) => ({
+        headers: new Headers(),
+        response: await services.session({ headers }),
+      }),
+    },
+  }),
   sessionPolicy: { freshAge: 86400 },
 }));
 vi.mock("../app/domain/registration.server", () => ({ registrationStatus: services.registration }));

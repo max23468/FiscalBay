@@ -4,7 +4,12 @@ import { redirect } from "react-router";
 import { createAuth } from "./auth.server";
 import { registrationStatus } from "./domain/registration.server";
 import { recordEmailChange } from "./domain/email-change.server";
-import { passkeyChangeBlock, recentSignIn, type AuthSession } from "./domain/sessions.server";
+import {
+  passkeyChangeBlock,
+  readSession,
+  recentSignIn,
+  type AuthSession,
+} from "./domain/sessions.server";
 import {
   claimStoreLinkSession,
   completeStoreLink,
@@ -174,7 +179,7 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
   if (pathname === linkSocialPath) {
     // Un nuovo metodo si collega solo da una sessione verificata e sempre con il consenso del
     // provider: il ramo `idToken` di Better Auth creerebbe l'account senza validateUserInfo.
-    const session = await createAuth(environment).api.getSession({ headers: request.headers });
+    const session = await readSession(environment, request);
     if (!session) return new Response(null, { status: 401 });
     // Come le altre modifiche critiche, anche chiamata direttamente: serve un accesso recente.
     if (!session.user.emailVerified || !recentSignIn(session as AuthSession)) {
@@ -189,7 +194,7 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
     }
   }
   if (pathname === changeEmailPath) {
-    const session = await createAuth(environment).api.getSession({ headers: request.headers });
+    const session = await readSession(environment, request);
     if (session && !recentSignIn(session as AuthSession)) {
       return new Response(null, { status: 403 });
     }
@@ -212,7 +217,7 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
   // Utente che registra una passkey, per avvisarlo quando la registrazione riesce.
   let enrollingUserId: string | null = null;
   if (passkeyEnrollmentPaths.has(pathname)) {
-    const session = await createAuth(environment).api.getSession({ headers: request.headers });
+    const session = await readSession(environment, request);
     if (!session) return new Response(null, { status: 401 });
     const status = await registrationStatus(environment.DB, session.user.id);
     if (!session.user.emailVerified || !status.profile || !status.termsAccepted) {
@@ -275,7 +280,7 @@ async function handleEbayCallback(
   const link = await claimStoreLinkSession(environment.DB, state);
   if (!link) return noStore(await authResponse(request, environment));
 
-  const session = await createAuth(environment).api.getSession({ headers: request.headers });
+  const session = await readSession(environment, request);
   const sessionUserId = session?.user.id ?? null;
   let outcome: StoreLinkOutcome | null;
   if (link.kind === "duplicate") {
