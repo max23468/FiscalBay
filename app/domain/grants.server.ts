@@ -44,16 +44,23 @@ export const trialDays = 14;
 const trialLength = trialDays * 24 * 60 * 60 * 1000;
 
 /**
+ * Prima lettura riuscita di un negozio dello spazio, anche senza ordini: abilita prova e
+ * acquisto. Lo scollegamento successivo non la toglie, il negozio è già stato letto.
+ */
+export function storeReadSql(workspace: string) {
+  return `EXISTS (SELECT 1 FROM ebay_stores s JOIN sync_state ss ON ss.store_id = s.id
+      WHERE s.workspace_id = ${workspace} AND ss.last_success_at IS NOT NULL)`;
+}
+
+/**
  * La prova si offre allo spazio che non l'ha mai avuta, senza una copertura in corso e dopo
- * la prima lettura riuscita di un suo negozio, anche senza ordini. Lo scollegamento successivo
- * non la toglie: il negozio è già stato letto.
+ * la prima lettura riuscita di un suo negozio.
  */
 function trialAvailableSql(workspace: string, at: string) {
   return `(NOT EXISTS (SELECT 1 FROM workspace_entitlements e
       WHERE e.workspace_id = ${workspace} AND e.source = 'trial')
     AND NOT ${activeEntitlementSql(workspace, at)}
-    AND EXISTS (SELECT 1 FROM ebay_stores s JOIN sync_state ss ON ss.store_id = s.id
-      WHERE s.workspace_id = ${workspace} AND ss.last_success_at IS NOT NULL))`;
+    AND ${storeReadSql(workspace)})`;
 }
 
 /**

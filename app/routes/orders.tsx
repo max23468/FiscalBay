@@ -25,6 +25,7 @@ import {
   UnlockError,
   unlockOrders,
 } from "../domain/grants.server";
+import { checkoutConfigured } from "../domain/checkout.server";
 import { historyDays } from "../domain/order-acquisition.server";
 import { requestOrderRead } from "../domain/order-sync.server";
 import { messageTemplates } from "../domain/preferences.server";
@@ -302,7 +303,8 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     messageTemplates: messageTemplates(preferences),
     now: now.toISOString(),
     confirmUnlock,
-    settings: false,
+    // Con l'acquisto disponibile gli sblocchi esauriti rimandano al piano.
+    settings: checkoutConfigured(env),
     exportable: false,
     openOnEbay: ebayEnvironment === "production",
     connectHref: verified

@@ -57,6 +57,7 @@ export function logFailure(input: {
     | "render"
     | "sign_in"
     | "store_link"
+    | "checkout"
     | "stripe_webhook"
     | "webhook_ingress"
     | "webhook_consumer"

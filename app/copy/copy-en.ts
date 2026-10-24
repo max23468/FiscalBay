@@ -457,13 +457,21 @@ export const en: AppCopy = {
       buyTitle: "Upgrade to Premium",
       buyBody:
         "No limit on orders to unlock per cycle, more active stores, one year of history, XLSX and Telegram notifications.",
-      priceMonthly: "€4.90 per month",
-      priceAnnual: "€49 per year",
-      priceLifetime: "€149 one-off",
+      priceMonthly: (price) => `${price} per month`,
+      priceAnnual: (price) => `${price} per year`,
+      priceLifetime: (price) => `${price} one-off`,
       priceMonthlyNote: "Renews every month.",
-      priceAnnualNote: "Works out at €4.08 per month.",
+      priceAnnualNote: (price) => `Works out at ${price} per month.`,
       priceLifetimeNote: "One-off payment, no renewals.",
-      pricesNote: "Prices exclude VAT. Payment takes place on Stripe.",
+      pricesNote:
+        "Prices exclude VAT. Before paying, Stripe shows the total with your country’s taxes, in your currency too.",
+      purchaseNeedsSync: "You can buy Premium once a store has been read successfully.",
+      checkoutUnavailable: "Payment is not available right now. Try again later.",
+      checkoutCovered: "Your workspace already has Premium.",
+      checkoutProcessingTitle: "Activating Premium",
+      checkoutProcessingBody:
+        "Premium starts as soon as Stripe confirms the payment. Stripe sends the receipt and invoice.",
+      checkoutCancelled: "Payment cancelled. You have not been charged.",
       buyPeriod: {
         monthly: "Choose monthly",
         annual: "Choose annual",

@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { data, isRouteErrorResponse } from "react-router";
+import { data, isRouteErrorResponse, redirect } from "react-router";
 
 import { AccountShell } from "~/components/account-shell";
 import { NotFoundState } from "~/components/not-found";
@@ -8,6 +8,14 @@ import { accessNotice } from "../access-notice";
 import { areaPage, assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { appBase, type AppLinks } from "../app-links";
+import { checkoutReturn } from "../catalog";
+import {
+  checkoutConfigured,
+  checkoutOffers,
+  isCheckoutOffer,
+  purchaseState,
+  startCheckout,
+} from "../domain/checkout.server";
 import { pendingEmailChange } from "../domain/email-change.server";
 import {
   accountCoverage,
@@ -41,17 +49,17 @@ import { settingsSections, type ActionResult, type SettingsSection } from "../vi
 import type { Route } from "./+types/settings";
 
 /**
- * Categorie con un servizio reale. L'esportazione arriva con il file degli ordini; pagamenti,
- * Telegram, esportazione e cancellazione dell'account e modulo di assistenza compaiono nelle
- * rispettive categorie insieme ai loro servizi.
+ * Categorie con un servizio reale. L'esportazione arriva con il file degli ordini; Telegram,
+ * esportazione e cancellazione dell'account e modulo di assistenza compaiono nelle rispettive
+ * categorie insieme ai loro servizi. L'acquisto compare con la configurazione Stripe.
  */
 const sections = settingsSections.filter((section) => section !== "esportazione");
-const services: SettingsPageData["services"] = {
-  billing: false,
+const services = (): SettingsPageData["services"] => ({
+  billing: checkoutConfigured(env),
   telegram: false,
   accountData: false,
   support: false,
-};
+});
 
 function isSection(value: string | undefined): value is SettingsSection {
   return (sections as readonly string[]).includes(value ?? "");
@@ -95,12 +103,13 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
   const userId = session.user.id;
   const now = new Date();
   const auth = session as AuthSession;
-  const [shell, [allowance, confirmUnlock, marketing, methods, sessions, pendingEmail]] =
+  const [shell, [allowance, purchase, confirmUnlock, marketing, methods, sessions, pendingEmail]] =
     await Promise.all([
       shellData(area, undefined, now),
       measure("d1", "settings", () =>
         Promise.all([
           orderAllowance(env.DB, userId, now),
+          purchaseState(env.DB, userId, now),
           unlockConfirmation(env.DB, userId),
           marketingConsent(env.DB, userId),
           listSignInMethods(env.DB, userId),
@@ -114,7 +123,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
     confirmUnlock,
     section: params.sezione ?? null,
     sections,
-    services,
+    services: services(),
     preview: false,
     account: {
       ...account,
@@ -132,6 +141,11 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
               ...(cycle.next_quota !== cycle.quota ? { nextLimit: cycle.next_quota } : {}),
             }
           : undefined,
+    },
+    purchase: {
+      state: purchase?.state ?? "needs-sync",
+      offers: checkoutOffers,
+      checkout: checkoutReturn(new URL(request.url).searchParams),
     },
     stores: [],
     security: {
@@ -209,6 +223,26 @@ export async function action({ request }: Route.ActionArgs) {
       // Una prova già usata, anche da un'altra scheda, non riparte: lo stato si rilegge.
       if (!(await startTrial(env.DB, userId))) return failed(409, t.plan.trialUnavailable);
       return { ok: true, notice: t.plan.trialStarted } satisfies ActionResult;
+    }
+    if (intent === "buy") {
+      const offer = String(form.get("plan") ?? "");
+      if (!isCheckoutOffer(offer)) return failed(400, t.plan.checkoutUnavailable);
+      const checkout = await startCheckout(env, {
+        request,
+        userId,
+        email: session.user.email,
+        offer,
+        language,
+      });
+      if (checkout.ok) return redirect(checkout.url);
+      return failed(
+        checkout.reason === "unavailable" ? 503 : 409,
+        checkout.reason === "covered"
+          ? t.plan.checkoutCovered
+          : checkout.reason === "needs-sync"
+            ? t.plan.purchaseNeedsSync
+            : t.plan.checkoutUnavailable,
+      );
     }
     if (intent === "profile") {
       // Nome, cognome e ragione sociale; il tipo di account resta quello registrato.

@@ -1,9 +1,9 @@
 import { env } from "cloudflare:workers";
-import { createCookie, data } from "react-router";
+import { createCookie, data, redirect } from "react-router";
 
 import { appCopy, type AppCopy } from "../app-copy";
 import { isProduction } from "../app-links";
-import { languageFromPath } from "../i18n";
+import { languageFromPath, localizedPath } from "../i18n";
 import type { ActionResult } from "../view-models";
 import { isScenarioId, loadScenario, type ScenarioId } from "./scenarios.server";
 
@@ -154,6 +154,11 @@ export async function simulateAction(request: Request, form: FormData) {
     );
   }
   if (intent === "save") return { ok: true } satisfies ActionResult;
+  // Al posto di Stripe, il ritorno con il pagamento in verifica.
+  if (intent === "buy")
+    return redirect(
+      `${localizedPath(language, "/anteprima/impostazioni/piano")}?checkout=processing`,
+    );
   const notice = notices[intent] ? notices[intent](t) : t.preview.simulated;
   return { ok: true, notice } satisfies ActionResult;
 }
