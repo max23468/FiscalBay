@@ -869,6 +869,8 @@ test.describe("miglioramenti account e negozi", () => {
     await expect(templateSection.getByText("Salvato", { exact: true })).toBeVisible();
     await page.reload();
     await expect(template).toHaveValue("Ciao, per l'ordine {ordine} ci serve il Codice Fiscale.");
+    // Il valore arriva già dal server: un clic sulla campanella prima dell'idratazione andrebbe perso.
+    await page.waitForLoadState("networkidle");
 
     // La campanella segnala il negozio da ricollegare e ricorda la lettura.
     const bell = page.getByRole("button", { name: "Notifiche, 1 da leggere" });
