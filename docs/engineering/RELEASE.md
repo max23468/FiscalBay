@@ -67,7 +67,7 @@ La ricerca del candidato ammette soltanto artefatti non scaduti dello stesso tre
 <a id="ciclo-operativo"></a>
 ### Ciclo operativo
 
-Il comando si esegue soltanto nel mandato corrispondente: `Pubblica` usa `pr`, `Promuovi` usa `production` dopo la promozione su `main`. `status` è in lettura; gli altri comandi possono modificare PR, Git o avviare workflow. Richiedono un checkout pulito e condividono un lock temporaneo nel clone, recuperabile dopo la fine del processo che lo possiede.
+Il comando si esegue soltanto nel mandato corrispondente: `Pubblica` usa `pr`, `Promuovi` usa `production` dopo la promozione su `main`. `status` è in lettura; gli altri comandi possono modificare PR, Git o avviare workflow. Richiedono un checkout pulito. I cicli su oggetti diversi (due PR, una PR e una ripresa) procedono insieme e ne resta uno solo per oggetto. Due blocchi brevi, condivisi nel clone, serializzano soltanto fetch, worktree e pulizia dei branch locali e il merge: una PR alla volta entra in `develop`, e se nel frattempo la base è avanzata la PR si aggiorna e si riqualifica. Il blocco di un processo terminato si recupera da solo.
 
 ```sh
 pnpm release:cycle status <run>

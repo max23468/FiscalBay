@@ -13,6 +13,7 @@ import {
   existsSync,
   mkdtempSync,
   cpSync,
+  statSync,
 } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
@@ -36,6 +37,71 @@ const watch = (args) =>
       code === 0 ? resolve() : reject(new Error(`Monitoraggio terminato con codice ${code}.`)),
     );
   });
+
+/**
+ * Blocco a cartella con il PID del titolare. Quello di un processo terminato si rimuove; una
+ * cartella ancora senza titolare è appena nata in un altro ciclo, salvo che sia vecchia di un
+ * minuto e quindi rimasta da un processo interrotto.
+ */
+export function acquireLock(directory, pid = process.pid, now = Date.now()) {
+  if (existsSync(directory)) {
+    let owner;
+    try {
+      owner = JSON.parse(readFileSync(path.join(directory, "owner.json"), "utf8"));
+    } catch {
+      if (now - statSync(directory).mtimeMs < 60_000) return false;
+    }
+    if (owner) {
+      try {
+        process.kill(owner.pid, 0);
+        return false;
+      } catch (error) {
+        if (error.code !== "ESRCH") return false;
+      }
+    }
+    rmSync(directory, { recursive: true, force: true });
+  }
+  try {
+    mkdirSync(directory);
+  } catch (error) {
+    if (error.code === "EEXIST") return false;
+    throw error;
+  }
+  writeFileSync(path.join(directory, "owner.json"), JSON.stringify({ pid }));
+  return true;
+}
+
+/** Esegue `work` con il blocco, attendendo che l'altro titolare lo lasci; vale anche se asincrono. */
+export function withLock(directory, label, work, wait = 5000) {
+  for (let notified = false; !acquireLock(directory); notified = true) {
+    if (!notified) console.log(`In attesa che un altro ciclo concluda ${label}.`);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, wait);
+  }
+  const release = () => rmSync(directory, { recursive: true, force: true });
+  let result;
+  try {
+    result = work();
+  } catch (error) {
+    release();
+    throw error;
+  }
+  if (result instanceof Promise) return result.finally(release);
+  release();
+  return result;
+}
+
+/**
+ * Blocchi del clone, nella cartella Git comune a tutti i worktree: uno per oggetto del ciclo e
+ * due brevi condivisi, per i riferimenti locali e per il merge.
+ */
+function lockDirectory(name) {
+  const root = path.resolve(git("rev-parse", "--git-common-dir"), "release-cycle");
+  mkdirSync(root, { recursive: true });
+  return path.join(root, name);
+}
+
+/** Fetch, worktree e branch locali: un ciclo alla volta, per pochi secondi. */
+const localGit = (work) => withLock(lockDirectory("git"), "le operazioni Git locali", work);
 
 export function assertBase(expected, current) {
   if (!/^[0-9a-f]{40}$/u.test(expected ?? "") || current !== expected)
@@ -311,8 +377,10 @@ function readback(repository, run, environment) {
   const checkout = path.join(directory, "checkout");
   let attached = false;
   try {
-    git("fetch", "origin", environment === "test" ? "develop" : "main");
-    git("worktree", "add", "--detach", checkout, run.head_sha);
+    localGit(() => {
+      git("fetch", "origin", environment === "test" ? "develop" : "main");
+      git("worktree", "add", "--detach", checkout, run.head_sha);
+    });
     attached = true;
     const executeHere = (command, args, options = {}) =>
       execute(command, args, { cwd: checkout, ...options });
@@ -413,7 +481,7 @@ function readback(repository, run, environment) {
     );
     console.log(`Readback provider confermato: ${environment}, ${run.head_sha}.`);
   } finally {
-    if (attached) git("worktree", "remove", "--force", checkout);
+    if (attached) localGit(() => git("worktree", "remove", "--force", checkout));
     rmSync(directory, { recursive: true, force: true });
   }
 }
@@ -473,6 +541,10 @@ export function cleanup(pr, cwd = process.cwd()) {
 }
 
 function cleanupIntegrated(repository) {
+  localGit(() => cleanupIntegratedBranches(repository));
+}
+
+function cleanupIntegratedBranches(repository) {
   const locals = git(
     "for-each-ref",
     "--format=%(refname:short)",
@@ -553,19 +625,11 @@ async function main() {
     throw new Error(
       "Il ciclo richiede un checkout pulito; conservare e completare il lavoro locale.",
     );
-  const directory = path.resolve(git("rev-parse", "--git-common-dir"), "release-cycle.lock");
-  if (existsSync(directory)) {
-    const owner = JSON.parse(readFileSync(path.join(directory, "owner.json"), "utf8"));
-    try {
-      process.kill(owner.pid, 0);
-      throw new Error("Un altro ciclo locale è già attivo.");
-    } catch (error) {
-      if (error.code !== "ESRCH") throw error;
-      rmSync(directory, { recursive: true });
-    }
-  }
-  mkdirSync(directory);
-  writeFileSync(path.join(directory, "owner.json"), JSON.stringify({ pid: process.pid }));
+  // Cicli su oggetti diversi procedono insieme; sullo stesso oggetto uno solo.
+  const object =
+    command === "pr" ? `pr-${number}` : command === "resume" ? `run-${number}` : command;
+  const directory = lockDirectory(object);
+  if (!acquireLock(directory)) throw new Error(`Un altro ciclo locale è già attivo: ${object}.`);
   try {
     if (command === "cleanup") {
       cleanupIntegrated(repository);
@@ -637,61 +701,93 @@ async function main() {
         const read = () => json("pr", "view", number, "--repo", repository, "--json", fields);
         const develop = () =>
           gh("api", `repos/${repository}/git/ref/heads/develop`, "--jq", ".object.sha");
+        const fetchHead = (...refs) =>
+          localGit(() => git("fetch", "origin", ...refs, pr.headRefName));
         // Una base avanzata durante la qualifica la fa fallire: il ciclo aggiorna la PR e
         // segue la nuova qualifica, fino a tre volte, senza rimetterla in bozza.
-        for (let attempt = 1; ; attempt++) {
-          const base = develop();
-          git("fetch", "origin", "develop", pr.headRefName);
-          let since = 0;
-          if (!contains(base, pr.headRefOid)) {
-            since = Date.now() - 1000;
-            gh("pr", "update-branch", number, "--repo", repository);
-            pr = await waitUpdatedHead(read, pr.headRefOid, (head) => {
-              git("fetch", "origin", pr.headRefName);
-              return contains(base, head);
-            });
+        const qualify = async () => {
+          for (let attempt = 1; ; attempt++) {
+            const base = develop();
+            fetchHead("develop");
+            let since = 0;
+            if (!contains(base, pr.headRefOid)) {
+              since = Date.now() - 1000;
+              gh("pr", "update-branch", number, "--repo", repository);
+              pr = await waitUpdatedHead(read, pr.headRefOid, (head) => {
+                fetchHead();
+                return contains(base, head);
+              });
+            }
+            if (pr.isDraft) {
+              since = Date.now() - 1000;
+              gh("pr", "ready", number, "--repo", repository);
+            }
+            // Senza aggiornamento vale la run già avviata sulla testa, anche se ancora in corso.
+            try {
+              await waitRun(
+                repository,
+                "ci.yml",
+                pr.headRefOid,
+                pr.headRefName,
+                ["pull_request"],
+                since,
+              );
+              return;
+            } catch (error) {
+              if (attempt === 3 || develop() === base) throw error;
+              console.log("Base avanzata durante la qualifica: aggiornamento della PR.");
+              pr = read();
+            }
           }
-          if (pr.isDraft) {
-            since = Date.now() - 1000;
-            gh("pr", "ready", number, "--repo", repository);
-          }
-          // Senza aggiornamento vale la run già avviata sulla testa, anche se ancora in corso.
-          try {
-            await waitRun(
-              repository,
-              "ci.yml",
-              pr.headRefOid,
-              pr.headRefName,
-              ["pull_request"],
-              since,
-            );
-            break;
-          } catch (error) {
-            if (attempt === 3 || develop() === base) throw error;
-            console.log("Base avanzata durante la qualifica: aggiornamento della PR.");
+        };
+        // Un merge alla volta: le qualifiche delle altre PR proseguono intanto, e la PR entra
+        // soltanto se la sua testa contiene ancora la base attuale, altrimenti si riqualifica.
+        for (let round = 1; pr.state === "OPEN"; round++) {
+          await qualify();
+          const expectedHead = pr.headRefOid;
+          const requalify = await withLock(lockDirectory("merge"), "il merge", async () => {
+            fetchHead("develop");
             pr = read();
-          }
-        }
-        const expectedHead = pr.headRefOid;
-        pr = read();
-        if (pr.headRefOid !== expectedHead) throw new Error("PR modificata durante la qualifica.");
-        gh(
-          "pr",
-          "merge",
-          number,
-          "--repo",
-          repository,
-          "--auto",
-          "--squash",
-          "--match-head-commit",
-          pr.headRefOid,
-        );
-        await watch(["pr", "checks", number, "--repo", repository, "--watch", "--interval", "30"]);
-        for (let attempt = 0; attempt < 60; attempt++) {
-          pr = json("pr", "view", number, "--repo", repository, "--json", fields);
-          if (pr.state !== "OPEN") break;
-          if (pr.headRefOid !== expectedHead) throw new Error("PR modificata durante il ciclo.");
-          await pause(30000);
+            if (pr.headRefOid !== expectedHead)
+              throw new Error("PR modificata durante la qualifica.");
+            if (!contains(develop(), pr.headRefOid)) {
+              if (round === 3)
+                throw new Error("Base avanzata più volte: ciclo riprendibile dalla stessa PR.");
+              console.log("Base avanzata in attesa del merge: nuova qualifica.");
+              return true;
+            }
+            gh(
+              "pr",
+              "merge",
+              number,
+              "--repo",
+              repository,
+              "--auto",
+              "--squash",
+              "--match-head-commit",
+              pr.headRefOid,
+            );
+            await watch([
+              "pr",
+              "checks",
+              number,
+              "--repo",
+              repository,
+              "--watch",
+              "--interval",
+              "30",
+            ]);
+            // Il blocco del merge ferma le altre PR: l'esito si rilegge ogni dieci secondi.
+            for (let attempt = 0; attempt < 180; attempt++) {
+              pr = read();
+              if (pr.state !== "OPEN") break;
+              if (pr.headRefOid !== expectedHead)
+                throw new Error("PR modificata durante il ciclo.");
+              await pause(10_000);
+            }
+            return false;
+          });
+          if (!requalify) break;
         }
       }
       if (pr.state !== "MERGED")
@@ -703,10 +799,12 @@ async function main() {
       );
       const deployed = checkCycleJobs(jobs, plan(files).deploy);
       if (deployed) readback(repository, run, "test");
-      git("fetch", "origin", "develop", `refs/pull/${number}/head`);
-      if (git("branch", "--show-current") === pr.headRefName && !git("status", "--porcelain"))
-        git("merge", "--ff-only", pr.headRefOid);
-      cleanup(pr);
+      localGit(() => {
+        git("fetch", "origin", "develop", `refs/pull/${number}/head`);
+        if (git("branch", "--show-current") === pr.headRefName && !git("status", "--porcelain"))
+          git("merge", "--ff-only", pr.headRefOid);
+        cleanup(pr);
+      });
       console.log("Merge, collaudo CI e pulizia del branch riconciliati.");
       return;
     }
