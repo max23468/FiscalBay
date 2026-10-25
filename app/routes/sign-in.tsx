@@ -7,6 +7,7 @@ import { AccessNotice, VerifyEmail } from "~/components/account";
 import { Logo } from "~/components/standalone-page";
 import { useFieldErrors, type FieldErrors } from "~/components/form-validation";
 import { LanguageSwitch } from "~/components/language-switch";
+import { SiteFooter } from "~/components/site-footer";
 import { ProfileFields } from "~/components/profile-fields";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
@@ -684,19 +685,9 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
               remembered={remembered}
             />
           </div>
-          <nav
-            aria-label={appCopy[language].legal.navigation}
-            className="flex justify-center gap-4 text-sm text-muted-foreground"
-          >
-            <a href={localizedPath(language, "/termini")} className="underline underline-offset-4">
-              {t.terms.terms}
-            </a>
-            <a href={localizedPath(language, "/privacy")} className="underline underline-offset-4">
-              {t.terms.privacy}
-            </a>
-          </nav>
           {loaderData.authenticated ? <SignOutForm t={t} language={language} /> : null}
         </div>
+        <SiteFooter language={language} className="w-full pb-2 sm:max-w-md" />
       </main>
     </div>
   );

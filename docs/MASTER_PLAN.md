@@ -505,15 +505,17 @@ Impostazioni desktop: categorie a sinistra e contenuto a destra; navigazione loc
 | Account | Profilo | Nome, cognome, ragione sociale e tipo di account registrato, che il salvataggio non cambia (D191) |
 | Account | Piano e pagamenti | Stato effettivo, trial, quote/date, upgrade, periodicità, lifetime, disdetta, concessioni, negozio attivo nel Free, storico pagamenti e documenti tramite il portale del provider, senza elenco interno (D176) |
 | Account | Sicurezza | Metodi login, passkey, password, sessioni, logout globale, verifiche pertinenti |
-| Account | Dati e privacy | Informative, export account, cancellazione e gestione diritti |
+| Account | Dati e privacy | Termini e informativa privacy, export account, cancellazione e gestione diritti; i Termini si raggiungono soltanto da qui perché l'area non ha footer (D202) |
 | Generale | Aspetto e lingua | Sistema/chiaro/scuro, IT/EN, fuso del dispositivo come predefinito o scelto (D185) |
-| Generale | Supporto | FAQ/form, contatto, storico esteso, integrazioni su valutazione |
+| Generale | Supporto | FAQ/form, contatto, Novità (D203), storico esteso, integrazioni su valutazione |
 
-Profilo come categoria delle Impostazioni: informazioni minime personali, senza email o accessi, che restano in Sicurezza (D191). Fuso in Aspetto e lingua, dati necessari alla vendita nel checkout provider. Menu avatar: nome/email, Profilo, Sicurezza, Piano e pagamenti, Impostazioni, Visita sito, Esci; Profilo apre la sua categoria.
+Profilo come categoria delle Impostazioni: informazioni minime personali, senza email o accessi, che restano in Sicurezza (D191). Fuso in Aspetto e lingua, dati necessari alla vendita nel checkout provider. Menu avatar: nome/email, Profilo, Sicurezza, Piano e pagamenti, Impostazioni, Novità, Visita sito, Esci; Profilo apre la sua categoria.
 
 Il profilo abilita Salva soltanto per modifiche pendenti, espone attesa ed esito e conserva i valori in caso di errore. Uscire dalle Impostazioni, ricaricare o chiudere avvisa quando restano modifiche non salvate al profilo o al modello di messaggio; il passaggio fra categorie conserva le bozze.
 
-Campanella: problemi e comunicazioni rilevanti di sicurezza/billing/servizio/manutenzione, non tutti gli ordini. Popover in 2.0, letture/segna tutti, ultimi **30 giorni**; pagina completa in 2.x. Niente storico di sicurezza visibile separato. Salvataggio misto: autosave controllato per toggle/scelte semplici, Salva per template/configurazioni articolate; pending/error espliciti, ripristino coerente in caso di fallimento.
+Campanella: problemi e comunicazioni rilevanti di sicurezza/billing/servizio/manutenzione e una voce per ogni rilascio con Novità, che porta alla pagina; non tutti gli ordini. Popover in 2.0, letture/segna tutti, ultimi **30 giorni**; pagina completa in 2.x. Niente storico di sicurezza visibile separato. Salvataggio misto: autosave controllato per toggle/scelte semplici, Salva per template/configurazioni articolate; pending/error espliciti, ripristino coerente in caso di fallimento.
+
+Novità (D203): pagina dell'area autenticata in Supporto e nel menu avatar, IT/EN, con le voci più recenti in alto. Entrano nuove funzioni, cambi visibili di comportamento, schermate o flussi e correzioni di difetti che gli utenti hanno notato o segnalato; restano fuori fix interni, refactoring, prestazioni non percepibili e cambi di piani, prezzi o limiti, che seguono le comunicazioni di billing e servizio. Le voci stanno in un file versionato, scritte nella PR che introduce la modifica, e compaiono con il deploy che le contiene: in Production soltanto con `Promuovi`. La 2.0.0 non genera voci; finché la pagina è vuota, menu e Supporto non la mostrano. Nessuna pagina pubblica, email o editor nella console.
 
 <a id="s20"></a>
 ## 20. Onboarding, stati vuoti e modalità degradate
@@ -571,15 +573,17 @@ Token semantici, dominio, naming e contratti condivisibili con Expo; implementaz
 <a id="s23"></a>
 ## 23. Sito pubblico, contenuti e SEO
 
-Home, Funzionalità, Prezzi, Sicurezza, FAQ, Supporto. Italiano su root, inglese `/en`, URL localizzati stabili. Nessun blog/news, roadmap pubblica o pagine fittizie «prossimamente». Funzionalità in pagina unica: CF, sync, ordini, export, Telegram, multi-negozio, sicurezza. Pagina Sicurezza dedicata a due livelli ma senza eccesso tecnico.
+Home, Funzionalità, Prezzi, Sicurezza, FAQ, Supporto. Italiano su root, inglese `/en`, URL localizzati stabili. Nessun blog/news, roadmap pubblica o pagine fittizie «prossimamente»; le Novità esistono soltanto nell'area autenticata (D203). Funzionalità in pagina unica: CF, sync, ordini, export, Telegram, multi-negozio, sicurezza. Pagina Sicurezza dedicata a due livelli ma senza eccesso tecnico.
 
 Descriptor principale: **Recupera il Codice Fiscale dagli ordini eBay**; breve: **Codice Fiscale per ordini eBay**. Hero: **Trova e gestisci il Codice Fiscale dei tuoi ordini eBay.** Title approvato: `FiscalBay | Recupera il Codice Fiscale dagli ordini eBay`. Meta: recupero/gestione del CF disponibile con sync, export e notifiche. Keyword secondarie solo pertinenti, inclusa fattura elettronica per spiegare l'utilità, mai per affermare che FB la emetta.
 
 CTA primaria `Inizia gratis`, secondaria `Come funziona`, accesso evidente. Tre passaggi: collega eBay; sync/individuazione CF; consulta/copia/esporta/notifiche secondo piano. Fascia fiducia: API ufficiali eBay, pagamenti sicuri gestiti da Stripe, nessuna carta per iniziare. Precisare quando necessario «quando disponibile su eBay». Letture e cose non fatte esplicite; indipendenza da eBay visibile e nei Termini.
 
+Barra superiore e footer delle pagine pubbliche (D202). La barra porta logo, Funzionalità, Prezzi, Sicurezza, FAQ, lingua e `Accedi`, oppure `Apri l'app` con una sessione; su smartphone le pagine stanno in un menu. Il footer è uno solo per tutte le pagine pubbliche, accesso, Termini e Privacy compresi: «© FiscalBay» con l'anno corrente, indipendenza da eBay, Termini, Privacy, Supporto e indirizzo di assistenza. Le pagine della barra non si ripetono nel footer, che non nomina Temisfera né riporta sede, P.IVA o titolare: l'operatore compare soltanto in Termini e Privacy (D204). L'area autenticata non ha footer (§19).
+
 Prezzi: Free e tre modalità Premium nello stesso confronto; annuale evidenziato senza scelta nascosta; lifetime allo stesso livello finché disponibile, residuo reale. Esaurito visibile per periodo iniziale poi rimosso secondo configurazione, senza urgenza artificiale. Trial 14 giorni senza carta evidente e volontario dopo prima sync. Promo mostra 10/7 giorni fino alla data, poi 5; la quota reale individuale può restare 10 fino a fine ciclo.
 
-SEO tecnico: sitemap solo pagine pubbliche canoniche, robots, noindex su app/test/anteprime, canonical, hreflang, Open Graph, metadata IT/EN, structured data soltanto veri e appropriati, performance. `robots.txt` non è controllo d'accesso. Nessun dato account indicizzabile o cache cross-user. Solo strumenti strettamente necessari; evitare banner cookie quando le tecnologie effettive lo consentono, non dichiarare l'esenzione senza inventario. Social proof soltanto quando reale/autorizzata.
+SEO tecnico: sitemap solo pagine pubbliche canoniche, senza Termini e Privacy che rispondono `noindex` (D204), robots, noindex su app/test/anteprime, canonical, hreflang, Open Graph, metadata IT/EN, structured data soltanto veri e appropriati, performance. `robots.txt` non è controllo d'accesso. Nessun dato account indicizzabile o cache cross-user. Solo strumenti strettamente necessari; evitare banner cookie quando le tecnologie effettive lo consentono, non dichiarare l'esenzione senza inventario. Social proof soltanto quando reale/autorizzata.
 
 **Cache e navigazione autenticata.** La home può reindirizzare l’utente autenticato agli Ordini, ma quel redirect è specifico della sessione e non può essere memorizzato nella cache pubblica per tutti. Anche la scelta «Visita il sito» resta personale. Definire regole esplicite di bypass/no-store per `/app`, `/admin`, API sensibili, callback, risposte con sessione e download; il solo header `Vary` o il solo noindex non dimostra isolamento della cache del provider.
 
@@ -825,7 +829,7 @@ Scollega vs Scollega ed elimina negozio separati. Eliminazioni richieste eBay/bu
 
 Le letture applicano scadenza e revoca anche se il job di pulizia non è ancora passato: dettaglio, ricerca, suggerimenti, generazione e download export non estendono la visibilità dei dati ancora fisicamente presenti. Provare i confini temporali con pulizia sospesa e le revoche durante richieste concorrenti.
 
-Privacy e Termini IT/EN, italiano prevalente se appropriato; informativa cookie separata solo quando necessaria, comunque inventario delle tecnologie reali, incluso Turnstile ([§29](#s29)). Trasparenza fornitori e cosa leggiamo/non facciamo; diritto di recesso e tutela consumatori da qualificare, senza confondere assenza di garanzia commerciale con assenza di diritti obbligatori. Dati legali reali di Temisfera raccolti privatamente, non inventati.
+Privacy e Termini IT/EN, italiano prevalente se appropriato; informativa cookie separata solo quando necessaria, comunque inventario delle tecnologie reali, incluso Turnstile ([§29](#s29)). Trasparenza fornitori e cosa leggiamo/non facciamo; diritto di recesso e tutela consumatori da qualificare, senza confondere assenza di garanzia commerciale con assenza di diritti obbligatori. Dati legali reali di Temisfera raccolti privatamente, non inventati. Come in CF Ready (D204), Termini e Privacy indicano come titolare la persona fisica che opera con il nome Temisfera: il nome legale non sta nel repository ma in un segreto dell'ambiente letto al rendering, un test impedisce che finisca nei sorgenti e il readback del deploy verifica che le pagine non mostrino il segnaposto. Termini e Privacy restano pubblici e raggiungibili con `X-Robots-Tag: noindex`, non con un `Disallow` in `robots.txt`.
 
 L'inventario comprende anche eventi WAF e report aggregati DMARC ([§24](#s24)): finalità di sicurezza, campi, accessi e retention effettiva del provider si qualificano in M7-07; nessuna raccolta di corpi email, dati fiscali o diagnostica buyer per queste funzioni.
 
@@ -937,7 +941,7 @@ Branch feature→`develop`, integrato su `test.fiscalbay.it`; `main` candidato P
 
 Readback e collaudo successivi si riferiscono all'owner; una pendenza utile alla ripresa entra nelle questioni aperte con il prossimo intervento che ha contenuto proprio. Un difetto si registra nella PR che lo corregge.
 
-Versioni interne `2.0.0-alpha.N`→`2.0.0-rc.N`→`2.0.0`. Non significano beta pubblica. `CHANGELOG.md` unica storia delle modifiche rilevanti; GitHub Release derivata per ogni versione Production, non ogni deploy test. Nessuna riscrittura tag pubblicati per correggere un errore.
+Versioni interne `2.0.0-alpha.N`→`2.0.0-rc.N`→`2.0.0`. Non significano beta pubblica. `CHANGELOG.md` unica storia delle modifiche rilevanti; le Novità dell'app (D203) ne sono una selezione per l'utente, non una seconda storia tecnica; GitHub Release derivata per ogni versione Production, non ogni deploy test. Nessuna riscrittura tag pubblicati per correggere un errore.
 
 **Pubblica** è un atto esplicito che autorizza il ciclo verso il test della modifica corrente: PR verso `develop`, gate, merge automatico, migration controllate, deploy test quando il diff distribuisce, readback e pulizia del branch. **Promuovi** autorizza l'intero ciclo Production del lotto su `develop`: promozione su `main`, commit atteso, gate, preflight provider, migration controllate, deploy, smoke/readback, ricevuta, tag/release solo dopo successo; richiede il via di M9 e i gate Production, e fino ad allora non avvia nulla. Domande, ipotesi e negazioni non autorizzano nessuno dei due. Non fermarsi dopo push o prima del readback; non estendere i comandi a provider/scopi non approvati. Cinque checkpoint owner restano separati dalle normali attività.
 
@@ -2188,6 +2192,8 @@ Qualificare info/supporto iCloud e noreply transazionale, template Auth/servizio
 
 Integrare anche la proposta separata del consenso marketing dopo l'onboarding prevista dal [§14](#s14), facoltativa, non preselezionata e senza bloccare il servizio. Provare proposta, mancata adesione, prova della scelta e revoca dalle impostazioni nelle due lingue; il consenso non abilita campagne o nuovi fornitori senza il mandato previsto.
 
+Realizzare la pagina Novità di D203 con il suo file IT/EN, la voce di Supporto e del menu avatar nascoste a pagina vuota e la voce della campanella per ogni rilascio che ne aggiunge; provare lingua, segna come letta e assenza di voci sul deploy che non ne contiene.
+
 Integrare il riepilogo diagnostico visibile e allowlistato del §14. Provare isolamento fra spazi, assenza di CF/token/payload e invio del form anche con diagnostica indisponibile; includere il riepilogo nella gestione della retention del supporto. Rate Limiting di [M7-09](#m7-09) e Turnstile di [M7-10](#m7-10) si aggiungono poi al form esistente: M6-06 si chiude senza attenderli.
 
 Il trasporto è Cloudflare Email Service con Workers Paid (D169): qualificare il recapito verso caselle esterne comuni, rimbalzi, reclami e lista di soppressione, consumo della quota mensile e comportamento del modulo email quando l'invio fallisce. Verificare le soppressioni con scope `sending_domain` sul dominio mittente FiscalBay, incluse quelle automatiche per rimbalzo/reclamo, senza coinvolgere gli altri progetti: il dominio e i suoi sottodomini sono scope distinti; una soppressione manuale senza scope resta `account` e coinvolge tutti i mittenti. Usare gli strumenti nativi, senza un nuovo pannello nell'app. La registrazione pubblica si apre solo dopo questa qualifica.
@@ -2205,11 +2211,13 @@ Qualificare il mittente transazionale insieme alla posta iCloud con SPF/DKIM/DMA
 
 Verificare contenuti/prezzi e percorsi autenticati; la qualifica legale conclusiva resta nel successivo M7-07.
 
-Completare Home, Funzionalità, Prezzi, Sicurezza, FAQ, Supporto e legali. Focus Codice Fiscale, P.IVA secondaria, canonical, hreflang, Open Graph e sitemap.
+Completare Home, Funzionalità, Prezzi, Sicurezza, FAQ, Supporto e legali, con barra superiore e footer comuni secondo D202 e identità del titolare secondo D204. Focus Codice Fiscale, P.IVA secondaria, canonical, hreflang, Open Graph e sitemap.
 
 **Criterio di completamento:** Verificati percorsi pubblici/autenticati e prezzi totali; niente social proof inventata, blog o roadmap pubblica. Noindex non è la sola protezione delle aree private.
 
 Verificare il comportamento della cache su home/redirect autenticati e pagina prezzi, mantenendo i totali fiscali e la preferenza di visita del sito corretti per il singolo utente.
+
+**Avanzamento:** il footer comune di D202 è attivo su home, accesso, Termini e Privacy, con l'indirizzo di assistenza al posto del link Supporto finché la pagina non esiste; Dati e privacy delle Impostazioni apre anche i Termini. Restano barra superiore, pagine, link Supporto, sitemap e identità del titolare di D204.
 
 <a id="m6-08"></a>
 #### M6-08 · KPI e misure minime

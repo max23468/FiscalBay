@@ -4,9 +4,10 @@ import { ClipboardList, Copy, Store } from "lucide-react";
 import { redirect } from "react-router";
 
 import { LanguageSwitch } from "~/components/language-switch";
+import { SiteFooter } from "~/components/site-footer";
 import { Logo } from "~/components/standalone-page";
 import { buttonLink } from "~/components/ui/button-variants";
-import { appCopy, pageTitle, supportEmail } from "../app-copy";
+import { appCopy, pageTitle } from "../app-copy";
 import { accessPath, ordersPath, visitCookie, visitParam } from "../app-links";
 import { createAuth } from "../auth.server";
 import { baseFreeQuota, currentFreePromotion } from "../domain/grants.server";
@@ -185,22 +186,7 @@ export default function Site({ loaderData }: Route.ComponentProps) {
           <p className="text-pretty text-muted-foreground">{t.trust}</p>
         </section>
       </main>
-      <footer className="border-t">
-        <div className="mx-auto flex w-[min(72rem,calc(100%-2rem))] flex-wrap items-center justify-between gap-4 py-6 text-sm text-muted-foreground">
-          <p>{t.independent}</p>
-          <nav aria-label={appCopy[language].legal.navigation} className="flex flex-wrap gap-4">
-            <a href={localizedPath(language, "/termini")} className="underline underline-offset-4">
-              {appCopy[language].legal.termini}
-            </a>
-            <a href={localizedPath(language, "/privacy")} className="underline underline-offset-4">
-              {appCopy[language].legal.privacy}
-            </a>
-            <a href={`mailto:${supportEmail}`} className="underline underline-offset-4">
-              {t.support}
-            </a>
-          </nav>
-        </div>
-      </footer>
+      <SiteFooter language={language} />
     </div>
   );
 }
