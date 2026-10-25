@@ -854,6 +854,8 @@ export const en: AppCopy = {
     navigation: "Legal documents",
     termini: "Terms of service",
     privacy: "Privacy policy",
+    termsLink: "Terms",
+    privacyLink: "Privacy",
     version: (version: string) =>
       version.startsWith("bozza-")
         ? `Draft dated ${legalDate("en-GB", version.slice(6))}`
@@ -875,7 +877,7 @@ export const en: AppCopy = {
     freeQuota: (base) => `On the Free plan you unlock ${base} orders every 7 days.`,
     freePromotion: (quota, date, base) =>
       `Free promotion: ${quota} orders to unlock every 7 days in cycles starting by ${date}, then ${base}.`,
-    independent: "FiscalBay is an independent service, not affiliated with eBay.",
+    independent: "Independent service, not affiliated with eBay.",
     support: "Support",
   },
   access: {
