@@ -504,8 +504,18 @@ export function cleanup(pr, cwd = process.cwd()) {
   )
     throw new Error("Riferimento protetto: conservato.");
   const local = git("for-each-ref", "--format=%(objectname)", `refs/heads/${branch}`);
+  // Un branch locale rimasto indietro sulla testa unita, per esempio dopo l'aggiornamento della
+  // base fatto dal ciclo mentre il checkout era su un altro branch, non ha contenuto proprio.
+  const behind = () => {
+    try {
+      git("merge-base", "--is-ancestor", local, pr.headRefOid);
+      return true;
+    } catch {
+      return false;
+    }
+  };
   if (
-    (local && local !== pr.headRefOid) ||
+    (local && local !== pr.headRefOid && !behind()) ||
     !squashIntegrated(pr.headRefOid, pr.mergeCommit.oid, cwd)
   )
     throw new Error("Branch locale con contenuto non riconciliato: conservato.");
