@@ -16,7 +16,7 @@ import {
   chatLabel,
   sendText,
   telegramConfigured,
-  linkToken,
+  linkToken as randomLinkToken,
   verifyTelegramUpdate,
 } from "../app/integrations/telegram.server";
 import { consumeWebhooks, receiveWebhook } from "../app/integrations/webhooks.server";
@@ -241,9 +241,9 @@ describe("ingresso del bot", () => {
   });
 
   it("il token del deep link ha il formato accettato da Telegram", () => {
-    const token = linkToken();
+    const token = randomLinkToken();
     expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/u);
-    expect(linkToken()).not.toBe(token);
+    expect(randomLinkToken()).not.toBe(token);
   });
 });
 
