@@ -133,6 +133,20 @@ export function migrationPlan(migrations, applied, reviewed = "", approved) {
   return { pending, digest, rollbackCompatible: pending.length === 0 };
 }
 
+/** Collaudo remoto completo del test sullo stesso commit: smoke e pagine dopo il deploy. */
+export function assertTestEvidence(report, sha) {
+  if (
+    report.status !== "passed" ||
+    report.partial ||
+    report.dirty !== false ||
+    report.sha !== sha ||
+    report.environment !== "test" ||
+    report.baseURL !== targets.test.origin ||
+    !(report.counts?.passed > 0)
+  )
+    throw new Error("Collaudo remoto test incompleto o di un altro candidato.");
+}
+
 export function assertResume(receipt, manifest) {
   if (
     receipt &&
@@ -496,6 +510,14 @@ async function main() {
   const receipt = existsSync(receiptFile) ? JSON.parse(readFileSync(receiptFile, "utf8")) : {};
   if (command === "confirm") {
     assertResume(receipt, manifest);
+    // Sul test la conferma chiude il job di deploy: richiede anche il collaudo remoto completo.
+    // Production lo verifica in `release-notes.mjs`, prima del tag.
+    if (environment === "test")
+      for (const name of ["test-smoke", "test-pages"]) {
+        const evidence = `test-results/browser/${name}.json`;
+        if (!existsSync(evidence)) throw new Error(`Collaudo remoto non disponibile: ${name}.`);
+        assertTestEvidence(JSON.parse(readFileSync(evidence, "utf8")), manifest.sha);
+      }
     const remote = git("ls-remote", "origin", `refs/heads/${target.ref}`).split(/\s/u)[0];
     const current = await currentVersion();
     if (

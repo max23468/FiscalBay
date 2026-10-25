@@ -21,14 +21,12 @@ import {
   expectedRun,
   candidateRef,
   runTimings,
-  assertCycleReceipt,
   checkCycleJobs,
-  assertRemoteEvidence,
+  assertConfirmed,
   assertPublishedRelease,
   squashIntegrated,
   completeHistory,
   cleanup,
-  effectiveProductionVariable,
   acquireLock,
   withLock,
   pullRequestView,
@@ -37,40 +35,6 @@ import {
 } from "./release-cycle.mjs";
 
 describe("coordinamento e provenienza della pubblicazione", () => {
-  it("rilegge le variabili effettive senza usare un fallback per errori di accesso", () => {
-    const calls = [];
-    const read = (endpoint) => {
-      calls.push(endpoint);
-      if (endpoint.includes("environments/"))
-        throw Object.assign(new Error("not found"), { stderr: "HTTP 404" });
-      return "approved";
-    };
-    assert.equal(
-      effectiveProductionVariable(read, "example/project", "OWNER_APPROVED_SHA"),
-      "approved",
-    );
-    assert.deepEqual(calls, [
-      "repos/example/project/environments/production/variables/OWNER_APPROVED_SHA",
-      "repos/example/project/actions/variables/OWNER_APPROVED_SHA",
-    ]);
-    assert.equal(
-      effectiveProductionVariable(() => "environment", "example/project", "OWNER_APPROVED_SHA"),
-      "environment",
-    );
-    let count = 0;
-    assert.throws(() =>
-      effectiveProductionVariable(
-        () => {
-          count++;
-          throw new Error("HTTP 403");
-        },
-        "example/project",
-        "OWNER_APPROVED_SHA",
-      ),
-    );
-    assert.equal(count, 1);
-  });
-
   it("blocca soltanto lo stesso oggetto del ciclo e recupera i blocchi rimasti", () => {
     const directory = mkdtempSync(path.join(tmpdir(), "cycle-lock-"));
     const lock = (name) => path.join(directory, name);
@@ -504,25 +468,7 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     );
   });
 
-  it("non chiude un ciclo con browser parziali o un tag di un altro commit", () => {
-    const report = {
-      status: "passed",
-      partial: false,
-      dirty: false,
-      sha: "commit",
-      environment: "test",
-      baseURL: "https://test.fiscalbay.it",
-      counts: { passed: 1 },
-    };
-    assert.doesNotThrow(() => assertRemoteEvidence(report, "commit", "test"));
-    for (const change of [
-      { partial: true },
-      { dirty: true },
-      { sha: "other" },
-      { counts: { passed: 0 } },
-      { environment: "local" },
-    ])
-      assert.throws(() => assertRemoteEvidence({ ...report, ...change }, "commit", "test"));
+  it("non chiude un ciclo con un tag di un altro commit", () => {
     const release = {
       tagName: "v2.0.0",
       isDraft: false,
@@ -553,30 +499,39 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     });
   });
 
-  it("richiede il deploy quando pertinente e rifiuta una ricevuta parziale o diversa", () => {
+  it("richiede il deploy quando pertinente e il readback confermato nella run", () => {
     const gate = { name: "Node 26", conclusion: "success" };
-    const deploy = { name: "Deploy test", conclusion: "skipped" };
+    const deploy = { name: "Deploy test", conclusion: "skipped", steps: [] };
+    const confirmed = {
+      ...deploy,
+      conclusion: "success",
+      steps: [{ name: "Confirm provider readback", conclusion: "success" }],
+    };
     assert.equal(checkCycleJobs([gate, deploy], false), false);
     assert.throws(() => checkCycleJobs([gate, deploy], true));
-    assert.equal(checkCycleJobs([gate, { ...deploy, conclusion: "success" }], true), true);
+    assert.equal(checkCycleJobs([gate, confirmed], true), true);
     assert.throws(() => checkCycleJobs([{ ...gate, conclusion: "failure" }], false));
-    const receipt = {
-      sha: "commit",
-      environment: "test",
-      deployed: true,
-      readback: true,
-      digest: "digest",
-      version: "version",
-    };
-    assert.doesNotThrow(() => assertCycleReceipt(receipt, "commit", "test"));
-    for (const change of [
-      { sha: "other" },
-      { environment: "production" },
-      { readback: false },
-      { rolledBack: true },
-      { deployed: false },
-    ])
-      assert.throws(() => assertCycleReceipt({ ...receipt, ...change }, "commit", "test"));
+    // Una run senza il passo di conferma, o con il passo saltato, non chiude il ciclo.
+    assert.throws(() => checkCycleJobs([gate, { ...confirmed, steps: [] }], true), /Readback/u);
+    assert.throws(
+      () =>
+        checkCycleJobs(
+          [gate, { ...confirmed, steps: [{ ...confirmed.steps[0], conclusion: "skipped" }] }],
+          false,
+        ),
+      /Readback/u,
+    );
+  });
+
+  it("legge la conferma Production dal passo che precede il tag", () => {
+    const job = (conclusion) => ({
+      name: "Distribuisci e verifica",
+      conclusion: "success",
+      steps: [{ name: "Create immutable tag and release", conclusion }],
+    });
+    assert.doesNotThrow(() => assertConfirmed([job("success")], "production"));
+    assert.throws(() => assertConfirmed([job("failure")], "production"), /production/u);
+    assert.throws(() => assertConfirmed([job("success")], "test"), /test/u);
   });
 });
 
