@@ -21,10 +21,11 @@ const secretPattern = /^[A-Za-z0-9_-]{32,256}$/u;
 
 /** Bot dell'ambiente configurato: nome pubblico, token e segreto del webhook. */
 export function telegramConfigured(env: Env): boolean {
+  // Un valore assente diventa «undefined», che nessuno dei due formati ammette.
   return (
-    usernamePattern.test(env.TELEGRAM_BOT_USERNAME ?? "") &&
+    usernamePattern.test(String(env.TELEGRAM_BOT_USERNAME)) &&
     !!env.TELEGRAM_BOT_TOKEN &&
-    secretPattern.test(env.TELEGRAM_WEBHOOK_SECRET ?? "")
+    secretPattern.test(String(env.TELEGRAM_WEBHOOK_SECRET))
   );
 }
 

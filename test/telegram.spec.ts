@@ -382,6 +382,8 @@ describe("collegamento della chat", () => {
     expect(text).toContain("link this chat in FiscalBay");
     expect(text).toContain("https://fiscalbay.it/app/impostazioni/notifiche");
     expect(text).toContain("https://fiscalbay.it/en/app/impostazioni/notifiche");
+    // Le due lingue stanno in paragrafi separati.
+    expect(text).toContain("/app/impostazioni/notifiche\n\nTo receive");
     const unknown = bot();
     await consumeTelegramStart(production, start("f".repeat(64)), unknown.fetcher, new Date(now));
     const invalid = String(unknown.texts()[0]?.params.text);
@@ -801,6 +803,9 @@ describe("pagine", () => {
     });
     await saveTelegramChange(env.DB, seller.userId, { name: "enabled", value: false }, "UTC");
     expect((await storeNotifications(env.DB, seller.userId))?.get(seller.store)).toBe(false);
+    // Uno spazio senza negozi, o un utente senza spazio, non ha stati da mostrare.
+    const { userId } = await verifiedSession("negozi-nessuno@example.invalid");
+    expect(await storeNotifications(env.DB, userId)).toBeNull();
   });
 });
 
