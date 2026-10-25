@@ -129,12 +129,17 @@ function webhook(body: unknown, header: string | null = secret) {
   });
 }
 
-/** Aggiornamento ricevuto dall'ingresso e consumato dalla coda, come in esercizio. */
+/**
+ * Aggiornamento ricevuto dall'ingresso, che risponde subito, come in esercizio. Se la risposta
+ * non si completa la ricevuta va in coda: il consumer la riprende con la stessa Bot API e il
+ * messaggio di coda è il risultato; null se ha risposto l'ingresso.
+ */
 async function deliver(text: string, chat = 501, fetcher = bot().fetcher, at = new Date(now)) {
   send.mockClear();
   const body = update(text, chat, "private", Math.floor(at.getTime() / 1000));
-  const response = await receiveWebhook(webhook(body), environment, fetch, at);
+  const response = await receiveWebhook(webhook(body), environment, fetcher, at);
   expect(response?.status).toBe(204);
+  if (send.mock.calls.length === 0) return null;
   const message = queueMessage(send.mock.calls[0]![0]);
   await consumeWebhooks({ messages: [message] }, environment, fetcher, at);
   return message;
@@ -209,12 +214,14 @@ describe("ingresso del bot", () => {
     expect((await receiveWebhook(webhook(update("/start")), off))?.status).toBe(503);
   });
 
-  it("conserva chat e impronta del token, mai il testo, e accoda una volta sola", async () => {
+  it("conserva chat e impronta del token, mai il testo, e risponde una volta sola", async () => {
     const token = "A".repeat(43);
     const body = update(`/start ${token}`, 777);
-    expect((await receiveWebhook(webhook(body), environment))?.status).toBe(204);
-    expect((await receiveWebhook(webhook(body), environment))?.status).toBe(204);
-    expect(send).toHaveBeenCalledOnce();
+    const api = bot();
+    expect((await receiveWebhook(webhook(body), environment, api.fetcher))?.status).toBe(204);
+    expect((await receiveWebhook(webhook(body), environment, api.fetcher))?.status).toBe(204);
+    // L'ingresso esegue subito l'aggiornamento: nessuna coda, e un nuovo tentativo non lo ripete.
+    expect(send).not.toHaveBeenCalled();
     const receipt = await env.DB.prepare("SELECT * FROM webhook_receipts").first();
     expect(receipt).toMatchObject({
       provider: "telegram",
@@ -227,7 +234,7 @@ describe("ingresso del bot", () => {
       event_at: now,
     });
     expect(JSON.stringify(receipt)).not.toContain(token);
-    expect(send.mock.calls[0]![0]).toEqual({ receiptId: receipt!.id });
+    expect(receipt).toMatchObject({ queued_at: null, completed_at: expect.any(String) });
     // Lo stesso aggiornamento con un contenuto diverso non cambia la ricevuta.
     const changed = { ...body, message: { ...body.message, chat: { id: 778, type: "private" } } };
     expect((await receiveWebhook(webhook(changed), environment))?.status).toBe(409);
@@ -275,7 +282,8 @@ describe("collegamento della chat", () => {
     });
     const api = bot();
     const message = await deliver(`/start ${token}`, 501, api.fetcher);
-    expect(message.ack).toHaveBeenCalledOnce();
+    // L'ingresso ha risposto subito, senza passare dalla coda.
+    expect(message).toBeNull();
     expect(await link(seller.workspace)).toMatchObject({
       chat_id: "501",
       chat_label: "@venditore",
@@ -311,14 +319,8 @@ describe("collegamento della chat", () => {
     const seller = await account("riprova");
     const token = await linkToken(seller.cookie);
     send.mockClear();
-    await receiveWebhook(
-      webhook(update(`/start ${token}`, 601)),
-      environment,
-      fetch,
-      new Date(now),
-    );
-    const body = send.mock.calls[0]![0];
-    // Telegram non risponde alla conferma: il messaggio torna in coda con l'attesa indicata.
+    // Telegram non risponde alla conferma: la ricevuta passa alla coda, che la riprova con
+    // l'attesa indicata.
     const limited = bot((call) =>
       call.method === "sendMessage"
         ? Response.json(
@@ -327,6 +329,13 @@ describe("collegamento della chat", () => {
           )
         : undefined,
     );
+    await receiveWebhook(
+      webhook(update(`/start ${token}`, 601)),
+      environment,
+      limited.fetcher,
+      new Date(now),
+    );
+    const body = send.mock.calls[0]![0];
     const first = queueMessage(body);
     await consumeWebhooks({ messages: [first] }, environment, limited.fetcher, new Date(now));
     expect(first.retry).toHaveBeenCalledWith({ delaySeconds: 7 });
@@ -370,7 +379,8 @@ describe("collegamento della chat", () => {
     await env.DB.prepare('DELETE FROM "session" WHERE "userId" = ?').bind(seller.userId).run();
     const api = bot();
     const message = await deliver(`/start ${closed}`, 701, api.fetcher);
-    expect(message.ack).toHaveBeenCalledOnce();
+    // L'ingresso ha risposto subito, senza passare dalla coda.
+    expect(message).toBeNull();
     expect(await link(seller.workspace)).toBeNull();
     expect(api.calls).toEqual([]);
   });
@@ -466,7 +476,8 @@ describe("collegamento della chat", () => {
       1101,
       blocked.fetcher,
     );
-    expect(message.ack).toHaveBeenCalledOnce();
+    // L'ingresso ha risposto subito, senza passare dalla coda.
+    expect(message).toBeNull();
     expect((await link(seller.workspace))?.chat_id).toBe("1101");
   });
 
@@ -669,7 +680,7 @@ describe("casi limite del collegamento e delle preferenze", () => {
       call.method === "getChat" ? new Response("{}", { status: 503 }) : undefined,
     );
     const message = await deliver(`/start ${await linkToken(seller.cookie)}`, 1701, down.fetcher);
-    expect(message.retry).toHaveBeenCalledOnce();
+    expect(message!.retry).toHaveBeenCalledOnce();
     expect(await link(seller.workspace)).toBeNull();
     expect(down.texts()).toEqual([]);
   });
@@ -1461,14 +1472,15 @@ async function tap(data: string, chat: number, fetcher: typeof fetch, at = new D
       message: { message_id: 42, chat: { id: chat, type: "private" } },
     },
   };
-  const response = await receiveWebhook(webhook(body), environment, fetch, at);
+  const response = await receiveWebhook(webhook(body), environment, fetcher, at);
   expect(response?.status).toBe(204);
-  await consumeWebhooks(
-    { messages: [queueMessage(send.mock.calls[0]![0])] },
-    environment,
-    fetcher,
-    at,
-  );
+  if (send.mock.calls.length > 0)
+    await consumeWebhooks(
+      { messages: [queueMessage(send.mock.calls[0]![0])] },
+      environment,
+      fetcher,
+      at,
+    );
 }
 
 describe("comandi e pulsanti del bot", () => {
@@ -1487,6 +1499,8 @@ describe("comandi e pulsanti del bot", () => {
     expect(keyboard(status)[0]![0]).toEqual({ text: "⚙️ Preferenze", callback_data: `${gen}:pr` });
 
     await tap(`${gen}:fi:all`, seller.chat, api.fetcher);
+    // Il tocco ha la risposta dall'ingresso, senza attendere la coda.
+    expect(send).not.toHaveBeenCalled();
     // Un tocco ripetuto porta lo stesso valore: la scelta non si inverte.
     await tap(`${gen}:fi:all`, seller.chat, api.fetcher);
     expect((await telegramSettings(env.DB, seller.userId, "UTC")).filter).toBe("all");
