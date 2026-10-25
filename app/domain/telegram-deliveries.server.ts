@@ -8,6 +8,7 @@ import {
   emptyFiscalKey,
   fiscalKey,
   importMessage,
+  localClock,
   orderMessage,
   orderNotice,
   type OrderChange,
@@ -273,27 +274,6 @@ async function prepareImportEvents(db: D1Database, workspace: Workspace, now: Da
     ON CONFLICT DO NOTHING`)
     .bind(workspace.workspaceId, now.toISOString(), workspace.linkId)
     .run();
-}
-
-/** Data e ora locali nel fuso del riepilogo. */
-export function localClock(timeZone: string, now: Date): { day: string; time: string } {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    })
-      .formatToParts(now)
-      .map((part) => [part.type, part.value]),
-  );
-  return {
-    day: `${parts.year}-${parts.month}-${parts.day}`,
-    time: `${parts.hour}:${parts.minute}`,
-  };
 }
 
 /** Istante dell'ora locale `time` del giorno `day` nel fuso indicato. */
@@ -600,7 +580,14 @@ async function compose(
       return notice ? [{ notice, change }] : [];
     });
     if (entries.length === 0) return "dropped";
-    return digestMessage(env, workspace.language, workspace.timeZone, delivery.event_at, entries);
+    return digestMessage(
+      env,
+      workspace.language,
+      workspace.timeZone,
+      delivery.event_at,
+      entries,
+      now,
+    );
   }
   const recipient = await telegramRecipient(
     db,
@@ -626,7 +613,7 @@ async function compose(
       .bind(delivery.store_id, now.toISOString())
       .first<Parameters<typeof importMessage>[3]>();
     if (!summary) return "dropped";
-    return [importMessage(env, recipient.language, recipient.timeZone, summary)];
+    return [importMessage(env, recipient.language, recipient.timeZone, summary, now)];
   }
   if (recipient.mode === "digest") return "waiting";
   const environment = await db
@@ -642,7 +629,7 @@ async function compose(
     )
   ).get(delivery.order_id!);
   if (!notice) return "dropped";
-  return orderMessage(env, recipient.language, recipient.timeZone, notice, delivery.change);
+  return orderMessage(env, recipient.language, recipient.timeZone, notice, delivery.change!, now);
 }
 
 /** Consegne chiuse da più di sette giorni: restano per diagnosi, poi si eliminano. */

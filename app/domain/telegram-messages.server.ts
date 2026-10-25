@@ -129,32 +129,33 @@ const text = {
       changed: "Dato fiscale aggiornato",
       removed: "Dato fiscale rimosso",
     },
-    order: (id: string, date: string) => `Ordine ${id} del ${date}`,
-    buyer: "Acquirente",
-    total: "Totale",
+    today: "oggi",
+    yesterday: "ieri",
     more: (count: number) => (count === 1 ? "e un altro articolo" : `e altri ${count} articoli`),
-    kinds: { CF: "Codice Fiscale", PIVA: "Partita IVA" },
-    removedNote: "Il dato fiscale notificato in precedenza non è più presente nell'ordine.",
+    kinds: { CF: null, PIVA: "P.IVA" },
+    removedNote: "Il dato notificato in precedenza non è più nell'ordine.",
     fiscal: {
-      checking: "Dato fiscale in verifica: se arriva, ricevi un nuovo messaggio.",
-      missing: "Nessun dato fiscale nell'ordine.",
-      foreign: (country: string) => `Fatturazione estera (${country}): nessun dato fiscale.`,
-      error: "Lettura del dato fiscale non riuscita: riprova da FiscalBay.",
-      locked: "Dato fiscale da sbloccare in FiscalBay.",
+      checking: "Dato fiscale in verifica",
+      missing: "Nessun dato fiscale",
+      foreign: (country: string) => `Fatturazione estera (${country})`,
+      error: "Dato fiscale non letto: riprova da FiscalBay",
+      locked: "Dato fiscale da sbloccare in FiscalBay",
       available: "",
     } satisfies Record<FiscalSituation, string | ((country: string) => string)>,
+    checkingNote: "Se arriva, ricevi un nuovo messaggio.",
     open: "Apri in FiscalBay",
     ebay: "Apri su eBay",
     copy: "Copia Codice Fiscale",
     orders: "Apri gli ordini",
-    digest: (date: string, count: number) =>
-      `<b>Riepilogo ordini del ${date}</b>\n${count === 1 ? "Un ordine" : `${count} ordini`} dall'ultimo riepilogo.`,
+    digest: (date: string) => `Riepilogo del ${date}`,
+    digestCount: (count: number) =>
+      `${count === 1 ? "Un ordine" : `${count} ordini`} dall'ultimo riepilogo`,
     import: {
       title: "Importazione completata",
       orders: (count: number, fiscal: number) =>
-        `${count === 1 ? "Un ordine acquisito" : `${count} ordini acquisiti`}, ${fiscal} con dato fiscale.`,
-      period: (from: string, until: string) => `Periodo: dal ${from} al ${until}.`,
-      note: "Gli ordini importati non ricevono messaggi singoli; da ora arrivano quelli nuovi.",
+        `${count === 1 ? "Un ordine acquisito" : `${count} ordini acquisiti`}, ${fiscal} con dato fiscale`,
+      period: (from: string, until: string) => `dal ${from} al ${until}`,
+      note: "Gli ordini importati non ricevono messaggi singoli: da ora arrivano quelli nuovi.",
     },
   },
   en: {
@@ -164,48 +165,82 @@ const text = {
       changed: "Tax ID updated",
       removed: "Tax ID removed",
     },
-    order: (id: string, date: string) => `Order ${id} of ${date}`,
-    buyer: "Buyer",
-    total: "Total",
+    today: "today",
+    yesterday: "yesterday",
     more: (count: number) => (count === 1 ? "and one more item" : `and ${count} more items`),
-    kinds: { CF: "Italian tax code", PIVA: "Italian VAT number" },
+    kinds: { CF: null, PIVA: "VAT" },
     removedNote: "The tax ID notified earlier is no longer in the order.",
     fiscal: {
-      checking: "Tax ID being checked: if it arrives, you get a new message.",
-      missing: "No tax ID in the order.",
-      foreign: (country: string) => `Billing abroad (${country}): no tax ID.`,
-      error: "The tax ID could not be read: try again from FiscalBay.",
-      locked: "Tax ID to unlock in FiscalBay.",
+      checking: "Tax ID being checked",
+      missing: "No tax ID",
+      foreign: (country: string) => `Billing abroad (${country})`,
+      error: "Tax ID not read: try again from FiscalBay",
+      locked: "Tax ID to unlock in FiscalBay",
       available: "",
     } satisfies Record<FiscalSituation, string | ((country: string) => string)>,
+    checkingNote: "If it arrives, you get a new message.",
     open: "Open in FiscalBay",
     ebay: "Open on eBay",
     copy: "Copy tax code",
     orders: "Open orders",
-    digest: (date: string, count: number) =>
-      `<b>Order summary of ${date}</b>\n${count === 1 ? "One order" : `${count} orders`} since the last summary.`,
+    digest: (date: string) => `Summary of ${date}`,
+    digestCount: (count: number) =>
+      `${count === 1 ? "One order" : `${count} orders`} since the last summary`,
     import: {
       title: "Import completed",
       orders: (count: number, fiscal: number) =>
-        `${count === 1 ? "One order imported" : `${count} orders imported`}, ${fiscal} with a tax ID.`,
-      period: (from: string, until: string) => `Period: from ${from} to ${until}.`,
-      note: "Imported orders get no individual messages; new orders arrive from now on.",
+        `${count === 1 ? "One order imported" : `${count} orders imported`}, ${fiscal} with a tax ID`,
+      period: (from: string, until: string) => `from ${from} to ${until}`,
+      note: "Imported orders get no individual messages: new orders arrive from now on.",
     },
   },
 } satisfies Record<Language, unknown>;
 
-export function dateTime(language: Language, timeZone: string, iso: string): string {
-  return new Intl.DateTimeFormat(locales[language], {
-    timeZone,
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(new Date(iso));
+/** Data e ora locali nel fuso indicato. */
+export function localClock(timeZone: string, now: Date): { day: string; time: string } {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(now)
+      .map((part) => [part.type, part.value]),
+  );
+  return {
+    day: `${parts.year}-${parts.month}-${parts.day}`,
+    time: `${parts.hour}:${parts.minute}`,
+  };
 }
 
-export function date(language: Language, timeZone: string, iso: string): string {
-  return new Intl.DateTimeFormat(locales[language], { timeZone, dateStyle: "medium" }).format(
-    new Date(iso),
-  );
+/** Giorno, con l'anno soltanto se diverso da quello di `now`. */
+export function date(language: Language, timeZone: string, iso: string, now = new Date()): string {
+  const year = (at: Date) => localClock(timeZone, at).day.slice(0, 4);
+  const at = new Date(iso);
+  return new Intl.DateTimeFormat(locales[language], {
+    timeZone,
+    day: "numeric",
+    month: "short",
+    ...(year(at) === year(now) ? {} : { year: "numeric" }),
+  }).format(at);
+}
+
+/** Istante come lo dice una persona: «oggi 14:03», «ieri 18:40», «25 ott 14:03». */
+export function when(language: Language, timeZone: string, iso: string, now: Date): string {
+  const at = localClock(timeZone, new Date(iso));
+  const today = localClock(timeZone, now).day;
+  const yesterday = localClock(timeZone, new Date(now.getTime() - 86_400_000)).day;
+  const day =
+    at.day === today
+      ? text[language].today
+      : at.day === yesterday
+        ? text[language].yesterday
+        : date(language, timeZone, iso, now);
+  return `${day} ${at.time}`;
 }
 
 /** Indirizzo assoluto di una pagina dell'app, con l'ambiente eBay se non è Production. */
@@ -225,10 +260,14 @@ export function appUrl(
 export const settingsUrl = (env: Pick<Env, "APP_ORIGIN">, language: Language) =>
   appUrl(env, language, `${settingsPath}/notifiche`);
 
+const orderUrl = (env: Pick<Env, "APP_ORIGIN">, language: Language, notice: OrderNotice) =>
+  appUrl(env, language, `${ordersPath}/${encodeURIComponent(notice.id)}`, notice.environment);
+
 const maxItems = 3;
 const clip = (value: string, length: number) =>
   value.length > length ? `${value.slice(0, length - 1)}…` : value;
 
+/** Valori fiscali in monospazio, che Telegram copia con un tocco; senza valori, lo stato. */
 function fiscalLines(language: Language, notice: OrderNotice): string[] {
   const copy = text[language];
   if (notice.values.length === 0) {
@@ -236,10 +275,10 @@ function fiscalLines(language: Language, notice: OrderNotice): string[] {
     const line = typeof state === "function" ? state(notice.country ?? "") : state;
     return line ? [escape(line)] : [];
   }
-  return notice.values.map(
-    (value) =>
-      `${escape(value.kind === "OTHER" ? value.label! : copy.kinds[value.kind])}: <code>${escape(value.value)}</code>`,
-  );
+  return notice.values.map((value) => {
+    const label = value.kind === "OTHER" ? value.label : copy.kinds[value.kind];
+    return `${label ? `${escape(label)} ` : ""}<code>${escape(value.value)}</code>`;
+  });
 }
 
 /** Pulsanti di un ordine: dettaglio, eBay per i negozi reali e copia del CF autorizzato. */
@@ -252,15 +291,7 @@ export function orderButtons(
   const cf = notice.values.find((value) => value.kind === "CF");
   return [
     [
-      {
-        text: copy.open,
-        url: appUrl(
-          env,
-          language,
-          `${ordersPath}/${encodeURIComponent(notice.id)}`,
-          notice.environment,
-        ),
-      },
+      { text: copy.open, url: orderUrl(env, language, notice) },
       ...(notice.environment === "production"
         ? [{ text: copy.ebay, url: ebayOrderHref(notice.ebayOrderId) }]
         : []),
@@ -270,39 +301,70 @@ export function orderButtons(
 }
 
 /**
- * Messaggio di un ordine: nuovo, con il dato arrivato dopo, corretto o rimosso; senza
- * variazione, come nella consultazione degli ultimi ordini, il titolo è il negozio.
+ * Notifica di un ordine: in testa la variazione e il dato fiscale, poi in citazione
+ * acquirente, totale, articoli, numero e data.
  */
 export function orderMessage(
   env: Pick<Env, "APP_ORIGIN">,
   language: Language,
   timeZone: string,
   notice: OrderNotice,
-  change: OrderChange | null,
+  change: OrderChange,
+  now: Date,
 ): BotMessage[] {
   const copy = text[language];
   const items = notice.items
     .slice(0, maxItems)
     .map((item) => `${item.quantity} × ${escape(clip(item.title, 80))}`);
   if (notice.items.length > maxItems) items.push(escape(copy.more(notice.items.length - maxItems)));
-  const lines = [
-    change
-      ? `<b>${escape(copy.change[change])}</b> · ${escape(notice.storeName)}`
-      : `<b>${escape(notice.storeName)}</b>`,
-    escape(copy.order(notice.ebayOrderId, dateTime(language, timeZone, notice.createdAt))),
-    ...(notice.buyer ? [`${escape(copy.buyer)}: ${escape(clip(notice.buyer, 64))}`] : []),
-    ...items,
-    `${escape(copy.total)}: ${escape(formatAmount(notice.totalMinor, notice.currency, language))}`,
-  ];
-  const fiscal = [
+  const head = [
+    `<b>${escape(copy.change[change])}</b> · ${escape(notice.storeName)}`,
     ...(change === "removed" ? [escape(copy.removedNote)] : []),
     ...fiscalLines(language, notice),
+    ...(change === "new" && notice.fiscal === "checking" ? [escape(copy.checkingNote)] : []),
   ];
-  const parts = splitBlocks([lines.join("\n"), ...(fiscal.length ? [fiscal.join("\n")] : [])]);
+  const details = [
+    [
+      notice.buyer ? escape(clip(notice.buyer, 64)) : null,
+      escape(formatAmount(notice.totalMinor, notice.currency, language)),
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    ...items,
+    `<i>${escape(notice.ebayOrderId)} · ${escape(when(language, timeZone, notice.createdAt, now))}</i>`,
+  ];
+  const parts = splitBlocks([head.join("\n"), `<blockquote>${details.join("\n")}</blockquote>`]);
   return parts.map((html, index) => ({
     html,
     ...(index === parts.length - 1 ? { buttons: orderButtons(env, language, notice) } : {}),
   }));
+}
+
+/**
+ * Un ordine in un elenco, come nel riepilogo e negli ultimi ordini: il numero apre il
+ * dettaglio in FiscalBay, poi acquirente, totale, data e dato fiscale.
+ */
+export function orderEntry(
+  env: Pick<Env, "APP_ORIGIN">,
+  language: Language,
+  timeZone: string,
+  notice: OrderNotice,
+  change: OrderChange | null,
+  now: Date,
+): string {
+  const copy = text[language];
+  return [
+    `<a href="${escape(orderUrl(env, language, notice)).replaceAll('"', "&quot;")}">${escape(notice.ebayOrderId)}</a> · ${escape(notice.storeName)}`,
+    ...(change && change !== "new" ? [`<i>${escape(copy.change[change])}</i>`] : []),
+    [
+      notice.buyer ? escape(clip(notice.buyer, 64)) : null,
+      escape(formatAmount(notice.totalMinor, notice.currency, language)),
+      escape(when(language, timeZone, notice.createdAt, now)),
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    ...fiscalLines(language, notice),
+  ].join("\n");
 }
 
 /** Riepilogo giornaliero: un blocco per ordine, nei messaggi necessari, e l'accesso agli ordini. */
@@ -312,24 +374,14 @@ export function digestMessage(
   timeZone: string,
   at: string,
   entries: Array<{ notice: OrderNotice; change: OrderChange }>,
+  now: Date,
 ): BotMessage[] {
   const copy = text[language];
-  const blocks = entries.map(({ notice, change }) =>
-    [
-      `<b>${escape(notice.storeName)}</b> · ${escape(notice.ebayOrderId)}`,
-      ...(change === "new" ? [] : [`<i>${escape(copy.change[change])}</i>`]),
-      [
-        notice.buyer ? escape(clip(notice.buyer, 64)) : null,
-        escape(formatAmount(notice.totalMinor, notice.currency, language)),
-      ]
-        .filter(Boolean)
-        .join(" · "),
-      ...fiscalLines(language, notice),
-    ].join("\n"),
-  );
   const parts = splitBlocks([
-    copy.digest(escape(date(language, timeZone, at)), entries.length),
-    ...blocks,
+    `<b>${escape(copy.digest(date(language, timeZone, at, now)))}</b>\n${escape(copy.digestCount(entries.length))}`,
+    ...entries.map(({ notice, change }) =>
+      orderEntry(env, language, timeZone, notice, change, now),
+    ),
   ]);
   const environment = entries.every(({ notice }) => notice.environment === "sandbox")
     ? "sandbox"
@@ -366,6 +418,7 @@ export function importMessage(
     orders: number;
     fiscal: number;
   },
+  now: Date,
 ): BotMessage {
   const copy = text[language].import;
   return {
@@ -374,11 +427,11 @@ export function importMessage(
       escape(copy.orders(summary.orders, summary.fiscal)),
       escape(
         copy.period(
-          date(language, timeZone, summary.from),
-          date(language, timeZone, summary.until),
+          date(language, timeZone, summary.from, now),
+          date(language, timeZone, summary.until, now),
         ),
       ),
-      escape(copy.note),
+      `<i>${escape(copy.note)}</i>`,
     ].join("\n"),
     buttons: [
       [

@@ -9,15 +9,16 @@ import {
 } from "./telegram.server";
 import {
   appUrl,
-  dateTime,
+  date,
   escape,
-  orderMessage,
+  orderEntry,
   orderNotice,
   settingsUrl,
   splitBlocks,
+  when,
   zoneName,
 } from "./telegram-messages.server";
-import { settingsPath } from "../app-links";
+import { ordersPath, settingsPath } from "../app-links";
 import type { Language } from "../i18n";
 import { UpstreamError } from "../integrations/http.server";
 import {
@@ -47,48 +48,43 @@ const copy = {
       preferences: "Notifiche e negozi",
       help: "Come funziona il bot",
     } satisfies Record<BotCommand, string>,
-    status: "Stato di FiscalBay",
-    plan: "Piano",
     plans: {
       premium: (until: string) => `Premium fino al ${until}`,
       trial: (until: string) => `Prova Premium fino al ${until}`,
       lifetime: "Premium a vita",
-      free: "Free: le notifiche sono ferme",
+      free: "Free",
     },
-    notifications: "Notifiche",
-    enabled: "attive",
-    paused: "in pausa",
-    filter: "Ordini",
-    filters: { fiscal: "solo con dato fiscale", all: "tutti" },
-    mode: "Frequenza",
+    freeNote: "Con il piano Free le notifiche sono ferme.",
+    enabled: "Notifiche attive",
+    paused: "Notifiche in pausa",
+    filters: { fiscal: "solo ordini con dato fiscale", all: "tutti gli ordini" },
     modes: {
-      each: "un messaggio per ordine",
-      digest: (time: string, zone: string) => `riepilogo giornaliero alle ${time} (${zone})`,
+      each: "Un messaggio per ordine",
+      digest: (time: string, zone: string) => `Riepilogo ogni giorno alle ${time}, ${zone}`,
     },
-    included: "Negozi inclusi",
-    excluded: "Negozi esclusi",
-    reconnect: "Da ricollegare",
-    none: "nessuno",
-    lastDelivery: "Ultimo invio",
+    stores: "Negozi",
+    excluded: "escluso",
+    reconnect: "da ricollegare",
+    suspended: "sospeso",
+    lastDelivery: (at: string) => `Ultimo invio ${at}`,
+    noDelivery: "Nessun invio finora",
     unreachable: "Alcuni messaggi non sono arrivati dopo diversi tentativi.",
     preferences: "Preferenze",
-    openSettings: "Apri le Impostazioni",
+    openSettings: "Impostazioni",
     choosePlan: "Scegli il piano",
     premiumRequired:
-      "Notifiche e consultazione degli ordini nel bot sono comprese in Premium, nella prova e nel lifetime.",
-    preferencesTitle: "Preferenze delle notifiche",
+      "Notifiche e ultimi ordini nel bot sono compresi in Premium, nella prova e nel lifetime.",
     zoneNote: "Il fuso del riepilogo si cambia dal sito.",
     pause: "Metti in pausa",
     resume: "Riprendi le notifiche",
     fiscalOnly: "Solo con dato fiscale",
     allOrders: "Tutti gli ordini",
-    each: "Un messaggio per ordine",
+    each: "Uno per ordine",
     digest: "Riepilogo giornaliero",
-    time: (time: string) => `Orario: ${time}`,
+    time: (time: string) => `Orario del riepilogo: ${time}`,
     timeTitle: "Orario del riepilogo",
-    stores: (included: number, total: number) => `Negozi: ${included} di ${total}`,
-    storesTitle: "Negozi inclusi nelle notifiche",
-    suspended: "sospeso",
+    storeCount: (included: number, total: number) => `Negozi inclusi: ${included} di ${total}`,
+    storesTitle: "Negozi nelle notifiche",
     back: "Indietro",
     unlink: "Scollega la chat",
     unlinkQuestion:
@@ -98,16 +94,21 @@ const copy = {
     unlinked:
       "Chat scollegata. Puoi collegarla di nuovo da FiscalBay, in Impostazioni › Notifiche.",
     expired: "Questo pulsante non è più valido.",
+    latest: "Ultimi ordini",
+    latestRange: (from: number, to: number, total: number) => `${from}–${to} di ${total}`,
     latestEmpty: "Nessun ordine da mostrare nei negozi inclusi.",
-    latestPage: (from: number, to: number) => `Ordini dal ${from} al ${to}.`,
     more: "Altri 5",
-    help: [
-      "Qui arrivano le notifiche degli ordini secondo le preferenze delle Impostazioni.",
-      "/stato: piano, notifiche e negozi",
-      "/ultimi: gli ultimi ordini dei negozi inclusi",
-      "/preferenze: pausa, filtro, frequenza e negozi",
-      "Ricerca, sblocco ed esportazione restano sul sito.",
-    ],
+    previous: "Precedenti",
+    orders: "Apri gli ordini",
+    help: {
+      intro: "Qui arrivano le notifiche degli ordini, secondo le preferenze delle Impostazioni.",
+      commands: [
+        ["/stato", "piano, notifiche e negozi"],
+        ["/ultimi", "gli ultimi ordini"],
+        ["/preferenze", "pausa, filtro, frequenza e negozi"],
+      ],
+      site: "Ricerca, sblocco ed esportazione restano sul sito.",
+    },
   },
   en: {
     commands: {
@@ -116,48 +117,43 @@ const copy = {
       preferences: "Notifications and stores",
       help: "How the bot works",
     } satisfies Record<BotCommand, string>,
-    status: "FiscalBay status",
-    plan: "Plan",
     plans: {
       premium: (until: string) => `Premium until ${until}`,
       trial: (until: string) => `Premium trial until ${until}`,
       lifetime: "Lifetime Premium",
-      free: "Free: notifications are stopped",
+      free: "Free",
     },
-    notifications: "Notifications",
-    enabled: "on",
-    paused: "paused",
-    filter: "Orders",
-    filters: { fiscal: "only with a tax ID", all: "all" },
-    mode: "Frequency",
+    freeNote: "Notifications are stopped on the Free plan.",
+    enabled: "Notifications on",
+    paused: "Notifications paused",
+    filters: { fiscal: "only orders with a tax ID", all: "all orders" },
     modes: {
-      each: "one message per order",
-      digest: (time: string, zone: string) => `daily summary at ${time} (${zone})`,
+      each: "One message per order",
+      digest: (time: string, zone: string) => `Daily summary at ${time}, ${zone}`,
     },
-    included: "Included stores",
-    excluded: "Excluded stores",
-    reconnect: "To reconnect",
-    none: "none",
-    lastDelivery: "Last delivery",
+    stores: "Stores",
+    excluded: "excluded",
+    reconnect: "to reconnect",
+    suspended: "suspended",
+    lastDelivery: (at: string) => `Last delivery ${at}`,
+    noDelivery: "Nothing delivered yet",
     unreachable: "Some messages did not arrive after several attempts.",
     preferences: "Preferences",
-    openSettings: "Open Settings",
+    openSettings: "Settings",
     choosePlan: "Choose a plan",
     premiumRequired:
-      "Notifications and order lookup in the bot are included in Premium, the trial and lifetime.",
-    preferencesTitle: "Notification preferences",
+      "Notifications and latest orders in the bot are included in Premium, the trial and lifetime.",
     zoneNote: "The summary time zone is changed on the website.",
     pause: "Pause",
     resume: "Resume notifications",
     fiscalOnly: "Only with a tax ID",
     allOrders: "All orders",
-    each: "One message per order",
+    each: "One per order",
     digest: "Daily summary",
-    time: (time: string) => `Time: ${time}`,
+    time: (time: string) => `Summary time: ${time}`,
     timeTitle: "Summary time",
-    stores: (included: number, total: number) => `Stores: ${included} of ${total}`,
-    storesTitle: "Stores included in notifications",
-    suspended: "suspended",
+    storeCount: (included: number, total: number) => `Included stores: ${included} of ${total}`,
+    storesTitle: "Stores in notifications",
     back: "Back",
     unlink: "Unlink this chat",
     unlinkQuestion:
@@ -166,16 +162,21 @@ const copy = {
     cancel: "Cancel",
     unlinked: "Chat unlinked. You can link it again in FiscalBay, under Settings › Notifications.",
     expired: "This button is no longer valid.",
+    latest: "Latest orders",
+    latestRange: (from: number, to: number, total: number) => `${from}–${to} of ${total}`,
     latestEmpty: "No orders to show in the included stores.",
-    latestPage: (from: number, to: number) => `Orders ${from} to ${to}.`,
     more: "5 more",
-    help: [
-      "Order notifications arrive here according to your Settings.",
-      "/status: plan, notifications and stores",
-      "/latest: the latest orders of the included stores",
-      "/preferences: pause, filter, frequency and stores",
-      "Search, unlocking and export stay on the website.",
-    ],
+    previous: "Previous",
+    orders: "Open orders",
+    help: {
+      intro: "Order notifications arrive here according to your Settings.",
+      commands: [
+        ["/status", "plan, notifications and stores"],
+        ["/latest", "the latest orders"],
+        ["/preferences", "pause, filter, frequency and stores"],
+      ],
+      site: "Search, unlocking and export stay on the website.",
+    },
   },
 } satisfies Record<Language, unknown>;
 
@@ -296,12 +297,17 @@ async function commandMessages(
   if (command === "status") return [await statusMessage(env, link, now)];
   if (link.premium !== 1) return [premiumMessage(env, link.language)];
   if (command === "preferences") return [await preferencesMessage(env, link, now)];
-  return latestMessages(env, link, 0, now);
+  return [await latestMessage(env, link, 0, now)];
 }
 
 function helpMessage(env: Env, language: Language): BotMessage {
+  const help = copy[language].help;
   return {
-    html: copy[language].help.map(escape).join("\n"),
+    html: [
+      escape(help.intro),
+      help.commands.map(([command, what]) => `${command}  ${escape(what)}`).join("\n"),
+      `<i>${escape(help.site)}</i>`,
+    ].join("\n\n"),
     buttons: [[{ text: copy[language].openSettings, url: settingsUrl(env, language) }]],
   };
 }
@@ -381,33 +387,28 @@ async function readState(db: D1Database, link: Link, now: Date) {
   };
 }
 
-const names = (stores: StoreRow[], none: string) => {
-  if (stores.length === 0) return none;
-  const shown = stores.slice(0, 10).map((store) => store.name.slice(0, 40));
-  return [...shown, ...(stores.length > 10 ? [`+${stores.length - 10}`] : [])].join(", ");
-};
-
-function preferenceLines(language: Language, state: Awaited<ReturnType<typeof readState>>) {
+/** Frequenza del riepilogo con orario e fuso, come nelle Impostazioni. */
+function modeLine(language: Language, preferences: Preferences) {
   const text = copy[language];
-  const { preferences } = state;
-  const line = (label: string, value: string) => `${escape(label)}: ${escape(value)}`;
+  return preferences.mode === "each"
+    ? text.modes.each
+    : text.modes.digest(preferences.digestTime, zoneName(language, preferences.timeZone));
+}
+
+/** Stato delle notifiche in due righe: attive o in pausa con il filtro, poi la frequenza. */
+function preferenceLines(language: Language, preferences: Preferences) {
+  const text = copy[language];
   return [
-    line(text.notifications, preferences.enabled ? text.enabled : text.paused),
-    line(text.filter, text.filters[preferences.filter]),
-    line(
-      text.mode,
-      preferences.mode === "each"
-        ? text.modes.each
-        : text.modes.digest(preferences.digestTime, zoneName(language, preferences.timeZone)),
-    ),
-  ];
+    preferences.enabled ? `${text.enabled}, ${text.filters[preferences.filter]}` : text.paused,
+    modeLine(language, preferences),
+  ].map(escape);
 }
 
 async function statusMessage(env: Env, link: Link, now: Date): Promise<BotMessage> {
   const text = copy[link.language];
   const state = await readState(env.DB, link, now);
   const { coverage, preferences } = state;
-  const until = (iso: string) => dateTime(link.language, preferences.timeZone, iso);
+  const until = (iso: string) => date(link.language, preferences.timeZone, iso, now);
   const plan = !coverage
     ? text.plans.free
     : coverage.source === "lifetime"
@@ -415,48 +416,38 @@ async function statusMessage(env: Env, link: Link, now: Date): Promise<BotMessag
       : coverage.source === "trial"
         ? text.plans.trial(until(coverage.endsAt!))
         : text.plans.premium(until(coverage.endsAt!));
-  const active = state.stores.filter((store) => !store.paused);
-  const line = (label: string, value: string) => `${escape(label)}: ${escape(value)}`;
-  const lines = [
-    `<b>${escape(text.status)}</b>`,
-    line(text.plan, plan),
-    ...(coverage ? preferenceLines(link.language, state) : []),
-    line(
-      text.included,
-      names(
-        active.filter((store) => store.enabled),
-        text.none,
+  const shown = state.stores.slice(0, 10).map((store) => {
+    const note = store.paused
+      ? text.suspended
+      : store.reconnect
+        ? text.reconnect
+        : store.enabled
+          ? null
+          : text.excluded;
+    const name = escape(store.name.slice(0, 40));
+    return note ? `${name} · <i>${escape(note)}</i>` : name;
+  });
+  if (state.stores.length > 10) shown.push(`+${state.stores.length - 10}`);
+  const blocks = [
+    [
+      `<b>${escape(plan)}</b>`,
+      ...(coverage ? preferenceLines(link.language, preferences) : [escape(text.freeNote)]),
+    ].join("\n"),
+    ...(shown.length ? [`<b>${escape(text.stores)}</b>\n${shown.join("\n")}`] : []),
+    [
+      escape(
+        preferences.lastDelivery
+          ? text.lastDelivery(
+              when(link.language, preferences.timeZone, preferences.lastDelivery, now),
+            )
+          : text.noDelivery,
       ),
-    ),
-    line(
-      text.excluded,
-      names(
-        active.filter((store) => !store.enabled),
-        text.none,
-      ),
-    ),
-    ...(state.stores.some((store) => store.reconnect)
-      ? [
-          line(
-            text.reconnect,
-            names(
-              state.stores.filter((store) => store.reconnect),
-              text.none,
-            ),
-          ),
-        ]
-      : []),
-    line(
-      text.lastDelivery,
-      preferences.lastDelivery
-        ? dateTime(link.language, preferences.timeZone, preferences.lastDelivery)
-        : text.none,
-    ),
-    // Un blocco si chiude già con il messaggio che ha chiesto lo stato.
-    ...(preferences.failure === "unreachable" ? [escape(text.unreachable)] : []),
+      // Un blocco si chiude già con il messaggio che ha chiesto lo stato.
+      ...(preferences.failure === "unreachable" ? [escape(text.unreachable)] : []),
+    ].join("\n"),
   ];
   return {
-    html: splitBlocks([lines.join("\n")])[0]!,
+    html: splitBlocks(blocks)[0]!,
     buttons: [
       [
         coverage
@@ -468,24 +459,30 @@ async function statusMessage(env: Env, link: Link, now: Date): Promise<BotMessag
   };
 }
 
-const mark = (on: boolean, label: string) => `${on ? "✓ " : ""}${label}`;
+/** Pulsanti a scelta singola: ● sull'opzione attiva, ○ sulle altre. */
+const choice = (on: boolean, label: string) => `${on ? "●" : "○"} ${label}`;
+/** Interruttori dei negozi: ☑ incluso, ☐ escluso. */
+const check = (on: boolean, label: string) => `${on ? "☑" : "☐"} ${label}`;
 
 async function preferencesMessage(env: Env, link: Link, now: Date): Promise<BotMessage> {
   const text = copy[link.language];
   const state = await readState(env.DB, link, now);
   const { preferences } = state;
   const active = state.stores.filter((store) => !store.paused);
-  const settings: BotButton = { text: text.openSettings, url: settingsUrl(env, link.language) };
-  const unlink: BotButton = { text: text.unlink, callback_data: data(link, "ul") };
+  const [status, mode] = preferenceLines(link.language, preferences);
   const html = [
-    `<b>${escape(text.preferencesTitle)}</b>`,
-    ...preferenceLines(link.language, state),
-    escape(text.zoneNote),
+    `<b>${status}</b>`,
+    mode,
+    ...(preferences.mode === "digest" ? [`<i>${escape(text.zoneNote)}</i>`] : []),
   ].join("\n");
+  const footer: BotButton[] = [
+    { text: text.unlink, callback_data: data(link, "ul") },
+    { text: text.openSettings, url: settingsUrl(env, link.language) },
+  ];
   if (!preferences.enabled)
     return {
       html,
-      buttons: [[{ text: text.resume, callback_data: data(link, "en", 1) }], [unlink], [settings]],
+      buttons: [[{ text: text.resume, callback_data: data(link, "en", 1) }], footer],
     };
   return {
     html,
@@ -493,21 +490,21 @@ async function preferencesMessage(env: Env, link: Link, now: Date): Promise<BotM
       [{ text: text.pause, callback_data: data(link, "en", 0) }],
       [
         {
-          text: mark(preferences.filter === "fiscal", text.fiscalOnly),
+          text: choice(preferences.filter === "fiscal", text.fiscalOnly),
           callback_data: data(link, "fi", "fiscal"),
         },
         {
-          text: mark(preferences.filter === "all", text.allOrders),
+          text: choice(preferences.filter === "all", text.allOrders),
           callback_data: data(link, "fi", "all"),
         },
       ],
       [
         {
-          text: mark(preferences.mode === "each", text.each),
+          text: choice(preferences.mode === "each", text.each),
           callback_data: data(link, "mo", "each"),
         },
         {
-          text: mark(preferences.mode === "digest", text.digest),
+          text: choice(preferences.mode === "digest", text.digest),
           callback_data: data(link, "mo", "digest"),
         },
       ],
@@ -518,14 +515,16 @@ async function preferencesMessage(env: Env, link: Link, now: Date): Promise<BotM
         ? [
             [
               {
-                text: text.stores(active.filter((store) => store.enabled).length, active.length),
+                text: text.storeCount(
+                  active.filter((store) => store.enabled).length,
+                  active.length,
+                ),
                 callback_data: data(link, "ss", 0),
               },
             ],
           ]
         : []),
-      [unlink],
-      [settings],
+      footer,
     ],
   };
 }
@@ -534,10 +533,10 @@ async function timesMessage(env: Env, link: Link, now: Date): Promise<BotMessage
   const text = copy[link.language];
   const { preferences } = await readState(env.DB, link, now);
   return {
-    html: `<b>${escape(text.timeTitle)}</b>\n${escape(text.zoneNote)}`,
+    html: `<b>${escape(text.timeTitle)}</b>\n${escape(zoneName(link.language, preferences.timeZone))}\n<i>${escape(text.zoneNote)}</i>`,
     buttons: [
       telegramDigestTimes.map((time) => ({
-        text: mark(preferences.digestTime === time, time),
+        text: choice(preferences.digestTime === time, time),
         callback_data: data(link, "tm", time.replace(":", "")),
       })),
       [{ text: text.back, callback_data: data(link, "pr") }],
@@ -557,11 +556,11 @@ async function storesMessage(env: Env, link: Link, page: number, now: Date): Pro
       ...shown.map((store) => [
         store.paused
           ? {
-              text: `${store.name.slice(0, 40)} (${text.suspended})`,
+              text: `${store.name.slice(0, 40)} · ${text.suspended}`,
               callback_data: data(link, "ss", current),
             }
           : {
-              text: mark(store.enabled === 1, store.name.slice(0, 40)),
+              text: check(store.enabled === 1, store.name.slice(0, 40)),
               callback_data: data(link, "sx", current, store.enabled ? 0 : 1, store.id),
             },
       ]),
@@ -581,15 +580,11 @@ async function storesMessage(env: Env, link: Link, page: number, now: Date): Pro
 }
 
 /**
- * Ultimi ordini definitivi dei negozi inclusi, letti come nel sito dall'utente dello spazio: un
- * messaggio per ordine con i suoi pulsanti, poi la posizione e, fino a 20, «Altri 5».
+ * Ultimi ordini definitivi dei negozi inclusi, letti come nel sito dall'utente dello spazio, in
+ * un solo messaggio a pagine di cinque, fino a venti: il numero dell'ordine apre il dettaglio
+ * e le pagine aggiornano lo stesso messaggio.
  */
-async function latestMessages(
-  env: Env,
-  link: Link,
-  offset: number,
-  now: Date,
-): Promise<BotMessage[]> {
+async function latestMessage(env: Env, link: Link, offset: number, now: Date): Promise<BotMessage> {
   const text = copy[link.language];
   const state = await readState(env.DB, link, now);
   // Ogni negozio incluso con i propri ultimi ordini: quelli dei negozi esclusi non tolgono posto.
@@ -604,51 +599,46 @@ async function latestMessages(
         ).map((order) => ({ order, environment: store.environment })),
       ),
   );
-  const orders = perStore.flat();
-  orders.sort((a, b) =>
-    b.order.creationTime === a.order.creationTime
-      ? b.order.id.localeCompare(a.order.id)
-      : b.order.creationTime.localeCompare(a.order.creationTime),
-  );
-  const listed = orders.slice(0, latestLimit);
+  const listed = perStore
+    .flat()
+    .sort((a, b) =>
+      b.order.creationTime === a.order.creationTime
+        ? b.order.id.localeCompare(a.order.id)
+        : b.order.creationTime.localeCompare(a.order.creationTime),
+    )
+    .slice(0, latestLimit);
   const page = listed.slice(offset, offset + latestPage);
-  if (page.length === 0) return [{ html: escape(text.latestEmpty) }];
-  const next = offset + latestPage;
-  return [
-    ...page.flatMap(({ order, environment }) =>
-      orderMessage(
+  if (page.length === 0) return { html: escape(text.latestEmpty) };
+  const environment = page.every(({ environment }) => environment === "sandbox")
+    ? "sandbox"
+    : "production";
+  const html = splitBlocks([
+    `<b>${escape(text.latest)}</b> · ${escape(text.latestRange(offset + 1, offset + page.length, listed.length))}`,
+    ...page.map(({ order, environment }) =>
+      orderEntry(
         env,
         link.language,
         state.preferences.timeZone,
         orderNotice(order, environment),
         null,
+        now,
       ),
     ),
-    {
-      html: escape(text.latestPage(offset + 1, offset + page.length)),
-      ...(next < listed.length
-        ? { buttons: [[{ text: text.more, callback_data: data(link, "la", next) }]] }
-        : {}),
-    },
-  ];
-}
-
-/**
- * Un altro tocco sullo stesso pulsante dello stesso messaggio, già eseguito o ricevuto prima: dei
- * tocchi in attesa insieme vale il primo ricevuto.
- */
-async function earlierTap(db: D1Database, update: TelegramReceipt) {
-  const earlier = await db
-    .prepare(`SELECT 1 FROM webhook_receipts mine JOIN webhook_receipts other
-        ON other.provider = mine.provider AND other.environment = mine.environment
-          AND other.object_id = mine.object_id AND other.message_id = mine.message_id
-          AND other.command = mine.command AND other.id <> mine.id
-      WHERE mine.id = ?1 AND (other.completed_at IS NOT NULL
-        OR julianday(other.event_at) < julianday(mine.event_at)
-        OR (other.event_at = mine.event_at AND other.id < mine.id))`)
-    .bind(update.receiptId)
-    .first();
-  return earlier !== null;
+  ])[0]!;
+  return {
+    html,
+    buttons: [
+      [
+        ...(offset > 0
+          ? [{ text: text.previous, callback_data: data(link, "la", offset - latestPage) }]
+          : []),
+        ...(offset + latestPage < listed.length
+          ? [{ text: text.more, callback_data: data(link, "la", offset + latestPage) }]
+          : []),
+      ],
+      [{ text: text.orders, url: appUrl(env, link.language, ordersPath, environment) }],
+    ].filter((row) => row.length > 0),
+  };
 }
 
 /** Scelta di un pulsante delle preferenze, nella forma delle Impostazioni. */
@@ -730,17 +720,9 @@ async function consumeCallback(
   }
   if (action === "la") {
     const offset = Number(args[0]);
-    if (!Number.isInteger(offset) || offset <= 0 || offset >= latestLimit) return;
-    // Il pulsante sparisce dal messaggio toccato; dei tocchi arrivati prima che sparisse vale
-    // soltanto il primo ricevuto, così la pagina non si ripete.
-    if (await earlierTap(env.DB, update)) return;
-    await edit({ html: escape(copy[language].latestPage(offset - latestPage + 1, offset)) });
-    const messages = await latestMessages(env, link, offset, now);
-    return sendInOrder(
-      env,
-      messages.map((message) => ({ link, message })),
-      fetcher,
-    );
+    if (!Number.isInteger(offset) || offset < 0 || offset >= latestLimit) return;
+    // La pagina sostituisce quella mostrata: un tocco ripetuto la riscrive uguale.
+    return edit(await latestMessage(env, link, offset, now));
   }
   return edit(await preferencesMessage(env, link, now));
 }
