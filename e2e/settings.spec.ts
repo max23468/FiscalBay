@@ -717,6 +717,22 @@ test.describe("abbonamento nel piano", () => {
     });
 });
 
+/**
+ * Notifiche dell'area reale pronte all'uso: rete ferma e pagina idratata, segnalata dal consenso
+ * email che resta disattivato fino ad allora.
+ */
+async function openNotifications(page: Page, prefix: string, it: boolean) {
+  await page.goto(`${prefix}/app/impostazioni/notifiche`);
+  await networkIdle(page);
+  await expect(
+    page.getByRole("switch", {
+      name: it
+        ? "Ricevi via email novità e offerte su FiscalBay"
+        : "Receive FiscalBay news and offers by email",
+    }),
+  ).toBeEnabled();
+}
+
 /** Scrittura nel database locale condiviso con la preview, ripetuta se lo trova occupato. */
 async function writeLocal(sql: string) {
   for (let attempt = 1; ; attempt++) {
@@ -748,7 +764,7 @@ test.describe("notifiche Telegram", () => {
       const t = (italian: string, english: string) => (it ? italian : english);
       const id = `telegram-linked-${language}-${browserName}-${testInfo.retry}`;
       await useLocalAccount(context, "member", baseURL!, id);
-      await page.goto(`${prefix}/app/impostazioni/notifiche`);
+      await openNotifications(page, prefix, it);
       await expect(page.getByText("@collaudo_fiscalbay")).toBeVisible();
       const saved = (name: string) =>
         page.waitForResponse(
@@ -827,7 +843,7 @@ test.describe("notifiche Telegram", () => {
       await context.route("https://t.me/**", (route) =>
         route.fulfill({ status: 200, contentType: "text/html", body: "<title>Telegram</title>" }),
       );
-      await page.goto(`${prefix}/app/impostazioni/notifiche`);
+      await openNotifications(page, prefix, it);
       const popup = page.waitForEvent("popup");
       await page
         .getByRole("button", { name: it ? "Collega Telegram" : "Connect Telegram" })
