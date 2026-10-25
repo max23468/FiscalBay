@@ -134,7 +134,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     diagnostics: scenario.diagnostics,
     // Chat e preferenze dimostrative: ogni scelta parte dal predefinito, come le altre.
     telegram: {
-      chat: scenario.telegramChat ? { label: scenario.telegramChat, linkedAt: scenario.now } : null,
+      chat: scenario.telegramChat
+        ? {
+            label: scenario.telegramChat,
+            linkedAt: scenario.now,
+            ...(scenario.telegramFailure ? { failure: scenario.telegramFailure } : {}),
+          }
+        : null,
       enabled: true,
       filter: "fiscal",
       mode: "each",

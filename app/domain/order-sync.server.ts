@@ -10,6 +10,7 @@ import { defaultRateLimitSeconds, rateLimitWait } from "./order-acquisition-cont
 import { servedSql } from "./admission.server";
 import { activeEntitlementSql } from "./grants.server";
 import { activeStore, writableStore } from "./store-state.server";
+import { deliverTelegram } from "./telegram-deliveries.server";
 import { logFailure } from "../errors";
 import { UpstreamError } from "../integrations/http.server";
 import { ebayConfiguration, type EbayEnvironment } from "../integrations/ebay/environment.server";
@@ -340,6 +341,11 @@ export async function consumeStoreSync(
         message.retry({ delaySeconds: 60 });
         return;
       }
+      // Le notifiche dello spazio partono appena la lettura ha scritto gli ordini; il compito
+      // periodico riprende quelle rimaste.
+      await deliverTelegram(environment, fetcher, now, { storeId: store.store_id }).catch(
+        (error: unknown) => logFailure({ error, operation: "telegram" }),
+      );
     } catch (error) {
       logFailure({ error, operation: "order_acquisition" });
       if (error instanceof UpstreamError && error.failure === "rate_limited") {

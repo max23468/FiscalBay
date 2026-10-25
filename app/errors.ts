@@ -68,6 +68,8 @@ export function logFailure(input: {
     | "inactivity"
     | "maintenance"
     | "scheduling"
+    | "telegram"
+    | "telegram_commands"
     | "queue";
   status?: number;
 }): void {

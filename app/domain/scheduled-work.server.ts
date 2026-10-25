@@ -5,6 +5,8 @@ import { reconcileBilling } from "./billing.server";
 import { applyFreePlans } from "./free-store.server";
 import { indexOrderSearch, purgeExpiredRecords } from "./maintenance.server";
 import { dispatchStoreSyncs } from "./order-sync.server";
+import { configureBotCommands } from "./telegram-bot.server";
+import { deliverTelegram } from "./telegram-deliveries.server";
 import { logFailure } from "../errors";
 import { refreshExpiringTokens } from "../integrations/ebay/seller-credentials.server";
 import { recoverWebhookIngress } from "../integrations/webhooks.server";
@@ -53,6 +55,18 @@ const tasks = {
     period: 60 * minute,
     run: (environment: Env, fetcher: typeof fetch, now: Date) =>
       reconcileBilling(environment, fetcher, now),
+  },
+  // Notifiche Telegram: valutazione degli ordini, riepiloghi dovuti, importazioni completate e
+  // invii in attesa o da ritentare. La lettura di un negozio le anticipa per il suo spazio.
+  telegram: {
+    period: 10 * minute,
+    run: (environment: Env, fetcher: typeof fetch, now: Date) =>
+      deliverTelegram(environment, fetcher, now),
+  },
+  // Menu dei comandi del bot, riallineato ogni giorno: ripeterlo non cambia nulla.
+  telegram_commands: {
+    period: 24 * 60 * minute,
+    run: (environment: Env, fetcher: typeof fetch) => configureBotCommands(environment, fetcher),
   },
 } satisfies Record<
   string,

@@ -278,8 +278,11 @@ export interface StoreView {
 
 /** Notifiche Telegram dello spazio: chat collegata, preferenze e scelta dei negozi. */
 export interface TelegramView {
-  /** Chat collegata, con il nome mostrato da Telegram se ne ha uno; null se non collegata. */
-  chat: { label: string | null; linkedAt: string } | null;
+  /**
+   * Chat collegata, con il nome mostrato da Telegram se ne ha uno; null se non collegata.
+   * `failure`: consegne ferme perché il bot è bloccato, o non riuscite dopo i tentativi.
+   */
+  chat: { label: string | null; linkedAt: string; failure?: "blocked" | "unreachable" } | null;
   enabled: boolean;
   filter: "fiscal" | "all";
   mode: "each" | "digest";

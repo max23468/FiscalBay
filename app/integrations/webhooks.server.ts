@@ -11,7 +11,7 @@ import { readBounded, UpstreamError } from "./http.server";
 import { ebayConfiguration } from "./ebay/environment.server";
 import { applyStripeEvent } from "../domain/billing.server";
 import { consumeOrderConfirmation } from "../domain/order-acquisition.server";
-import { consumeTelegramStart } from "../domain/telegram.server";
+import { consumeTelegramUpdate } from "../domain/telegram-bot.server";
 import { isProduction } from "../app-links";
 import { logFailure } from "../errors";
 
@@ -42,6 +42,9 @@ type Receipt = {
   store_id: string | null;
   consent_granted_at: string | null;
   link_token_hash: string | null;
+  command: string | null;
+  callback_id: string | null;
+  message_id: number | null;
   event_at: string;
   queued_at: string | null;
   completed_at: string | null;
@@ -131,27 +134,39 @@ export async function receiveWebhook(
           store_id: null,
           consent_granted_at: null,
           link_token_hash: null,
+          command: null,
+          callback_id: null,
+          message_id: null,
           event_at: new Date(stripe.created * 1000).toISOString(),
         };
       } else if (path === "/webhooks/telegram") {
         if (!telegramConfigured(env)) throw new InvalidWebhook(503);
-        const start = verifyTelegramUpdate(
+        const update = verifyTelegramUpdate(
           body,
           request.headers.get("x-telegram-bot-api-secret-token"),
           env,
+          now,
         );
-        // Ogni aggiornamento diverso da /start in una chat privata non ha effetti.
-        if (!start) return new Response(null, { status: 204 });
+        // Ogni altro aggiornamento, anche di una chat non privata, non ha effetti.
+        if (!update) return new Response(null, { status: 204 });
         event = {
           provider: "telegram",
           environment: isProduction(env) ? "live" : "test",
-          provider_id: String(start.updateId),
-          topic: "start",
-          object_id: start.chatId,
+          provider_id: String(update.updateId),
+          topic: update.kind,
+          object_id: update.chatId,
           store_id: null,
           consent_granted_at: null,
-          link_token_hash: start.tokenHash,
-          event_at: start.eventAt,
+          link_token_hash: update.kind === "start" ? update.tokenHash : null,
+          command:
+            update.kind === "command"
+              ? update.command
+              : update.kind === "callback"
+                ? update.data
+                : null,
+          callback_id: update.kind === "callback" ? update.callbackId : null,
+          message_id: update.kind === "callback" ? update.messageId : null,
+          event_at: update.eventAt,
         };
       } else {
         const ebayEnvironment = path.endsWith("/sandbox") ? "sandbox" : "production";
@@ -175,6 +190,9 @@ export async function receiveWebhook(
           store_id: notification.data.user.userId,
           consent_granted_at: null,
           link_token_hash: null,
+          command: null,
+          callback_id: null,
+          message_id: null,
           event_at: new Date(notification.eventDate).toISOString(),
         };
       }
@@ -201,10 +219,13 @@ export async function receiveWebhook(
     }
     const age = now.getTime() - Date.parse(event.event_at);
     if (age >= retention || age < -300_000) throw new InvalidWebhook(400);
+    // Una chat che scrive troppo in fretta non accoda altro lavoro: il resto si ignora.
+    if (event.provider === "telegram" && (await chatFlood(env, event, now)))
+      return new Response(null, { status: 204 });
     const receipt = (await env.DB.prepare(`INSERT INTO webhook_receipts
       (id, provider, environment, provider_id, topic, object_id, store_id, consent_granted_at,
-        link_token_hash, event_at, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(provider, environment, provider_id) DO UPDATE SET id = webhook_receipts.id
+        link_token_hash, command, callback_id, message_id, event_at, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(provider, environment, provider_id) DO UPDATE SET id = webhook_receipts.id
       RETURNING *`)
       .bind(
         crypto.randomUUID(),
@@ -216,6 +237,9 @@ export async function receiveWebhook(
         event.store_id,
         event.consent_granted_at,
         event.link_token_hash,
+        event.command,
+        event.callback_id,
+        event.message_id,
         event.event_at,
         new Date(Date.parse(event.event_at) + retention).toISOString(),
       )
@@ -227,7 +251,11 @@ export async function receiveWebhook(
       receipt.store_id !== event.store_id ||
       receipt.consent_granted_at !== event.consent_granted_at ||
       receipt.link_token_hash !== event.link_token_hash ||
-      receipt.event_at !== event.event_at
+      receipt.command !== event.command ||
+      receipt.callback_id !== event.callback_id ||
+      receipt.message_id !== event.message_id ||
+      // Il tocco su un pulsante prende la data dalla ricezione, che un nuovo tentativo cambia.
+      (event.topic !== "callback" && receipt.event_at !== event.event_at)
     )
       throw new InvalidWebhook(409);
     if (!receipt.queued_at && !receipt.completed_at) {
@@ -244,6 +272,17 @@ export async function receiveWebhook(
     if (status === 503) logFailure({ error, operation: "webhook_ingress" });
     return new Response(null, { status });
   }
+}
+
+/** Aggiornamenti accettati per chat in un minuto: oltre, il bot non risponde. */
+const chatUpdatesPerMinute = 20;
+
+async function chatFlood(env: Env, event: Pick<Receipt, "environment" | "object_id">, now: Date) {
+  const row = await env.DB.prepare(`SELECT count(*) AS total FROM webhook_receipts
+    WHERE provider = 'telegram' AND environment = ? AND object_id = ? AND event_at > ?`)
+    .bind(event.environment, event.object_id, new Date(now.getTime() - 60_000).toISOString())
+    .first<{ total: number }>();
+  return row!.total >= chatUpdatesPerMinute;
 }
 
 async function enqueueReceipt(env: Env, receiptId: string, now: Date) {
@@ -322,12 +361,16 @@ export async function consumeWebhooks(
           now,
         );
       } else if (receipt.provider === "telegram") {
-        await consumeTelegramStart(
+        await consumeTelegramUpdate(
           env,
           {
             receiptId: receipt.id,
+            topic: receipt.topic,
             chatId: receipt.object_id,
             tokenHash: receipt.link_token_hash,
+            command: receipt.command,
+            callbackId: receipt.callback_id,
+            messageId: receipt.message_id,
             eventAt: receipt.event_at,
           },
           fetcher,
