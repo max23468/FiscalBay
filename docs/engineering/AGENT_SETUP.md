@@ -15,7 +15,7 @@ L’avvio e la ripresa sono nel [README](../../README.md); autonomia e checkpoin
 | M6/M7 · comunicazioni e operazioni | Email transazionale scelta, iCloud per posta umana, metriche/alert nativi; tool esterni solo se necessari e con costo autorizzato. |
 | Solo su decisione owner | Paddle e relativo tooling; non predisporre un secondo billing operativo mentre Stripe è primario. |
 
-Codex desktop può usare file/CLI locali e le connessioni effettivamente autorizzate. Non assumere che un MCP presente in un’altra applicazione o una skill citata nella chat sia già disponibile qui. Configurare secondo documentazione corrente, senza URL, plugin o nomi di tool inventati. Le skill guidano l’implementazione, non prevalgono su scope e checkpoint. `/grill-me` e `/grill-with-docs` non sono dipendenze dell’app.
+Claude Code lavora sul Mac con file e CLI locali, nelle sessioni cloud e nei thread del progetto Claude con il clone del repository e i connettori autorizzati. Non assumere che un MCP presente in un’altra applicazione o una skill citata nella chat sia già disponibile qui. Configurare secondo documentazione corrente, senza URL, plugin o nomi di tool inventati. Le skill guidano l’implementazione, non prevalgono su scope e checkpoint. `/grill-me` e `/grill-with-docs` non sono dipendenze dell’app.
 
 ### Comandi del progetto
 
@@ -116,7 +116,7 @@ Per sostenibilità misurare ordini, negozi multipli, storico, retry, export, log
 
 Questa è una mappa di **contenuti e responsabilità**, non un elenco di file obbligatori. Prima usare codice, schema, configurazione e test come contratti eseguibili. Creare un documento separato quando spiega un comportamento sostanziale condiviso, una scelta costosa da invertire o una procedura operativa reale. Accorpare elementi brevi; nessuno scaffolding documentale vuoto.
 
-Per creare o aggiornare una PR, passare la descrizione direttamente alla CLI tramite input standard (`gh pr create --body-file -` o `gh pr edit --body-file -`), senza creare file `.md` temporanei per il testo della PR.
+Per creare o aggiornare una PR, passare la descrizione direttamente allo strumento, senza creare file `.md` temporanei per il testo: sul Mac `gh pr create --body-file -` o `gh pr edit --body-file -` con input standard; nel cloud, dove `gh pr` è rifiutato, il connettore GitHub o `pnpm release:cycle`.
 
 | Quando / responsabile | Informazione che deve risultare verificabile | Collocazione più semplice |
 |---|---|---|
