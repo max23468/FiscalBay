@@ -54,6 +54,8 @@ export const scenarioIds = [
   "stripe-non-disponibile",
   "lifetime-esaurito",
   "premium",
+  "telegram-bloccato",
+  "telegram-non-consegnato",
   "cambio-rinnovo",
   "rinnovo-disdetto",
   "passaggio-a-vita",
@@ -368,6 +370,30 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
     en: {
       name: "Premium, several stores",
       focus: "Three stores, Telegram notifications, XLSX. The first autosave fails.",
+    },
+  },
+  "telegram-bloccato": {
+    it: {
+      name: "Bot Telegram bloccato",
+      focus:
+        "Il bot è bloccato nella chat collegata: le notifiche sono ferme finché la chat non scrive di nuovo al bot.",
+    },
+    en: {
+      name: "Telegram bot blocked",
+      focus:
+        "The bot is blocked in the linked chat: notifications are stopped until the chat writes to the bot again.",
+    },
+  },
+  "telegram-non-consegnato": {
+    it: {
+      name: "Notifiche Telegram non consegnate",
+      focus:
+        "Telegram non ha accettato alcuni messaggi dopo diversi tentativi: l'avviso resta fino al prossimo invio riuscito.",
+    },
+    en: {
+      name: "Telegram notifications not delivered",
+      focus:
+        "Telegram did not accept some messages after several attempts: the notice stays until the next successful delivery.",
     },
   },
   "cambio-rinnovo": {
@@ -1054,6 +1080,8 @@ export interface Scenario {
   signInMethods: SignInMethods;
   diagnostics: DiagnosticsView;
   telegramChat: string | null;
+  /** Consegna ferma della chat collegata, come in Impostazioni › Notifiche dell'area reale. */
+  telegramFailure: "blocked" | "unreachable" | null;
   saveFailsOnce: boolean;
   /** Stripe non risponde: l'acquisto simulato fallisce. */
   stripeDown: boolean;
@@ -1225,6 +1253,7 @@ export function loadScenario(
       passkeys: [{ id: "preview-passkey", name: "MacBook Air", createdAt: "2026-09-21T10:12:00Z" }],
     },
     telegramChat: null,
+    telegramFailure: null,
     saveFailsOnce: false,
     stripeDown: false,
     lifetimeSoldOut: false,
@@ -1824,6 +1853,19 @@ export function loadScenario(
           }),
           ...common.notifications,
         ],
+        diagnostics: diagnostics(),
+      };
+      break;
+    case "telegram-bloccato":
+    case "telegram-non-consegnato":
+      scenario = {
+        ...common,
+        account: premiumAccount(),
+        stores: premiumStores,
+        seeds,
+        premium: true,
+        telegramChat: "Magazzino Vintage",
+        telegramFailure: id === "telegram-bloccato" ? "blocked" : "unreachable",
         diagnostics: diagnostics(),
       };
       break;

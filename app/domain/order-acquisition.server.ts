@@ -60,7 +60,11 @@ export const historyDays = 30;
 export function historyStart(now: Date): string {
   return new Date(now.getTime() - historyDays * dayMilliseconds).toISOString();
 }
-const lockMilliseconds = 15 * 60_000;
+/**
+ * Durata massima di una lettura: le sue scritture portano l'istante d'inizio, quindi arrivano in
+ * D1 fino a questo tempo dopo l'istante registrato.
+ */
+export const lockMilliseconds = 15 * 60_000;
 // Acquisti prima del pagamento e ordini combinati cambiano di rado: la lettura Trading periodica
 // ogni due ore tiene la quota `GetOrders` del keyset lontana dal limite anche con molti negozi.
 const tradingIntervalMilliseconds = 2 * 60 * 60_000;

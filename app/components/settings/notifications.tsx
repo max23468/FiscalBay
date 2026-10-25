@@ -198,8 +198,17 @@ function TelegramPreferences({
     view.digestTime,
   );
   const [enabled, setEnabled, enabledState] = useAutoSave<boolean>("telegram", view.enabled);
+  const failure = view.chat?.failure;
   return (
     <FieldGroup>
+      {failure ? (
+        <StatusAlert
+          tone="warning"
+          title={failure === "blocked" ? copy.telegramBlocked : copy.telegramUnreachable}
+        >
+          {failure === "blocked" ? copy.telegramBlockedHint : copy.telegramUnreachableHint}
+        </StatusAlert>
+      ) : null}
       <div className="grid gap-2">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-sm">
           <span className="grid">

@@ -1,6 +1,7 @@
 import { orderSearchText } from "../orders/order-search";
 import { notificationWindowMilliseconds } from "./notification-reads.server";
 import { purgeTelegramLinks } from "./telegram.server";
+import { purgeTelegramDeliveries } from "./telegram-deliveries.server";
 
 /**
  * Pulizia periodica degli ordini e dei dati tecnici scaduti, eseguita dal consumer
@@ -20,6 +21,7 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
     db.prepare("DELETE FROM ebay_store_link_sessions WHERE expires_at <= ?").bind(at),
     db.prepare("DELETE FROM account_email_changes WHERE expires_at <= ?").bind(at),
     purgeTelegramLinks(db, now),
+    purgeTelegramDeliveries(db, now),
     // Una notifica resta nella campanella al massimo 30 giorni dopo la sua lettura.
     db
       .prepare("DELETE FROM notification_reads WHERE read_at < ?")
