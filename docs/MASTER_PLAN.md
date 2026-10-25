@@ -399,7 +399,7 @@ Export account distinto, a tutti i piani: ZIP con JSON strutturato e CSV leggibi
 <a id="s13"></a>
 ## 13. Telegram
 
-Bot attuale riutilizzabile come identità per la 2.0; backend 1.x eliminabile prima del go-live. Bot separato per test, niente stesso webhook condiviso con Production. Un solo bot per ambiente, anche per il Control Center dell'owner (D198). Web app funzionante senza Telegram. Bot ordinario essenziale: associazione, stato/notifiche e comandi necessari, non una seconda app ordini da mantenere.
+Bot attuale riutilizzabile come identità per la 2.0; backend 1.x eliminabile prima del go-live. Bot separato per test, niente stesso webhook condiviso con Production. Un solo bot per ambiente, anche per il Control Center dell'owner (D198). Web app funzionante senza Telegram. Bot dei venditori con collegamento, notifiche, stato, preferenze e consultazione degli ultimi ordini (D199); ricerca, sblocco, esportazione e gestione dei negozi restano soltanto sul sito. Le Impostazioni sono l'unica fonte delle preferenze: il bot legge e scrive gli stessi dati con le stesse regole.
 
 Una chat privata verificata per spazio, non gruppi né destinatari multipli. Deep-link con token monouso breve, legato a spazio e sessione, consumo atomico; codice manuale solo fallback tecnico utile. Cambio chat sostituisce la precedente dopo conferma, invalidando link e consegne pendenti pertinenti.
 
@@ -2055,6 +2055,17 @@ Gestire nuovo ordine in verifica, dato successivamente disponibile, cambi/rimozi
 **Criterio di completamento:** CF autorizzato leggibile; riepilogo singolo di completamento import senza messaggi per ogni ordine storico; niente indirizzo/email buyer standard, duplicati da ripresa o arretrato volontariamente disabilitato. Correzioni/rimozioni pertinenti non soppresse dal filtro «solo fiscali»; nessuna garanzia exactly-once esterna.
 
 Usare per CF e P.IVA italiani la stessa forma derivata di visualizzazione e copia definita in [M4-01](#m4-01), preservando gli originali persistiti e distinguendo tipi esteri e valori rimossi. Provare minuscole, spazi e zeri iniziali anche nei messaggi suddivisi e nei digest.
+
+**Funzioni del bot per i venditori (D199).** Ogni comando e ogni pulsante rilegge chat collegata, generazione del collegamento, Premium e spazio prima di rispondere; una chat non collegata non vede nulla (sul test nessuna risposta, in Production il rimando al sito). Testi IT/EN secondo la lingua del collegamento; i menu aggiornano lo stesso messaggio invece di aggiungerne.
+
+- **Menu dei comandi** di Telegram, per lingua e soltanto nelle chat private: `/stato`, `/ultimi`, `/preferenze`, `/aiuto`.
+- **`/stato`:** piano (Premium con la scadenza, prova, lifetime; con il Free le notifiche sono ferme), notifiche attive o in pausa, filtro, frequenza con orario e fuso, negozi inclusi ed esclusi con quelli sospesi da ricollegare, ultimo invio ed eventuale problema di consegna; pulsanti «Preferenze» e «Apri le Impostazioni».
+- **`/preferenze`:** pulsanti per pausa e ripresa, filtro, frequenza con gli orari ammessi, inclusione di ogni negozio con pagine se sono molti e scollegamento della chat con conferma in due tocchi, che annulla le consegne in attesa. Stesse regole delle Impostazioni, compreso l'inizio degli eventi alla riattivazione; il fuso del riepilogo si cambia soltanto dal sito. Un pulsante di un collegamento sostituito non ha effetto.
+- **Pulsanti nei messaggi degli ordini:** «Apri in FiscalBay» sul dettaglio dopo l'accesso, «Apri su eBay» per i negozi reali, «Copia Codice Fiscale» soltanto con un valore autorizzato e corrente; nel riepilogo «Apri gli ordini» sul periodo del riepilogo.
+- **`/ultimi`:** gli ultimi 5 ordini definitivi dei negozi inclusi, fino a 20 con «Altri 5»: numero, negozio, data, nome dell'acquirente, totale e stato fiscale, con gli stessi pulsanti. Stessi permessi, isolamento e conservazione del sito; nessuno sblocco né ricerca.
+- **Ingresso e sicurezza:** il webhook riceve anche i tocchi sui pulsanti (`callback_query`), con ricevute idempotenti e risposta immediata a ogni tocco; nei pulsanti soltanto identificativi brevi legati alla generazione del collegamento; limite di comandi per chat; log senza testo dei messaggi.
+
+**Criterio di completamento delle funzioni del bot:** stato e preferenze coincidono con le Impostazioni nei due sensi; nessun dato di un altro spazio o di un collegamento sostituito; Codice Fiscale soltanto se autorizzato; prove IT/EN di comandi, pulsanti, scollegamento, chat non collegata, Premium scaduto e tocchi ripetuti.
 
 <a id="m5-11"></a>
 #### M5-11 · Ammissione, inattività e costo
