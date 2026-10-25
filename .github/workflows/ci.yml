@@ -93,8 +93,8 @@ jobs:
           git fetch --quiet origin "${BASE_REF}"
           node --input-type=module -e 'import { assertQualificationBase } from "./scripts/release/release-cycle.mjs"; assertQualificationBase(process.env.BASE_REF, process.env.BASE_SHA, process.argv[1], process.env.HEAD_SHA);' "$(git rev-parse FETCH_HEAD)"
 
-      # Sul push il confronto parte dall'ultimo deploy test riuscito, non dal push precedente:
-      # una run annullata da un push successivo o un deploy fallito restano nel diff.
+      # Sul push il confronto parte dall'ultimo deploy test riuscito, o dalla run verde successiva
+      # senza modifiche da distribuire: una run annullata o un deploy fallito restano nel diff.
       - name: Find last test deploy
         id: deployed
         if: github.event_name == 'push'
