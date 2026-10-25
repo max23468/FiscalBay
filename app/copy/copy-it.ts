@@ -379,6 +379,8 @@ export const it = {
     resume: "Riprendi",
     pauseHint:
       "La pausa manuale ferma le nuove letture. Gli ordini già importati restano consultabili secondo il piano.",
+    inactivityPauseHint:
+      "In pausa per inattività: nessuna nuova lettura dopo 30 giorni senza accessi al piano Free. Gli ordini restano consultabili; «Riprendi» riprende tutti i negozi.",
     planPauseHint:
       "In pausa per il piano Free: nessuna nuova lettura e ordini non consultabili. Il piano include un solo negozio attivo.",
     chooseFreeStore: "Scegli il negozio attivo",

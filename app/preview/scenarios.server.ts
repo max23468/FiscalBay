@@ -126,7 +126,7 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
     en: {
       name: "Inactive Free",
       focus:
-        "After 30 days without sign-ins and 7 days' notice, Free reading is paused. Orders remain available; «Resume reading» restarts it.",
+        "After 30 days without sign-ins and 7 days' notice, Free reading is paused. Orders remain available; Resume reading restarts it.",
     },
   },
   "lista-d-attesa": {
@@ -1388,7 +1388,19 @@ export function loadScenario(
         ...common,
         account: account({ waitlisted: true, quota: { used: 0, limit: 0, cycleEndsAt: null } }),
         stores: [storeView("vintage", { importedOrders: 12 })],
-        seeds: freeSeeds,
+        // Senza Free nessun ordine è mai stato sbloccato: ogni dato fiscale presente resta bloccato.
+        seeds: freeSeeds.map((seed) =>
+          seed.fiscal.state === "available"
+            ? {
+                ...seed,
+                fiscal: {
+                  state: "locked",
+                  shownAs: seed.fiscal.identifiers.some((id) => id.type === "CF") ? "CF" : "PIVA",
+                },
+                lockable: seed.fiscal.identifiers,
+              }
+            : seed,
+        ),
         premium: false,
         notices: [{ kind: "waitlist", purchase: true }],
         diagnostics: diagnostics(),

@@ -186,6 +186,9 @@ describe("stato sintetico dell'anteprima", () => {
       const waiting = loadScenario("lista-d-attesa", language, new Set());
       expect(waiting.account).toMatchObject({ waitlisted: true, trialAvailable: true });
       expect(waiting.notices).toEqual([{ kind: "waitlist", purchase: true }]);
+      // In attesa nessun dato fiscale è mai stato sbloccato.
+      expect(waiting.orders.some((order) => order.fiscal.state === "available")).toBe(false);
+      expect(waiting.orders.some((order) => order.fiscal.state === "locked")).toBe(true);
       const closed = loadScenario("acquisti-sospesi", language, new Set());
       expect(closed).toMatchObject({ purchasesClosed: true, account: { trialAvailable: false } });
     });

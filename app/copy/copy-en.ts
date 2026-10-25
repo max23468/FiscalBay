@@ -372,6 +372,8 @@ export const en: AppCopy = {
     resume: "Resume",
     pauseHint:
       "A manual pause stops new reads. Imported orders remain available according to your plan.",
+    inactivityPauseHint:
+      "Paused for inactivity: no new reads after 30 days without sign-ins on the Free plan. Orders remain available; Resume restarts every store.",
     planPauseHint:
       "Paused by the Free plan: no new reads and orders are unavailable. The plan includes one active store.",
     chooseFreeStore: "Choose the active store",

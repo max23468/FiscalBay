@@ -96,6 +96,7 @@ export function syncDescription(store: StoreView, ebayDown: boolean, t: AppCopy)
   if (ebayDown) return t.stores.ebayDown;
   if (store.connection === "active") return t.stores.target(store.targetMinutes);
   if (store.pauseReason === "plan") return t.stores.planPauseHint;
+  if (store.pauseReason === "inactivity") return t.stores.inactivityPauseHint;
   if (store.connection === "paused") return t.stores.pauseHint;
   return t.stores.syncSuspended;
 }
