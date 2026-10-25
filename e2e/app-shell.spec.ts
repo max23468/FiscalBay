@@ -617,8 +617,8 @@ for (const area of areas)
         ).toContainText(
           area.base === "/app"
             ? locale === "it"
-              ? "Informativa sulla privacy"
-              : "Privacy policy"
+              ? "Termini e informativa sulla privacy"
+              : "Terms and privacy policy"
             : locale === "it"
               ? "esportazione"
               : "export",

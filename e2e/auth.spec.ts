@@ -285,7 +285,7 @@ for (const language of ["it", "en"] as const) {
       const legal = page.getByRole("navigation", {
         name: language === "it" ? "Documenti legali" : "Legal documents",
       });
-      await expect(legal.getByRole("link")).toHaveCount(2);
+      await expect(legal.getByRole("link")).toHaveCount(3);
       if (width === 500) {
         const card = page.locator("main .rounded-2xl");
         expect((await card.boundingBox())!.x).toBe(16);
