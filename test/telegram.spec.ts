@@ -23,6 +23,7 @@ import {
 } from "../app/integrations/telegram.server";
 import { consumeWebhooks, receiveWebhook } from "../app/integrations/webhooks.server";
 import { configureBotCommands } from "../app/domain/telegram-bot.server";
+import { ebayOrderHref } from "../app/components/orders/labels";
 import { action as settingsAction, loader as settingsLoader } from "../app/routes/settings";
 import { loader as storesLoader } from "../app/routes/stores";
 import { verifiedSession } from "./fixtures/account-fixtures";
@@ -1015,7 +1016,7 @@ describe("invii degli ordini", () => {
       expect(text).not.toContain(hidden);
     expect(keyboard(sent!).flat()).toEqual([
       { text: "Apri in FiscalBay", url: `${origin}/app/ordini/o-invio` },
-      { text: "Apri su eBay", url: "https://www.ebay.it/sh/ord/details?orderid=ebay-o-invio" },
+      { text: "Apri su eBay", url: ebayOrderHref("ebay-o-invio") },
       { text: "Copia Codice Fiscale", copy_text: { text: "RSSMRA80A01H501U" } },
     ]);
     // Una nuova esecuzione, anche ripetuta dopo un'interruzione, non ripete l'evento.
