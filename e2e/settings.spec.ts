@@ -721,6 +721,15 @@ test.describe("abbonamento nel piano", () => {
  * Notifiche dell'area reale pronte all'uso: rete ferma e pagina idratata, segnalata dal consenso
  * email che resta disattivato fino ad allora.
  */
+/** Avviso delle Impostazioni per una consegna Telegram ferma. */
+function deliveryAlert(page: Page, failure: "blocked" | "unreachable", it: boolean) {
+  const title = {
+    blocked: it ? "Il bot non riesce a scriverti" : "The bot cannot write to you",
+    unreachable: it ? "Alcune notifiche non sono arrivate" : "Some notifications did not arrive",
+  }[failure];
+  return page.getByRole("status").filter({ hasText: title });
+}
+
 async function openNotifications(page: Page, prefix: string, it: boolean) {
   await page.goto(`${prefix}/app/impostazioni/notifiche`);
   await networkIdle(page);
@@ -824,6 +833,18 @@ test.describe("notifiche Telegram", () => {
           name: t("Apri le notifiche", "Open notifications"),
         }),
       ).toHaveAttribute("href", `${prefix}/app/impostazioni/notifiche`);
+
+      // Una consegna ferma compare nelle Notifiche, con gli stessi testi dell'anteprima.
+      test.setTimeout(90_000);
+      for (const failure of ["blocked", "unreachable"] as const) {
+        await writeLocal(
+          `UPDATE telegram_links SET delivery_failure = '${failure}' WHERE id = '${id}'`,
+        );
+        await expect(async () => {
+          await openNotifications(page, prefix, it);
+          await expect(deliveryAlert(page, failure, it)).toBeVisible({ timeout: 1_000 });
+        }).toPass({ timeout: 20_000 });
+      }
     });
 
   for (const language of ["it", "en"] as const)
@@ -878,6 +899,25 @@ test.describe("notifiche Telegram", () => {
           name: it ? "Invia notifiche degli ordini" : "Send order notifications",
         }),
       ).toBeChecked();
+    });
+
+  for (const language of ["it", "en"] as const)
+    test(`anteprima: bot bloccato e consegne non riuscite come nell'area reale, ${language}`, async ({
+      page,
+    }) => {
+      const it = language === "it";
+      const prefix = it ? "" : "/en";
+      for (const [scenario, failure] of [
+        ["telegram-bloccato", "blocked"],
+        ["telegram-non-consegnato", "unreachable"],
+      ] as const) {
+        await open(page, `${prefix}/anteprima/impostazioni/notifiche`, scenario);
+        await expect(page.getByText("Magazzino Vintage")).toBeVisible();
+        await expect(deliveryAlert(page, failure, it)).toBeVisible();
+        await expect(
+          deliveryAlert(page, failure === "blocked" ? "unreachable" : "blocked", it),
+        ).toHaveCount(0);
+      }
     });
 
   for (const language of ["it", "en"] as const)
