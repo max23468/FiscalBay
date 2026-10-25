@@ -5,7 +5,8 @@
  * Da rimuovere quando `cf d1 ... --local` termina da solo.
  */
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { databases } from "../cloudflare.config.ts";
 
@@ -40,6 +41,18 @@ function wrangler(args) {
 export const applyLocalMigrations = () =>
   wrangler(["d1", "migrations", "apply", databases.test.name]);
 
-/** @param {string} sql */
-export const executeLocal = (sql) =>
-  wrangler(["d1", "execute", databases.test.name, "--command", sql]);
+/**
+ * Istruzioni dal file temporaneo: un solo argomento ha un limite di lunghezza (128 KiB su Linux)
+ * che gli account sintetici superano. In locale il file non sospende il database come in remoto.
+ * @param {string} sql
+ */
+export function executeLocal(sql) {
+  const directory = mkdtempSync(path.join(tmpdir(), "fiscalbay-d1-"));
+  const file = path.join(directory, "statements.sql");
+  writeFileSync(file, sql);
+  try {
+    wrangler(["d1", "execute", databases.test.name, "--file", file]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
