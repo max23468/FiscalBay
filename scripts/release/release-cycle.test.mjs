@@ -30,6 +30,9 @@ import {
   effectiveProductionVariable,
   acquireLock,
   withLock,
+  pullRequestView,
+  pullRequestAction,
+  checksOutcome,
 } from "./release-cycle.mjs";
 
 describe("coordinamento e provenienza della pubblicazione", () => {
@@ -264,7 +267,7 @@ describe("coordinamento e provenienza della pubblicazione", () => {
         { conclusion: "success", started_at: at(10), completed_at: at(30) },
       ],
     };
-    const executable = `#!${process.execPath}\nconst fs = require("node:fs"); const args = process.argv.slice(2); fs.appendFileSync(process.env.CYCLE_CALLS, JSON.stringify(args) + "\\n"); if(args[0] === "repo") console.log(JSON.stringify({nameWithOwner:"example/project"})); else if(args.includes("--slurp")) console.log(${JSON.stringify(JSON.stringify([jobs]))}); else console.log(${JSON.stringify(JSON.stringify(run))});\n`;
+    const executable = `#!${process.execPath}\nconst fs = require("node:fs"); const args = process.argv.slice(2); fs.appendFileSync(process.env.CYCLE_CALLS, JSON.stringify(args) + "\\n"); if(args[1] === "repos/{owner}/{repo}") console.log(JSON.stringify({full_name:"example/project"})); else if(args.includes("--slurp")) console.log(${JSON.stringify(JSON.stringify([jobs]))}); else console.log(${JSON.stringify(JSON.stringify(run))});\n`;
     try {
       writeFileSync(path.join(directory, "gh"), executable, { mode: 0o700 });
       const env = { ...process.env, PATH: `${directory}:${process.env.PATH}`, CYCLE_CALLS: calls };
@@ -284,7 +287,7 @@ describe("coordinamento e provenienza della pubblicazione", () => {
         readFileSync(calls, "utf8")
           .split("\n")
           .filter(Boolean)
-          .every((line) => ["repo", "api"].includes(JSON.parse(line)[0])),
+          .every((line) => JSON.parse(line)[0] === "api"),
       );
       const checkout = path.join(directory, "checkout");
       mkdirSync(checkout);
@@ -320,7 +323,7 @@ describe("coordinamento e provenienza della pubblicazione", () => {
           { name: "Qualifica candidato / Candidate qualified", conclusion: "success" },
         ],
       };
-      const candidateGh = `#!${process.execPath}\nconst fs=require("node:fs");const a=process.argv.slice(2);fs.appendFileSync(process.env.CYCLE_CALLS,JSON.stringify(a)+"\\n");let value;if(a[0]==="repo")value={nameWithOwner:"example/project"};else if(a[0]==="run")value=[{databaseId:124,headSha:${JSON.stringify(sha)},status:"completed",conclusion:"success"}];else if(a[0]==="workflow")process.exit(99);else if(a.includes("--slurp"))value=${JSON.stringify([jobs])};else if(a[1].includes("git/ref/")){console.log(${JSON.stringify(sha)});process.exit(0);}else if(a[1].includes("git/commits/"))value={tree:{sha:${JSON.stringify(tree)}}};else if(a[1].includes("/artifacts?"))value={artifacts:[{...${JSON.stringify(proof)},expired:process.env.CANDIDATE_EXPIRED==="1"}]};else if(a[1].includes("/jobs?"))value=${JSON.stringify(cycleJobs)};else if(a[1].includes("/actions/runs/"))value={...${JSON.stringify(run)},path:".github/workflows/publish.yml"};else value={id:1};console.log(JSON.stringify(value));\n`;
+      const candidateGh = `#!${process.execPath}\nconst fs=require("node:fs");const a=process.argv.slice(2);fs.appendFileSync(process.env.CYCLE_CALLS,JSON.stringify(a)+"\\n");let value;if(a[1]==="repos/{owner}/{repo}")value={full_name:"example/project"};else if(a[0]==="run")value=[{databaseId:124,headSha:${JSON.stringify(sha)},status:"completed",conclusion:"success"}];else if(a[0]==="workflow")process.exit(99);else if(a.includes("--slurp"))value=${JSON.stringify([jobs])};else if(a[1].includes("git/ref/")){console.log(${JSON.stringify(sha)});process.exit(0);}else if(a[1].includes("git/commits/"))value={tree:{sha:${JSON.stringify(tree)}}};else if(a[1].includes("/artifacts?"))value={artifacts:[{...${JSON.stringify(proof)},expired:process.env.CANDIDATE_EXPIRED==="1"}]};else if(a[1].includes("/jobs?"))value=${JSON.stringify(cycleJobs)};else if(a[1].includes("/actions/runs/"))value={...${JSON.stringify(run)},path:".github/workflows/publish.yml"};else value={id:1};console.log(JSON.stringify(value));\n`;
       writeFileSync(path.join(directory, "gh"), candidateGh, { mode: 0o700 });
       writeFileSync(calls, "");
       const candidate = (expired) =>
@@ -537,5 +540,92 @@ describe("coordinamento e provenienza della pubblicazione", () => {
       { deployed: false },
     ])
       assert.throws(() => assertCycleReceipt({ ...receipt, ...change }, "commit", "test"));
+  });
+});
+
+describe("PR tramite API REST", () => {
+  const pull = {
+    state: "closed",
+    draft: false,
+    auto_merge: null,
+    merged_at: "2026-10-25T12:00:00Z",
+    merge_commit_sha: "c".repeat(40),
+    head: { ref: "feature", sha: "a".repeat(40), repo: { full_name: "example/project" } },
+    base: { ref: "develop", sha: "b".repeat(40) },
+    body: null,
+  };
+
+  it("converte la PR REST nei campi del ciclo", () => {
+    assert.deepEqual(pullRequestView(pull), {
+      state: "MERGED",
+      isDraft: false,
+      autoMergeRequest: null,
+      headRefName: "feature",
+      headRefOid: "a".repeat(40),
+      baseRefName: "develop",
+      baseRefOid: "b".repeat(40),
+      mergeCommit: { oid: "c".repeat(40) },
+      headRepository: { nameWithOwner: "example/project" },
+      body: "",
+    });
+    const open = pullRequestView({
+      ...pull,
+      state: "open",
+      merged_at: null,
+      head: { ...pull.head, repo: null },
+    });
+    assert.equal(open.state, "OPEN");
+    assert.equal(open.mergeCommit, null);
+    assert.equal(open.headRepository, null);
+  });
+
+  it("usa le route del proxy soltanto nelle sessioni cloud", () => {
+    const cloud = { CLAUDE_CODE_REMOTE: "true" };
+    assert.deepEqual(pullRequestAction("enable-auto", "example/project", "7", "a", cloud), [
+      "api",
+      "-X",
+      "PUT",
+      "repos/example/project/pulls/7/ccr/auto_merge",
+      "-f",
+      "merge_method=squash",
+    ]);
+    assert.deepEqual(pullRequestAction("ready", "example/project", "7", "a", cloud), [
+      "api",
+      "-X",
+      "POST",
+      "repos/example/project/pulls/7/ccr/ready_for_review",
+    ]);
+    assert.deepEqual(pullRequestAction("enable-auto", "example/project", "7", "a", {}), [
+      "pr",
+      "merge",
+      "7",
+      "--repo",
+      "example/project",
+      "--auto",
+      "--squash",
+      "--match-head-commit",
+      "a",
+    ]);
+    assert.deepEqual(pullRequestAction("disable-auto", "example/project", "7", "a", {}), [
+      "pr",
+      "merge",
+      "7",
+      "--disable-auto",
+      "--repo",
+      "example/project",
+    ]);
+  });
+
+  it("attende i controlli in corso e si ferma sul primo fallito", () => {
+    const done = { status: "completed", conclusion: "success" };
+    assert.equal(checksOutcome([done, { status: "completed", conclusion: "skipped" }]), "passed");
+    assert.equal(checksOutcome([done, { status: "in_progress", conclusion: null }]), "pending");
+    assert.equal(
+      checksOutcome([
+        { status: "in_progress", conclusion: null },
+        { status: "completed", conclusion: "failure" },
+      ]),
+      "failed",
+    );
   });
 });
