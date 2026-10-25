@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
-import { type BrowserContext, expect, test } from "@playwright/test";
+import type { BrowserContext } from "@playwright/test";
+import { expect, networkIdle, test } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { pageCases, knownPagePath, expectedPageError } from "./page-cases";
 import { testAccount } from "./test-account";
@@ -290,13 +291,13 @@ for (const scenario of scenarios) {
         }
         const before = page.url();
         // La scoperta delle route termina prima di interromperla con un'altra navigazione.
-        await page.waitForLoadState("networkidle");
+        await networkIdle(page);
         const reload = await page.reload();
         expect(reload?.status()).toBe(expectedStatus);
         await expect(page.locator("main")).toBeVisible();
         if (modal) await expect(page.getByRole("dialog")).toBeVisible();
         checked("ricarica");
-        await page.waitForLoadState("networkidle");
+        await networkIdle(page);
         // Con la sessione la radice porta agli Ordini: la pagina iniziale è quella dell'app.
         const prefix = scenario.path.startsWith("/en") ? "/en" : "";
         const home = scenario.role === "anonymous" ? prefix || "/" : `${prefix}/app/ordini`;
@@ -310,16 +311,16 @@ for (const scenario of scenarios) {
         if (!modal && (await homeLink.isVisible()) && new URL(before).pathname !== home) {
           await homeLink.click();
           await expect(page).toHaveURL(atHome);
-          await page.waitForLoadState("networkidle");
+          await networkIdle(page);
           await page.goBack();
           await expect(page).toHaveURL(before);
-          await page.waitForLoadState("networkidle");
+          await networkIdle(page);
           await page.goForward();
           await expect(page).toHaveURL(atHome);
-          await page.waitForLoadState("networkidle");
+          await networkIdle(page);
           await page.goBack();
           await expect(page).toHaveURL(before);
-          await page.waitForLoadState("networkidle");
+          await networkIdle(page);
           checked("navigazione interna, indietro e avanti");
         } else {
           info.annotations.push({

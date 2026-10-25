@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, test } from "./fixtures";
+import { expect, networkIdle, test, watchNetwork } from "./fixtures";
 import { useLocalAccount, localPassword } from "./local-account";
 import { testAccount } from "./test-account";
 
@@ -801,7 +801,7 @@ test.describe("miglioramenti account e negozi", () => {
     const row = methods.getByRole("group", { name: /Chiave browser sintetica/ });
     await expect(row).toBeVisible();
     // La registrazione ricarica il documento: i controlli richiedono l'idratazione successiva.
-    await page.waitForLoadState("networkidle");
+    await networkIdle(page);
     await row.getByRole("button", { name: "Rimuovi", exact: true }).click();
     await page
       .getByRole("alertdialog")
@@ -825,7 +825,7 @@ test.describe("miglioramenti account e negozi", () => {
       `preferences-${browserName}-${testInfo.retry}`,
     );
     await page.goto("/app/impostazioni/aspetto");
-    await page.waitForLoadState("networkidle");
+    await networkIdle(page);
     // Le categorie dei servizi non ancora disponibili non compaiono.
     const categories = page.getByRole("navigation", { name: "Categorie" });
     await expect(categories.getByRole("link")).toHaveCount(8);
@@ -875,7 +875,7 @@ test.describe("miglioramenti account e negozi", () => {
     await page.reload();
     await expect(template).toHaveValue("Ciao, per l'ordine {ordine} ci serve il Codice Fiscale.");
     // Il valore arriva già dal server: un clic sulla campanella prima dell'idratazione andrebbe perso.
-    await page.waitForLoadState("networkidle");
+    await networkIdle(page);
 
     // La campanella segnala il negozio da ricollegare e ricorda la lettura.
     const bell = page.getByRole("button", { name: "Notifiche, 1 da leggere" });
@@ -896,7 +896,7 @@ test.describe("miglioramenti account e negozi", () => {
     await page.reload();
     await expect(page.getByRole("button", { name: "Notifiche", exact: true })).toBeVisible();
     // Dopo la ricarica il cambio lingua richiede l'idratazione: un clic precedente andrebbe perso.
-    await page.waitForLoadState("networkidle");
+    await networkIdle(page);
 
     // La lingua scelta resta anche aprendo l'area in italiano.
     const appearance = page.locator('section[aria-labelledby="settings-aspetto"]');
@@ -905,7 +905,7 @@ test.describe("miglioramenti account e negozi", () => {
     await page.goto("/app/ordini");
     await expect(page).toHaveURL(/\/en\/app\/ordini$/u);
     await page.goto("/en/app/impostazioni/aspetto");
-    await page.waitForLoadState("networkidle");
+    await networkIdle(page);
     await appearance.getByRole("button", { name: "Italiano", exact: true }).click();
     await expect(page).toHaveURL(/\/app\/impostazioni\/aspetto$/u);
     await expect(page.locator("html")).toHaveAttribute("lang", "it");
@@ -944,7 +944,7 @@ test.describe("miglioramenti account e negozi", () => {
     }
     for (const opener of openers) await expect(opener).toBeEnabled();
     await expect(row).toBeVisible();
-    await page.waitForLoadState("networkidle");
+    await networkIdle(page);
     await page.setViewportSize({ width: 390, height: 844 });
     expect(await noPageOverflow(page)).toBe(true);
     await page.setViewportSize({ width: 1280, height: 900 });
@@ -955,7 +955,7 @@ test.describe("miglioramenti account e negozi", () => {
     await row.getByRole("button", { name: "Salva", exact: true }).click();
     const renamed = methods.getByRole("group", { name: new RegExp(renamedName) });
     await expect(renamed).toBeVisible();
-    await page.waitForLoadState("networkidle");
+    await networkIdle(page);
     await page.setViewportSize({ width: 390, height: 844 });
     expect(await noPageOverflow(page)).toBe(true);
     await renamed.getByRole("button", { name: "Rimuovi", exact: true }).click();
@@ -1053,7 +1053,7 @@ async function open(page: Page, path: string, scenario?: string) {
   await expect(
     page.getByRole("searchbox", { name: /Cerca ordini|Search orders/u, includeHidden: true }),
   ).toBeEnabled();
-  await page.waitForLoadState("networkidle");
+  await networkIdle(page);
   await page.evaluate(() => document.fonts.ready);
   const section = /\/impostazioni\/([^/?#]+)/u.exec(path)?.[1];
   if (section) {
@@ -1325,7 +1325,7 @@ for (const language of ["it", "en"] as const) {
       await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
       await page.reload();
       await expect(page.locator("html")).not.toHaveAttribute("data-theme", "dark");
-      await page.waitForLoadState("networkidle");
+      await networkIdle(page);
       if (width >= 768) {
         // L'indicatore nasce nel layout effect, poi il frame allinea la route ripristinata.
         await expect(page.locator('main nav li[aria-hidden="true"]')).toBeVisible();
@@ -1639,7 +1639,7 @@ for (const language of ["it", "en"] as const) {
       await page.emulateMedia({ reducedMotion: "reduce" });
       const prefix = language === "it" ? "" : "/en";
       await page.goto(`${prefix}/accesso`);
-      await page.waitForLoadState("networkidle");
+      await networkIdle(page);
       await expect(page).toHaveTitle(
         language === "it" ? "FiscalBay | Accedi" : "FiscalBay | Sign in",
       );
@@ -1875,7 +1875,7 @@ for (const language of ["it", "en"] as const) {
     });
     // La rilettura dopo l'ultima azione simulata si chiude prima di cambiare pagina: WebKit
     // segnala come errore della pagina una richiesta annullata dalla navigazione.
-    await page.waitForLoadState("networkidle");
+    await networkIdle(page);
 
     await open(page, `${prefix}/anteprima/impostazioni/profilo`);
     const profile = page.getByRole("region", { name: it ? "Profilo" : "Profile", exact: true });
@@ -1922,6 +1922,7 @@ for (const language of ["it", "en"] as const) {
         baseURL,
         viewport: { width: 1440, height: 900 },
       });
+      watchNetwork(context);
       const page = await context.newPage();
       const errors: string[] = [];
       page.on("pageerror", (error) => errors.push(error.message));
@@ -2118,6 +2119,7 @@ for (const language of ["it", "en"] as const) {
         viewport: { width, height: 844 },
         reducedMotion: "reduce",
       });
+      watchNetwork(context);
       const page = await context.newPage();
       const prefix = language === "it" ? "" : "/en";
       const title = language === "it" ? "Scegli una nuova password" : "Choose a new password";
@@ -2181,7 +2183,7 @@ for (const language of ["it", "en"] as const) {
           contentType: "image/png",
         });
         await backLink.click();
-        await page.waitForLoadState("networkidle");
+        await networkIdle(page);
         await expect(page).toHaveURL(new RegExp(`${prefix}/accesso$`));
         await expect(
           page.getByRole("tab", { name: language === "it" ? "Accedi" : "Sign in", exact: true }),
@@ -2589,6 +2591,7 @@ for (const locale of ["it", "en"] as const) {
       viewport: { width: 375, height: 667 },
       hasTouch: true,
     });
+    watchNetwork(context);
     const page = await context.newPage();
     try {
       await open(page, locale === "it" ? "/anteprima/ordini" : "/en/anteprima/ordini", "premium");
@@ -2907,7 +2910,7 @@ for (const language of ["it", "en"] as const) {
   }) => {
     const it = language === "it";
     await page.goto(it ? "/accesso" : "/en/accesso");
-    await page.waitForLoadState("networkidle");
+    await networkIdle(page);
     const signIn = page.getByRole("tabpanel", { name: it ? "Accedi" : "Sign in", exact: true });
     await signIn.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }).click();
     const email = signIn.getByRole("textbox", { name: "Email" });
@@ -3283,6 +3286,7 @@ test.describe("abbonamento nel piano", () => {
       await check(page);
       const preview = await browser.newContext({ baseURL });
       try {
+        watchNetwork(preview);
         const previewPage = await preview.newPage();
         await open(previewPage, `${prefix}/anteprima/negozi/neg-vintage`, "cambio-rinnovo");
         await check(previewPage);
@@ -3370,6 +3374,7 @@ test.describe("abbonamento nel piano", () => {
         // L'anteprima in un contesto proprio, anonimo e senza la sessione dell'area reale.
         const preview = await browser.newContext({ baseURL });
         try {
+          watchNetwork(preview);
           const previewPage = await preview.newPage();
           await open(previewPage, `${prefix}/anteprima/impostazioni/piano`, scenario);
           await check(previewPage, "preview");
