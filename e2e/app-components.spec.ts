@@ -3175,6 +3175,7 @@ test.describe("abbonamento nel piano", () => {
     { account: "pending", scenario: "pagamento-in-attivazione" },
     { account: "lapsed", scenario: "rinnovo-non-riuscito" },
     { account: "scheduled", scenario: "prova-con-abbonamento" },
+    { account: "scheduled-cancelled", scenario: "prova-con-abbonamento-disdetto" },
   ] as const;
 
   // Scollegare l'unico negozio con un abbonamento che si rinnova non lo disdice: lo dicono
@@ -3260,6 +3261,11 @@ test.describe("abbonamento nel piano", () => {
             text: it
               ? "Alla fine Premium continua con il primo addebito."
               : "When it ends, Premium continues with the first charge.",
+          },
+          // Disdetto durante la prova: nessun addebito e ritorno al Free alla fine.
+          "scheduled-cancelled": {
+            title: it ? "Prova Premium" : "Premium trial",
+            text: it ? "Premium mensile disdetto" : "Premium, monthly cancelled",
           },
         }[account];
         const check = async (target: Page, surface: "real" | "preview") => {

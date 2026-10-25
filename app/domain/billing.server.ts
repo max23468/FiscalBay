@@ -351,9 +351,16 @@ export async function subscriptionView(
   // Durante la prova un acquisto ancora da confermare resta visibile; un'altra copertura,
   // come una concessione, prevale.
   if (coverage && coverage.source !== "trial") return {};
-  // Scelto durante la prova: nessun incasso finché la prova non finisce.
+  // Scelto durante la prova: nessun incasso finché la prova non finisce; disdetto, nessuno.
   if (coverage?.source === "trial" && row.status === "trialing")
-    return { payment: { state: "scheduled", period: row.offer, chargeAt: row.current_period_end } };
+    return {
+      payment: {
+        state: "scheduled",
+        period: row.offer,
+        chargeAt: row.current_period_end,
+        ...(row.cancel_at_period_end ? { cancelled: true as const } : {}),
+      },
+    };
   if ((lapsedStatuses as readonly string[]).includes(row.status)) {
     const protectedUntil = Date.parse(row.current_period_start) + pricePromiseMs;
     return protectedUntil > now.getTime()

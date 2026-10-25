@@ -283,6 +283,13 @@ async function main() {
       pending: { status: "incomplete", start: -day, cancel: 0, paid: false },
       lapsed: { status: "past_due", start: -2 * day, cancel: 0, paid: false },
       scheduled: { status: "trialing", start: -day, cancel: 0, paid: false, trial: true },
+      "scheduled-cancelled": {
+        status: "trialing",
+        start: -day,
+        cancel: 1,
+        paid: false,
+        trial: true,
+      },
     };
     for (const [state, subscription] of Object.entries(subscriptions)) {
       const id = `subscription-${state}`;

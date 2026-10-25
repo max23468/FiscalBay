@@ -78,12 +78,12 @@ function TrialPlan({
           </p>
           {/* Con un abbonamento scelto la prova non riporta al Free: prosegue in Premium. */}
           <p className="text-sm text-muted-foreground">
-            {payment?.state === "scheduled"
+            {payment?.state === "scheduled" && !payment.cancelled
               ? t.settings.plan.trialAfterChosen
               : t.settings.plan.trialAfter}
           </p>
         </div>
-        {/* L'abbonamento scelto si disdice dal portale prima del primo addebito. */}
+        {/* L'abbonamento scelto si disdice dal portale prima del primo addebito e lì si riattiva. */}
         {billingPortal && payment?.state === "scheduled" ? <ManageBilling t={t} /> : null}
       </Group>
       <PurchaseOptions
@@ -337,6 +337,15 @@ function CheckoutReturn({
 }) {
   const zone = useTimeZone();
   const copy = t.settings.plan;
+  if (payment?.state === "scheduled" && payment.cancelled)
+    return (
+      <StatusAlert
+        tone="info"
+        title={copy.trialChosenCancelledTitle(copy.premiumPeriod[payment.period])}
+      >
+        {copy.trialChosenCancelledBody(formatDate(payment.chargeAt, language, "dateTime", zone))}
+      </StatusAlert>
+    );
   if (payment?.state === "scheduled")
     return (
       <StatusAlert tone="info" title={copy.trialChosenTitle(copy.premiumPeriod[payment.period])}>
