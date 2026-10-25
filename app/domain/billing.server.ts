@@ -143,8 +143,11 @@ async function eventTarget(
         limit: 1,
       }),
     );
+    // Managed Payments emette una fattura anche per il lifetime: senza abbonamento il pagamento
+    // si cerca nella sessione Checkout che l'ha incassato.
     const invoice = payments.data[0]?.invoice;
-    if (invoice) return eventTarget(stripe, "invoice.paid", idOf(invoice));
+    const subscription = invoice ? await eventTarget(stripe, "invoice.paid", idOf(invoice)) : null;
+    if (subscription) return subscription;
     const sessions = await stripeRead(() =>
       stripe.checkout.sessions.list({ payment_intent: intent, limit: 1 }),
     );
