@@ -7,6 +7,7 @@ import { ApplicationError, logFailure } from "../errors";
 import { isMissingObject, stripeRead } from "../integrations/stripe.server";
 import type { UpstreamError } from "../integrations/http.server";
 import { openSubscriptionStatuses, storeReadSql } from "./grants.server";
+import { paymentReversal, reversalStatements } from "./refunds.server";
 
 /**
  * Venti posti lifetime fra vendite e omaggi (D031). Il numero del posto è il vincolo atomico
@@ -41,6 +42,10 @@ const freeSlotSql = `WITH RECURSIVE n(slot) AS (SELECT 1 UNION ALL SELECT slot +
     WHERE slot < ${lifetimeSlots})`;
 const freeSlotWhere = "slot NOT IN (SELECT slot FROM lifetime_allocations)";
 
+/** Lifetime in vigore: un rimborso o una disputa persa lo revocano e il posto resta occupato. */
+const lifetimeInForceSql = (workspace: string) => `EXISTS (SELECT 1 FROM workspace_entitlements e
+  WHERE e.workspace_id = ${workspace} AND e.source = 'lifetime' AND e.revoked_at IS NULL)`;
+
 /**
  * Netto del listino per una periodicità della generazione dell'abbonamento. Null per una
  * generazione che il catalogo non conosce: quando ne arriva una nuova, quella precedente
@@ -67,8 +72,11 @@ type LifetimeContext = {
   offer: LifetimeOffer | null;
   /** Posto dello spazio già prenotato da una sessione precedente, non ancora completata. */
   reservation: { slot: number; reference: string | null } | null;
-  /** Abbonamento che il lifetime sostituisce, con il rinnovo se ancora previsto. */
-  subscription: { customerId: string; renewsAt: string | null } | null;
+  /**
+   * Abbonamento che il lifetime sostituisce, con il rinnovo se ancora previsto e il cliente
+   * Stripe, salvo dopo la cancellazione dei suoi dati finanziari.
+   */
+  subscription: { customerId: string | null; renewsAt: string | null } | null;
 };
 
 /**
@@ -104,7 +112,9 @@ export async function lifetimeContext(
   if (!workspace) return null;
   const [subscription, paid] = await db.batch<Record<string, unknown>>([
     db
-      .prepare(`SELECT customer_id, status, offer, price_generation, current_period_end,
+      .prepare(`SELECT CASE WHEN EXISTS (SELECT 1 FROM stripe_customer_erasures r
+            WHERE r.customer_id = stripe_subscriptions.customer_id) THEN NULL
+          ELSE customer_id END AS customer_id, status, offer, price_generation, current_period_end,
           cancel_at_period_end, status IN (${sqlList(openSubscriptionStatuses)}) AS open
         FROM stripe_subscriptions WHERE workspace_id = ?1 AND environment = ?2
           AND unavailable_at IS NULL
@@ -120,7 +130,7 @@ export async function lifetimeContext(
   ]);
   const row = subscription!.results[0] as
     | {
-        customer_id: string;
+        customer_id: string | null;
         status: string;
         offer: "monthly" | "annual";
         price_generation: string;
@@ -263,7 +273,8 @@ export function isLifetimeSession(session: Stripe.Checkout.Session) {
  * con il pagamento in conferma: il posto resta. Scaduta, o con il pagamento asincrono fallito:
  * il posto si libera. Ripetuta produce lo stesso risultato; un pagamento confermato senza
  * posto, dopo una liberazione, occupa il primo libero o, a posti finiti, si segnala senza
- * attribuire il diritto né rimborsare.
+ * attribuire il diritto né rimborsare. Un rimborso totale o una disputa persa revocano il
+ * diritto e il posto resta occupato.
  */
 export async function reconcileLifetime(
   env: Env,
@@ -324,6 +335,7 @@ export async function reconcileLifetime(
   }
   const charge =
     intent?.latest_charge && typeof intent.latest_charge !== "string" ? intent.latest_charge : null;
+  const reversal = charge ? await paymentReversal(stripe, charge) : null;
   const paidAt = new Date((charge?.created ?? session.created) * 1000).toISOString();
   const customer = session.customer
     ? typeof session.customer === "string"
@@ -356,18 +368,22 @@ export async function reconcileLifetime(
       intent?.amount_received ?? session.amount_total ?? 0,
       intent?.currency ?? session.currency ?? "eur",
     ),
+    ...(reversal
+      ? reversalStatements(env.DB, "stripe_checkout_session_id", session.id, reversal, at)
+      : []),
   ]);
   const granted = await env.DB.prepare(
-    "SELECT 1 FROM workspace_entitlements WHERE stripe_checkout_session_id = ?",
+    "SELECT revoked_at FROM workspace_entitlements WHERE stripe_checkout_session_id = ?",
   )
     .bind(session.id)
-    .first();
+    .first<{ revoked_at: string | null }>();
   if (!granted) {
     // Incasso senza posto: lo gestisce l'assistenza, il tetto non cambia.
     logFailure({ error: new UnknownLifetimeSession("lifetime_unallocated"), operation: "billing" });
     return;
   }
-  await endReplacedSubscriptions(env, stripe, workspaceId, now);
+  // Rimborsato prima dell'attivazione: l'abbonamento sostituito resta quello in vigore.
+  if (!granted.revoked_at) await endReplacedSubscriptions(env, stripe, workspaceId, now);
 }
 
 /**
@@ -406,15 +422,19 @@ export async function endReplacedSubscriptions(
   );
 }
 
+/** Lifetime venduti riletti per turno, ognuno una volta al giorno. */
+const lifetimeChecks = 5;
+
 /**
  * Passo del cron per i posti: prenotazioni scadute o in attesa di un pagamento asincrono si
  * rileggono da Stripe; una prenotazione mai legata a una sessione si libera alla scadenza; un
- * lifetime con un abbonamento ancora aperto lo chiude. Ogni elemento registra il proprio
- * errore senza fermare gli altri.
+ * lifetime in vigore con un abbonamento ancora aperto lo chiude; un lifetime venduto e non
+ * revocato si rilegge una volta al giorno, per un rimborso o una disputa di cui il webhook non
+ * è arrivato. Ogni elemento registra il proprio errore senza fermare gli altri.
  */
 export async function reconcileLifetimeReservations(env: Env, stripe: Stripe, now = new Date()) {
   const at = now.toISOString();
-  const [, due, replaced] = await env.DB.batch<Record<string, string>>([
+  const [, due, replaced, sold] = await env.DB.batch<Record<string, string>>([
     env.DB.prepare(`DELETE FROM lifetime_allocations WHERE status = 'reserved'
         AND provider_reference IS NULL AND julianday(expires_at) <= julianday(?)`).bind(at),
     env.DB.prepare(`SELECT provider_reference FROM lifetime_allocations
@@ -424,7 +444,17 @@ export async function reconcileLifetimeReservations(env: Env, stripe: Stripe, no
     env.DB.prepare(`SELECT DISTINCT a.workspace_id
         FROM lifetime_allocations a JOIN stripe_subscriptions s ON s.workspace_id = a.workspace_id
         WHERE a.status = 'active' AND s.environment = ?1 AND s.unavailable_at IS NULL
-          AND s.status IN (${sqlList(openSubscriptionStatuses)})`).bind(environmentOf(env)),
+          AND s.status IN (${sqlList(openSubscriptionStatuses)})
+          AND ${lifetimeInForceSql("a.workspace_id")}`).bind(environmentOf(env)),
+    env.DB.prepare(`UPDATE lifetime_allocations SET checked_at = ?1 WHERE slot IN (
+        SELECT a.slot FROM lifetime_allocations a
+        WHERE a.status = 'active' AND a.kind = 'sale'
+          AND (a.checked_at IS NULL OR julianday(a.checked_at) <= julianday(?1, '-1 day'))
+          AND EXISTS (SELECT 1 FROM workspace_entitlements e
+            WHERE e.stripe_checkout_session_id = a.provider_reference AND e.revoked_at IS NULL)
+        ORDER BY a.checked_at IS NOT NULL, julianday(a.checked_at), a.slot
+        LIMIT ${lifetimeChecks})
+      RETURNING provider_reference`).bind(at),
   ]);
   const logged = (step: () => Promise<unknown>) => () =>
     step().catch((error: unknown) => logFailure({ error, operation: "billing" }));
@@ -434,6 +464,9 @@ export async function reconcileLifetimeReservations(env: Env, stripe: Stripe, no
     ),
     ...replaced!.results.map(({ workspace_id }) =>
       logged(() => endReplacedSubscriptions(env, stripe, workspace_id!, now)),
+    ),
+    ...sold!.results.map(({ provider_reference }) =>
+      logged(() => reconcileLifetime(env, stripe, provider_reference!, now)),
     ),
   ]);
 }

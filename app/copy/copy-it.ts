@@ -537,6 +537,13 @@ export const it = {
       grantEnds: (date: string) => `Premium concesso fino al ${date}.`,
       premiumRenews: (date: string) => `Si rinnova il ${date}.`,
       premiumEnds: (date: string) => `Rinnovo disdetto: Premium resta attivo fino al ${date}.`,
+      refundedTitle: "Pagamento rimborsato",
+      refundedBody: (renewsAt: string | null) =>
+        renewsAt
+          ? `Il pagamento del periodo in corso è stato rimborsato e sei nel piano Free. Premium riprende con il rinnovo del ${renewsAt}.`
+          : "Il pagamento del periodo in corso è stato rimborsato e sei di nuovo nel piano Free.",
+      lifetimeRefundedBody:
+        "Il pagamento di Premium a vita è stato rimborsato e sei di nuovo nel piano Free.",
       renewalFailedTitle: "Rinnovo non riuscito",
       renewalFailedBody: (date: string) =>
         `Sei di nuovo nel piano Free. Completa il pagamento richiesto da Stripe entro il ${date} per mantenere il tuo prezzo.`,

@@ -563,6 +563,7 @@ test.describe("abbonamento nel piano", () => {
     { account: "lapsed", scenario: "rinnovo-non-riuscito" },
     { account: "scheduled", scenario: "prova-con-abbonamento" },
     { account: "scheduled-cancelled", scenario: "prova-con-abbonamento-disdetto" },
+    { account: "refunded", scenario: "pagamento-rimborsato" },
   ] as const;
 
   // Negli stati in attesa anche gli Ordini non propongono la prova.
@@ -611,6 +612,13 @@ test.describe("abbonamento nel piano", () => {
               title: it ? "Prova Premium" : "Premium trial",
               text: it ? "Premium mensile disdetto" : "Premium, monthly cancelled",
             },
+            // Periodo rimborsato: Free subito, Premium torna con il rinnovo.
+            refunded: {
+              title: "Free",
+              text: it
+                ? "Premium riprende con il rinnovo del"
+                : "Premium resumes with the renewal on",
+            },
           }[account];
           const check = async (target: Page, surface: "real" | "preview") => {
             const section = target.getByRole("region", {
@@ -637,7 +645,7 @@ test.describe("abbonamento nel piano", () => {
           await useLocalAccount(context, "member", baseURL!, `subscription-${account}`);
           await page.goto(`${prefix}/app/impostazioni/piano`);
           await check(page, "real");
-          if (account === "pending" || account === "lapsed") {
+          if (account === "pending" || account === "lapsed" || account === "refunded") {
             await page.goto(`${prefix}/app/ordini`);
             await expect(
               page.getByRole("button", { name: it ? "Attiva la prova" : "Start trial" }),
@@ -655,4 +663,51 @@ test.describe("abbonamento nel piano", () => {
           }
         });
   });
+
+  // Il lifetime rimborsato riporta al Free: il posto resta occupato e non torna in vendita
+  // allo spazio, mentre mensile e annuale sì.
+  for (const language of ["it", "en"] as const)
+    test(`area reale e anteprima spiegano il lifetime rimborsato, ${language}`, async ({
+      page,
+      context,
+      browser,
+      baseURL,
+    }) => {
+      const it = language === "it";
+      const prefix = it ? "" : "/en";
+      const check = async (target: Page, surface: "real" | "preview") => {
+        const section = target.getByRole("region", {
+          name: it ? "Piano e pagamenti" : "Plan and billing",
+        });
+        await expect(section.getByText("Free", { exact: true })).toBeVisible();
+        await expect(section).toContainText(
+          it
+            ? "Il pagamento di Premium a vita è stato rimborsato"
+            : "The lifetime Premium payment was refunded",
+        );
+        await expect(
+          section.getByRole("button", { name: it ? "Scegli a vita" : "Choose lifetime" }),
+        ).toHaveCount(0);
+        // In locale l'area reale non ha la chiave Stripe e non mostra acquisti.
+        if (surface === "preview")
+          await expect(
+            section.getByRole("button", { name: it ? "Scegli mensile" : "Choose monthly" }),
+          ).toBeVisible();
+        await section.screenshot({
+          path: test.info().outputPath(`lifetime-refunded-${surface}-${language}.png`),
+        });
+      };
+      await useLocalAccount(context, "member", baseURL!, "lifetime-refunded");
+      await page.goto(`${prefix}/app/impostazioni/piano`);
+      await check(page, "real");
+      const preview = await browser.newContext({ baseURL });
+      try {
+        watchNetwork(preview);
+        const previewPage = await preview.newPage();
+        await open(previewPage, `${prefix}/anteprima/impostazioni/piano`, "lifetime-rimborsato");
+        await check(previewPage, "preview");
+      } finally {
+        await preview.close();
+      }
+    });
 });
