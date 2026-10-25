@@ -42,7 +42,7 @@ Specifica canonica del prodotto e dei criteri di accettazione. Le decisioni sono
 - [30. Privacy, conservazione, cancellazione e licenze](#s30)
 - [31. Osservabilità, metriche e supporto operativo](#s31)
 - [32. Recovery, incidenti e continuità](#s32)
-- [33. Codex, plugin, MCP, skill e strumenti](#s33)
+- [33. Agenti, plugin, MCP, skill e strumenti](#s33)
 - [34. Git, CI/CD, versioning, Pubblica e Promuovi](#s34)
 - [35. Strategia di test e criteri osservabili](#s35)
 - [36. Gate di qualificazione e criteri di arresto](#s36)
@@ -64,7 +64,7 @@ Per il prodotto prevale l’ultima decisione esplicita dell’owner, da riportar
 
 ### 0.2 Autonomia e checkpoint
 
-Codex decide i dettagli tecnici reversibili ed esegue le attività previste nel mandato, incluse operazioni Production autorizzate, senza chiedere consenso per ogni comando. Non introduce autonomamente nuovi costi/provider o cambi sostanziali di prodotto, diritti, privacy e UX. Rispetta conferme imposte dagli strumenti e non modifica risorse di altri progetti perché accessibili nello stesso account. Paddle si attiva solo su decisione di Matteo.
+L'agente decide i dettagli tecnici reversibili ed esegue le attività previste nel mandato, incluse operazioni Production autorizzate, senza chiedere consenso per ogni comando. Non introduce autonomamente nuovi costi/provider o cambi sostanziali di prodotto, diritti, privacy e UX. Rispetta conferme imposte dagli strumenti e non modifica risorse di altri progetti perché accessibili nello stesso account. Paddle si attiva solo su decisione di Matteo.
 
 | Checkpoint dell’owner | Decisione |
 |---|---|
@@ -107,7 +107,7 @@ Una prova breve, un test o il log CI pertinenti possono bastare: non serve una r
 
 ### 0.5 Avvio e continuità
 
-La procedura di adozione e ripresa è unica nel [README](../README.md#avvio). Allineare le istruzioni 1.x e verificare i trigger legacy nell'inventario iniziale, senza alterare istruzioni globali o lavoro altrui. La roadmap conserva avanzamento, task per milestone e pendenze utili alla ripresa; Git conserva la storia. Non creare un archivio del vecchio tracker, un diario o uno stato concorrente.
+Avvio e ripresa sono nel [README](../README.md#avvio); la procedura di adozione iniziale è [archiviata](archive/2026-09-adozione-2.0.md). Allineare le istruzioni 1.x e verificare i trigger legacy nell'inventario iniziale, senza alterare istruzioni globali o lavoro altrui. La roadmap conserva avanzamento, task per milestone e pendenze utili alla ripresa; Git conserva la storia. Non creare un archivio del vecchio tracker, un diario o uno stato concorrente.
 
 Accessi, dati legali, destinatario del test e date promo si acquisiscono secondo il [catalogo input](engineering/AGENT_SETUP.md#input). Non occorre ricostruire le decisioni dalla chat; una credenziale mancante blocca soltanto il lavoro dipendente. Le [responsabilità documentali](engineering/AGENT_SETUP.md#deliverable) indicano dove mantenere le informazioni prodotte nello sviluppo, senza imporre file anticipati.
 
@@ -904,9 +904,9 @@ Il solo adempimento richiesto è **un drill conclusivo riuscito** sul candidato 
 Per incidenti con dati personali, il runbook individua anche ruoli, destinatari e termini di comunicazione imposti dai contratti/norme applicabili. L’obiettivo RTO24h e l’assenza di SLA pubblico non sostituiscono tali adempimenti.
 
 <a id="s33"></a>
-## 33. Codex, plugin, MCP, skill e strumenti
+## 33. Agenti, plugin, MCP, skill e strumenti
 
-Configurare CLI, MCP e skill necessari alla fase tramite [AGENT_SETUP.md](engineering/AGENT_SETUP.md). La scelta di un servizio non prova che il relativo tool sia già connesso nell’ambiente Codex corrente.
+Configurare CLI, MCP e skill necessari alla fase tramite [AGENT_SETUP.md](engineering/AGENT_SETUP.md). La scelta di un servizio non prova che il relativo tool sia già connesso nell’ambiente corrente dell'agente (Claude Code sul Mac, sessione cloud o thread del progetto Claude).
 
 Tool di consultazione: fonte affidabile, configurazione, permessi minimi e prova di lettura. Tool con accesso a dati o scritture: target e ambienti espliciti, custodia, isolamento, prova pertinente e revoca. CLI e MCP sullo stesso servizio non richiedono due qualificazioni funzionali complete; si verificano i loro accessi e si riusano le prove del contratto.
 
@@ -945,7 +945,7 @@ Versioni interne `2.0.0-alpha.N`→`2.0.0-rc.N`→`2.0.0`. Non significano beta 
 
 Migrazioni versionate, testate su schema/dati rappresentativi, forward-only dove sensato, approccio expand/contract se serve compatibilità. Release manifest collega codice, schema, config e artifact immutabile. Rollback codice automatico se sicuro, altrimenti forward-fix; recovery dati separato. Nessun comando di pubblicazione deve contenere token/PII nelle evidenze.
 
-L'avanzamento segue milestone e task della roadmap (§37), con prove proporzionate e limiti espliciti. Non duplicare output grezzi né creare un diario delle sessioni. Codex preserva modifiche dell'owner e worktree non propri.
+L'avanzamento segue milestone e task della roadmap (§37), con prove proporzionate e limiti espliciti. Non duplicare output grezzi né creare un diario delle sessioni. L'agente preserva modifiche dell'owner e worktree non propri.
 
 **Pubblicazione riprendibile e provenienza dell’artefatto.** Legare il via a commit e release manifest attesi. Serializzare le pubblicazioni per ambiente; un workflow più vecchio non deve sovrascrivere uno successivo. Promuovere lo stesso artefatto verificato quando il provider lo consente; se serve una ricostruzione specifica Production, registrare gli input immutabili e verificarne l’artefatto, non chiamarlo automaticamente «lo stesso build testato».
 
@@ -1081,11 +1081,10 @@ Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o
 | Ambito | Pendenza e condizione di chiusura |
 |---|---|
 | Dipendenze dei tool | `braces` 3.0.3 arriva da shadcn tramite `fast-glob` e `micromatch`, soltanto nello sviluppo. L'[avviso GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) segnala esaurimento dello stack con pattern annidati e non indica una versione corretta. Chiudere con una release corretta e qualificata della catena; non sopprimere l'avviso nell'audit. `vitest` e `@vitest/coverage-istanbul` restano a 5.0.3: con 5.0.4 e 5.0.5 il dry-run di Stryker sul pool Cloudflare termina il worker e nessuna partizione mutation di quei file produce un report. Aggiornarli soltanto a una versione che superi la mutation di un file Cloudflare. |
-| Distribuzione delle correzioni finali M3 | Pubblicazione sul test autorizzata dall'owner il 18 ottobre 2026. Il ciclo della PR applica la migration additiva `0027_scheduled_task_claims.sql` e riconcilia artefatto, schema, consumer e dettaglio Ordini; ricevuta e readback attestano l'esito. Nessuna di queste prove sostituisce il manifest merchant di M8. |
 | Integrazione dell'anteprima nell'app reale | D176/D179: [M4](#m4) integra interfaccia e preferenze, con il vocabolario del [§9](#s09) già comune agli Ordini ([M4-01](#m4-01)); [M5](#m5)/[M6](#m6) completano servizi e stati pertinenti. Ogni task verifica i percorsi reali secondo [§35](#s35). [M7-08](#m7-08) chiude integrazione, copertura e rimozione del codice superfluo prima della RC, mantenendo scenari grafici sul test ed esclusione dalla Production. |
 | Pagina Ordini reale | Gli ordini rimasti senza esito fiscale dopo la rilettura della migration `0028_order_tax_recheck.sql` risultano letture da riprovare. |
 | Qualifica del ciclo | D172 integrata con [#337](https://github.com/max23468/FiscalBay/pull/337): controllo della base, automerge, riuso dell'artefatto fra PR e merge, deploy test e readback provider qualificati. La prima qualifica senza promozione su `develop` ha superato le due build e le otto partizioni browser, ma ha bloccato la certificazione per superstiti e timeout mutation; con D173 un test bloccato da un mutante cade sul timeout di Vitest prima di quello di Stryker, che dipendeva dal carico. Completare il collaudo delle correzioni di copertura e del runner Cloudflare, poi verificare certificazione `candidate-<tree>`, riuso delle ricevute e ripresa sullo stesso candidato. [M7-06](#m7-06) e i checkpoint Production restano aperti. |
-| CI alleggerita | D190: la prima run della PR prova i job browser nel container ufficiale di Playwright, non riproducibile in locale. Con `develop` branch predefinito ([D200](DECISION_REGISTER.md)) la campagna mutation settimanale e l'avvio manuale partono senza attendere il primo `Promuovi`. Chiudere con la prima run browser verde nel container e la prima campagna settimanale riuscita. |
+| CI alleggerita | D190: i job browser nel container ufficiale di Playwright sono verdi dalla [run del 2026-10-25](https://github.com/max23468/FiscalBay/actions/runs/40199642453). Con `develop` branch predefinito ([D200](DECISION_REGISTER.md)) la campagna mutation settimanale e l'avvio manuale partono senza attendere il primo `Promuovi`. L'ultima campagna, del [2026-10-24](https://github.com/max23468/FiscalBay/actions/runs/40102026330), è fallita per mutanti sopravvissuti o in timeout in `grants.server.ts`, `orders.server.ts`, `order-sync.server.ts` e `webhooks.server.ts`. Chiudere con la prima campagna settimanale riuscita. |
 | Configurazione Stripe | Sandbox del test (2026-10-24): listino unico con i prezzi duplicati della copia iniziale archiviati, impostazioni fiscali predefinite nette con il codice del prodotto, portale clienti con disdetta a fine periodo, senza cambio piano immediato con conguaglio contrario al [§6.2](#s06) e con termini, privacy e ritorno del test. Restano dalla dashboard, nella sandbox: sito, email e telefono di assistenza ancora sui valori fittizi di Stripe e indirizzi di termini e privacy del checkout. Account live, letto senza modifiche: prodotto e tre prezzi conformi, metodi di Managed Payments limitati a carta, Link, Apple Pay e Google Pay, nessun webhook; nel profilo pubblico dell'account nome commerciale, sito e contatti di assistenza sono vuoti e il checkout ricavava altrove il nome «Temisfera»; per [M5-12](#m5-12) servono nome pubblico «FiscalBay», sito e contatti di assistenza con `supporto@fiscalbay.it`, impostazioni fiscali predefinite nette, termini, privacy e ritorno nel portale e la verifica dei dati della sede fiscale che possono comparire nei documenti. Il prodotto e i prezzi una tantum del primo periodo usati prima di D194 sono archiviati. Nella sandbox Smart Retries riprova entro una settimana e poi annulla l'abbonamento; per il live servono gli stessi tentativi, l'endpoint webhook e una chiave con limitazioni al posto della chiave segreta standard usata dal test. |
 | Ingresso webhook | [M3-11](#m3-11) qualificato sul test. Sottoscrivere `ORDER_CONFIRMATION` di un negozio Production soltanto con il test merchant. Stripe attivo sul test con [M5-05](#m5-05); l'endpoint live e il suo segreto si configurano con [M5-12](#m5-12). Telegram attivo sul test con [M5-09](#m5-09); il bot Production `fiscalbay_bot` riceve token, segreto e webhook soltanto nel mandato Production e a 1.x spenta, perché la 1.x legge il bot con il long polling e cancella il webhook a ogni avvio. |
 | Pubblicazione | Percorsi `cf` qualificati sul provider test: migration su D1 temporanea in UE con errore e ripresa, ripresa senza ricevuta e fra tentativi CI, rollback compatibile e ripristino del candidato secondo [RELEASE](engineering/RELEASE.md#qualifica-sul-provider-test). Prove e collaudo remoto nella [run di #335](https://github.com/max23468/FiscalBay/actions/runs/38357985449/attempts/2). Le nuove migration sui dati applicativi si collaudano nella PR che le introduce; il recovery dei dati resta distinto. Modalità `prova` del workflow Production ancora da eseguire sul candidato autorizzato; creare `CHANGELOG.md` prima della pubblicazione reale. Il riuso mutation è stato osservato in [#298](https://github.com/max23468/FiscalBay/pull/298); resta la riconciliazione del deploy successivo. |
@@ -1126,7 +1125,7 @@ Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o
 
 **Stato:** Completato · **Prerequisiti:** Avvio autorizzato · **Contratto:** [§0](#s00) · [§2](#s02) · [§34](#s34)
 
-Seguire [README](../README.md#avvio), verificare l’integrità iniziale e le istruzioni/automazioni pertinenti (AGENTS, README, workflow, main, autodeploy e keyset condivisi); individuare cosa deve essere dismesso/allineato senza spostare gli altri progetti.
+Seguire la [procedura di adozione](archive/2026-09-adozione-2.0.md), verificare l’integrità iniziale e le istruzioni/automazioni pertinenti (AGENTS, README, workflow, main, autodeploy e keyset condivisi); individuare cosa deve essere dismesso/allineato senza spostare gli altri progetti.
 
 **Criterio di completamento:** Adozione locale e istruzioni 2.0 verificate; inventario dei trigger e regola di blocco per ogni effetto remoto non ancora qualificato. Questo chiude il prerequisito delle attività locali indipendenti, non autorizza push/merge: prima di quei passaggi occorre attestare che le automazioni legacy non possano attivare il vecchio deploy. Un accesso remoto mancante resta un blocco circoscritto registrato nelle questioni aperte, senza dichiarare dismessa la 1.x. Nessun checkpoint owner aggiuntivo.
 
@@ -2603,21 +2602,21 @@ La rilettura operativa include le protezioni della zona di §24 e M7-12 sul domi
 
 | Rischio prioritario | Trigger / rilevazione | Mitigazione / prova richiesta | Responsabile |
 |---|---|---|---|
-| Cambi/quote API eBay | 429, deprecazioni, fonte fiscale diversa | G-EBAY, quota condivisa, adapter/test, riconciliazione; stop polling interessato | Codex tecnico, owner eccezioni |
-| Dato fiscale assente/mascherato | Copertura per età/stato non uniforme | Matrice campo/fonte, claim prudenti, stati non ambigui | Codex/prodotto |
-| Isolamento tenant/CF locked | Accesso a ID o inferenza tramite search/export | Test negativi server/DB/cache, P1 e containment | Codex/owner |
-| Billing/entitlement divergenti | Webhook perso, refund/periodo errati | Reconciliation, grant separati, esempi calendario/test clock | Codex/Stripe |
+| Cambi/quote API eBay | 429, deprecazioni, fonte fiscale diversa | G-EBAY, quota condivisa, adapter/test, riconciliazione; stop polling interessato | Agente tecnico, owner eccezioni |
+| Dato fiscale assente/mascherato | Copertura per età/stato non uniforme | Matrice campo/fonte, claim prudenti, stati non ambigui | Agente/prodotto |
+| Isolamento tenant/CF locked | Accesso a ID o inferenza tramite search/export | Test negativi server/DB/cache, P1 e containment | Agente/owner |
+| Billing/entitlement divergenti | Webhook perso, refund/periodo errati | Reconciliation, grant separati, esempi calendario/test clock | Agente/Stripe |
 | Costi/saturazione free tier | Limiti per richiesta/account/test vicini | Capacità residua e margine; alert/ammissione; costo nuovo approvato | Owner |
-| Auth sperimentale/identity linking | API instabile, claim email debole | Quattro login qualificati e recovery; no doppio Auth improvvisato | Codex/owner |
-| Backup nativo insufficiente | Stato critico non ripristinabile | G-RECOVERY e drill unico reale; combinazione non qualificata esclusa | Codex/owner |
+| Auth sperimentale/identity linking | API instabile, claim email debole | Quattro login qualificati e recovery; no doppio Auth improvvisato | Agente/owner |
+| Backup nativo insufficiente | Stato critico non ripristinabile | G-RECOVERY e drill unico reale; combinazione non qualificata esclusa | Agente/owner |
 | Abuso Free/trial | Multi-account ripetuti, reset apparenti | Segnali minimizzati e revisione, nessun blocco da solo IP | Owner/admin |
 | Lifetime oneroso | Troppe concessioni/costi di lungo periodo | Tetto20 atomico inclusi omaggi, modello cassa/ricorrenza distinto | Owner |
-| Cancellazione incompleta | Reimport/job/restore ripristinano dati | Tombstone e sweep, invalidazione suggerimenti/export, test ripristino | Codex |
+| Cancellazione incompleta | Reimport/job/restore ripristinano dati | Tombstone e sweep, invalidazione suggerimenti/export, test ripristino | Agente |
 | Token o segreti compromessi | Alert/log/supply chain | Secret store/rotazione, scope minimi, P1 e revoca mirata | Owner/Codex |
-| Shared resources danneggiate | Modifica keyset/DNS/quote altrui | Manifest target e isolamento, no cleanup indiscriminato 1.x | Codex |
+| Shared resources danneggiate | Modifica keyset/DNS/quote altrui | Manifest target e isolamento, no cleanup indiscriminato 1.x | Agente |
 | Fiscalità vendite non coperta | Checkout fuori copertura MoR | G-STRIPE/LEGAL, restrizione acquisto coerente, no fallback Payments | Owner |
 | Pubblico confonde FB con eBay/fatturazione | Copy/logo ambigui | Gate marchi/disclaimer, no promesse emissione fatture | Owner |
-| Tool AI esfiltra o esegue contenuti | Istruzioni in payload/tool result | Context autorizzato, dati come input non comandi, target/permessi | Codex |
+| Tool AI esfiltra o esegue contenuti | Istruzioni in payload/tool result | Context autorizzato, dati come input non comandi, target/permessi | Agente |
 
 Ogni rischio chiuso collega prova o decisione di accettazione; nessuna tabella rischi compilata vale come mitigazione effettuata. Budget e consumi reali si registrano privatamente. Nessun incidente obbliga a cambiare provider senza decisione owner.
 
