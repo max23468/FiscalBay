@@ -3,7 +3,11 @@ import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-import { deliverTelegram, localClock } from "../app/domain/telegram-deliveries.server";
+import {
+  deliverTelegram,
+  localClock,
+  zonedInstant,
+} from "../app/domain/telegram-deliveries.server";
 import { escape, splitBlocks } from "../app/domain/telegram-messages.server";
 import {
   consumeTelegramStart,
@@ -1097,6 +1101,144 @@ describe("invii degli ordini", () => {
     await run(api.fetcher, 30);
     expect(sentTexts(api)).toEqual([expect.stringContaining("Importazione completata")]);
     expect(sentTexts(api)[0]).toContain("Un ordine acquisito, 1 con dato fiscale.");
+    expect(keyboard(api.texts()[0]!)).toEqual([
+      [{ text: "Apri gli ordini", url: `${origin}/app/ordini?negozio=${seller.store}` }],
+    ]);
+  });
+
+  it("una variazione scritta dopo la valutazione da una lettura partita prima non va persa", async () => {
+    const seller = await linked("lettura");
+    await order(seller.store, "o-lettura");
+    const api = bot();
+    await run(api.fetcher, 10);
+    // La lettura è partita a 8 e registra quell'istante, ma scrive dopo la valutazione delle 10.
+    await insertTaxIdentifiers({
+      id: "t-lettura",
+      orderId: "o-lettura",
+      type: "CODICE_FISCALE",
+      value: "BNCLGU80A01H501Z",
+      source: "ebay_trading_get_orders",
+      observedAt: later(8).toISOString(),
+    }).run();
+    await run(api.fetcher, 20);
+    expect(sentTexts(api)).toEqual([expect.stringContaining("<code>BNCLGU80A01H501Z</code>")]);
+    // La rivalutazione dello stesso dato non ripete l'evento.
+    await run(api.fetcher, 30);
+    expect(api.texts()).toHaveLength(1);
+  });
+
+  it("il riepilogo raccoglie gli eventi fino all'orario; quelli successivi vanno al giorno dopo", async () => {
+    const seller = await linked("orario");
+    await saveTelegramChange(env.DB, seller.userId, { name: "mode", value: "digest" }, "UTC");
+    await saveTelegramChange(env.DB, seller.userId, { name: "digestTime", value: "21:00" }, "UTC");
+    // Un ordine delle 20:50 valutato soltanto alle 22, dopo un'interruzione, entra nel riepilogo.
+    await order(seller.store, "o-prima", { cf: "RSSMRA80A01H501U", created: 45, listed: 50 });
+    const api = bot();
+    await run(api.fetcher, 120);
+    expect(sentTexts(api)).toEqual([expect.stringContaining("ebay-o-prima")]);
+    expect(keyboard(api.texts()[0]!)).toEqual([
+      [{ text: "Apri gli ordini", url: `${origin}/app/ordini?periodo=7` }],
+    ]);
+    // Un ordine dopo l'orario non fa partire un secondo riepilogo, né uno tardivo.
+    await order(seller.store, "o-dopo-orario", {
+      cf: "BNCLGU80A01H501Z",
+      created: 125,
+      listed: 130,
+    });
+    await run(api.fetcher, 140);
+    expect(api.texts()).toHaveLength(1);
+    await run(api.fetcher, 24 * 60 + 65);
+    expect(sentTexts(api).slice(1)).toEqual([expect.stringContaining("ebay-o-dopo-orario")]);
+  });
+
+  it("senza eventi all'orario nessun riepilogo tardivo nello stesso giorno", async () => {
+    const seller = await linked("tardivo");
+    await saveTelegramChange(env.DB, seller.userId, { name: "mode", value: "digest" }, "UTC");
+    await saveTelegramChange(env.DB, seller.userId, { name: "digestTime", value: "21:00" }, "UTC");
+    const api = bot();
+    await run(api.fetcher, 65);
+    await order(seller.store, "o-tardivo", { cf: "RSSMRA80A01H501U", created: 75, listed: 80 });
+    await run(api.fetcher, 90);
+    await run(api.fetcher, 3 * 60);
+    expect(api.texts()).toHaveLength(0);
+    await run(api.fetcher, 24 * 60 + 65);
+    expect(sentTexts(api)).toEqual([expect.stringContaining("ebay-o-tardivo")]);
+  });
+
+  it("dopo un'interruzione riprende dalla parte successiva e aspetta il lease di chi si è fermato", async () => {
+    const seller = await linked("parti");
+    await saveTelegramChange(env.DB, seller.userId, { name: "mode", value: "digest" }, "UTC");
+    await saveTelegramChange(env.DB, seller.userId, { name: "digestTime", value: "21:00" }, "UTC");
+    const ids = Array.from(
+      { length: 40 },
+      (_, index) => `o-parti-${String(index).padStart(2, "0")}`,
+    );
+    for (const [index, id] of ids.entries())
+      await order(seller.store, id, {
+        cf: "RSSMRA80A01H501U",
+        created: 1 + index / 10,
+        listed: 2 + index / 10,
+      });
+    let sends = 0;
+    const broken = bot((call) => {
+      if (call.method === "sendMessage" && ++sends === 2) throw new TypeError("rete");
+      return undefined;
+    });
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await run(broken.fetcher, 70);
+    } finally {
+      errors.mockRestore();
+    }
+    expect(
+      await env.DB.prepare(
+        "SELECT parts_sent, attempts FROM telegram_deliveries WHERE kind = 'digest'",
+      ).first(),
+    ).toEqual({ parts_sent: 1, attempts: 1 });
+    // Un altro esecutore ha preso la consegna e si è fermato: fino alla scadenza del lease non parte.
+    await env.DB.prepare(
+      "UPDATE telegram_deliveries SET lease = 'fermo', locked_until = ? WHERE kind = 'digest'",
+    )
+      .bind(later(80).toISOString())
+      .run();
+    const api = bot();
+    await run(api.fetcher, 75);
+    expect(api.texts()).toHaveLength(0);
+    await run(api.fetcher, 85);
+    await run(api.fetcher, 95);
+    // Ogni ordine compare una volta sola fra la parte consegnata e quelle riprese.
+    const parts = [sentTexts(broken)[0]!, ...sentTexts(api)];
+    expect(parts.length).toBeGreaterThan(1);
+    for (const id of ids)
+      expect(parts.filter((part) => part.includes(`ebay-${id}\n`))).toHaveLength(1);
+    expect(keyboard(api.texts().at(-1)!)).toEqual([
+      [{ text: "Apri gli ordini", url: `${origin}/app/ordini?periodo=7` }],
+    ]);
+  });
+
+  it("una consegna in attesa alla fine di Premium non parte al rinnovo", async () => {
+    const seller = await linked("rinnovo");
+    await order(seller.store, "o-rinnovo", { cf: "RSSMRA80A01H501U" });
+    const limited = bot((call) =>
+      call.method === "sendMessage"
+        ? failure(429, { ok: false, parameters: { retry_after: 600 } })
+        : undefined,
+    );
+    await run(limited.fetcher, 10);
+    await env.DB.prepare("UPDATE workspace_entitlements SET revoked_at = ? WHERE workspace_id = ?")
+      .bind(later(12).toISOString(), seller.workspace)
+      .run();
+    await run(limited.fetcher, 15);
+    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+      VALUES ('e-rinnovo-2', ?, 'admin', ?, ?)`)
+      .bind(seller.workspace, later(16).toISOString(), later(30 * 24 * 60).toISOString())
+      .run();
+    const api = bot();
+    await run(api.fetcher, 25);
+    expect(api.texts()).toHaveLength(0);
+    expect(await env.DB.prepare("SELECT failed_at FROM telegram_deliveries").first()).toEqual({
+      failed_at: later(15).toISOString(),
+    });
   });
 
   it("il riepilogo giornaliero parte all'orario nel fuso scelto, uno al giorno", async () => {
@@ -1268,6 +1410,16 @@ describe("invii degli ordini", () => {
       day: "2026-10-25",
       time: "02:30",
     });
+    // L'orario del riepilogo nel fuso, prima e dopo i cambi di ora legale.
+    for (const [zone, day, time, instant] of [
+      ["Europe/Rome", "2026-10-24", "08:00", "2026-10-24T06:00:00.000Z"],
+      ["Europe/Rome", "2026-10-25", "08:00", "2026-10-25T07:00:00.000Z"],
+      ["Europe/Rome", "2026-03-29", "21:00", "2026-03-29T19:00:00.000Z"],
+      ["America/New_York", "2026-11-01", "08:00", "2026-11-01T13:00:00.000Z"],
+      ["Asia/Kolkata", "2026-10-25", "12:00", "2026-10-25T06:30:00.000Z"],
+      ["UTC", "2026-10-25", "21:00", "2026-10-25T21:00:00.000Z"],
+    ] as const)
+      expect(zonedInstant(zone, day, time).toISOString()).toBe(instant);
   });
 });
 
@@ -1380,6 +1532,16 @@ describe("comandi e pulsanti del bot", () => {
         created: index - 30,
         listed: 1,
       });
+    // Un negozio escluso con ordini più recenti non toglie posto a quelli inclusi.
+    await insertStore({ id: "s-ultimi-escluso", workspaceId: seller.workspace }).run();
+    await saveTelegramChange(
+      env.DB,
+      seller.userId,
+      { name: "store", storeId: "s-ultimi-escluso", value: false },
+      "UTC",
+    );
+    for (let index = 0; index < 20; index++)
+      await order("s-ultimi-escluso", `o-escluso-${index}`, { created: index - 20, listed: 1 });
     const api = bot();
     await deliver("/ultimi", seller.chat, api.fetcher);
     const texts = sentTexts(api);
@@ -1396,6 +1558,9 @@ describe("comandi e pulsanti del bot", () => {
       expect.stringContaining("ebay-o-ultimi-0"),
       "Ordini dal 6 al 7.",
     ]);
+    // Un secondo tocco sullo stesso pulsante, arrivato prima che sparisse, non ripete la pagina.
+    await tap(`${gen}:la:5`, seller.chat, api.fetcher);
+    expect(api.texts()).toHaveLength(9);
   });
 
   it("senza Premium lo stato dice Free e le preferenze rimandano al piano", async () => {

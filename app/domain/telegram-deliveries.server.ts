@@ -1,9 +1,11 @@
 import { activeEntitlementSql } from "./grants.server";
+import { lockMilliseconds } from "./order-acquisition.server";
 import { listVisibleOrders } from "./orders.server";
-import { storeNameSql } from "./store-state.server";
+import { consultableStore, storeNameSql } from "./store-state.server";
 import { telegramRecipient, telegramRecipientSql } from "./telegram.server";
 import {
   digestMessage,
+  emptyFiscalKey,
   fiscalKey,
   importMessage,
   orderMessage,
@@ -67,6 +69,8 @@ export async function deliverTelegram(
   scope: { storeId?: string } = {},
 ): Promise<void> {
   if (!telegramConfigured(env)) return;
+  // Senza Premium le consegne in attesa si chiudono: un rinnovo non porta l'arretrato.
+  if (!scope.storeId) await closeUncovered(env.DB, now);
   const { results } = await env.DB.prepare(`SELECT l.workspace_id AS workspaceId, l.id AS linkId,
       l.language, COALESCE(p.enabled, 1) AS enabled, COALESCE(p.filter, 'fiscal') AS filter,
       COALESCE(p.mode, 'each') AS mode, COALESCE(p.digest_time, '18:00') AS digestTime,
@@ -79,19 +83,40 @@ export async function deliverTelegram(
     ORDER BY l.linked_at LIMIT ?3`)
     .bind(scope.storeId ?? null, now.toISOString(), workspacesPerRun)
     .all<Workspace>();
-  for (const workspace of results) {
+  // Uno spazio alla volta. Il bot non più valido ferma l'esecuzione: nessun altro spazio può
+  // ricevere messaggi.
+  await inSequence(results, async (workspace) => {
     try {
       if (workspace.enabled === 1 && workspace.userId) {
         await prepareOrderEvents(env.DB, workspace, now);
         await prepareImportEvents(env.DB, workspace, now);
       }
       await prepareDigest(env.DB, workspace, now);
-      // Il bot non è più valido: nessun altro spazio può ricevere messaggi in questa esecuzione.
-      if ((await sendPending(env, workspace, fetcher, now)) === "stop") return;
+      return await sendPending(env, workspace, fetcher, now);
     } catch (error) {
       logFailure({ error, operation: "telegram" });
+      return "continue";
     }
-  }
+  });
+}
+
+type Next = "continue" | "wait" | "stop";
+
+/** Un passo alla volta, nell'ordine dato, finché un passo non chiede di fermarsi. */
+function inSequence<T>(items: readonly T[], step: (item: T) => Promise<Next>): Promise<Next> {
+  return items.reduce<Promise<Next>>(
+    (previous, item) => previous.then((next) => (next === "continue" ? step(item) : next)),
+    Promise.resolve("continue"),
+  );
+}
+
+function closeUncovered(db: D1Database, now: Date) {
+  return db
+    .prepare(`UPDATE telegram_deliveries SET failed_at = ?1
+      WHERE sent_at IS NULL AND failed_at IS NULL
+        AND NOT ${activeEntitlementSql("telegram_deliveries.workspace_id", "?1")}`)
+    .bind(now.toISOString())
+    .run();
 }
 
 type Candidate = {
@@ -105,12 +130,19 @@ type Candidate = {
   live: number;
 };
 
-/** Variazioni fiscali dell'ordine, anche dei suoi acquisti confluiti, dopo la valutazione. */
+/**
+ * Variazioni fiscali dell'ordine, anche dei suoi acquisti confluiti, dopo la valutazione. Una
+ * lettura registra l'istante in cui è partita e scrive fino a `lockMilliseconds` dopo: una
+ * valutazione nel frattempo non l'ha vista, quindi il confronto la include. Rivalutare un
+ * ordine senza variazioni non prepara eventi, perché l'impronta resta la stessa.
+ */
+const writtenSince = (column: string) =>
+  `julianday(${column}) > julianday(n.evaluated_at) - ${lockMilliseconds / 86_400_000}`;
 const changedSinceSql = `(EXISTS (SELECT 1 FROM tax_identifiers t JOIN orders original ON original.id = t.order_id
       WHERE (original.id = o.id OR original.merged_into = o.id)
-        AND (t.observed_at > n.evaluated_at OR t.removed_at > n.evaluated_at))
+        AND (${writtenSince("t.observed_at")} OR ${writtenSince("t.removed_at")}))
     OR EXISTS (SELECT 1 FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
-      WHERE (original.id = o.id OR original.merged_into = o.id) AND tc.observed_at > n.evaluated_at))`;
+      WHERE (original.id = o.id OR original.merged_into = o.id) AND ${writtenSince("tc.observed_at")}))`;
 
 /** Ordini consultabili dello spazio con le loro viste, letti come nel sito dall'utente dello spazio. */
 async function noticesOf(
@@ -119,14 +151,13 @@ async function noticesOf(
   orders: Array<{ id: string; environment: EbayEnvironment }>,
   now: Date,
 ): Promise<Map<string, OrderNotice>> {
-  const notices = new Map<string, OrderNotice>();
-  for (const environment of ["production", "sandbox"] as const) {
+  const read = (["production", "sandbox"] as const).map(async (environment) => {
     const ids = orders.filter((order) => order.environment === environment).map(({ id }) => id);
-    if (ids.length === 0) continue;
+    if (ids.length === 0) return [];
     const visible = await listVisibleOrders(db, userId, ids.length, environment, now, { ids });
-    for (const order of visible) notices.set(order.id, orderNotice(order, environment));
-  }
-  return notices;
+    return visible.map((order) => [order.id, orderNotice(order, environment)] as const);
+  });
+  return new Map((await Promise.all(read)).flat());
 }
 
 /**
@@ -151,7 +182,7 @@ async function prepareOrderEvents(db: D1Database, workspace: Workspace, now: Dat
       JOIN orders o ON o.store_id = s.id
       LEFT JOIN telegram_order_notices n ON n.order_id = o.id
       WHERE s.workspace_id = ?1 AND l.id = ?3 AND +o.merged_into IS NULL AND o.is_provisional = 0
-        AND o.retention_until > ?2
+        AND o.retention_until > ?2 AND ${consultableStore("s")}
         AND CASE WHEN n.link_id IS l.id THEN ${changedSinceSql}
           ELSE o.listed_at IS NOT NULL AND o.creation_time >= ss.history_until
             AND ${telegramRecipientSql("o.listed_at", "?2")} END
@@ -176,8 +207,8 @@ async function prepareOrderEvents(db: D1Database, workspace: Workspace, now: Dat
       else if (first && notice.fiscal === "checking") continue;
       else notified = 0;
     } else if (key !== candidate.fiscalKey && candidate.live === 1) {
-      const before = (JSON.parse(candidate.fiscalKey!) as unknown[]).length > 0;
-      change = !before ? "available" : withValues ? "changed" : "removed";
+      change =
+        candidate.fiscalKey === emptyFiscalKey ? "available" : withValues ? "changed" : "removed";
     }
     // Lo stato registrato è ancora quello letto: altrimenti un'altra valutazione l'ha già fatta.
     const unchanged =
@@ -265,10 +296,23 @@ export function localClock(timeZone: string, now: Date): { day: string; time: st
   };
 }
 
+/** Istante dell'ora locale `time` del giorno `day` nel fuso indicato. */
+export function zonedInstant(timeZone: string, day: string, time: string): Date {
+  const wall = Date.parse(`${day}T${time}:00Z`);
+  const offset = (instant: number) => {
+    const clock = localClock(timeZone, new Date(instant));
+    return Date.parse(`${clock.day}T${clock.time}:00Z`) - Math.floor(instant / 60_000) * 60_000;
+  };
+  // La seconda correzione usa la differenza valida all'istante trovato, anche vicino a un cambio
+  // di ora legale.
+  return new Date(wall - offset(wall - offset(wall)));
+}
+
 /**
- * Riepilogo del giorno locale, dall'orario scelto in poi, con gli eventi in attesa: uno al giorno
- * anche nei cambi di ora legale, perché l'identità è la data nel fuso. Gli eventi arrivati dopo
- * un riepilogo già partito restano al giorno successivo.
+ * Riepilogo del giorno locale all'orario scelto, con gli eventi in attesa fino a quell'istante:
+ * uno al giorno anche nei cambi di ora legale, perché l'identità è la data nel fuso. Gli eventi
+ * successivi, anche senza un riepilogo nel giorno, vanno al giorno dopo; quelli precedenti
+ * rimasti indietro per un'interruzione entrano nel primo riepilogo che parte.
  */
 async function prepareDigest(db: D1Database, workspace: Workspace, now: Date) {
   if (workspace.mode !== "digest") return;
@@ -276,21 +320,22 @@ async function prepareDigest(db: D1Database, workspace: Workspace, now: Date) {
   if (clock.time < workspace.digestTime) return;
   const key = `digest:${clock.day}`;
   const at = now.toISOString();
+  const cutoff = zonedInstant(workspace.timeZone, clock.day, workspace.digestTime).toISOString();
   const pending = `link_id = ?2 AND kind = 'order' AND digest_id IS NULL AND sent_at IS NULL
-    AND failed_at IS NULL`;
+    AND failed_at IS NULL AND julianday(event_at) <= julianday(?4)`;
   await db.batch([
     db
       .prepare(`INSERT INTO telegram_deliveries (id, workspace_id, link_id, kind, event_key, event_at, created_at)
-      SELECT ?4, ?1, ?2, 'digest', ?3, ?5, ?5
+      SELECT ?5, ?1, ?2, 'digest', ?3, ?6, ?6
       WHERE EXISTS (SELECT 1 FROM telegram_deliveries WHERE ${pending}) ON CONFLICT DO NOTHING`)
-      .bind(workspace.workspaceId, workspace.linkId, key, crypto.randomUUID(), at),
+      .bind(workspace.workspaceId, workspace.linkId, key, cutoff, crypto.randomUUID(), at),
     db
       .prepare(`UPDATE telegram_deliveries SET digest_id = (SELECT id FROM telegram_deliveries
         WHERE link_id = ?2 AND event_key = ?3)
       WHERE ${pending} AND workspace_id = ?1 AND EXISTS (SELECT 1 FROM telegram_deliveries g
         WHERE g.link_id = ?2 AND g.event_key = ?3 AND g.sent_at IS NULL AND g.failed_at IS NULL
           AND g.attempts = 0 AND g.parts_sent = 0)`)
-      .bind(workspace.workspaceId, workspace.linkId, key),
+      .bind(workspace.workspaceId, workspace.linkId, key, cutoff),
   ]);
 }
 
@@ -326,64 +371,77 @@ async function sendPending(
   workspace: Workspace,
   fetcher: typeof fetch,
   now: Date,
-): Promise<"stop" | undefined> {
-  const db = env.DB;
+): Promise<Next> {
   const at = now.toISOString();
-  const { results } = await db
-    .prepare(`SELECT id, kind, link_id, order_id, store_id, change, event_at, attempts, parts_sent
+  const { results } = await env.DB.prepare(`SELECT id, kind, link_id, order_id, store_id, change,
+        event_at, attempts, parts_sent
       FROM telegram_deliveries
       WHERE workspace_id = ?1 AND sent_at IS NULL AND failed_at IS NULL
         AND (retry_at IS NULL OR retry_at <= ?2) AND (kind <> 'order' OR digest_id IS NULL)
       ORDER BY created_at, id LIMIT ?3`)
     .bind(workspace.workspaceId, at, deliveriesPerRun)
     .all<Delivery>();
-  for (const delivery of results) {
-    const lease = crypto.randomUUID();
-    const claimed = await db
-      .prepare(`UPDATE telegram_deliveries SET lease = ?2, locked_until = ?3
-        WHERE id = ?1 AND sent_at IS NULL AND failed_at IS NULL
-          AND (locked_until IS NULL OR locked_until <= ?4) RETURNING parts_sent`)
-      .bind(delivery.id, lease, new Date(now.getTime() + leaseMilliseconds).toISOString(), at)
-      .first<{ parts_sent: number }>();
-    if (!claimed) continue;
-    const release = (assignments: string, ...values: unknown[]) =>
-      db
-        .prepare(`UPDATE telegram_deliveries SET ${assignments}, lease = NULL, locked_until = NULL
-          WHERE id = ?1 AND lease = ?2`)
-        .bind(delivery.id, lease, ...values);
-    try {
-      const outcome = await deliver(
-        env,
-        workspace,
-        delivery,
-        claimed.parts_sent,
-        lease,
-        fetcher,
-        now,
-      );
-      if (outcome === "waiting") await release("retry_at = NULL").run();
-      else if (outcome === "dropped")
-        await db.batch([release("failed_at = ?3", at), closeMembers(db, delivery.id, at)]);
-      else
-        await db.batch([
-          release("sent_at = ?3", at),
-          db
-            .prepare("UPDATE telegram_deliveries SET sent_at = ?2 WHERE digest_id = ?1")
-            .bind(delivery.id, at),
-          db
-            .prepare(`UPDATE telegram_links SET last_delivery_at = ?2,
-              delivery_failure = CASE WHEN delivery_failure = 'unreachable' THEN NULL ELSE delivery_failure END,
-              delivery_failed_at = CASE WHEN delivery_failure = 'unreachable' THEN NULL ELSE delivery_failed_at END
-            WHERE id = ?1`)
-            .bind(delivery.link_id, at),
-        ]);
-    } catch (error) {
-      const failure = await recordFailure(db, delivery, lease, error, now);
-      if (failure === "skip") continue;
-      return failure === "stop" ? "stop" : undefined;
-    }
+  const next = await inSequence(results, (delivery) =>
+    sendOne(env, workspace, delivery, fetcher, now),
+  );
+  // L'attesa di una chat non ferma gli altri spazi.
+  return next === "stop" ? "stop" : "continue";
+}
+
+/** Prende la consegna con un lease e la invia; `wait` ferma le successive della chat. */
+async function sendOne(
+  env: Env,
+  workspace: Workspace,
+  delivery: Delivery,
+  fetcher: typeof fetch,
+  now: Date,
+): Promise<Next> {
+  const db = env.DB;
+  const at = now.toISOString();
+  const lease = crypto.randomUUID();
+  const claimed = await db
+    .prepare(`UPDATE telegram_deliveries SET lease = ?2, locked_until = ?3
+      WHERE id = ?1 AND sent_at IS NULL AND failed_at IS NULL
+        AND (locked_until IS NULL OR locked_until <= ?4) RETURNING parts_sent`)
+    .bind(delivery.id, lease, new Date(now.getTime() + leaseMilliseconds).toISOString(), at)
+    .first<{ parts_sent: number }>();
+  if (!claimed) return "continue";
+  const release = (assignments: string, ...values: unknown[]) =>
+    db
+      .prepare(`UPDATE telegram_deliveries SET ${assignments}, lease = NULL, locked_until = NULL
+        WHERE id = ?1 AND lease = ?2`)
+      .bind(delivery.id, lease, ...values);
+  try {
+    const outcome = await deliver(
+      env,
+      workspace,
+      delivery,
+      claimed.parts_sent,
+      lease,
+      fetcher,
+      now,
+    );
+    if (outcome === "waiting") await release("retry_at = NULL").run();
+    else if (outcome === "dropped")
+      await db.batch([release("failed_at = ?3", at), closeMembers(db, delivery.id, at)]);
+    else
+      await db.batch([
+        release("sent_at = ?3", at),
+        db
+          .prepare("UPDATE telegram_deliveries SET sent_at = ?2 WHERE digest_id = ?1")
+          .bind(delivery.id, at),
+        db
+          .prepare(`UPDATE telegram_links SET last_delivery_at = ?2,
+            delivery_failure = CASE WHEN delivery_failure = 'unreachable' THEN NULL ELSE delivery_failure END,
+            delivery_failed_at = CASE WHEN delivery_failure = 'unreachable' THEN NULL ELSE delivery_failed_at END
+          WHERE id = ?1`)
+          .bind(delivery.link_id, at),
+      ]);
+  } catch (error) {
+    const failure = await recordFailure(db, delivery, lease, error, now);
+    return failure === "skip" ? "continue" : failure;
   }
-  return undefined;
+  return "continue";
 }
 
 /**
@@ -483,14 +541,20 @@ async function deliver(
     .bind(delivery.link_id)
     .first<{ chat_id: string }>();
   if (!recipient) return "dropped";
-  for (let part = from; part < messages.length; part++) {
-    await sendMessage(env, recipient.chat_id, messages[part]!, fetcher);
-    await env.DB.prepare(
-      "UPDATE telegram_deliveries SET parts_sent = ?3 WHERE id = ?1 AND lease = ?2",
-    )
-      .bind(delivery.id, lease, part + 1)
-      .run();
-  }
+  // Le parti nell'ordine del testo, una alla volta.
+  await messages.slice(from).reduce<Promise<unknown>>(
+    (previous, message, index) =>
+      previous
+        .then(() => sendMessage(env, recipient.chat_id, message, fetcher))
+        .then(() =>
+          env.DB.prepare(
+            "UPDATE telegram_deliveries SET parts_sent = ?3 WHERE id = ?1 AND lease = ?2",
+          )
+            .bind(delivery.id, lease, from + index + 1)
+            .run(),
+        ),
+    Promise.resolve(),
+  );
   return "sent";
 }
 
@@ -507,28 +571,17 @@ async function compose(
   const db = env.DB;
   if (delivery.kind === "digest") {
     if (delivery.link_id !== workspace.linkId || workspace.enabled !== 1) return "dropped";
-    const { results: members } = await db
-      .prepare(`SELECT d.order_id AS orderId, d.store_id AS storeId, d.change, d.event_at AS eventAt,
-          s.ebay_environment AS environment
+    // Restano gli eventi che il destinatario riceverebbe ancora, come per un ordine singolo.
+    const { results: kept } = await db
+      .prepare(`SELECT d.order_id AS orderId, d.change, s.ebay_environment AS environment
         FROM telegram_deliveries d JOIN ebay_stores s ON s.id = d.store_id
-        WHERE d.digest_id = ? ORDER BY d.event_at, d.id`)
-      .bind(delivery.id)
-      .all<{
-        orderId: string;
-        storeId: string;
-        change: OrderChange;
-        eventAt: string;
-        environment: EbayEnvironment;
-      }>();
-    const kept = [];
-    for (const member of members) {
-      const recipient = await telegramRecipient(
-        db,
-        { storeId: member.storeId, eventAt: member.eventAt, linkId: delivery.link_id },
-        now,
-      );
-      if (recipient) kept.push(member);
-    }
+        JOIN telegram_links l ON l.id = d.link_id AND l.workspace_id = s.workspace_id
+        LEFT JOIN telegram_preferences p ON p.workspace_id = s.workspace_id
+        LEFT JOIN telegram_store_preferences sp ON sp.store_id = s.id
+        WHERE d.digest_id = ?1 AND ${telegramRecipientSql("d.event_at", "?2")}
+        ORDER BY d.event_at, d.id`)
+      .bind(delivery.id, now.toISOString())
+      .all<{ orderId: string; change: OrderChange; environment: EbayEnvironment }>();
     // Più eventi dello stesso ordine diventano una voce, con i dati correnti.
     const changes = new Map<string, OrderChange>();
     for (const member of kept)
@@ -557,7 +610,7 @@ async function compose(
   if (!recipient) return "dropped";
   if (delivery.kind === "import") {
     const summary = await db
-      .prepare(`SELECT ${storeNameSql("s")} ||
+      .prepare(`SELECT s.id AS storeId, ${storeNameSql("s")} ||
           CASE WHEN s.ebay_environment = 'sandbox' THEN ' (Sandbox)' ELSE '' END AS storeName,
           s.ebay_environment AS environment, ss.history_from AS "from", ss.history_until AS until,
           (SELECT count(*) FROM orders o WHERE o.store_id = s.id AND o.merged_into IS NULL

@@ -118,6 +118,9 @@ export function fiscalKey(notice: Pick<OrderNotice, "values">): string {
   );
 }
 
+/** Impronta di un ordine senza dato fiscale. */
+export const emptyFiscalKey = fiscalKey({ values: [] });
+
 const text = {
   it: {
     change: {
@@ -211,9 +214,12 @@ export function appUrl(
   language: Language,
   path: string,
   environment: EbayEnvironment = "production",
+  filters: Record<string, string> = {},
 ) {
-  const query = environment === "sandbox" ? "?environment=sandbox" : "";
-  return `${new URL(env.APP_ORIGIN).origin}${localizedPath(language, path)}${query}`;
+  const query = new URLSearchParams(filters);
+  if (environment === "sandbox") query.set("environment", "sandbox");
+  const search = query.size ? `?${query}` : "";
+  return `${new URL(env.APP_ORIGIN).origin}${localizedPath(language, path)}${search}`;
 }
 
 export const settingsUrl = (env: Pick<Env, "APP_ORIGIN">, language: Language) =>
@@ -331,7 +337,17 @@ export function digestMessage(
   return parts.map((html, index) => ({
     html,
     ...(index === parts.length - 1
-      ? { buttons: [[{ text: copy.orders, url: appUrl(env, language, ordersPath, environment) }]] }
+      ? {
+          // Gli ultimi sette giorni di tutti i negozi comprendono il periodo del riepilogo.
+          buttons: [
+            [
+              {
+                text: copy.orders,
+                url: appUrl(env, language, ordersPath, environment, { periodo: "7" }),
+              },
+            ],
+          ],
+        }
       : {}),
   }));
 }
@@ -342,6 +358,7 @@ export function importMessage(
   language: Language,
   timeZone: string,
   summary: {
+    storeId: string;
     storeName: string;
     environment: EbayEnvironment;
     from: string;
@@ -367,7 +384,9 @@ export function importMessage(
       [
         {
           text: text[language].orders,
-          url: appUrl(env, language, ordersPath, summary.environment),
+          url: appUrl(env, language, ordersPath, summary.environment, {
+            negozio: summary.storeId,
+          }),
         },
       ],
     ],

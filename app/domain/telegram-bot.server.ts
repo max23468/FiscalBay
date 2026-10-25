@@ -255,10 +255,25 @@ export async function consumeTelegramUpdate(
   if (update.topic === "callback") return consumeCallback(env, update, links, fetcher, now);
   if (links.length === 0) return unknownChatReply(env, update.chatId, "help", fetcher);
   const command = (update.topic === "start" ? "help" : update.command) as BotCommand;
-  for (const link of links) {
-    const messages = await commandMessages(env, link, command, now);
-    for (const message of messages) await quiet(sendMessage(env, link.chatId, message, fetcher));
-  }
+  const replies = await Promise.all(
+    links.map(async (link) =>
+      (await commandMessages(env, link, command, now)).map((message) => ({ link, message })),
+    ),
+  );
+  await sendInOrder(env, replies.flat(), fetcher);
+}
+
+/** Risposte nell'ordine dato, una alla volta, come la chat le deve leggere. */
+function sendInOrder(
+  env: Env,
+  replies: Array<{ link: Pick<Link, "chatId">; message: BotMessage }>,
+  fetcher: typeof fetch,
+) {
+  return replies.reduce<Promise<void>>(
+    (previous, { link, message }) =>
+      previous.then(() => quiet(sendMessage(env, link.chatId, message, fetcher))),
+    Promise.resolve(),
+  );
 }
 
 /** Una risposta rifiutata, per esempio a un bot appena bloccato, non si ritenta. */
@@ -322,6 +337,7 @@ type Preferences = {
 type StoreRow = {
   id: string;
   name: string;
+  environment: EbayEnvironment;
   enabled: number;
   paused: number;
   reconnect: number;
@@ -340,7 +356,8 @@ async function readState(db: D1Database, link: Link, now: Date) {
         WHERE l.id = ?`)
       .bind(link.id),
     db
-      .prepare(`SELECT s.id, ${storeNameSql("s")} AS name, COALESCE(sp.enabled, 1) AS enabled,
+      .prepare(`SELECT s.id, ${storeNameSql("s")} AS name, s.ebay_environment AS environment,
+          COALESCE(sp.enabled, 1) AS enabled,
           EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = s.id AND p.reason = 'plan')
             AS paused,
           (s.disconnected_at IS NOT NULL OR NOT EXISTS (SELECT 1 FROM ebay_store_credentials c
@@ -575,23 +592,19 @@ async function latestMessages(
 ): Promise<BotMessage[]> {
   const text = copy[link.language];
   const state = await readState(env.DB, link, now);
-  const included = new Set(
-    state.stores.filter((store) => store.enabled && !store.paused).map((store) => store.id),
+  // Ogni negozio incluso con i propri ultimi ordini: quelli dei negozi esclusi non tolgono posto.
+  const perStore = await Promise.all(
+    state.stores
+      .filter((store) => store.enabled && !store.paused)
+      .map(async (store) =>
+        (
+          await listVisibleOrders(env.DB, link.userId, latestLimit, store.environment, now, {
+            criteria: { storeId: store.id },
+          })
+        ).map((order) => ({ order, environment: store.environment })),
+      ),
   );
-  const { results: environments } = await env.DB.prepare(
-    "SELECT DISTINCT ebay_environment AS environment FROM ebay_stores WHERE workspace_id = ?",
-  )
-    .bind(link.workspaceId)
-    .all<{ environment: EbayEnvironment }>();
-  const orders = [];
-  for (const { environment } of environments) {
-    const visible = await listVisibleOrders(env.DB, link.userId, latestLimit, environment, now);
-    orders.push(
-      ...visible
-        .filter((order) => included.has(order.storeId))
-        .map((order) => ({ order, environment })),
-    );
-  }
+  const orders = perStore.flat();
   orders.sort((a, b) =>
     b.order.creationTime === a.order.creationTime
       ? b.order.id.localeCompare(a.order.id)
@@ -618,6 +631,24 @@ async function latestMessages(
         : {}),
     },
   ];
+}
+
+/**
+ * Un altro tocco sullo stesso pulsante dello stesso messaggio, già eseguito o ricevuto prima: dei
+ * tocchi in attesa insieme vale il primo ricevuto.
+ */
+async function earlierTap(db: D1Database, update: TelegramReceipt) {
+  const earlier = await db
+    .prepare(`SELECT 1 FROM webhook_receipts mine JOIN webhook_receipts other
+        ON other.provider = mine.provider AND other.environment = mine.environment
+          AND other.object_id = mine.object_id AND other.message_id = mine.message_id
+          AND other.command = mine.command AND other.id <> mine.id
+      WHERE mine.id = ?1 AND (other.completed_at IS NOT NULL
+        OR julianday(other.event_at) < julianday(mine.event_at)
+        OR (other.event_at = mine.event_at AND other.id < mine.id))`)
+    .bind(update.receiptId)
+    .first();
+  return earlier !== null;
 }
 
 /** Scelta di un pulsante delle preferenze, nella forma delle Impostazioni. */
@@ -700,11 +731,16 @@ async function consumeCallback(
   if (action === "la") {
     const offset = Number(args[0]);
     if (!Number.isInteger(offset) || offset <= 0 || offset >= latestLimit) return;
-    // Il pulsante sparisce dal messaggio toccato: un secondo tocco non ripete la pagina.
+    // Il pulsante sparisce dal messaggio toccato; dei tocchi arrivati prima che sparisse vale
+    // soltanto il primo ricevuto, così la pagina non si ripete.
+    if (await earlierTap(env.DB, update)) return;
     await edit({ html: escape(copy[language].latestPage(offset - latestPage + 1, offset)) });
-    for (const message of await latestMessages(env, link, offset, now))
-      await quiet(sendMessage(env, link.chatId, message, fetcher));
-    return;
+    const messages = await latestMessages(env, link, offset, now);
+    return sendInOrder(
+      env,
+      messages.map((message) => ({ link, message })),
+      fetcher,
+    );
   }
   return edit(await preferencesMessage(env, link, now));
 }

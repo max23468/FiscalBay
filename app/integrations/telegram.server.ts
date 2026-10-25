@@ -319,22 +319,24 @@ export async function setBotCommands(
   descriptions: Record<"it" | "en", Record<BotCommand, string>>,
   fetcher: typeof fetch = fetch,
 ): Promise<void> {
-  for (const language of ["it", "en"] as const) {
-    await botApi(
-      env,
-      "setMyCommands",
-      {
-        commands: (Object.keys(botCommands) as BotCommand[]).map((command) => ({
-          command: botCommands[command][language],
-          description: descriptions[language][command],
-        })),
-        scope: { type: "all_private_chats" },
-        ...(language === "it" ? { language_code: "it" } : {}),
-      },
-      z.literal(true),
-      fetcher,
-    );
-  }
+  await Promise.all(
+    (["it", "en"] as const).map((language) =>
+      botApi(
+        env,
+        "setMyCommands",
+        {
+          commands: (Object.keys(botCommands) as BotCommand[]).map((command) => ({
+            command: botCommands[command][language],
+            description: descriptions[language][command],
+          })),
+          scope: { type: "all_private_chats" },
+          ...(language === "it" ? { language_code: "it" } : {}),
+        },
+        z.literal(true),
+        fetcher,
+      ),
+    ),
+  );
 }
 
 /** Messaggio di testo semplice, senza formattazione da sottoporre a escape. */
