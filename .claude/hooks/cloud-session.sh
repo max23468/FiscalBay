@@ -34,9 +34,13 @@ export PATH="${root}/bin:${PATH}"
 if [ "$("${root}/bin/pnpm" --version 2>/dev/null)" != "${pnpm_version}" ]; then
   npm install --global --prefix "${root}" --silent "pnpm@${pnpm_version}" >&2
 fi
-# I comandi successivi della sessione leggono questo file prima di partire.
+# I comandi successivi della sessione leggono questo file prima di partire. Nei thread dei
+# progetti Claude gli hook del repository non partono: lanciato a mano, lo script stampa la riga.
+path_line="export PATH=\"${root}/bin:\$PATH\""
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
-  echo "export PATH=\"${root}/bin:\$PATH\"" >>"${CLAUDE_ENV_FILE}"
+  echo "${path_line}" >>"${CLAUDE_ENV_FILE}"
+else
+  echo "Anteporre ai comandi successivi: ${path_line}"
 fi
 pnpm install --frozen-lockfile >&2
 
