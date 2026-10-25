@@ -1,17 +1,29 @@
 import { z } from "zod";
 import { createHash } from "node:crypto";
 import { verifyStripeEvent } from "./stripe.server";
+import {
+  telegramConfigured,
+  TelegramSecretMismatch,
+  verifyTelegramUpdate,
+} from "./telegram.server";
 import { NotificationLimit, verifyOrderNotification } from "./ebay/notifications.server";
 import { readBounded, UpstreamError } from "./http.server";
 import { ebayConfiguration } from "./ebay/environment.server";
 import { applyStripeEvent } from "../domain/billing.server";
 import { consumeOrderConfirmation } from "../domain/order-acquisition.server";
+import { consumeTelegramStart } from "../domain/telegram.server";
 import { isProduction } from "../app-links";
 import { logFailure } from "../errors";
 
 const maxBytes = 262_144;
 const retention = 7 * 86_400_000;
 const referenceSchema = z.object({ receiptId: z.string().uuid() });
+const webhookPaths = [
+  "/webhooks/ebay",
+  "/webhooks/ebay/sandbox",
+  "/webhooks/stripe",
+  "/webhooks/telegram",
+];
 
 /**
  * Messaggio della coda con il riferimento a una ricevuta; il consumer convalida il riferimento e
@@ -22,13 +34,14 @@ export function isWebhookMessage(body: unknown): body is { receiptId: string } {
 }
 type Receipt = {
   id: string;
-  provider: "ebay" | "stripe";
+  provider: "ebay" | "stripe" | "telegram";
   environment: string;
   provider_id: string;
   topic: string;
   object_id: string;
   store_id: string | null;
   consent_granted_at: string | null;
+  link_token_hash: string | null;
   event_at: string;
   queued_at: string | null;
   completed_at: string | null;
@@ -64,8 +77,10 @@ export async function receiveWebhook(
   now = new Date(),
 ): Promise<Response | null> {
   const path = new URL(request.url).pathname;
-  if (!["/webhooks/ebay", "/webhooks/ebay/sandbox", "/webhooks/stripe"].includes(path)) return null;
-  if (request.method === "GET" && path !== "/webhooks/stripe") {
+  if (!webhookPaths.includes(path)) return null;
+  // Stripe e Telegram consegnano soltanto con POST; eBay verifica l'endpoint con un GET.
+  const postOnly = path === "/webhooks/stripe" || path === "/webhooks/telegram";
+  if (request.method === "GET" && !postOnly) {
     const challenge = new URL(request.url).searchParams.get("challenge_code");
     const token = env.EBAY_NOTIFICATION_VERIFICATION_TOKEN;
     if (!token || !/^[a-zA-Z0-9_-]{32,80}$/u.test(token))
@@ -89,7 +104,7 @@ export async function receiveWebhook(
   if (request.method !== "POST")
     return new Response(null, {
       status: 405,
-      headers: { allow: path === "/webhooks/stripe" ? "POST" : "GET, POST" },
+      headers: { allow: postOnly ? "POST" : "GET, POST" },
     });
   try {
     const body = await rawBody(request);
@@ -115,7 +130,28 @@ export async function receiveWebhook(
           object_id: object.id,
           store_id: null,
           consent_granted_at: null,
+          link_token_hash: null,
           event_at: new Date(stripe.created * 1000).toISOString(),
+        };
+      } else if (path === "/webhooks/telegram") {
+        if (!telegramConfigured(env)) throw new InvalidWebhook(503);
+        const start = verifyTelegramUpdate(
+          body,
+          request.headers.get("x-telegram-bot-api-secret-token"),
+          env,
+        );
+        // Ogni aggiornamento diverso da /start in una chat privata non ha effetti.
+        if (!start) return new Response(null, { status: 204 });
+        event = {
+          provider: "telegram",
+          environment: isProduction(env) ? "live" : "test",
+          provider_id: String(start.updateId),
+          topic: "start",
+          object_id: start.chatId,
+          store_id: null,
+          consent_granted_at: null,
+          link_token_hash: start.tokenHash,
+          event_at: start.eventAt,
         };
       } else {
         const ebayEnvironment = path.endsWith("/sandbox") ? "sandbox" : "production";
@@ -138,6 +174,7 @@ export async function receiveWebhook(
           object_id: notification.data.order.orderId,
           store_id: notification.data.user.userId,
           consent_granted_at: null,
+          link_token_hash: null,
           event_at: new Date(notification.eventDate).toISOString(),
         };
       }
@@ -148,6 +185,7 @@ export async function receiveWebhook(
         error instanceof NotificationLimit
       )
         throw error;
+      if (error instanceof TelegramSecretMismatch) throw new InvalidWebhook(401);
       throw new InvalidWebhook(412);
     }
     if (event.provider === "ebay") {
@@ -164,8 +202,9 @@ export async function receiveWebhook(
     const age = now.getTime() - Date.parse(event.event_at);
     if (age >= retention || age < -300_000) throw new InvalidWebhook(400);
     const receipt = (await env.DB.prepare(`INSERT INTO webhook_receipts
-      (id, provider, environment, provider_id, topic, object_id, store_id, consent_granted_at, event_at, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(provider, environment, provider_id) DO UPDATE SET id = webhook_receipts.id
+      (id, provider, environment, provider_id, topic, object_id, store_id, consent_granted_at,
+        link_token_hash, event_at, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(provider, environment, provider_id) DO UPDATE SET id = webhook_receipts.id
       RETURNING *`)
       .bind(
         crypto.randomUUID(),
@@ -176,6 +215,7 @@ export async function receiveWebhook(
         event.object_id,
         event.store_id,
         event.consent_granted_at,
+        event.link_token_hash,
         event.event_at,
         new Date(Date.parse(event.event_at) + retention).toISOString(),
       )
@@ -186,6 +226,7 @@ export async function receiveWebhook(
       receipt.object_id !== event.object_id ||
       receipt.store_id !== event.store_id ||
       receipt.consent_granted_at !== event.consent_granted_at ||
+      receipt.link_token_hash !== event.link_token_hash ||
       receipt.event_at !== event.event_at
     )
       throw new InvalidWebhook(409);
@@ -275,6 +316,18 @@ export async function consumeWebhooks(
             grantedAt: receipt.consent_granted_at!,
             environment: receipt.environment,
             orderId: receipt.object_id,
+            eventAt: receipt.event_at,
+          },
+          fetcher,
+          now,
+        );
+      } else if (receipt.provider === "telegram") {
+        await consumeTelegramStart(
+          env,
+          {
+            receiptId: receipt.id,
+            chatId: receipt.object_id,
+            tokenHash: receipt.link_token_hash,
             eventAt: receipt.event_at,
           },
           fetcher,

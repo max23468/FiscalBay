@@ -7,7 +7,12 @@ import { NotFoundState, UnavailableState } from "~/components/not-found";
 import { appCopy, pageTitle } from "../app-copy";
 import { checkoutReturn, premiumOffers } from "../catalog";
 import { languageFromPath, localizedPath } from "../i18n";
-import { defaultDisplay, defaultTemplate, detectedTimeZone } from "../preferences";
+import {
+  defaultDisplay,
+  defaultTemplate,
+  detectedTimeZone,
+  effectiveTimeZone,
+} from "../preferences";
 import { exportReturnHref, exportScope } from "../orders/export-scope";
 import { snapshotParam } from "../orders/order-list";
 import { openSearch } from "../orders/order-search.server";
@@ -109,7 +114,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
             activeId: scenario.stores.find((store) => store.pauseReason !== "plan")?.id ?? null,
             changeFrom: null,
           },
-    stores: scenario.stores,
     security: {
       methods: scenario.signInMethods,
       sessions: scenario.sessions,
@@ -126,7 +130,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       templates: { it: defaultTemplate("it"), en: defaultTemplate("en") },
     },
     diagnostics: scenario.diagnostics,
-    telegramChat: scenario.telegramChat,
+    // Chat e preferenze dimostrative: ogni scelta parte dal predefinito, come le altre.
+    telegram: {
+      chat: scenario.telegramChat ? { label: scenario.telegramChat, linkedAt: scenario.now } : null,
+      enabled: true,
+      filter: "fiscal",
+      mode: "each",
+      digestTime: "18:00",
+      timeZone: effectiveTimeZone("auto", detectedTimeZone(request.headers.get("cookie"))),
+      stores: scenario.stores.map((store) => ({
+        id: store.id,
+        name: store.name,
+        enabled: store.notifications === true,
+        paused: store.pauseReason === "plan",
+      })),
+    },
     exportEstimate: {
       orders: estimate.length,
       locked: estimate.filter((order) => order.fiscal.state === "locked").length,

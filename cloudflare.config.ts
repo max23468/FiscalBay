@@ -78,6 +78,8 @@ export default defineConfig((ctx) => ({
             STRIPE_PRICE_MONTHLY: bindings.text(""),
             STRIPE_PRICE_ANNUAL: bindings.text(""),
             STRIPE_PRICE_LIFETIME: bindings.text(""),
+            // Bot attuale, riusato come identità della 2.0; token e segreto restano in custodia.
+            TELEGRAM_BOT_USERNAME: bindings.text("fiscalbay_bot"),
           },
         })
       : worker({
@@ -93,6 +95,8 @@ export default defineConfig((ctx) => ({
             STRIPE_PRICE_MONTHLY: bindings.text("price_1UUABwJqfZnQjIbKpQPYZhKu"),
             STRIPE_PRICE_ANNUAL: bindings.text("price_1UUABwJqfZnQjIbKjc1m9dc0"),
             STRIPE_PRICE_LIFETIME: bindings.text("price_1UUABxJqfZnQjIbK0m1dpfRa"),
+            // Bot separato dal bot Production, con foto e profilo che lo dichiarano di prova.
+            TELEGRAM_BOT_USERNAME: bindings.text("fiscalbay_test_bot"),
           },
         }),
 }));

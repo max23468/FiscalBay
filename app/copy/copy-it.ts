@@ -574,6 +574,15 @@ export const it = {
       telegramModeDigest: "Riepilogo giornaliero",
       telegramDigestTime: "Orario del riepilogo",
       telegramStores: "Negozi",
+      telegramConnect: "Collega Telegram",
+      telegramPending:
+        "Premi «Avvia» nel bot per completare il collegamento. Il link vale 15 minuti.",
+      telegramChangePending:
+        "Premi «Avvia» nel bot dalla nuova chat. Fino ad allora le notifiche restano su questa.",
+      telegramLinked: "Chat Telegram collegata.",
+      telegramChatUnnamed: "Chat privata",
+      telegramDigestZone: (zone: string) => `Fuso orario: ${zone}`,
+      telegramUnavailable: "Le notifiche Telegram non sono disponibili in questo momento.",
       marketingTitle: "Comunicazioni",
       marketingConsent: "Ricevi via email novità e offerte su FiscalBay",
       marketingHint: "Le email sul tuo account arrivano in ogni caso.",

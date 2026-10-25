@@ -21,11 +21,14 @@ import { fileURLToPath } from "node:url";
 import { availableParallelism, totalmem } from "node:os";
 import { importGraph } from "./verify-repo.mjs";
 
-/** Moduli server di Auth, sessioni, isolamento, ordini, export, negozi, integrazioni e diritti. */
+/**
+ * Moduli server di Auth, sessioni, isolamento, ordini, export, negozi, integrazioni, diritti e
+ * destinatari Telegram.
+ */
 export function criticalModule(file) {
   return (
     file === "app/tax-quality.ts" ||
-    /^app\/(?:auth(?:-route)?|domain\/(?:billing|refunds|orders|order-import|order-acquisition|order-sync|quota|grants|cycles|sessions|sign-in-methods|registration|stores|export)|integrations\/(?:webhooks|stripe|ebay\/(?:notifications|seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
+    /^app\/(?:auth(?:-route)?|domain\/(?:billing|refunds|orders|order-import|order-acquisition|order-sync|quota|grants|cycles|sessions|sign-in-methods|registration|stores|export|telegram)|integrations\/(?:webhooks|stripe|telegram|ebay\/(?:notifications|seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
       file,
     )
   );

@@ -8,16 +8,8 @@ import { RadioGroup } from "~/components/ui/radio-group";
 import type { AppCopy } from "../../app-copy";
 import { languagePath, type AppLinks } from "../../app-links";
 import { languageNames, languages, localizedPath } from "../../i18n";
-import { timeZones, type Theme, type TimeZone, type TimeZoneChoice } from "../../preferences";
+import { timeZones, zoneLabel, type Theme, type TimeZoneChoice } from "../../preferences";
 import { Group, RadioOption, SaveStatus, SimpleSelect, useAutoSave } from "./controls";
-
-/** Nome del fuso: quello dell'elenco, altrimenti la città dell'identificativo IANA. */
-function zoneLabel(zone: string | null, t: AppCopy): string | null {
-  if (!zone) return null;
-  return (timeZones as readonly string[]).includes(zone)
-    ? t.settings.appearance.timeZones[zone as TimeZone]
-    : (zone.split("/").at(-1) ?? zone).replaceAll("_", " ");
-}
 
 /** Tema sul documento: `data-theme` impone chiaro o scuro, senza attributo segue il sistema. */
 function applyTheme(theme: Theme) {

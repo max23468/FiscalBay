@@ -69,6 +69,8 @@ anche i dettagli e i retry pendenti.
 |---|---|
 | Risposte eBay e body webhook | Solo memoria della richiesta, nessun raw persistito: nessuna copia può superare le 24 ore o sopravvivere a un retry. |
 | Ricevute webhook | Riferimenti tecnici minimizzati, negozio, consenso, oggetto e date; scadenza propria di sette giorni, verificata anche prima della pulizia. Nessun body o dato fiscale. |
+| Ricevute del bot Telegram | Soltanto il comando `/start` di una chat privata: aggiornamento, chat e impronta del token di collegamento, con la scadenza di sette giorni delle altre ricevute. Mai il testo del messaggio, il token o i dati del profilo Telegram. |
+| Collegamento Telegram | Richiesta con l'impronta del token, legata a spazio, utente e sessione: la chiusura della sessione o dello spazio la elimina, la pulizia giornaliera un giorno dopo la scadenza di 15 minuti. Una sola chat per spazio con il nome mostrato da Telegram, sostituita dal cambio di chat; preferenze e scelte per negozio seguono lo spazio e il negozio. |
 | Queue e recupero ingressi | ID della ricevuta, ID del negozio oppure nome e turno del compito. Ogni consegna rilegge lo stato corrente; non trasporta snapshot buyer o CF. |
 | Checkpoint e letture sync | Cursori, date, contatori ed esiti minimizzati; nessun ordine o identificativo fiscale serializzato. |
 | Buyer e storico fiscale | Legati all'ordine tramite FK, senza anagrafica globale o snapshot indipendente. |

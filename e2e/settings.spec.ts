@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { areas, enter, noPageOverflow, open } from "./components";
 import { expect, networkIdle, test, watchNetwork } from "./fixtures";
+import { executeLocal } from "../scripts/local-d1.mjs";
 import { useLocalAccount } from "./local-account";
 
 test.afterEach(async ({ context }) => context.unrouteAll({ behavior: "ignoreErrors" }));
@@ -713,5 +714,186 @@ test.describe("abbonamento nel piano", () => {
       } finally {
         await preview.close();
       }
+    });
+});
+
+/**
+ * Notifiche dell'area reale pronte all'uso: rete ferma e pagina idratata, segnalata dal consenso
+ * email che resta disattivato fino ad allora.
+ */
+async function openNotifications(page: Page, prefix: string, it: boolean) {
+  await page.goto(`${prefix}/app/impostazioni/notifiche`);
+  await networkIdle(page);
+  await expect(
+    page.getByRole("switch", {
+      name: it
+        ? "Ricevi via email novità e offerte su FiscalBay"
+        : "Receive FiscalBay news and offers by email",
+    }),
+  ).toBeEnabled();
+}
+
+/** Scrittura nel database locale condiviso con la preview, ripetuta se lo trova occupato. */
+async function writeLocal(sql: string) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      executeLocal(sql);
+      return;
+    } catch (error) {
+      if (attempt === 5) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+    }
+  }
+}
+
+test.describe("notifiche Telegram", () => {
+  test.skip(
+    Boolean(process.env.E2E_BASE_URL),
+    "Prove con dati sintetici soltanto sul database locale.",
+  );
+
+  for (const language of ["it", "en"] as const)
+    test(`la chat collegata salva preferenze e negozi, ${language}`, async ({
+      page,
+      context,
+      baseURL,
+      browserName,
+    }, testInfo) => {
+      const it = language === "it";
+      const prefix = it ? "" : "/en";
+      const t = (italian: string, english: string) => (it ? italian : english);
+      const id = `telegram-linked-${language}-${browserName}-${testInfo.retry}`;
+      await useLocalAccount(context, "member", baseURL!, id);
+      await openNotifications(page, prefix, it);
+      await expect(page.getByText("@collaudo_fiscalbay")).toBeVisible();
+      const saved = (name: string) =>
+        page.waitForResponse(
+          (response) =>
+            response.request().method() === "POST" &&
+            new URLSearchParams(response.request().postData() ?? "").get("name") === name,
+        );
+      await expect(
+        page.getByRole("radio", {
+          name: t("Solo ordini con Codice Fiscale", "Only orders with a tax code"),
+        }),
+      ).toBeChecked();
+      let done = saved("telegram-filter");
+      await page.getByRole("radio", { name: t("Tutti i nuovi ordini", "All new orders") }).check();
+      await done;
+      done = saved("telegram-mode");
+      await page.getByRole("radio", { name: t("Riepilogo giornaliero", "Daily summary") }).check();
+      await done;
+      const time = page.getByRole("combobox", { name: t("Orario del riepilogo", "Summary time") });
+      await expect(
+        page.getByText(t("Fuso orario: Roma (Italia)", "Time zone: Rome (Italy)")),
+      ).toBeVisible();
+      done = saved("telegram-digest-time");
+      await time.click();
+      await page.getByRole("option", { name: "21:00" }).click();
+      await done;
+      done = saved(`store-notifications:${id}-2`);
+      await page.getByRole("switch", { name: "Secondo negozio notifiche", exact: true }).uncheck();
+      await done;
+
+      // Le scelte vengono dal server dopo la ricarica.
+      await page.reload();
+      await expect(
+        page.getByRole("radio", { name: t("Tutti i nuovi ordini", "All new orders") }),
+      ).toBeChecked();
+      await expect(
+        page.getByRole("radio", { name: t("Riepilogo giornaliero", "Daily summary") }),
+      ).toBeChecked();
+      await expect(time).toContainText("21:00");
+      await expect(
+        page.getByRole("switch", { name: "Negozio notifiche", exact: true }),
+      ).toBeChecked();
+      await expect(
+        page.getByRole("switch", { name: "Secondo negozio notifiche", exact: true }),
+      ).not.toBeChecked();
+
+      // I Negozi mostrano lo stesso stato, con la scorciatoia verso le Notifiche.
+      await page.goto(`${prefix}/app/negozi`);
+      const row = (name: string) =>
+        page.getByRole("table", { name: t("Elenco negozi", "Store list") }).getByRole("row", {
+          name: new RegExp(`^${name}`, "u"),
+        });
+      await expect(row("Secondo negozio notifiche")).toContainText(t("Disattivate", "Off"));
+      await page.goto(`${prefix}/app/negozi/${id}-2`);
+      await expect(
+        page.getByRole("dialog").getByRole("link", {
+          name: t("Apri le notifiche", "Open notifications"),
+        }),
+      ).toHaveAttribute("href", `${prefix}/app/impostazioni/notifiche`);
+    });
+
+  for (const language of ["it", "en"] as const)
+    test(`collegare la chat apre il bot e la pagina aspetta l'«Avvia», ${language}`, async ({
+      page,
+      context,
+      baseURL,
+      browserName,
+    }, testInfo) => {
+      const it = language === "it";
+      const prefix = it ? "" : "/en";
+      // Wrangler scrive nel database locale in alcuni secondi, poi la pagina si rilegge.
+      test.setTimeout(90_000);
+      const id = `telegram-unlinked-${language}-${browserName}-${testInfo.retry}`;
+      await useLocalAccount(context, "member", baseURL!, id);
+      // Nessun bot reale: Telegram risponde con una pagina vuota.
+      await context.route("https://t.me/**", (route) =>
+        route.fulfill({ status: 200, contentType: "text/html", body: "<title>Telegram</title>" }),
+      );
+      await openNotifications(page, prefix, it);
+      const popup = page.waitForEvent("popup");
+      await page
+        .getByRole("button", { name: it ? "Collega Telegram" : "Connect Telegram" })
+        .click();
+      const bot = await popup;
+      await bot.waitForURL(/^https:\/\/t\.me\//u);
+      const target = new URL(bot.url());
+      expect(target.pathname).toBe("/FiscalBayCollaudoBot");
+      expect(target.searchParams.get("start")).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+      await bot.close();
+      await expect(
+        page.getByText(
+          it
+            ? "Premi «Avvia» nel bot per completare il collegamento. Il link vale 15 minuti."
+            : "Press Start in the bot to finish linking. The link is valid for 15 minutes.",
+        ),
+      ).toBeVisible();
+      // Al posto del bot, il collegamento che il consumer scrive dopo l'«Avvia». La preview tiene
+      // aperto lo stesso database: una scrittura concorrente può trovarlo occupato e si ripete.
+      await writeLocal(
+        `INSERT INTO telegram_links (workspace_id, id, chat_id, chat_label, language, linked_at)
+          VALUES ('${id}', '${id}', '2', '@nuova_chat', '${language}', '${new Date().toISOString()}')`,
+      );
+      await expect(page.getByText("@nuova_chat")).toBeVisible({ timeout: 20_000 });
+      await expect(
+        page
+          .getByRole("status")
+          .filter({ hasText: it ? "Chat Telegram collegata." : "Telegram chat linked." }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("switch", {
+          name: it ? "Invia notifiche degli ordini" : "Send order notifications",
+        }),
+      ).toBeChecked();
+    });
+
+  for (const language of ["it", "en"] as const)
+    test(`anteprima: Premium senza chat propone il collegamento simulato, ${language}`, async ({
+      page,
+    }) => {
+      const it = language === "it";
+      const prefix = it ? "" : "/en";
+      await open(page, `${prefix}/anteprima/impostazioni/notifiche`, "prova-premium");
+      await page
+        .getByRole("button", { name: it ? "Collega Telegram" : "Connect Telegram" })
+        .click();
+      await expect(
+        page.getByRole("status").filter({
+          hasText: it ? "Anteprima: l’azione è simulata." : "Preview: this action is simulated.",
+        }),
+      ).toBeVisible();
     });
 });

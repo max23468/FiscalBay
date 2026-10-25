@@ -32,6 +32,12 @@ describe("copia locale dell'artefatto", () => {
           readFileSync(path.join(directory, ".cloudflare/preview", relative), "utf8"),
         );
         assert.equal(copy.env.APP_ORIGIN.value, production ? origin : "http://localhost:5193");
+        // Il bot sintetico serve soltanto alla copia test; Production conserva il proprio nome.
+        assert.equal(
+          copy.env.TELEGRAM_BOT_USERNAME?.value,
+          production ? undefined : "FiscalBayCollaudoBot",
+        );
+        assert.equal(copy.env.TELEGRAM_BOT_TOKEN === undefined, production);
         assert.equal(readFileSync(source, "utf8"), original);
       }
     } finally {

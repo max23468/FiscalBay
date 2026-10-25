@@ -13,6 +13,19 @@ interface Traffic {
 const traffic = new WeakMap<BrowserContext, WeakMap<Page, Traffic>>();
 
 /**
+ * Frame della richiesta; null per quelle del service worker e per la navigazione che apre una
+ * nuova scheda, partita prima che il frame esista: la nuova pagina si osserva dal suo documento.
+ */
+function frameOf(request: Request) {
+  if (request.serviceWorker()) return null;
+  try {
+    return request.frame();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Osserva le richieste delle pagine del contesto per `networkIdle`. Il contesto della prova lo è
  * già; un contesto creato nella prova va osservato prima di aprirne le pagine.
  */
@@ -44,8 +57,8 @@ export function watchNetwork(context: BrowserContext) {
   for (const page of context.pages()) state(page);
   context.on("page", state);
   context.on("request", (request) => {
-    if (request.serviceWorker()) return;
-    const frame = request.frame();
+    const frame = frameOf(request);
+    if (!frame) return;
     const current = state(frame.page());
     if (request.isNavigationRequest() && frame === frame.page().mainFrame())
       current.navigation = request;
@@ -53,8 +66,9 @@ export function watchNetwork(context: BrowserContext) {
     current.changed = Date.now();
   });
   const done = (request: Request) => {
-    if (request.serviceWorker()) return;
-    const current = state(request.frame().page());
+    const frame = frameOf(request);
+    if (!frame) return;
+    const current = state(frame.page());
     if (current.pending.delete(request)) current.changed = Date.now();
   };
   context.on("requestfinished", done);

@@ -106,6 +106,8 @@ describe("esito dei mutation test", () => {
     assert.equal(criticalModule("app/i18n.ts"), false);
     assert.equal(criticalModule("app/domain/billing.server.ts"), true);
     assert.equal(criticalModule("app/domain/refunds.server.ts"), true);
+    assert.equal(criticalModule("app/domain/telegram.server.ts"), true);
+    assert.equal(criticalModule("app/integrations/telegram.server.ts"), true);
     assert.deepEqual(mutationMatrix("", files), {
       target: [
         "app/domain/order-import.server.ts",
