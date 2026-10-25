@@ -307,22 +307,27 @@ export interface AccountView {
   quota?: { used: number; limit: number; cycleEndsAt: string | null; nextLimit?: number };
   /**
    * `endsAt` compare dopo la disdetta: la copertura pagata finisce senza rinnovo. `nextPeriod`
-   * è la periodicità di un cambio programmato, che vale dal rinnovo.
+   * è la periodicità di un cambio programmato, che vale dal rinnovo. `granted` segna un
+   * lifetime in omaggio, senza acquisto né documenti su Stripe.
    */
   premium?: {
     period: "monthly" | "annual" | "lifetime";
     renewsAt: string | null;
     endsAt?: string | null;
     nextPeriod?: "monthly" | "annual";
+    granted?: true;
   };
+  /** Premium concesso senza abbonamento: finisce all'istante `endsAt`. */
+  grant?: { endsAt: string };
   /**
-   * Pagamento senza copertura in corso: in attesa della conferma di Stripe, abbonamento scelto
-   * durante la prova con il primo addebito alla sua fine (`chargeAt`), oppure rinnovo non
+   * Pagamento senza copertura in corso: in attesa della conferma di Stripe, anche per il
+   * lifetime (`lifetime`), abbonamento scelto durante la prova con il primo addebito alla sua
+   * fine (`chargeAt`), che dopo la disdetta (`cancelled`) non arriva più, oppure rinnovo non
    * riuscito con il prezzo protetto fino a `protectedUntil`.
    */
   payment?:
-    | { state: "pending" }
-    | { state: "scheduled"; period: "monthly" | "annual"; chargeAt: string }
+    | { state: "pending"; lifetime?: true }
+    | { state: "scheduled"; period: "monthly" | "annual"; chargeAt: string; cancelled?: true }
     | { state: "renewal-failed"; protectedUntil: string };
 }
 

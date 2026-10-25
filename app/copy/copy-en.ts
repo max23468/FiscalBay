@@ -374,7 +374,7 @@ export const en: AppCopy = {
     disconnectBody:
       "FiscalBay will stop reading this store on eBay. Imported orders remain available for the retention period and you can reconnect the same store later.",
     disconnectSubscription:
-      "Disconnecting the store does not cancel the Premium subscription, which keeps renewing.",
+      "Disconnecting the store does not cancel the Premium subscription: scheduled charges still apply.",
     disconnectSubscriptionLink: "Manage subscription",
     deleteBody:
       "The store will be removed from FiscalBay and all its imported orders will be deleted. This cannot be undone. Your store on eBay and your FiscalBay subscription will not change.",
@@ -470,6 +470,17 @@ export const en: AppCopy = {
       priceMonthlyNote: "Renews every month.",
       priceAnnualNote: (months) => `12 months for the price of ${months}.`,
       priceLifetimeNote: "One-off payment, no renewals.",
+      lifetimeCredit: (amount: string) => `Less ${amount} for the unused paid period.`,
+      lifetimeReplaces: "Your subscription ends with no further renewals.",
+      lifetimeCreditName: "Unused paid period",
+      lifetimeSoldOut: "Sold out",
+      lifetimeUnavailable: "Lifetime places are sold out.",
+      lifetimeRenewing:
+        "Your subscription renews shortly: you can switch to lifetime right after the renewal.",
+      lifetimeUpgradeTitle: "Switch to lifetime",
+      lifetimeProcessingTitle: "Activating lifetime Premium",
+      lifetimeProcessingBody:
+        "Lifetime Premium starts as soon as Stripe confirms the payment; until then your plan stays as it is. Receipts and invoices come from Stripe.",
       trialPurchaseNote:
         "With monthly or annual you don't pay today: your trial days stay and the first charge comes when the trial ends.",
       trialEndingPurchaseNote:
@@ -481,6 +492,9 @@ export const en: AppCopy = {
       trialChosenTitle: (plan: string) => `You chose ${plan}`,
       trialChosenBody: (date: string) =>
         `Your trial continues: the first charge comes on ${date}, when it ends. Until then you pay nothing.`,
+      trialChosenCancelledTitle: (plan: string) => `${plan} cancelled`,
+      trialChosenCancelledBody: (date: string) =>
+        `No charge: on ${date}, when the trial ends, you go back to Free. Until then you can reactivate it on Stripe.`,
       pricesNote:
         "Prices exclude VAT. Before paying, Stripe shows the total with your country’s taxes, in your currency too.",
       purchaseNeedsSync: "You can buy Premium once a store has been read successfully.",
@@ -509,6 +523,8 @@ export const en: AppCopy = {
         lifetime: "Premium, lifetime",
       },
       premiumLifetime: "One-off purchase, no renewals.",
+      premiumLifetimeGranted: "Granted by FiscalBay, no renewals.",
+      grantEnds: (date: string) => `Premium granted until ${date}.`,
       premiumRenews: (date) => `Renews on ${date}.`,
       premiumEnds: (date) => `Renewal cancelled: Premium stays active until ${date}.`,
       renewalFailedTitle: "Renewal failed",

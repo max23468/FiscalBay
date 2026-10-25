@@ -12,6 +12,7 @@ import { exportReturnHref, exportScope } from "../orders/export-scope";
 import { snapshotParam } from "../orders/order-list";
 import { openSearch } from "../orders/order-search.server";
 import { previewListing, previewSearchScope } from "../preview/order-list.server";
+import { previewLifetime } from "../preview/scenarios.server";
 import { pageScenario, simulateAction } from "../preview/state.server";
 import { settingsSections, type SettingsSection } from "../view-models";
 import type { PreviewContext } from "./preview";
@@ -93,6 +94,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
             ? "available"
             : "needs-sync",
       offers: premiumOffers,
+      lifetime: previewLifetime(scenario),
       checkout: checkoutReturn(query),
     },
     // Il negozio attivo è quello senza la pausa del piano; la sostituzione è simulata.

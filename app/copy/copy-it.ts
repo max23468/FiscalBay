@@ -381,7 +381,7 @@ export const it = {
     disconnectBody:
       "FiscalBay smette di leggere il negozio su eBay. Gli ordini già importati restano consultabili per il periodo di conservazione e puoi ricollegare lo stesso negozio in seguito.",
     disconnectSubscription:
-      "Scollegare il negozio non disdice l’abbonamento Premium, che continua a rinnovarsi.",
+      "Scollegare il negozio non disdice l’abbonamento Premium: gli addebiti previsti restano.",
     disconnectSubscriptionLink: "Gestisci l’abbonamento",
     deleteBody:
       "Il negozio verrà rimosso da FiscalBay e tutti i suoi ordini importati saranno eliminati. Questa operazione non può essere annullata. Il negozio su eBay e l’abbonamento FiscalBay non vengono modificati.",
@@ -484,6 +484,17 @@ export const it = {
       priceMonthlyNote: "Si rinnova ogni mese.",
       priceAnnualNote: (months: number) => `12 mesi al prezzo di ${months}.`,
       priceLifetimeNote: "Pagamento unico, senza rinnovi.",
+      lifetimeCredit: (amount: string) => `Meno ${amount} del periodo pagato non usato.`,
+      lifetimeReplaces: "L’abbonamento si chiude senza altri rinnovi.",
+      lifetimeCreditName: "Periodo pagato non usato",
+      lifetimeSoldOut: "Posti esauriti",
+      lifetimeUnavailable: "I posti a vita sono esauriti.",
+      lifetimeRenewing:
+        "Il tuo abbonamento si rinnova a breve: potrai passare a vita subito dopo il rinnovo.",
+      lifetimeUpgradeTitle: "Passa a vita",
+      lifetimeProcessingTitle: "Premium a vita in attivazione",
+      lifetimeProcessingBody:
+        "Premium a vita si attiva appena Stripe conferma il pagamento; fino ad allora il piano resta quello attuale. Ricevuta e fattura arrivano da Stripe.",
       trialPurchaseNote:
         "Con mensile o annuale oggi non paghi: i giorni di prova restano e il primo addebito arriva quando la prova finisce.",
       trialEndingPurchaseNote:
@@ -495,6 +506,9 @@ export const it = {
       trialChosenTitle: (plan: string) => `${plan} scelto`,
       trialChosenBody: (date: string) =>
         `La prova continua: il primo addebito arriva il ${date}, quando finisce. Fino ad allora non paghi nulla.`,
+      trialChosenCancelledTitle: (plan: string) => `${plan} disdetto`,
+      trialChosenCancelledBody: (date: string) =>
+        `Nessun addebito: il ${date}, alla fine della prova, torni al Free. Fino ad allora puoi riattivarlo su Stripe.`,
       pricesNote:
         "Prezzi IVA esclusa. Su Stripe vedi il totale con le imposte del tuo paese, anche nella tua valuta, prima di pagare.",
       purchaseNeedsSync: "Potrai acquistare Premium dopo la prima lettura riuscita di un negozio.",
@@ -519,6 +533,8 @@ export const it = {
         lifetime: "Premium a vita",
       },
       premiumLifetime: "Acquisto una tantum, senza rinnovi.",
+      premiumLifetimeGranted: "Concesso da FiscalBay, senza rinnovi.",
+      grantEnds: (date: string) => `Premium concesso fino al ${date}.`,
       premiumRenews: (date: string) => `Si rinnova il ${date}.`,
       premiumEnds: (date: string) => `Rinnovo disdetto: Premium resta attivo fino al ${date}.`,
       renewalFailedTitle: "Rinnovo non riuscito",

@@ -2317,7 +2317,65 @@ for (const width of [390, 768, 1440]) {
         timeout: 20_000,
       });
       await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/piano$`));
+      // Con il lifetime non resta nulla da acquistare.
+      await expect(
+        page.getByRole("button", { name: /Scegli a vita|Choose lifetime/u }),
+      ).toHaveCount(0);
       await page.screenshot({ path: testInfo.outputPath(`lifetime-${locale}.png`) });
+      // Dall'abbonamento si passa a vita detraendo il periodo pagato non usato.
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "cambio-rinnovo");
+      const upgrade = page.getByRole("region", {
+        name: it ? "Passa a vita" : "Switch to lifetime",
+      });
+      await expect(upgrade).toContainText(
+        it ? "del periodo pagato non usato." : "for the unused paid period.",
+      );
+      await expect(upgrade).toContainText(
+        it
+          ? "L’abbonamento si chiude senza altri rinnovi."
+          : "Your subscription ends with no further renewals.",
+      );
+      await expect(
+        upgrade.getByRole("button", { name: it ? "Scegli a vita" : "Choose lifetime" }),
+      ).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`lifetime-upgrade-${locale}.png`) });
+      // A posti finiti il lifetime resta visibile come esaurito; mensile e annuale restano.
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "lifetime-esaurito");
+      await expect(page.locator("main")).toContainText(it ? "Posti esauriti" : "Sold out");
+      await expect(
+        page.getByRole("button", { name: /Scegli a vita|Choose lifetime/u }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }),
+      ).toBeVisible();
+      // Passaggio a vita pagato e in conferma: l'abbonamento resta, nessun secondo acquisto.
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "passaggio-a-vita");
+      await expect(
+        page.getByText(it ? "Premium a vita in attivazione" : "Activating lifetime Premium"),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: /Scegli a vita|Choose lifetime/u }),
+      ).toHaveCount(0);
+      // Lifetime in omaggio: nessun rinnovo e nessun documento su Stripe.
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium-a-vita-concesso");
+      await expect(page.locator("main")).toContainText(
+        it ? "Concesso da FiscalBay, senza rinnovi." : "Granted by FiscalBay, no renewals.",
+      );
+      await expect(
+        page.getByRole("button", {
+          name: it
+            ? "Consulta ricevute e fatture su Stripe"
+            : "View receipts and invoices on Stripe",
+        }),
+      ).toHaveCount(0);
+      // Premium concesso: la sua fine, senza gestione su Stripe.
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium-concesso");
+      await expect(page.locator("main")).toContainText(
+        it ? "Premium concesso fino al" : "Premium granted until",
+      );
+      await expect(
+        page.getByRole("button", { name: /Gestisci abbonamento|Manage subscription/u }),
+      ).toHaveCount(0);
       // Pagamento da confermare o rinnovo da regolarizzare: Free, senza un secondo acquisto.
       await open(page, `${prefix}/anteprima/impostazioni/piano`, "pagamento-in-attivazione");
       await expect(
@@ -2438,6 +2496,16 @@ for (const width of [390, 768, 1440]) {
       await expect(
         page.getByText(it ? "Scelta del piano in corso" : "Confirming your plan"),
       ).toBeVisible();
+      // Il lifetime durante la prova si paga subito: il ritorno non parla del primo addebito.
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "prova-premium");
+      await page.getByRole("button", { name: it ? "Scegli a vita" : "Choose lifetime" }).click();
+      await expect(page).toHaveURL(/\?checkout=lifetime$/u);
+      await expect(
+        page.getByText(it ? "Premium a vita in attivazione" : "Activating lifetime Premium"),
+      ).toBeVisible();
+      await expect(
+        page.getByText(it ? "Scelta del piano in corso" : "Confirming your plan"),
+      ).toHaveCount(0);
       // Con l'abbonamento scelto la prova continua senza addebiti né un secondo acquisto.
       await open(page, `${prefix}/anteprima/impostazioni/piano`, "prova-con-abbonamento");
       await expect(
@@ -2458,6 +2526,12 @@ for (const width of [390, 768, 1440]) {
       await expect(
         page.getByRole("button", { name: /Scegli (mensile|annuale)|Choose (monthly|annual)/u }),
       ).toHaveCount(0);
+      // L'abbonamento scelto si disdice dal portale di Stripe prima del primo addebito.
+      await expect(
+        main.getByRole("button", {
+          name: it ? "Gestisci abbonamento su Stripe" : "Manage subscription on Stripe",
+        }),
+      ).toBeVisible();
     }
   });
 }
@@ -3172,6 +3246,7 @@ test.describe("abbonamento nel piano", () => {
     { account: "pending", scenario: "pagamento-in-attivazione" },
     { account: "lapsed", scenario: "rinnovo-non-riuscito" },
     { account: "scheduled", scenario: "prova-con-abbonamento" },
+    { account: "scheduled-cancelled", scenario: "prova-con-abbonamento-disdetto" },
   ] as const;
 
   // Scollegare l'unico negozio con un abbonamento che si rinnova non lo disdice: lo dicono
@@ -3259,6 +3334,11 @@ test.describe("abbonamento nel piano", () => {
               ? "Alla fine Premium continua con il primo addebito."
               : "When it ends, Premium continues with the first charge.",
           },
+          // Disdetto durante la prova: nessun addebito e ritorno al Free alla fine.
+          "scheduled-cancelled": {
+            title: it ? "Prova Premium" : "Premium trial",
+            text: it ? "Premium mensile disdetto" : "Premium, monthly cancelled",
+          },
         }[account];
         const check = async (target: Page, surface: "real" | "preview") => {
           const section = target.getByRole("region", {
@@ -3272,6 +3352,12 @@ test.describe("abbonamento nel piano", () => {
               name: /Attiva la prova|Start trial|Scegli (mensile|annuale)|Choose (monthly|annual)/u,
             }),
           ).toHaveCount(0);
+          // Il passaggio a vita aspetta un primo pagamento ancora da confermare; in locale l'area
+          // reale non ha la chiave Stripe e non mostra acquisti.
+          if (surface === "preview")
+            await expect(
+              section.getByRole("button", { name: it ? "Scegli a vita" : "Choose lifetime" }),
+            ).toHaveCount(account === "pending" ? 0 : 1);
           await section.screenshot({
             path: test.info().outputPath(`subscription-${account}-${surface}-${language}.png`),
           });
