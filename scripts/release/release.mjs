@@ -73,20 +73,41 @@ export function declaredReview(body) {
   return body?.match(/^reviewed-migrations:\s*([0-9a-f]{64})\s*$/imu)?.[1] ?? "";
 }
 
+/** Voce di una migration per digest e controllo: nome, hash dei byte e testo. */
+export const migrationEntry = (file, bytes) => ({
+  name: path.basename(file),
+  digest: hash(bytes),
+  sql: bytes.toString("utf8"),
+});
+
+/** Migration aggiunte fra due commit, lette da Git. */
+export function addedMigrations(base, head) {
+  return git("diff", "--name-only", "--diff-filter=A", base, head, "--", "migrations")
+    .split("\n")
+    .filter((file) => file.endsWith(".sql"))
+    .map((file) => migrationEntry(file, execFileSync("git", ["show", `${head}:${file}`])));
+}
+
+/** Migration non additive fra quelle aggiunte e digest da approvare; `undefined` se mancano. */
+export function requiredReview(added) {
+  const unsafe = unsafeMigrations(added);
+  if (!unsafe.length) return undefined;
+  return { names: unsafe.map(({ name }) => name), digest: migrationDigest(added) };
+}
+
 /**
  * Le migration non additive aggiunte da una PR si approvano prima del merge: il digest
  * coincide con quello del deploy test quando il test distribuisce già la base della PR.
  */
 export function reviewAdded(added, body) {
-  const unsafe = unsafeMigrations(added);
-  if (!unsafe.length) return "";
-  const digest = migrationDigest(added);
-  if (declaredReview(body) !== digest)
+  const required = requiredReview(added);
+  if (!required) return "";
+  if (declaredReview(body) !== required.digest)
     throw new Error(
-      `Migration da approvare prima del merge: ${unsafe.map(({ name }) => name).join(", ")}. ` +
-        `Dopo l'esame aggiungere al corpo della PR la riga "reviewed-migrations: ${digest}".`,
+      `Migration da approvare prima del merge: ${required.names.join(", ")}. ` +
+        `Dopo l'esame aggiungere al corpo della PR la riga "reviewed-migrations: ${required.digest}".`,
     );
-  return digest;
+  return required.digest;
 }
 
 export function migrationPlan(migrations, applied, reviewed = "", approved) {
@@ -322,22 +343,7 @@ async function main() {
   const command = positionals[0];
   if (command === "review") {
     if (!/^[0-9a-f]{40}$/u.test(values.base ?? "")) throw new Error("Base della PR richiesta.");
-    const added = git(
-      "diff",
-      "--name-only",
-      "--diff-filter=A",
-      values.base,
-      "HEAD",
-      "--",
-      "migrations",
-    )
-      .split("\n")
-      .filter((file) => file.endsWith(".sql"))
-      .map((file) => ({
-        name: path.basename(file),
-        digest: hash(readFileSync(file)),
-        sql: readFileSync(file, "utf8"),
-      }));
+    const added = addedMigrations(values.base, "HEAD");
     const digest = reviewAdded(added, process.env.PR_BODY);
     console.log(
       digest

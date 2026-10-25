@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
@@ -221,6 +221,40 @@ describe("prove browser per area", () => {
   });
 });
 
+describe("spec browser modificate", () => {
+  const sources = [{ path: "app/routes/stores.tsx", text: "export default function Page() {}" }];
+
+  it("seleziona per nome le sole spec modificate, in entrambi i browser", () => {
+    const selected = plan(["e2e/settings.spec.ts", "test/stripe.spec.ts"], sources);
+    assert.deepEqual(
+      [selected.gate, selected.browserGrep, selected.browsers, selected.deploy],
+      ["build", "settings.spec", "chromium,webkit", false],
+    );
+    assert.equal(
+      plan(["e2e/stores.spec.ts", "e2e/orders.spec.ts"], sources).browserGrep,
+      "stores.spec|orders.spec",
+    );
+  });
+
+  it("unisce le spec alle aree dei moduli applicativi modificati", () => {
+    const selected = plan(["app/routes/stores.tsx", "e2e/stores.spec.ts"], sources);
+    assert.equal(selected.browserGrep.split("|").at(-1), "stores.spec");
+    assert.match(selected.browserGrep, /^app-shell\.spec\|@smoke\|negozi/u);
+    assert.equal(plan(["package.json", "e2e/stores.spec.ts"], sources).browserGrep, ".");
+  });
+
+  it("esegue tutto per gli strumenti condivisi delle prove browser", () => {
+    for (const file of [
+      "e2e/fixtures.ts",
+      "e2e/page-cases.ts",
+      "playwright.config.ts",
+      "scripts/browser-tests.mjs",
+    ])
+      assert.equal(plan([file, "e2e/stores.spec.ts"], sources).browserGrep, ".", file);
+    assert.equal(plan(["e2e/stores.spec.ts"], sources, true).browserGrep, ".");
+  });
+});
+
 describe("mutation e riuso nel candidato", () => {
   it("esegue mutation soltanto nel candidato, sui moduli critici e i consumatori critici", () => {
     const files = [
@@ -277,6 +311,60 @@ describe("esecuzione del classificatore", () => {
       assert.equal(fields.gate, "full");
       for (const flag of ["e2e", "build", "deploy"]) assert.equal(fields[flag], "true");
       assert.equal(fields["mutation-matrix"], '{"target":[]}');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("in locale ripete soltanto ciò che è cambiato dall'ultimo verde", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "local-green-"));
+    const bin = path.join(directory, "bin");
+    const log = path.join(directory, "commands");
+    const repo = path.join(directory, "repo");
+    const runner = `#!${process.execPath}\nrequire("node:fs").appendFileSync(process.env.GATE_TEST_LOG, process.argv.slice(2).join(" ") + "\\n");\n`;
+    const git = (...args) => spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+    try {
+      mkdirSync(bin);
+      writeFileSync(path.join(bin, "pnpm"), runner, { mode: 0o700 });
+      mkdirSync(path.join(repo, "scripts/release"), { recursive: true });
+      for (const file of [
+        "classify-changes.mjs",
+        "mutation.mjs",
+        "verify-repo.mjs",
+        "release/release.mjs",
+      ])
+        cpSync(path.join("scripts", file), path.join(repo, "scripts", file));
+      writeFileSync(path.join(repo, "README.md"), "base\n");
+      git("init", "--quiet", "--initial-branch", "develop");
+      git("add", "--all");
+      git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", "base");
+      git("update-ref", "refs/remotes/origin/develop", "HEAD");
+      const classify = () => {
+        writeFileSync(log, "");
+        const result = spawnSync(process.execPath, ["scripts/classify-changes.mjs", "--run"], {
+          cwd: repo,
+          encoding: "utf8",
+          timeout: 10000,
+          env: {
+            ...process.env,
+            PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+            GATE_TEST_LOG: log,
+            GITHUB_OUTPUT: "",
+            GITHUB_STEP_SUMMARY: "",
+          },
+        });
+        assert.equal(result.status, 0, result.stderr);
+        return { output: result.stdout, commands: readFileSync(log, "utf8").trim() };
+      };
+      writeFileSync(path.join(repo, "AGENTS.md"), "regole\n");
+      assert.equal(classify().commands, "verify:tooling");
+      assert.match(classify().output, /Nessuna modifica dall'ultimo verde locale/u);
+      assert.equal(classify().commands, "");
+      writeFileSync(path.join(repo, "notes.md"), "nota\n");
+      const incremental = classify();
+      assert.equal(incremental.commands, "verify:documents");
+      assert.match(incremental.output, /ultimo verde locale/u);
+      assert.doesNotMatch(incremental.output, /tooling: AGENTS\.md/u);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
