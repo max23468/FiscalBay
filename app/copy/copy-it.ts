@@ -581,6 +581,12 @@ export const it = {
         "Premi «Avvia» nel bot dalla nuova chat. Fino ad allora le notifiche restano su questa.",
       telegramLinked: "Chat Telegram collegata.",
       telegramChatUnnamed: "Chat privata",
+      telegramBlocked: "Il bot non riesce a scriverti",
+      telegramBlockedHint:
+        "Il bot risulta bloccato in Telegram. Sbloccalo e scrivigli /start: le notifiche riprendono da quel momento.",
+      telegramUnreachable: "Alcune notifiche non sono arrivate",
+      telegramUnreachableHint:
+        "Telegram non ha accettato i messaggi dopo diversi tentativi. Il prossimo invio riuscito chiude l'avviso.",
       telegramDigestZone: (zone: string) => `Fuso orario: ${zone}`,
       telegramUnavailable: "Le notifiche Telegram non sono disponibili in questo momento.",
       marketingTitle: "Comunicazioni",

@@ -2077,6 +2077,8 @@ describe("acquisizione con il client", () => {
             { body: { task: "maintenance", slot: "2026-09-02T00:00:00.000Z" } },
             { body: { task: "token_refresh", slot: "2026-09-02T00:00:00.000Z" } },
             { body: { task: "billing", slot: "2026-09-02T00:00:00.000Z" } },
+            { body: { task: "telegram", slot: "2026-09-02T00:00:00.000Z" } },
+            { body: { task: "telegram_commands", slot: "2026-09-02T00:00:00.000Z" } },
           ]);
           expect(sendBatch).toHaveBeenCalledTimes(3);
           expect(fetcher).not.toHaveBeenCalled();
@@ -2092,31 +2094,40 @@ describe("acquisizione con il client", () => {
           "maintenance",
           "token_refresh",
           "billing",
+          "telegram",
+          "telegram_commands",
         ]);
         expect(sendBatch).toHaveBeenCalledWith([
           { body: { task: "maintenance", ...slot(0) } },
           { body: { task: "token_refresh", ...slot(0) } },
           { body: { task: "billing", ...slot(0) } },
+          { body: { task: "telegram", ...slot(0) } },
+          { body: { task: "telegram_commands", ...slot(0) } },
         ]);
         // Ripetuto a pochi secondi, o un trigger precedente consegnato in ritardo.
         expect(await dispatchTasks(cron, minutes(0.05))).toEqual([]);
         expect(await dispatchTasks(cron, minutes(-0.05))).toEqual([]);
         // Il periodo successivo del rinnovo; la riconciliazione è oraria, la pulizia giornaliera.
-        expect(await dispatchTasks(cron, minutes(10))).toEqual(["token_refresh"]);
+        expect(await dispatchTasks(cron, minutes(10))).toEqual(["token_refresh", "telegram"]);
         // Trigger saltati fra 20 e 40: il primo che arriva prende il turno.
-        expect(await dispatchTasks(cron, minutes(50))).toEqual(["token_refresh"]);
+        expect(await dispatchTasks(cron, minutes(50))).toEqual(["token_refresh", "telegram"]);
         expect(sendBatch).toHaveBeenLastCalledWith([
           { body: { task: "token_refresh", ...slot(50) } },
+          { body: { task: "telegram", ...slot(50) } },
         ]);
         expect(await dispatchTasks(cron, minutes(24 * 60 + 3))).toEqual([
           "maintenance",
           "token_refresh",
           "billing",
+          "telegram",
+          "telegram_commands",
         ]);
         expect(sendBatch).toHaveBeenLastCalledWith([
           { body: { task: "maintenance", ...slot(24 * 60) } },
           { body: { task: "token_refresh", ...slot(24 * 60) } },
           { body: { task: "billing", ...slot(24 * 60) } },
+          { body: { task: "telegram", ...slot(24 * 60) } },
+          { body: { task: "telegram_commands", ...slot(24 * 60) } },
         ]);
       });
 
@@ -2137,11 +2148,13 @@ describe("acquisizione con il client", () => {
         const body = { task: "maintenance", slot: minutes(0).toISOString() };
 
         // Accettato e mai consegnato: entro l'ora non si riaccoda, dopo sì, con lo stesso turno.
-        expect(await dispatchTasks(cron, minutes(59))).toEqual(["token_refresh"]);
+        expect(await dispatchTasks(cron, minutes(59))).toEqual(["token_refresh", "telegram"]);
         expect(await dispatchTasks(cron, minutes(60))).toEqual([
           "maintenance",
           "token_refresh",
           "billing",
+          "telegram",
+          "telegram_commands",
         ]);
         expect(sendBatch).toHaveBeenLastCalledWith(expect.arrayContaining([{ body }]));
 
@@ -2162,7 +2175,12 @@ describe("acquisizione con il client", () => {
         expect(older.ack).toHaveBeenCalledOnce();
         expect(await remaining()).toBe(1);
         // Un turno concluso non si riaccoda nello stesso giorno.
-        expect(await dispatchTasks(cron, minutes(180))).toEqual(["token_refresh", "billing"]);
+        expect(await dispatchTasks(cron, minutes(180))).toEqual([
+          "token_refresh",
+          "billing",
+          "telegram",
+          "telegram_commands",
+        ]);
       });
 
       it("serializza due consegne dello stesso compito e riprende una lease scaduta", async () => {
@@ -2217,7 +2235,13 @@ describe("acquisizione con il client", () => {
           dispatchTasks(cron, minutes(0)),
           dispatchTasks(cron, minutes(0)),
         ]);
-        expect(turns.flat().sort()).toEqual(["billing", "maintenance", "token_refresh"]);
+        expect(turns.flat().sort()).toEqual([
+          "billing",
+          "maintenance",
+          "telegram",
+          "telegram_commands",
+          "token_refresh",
+        ]);
         expect(sendBatch).toHaveBeenCalledOnce();
       });
 

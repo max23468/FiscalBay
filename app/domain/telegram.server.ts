@@ -91,6 +91,30 @@ const replies = {
   },
 } satisfies Record<Language, unknown>;
 
+function settingsUrl(env: Env, language: Language) {
+  return `${new URL(env.APP_ORIGIN).origin}${localizedPath(language, settingsPath)}`;
+}
+
+/**
+ * Risposta a una chat senza collegamento, in entrambe le lingue: in Production il rimando alle
+ * Impostazioni. Sul test il bot parla soltanto con chi arriva da un link di un suo account: a
+ * una chat sconosciuta non risponde, così il bot di prova non si presenta a chi lo trova per caso.
+ */
+export async function unknownChatReply(
+  env: Env,
+  chatId: string,
+  kind: "help" | "invalid",
+  fetcher: typeof fetch = fetch,
+): Promise<void> {
+  if (!isProduction(env)) return;
+  await confirm(
+    env,
+    chatId,
+    languages.map((language) => replies[language][kind](settingsUrl(env, language))).join("\n\n"),
+    fetcher,
+  );
+}
+
 type LinkRequest = {
   workspace_id: string;
   language: Language;
@@ -111,15 +135,9 @@ export async function consumeTelegramStart(
   now = new Date(),
 ): Promise<void> {
   const db = env.DB;
-  const url = (language: Language) =>
-    `${new URL(env.APP_ORIGIN).origin}${localizedPath(language, settingsPath)}`;
+  const url = (language: Language) => settingsUrl(env, language);
   const reply = (text: string) => confirm(env, start.chatId, text, fetcher);
-  // Sul test il bot parla soltanto con chi arriva da un link di un suo account: a una chat
-  // sconosciuta non risponde, così il bot di prova non si presenta a chi lo trova per caso.
-  const both = async (kind: "help" | "invalid") => {
-    if (isProduction(env))
-      await reply(languages.map((language) => replies[language][kind](url(language))).join("\n\n"));
-  };
+  const both = (kind: "help" | "invalid") => unknownChatReply(env, start.chatId, kind, fetcher);
   if (!start.tokenHash) return both("help");
   const request = await db
     .prepare(
@@ -159,7 +177,8 @@ export async function consumeTelegramStart(
       SELECT workspace_id, ?3, ?4, ?5, language, ?6 FROM (${consumed}) WHERE true
       ON CONFLICT(workspace_id) DO UPDATE SET id = excluded.id, chat_id = excluded.chat_id,
         chat_label = excluded.chat_label, language = excluded.language,
-        linked_at = excluded.linked_at
+        linked_at = excluded.linked_at, delivery_failure = NULL, delivery_failed_at = NULL,
+        resumed_at = NULL, last_delivery_at = NULL
       WHERE telegram_links.chat_id <> excluded.chat_id`)
       .bind(start.tokenHash, start.receiptId, crypto.randomUUID(), start.chatId, label, at),
     db
@@ -200,7 +219,7 @@ export async function telegramSettings(
 ): Promise<TelegramView> {
   const [{ results: workspaces }, { results: stores }] = await db.batch<Record<string, unknown>>([
     db
-      .prepare(`SELECT l.chat_label, l.linked_at, p.enabled, p.filter, p.mode,
+      .prepare(`SELECT l.chat_label, l.linked_at, l.delivery_failure, p.enabled, p.filter, p.mode,
         p.digest_time, p.time_zone
       FROM workspace_members wm
       LEFT JOIN telegram_links l ON l.workspace_id = wm.workspace_id
@@ -220,6 +239,7 @@ export async function telegramSettings(
     | {
         chat_label: string | null;
         linked_at: string | null;
+        delivery_failure: "blocked" | "unreachable" | null;
         enabled: number | null;
         filter: TelegramFilter | null;
         mode: TelegramMode | null;
@@ -230,7 +250,13 @@ export async function telegramSettings(
   // Prima del primo negozio non c'è uno spazio: nessuna chat e i predefiniti.
   if (!row) return { chat: null, ...defaults, timeZone, stores: [] };
   return {
-    chat: row.linked_at ? { label: row.chat_label, linkedAt: row.linked_at } : null,
+    chat: row.linked_at
+      ? {
+          label: row.chat_label,
+          linkedAt: row.linked_at,
+          ...(row.delivery_failure ? { failure: row.delivery_failure } : {}),
+        }
+      : null,
     enabled: row.enabled === null ? defaults.enabled : row.enabled === 1,
     filter: row.filter ?? defaults.filter,
     mode: row.mode ?? defaults.mode,
@@ -355,10 +381,27 @@ export type TelegramRecipient = {
 };
 
 /**
- * Destinatario di un evento di un negozio, riletto al momento dell'invio: chat collegata ora allo
- * spazio del negozio, Premium in corso, notifiche attive per lo spazio e per il negozio, evento
- * successivo al collegamento e alle riattivazioni. Con `linkId` la consegna è stata preparata per
- * quel collegamento: dopo un cambio di chat non ha più destinatario. Null se non va inviato.
+ * Condizioni del destinatario di un evento del negozio all'istante `eventAt`, rilette a `at`:
+ * Premium in corso ora e all'evento, notifiche attive per lo spazio e per il negozio, chat non
+ * bloccata, evento successivo al collegamento, alle riattivazioni e alla ripresa dopo un blocco.
+ * Alias attesi: `s` negozio, `l` collegamento, `p` e `sp` preferenze dello spazio e del negozio.
+ */
+export function telegramRecipientSql(eventAt: string, at: string) {
+  return `s.data_deleted_at IS NULL
+      AND ${activeEntitlementSql("s.workspace_id", at)}
+      AND ${activeEntitlementSql("s.workspace_id", eventAt)}
+      AND COALESCE(p.enabled, 1) = 1 AND COALESCE(sp.enabled, 1) = 1
+      AND l.delivery_failure IS NOT 'blocked'
+      AND julianday(${eventAt}) >= julianday(l.linked_at)
+      AND (l.resumed_at IS NULL OR julianday(${eventAt}) >= julianday(l.resumed_at))
+      AND (p.events_from IS NULL OR julianday(${eventAt}) >= julianday(p.events_from))
+      AND (sp.events_from IS NULL OR julianday(${eventAt}) >= julianday(sp.events_from))`;
+}
+
+/**
+ * Destinatario di un evento di un negozio, riletto al momento dell'invio secondo
+ * `telegramRecipientSql`. Con `linkId` la consegna è stata preparata per quel collegamento: dopo
+ * un cambio di chat non ha più destinatario. Null se non va inviato.
  */
 export async function telegramRecipient(
   db: D1Database,
@@ -374,12 +417,7 @@ export async function telegramRecipient(
     JOIN telegram_links l ON l.workspace_id = s.workspace_id
     LEFT JOIN telegram_preferences p ON p.workspace_id = s.workspace_id
     LEFT JOIN telegram_store_preferences sp ON sp.store_id = s.id
-    WHERE s.id = ?1 AND s.data_deleted_at IS NULL AND (?4 IS NULL OR l.id = ?4)
-      AND ${activeEntitlementSql("s.workspace_id", "?3")}
-      AND COALESCE(p.enabled, 1) = 1 AND COALESCE(sp.enabled, 1) = 1
-      AND julianday(?2) >= julianday(l.linked_at)
-      AND (p.events_from IS NULL OR julianday(?2) >= julianday(p.events_from))
-      AND (sp.events_from IS NULL OR julianday(?2) >= julianday(sp.events_from))`)
+    WHERE s.id = ?1 AND (?4 IS NULL OR l.id = ?4) AND ${telegramRecipientSql("?2", "?3")}`)
     .bind(event.storeId, event.eventAt, now.toISOString(), event.linkId ?? null)
     .first<TelegramRecipient>();
   return row ?? null;

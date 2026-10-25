@@ -570,6 +570,12 @@ export const en: AppCopy = {
         "Press Start in the bot from the new chat. Until then, notifications stay on this one.",
       telegramLinked: "Telegram chat linked.",
       telegramChatUnnamed: "Private chat",
+      telegramBlocked: "The bot cannot write to you",
+      telegramBlockedHint:
+        "The bot is blocked in Telegram. Unblock it and send /start: notifications resume from then on.",
+      telegramUnreachable: "Some notifications did not arrive",
+      telegramUnreachableHint:
+        "Telegram did not accept the messages after several attempts. The next successful delivery clears this notice.",
       telegramDigestZone: (zone: string) => `Time zone: ${zone}`,
       telegramUnavailable: "Telegram notifications are not available right now.",
       marketingTitle: "Communications",
