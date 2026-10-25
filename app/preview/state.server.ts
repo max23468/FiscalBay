@@ -164,7 +164,7 @@ export async function simulateAction(request: Request, form: FormData) {
     );
   if (intent === "buy")
     return redirect(
-      `${localizedPath(language, "/anteprima/impostazioni/piano")}?checkout=processing`,
+      `${localizedPath(language, "/anteprima/impostazioni/piano")}?checkout=${form.get("plan") === "lifetime" ? "lifetime" : "processing"}`,
     );
   const notice = notices[intent] ? notices[intent](t) : t.preview.simulated;
   return { ok: true, notice } satisfies ActionResult;

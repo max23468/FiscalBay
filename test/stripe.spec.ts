@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import Stripe from "stripe";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { annualPaidMonths, firstChargeAt, formatPrice, priceGeneration } from "../app/catalog";
 import {
@@ -13,7 +13,9 @@ import {
   subscriptionView,
 } from "../app/domain/billing.server";
 import { purchaseState, startCheckout } from "../app/domain/checkout.server";
-import { orderAllowance, startTrial } from "../app/domain/grants.server";
+import { grantLifetimeConcession, grantPremium } from "../app/domain/concessions.server";
+import { accountCoverage, orderAllowance, startTrial } from "../app/domain/grants.server";
+import { lifetimeContext, unusedCredit } from "../app/domain/lifetime.server";
 import {
   buildManagedCheckoutParams,
   catalogMismatch,
@@ -411,8 +413,8 @@ describe("Stripe Managed Payments", () => {
         init: { status: 409 },
       });
       await workspace(userId);
-      // Il lifetime non è in vendita finché mancano le prenotazioni dei posti.
-      expect(await buy(cookie, "lifetime")).toMatchObject({ init: { status: 400 } });
+      // Un'offerta che il listino non conosce non arriva a Stripe.
+      expect(await buy(cookie, "settimanale")).toMatchObject({ init: { status: 400 } });
       expect(api).not.toHaveBeenCalled();
 
       const response = (await buy(cookie, "monthly")) as Response;
@@ -452,12 +454,22 @@ describe("Stripe Managed Payments", () => {
     };
     expect(await page()).toMatchObject({
       services: { billing: true },
-      purchase: { state: "needs-sync", offers: ["monthly", "annual"], checkout: null },
+      purchase: {
+        state: "needs-sync",
+        offers: ["monthly", "annual", "lifetime"],
+        // Senza spazio nessun negozio è stato collegato.
+        lifetime: null,
+        checkout: null,
+      },
     });
     await workspace(userId);
     expect(await page("?checkout=processing&session_id=cs_test_checkout")).toMatchObject({
       account: { plan: "free" },
-      purchase: { state: "available", checkout: "processing" },
+      purchase: {
+        state: "available",
+        lifetime: { state: "available", credit: 0, replaces: false },
+        checkout: "processing",
+      },
     });
     expect(await page("?checkout=altro")).toMatchObject({ purchase: { checkout: null } });
     await env.DB.prepare(
@@ -641,7 +653,12 @@ function stripeAccount() {
       /** Fattura senza abbonamento: senza origine, oppure da un preventivo. */
       orphan?: "none" | "quote";
     }>,
-    sessions: [] as Array<{ id: string; mode: string; subscription: string | null }>,
+    /** Sessioni Checkout: quelle create dal test di acquisto si aggiungono qui. */
+    sessions: [] as Array<
+      { id: string; mode: string; subscription: string | null } & Record<string, unknown>
+    >,
+    /** Coupon creati per il credito del lifetime. */
+    coupons: [] as Array<Record<string, string>>,
     /** Inizio della finestra chiesta nell'ultimo elenco delle sessioni, in secondi. */
     sessionsSince: 0,
     down: false,
@@ -726,22 +743,26 @@ function stripeAccount() {
       return Response.json(subscription());
     }
     if (url.pathname === "/v1/subscriptions/sub_test" && init?.method === "POST") {
-      // Cambio di periodicità: prezzo del rinnovo, fine del periodo pagato e metadati.
+      // Cambio di periodicità o rinvio del rinnovo: prezzo, fine del periodo e metadati.
       const body = writes.at(-1)!.body;
-      const price = prices.find((candidate) => candidate.id === body.get("items[0][price]"))!;
-      state.subscription.price = {
-        id: price.id,
-        interval: price.recurring!.interval as "month" | "year",
-      };
+      const price = prices.find((candidate) => candidate.id === body.get("items[0][price]"));
+      if (price)
+        state.subscription.price = {
+          id: price.id,
+          interval: price.recurring!.interval as "month" | "year",
+        };
+      const trialEnd = body.get("trial_end");
+      if (trialEnd) state.subscription.end = new Date(Number(trialEnd) * 1000).toISOString();
       state.subscription.status = "trialing";
-      state.subscription.metadata = {
-        ...(state.subscription.metadata ?? {
-          workspace_id: "w-a",
-          offer: "monthly",
-          price_generation: "2026-09",
-        }),
-        offer: body.get("metadata[offer]")!,
-      };
+      if (body.get("metadata[offer]"))
+        state.subscription.metadata = {
+          ...(state.subscription.metadata ?? {
+            workspace_id: "w-a",
+            offer: "monthly",
+            price_generation: "2026-09",
+          }),
+          offer: body.get("metadata[offer]")!,
+        };
       return Response.json(subscription());
     }
     if (url.pathname === "/v1/subscriptions/sub_test") return Response.json(subscription());
@@ -762,6 +783,54 @@ function stripeAccount() {
     }
     if (url.pathname.startsWith("/v1/invoices/"))
       return Response.json(invoice(state.invoices.find((paid) => url.pathname.endsWith(paid.id))!));
+    if (url.pathname === "/v1/prices/price_test_lifetime")
+      return Response.json(
+        catalogPrice(
+          {
+            id: "price_test_lifetime",
+            unit_amount: 14900,
+            type: "one_time",
+            recurring: null,
+          },
+          { id: "prod_lifetime" },
+        ),
+      );
+    if (url.pathname === "/v1/coupons") {
+      const body = writes.at(-1)!.body;
+      const coupon = { id: `coupon_${state.coupons.length + 1}`, ...Object.fromEntries(body) };
+      state.coupons.push(coupon);
+      return Response.json({ object: "coupon", ...coupon });
+    }
+    if (url.pathname === "/v1/checkout/sessions" && init?.method === "POST") {
+      const body = writes.at(-1)!.body;
+      const id = `cs_lifetime_${state.sessions.length + 1}`;
+      state.sessions.push({
+        id,
+        mode: body.get("mode")!,
+        subscription: null,
+        status: "open",
+        payment_status: "unpaid",
+        livemode: false,
+        created: second(now),
+        url: `https://checkout.example.invalid/c/pay/${id}`,
+        managed_payments: { enabled: true },
+        metadata: {
+          workspace_id: body.get("metadata[workspace_id]")!,
+          offer: body.get("metadata[offer]")!,
+          price_generation: body.get("metadata[price_generation]")!,
+        },
+        customer: body.get("customer"),
+        payment_intent: null,
+      });
+      return Response.json({ object: "checkout.session", ...state.sessions.at(-1) });
+    }
+    if (url.pathname.endsWith("/expire")) {
+      const session = state.sessions.find((candidate) => url.pathname.includes(candidate.id))!;
+      if (session.status !== "open")
+        return Response.json({ error: { type: "invalid_request_error" } }, { status: 400 });
+      session.status = "expired";
+      return Response.json({ object: "checkout.session", ...session });
+    }
     if (url.pathname === "/v1/checkout/sessions") {
       expect(url.searchParams.get("status")).toBe("complete");
       state.sessionsSince = Number(url.searchParams.get("created[gte]"));
@@ -774,7 +843,27 @@ function stripeAccount() {
       });
     throw new Error("unexpected_stripe_request");
   });
-  return { state, fetcher, requests, writes, prices };
+  /** Esito del pagamento di una sessione lifetime, come lo rilegge Stripe. */
+  const settle = (
+    id: string,
+    outcome: "paid" | "processing" | "failed" | "expired",
+    paidAt = now,
+  ) => {
+    const session = state.sessions.find((candidate) => candidate.id === id)!;
+    session.status = outcome === "expired" ? "expired" : "complete";
+    session.payment_status = outcome === "paid" ? "paid" : "unpaid";
+    session.customer ??= "cus_lifetime";
+    session.payment_intent = {
+      id: `pi_${id}`,
+      object: "payment_intent",
+      status:
+        outcome === "paid" ? "succeeded" : outcome === "processing" ? "processing" : "canceled",
+      amount_received: outcome === "paid" ? 18178 : 0,
+      currency: "eur",
+      latest_charge: outcome === "paid" ? { id: `ch_${id}`, created: second(paidAt) } : null,
+    };
+  };
+  return { state, fetcher, requests, writes, prices, settle };
 }
 
 const firstInvoice = {
@@ -1071,7 +1160,7 @@ describe("Webhook e riconciliazione Stripe", () => {
     await env.DB.prepare("UPDATE stripe_subscriptions SET status = 'incomplete'").run();
     for (const [source, expected] of [
       ["trial", { payment: { state: "pending" } }],
-      ["admin", {}],
+      ["admin", { grant: { endsAt: periodEnd } }],
     ] as const) {
       await env.DB.prepare(
         `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
@@ -1634,5 +1723,478 @@ describe("Webhook e riconciliazione Stripe", () => {
     await expect(read()).rejects.toMatchObject({ failure: "unavailable", details: {} });
     // Ogni errore è stato una sola richiesta: nessun retry dello SDK.
     expect(reply).toHaveBeenCalledTimes(10);
+  });
+});
+
+describe("Lifetime e concessioni", () => {
+  let userId: string;
+  let cookie: string;
+  const at = (iso: string) => new Date(iso);
+  const request = new Request("http://localhost:5173/app/impostazioni/piano", { method: "POST" });
+  /** Acquisto lifetime dalla pagina del piano, con Stripe simulato anche per il client. */
+  const buyLifetime = (stripe: ReturnType<typeof stripeAccount>, user = userId, time = now) => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
+    return startCheckout(
+      env,
+      {
+        request,
+        userId: user,
+        email: "lifetime@example.invalid",
+        offer: "lifetime",
+        language: "it",
+      },
+      at(time),
+    );
+  };
+  const event = (stripe: ReturnType<typeof stripeAccount>, topic: string, id: string, time = now) =>
+    applyStripeEvent(env, { topic, objectId: id }, stripe.fetcher, at(time));
+  const allocations = async () =>
+    (
+      await env.DB.prepare(
+        `SELECT slot, workspace_id, status, kind, provider_reference, expires_at, completed_at,
+          customer_id FROM lifetime_allocations ORDER BY slot`,
+      ).all()
+    ).results;
+  const lifetimes = async () =>
+    (
+      await env.DB.prepare(
+        `SELECT workspace_id, starts_at, ends_at, stripe_checkout_session_id, amount_paid, currency,
+          granted_by, grant_reason FROM workspace_entitlements WHERE source = 'lifetime'`,
+      ).all()
+    ).results;
+  /** Posti già occupati da altri spazi, ormai cancellati. */
+  const taken = (slots: number) =>
+    env.DB.batch(
+      Array.from({ length: slots }, (_, index) =>
+        env.DB.prepare(`INSERT INTO lifetime_allocations (slot, status, activated_at, created_at)
+          VALUES (?1, 'active', ?2, ?2)`).bind(index + 1, now),
+      ),
+    );
+  const view = async (time = now) => {
+    const allowance = (await orderAllowance(env.DB, userId, at(time)))!;
+    return subscriptionView(env.DB, env, "w-a", allowance.coverage, at(time));
+  };
+  const reservationEnd = new Date(Date.parse(now) + 3_600_000).toISOString();
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM stripe_subscriptions"),
+      env.DB.prepare("DELETE FROM workspace_entitlements"),
+    ]);
+    ({ userId, cookie } = await verifiedSession(`lifetime-${crypto.randomUUID()}@example.invalid`));
+    await workspace(userId);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("detrae soltanto il periodo pagato non usato, sull'istante UTC", () => {
+    const month = { startsAt: "2028-02-01T00:00:00.000Z", endsAt: "2028-03-01T00:00:00.000Z" };
+    // Febbraio bisestile: 29 giorni, 15 ancora da usare.
+    expect(unusedCredit(490, month, at("2028-02-15T00:00:00.000Z"))).toBe(
+      Math.floor((490 * 15) / 29),
+    );
+    // Il periodo non ancora iniziato vale per intero, quello finito niente.
+    expect(unusedCredit(490, month, at("2028-01-31T23:00:00.000Z"))).toBe(490);
+    expect(unusedCredit(490, month, at("2028-03-01T00:00:00.000Z"))).toBe(0);
+    const year = { startsAt: "2026-12-31T23:30:00.000Z", endsAt: "2027-12-31T23:30:00.000Z" };
+    expect(unusedCredit(4900, year, at("2027-07-02T11:30:00.000Z"))).toBe(2450);
+  });
+
+  it("vende l'ultimo posto una volta sola con acquisti concorrenti", async () => {
+    const stripe = stripeAccount();
+    const other = await verifiedSession("lifetime-concorrente@example.invalid");
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO workspaces (id, name, created_at) VALUES ('w-b', 'Altro', ?)",
+      ).bind(now),
+      env.DB.prepare(
+        "INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ('w-b', ?, 'owner')",
+      ).bind(other.userId),
+      insertStore({ id: "s-b", workspaceId: "w-b" }),
+      env.DB.prepare(
+        "INSERT INTO sync_state (store_id, last_success_at, updated_at) VALUES ('s-b', ?1, ?1)",
+      ).bind(now),
+    ]);
+    await taken(19);
+    const results = await Promise.all([buyLifetime(stripe), buyLifetime(stripe, other.userId)]);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(results.filter((result) => !result.ok)).toEqual([{ ok: false, reason: "sold-out" }]);
+    const reserved = (await allocations()).filter((row) => row.status === "reserved");
+    expect(reserved).toEqual([
+      expect.objectContaining({
+        slot: 20,
+        expires_at: reservationEnd,
+        provider_reference: "cs_lifetime_1",
+      }),
+    ]);
+    // Il checkout scade con la prenotazione e crea il cliente per i documenti.
+    const body = stripe.writes.find((write) => write.path === "/v1/checkout/sessions")!.body;
+    expect(body.get("mode")).toBe("payment");
+    expect(body.get("expires_at")).toBe(String(second(reservationEnd)));
+    expect(body.get("customer_creation")).toBe("always");
+    // Il ritorno dice che il lifetime è in attivazione, anche durante la prova.
+    expect(body.get("success_url")).toBe(
+      "http://localhost:5173/app/impostazioni/piano?checkout=lifetime&session_id={CHECKOUT_SESSION_ID}",
+    );
+    expect(body.get("line_items[0][price]")).toBe("price_test_lifetime");
+    expect(body.get("discounts[0][coupon]")).toBeNull();
+    // Chi non ha avuto il posto lo vede esaurito; nessun posto oltre il ventesimo.
+    const loser = reserved[0]!.workspace_id === "w-a" ? other.userId : userId;
+    expect((await lifetimeContext(env.DB, env, loser))?.offer).toEqual({
+      state: "sold-out",
+      credit: 0,
+      replaces: false,
+    });
+    expect(await allocations()).toHaveLength(20);
+  });
+
+  it("dalla pagina del piano porta al checkout lifetime o dice che i posti sono finiti", async () => {
+    const stripe = stripeAccount();
+    vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
+    const response = (await buy(cookie, "lifetime")) as Response;
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe(
+      "https://checkout.example.invalid/c/pay/cs_lifetime_1",
+    );
+    await env.DB.prepare("DELETE FROM lifetime_allocations").run();
+    await taken(20);
+    expect(await buy(cookie, "lifetime")).toMatchObject({
+      data: { ok: false, notice: "I posti a vita sono esauriti." },
+      init: { status: 409 },
+    });
+  });
+
+  it("libera il posto soltanto quando la sessione non può più incassare", async () => {
+    const stripe = stripeAccount();
+    expect(await buyLifetime(stripe)).toEqual({
+      ok: true,
+      url: "https://checkout.example.invalid/c/pay/cs_lifetime_1",
+    });
+    stripe.settle("cs_lifetime_1", "expired");
+    await event(stripe, "checkout.session.expired", "cs_lifetime_1");
+    expect(await allocations()).toEqual([]);
+
+    // Completata con un pagamento asincrono: il posto resta oltre la scadenza della sessione.
+    await buyLifetime(stripe);
+    stripe.settle("cs_lifetime_2", "processing");
+    await event(stripe, "checkout.session.completed", "cs_lifetime_2");
+    await reconcileBilling(env, stripe.fetcher, at("2026-09-13T23:00:00.000Z"));
+    expect(await allocations()).toEqual([
+      expect.objectContaining({
+        status: "reserved",
+        provider_reference: "cs_lifetime_2",
+        completed_at: now,
+      }),
+    ]);
+    expect(await view()).toEqual({ payment: { state: "pending", lifetime: true } });
+    expect((await lifetimeContext(env.DB, env, userId))?.offer).toBeNull();
+    // Nemmeno mensile o annuale finché il pagamento lifetime non ha un esito.
+    expect((await purchaseState(env.DB, userId))?.state).toBe("covered");
+    expect(await buyLifetime(stripe)).toEqual({ ok: false, reason: "covered" });
+    stripe.settle("cs_lifetime_2", "failed");
+    await event(stripe, "checkout.session.async_payment_failed", "cs_lifetime_2");
+    expect(await allocations()).toEqual([]);
+
+    // Pagamento asincrono riuscito: posto attivo, diritto senza scadenza con la prova.
+    await buyLifetime(stripe);
+    stripe.settle("cs_lifetime_3", "processing");
+    await event(stripe, "checkout.session.completed", "cs_lifetime_3");
+    stripe.settle("cs_lifetime_3", "paid", "2026-09-14T08:00:00.000Z");
+    for (const topic of ["checkout.session.async_payment_succeeded", "checkout.session.completed"])
+      await event(stripe, topic, "cs_lifetime_3", "2026-09-14T08:05:00.000Z");
+    expect(await allocations()).toEqual([
+      expect.objectContaining({
+        slot: 1,
+        workspace_id: "w-a",
+        status: "active",
+        kind: "sale",
+        expires_at: null,
+        customer_id: "cus_lifetime",
+      }),
+    ]);
+    expect(await lifetimes()).toEqual([
+      {
+        workspace_id: "w-a",
+        starts_at: "2026-09-14T08:00:00.000Z",
+        ends_at: null,
+        stripe_checkout_session_id: "cs_lifetime_3",
+        amount_paid: 18178,
+        currency: "eur",
+        granted_by: null,
+        grant_reason: null,
+      },
+    ]);
+    expect(await view("2026-09-14T09:00:00.000Z")).toEqual({
+      premium: { period: "lifetime", renewsAt: null },
+    });
+    expect((await purchaseState(env.DB, userId, at("2026-09-14T09:00:00.000Z")))?.state).toBe(
+      "covered",
+    );
+    expect((await lifetimeContext(env.DB, env, userId))?.offer).toBeNull();
+    // Un rimborso, gestito dall'assistenza, non libera il posto né lo rende riassegnabile.
+    stripe.state.sessions.at(-1)!.payment_intent = {
+      ...(stripe.state.sessions.at(-1)!.payment_intent as object),
+      amount_refunded: 18178,
+    };
+    await event(stripe, "checkout.session.completed", "cs_lifetime_3", "2026-09-20T08:00:00.000Z");
+    await reconcileBilling(env, stripe.fetcher, at("2026-09-20T08:00:00.000Z"));
+    expect(await allocations()).toEqual([expect.objectContaining({ slot: 1, status: "active" })]);
+    expect(await lifetimes()).toHaveLength(1);
+  });
+
+  it("riprende dopo un errore o un crash senza liberare posti prima del tempo", async () => {
+    const stripe = stripeAccount();
+    // Stripe non crea la sessione: nessun indirizzo al cliente, il posto si libera subito.
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) =>
+      new URL(String(input)).pathname === "/v1/checkout/sessions"
+        ? Response.json({ error: { type: "api_error" } }, { status: 500 })
+        : stripe.fetcher(input, init),
+    );
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(
+      await startCheckout(
+        env,
+        { request, userId, email: "lifetime@example.invalid", offer: "lifetime", language: "it" },
+        at(now),
+      ),
+    ).toEqual({ ok: false, reason: "unavailable" });
+    expect(await allocations()).toEqual([]);
+    vi.mocked(globalThis.fetch).mockRestore();
+
+    // Sessione aperta oltre la scadenza: il cron la chiude e libera il posto, non prima.
+    await buyLifetime(stripe);
+    await reconcileBilling(env, stripe.fetcher, at("2026-09-13T20:50:00.000Z"));
+    expect(await allocations()).toHaveLength(1);
+    await reconcileBilling(env, stripe.fetcher, at("2026-09-13T21:01:00.000Z"));
+    expect(stripe.state.sessions[0]!.status).toBe("expired");
+    expect(await allocations()).toEqual([]);
+
+    // Crash fra prenotazione e sessione: senza sessione legata il posto scade con la prenotazione.
+    await env.DB.prepare(`INSERT INTO lifetime_allocations (slot, workspace_id, status, expires_at,
+        created_at) VALUES (1, 'w-a', 'reserved', ?, ?)`)
+      .bind(reservationEnd, now)
+      .run();
+    await reconcileBilling(env, stripe.fetcher, at("2026-09-13T20:30:00.000Z"));
+    expect(await allocations()).toHaveLength(1);
+    await reconcileBilling(env, stripe.fetcher, at(reservationEnd));
+    expect(await allocations()).toEqual([]);
+
+    // Una sessione precedente ancora aperta si chiude prima di aprirne un'altra sullo stesso posto.
+    await buyLifetime(stripe);
+    await buyLifetime(stripe, userId, "2026-09-13T20:10:00.000Z");
+    expect(stripe.state.sessions.slice(-2).map((session) => session.status)).toEqual([
+      "expired",
+      "open",
+    ]);
+    expect(await allocations()).toEqual([
+      expect.objectContaining({ slot: 1, provider_reference: stripe.state.sessions.at(-1)!.id }),
+    ]);
+    // Il webhook della sessione chiusa non tocca la nuova prenotazione.
+    await event(stripe, "checkout.session.expired", stripe.state.sessions.at(-2)!.id);
+    expect(await allocations()).toHaveLength(1);
+
+    // Pagamento confermato senza posto, dopo una liberazione: occupa il primo libero; a posti
+    // finiti si segnala all'assistenza senza diritto né rimborso automatico.
+    await env.DB.prepare("DELETE FROM lifetime_allocations").run();
+    stripe.settle(stripe.state.sessions.at(-1)!.id, "paid");
+    await reconcileBilling(env, stripe.fetcher, at("2026-09-13T21:30:00.000Z"));
+    expect(await allocations()).toEqual([expect.objectContaining({ slot: 1, status: "active" })]);
+    expect(await lifetimes()).toHaveLength(1);
+    await resetDatabase();
+    await env.DB.prepare("DELETE FROM workspace_entitlements").run();
+    ({ userId } = await verifiedSession("lifetime-senza-posto@example.invalid"));
+    await workspace(userId);
+    await taken(20);
+    log.mockClear();
+    await event(stripe, "checkout.session.completed", stripe.state.sessions.at(-1)!.id);
+    expect(await lifetimes()).toEqual([]);
+    expect(await allocations()).toHaveLength(20);
+    expect(JSON.parse(String(log.mock.calls.at(-1)?.[0]))).toMatchObject({
+      operation: "billing",
+      failure: "lifetime_unallocated",
+    });
+  });
+
+  it("passa al lifetime detraendo il periodo pagato non usato e chiude l'abbonamento", async () => {
+    const stripe = stripeAccount();
+    stripe.state.invoices = [firstInvoice];
+    await event(stripe, "customer.subscription.created", "sub_test");
+    const halfway = "2026-09-28T20:00:00.000Z";
+    expect((await lifetimeContext(env.DB, env, userId, at(halfway)))?.offer).toEqual({
+      state: "available",
+      credit: 245,
+      replaces: true,
+    });
+    // Con il rinnovo prima della scadenza del checkout il credito non sarebbe esatto.
+    expect(await buyLifetime(stripe, userId, "2026-10-13T19:30:00.000Z")).toEqual({
+      ok: false,
+      reason: "renewing",
+    });
+    expect(await allocations()).toEqual([]);
+
+    expect(await buyLifetime(stripe, userId, halfway)).toMatchObject({ ok: true });
+    expect(stripe.state.coupons).toEqual([
+      expect.objectContaining({
+        amount_off: "245",
+        currency: "eur",
+        duration: "once",
+        max_redemptions: "1",
+        redeem_by: String(second(halfway) + 3600),
+        "applies_to[products][0]": "prod_lifetime",
+        name: "Periodo pagato non usato",
+        "metadata[workspace_id]": "w-a",
+      }),
+    ]);
+    const body = stripe.writes.find((write) => write.path === "/v1/checkout/sessions")!.body;
+    expect(body.get("discounts[0][coupon]")).toBe("coupon_1");
+    expect(body.get("customer")).toBe("cus_test");
+    expect(body.get("customer_email")).toBeNull();
+    expect(body.get("customer_creation")).toBeNull();
+
+    stripe.settle("cs_lifetime_1", "paid", halfway);
+    await event(stripe, "checkout.session.completed", "cs_lifetime_1", halfway);
+    expect(stripe.requests).toContain("DELETE /v1/subscriptions/sub_test");
+    expect(
+      await env.DB.prepare("SELECT status FROM stripe_subscriptions WHERE id = 'sub_test'").first(),
+    ).toEqual({ status: "canceled" });
+    expect(await view(halfway)).toEqual({ premium: { period: "lifetime", renewsAt: null } });
+    // Il portale apre i documenti del cliente del lifetime.
+    vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
+    await openBillingPortal(env, userId, "https://test.fiscalbay.it/piano", "it");
+    expect(stripe.writes.at(-1)!.body.get("customer")).toBe("cus_test");
+  });
+
+  it("durante la prova il lifetime si paga subito e chiude l'abbonamento scelto", async () => {
+    const stripe = stripeAccount();
+    const trialEnd = (await startTrial(env.DB, userId, at(now)))!;
+    stripe.state.subscription = { status: "trialing", start: now, end: trialEnd };
+    await event(stripe, "customer.subscription.created", "sub_test");
+    expect((await purchaseState(env.DB, userId))?.state).toBe("covered");
+    expect((await lifetimeContext(env.DB, env, userId))?.offer).toEqual({
+      state: "available",
+      credit: 0,
+      replaces: true,
+    });
+    await buyLifetime(stripe);
+    expect(stripe.state.coupons).toEqual([]);
+    stripe.settle("cs_lifetime_1", "paid");
+    await event(stripe, "checkout.session.completed", "cs_lifetime_1");
+    expect(stripe.state.subscription.status).toBe("canceled");
+    const allowance = (await orderAllowance(env.DB, userId))!;
+    expect(allowance.coverage).toEqual({ source: "lifetime", endsAt: null });
+    expect(accountCoverage(allowance)).toEqual({});
+  });
+
+  it("concede il lifetime in omaggio consumando un posto, con autore e motivo", async () => {
+    const stripe = stripeAccount();
+    stripe.state.invoices = [firstInvoice];
+    await event(stripe, "customer.subscription.created", "sub_test");
+    vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
+    const grant = (workspaceId: string, reason = "Collaborazione") =>
+      grantLifetimeConcession(env, { workspaceId, author: "admin-1", reason }, at(now));
+    expect(await grant("w-a", " ")).toBe("invalid");
+    expect(await grant("w-inesistente")).toBe("not_found");
+    expect(await grant("w-a")).toBe("done");
+    expect(await grant("w-a")).toBe("owned");
+    expect(await allocations()).toEqual([
+      expect.objectContaining({ slot: 1, workspace_id: "w-a", status: "active", kind: "gift" }),
+    ]);
+    expect(await lifetimes()).toEqual([
+      expect.objectContaining({
+        workspace_id: "w-a",
+        stripe_checkout_session_id: null,
+        amount_paid: null,
+        granted_by: "admin-1",
+        grant_reason: "Collaborazione",
+      }),
+    ]);
+    expect(stripe.state.subscription.status).toBe("canceled");
+    expect(await view()).toEqual({
+      premium: { period: "lifetime", renewsAt: null, granted: true },
+    });
+    // A posti finiti l'omaggio non supera il tetto.
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO workspaces (id, name, created_at) VALUES ('w-b', 'Altro', ?)",
+      ).bind(now),
+      ...Array.from({ length: 19 }, (_, index) =>
+        env.DB.prepare(`INSERT INTO lifetime_allocations (slot, status, activated_at, created_at)
+          VALUES (?1, 'active', ?2, ?2)`).bind(index + 2, now),
+      ),
+    ]);
+    expect(await grant("w-b")).toBe("sold-out");
+  });
+
+  it("concede Premium dopo la copertura in corso e ne rinvia il rinnovo", async () => {
+    const stripe = stripeAccount();
+    vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
+    const grant = (days: number, time = now) =>
+      grantPremium(
+        env,
+        { workspaceId: "w-a", author: "admin-1", reason: "Disservizio", days },
+        at(time),
+      );
+    for (const days of [0, 1.5, 367]) expect(await grant(days)).toEqual({ result: "invalid" });
+    expect(
+      await grantPremium(env, { workspaceId: "w-a", author: "", reason: "Disservizio", days: 3 }),
+    ).toEqual({ result: "invalid" });
+
+    // Senza abbonamento: da subito, con la fine nel piano e senza gestione su Stripe.
+    expect(await grant(10)).toEqual({
+      result: "done",
+      startsAt: now,
+      endsAt: "2026-09-23T20:00:00.000Z",
+    });
+    expect(await view()).toEqual({ grant: { endsAt: "2026-09-23T20:00:00.000Z" } });
+    expect(stripe.writes).toEqual([]);
+    // Una seconda concessione si accoda alla prima.
+    expect(await grant(5)).toMatchObject({
+      startsAt: "2026-09-23T20:00:00.000Z",
+      endsAt: "2026-09-28T20:00:00.000Z",
+    });
+
+    // Con un abbonamento che si rinnova: dopo il periodo pagato, con il rinnovo rinviato.
+    await env.DB.prepare("DELETE FROM workspace_entitlements").run();
+    stripe.state.invoices = [firstInvoice];
+    await event(stripe, "customer.subscription.created", "sub_test");
+    expect(await grant(7)).toEqual({
+      result: "done",
+      startsAt: periodEnd,
+      endsAt: "2026-10-20T20:00:00.000Z",
+    });
+    const update = stripe.writes.find((write) => write.path === "/v1/subscriptions/sub_test")!;
+    expect(update.body.get("trial_end")).toBe(String(second("2026-10-20T20:00:00.000Z")));
+    expect(update.body.get("proration_behavior")).toBe("none");
+    expect(update.body.has("items[0][price]")).toBe(false);
+    // Durante la concessione il piano indica il rinnovo rinviato; nessun incasso figura.
+    expect(await view("2026-10-15T00:00:00.000Z")).toEqual({
+      premium: { period: "monthly", renewsAt: "2026-10-20T20:00:00.000Z" },
+    });
+    expect(
+      (
+        await env.DB.prepare(
+          "SELECT amount_paid, stripe_invoice_id FROM workspace_entitlements WHERE source = 'admin'",
+        ).all()
+      ).results,
+    ).toEqual([{ amount_paid: null, stripe_invoice_id: null }]);
+
+    // Un rinnovo disdetto non si riattiva: la concessione prolunga soltanto il diritto.
+    await env.DB.prepare("DELETE FROM workspace_entitlements WHERE source = 'admin'").run();
+    stripe.state.subscription = {
+      status: "active",
+      start: periodStart,
+      end: periodEnd,
+      cancel: true,
+    };
+    await event(stripe, "customer.subscription.updated", "sub_test");
+    stripe.writes.length = 0;
+    expect(await grant(7)).toMatchObject({ endsAt: "2026-10-20T20:00:00.000Z" });
+    expect(stripe.writes).toEqual([]);
+    expect(await view("2026-09-20T00:00:00.000Z")).toEqual({
+      premium: { period: "monthly", renewsAt: null, endsAt: "2026-10-20T20:00:00.000Z" },
+    });
   });
 });

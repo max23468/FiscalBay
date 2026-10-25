@@ -1,26 +1,39 @@
+import { appCopy } from "../app-copy";
 import { firstChargeAt, priceGeneration, type PremiumOffer, type PurchaseState } from "../catalog";
 import { ApplicationError, logFailure } from "../errors";
 import { localizedPath, type Language } from "../i18n";
 import {
   catalogMismatch,
+  createLifetimeCredit,
   createManagedCheckout,
   createStripeClient,
   expireCheckout,
   retrieveCatalogPrice,
+  stripeRead,
 } from "../integrations/stripe.server";
 import { openSubscriptionSql, storeReadSql } from "./grants.server";
+import {
+  bindLifetimeSession,
+  lifetimeContext,
+  reconcileLifetime,
+  releaseUnboundReservation,
+  renewsDuringCheckout,
+  reserveLifetime,
+} from "./lifetime.server";
 
-/**
- * Offerte in vendita. Il lifetime aspetta la prenotazione atomica dei venti posti: senza,
- * due acquisti concorrenti potrebbero superare il tetto.
- */
-export const checkoutOffers = ["monthly", "annual"] as const satisfies readonly PremiumOffer[];
+/** Offerte in vendita: il lifetime con la prenotazione atomica di uno dei venti posti. */
+export const checkoutOffers = [
+  "monthly",
+  "annual",
+  "lifetime",
+] as const satisfies readonly PremiumOffer[];
 
 type CheckoutOffer = (typeof checkoutOffers)[number];
 
 const priceVariable = {
   monthly: "STRIPE_PRICE_MONTHLY",
   annual: "STRIPE_PRICE_ANNUAL",
+  lifetime: "STRIPE_PRICE_LIFETIME",
 } as const satisfies Record<CheckoutOffer, keyof Env>;
 
 export function isCheckoutOffer(value: string): value is CheckoutOffer {
@@ -45,11 +58,13 @@ function activeSql(workspace: string, at: string, trial: boolean) {
  * anche senza ordini. Un diritto in corso diverso dalla prova lo ferma; durante la prova
  * l'acquisto resta possibile e ne conserva i giorni residui (`trialEndsAt`). Lo ferma anche un
  * abbonamento che può ancora incassare, come un pagamento da confermare o un rinnovo da
- * regolarizzare.
+ * regolarizzare, o un lifetime pagato e in attesa della conferma.
  */
 export async function purchaseState(db: D1Database, userId: string, now = new Date()) {
   const row = await db
-    .prepare(`SELECT w.id, (${activeSql("w.id", "?2", false)} OR ${openSubscriptionSql("w.id")}) AS covered,
+    .prepare(`SELECT w.id, (${activeSql("w.id", "?2", false)} OR ${openSubscriptionSql("w.id")}
+        OR EXISTS (SELECT 1 FROM lifetime_allocations a WHERE a.workspace_id = w.id
+          AND a.completed_at IS NOT NULL)) AS covered,
       ${activeSql("w.id", "?2", true)} AS trial_ends_at, ${storeReadSql("w.id")} AS synced
     FROM workspaces w JOIN workspace_members wm ON wm.workspace_id = w.id
     WHERE wm.user_id = ?1`)
@@ -75,7 +90,10 @@ function trialCheckout(trialEndsAt: string | null, now: Date) {
 
 export type CheckoutResult =
   | { ok: true; url: string }
-  | { ok: false; reason: Exclude<PurchaseState, "available"> | "unavailable" };
+  | {
+      ok: false;
+      reason: Exclude<PurchaseState, "available"> | "sold-out" | "renewing" | "unavailable";
+    };
 
 /**
  * Hosted Checkout nel percorso Managed Payments. Prima della vendita il prezzo su Stripe
@@ -96,6 +114,8 @@ export async function startCheckout(
 ): Promise<CheckoutResult> {
   const priceId = env[priceVariable[input.offer]];
   if (!env.STRIPE_SECRET_KEY || !priceId) return { ok: false, reason: "unavailable" };
+  if (input.offer === "lifetime")
+    return startLifetimeCheckout(env, { ...input, priceId, secretKey: env.STRIPE_SECRET_KEY }, now);
   const purchase = await purchaseState(env.DB, input.userId, now);
   // Senza spazio nessun negozio è stato ancora collegato.
   if (purchase?.state !== "available")
@@ -132,6 +152,96 @@ export async function startCheckout(
     if (!session.url) return { ok: false, reason: "unavailable" };
     return { ok: true, url: session.url };
   } catch (error) {
+    logFailure({ request: input.request, error, code: "CHECKOUT_PENDING", operation: "checkout" });
+    return { ok: false, reason: "unavailable" };
+  }
+}
+
+/**
+ * Lifetime: il posto si prenota prima della sessione, che scade con la prenotazione, e la
+ * sessione si lega al posto prima che il cliente ne riceva l'indirizzo. Una sessione
+ * precedente dello stesso spazio si chiude prima di aprirne un'altra, così un posto ha sempre
+ * una sola sessione che può incassare; se era già stata completata, il suo esito prevale. Chi
+ * passa dall'abbonamento paga il listino corrente meno il periodo pagato non usato, come
+ * coupon sul solo prodotto lifetime.
+ */
+async function startLifetimeCheckout(
+  env: Env,
+  input: Parameters<typeof startCheckout>[1] & { priceId: string; secretKey: string },
+  now: Date,
+): Promise<CheckoutResult> {
+  const context = await lifetimeContext(env.DB, env, input.userId, now);
+  if (!context?.offer) return { ok: false, reason: context ? "covered" : "needs-sync" };
+  if (context.offer.state !== "available") return { ok: false, reason: context.offer.state };
+  if (renewsDuringCheckout(context.subscription?.renewsAt ?? null, now))
+    return { ok: false, reason: "renewing" };
+  let reservation: Awaited<ReturnType<typeof reserveLifetime>> = null;
+  try {
+    const stripe = await createStripeClient(input.secretKey);
+    const price = await retrieveCatalogPrice(stripe, input.priceId);
+    const mismatch = catalogMismatch(price, "lifetime", priceGeneration.net.lifetime);
+    if (mismatch) {
+      logCheckoutFailure(input.request, `catalog_${mismatch}`);
+      return { ok: false, reason: "unavailable" };
+    }
+    const previous = context.reservation?.reference;
+    if (previous) {
+      const session = await stripeRead(() => stripe.checkout.sessions.retrieve(previous));
+      if (session.status === "complete") {
+        await reconcileLifetime(env, stripe, previous, now);
+        return { ok: false, reason: "covered" };
+      }
+      if (session.status === "open") await expireCheckout(stripe, previous);
+    }
+    reservation = await reserveLifetime(env.DB, context.workspaceId, context.reservation, now);
+    if (!reservation)
+      return { ok: false, reason: context.reservation ? "unavailable" : "sold-out" };
+    const product = typeof price.product === "string" ? price.product : price.product.id;
+    const coupon = context.offer.credit
+      ? await createLifetimeCredit(stripe, {
+          amount: context.offer.credit,
+          product,
+          redeemBy: reservation.expiresAt,
+          workspaceId: context.workspaceId,
+          name: appCopy[input.language].settings.plan.lifetimeCreditName,
+        })
+      : null;
+    const plan = `${new URL(env.APP_ORIGIN).origin}${localizedPath(input.language, "/app/impostazioni/piano")}`;
+    const session = await createManagedCheckout(stripe, {
+      offer: "lifetime",
+      priceId: input.priceId,
+      generation: priceGeneration.id,
+      workspaceId: context.workspaceId,
+      email: input.email,
+      language: input.language,
+      successUrl: plan,
+      cancelUrl: plan,
+      lifetime: {
+        expiresAt: reservation.expiresAt,
+        ...(coupon ? { coupon: coupon.id } : {}),
+        ...(context.subscription ? { customerId: context.subscription.customerId } : {}),
+      },
+    });
+    if (session.managed_payments?.enabled !== true) {
+      await expireCheckout(stripe, session.id);
+      logCheckoutFailure(input.request, "not_managed");
+      await releaseUnboundReservation(env.DB, context.workspaceId, reservation);
+      return { ok: false, reason: "unavailable" };
+    }
+    if (!session.url) {
+      await releaseUnboundReservation(env.DB, context.workspaceId, reservation);
+      return { ok: false, reason: "unavailable" };
+    }
+    // Un'altra richiesta dello stesso spazio ha già ripreso il posto: questa sessione si chiude.
+    if (!(await bindLifetimeSession(env.DB, context.workspaceId, reservation, session.id))) {
+      await expireCheckout(stripe, session.id);
+      return { ok: false, reason: "unavailable" };
+    }
+    return { ok: true, url: session.url };
+  } catch (error) {
+    // Nessun indirizzo è arrivato al cliente: la prenotazione senza sessione si libera.
+    if (reservation)
+      await releaseUnboundReservation(env.DB, context.workspaceId, reservation).catch(() => {});
     logFailure({ request: input.request, error, code: "CHECKOUT_PENDING", operation: "checkout" });
     return { ok: false, reason: "unavailable" };
   }

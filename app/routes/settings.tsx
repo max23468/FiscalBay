@@ -22,6 +22,7 @@ import {
   subscriptionView,
 } from "../domain/billing.server";
 import { pendingEmailChange } from "../domain/email-change.server";
+import { lifetimeContext } from "../domain/lifetime.server";
 import { chooseFreeStore, freeStoreState } from "../domain/free-store.server";
 import {
   accountCoverage,
@@ -119,13 +120,24 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
   const auth = session as AuthSession;
   const [
     shell,
-    [allowance, purchase, freeStore, confirmUnlock, marketing, methods, sessions, pendingEmail],
+    [
+      allowance,
+      purchase,
+      lifetime,
+      freeStore,
+      confirmUnlock,
+      marketing,
+      methods,
+      sessions,
+      pendingEmail,
+    ],
   ] = await Promise.all([
     shellData(area, undefined, now),
     measure("d1", "settings", () =>
       Promise.all([
         orderAllowance(env.DB, userId, now),
         purchaseState(env.DB, userId, now),
+        lifetimeContext(env.DB, env, userId, now),
         freeStoreState(env.DB, userId, now),
         unlockConfirmation(env.DB, userId),
         marketingConsent(env.DB, userId),
@@ -169,6 +181,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
     purchase: {
       state: purchase?.state ?? "needs-sync",
       offers: checkoutOffers,
+      lifetime: lifetime?.offer ?? null,
       checkout: checkoutReturn(new URL(request.url).searchParams),
     },
     freeStore,
@@ -260,14 +273,14 @@ export async function action({ request }: Route.ActionArgs) {
         language,
       });
       if (checkout.ok) return redirect(checkout.url);
-      return failed(
-        checkout.reason === "unavailable" ? 503 : 409,
-        checkout.reason === "covered"
-          ? t.plan.checkoutCovered
-          : checkout.reason === "needs-sync"
-            ? t.plan.purchaseNeedsSync
-            : t.plan.checkoutUnavailable,
-      );
+      const notices = {
+        covered: t.plan.checkoutCovered,
+        "needs-sync": t.plan.purchaseNeedsSync,
+        "sold-out": t.plan.lifetimeUnavailable,
+        renewing: t.plan.lifetimeRenewing,
+        unavailable: t.plan.checkoutUnavailable,
+      } satisfies Record<typeof checkout.reason, string>;
+      return failed(checkout.reason === "unavailable" ? 503 : 409, notices[checkout.reason]);
     }
     if (intent === "manage-billing") {
       const plan = `${new URL(env.APP_ORIGIN).origin}${localizedPath(language, "/app/impostazioni/piano")}`;

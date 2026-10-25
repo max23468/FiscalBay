@@ -116,8 +116,13 @@ export function buildManagedCheckoutParams(input: {
    * addebito arriva alla loro fine (`chargeAt`), che Stripe mostra come prova gratuita.
    */
   trial?: { endsAt: string; chargeAt: string };
+  /**
+   * Lifetime: scadenza della sessione, che coincide con quella della prenotazione del posto,
+   * coupon del periodo pagato non usato e cliente Stripe di un abbonamento da sostituire.
+   */
+  lifetime?: { expiresAt: string; coupon?: string; customerId?: string };
 }): Stripe.Checkout.SessionCreateParams {
-  const { trial } = input;
+  const { trial, lifetime } = input;
   const metadata = {
     workspace_id: input.workspaceId,
     offer: input.offer,
@@ -130,19 +135,27 @@ export function buildManagedCheckoutParams(input: {
     managed_payments: { enabled: true },
     integration_identifier: integrationIdentifier,
     client_reference_id: input.workspaceId,
-    customer_email: input.email,
+    // Chi passa dall'abbonamento resta lo stesso cliente; un acquisto una tantum ne crea uno,
+    // così ricevute e fatture restano consultabili dal portale.
+    ...(lifetime?.customerId
+      ? { customer: lifetime.customerId }
+      : { customer_email: input.email, ...(lifetime ? { customer_creation: "always" } : {}) }),
     locale: input.language,
     metadata,
     // Il riferimento allo spazio resta anche sull'oggetto che sopravvive alla sessione.
     ...(input.offer === "lifetime"
-      ? { payment_intent_data: { metadata } }
+      ? {
+          payment_intent_data: { metadata },
+          ...(lifetime ? { expires_at: Math.floor(Date.parse(lifetime.expiresAt) / 1000) } : {}),
+          ...(lifetime?.coupon ? { discounts: [{ coupon: lifetime.coupon }] } : {}),
+        }
       : {
           subscription_data: {
             metadata,
             ...(trial ? { trial_end: Date.parse(trial.chargeAt) / 1000 } : {}),
           },
         }),
-    success_url: `${input.successUrl}?checkout=processing&session_id={CHECKOUT_SESSION_ID}`,
+    success_url: `${input.successUrl}?checkout=${input.offer === "lifetime" ? "lifetime" : "processing"}&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${input.cancelUrl}?checkout=cancelled`,
   };
 }
@@ -192,6 +205,27 @@ export async function createManagedCheckout(
   input: Parameters<typeof buildManagedCheckoutParams>[0],
 ): Promise<Stripe.Checkout.Session> {
   return stripe.checkout.sessions.create(buildManagedCheckoutParams(input));
+}
+
+/**
+ * Credito del periodo pagato non usato per chi passa al lifetime: un coupon da usare una sola
+ * volta, soltanto sul prodotto lifetime ed entro la scadenza della sessione. Il nome compare
+ * nel riepilogo di Stripe accanto allo sconto.
+ */
+export async function createLifetimeCredit(
+  stripe: Stripe,
+  input: { amount: number; product: string; redeemBy: string; workspaceId: string; name: string },
+): Promise<Stripe.Coupon> {
+  return stripe.coupons.create({
+    amount_off: input.amount,
+    currency: "eur",
+    duration: "once",
+    max_redemptions: 1,
+    redeem_by: Math.floor(Date.parse(input.redeemBy) / 1000),
+    applies_to: { products: [input.product] },
+    name: input.name,
+    metadata: { workspace_id: input.workspaceId, role: "lifetime_credit" },
+  });
 }
 
 /** Una sessione che Stripe non ha aperto in Managed Payments non arriva mai al cliente. */

@@ -12,6 +12,17 @@ export type PremiumOffer = (typeof premiumOffers)[number];
 export type PurchaseState = "available" | "needs-sync" | "covered";
 
 /**
+ * Offerta lifetime per la pagina del piano: in vendita, esaurita o in attesa della prima
+ * lettura. `credit` è il periodo pagato non usato, in centesimi, che si detrae dal prezzo;
+ * `replaces` indica un abbonamento che con il lifetime si chiude.
+ */
+export type LifetimeOffer = {
+  state: "available" | "needs-sync" | "sold-out";
+  credit: number;
+  replaces: boolean;
+};
+
+/**
  * Listino canonico in centesimi di euro, IVA e imposte escluse. Una nuova generazione di
  * prezzi si aggiunge accanto a questa: gli abbonamenti continuano con il listino con cui sono
  * nati, riconoscibile dalla generazione salvata nei metadati del checkout.
@@ -49,8 +60,11 @@ export function firstChargeAt(trialEndsAt: string, now: string | Date) {
   return at < new Date(now).getTime() + minimumCheckoutTrial ? null : new Date(at).toISOString();
 }
 
-/** Esito del ritorno da Stripe, soltanto per il messaggio: il diritto non dipende da esso. */
+/**
+ * Esito del ritorno da Stripe, soltanto per il messaggio: il diritto non dipende da esso. Il
+ * lifetime ha un ritorno proprio, perché si paga subito anche durante la prova.
+ */
 export function checkoutReturn(query: URLSearchParams) {
   const value = query.get("checkout");
-  return value === "processing" || value === "cancelled" ? value : null;
+  return value === "processing" || value === "lifetime" || value === "cancelled" ? value : null;
 }

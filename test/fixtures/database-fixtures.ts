@@ -4,10 +4,16 @@ import { vi } from "vitest";
 export const now = "2026-09-13T20:00:00.000Z";
 export async function resetDatabase() {
   vi.setSystemTime(new Date(now));
+  // Un posto lifetime attivo non si elimina: il trigger si sospende soltanto per ripulire.
+  const kept = await env.DB.prepare(
+    "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'lifetime_allocation_is_kept'",
+  ).first<{ sql: string }>();
   await env.DB.batch([
+    env.DB.prepare("DROP TRIGGER lifetime_allocation_is_kept"),
+    env.DB.prepare("DELETE FROM lifetime_allocations"),
+    env.DB.prepare(kept!.sql),
     env.DB.prepare("DELETE FROM ebay_store_link_sessions"),
     env.DB.prepare("DELETE FROM ebay_store_credentials"),
-    env.DB.prepare("DELETE FROM lifetime_allocations"),
     env.DB.prepare("DELETE FROM order_grants"),
     env.DB.prepare("DELETE FROM free_cycles"),
     env.DB.prepare("DELETE FROM free_promotions"),

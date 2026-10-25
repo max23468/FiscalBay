@@ -1,5 +1,7 @@
 import { appCopy } from "../app-copy";
+import { priceGeneration, type LifetimeOffer } from "../catalog";
 import { contactsView } from "../contact";
+import { unusedCredit } from "../domain/lifetime.server";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
 import type { Language } from "../i18n";
 import { formatDate } from "../view-models";
@@ -47,10 +49,14 @@ export const scenarioIds = [
   "pagamento-in-attivazione",
   "rinnovo-non-riuscito",
   "stripe-non-disponibile",
+  "lifetime-esaurito",
   "premium",
   "cambio-rinnovo",
   "rinnovo-disdetto",
+  "passaggio-a-vita",
+  "premium-concesso",
   "premium-a-vita",
+  "premium-a-vita-concesso",
 ] as const;
 
 export type ScenarioId = (typeof scenarioIds)[number];
@@ -292,6 +298,29 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
         "Stripe is not responding: the purchase does not start and says so, the rest of the plan still works.",
     },
   },
+  "lifetime-esaurito": {
+    it: {
+      name: "Lifetime esaurito",
+      focus:
+        "I venti posti a vita sono finiti: il lifetime resta visibile come esaurito, mensile e annuale restano in vendita.",
+    },
+    en: {
+      name: "Lifetime sold out",
+      focus:
+        "All twenty lifetime places are taken: lifetime stays visible as sold out, monthly and annual remain on sale.",
+    },
+  },
+  "premium-a-vita-concesso": {
+    it: {
+      name: "Premium a vita concesso",
+      focus:
+        "Lifetime in omaggio da FiscalBay: nessun rinnovo, nessun acquisto né documenti su Stripe.",
+    },
+    en: {
+      name: "Lifetime Premium granted",
+      focus: "Lifetime granted by FiscalBay: no renewals, no purchase and no documents on Stripe.",
+    },
+  },
   premium: {
     it: {
       name: "Premium, più negozi",
@@ -324,6 +353,30 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
       name: "Renewal cancelled",
       focus:
         "Monthly Premium cancelled: it stays active until the end of the paid period, with no renewal.",
+    },
+  },
+  "passaggio-a-vita": {
+    it: {
+      name: "Passaggio a vita in conferma",
+      focus:
+        "Premium mensile con il lifetime pagato e in attesa della conferma di Stripe: l'abbonamento resta finché il pagamento non è confermato, senza un secondo acquisto.",
+    },
+    en: {
+      name: "Lifetime switch being confirmed",
+      focus:
+        "Monthly Premium with lifetime paid and awaiting Stripe's confirmation: the subscription stays until the payment is confirmed, with no second purchase.",
+    },
+  },
+  "premium-concesso": {
+    it: {
+      name: "Premium concesso",
+      focus:
+        "Premium concesso da FiscalBay senza abbonamento: la data di fine e il passaggio a vita, senza gestione su Stripe.",
+    },
+    en: {
+      name: "Premium granted",
+      focus:
+        "Premium granted by FiscalBay with no subscription: the end date and the switch to lifetime, with no Stripe management.",
     },
   },
   "premium-a-vita": {
@@ -965,6 +1018,8 @@ export interface Scenario {
   saveFailsOnce: boolean;
   /** Stripe non risponde: l'acquisto simulato fallisce. */
   stripeDown: boolean;
+  /** I venti posti lifetime sono tutti occupati. */
+  lifetimeSoldOut: boolean;
   onboarding: Array<{
     label: "stepAccount" | "stepEmail" | "stepStore" | "stepSync";
     done: boolean;
@@ -1133,6 +1188,7 @@ export function loadScenario(
     telegramChat: null,
     saveFailsOnce: false,
     stripeDown: false,
+    lifetimeSoldOut: false,
     onboarding: [
       { label: "stepAccount" as const, done: true },
       { label: "stepEmail" as const, done: true },
@@ -1682,6 +1738,17 @@ export function loadScenario(
         diagnostics: diagnostics(),
       };
       break;
+    case "lifetime-esaurito":
+      scenario = {
+        ...common,
+        account: account({ trialAvailable: false }),
+        stores: freeStores,
+        seeds: freeSeeds,
+        premium: false,
+        lifetimeSoldOut: true,
+        diagnostics: diagnostics(),
+      };
+      break;
     case "premium":
       scenario = {
         ...common,
@@ -1730,6 +1797,52 @@ export function loadScenario(
         }),
         stores: premiumStores,
         seeds,
+        premium: true,
+        diagnostics: diagnostics(),
+      };
+      break;
+    case "passaggio-a-vita":
+      scenario = {
+        ...common,
+        account: account({
+          plan: "premium",
+          trialAvailable: false,
+          quota: undefined,
+          premium: { period: "monthly", renewsAt: "2026-10-13T10:00:00Z" },
+          payment: { state: "pending", lifetime: true },
+        }),
+        stores: [premiumStores[0]!],
+        seeds: seeds.filter((seed) => seed.store === "vintage"),
+        premium: true,
+        diagnostics: diagnostics(),
+      };
+      break;
+    case "premium-a-vita-concesso":
+      scenario = {
+        ...common,
+        account: account({
+          plan: "premium",
+          trialAvailable: false,
+          quota: undefined,
+          premium: { period: "lifetime", renewsAt: null, granted: true },
+        }),
+        stores: [premiumStores[0]!],
+        seeds: seeds.filter((seed) => seed.store === "vintage"),
+        premium: true,
+        diagnostics: diagnostics(),
+      };
+      break;
+    case "premium-concesso":
+      scenario = {
+        ...common,
+        account: account({
+          plan: "premium",
+          trialAvailable: false,
+          quota: undefined,
+          grant: { endsAt: "2026-10-27T13:00:00Z" },
+        }),
+        stores: [premiumStores[0]!],
+        seeds: seeds.filter((seed) => seed.store === "vintage"),
         premium: true,
         diagnostics: diagnostics(),
       };
@@ -1823,22 +1936,54 @@ export function loadScenario(
         ? language === "it"
           ? "Prova Premium"
           : "Premium trial"
-        : currentAccount.premium?.period === "lifetime"
+        : currentAccount.grant
           ? language === "it"
-            ? "Premium a vita"
-            : "Premium, lifetime"
-          : currentAccount.premium?.period === "monthly"
+            ? "Premium concesso"
+            : "Premium, granted"
+          : currentAccount.premium?.period === "lifetime"
             ? language === "it"
-              ? "Premium mensile"
-              : "Premium, monthly"
-            : language === "it"
-              ? "Premium annuale"
-              : "Premium, annual";
+              ? "Premium a vita"
+              : "Premium, lifetime"
+            : currentAccount.premium?.period === "monthly"
+              ? language === "it"
+                ? "Premium mensile"
+                : "Premium, monthly"
+              : language === "it"
+                ? "Premium annuale"
+                : "Premium, annual";
   return {
     ...rest,
     account: currentAccount,
     diagnostics: { ...rest.diagnostics, rights },
     orders,
     lockedValues,
+  };
+}
+
+/**
+ * Offerta lifetime dello scenario, con le regole dell'area reale: non si propone con il
+ * lifetime o un pagamento da confermare, aspetta la prima lettura e detrae il periodo pagato
+ * non usato, che nell'anteprima termina al rinnovo o alla fine dopo la disdetta.
+ */
+export function previewLifetime(scenario: Scenario): LifetimeOffer | null {
+  const { premium, payment } = scenario.account;
+  if (premium?.period === "lifetime" || payment?.state === "pending") return null;
+  const synced = scenario.onboarding.some((step) => step.label === "stepSync" && step.done);
+  const end = premium?.renewsAt ?? premium?.endsAt ?? null;
+  let credit = 0;
+  if (premium && end) {
+    const start = new Date(end);
+    if (premium.period === "annual") start.setUTCFullYear(start.getUTCFullYear() - 1);
+    else start.setUTCMonth(start.getUTCMonth() - 1);
+    credit = unusedCredit(
+      priceGeneration.net[premium.period],
+      { startsAt: start.toISOString(), endsAt: end },
+      new Date(scenario.now),
+    );
+  }
+  return {
+    state: !synced ? "needs-sync" : scenario.lifetimeSoldOut ? "sold-out" : "available",
+    credit,
+    replaces: !!premium || !!payment,
   };
 }

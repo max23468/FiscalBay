@@ -22,6 +22,7 @@ import {
   formatPrice,
   firstChargeAt,
   priceGeneration,
+  type LifetimeOffer,
   type PremiumOffer,
   type PurchaseState,
 } from "../../catalog";
@@ -94,18 +95,23 @@ function TrialPlan({
 }
 
 /**
- * Il lifetime conserva l'accesso ai documenti senza presentare un rinnovo; dopo la disdetta
- * l'abbonamento indica la fine del periodo pagato. Un Premium concesso senza abbonamento non
- * ha periodo né gestione su Stripe.
+ * Il lifetime conserva l'accesso ai documenti senza presentare un rinnovo, salvo quello in
+ * omaggio, che non ha acquisti su Stripe; dopo la disdetta l'abbonamento indica la fine del
+ * periodo pagato. Un Premium concesso senza abbonamento indica la sua fine, senza gestione su
+ * Stripe. Senza lifetime resta possibile passare a vita.
  */
 function PremiumPlan({
   account,
+  billing,
   billingPortal,
+  purchase,
   t,
   language,
 }: {
   account: AccountView;
+  billing: boolean;
   billingPortal: boolean;
+  purchase: PurchaseView;
   t: AppCopy;
   language: Language;
 }) {
@@ -113,53 +119,76 @@ function PremiumPlan({
   const action = useAction();
   const lifetime = account.premium?.period === "lifetime";
   return (
-    <Group title={t.settings.plan.currentPlan}>
-      <div className="grid gap-1">
-        <p className="flex items-center gap-2 text-lg font-semibold">
-          {account.premium
-            ? t.settings.plan.premiumPeriod[account.premium.period]
-            : t.settings.plan.premium}
-        </p>
-        <PremiumStatus premium={account.premium} t={t} language={language} />
-      </div>
-      {billingPortal && account.premium?.renewsAt && account.premium.period !== "lifetime" ? (
-        <RenewalPeriod
-          period={account.premium.period}
-          next={account.premium.nextPeriod}
-          renewsAt={formatDate(account.premium.renewsAt, language, "date", zone)}
-          t={t}
-        />
-      ) : null}
-      {billingPortal && account.premium ? (
-        <>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button variant="outline" onClick={() => action.run("manage-billing")}>
-              {lifetime ? t.settings.plan.billingDocuments : t.settings.plan.manageBilling}
-            </Button>
-          </div>
-          {lifetime ? null : (
-            <p className="text-sm text-muted-foreground">{t.settings.plan.billingDocs}</p>
-          )}
-        </>
-      ) : null}
-    </Group>
+    <>
+      {/* Passaggio a vita: ritorno da Stripe, pagamento in conferma o annullato. */}
+      <CheckoutReturn
+        checkout={purchase.checkout === "processing" ? null : purchase.checkout}
+        payment={account.payment}
+        t={t}
+        language={language}
+      />
+      <Group title={t.settings.plan.currentPlan}>
+        <div className="grid gap-1">
+          <p className="flex items-center gap-2 text-lg font-semibold">
+            {account.premium
+              ? t.settings.plan.premiumPeriod[account.premium.period]
+              : t.settings.plan.premium}
+          </p>
+          <PremiumStatus
+            premium={account.premium}
+            grant={account.grant}
+            t={t}
+            language={language}
+          />
+        </div>
+        {billingPortal && account.premium?.renewsAt && account.premium.period !== "lifetime" ? (
+          <RenewalPeriod
+            period={account.premium.period}
+            next={account.premium.nextPeriod}
+            renewsAt={formatDate(account.premium.renewsAt, language, "date", zone)}
+            t={t}
+          />
+        ) : null}
+        {billingPortal && account.premium && !account.premium.granted ? (
+          <>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button variant="outline" onClick={() => action.run("manage-billing")}>
+                {lifetime ? t.settings.plan.billingDocuments : t.settings.plan.manageBilling}
+              </Button>
+            </div>
+            {lifetime ? null : (
+              <p className="text-sm text-muted-foreground">{t.settings.plan.billingDocs}</p>
+            )}
+          </>
+        ) : null}
+      </Group>
+      {lifetime ? null : (
+        <PurchaseOptions billing={billing} purchase={purchase} upgrade t={t} language={language} />
+      )}
+    </>
   );
 }
 
-/** Rinnovo, eventuale cambio programmato, fine dopo la disdetta o acquisto una tantum. */
+/**
+ * Rinnovo, eventuale cambio programmato, fine dopo la disdetta, acquisto una tantum o fine di
+ * una concessione.
+ */
 function PremiumStatus({
   premium,
+  grant,
   t,
   language,
 }: {
   premium: AccountView["premium"];
+  grant: AccountView["grant"];
   t: AppCopy;
   language: Language;
 }) {
   const zone = useTimeZone();
   const copy = t.settings.plan;
   let text: string | null = null;
-  if (premium?.period === "lifetime") text = copy.premiumLifetime;
+  if (premium?.period === "lifetime")
+    text = premium.granted ? copy.premiumLifetimeGranted : copy.premiumLifetime;
   else if (premium?.renewsAt) {
     const date = formatDate(premium.renewsAt, language, "date", zone);
     text = premium.nextPeriod
@@ -167,6 +196,7 @@ function PremiumStatus({
       : copy.premiumRenews(date);
   } else if (premium?.endsAt)
     text = copy.premiumEnds(formatDate(premium.endsAt, language, "dateTime", zone));
+  else if (grant) text = copy.grantEnds(formatDate(grant.endsAt, language, "dateTime", zone));
   return text ? <p className="text-sm text-muted-foreground">{text}</p> : null;
 }
 
@@ -218,12 +248,16 @@ function TrialOffer({ t }: { t: AppCopy }) {
   );
 }
 
-/** Acquisto dalla pagina del piano: stato per lo spazio e offerte in vendita. */
+/**
+ * Acquisto dalla pagina del piano: stato di mensile e annuale per lo spazio, offerte in vendita
+ * e offerta lifetime, null quando non si propone.
+ */
 export interface PurchaseView {
   state: PurchaseState;
   offers: readonly PremiumOffer[];
-  /** Ritorno da Stripe: pagamento in verifica oppure annullato. */
-  checkout: "processing" | "cancelled" | null;
+  lifetime: LifetimeOffer | null;
+  /** Ritorno da Stripe: pagamento in verifica, lifetime in verifica oppure annullato. */
+  checkout: "processing" | "lifetime" | "cancelled" | null;
 }
 
 /** Negozio attivo del Free: negozi dello spazio, quello attivo e la prima nuova sostituzione. */
@@ -328,6 +362,13 @@ function CheckoutReturn({
 }) {
   const zone = useTimeZone();
   const copy = t.settings.plan;
+  // Il lifetime si paga subito, anche durante la prova o con un abbonamento.
+  if (checkout === "lifetime" || (payment?.state === "pending" && payment.lifetime))
+    return (
+      <StatusAlert tone="info" title={copy.lifetimeProcessingTitle}>
+        {copy.lifetimeProcessingBody}
+      </StatusAlert>
+    );
   if (payment?.state === "scheduled")
     return (
       <StatusAlert tone="info" title={copy.trialChosenTitle(copy.premiumPeriod[payment.period])}>
@@ -396,7 +437,14 @@ export function PlanSection({
         language={language}
       />
     ) : (
-      <PremiumPlan account={account} billingPortal={billingPortal} t={t} language={language} />
+      <PremiumPlan
+        account={account}
+        billing={billing}
+        billingPortal={billingPortal}
+        purchase={purchase}
+        t={t}
+        language={language}
+      />
     );
   }
   const quota = account.quota;
@@ -460,11 +508,16 @@ export function PlanSection({
   );
 }
 
-/** Acquisto con i pagamenti attivi e senza un diritto in corso diverso dalla prova. */
+/**
+ * Acquisto con i pagamenti attivi. Mensile e annuale si fermano con un diritto in corso diverso
+ * dalla prova; il lifetime resta finché ci sono posti, anche per chi ha già un abbonamento, che
+ * con il lifetime si chiude detraendo dal prezzo il periodo pagato non usato.
+ */
 function PurchaseOptions({
   billing,
   purchase,
   trial,
+  upgrade = false,
   t,
   language,
 }: {
@@ -472,37 +525,32 @@ function PurchaseOptions({
   purchase: PurchaseView;
   /** Durante la prova mensile e annuale si pagano alla sua fine, la stessa data del server. */
   trial?: { endsAt: string; now: string };
+  /** Premium già attivo: resta soltanto il passaggio a vita. */
+  upgrade?: boolean;
   t: AppCopy;
   language: Language;
 }) {
   const zone = useTimeZone();
+  // Un solo acquisto alla volta: la richiesta in corso ferma tutte le offerte.
   const action = useAction();
-  if (!billing || purchase.state === "covered") return null;
+  const lifetime = purchase.lifetime;
+  const offers = purchase.offers.filter((offer) =>
+    offer === "lifetime" ? !!lifetime : purchase.state !== "covered",
+  );
+  if (!billing || !offers.length) return null;
   const copy = t.settings.plan;
-  const net = (offer: PremiumOffer) => formatPrice(priceGeneration.net[offer], language);
   // Durante la prova la nota dell'offerta aggiunge la data del primo addebito; con meno di due
   // giorni residui il primo addebito è subito.
   const chargeAt = trial ? firstChargeAt(trial.endsAt, trial.now) : null;
   const firstCharge = chargeAt
     ? copy.firstCharge(formatDate(chargeAt, language, "date", zone))
     : null;
-  const withCharge = (note: string) => (firstCharge ? `${note} ${firstCharge}` : note);
-  const prices = {
-    monthly: {
-      price: copy.priceMonthly(net("monthly")),
-      note: withCharge(copy.priceMonthlyNote),
-    },
-    annual: {
-      price: copy.priceAnnual(net("annual")),
-      note: withCharge(copy.priceAnnualNote(annualPaidMonths())),
-    },
-    lifetime: { price: copy.priceLifetime(net("lifetime")), note: copy.priceLifetimeNote },
-  };
-  const available = purchase.state === "available";
+  const prices = offerTexts(t, language, lifetime, firstCharge);
+  const needsSync = purchase.state === "needs-sync" || lifetime?.state === "needs-sync";
   return (
-    <Group title={copy.buyTitle}>
-      <PremiumNote>{copy.buyBody}</PremiumNote>
-      {trial ? (
+    <Group title={upgrade ? copy.lifetimeUpgradeTitle : copy.buyTitle}>
+      {upgrade ? null : <PremiumNote>{copy.buyBody}</PremiumNote>}
+      {trial && purchase.state !== "covered" ? (
         <p className="text-sm text-muted-foreground">
           {chargeAt ? copy.trialPurchaseNote : copy.trialEndingPurchaseNote}
         </p>
@@ -510,10 +558,10 @@ function PurchaseOptions({
       <ul
         className={cn(
           "grid gap-3",
-          purchase.offers.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2",
+          ["max-w-sm", "sm:grid-cols-2", "sm:grid-cols-3"][offers.length - 1],
         )}
       >
-        {purchase.offers.map((plan) => (
+        {offers.map((plan) => (
           <li
             key={plan}
             className={cn(
@@ -525,22 +573,76 @@ function PurchaseOptions({
               <span className="font-code text-base font-semibold">{prices[plan].price}</span>
               <span className="text-sm text-muted-foreground">{prices[plan].note}</span>
             </span>
-            {available ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-fit"
-                disabled={action.pending}
-                onClick={() => action.run("buy", { plan })}
-              >
-                {copy.buyPeriod[plan]}
-              </Button>
-            ) : null}
+            <OfferAction plan={plan} purchase={purchase} action={action} t={t} />
           </li>
         ))}
       </ul>
-      {available ? null : <p className="text-sm font-medium">{copy.purchaseNeedsSync}</p>}
+      {needsSync ? <p className="text-sm font-medium">{copy.purchaseNeedsSync}</p> : null}
       <p className="text-sm text-muted-foreground">{copy.pricesNote}</p>
     </Group>
+  );
+}
+
+/**
+ * Prezzo e nota di ogni offerta. Mensile e annuale aggiungono il primo addebito della prova; il
+ * lifetime la detrazione del periodo pagato non usato e la chiusura dell'abbonamento.
+ */
+function offerTexts(
+  t: AppCopy,
+  language: Language,
+  lifetime: LifetimeOffer | null,
+  firstCharge: string | null,
+): Record<PremiumOffer, { price: string; note: string }> {
+  const copy = t.settings.plan;
+  const net = (offer: PremiumOffer) => formatPrice(priceGeneration.net[offer], language);
+  const withCharge = (note: string) => (firstCharge ? `${note} ${firstCharge}` : note);
+  return {
+    monthly: {
+      price: copy.priceMonthly(net("monthly")),
+      note: withCharge(copy.priceMonthlyNote),
+    },
+    annual: {
+      price: copy.priceAnnual(net("annual")),
+      note: withCharge(copy.priceAnnualNote(annualPaidMonths())),
+    },
+    lifetime: {
+      price: copy.priceLifetime(net("lifetime")),
+      note: [
+        copy.priceLifetimeNote,
+        lifetime?.credit ? copy.lifetimeCredit(formatPrice(lifetime.credit, language)) : null,
+        lifetime?.replaces ? copy.lifetimeReplaces : null,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    },
+  };
+}
+
+/** Acquisto dell'offerta quando il server lo ammette; a posti finiti il lifetime è esaurito. */
+function OfferAction({
+  plan,
+  purchase,
+  action,
+  t,
+}: {
+  plan: PremiumOffer;
+  purchase: PurchaseView;
+  action: ReturnType<typeof useAction>;
+  t: AppCopy;
+}) {
+  const state = plan === "lifetime" ? purchase.lifetime?.state : purchase.state;
+  if (state === "sold-out")
+    return <span className="text-sm font-medium">{t.settings.plan.lifetimeSoldOut}</span>;
+  if (state !== "available") return null;
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className="w-fit"
+      disabled={action.pending}
+      onClick={() => action.run("buy", { plan })}
+    >
+      {t.settings.plan.buyPeriod[plan]}
+    </Button>
   );
 }
