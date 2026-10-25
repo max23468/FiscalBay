@@ -286,6 +286,23 @@ for (const language of ["it", "en"] as const) {
         name: language === "it" ? "Documenti legali" : "Legal documents",
       });
       await expect(legal.getByRole("link")).toHaveCount(3);
+      // Il footer resta su una riga per elemento anche sugli smartphone più stretti.
+      if (width === 500) {
+        await page.setViewportSize({ width: 360, height: 666 });
+        const footer = page.locator("footer");
+        const lines = await footer
+          .locator("p, nav")
+          .evaluateAll((elements) =>
+            elements.map((element) =>
+              Math.round(
+                element.getBoundingClientRect().height /
+                  parseFloat(getComputedStyle(element).lineHeight),
+              ),
+            ),
+          );
+        expect(lines).toEqual([1, 1, 1]);
+        await page.setViewportSize({ width, height: 666 });
+      }
       if (width === 500) {
         const card = page.locator("main .rounded-2xl");
         expect((await card.boundingBox())!.x).toBe(16);
