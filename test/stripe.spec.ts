@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import Stripe from "stripe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { supportEmail } from "../app/app-copy";
 import { annualPaidMonths, firstChargeAt, formatPrice, priceGeneration } from "../app/catalog";
 import {
   applyStripeEvent,
@@ -14,21 +15,28 @@ import {
   subscriptionRenews,
   subscriptionView,
 } from "../app/domain/billing.server";
-import { purchaseState, startCheckout } from "../app/domain/checkout.server";
+import { checkoutConfigured, purchaseState, startCheckout } from "../app/domain/checkout.server";
 import { grantLifetimeConcession, grantPremium } from "../app/domain/concessions.server";
 import { accountCoverage, orderAllowance, startTrial } from "../app/domain/grants.server";
 import { lifetimeContext, unusedCredit } from "../app/domain/lifetime.server";
 import {
-  buildManagedCheckoutParams,
   catalogMismatch,
+  stripeAccountProfile,
+  stripePortalConfiguration,
+  stripeWebhookEvents,
+} from "../app/integrations/stripe-account.server";
+import {
+  buildManagedCheckoutParams,
   createManagedCheckout,
   createStripeClient,
   createStripeReader,
   isMissingObject,
   stripeRead,
+  stripeSecretKey,
   verifyStripeEvent,
 } from "../app/integrations/stripe.server";
 import { receiveWebhook } from "../app/integrations/webhooks.server";
+import { localizedPath } from "../app/i18n";
 import { action as settingsAction, loader as settingsLoader } from "../app/routes/settings";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { insertStore, now, resetDatabase } from "./fixtures/database-fixtures";
@@ -47,6 +55,9 @@ const event = {
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM webhook_receipts").run();
 });
+
+/** Chiave live con limitazioni, l'unica che Production accetta. */
+const liveKey = "rk_live_fiscalbay";
 
 const checkoutInput = {
   priceId: "price_test_monthly",
@@ -220,6 +231,36 @@ describe("Stripe Managed Payments", () => {
       catalogMismatch(catalogPrice({ type: "one_time", recurring: null }), "lifetime", net),
     ).toBeNull();
     expect(catalogMismatch(catalogPrice({}, { tax_code: null }), "monthly", net)).toBe("tax_code");
+  });
+
+  it("descrive dalla configurazione l'account Stripe atteso di ogni ambiente", () => {
+    const origin = "https://fiscalbay.it";
+    expect(stripeAccountProfile(true, origin)).toEqual({
+      name: "FiscalBay",
+      url: origin,
+      supportEmail,
+    });
+    expect(stripeAccountProfile(false, "https://test.fiscalbay.it")).toEqual({
+      name: "FiscalBay Sandbox",
+      url: "https://test.fiscalbay.it",
+      supportEmail,
+    });
+    const portal = stripePortalConfiguration(origin);
+    expect(portal.business_profile).toEqual({
+      privacy_policy_url: `${origin}/privacy`,
+      terms_of_service_url: `${origin}/termini`,
+    });
+    expect(portal.default_return_url).toBe(
+      `${origin}${localizedPath("it", "/app/impostazioni/piano")}`,
+    );
+    // Disdetta a fine periodo senza conguaglio; la periodicità cambia dalla pagina del piano.
+    expect(portal.features.subscription_cancel).toMatchObject({
+      enabled: true,
+      mode: "at_period_end",
+      proration_behavior: "none",
+    });
+    expect(portal.features.subscription_update).toEqual({ enabled: false });
+    expect(new Set(stripeWebhookEvents).size).toBe(stripeWebhookEvents.length);
   });
 
   it("mostra il listino netto dalla sola fonte del catalogo", () => {
@@ -1217,11 +1258,48 @@ describe("Webhook e riconciliazione Stripe", () => {
     expect(stripe.fetcher).not.toHaveBeenCalled();
   });
 
+  it("usa soltanto la chiave dell'ambiente e in Production soltanto quella con limitazioni", async () => {
+    const production = { ...env, APP_ORIGIN: "https://fiscalbay.it" } as Env;
+    expect(stripeSecretKey(env)).toBe("rk_test_fiscalbay");
+    expect(stripeSecretKey({ ...env, STRIPE_SECRET_KEY: "sk_test_fiscalbay" })).toBe(
+      "sk_test_fiscalbay",
+    );
+    expect(stripeSecretKey({ ...production, STRIPE_SECRET_KEY: liveKey })).toBe(liveKey);
+    for (const [target, key] of [
+      [env, liveKey],
+      [env, "sk_live_fiscalbay"],
+      [env, "rk_test_"],
+      [env, "pk_test_fiscalbay"],
+      [env, ""],
+      [production, "sk_live_fiscalbay"],
+      [production, "rk_test_fiscalbay"],
+      [production, "sk_test_fiscalbay"],
+      [production, `x${liveKey}`],
+      [production, "rk_live_"],
+      [production, undefined],
+    ] as const)
+      expect(stripeSecretKey({ ...target, STRIPE_SECRET_KEY: key })).toBeUndefined();
+    // Una chiave rifiutata ferma acquisti, portale, ricevute e cron senza chiamare Stripe.
+    const stripe = stripeAccount();
+    for (const target of [
+      { ...env, STRIPE_SECRET_KEY: liveKey },
+      { ...production, STRIPE_SECRET_KEY: "sk_live_fiscalbay" },
+    ] as Env[]) {
+      expect(checkoutConfigured(target)).toBe(false);
+      await expect(
+        applyStripeEvent(target, { topic: "invoice.paid", objectId: "in_first" }, stripe.fetcher),
+      ).rejects.toMatchObject({ code: "UPSTREAM_UNAVAILABLE" });
+      await reconcileBilling(target, stripe.fetcher, at(now));
+      expect(await openBillingPortal(target, "u-a", "https://fiscalbay.it/", "it")).toBeNull();
+    }
+    expect(stripe.fetcher).not.toHaveBeenCalled();
+  });
+
   it("in Production registra gli abbonamenti live", async () => {
     const stripe = stripeAccount();
     stripe.state.subscription.livemode = true;
     stripe.state.invoices = [firstInvoice];
-    const live = { ...env, APP_ORIGIN: "https://fiscalbay.it" } as Env;
+    const live = { ...env, APP_ORIGIN: "https://fiscalbay.it", STRIPE_SECRET_KEY: liveKey } as Env;
     await applyStripeEvent(
       live,
       { topic: "customer.subscription.created", objectId: "sub_test" },
@@ -3065,7 +3143,7 @@ describe("Rimborsi, dispute e cancellazioni finanziarie", () => {
       .bind(now, periodEnd)
       .run();
     stripe.state.missingCustomers = ["cus_live"];
-    const live = { ...env, APP_ORIGIN: "https://fiscalbay.it" } as Env;
+    const live = { ...env, APP_ORIGIN: "https://fiscalbay.it", STRIPE_SECRET_KEY: liveKey } as Env;
     await applyStripeEvent(
       live,
       { topic: "customer.deleted", objectId: "cus_live" },

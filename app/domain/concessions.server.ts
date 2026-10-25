@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { isProduction } from "../app-links";
 import { logFailure } from "../errors";
-import { createStripeClient, stripeRead } from "../integrations/stripe.server";
+import { createStripeClient, stripeRead, stripeSecretKey } from "../integrations/stripe.server";
 import { reconcileSubscription } from "./billing.server";
 import { grantLifetime, type LifetimeGrant } from "./lifetime.server";
 
@@ -85,9 +85,10 @@ export async function grantPremium(
       : null;
   let stripe = null;
   if (postpone) {
-    if (!env.STRIPE_SECRET_KEY) return { result: "unavailable" };
+    const key = stripeSecretKey(env);
+    if (!key) return { result: "unavailable" };
     try {
-      stripe = await createStripeClient(env.STRIPE_SECRET_KEY);
+      stripe = await createStripeClient(key);
       await stripeRead(() =>
         stripe!.subscriptions.update(postpone, {
           trial_end: Math.floor(end / 1000),
@@ -126,6 +127,7 @@ export async function grantLifetimeConcession(
 ): Promise<LifetimeGrant | "invalid"> {
   const parsed = concession.safeParse(input);
   if (!parsed.success) return "invalid";
-  const stripe = env.STRIPE_SECRET_KEY ? await createStripeClient(env.STRIPE_SECRET_KEY) : null;
+  const key = stripeSecretKey(env);
+  const stripe = key ? await createStripeClient(key) : null;
   return grantLifetime(env, stripe, parsed.data, now);
 }

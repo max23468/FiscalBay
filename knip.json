@@ -9,7 +9,8 @@
         "benchmarks/**/*.bench.ts",
         "app/components/ui/*.tsx"
       ],
-      "ignoreDependencies": ["cloudflare"]
+      "ignoreDependencies": ["cloudflare"],
+      "ignoreBinaries": ["stripe"]
     },
     "placeholder": {
       "entry": ["cloudflare.config.ts", "wrangler.config.ts", "worker.js"]

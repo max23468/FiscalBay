@@ -2,14 +2,15 @@ import { appCopy } from "../app-copy";
 import { firstChargeAt, priceGeneration, type PremiumOffer, type PurchaseState } from "../catalog";
 import { ApplicationError, logFailure } from "../errors";
 import { localizedPath, type Language } from "../i18n";
+import { catalogMismatch } from "../integrations/stripe-account.server";
 import {
-  catalogMismatch,
   createLifetimeCredit,
   createManagedCheckout,
   createStripeClient,
   expireCheckout,
   retrieveCatalogPrice,
   stripeRead,
+  stripeSecretKey,
 } from "../integrations/stripe.server";
 import { purchasesOpenSql } from "./admission-state.server";
 import { openSubscriptionSql, storeReadSql } from "./grants.server";
@@ -43,7 +44,7 @@ export function isCheckoutOffer(value: string): value is CheckoutOffer {
 
 /** L'acquisto compare soltanto con la chiave Stripe e i prezzi di ogni offerta in vendita. */
 export function checkoutConfigured(env: Env) {
-  return !!env.STRIPE_SECRET_KEY && checkoutOffers.every((offer) => !!env[priceVariable[offer]]);
+  return !!stripeSecretKey(env) && checkoutOffers.every((offer) => !!env[priceVariable[offer]]);
 }
 
 /** Diritto in corso dello spazio, separato per la prova e per ogni altra origine. */
@@ -128,16 +129,17 @@ export async function startCheckout(
   now = new Date(),
 ): Promise<CheckoutResult> {
   const priceId = env[priceVariable[input.offer]];
-  if (!env.STRIPE_SECRET_KEY || !priceId) return { ok: false, reason: "unavailable" };
+  const secretKey = stripeSecretKey(env);
+  if (!secretKey || !priceId) return { ok: false, reason: "unavailable" };
   if (input.offer === "lifetime")
-    return startLifetimeCheckout(env, { ...input, priceId, secretKey: env.STRIPE_SECRET_KEY }, now);
+    return startLifetimeCheckout(env, { ...input, priceId, secretKey }, now);
   const purchase = await purchaseState(env.DB, input.userId, now);
   // Senza spazio nessun negozio è stato ancora collegato.
   if (purchase?.state !== "available")
     return { ok: false, reason: purchase?.state ?? "needs-sync" };
   const { trialEndsAt } = purchase;
   try {
-    const stripe = await createStripeClient(env.STRIPE_SECRET_KEY);
+    const stripe = await createStripeClient(secretKey);
     const mismatch = catalogMismatch(
       await retrieveCatalogPrice(stripe, priceId),
       input.offer,

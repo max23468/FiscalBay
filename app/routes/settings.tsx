@@ -55,6 +55,7 @@ import {
   startTelegramLink,
   telegramSettings,
 } from "../domain/telegram.server";
+import { stripeSecretKey } from "../integrations/stripe.server";
 import { telegramConfigured } from "../integrations/telegram.server";
 import { logFailure } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
@@ -78,7 +79,7 @@ import type { Route } from "./+types/settings";
 const sections = settingsSections.filter((section) => section !== "esportazione");
 const services = (): SettingsPageData["services"] => ({
   billing: checkoutConfigured(env),
-  billingPortal: !!env.STRIPE_SECRET_KEY,
+  billingPortal: !!stripeSecretKey(env),
   telegram: telegramConfigured(env),
   accountData: false,
   support: false,
