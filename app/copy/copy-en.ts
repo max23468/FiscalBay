@@ -557,6 +557,15 @@ export const en: AppCopy = {
       telegramModeDigest: "Daily summary",
       telegramDigestTime: "Summary time",
       telegramStores: "Stores",
+      telegramConnect: "Connect Telegram",
+      telegramPending:
+        "Press Start in the bot to finish linking. The link is valid for 15 minutes.",
+      telegramChangePending:
+        "Press Start in the bot from the new chat. Until then, notifications stay on this one.",
+      telegramLinked: "Telegram chat linked.",
+      telegramChatUnnamed: "Private chat",
+      telegramDigestZone: (zone: string) => `Time zone: ${zone}`,
+      telegramUnavailable: "Telegram notifications are not available right now.",
       marketingTitle: "Communications",
       marketingConsent: "Receive FiscalBay news and offers by email",
       marketingHint: "Emails about your account are always sent.",

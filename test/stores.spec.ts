@@ -728,11 +728,12 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         "aspetto",
         "supporto",
       ],
-      // Con chiave e prezzi Stripe configurati il piano offre acquisto e portale clienti.
+      // Con chiave e prezzi Stripe configurati il piano offre acquisto e portale clienti; con il
+      // bot dell'ambiente compaiono le notifiche Telegram.
       services: {
         billing: true,
         billingPortal: true,
-        telegram: false,
+        telegram: true,
         accountData: false,
         support: false,
       },
@@ -793,7 +794,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       ["time-zone", "Mars/Olympus"],
       ["marketing", "forse"],
       ["language", "en"],
-      ["telegram", "true"],
+      ["telegram", "forse"],
     ]) {
       expect(await save(name, value)).toMatchObject({ init: { status: 400 }, data: { ok: false } });
     }

@@ -26,7 +26,7 @@ import {
   type AccountView,
   type DiagnosticsView,
   type SettingsSection,
-  type StoreView,
+  type TelegramView,
 } from "../../view-models";
 import { AppearanceSection } from "./appearance";
 import { ExportSection, type ExportContext } from "./export";
@@ -52,7 +52,6 @@ export interface SettingsPageData {
   purchase: PurchaseView;
   /** Negozio attivo del Free; null in Premium o senza negozi. */
   freeStore: FreeStoreView | null;
-  stores: StoreView[];
   security: SecurityData;
   /** Valori salvati, con i testi predefiniti dove non c'è una scelta. */
   preferences: {
@@ -65,7 +64,8 @@ export interface SettingsPageData {
   };
   /** Dati tecnici allegabili alla richiesta di assistenza; null senza il modulo. */
   diagnostics: DiagnosticsView | null;
-  telegramChat: string | null;
+  /** Notifiche Telegram dello spazio; null senza il servizio o senza uno spazio. */
+  telegram: TelegramView | null;
   /** Ordini dell'esportazione e quanti fra loro hanno un dato ancora da sbloccare. */
   exportEstimate: { orders: number; locked: number };
   /** Ambito ricevuto dagli Ordini; null se l'esportazione è aperta dalle Impostazioni. */
@@ -182,10 +182,9 @@ export function SettingsPage({
     ),
     notifiche: (
       <NotificationsSection
-        telegram={data.services.telegram}
+        telegram={data.services.telegram ? data.telegram : null}
         premium={premium}
-        telegramChat={data.telegramChat}
-        stores={data.stores}
+        preview={data.preview}
         marketing={data.preferences.marketing}
         t={t}
         links={links}

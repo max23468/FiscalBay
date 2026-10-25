@@ -24,7 +24,7 @@ export const pendingServerModules = new Map([
 ]);
 
 // Host ammessi nelle fixture oltre a `.invalid`: origini del sistema, endpoint
-// dei provider chiamati dal codice sotto test e namespace XML.
+// dei provider chiamati dal codice sotto test, deep link del bot e namespace XML.
 const fixtureHosts = new Set([
   "localhost",
   "127.0.0.1",
@@ -36,6 +36,8 @@ const fixtureHosts = new Set([
   "api.sandbox.ebay.com",
   "i.ebayimg.com",
   "i.ebayimg.sandbox.ebay.com",
+  "api.telegram.org",
+  "t.me",
   "www.w3.org",
 ]);
 

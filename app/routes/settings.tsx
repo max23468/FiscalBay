@@ -48,6 +48,13 @@ import {
   type AuthSession,
 } from "../domain/sessions.server";
 import { listSignInMethods } from "../domain/sign-in-methods.server";
+import {
+  parseTelegramChange,
+  saveTelegramChange,
+  startTelegramLink,
+  telegramSettings,
+} from "../domain/telegram.server";
+import { telegramConfigured } from "../integrations/telegram.server";
 import { logFailure } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
 import { measure } from "../observability.server";
@@ -62,16 +69,16 @@ import {
 import type { Route } from "./+types/settings";
 
 /**
- * Categorie con un servizio reale. L'esportazione arriva con il file degli ordini; Telegram,
- * esportazione e cancellazione dell'account e modulo di assistenza compaiono nelle rispettive
- * categorie insieme ai loro servizi. L'acquisto compare con la configurazione Stripe, la
- * gestione dell'abbonamento con il portale di Stripe.
+ * Categorie con un servizio reale. L'esportazione arriva con il file degli ordini; esportazione e
+ * cancellazione dell'account e modulo di assistenza compaiono nelle rispettive categorie insieme
+ * ai loro servizi. L'acquisto compare con la configurazione Stripe, la gestione dell'abbonamento
+ * con il portale di Stripe, le notifiche Telegram con il bot dell'ambiente.
  */
 const sections = settingsSections.filter((section) => section !== "esportazione");
 const services = (): SettingsPageData["services"] => ({
   billing: checkoutConfigured(env),
   billingPortal: !!env.STRIPE_SECRET_KEY,
-  telegram: false,
+  telegram: telegramConfigured(env),
   accountData: false,
   support: false,
 });
@@ -118,6 +125,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
   const userId = session.user.id;
   const now = new Date();
   const auth = session as AuthSession;
+  const timeZone = effectiveTimeZone(preferences.timeZone, area.detectedTimeZone);
   const [
     shell,
     [
@@ -130,6 +138,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       methods,
       sessions,
       pendingEmail,
+      telegram,
     ],
   ] = await Promise.all([
     shellData(area, undefined, now),
@@ -144,6 +153,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
         listSignInMethods(env.DB, userId),
         listActiveSessions(env.DB, userId, session.session.id, language, now),
         pendingEmailChange(env.DB, userId, session.user.email),
+        telegramConfigured(env) ? telegramSettings(env.DB, userId, timeZone) : null,
       ]),
     ),
   ]);
@@ -185,7 +195,6 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       checkout: checkoutReturn(new URL(request.url).searchParams),
     },
     freeStore,
-    stores: [],
     security: {
       methods,
       sessions,
@@ -204,7 +213,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       templates: messageTemplates(preferences),
     },
     diagnostics: null,
-    telegramChat: null,
+    telegram,
     exportEstimate: { orders: 0, locked: 0 },
     exportContext: null,
     now: now.toISOString(),
@@ -245,6 +254,14 @@ export async function action({ request }: Route.ActionArgs) {
         await setUnlockConfirmation(env.DB, userId, value === "true");
         return { ok: true } satisfies ActionResult;
       }
+      const telegram = parseTelegramChange(name, value);
+      if (telegram) {
+        if (!telegramConfigured(env)) return failed(409, t.saveFailed);
+        const zone = effectiveTimeZone(area.preferences.timeZone, area.detectedTimeZone);
+        if (!(await saveTelegramChange(env.DB, userId, telegram, zone)))
+          return failed(404, t.saveFailed);
+        return { ok: true } satisfies ActionResult;
+      }
       const change = parsePreference(name, value);
       // La lingua cambia l'indirizzo della pagina: ha il proprio percorso.
       if (!change || change.name === "language") return failed(400, t.saveFailed);
@@ -256,6 +273,18 @@ export async function action({ request }: Route.ActionArgs) {
       if (!templates) return failed(400, t.template.templateInvalid);
       await saveTemplates(env.DB, userId, templates);
       return { ok: true } satisfies ActionResult;
+    }
+    if (intent === "telegram-link") {
+      // Il modulo apre una nuova scheda: il link porta al bot dell'ambiente.
+      if (!telegramConfigured(env)) return failed(409, t.notifications.telegramUnavailable);
+      const link = await startTelegramLink(env.DB, env, {
+        userId,
+        sessionId: session.session.id,
+        language,
+        timeZone: effectiveTimeZone(area.preferences.timeZone, area.detectedTimeZone),
+      });
+      if ("url" in link) return redirect(link.url);
+      return failed(409, t.notifications.telegramPremium);
     }
     if (intent === "start-trial") {
       // Una prova già usata, anche da un'altra scheda, non riparte: lo stato si rilegge.

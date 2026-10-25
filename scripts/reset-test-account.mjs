@@ -347,6 +347,35 @@ async function main() {
       INSERT INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
         VALUES ('${id}', '${id}', '${id}', '${expires}', '${now}', '${now}');`);
     }
+    // Notifiche Telegram: Premium con due negozi, con la chat già collegata o da collegare, per
+    // lingua, browser e tentativo. Le prove salvano preferenze e scrivono il collegamento.
+    for (const id of ["linked", "unlinked"].flatMap((state) =>
+      ["chromium", "webkit"].flatMap((browser) =>
+        ["it", "en"].flatMap((language) =>
+          [0, 1, 2].map((attempt) => `telegram-${state}-${language}-${browser}-${attempt}`),
+        ),
+      ),
+    )) {
+      statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
+      INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+        SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
+      INSERT INTO user_profiles SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
+        FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
+      INSERT INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
+        FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};
+      INSERT INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
+        VALUES ('${id}', '${id}', '${id}', '${expires}', '${now}', '${now}');
+      INSERT INTO workspaces (id, name, created_at) VALUES ('${id}', 'Collaudo Telegram', '${now}');
+      INSERT INTO workspace_members VALUES ('${id}', '${id}', 'owner');
+      INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
+        VALUES ('${id}', '${id}', '${id}', '${now}', 'Negozio notifiche'),
+               ('${id}-2', '${id}', '${id}-2', '${new Date(Date.now() + 1000).toISOString()}', 'Secondo negozio notifiche');
+      INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+        VALUES ('${id}', '${id}', 'admin', '${now}', '${expires}');`);
+      if (id.startsWith("telegram-linked-"))
+        statements.push(`INSERT INTO telegram_links (workspace_id, id, chat_id, chat_label, language, linked_at)
+          VALUES ('${id}', '${id}', '1', '@collaudo_fiscalbay', '${id.split("-")[2]}', '${now}');`);
+    }
     for (const browser of ["chromium", "webkit"]) {
       const id = `passkey-${browser}`;
       statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';

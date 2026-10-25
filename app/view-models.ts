@@ -271,6 +271,20 @@ export interface StoreView {
   recent: StoreSyncView[];
 }
 
+/** Notifiche Telegram dello spazio: chat collegata, preferenze e scelta dei negozi. */
+export interface TelegramView {
+  /** Chat collegata, con il nome mostrato da Telegram se ne ha uno; null se non collegata. */
+  chat: { label: string | null; linkedAt: string } | null;
+  enabled: boolean;
+  filter: "fiscal" | "all";
+  mode: "each" | "digest";
+  digestTime: string;
+  /** Fuso del riepilogo giornaliero. */
+  timeZone: string;
+  /** `paused`: negozio escluso dal piano, senza ordini da notificare. */
+  stores: Array<{ id: string; name: string; enabled: boolean; paused: boolean }>;
+}
+
 /** Identificativi letti al massimo in una sola richiesta della campanella. */
 export const maxReadNotifications = 50;
 

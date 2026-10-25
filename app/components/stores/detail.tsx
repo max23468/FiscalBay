@@ -162,7 +162,12 @@ function StoreDetail({
       <ConnectionSection store={store} now={data.now} t={t} language={links.language} />
       <SyncSection store={store} data={data} t={t} language={links.language} />
       <RecentSection store={store} t={t} language={links.language} />
-      <NotificationsSection store={store} settings={data.settings} t={t} links={links} />
+      <NotificationsSection
+        store={store}
+        settings={data.notificationSettings}
+        t={t}
+        links={links}
+      />
       <StoreActions
         store={store}
         ebayDown={ebayDownFor(data, store)}

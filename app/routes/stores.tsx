@@ -20,6 +20,8 @@ import {
   type StoreStatus,
 } from "../domain/stores.server";
 import { subscriptionRenews } from "../domain/billing.server";
+import { storeNotifications } from "../domain/telegram.server";
+import { telegramConfigured } from "../integrations/telegram.server";
 import { requestStoreSync, type SyncRequestResult } from "../domain/order-sync.server";
 import { languageFromPath, localizedPath } from "../i18n";
 import type { ActionResult, StoreView } from "../view-models";
@@ -41,10 +43,10 @@ export function headers(): HeadersInit {
  * Vista del negozio con i soli dati che FiscalBay possiede: lo storico compare dal primo avvio
  * dell'importazione e resta «in corso» finché non è completo e la sincronizzazione risulta in
  * corso mentre un'acquisizione tiene il negozio.
- * Frequenza e ultimi aggiornamenti vengono dalla lettura periodica; senza Telegram le notifiche
- * seguono il piano.
+ * Frequenza e ultimi aggiornamenti vengono dalla lettura periodica. Le notifiche sono null senza
+ * Premium o senza il bot dell'ambiente.
  */
-function storeView(store: StoreStatus): StoreView {
+function storeView(store: StoreStatus, notifications: Map<string, boolean> | null): StoreView {
   return {
     id: store.id,
     name: store.name,
@@ -64,7 +66,7 @@ function storeView(store: StoreStatus): StoreView {
     issue: store.connection === "reconnect_required" ? "reconnect" : undefined,
     syncing: store.syncing,
     lastSyncAt: store.lastSyncAt,
-    notifications: null,
+    notifications: notifications ? (notifications.get(store.id) ?? false) : null,
     importedOrders: store.importedOrders,
     historyDays: store.history?.days ?? null,
     // Uno storico incompleto resta in corso anche in pausa: riprende con la lettura di eBay.
@@ -85,17 +87,19 @@ async function readStores({ request, params }: Route.LoaderArgs) {
   const area = await requireAccountArea(request);
   const { language, session, account } = area;
   const now = new Date();
-  const [statuses, renews] = await measure("d1", "stores", () =>
+  const telegram = telegramConfigured(env);
+  const [statuses, renews, notifications] = await measure("d1", "stores", () =>
     Promise.all([
       listStores(env.DB, session.user.id, now),
       subscriptionRenews(env.DB, env, session.user.id),
+      telegram ? storeNotifications(env.DB, session.user.id, now) : null,
     ]),
   );
   const read = () =>
     measure("d1", "stores", () => listStores(env.DB, session.user.id)).then((stores) =>
-      stores.map(storeView),
+      stores.map((store) => storeView(store, notifications)),
     );
-  const stores = statuses.map(storeView);
+  const stores = statuses.map((store) => storeView(store, notifications));
   const detail = params.negozio
     ? (stores.find((store) => store.id === params.negozio) ?? null)
     : null;
@@ -110,18 +114,18 @@ async function readStores({ request, params }: Route.LoaderArgs) {
     page: {
       stores,
       detail,
-      // Il piano della pagina decide soltanto la colonna delle notifiche Telegram, che arriva
-      // con il loro servizio: fino ad allora resta quella del Free. Le pause del piano sono nei
-      // negozi.
-      account: { plan: "free" as const },
+      // Il piano della pagina decide soltanto la colonna delle notifiche Telegram: senza il bot
+      // dell'ambiente resta quella del Free. Le pause del piano sono nei negozi.
+      account: { plan: notifications ? ("premium" as const) : ("free" as const) },
       now: now.toISOString(),
       // Con eBay che non risponde restano sospese soltanto le azioni che lo chiamano, per
       // ambiente: Production e Sandbox rispondono ciascuno per sé.
       ebayDown: [...ebayOutages(statuses).keys()],
       elsewhere: false,
       connectHref: localizedPath(language, storeLinkPath),
-      // Notifiche, piano e supporto non hanno ancora una pagina reale.
+      // Piano e supporto non hanno ancora tutti i servizi; le notifiche li hanno con il bot.
       settings: false,
+      notificationSettings: telegram,
       subscriptionRenews: renews,
     },
   };

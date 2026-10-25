@@ -1,3 +1,4 @@
+import type { AppCopy } from "./app-copy";
 import type { Language } from "./i18n";
 import { displayTimeZone, type NotificationView } from "./view-models";
 
@@ -17,12 +18,26 @@ export type TimeZone = (typeof timeZones)[number];
 
 export const maxTemplateLength = 2000;
 
+/** Orari ammessi del riepilogo Telegram giornaliero. */
+export const telegramDigestTimes = ["08:00", "12:00", "18:00", "21:00"] as const;
+
+/** Validità del deep link che collega la chat Telegram, in minuti. */
+export const telegramLinkMinutes = 15;
+
 export function isTheme(value: unknown): value is Theme {
   return (themes as readonly unknown[]).includes(value);
 }
 
 export function isTimeZone(value: unknown): value is TimeZone {
   return (timeZones as readonly unknown[]).includes(value);
+}
+
+/** Nome del fuso: quello dell'elenco, altrimenti la città dell'identificativo IANA. */
+export function zoneLabel(zone: string | null, t: AppCopy): string | null {
+  if (!zone) return null;
+  return isTimeZone(zone)
+    ? t.settings.appearance.timeZones[zone]
+    : (zone.split("/").at(-1) ?? zone).replaceAll("_", " ");
 }
 
 /** Fuso scelto: uno dell'elenco, oppure quello del dispositivo (predefinito). */

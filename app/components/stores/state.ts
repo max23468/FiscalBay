@@ -23,8 +23,10 @@ export interface StoresPageData {
    * senza, l'anteprima simula l'esito.
    */
   connectHref?: string;
-  /** Impostazioni esistono: le scorciatoie verso notifiche, piano e supporto hanno una meta. */
+  /** Impostazioni esistono: le scorciatoie verso piano e supporto hanno una meta. */
   settings: boolean;
+  /** La scorciatoia verso le notifiche ha una meta: il servizio Telegram è disponibile. */
+  notificationSettings: boolean;
   /** Abbonamento Premium che si rinnova: scollegare l'ultimo negozio non lo disdice. */
   subscriptionRenews?: boolean;
 }
