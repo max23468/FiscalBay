@@ -634,6 +634,13 @@ function readback(repository, run, environment) {
   }
 }
 
+/** I cloni delle sessioni cloud sono superficiali: merge-base e merge-tree richiedono la storia. */
+export function completeHistory(cwd = process.cwd()) {
+  const git = (...args) => execute("git", args, { cwd });
+  if (git("rev-parse", "--is-shallow-repository") === "true")
+    git("fetch", "--quiet", "--unshallow", "origin");
+}
+
 export function squashIntegrated(branchSha, mergeSha, cwd = process.cwd()) {
   const localGit = (...args) => execute("git", args, { cwd, stdio: ["ignore", "pipe", "ignore"] });
   try {
@@ -765,6 +772,7 @@ async function main() {
     throw new Error(
       "Il ciclo richiede un checkout pulito; conservare e completare il lavoro locale.",
     );
+  localGit(() => completeHistory());
   // Cicli su oggetti diversi procedono insieme; sullo stesso oggetto uno solo.
   const object =
     command === "pr" ? `pr-${number}` : command === "resume" ? `run-${number}` : command;

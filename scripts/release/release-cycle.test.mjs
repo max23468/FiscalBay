@@ -26,6 +26,7 @@ import {
   assertRemoteEvidence,
   assertPublishedRelease,
   squashIntegrated,
+  completeHistory,
   cleanup,
   effectiveProductionVariable,
   acquireLock,
@@ -183,6 +184,42 @@ describe("coordinamento e provenienza della pubblicazione", () => {
       run("add", ".");
       run("commit", "--amend", "--no-edit", "-q");
       assert.equal(squashIntegrated(head, run("rev-parse", "HEAD"), directory), false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("completa un clone superficiale prima di provare l'integrazione squash", () => {
+    const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "cycle-shallow-")));
+    const origin = path.join(directory, "origin");
+    const shallow = path.join(directory, "shallow");
+    const run = (cwd, ...args) => {
+      const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+      assert.equal(result.status, 0, result.stderr);
+      return result.stdout.trim();
+    };
+    try {
+      run(directory, "init", "-q", "--initial-branch=develop", origin);
+      run(origin, "config", "user.name", "Synthetic test");
+      run(origin, "config", "user.email", "test@example.invalid");
+      writeFileSync(path.join(origin, "value.js"), "export const value=false;\n");
+      run(origin, "add", ".");
+      run(origin, "commit", "-qm", "base");
+      run(origin, "switch", "-qc", "codex/feature");
+      writeFileSync(path.join(origin, "value.js"), "export const value=true;\n");
+      run(origin, "commit", "-qam", "feature");
+      const head = run(origin, "rev-parse", "HEAD");
+      run(origin, "switch", "-q", "develop");
+      run(origin, "merge", "--squash", "codex/feature");
+      run(origin, "commit", "-qm", "squash");
+      const merged = run(origin, "rev-parse", "HEAD");
+      run(directory, "clone", "-q", "--depth=1", `file://${origin}`, shallow);
+      run(shallow, "fetch", "-q", "--depth=1", "origin", "codex/feature");
+      assert.equal(squashIntegrated(head, merged, shallow), false);
+      completeHistory(shallow);
+      assert.equal(run(shallow, "rev-parse", "--is-shallow-repository"), "false");
+      assert.equal(squashIntegrated(head, merged, shallow), true);
+      completeHistory(shallow);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
