@@ -233,6 +233,7 @@ describe("stato sintetico dell'anteprima", () => {
       expect(refunded.account).toMatchObject({
         plan: "free",
         payment: { state: "refunded", lifetime: true },
+        trialAvailable: true,
       });
       expect(previewLifetime(refunded)).toBeNull();
       expect(previewLifetime(loadScenario("pagamento-rimborsato", language, new Set()))).toEqual({
