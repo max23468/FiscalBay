@@ -7,8 +7,7 @@
         "vitest.mutation.config.ts",
         "vitest.benchmark.config.ts",
         "benchmarks/**/*.bench.ts",
-        "app/components/ui/*.tsx",
-        "e2e/networkidle-trace.mjs"
+        "app/components/ui/*.tsx"
       ],
       "ignoreDependencies": ["cloudflare"]
     },

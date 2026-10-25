@@ -1,4 +1,5 @@
-import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import type { BrowserContext, Page } from "@playwright/test";
+import { expect, networkIdle, test, watchNetwork } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { testAccount } from "./test-account";
 
@@ -42,7 +43,7 @@ async function open(page: Page, path = "/anteprima/ordini") {
   await expect(
     page.getByRole("searchbox", { name: /Cerca ordini|Search orders/u, includeHidden: true }),
   ).toBeEnabled();
-  await page.waitForLoadState("networkidle");
+  await networkIdle(page);
 }
 
 /** Elenco con la ricerca: la query va nel corpo e l'indirizzo riceve la sua forma cifrata. */
@@ -328,6 +329,7 @@ for (const language of ["it", "en"] as const) {
           viewport: { width, height: 900 },
           reducedMotion: "reduce",
         });
+        watchNetwork(context);
         const page = await context.newPage();
         const base = language === "it" ? "/anteprima" : "/en/anteprima";
         const reset = async (scenario: string) => {
@@ -573,6 +575,7 @@ for (const area of areas)
         isMobile: true,
       });
       await enter(context, baseURL!, area);
+      watchNetwork(context);
       const page = await context.newPage();
       const prefix = locale === "it" ? "" : "/en";
       const labels =
@@ -731,13 +734,13 @@ test("stati coerenti: aggiornamento, eBay fermo e collegamento già usato", asyn
 
   await chooseScenario(page, "Primo accesso");
   // Il selettore cambia subito: attendere anche i dati dello scenario prima del collegamento.
-  await page.waitForLoadState("networkidle");
+  await networkIdle(page);
   await page
     .getByRole("navigation", { name: "Navigazione principale" })
     .getByRole("link", { name: "Negozi eBay" })
     .click();
   await expect(page).toHaveURL(/\/anteprima\/negozi$/u);
-  await page.waitForLoadState("networkidle");
+  await networkIdle(page);
   await expect(page.getByText("Negozio già collegato a un altro account")).toHaveCount(0);
   await page.getByRole("button", { name: "Collega negozio eBay" }).click();
   await expect(page.getByText("Negozio già collegato a un altro account")).toBeVisible();
