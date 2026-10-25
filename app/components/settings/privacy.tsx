@@ -29,7 +29,7 @@ export function PrivacySection({
   links: AppLinks;
 }) {
   const action = useAction();
-  // Senza footer nell'area autenticata, i documenti legali si raggiungono da qui (D201).
+  // Senza footer nell'area autenticata, i documenti legali si raggiungono da qui (D202).
   const legal = [
     {
       path: "/termini",

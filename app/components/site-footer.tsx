@@ -4,7 +4,7 @@ import { appCopy, supportEmail } from "../app-copy";
 import { type Language, localizedPath } from "../i18n";
 
 /**
- * Footer unico delle pagine pubbliche: home, accesso, Termini e Privacy (D201). L'area
+ * Footer unico delle pagine pubbliche: home, accesso, Termini e Privacy (D202). L'area
  * autenticata non ne ha uno. `className` adatta la larghezza alla colonna che lo contiene.
  */
 export function SiteFooter({ language, className }: { language: Language; className?: string }) {

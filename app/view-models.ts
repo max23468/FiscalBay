@@ -31,6 +31,8 @@ export type OrdersNotice =
   /** Letture di un solo negozio non riuscite: i suoi ordini sono fermi all'istante `at`. */
   | { kind: "store-read-failed"; storeId: string; storeName: string; at: string }
   | { kind: "quota"; until: string }
+  /** In lista d'attesa per il Free; `purchase` se prova e Premium sono già disponibili. */
+  | { kind: "waitlist"; purchase: boolean }
   | { kind: "store-issue"; storeId: string; storeName: string }
   | {
       kind: "consent-expiring";
@@ -251,8 +253,11 @@ export interface StoreView {
   /** Negozio dell'ambiente Sandbox di eBay, disponibile solo sul test. */
   sandbox?: boolean;
   connection: ConnectionState;
-  /** Pausa manuale o per piano: la seconda non lascia consultare i dati. */
-  pauseReason?: "manual" | "plan";
+  /**
+   * Pausa manuale, per piano o per inattività del Free: soltanto quella per piano non lascia
+   * consultare i dati.
+   */
+  pauseReason?: "manual" | "plan" | "inactivity";
   issue?: "reconnect" | "permissions" | "unverifiable";
   syncing: boolean;
   lastSyncAt: string | null;
@@ -314,6 +319,8 @@ export interface AccountView {
   plan: Plan;
   /** La prova Premium si può attivare: mai usata, nessuna copertura in corso, negozio letto. */
   trialAvailable: boolean;
+  /** In lista d'attesa per il Free: nessuna lettura periodica né sblocco del Free. */
+  waitlisted?: boolean;
   /** Prova Premium in corso, senza un'altra copertura: finisce all'istante `endsAt`. */
   trial?: { endsAt: string };
   /**

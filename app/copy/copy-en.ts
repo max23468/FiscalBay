@@ -55,6 +55,9 @@ export const en: AppCopy = {
       readFailedTitle: "Update failed",
       readFailedBody: (store) =>
         `${store}: the latest reads from eBay failed. FiscalBay retries automatically.`,
+      inactivityTitle: "Reading paused for inactivity",
+      inactivityBody:
+        "On the Free plan reading stops after 30 days without sign-ins. Resume it from Stores.",
     },
     account: "Account",
     profile: "Profile",
@@ -235,6 +238,7 @@ export const en: AppCopy = {
     quotaBody: (date) =>
       `You can still view and search all orders. Codice Fiscale and Partita IVA of new orders stay locked until ${date}.`,
     quotaAction: "Upgrade to Premium",
+    waitlistTitle: "You are on the Free waiting list",
     trialOffer: "Try Premium free for 14 days, no card needed.",
     trialStatus: (days) =>
       `Premium trial: ${days ? `${days} ${plural(days, "day", "days")}` : "less than a day"} left`,
@@ -317,6 +321,11 @@ export const en: AppCopy = {
     syncing: "In progress",
     never: "Never",
     pausedByPlan: "Paused on the Free plan",
+    pausedByInactivity: "Paused for inactivity",
+    inactivityTitle: "Reading paused for inactivity",
+    inactivityBody:
+      "You have not opened FiscalBay for more than 30 days, so on the Free plan reading from eBay stopped. Resume it to recover the orders still within your plan window.",
+    inactivityResume: "Resume reading",
     notificationsOn: "On",
     notificationsOff: "Off",
     notificationsHeld: "Paused",
@@ -363,6 +372,8 @@ export const en: AppCopy = {
     resume: "Resume",
     pauseHint:
       "A manual pause stops new reads. Imported orders remain available according to your plan.",
+    inactivityPauseHint:
+      "Paused for inactivity: no new reads after 30 days without sign-ins on the Free plan. Orders remain available; Resume restarts every store.",
     planPauseHint:
       "Paused by the Free plan: no new reads and orders are unavailable. The plan includes one active store.",
     chooseFreeStore: "Choose the active store",
@@ -444,6 +455,9 @@ export const en: AppCopy = {
       free: "Free",
       premium: "Premium",
       freeSummary: "One active store, the last 30 days of orders, CSV.",
+      waitlisted:
+        "The Free plan is full and your account is on the waiting list: FiscalBay does not read your stores or offer Free unlocks until you are admitted.",
+      waitlistedPurchase: "Meanwhile you can connect a store and choose the trial or Premium.",
       unlocksCycle: "Orders unlocked this cycle",
       unlocksUsed: (used, limit) => `${used} of ${limit}`,
       cycleEnds: (date) => `The cycle renews on ${date}.`,
@@ -498,6 +512,7 @@ export const en: AppCopy = {
       pricesNote:
         "Prices exclude VAT. Before paying, Stripe shows the total with your country’s taxes, in your currency too.",
       purchaseNeedsSync: "You can buy Premium once a store has been read successfully.",
+      purchaseClosed: "New Premium purchases and trials are paused for now.",
       checkoutUnavailable: "Payment is not available right now. Try again later.",
       checkoutCovered: "Your workspace already has Premium.",
       checkoutProcessingTitle: "Activating Premium",
@@ -966,6 +981,8 @@ export const en: AppCopy = {
       accesso: "Confirm your email address to connect a store.",
       errore: "Could not connect the store. Try again.",
       "ebay-non-risponde": "eBay is not responding: reconnect the store when reads resume.",
+      "lista-attesa":
+        "The Free plan is full and your account is on the waiting list: you cannot connect a store for now.",
     },
     signInNotices: {
       "metodo-collegato": "Sign-in method linked to your FiscalBay account.",

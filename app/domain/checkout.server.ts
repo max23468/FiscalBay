@@ -11,6 +11,7 @@ import {
   retrieveCatalogPrice,
   stripeRead,
 } from "../integrations/stripe.server";
+import { purchasesOpenSql } from "./admission-state.server";
 import { openSubscriptionSql, storeReadSql } from "./grants.server";
 import {
   bindLifetimeSession,
@@ -59,19 +60,33 @@ function activeSql(workspace: string, at: string, trial: boolean) {
  * l'acquisto resta possibile e ne conserva i giorni residui (`trialEndsAt`). Lo ferma anche un
  * abbonamento che può ancora incassare, come un pagamento da confermare o un rinnovo da
  * regolarizzare, o un lifetime pagato e in attesa della conferma; un lifetime rimborsato no.
+ * Senza capacità per nuovi Premium gli acquisti sono sospesi.
  */
 export async function purchaseState(db: D1Database, userId: string, now = new Date()) {
   const row = await db
     .prepare(`SELECT w.id, (${activeSql("w.id", "?2", false)} OR ${openSubscriptionSql("w.id")}
         OR EXISTS (SELECT 1 FROM lifetime_allocations a WHERE a.workspace_id = w.id
           AND a.status = 'reserved' AND a.completed_at IS NOT NULL)) AS covered,
-      ${activeSql("w.id", "?2", true)} AS trial_ends_at, ${storeReadSql("w.id")} AS synced
+      ${activeSql("w.id", "?2", true)} AS trial_ends_at, ${storeReadSql("w.id")} AS synced,
+      ${purchasesOpenSql} AS open
     FROM workspaces w JOIN workspace_members wm ON wm.workspace_id = w.id
     WHERE wm.user_id = ?1`)
     .bind(userId, now.toISOString())
-    .first<{ id: string; covered: number; trial_ends_at: string | null; synced: number }>();
+    .first<{
+      id: string;
+      covered: number;
+      trial_ends_at: string | null;
+      synced: number;
+      open: number;
+    }>();
   if (!row) return null;
-  const state: PurchaseState = row.covered ? "covered" : row.synced ? "available" : "needs-sync";
+  const state: PurchaseState = row.covered
+    ? "covered"
+    : !row.open
+      ? "closed"
+      : row.synced
+        ? "available"
+        : "needs-sync";
   return {
     workspaceId: row.id,
     state,

@@ -447,6 +447,62 @@ function RefundNotice({
   );
 }
 
+/**
+ * Sblocchi del ciclo Free in corso e conferma prima dello sblocco, che li protegge e sta
+ * accanto al loro conteggio.
+ */
+function FreeUnlocks({
+  quota,
+  confirmUnlock,
+  t,
+  language,
+}: {
+  quota: AccountView["quota"];
+  confirmUnlock: boolean;
+  t: AppCopy;
+  language: Language;
+}) {
+  const zone = useTimeZone();
+  return (
+    <>
+      {quota ? (
+        <div className="grid max-w-md gap-2">
+          <p className="flex justify-between gap-4 text-sm">
+            <span>{t.settings.plan.unlocksCycle}</span>
+            <span className="font-code">
+              {t.settings.plan.unlocksUsed(quota.used, quota.limit)}
+            </span>
+          </p>
+          {/* Il valore è già nel testo sopra: la barra è solo visiva. */}
+          <div aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className={cn(
+                "h-full rounded-full",
+                quota.used >= quota.limit ? "bg-warning" : "bg-primary",
+              )}
+              style={{ width: `${Math.min(quota.used / quota.limit, 1) * 100}%` }}
+            />
+          </div>
+          {quota.cycleEndsAt ? (
+            <p className="text-sm text-muted-foreground">
+              {t.settings.plan.cycleEnds(formatDate(quota.cycleEndsAt, language, "dateTime", zone))}
+              {/* La promozione cambia la quota soltanto da un ciclo all'altro. */}
+              {quota.nextLimit ? ` ${t.settings.plan.nextCycleLimit(quota.nextLimit)}` : null}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      <AutoSwitch
+        name="unlock-confirmation"
+        label={t.settings.plan.unlockConfirmation}
+        description={t.settings.plan.unlockConfirmationHint}
+        initial={confirmUnlock}
+        t={t}
+      />
+    </>
+  );
+}
+
 export function PlanSection({
   account,
   freeStore,
@@ -470,7 +526,6 @@ export function PlanSection({
   t: AppCopy;
   language: Language;
 }) {
-  const zone = useTimeZone();
   // La scelta del negozio attivo compare solo nel Free: in Premium non anticipa il downgrade.
   if (account.plan === "premium") {
     return account.trial ? (
@@ -495,7 +550,6 @@ export function PlanSection({
       />
     );
   }
-  const quota = account.quota;
   return (
     <>
       <RefundNotice payment={account.payment} t={t} language={language} />
@@ -508,45 +562,24 @@ export function PlanSection({
       <Group title={t.settings.plan.currentPlan}>
         <div className="grid gap-1">
           <p className="text-lg font-semibold">{t.settings.plan.free}</p>
-          <p className="text-sm text-muted-foreground">{t.settings.plan.freeSummary}</p>
-        </div>
-        {quota ? (
-          <div className="grid max-w-md gap-2">
-            <p className="flex justify-between gap-4 text-sm">
-              <span>{t.settings.plan.unlocksCycle}</span>
-              <span className="font-code">
-                {t.settings.plan.unlocksUsed(quota.used, quota.limit)}
-              </span>
+          {account.waitlisted ? (
+            <p className="text-sm text-muted-foreground">
+              {t.settings.plan.waitlisted}
+              {purchase.state === "closed" ? null : ` ${t.settings.plan.waitlistedPurchase}`}
             </p>
-            {/* Il valore è già nel testo sopra: la barra è solo visiva. */}
-            <div aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-muted">
-              <div
-                className={cn(
-                  "h-full rounded-full",
-                  quota.used >= quota.limit ? "bg-warning" : "bg-primary",
-                )}
-                style={{ width: `${Math.min(quota.used / quota.limit, 1) * 100}%` }}
-              />
-            </div>
-            {quota.cycleEndsAt ? (
-              <p className="text-sm text-muted-foreground">
-                {t.settings.plan.cycleEnds(
-                  formatDate(quota.cycleEndsAt, language, "dateTime", zone),
-                )}
-                {/* La promozione cambia la quota soltanto da un ciclo all'altro. */}
-                {quota.nextLimit ? ` ${t.settings.plan.nextCycleLimit(quota.nextLimit)}` : null}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-        {/* La conferma protegge gli sblocchi del ciclo: sta accanto al loro conteggio. */}
-        <AutoSwitch
-          name="unlock-confirmation"
-          label={t.settings.plan.unlockConfirmation}
-          description={t.settings.plan.unlockConfirmationHint}
-          initial={confirmUnlock}
-          t={t}
-        />
+          ) : (
+            <p className="text-sm text-muted-foreground">{t.settings.plan.freeSummary}</p>
+          )}
+        </div>
+        {/* In lista d'attesa il Free non è ancora erogato: niente quota né conferma. */}
+        {account.waitlisted ? null : (
+          <FreeUnlocks
+            quota={account.quota}
+            confirmUnlock={confirmUnlock}
+            t={t}
+            language={language}
+          />
+        )}
       </Group>
       {freeStore && freeStore.stores.length > 1 ? (
         <FreeStoreChoice freeStore={freeStore} now={now} t={t} language={language} />
@@ -596,6 +629,7 @@ function PurchaseOptions({
     : null;
   const prices = offerTexts(t, language, lifetime, firstCharge);
   const needsSync = purchase.state === "needs-sync" || lifetime?.state === "needs-sync";
+  const closed = purchase.state === "closed" || lifetime?.state === "closed";
   return (
     <Group title={upgrade ? copy.lifetimeUpgradeTitle : copy.buyTitle}>
       {upgrade ? null : <PremiumNote>{copy.buyBody}</PremiumNote>}
@@ -626,7 +660,11 @@ function PurchaseOptions({
           </li>
         ))}
       </ul>
-      {needsSync ? <p className="text-sm font-medium">{copy.purchaseNeedsSync}</p> : null}
+      {closed ? (
+        <p className="text-sm font-medium">{copy.purchaseClosed}</p>
+      ) : needsSync ? (
+        <p className="text-sm font-medium">{copy.purchaseNeedsSync}</p>
+      ) : null}
       <p className="text-sm text-muted-foreground">{copy.pricesNote}</p>
     </Group>
   );
