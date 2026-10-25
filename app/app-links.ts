@@ -44,6 +44,8 @@ export function securityReturnPath(language: Language, value: string | null): st
     : null;
 }
 
+export const storesPath = `${appBase}/negozi`;
+
 /** Collegamento di un negozio eBay, dalla schermata preparatoria. */
 export const storeLinkPath = `${appBase}/negozi/collega`;
 

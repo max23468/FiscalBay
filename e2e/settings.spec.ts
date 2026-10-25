@@ -549,6 +549,90 @@ test.describe("negozio attivo del Free", () => {
     });
 });
 
+test.describe("inattività e ammissione", () => {
+  test.skip(
+    Boolean(process.env.E2E_BASE_URL),
+    "Prove con dati sintetici soltanto sul database locale.",
+  );
+
+  for (const language of ["it", "en"] as const) {
+    const it = language === "it";
+    const prefix = it ? "" : "/en";
+    test(`negozi reali: letture in pausa per inattività e ripresa confermata ${language}`, async ({
+      page,
+      context,
+      baseURL,
+      browserName,
+    }, testInfo) => {
+      const id = `inactive-${language}-${browserName}-${testInfo.retry}`;
+      await useLocalAccount(context, "member", baseURL!, id);
+      await page.goto(`${prefix}/app/negozi`);
+      await networkIdle(page);
+      const main = page.locator("main");
+      await expect(main).toContainText(it ? "In pausa per inattività" : "Paused for inactivity");
+      await expect(
+        page.getByRole("button", {
+          name: it ? "Notifiche, 1 da leggere" : "Notifications, 1 unread",
+        }),
+      ).toBeVisible();
+      await page
+        .getByRole("button", { name: it ? "Riprendi le letture" : "Resume reading" })
+        .click();
+      await expect(
+        page.getByRole("status").filter({ hasText: it ? "Negozio ripreso." : "Store resumed." }),
+      ).toBeVisible();
+      await expect(main).not.toContainText(
+        it ? "In pausa per inattività" : "Paused for inactivity",
+      );
+      // Quota, ciclo e prova restano: la ripresa non tocca il piano.
+      await page.goto(`${prefix}/app/impostazioni/piano`);
+      await expect(
+        page.getByRole("region", { name: it ? "Piano e pagamenti" : "Plan and billing" }),
+      ).toContainText("Free");
+    });
+
+    test(`anteprima: Free inattivo, lista d'attesa e acquisti sospesi ${language}`, async ({
+      page,
+    }, testInfo) => {
+      await open(page, `${prefix}/anteprima/negozi`, "free-inattivo");
+      await page.screenshot({ path: testInfo.outputPath(`inactive-${language}.png`) });
+      await page
+        .getByRole("button", { name: it ? "Riprendi le letture" : "Resume reading" })
+        .click();
+      await expect(
+        page.getByRole("button", { name: it ? "Riprendi le letture" : "Resume reading" }),
+      ).toHaveCount(0);
+
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "lista-d-attesa");
+      const plan = page.getByRole("region", {
+        name: it ? "Piano e pagamenti" : "Plan and billing",
+      });
+      await expect(plan).toContainText(it ? "in lista d’attesa" : "on the waiting list");
+      await page.screenshot({ path: testInfo.outputPath(`waitlist-${language}.png`) });
+      await expect(plan).not.toContainText(it ? "Ordini sbloccati" : "Orders unlocked");
+      await expect(
+        plan.getByRole("button", { name: it ? "Attiva la prova" : "Start trial" }),
+      ).toBeVisible();
+      await open(page, `${prefix}/anteprima/ordini`, "lista-d-attesa");
+      await expect(page.locator("main")).toContainText(
+        it ? "Sei in lista d’attesa per il Free" : "You are on the Free waiting list",
+      );
+
+      await open(page, `${prefix}/anteprima/impostazioni/piano`, "acquisti-sospesi");
+      await expect(plan).toContainText(
+        it
+          ? "I nuovi acquisti di Premium e le prove sono sospesi per ora."
+          : "New Premium purchases and trials are paused for now.",
+      );
+      await expect(
+        plan.getByRole("button", {
+          name: /Scegli (mensile|annuale|a vita)|Choose (monthly|annual|lifetime)|Attiva la prova|Start trial/u,
+        }),
+      ).toHaveCount(0);
+    });
+  }
+});
+
 test.describe("abbonamento nel piano", () => {
   test.skip(
     Boolean(process.env.E2E_BASE_URL),

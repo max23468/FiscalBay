@@ -192,13 +192,14 @@ async function main() {
       statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
       INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
         SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
-      INSERT INTO user_profiles SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
+      INSERT INTO user_profiles (user_id, first_name, last_name, account_type, company_name, updated_at)
+        SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
         FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
       INSERT INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
         FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};
       INSERT INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
         VALUES ('${id}', '${id}', '${id}', '${expires}', '${now}', '${now}');
-      INSERT INTO workspaces VALUES ('${id}', 'Collaudo sblocco', '${now}', NULL);
+      INSERT INTO workspaces (id, name, created_at) VALUES ('${id}', 'Collaudo sblocco', '${now}');
       INSERT INTO workspace_members VALUES ('${id}', '${id}', 'owner');
       INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
         VALUES ('${id}', '${id}', '${id}', '${now}', 'Negozio sblocco');
@@ -259,7 +260,8 @@ async function main() {
       statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
       INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
         SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
-      INSERT INTO user_profiles SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
+      INSERT INTO user_profiles (user_id, first_name, last_name, account_type, company_name, updated_at)
+        SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
         FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
       INSERT INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
         FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};
@@ -268,6 +270,35 @@ async function main() {
       INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
         VALUES ('${id}', '${id}', '${id}', '${now}', 'Negozio principale'),
                ('${id}-2', '${id}', '${id}-2', '${new Date(Date.now() + 1000).toISOString()}', 'Negozio secondario');
+      INSERT INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
+        VALUES ('${id}', '${id}', '${id}', '${expires}', '${now}', '${now}');`);
+    }
+    // Inattività del Free: un negozio con le letture in pausa dopo il preavviso, per lingua,
+    // browser e tentativo. La prova le riprende, quindi un nuovo tentativo riparte in pausa.
+    for (const id of ["chromium", "webkit"].flatMap((browser) =>
+      ["it", "en"].flatMap((language) =>
+        [0, 1, 2].map((attempt) => `inactive-${language}-${browser}-${attempt}`),
+      ),
+    )) {
+      const noticed = new Date(Date.now() - 8 * day).toISOString();
+      statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
+      INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+        SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
+      INSERT INTO user_profiles (user_id, first_name, last_name, account_type, company_name, updated_at)
+        SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
+        FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
+      INSERT INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
+        FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};
+      INSERT INTO workspaces (id, name, created_at, active_at, inactivity_notice_at)
+        VALUES ('${id}', 'Collaudo inattività', '${now}', '${new Date(Date.now() - 38 * day).toISOString()}', '${noticed}');
+      INSERT INTO workspace_members VALUES ('${id}', '${id}', 'owner');
+      INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
+        VALUES ('${id}', '${id}', '${id}', '${now}', 'Negozio inattivo');
+      INSERT INTO ebay_store_credentials
+        (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
+        VALUES ('${id}', 'v1.collaudo', '2099-01-01T00:00:00.000Z', 'v1.collaudo', '2099-01-01T00:00:00.000Z', '${now}');
+      INSERT INTO ebay_store_pauses (store_id, reason, paused_at)
+        VALUES ('${id}', 'inactivity', '${new Date(Date.now() - day).toISOString()}');
       INSERT INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
         VALUES ('${id}', '${id}', '${id}', '${expires}', '${now}', '${now}');`);
     }
@@ -299,7 +330,8 @@ async function main() {
       statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
       INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
         SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
-      INSERT INTO user_profiles SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
+      INSERT INTO user_profiles (user_id, first_name, last_name, account_type, company_name, updated_at)
+        SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
         FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
       INSERT INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
         FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};
@@ -333,7 +365,8 @@ async function main() {
       const id = "lifetime-refunded";
       statements.push(`INSERT OR IGNORE INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
         SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
-      INSERT OR IGNORE INTO user_profiles SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
+      INSERT OR IGNORE INTO user_profiles (user_id, first_name, last_name, account_type, company_name, updated_at)
+        SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
         FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
       INSERT OR IGNORE INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
         FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};
@@ -366,7 +399,8 @@ async function main() {
       statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
       INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
         SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
-      INSERT INTO user_profiles SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
+      INSERT INTO user_profiles (user_id, first_name, last_name, account_type, company_name, updated_at)
+        SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
         FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
       INSERT INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
         FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};
@@ -392,7 +426,8 @@ async function main() {
       statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
       INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
         SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
-      INSERT INTO user_profiles SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
+      INSERT INTO user_profiles (user_id, first_name, last_name, account_type, company_name, updated_at)
+        SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
         FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
       INSERT INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
         FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};
@@ -414,7 +449,8 @@ async function main() {
       statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
       INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
         SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
-      INSERT INTO user_profiles SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
+      INSERT INTO user_profiles (user_id, first_name, last_name, account_type, company_name, updated_at)
+        SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
         FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
       INSERT INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
         FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};

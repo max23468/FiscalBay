@@ -14,6 +14,7 @@ import { ebayOutages, listStores } from "../domain/stores.server";
 import { errorResponse } from "../error-response";
 import { tracePhase } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
+import { storeLinkAdmitted } from "../domain/admission.server";
 import { startStoreLink } from "../integrations/ebay/store-link.server";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import type { Route } from "./+types/store-link";
@@ -121,6 +122,10 @@ export async function action({ request }: Route.ActionArgs) {
   }
   const expectedStoreId = String(form.get("negozio") ?? "");
   const fromStores = form.get("da") === "negozi";
+  if (!(await storeLinkAdmitted(env.DB, status.userId))) {
+    const back = fromStores ? localizedPath(language, `${appBase}/negozi`) : base;
+    return redirect(`${back}?negozio=lista-attesa`, { status: 303, ...noStore });
+  }
   if (expectedStoreId) {
     const stores = await listStores(env.DB, status.userId);
     if (

@@ -7,17 +7,18 @@ export type PremiumOffer = (typeof premiumOffers)[number];
 
 /**
  * Acquisto dalla pagina del piano: possibile, in attesa della prima lettura riuscita di un
- * negozio, oppure fermo per una copertura già in corso.
+ * negozio, fermo per una copertura già in corso oppure sospeso senza capacità per nuovi
+ * Premium.
  */
-export type PurchaseState = "available" | "needs-sync" | "covered";
+export type PurchaseState = "available" | "needs-sync" | "covered" | "closed";
 
 /**
- * Offerta lifetime per la pagina del piano: in vendita, esaurita o in attesa della prima
- * lettura. `credit` è il periodo pagato non usato, in centesimi, che si detrae dal prezzo;
+ * Offerta lifetime per la pagina del piano: in vendita, esaurita, in attesa della prima
+ * lettura o sospesa come gli altri acquisti. `credit` è il periodo pagato non usato, in centesimi, che si detrae dal prezzo;
  * `replaces` indica un abbonamento che con il lifetime si chiude.
  */
 export type LifetimeOffer = {
-  state: "available" | "needs-sync" | "sold-out";
+  state: "available" | "needs-sync" | "sold-out" | "closed";
   credit: number;
   replaces: boolean;
 };
