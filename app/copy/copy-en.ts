@@ -527,6 +527,12 @@ export const en: AppCopy = {
       grantEnds: (date: string) => `Premium granted until ${date}.`,
       premiumRenews: (date) => `Renews on ${date}.`,
       premiumEnds: (date) => `Renewal cancelled: Premium stays active until ${date}.`,
+      refundedTitle: "Payment refunded",
+      refundedBody: (renewsAt) =>
+        renewsAt
+          ? `The payment for the current period was refunded and you are on Free. Premium resumes with the renewal on ${renewsAt}.`
+          : "The payment for the current period was refunded and you are back on Free.",
+      lifetimeRefundedBody: "The lifetime Premium payment was refunded and you are back on Free.",
       renewalFailedTitle: "Renewal failed",
       renewalFailedBody: (date) =>
         `You are back on Free. Complete the payment Stripe asks for by ${date} to keep your price.`,

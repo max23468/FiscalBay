@@ -273,8 +273,8 @@ async function main() {
     }
     // Abbonamenti Stripe negli stati del piano, soltanto in lettura: attivo, con il passaggio
     // all'annuale programmato al rinnovo, disdetto, pagamento da confermare, rinnovo non
-    // riuscito con il prezzo ancora protetto e scelto durante la prova, con il primo addebito
-    // alla sua fine.
+    // riuscito con il prezzo ancora protetto, scelto durante la prova, con il primo addebito
+    // alla sua fine, e con il periodo in corso rimborsato.
     const period = 30 * day;
     const subscriptions = {
       active: { status: "active", start: -day, cancel: 0, paid: true },
@@ -283,6 +283,7 @@ async function main() {
       pending: { status: "incomplete", start: -day, cancel: 0, paid: false },
       lapsed: { status: "past_due", start: -2 * day, cancel: 0, paid: false },
       scheduled: { status: "trialing", start: -day, cancel: 0, paid: false, trial: true },
+      refunded: { status: "active", start: -day, cancel: 0, paid: true, refunded: true },
       "scheduled-cancelled": {
         status: "trialing",
         start: -day,
@@ -318,12 +319,44 @@ async function main() {
           '${subscription.renewal ?? "monthly"}');`);
       if (subscription.paid)
         statements.push(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at,
-          stripe_invoice_id, amount_paid, currency, paid_at)
-          VALUES ('${id}', '${id}', 'premium', '${start}', '${end}', 'in_${id}', 598, 'eur', '${start}');`);
+          stripe_invoice_id, amount_paid, currency, paid_at, revoked_at, revocation, amount_refunded)
+          VALUES ('${id}', '${id}', 'premium', '${start}', '${end}', 'in_${id}', 598, 'eur', '${start}',
+            ${subscription.refunded ? `'${now}', 'refund', 598` : "NULL, NULL, NULL"});`);
       // La prova dura quanto il periodo `trialing` di Stripe, senza coperture pagate.
       if (subscription.trial)
         statements.push(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
           VALUES ('${id}', '${id}', 'trial', '${start}', '${end}');`);
+    }
+    // Lifetime rimborsato: il posto resta occupato anche dopo la cancellazione dello spazio,
+    // quindi l'account si conserva fra i ripristini e prende un posto soltanto la prima volta.
+    {
+      const id = "lifetime-refunded";
+      statements.push(`INSERT OR IGNORE INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+        SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
+      INSERT OR IGNORE INTO user_profiles SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
+        FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
+      INSERT OR IGNORE INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
+        FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};
+      INSERT OR REPLACE INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
+        VALUES ('${id}', '${id}', '${id}', '${expires}', '${now}', '${now}');
+      INSERT OR IGNORE INTO workspaces (id, name, created_at) VALUES ('${id}', 'Collaudo lifetime', '${now}');
+      INSERT OR IGNORE INTO workspace_members VALUES ('${id}', '${id}', 'owner');
+      INSERT OR IGNORE INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
+        VALUES ('${id}', '${id}', '${id}', '${now}', 'Negozio lifetime');
+      INSERT OR IGNORE INTO sync_state (store_id, polled_at, last_success_at, updated_at)
+        VALUES ('${id}', '${now}', '${now}', '${now}');
+      WITH RECURSIVE n(slot) AS (SELECT 1 UNION ALL SELECT slot + 1 FROM n WHERE slot < 20)
+      INSERT INTO lifetime_allocations (slot, workspace_id, status, kind, provider_reference,
+          customer_id, completed_at, activated_at, created_at)
+        SELECT slot, '${id}', 'active', 'sale', 'cs_${id}', 'cus_${id}', '${now}', '${now}', '${now}'
+        FROM n WHERE slot NOT IN (SELECT slot FROM lifetime_allocations)
+          AND NOT EXISTS (SELECT 1 FROM lifetime_allocations WHERE workspace_id = '${id}')
+        ORDER BY slot LIMIT 1;
+      INSERT OR IGNORE INTO workspace_entitlements (id, workspace_id, source, starts_at,
+          stripe_checkout_session_id, amount_paid, currency, paid_at, revoked_at, revocation,
+          amount_refunded)
+        VALUES ('${id}', '${id}', 'lifetime', '${now}', 'cs_${id}', 18178, 'eur', '${now}', '${now}',
+          'refund', 18178);`);
     }
     // Preferenze e campanella: un account per browser e per tentativo, con un negozio da
     // ricollegare. La prova salva tema, fuso e letture: un nuovo tentativo riparte pulito.

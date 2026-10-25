@@ -49,6 +49,8 @@ export const scenarioIds = [
   "prova-con-abbonamento-disdetto",
   "pagamento-in-attivazione",
   "rinnovo-non-riuscito",
+  "pagamento-rimborsato",
+  "lifetime-rimborsato",
   "stripe-non-disponibile",
   "lifetime-esaurito",
   "premium",
@@ -297,6 +299,30 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
       name: "Renewal failed",
       focus:
         "The renewal was not paid: back on Free right away, with the date by which to pay to keep the price.",
+    },
+  },
+  "pagamento-rimborsato": {
+    it: {
+      name: "Pagamento rimborsato",
+      focus:
+        "Il periodo in corso è stato rimborsato: di nuovo Free subito e Premium riprende con il rinnovo, senza prova né secondo acquisto.",
+    },
+    en: {
+      name: "Payment refunded",
+      focus:
+        "The current period was refunded: back on Free right away and Premium resumes with the renewal, with no trial or second purchase.",
+    },
+  },
+  "lifetime-rimborsato": {
+    it: {
+      name: "Lifetime rimborsato",
+      focus:
+        "Il pagamento di Premium a vita è stato rimborsato: di nuovo Free, il posto resta occupato e mensile e annuale restano in vendita.",
+    },
+    en: {
+      name: "Lifetime refunded",
+      focus:
+        "The lifetime Premium payment was refunded: back on Free, the place stays taken and monthly and annual remain on sale.",
     },
   },
   "stripe-non-disponibile": {
@@ -1735,16 +1761,31 @@ export function loadScenario(
       break;
     case "pagamento-in-attivazione":
     case "rinnovo-non-riuscito":
+    case "pagamento-rimborsato":
+    case "lifetime-rimborsato":
     case "stripe-non-disponibile":
       scenario = {
         ...common,
         account: account({
-          trialAvailable: false,
-          ...(id === "pagamento-in-attivazione"
-            ? { payment: { state: "pending" } }
-            : id === "rinnovo-non-riuscito"
-              ? { payment: { state: "renewal-failed", protectedUntil: "2026-10-02T10:00:00Z" } }
-              : {}),
+          // Senza copertura né abbonamento aperto la prova mai usata resta disponibile, come
+          // nell'area reale.
+          trialAvailable: id === "lifetime-rimborsato",
+          ...{
+            "pagamento-in-attivazione": { payment: { state: "pending" as const } },
+            "rinnovo-non-riuscito": {
+              payment: {
+                state: "renewal-failed" as const,
+                protectedUntil: "2026-10-02T10:00:00Z",
+              },
+            },
+            "pagamento-rimborsato": {
+              payment: { state: "refunded" as const, renewsAt: "2026-10-13T10:00:00Z" },
+            },
+            "lifetime-rimborsato": {
+              payment: { state: "refunded" as const, lifetime: true as const },
+            },
+            "stripe-non-disponibile": {},
+          }[id],
         }),
         stores: freeStores,
         seeds: freeSeeds,
@@ -1982,7 +2023,13 @@ export function loadScenario(
  */
 export function previewLifetime(scenario: Scenario): LifetimeOffer | null {
   const { premium, payment } = scenario.account;
-  if (premium?.period === "lifetime" || payment?.state === "pending") return null;
+  // Il posto di un lifetime rimborsato resta occupato: non torna in vendita allo spazio.
+  if (
+    premium?.period === "lifetime" ||
+    payment?.state === "pending" ||
+    (payment?.state === "refunded" && payment.lifetime)
+  )
+    return null;
   const synced = scenario.onboarding.some((step) => step.label === "stepSync" && step.done);
   const end = premium?.renewsAt ?? premium?.endsAt ?? null;
   let credit = 0;

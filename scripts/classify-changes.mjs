@@ -274,6 +274,15 @@ function lastGreen() {
   }
 }
 
+/** Se le modifiche fra due commit richiedono il deploy test, secondo lo stesso piano della CI. */
+export function needsDeploy(base, head) {
+  const files = committedChanges(base, head);
+  const changes = files.includes(configFile)
+    ? { [configFile]: { before: show(base, configFile), after: show(head, configFile) } }
+    : {};
+  return plan(files, [], false, changes).deploy;
+}
+
 // Versione di un file a un commit; `undefined` se manca o il confronto non è disponibile.
 function show(ref, file) {
   try {

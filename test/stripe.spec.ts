@@ -9,6 +9,8 @@ import {
   openBillingPortal,
   paidCoverage,
   reconcileBilling,
+  stopRenewals,
+  subscriptionOffers,
   subscriptionRenews,
   subscriptionView,
 } from "../app/domain/billing.server";
@@ -631,10 +633,28 @@ type FakeSubscription = {
   start: string;
   end: string;
   cancel?: boolean;
+  /** Disdetta a un istante esplicito, come dal portale. */
+  cancelAt?: string;
+  /** Modifica programmata con una Subscription Schedule. */
+  schedule?: string;
+  /** Abbonamento senza righe. */
+  noItems?: boolean;
   metadata?: Record<string, string>;
   livemode?: boolean;
   /** Prezzo del rinnovo; senza, quello della periodicità dei metadati. */
   price?: { id: string; interval: "month" | "year" };
+};
+
+type FakeCharge = {
+  id: string;
+  paymentIntent: string | null;
+  customer: string;
+  /** Tentativo non riuscito; senza, l'addebito è riuscito. */
+  failed?: true;
+  amount: number;
+  created: number;
+  refunds: Array<{ amount: number; status: "succeeded" | "pending" | "failed" }>;
+  dispute?: "needs_response" | "under_review" | "won" | "lost";
 };
 
 /**
@@ -652,6 +672,8 @@ function stripeAccount() {
       paidAt: string;
       /** Fattura senza abbonamento: senza origine, oppure da un preventivo. */
       orphan?: "none" | "quote";
+      /** Pagamento della fattura; senza, `pi_<fattura>`. */
+      paymentIntent?: string;
     }>,
     /** Sessioni Checkout: quelle create dal test di acquisto si aggiungono qui. */
     sessions: [] as Array<
@@ -659,8 +681,21 @@ function stripeAccount() {
     >,
     /** Coupon creati per il credito del lifetime. */
     coupons: [] as Array<Record<string, string>>,
+    /**
+     * Addebiti riusciti, per payment intent: le fatture pagano `pi_<fattura>`, il lifetime
+     * `pi_<sessione>`. Rimborsi con il loro stato e una disputa facoltativa.
+     */
+    charges: [] as FakeCharge[],
+    /** Clienti cancellati su Stripe e clienti che Stripe non restituisce più. */
+    deletedCustomers: [] as string[],
+    missingCustomers: [] as string[],
+    /** L'elenco degli addebiti del cliente risponde 404 oppure 503. */
+    chargesMissing: false,
+    chargesDown: false,
     /** Inizio della finestra chiesta nell'ultimo elenco delle sessioni, in secondi. */
     sessionsSince: 0,
+    /** Percorsi che rispondono 503, per un singolo passo non riuscito. */
+    failing: [] as string[],
     down: false,
     missing: false,
   };
@@ -672,6 +707,8 @@ function stripeAccount() {
     livemode: state.subscription.livemode ?? false,
     status: state.subscription.status,
     cancel_at_period_end: state.subscription.cancel ?? false,
+    cancel_at: state.subscription.cancelAt ? second(state.subscription.cancelAt) : null,
+    schedule: state.subscription.schedule ?? null,
     metadata: state.subscription.metadata ?? {
       workspace_id: "w-a",
       offer: "monthly",
@@ -679,29 +716,39 @@ function stripeAccount() {
     },
     items: {
       object: "list",
-      data: [
-        {
-          id: "si_test",
-          current_period_start: second(state.subscription.start),
-          current_period_end: second(state.subscription.end),
-          price: {
-            id: state.subscription.price?.id ?? "price_monthly",
-            object: "price",
-            product: "prod_test",
-            recurring: {
-              interval:
-                state.subscription.price?.interval ??
-                ((state.subscription.metadata?.offer ?? "monthly") === "annual" ? "year" : "month"),
-            },
+      data: (state.subscription.noItems ? [] : [null]).map(() => ({
+        id: "si_test",
+        current_period_start: second(state.subscription.start),
+        current_period_end: second(state.subscription.end),
+        price: {
+          id: state.subscription.price?.id ?? "price_monthly",
+          object: "price",
+          product: "prod_test",
+          recurring: {
+            interval:
+              state.subscription.price?.interval ??
+              ((state.subscription.metadata?.offer ?? "monthly") === "annual" ? "year" : "month"),
           },
         },
-      ],
+      })),
     },
   });
   const invoice = (paid: (typeof state.invoices)[number]) => ({
     id: paid.id,
     object: "invoice",
     status: "paid",
+    payments: {
+      object: "list",
+      data: [
+        {
+          status: "paid",
+          payment: {
+            type: "payment_intent",
+            payment_intent: paid.paymentIntent ?? `pi_${paid.id}`,
+          },
+        },
+      ],
+    },
     amount_paid: paid.amount,
     currency: "eur",
     status_transitions: { paid_at: second(paid.paidAt) },
@@ -721,6 +768,35 @@ function stripeAccount() {
       ],
     },
   });
+  const charge = (paid: FakeCharge) => ({
+    id: paid.id,
+    object: "charge",
+    amount: paid.amount,
+    // Come su Stripe, l'importo rimborsato conta anche i rimborsi ancora in corso.
+    amount_refunded: paid.refunds
+      .filter((refund) => refund.status !== "failed")
+      .reduce((sum, refund) => sum + refund.amount, 0),
+    disputed: !!paid.dispute,
+    payment_intent: paid.paymentIntent,
+    customer: paid.customer,
+    status: paid.failed ? "failed" : "succeeded",
+    created: paid.created,
+  });
+  const refund = (paid: FakeCharge, index: number) => ({
+    id: `re_${paid.id}_${index}`,
+    object: "refund",
+    charge: paid.id,
+    payment_intent: paid.paymentIntent,
+    ...paid.refunds[index],
+  });
+  const dispute = (paid: FakeCharge) => ({
+    id: `du_${paid.id}`,
+    object: "dispute",
+    charge: paid.id,
+    // Espanso: l'identificativo si legge anche dall'oggetto.
+    payment_intent: { id: paid.paymentIntent, object: "payment_intent" },
+    status: paid.dispute,
+  });
   const requests: string[] = [];
   /** Corpi delle richieste di modifica, già letti come form. */
   const writes: Array<{ path: string; body: URLSearchParams }> = [];
@@ -731,7 +807,8 @@ function stripeAccount() {
     requests.push(`${init?.method} ${url.pathname}`);
     if (init?.method === "POST")
       writes.push({ path: url.pathname, body: new URLSearchParams(String(init.body ?? "")) });
-    if (state.down) return Response.json({ error: { type: "api_error" } }, { status: 503 });
+    if (state.down || state.failing.includes(url.pathname))
+      return Response.json({ error: { type: "api_error" } }, { status: 503 });
     if (state.missing)
       return Response.json(
         { error: { type: "invalid_request_error", code: "resource_missing" } },
@@ -769,7 +846,15 @@ function stripeAccount() {
     if (url.pathname === "/v1/prices") {
       expect(url.searchParams.get("product")).toBe("prod_test");
       expect(url.searchParams.get("type")).toBe("recurring");
-      return list(prices);
+      // Il prodotto, con il codice fiscale, compare soltanto se espanso.
+      const expanded = [...url.searchParams].some(
+        ([key, value]) => key.startsWith("expand") && value === "data.product",
+      );
+      return list(
+        prices.map((price) =>
+          expanded ? price : { ...price, product: (price.product as { id: string }).id },
+        ),
+      );
     }
     if (url.pathname === "/v1/billing_portal/sessions")
       return Response.json({
@@ -779,10 +864,66 @@ function stripeAccount() {
     if (url.pathname === "/v1/invoices") {
       expect(url.searchParams.get("subscription")).toBe("sub_test");
       expect(url.searchParams.get("status")).toBe("paid");
-      return list(state.invoices.filter((paid) => !paid.orphan).map(invoice));
+      // I pagamenti della fattura compaiono soltanto se espansi.
+      const expanded = [...url.searchParams].some(
+        ([key, value]) => key.startsWith("expand") && value === "data.payments",
+      );
+      return list(
+        state.invoices
+          .filter((paid) => !paid.orphan)
+          .map((paid) => ({ ...invoice(paid), ...(expanded ? {} : { payments: undefined }) })),
+      );
     }
     if (url.pathname.startsWith("/v1/invoices/"))
       return Response.json(invoice(state.invoices.find((paid) => url.pathname.endsWith(paid.id))!));
+    if (url.pathname === "/v1/invoice_payments") {
+      expect(url.searchParams.get("payment[type]")).toBe("payment_intent");
+      const intent = url.searchParams.get("payment[payment_intent]");
+      const paid = state.invoices.find(
+        (candidate) => (candidate.paymentIntent ?? `pi_${candidate.id}`) === intent,
+      );
+      return list(paid ? [{ object: "invoice_payment", invoice: paid.id, status: "paid" }] : []);
+    }
+    const missing = () =>
+      Response.json(
+        { error: { type: "invalid_request_error", code: "resource_missing" } },
+        { status: 404 },
+      );
+    if (url.pathname === "/v1/charges" && state.chargesMissing) return missing();
+    if (url.pathname === "/v1/charges" && state.chargesDown)
+      return Response.json({ error: { type: "api_error" } }, { status: 503 });
+    if (url.pathname === "/v1/charges")
+      return list(
+        state.charges
+          .filter((paid) => paid.customer === url.searchParams.get("customer"))
+          .map(charge),
+      );
+    const byCharge = (id: string | null) => state.charges.find((paid) => paid.id === id)!;
+    if (url.pathname.startsWith("/v1/charges/"))
+      return Response.json(charge(byCharge(url.pathname.split("/").at(-1)!)));
+    if (url.pathname === "/v1/refunds") {
+      const paid = byCharge(url.searchParams.get("charge"));
+      return list(paid.refunds.map((_, index) => refund(paid, index)));
+    }
+    if (url.pathname.startsWith("/v1/refunds/")) {
+      const [, id, index] = /^re_(.+)_(\d+)$/u.exec(url.pathname.split("/").at(-1)!)!;
+      return Response.json(refund(byCharge(id!), Number(index)));
+    }
+    if (url.pathname === "/v1/disputes") {
+      const paid = byCharge(url.searchParams.get("charge"));
+      return list(paid.dispute ? [dispute(paid)] : []);
+    }
+    if (url.pathname.startsWith("/v1/disputes/"))
+      return Response.json(dispute(byCharge(url.pathname.split("/").at(-1)!.slice(3))));
+    if (url.pathname.startsWith("/v1/customers/")) {
+      const id = url.pathname.split("/").at(-1)!;
+      if (state.missingCustomers.includes(id)) return missing();
+      return Response.json(
+        state.deletedCustomers.includes(id)
+          ? { id, object: "customer", deleted: true }
+          : { id, object: "customer" },
+      );
+    }
     if (url.pathname === "/v1/prices/price_test_lifetime")
       return Response.json(
         catalogPrice(
@@ -831,16 +972,30 @@ function stripeAccount() {
       session.status = "expired";
       return Response.json({ object: "checkout.session", ...session });
     }
+    const intentOf = (session: (typeof state.sessions)[number]) =>
+      (session.payment_intent as { id: string } | null)?.id;
+    if (url.pathname === "/v1/checkout/sessions" && url.searchParams.has("payment_intent"))
+      return list(
+        state.sessions
+          .filter((session) => intentOf(session) === url.searchParams.get("payment_intent"))
+          .map((session) => ({ object: "checkout.session", ...session })),
+      );
     if (url.pathname === "/v1/checkout/sessions") {
       expect(url.searchParams.get("status")).toBe("complete");
       state.sessionsSince = Number(url.searchParams.get("created[gte]"));
       return list(state.sessions.map((session) => ({ object: "checkout.session", ...session })));
     }
-    if (url.pathname.startsWith("/v1/checkout/sessions/"))
+    if (url.pathname.startsWith("/v1/checkout/sessions/")) {
+      const session = state.sessions.find((candidate) => url.pathname.endsWith(candidate.id))!;
+      const intent = session.payment_intent as { latest_charge: { id: string } | null } | null;
+      // L'addebito espanso riflette rimborsi e dispute registrati dopo il pagamento.
+      const latest = intent?.latest_charge && byCharge(intent.latest_charge.id);
       return Response.json({
         object: "checkout.session",
-        ...state.sessions.find((session) => url.pathname.endsWith(session.id)),
+        ...session,
+        ...(latest ? { payment_intent: { ...intent, latest_charge: charge(latest) } } : {}),
       });
+    }
     throw new Error("unexpected_stripe_request");
   });
   /** Esito del pagamento di una sessione lifetime, come lo rilegge Stripe. */
@@ -862,6 +1017,15 @@ function stripeAccount() {
       currency: "eur",
       latest_charge: outcome === "paid" ? { id: `ch_${id}`, created: second(paidAt) } : null,
     };
+    if (outcome === "paid")
+      state.charges.push({
+        id: `ch_${id}`,
+        paymentIntent: `pi_${id}`,
+        customer: session.customer as string,
+        amount: 18178,
+        created: second(paidAt),
+        refunds: [],
+      });
   };
   return { state, fetcher, requests, writes, prices, settle };
 }
@@ -1433,13 +1597,25 @@ describe("Webhook e riconciliazione Stripe", () => {
       { id: "in_renewal", start: periodEnd, end: nextEnd, amount: 598, paidAt: periodEnd },
       firstInvoice,
     ];
+    stripe.state.charges = [
+      {
+        id: "ch_in_renewal",
+        paymentIntent: "pi_in_renewal",
+        customer: "cus_test",
+        amount: 598,
+        created: second(periodEnd),
+        refunds: [],
+      },
+    ];
     stripe.state.sessions = [];
     stripe.requests.length = 0;
     await reconcileBilling(env, stripe.fetcher, at("2026-10-13T20:10:00.000Z"));
+    // Gli addebiti del cliente si leggono una volta: nessun rimborso, nessuna altra richiesta.
     expect(stripe.requests).toEqual([
       "GET /v1/checkout/sessions",
       "GET /v1/subscriptions/sub_test",
       "GET /v1/invoices",
+      "GET /v1/charges",
     ]);
     expect(await premium("2026-10-13T20:10:00.000Z")).toBe(true);
     stripe.requests.length = 0;
@@ -1633,6 +1809,161 @@ describe("Webhook e riconciliazione Stripe", () => {
     expect(stripe.writes).toEqual([]);
   });
 
+  it("cambia periodicità soltanto se Stripe conferma un abbonamento modificabile", async () => {
+    const stripe = await paidMonthly();
+    vi.setSystemTime(at(now));
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const base = { ...stripe.state.subscription };
+    // Lo stato locale dice rinnovabile, Stripe no: nessuna modifica.
+    for (const variant of [
+      { metadata: {} },
+      { metadata: { workspace_id: "w-b", offer: "monthly", price_generation: "2026-09" } },
+      { noItems: true },
+      { status: "past_due" },
+      { cancel: true },
+      { cancelAt: periodEnd },
+      { schedule: "sub_sched_test" },
+    ] satisfies Array<Partial<FakeSubscription>>) {
+      stripe.state.subscription = { ...base, ...variant };
+      expect(await changeSubscriptionPeriod(env, userId, "annual", at(now))).toBe("not_allowed");
+    }
+    expect(stripe.writes).toEqual([]);
+    expect(errors).not.toHaveBeenCalled();
+    stripe.state.subscription = { ...base };
+
+    // Senza chiave nessuna richiesta né errore da registrare.
+    const missing = { ...env, STRIPE_SECRET_KEY: undefined } as Env;
+    stripe.requests.length = 0;
+    expect(await changeSubscriptionPeriod(missing, userId, "annual", at(now))).toBe("unavailable");
+    expect(stripe.requests).toEqual([]);
+    expect(errors).not.toHaveBeenCalled();
+    // Stripe non disponibile: nessuna modifica, l'errore si registra.
+    stripe.state.down = true;
+    expect(await changeSubscriptionPeriod(env, userId, "annual", at(now))).toBe("unavailable");
+    expect(logged(errors)).toEqual([
+      expect.objectContaining({ operation: "billing", failure: "unavailable" }),
+    ]);
+    stripe.state.down = false;
+    errors.mockClear();
+
+    // Il prezzo della generazione corrente deve avere l'importo del listino.
+    const annual = stripe.prices.find((price) => price.id === "price_annual_2026-09")!;
+    annual.unit_amount = 5900;
+    expect(await changeSubscriptionPeriod(env, userId, "annual", at(now))).toBe("unavailable");
+    // Senza il prezzo della generazione: un solo errore, con la sua etichetta.
+    stripe.prices.splice(stripe.prices.indexOf(annual), 1);
+    expect(await changeSubscriptionPeriod(env, userId, "annual", at(now))).toBe("unavailable");
+    expect(logged(errors)).toEqual([
+      expect.objectContaining({ operation: "billing", failure: "unknown_subscription" }),
+      expect.objectContaining({ operation: "billing", failure: "unknown_subscription" }),
+    ]);
+    expect(stripe.writes).toEqual([]);
+  });
+
+  it("legge la periodicità dal prezzo ricorrente o, senza, dai metadati", () => {
+    const subscription = (status: string, recurring: { interval: string } | null) =>
+      ({
+        status,
+        items: { data: [{ price: { recurring } }] },
+      }) as unknown as Stripe.Subscription;
+    expect(subscriptionOffers(subscription("active", { interval: "month" }), "annual")).toEqual({
+      offer: "monthly",
+      renewal: "monthly",
+    });
+    expect(subscriptionOffers(subscription("active", { interval: "year" }), "monthly")).toEqual({
+      offer: "annual",
+      renewal: "annual",
+    });
+    // Un prezzo non ricorrente o di un'altra durata non decide la periodicità.
+    for (const recurring of [null, { interval: "week" }])
+      expect(subscriptionOffers(subscription("active", recurring), "annual")).toEqual({
+        offer: "annual",
+        renewal: "annual",
+      });
+    // Durante il periodo `trialing` vale la periodicità pagata dei metadati.
+    expect(subscriptionOffers(subscription("trialing", { interval: "year" }), "monthly")).toEqual({
+      offer: "monthly",
+      renewal: "annual",
+    });
+  });
+
+  it("nel piano combina coperture, abbonamento e lifetime in conferma", async () => {
+    const later = "2026-09-20T10:00:00.000Z";
+    const subscription = (status: string) =>
+      env.DB.prepare(`INSERT OR REPLACE INTO stripe_subscriptions (id, workspace_id, environment,
+          customer_id, offer, price_generation, status, current_period_start, current_period_end,
+          cancel_at_period_end, synced_at, checked_at, renewal_offer)
+        VALUES ('sub_test', 'w-a', 'test', 'cus_test', 'monthly', '2026-09', ?1, ?2, ?3, 0, ?2,
+          ?2, 'monthly')`)
+        .bind(status, now, periodEnd)
+        .run();
+    const entitlement = (source: "premium" | "trial" | "admin") =>
+      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
+          ends_at, granted_by, grant_reason) VALUES (?1, 'w-a', ?1, ?2, ?3, ?4, ?4)`)
+        .bind(source, now, periodEnd, source === "admin" ? "owner" : null)
+        .run();
+    // Senza copertura un abbonamento ancora da pagare resta in attivazione.
+    for (const status of ["incomplete", "trialing", "active"]) {
+      await subscription(status);
+      expect(await view(later)).toEqual({ payment: { state: "pending" } });
+    }
+    // Una concessione a un abbonamento che si rinnova ne mostra il rinnovo.
+    await entitlement("admin");
+    expect(await view(later)).toEqual({ premium: { period: "monthly", renewsAt: periodEnd } });
+    await env.DB.prepare("DELETE FROM workspace_entitlements").run();
+
+    // Lifetime pagato e in conferma: durante la prova prevale sull'abbonamento scelto, con un
+    // periodo pagato lo accompagna.
+    await env.DB.prepare(`INSERT INTO lifetime_allocations (slot, workspace_id, status, kind,
+        provider_reference, expires_at, completed_at, created_at)
+      VALUES (1, 'w-a', 'reserved', 'sale', 'cs_pending', ?1, ?2, ?2)`)
+      .bind(periodEnd, now)
+      .run();
+    await subscription("trialing");
+    await entitlement("trial");
+    expect(await view(later)).toEqual({ payment: { state: "pending", lifetime: true } });
+    await env.DB.prepare("DELETE FROM workspace_entitlements").run();
+    await subscription("active");
+    await entitlement("premium");
+    expect(await view(later)).toEqual({
+      payment: { state: "pending", lifetime: true },
+      premium: { period: "monthly", renewsAt: periodEnd },
+    });
+  });
+
+  it("un passo del cron fallito per il lifetime si registra e non ferma gli altri", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const stripe = stripeAccount();
+    // Una sessione lifetime completata senza posto locale, che Stripe non restituisce ora.
+    stripe.state.sessions = [
+      {
+        id: "cs_lifetime_down",
+        mode: "payment",
+        subscription: null,
+        status: "complete",
+        metadata: { workspace_id: "w-a", offer: "lifetime" },
+      },
+    ];
+    stripe.state.failing = ["/v1/checkout/sessions/cs_lifetime_down"];
+    // Anche il passo dei posti fallisce, sul database.
+    const batch = vi.spyOn(env.DB, "batch").mockRejectedValueOnce(new Error("d1_unavailable"));
+    // L'abbonamento dovuto si rilegge comunque.
+    await env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
+        customer_id, offer, price_generation, status, current_period_start, current_period_end,
+        cancel_at_period_end, synced_at, checked_at, renewal_offer)
+      VALUES ('sub_test', 'w-a', 'test', 'cus_test', 'monthly', '2026-09', 'active', ?1, ?2, 0,
+        ?1, ?1, 'monthly')`)
+      .bind(periodStart, periodEnd)
+      .run();
+    await reconcileBilling(env, stripe.fetcher, at("2026-10-13T20:10:00.000Z"));
+    expect(logged(errors)).toEqual([
+      expect.objectContaining({ operation: "billing", failure: "unavailable" }),
+      expect.objectContaining({ operation: "billing", code: "INTERNAL_ERROR" }),
+    ]);
+    expect(stripe.requests).toContain("GET /v1/subscriptions/sub_test");
+    batch.mockRestore();
+  });
+
   it("apre il portale di Stripe con il cliente dello spazio e il ritorno al piano", async () => {
     const stripe = await paidMonthly();
     vi.setSystemTime(at(now));
@@ -1653,6 +1984,15 @@ describe("Webhook e riconciliazione Stripe", () => {
     });
     expect(
       await openBillingPortal(env, "estraneo", "https://test.fiscalbay.it/app", "it"),
+    ).toBeNull();
+    // Senza chiave Stripe il portale non si apre, anche con un cliente.
+    expect(
+      await openBillingPortal(
+        { ...env, STRIPE_SECRET_KEY: undefined } as Env,
+        userId,
+        "https://test.fiscalbay.it/app",
+        "it",
+      ),
     ).toBeNull();
     // Lo scollegamento dell'ultimo negozio avvisa finché l'abbonamento si rinnova.
     expect(await subscriptionRenews(env.DB, env, userId)).toBe(true);
@@ -1678,6 +2018,16 @@ describe("Webhook e riconciliazione Stripe", () => {
       amount_paid: 1200,
       currency: "eur",
       status_transitions: { paid_at: second(now) },
+      // Un primo tentativo fallito e il pagamento riuscito, espanso.
+      payments: {
+        data: [
+          { status: "canceled", payment: { type: "payment_intent", payment_intent: "pi_failed" } },
+          {
+            status: "paid",
+            payment: { type: "payment_intent", payment_intent: { id: "pi_mixed" } },
+          },
+        ],
+      },
       lines: {
         data: [
           line("2026-09-01T00:00:00.000Z", nextEnd, "invoice_item_details"),
@@ -1689,6 +2039,7 @@ describe("Webhook e riconciliazione Stripe", () => {
     } as unknown as Stripe.Invoice;
     expect(paidCoverage(invoice)).toEqual({
       invoiceId: "in_mixed",
+      paymentIntent: "pi_mixed",
       startsAt: now,
       endsAt: nextEnd,
       amountPaid: 1200,
@@ -1698,6 +2049,18 @@ describe("Webhook e riconciliazione Stripe", () => {
     const only = (...data: unknown[]) => ({ ...invoice, lines: { data } }) as Stripe.Invoice;
     expect(paidCoverage({ ...invoice, status: "open" } as Stripe.Invoice)).toBeNull();
     expect(paidCoverage(only(invoice.lines.data[0]))).toBeNull();
+    // Senza pagamenti espansi, o senza un pagamento riuscito, la copertura resta senza
+    // riferimento all'addebito.
+    expect(paidCoverage({ ...invoice, payments: undefined } as Stripe.Invoice)).toMatchObject({
+      invoiceId: "in_mixed",
+      paymentIntent: null,
+    });
+    expect(
+      paidCoverage({
+        ...invoice,
+        payments: { data: [invoice.payments.data[0]] },
+      } as unknown as Stripe.Invoice),
+    ).toMatchObject({ invoiceId: "in_mixed", paymentIntent: null });
     // Un periodo senza durata non copre nulla.
     expect(paidCoverage(only(line(now, now, "subscription_item_details")))).toBeNull();
   });
@@ -1973,6 +2336,126 @@ describe("Lifetime e concessioni", () => {
     expect(await lifetimes()).toHaveLength(1);
   });
 
+  it("un rimborso revoca il lifetime, lascia occupato il posto e riapre mensile e annuale", async () => {
+    const stripe = stripeAccount();
+    await buyLifetime(stripe);
+    stripe.settle("cs_lifetime_1", "paid");
+    await event(stripe, "checkout.session.completed", "cs_lifetime_1");
+    // Un omaggio di un altro spazio non dipende da questo pagamento.
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO workspaces (id, name, created_at) VALUES ('w-b', 'Altro', ?)",
+      ).bind(now),
+    ]);
+    expect(
+      await grantLifetimeConcession(env, {
+        workspaceId: "w-b",
+        author: "owner",
+        reason: "Omaggio",
+      }),
+    ).toBe("done");
+    // Managed Payments emette una fattura anche per l'acquisto una tantum.
+    stripe.state.invoices.push({
+      id: "in_lifetime",
+      start: now,
+      end: now,
+      amount: 18178,
+      paidAt: now,
+      orphan: "none",
+      paymentIntent: "pi_cs_lifetime_1",
+    });
+    stripe.state.charges
+      .find((charge) => charge.id === "ch_cs_lifetime_1")!
+      .refunds.push({
+        amount: 18178,
+        status: "succeeded",
+      });
+    await event(stripe, "charge.refunded", "ch_cs_lifetime_1", "2026-09-20T08:00:00.000Z");
+    expect(
+      (
+        await env.DB.prepare(
+          `SELECT workspace_id, revoked_at, revocation, amount_refunded FROM workspace_entitlements
+            WHERE source = 'lifetime' ORDER BY workspace_id`,
+        ).all()
+      ).results,
+    ).toEqual([
+      {
+        workspace_id: "w-a",
+        revoked_at: "2026-09-20T08:00:00.000Z",
+        revocation: "refund",
+        amount_refunded: 18178,
+      },
+      { workspace_id: "w-b", revoked_at: null, revocation: null, amount_refunded: null },
+    ]);
+    expect(await allocations()).toEqual([
+      expect.objectContaining({ slot: 1, workspace_id: "w-a", status: "active" }),
+      expect.objectContaining({ slot: 2, workspace_id: "w-b", status: "active", kind: "gift" }),
+    ]);
+    const later = "2026-09-20T09:00:00.000Z";
+    expect(await view(later)).toEqual({ payment: { state: "refunded", lifetime: true } });
+    expect((await lifetimeContext(env.DB, env, userId, at(later)))?.offer).toBeNull();
+    expect((await purchaseState(env.DB, userId, at(later)))?.state).toBe("available");
+
+    // Un abbonamento acquistato dopo il rimborso non è sostituito dal lifetime revocato.
+    await env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
+        customer_id, offer, price_generation, status, current_period_start, current_period_end,
+        cancel_at_period_end, synced_at, checked_at, renewal_offer)
+      VALUES ('sub_test', 'w-a', 'test', 'cus_lifetime', 'monthly', '2026-09', 'active', ?1, ?2,
+        0, ?1, ?1, 'monthly')`)
+      .bind(later, "2026-10-20T09:00:00.000Z")
+      .run();
+    stripe.requests.length = 0;
+    await reconcileBilling(env, stripe.fetcher, at("2026-09-20T10:00:00.000Z"));
+    expect(stripe.requests).not.toContain("DELETE /v1/subscriptions/sub_test");
+  });
+
+  it("alla cancellazione dell'account chiude il checkout lifetime aperto", async () => {
+    const stripe = stripeAccount();
+    await buyLifetime(stripe);
+    stripe.requests.length = 0;
+    expect(await stopRenewals(env, "w-a", stripe.fetcher, at(now))).toBe(true);
+    expect(stripe.requests).toContain("POST /v1/checkout/sessions/cs_lifetime_1/expire");
+    expect(await allocations()).toEqual([]);
+    // Un pagamento in conferma non si può fermare: il job ripete e avvisa.
+    await buyLifetime(stripe);
+    stripe.settle("cs_lifetime_2", "processing");
+    await event(stripe, "checkout.session.completed", "cs_lifetime_2");
+    stripe.requests.length = 0;
+    expect(await stopRenewals(env, "w-a", stripe.fetcher, at(now))).toBe(false);
+    expect(stripe.requests).not.toContain("POST /v1/checkout/sessions/cs_lifetime_2/expire");
+    expect(await allocations()).toEqual([
+      expect.objectContaining({ provider_reference: "cs_lifetime_2", status: "reserved" }),
+    ]);
+  });
+
+  it("il cron rilegge una volta al giorno i lifetime venduti, per i rimborsi senza webhook", async () => {
+    const stripe = stripeAccount();
+    await buyLifetime(stripe);
+    stripe.settle("cs_lifetime_1", "paid");
+    await event(stripe, "checkout.session.completed", "cs_lifetime_1");
+    const rereads = () =>
+      stripe.requests.filter((request) => request === "GET /v1/checkout/sessions/cs_lifetime_1")
+        .length;
+    stripe.requests.length = 0;
+    await reconcileBilling(env, stripe.fetcher, at("2026-09-13T21:00:00.000Z"));
+    expect(rereads()).toBe(1);
+    stripe.state.charges[0]!.refunds.push({ amount: 18178, status: "succeeded" });
+    // Entro il giorno nessuna nuova rilettura; il giorno dopo il rimborso si applica.
+    await reconcileBilling(env, stripe.fetcher, at("2026-09-14T20:00:00.000Z"));
+    expect(rereads()).toBe(1);
+    expect(await view("2026-09-14T20:30:00.000Z")).toEqual({
+      premium: { period: "lifetime", renewsAt: null },
+    });
+    await reconcileBilling(env, stripe.fetcher, at("2026-09-14T21:00:00.000Z"));
+    expect(rereads()).toBe(2);
+    expect(await view("2026-09-14T21:30:00.000Z")).toEqual({
+      payment: { state: "refunded", lifetime: true },
+    });
+    // Revocato, non si rilegge più.
+    await reconcileBilling(env, stripe.fetcher, at("2026-09-16T21:00:00.000Z"));
+    expect(rereads()).toBe(2);
+  });
+
   it("riprende dopo un errore o un crash senza liberare posti prima del tempo", async () => {
     const stripe = stripeAccount();
     // Stripe non crea la sessione: nessun indirizzo al cliente, il posto si libera subito.
@@ -2224,5 +2707,530 @@ describe("Lifetime e concessioni", () => {
     expect(await view("2026-09-20T00:00:00.000Z")).toEqual({
       premium: { period: "monthly", renewsAt: null, endsAt: "2026-10-20T20:00:00.000Z" },
     });
+  });
+});
+
+describe("Rimborsi, dispute e cancellazioni finanziarie", () => {
+  let userId: string;
+  let cookie: string;
+  const at = (iso: string) => new Date(iso);
+  const renewal = {
+    id: "in_renewal",
+    start: periodEnd,
+    end: nextEnd,
+    amount: 598,
+    paidAt: periodEnd,
+  };
+  /** Addebito riuscito della fattura, del cliente dell'abbonamento. */
+  const paid = (invoice: string, amount = 598): FakeCharge => ({
+    id: `ch_${invoice}`,
+    paymentIntent: `pi_${invoice}`,
+    customer: "cus_test",
+    amount,
+    created: second(now),
+    refunds: [],
+  });
+  const event = (stripe: ReturnType<typeof stripeAccount>, topic: string, id: string, time = now) =>
+    applyStripeEvent(env, { topic, objectId: id }, stripe.fetcher, at(time));
+  const entitlements = async () =>
+    (
+      await env.DB.prepare(
+        `SELECT source, stripe_invoice_id, revoked_at, revocation, amount_refunded
+          FROM workspace_entitlements ORDER BY julianday(starts_at), source`,
+      ).all()
+    ).results;
+  const premium = async (time: string) => (await orderAllowance(env.DB, userId, at(time)))!.premium;
+  const view = async (time: string) => {
+    const allowance = (await orderAllowance(env.DB, userId, at(time)))!;
+    return subscriptionView(env.DB, env, "w-a", allowance.coverage, at(time));
+  };
+  const logged = (errors: { mock: { calls: unknown[][] } }) =>
+    errors.mock.calls.map(([line]) => JSON.parse(String(line)) as Record<string, unknown>);
+  const signals = (errors: { mock: { calls: unknown[][] } }) =>
+    errors.mock.calls.map(([line]) => (JSON.parse(String(line)) as { failure?: string }).failure);
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM stripe_subscriptions"),
+      env.DB.prepare("DELETE FROM workspace_entitlements"),
+      env.DB.prepare("DELETE FROM stripe_customer_erasures"),
+    ]);
+    ({ userId, cookie } = await verifiedSession(`rimborsi-${crypto.randomUUID()}@example.invalid`));
+    await workspace(userId);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("un rimborso totale revoca soltanto la copertura che ha pagato", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const stripe = stripeAccount();
+    stripe.state.subscription = { status: "active", start: periodEnd, end: nextEnd };
+    stripe.state.invoices = [firstInvoice, renewal];
+    // Il rinnovo riuscito al secondo tentativo, dopo uno fallito con lo stesso payment intent,
+    // e un addebito senza payment intent.
+    stripe.state.charges = [
+      paid("in_first"),
+      paid("in_renewal"),
+      { ...paid("in_renewal"), id: "ch_in_renewal_failed", failed: true },
+      { ...paid("in_legacy"), paymentIntent: null },
+    ];
+    // Diritti indipendenti: la prova conclusa e Premium concesso dopo il rinnovo.
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
+          ends_at) VALUES ('trial', 'w-a', 'trial', '2026-08-30T20:00:00.000Z', ?)`).bind(now),
+      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
+          ends_at, granted_by, grant_reason)
+        VALUES ('admin', 'w-a', 'admin', ?, '2026-11-20T20:00:00.000Z', 'owner', 'Disservizio')`).bind(
+        nextEnd,
+      ),
+    ]);
+    await event(stripe, "invoice.paid", "in_renewal", "2026-10-13T21:00:00.000Z");
+    expect(await premium("2026-10-20T10:00:00.000Z")).toBe(true);
+
+    stripe.state.charges[1]!.refunds.push({ amount: 598, status: "succeeded" });
+    const refundedAt = "2026-10-20T10:00:00.000Z";
+    await event(stripe, "charge.refunded", "ch_in_renewal", refundedAt);
+    const expected = [
+      {
+        source: "trial",
+        stripe_invoice_id: null,
+        revoked_at: null,
+        revocation: null,
+        amount_refunded: null,
+      },
+      {
+        source: "premium",
+        stripe_invoice_id: "in_first",
+        revoked_at: null,
+        revocation: null,
+        amount_refunded: null,
+      },
+      {
+        source: "premium",
+        stripe_invoice_id: "in_renewal",
+        revoked_at: refundedAt,
+        revocation: "refund",
+        amount_refunded: 598,
+      },
+      {
+        source: "admin",
+        stripe_invoice_id: null,
+        revoked_at: null,
+        revocation: null,
+        amount_refunded: null,
+      },
+    ];
+    expect(await entitlements()).toEqual(expected);
+    // Il periodo rimborsato torna Free; la concessione successiva resta.
+    expect(await premium("2026-10-20T11:00:00.000Z")).toBe(false);
+    expect(await premium("2026-11-14T20:00:00.000Z")).toBe(true);
+
+    // Eventi duplicati, fuori ordine e la rete del cron non spostano la revoca.
+    await event(stripe, "charge.refund.updated", "re_ch_in_renewal_0", "2026-10-21T10:00:00.000Z");
+    await event(stripe, "charge.refunded", "ch_in_renewal", "2026-10-19T10:00:00.000Z");
+    await event(stripe, "invoice.paid", "in_renewal", "2026-10-22T10:00:00.000Z");
+    await reconcileBilling(env, stripe.fetcher, at("2026-10-23T10:00:00.000Z"));
+    expect(await entitlements()).toEqual(expected);
+    // Un rimborso totale non è parziale: nessuna segnalazione.
+    expect(errors).not.toHaveBeenCalled();
+  });
+
+  it("un rimborso parziale, in corso o fallito non revoca e non diventa giorni", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const stripe = stripeAccount();
+    stripe.state.invoices = [firstInvoice];
+    stripe.state.charges = [paid("in_first")];
+    await event(stripe, "invoice.paid", "in_first");
+    const coverage = async () =>
+      env.DB.prepare(
+        "SELECT ends_at, revoked_at, amount_refunded FROM workspace_entitlements WHERE stripe_invoice_id = 'in_first'",
+      ).first();
+
+    stripe.state.charges[0]!.refunds.push({ amount: 200, status: "succeeded" });
+    await event(stripe, "charge.refunded", "ch_in_first", "2026-09-20T10:00:00.000Z");
+    expect(await coverage()).toEqual({
+      ends_at: periodEnd,
+      revoked_at: null,
+      amount_refunded: 200,
+    });
+    // Una segnalazione per l'assistenza: un'etichetta fissa, senza importi né riferimenti.
+    expect(logged(errors)).toEqual([
+      {
+        event: "application_error",
+        code: "INVALID_REQUEST",
+        operation: "billing",
+        failure: "partial_refund",
+      },
+    ]);
+
+    // Il resto, ancora in corso: nessuna revoca finché Stripe non lo conferma.
+    stripe.state.charges[0]!.refunds.push({ amount: 398, status: "pending" });
+    await event(stripe, "charge.refunded", "ch_in_first", "2026-09-21T10:00:00.000Z");
+    expect(await coverage()).toEqual({
+      ends_at: periodEnd,
+      revoked_at: null,
+      amount_refunded: 200,
+    });
+    expect(await premium("2026-09-21T11:00:00.000Z")).toBe(true);
+    // Fallito: il periodo resta pagato.
+    stripe.state.charges[0]!.refunds[1]!.status = "failed";
+    await event(stripe, "charge.refund.updated", "re_ch_in_first_1", "2026-09-22T10:00:00.000Z");
+    expect(await coverage()).toEqual({
+      ends_at: periodEnd,
+      revoked_at: null,
+      amount_refunded: 200,
+    });
+    // Riuscito in un secondo tentativo: l'intero importo è restituito e la copertura si revoca.
+    stripe.state.charges[0]!.refunds.push({ amount: 398, status: "succeeded" });
+    await event(stripe, "charge.refund.updated", "re_ch_in_first_2", "2026-09-23T10:00:00.000Z");
+    expect(await coverage()).toEqual({
+      ends_at: periodEnd,
+      revoked_at: "2026-09-23T10:00:00.000Z",
+      amount_refunded: 598,
+    });
+  });
+
+  it("revoca anche quando il rimborso arriva prima della fattura e spiega il ritorno al Free", async () => {
+    const stripe = stripeAccount();
+    stripe.state.invoices = [firstInvoice];
+    stripe.state.charges = [paid("in_first")];
+    stripe.state.charges[0]!.refunds.push({ amount: 598, status: "succeeded" });
+    await event(stripe, "charge.refunded", "ch_in_first", "2026-09-14T10:00:00.000Z");
+    expect(await entitlements()).toEqual([
+      {
+        source: "premium",
+        stripe_invoice_id: "in_first",
+        revoked_at: "2026-09-14T10:00:00.000Z",
+        revocation: "refund",
+        amount_refunded: 598,
+      },
+    ]);
+    expect(await premium("2026-09-14T11:00:00.000Z")).toBe(false);
+    // L'abbonamento continua: Premium riprende con il rinnovo, senza prova né nuovo acquisto.
+    expect(await view("2026-09-14T11:00:00.000Z")).toEqual({
+      payment: { state: "refunded", renewsAt: periodEnd },
+    });
+    expect((await purchaseState(env.DB, userId, at("2026-09-14T11:00:00.000Z")))?.state).toBe(
+      "covered",
+    );
+    expect(
+      (await orderAllowance(env.DB, userId, at("2026-09-14T11:00:00.000Z")))?.trialAvailable,
+    ).toBe(false);
+    vi.setSystemTime(at("2026-09-14T11:00:00.000Z"));
+    const page = (await settingsLoader({
+      request: new Request("http://localhost:5173/app/impostazioni/piano", { headers: { cookie } }),
+      params: { sezione: "piano" },
+    } as unknown as Parameters<typeof settingsLoader>[0])) as {
+      page: { account: Record<string, unknown> };
+    };
+    expect(page.page.account).toMatchObject({
+      plan: "free",
+      payment: { state: "refunded", renewsAt: periodEnd },
+    });
+    vi.useRealTimers();
+    // Un periodo rimborsato non è un pagamento da confermare: il cron non lo rilegge ogni ora.
+    stripe.requests.length = 0;
+    await reconcileBilling(env, stripe.fetcher, at("2026-09-14T13:00:00.000Z"));
+    expect(stripe.requests).toEqual(["GET /v1/checkout/sessions"]);
+    // Disdetto: nessun rinnovo da annunciare.
+    stripe.state.subscription.cancel = true;
+    await event(stripe, "customer.subscription.updated", "sub_test", "2026-09-15T10:00:00.000Z");
+    expect(await view("2026-09-15T11:00:00.000Z")).toEqual({ payment: { state: "refunded" } });
+    // Dopo il periodo rimborsato nessun avviso resta.
+    stripe.state.subscription.status = "canceled";
+    await event(stripe, "customer.subscription.deleted", "sub_test", periodEnd);
+    expect(await view("2026-10-14T00:00:00.000Z")).toEqual({});
+  });
+
+  it("una disputa aperta o vinta non revoca, una persa revoca la sola copertura", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const stripe = stripeAccount();
+    stripe.state.invoices = [firstInvoice];
+    stripe.state.charges = [paid("in_first")];
+    await event(stripe, "invoice.paid", "in_first");
+    stripe.state.charges[0]!.dispute = "needs_response";
+    await event(stripe, "charge.dispute.created", "du_ch_in_first", "2026-09-20T10:00:00.000Z");
+    expect(await premium("2026-09-20T11:00:00.000Z")).toBe(true);
+    expect(signals(errors)).toEqual(["dispute_opened"]);
+    stripe.state.charges[0]!.dispute = "won";
+    await event(stripe, "charge.dispute.closed", "du_ch_in_first", "2026-09-25T10:00:00.000Z");
+    expect(await premium("2026-09-25T11:00:00.000Z")).toBe(true);
+
+    stripe.state.charges[0]!.dispute = "lost";
+    await event(stripe, "charge.dispute.closed", "du_ch_in_first", "2026-09-26T10:00:00.000Z");
+    expect(await entitlements()).toEqual([
+      {
+        source: "premium",
+        stripe_invoice_id: "in_first",
+        revoked_at: "2026-09-26T10:00:00.000Z",
+        revocation: "dispute",
+        amount_refunded: null,
+      },
+    ]);
+    expect(signals(errors)).toEqual(["dispute_opened", "dispute_lost"]);
+    expect(await premium("2026-09-26T11:00:00.000Z")).toBe(false);
+  });
+
+  it("un evento di rimborso senza un nostro pagamento non ha effetti", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const stripe = stripeAccount();
+    stripe.state.charges = [{ ...paid("in_other"), customer: "cus_other" }];
+    // Il rimborso è fallito: nulla di restituito e nessuna segnalazione.
+    stripe.state.charges[0]!.refunds.push({ amount: 598, status: "failed" });
+    await event(stripe, "charge.refunded", "ch_in_other");
+    expect(errors).not.toHaveBeenCalled();
+    expect(stripe.requests).toEqual([
+      "GET /v1/charges/ch_in_other",
+      "GET /v1/invoice_payments",
+      "GET /v1/checkout/sessions",
+    ]);
+    expect(await entitlements()).toEqual([]);
+  });
+
+  it("dopo la cancellazione su Link conserva coperture e spazio e non usa più il cliente", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const stripe = stripeAccount();
+    stripe.state.invoices = [firstInvoice];
+    stripe.state.charges = [paid("in_first")];
+    await event(stripe, "invoice.paid", "in_first");
+    // Un cliente ancora presente su Stripe o di altri spazi non si registra.
+    stripe.state.deletedCustomers = ["cus_unknown"];
+    await event(stripe, "customer.deleted", "cus_test");
+    await event(stripe, "customer.deleted", "cus_unknown");
+    expect((await env.DB.prepare("SELECT * FROM stripe_customer_erasures").all()).results).toEqual(
+      [],
+    );
+
+    // Stripe chiude l'abbonamento e cancella il cliente.
+    stripe.state.subscription.status = "canceled";
+    stripe.state.deletedCustomers = ["cus_test"];
+    stripe.requests.length = 0;
+    await event(stripe, "customer.deleted", "cus_test", "2026-09-20T10:00:00.000Z");
+    expect(
+      await env.DB.prepare(
+        "SELECT customer_id, environment, source, received_at FROM stripe_customer_erasures",
+      ).first(),
+    ).toEqual({
+      customer_id: "cus_test",
+      environment: "test",
+      source: "webhook",
+      received_at: "2026-09-20T10:00:00.000Z",
+    });
+    // L'abbonamento si rilegge chiuso, senza leggere gli addebiti cancellati.
+    expect(stripe.requests).toEqual([
+      "GET /v1/customers/cus_test",
+      "GET /v1/subscriptions/sub_test",
+      "GET /v1/invoices",
+    ]);
+    expect(
+      await env.DB.prepare("SELECT status FROM stripe_subscriptions WHERE id = 'sub_test'").first(),
+    ).toEqual({ status: "canceled" });
+    expect(signals(errors)).toEqual(["financial_erasure"]);
+    // La copertura pagata e lo spazio restano; il portale e il passaggio a vita non usano più
+    // il cliente.
+    expect(await premium("2026-09-20T11:00:00.000Z")).toBe(true);
+    expect(await env.DB.prepare("SELECT id FROM workspaces WHERE id = 'w-a'").first()).toEqual({
+      id: "w-a",
+    });
+    expect(
+      await openBillingPortal(env, userId, "http://localhost:5173/app/impostazioni/piano", "it"),
+    ).toBeNull();
+    expect((await lifetimeContext(env.DB, env, userId))?.subscription).toMatchObject({
+      customerId: null,
+    });
+    // Ripetuto, l'evento non duplica né aggiorna la registrazione.
+    await event(stripe, "customer.deleted", "cus_test", "2026-09-21T10:00:00.000Z");
+    expect(
+      (await env.DB.prepare("SELECT received_at FROM stripe_customer_erasures").all()).results,
+    ).toEqual([{ received_at: "2026-09-20T10:00:00.000Z" }]);
+    expect(signals(errors)).toEqual(["financial_erasure"]);
+    // Un cliente che Stripe non restituisce più vale come cancellato.
+    await env.DB.prepare("DELETE FROM stripe_customer_erasures").run();
+    stripe.state.deletedCustomers = [];
+    stripe.state.missingCustomers = ["cus_test"];
+    await event(stripe, "customer.deleted", "cus_test", "2026-09-22T10:00:00.000Z");
+    expect(
+      (await env.DB.prepare("SELECT received_at FROM stripe_customer_erasures").all()).results,
+    ).toEqual([{ received_at: "2026-09-22T10:00:00.000Z" }]);
+    // In Production vale per i clienti degli abbonamenti live.
+    await env.DB.prepare("DELETE FROM stripe_customer_erasures").run();
+    await env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
+        customer_id, offer, price_generation, status, current_period_start, current_period_end,
+        cancel_at_period_end, synced_at, checked_at, renewal_offer)
+      VALUES ('sub_live', 'w-a', 'live', 'cus_live', 'monthly', '2026-09', 'canceled', ?1, ?2,
+        0, ?1, ?1, 'monthly')`)
+      .bind(now, periodEnd)
+      .run();
+    stripe.state.missingCustomers = ["cus_live"];
+    const live = { ...env, APP_ORIGIN: "https://fiscalbay.it" } as Env;
+    await applyStripeEvent(
+      live,
+      { topic: "customer.deleted", objectId: "cus_live" },
+      stripe.fetcher,
+    );
+    expect(
+      await env.DB.prepare("SELECT environment FROM stripe_customer_erasures").first(),
+    ).toEqual({ environment: "live" });
+    // Stripe non disponibile: la ricevuta si ripete, nulla si registra.
+    await env.DB.prepare("DELETE FROM stripe_customer_erasures").run();
+    stripe.state.down = true;
+    await expect(event(stripe, "customer.deleted", "cus_test")).rejects.toMatchObject({
+      failure: "unavailable",
+    });
+    expect((await env.DB.prepare("SELECT * FROM stripe_customer_erasures").all()).results).toEqual(
+      [],
+    );
+  });
+
+  it("senza l'elenco degli addebiti la rilettura continua e non revoca", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const stripe = stripeAccount();
+    stripe.state.invoices = [firstInvoice];
+    stripe.state.charges = [paid("in_first")];
+    stripe.state.charges[0]!.refunds.push({ amount: 598, status: "succeeded" });
+    // Stripe non disponibile: la ricevuta si ripete senza scrivere nulla.
+    stripe.state.chargesDown = true;
+    await expect(event(stripe, "invoice.paid", "in_first")).rejects.toMatchObject({
+      failure: "unavailable",
+    });
+    expect(await entitlements()).toEqual([]);
+    stripe.state.chargesDown = false;
+    // Non più disponibile: la copertura si registra, senza revoca.
+    stripe.state.chargesMissing = true;
+    await event(stripe, "invoice.paid", "in_first");
+    expect(await entitlements()).toEqual([
+      {
+        source: "premium",
+        stripe_invoice_id: "in_first",
+        revoked_at: null,
+        revocation: null,
+        amount_refunded: null,
+      },
+    ]);
+    expect(logged(errors)).toEqual([
+      expect.objectContaining({ operation: "billing", failure: "rejected" }),
+    ]);
+    // Torna disponibile: la stessa rilettura revoca.
+    stripe.state.chargesMissing = false;
+    await event(stripe, "invoice.paid", "in_first", "2026-09-14T10:00:00.000Z");
+    expect(await entitlements()).toEqual([
+      expect.objectContaining({ revoked_at: "2026-09-14T10:00:00.000Z", revocation: "refund" }),
+    ]);
+  });
+
+  it("alla cancellazione dell'account ferma i rinnovi e lo conferma soltanto con Stripe", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const stripe = stripeAccount();
+    const missing = { ...env, STRIPE_SECRET_KEY: undefined } as Env;
+    // Senza abbonamenti nulla da fermare, anche senza Stripe.
+    expect(await stopRenewals(env, "w-a", stripe.fetcher, at(now))).toBe(true);
+    expect(await stopRenewals(missing, "w-a", stripe.fetcher, at(now))).toBe(true);
+    expect(stripe.requests).toEqual([]);
+    stripe.state.invoices = [firstInvoice];
+    await event(stripe, "invoice.paid", "in_first");
+    // Senza chiave nulla si può confermare: il job ripete, senza errori da registrare.
+    expect(await stopRenewals(missing, "w-a", stripe.fetcher, at(now))).toBe(false);
+    expect(errors).not.toHaveBeenCalled();
+    stripe.state.down = true;
+    expect(await stopRenewals(env, "w-a", stripe.fetcher, at(now))).toBe(false);
+    expect(logged(errors)).toEqual([
+      expect.objectContaining({ operation: "billing", failure: "unavailable" }),
+    ]);
+    stripe.state.down = false;
+    stripe.requests.length = 0;
+    expect(await stopRenewals(env, "w-a", stripe.fetcher, at("2026-09-14T10:00:00.000Z"))).toBe(
+      true,
+    );
+    expect(stripe.requests).toEqual([
+      "GET /v1/subscriptions/sub_test",
+      "DELETE /v1/subscriptions/sub_test",
+    ]);
+    expect(
+      await env.DB.prepare("SELECT status FROM stripe_subscriptions WHERE id = 'sub_test'").first(),
+    ).toEqual({ status: "canceled" });
+    expect(await subscriptionRenews(env.DB, env, userId)).toBe(false);
+    // Già fermo: nessuna nuova richiesta. Un abbonamento sparito da Stripe non addebita.
+    stripe.requests.length = 0;
+    expect(await stopRenewals(env, "w-a", stripe.fetcher, at(now))).toBe(true);
+    expect(stripe.requests).toEqual([]);
+    // Chiuso su Stripe ma non ancora in locale: si registra senza una seconda chiusura.
+    await env.DB.prepare("UPDATE stripe_subscriptions SET status = 'active'").run();
+    stripe.requests.length = 0;
+    expect(await stopRenewals(env, "w-a", stripe.fetcher, at("2026-09-15T10:00:00.000Z"))).toBe(
+      true,
+    );
+    expect(stripe.requests).toEqual(["GET /v1/subscriptions/sub_test"]);
+    expect(
+      await env.DB.prepare("SELECT status FROM stripe_subscriptions WHERE id = 'sub_test'").first(),
+    ).toEqual({ status: "canceled" });
+    // Un primo pagamento mai completato è già scaduto su Stripe: nessuna chiusura.
+    await env.DB.prepare("UPDATE stripe_subscriptions SET status = 'incomplete'").run();
+    stripe.state.subscription.status = "incomplete_expired";
+    stripe.requests.length = 0;
+    expect(await stopRenewals(env, "w-a", stripe.fetcher, at("2026-09-16T10:00:00.000Z"))).toBe(
+      true,
+    );
+    expect(stripe.requests).toEqual(["GET /v1/subscriptions/sub_test"]);
+    expect(
+      await env.DB.prepare("SELECT status FROM stripe_subscriptions WHERE id = 'sub_test'").first(),
+    ).toEqual({ status: "incomplete_expired" });
+    await env.DB.prepare("UPDATE stripe_subscriptions SET status = 'active'").run();
+    stripe.state.missing = true;
+    expect(await stopRenewals(env, "w-a", stripe.fetcher, at(now))).toBe(true);
+    expect(await env.DB.prepare("SELECT unavailable_at FROM stripe_subscriptions").first()).toEqual(
+      { unavailable_at: now },
+    );
+  });
+
+  it("l'avviso del rimborso segue lo stato dell'abbonamento", async () => {
+    const later = "2026-09-20T10:00:00.000Z";
+    const subscription = (status: string, cancel = 0) =>
+      env.DB.prepare(`INSERT OR REPLACE INTO stripe_subscriptions (id, workspace_id, environment,
+          customer_id, offer, price_generation, status, current_period_start, current_period_end,
+          cancel_at_period_end, synced_at, checked_at, renewal_offer)
+        VALUES ('sub_test', 'w-a', 'test', 'cus_test', 'monthly', '2026-09', ?1, ?2, ?3, ?4, ?2, ?2,
+          'monthly')`)
+        .bind(status, now, periodEnd, cancel)
+        .run();
+    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
+        ends_at, stripe_invoice_id, amount_paid, currency, paid_at, revoked_at, revocation)
+      VALUES ('paid', 'w-a', 'premium', ?1, ?2, 'in_first', 598, 'eur', ?1, ?1, 'refund')`)
+      .bind(now, periodEnd)
+      .run();
+    // Chiuso dopo il rimborso: nessun rinnovo da annunciare.
+    expect(await view(later)).toEqual({ payment: { state: "refunded" } });
+    // Cambio di periodicità programmato: Premium riprende comunque al rinnovo.
+    await subscription("trialing");
+    expect(await view(later)).toEqual({ payment: { state: "refunded", renewsAt: periodEnd } });
+    // Rinnovo non riuscito: prevale la tutela del prezzo.
+    await subscription("past_due");
+    expect(await view(later)).toMatchObject({ payment: { state: "renewal-failed" } });
+    // Dopo un lifetime rimborsato, un nuovo abbonamento da confermare prevale.
+    await env.DB.prepare("DELETE FROM workspace_entitlements").run();
+    await env.DB.prepare(`INSERT INTO lifetime_allocations (slot, workspace_id, status, kind,
+        provider_reference, customer_id, completed_at, activated_at, created_at)
+      VALUES (1, 'w-a', 'active', 'sale', 'cs_paid', 'cus_test', ?1, ?1, ?1)`)
+      .bind(now)
+      .run();
+    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
+        stripe_checkout_session_id, amount_paid, currency, paid_at, revoked_at, revocation)
+      VALUES ('lifetime', 'w-a', 'lifetime', ?1, 'cs_paid', 18178, 'eur', ?1, ?1, 'refund')`)
+      .bind(now)
+      .run();
+    await subscription("active");
+    expect(await view(later)).toEqual({ payment: { state: "pending" } });
+    await env.DB.prepare("DELETE FROM stripe_subscriptions").run();
+    expect(await view(later)).toEqual({ payment: { state: "refunded", lifetime: true } });
+  });
+
+  it("un evento di rimborso senza payment intent non legge altro", async () => {
+    const stripe = stripeAccount();
+    stripe.state.charges = [{ ...paid("in_first"), paymentIntent: null }];
+    stripe.state.charges[0]!.refunds.push({ amount: 598, status: "succeeded" });
+    await event(stripe, "charge.refunded", "ch_in_first");
+    expect(stripe.requests).toEqual(["GET /v1/charges/ch_in_first"]);
   });
 });

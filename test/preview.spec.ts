@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { appCopy } from "../app/app-copy";
 import {
   loadScenario,
+  previewLifetime,
   previewNow,
   scenarioIds,
   scenarioOptions,
@@ -206,7 +207,7 @@ describe("stato sintetico dell'anteprima", () => {
       ).toBe("free");
     });
 
-    it(`mostra pagamento in attivazione, rinnovo non riuscito o disdetto e Stripe non disponibile, ${language}`, () => {
+    it(`mostra pagamento in attivazione, rinnovo non riuscito o disdetto, rimborsi e Stripe non disponibile, ${language}`, () => {
       expect(loadScenario("pagamento-in-attivazione", language, new Set()).account).toMatchObject({
         plan: "free",
         payment: { state: "pending" },
@@ -223,6 +224,23 @@ describe("stato sintetico dell'anteprima", () => {
       expect(cancelled.diagnostics.rights).toBe(
         language === "it" ? "Premium mensile" : "Premium, monthly",
       );
+      // Rimborsati: il periodo con il rinnovo che riporta Premium, il lifetime senza offerta.
+      expect(loadScenario("pagamento-rimborsato", language, new Set()).account).toMatchObject({
+        plan: "free",
+        payment: { state: "refunded", renewsAt: "2026-10-13T10:00:00Z" },
+      });
+      const refunded = loadScenario("lifetime-rimborsato", language, new Set());
+      expect(refunded.account).toMatchObject({
+        plan: "free",
+        payment: { state: "refunded", lifetime: true },
+        trialAvailable: true,
+      });
+      expect(previewLifetime(refunded)).toBeNull();
+      expect(previewLifetime(loadScenario("pagamento-rimborsato", language, new Set()))).toEqual({
+        state: "available",
+        credit: 0,
+        replaces: true,
+      });
       const down = loadScenario("stripe-non-disponibile", language, new Set());
       expect(down.stripeDown).toBe(true);
       expect(down.account.payment).toBeUndefined();

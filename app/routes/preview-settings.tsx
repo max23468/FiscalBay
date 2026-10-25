@@ -90,10 +90,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     preview: true,
     account: scenario.account,
     // Come nell'area reale: l'acquisto aspetta la prima lettura riuscita di un negozio, durante
-    // la prova resta possibile e resta fermo con un abbonamento che può ancora incassare.
+    // la prova resta possibile e resta fermo con un abbonamento che può ancora incassare; un
+    // lifetime rimborsato non lo ferma.
     purchase: {
       state:
-        (scenario.account.plan === "premium" && !scenario.account.trial) || scenario.account.payment
+        (scenario.account.plan === "premium" && !scenario.account.trial) ||
+        (scenario.account.payment &&
+          !(scenario.account.payment.state === "refunded" && scenario.account.payment.lifetime))
           ? "covered"
           : scenario.onboarding.some((step) => step.label === "stepSync" && step.done)
             ? "available"

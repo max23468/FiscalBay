@@ -420,6 +420,33 @@ function CheckoutReturn({
   return null;
 }
 
+/**
+ * Pagamento rimborsato, o con la disputa persa: spiega il ritorno al Free, con il rinnovo che
+ * riporta Premium se l'abbonamento continua.
+ */
+function RefundNotice({
+  payment,
+  t,
+  language,
+}: {
+  payment: AccountView["payment"];
+  t: AppCopy;
+  language: Language;
+}) {
+  const zone = useTimeZone();
+  if (payment?.state !== "refunded") return null;
+  const copy = t.settings.plan;
+  return (
+    <StatusAlert tone="info" title={copy.refundedTitle}>
+      {payment.lifetime
+        ? copy.lifetimeRefundedBody
+        : copy.refundedBody(
+            payment.renewsAt ? formatDate(payment.renewsAt, language, "date", zone) : null,
+          )}
+    </StatusAlert>
+  );
+}
+
 export function PlanSection({
   account,
   freeStore,
@@ -471,6 +498,7 @@ export function PlanSection({
   const quota = account.quota;
   return (
     <>
+      <RefundNotice payment={account.payment} t={t} language={language} />
       <CheckoutReturn
         checkout={purchase.checkout}
         payment={account.payment}
