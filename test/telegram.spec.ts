@@ -1147,6 +1147,7 @@ describe("invii degli ordini", () => {
     await run(api.fetcher, 120);
     expect(sentTexts(api)).toEqual([expect.stringContaining("ebay-o-prima")]);
     expect(keyboard(api.texts()[0]!)).toEqual([
+      [{ text: "📋 RSSMRA80A01H501U", copy_text: { text: "RSSMRA80A01H501U" } }],
       [{ text: "🔗 Apri gli ordini", url: `${origin}/app/ordini?periodo=7` }],
     ]);
     // Un ordine dopo l'orario non fa partire un secondo riepilogo, né uno tardivo.
@@ -1222,6 +1223,7 @@ describe("invii degli ordini", () => {
     for (const id of ids)
       expect(parts.filter((part) => part.includes(`>ebay-${id}</a>`))).toHaveLength(1);
     expect(keyboard(api.texts().at(-1)!)).toEqual([
+      [{ text: "📋 RSSMRA80A01H501U", copy_text: { text: "RSSMRA80A01H501U" } }],
       [{ text: "🔗 Apri gli ordini", url: `${origin}/app/ordini?periodo=7` }],
     ]);
   });
@@ -1267,6 +1269,12 @@ describe("invii degli ordini", () => {
     expect(digest).toContain("2 ordini");
     expect(digest).toContain("RSSMRA80A01H501U");
     expect(digest).toContain("BNCLGU80A01H501Z");
+    // Ogni Codice Fiscale del riepilogo ha il suo pulsante di copia, prima di «Apri gli ordini».
+    expect(keyboard(api.texts()[0]!).map((row) => row[0]!.text)).toEqual([
+      "📋 RSSMRA80A01H501U",
+      "📋 BNCLGU80A01H501Z",
+      "🔗 Apri gli ordini",
+    ]);
     // Un ordine dopo il riepilogo del giorno aspetta il giorno successivo.
     await order(seller.store, "o-tre", { cf: "VRDGPP80A01H501X", created: 75, listed: 80 });
     await run(api.fetcher, 90);
@@ -1587,6 +1595,38 @@ describe("comandi e pulsanti del bot", () => {
     expect(keyboard(edits[0]!)[0]).toEqual([
       { text: "‹ Precedenti", callback_data: `${gen}:la:0` },
     ]);
+  });
+
+  it("negli ultimi ordini ogni Codice Fiscale autorizzato ha il suo pulsante di copia", async () => {
+    const seller = await linked("copia");
+    await order(seller.store, "o-copia-uno", { cf: "rss mra80a01h501u", created: 1, listed: 2 });
+    await order(seller.store, "o-copia-due", { cf: "BNCLGU80A01H501Z", created: 3, listed: 4 });
+    await order(seller.store, "o-copia-senza", { created: 5, listed: 6 });
+    const api = bot();
+    await deliver("/ultimi", seller.chat, api.fetcher, later(10));
+    expect(keyboard(api.texts()[0]!)).toEqual([
+      [{ text: "📋 BNCLGU80A01H501Z", copy_text: { text: "BNCLGU80A01H501Z" } }],
+      [{ text: "📋 RSSMRA80A01H501U", copy_text: { text: "RSSMRA80A01H501U" } }],
+      [{ text: "🔗 Apri gli ordini", url: `${origin}/app/ordini` }],
+    ]);
+  });
+
+  it("l'aiuto presenta i comandi con le loro icone, nelle due lingue", async () => {
+    const seller = await linked("aiuto");
+    const api = bot();
+    await deliver("/aiuto", seller.chat, api.fetcher);
+    expect(sentTexts(api)[0]).toBe(
+      [
+        "👋 <b>FiscalBay</b>\nQui arrivano le notifiche degli ordini, secondo le preferenze delle Impostazioni.",
+        "⭐ /stato · piano, notifiche e negozi\n🛒 /ultimi · gli ultimi ordini\n⚙️ /preferenze · pausa, filtro, frequenza e negozi",
+        "<i>Ricerca, sblocco ed esportazione restano sul sito.</i>",
+      ].join("\n\n"),
+    );
+    await env.DB.prepare("UPDATE telegram_links SET language = 'en' WHERE workspace_id = ?")
+      .bind(seller.workspace)
+      .run();
+    await deliver("/help", seller.chat, api.fetcher, later(1));
+    expect(sentTexts(api)[1]).toContain("🛒 /latest · the latest orders");
   });
 
   it("senza Premium lo stato dice Free e le preferenze rimandano al piano", async () => {
