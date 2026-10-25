@@ -398,6 +398,21 @@ export function orderEntry(
   ].join("\n");
 }
 
+/**
+ * Un pulsante per Codice Fiscale autorizzato degli ordini, presente nel testo indicato: il codice
+ * nel pulsante dice di quale ordine è, il tocco lo copia.
+ */
+export function copyButtons(notices: OrderNotice[], html: string): BotButton[][] {
+  const codes = new Set(
+    notices.flatMap((notice) =>
+      notice.values.filter((value) => value.kind === "CF").map((value) => value.value),
+    ),
+  );
+  return [...codes]
+    .filter((code) => html.includes(`<code>${escape(code)}</code>`))
+    .map((code) => [{ text: `${icons.copy} ${code}`, copy_text: { text: code } }]);
+}
+
 /** Riepilogo giornaliero: un blocco per ordine, nei messaggi necessari, e l'accesso agli ordini. */
 export function digestMessage(
   env: Pick<Env, "APP_ORIGIN">,
@@ -417,22 +432,24 @@ export function digestMessage(
   const environment = entries.every(({ notice }) => notice.environment === "sandbox")
     ? "sandbox"
     : "production";
-  return parts.map((html, index) => ({
-    html,
-    ...(index === parts.length - 1
-      ? {
-          // Gli ultimi sette giorni di tutti i negozi comprendono il periodo del riepilogo.
-          buttons: [
+  const notices = entries.map(({ notice }) => notice);
+  return parts.map((html, index) => {
+    const buttons = [
+      ...copyButtons(notices, html),
+      // Gli ultimi sette giorni di tutti i negozi comprendono il periodo del riepilogo.
+      ...(index === parts.length - 1
+        ? [
             [
               {
                 text: `${icons.link} ${copy.orders}`,
                 url: appUrl(env, language, ordersPath, environment, { periodo: "7" }),
               },
             ],
-          ],
-        }
-      : {}),
-  }));
+          ]
+        : []),
+    ];
+    return { html, ...(buttons.length ? { buttons } : {}) };
+  });
 }
 
 /** Completamento di un'importazione: un solo messaggio con conteggi e periodo acquisito. */

@@ -9,6 +9,7 @@ import {
 } from "./telegram.server";
 import {
   appUrl,
+  copyButtons,
   date,
   escape,
   icons,
@@ -103,11 +104,12 @@ const copy = {
     previous: "Precedenti",
     orders: "Apri gli ordini",
     help: {
+      title: "FiscalBay",
       intro: "Qui arrivano le notifiche degli ordini, secondo le preferenze delle Impostazioni.",
       commands: [
-        ["/stato", "piano, notifiche e negozi"],
-        ["/ultimi", "gli ultimi ordini"],
-        ["/preferenze", "pausa, filtro, frequenza e negozi"],
+        ["⭐", "/stato", "piano, notifiche e negozi"],
+        ["🛒", "/ultimi", "gli ultimi ordini"],
+        ["⚙️", "/preferenze", "pausa, filtro, frequenza e negozi"],
       ],
       site: "Ricerca, sblocco ed esportazione restano sul sito.",
     },
@@ -172,11 +174,12 @@ const copy = {
     previous: "Previous",
     orders: "Open orders",
     help: {
+      title: "FiscalBay",
       intro: "Order notifications arrive here according to your Settings.",
       commands: [
-        ["/status", "plan, notifications and stores"],
-        ["/latest", "the latest orders"],
-        ["/preferences", "pause, filter, frequency and stores"],
+        ["⭐", "/status", "plan, notifications and stores"],
+        ["🛒", "/latest", "the latest orders"],
+        ["⚙️", "/preferences", "pause, filter, frequency and stores"],
       ],
       site: "Search, unlocking and export stay on the website.",
     },
@@ -307,8 +310,10 @@ function helpMessage(env: Env, language: Language): BotMessage {
   const help = copy[language].help;
   return {
     html: [
-      escape(help.intro),
-      help.commands.map(([command, what]) => `${command}  ${escape(what)}`).join("\n"),
+      `👋 <b>${escape(help.title)}</b>\n${escape(help.intro)}`,
+      help.commands
+        .map(([icon, command, what]) => `${icon} ${command} · ${escape(what)}`)
+        .join("\n"),
       `<i>${escape(help.site)}</i>`,
     ].join("\n\n"),
     buttons: [
@@ -643,22 +648,17 @@ async function latestMessage(env: Env, link: Link, offset: number, now: Date): P
   const environment = page.every(({ environment }) => environment === "sandbox")
     ? "sandbox"
     : "production";
+  const notices = page.map(({ order, environment }) => orderNotice(order, environment));
   const html = splitBlocks([
     `${icons.change.new} <b>${escape(text.latest)}</b> · <i>${escape(text.latestRange(offset + 1, offset + page.length, listed.length))}</i>`,
-    ...page.map(({ order, environment }) =>
-      orderEntry(
-        env,
-        link.language,
-        state.preferences.timeZone,
-        orderNotice(order, environment),
-        null,
-        now,
-      ),
+    ...notices.map((notice) =>
+      orderEntry(env, link.language, state.preferences.timeZone, notice, null, now),
     ),
   ])[0]!;
   return {
     html,
     buttons: [
+      ...copyButtons(notices, html),
       [
         ...(offset > 0
           ? [{ text: `‹ ${text.previous}`, callback_data: data(link, "la", offset - latestPage) }]
